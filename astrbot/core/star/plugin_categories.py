@@ -1,0 +1,73 @@
+"""Canonical plugin categories that plugins declare in ``metadata.yaml``.
+
+Plugins declare a stable, machine-readable slug instead of a localized label so
+the plugin market index, the WebUI and the runtime all filter on the same
+values. Adding a category is a code change here; labels are derived from the
+slug wherever it is displayed.
+"""
+
+from __future__ import annotations
+
+from astrbot.core import logger
+
+PLUGIN_CATEGORY_SLUGS: tuple[str, ...] = (
+    "ai_tools",
+    "ai_image",
+    "ai_speech",
+    "ai_agent",
+    "platform_adapter",
+    "media_processing",
+    "automation",
+    "security",
+    "long_term_memory",
+    "knowledge_base",
+    "tools",
+    "integrations",
+    "entertainment",
+    "group_games",
+    "productivity",
+    "utilities",
+    "other",
+)
+"""Supported ``metadata.yaml`` ``category`` values, in display order."""
+
+DEFAULT_PLUGIN_CATEGORY = "other"
+"""Category used when a plugin declares an unsupported category."""
+
+
+def normalize_plugin_category(value: object, *, warn: bool = True) -> str | None:
+    """Normalize the category declared by plugin metadata.
+
+    Unsupported values never block loading or installation: they are reported in
+    the log and mapped to ``DEFAULT_PLUGIN_CATEGORY`` so that a typo in
+    ``metadata.yaml`` cannot make a plugin uninstallable.
+
+    Args:
+        value: Raw ``category`` value read from ``metadata.yaml``.
+        warn: Whether to report an unsupported value. Callers that already
+            validated the same metadata can pass ``False`` to avoid a duplicate
+            warning while still getting the normalized value.
+
+    Returns:
+        The declared slug when it is supported, ``None`` when the plugin does
+        not declare a category, otherwise ``DEFAULT_PLUGIN_CATEGORY``.
+    """
+    if value is None:
+        return None
+
+    if isinstance(value, str):
+        slug = value.strip().lower().replace("-", "_").replace(" ", "_")
+        if slug in PLUGIN_CATEGORY_SLUGS:
+            return slug
+        if not slug:
+            return None
+
+    if not warn:
+        return DEFAULT_PLUGIN_CATEGORY
+
+    logger.warning(
+        f"Unsupported plugin category {value!r}; falling back to "
+        f"{DEFAULT_PLUGIN_CATEGORY!r}. Supported categories: "
+        f"{', '.join(PLUGIN_CATEGORY_SLUGS)}."
+    )
+    return DEFAULT_PLUGIN_CATEGORY

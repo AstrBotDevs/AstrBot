@@ -24,6 +24,7 @@ from astrbot.core.utils.io import ensure_dir, remove_dir
 
 from ..star.star import StarMetadata
 from ..zip_updater import _RepoZipUpdater
+from .plugin_categories import normalize_plugin_category
 
 PLUGIN_METADATA_FILENAMES = ("metadata.yaml", "metadata.yml")
 PLUGIN_METADATA_REQUIRED_FIELDS = ("name", "desc", "version", "author")
@@ -394,6 +395,10 @@ class _PluginUpdater(_RepoZipUpdater):
             raise ValueError(
                 f"{metadata_label} 中字段 {', '.join(invalid_fields)} 必须是非空字符串。"
             )
+
+        # An unsupported category must never block installation or updates, so it
+        # is normalized to the fallback category with a warning instead of raising.
+        normalize_plugin_category(normalized_metadata.get("category"))
 
     @classmethod
     def inspect_plugin_directory(cls, plugin_path: str | Path) -> dict[str, object]:

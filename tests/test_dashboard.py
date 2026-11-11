@@ -242,6 +242,7 @@ window.renderTabs = renderTabs;
         display_name="Plugin Page Demo",
         root_dir_name=PLUGIN_PAGE_DEMO_NAME,
         activated=True,
+        category="tools",
     )
 
     monkeypatch.setattr(
@@ -1883,6 +1884,7 @@ async def test_plugin_get_excludes_scanned_pages(
         item for item in data["data"] if item["name"] == PLUGIN_PAGE_DEMO_NAME
     )
     assert plugin["activated"] is True
+    assert plugin["category"] == "tools"
     assert "page" not in plugin
     assert "pages" in plugin
     assert isinstance(plugin["pages"], list)
@@ -2549,6 +2551,7 @@ async def test_plugins(
     assert data["status"] == "ok"
     for plugin in data["data"]:
         assert "installed_at" in plugin
+        assert "category" in plugin
         assert "components" not in plugin
         installed_at = plugin["installed_at"]
         if installed_at is None:

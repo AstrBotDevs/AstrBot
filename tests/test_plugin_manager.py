@@ -14,6 +14,7 @@ from unittest.mock import AsyncMock
 import pytest
 import yaml
 
+from astrbot.core.star import plugin_categories
 from astrbot.core.star import star_manager as star_manager_module
 from astrbot.core.star.star_handler import EventType, StarHandlerMetadata
 from astrbot.core.star.star_manager import PluginDependencyInstallError, PluginManager
@@ -191,6 +192,97 @@ def test_load_plugin_metadata_accepts_yml_suffix(tmp_path: Path):
     assert PluginManager._get_plugin_dir_name_from_metadata(str(plugin_path)) == (
         TEST_PLUGIN_NAME
     )
+
+
+def _write_plugin_category(plugin_path: Path, category: object) -> None:
+    metadata_path = plugin_path / "metadata.yaml"
+    metadata = yaml.safe_load(metadata_path.read_text(encoding="utf-8"))
+    metadata["category"] = category
+    metadata_path.write_text(yaml.dump(metadata), encoding="utf-8")
+
+
+def test_load_plugin_metadata_includes_category(tmp_path: Path):
+    plugin_path = tmp_path / "helloworld"
+    _write_local_test_plugin(plugin_path, TEST_PLUGIN_REPO)
+    _write_plugin_category(plugin_path, "platform_adapter")
+
+    loaded_metadata = PluginManager._load_plugin_metadata(str(plugin_path))
+
+    assert loaded_metadata is not None
+    assert loaded_metadata.category == "platform_adapter"
+
+
+def test_load_plugin_metadata_normalizes_category(tmp_path: Path):
+    plugin_path = tmp_path / "helloworld"
+    _write_local_test_plugin(plugin_path, TEST_PLUGIN_REPO)
+    _write_plugin_category(plugin_path, "Group Games")
+
+    loaded_metadata = PluginManager._load_plugin_metadata(str(plugin_path))
+
+    assert loaded_metadata is not None
+    assert loaded_metadata.category == "group_games"
+
+
+def test_load_plugin_metadata_unknown_category_falls_back_to_other(tmp_path: Path):
+    plugin_path = tmp_path / "helloworld"
+    _write_local_test_plugin(plugin_path, TEST_PLUGIN_REPO)
+    _write_plugin_category(plugin_path, "not_a_category")
+
+    loaded_metadata = PluginManager._load_plugin_metadata(str(plugin_path))
+
+    assert loaded_metadata is not None
+    assert loaded_metadata.category == "other"
+
+
+def test_load_plugin_metadata_without_category_is_none(tmp_path: Path):
+    plugin_path = tmp_path / "helloworld"
+    _write_local_test_plugin(plugin_path, TEST_PLUGIN_REPO)
+
+    loaded_metadata = PluginManager._load_plugin_metadata(str(plugin_path))
+
+    assert loaded_metadata is not None
+    assert loaded_metadata.category is None
+
+
+def test_validate_plugin_metadata_allows_unknown_category(monkeypatch) -> None:
+    # A category typo must not make an existing plugin uninstallable on update.
+    warnings: list[str] = []
+    monkeypatch.setattr(
+        plugin_categories.logger, "warning", lambda message: warnings.append(message)
+    )
+
+    star_manager_module._PluginUpdater.validate_plugin_metadata(
+        {
+            "name": TEST_PLUGIN_NAME,
+            "author": "AstrBot Team",
+            "desc": "Local test plugin",
+            "version": "1.0.0",
+            "category": "not_a_category",
+        },
+        "metadata.yaml",
+    )
+
+    assert len(warnings) == 1
+    assert "not_a_category" in warnings[0]
+
+
+def test_load_plugin_metadata_warns_once_for_unknown_category(
+    tmp_path: Path, monkeypatch
+) -> None:
+    # Loading validates the metadata first, so the warning must not repeat.
+    warnings: list[str] = []
+    monkeypatch.setattr(
+        plugin_categories.logger, "warning", lambda message: warnings.append(message)
+    )
+    plugin_path = tmp_path / "helloworld"
+    _write_local_test_plugin(plugin_path, TEST_PLUGIN_REPO)
+    _write_plugin_category(plugin_path, "not_a_category")
+
+    loaded_metadata = PluginManager._load_plugin_metadata(str(plugin_path))
+
+    assert loaded_metadata is not None
+    assert loaded_metadata.category == "other"
+    assert len(warnings) == 1
 
 
 def test_load_plugin_metadata_does_not_fallback_to_legacy_info(
@@ -927,6 +1019,62 @@ async def test_url_install_preparation_failure_preserves_existing_plugin(
     assert plugin_manager_pm.failed_plugin_dict == {}
     load.assert_not_awaited()
     terminate.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_load_plugin_keeps_declared_category(
+    plugin_manager_pm: PluginManager,
+    local_updater: Path,
+    monkeypatch,
+    tmp_path: Path,
+):
+    """Loading a plugin must keep the category declared in metadata.yaml."""
+    _clear_star_runtime_state()
+    module_path = f"data.plugins.{TEST_PLUGIN_DIR}.main"
+    _write_plugin_category(local_updater, "group_games")
+    (local_updater / "main.py").write_text(
+        "from astrbot.api.star import Star\nclass Main(Star):\n    pass\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(
+        plugin_manager_pm.context, "stars", star_manager_module.star_registry
+    )
+    monkeypatch.setattr(
+        plugin_manager_pm, "reserved_plugin_path", str(tmp_path / "reserved")
+    )
+    monkeypatch.setattr(
+        plugin_manager_pm, "plugin_config_path", str(tmp_path / "config")
+    )
+
+    async def global_get(key, default=None):
+        return default
+
+    async def import_plugin(*, path, **kwargs):
+        if path not in sys.modules:
+            module = ModuleType(path)
+            sys.modules[path] = module
+            main_path = local_updater / "main.py"
+            exec(
+                compile(main_path.read_text(encoding="utf-8"), str(main_path), "exec"),
+                module.__dict__,
+            )
+        return sys.modules[path]
+
+    async def sync_command_configs():
+        return None
+
+    monkeypatch.setattr(star_manager_module.sp, "global_get", global_get)
+    monkeypatch.setattr(
+        star_manager_module, "sync_command_configs", sync_command_configs
+    )
+    monkeypatch.setattr(
+        plugin_manager_pm, "_import_plugin_with_dependency_recovery", import_plugin
+    )
+
+    success, error = await plugin_manager_pm.load(specified_dir_name=TEST_PLUGIN_DIR)
+
+    assert success, error
+    assert star_manager_module.star_map[module_path].category == "group_games"
 
 
 @pytest.mark.asyncio

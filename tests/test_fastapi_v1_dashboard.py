@@ -947,6 +947,7 @@ def fake_core_lifecycle():
         logo_path=None,
         support_platforms=[],
         astrbot_version="",
+        category=None,
         i18n={},
         root_dir_name=None,
         star_handler_full_names=[],

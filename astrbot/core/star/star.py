@@ -69,6 +69,9 @@ class StarMetadata:
     astrbot_version: str | None = None
     """插件要求的 AstrBot 版本范围（PEP 440 specifier，如 >=4.13.0,<4.17.0）"""
 
+    category: str | None = None
+    """Plugin market category slug declared in metadata (None when undeclared)."""
+
     i18n: dict[str, dict] = field(default_factory=dict)
     """插件自带的国际化文案，按 locale 分组。"""
 
