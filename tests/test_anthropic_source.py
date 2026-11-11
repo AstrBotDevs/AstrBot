@@ -127,15 +127,19 @@ async def test_follow_up_preserves_history_images(monkeypatch, tmp_path, streami
 @pytest.mark.asyncio
 async def test_history_images_share_one_download_deadline(monkeypatch):
     requested = []
+    loop = asyncio.get_running_loop()
+    now = loop.time()
 
     @asynccontextmanager
     async def slow_get(session, url, **kwargs):
+        nonlocal now
         requested.append(str(url))
+        now += ProviderAnthropic._HISTORY_IMAGE_TIMEOUT
         await asyncio.Event().wait()
         yield
 
     monkeypatch.setattr(aiohttp.ClientSession, "get", slow_get)
-    monkeypatch.setattr(ProviderAnthropic, "_HISTORY_IMAGE_TIMEOUT", 0.05)
+    monkeypatch.setattr(loop, "time", lambda: now)
     refs = ["https://example.com/slow.png", "https://example.com/next.png"]
     _, messages = await _provider()._prepare_payload(
         [
