@@ -1,14 +1,25 @@
+import asyncio
+import base64
+import copy
 import json
+from contextlib import asynccontextmanager
+from io import BytesIO
 from types import SimpleNamespace
 
+import aiohttp
 import pytest
+from aiohttp import ClientConnectionError
 from anthropic import BadRequestError
 from anthropic import _base_client as anthropic_base_client
 from anthropic.types import Message, MessageDeltaUsage, TextBlock, Usage
+from PIL import Image
 
 from astrbot.core.agent.tool import FunctionTool, ToolSet
-from astrbot.core.provider.entities import TokenUsage
-from astrbot.core.provider.sources.anthropic_source import ProviderAnthropic
+from astrbot.core.provider.entities import LLMResponse, TokenUsage
+from astrbot.core.provider.sources.anthropic_source import (
+    ProviderAnthropic,
+    _PublicImageResolver,
+)
 
 # The SDK bundles its own httpx (``httpx`` before 1.0.0, ``httpx2`` after).
 sdk_httpx = getattr(
@@ -18,6 +29,203 @@ sdk_httpx = getattr(
 
 def _provider() -> ProviderAnthropic:
     return ProviderAnthropic.__new__(ProviderAnthropic)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("streaming", [False, True])
+@pytest.mark.parametrize(
+    "reference",
+    [
+        "http",
+        "https",
+        "path",
+        "file",
+        "base64",
+        "data",
+        "missing",
+        "download_error",
+        "invalid_data",
+        "unsupported_format",
+        "truncated_png",
+        "oversize",
+        "redirect",
+        "ip_literal",
+        "bare_base64",
+    ],
+)
+async def test_history_images_survive_repeated_requests(
+    monkeypatch, tmp_path, streaming, reference
+):
+    image = Image.new("RGB", (2, 2))
+    png = BytesIO()
+    image.save(png, format="PNG")
+    image_bytes = png.getvalue()
+    bmp = BytesIO()
+    image.save(bmp, format="BMP")
+    encoded = base64.b64encode(image_bytes).decode()
+    source = tmp_path / "image.png"
+    source.write_bytes(image_bytes)
+    refs = {
+        "http": "http://example.com/image.png",
+        "https": "https://example.com/image.png",
+        "path": str(source),
+        "file": source.as_uri(),
+        "base64": "base64://" + encoded,
+        "bare_base64": encoded,
+        "data": "data:image/png;base64," + encoded,
+        "missing": str(tmp_path / "missing.png"),
+        "invalid_data": "data:image/png;base64,!!!!",
+        "download_error": "https://example.com/unavailable.png",
+        "unsupported_format": "https://example.com/image.bmp",
+        "truncated_png": "data:image/png;base64,"
+        + base64.b64encode(image_bytes[:33]).decode(),
+        "oversize": "https://example.com/large.png",
+        "redirect": "https://example.com/moved.png",
+        "ip_literal": "http://127.0.0.1/image.png",
+    }
+    remote_refs = {
+        "http",
+        "https",
+        "download_error",
+        "unsupported_format",
+        "oversize",
+        "redirect",
+    }
+
+    @asynccontextmanager
+    async def get(session, url, *, allow_redirects, headers):
+        assert reference in remote_refs
+        assert str(url) == refs[reference]
+        assert not allow_redirects
+        assert not session.trust_env
+        if reference == "download_error":
+            raise ClientConnectionError("Image download failed")
+
+        async def chunks(size):
+            yield bmp.getvalue() if reference == "unsupported_format" else image_bytes
+
+        yield SimpleNamespace(
+            status=302 if reference == "redirect" else 200,
+            content=SimpleNamespace(iter_chunked=chunks),
+        )
+
+    monkeypatch.setattr(aiohttp.ClientSession, "get", get)
+    if reference == "oversize":
+        monkeypatch.setattr(
+            ProviderAnthropic, "_HISTORY_IMAGE_MAX_BYTES", len(image_bytes) - 1
+        )
+    provider = ProviderAnthropic({"model": "claude-test"}, {}, use_api_key=False)
+    captured = []
+
+    async def query(payloads, tools, **kwargs):
+        provider._sanitize_assistant_messages(payloads)
+        captured.append(payloads)
+        return LLMResponse(role="assistant", completion_text="ok")
+
+    async def query_stream(payloads, tools, **kwargs):
+        yield await query(payloads, tools, **kwargs)
+
+    monkeypatch.setattr(provider, "_query", query)
+    monkeypatch.setattr(provider, "_query_stream", query_stream)
+    history = [
+        {
+            "role": "user",
+            "content": [{"type": "image_url", "image_url": {"url": refs[reference]}}],
+        },
+        {"role": "assistant", "content": "Previous answer"},
+    ]
+    for _ in range(3):
+        original = copy.deepcopy(history)
+        if streaming:
+            responses = [
+                response
+                async for response in provider.text_chat_stream(
+                    prompt="Look at the picture again", contexts=history
+                )
+            ]
+            assert responses[-1].completion_text == "ok"
+        else:
+            response = await provider.text_chat(
+                prompt="Look at the picture again", contexts=history
+            )
+            assert response.completion_text == "ok"
+        assert history == original
+        first_message = captured[-1]["messages"][0]
+        assert first_message["role"] == "user"
+        if reference not in {"http", "https", "data", "base64", "bare_base64"}:
+            assert first_message["content"] == [
+                {"type": "text", "text": "[Image unavailable]"}
+            ]
+        else:
+            assert first_message["content"] == [
+                {
+                    "type": "image",
+                    "source": {
+                        "type": "base64",
+                        "media_type": "image/png",
+                        "data": encoded,
+                    },
+                }
+            ]
+        history.extend(
+            [
+                {"role": "user", "content": "Look at the picture again"},
+                {"role": "assistant", "content": "ok"},
+            ]
+        )
+
+
+@pytest.mark.asyncio
+async def test_history_images_share_one_download_deadline(monkeypatch):
+    requested = []
+
+    @asynccontextmanager
+    async def slow_get(session, url, **kwargs):
+        requested.append(str(url))
+        await asyncio.Event().wait()
+        yield
+
+    monkeypatch.setattr(aiohttp.ClientSession, "get", slow_get)
+    monkeypatch.setattr(ProviderAnthropic, "_HISTORY_IMAGE_TIMEOUT", 0.05)
+    refs = ["https://example.com/slow.png", "https://example.com/next.png"]
+    _, messages = await _provider()._prepare_payload(
+        [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "image_url", "image_url": {"url": ref}} for ref in refs
+                ],
+            }
+        ]
+    )
+    assert requested == refs[:1]
+    assert messages[0]["content"] == [
+        {"type": "text", "text": "[Image unavailable]"},
+        {"type": "text", "text": "[Image unavailable]"},
+    ]
+
+
+@pytest.mark.asyncio
+async def test_history_image_resolver_only_returns_public_destinations(monkeypatch):
+    async def resolve(self, host, port, family):
+        return [
+            {"host": address}
+            for address in (
+                "127.0.0.1",
+                "10.0.0.2",
+                "224.0.0.1",
+                "::1",
+                "::ffff:127.0.0.1",
+                "93.184.216.34",
+            )
+            if host == "example.com" or address != "93.184.216.34"
+        ]
+
+    monkeypatch.setattr(aiohttp.ThreadedResolver, "resolve", resolve)
+    resolver = _PublicImageResolver()
+    assert await resolver.resolve("example.com") == [{"host": "93.184.216.34"}]
+    with pytest.raises(OSError, match="no public address"):
+        await resolver.resolve("internal.example")
 
 
 @pytest.mark.asyncio

@@ -1,15 +1,24 @@
+import asyncio
 import base64
 import builtins
 import json
+import socket
 from collections.abc import AsyncGenerator
+from io import BytesIO
+from ipaddress import IPv6Address, ip_address
 from typing import Any, Literal
 
+import aiohttp
 import anthropic
 import httpx
+from aiohttp.abc import ResolveResult
+from aiohttp.helpers import is_ip_address
 from anthropic import AsyncAnthropic
 from anthropic.types import Message
 from anthropic.types.message_delta_usage import MessageDeltaUsage
 from anthropic.types.usage import Usage
+from PIL import Image as PILImage
+from yarl import URL
 
 from astrbot import logger
 from astrbot.api.provider import Provider
@@ -19,6 +28,7 @@ from astrbot.core.provider.entities import LLMResponse, TokenUsage
 from astrbot.core.provider.func_tool_manager import ToolSet
 from astrbot.core.utils.media_utils import (
     describe_media_ref,
+    is_recoverable_image_error,
     resolve_media_ref_to_base64_data,
 )
 from astrbot.core.utils.network_utils import (
@@ -32,12 +42,53 @@ from ..register import register_provider_adapter
 from .request_retry import retry_provider_request, retry_provider_request_context
 
 
+class _PublicImageResolver(aiohttp.ThreadedResolver):
+    """Supply only public DNS results to the historical image connector."""
+
+    async def resolve(
+        self, host: str, port: int = 0, family: socket.AddressFamily = socket.AF_INET
+    ) -> list[ResolveResult]:
+        """Filter the actual addresses used by the connector.
+
+        Args:
+            host: DNS name to resolve.
+            port: Destination port.
+            family: Address family requested by the connector.
+
+        Returns:
+            Public destination addresses.
+
+        Raises:
+            OSError: If DNS returns no usable public address.
+        """
+        public = []
+        for result in await super().resolve(host, port, family):
+            address = ip_address(result["host"])
+            if isinstance(address, IPv6Address):
+                if address.ipv4_mapped:
+                    address = address.ipv4_mapped
+                elif address.sixtofour or address.teredo:
+                    continue
+            if (
+                address.is_global
+                and not address.is_multicast
+                and not address.is_reserved
+            ):
+                public.append(result)
+        if not public:
+            raise OSError("Image host has no public address.")
+        return public
+
+
 @register_provider_adapter(
     "anthropic_chat_completion",
     "Anthropic Claude API 提供商适配器",
 )
 class ProviderAnthropic(Provider):
     _PROMPT_CACHE_CONTROL = {"type": "ephemeral"}
+    _HISTORY_IMAGE_TIMEOUT = 5.0
+    _HISTORY_IMAGE_MAX_BYTES = 5 * 1024 * 1024
+    _HISTORY_IMAGE_FORMATS = ("JPEG", "PNG", "GIF", "WEBP")
 
     @staticmethod
     def _ensure_usable_response(
@@ -176,18 +227,81 @@ class ProviderAnthropic(Provider):
                 "type": "enabled",
             }
 
-    def _prepare_payload(self, messages: list[dict]):
-        """准备 Anthropic API 的请求 payload
+    async def _download_history_image(self, reference: str, deadline: float) -> bytes:
+        """Download a public image without following redirects or using a proxy.
 
         Args:
-            messages: OpenAI 格式的消息列表，包含用户输入和系统提示等信息
-        Returns:
-            system_prompt: 系统提示内容
-            new_messages: 处理后的消息列表，去除系统提示
+            reference: HTTP(S) URL from the history.
+            deadline: Shared deadline for remote images in this request.
 
+        Returns:
+            The downloaded image bytes.
+
+        Raises:
+            ValueError: If the URL or response violates the image download policy.
+            TimeoutError: If the shared download budget expires.
+            aiohttp.ClientError: If the request fails.
+        """
+        if deadline <= asyncio.get_running_loop().time():
+            raise TimeoutError("Historical image download budget expired.")
+
+        url = URL(reference)
+        host = url.raw_host
+        # aiohttp bypasses its DNS resolver for IP literals.
+        if not host or is_ip_address(host) or url.user is not None:
+            raise ValueError("Expected an image URL with a public DNS name.")
+
+        async with (
+            asyncio.timeout_at(deadline),
+            aiohttp.ClientSession(
+                connector=aiohttp.TCPConnector(resolver=_PublicImageResolver()),
+                trust_env=False,
+                auto_decompress=False,
+            ) as session,
+            session.get(
+                url,
+                allow_redirects=False,
+                headers={"Accept-Encoding": "identity"},
+            ) as response,
+        ):
+            if response.status != 200:
+                raise ValueError("Image download did not return HTTP 200.")
+            image = bytearray()
+            async for chunk in response.content.iter_chunked(64 * 1024):
+                if len(image) + len(chunk) > self._HISTORY_IMAGE_MAX_BYTES:
+                    raise ValueError(
+                        "Historical image exceeds the download size limit."
+                    )
+                image.extend(chunk)
+            return bytes(image)
+
+    @classmethod
+    def _verify_history_image(cls, data: bytes) -> str | None:
+        """Check supported image headers and structure without decoding pixels.
+
+        Args:
+            data: Encoded image bytes from history.
+
+        Returns:
+            MIME type reported by the verified image parser.
+        """
+        with PILImage.open(BytesIO(data), formats=cls._HISTORY_IMAGE_FORMATS) as image:
+            mime_type = image.get_format_mimetype()
+            image.verify()
+            return mime_type
+
+    async def _prepare_payload(self, messages: list[dict]):
+        """Convert OpenAI messages and resolve historical image references.
+
+        Args:
+            messages: Messages containing system prompts and conversation history.
+
+        Returns:
+            The system prompt and Anthropic messages with resolved image blocks.
         """
         system_prompt = ""
         new_messages = []
+        image_download_deadline = None
         for message in messages:
             if message["role"] == "system":
                 system_prompt = message["content"] or "<empty system prompt>"
@@ -275,35 +389,72 @@ class ProviderAnthropic(Provider):
                     converted_content = []
                     for part in message["content"]:
                         if part.get("type") == "image_url":
-                            # Convert OpenAI image_url format to Anthropic image format
-                            image_url_data = part.get("image_url", {})
-                            url = image_url_data.get("url", "")
-                            if url.startswith("data:"):
-                                try:
-                                    _, base64_data = url.split(",", 1)
-                                    # Detect actual image format from binary data
-                                    image_bytes = base64.b64decode(base64_data)
-                                    media_type = self._detect_image_mime_type(
-                                        image_bytes
+                            image_url = part.get("image_url")
+                            reference = (
+                                image_url.get("url")
+                                if isinstance(image_url, dict)
+                                else None
+                            )
+                            try:
+                                if not isinstance(reference, str):
+                                    raise ValueError("Expected an image reference.")
+                                if reference.startswith(("http://", "https://")):
+                                    if image_download_deadline is None:
+                                        image_download_deadline = (
+                                            asyncio.get_running_loop().time()
+                                            + self._HISTORY_IMAGE_TIMEOUT
+                                        )
+                                    image_bytes = await self._download_history_image(
+                                        reference, image_download_deadline
                                     )
-                                    converted_content.append(
-                                        {
-                                            "type": "image",
-                                            "source": {
-                                                "type": "base64",
-                                                "media_type": media_type,
-                                                "data": base64_data,
-                                            },
-                                        }
+                                else:
+                                    if reference.startswith("data:"):
+                                        header, _, reference = reference.partition(",")
+                                        if not header.endswith(";base64"):
+                                            raise ValueError(
+                                                "Expected a base64 data URI."
+                                            )
+                                    reference = reference.removeprefix("base64://")
+                                    encoded = "".join(reference.split())
+                                    encoded += "=" * (-len(encoded) % 4)
+                                    image_bytes = base64.b64decode(
+                                        encoded, validate=True
                                     )
-                                except ValueError:
-                                    logger.warning(
-                                        f"Failed to parse image data URI: {url[:50]}..."
-                                    )
-                            else:
-                                logger.warning(
-                                    f"Unsupported image URL format for Anthropic: {url[:50]}..."
+
+                                media_type = await asyncio.to_thread(
+                                    self._verify_history_image, image_bytes
                                 )
+                                if media_type is None:
+                                    raise ValueError(
+                                        "Unsupported historical image format."
+                                    )
+                            except Exception as exc:
+                                if not (
+                                    is_recoverable_image_error(exc)
+                                    or isinstance(exc, PILImage.DecompressionBombError)
+                                ):
+                                    raise
+                                logger.warning(
+                                    "Unable to include Anthropic history image; "
+                                    "using a placeholder."
+                                )
+                                converted_content.append(
+                                    {"type": "text", "text": "[Image unavailable]"}
+                                )
+                                continue
+
+                            converted_content.append(
+                                {
+                                    "type": "image",
+                                    "source": {
+                                        "type": "base64",
+                                        "media_type": media_type,
+                                        "data": base64.b64encode(image_bytes).decode(
+                                            "ascii"
+                                        ),
+                                    },
+                                }
+                            )
                         elif part.get("type") == "audio_url":
                             converted_content.append(
                                 {
@@ -866,7 +1017,7 @@ class ProviderAnthropic(Provider):
                 for tool_call_result in tool_calls_result:
                     context_query.extend(tool_call_result.to_openai_messages())
 
-        system_prompt, new_messages = self._prepare_payload(context_query)
+        system_prompt, new_messages = await self._prepare_payload(context_query)
 
         model = model or self.get_model()
 
@@ -943,7 +1094,7 @@ class ProviderAnthropic(Provider):
                 for tool_call_result in tool_calls_result:
                     context_query.extend(tool_call_result.to_openai_messages())
 
-        system_prompt, new_messages = self._prepare_payload(context_query)
+        system_prompt, new_messages = await self._prepare_payload(context_query)
 
         model = model or self.get_model()
 
@@ -969,18 +1120,6 @@ class ProviderAnthropic(Provider):
             **query_kwargs,
         ):
             yield llm_response
-
-    def _detect_image_mime_type(self, data: bytes) -> str:
-        """根据图片二进制数据的 magic bytes 检测 MIME 类型"""
-        if data[:8] == b"\x89PNG\r\n\x1a\n":
-            return "image/png"
-        if data[:2] == b"\xff\xd8":
-            return "image/jpeg"
-        if data[:6] in (b"GIF87a", b"GIF89a"):
-            return "image/gif"
-        if data[:4] == b"RIFF" and data[8:12] == b"WEBP":
-            return "image/webp"
-        return "image/jpeg"
 
     async def assemble_context(
         self,

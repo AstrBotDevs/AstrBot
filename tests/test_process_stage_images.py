@@ -669,7 +669,7 @@ async def test_plugin_request_extra_metadata_hook_and_history(
     from astrbot.core.provider.sources.anthropic_source import ProviderAnthropic
 
     anthropic = object.__new__(ProviderAnthropic)
-    _, payload = anthropic._prepare_payload([saved[-1]])
+    _, payload = await anthropic._prepare_payload([saved[-1]])
     visual = [part for part in payload[0]["content"] if part["type"] == "image"]
     assert len(visual) == len(images)
     assert all(part["source"]["media_type"] == "image/jpeg" for part in visual)
