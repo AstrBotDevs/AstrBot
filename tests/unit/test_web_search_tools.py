@@ -2336,7 +2336,19 @@ async def test_specstream_extract_reports_page_failure(specstream_session, page_
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
     "url",
-    [None, 1, "", "ftp://example.com", "https:///page", "https://[broken"],
+    [
+        None,
+        1,
+        "",
+        "ftp://example.com",
+        "https:///page",
+        "https://[broken",
+        "https://example.com:abc/page",
+        "https://example.com:70000/page",
+        "https://example.com:-1/page",
+        "https://example.com/with space",
+        "https://example.com/\npage",
+    ],
 )
 async def test_specstream_extract_rejects_invalid_url(specstream_session, url):
     context = _context_with_provider_settings({"websearch_specstream_key": ["key"]})

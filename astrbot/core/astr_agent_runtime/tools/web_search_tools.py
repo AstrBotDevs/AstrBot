@@ -2474,10 +2474,13 @@ class SpecStreamExtractWebPageTool(FunctionTool[AstrAgentContext]):
         url = kwargs.get("url")
         try:
             parsed = urlsplit(url) if isinstance(url, str) else None
+            # Port syntax and range are validated only when this property is read.
+            _ = parsed.port if parsed is not None else None
             valid_url = (
                 parsed is not None
                 and parsed.scheme in {"http", "https"}
                 and bool(parsed.hostname)
+                and not any(char.isspace() for char in url)
             )
         except ValueError:
             valid_url = False
