@@ -36,6 +36,9 @@ CACHED_SIZE = 500
 PLUGIN_LOGGER_PREFIX = "astrbot.plugin."
 """Prefix of per-plugin logger names; full name is ``astrbot.plugin.<plugin_name>``."""
 
+PLUGIN_PATH_MARKERS = ("data/plugins/", "astrbot/builtin_stars/")
+"""Path segments (POSIX form) of the plugin store and the built-in plugins."""
+
 PLUGIN_LOG_LEVELS = ("DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL")
 """Allowed per-plugin log levels."""
 
@@ -102,20 +105,24 @@ class _RecordEnricherFilter(logging.Filter):
             record.source = "plugin"
             record.plugin_name = plugin_name
         else:
-            # Framework code sometimes reports on behalf of a plugin: for
-            # example, the plugin loader logs why a plugin failed to load.
-            # Such call sites pass ``extra={"plugin_name": ...}`` so the WebUI
-            # can list the plugin in the log filter and tag the line with it.
-            explicit_plugin_name = getattr(record, "plugin_name", None)
-            is_plugin = _is_plugin_path(record.pathname)
-            if explicit_plugin_name:
-                record.plugin_tag = f"[{explicit_plugin_name}]"
-                record.source = "plugin"
-                record.plugin_name = explicit_plugin_name
+            # Core code can log on behalf of a plugin (the plugin loader reports
+            # load failures), in which case it stamps the plugin name on the
+            # record. Other records are attributed to a plugin by their source
+            # file. Both have to yield the same identifier: the Dashboard log
+            # page builds its plugin filter from the distinct ``plugin_name``
+            # values of the retained records.
+            stamped_plugin_name = getattr(record, "plugin_name", None)
+            plugin_name = stamped_plugin_name or _plugin_name_from_path(record.pathname)
+            if plugin_name:
+                plugin_name = _plugin_name_aliases.get(plugin_name, plugin_name)
+            if not plugin_name:
+                record.plugin_tag = "[Core]"
+            elif stamped_plugin_name:
+                record.plugin_tag = f"[{plugin_name}]"
             else:
-                record.plugin_tag = "[Plug]" if is_plugin else "[Core]"
-                record.source = "plugin" if is_plugin else "core"
-                record.plugin_name = None
+                record.plugin_tag = "[Plug]"
+            record.source = "plugin" if plugin_name else "core"
+            record.plugin_name = plugin_name
         record.short_levelname = _get_short_level_name(record.levelname)
         record.astrbot_version_tag = (
             f" [v{VERSION}]" if record.levelno >= logging.WARNING else ""
@@ -158,11 +165,42 @@ class _QueueAnsiColorFilter(logging.Filter):
         return True
 
 
-def _is_plugin_path(pathname: str | None) -> bool:
+_plugin_name_aliases: dict[str, str] = {}
+"""Plugin directory names mapped to the name their records are attributed to.
+
+A plugin directory does not have to match the name in the plugin's metadata, so
+the loader registers the mapping once a plugin loads. Records emitted through
+the plugin's dedicated logger and records whose source file is inside the plugin
+directory then share a single identifier in the Dashboard log filter. The entry
+is dropped again when the plugin is unloaded or removed.
+"""
+
+
+def _plugin_name_from_path(pathname: str | None) -> str | None:
+    """Return the plugin directory that contains a log record's source file.
+
+    Paths are compared with POSIX separators so plugin attribution works on
+    every platform, not only on systems whose paths use ``/``.
+
+    Args:
+        pathname: Source file path of the log record.
+
+    Returns:
+        The plugin directory name, or None if the file is not part of a plugin.
+        The directory name is the plugin identifier for a plugin that never
+        loaded; loaded plugins are resolved through ``_plugin_name_aliases``.
+    """
     if not pathname:
-        return False
-    norm_path = os.path.normpath(pathname)
-    return ("data/plugins" in norm_path) or ("astrbot/builtin_stars/" in norm_path)
+        return None
+    norm_path = os.path.normpath(pathname).replace("\\", "/")
+    for marker in PLUGIN_PATH_MARKERS:
+        index = norm_path.find(marker)
+        if index < 0:
+            continue
+        plugin_name = norm_path[index + len(marker) :].split("/", 1)[0]
+        if plugin_name:
+            return plugin_name
+    return None
 
 
 def _get_short_level_name(level_name: str) -> str:
@@ -584,6 +622,38 @@ class LogManager:
             return logging.getLevelName(override)
         base_level = logging.getLogger("astrbot").level
         return base_level if base_level > 0 else logging.INFO
+
+    @classmethod
+    def register_plugin_name_alias(
+        cls,
+        dir_name: str | None,
+        plugin_name: str | None,
+    ) -> None:
+        """Attribute a plugin directory to the plugin name used by its logger.
+
+        Args:
+            dir_name: Directory name of the plugin inside the plugin store.
+            plugin_name: Plugin name from the plugin metadata; ignored when
+                empty, in which case the directory name stays the identifier.
+        """
+        if dir_name and plugin_name:
+            _plugin_name_aliases[dir_name] = plugin_name
+
+    @classmethod
+    def forget_plugin_name_alias(cls, dir_name: str | None) -> None:
+        """Stop attributing a plugin directory to its previous plugin name.
+
+        The alias only describes the plugin that currently occupies the
+        directory. It is dropped when that plugin is unloaded or removed, so a
+        different plugin installed into the same directory is not attributed to
+        the previous plugin's name.
+
+        Args:
+            dir_name: Directory name of the plugin inside the plugin store;
+                ignored when empty.
+        """
+        if dir_name:
+            _plugin_name_aliases.pop(dir_name, None)
 
     @classmethod
     def get_plugin_logger(cls, plugin_name: str) -> logging.Logger:
