@@ -12,9 +12,11 @@ import pytest
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from astrbot.core.agent.agent import Agent
+from astrbot.core.agent.events import MessageCompleted
 from astrbot.core.agent.handoff import HandoffTool
 from astrbot.core.agent.hooks import BaseAgentRunHooks
 from astrbot.core.agent.message import ImageURLPart, Message, TextPart
+from astrbot.core.agent.output import ExtensionOutput, PlainOutput
 from astrbot.core.agent.run_context import ContextWrapper
 from astrbot.core.agent.runners.tool_loop_agent_runner import ToolLoopAgentRunner
 from astrbot.core.agent.tool import FunctionTool, ToolSet
@@ -37,6 +39,22 @@ async def next_event(iterator, kind):
 async def collect_events(iterator):
     """Drain a step so execution, cancellation and hooks all settle."""
     return [event async for event in iterator]
+
+
+def completed_texts(events):
+    """Collect completed plain output from native runner events.
+
+    Args:
+        events: Events emitted by the runner.
+
+    Returns:
+        The completed messages' plain text in emission order.
+    """
+    return [
+        "".join(part.text for part in event.content if isinstance(part, PlainOutput))
+        for event in events
+        if isinstance(event, MessageCompleted)
+    ]
 
 
 class MockProvider(Provider):
@@ -2443,11 +2461,7 @@ async def test_whitespace_preamble_with_tool_call_is_not_yielded(
 
     responses = [resp async for resp in runner.step_until_done(5)]
 
-    texts = [
-        resp.data["chain"].get_plain_text()
-        for resp in responses
-        if resp.type == "llm_result"
-    ]
+    texts = completed_texts(responses)
     assert texts == ["最终回复"]
 
 
@@ -2470,11 +2484,7 @@ async def test_non_empty_preamble_with_tool_call_is_still_yielded(
 
     responses = [resp async for resp in runner.step_until_done(5)]
 
-    texts = [
-        resp.data["chain"].get_plain_text()
-        for resp in responses
-        if resp.type == "llm_result"
-    ]
+    texts = completed_texts(responses)
     assert texts == ["先查一下天气。", "最终回复"]
 
 
@@ -2527,11 +2537,7 @@ async def test_whitespace_preamble_chain_with_tool_call_is_not_yielded(
 
     responses = [resp async for resp in runner.step_until_done(5)]
 
-    texts = [
-        resp.data["chain"].get_plain_text()
-        for resp in responses
-        if resp.type == "llm_result"
-    ]
+    texts = completed_texts(responses)
     assert texts == ["最终回复"]
 
 
@@ -2557,12 +2563,15 @@ async def test_media_preamble_chain_with_tool_call_is_still_yielded(
 
     responses = [resp async for resp in runner.step_until_done(5)]
 
-    yielded = [resp for resp in responses if resp.type == "llm_result"]
+    completed = [resp for resp in responses if isinstance(resp, MessageCompleted)]
     assert any(
-        any(not isinstance(comp, PlainComp) for comp in resp.data["chain"].chain)
-        for resp in yielded
+        isinstance(part, ExtensionOutput)
+        and part.namespace == "astrbot.platform"
+        and part.value.get("qq") == "123"
+        for event in completed
+        for part in event.content
     )
-    assert yielded[-1].data["chain"].get_plain_text() == "最终回复"
+    assert completed_texts(completed)[-1] == "最终回复"
 
 
 @pytest.mark.asyncio
