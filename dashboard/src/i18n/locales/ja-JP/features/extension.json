@@ -142,8 +142,10 @@
   },
   "market": {
     "recommended": "🥳 おすすめ",
-    "allPlugins": "📦 すべてのプラグイン",
     "category": "カテゴリ",
+    "expandCategories": "すべてのカテゴリを表示",
+    "collapseCategories": "カテゴリを折りたたむ",
+    "refresh": "更新",
     "categories": {
       "all": "すべて",
       "ai_tools": "AI ツール",
@@ -151,7 +153,18 @@
       "productivity": "生産性",
       "integrations": "外部連携",
       "utilities": "ユーティリティ",
-      "other": "その他"
+      "other": "その他",
+      "ai_image": "AI 画像",
+      "ai_speech": "AI 音声",
+      "ai_agent": "エージェントと編成",
+      "platform_adapter": "プラットフォームアダプター",
+      "media_processing": "メディア処理",
+      "automation": "自動化とスケジュール",
+      "security": "セキュリティと審査",
+      "long_term_memory": "長期記憶",
+      "knowledge_base": "ナレッジベース",
+      "tools": "ツール",
+      "group_games": "グループゲーム"
     },
     "showFullName": "正式名称",
     "devDocs": "プラグイン開発ドキュメント",

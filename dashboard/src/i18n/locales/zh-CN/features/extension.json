@@ -142,8 +142,10 @@
   },
   "market": {
     "recommended": "🥳 推荐",
-    "allPlugins": "📦 全部插件",
     "category": "分类",
+    "expandCategories": "展开全部分类",
+    "collapseCategories": "收起分类",
+    "refresh": "刷新",
     "categories": {
       "all": "全部",
       "ai_tools": "AI 增强",
@@ -151,7 +153,18 @@
       "productivity": "效率",
       "integrations": "外部集成",
       "utilities": "生活实用",
-      "other": "其他"
+      "other": "其他",
+      "ai_image": "AI 绘图",
+      "ai_speech": "AI 语音",
+      "ai_agent": "智能体与编排",
+      "platform_adapter": "平台适配器",
+      "media_processing": "媒体处理",
+      "automation": "自动化与定时",
+      "security": "安全与审核",
+      "long_term_memory": "长期记忆",
+      "knowledge_base": "知识库",
+      "tools": "工具",
+      "group_games": "群游戏"
     },
     "showFullName": "完整名称",
     "devDocs": "插件开发文档",

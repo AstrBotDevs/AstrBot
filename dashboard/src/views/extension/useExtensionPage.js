@@ -213,8 +213,23 @@ export const useExtensionPage = (initialTab = "installed") => {
   const sortOrder = ref("desc"); // desc (降序) or asc (升序)
   const randomPluginNames = ref([]);
   const marketCategoryFilter = ref("all");
+  // Canonical slug order served by the backend; empty until it loads.
+  const marketCategorySlugs = ref([]);
 
   // 插件市场拼音搜索
+
+  const loadMarketCategories = async () => {
+    try {
+      const res = await pluginApi.marketCategories();
+      const slugs = res.data?.data?.categories;
+      marketCategorySlugs.value = Array.isArray(slugs)
+        ? slugs.map((slug) => String(slug || "").trim()).filter(Boolean)
+        : [];
+    } catch (error) {
+      console.warn("Failed to load plugin market categories:", error);
+      marketCategorySlugs.value = [];
+    }
+  };
 
   const normalizeMarketCategory = (rawCategory) => {
     const normalized = String(rawCategory || "")
@@ -223,7 +238,16 @@ export const useExtensionPage = (initialTab = "installed") => {
     if (!normalized) {
       return "other";
     }
-    return normalized.replace(/[\s-]+/g, "_");
+    const slug = normalized.replace(/[\s-]+/g, "_");
+    // Unknown slugs collapse into "other" so that a typo or an ad-hoc value in
+    // a marketplace index cannot create a one-off filter entry.
+    if (
+      marketCategorySlugs.value.length > 0 &&
+      !marketCategorySlugs.value.includes(slug)
+    ) {
+      return "other";
+    }
+    return slug;
   };
 
   const getMarketCategoryLabel = (key, rawCategory = "") => {
@@ -294,10 +318,18 @@ export const useExtensionPage = (initialTab = "installed") => {
       },
     ];
 
-    for (const [
-      categoryKey,
-      categoryData,
-    ] of marketCategoryMeta.value.entries()) {
+    // Prefer the backend order so the filter reads the same everywhere; fall
+    // back to discovery order when the vocabulary is unavailable.
+    const orderedKeys =
+      marketCategorySlugs.value.length > 0
+        ? marketCategorySlugs.value
+        : [...marketCategoryMeta.value.keys()];
+
+    for (const categoryKey of orderedKeys) {
+      const categoryData = marketCategoryMeta.value.get(categoryKey);
+      if (!categoryData) {
+        continue;
+      }
       items.push({
         value: categoryKey,
         label: getMarketCategoryLabel(categoryKey, categoryData.rawLabel),
@@ -2366,6 +2398,7 @@ export const useExtensionPage = (initialTab = "installed") => {
     }
     loading_.value = true;
     try {
+      await loadMarketCategories();
       await getExtensions({ withLoading: false });
 
       // 检查是否有 open_config 参数

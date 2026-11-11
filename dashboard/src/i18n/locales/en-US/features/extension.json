@@ -142,8 +142,10 @@
   },
   "market": {
     "recommended": "🥳 Recommended",
-    "allPlugins": "📦 All Extensions",
     "category": "Category",
+    "expandCategories": "Show all categories",
+    "collapseCategories": "Collapse categories",
+    "refresh": "Refresh",
     "categories": {
       "all": "All",
       "ai_tools": "AI Tools",
@@ -151,7 +153,18 @@
       "productivity": "Productivity",
       "integrations": "Integrations",
       "utilities": "Utilities",
-      "other": "Other"
+      "other": "Other",
+      "ai_image": "AI Image",
+      "ai_speech": "AI Speech",
+      "ai_agent": "Agents & Orchestration",
+      "platform_adapter": "Platform Adapter",
+      "media_processing": "Media Processing",
+      "automation": "Automation & Scheduling",
+      "security": "Security & Moderation",
+      "long_term_memory": "Long-term Memory",
+      "knowledge_base": "Knowledge Base",
+      "tools": "Tools",
+      "group_games": "Group Games"
     },
     "showFullName": "Full Name",
     "devDocs": "Extension Development Docs",
