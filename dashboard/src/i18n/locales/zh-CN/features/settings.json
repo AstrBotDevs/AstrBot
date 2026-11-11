@@ -61,6 +61,10 @@
       "tempStorage": {
         "title": "缓存",
         "subtitle": "临时目录自动清理阈值。"
+      },
+      "usageData": {
+        "title": "使用数据",
+        "subtitle": "匿名使用数据的收集与关闭方式。"
       }
     },
     "timePreview": {

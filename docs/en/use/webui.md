@@ -129,7 +129,7 @@ Global settings are under `System Settings` at the bottom of the sidebar:
 
 The page title and section navigation stay fixed while only the settings pane on the right scrolls.
 
-- `General`: timezone, external callback address, logs, and cache.
+- `General`: timezone, external callback address, logs, cache, and usage data. Use `Disable User Experience Improvement Program` under `Usage Data` to stop uploading anonymous usage data.
 - `Appearance`: theme colors.
 - `Network`: HTTP proxy, Python package sources, and GitHub proxy. For the address to use when AstrBot runs in Docker, see [Deploy with Docker](/en/deploy/astrbot/docker.md).
 - `Security`: WebUI HTTPS, login rate limits, and TOTP.
