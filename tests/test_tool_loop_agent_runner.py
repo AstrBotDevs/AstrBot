@@ -2550,7 +2550,7 @@ async def test_media_preamble_chain_with_tool_call_is_still_yielded(
     from astrbot.core.message.components import At
     from astrbot.core.message.components import Plain as PlainComp
 
-    provider = PreambleChainToolProvider([PlainComp(" "), At(qq="123")])
+    provider = PreambleChainToolProvider([PlainComp(" "), At(qq=123)])
     runner = ToolLoopAgentRunner()
     await runner.reset(
         provider=provider,
@@ -2567,7 +2567,8 @@ async def test_media_preamble_chain_with_tool_call_is_still_yielded(
     assert any(
         isinstance(part, ExtensionOutput)
         and part.namespace == "astrbot.platform"
-        and part.value.get("qq") == "123"
+        and part.name == "At"
+        and part.value.get("qq") == 123
         for event in completed
         for part in event.content
     )
