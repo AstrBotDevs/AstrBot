@@ -1,5 +1,9 @@
 ---
 outline: deep
+head:
+  - - style
+    - {}
+    - '.vp-doc table:has(thead th:nth-child(3)) th:nth-child(-n + 2), .vp-doc table:has(thead th:nth-child(3)) td:nth-child(-n + 2) { white-space: nowrap; }'
 ---
 
 # AstrBot Plugin Development Guide 🌠
@@ -143,35 +147,37 @@ In the WebUI installation flow, you can choose to "Ignore Warning and Install" t
 
 ### Declare Plugin Category (Optional)
 
-You can add a `category` field in `metadata.yaml` to declare the marketplace category of your plugin. The plugin marketplace, the WebUI and the runtime all follow this field instead of a category assigned during manual review.
+You can add a `category` field in `metadata.yaml` to declare the marketplace category of your plugin. The plugin marketplace, the WebUI and the runtime all follow this field.
 
 ```yaml
-category: media_processing
+category: media processing
 ```
 
-`category` must be one of the following identifiers (case-insensitive; localized names are not accepted):
+`category` takes one of the following identifiers. The English label is only the display text, so writing it back is not accepted.
 
-| Identifier | Meaning |
-| --- | --- |
-| `ai_tools` | AI enhancement |
-| `ai_image` | AI image generation |
-| `ai_speech` | AI speech |
-| `ai_agent` | Agents and orchestration |
-| `platform_adapter` | Platform adapter |
-| `media_processing` | Media processing |
-| `automation` | Automation and scheduling |
-| `security` | Security and moderation |
-| `long_term_memory` | Long-term memory |
-| `knowledge_base` | Knowledge base |
-| `tools` | Tools |
-| `integrations` | Third-party integrations |
-| `entertainment` | Entertainment |
-| `group_games` | Group games |
-| `productivity` | Productivity |
-| `utilities` | Utilities |
-| `other` | Other |
+| Identifier | English label | Use it for |
+| --- | --- | --- |
+| `ai tools` | AI Tools | One-shot text abilities on top of an LLM: prompts, rewriting, summarizing and translation |
+| `ai image` | AI Image | Text-to-image, image-to-image, style transfer and image editing |
+| `ai speech` | AI Speech | TTS and ASR: speech synthesis, voices and tone, speech recognition |
+| `ai agent` | Agents & Orchestration | Agent runs, tool calling, multi-agent and workflow orchestration |
+| `ai context` | AI Conversation | Cross-turn conversation context: persona and character settings, context compression and injection, reply style and tone; stored memories belong to Long-term Memory, external documents to Knowledge Base |
+| `long term memory` | Long-term Memory | Storing and recalling memories, user profiles and long-lived context |
+| `knowledge base` | Knowledge Base | Ingesting documents and retrieval QA (RAG), knowledge base management |
+| `tools` | Tools | General utilities and command sets: encoding and format conversion, calculation, short links, batch work |
+| `productivity` | Productivity | To-dos, schedules, notes and personal workflows |
+| `utilities` | Utilities | Everyday lookups and reminders: weather, exchange rates, parcels, almanac, unit conversion |
+| `integrations` | Integrations | Wiring a third-party platform or account: GitHub, cloud drives, RSS, music, Notion |
+| `platform adapter` | Platform Adapter | New messaging platforms or protocols, such as QQ, Telegram and Discord |
+| `media processing` | Media Processing | Parsing, transcoding, joining and sticker generation for images, audio and video |
+| `automation` | Automation & Scheduling | Scheduled pushes, auto replies and event-driven flows |
+| `security` | Security & Moderation | Content moderation, anti-spam, word filters, permissions and risk control |
+| `entertainment` | Entertainment | Generic fun that is not a game: tarot, fortune telling, song requests, stickers, memes and playful chat |
+| `group games` | Group Games | Played inside the group chat with rules the plugin implements itself: word chains, word guessing, who-is-the-spy, dice and quizzes |
+| `game integration` | Game Integration | Plugins built around another game: connectors, wikis and data lookups, server status and player actions (Minecraft, Palworld, Steam) |
+| `other` | Other | Anything that does not fit the categories above |
 
-Declarations are lightly normalized: surrounding whitespace, letter case and `-`/space separators are ignored, so `AI Tools`, `ai-tools` and `ai_tools` are equivalent.
+Declarations are lightly normalized: surrounding whitespace, letter case and space, `-` or `_` separators are ignored, so the underscore spelling works too: `ai tools`, `AI Tools`, `ai-tools` and `ai_tools` are equivalent.
 
 Plugins that do not declare `category` are grouped under `other`. An unsupported value only logs a warning and is also grouped under `other`; it never blocks installation or updates. Adding a new category requires a code change in AstrBot, so prefer the identifiers above.
 
