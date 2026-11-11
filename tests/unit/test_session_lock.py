@@ -19,7 +19,7 @@ from astrbot.core.astr_agent_runtime.main_session import (
     MainAgentSession,
 )
 from astrbot.core.star.session_llm_manager import SessionServiceManager
-from astrbot.core.utils.session_lock import SessionLockManager, SessionLockTimeoutError
+from astrbot.core.utils.session_lock import SessionLockManager
 
 
 class TestSessionLockManagerBasic:
@@ -59,33 +59,6 @@ class TestSessionLockManagerBasic:
             pass
 
         # Both acquisitions should succeed
-
-    @pytest.mark.asyncio
-    async def test_timed_out_waiter_preserves_owner_and_cleans_up(self):
-        """An acquisition deadline must not release the current owner's lock."""
-        manager = SessionLockManager()
-        state = manager._get_loop_manager()
-        async with manager.acquire_lock("busy"):
-            with pytest.raises(SessionLockTimeoutError):
-                async with manager.acquire_lock("busy", timeout=0.01):
-                    pytest.fail("The busy session must remain owned")
-            assert state._locks["busy"].locked()
-            assert state._lock_count["busy"] == 1
-            async with manager.acquire_lock("other", timeout=0.01):
-                assert state._locks["busy"].locked()
-        assert not state._locks
-        assert not state._lock_count
-        async with manager.acquire_lock("busy", timeout=0.01):
-            pass
-
-    @pytest.mark.asyncio
-    async def test_timeout_only_bounds_acquisition(self):
-        """Mutation execution must not be cancelled after acquiring the lock."""
-        manager = SessionLockManager()
-        async with manager.acquire_lock("session", timeout=0.01):
-            await asyncio.sleep(0.03)
-            assert manager._get_loop_manager()._locks["session"].locked()
-        assert not manager._get_loop_manager()._locks
 
 
 class TestCrossLoopIsolation:

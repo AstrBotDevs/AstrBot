@@ -4,6 +4,7 @@ import json
 import random
 import uuid
 from collections import defaultdict, deque
+from weakref import WeakValueDictionary
 
 from astrbot import logger
 from astrbot.api import star
@@ -44,7 +45,7 @@ class GroupChatContext:
     def __init__(self, acm: AstrBotConfigManager, context: star.Context) -> None:
         self.acm = acm
         self.context = context
-        self._locks: dict[str, asyncio.Lock] = {}
+        self._locks: WeakValueDictionary[str, asyncio.Lock] = WeakValueDictionary()
         self.raw_records: dict[str, deque[str]] = defaultdict(deque)
         self._record_ids: dict[str, deque[str]] = defaultdict(deque)
 
@@ -139,12 +140,16 @@ class GroupChatContext:
             Number of discarded observations.
         """
         umo = event if isinstance(event, str) else event.unified_msg_origin
+        records = self.raw_records.get(umo)
         lock = self._get_lock(umo)
         async with lock:
-            cnt = len(self.raw_records.get(umo, deque()))
+            # A queued clear only invalidates the buffer it originally observed.
+            if self.raw_records.get(umo) is not records:
+                return 0
+            cnt = len(records) if records is not None else 0
             self.raw_records.pop(umo, None)
             self._record_ids.pop(umo, None)
-        self._locks.pop(umo, None)
+        # Weak references retain the same lock while any holder or waiter uses it.
         return cnt
 
     async def handle_message(self, event: AstrMessageEvent) -> None:

@@ -4,6 +4,7 @@
 在一个会话中可以建立多个对话, 并且支持对话的切换和删除
 """
 
+import asyncio
 import json
 from collections.abc import Awaitable, Callable
 
@@ -160,18 +161,42 @@ class ConversationManager:
                 conversation for the same origin.
         """
         async with self._selection_locks.acquire_lock(unified_msg_origin):
+            curr_cid = await self.get_curr_conversation_id(unified_msg_origin)
             if not conversation_id:
-                conversation_id = await self.get_curr_conversation_id(
-                    unified_msg_origin
-                )
+                conversation_id = curr_cid
             if conversation_id:
-                await self.db.delete_conversation(cid=conversation_id)
-                curr_cid = await self.get_curr_conversation_id(unified_msg_origin)
-                if curr_cid == conversation_id:
-                    self.session_conversations.pop(unified_msg_origin, None)
-                    await sp.session_remove(unified_msg_origin, "sel_conv_id")
-                    if on_current_deleted is not None:
-                        await on_current_deleted(unified_msg_origin)
+                deletion = asyncio.create_task(
+                    self.db.delete_conversation(cid=conversation_id)
+                )
+                try:
+                    try:
+                        await asyncio.shield(deletion)
+                    except asyncio.CancelledError:
+                        # Settle the database operation before releasing selection.
+                        await deletion
+                        raise
+                finally:
+                    if (
+                        curr_cid == conversation_id
+                        and deletion.done()
+                        and not deletion.cancelled()
+                        and deletion.exception() is None
+                    ):
+                        self.session_conversations.pop(unified_msg_origin, None)
+                        try:
+                            await sp.session_remove(unified_msg_origin, "sel_conv_id")
+                        finally:
+                            # Persisted deletion must invalidate buffered observations
+                            # even if preference cleanup fails or the caller cancels.
+                            if on_current_deleted is not None:
+                                cleanup = asyncio.ensure_future(
+                                    on_current_deleted(unified_msg_origin)
+                                )
+                                try:
+                                    await asyncio.shield(cleanup)
+                                except asyncio.CancelledError:
+                                    await cleanup
+                                    raise
 
     async def delete_conversations_by_user_id(self, unified_msg_origin: str) -> None:
         """删除会话的所有对话

@@ -1995,6 +1995,18 @@ class ChatService:
         username: str,
         data: dict,
     ) -> dict:
+        """Prepare regeneration after any pending native history commit settles.
+
+        Args:
+            username: Authenticated owner of the WebChat session.
+            data: Session ID, bot message ID, and regeneration options.
+
+        Returns:
+            Chat input carrying the original user message and a new checkpoint.
+
+        Raises:
+            ChatServiceError: If validation fails or the session remains busy.
+        """
         session_id = data.get("session_id")
         message_id = data.get("message_id")
         if not session_id:
@@ -2013,78 +2025,93 @@ class ChatService:
         if session.creator != username:
             raise ChatServiceError("Permission denied")
 
-        target_record = await self.db.get_platform_message_history_by_id(message_id)
-        if not target_record:
-            raise ChatServiceError(f"Message {message_id} not found")
-        if (
-            target_record.platform_id != session.platform_id
-            or target_record.user_id != session_id
-        ):
-            raise ChatServiceError("Message does not belong to the session")
-        if not isinstance(target_record.content, dict):
-            raise ChatServiceError("Invalid message content")
-        if target_record.content.get("type") != "bot":
-            raise ChatServiceError("Only bot messages can be regenerated")
+        umo = build_webchat_unified_msg_origin(session)
+        try:
+            async with session_lock_manager.acquire_lock(
+                umo, timeout=HISTORY_MUTATION_TIMEOUT
+            ):
+                target_record = await self.db.get_platform_message_history_by_id(
+                    message_id
+                )
+                if not target_record:
+                    raise ChatServiceError(f"Message {message_id} not found")
+                if (
+                    target_record.platform_id != session.platform_id
+                    or target_record.user_id != session_id
+                ):
+                    raise ChatServiceError("Message does not belong to the session")
+                if not isinstance(target_record.content, dict):
+                    raise ChatServiceError("Invalid message content")
+                if target_record.content.get("type") != "bot":
+                    raise ChatServiceError("Only bot messages can be regenerated")
 
-        checkpoint_id = target_record.llm_checkpoint_id
-        if not checkpoint_id:
-            raise ChatServiceError("Message is not linked to LLM history")
+                checkpoint_id = target_record.llm_checkpoint_id
+                if not checkpoint_id:
+                    raise ChatServiceError("Message is not linked to LLM history")
 
-        conversation_id, history = await self.load_current_conversation_history(session)
-        turn_range = find_turn_range(history, checkpoint_id)
-        if not conversation_id or not turn_range:
-            raise ChatServiceError("Linked checkpoint not found")
-        if not is_latest_checkpoint(history, checkpoint_id):
-            raise ChatServiceError("Regenerating older turns requires branching")
+                conversation_id, history = await self.load_current_conversation_history(
+                    session
+                )
+                turn_range = find_turn_range(history, checkpoint_id)
+                if not conversation_id or not turn_range:
+                    raise ChatServiceError("Linked checkpoint not found")
+                if not is_latest_checkpoint(history, checkpoint_id):
+                    raise ChatServiceError(
+                        "Regenerating older turns requires branching"
+                    )
 
-        start, end = turn_range
-        user_index = find_turn_user_index(history, start, end)
-        if user_index is None:
-            raise ChatServiceError("Linked user message not found")
+                start, end = turn_range
+                user_index = find_turn_user_index(history, start, end)
+                if user_index is None:
+                    raise ChatServiceError("Linked user message not found")
 
-        platform_history = await self.get_sorted_platform_history(session)
-        source_user_record = next(
-            (
-                item
-                for item in reversed(platform_history)
-                if item.llm_checkpoint_id == checkpoint_id
-                and isinstance(item.content, dict)
-                and item.content.get("type") == "user"
-            ),
-            None,
-        )
-        if not source_user_record:
-            raise ChatServiceError("Linked user display message not found")
+                platform_history = await self.get_sorted_platform_history(session)
+                source_user_record = next(
+                    (
+                        item
+                        for item in reversed(platform_history)
+                        if item.llm_checkpoint_id == checkpoint_id
+                        and isinstance(item.content, dict)
+                        and item.content.get("type") == "user"
+                    ),
+                    None,
+                )
+                if not source_user_record:
+                    raise ChatServiceError("Linked user display message not found")
 
-        old_bot_record_ids = [
-            item.id
-            for item in platform_history
-            if item.id is not None
-            and item.llm_checkpoint_id == checkpoint_id
-            and isinstance(item.content, dict)
-            and item.content.get("type") == "bot"
-        ]
-        if not old_bot_record_ids:
-            raise ChatServiceError("Linked bot display message not found")
+                old_bot_record_ids = [
+                    item.id
+                    for item in platform_history
+                    if item.id is not None
+                    and item.llm_checkpoint_id == checkpoint_id
+                    and isinstance(item.content, dict)
+                    and item.content.get("type") == "bot"
+                ]
+                if not old_bot_record_ids:
+                    raise ChatServiceError("Linked bot display message not found")
 
-        new_checkpoint_id = str(uuid.uuid4())
-        new_history = history[:start] + history[end + 1 :]
-        await self.conv_mgr.update_conversation(
-            unified_msg_origin=build_webchat_unified_msg_origin(session),
-            conversation_id=conversation_id,
-            history=new_history,
-        )
-        thread_ids = await self.db.delete_webchat_threads_by_parent_message_ids(
-            session_id,
-            old_bot_record_ids,
-        )
-        await self.delete_threads_by_ids(thread_ids, username)
-        for old_bot_record_id in old_bot_record_ids:
-            await self.platform_history_mgr.delete_by_id(old_bot_record_id)
-        await self.platform_history_mgr.update(
-            message_id=source_user_record.id,
-            llm_checkpoint_id=new_checkpoint_id,
-        )
+                new_checkpoint_id = str(uuid.uuid4())
+                new_history = history[:start] + history[end + 1 :]
+                await self.conv_mgr.update_conversation(
+                    unified_msg_origin=umo,
+                    conversation_id=conversation_id,
+                    history=new_history,
+                )
+                thread_ids = await self.db.delete_webchat_threads_by_parent_message_ids(
+                    session_id,
+                    old_bot_record_ids,
+                )
+                await self.delete_threads_by_ids(thread_ids, username)
+                for old_bot_record_id in old_bot_record_ids:
+                    await self.platform_history_mgr.delete_by_id(old_bot_record_id)
+                await self.platform_history_mgr.update(
+                    message_id=source_user_record.id,
+                    llm_checkpoint_id=new_checkpoint_id,
+                )
+        except SessionLockTimeoutError as exc:
+            raise ChatServiceError(
+                "Conversation is busy; please retry after the current reply finishes."
+            ) from exc
 
         return {
             "session_id": session_id,
