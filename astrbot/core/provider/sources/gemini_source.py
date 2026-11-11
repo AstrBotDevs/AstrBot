@@ -291,8 +291,13 @@ class ProviderGoogleGenAI(Provider):
                 mode = types.FunctionCallingConfigMode.AUTO
             tool_config = types.ToolConfig(
                 function_calling_config=types.FunctionCallingConfig(mode=mode),
-                include_server_side_tool_invocations=True if combines_tools else None,
             )
+            if combines_tools:
+                # The field only exists since google-genai 1.68.0 and the SDK
+                # models reject unknown fields, so only set it on the path that
+                # requires it. Passing it unconditionally, even as None, breaks
+                # plain function calling on environments with an older SDK.
+                tool_config.include_server_side_tool_invocations = True
 
         # oper thinking config
         thinking_config = None

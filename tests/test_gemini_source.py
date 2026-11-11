@@ -190,6 +190,28 @@ async def test_gemini_function_only_requests_keep_auto_mode():
 
 
 @pytest.mark.asyncio
+async def test_gemini_function_only_config_omits_server_side_flag_kwarg(monkeypatch):
+    # google-genai<1.68.0 does not define
+    # ToolConfig.include_server_side_tool_invocations and rejects unknown
+    # constructor arguments, so plain function calling must not pass it.
+    captured_kwargs: dict = {}
+    original_tool_config = types.ToolConfig
+
+    def _capturing_tool_config(**kwargs):
+        captured_kwargs.update(kwargs)
+        return original_tool_config(**kwargs)
+
+    monkeypatch.setattr(gemini_source.types, "ToolConfig", _capturing_tool_config)
+
+    model = "gemini-2.5-flash"
+    provider = _gemini_config_provider(model)
+
+    await provider._prepare_query_config({"model": model}, tools=_gemini_func_toolset())
+
+    assert "include_server_side_tool_invocations" not in captured_kwargs
+
+
+@pytest.mark.asyncio
 async def test_gemini_builtin_only_requests_keep_tool_config_unset():
     model = "gemini-3.8-flash"
     provider = _gemini_config_provider(model, {"gm_native_search": True})
