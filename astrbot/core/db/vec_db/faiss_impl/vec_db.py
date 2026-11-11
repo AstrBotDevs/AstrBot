@@ -219,6 +219,7 @@ class FaissVecDB(BaseVecDB):
         fetch_k: int = 20,
         rerank: bool = False,
         metadata_filters: dict | None = None,
+        embedding_provider: EmbeddingProvider | None = None,
     ) -> list[Result]:
         """搜索最相似的文档。
 
@@ -228,12 +229,16 @@ class FaissVecDB(BaseVecDB):
             fetch_k (int): 在根据 metadata 过滤前从 FAISS 中获取的数量
             rerank (bool): 是否使用重排序。这需要在实例化时提供 rerank_provider, 如果未提供并且 rerank 为 True, 不会抛出异常。
             metadata_filters (dict): 元数据过滤器
+            embedding_provider (EmbeddingProvider): 用于编码查询的 embedding provider。
+                默认使用实例化时缓存的 provider；调用方可以传入按 ID 重新解析的
+                当前实例，避免 provider 热重载后仍使用已终止的旧实例。
 
         Returns:
             List[Result]: 查询结果
 
         """
-        embedding = await self.embedding_provider.get_embedding(query)
+        provider = embedding_provider or self.embedding_provider
+        embedding = await provider.get_embedding(query)
         scores, indices = await self.embedding_storage.search(
             vector=np.array(embedding).astype("float32"),
             k=fetch_k if metadata_filters else k,
