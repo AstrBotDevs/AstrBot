@@ -100,9 +100,102 @@ a {
   font: inherit;
 }
 
-.version {
+.sidebar-meta {
   margin-top: auto;
   padding: 0.75rem;
+}
+
+.hours-note {
+  margin: 0;
+  padding: 0;
+  font-size: 0.82rem;
+  line-height: 1.5;
+}
+
+.hours-note--card {
+  margin: 0 0 1.25rem;
+  padding: 0.85rem 1rem;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  background: linear-gradient(180deg, rgba(31, 43, 92, 0.05) 0%, rgba(31, 43, 92, 0.02) 100%);
+  text-align: left;
+}
+
+.hours-note--compact {
+  margin-bottom: 0.5rem;
+  padding: 0.55rem 0.65rem;
+  border-radius: var(--radius);
+  background: rgba(31, 43, 92, 0.05);
+}
+
+.hours-note-title {
+  margin: 0 0 0.35rem;
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.hours-note-hours {
+  margin: 0 0 0.25rem;
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.hours-note-hint {
+  margin: 0 0 0.5rem;
+  font-size: 0.82rem;
+  color: var(--text-muted);
+}
+
+.hours-note-quota {
+  margin: 0;
+  padding-top: 0.5rem;
+  border-top: 1px dashed var(--border);
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  line-height: 1.45;
+}
+
+.hours-note-line {
+  margin: 0 0 0.2rem;
+  line-height: 1.4;
+}
+
+.hours-note-line:last-child {
+  margin-bottom: 0;
+}
+
+.hours-note-sub {
+  display: block;
+  margin-top: 0.15rem;
+  font-size: 0.78rem;
+  font-weight: 400;
+  color: var(--text-muted);
+}
+
+.login-tagline {
+  margin: 0 0 1rem;
+  text-align: center;
+  line-height: 1.5;
+}
+
+.login-form {
+  margin-top: 0.25rem;
+}
+
+.login-footer {
+  margin: 1.25rem 0 0;
+  text-align: center;
+}
+
+.btn-block {
+  width: 100%;
+}
+
+.version {
   font-size: 0.8rem;
   color: var(--text-muted);
 }
@@ -212,6 +305,76 @@ a {
   cursor: not-allowed;
 }
 
+.btn-secondary {
+  display: inline-block;
+  padding: 0.6rem 1.25rem;
+  background: #fff;
+  color: var(--maid-navy);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  cursor: pointer;
+  font: inherit;
+  font-weight: 500;
+}
+
+.btn-secondary:hover {
+  background: var(--surface-soft);
+}
+
+.btn-secondary:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.bind-channel-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
+.bind-guide-preview {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin: 0.75rem 0;
+}
+
+.bind-guide-preview img {
+  width: 72px;
+  height: 72px;
+  object-fit: cover;
+  border-radius: 50%;
+  border: 1px solid var(--border);
+  background: #fff;
+}
+
+.bind-guide-figures {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+  margin-top: 1rem;
+}
+
+.bind-guide-figure {
+  margin: 0;
+}
+
+.bind-guide-figure img {
+  display: block;
+  width: 100%;
+  max-width: 560px;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: #fff;
+}
+
+.bind-guide-figure figcaption {
+  margin-top: 0.45rem;
+  color: var(--text-muted);
+  font-size: 0.9rem;
+  line-height: 1.45;
+}
+
 .muted {
   color: var(--text-muted);
   font-size: 0.9rem;
@@ -290,11 +453,12 @@ a {
 
 .login-card {
   width: 100%;
-  max-width: 400px;
+  max-width: 420px;
   background: var(--bg-card);
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  padding: 2rem;
+  padding: 2rem 2rem 1.75rem;
+  box-shadow: 0 4px 24px rgba(31, 43, 92, 0.06);
 }
 
 .login-card h1 {
@@ -809,4 +973,43 @@ a {
 .dafeiyu-login {
   width: 130px;
   margin: -0.5rem auto 0.25rem;
+}
+
+.bind-qr-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.75rem;
+}
+
+.bind-qr {
+  width: 240px;
+  height: 240px;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: #fff;
+}
+
+.bind-steps {
+  margin: 0.75rem 0 0;
+  padding-left: 1.2rem;
+  color: var(--text-muted);
+  font-size: 0.95rem;
+}
+
+.bind-steps li {
+  margin-bottom: 0.4rem;
+}
+
+.bind-manual summary {
+  cursor: pointer;
+  list-style: none;
+}
+
+.bind-manual summary::-webkit-details-marker {
+  display: none;
+}
+
+.bind-manual[open] summary {
+  margin-bottom: 0.75rem;
 }

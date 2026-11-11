@@ -6,6 +6,7 @@ from app.db.engine import get_db
 from app.models.user import User
 from app.schemas.commerce import UsageRow, UsageSummary
 from app.services.usage import get_binding_or_none, query_usage_rows
+from app.services.usage_billing import sync_usage_charges
 
 router = APIRouter(prefix="/usage", tags=["usage"])
 
@@ -17,6 +18,8 @@ def usage_me(
     db: Session = Depends(get_db),
 ) -> UsageSummary:
     """Token usage for the bound bot (display multiplier applied server-side)."""
+    sync_usage_charges(db, current_user)
+    db.commit()
     binding = get_binding_or_none(db, current_user.id)
     if binding is None:
         return UsageSummary(days=days, rows=[], total_rice_g=0, bound=False)

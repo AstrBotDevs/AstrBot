@@ -7,7 +7,8 @@ from app.db.engine import get_db
 from app.models.user import User
 from app.models.wallet import BotBinding
 from app.schemas.commerce import BindingPublic, ProfilePublic
-from app.services.wallet import customer_wallet_public, get_or_create_wallet
+from app.services.usage_billing import enforce_bot_for_wallet, sync_usage_charges
+from app.services.wallet import customer_wallet_public
 
 router = APIRouter(prefix="/profile", tags=["profile"])
 
@@ -18,8 +19,10 @@ def profile_me(
     db: Session = Depends(get_db),
 ) -> ProfilePublic:
     """Email, wallet, and binding snapshot."""
-    wallet = get_or_create_wallet(db, current_user.id)
+    wallet = sync_usage_charges(db, current_user)
+    enforce_bot_for_wallet(db, current_user, enable_if_active=True)
     db.commit()
+    db.refresh(wallet)
     binding = db.scalar(select(BotBinding).where(BotBinding.user_id == current_user.id))
     return ProfilePublic(
         email=current_user.email,

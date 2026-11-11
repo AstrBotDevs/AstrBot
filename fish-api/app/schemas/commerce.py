@@ -1,7 +1,7 @@
 from datetime import datetime
 from decimal import Decimal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 
 class PaymentPublicConfig(BaseModel):
@@ -44,20 +44,89 @@ class AdminOrderPublic(OrderPublic):
     credit_yuan: Decimal
 
 
-class BindingUpsertRequest(BaseModel):
+class AdminWalletAdjustRequest(BaseModel):
+    """Admin-only wallet tweak for local QA (grams shown to the customer)."""
+
+    email: str = Field(min_length=3, max_length=320)
+    balance_rice_g: int | None = Field(
+        default=None,
+        description="Bowl rice in grams; negative becomes 0g + arrears.",
+    )
+    arrears_rice_g: int | None = Field(
+        default=None,
+        description="Owed rice in grams; omit or null to leave unchanged.",
+    )
+    disable_bot_if_empty: bool = True
+    enable_bot_if_active: bool = True
+
+    @field_validator("balance_rice_g", "arrears_rice_g", mode="before")
+    @classmethod
+    def _optional_grams(cls, value: object) -> object:
+        """Swagger UI may send empty strings for optional numbers."""
+        if value == "" or value is None:
+            return None
+        return value
+
+
+class AdminWalletPublic(BaseModel):
+    """Wallet snapshot for admin tools."""
+
+    user_id: str
+    email: str
+    balance_yuan: Decimal
+    balance_rice_g: int
+    arrears_yuan: Decimal
+    arrears_rice_g: int
+    status: str
+    adapter_id: str | None = None
+
+
+class BindingManualRequest(BaseModel):
+    """Customer-pasted QQ credentials (advanced path)."""
+
     qq_appid: str = Field(min_length=4, max_length=64)
-    adapter_id: str = Field(min_length=2, max_length=128)
-    umo_prefix: str | None = Field(default=None, max_length=256)
+    app_secret: str = Field(min_length=4, max_length=256)
 
 
 class BindingPublic(BaseModel):
     id: str
+    channel: str = "qq"
     qq_appid: str | None
     adapter_id: str
     umo_prefix: str
     bind_status: str
 
     model_config = {"from_attributes": True}
+
+
+class BindMetaPublic(BaseModel):
+    """Hints shown on the bind wizard (no secrets)."""
+
+    qq_egress_ip: str = ""
+    astrbot_ready: bool = False
+    channels: list[str] = Field(default_factory=lambda: ["qq", "weixin"])
+
+
+class QrStartRequest(BaseModel):
+    channel: str = Field(default="qq", max_length=16)
+
+
+class QrStartPublic(BaseModel):
+    session_id: str
+    channel: str
+    qrcode: str
+    interval: int
+    expires_in: int
+
+
+class QrPollRequest(BaseModel):
+    session_id: str = Field(min_length=8, max_length=64)
+
+
+class QrPollPublic(BaseModel):
+    status: str
+    message: str | None = None
+    binding: BindingPublic | None = None
 
 
 class UsageRow(BaseModel):

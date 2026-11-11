@@ -5,6 +5,14 @@ icon: circle-question
 
 # 常见问题
 
+## 营业时间
+
+<details>
+<summary>鱼咖什么时候开门？关店米饭会不会没？</summary>
+
+鱼咖 **非 24 小时营业**：早上 9 点到晚上 11 点（工作时间偶尔摸鱼）。关店时大肥鱼可能不回消息，但**你碗里的白饭额度一直留着不动**，开门接着吃。
+</details>
+
 ## 注册与付款
 
 <details>
@@ -22,9 +30,9 @@ icon: circle-question
 ## QQ 机器人
 
 <details>
-<summary>头像在哪里改？</summary>
+<summary>头像或名称改不了怎么办？</summary>
 
-[QQ 开放平台](https://q.qq.com) 机器人资料，不是 AstrBot。[详细步骤](../qq-open-platform/avatar-name.md)
+选好后若无法更改图片或名称，前往 [q.qq.com](https://q.qq.com) 处理（不是鱼咖用户中心）。[详细步骤](../qq-open-platform/avatar-name.md)
 </details>
 
 <details>
@@ -36,7 +44,13 @@ icon: circle-question
 <details>
 <summary>可以把教程里的扫码图发群里吗？</summary>
 
-不要。绑定二维码应在 **你本人登录的用户中心** 内使用，避免他人绑到你的实例。
+不要。微信绑定二维码应在 **你本人登录的用户中心** 内使用，避免他人绑到你的实例。QQ 走手填凭证，也不要把 AppSecret 发群。
+</details>
+
+<details>
+<summary>QQ 为什么不扫鱼咖的码？</summary>
+
+腾讯侧创建后还要绑 AI 服务。鱼咖对 QQ 用 **图文教学 + AppID/AppSecret**，直接接到大肥鱼，减少「未连接灵魂」。微信仍用扫码。
 </details>
 
 ## 用量与费用

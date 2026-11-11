@@ -19,12 +19,16 @@ class Settings(BaseSettings):
     cors_origins: str = "http://localhost:5173,http://127.0.0.1:5173"
     topup_credit_ratio: float = 0.5
     min_topup_yuan: float = 1.0
+    # User-facing usage markup on real model USD cost (only this, not topup ratio).
     usage_display_multiplier: float = 2.0
+    # USD → CNY for usage→白饭 (align with cost_control exchange_rates.CNY).
+    usd_cny_rate: float = 7.2
     # User-facing: grams per 1 Alipay pay-yuan (not per internal APIKEY yuan).
     rice_grams_per_yuan: float = 500.0
-    # Placeholder until provider_stats carries yuan; internal APIKEY cost estimate.
-    internal_yuan_per_million_tokens: float = 1.0
     astrbot_database_url: str = ""
+    astrbot_base_url: str = "http://127.0.0.1:6185"
+    astrbot_api_key: str = ""
+    qq_egress_ip: str = ""
     alipay_qr_url: str = ""
     alipay_pay_hint: str = "转账金额须与本次添饭一致，备注请原样填写下方备注码。"
     admin_api_key: str = ""

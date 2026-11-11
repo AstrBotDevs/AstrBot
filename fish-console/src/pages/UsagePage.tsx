@@ -26,7 +26,7 @@ export function UsagePage() {
       {error ? <div className="alert alert-error">{error}</div> : null}
       {data && !data.bound ? (
         <article className="card">
-          <p className="muted">还没登记接鱼，先去「接鱼回家」填 AppID 和实例 ID。</p>
+          <p className="muted">还没接鱼回家，先去「接鱼回家」把鱼接过来。</p>
         </article>
       ) : null}
       <article className="card">

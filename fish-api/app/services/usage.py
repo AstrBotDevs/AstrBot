@@ -6,7 +6,8 @@ from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.models.wallet import BotBinding
-from app.services.rice import display_rice_grams_from_tokens
+from app.providers.model_cost import usd_cost_from_tokens
+from app.services.rice import display_rice_grams_from_usd
 
 SERVICE_ROOT = Path(__file__).resolve().parents[2]
 REPO_ROOT = SERVICE_ROOT.parent
@@ -27,7 +28,11 @@ def query_usage_rows(
     umo_prefix: str,
     days: int = 7,
 ) -> list[dict[str, object]]:
-    """Aggregate provider_stats by day and model for a umo prefix."""
+    """Aggregate provider_stats by day and model for a umo prefix.
+
+    Rice grams are derived from real USD model cost × display multiplier,
+    not from a flat tokens→yuan placeholder.
+    """
     db_url = resolve_astrbot_db_url()
     if not db_url:
         return []
@@ -44,13 +49,16 @@ def query_usage_rows(
         SELECT
             date(created_at) AS day,
             COALESCE(provider_model, 'unknown') AS model,
-            SUM(token_input_other + token_input_cached + token_output) AS raw_tokens,
+            COALESCE(provider_id, '') AS provider_id,
+            SUM(token_input_other) AS token_input_other,
+            SUM(token_input_cached) AS token_input_cached,
+            SUM(token_output) AS token_output,
             COUNT(*) AS calls
         FROM provider_stats
         WHERE agent_type = 'internal'
           AND umo LIKE :umo_prefix
           AND created_at >= :since_iso
-        GROUP BY day, model
+        GROUP BY day, model, provider_id
         ORDER BY day DESC, model
         """
     )
@@ -61,12 +69,18 @@ def query_usage_rows(
             {"umo_prefix": f"{umo_prefix}%", "since_iso": since_iso},
         )
         for row in result.mappings():
-            raw = int(row["raw_tokens"] or 0)
+            usd = usd_cost_from_tokens(
+                model=str(row["model"]),
+                provider_id=str(row["provider_id"] or "") or None,
+                token_input_other=int(row["token_input_other"] or 0),
+                token_input_cached=int(row["token_input_cached"] or 0),
+                token_output=int(row["token_output"] or 0),
+            )
             rows.append(
                 {
                     "date": str(row["day"]),
                     "model": str(row["model"]),
-                    "rice_g": display_rice_grams_from_tokens(raw),
+                    "rice_g": display_rice_grams_from_usd(usd),
                     "calls": int(row["calls"] or 0),
                 }
             )

@@ -26,18 +26,33 @@ def rice_grams_from_internal(internal_yuan: Decimal) -> int:
     return pay_yuan_to_rice_grams(alipay_yuan_from_internal(internal_yuan))
 
 
-def internal_yuan_from_tokens(raw_tokens: int) -> Decimal:
-    """Estimate internal yuan cost from token count (until per-model cost is wired)."""
-    per_m = Decimal(str(settings.internal_yuan_per_million_tokens))
-    return (Decimal(raw_tokens) / Decimal(1_000_000) * per_m).quantize(
-        Decimal("0.0001")
-    )
+def internal_yuan_from_display_rice_g(rice_g: int) -> Decimal:
+    """Inverse of rice_grams_from_internal for admin/test wallet tweaks."""
+    pay = Decimal(int(rice_g)) / Decimal(str(settings.rice_grams_per_yuan))
+    return (pay * _ratio()).quantize(Decimal("0.0001"))
 
 
-def display_rice_grams_from_tokens(raw_tokens: int) -> int:
-    """User-visible 白饭消耗：内部元 → 实付等价 × 展示倍数 → 克。"""
-    internal = internal_yuan_from_tokens(raw_tokens)
-    pay_equiv = alipay_yuan_from_internal(internal)
+def charged_pay_yuan_from_usd(usd_cost: float) -> Decimal:
+    """User-facing CNY charge for a USD model cost (× display multiplier only)."""
+    usd = Decimal(str(max(0.0, float(usd_cost))))
+    cny = (usd * Decimal(str(settings.usd_cny_rate))).quantize(Decimal("0.0000001"))
     mult = Decimal(str(settings.usage_display_multiplier))
-    charged_pay = (pay_equiv * mult).quantize(Decimal("0.0001"))
-    return pay_yuan_to_rice_grams(charged_pay)
+    return (cny * mult).quantize(Decimal("0.0000001"))
+
+
+def display_rice_grams_from_usd(usd_cost: float) -> int:
+    """User-visible 白饭：真实模型 USD 成本 → CNY → × 展示倍数 → 克。
+
+    Formula: usd × usd_cny_rate × usage_display_multiplier × rice_grams_per_yuan.
+    Topup credit ratio is NOT applied here — markup is only the display multiplier.
+    """
+    return pay_yuan_to_rice_grams(charged_pay_yuan_from_usd(usd_cost))
+
+
+def internal_yuan_from_usd_charge(usd_cost: float) -> Decimal:
+    """Ledger debit so bowl rice drops by the same grams as display_rice_grams_from_usd.
+
+    Wallet stores internal yuan (topup × ratio). Display rice = internal ÷ ratio × 500g,
+    so debit = charged_pay_yuan × ratio.
+    """
+    return (charged_pay_yuan_from_usd(usd_cost) * _ratio()).quantize(Decimal("0.0001"))

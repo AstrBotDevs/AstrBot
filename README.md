@@ -42,6 +42,7 @@
 | http://localhost:5173 | 客户用户中心 |
 | http://127.0.0.1:8800/docs | fish-api OpenAPI |
 | http://127.0.0.1:6185 | 运营后台（登录 `data/cmd_config.json` 里配置的账号） |
+| http://127.0.0.1:6185/api/v1/docs | 对话引擎 OpenAPI（扫码 registration、bots 等；**不是** `/docs`） |
 
 `fish-console` 开发时把浏览器的 `/api` 代理到 **8800**，所以 **8800 没开则注册登录失败**。
 
@@ -89,7 +90,7 @@ cd fish-console && pnpm dev
 | --- | --- |
 | 邮箱注册 / 登录 / JWT | ✅ |
 | 付费 → `paid` | 🔲 |
-| QQ 绑定扫码 | 🔲 |
+| 接鱼回家（QQ 图文手填 + 微信扫码） | 🔲 需配置 `FISH_ASTRBOT_API_KEY` |
 | 用量 × 服务系数 | 🔲 |
 
 详见 [PRD.md](./PRD.md) 里程碑。

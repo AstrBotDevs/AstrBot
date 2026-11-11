@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from "react";
 import { Link, Navigate, useNavigate } from "react-router-dom";
 
+import { BusinessHoursNote } from "../components/BusinessHoursNote";
 import { siteConfig } from "../config/site";
 import { useAuth } from "../context/AuthContext";
 
@@ -39,11 +40,10 @@ export function LoginPage() {
       <div className="login-card">
         <img className="dafeiyu dafeiyu-login" src="/dafeiyu/hello.webp" alt="大肥鱼" />
         <h1>{siteConfig.brandName}</h1>
-        <p className="muted" style={{ textAlign: "center", marginBottom: "1.5rem" }}>
-          鱼片来了？登录一下，我看看是谁在敲碗。
-        </p>
+        <p className="login-tagline muted">鱼片来了？登录一下，我看看是谁在敲碗。</p>
+        <BusinessHoursNote />
         {error ? <div className="alert alert-error">{error}</div> : null}
-        <form onSubmit={onSubmit}>
+        <form className="login-form" onSubmit={onSubmit}>
           <div className="field">
             <label htmlFor="email">联系邮箱</label>
             <input
@@ -57,7 +57,7 @@ export function LoginPage() {
             />
           </div>
           <div className="field">
-            <label htmlFor="password">通行证</label>
+            <label htmlFor="password">通行证(密码)</label>
             <input
               id="password"
               type="password"
@@ -68,16 +68,11 @@ export function LoginPage() {
               onChange={(e) => setPassword(e.target.value)}
             />
           </div>
-          <button
-            type="submit"
-            className="btn-primary"
-            style={{ width: "100%" }}
-            disabled={submitting}
-          >
+          <button type="submit" className="btn-primary btn-block" disabled={submitting}>
             {submitting ? "进门中…" : "进屋"}
           </button>
         </form>
-        <p className="muted" style={{ textAlign: "center", marginTop: "1rem" }}>
+        <p className="login-footer muted">
           新来的鱼片？<Link to="/register">先报到</Link>
         </p>
       </div>

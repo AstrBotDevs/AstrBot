@@ -45,12 +45,35 @@ export type AdminOrder = Order & {
   credit_yuan: string | number;
 };
 
+export type BindChannel = "qq" | "weixin";
+
 export type Binding = {
   id: string;
+  channel: BindChannel | string;
   qq_appid: string | null;
   adapter_id: string;
   umo_prefix: string;
   bind_status: string;
+};
+
+export type BindMeta = {
+  qq_egress_ip: string;
+  astrbot_ready: boolean;
+  channels: BindChannel[];
+};
+
+export type QrStart = {
+  session_id: string;
+  channel: BindChannel | string;
+  qrcode: string;
+  interval: number;
+  expires_in: number;
+};
+
+export type QrPoll = {
+  status: string;
+  message: string | null;
+  binding: Binding | null;
 };
 
 export type UsageSummary = {
@@ -114,13 +137,38 @@ export async function fetchBinding(): Promise<Binding | null> {
   return text ? JSON.parse(text) : null;
 }
 
-export async function saveBinding(payload: {
+export async function fetchBindMeta(): Promise<BindMeta> {
+  const res = await fetch(`${API_BASE}/api/v1/bot/bind/meta`, { headers: authHeaders() });
+  if (!res.ok) throw new Error(await parseError(res));
+  return res.json();
+}
+
+export async function startBindQr(channel: BindChannel): Promise<QrStart> {
+  const res = await fetch(`${API_BASE}/api/v1/bot/bind/qr/start`, {
+    method: "POST",
+    headers: authHeaders(),
+    body: JSON.stringify({ channel }),
+  });
+  if (!res.ok) throw new Error(await parseError(res));
+  return res.json();
+}
+
+export async function pollBindQr(session_id: string): Promise<QrPoll> {
+  const res = await fetch(`${API_BASE}/api/v1/bot/bind/qr/poll`, {
+    method: "POST",
+    headers: authHeaders(),
+    body: JSON.stringify({ session_id }),
+  });
+  if (!res.ok) throw new Error(await parseError(res));
+  return res.json();
+}
+
+export async function manualBind(payload: {
   qq_appid: string;
-  adapter_id: string;
-  umo_prefix?: string;
+  app_secret: string;
 }): Promise<Binding> {
-  const res = await fetch(`${API_BASE}/api/v1/bot/binding`, {
-    method: "PUT",
+  const res = await fetch(`${API_BASE}/api/v1/bot/bind/manual`, {
+    method: "POST",
     headers: authHeaders(),
     body: JSON.stringify(payload),
   });

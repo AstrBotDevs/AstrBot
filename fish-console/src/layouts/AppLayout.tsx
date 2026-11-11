@@ -1,5 +1,6 @@
 import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 
+import { BusinessHoursNote } from "../components/BusinessHoursNote";
 import { siteConfig } from "../config/site";
 import { useAuth } from "../context/AuthContext";
 
@@ -113,7 +114,10 @@ export function AppLayout() {
             养鱼小抄
           </a>
         ) : null}
-        <div className="version">{siteConfig.consoleVersion}</div>
+        <div className="sidebar-meta">
+          <BusinessHoursNote compact />
+          <div className="version">{siteConfig.consoleVersion}</div>
+        </div>
       </aside>
       <div className="main">
         <header className="topbar">
