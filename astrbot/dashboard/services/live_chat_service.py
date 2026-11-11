@@ -10,6 +10,7 @@ import uuid
 import wave
 from collections.abc import Awaitable, Callable
 from typing import Any
+from urllib.parse import urlsplit
 
 import jwt
 from starlette.websockets import WebSocketDisconnect
@@ -313,9 +314,21 @@ class LiveChatService:
                 try:
                     result_data = json.loads(tool_call["result"])
                     for item in result_data.get("results", []):
+                        url = item.get("url")
+                        if not isinstance(url, str):
+                            continue
+                        try:
+                            parsed_url = urlsplit(url)
+                        except ValueError:
+                            continue
+                        if (
+                            parsed_url.scheme not in ("http", "https")
+                            or not parsed_url.hostname
+                        ):
+                            continue
                         if idx := item.get("index"):
                             web_search_results[idx] = {
-                                "url": item.get("url"),
+                                "url": url,
                                 "title": item.get("title"),
                                 "snippet": item.get("snippet"),
                             }
