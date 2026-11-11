@@ -36,6 +36,9 @@ class FakeClient:
         self.requests = []
 
     def post(self, url: str, json: dict) -> FakeResponse:
+        if self.closed:
+            # Mirrors aiohttp: a closed session refuses to send requests.
+            raise RuntimeError("Session is closed")
         self.requests.append((url, json))
         return self.response
 
@@ -127,3 +130,80 @@ async def test_vllm_rerank_terminate_closes_session(provider):
 
     assert client.closed is True
     assert provider.client is None
+
+
+@pytest.mark.asyncio
+async def test_vllm_rerank_does_not_recreate_session_after_terminate(
+    provider, monkeypatch
+):
+    """terminate() clears the session and rerank must not build a new one.
+
+    Knowledge base vector stores cache the provider instance they were built
+    with, so a reload can leave retrieval holding a terminated instance.
+    Resolving the provider by ID on every retrieval is what recovers from a
+    reload; this instance must not rebuild the session here, because that would
+    silently keep using the endpoint, key and model from before the reload.
+    """
+    await provider.terminate()
+    assert provider.client is None
+
+    created_sessions = []
+
+    def fake_client_session(**kwargs):
+        created_sessions.append(kwargs)
+        return FakeClient(
+            FakeResponse({"results": [{"index": 0, "relevance_score": 0.5}]})
+        )
+
+    monkeypatch.setattr(aiohttp, "ClientSession", fake_client_session)
+
+    with pytest.raises(RuntimeError, match="session is terminated"):
+        await provider.rerank("query", ["document"])
+
+    assert created_sessions == []
+
+
+@pytest.mark.asyncio
+async def test_vllm_rerank_terminate_then_reload_uses_the_new_instance(provider):
+    """After terminate() only a freshly loaded provider may rerank again."""
+    await provider.terminate()
+    assert provider.client is None
+
+    reloaded = VLLMRerankProvider.__new__(VLLMRerankProvider)
+    reloaded.base_url = "https://rerank-reloaded.example.test"
+    reloaded.api_suffix = "/v1/rerank"
+    reloaded.model = "reloaded-model"
+    reloaded.client = FakeClient(
+        FakeResponse({"results": [{"index": 0, "relevance_score": 0.25}]})
+    )
+
+    results = await reloaded.rerank("query", ["document"])
+
+    assert [(result.index, result.relevance_score) for result in results] == [
+        (0, 0.25),
+    ]
+    assert reloaded.client.requests == [
+        (
+            "https://rerank-reloaded.example.test/v1/rerank",
+            {
+                "query": "query",
+                "documents": ["document"],
+                "model": "reloaded-model",
+            },
+        )
+    ]
+
+
+@pytest.mark.asyncio
+async def test_vllm_rerank_reports_closed_session_without_rebuilding(provider):
+    """A closed session fails with a diagnosable error instead of an empty one."""
+    client = FakeClient(
+        FakeResponse({"results": [{"index": 0, "relevance_score": 0.5}]})
+    )
+    await client.close()
+    provider.client = client
+
+    with pytest.raises(RuntimeError, match="Session is closed"):
+        await provider.rerank("query", ["document"])
+
+    assert client.requests == []
