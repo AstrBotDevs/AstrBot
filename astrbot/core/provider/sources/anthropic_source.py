@@ -6,6 +6,7 @@ import socket
 from collections.abc import AsyncGenerator
 from io import BytesIO
 from ipaddress import IPv6Address, ip_address
+from itertools import islice
 from typing import Any, Literal
 
 import aiohttp
@@ -410,23 +411,37 @@ class ProviderAnthropic(Provider):
                                         ref, deadline
                                     )
                                 else:
+                                    payload_start = 0
                                     if prefix.startswith("data:"):
-                                        header, _, ref = ref.partition(",")
-                                        if not header.lower().endswith(";base64"):
+                                        comma = ref.find(",")
+                                        if (
+                                            comma < 7
+                                            or ref[comma - 7 : comma].lower()
+                                            != ";base64"
+                                        ):
                                             raise ValueError(
                                                 "Expected a base64 data URI."
                                             )
+                                        payload_start = comma + 1
                                     elif prefix == "base64://":
-                                        ref = ref[9:]
-                                    encoded = "".join(ref.split())
-                                    if len(encoded) > 4 * (
+                                        payload_start = 9
+                                    encoded_limit = 4 * (
                                         (self._HISTORY_IMAGE_MAX_BYTES + 2) // 3
-                                    ):
+                                    )
+                                    encoded_bytes = (
+                                        ord(char)
+                                        for char in islice(ref, payload_start, None)
+                                        if not char.isspace()
+                                    )
+                                    encoded = bytes(
+                                        islice(encoded_bytes, encoded_limit + 1)
+                                    )
+                                    if len(encoded) > encoded_limit:
                                         raise ValueError(
                                             "Historical image exceeds the size limit."
                                         )
                                     data = base64.b64decode(
-                                        encoded + "=" * (-len(encoded) % 4),
+                                        encoded + b"=" * (-len(encoded) % 4),
                                         validate=True,
                                     )
                                 source = await asyncio.to_thread(

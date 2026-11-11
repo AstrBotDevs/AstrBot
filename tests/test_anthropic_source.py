@@ -78,7 +78,7 @@ async def test_follow_up_preserves_history_images(monkeypatch, tmp_path, streami
         "data:image/png;base64," + encoded,
         "DaTa:image/png;BASE64," + encoded,
         "BaSe64://" + encoded,
-        encoded,
+        " \t\n\u2003".join(encoded.rstrip("=")),
     ]
     unavailable = [
         *failures,
@@ -87,7 +87,7 @@ async def test_follow_up_preserves_history_images(monkeypatch, tmp_path, streami
         "data:image/png;base64,!!!!",
         "data:image/png;base64," + base64.b64encode(png_bytes[:33]).decode(),
         *[
-            prefix + base64.b64encode(png_bytes + b"x" * extra).decode()
+            prefix + " \t".join(base64.b64encode(png_bytes + b"x" * extra).decode())
             for prefix in ("data:image/png;base64,", "base64://", "")
             for extra in (1, 4)
         ],
