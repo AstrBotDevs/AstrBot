@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 import pytest_asyncio
-from sqlalchemy import text
+from sqlalchemy import event, text
 from sqlmodel import select
 
 from astrbot.core.agent.conversation_events import ConversationEventWriter
@@ -126,14 +126,19 @@ async def test_concurrent_writers_and_idempotent_delivery(database):
     store = database.conversation_store
     snapshot = await store.read(conv.conversation_id)
     writers = [ConversationEventWriter(store, snapshot) for _ in range(2)]
-    results = await asyncio.gather(*(w.append("plugin.test.result", {"value": i}, event_id=f"p{i}") for i, w in enumerate(writers)), return_exceptions=True)
-    assert sum(isinstance(r, ConversationConflictError) for r in results) == 1
-    succeeded = next(i for i, r in enumerate(results) if not isinstance(r, Exception))
-    repeated = await writers[succeeded].append("plugin.test.result", {"value": succeeded}, event_id=f"p{succeeded}")
-    assert repeated.event_id == f"p{succeeded}"
+    results = await asyncio.gather(
+        *(
+            writer.append("plugin.test.result", {"value": i}, event_id=f"p{i}")
+            for i, writer in enumerate(writers)
+        )
+    )
+    assert {event.event_id for event in results} == {"p0", "p1"}
+    assert len({event.seq for event in results}) == 2
+    repeated = await writers[0].append("plugin.test.result", {"value": 0}, event_id="p0")
+    assert repeated.event_id == "p0"
     with pytest.raises(ConversationConflictError):
-        await writers[succeeded].append("plugin.test.result", {"value": "different"}, event_id=f"p{succeeded}")
-    assert len(await store.events(conv.conversation_id)) == 2
+        await writers[0].append("plugin.test.result", {"value": "different"}, event_id="p0")
+    assert len(await store.events(conv.conversation_id)) == 3
 
 
 @pytest.mark.asyncio
@@ -356,15 +361,20 @@ async def test_native_append_and_legacy_nested_edits_share_runtime(database):
 
 
 @pytest.mark.asyncio
-async def test_large_baseline_does_not_repeat_snapshots(database):
+async def test_large_appended_message_keeps_the_existing_baseline(database):
     store = database.conversation_store
-    conv = await database.create_conversation("umo", "p", [{"role": "user", "content": "x" * (4 * 1024 * 1024 + 1)}])
+    initial = {"role": "user", "content": "seed"}
+    large = {"role": "assistant", "content": "x" * (4 * 1024 * 1024 + 1)}
+    conv = await database.create_conversation("umo", "p", [initial])
     before = await store.read(conv.conversation_id)
-    events = await store.append(conv.conversation_id, [{"type": "message.appended", "payload": {"message": {"role": "assistant", "content": "small"}}}])
+    events = await store.append(
+        conv.conversation_id,
+        [{"type": "message.appended", "payload": {"message": large}}],
+    )
     assert [e.type for e in events] == ["message.appended"]
     after = await store.read(conv.conversation_id)
     assert after.conversation.replay_from_event_id == before.conversation.replay_from_event_id
-    assert after.replay_bytes < 1024
+    assert after.messages == [initial, large]
 
 
 @pytest.mark.asyncio
@@ -433,7 +443,14 @@ async def test_provider_retry_has_distinct_attempts(database):
     conv = await database.create_conversation("umo", "p")
     writer = ConversationEventWriter(database.conversation_store, await database.conversation_store.read(conv.conversation_id))
     await writer.start_turn({"kind": "agent"})
-    recorder = RequestEventRecorder(writer.consume, {"turn_id": writer.turn_id})
+    input_context = {
+        "contexts": [{"role": "user", "content": "retry this request"}],
+        "extra_user_content_parts": [],
+        "complete": True,
+    }
+    recorder = RequestEventRecorder(
+        writer.consume, {"turn_id": writer.turn_id, "input_context": input_context}
+    )
     await recorder.begin()
     attempts = 0
 
@@ -457,18 +474,84 @@ async def test_provider_retry_has_distinct_attempts(database):
     assert len(starts) == len(finishes) == 2
     assert [e.payload["request_id"] for e in finishes] == [e.event_id for e in starts]
     assert [e.payload["status"] for e in finishes] == ["failed", "completed"]
+    for start in starts:
+        assert await database.conversation_store.read_request_context(
+            writer.cid, start.event_id
+        ) == input_context
 
 
 @pytest.mark.asyncio
-async def test_idempotent_batch_includes_its_automatic_rebase(database):
+async def test_retry_and_late_display_link_to_a_legacy_automatic_snapshot(database):
     conv = await database.create_conversation("umo", "p")
     store = database.conversation_store
-    drafts = [{"event_id": f"m{i}", "type": "message.appended", "payload": {"message": {"role": "user", "content": str(i)}}} for i in range(257)]
-    first = await store.append(conv.conversation_id, drafts, expected_head=1, expected_leaf=None)
-    assert first[-1].payload["reason"] == "snapshot"
-    retried = await store.append(conv.conversation_id, drafts, expected_head=1, expected_leaf=None)
-    assert [e.event_id for e in retried] == [e.event_id for e in first]
-    assert (await store.read(conv.conversation_id)).replay_count == 1
+    await store.append(
+        conv.conversation_id,
+        [{"event_id": "turn", "type": "turn.started", "payload": {}}],
+    )
+    drafts = [
+        {
+            "event_id": f"m{i}",
+            "type": "message.appended",
+            "payload": {
+                "turn_id": "turn",
+                "message": {"role": "assistant", "content": str(i)},
+            },
+        }
+        for i in range(257)
+    ]
+    first = await store.append(
+        conv.conversation_id, drafts, expected_head=2, expected_leaf=None
+    )
+    assert len(first) == len(drafts)
+    projected = await store.read(conv.conversation_id)
+    # Reproduce the event formerly inserted at the end of the original batch.
+    (legacy_snapshot,) = await store.append(
+        conv.conversation_id,
+        [
+            {
+                "type": "context.rebased",
+                "payload": {
+                    "reason": "snapshot",
+                    "origin": "system",
+                    "source_event_id": first[-1].event_id,
+                    "messages": projected.entries,
+                },
+            }
+        ],
+    )
+
+    selects = []
+
+    def record_select(_conn, _cursor, statement, _params, _ctx, _many):
+        if statement.startswith("SELECT"):
+            selects.append(statement)
+
+    engine = database.engine.sync_engine
+    event.listen(engine, "before_cursor_execute", record_select)
+    try:
+        retried = await store.append(
+            conv.conversation_id, drafts, expected_head=2, expected_leaf=None
+        )
+    finally:
+        event.remove(engine, "before_cursor_execute", record_select)
+
+    # One read each for the conversation, the draft IDs and the automatic snapshot.
+    assert len(selects) == 3
+    assert [e.event_id for e in retried] == [e.event_id for e in first] + [
+        legacy_snapshot.event_id
+    ]
+    with pytest.raises(ConversationConflictError, match="partially replay"):
+        await store.append(
+            conv.conversation_id, [drafts[0], {**drafts[1], "event_id": "new"}]
+        )
+    record = await database.insert_platform_message_history(
+        "webchat", "session", {"type": "bot", "message": []}, turn_id="turn"
+    )
+    assert record.context_event_id == legacy_snapshot.event_id
+    side = await store.create(
+        umo="umo", platform_id="p", source_event_id=record.context_event_id
+    )
+    assert (await store.read(side.conversation_id)).messages == projected.messages
 
 
 @pytest.mark.asyncio
@@ -498,7 +581,7 @@ async def test_webchat_links_plugin_replacement_without_an_appended_reply(databa
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("change", ["append", "select_branch"])
+@pytest.mark.parametrize("change", ["plugin_event", "message", "select_branch"])
 async def test_declared_read_revision_rejects_context_changes(database, change):
     from dataclasses import FrozenInstanceError
 
@@ -523,8 +606,16 @@ async def test_declared_read_revision_rejects_context_changes(database, change):
     with pytest.raises(FrozenInstanceError):
         conversation.revision.head_seq = 0
     writer = await manager._event_writer(created.conversation_id, unified_msg_origin="umo", expected_revision=conversation.revision)
-    if change == "append":
+    if change == "plugin_event":
         await writer.append("plugin.test.changed", {})
+        await manager._event_writer(
+            created.conversation_id,
+            unified_msg_origin="umo",
+            expected_revision=conversation.revision,
+        )
+        return
+    if change == "message":
+        await writer.append_message({"role": "user", "content": "new message"})
     else:
         await store.select_branch(
             created.conversation_id, first.event_id,
@@ -578,6 +669,34 @@ async def test_native_history_uses_the_same_writer_after_execution_events(databa
         "conversation.created", "turn.started", "request.started", "request.finished",
         "message.appended", "message.appended", "turn.finished",
     ]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("changes_context", [False, True])
+async def test_independent_plugin_write_and_turn_settlement(database, changes_context):
+    from astrbot.core.conversation_mgr import ConversationManager
+
+    conv = await database.create_conversation("umo", "p")
+    store = database.conversation_store
+    manager = ConversationManager(database)
+    writer = ConversationEventWriter(store, await store.read(conv.conversation_id))
+    await writer.start_turn({"kind": "agent"})
+    reply = {"role": "assistant", "content": "reply"}
+    if changes_context:
+        await manager.append_message("new input", cid=writer.cid)
+        with pytest.raises(ConversationConflictError):
+            await writer.save_history([reply])
+        await writer.finish_turn("failed")
+        expected = [{"role": "user", "content": "new input"}]
+    else:
+        await manager.append_plugin_event("test.observed", {}, cid=writer.cid)
+        await writer.save_history([reply])
+        await writer.finish_turn("completed")
+        expected = [reply]
+    events = await store.events(writer.cid)
+    assert events[-1].type == "turn.finished"
+    assert events[-1].payload["status"] == ("failed" if changes_context else "completed")
+    assert (await store.read(writer.cid)).messages == expected
 
 
 @pytest.mark.asyncio

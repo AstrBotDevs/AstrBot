@@ -4,8 +4,10 @@ import asyncio
 import inspect
 import uuid
 from collections.abc import AsyncGenerator, Awaitable, Callable
+from copy import deepcopy
 from typing import Generic, TypeVar
 
+from .message import Message
 from .response import AgentResponse
 
 TEvent = TypeVar("TEvent")
@@ -107,6 +109,79 @@ def request_recorder_kwargs(call: Callable, recorder) -> dict:
     return {}
 
 
+def request_context_for_journal(
+    contexts, *, source_contexts, modalities, extra_user_content_parts=None
+) -> dict:
+    """Capture the context at the provider boundary without temporary content.
+
+    Args:
+        contexts: The prepared messages passed to the provider.
+        source_contexts: Messages before modality conversion, with private flags intact.
+        modalities: Modalities supported by the selected provider.
+        extra_user_content_parts: Additional content passed to the provider.
+
+    Returns:
+        Detached provider arguments and whether all their content was retained.
+    """
+    from astrbot.core.provider.modalities import sanitize_contexts_by_modalities
+
+    filtered = []
+    complete = True
+    for message in source_contexts:
+        if message.get("_no_save") if isinstance(message, dict) else message._no_save:
+            complete = False
+            continue
+        content = (
+            message.get("content") if isinstance(message, dict) else message.content
+        )
+        if isinstance(content, list):
+            kept = [
+                part
+                for part in content
+                if not (
+                    part.get("_no_save")
+                    if isinstance(part, dict)
+                    else getattr(part, "_no_save", False)
+                )
+            ]
+            if len(kept) != len(content):
+                complete = False
+                data = message if isinstance(message, dict) else message.model_dump()
+                message = {
+                    **data,
+                    "content": [
+                        part if isinstance(part, dict) else part.model_dump()
+                        for part in kept
+                    ],
+                }
+        filtered.append(message)
+
+    # Modality conversion can drop private flags or turn a tool result into text.
+    # When redacting, convert the safe source again instead of trusting the wire copy.
+    if not complete:
+        contexts = (
+            sanitize_contexts_by_modalities(filtered, modalities)[0]
+            if modalities
+            else filtered
+        )
+    extra = []
+    for part in extra_user_content_parts or ():
+        if part.get("_no_save") if isinstance(part, dict) else part._no_save:
+            complete = False
+        else:
+            extra.append(part if isinstance(part, dict) else part.model_dump())
+    return deepcopy(
+        {
+            "contexts": [
+                message.model_dump() if isinstance(message, Message) else message
+                for message in contexts
+            ],
+            "extra_user_content_parts": extra,
+            "complete": complete,
+        }
+    )
+
+
 class RequestEventRecorder:
     """Pair provider attempts while attaching final usage after response decoding."""
 
@@ -117,7 +192,7 @@ class RequestEventRecorder:
 
         Args:
             emit: Awaited delivery of events to the runner's consumer.
-            payload: Request metadata, excluding the model request body.
+            payload: Request metadata and optional filtered provider context.
         """
         self.emit = emit
         self.payload = payload
@@ -136,7 +211,7 @@ class RequestEventRecorder:
         self.network_attempt_seen = True
 
     async def finish(self, status, *, usage=None, error_code=None):
-        """Settle one attempt once without storing its request body.
+        """Settle one attempt once.
 
         Args:
             status: Terminal request status.

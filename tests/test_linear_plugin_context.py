@@ -6,12 +6,14 @@ from unittest.mock import MagicMock
 import pytest
 import pytest_asyncio
 
+from astrbot.core.agent import conversation_events
 from astrbot.core.agent.conversation_events import (
     ConversationEventWriter,
 )
 from astrbot.core.agent.message import Message
 from astrbot.core.agent.response import AgentResponse
 from astrbot.core.conversation_mgr import ConversationManager
+from astrbot.core.db import conversation as conversation_db
 from astrbot.core.db.conversation import ConversationConflictError
 from astrbot.core.db.sqlite import SQLiteDatabase
 from astrbot.core.pipeline import context_utils
@@ -50,6 +52,58 @@ def install_hook(monkeypatch):
         )
 
     return install
+
+
+@pytest.mark.asyncio
+async def test_hook_compares_without_copying_and_detects_nested_edits(
+    database, install_hook, monkeypatch
+):
+    store = database.conversation_store
+    history = [{"role": "user", "content": [{"type": "text", "text": "old"}]}]
+    conv = await store.create(umo="umo", platform_id="p", content=history)
+    writer = ConversationEventWriter(store, await store.read(conv.conversation_id))
+    writer.request = SimpleNamespace(contexts=history, conversation=conv)
+    event = SimpleNamespace(
+        plugins_name=None, is_stopped=lambda: False, trace=MagicMock()
+    )
+    await writer.start_turn({"kind": "test"})
+
+    async def noop(event, req):
+        pass
+
+    def unexpected_copy(_value):
+        pytest.fail("Unchanged context was deep-copied")
+
+    install_hook(noop)
+    with monkeypatch.context() as patch:
+        patch.setattr(conversation_db, "deepcopy", unexpected_copy)
+        patch.setattr(conversation_events, "deepcopy", unexpected_copy)
+        await context_utils.call_event_hook(
+            event, EventType.OnLLMRequestEvent, writer.request, writer=writer
+        )
+    assert not writer._pending
+
+    async def edit(event, req):
+        req.contexts[0]["content"][0]["text"] = "edited"
+
+    install_hook(edit)
+    await context_utils.call_event_hook(
+        event, EventType.OnLLMRequestEvent, writer.request, writer=writer
+    )
+    history[0]["content"][0]["text"] = "later change"
+    staged = writer._pending[-1]["payload"]["messages"][0]["message"]
+    assert staged["content"][0]["text"] == "edited"
+    history[0]["content"][0]["text"] = "edited"
+    await writer.save_history(history)
+    edits = [
+        entry.payload
+        for entry in await store.events(conv.conversation_id)
+        if entry.type == "context.rebased"
+        and entry.payload
+        and entry.payload.get("origin") == "plugin"
+    ]
+    assert len(edits) == 1
+    assert edits[0]["messages"][0]["message"]["content"][0]["text"] == "edited"
 
 
 @pytest.mark.asyncio

@@ -313,7 +313,7 @@ async def test_conversation_indexes_are_idempotent_and_support_ordered_list(
 
 
 @pytest.mark.asyncio
-async def test_multi_platform_summary_uses_global_order_index(
+async def test_multi_platform_summary_uses_global_order_index_and_batches_usage(
     tmp_path: Path,
 ):
     db = SQLiteDatabase(str(tmp_path / "multi-platform.db"))
@@ -329,6 +329,24 @@ async def test_multi_platform_summary_uses_global_order_index(
                     )
                     for index in range(20)
                 ])
+
+    await db.conversation_store.append(
+        "conversation-19",
+        [
+            {"type": "conversation.updated", "payload": {"token_usage": 42}},
+            {
+                "type": "conversation.updated",
+                "payload": {"changes": {"title": "Renamed"}},
+            },
+        ],
+    )
+    await db.conversation_store.append(
+        "conversation-18",
+        [
+            {"type": "conversation.updated", "payload": {"token_usage": 77}},
+            {"type": "conversation.updated", "payload": {"token_usage": 0}},
+        ],
+    )
 
     statements = []
 
@@ -359,6 +377,8 @@ async def test_multi_platform_summary_uses_global_order_index(
         "conversation-15",
     ]
     assert all(item.content is None for item in conversations)
+    assert [item.token_usage for item in conversations] == [42, 0, 0, 0, 0]
+    assert len(statements) == 3
 
     ordered_queries = [statement for statement in statements if "ORDER BY" in statement and "FROM conversations_v3" in statement]
     assert len(ordered_queries) == 1

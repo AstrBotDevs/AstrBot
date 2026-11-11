@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 
 import pytest
 import pytest_asyncio
-from sqlalchemy import text
+from sqlalchemy import event, text
 
 from astrbot.core.db.conversation import (
     ContextUnavailableError,
@@ -389,8 +389,74 @@ async def test_tree_schema_migration_preserves_every_position_and_cross_conversa
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("display_before", [False, True])
+async def test_display_links_are_written_once_per_role_and_only_for_existing_rows(
+    database, display_before
+):
+    store = database.conversation_store
+    conv = await store.create(umo="owner", platform_id="p")
+    await store.append(
+        conv.conversation_id,
+        [{"event_id": "turn", "type": "turn.started", "payload": {}}],
+    )
+    if display_before:
+        user = await database.insert_platform_message_history(
+            "webchat", "session", {"type": "user"}, turn_id="turn"
+        )
+        bot = await database.insert_platform_message_history(
+            "webchat", "session", {"type": "bot"}, turn_id="turn"
+        )
+
+    drafts = [
+        {
+            "event_id": event_id,
+            "type": "message.appended",
+            "payload": {
+                "turn_id": "turn",
+                "message": {"role": role, "content": event_id},
+                "include_in_context": event_id != "temporary",
+            },
+        }
+        for event_id, role in [
+            ("first-user", "user"),
+            ("first-bot", "assistant"),
+            ("second-user", "user"),
+            ("last-bot", "assistant"),
+            ("temporary", "assistant"),
+        ]
+    ]
+    display_updates = []
+
+    def record_display_update(_conn, _cursor, statement, _params, _ctx, _many):
+        if statement.startswith("UPDATE platform_message_history"):
+            display_updates.append(statement)
+
+    engine = database.engine.sync_engine
+    event.listen(engine, "before_cursor_execute", record_display_update)
+    try:
+        await store.append(conv.conversation_id, drafts)
+    finally:
+        event.remove(engine, "before_cursor_execute", record_display_update)
+
+    assert len(display_updates) == (2 if display_before else 0)
+    if not display_before:
+        user = await database.insert_platform_message_history(
+            "webchat", "session", {"type": "user"}, turn_id="turn"
+        )
+        bot = await database.insert_platform_message_history(
+            "webchat", "session", {"type": "bot"}, turn_id="turn"
+        )
+    assert (
+        await database.get_platform_message_history_by_id(user.id)
+    ).context_event_id == "first-user"
+    assert (
+        await database.get_platform_message_history_by_id(bot.id)
+    ).context_event_id == "last-bot"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("display_before", [False, True])
 @pytest.mark.parametrize("role", ["user", "assistant"])
-async def test_automatic_snapshot_keeps_exact_display_tip_forkable(
+async def test_large_append_keeps_exact_display_tip_forkable_without_snapshot(
     database, display_before, role
 ):
     store = database.conversation_store
@@ -435,19 +501,35 @@ async def test_automatic_snapshot_keeps_exact_display_tip_forkable(
             {
                 "type": "plugin.test.audit",
                 "payload": {
-                    "description": "A non-context event separates the tip from its snapshot"
+                    "description": "The journal advances beyond the display context"
                 },
             },
         ]
     )
-    committed = await store.append(conv.conversation_id, drafts)
-    snapshot = committed[-1]
-    assert snapshot.type == "context.rebased"
-    assert snapshot.payload["reason"] == "snapshot"
-    assert snapshot.payload["source_event_id"] == "display-tip"
-    assert (
-        await store.get_context_availability(conv.conversation_id, [plugin.event_id])
-    )[plugin.event_id] == "available"
+    conversation_updates = []
+    event_insert_sizes = []
+
+    def record_writes(_conn, _cursor, statement, params, _ctx, many):
+        if statement.startswith("UPDATE conversations_v3"):
+            conversation_updates.append(statement)
+        if statement.startswith("INSERT INTO conversation_events"):
+            assert not many
+            event_insert_sizes.append(len(params) // len(ConversationEvent.__table__.columns))
+
+    engine = database.engine.sync_engine
+    event.listen(engine, "before_cursor_execute", record_writes)
+    try:
+        committed = await store.append(conv.conversation_id, drafts)
+    finally:
+        event.remove(engine, "before_cursor_execute", record_writes)
+
+    assert len(conversation_updates) == 1
+    assert event_insert_sizes == [100, 100, 56, 1]
+    saved = await store.read(conv.conversation_id)
+    assert saved.conversation.head_seq == committed[-1].seq
+    assert saved.conversation.leaf_event_id == "display-tip"
+    assert saved.conversation.replay_from_event_id == plugin.event_id
+    assert saved.replay_count == 257
     await store.append(
         conv.conversation_id,
         [
@@ -459,13 +541,13 @@ async def test_automatic_snapshot_keeps_exact_display_tip_forkable(
     )
     assert (
         await store.get_context_availability(conv.conversation_id, [plugin.event_id])
-    )[plugin.event_id] == "pruned"
+    )[plugin.event_id] == "available"
     if not display_before:
         record = await database.insert_platform_message_history(
             "p", "session", display_content, turn_id="active-turn"
         )
     linked = await database.get_platform_message_history_by_id(record.id)
-    assert linked.context_event_id == snapshot.event_id
+    assert linked.context_event_id == "display-tip"
     assert (
         await store.get_context_availability(
             conv.conversation_id, [linked.context_event_id]

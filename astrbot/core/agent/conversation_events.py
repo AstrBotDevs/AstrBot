@@ -15,10 +15,27 @@ from astrbot.core.db.conversation import (
     ConversationSnapshot,
     persistent_messages,
 )
+from astrbot.core.sentinels import NOT_GIVEN
 
 
 class ConversationPersistenceError(RuntimeError):
     """A journal write failed; provider or tool retries cannot repair it."""
+
+
+def _message_key(value):
+    """Make a JSON value hashable without encoding large message bodies.
+
+    Args:
+        value: A JSON-compatible value in a model message.
+
+    Returns:
+        A key that preserves JSON types and ignores object key order.
+    """
+    if isinstance(value, dict):
+        return frozenset((key, _message_key(item)) for key, item in value.items())
+    if isinstance(value, (list, tuple)):
+        return tuple(_message_key(item) for item in value)
+    return type(value), value
 
 
 class ConversationEventWriter:
@@ -40,6 +57,7 @@ class ConversationEventWriter:
         self._lock = asyncio.Lock()
         self._pending: list[dict] = []
         self._entries = deepcopy(snapshot.entries)
+        self._committed_entries = tuple(self._entries)
         self._excluded_counts: Counter[str] = Counter()
         self.runtime_context = None
         self.request = None
@@ -83,8 +101,6 @@ class ConversationEventWriter:
                 "context.rebased",
             }:
                 payload.setdefault("turn_id", self.turn_id)
-            if response.type == "request.started":
-                payload.setdefault("context_leaf_event_id", self.leaf_event_id)
             await self.append(
                 response.type, payload, event_id=response.event_id, sync_runtime=False
             )
@@ -120,13 +136,24 @@ class ConversationEventWriter:
         }
         async with self._lock:
             context_change = event_type in CONTEXT_TYPES
+            if event_type == "request.started":
+                payload.setdefault("context_leaf_event_id", self.leaf_event_id)
+                if "input_context" in payload:
+                    payload["context_leaf_event_id"] = self.leaf_event_id
+                    payload["input_context"] = self._encode_request_context(
+                        payload["input_context"]
+                    )
             drafts = [*self._pending, draft] if context_change else [draft]
+            checks_context = context_change or event_type in {
+                "turn.started",
+                "request.started",
+                "tool.started",
+            }
             try:
                 committed = await self.store.append(
                     self.cid,
                     drafts,
-                    expected_head=self.head_seq,
-                    expected_leaf=self.leaf_event_id,
+                    expected_leaf=self.leaf_event_id if checks_context else NOT_GIVEN,
                 )
             except (SQLAlchemyError, ValueError) as exc:
                 raise ConversationPersistenceError(
@@ -157,6 +184,7 @@ class ConversationEventWriter:
                         session, conv, self.leaf_event_id
                     )
                 self._entries = snapshot.entries
+                self._committed_entries = tuple(self._entries)
                 self._pending.clear()
                 if sync_runtime and self.runtime_context is not None:
                     from astrbot.core.agent.message import Message
@@ -234,6 +262,43 @@ class ConversationEventWriter:
         self.turn_id = event.event_id
         return self.turn_id
 
+    def _encode_request_context(self, input_context: dict) -> dict:
+        """Reference unchanged messages in the committed context by position.
+
+        Args:
+            input_context: Provider-facing messages with temporary content filtered.
+
+        Returns:
+            The request input as ordered ranges and inline messages.
+        """
+        base_keys = [
+            _message_key(entry["message"]) for entry in self._committed_entries
+        ]
+        positions = {}
+        for index, key in enumerate(base_keys):
+            positions.setdefault(key, index)
+        segments = []
+        for message in input_context["contexts"]:
+            key = _message_key(message)
+            previous_range = segments[-1].get("base_range") if segments else None
+            if (
+                previous_range is not None
+                and previous_range[1] < len(base_keys)
+                and base_keys[previous_range[1]] == key
+            ):
+                previous_range[1] += 1
+                continue
+            position = positions.get(key)
+            if position is None:
+                segments.append({"message": message})
+            else:
+                segments.append({"base_range": [position, position + 1]})
+        return {
+            "segments": segments,
+            "extra_user_content_parts": input_context["extra_user_content_parts"],
+            "complete": input_context["complete"],
+        }
+
     async def finish_turn(self, status: str) -> None:
         """Record settlement without claiming recovery of external side effects.
 
@@ -261,9 +326,11 @@ class ConversationEventWriter:
             reason: Reason for a replacement, such as compaction.
             origin: Trusted mutation source: user, plugin, system, or unknown.
         """
+        projected = []
         excluded_counts = Counter()
         for message in history:
-            effective = persistent_messages([message])
+            effective = persistent_messages([message], detach=False)
+            projected.extend(effective)
             if message.get("role") == "_checkpoint" or effective == [message]:
                 continue
             fingerprint = hashlib.sha256(
@@ -285,12 +352,13 @@ class ConversationEventWriter:
                 }
             )
         self._excluded_counts |= excluded_counts
-        history = persistent_messages(history)
-        before = [e["message"] for e in self._entries]
-        if before == history:
-            return
-        if history[: len(before)] == before:
-            for message in history[len(before) :]:
+        # The projection can share data with the plugin until it is staged.
+        previous_count = len(self._entries)
+        if len(projected) >= previous_count and all(
+            entry["message"] == message
+            for entry, message in zip(self._entries, projected)
+        ):
+            for message in projected[previous_count:]:
                 identity = str(uuid.uuid4())
                 self._pending.append(
                     {
@@ -311,7 +379,7 @@ class ConversationEventWriter:
                     entry["id"]
                 )
             self._entries = []
-            for message in history:
+            for message in projected:
                 matches = retained_ids[json.dumps(message, sort_keys=True)]
                 self._entries.append(
                     {
@@ -324,7 +392,7 @@ class ConversationEventWriter:
                     "event_id": identity,
                     "type": "context.rebased",
                     "payload": {
-                        "reason": "reset" if not history else reason,
+                        "reason": "reset" if not projected else reason,
                         "origin": origin,
                         "turn_id": self.turn_id,
                         "messages": deepcopy(self._entries),
@@ -358,7 +426,6 @@ class ConversationEventWriter:
             committed = await self.store.append(
                 self.cid,
                 drafts,
-                expected_head=self.head_seq,
                 expected_leaf=self.leaf_event_id,
             )
             for event in committed:
@@ -366,6 +433,7 @@ class ConversationEventWriter:
                 if event.type in CONTEXT_TYPES:
                     self.leaf_event_id = event.event_id
             self._pending.clear()
+            self._committed_entries = tuple(self._entries)
             if self.runtime_context is not None:
                 from astrbot.core.agent.message import bind_checkpoint_messages
 

@@ -1,7 +1,9 @@
 """Maintain display-message links to committed conversation context positions."""
 
+import json
+
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlmodel import update
+from sqlmodel import col, func, select, update
 
 from astrbot.core.db.po import ConversationEvent, PlatformMessageHistory
 
@@ -9,21 +11,18 @@ from astrbot.core.db.po import ConversationEvent, PlatformMessageHistory
 async def project_webchat_event_links(
     session: AsyncSession,
     events: list[ConversationEvent],
-    *,
-    snapshot: ConversationEvent | None = None,
 ) -> None:
     """Apply ordered display links inside the event writer's transaction.
 
     The first user context and latest assistant context are linked to each turn.
-    An automatic snapshot then replaces links to its equivalent source position.
     This projection never opens or commits a transaction; failures propagate so
     event insertion, conversation pointers, and display links roll back together.
 
     Args:
         session: Active transaction owned by ConversationStore.append.
-        events: Validated events in append order, including any automatic snapshot.
-        snapshot: Optional automatic snapshot whose source links must be moved.
+        events: Validated events in append order.
     """
+    links: dict[str, dict[str, str]] = {}
     for event in events:
         kind, payload = event.type, event.payload
         if (
@@ -45,25 +44,32 @@ async def project_webchat_event_links(
                 else None
             )
             if role in {"user", "assistant"}:
-                query = update(PlatformMessageHistory).where(
-                    PlatformMessageHistory.turn_id == payload["turn_id"],
-                    PlatformMessageHistory.content["type"].as_string()
-                    == ("user" if role == "user" else "bot"),
-                )
+                turn_links = links.setdefault(payload["turn_id"], {})
                 if role == "user":
-                    query = query.where(
-                        PlatformMessageHistory.context_event_id.is_(None)
-                    )
-                await session.execute(query.values(context_event_id=event.event_id))
+                    turn_links.setdefault("user", event.event_id)
+                else:
+                    turn_links["bot"] = event.event_id
 
-    if snapshot is not None:
-        # The new baseline is exactly equivalent to its source tip.
-        # Keep already displayed messages forkable after reclamation.
-        await session.execute(
-            update(PlatformMessageHistory)
-            .where(
-                PlatformMessageHistory.context_event_id
-                == snapshot.payload["source_event_id"]
-            )
-            .values(context_event_id=snapshot.event_id)
+    if not links:
+        return
+
+    # Look up the roles that have display rows once, using the turn ID index.
+    # A single bound parameter also supports batches spanning many turns.
+    turn_ids = func.json_each(json.dumps(list(links))).table_valued("value")
+    display_type = PlatformMessageHistory.content["type"].as_string()
+    display_roles = await session.execute(
+        select(PlatformMessageHistory.turn_id, display_type)
+        .where(col(PlatformMessageHistory.turn_id).in_(select(turn_ids.c.value)))
+        .distinct()
+    )
+    for turn_id, role in display_roles:
+        event_id = links[turn_id].get(role)
+        if event_id is None:
+            continue
+        query = update(PlatformMessageHistory).where(
+            PlatformMessageHistory.turn_id == turn_id,
+            display_type == role,
         )
+        if role == "user":
+            query = query.where(PlatformMessageHistory.context_event_id.is_(None))
+        await session.execute(query.values(context_event_id=event_id))

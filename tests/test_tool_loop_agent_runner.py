@@ -2319,6 +2319,85 @@ async def test_event_journal_records_requests_tools_and_final_context(
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("temporary", [False, True])
+async def test_request_journal_captures_hook_edited_provider_input(
+    runner, mock_tool_executor, mock_hooks, tmp_path, temporary
+):
+    from astrbot.core.agent.conversation_events import ConversationEventWriter
+    from astrbot.core.db.sqlite import SQLiteDatabase
+
+    history = [
+        {"role": "user", "content": "first"},
+        {"role": "assistant", "content": "before hook"},
+        {"role": "user", "content": "last"},
+    ]
+    db = SQLiteDatabase(str(tmp_path / "request_input.db"))
+    await db.initialize()
+    try:
+        store = db.conversation_store
+        conv = await db.create_conversation("umo", "p", history)
+        writer = ConversationEventWriter(store, await store.read(conv.conversation_id))
+        provider = MockProvider()
+        provider.provider_config["modalities"] = ["image", "tool_use"]
+        request = ProviderRequest(
+            contexts=history,
+            prompt="new question",
+            extra_user_content_parts=[TextPart(text="extra")],
+        )
+        if temporary:
+            request.extra_user_content_parts.append(TextPart(text="private extra").mark_as_temp())
+        await runner.reset(
+            provider=provider,
+            request=request,
+            run_context=ContextWrapper(context=None),
+            tool_executor=mock_tool_executor,
+            agent_hooks=mock_hooks,
+            streaming=False,
+            conversation_event_sink=writer.consume,
+        )
+        writer.runtime_context = runner.run_context
+        await writer.start_turn({"kind": "test"})
+        runner.run_context.messages[1].content = "after hook"
+        if temporary:
+            runner.run_context.messages[2].content = [
+                TextPart(text="last"),
+                TextPart(text="private history").mark_as_temp(),
+            ]
+
+        async def capture(**kwargs):
+            events = await store.events(writer.cid, event_type="request.started")
+            start = events[-1]
+            restored = await store.read_request_context(writer.cid, start.event_id)
+            assert restored is not None
+            expected = kwargs["contexts"]
+            assert expected[1]["content"] == "after hook"
+            if temporary:
+                assert expected[2]["content"][-1]["text"] == "private history"
+                expected = [
+                    *expected[:2],
+                    {**expected[2], "content": [{"type": "text", "text": "last"}]},
+                    *expected[3:],
+                ]
+                assert "private" not in str(start.payload)
+            assert restored == {
+                "contexts": expected,
+                "extra_user_content_parts": [{"type": "text", "text": "extra"}],
+                "complete": not temporary,
+            }
+            assert start.payload["input_context"]["segments"][0] == {"base_range": [0, 1]}
+            assert (await store.read(writer.cid)).messages == history
+            return LLMResponse(role="assistant", completion_text="reply")
+
+        provider.text_chat = AsyncMock(side_effect=capture)
+        await collect_events(runner.step_until_done(1))
+        provider.text_chat.assert_awaited_once()
+        await writer.finish_turn("cancelled")
+        assert (await store.read(writer.cid)).messages == history
+    finally:
+        await db.engine.dispose()
+
+
+@pytest.mark.asyncio
 async def test_journal_failure_does_not_retry_a_model_or_fallback(
     runner, provider_request, mock_tool_executor, mock_hooks
 ):

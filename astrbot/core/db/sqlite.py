@@ -418,10 +418,9 @@ class SQLiteDatabase(BaseDatabase):
             query = query.order_by(desc(ConversationV3.created_at))
             result = await session.execute(query)
 
-            return [
-                await self.conversation_store.read_result(session, conv)
-                for conv in result.scalars()
-            ]
+            return await self.conversation_store.read_results(
+                session, result.scalars().all()
+            )
 
     async def get_conversation_by_id(self, cid):
         async with self.get_db() as session:
@@ -445,10 +444,9 @@ class SQLiteDatabase(BaseDatabase):
                 .offset(offset)
                 .limit(page_size),
             )
-            return [
-                await self.conversation_store.read_result(session, conv)
-                for conv in result.scalars()
-            ]
+            return await self.conversation_store.read_results(
+                session, result.scalars().all()
+            )
 
     async def get_filtered_conversations(
         self,
@@ -626,12 +624,9 @@ class SQLiteDatabase(BaseDatabase):
                 result = await session.execute(result_query, compiled.params)
             else:
                 result = await session.execute(result_query)
-            conversations = [
-                await self.conversation_store.read_result(
-                    session, conv, include_history
-                )
-                for conv in result.scalars()
-            ]
+            conversations = await self.conversation_store.read_results(
+                session, result.scalars().all(), include_history
+            )
 
             return conversations, total
 
@@ -904,8 +899,7 @@ class SQLiteDatabase(BaseDatabase):
                         await session.execute(query)
                     ).scalar_one_or_none()
                     if new_history.context_event_id:
-                        # A display row may arrive after its exact source position
-                        # was materialized as a durable automatic snapshot.
+                        # Older databases may have an automatic snapshot for this position.
                         snapshot_id = (
                             await session.execute(
                                 text("""SELECT event_id FROM conversation_events

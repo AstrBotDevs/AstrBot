@@ -67,9 +67,9 @@ class ConversationManager:
         ):
             raise ValueError("Conversation is not accessible")
         writer = ConversationEventWriter(self.db.conversation_store, snapshot)
-        if expected_revision is not None and (
-            expected_revision.head_seq != writer.head_seq
-            or expected_revision.leaf_event_id != writer.leaf_event_id
+        if (
+            expected_revision is not None
+            and expected_revision.leaf_event_id != writer.leaf_event_id
         ):
             raise ConversationConflictError(
                 "Conversation changed while preparing the request"
@@ -483,7 +483,6 @@ class ConversationManager:
                     {"type": "message.appended", "payload": {"message": message}}
                     for message in messages
                 ],
-                expected_head=snapshot.conversation.head_seq,
                 expected_leaf=snapshot.conversation.leaf_event_id,
             )
             return

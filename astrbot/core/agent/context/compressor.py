@@ -6,7 +6,11 @@ from ...provider.modalities import (
     log_context_sanitize_stats,
     sanitize_contexts_by_modalities,
 )
-from ..event_stream import RequestEventRecorder, request_recorder_kwargs
+from ..event_stream import (
+    RequestEventRecorder,
+    request_context_for_journal,
+    request_recorder_kwargs,
+)
 from ..message import Message, dump_messages_with_checkpoints
 from ..response import AgentResponse
 from .token_counter import EstimateTokenCounter, TokenCounter
@@ -301,6 +305,11 @@ class LLMSummaryCompressor:
                         "purpose": "compaction",
                         "provider_id": self.provider.provider_config.get("id", ""),
                         "model": self.provider.get_model(),
+                        "input_context": request_context_for_journal(
+                            sanitized_summary_contexts,
+                            source_contexts=summary_contexts,
+                            modalities=self.provider.provider_config.get("modalities"),
+                        ),
                     },
                 )
                 await recorder.begin()

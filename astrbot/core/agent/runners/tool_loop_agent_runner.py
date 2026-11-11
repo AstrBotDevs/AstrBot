@@ -29,6 +29,7 @@ from astrbot import logger
 from astrbot.core.agent.event_stream import (
     AgentEventStream,
     RequestEventRecorder,
+    request_context_for_journal,
     request_recorder_kwargs,
 )
 from astrbot.core.agent.message import (
@@ -583,18 +584,24 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             await asyncio.gather(abort_task, return_exceptions=True)
 
     async def _recorded_responses(
-        self, payload: dict[str, T.Any], *, streaming: bool
+        self,
+        payload: dict[str, T.Any],
+        *,
+        contexts: list[Message] | list[dict[str, T.Any]],
+        streaming: bool,
     ) -> T.AsyncGenerator[LLMResponse, None]:
         """Pair one provider invocation, including re-query and fallback attempts.
 
         Args:
             payload: Native provider arguments, never placed in public events.
+            contexts: Working messages before provider modality conversion.
             streaming: Whether this call produces chunks.
 
         Yields:
             Provider replies for normal model processing and hooks.
         """
         recorder = None
+        payload["contexts"] = self._sanitize_contexts_for_provider(contexts)
         if self._events.active and self._conversation_event_sink is not None:
             recorder = RequestEventRecorder(
                 self._events.emit,
@@ -602,6 +609,14 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                     "provider_id": self.provider.provider_config.get("id", ""),
                     "model": payload.get("model") or self.provider.get_model(),
                     "attempt_scope": "provider_call",
+                    "input_context": request_context_for_journal(
+                        payload["contexts"],
+                        source_contexts=contexts,
+                        modalities=self.provider.provider_config.get("modalities"),
+                        extra_user_content_parts=payload.get(
+                            "extra_user_content_parts"
+                        ),
+                    ),
                 },
             )
             await recorder.begin()
@@ -715,7 +730,6 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
     ) -> T.AsyncGenerator[LLMResponse, None]:
         """Yields chunks *and* a final LLMResponse."""
         payload = {
-            "contexts": self._sanitize_contexts_for_provider(self.run_context.messages),
             "func_tool": self._func_tool_for_provider(),
             "session_id": self.req.session_id,
             "conversation_id": (
@@ -729,7 +743,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             # For primary provider we keep explicit model selection if provided.
             payload["model"] = self.req.model
         async for response in self._recorded_responses(
-            payload, streaming=self.streaming
+            payload, contexts=self.run_context.messages, streaming=self.streaming
         ):
             yield response
 
@@ -1830,7 +1844,6 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                 requery_resp = None
                 async for recorded in self._recorded_responses(
                     {
-                        "contexts": self._sanitize_contexts_for_provider(contexts),
                         "func_tool": param_subset,
                         "model": self.req.model,
                         "session_id": self.req.session_id,
@@ -1839,6 +1852,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                         "abort_signal": self._abort_signal,
                         "request_max_retries": self.request_max_retries,
                     },
+                    contexts=contexts,
                     streaming=False,
                 ):
                     requery_resp = recorded
@@ -1863,9 +1877,6 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                     repair_resp = None
                     async for recorded in self._recorded_responses(
                         {
-                            "contexts": self._sanitize_contexts_for_provider(
-                                repair_contexts
-                            ),
                             "func_tool": param_subset,
                             "model": self.req.model,
                             "session_id": self.req.session_id,
@@ -1874,6 +1885,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                             "abort_signal": self._abort_signal,
                             "request_max_retries": self.request_max_retries,
                         },
+                        contexts=repair_contexts,
                         streaming=False,
                     ):
                         repair_resp = recorded
