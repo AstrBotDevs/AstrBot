@@ -278,8 +278,10 @@ class ProviderAnthropic(Provider):
             A base64 image source for the Anthropic request.
 
         Raises:
-            ValueError: If the image MIME type is unavailable.
+            ValueError: If the image exceeds the size limit or has no MIME type.
         """
+        if len(data) > cls._HISTORY_IMAGE_MAX_BYTES:
+            raise ValueError("Historical image exceeds the size limit.")
         with PILImage.open(BytesIO(data), formats=cls._HISTORY_IMAGE_FORMATS) as image:
             mime_type = image.get_format_mimetype()
             image.verify()
@@ -398,7 +400,8 @@ class ProviderAnthropic(Provider):
                                 ref = image_url.get("url")
                                 if not isinstance(ref, str):
                                     raise ValueError("Expected an image reference.")
-                                if ref.startswith(("http://", "https://")):
+                                prefix = ref[:9].lower()
+                                if prefix.startswith(("http://", "https://")):
                                     if deadline is None:
                                         deadline = (
                                             loop.time() + self._HISTORY_IMAGE_TIMEOUT
@@ -407,15 +410,21 @@ class ProviderAnthropic(Provider):
                                         ref, deadline
                                     )
                                 else:
-                                    if ref.startswith("data:"):
+                                    if prefix.startswith("data:"):
                                         header, _, ref = ref.partition(",")
-                                        if not header.endswith(";base64"):
+                                        if not header.lower().endswith(";base64"):
                                             raise ValueError(
                                                 "Expected a base64 data URI."
                                             )
-                                    encoded = "".join(
-                                        ref.removeprefix("base64://").split()
-                                    )
+                                    elif prefix == "base64://":
+                                        ref = ref[9:]
+                                    encoded = "".join(ref.split())
+                                    if len(encoded) > 4 * (
+                                        (self._HISTORY_IMAGE_MAX_BYTES + 2) // 3
+                                    ):
+                                        raise ValueError(
+                                            "Historical image exceeds the size limit."
+                                        )
                                     data = base64.b64decode(
                                         encoded + "=" * (-len(encoded) % 4),
                                         validate=True,

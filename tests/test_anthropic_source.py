@@ -14,10 +14,7 @@ from PIL import Image
 
 from astrbot.core.agent.tool import FunctionTool, ToolSet
 from astrbot.core.provider.entities import LLMResponse, TokenUsage
-from astrbot.core.provider.sources.anthropic_source import (
-    ProviderAnthropic,
-    _PublicImageResolver,
-)
+from astrbot.core.provider.sources.anthropic_source import ProviderAnthropic
 
 # The SDK bundles its own httpx (``httpx`` before 1.0.0, ``httpx2`` after).
 sdk_httpx = getattr(
@@ -75,13 +72,25 @@ async def test_follow_up_preserves_history_images(monkeypatch, tmp_path, streami
 
     monkeypatch.setattr(provider, "_query", query)
     monkeypatch.setattr(provider, "_query_stream", query_stream)
-    available = [image_url, "data:image/png;base64," + encoded]
+    available = [
+        image_url,
+        "HtTpS://example.com/image.png",
+        "data:image/png;base64," + encoded,
+        "DaTa:image/png;BASE64," + encoded,
+        "BaSe64://" + encoded,
+        encoded,
+    ]
     unavailable = [
         *failures,
         str(local),
         "http://127.0.0.1/image.png",
         "data:image/png;base64,!!!!",
         "data:image/png;base64," + base64.b64encode(png_bytes[:33]).decode(),
+        *[
+            prefix + base64.b64encode(png_bytes + b"x" * extra).decode()
+            for prefix in ("data:image/png;base64,", "base64://", "")
+            for extra in (1, 4)
+        ],
     ]
     history = []
     for refs in (available, unavailable):
@@ -146,26 +155,38 @@ async def test_history_images_share_one_download_deadline(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_history_image_resolver_only_returns_public_destinations(monkeypatch):
+async def test_history_image_download_only_connects_to_public_destinations(monkeypatch):
     async def resolve(self, host, port, family):
         return [
-            {"host": address}
+            {"hostname": host, "host": address, "port": port}
             for address in (
                 "127.0.0.1",
                 "10.0.0.2",
                 "224.0.0.1",
                 "::1",
                 "::ffff:127.0.0.1",
+                "64:ff9b::7f00:1",
+                "64:ff9b:1::7f00:1",
                 "93.184.216.34",
             )
             if host == "example.com" or address != "93.184.216.34"
         ]
 
+    destinations = []
+
+    async def connect(self, *args, addr_infos, **kwargs):
+        destinations.extend(info[4][0] for info in addr_infos)
+        raise aiohttp.ClientConnectionError("Connection stopped by test.")
+
     monkeypatch.setattr(aiohttp.ThreadedResolver, "resolve", resolve)
-    resolver = _PublicImageResolver()
-    assert await resolver.resolve("example.com") == [{"host": "93.184.216.34"}]
-    with pytest.raises(OSError, match="no public address"):
-        await resolver.resolve("internal.example")
+    monkeypatch.setattr(aiohttp.TCPConnector, "_wrap_create_connection", connect)
+    for host in ("example.com", "internal.example"):
+        destinations.clear()
+        with pytest.raises(aiohttp.ClientConnectionError):
+            await _provider()._download_history_image(
+                f"https://{host}/image.png", asyncio.get_running_loop().time() + 5
+            )
+        assert destinations == (["93.184.216.34"] if host == "example.com" else [])
 
 
 @pytest.mark.asyncio
