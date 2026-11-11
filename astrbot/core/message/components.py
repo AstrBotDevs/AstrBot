@@ -596,13 +596,59 @@ class Share(BaseMessageComponent):
         super().__init__(**_)
 
 
+_CONTACT_TYPES = frozenset({"qq", "group"})
+"""OneBot V11 contact ``data.type`` values that are recognized as-is."""
+
+
 class Contact(BaseMessageComponent):  # TODO
     type: ComponentType = ComponentType.Contact
-    _type: str  # type 字段冲突
+    # OneBot contact segments carry their own ``type`` (qq / group), but ``type``
+    # is already the component name, so it is kept as a private field.
+    _type: str = PrivateAttr(default="")
     id: int | None = 0
 
     def __init__(self, **_) -> None:
+        # pydantic v1 drops underscore-prefixed keyword arguments; accept both the
+        # inbound OneBot ``type`` key and the private ``_type`` spelling here so
+        # callers such as the respond-stage validator can read the subtype.
+        legacy_type = _.pop("type", None)
+        raw_type = _.pop("_type", None)
         super().__init__(**_)
+        contact_type = raw_type if raw_type not in (None, "") else legacy_type
+        if contact_type is None or contact_type == "":
+            self._type = ""
+            return
+        normalized = str(contact_type).strip().lower()
+        if normalized not in _CONTACT_TYPES:
+            # Keep the received value instead of inventing a different subtype:
+            # guessing here would silently target the wrong contact type.
+            logger.warning(
+                "Unsupported OneBot contact type %r, keeping it as received",
+                contact_type,
+            )
+        self._type = normalized
+
+    def toDict(self) -> dict:
+        """Serialize this component to an OneBot V11 contact segment.
+
+        The base implementation only walks model fields, which cannot include the
+        private ``_type``, so an already parsed contact used to be re-serialized
+        without its subtype. ``data.type`` is therefore added explicitly.
+
+        The subtype is normalized (``strip().lower()``) and recognized values are
+        ``qq`` and ``group``. Unrecognized values are kept as received and only
+        logged, because fabricating a subtype would silently send the wrong
+        contact type; an empty subtype is omitted rather than invented.
+
+        Returns:
+            The ``{"type": "contact", "data": {...}}`` segment.
+        """
+        data: dict[str, Any] = {}
+        if self._type:
+            data["type"] = self._type
+        if self.id is not None:
+            data["id"] = str(self.id)
+        return {"type": "contact", "data": data}
 
 
 class Location(BaseMessageComponent):  # TODO
@@ -616,10 +662,19 @@ class Location(BaseMessageComponent):  # TODO
         super().__init__(**_)
 
 
+_MUSIC_TYPES = frozenset({"qq", "163", "xm", "custom"})
+"""OneBot V11 music ``data.type`` values that are emitted as-is."""
+
+_ABSENT = object()
+"""Sentinel marking a keyword argument that was not provided at all."""
+
+
 class Music(BaseMessageComponent):
     type: ComponentType = ComponentType.Music
-    _type: str
-    id: int | None = 0
+    # OneBot music segments need ``data.type`` (qq / 163 / xm / custom), but
+    # ``type`` is already the component name, so it is kept as a private field.
+    _type: str = PrivateAttr(default="")
+    id: int | str | None = 0
     url: str | None = ""
     audio: str | None = ""
     title: str | None = ""
@@ -627,10 +682,55 @@ class Music(BaseMessageComponent):
     image: str | None = ""
 
     def __init__(self, **_) -> None:
-        # for k in _.keys():
-        #     if k == "_type" and _[k] not in ["qq", "163", "xm", "custom"]:
-        #         logger.warn(f"Protocol: {k}={_[k]} doesn't match values")
+        # pydantic v1 drops underscore-prefixed keyword arguments and rejects
+        # setting them through __setattr__, so accept both the plugin-facing
+        # ``_type`` keyword and the inbound OneBot ``type`` key here. ``type`` is
+        # always consumed: leaving it in ``_`` would make the base model validate
+        # it against ``ComponentType`` and fail.
+        legacy_type = _.pop("type", None)
+        raw_type = _.pop("_type", _ABSENT)
+        # Only a missing (or explicitly empty) private value falls back to the
+        # inbound key. Falsey-but-present values such as ``0`` or ``False`` must
+        # reach the validation branch below instead of silently becoming "no type".
+        if raw_type is _ABSENT or raw_type is None or raw_type == "":
+            raw_type = legacy_type
         super().__init__(**_)
+        if raw_type is None or raw_type == "":
+            # Derive a usable type so the segment never carries an empty
+            # ``data.type``; payloads with custom fields are custom shares.
+            self._type = "custom" if (self.url or self.audio) else "163"
+        elif str(raw_type) in _MUSIC_TYPES:
+            self._type = str(raw_type)
+        else:
+            # A mispassed value (for example a ComponentType member) would make
+            # the segment invalid, so log it and fall back to a usable type.
+            self._type = "custom" if (self.url or self.audio) else "163"
+            logger.warning(
+                "Unsupported OneBot music type %r, falling back to %r",
+                raw_type,
+                self._type,
+            )
+
+    def toDict(self) -> dict:
+        """Serialize this component to an OneBot V11 music segment.
+
+        The base implementation only walks model fields, which cannot include the
+        private ``_type``, so the required ``data.type`` key is added explicitly.
+        ``qq`` / ``163`` / ``xm`` segments reference a song by ``id``, while a
+        ``custom`` segment carries the share URLs and display fields.
+
+        Returns:
+            The ``{"type": "music", "data": {...}}`` segment.
+        """
+        data: dict[str, Any] = {"type": self._type}
+        if self._type == "custom":
+            for key in ("url", "audio", "title", "content", "image"):
+                value = getattr(self, key)
+                if value:
+                    data[key] = value
+        elif self.id:
+            data["id"] = str(self.id)
+        return {"type": "music", "data": data}
 
 
 class Image(BaseMessageComponent):
