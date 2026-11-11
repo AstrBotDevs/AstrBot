@@ -697,3 +697,119 @@ async def test_future_task_delete_explains_jobs_without_a_creator():
         "delete it here."
     )
     cron_mgr.delete_job.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("schedule", "expected_run_once", "expected_cron"),
+    [
+        ({"run_at": "2035-11-11T16:00:00+08:00"}, True, None),
+        ({"run_at": "2035-11-11T16:00:00+08:00", "cron_expression": ""}, True, None),
+        ({"run_at": "2035-11-11T16:00:00+08:00", "cron_expression": None}, True, None),
+        ({"run_at": "2035-11-11T16:00:00+08:00", "run_once": True}, True, None),
+        ({"cron_expression": "0 16 * * *"}, False, "0 16 * * *"),
+        ({"cron_expression": "0 16 * * *", "run_once": False}, False, "0 16 * * *"),
+        (
+            {"run_at": "2035-11-11T16:00:00+08:00", "cron_expression": "0 16 * * *"},
+            False,
+            "0 16 * * *",
+        ),
+        (
+            {
+                "run_at": "2035-11-11T16:00:00+08:00",
+                "cron_expression": "0 16 * * *",
+                "run_once": True,
+            },
+            True,
+            None,
+        ),
+    ],
+)
+async def test_future_task_create_schedule_inference(
+    schedule, expected_run_once, expected_cron
+):
+    """Infer only unambiguous one-time creates and preserve explicit schedules.
+
+    Args:
+        schedule: Scheduling fields supplied by the model.
+        expected_run_once: Whether the reminder must execute once.
+        expected_cron: Recurring expression passed to the scheduler, if any.
+    """
+    created_job = SimpleNamespace(job_id="job-1", name="reminder", next_run_time=None)
+    cron_mgr = SimpleNamespace(
+        add_active_job=AsyncMock(return_value=created_job),
+        get_next_run_time=MagicMock(return_value=None),
+    )
+
+    result = await FutureTaskTool().call(
+        _context(cron_mgr), action="create", note="Send the report", **schedule
+    )
+
+    assert result.startswith("Scheduled future task job-1")
+    cron_mgr.add_active_job.assert_awaited_once()
+    arguments = cron_mgr.add_active_job.await_args.kwargs
+    assert arguments["run_once"] is expected_run_once
+    assert arguments["cron_expression"] == expected_cron
+    assert arguments["run_at"] == (
+        datetime.fromisoformat(schedule["run_at"]) if schedule.get("run_at") else None
+    )
+    assert arguments["payload"]["note"] == "Send the report"
+    assert arguments["payload"]["session"] == "test:group:shared"
+    assert arguments["payload"]["sender_id"] == "user-1"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("arguments", "expected_error"),
+    [
+        (
+            {
+                "note": "Send the report",
+                "run_at": "2035-11-11T16:00:00+08:00",
+                "run_once": False,
+            },
+            "error: cron_expression is required when run_once=false.",
+        ),
+        (
+            {"note": "Send the report"},
+            "error: cron_expression is required when run_once=false.",
+        ),
+        (
+            {"note": "Send the report", "run_at": ""},
+            "error: cron_expression is required when run_once=false.",
+        ),
+        (
+            {"note": "Send the report", "run_once": True},
+            "error: run_at is required when run_once=true.",
+        ),
+        (
+            {"note": "Send the report", "run_at": "not-a-date"},
+            "error: run_at must be ISO datetime",
+        ),
+        (
+            {"run_at": "2035-11-11T16:00:00+08:00"},
+            "error: note is required when action=create.",
+        ),
+        (
+            {"note": "  ", "cron_expression": "0 16 * * *"},
+            "error: note is required when action=create.",
+        ),
+    ],
+)
+async def test_future_task_create_rejects_incomplete_schedules(
+    arguments, expected_error
+):
+    """Reject invalid or incomplete creates before touching the scheduler.
+
+    Args:
+        arguments: An incomplete or malformed task creation request.
+        expected_error: The validation error returned to the model.
+    """
+    cron_mgr = SimpleNamespace(add_active_job=AsyncMock())
+
+    result = await FutureTaskTool().call(
+        _context(cron_mgr), action="create", **arguments
+    )
+
+    assert result.startswith(expected_error)
+    cron_mgr.add_active_job.assert_not_awaited()
