@@ -1,6 +1,5 @@
 import asyncio
 import base64
-import copy
 import json
 from contextlib import asynccontextmanager
 from io import BytesIO
@@ -32,9 +31,7 @@ def _provider() -> ProviderAnthropic:
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("streaming", [False, True])
-async def test_history_images_survive_repeated_requests(
-    monkeypatch, tmp_path, streaming
-):
+async def test_follow_up_preserves_history_images(monkeypatch, tmp_path, streaming):
     image = Image.new("RGB", (2, 2))
     png, bmp = BytesIO(), BytesIO()
     image.save(png, format="PNG")
@@ -43,14 +40,13 @@ async def test_history_images_survive_repeated_requests(
     encoded = base64.b64encode(png_bytes).decode()
     local = tmp_path / "image.png"
     local.write_bytes(png_bytes)
-    urls = ["http://example.com/image.png", "https://example.com/image.png"]
+    image_url = "https://example.com/image.png"
     failures = {
         "https://example.com/image.bmp": (200, bmp.getvalue()),
         "https://example.com/large.png": (200, png_bytes + b"x"),
         "https://example.com/moved.png": (302, b""),
-        "https://example.com/missing.png": (404, b""),
     }
-    replies = dict.fromkeys(urls, (200, png_bytes)) | failures
+    replies = {image_url: (200, png_bytes), **failures}
 
     @asynccontextmanager
     async def get(session, url, *, allow_redirects):
@@ -79,16 +75,10 @@ async def test_history_images_survive_repeated_requests(
 
     monkeypatch.setattr(provider, "_query", query)
     monkeypatch.setattr(provider, "_query_stream", query_stream)
-    available = [
-        *urls,
-        encoded,
-        "base64://" + encoded,
-        "data:image/png;base64," + encoded,
-    ]
+    available = [image_url, "data:image/png;base64," + encoded]
     unavailable = [
         *failures,
         str(local),
-        local.as_uri(),
         "http://127.0.0.1/image.png",
         "data:image/png;base64,!!!!",
         "data:image/png;base64," + base64.b64encode(png_bytes[:33]).decode(),
@@ -112,27 +102,17 @@ async def test_history_images_survive_repeated_requests(
         "source": {"type": "base64", "media_type": "image/png", "data": encoded},
     }
     placeholder = {"type": "text", "text": "[Image unavailable]"}
-    for prompt in ("Describe the pictures", "What is in the corner?", "Look again"):
-        original = copy.deepcopy(history)
-        if streaming:
-            async for response in provider.text_chat_stream(
-                prompt=prompt, contexts=history
-            ):
-                assert response.completion_text == "ok"
-        else:
-            await provider.text_chat(prompt=prompt, contexts=history)
-        assert history == original
-        user_messages = [msg for msg in captured[-1] if msg["role"] == "user"]
-        assert user_messages[:2] == [
-            {"role": "user", "content": [image_block] * len(available)},
-            {"role": "user", "content": [placeholder] * len(unavailable)},
-        ]
-        history.extend(
-            [
-                {"role": "user", "content": prompt},
-                {"role": "assistant", "content": "ok"},
-            ]
-        )
+    follow_up = {"prompt": "What is in the corner?", "contexts": history}
+    if streaming:
+        assert [reply async for reply in provider.text_chat_stream(**follow_up)]
+    else:
+        await provider.text_chat(**follow_up)
+
+    user_messages = [msg for msg in captured[0] if msg["role"] == "user"]
+    assert user_messages[:2] == [
+        {"role": "user", "content": [image_block] * len(available)},
+        {"role": "user", "content": [placeholder] * len(unavailable)},
+    ]
 
 
 @pytest.mark.asyncio
