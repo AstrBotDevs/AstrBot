@@ -846,16 +846,27 @@ class ProviderGoogleGenAI(Provider):
         accumulated_text = ""
         accumulated_reasoning = ""
         final_response = None
+        usage_metadata = None
 
         async with self._conversation_header(conversation_id):
             async for chunk in result:
-                llm_response = LLMResponse("assistant", is_chunk=True)
+                if chunk.usage_metadata is not None:
+                    usage_metadata = chunk.usage_metadata
+                # Usage can arrive after the last content or tool-call chunk.
+                if final_response is not None:
+                    continue
 
                 if not chunk.candidates:
-                    logger.warning(f"Gemini stream chunk has empty candidates: {chunk}")
+                    if chunk.usage_metadata is None:
+                        logger.warning(
+                            f"Gemini stream chunk has empty candidates: {chunk}"
+                        )
                     continue
                 if not chunk.candidates[0].content:
-                    logger.warning(f"Gemini stream chunk has empty content: {chunk}")
+                    if chunk.usage_metadata is None:
+                        logger.warning(
+                            f"Gemini stream chunk has empty content: {chunk}"
+                        )
                     continue
 
                 if chunk.candidates[0].content.parts and any(
@@ -885,11 +896,10 @@ class ProviderGoogleGenAI(Provider):
                                 llm_response.reasoning_content or ""
                             )
                     llm_response.id = chunk.response_id
-                    if chunk.usage_metadata:
-                        self._set_usage(llm_response, chunk.usage_metadata)
-                    yield llm_response
-                    return
+                    final_response = llm_response
+                    continue
 
+                llm_response = LLMResponse("assistant", is_chunk=True)
                 _f = False
 
                 # 提取 reasoning content
@@ -908,9 +918,9 @@ class ProviderGoogleGenAI(Provider):
                     yield llm_response
 
                 if chunk.candidates[0].finish_reason:
+                    final_response = LLMResponse("assistant", is_chunk=False)
                     # Process the final chunk for potential tool calls or other content
                     if chunk.candidates[0].content.parts:
-                        final_response = LLMResponse("assistant", is_chunk=False)
                         final_response.raw_completion = chunk
                         final_response.result_chain = self._process_content_parts(
                             chunk.candidates[0],
@@ -918,13 +928,15 @@ class ProviderGoogleGenAI(Provider):
                             validate_output=False,
                         )
                         final_response.id = chunk.response_id
-                        if chunk.usage_metadata:
-                            self._set_usage(final_response, chunk.usage_metadata)
-                    break
 
         # Yield final complete response with accumulated text
         if not final_response:
             final_response = LLMResponse("assistant", is_chunk=False)
+        if usage_metadata is not None:
+            self._set_usage(final_response, usage_metadata)
+        if final_response.tools_call_name:
+            yield final_response
+            return
 
         # Set the complete accumulated reasoning in the final response
         if accumulated_reasoning:

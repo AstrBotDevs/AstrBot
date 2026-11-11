@@ -396,6 +396,51 @@ async def _drain_gemini_stream(provider, monkeypatch, chunks):
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("tool_call", [False, True], ids=["text", "tool-call"])
+@pytest.mark.parametrize("usage_only_tail", [False, True], ids=["inline", "tail"])
+async def test_gemini_stream_reports_final_usage(monkeypatch, tool_call, usage_only_tail):
+    usage = types.GenerateContentResponseUsageMetadata(
+        prompt_token_count=100,
+        candidates_token_count=20,
+        thoughts_token_count=50,
+        total_token_count=170,
+    )
+    part = (
+        types.Part.from_function_call(name="get_weather", args={"city": "Shenyang"})
+        if tool_call
+        else types.Part(text="Answer")
+    )
+    chunks = [
+        types.GenerateContentResponse(
+            candidates=[
+                types.Candidate(
+                    content=types.ModelContent(parts=[part]),
+                    finish_reason="STOP",
+                )
+            ],
+            usage_metadata=None if usage_only_tail else usage,
+        )
+    ]
+    if usage_only_tail:
+        chunks.append(types.GenerateContentResponse(usage_metadata=usage))
+
+    responses = await _drain_gemini_stream(
+        _gemini_stream_provider(), monkeypatch, chunks
+    )
+
+    final = responses[-1]
+    assert not final.is_chunk
+    if tool_call:
+        assert final.tools_call_name == ["get_weather"]
+    else:
+        assert final.completion_text == "Answer"
+    assert final.usage is not None
+    assert final.usage.output == 70
+    assert final.usage.total == 170
+    assert final.context_token_usage == 120
+
+
+@pytest.mark.asyncio
 async def test_gemini_stream_keeps_narration_emitted_before_tool_call(monkeypatch):
     """Narration streamed before a tool call must reach the final response.
 
