@@ -2980,3 +2980,45 @@ async def test_repeated_deactivated_loads_bind_handlers_once_when_activated(
         llm_tools.func_list = original_func_list
         cast(Any, plugin_manager_pm.context).stars.remove(metadata)
         _clear_star_runtime_state()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "installed_version, expected_upgrade", [("2.0", True), ("0.5", True)]
+)
+async def test_plugin_precheck_installs_extras_even_when_base_package_is_present(
+    monkeypatch, tmp_path, installed_version, expected_upgrade
+):
+    from astrbot.core.utils import requirements_utils
+
+    requirements_path = tmp_path / "requirements.txt"
+    requirements_path.write_text("demo[socks]>=1.0\nunrelated>=1.0\n", encoding="utf-8")
+    monkeypatch.setattr(
+        requirements_utils,
+        "collect_installed_distribution_versions",
+        lambda paths: {"demo": installed_version, "unrelated": "1.0"},
+    )
+    monkeypatch.setattr(
+        star_manager_module, "get_astrbot_temp_path", lambda: str(tmp_path / "temp")
+    )
+    observed = []
+
+    async def capture_install(**kwargs):
+        observed.append(
+            (kwargs, Path(kwargs["requirements_path"]).read_text(encoding="utf-8"))
+        )
+
+    install = AsyncMock(side_effect=capture_install)
+    monkeypatch.setattr(star_manager_module.pip_installer, "install", install)
+
+    await star_manager_module._install_requirements_with_precheck(
+        plugin_label="extra-dependency-plugin",
+        requirements_path=str(requirements_path),
+    )
+
+    install.assert_awaited_once()
+    kwargs, content = observed[0]
+    assert kwargs["requirements_path"] != str(requirements_path)
+    assert content == "demo[socks]>=1.0\n"
+    assert kwargs["allow_target_upgrade"] is expected_upgrade
+    assert not Path(kwargs["requirements_path"]).exists()
