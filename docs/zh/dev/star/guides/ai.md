@@ -33,7 +33,7 @@ llm_resp = await self.context.llm_generate(
 
 判断提供商（Decision Provider）用于低延迟的结构化选择，例如是否回复、回复哪条消息或选择执行分支。先在 WebUI 的「模型提供商」→「判断」中配置提供商，插件通过 `self.context.decision` 调用，它与聊天模型互不影响。
 
-一次请求可以同时回答多个问题。`state` 会原样传给判断模型，类型为 `str | list | dict`：
+一次请求可以同时回答多个问题。`state` 支持文本（`str`）和业务 JSON（`list`/`dict`）；支持多模态的提供商还接受显式 `DecisionInput`，普通 JSON 不会被自动解释为媒体：
 
 ```py
 from astrbot.api.provider import (
@@ -87,7 +87,7 @@ if (
 
 返回结果按题型分别是 `DecisionChoiceAnswer`、`DecisionBooleanAnswer` 和 `DecisionScoreAnswer`，它们是三个独立的冻结数据类。`DecisionAnswer` 是这三个类的联合类型。调用 `ask()` 后，可使用 `isinstance()` 确认结果类型再读取对应字段；`choose()` 明确返回 `DecisionChoiceAnswer`，`yes_no()` 返回 `bool`。
 
-评分类 `DecisionScoreQuestion.criteria` 是由低到高排列的 2～10 个字符串等级，等级从 0 编号。`DecisionScoreAnswer.score` 是概率加权评分，可以为小数，范围是 `0` 到 `len(criteria) - 1`；`legend` 和 `probabilities` 分别以字符串等级编号（如 `"0"`）映射到描述和概率，`confidence` 表示置信度。评分结果仅包含这四个字段。三种题型可以通过同一次 `ask()` 调用混合提交。
+评分类 `DecisionScoreQuestion.criteria` 至少包含两个由低到高排列的字符串等级，等级从 0 编号。数量上限由提供商决定：Gemini 支持 2–255 档，当前 OpenAI 适配器支持 2–10 档。`DecisionScoreAnswer.score` 是概率加权评分，可以为小数，范围是 `0` 到 `len(criteria) - 1`；`legend` 和 `probabilities` 分别以字符串等级编号（如 `"0"`）映射到描述和概率，`confidence` 表示置信度。评分结果仅包含这四个字段。三种题型可以通过同一次 `ask()` 调用混合提交。
 
 对于单个问题，可以使用以下快捷方法：
 
@@ -140,6 +140,59 @@ answers = await self.context.decision.ask(
 - 不支持的类型、含 `NaN`/`Infinity` 或无法 JSON 序列化的值：在发送前抛出 `ValueError`。
 
 首版不支持图片输入、消息/工具调用历史、问题内的多模态指令、提示缓存控制与 `safety_identifier`。模型对任一问题拒答（`refusal`）时，整批 `ask()` 抛出 `DecisionError`，不会当作否定、零分或空结果；`yes_no(default=...)` 的降级行为保持不变。
+
+### 使用 Gemini Decisions
+
+在 WebUI「模型提供商」→「判断」中新增「Gemini Decisions」模板。填写 Gemini API Key（支持 `$ENV_NAME` 环境变量引用），接口基础地址默认为 `https://generativelanguage.googleapis.com/v1beta`，模型填写 `gemini-decision-1`。AstrBot 会自动补全 `/decisions`（路径已以它结尾时不重复追加），通过 `x-goog-api-key` 请求头发送密钥。保存后使用提供商的连接测试检查访问权限。你的 Google API 项目需要具有该模型的访问权限与可用额度，添加配置本身不会开通它们。
+
+适配器直接调用 REST 接口，无需升级 Google SDK。超时、总超时（包含排队与重试）、最大并发、代理和自定义请求头与 OpenAI Decisions 使用同一套约定。它只在插件显式调用判断服务时运行，不会自动参与主对话流程。
+
+使用上文通用的 `ask()`、`choose()` 和 `yes_no()` 方法，并指定 `provider_id="gemini_decision"`。
+
+Gemini 布尔题使用 `noul`，表示**为真**的概率，范围为 `[0.01, 0.99]`。`yes_no()` 将此概率与阈值比较，阈值高于 `0.99` 时不会命中。Gemini 的布尔置信度为 `max(p, 1-p)`。单选必须选择最高概率项；概率完全相同时，取 UTF-8 字节序最小的选项 ID。评分置信度为各等级概率中的最大值。
+
+每次请求支持 1–1,000 道题，每道单选支持 2–255 个选项，评分支持 2–255 档（推荐 2–10 档）。选项 ID 包含 1–128 个字符，最多 512 个 UTF-8 字节；允许内部 ASCII 空格、组合标记和变体选择符。禁止首尾空白、非 ASCII 空白，以及 Unicode Other 类字符（`Cc`、`Cf`、`Cs`、`Co`、`Cn`），包括零宽格式字符和私用区字符。描述可以为空。非法输入会在发送前抛出 `ValueError`。调用方的问题 ID 在内部映射，返回答案仍保留原始键。
+
+答案缺失或不一致会让整批调用抛出 `DecisionError`。[官方接口](https://aistudio.google.com/docs/decisions-api)通过 HTTP 400 返回安全拦截，`error.code` 为 `safety`、`prohibited_content`、`blocklist`、`image_safety` 或 `content_blocked`；适配器也识别 `prompt_feedback.block_reason`。错误不会暴露服务器消息，拦截不会被转换成答案。`yes_no(default=...)` 保留显式降级行为。
+
+Gemini 将普通字典和列表（包括空容器）发送为 JSON 文本。省略 `state`、传入 `None` 或空字符串时，使用 JSON 文本 `"{}"`，因为接口不接受空输入。不支持或无法序列化的值以及 `NaN`/`Infinity` 会被拒绝。通过下方的 `DecisionInput` 显式传入媒体；问题指令仍只支持文本。
+
+#### 显式多模态输入
+
+从 `astrbot.api.provider` 导入 `DecisionInput` 和 `DecisionMedia`。`DecisionInput.content` 是非空的有序列表，成员为文本字符串或 `DecisionMedia` 对象。Gemini 拼接相邻文本块时不会自动插入分隔符，请自行添加空格或换行。
+
+```py
+from astrbot.api.provider import DecisionInput, DecisionMedia
+
+photo = DecisionInput(content=[
+    "Inspect this product photo.\n",
+    DecisionMedia(
+        type="image",
+        uri="https://example.com/product.png",  # Replace with an accessible media URL.
+        mime_type="image/png",
+        resolution="low",
+    ),
+])
+
+has_damage = await self.context.decision.yes_no(
+    "Does the product have visible damage?",
+    state=photo,
+    provider_id="gemini_decision",
+)
+```
+
+同一个 `state` 也可用于 `ask()` 和 `choose()`。每个 `DecisionMedia` 必须指定真实的 `mime_type`，并且只提供 `uri` 或 `data` 中的一项。内联媒体使用 `data=base64.b64encode(file_bytes).decode("ascii")`，不加 data URI 前缀。适配器不会自动读取本地路径或上传文件。
+
+| `type` | MIME 类型示例 | 输入方式 |
+| --- | --- | --- |
+| `image` | `image/png`、`image/jpeg` | base64 `data` 或 HTTPS `uri` |
+| `audio` | `audio/wav`、`audio/mp3` | base64 `data` 或 HTTPS `uri` |
+| `video` | `video/mp4` | base64 `data` 或 HTTPS `uri` |
+| `document` | `application/pdf` | base64 `data` 或 HTTPS `uri` |
+
+Gemini 接受公开或签名 HTTPS URL，以及 Files API 返回的 HTTPS URI；不支持 YouTube URL 或直接使用 `gs://` URI。图片和视频可选 `resolution="low"`、`"medium"` 或 `"high"`，图片还支持 `"ultra_high"`；音频和 PDF 不设置此字段。完整格式和大小限制见[官方输入说明](https://aistudio.google.com/docs/decisions-api#input)，实际文件格式、可访问性及请求和媒体大小限制由 Google 校验。
+
+显式输入结构不合法时，会在发送前抛出 `ValueError`；接口请求失败时抛出 `DecisionError`。媒体内容不接受工具调用、思考或对话历史块。当前 OpenAI 适配器会明确以 `ValueError` 拒绝 `DecisionInput`，仍应传入文本或业务 JSON。
 
 ## 定义 Tool
 

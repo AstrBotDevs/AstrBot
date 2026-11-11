@@ -637,6 +637,10 @@ class ProviderManager:
                 from .sources.openai_decision_source import (
                     OpenAIDecisionProvider as OpenAIDecisionProvider,
                 )
+            case "gemini_decision":
+                from .sources.gemini_decision_source import (
+                    GeminiDecisionProvider as GeminiDecisionProvider,
+                )
 
     def get_merged_provider_config(self, provider_config: dict) -> dict:
         """获取 provider 配置和 provider_source 配置合并后的结果

@@ -17,6 +17,7 @@ from ..entities import (
     DecisionChoiceAnswer,
     DecisionChoiceQuestion,
     DecisionError,
+    DecisionInput,
     DecisionQuestion,
     DecisionScoreAnswer,
     DecisionScoreQuestion,
@@ -209,6 +210,8 @@ class OpenAIDecisionProvider(DecisionProvider):
                     {"type": "predicate", "name": name, "instructions": instructions}
                 )
 
+        if isinstance(state, DecisionInput):
+            raise ValueError("OpenAI decision provider does not support DecisionInput")
         if state is not None and not isinstance(state, (str, dict, list)):
             raise ValueError(
                 "OpenAI decision state must be a string, a dict, or a list"

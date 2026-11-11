@@ -16,6 +16,8 @@ from astrbot.core.provider.entities import (
     DecisionChoiceAnswer,
     DecisionChoiceQuestion,
     DecisionError,
+    DecisionInput,
+    DecisionMedia,
     DecisionScoreAnswer,
     DecisionScoreQuestion,
     ProviderType,
@@ -74,7 +76,9 @@ def _manager() -> ProviderManager:
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("criteria_type", [dict, MappingProxyType])
-async def test_mixed_questions_share_one_request_and_match_answers_by_name(criteria_type):
+async def test_mixed_questions_share_one_request_and_match_answers_by_name(
+    criteria_type,
+):
     requests = []
 
     def handler(request: httpx.Request) -> httpx.Response:
@@ -1046,7 +1050,9 @@ async def test_failure_logs_omit_urls_and_exception_content(failure, caplog):
             raise httpx.ReadTimeout(secret)
         if failure == "json":
             return httpx.Response(200, content=secret.encode())
-        return httpx.Response(503, json={"error": {"message": secret, "code": secret, "type": secret}})
+        return httpx.Response(
+            503, json={"error": {"message": secret, "code": secret, "type": secret}}
+        )
 
     provider = _provider(
         handler,
@@ -1096,7 +1102,9 @@ async def test_score_matches_probability_weighted_levels(distribution, score, ac
     provider = _provider(
         lambda request: httpx.Response(
             200,
-            json=_decision(_score(score=score, probabilities=list(reversed(probabilities)))),
+            json=_decision(
+                _score(score=score, probabilities=list(reversed(probabilities)))
+            ),
         )
     )
     try:
@@ -1109,5 +1117,24 @@ async def test_score_matches_probability_weighted_levels(distribution, score, ac
         else:
             with pytest.raises(DecisionError, match="invalid score"):
                 await provider.ask({"a": question})
+    finally:
+        await provider.terminate()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "state",
+    [
+        DecisionInput(["text"]),
+        DecisionInput([DecisionMedia("image", "image/png", data="AA==")]),
+    ],
+)
+async def test_explicit_decision_input_is_unsupported_before_transport(state):
+    handler = MagicMock(side_effect=AssertionError("No request expected"))
+    provider = _provider(handler)
+    try:
+        with pytest.raises(ValueError, match="does not support DecisionInput"):
+            await provider.ask({"q": DecisionBooleanQuestion("True?")}, state)
+        handler.assert_not_called()
     finally:
         await provider.terminate()

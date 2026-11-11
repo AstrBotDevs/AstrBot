@@ -463,7 +463,8 @@ class DecisionProvider(AbstractProvider):
 
         Args:
             questions: Question heads keyed by caller-defined identifiers.
-            state: Context evaluated by the model. Providers forward it as-is.
+            state: Text or business JSON context. Providers that support media
+                also accept explicit DecisionInput content.
             request_max_retries: Number of retries after the initial request.
 
         Returns:
