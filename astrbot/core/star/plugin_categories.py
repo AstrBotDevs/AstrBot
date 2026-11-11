@@ -69,7 +69,6 @@ def normalize_plugin_category(value: object, *, warn: bool = True) -> str | None
 
     logger.warning(
         f"Unsupported plugin category {value!r}; falling back to "
-        f"{DEFAULT_PLUGIN_CATEGORY!r}. Supported categories: "
-        f"{', '.join(PLUGIN_CATEGORY_SLUGS)}."
+        f"{DEFAULT_PLUGIN_CATEGORY!r}."
     )
     return DEFAULT_PLUGIN_CATEGORY
