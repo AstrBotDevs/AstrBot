@@ -694,6 +694,57 @@ def test_gemini_process_content_parts_keeps_server_side_tool_parts():
         tool_call_model.model_dump()["extra_content"]["google"]["server_parts"]
         == stored
     )
+    # The function-call signature still feeds the narration dedupe logic.
+    assert llm_response.reasoning_signature == base64.b64encode(b"\x03").decode()
+
+
+def test_gemini_process_content_parts_ignores_server_side_signature_for_reasoning():
+    provider = ProviderGoogleGenAI.__new__(ProviderGoogleGenAI)
+    candidate = SimpleNamespace(
+        content=types.Content(
+            role="model",
+            parts=[
+                *_gemini_server_side_response_parts(),
+                types.Part(text="Castorice is an undertaker."),
+            ],
+        ),
+        finish_reason=None,
+    )
+    llm_response = LLMResponse(role="assistant")
+
+    ProviderGoogleGenAI._process_content_parts(
+        provider, candidate, llm_response, validate_output=False
+    )
+
+    # The server-side parts themselves are not persisted for a turn without a
+    # custom function call, so replaying their signature as the narration
+    # signature would corrupt the next request.
+    assert llm_response.reasoning_signature is None
+    assert llm_response.tools_call_extra_content == {}
+
+
+def test_gemini_process_content_parts_keeps_content_part_signature_for_reasoning():
+    provider = ProviderGoogleGenAI.__new__(ProviderGoogleGenAI)
+    text_signature = b"\x09\x09"
+    candidate = SimpleNamespace(
+        content=types.Content(
+            role="model",
+            parts=[
+                *_gemini_server_side_response_parts(),
+                types.Part(text="answer", thought_signature=text_signature),
+            ],
+        ),
+        finish_reason=None,
+    )
+    llm_response = LLMResponse(role="assistant")
+
+    ProviderGoogleGenAI._process_content_parts(
+        provider, candidate, llm_response, validate_output=False
+    )
+
+    assert llm_response.reasoning_signature == base64.b64encode(text_signature).decode(
+        "utf-8"
+    )
 
 
 @pytest.mark.asyncio

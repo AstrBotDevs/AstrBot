@@ -725,8 +725,21 @@ class ProviderGoogleGenAI(Provider):
                 chain.append(Comp.Image.fromBytes(part.inline_data.data))
 
             if ts := part.thought_signature:
-                # only keep the last thinking signature
-                llm_response.reasoning_signature = base64.b64encode(ts).decode("utf-8")
+                # Server-side tool parts are replayed through their own
+                # extra_content/server_parts. Copying their signature here would
+                # attach a tool-part signature to the narration text on the next
+                # turn, so only keep signatures from regular content parts.
+                is_server_side_part = bool(
+                    getattr(part, "tool_call", None)
+                    or getattr(part, "tool_response", None)
+                    or getattr(part, "executable_code", None)
+                    or getattr(part, "code_execution_result", None)
+                )
+                if not is_server_side_part:
+                    # only keep the last thinking signature
+                    llm_response.reasoning_signature = base64.b64encode(ts).decode(
+                        "utf-8"
+                    )
 
         # Keep server-side tool parts (tool_call/tool_response and code
         # execution parts) so they can be replayed unchanged, with their thought
