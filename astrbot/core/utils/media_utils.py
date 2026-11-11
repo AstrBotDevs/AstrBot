@@ -865,9 +865,12 @@ class MediaResolver:
             # assembly relies on to skip bad image refs.
             try:
                 resolved = await self._resolve_path(target_format=target_format)
-            except (OSError, ValueError) as exc:
-                # ValueError covers non-regular sources, which is_recoverable_image_error
-                # already treats as skippable.
+            except Exception as exc:  # noqa: BLE001
+                # Declared-recoverable image errors are not limited to OSError
+                # and ValueError: DownloadFileHTTPError and aiohttp ClientError
+                # are RuntimeError subclasses, and image sniffing can raise
+                # SyntaxError, EOFError or struct.error. Anything outside that
+                # set still propagates, strict or not.
                 if strict or not is_recoverable_image_error(exc):
                     raise
                 return None
