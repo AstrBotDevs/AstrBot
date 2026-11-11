@@ -63,17 +63,12 @@ class _PublicImageResolver(aiohttp.ThreadedResolver):
         """
         public = []
         for result in await super().resolve(host, port, family):
-            address = ip_address(result["host"])
-            if isinstance(address, IPv6Address):
-                if address.ipv4_mapped:
-                    address = address.ipv4_mapped
-                elif address.sixtofour or address.teredo:
+            ip = ip_address(result["host"])
+            if isinstance(ip, IPv6Address):
+                if ip.sixtofour or ip.teredo:
                     continue
-            if (
-                address.is_global
-                and not address.is_multicast
-                and not address.is_reserved
-            ):
+                ip = ip.ipv4_mapped or ip
+            if ip.is_global and not ip.is_multicast and not ip.is_reserved:
                 public.append(result)
         if not public:
             raise OSError("Image host has no public address.")
@@ -257,12 +252,9 @@ class ProviderAnthropic(Provider):
                 connector=aiohttp.TCPConnector(resolver=_PublicImageResolver()),
                 trust_env=False,
                 auto_decompress=False,
-            ) as session,
-            session.get(
-                url,
-                allow_redirects=False,
                 headers={"Accept-Encoding": "identity"},
-            ) as response,
+            ) as session,
+            session.get(url, allow_redirects=False) as response,
         ):
             if response.status != 200:
                 raise ValueError("Image download did not return HTTP 200.")
@@ -276,19 +268,28 @@ class ProviderAnthropic(Provider):
             return bytes(image)
 
     @classmethod
-    def _verify_history_image(cls, data: bytes) -> str | None:
-        """Check supported image headers and structure without decoding pixels.
+    def _history_image_source(cls, data: bytes) -> dict[str, str]:
+        """Validate an image without decoding its pixels and encode its source.
 
         Args:
             data: Encoded image bytes from history.
 
         Returns:
-            MIME type reported by the verified image parser.
+            A base64 image source for the Anthropic request.
+
+        Raises:
+            ValueError: If the image MIME type is unavailable.
         """
         with PILImage.open(BytesIO(data), formats=cls._HISTORY_IMAGE_FORMATS) as image:
             mime_type = image.get_format_mimetype()
             image.verify()
-            return mime_type
+        if mime_type is None:
+            raise ValueError("Unsupported historical image format.")
+        return {
+            "type": "base64",
+            "media_type": mime_type,
+            "data": base64.b64encode(data).decode("ascii"),
+        }
 
     async def _prepare_payload(self, messages: list[dict]):
         """Convert OpenAI messages and resolve historical image references.
@@ -301,7 +302,8 @@ class ProviderAnthropic(Provider):
         """
         system_prompt = ""
         new_messages = []
-        image_download_deadline = None
+        deadline = None
+        loop = asyncio.get_running_loop()
         for message in messages:
             if message["role"] == "system":
                 system_prompt = message["content"] or "<empty system prompt>"
@@ -389,45 +391,38 @@ class ProviderAnthropic(Provider):
                     converted_content = []
                     for part in message["content"]:
                         if part.get("type") == "image_url":
-                            image_url = part.get("image_url")
-                            reference = (
-                                image_url.get("url")
-                                if isinstance(image_url, dict)
-                                else None
-                            )
                             try:
-                                if not isinstance(reference, str):
+                                image_url = part.get("image_url")
+                                if not isinstance(image_url, dict):
+                                    raise ValueError("Expected an image URL object.")
+                                ref = image_url.get("url")
+                                if not isinstance(ref, str):
                                     raise ValueError("Expected an image reference.")
-                                if reference.startswith(("http://", "https://")):
-                                    if image_download_deadline is None:
-                                        image_download_deadline = (
-                                            asyncio.get_running_loop().time()
-                                            + self._HISTORY_IMAGE_TIMEOUT
+                                if ref.startswith(("http://", "https://")):
+                                    if deadline is None:
+                                        deadline = (
+                                            loop.time() + self._HISTORY_IMAGE_TIMEOUT
                                         )
-                                    image_bytes = await self._download_history_image(
-                                        reference, image_download_deadline
+                                    data = await self._download_history_image(
+                                        ref, deadline
                                     )
                                 else:
-                                    if reference.startswith("data:"):
-                                        header, _, reference = reference.partition(",")
+                                    if ref.startswith("data:"):
+                                        header, _, ref = ref.partition(",")
                                         if not header.endswith(";base64"):
                                             raise ValueError(
                                                 "Expected a base64 data URI."
                                             )
-                                    reference = reference.removeprefix("base64://")
-                                    encoded = "".join(reference.split())
-                                    encoded += "=" * (-len(encoded) % 4)
-                                    image_bytes = base64.b64decode(
-                                        encoded, validate=True
+                                    encoded = "".join(
+                                        ref.removeprefix("base64://").split()
                                     )
-
-                                media_type = await asyncio.to_thread(
-                                    self._verify_history_image, image_bytes
+                                    data = base64.b64decode(
+                                        encoded + "=" * (-len(encoded) % 4),
+                                        validate=True,
+                                    )
+                                source = await asyncio.to_thread(
+                                    self._history_image_source, data
                                 )
-                                if media_type is None:
-                                    raise ValueError(
-                                        "Unsupported historical image format."
-                                    )
                             except Exception as exc:
                                 if not (
                                     is_recoverable_image_error(exc)
@@ -435,26 +430,15 @@ class ProviderAnthropic(Provider):
                                 ):
                                     raise
                                 logger.warning(
-                                    "Unable to include Anthropic history image; "
-                                    "using a placeholder."
+                                    "Unable to include Anthropic history image; using a placeholder."
                                 )
                                 converted_content.append(
                                     {"type": "text", "text": "[Image unavailable]"}
                                 )
-                                continue
-
-                            converted_content.append(
-                                {
-                                    "type": "image",
-                                    "source": {
-                                        "type": "base64",
-                                        "media_type": media_type,
-                                        "data": base64.b64encode(image_bytes).decode(
-                                            "ascii"
-                                        ),
-                                    },
-                                }
-                            )
+                            else:
+                                converted_content.append(
+                                    {"type": "image", "source": source}
+                                )
                         elif part.get("type") == "audio_url":
                             converted_content.append(
                                 {
