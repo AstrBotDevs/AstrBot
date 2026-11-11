@@ -289,15 +289,26 @@ class ProviderGoogleGenAI(Provider):
                 mode = types.FunctionCallingConfigMode.VALIDATED
             else:
                 mode = types.FunctionCallingConfigMode.AUTO
-            tool_config = types.ToolConfig(
-                function_calling_config=types.FunctionCallingConfig(mode=mode),
-            )
+            tool_config_kwargs = {
+                "function_calling_config": types.FunctionCallingConfig(mode=mode),
+            }
             if combines_tools:
-                # The field only exists since google-genai 1.68.0 and the SDK
-                # models reject unknown fields, so only set it on the path that
-                # requires it. Passing it unconditionally, even as None, breaks
-                # plain function calling on environments with an older SDK.
-                tool_config.include_server_side_tool_invocations = True
+                # google-genai<1.68.0 does not define this field and its SDK
+                # models reject unknown fields, so keep it off the request in
+                # that case and let the API report the unsupported combination
+                # instead of raising a confusing pydantic error.
+                if (
+                    "include_server_side_tool_invocations"
+                    in types.ToolConfig.model_fields
+                ):
+                    tool_config_kwargs["include_server_side_tool_invocations"] = True
+                else:
+                    logger.warning(
+                        "Gemini built-in tool combination with function calling "
+                        "requires google-genai>=1.68.0; the installed SDK does not "
+                        "support it."
+                    )
+            tool_config = types.ToolConfig(**tool_config_kwargs)
 
         # oper thinking config
         thinking_config = None

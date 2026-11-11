@@ -1,5 +1,6 @@
 import base64
 import json
+import logging
 from types import SimpleNamespace
 
 import httpx
@@ -209,6 +210,35 @@ async def test_gemini_function_only_config_omits_server_side_flag_kwarg(monkeypa
     await provider._prepare_query_config({"model": model}, tools=_gemini_func_toolset())
 
     assert "include_server_side_tool_invocations" not in captured_kwargs
+
+
+@pytest.mark.asyncio
+async def test_gemini_tool_combination_warns_when_sdk_lacks_server_side_flag(
+    monkeypatch, caplog
+):
+    # Simulate google-genai<1.68.0, where ToolConfig has no
+    # include_server_side_tool_invocations field and rejects the keyword.
+    class _LegacyToolConfig(types.ToolConfig):
+        pass
+
+    _LegacyToolConfig.model_fields = {
+        name: field_info
+        for name, field_info in types.ToolConfig.model_fields.items()
+        if name != "include_server_side_tool_invocations"
+    }
+    monkeypatch.setattr(gemini_source.types, "ToolConfig", _LegacyToolConfig)
+
+    model = "gemini-3.8-flash"
+    provider = _gemini_config_provider(model, {"gm_native_search": True})
+    caplog.set_level(logging.WARNING, logger="astrbot")
+
+    config = await provider._prepare_query_config(
+        {"model": model}, tools=_gemini_func_toolset()
+    )
+
+    assert "google-genai>=1.68.0" in caplog.text
+    assert config.tool_config is not None
+    assert config.tool_config.include_server_side_tool_invocations is None
 
 
 @pytest.mark.asyncio
