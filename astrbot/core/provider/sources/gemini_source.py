@@ -459,6 +459,41 @@ class ProviderGoogleGenAI(Provider):
 
             elif role == "assistant":
                 parts = []
+                tool_parts: list[types.Part] = []
+                if "tool_calls" in message:
+                    for tool in message["tool_calls"]:
+                        extra_content = tool.get("extra_content") or {}
+                        google_extra = extra_content.get("google") or {}
+                        function_name = tool["function"]["name"]
+                        if tool.get("id"):
+                            tool_id_to_name[tool["id"]] = function_name
+                        # Replay server-side tool parts (tool_call/tool_response)
+                        # captured from a previous response. When server-side
+                        # invocations are enabled, the API requires them to be
+                        # sent back unchanged, including their thought signatures.
+                        for server_side_part in google_extra.get("server_parts") or []:
+                            try:
+                                tool_parts.append(
+                                    types.Part.model_validate(server_side_part)
+                                )
+                            except Exception as e:
+                                logger.warning(
+                                    "Failed to restore Gemini server-side tool part: %s",
+                                    e,
+                                    exc_info=True,
+                                )
+                        part = types.Part.from_function_call(
+                            name=function_name,
+                            args=json.loads(tool["function"]["arguments"]),
+                        )
+                        # we should set thought_signature back to part if exists
+                        # for more info about thought_signature, see:
+                        # https://ai.google.dev/gemini-api/docs/thought-signatures
+                        ts_bs64 = google_extra.get("thought_signature")
+                        if ts_bs64:
+                            part.thought_signature = base64.b64decode(ts_bs64)
+                        tool_parts.append(part)
+
                 if isinstance(content, str):
                     parts.append(types.Part.from_text(text=content))
                 elif isinstance(content, list):
@@ -481,24 +516,14 @@ class ProviderGoogleGenAI(Provider):
                             )
                             thinking_signature = None
 
-                    has_tool_thought_signature = any(
-                        isinstance(tool, dict)
-                        and isinstance(tool.get("extra_content"), dict)
-                        and isinstance(tool["extra_content"].get("google"), dict)
-                        and (
-                            tool["extra_content"]["google"].get("thought_signature")
-                            or any(
-                                isinstance(server_side_part, dict)
-                                and server_side_part.get("thought_signature")
-                                for server_side_part in (
-                                    tool["extra_content"]["google"].get("server_parts")
-                                    or []
-                                )
-                            )
+                    has_duplicate_thought_signature = bool(
+                        thinking_signature
+                        and any(
+                            tool_part.thought_signature == thinking_signature
+                            for tool_part in tool_parts
                         )
-                        for tool in message.get("tool_calls") or []
                     )
-                    if thinking_signature and has_tool_thought_signature:
+                    if has_duplicate_thought_signature:
                         # Tool calls and replayed server-side tool parts already
                         # carry their own thought signatures. Attaching the same
                         # signature to the narration part would send it twice, so
@@ -513,39 +538,7 @@ class ProviderGoogleGenAI(Provider):
                             )
                         )
 
-                if "tool_calls" in message:
-                    for tool in message["tool_calls"]:
-                        extra_content = tool.get("extra_content") or {}
-                        google_extra = extra_content.get("google") or {}
-                        function_name = tool["function"]["name"]
-                        if tool.get("id"):
-                            tool_id_to_name[tool["id"]] = function_name
-                        # Replay server-side tool parts (tool_call/tool_response)
-                        # captured from a previous response. When server-side
-                        # invocations are enabled, the API requires them to be
-                        # sent back unchanged, including their thought signatures.
-                        for server_side_part in google_extra.get("server_parts") or []:
-                            try:
-                                parts.append(
-                                    types.Part.model_validate(server_side_part)
-                                )
-                            except Exception as e:
-                                logger.warning(
-                                    "Failed to restore Gemini server-side tool part: %s",
-                                    e,
-                                    exc_info=True,
-                                )
-                        part = types.Part.from_function_call(
-                            name=function_name,
-                            args=json.loads(tool["function"]["arguments"]),
-                        )
-                        # we should set thought_signature back to part if exists
-                        # for more info about thought_signature, see:
-                        # https://ai.google.dev/gemini-api/docs/thought-signatures
-                        ts_bs64 = google_extra.get("thought_signature")
-                        if ts_bs64:
-                            part.thought_signature = base64.b64decode(ts_bs64)
-                        parts.append(part)
+                parts.extend(tool_parts)
 
                 if not parts:
                     parts = [types.Part.from_text(text=" ")]
