@@ -250,28 +250,13 @@ export const useExtensionPage = (initialTab = "installed") => {
     return slug;
   };
 
-  const getMarketCategoryLabel = (key, rawCategory = "") => {
-    const fallbackMap = {
-      all: "All",
-      ai_tools: "AI Tools",
-      entertainment: "Entertainment",
-      productivity: "Productivity",
-      integrations: "Integrations",
-      utilities: "Utilities",
-      other: "Other",
-    };
-    const i18nKey = `market.categories.${key}`;
-    const translated = tm(i18nKey);
+  const getMarketCategoryLabel = (key) => {
+    const translated = tm(`market.categories.${key}`);
     if (translated && !translated.includes("[MISSING:")) {
       return translated;
     }
-    if (fallbackMap[key]) {
-      return fallbackMap[key];
-    }
-    const normalizedRaw = String(rawCategory || "").trim();
-    if (normalizedRaw) {
-      return normalizedRaw;
-    }
+    // A missing label still renders as words instead of the raw identifier, so
+    // an ad-hoc marketplace category never shows up as a slug.
     return key
       .split(/[_-]+/)
       .filter(Boolean)
@@ -289,10 +274,7 @@ export const useExtensionPage = (initialTab = "installed") => {
         categoryData.count += 1;
         continue;
       }
-      categories.set(categoryKey, {
-        count: 1,
-        rawLabel: String(plugin?.category || "").trim(),
-      });
+      categories.set(categoryKey, { count: 1 });
     }
 
     return categories;
@@ -332,7 +314,7 @@ export const useExtensionPage = (initialTab = "installed") => {
       }
       items.push({
         value: categoryKey,
-        label: getMarketCategoryLabel(categoryKey, categoryData.rawLabel),
+        label: getMarketCategoryLabel(categoryKey),
         count: categoryData.count,
       });
     }
