@@ -6,6 +6,62 @@
 
 B 站视频：[一块钱也能养鱼!无需本地部署也能养鱼!大肥鱼鱼咖养一只自己的大肥鱼(附本地部署自己养鱼攻略)](https://www.bilibili.com/video/BV1J5Wj63Ete/)
 
+<p align="center">
+  <img src="fish-console/public/dafeiyu/hello.webp" width="140" alt="大肥鱼打招呼" />
+  <img src="fish-console/public/dafeiyu/eating.webp" width="140" alt="大肥鱼吃饭" />
+  <img src="fish-console/public/dafeiyu/sulk.webp" width="140" alt="大肥鱼赌气" />
+</p>
+<p align="center"><sub>用户中心吉祥物 · 图源 fish-console</sub></p>
+
+## 产品示意图
+
+### 架构：客户、鱼咖、QQ
+
+客户用浏览器进 **fish-console**，账号与订单走 **fish-api**；QQ 消息进 **对话引擎**；客户在 QQ 开放平台创建机器人后，把凭证交给鱼咖完成「接鱼回家」。
+
+```mermaid
+flowchart TB
+  subgraph client [客户侧]
+    U[浏览器 · fish-console]
+    QQ[QQ 客户端]
+    QQP[QQ 开放平台 q.qq.com]
+  end
+
+  subgraph platform [大肥鱼鱼咖]
+    API[fish-api :8800]
+    DB[(租户数据)]
+    ENG[对话引擎 :6185]
+  end
+
+  U -->|/api| API
+  API --> DB
+  API -->|内网 OpenAPI| ENG
+  QQ -->|官方 Bot| ENG
+  QQP -.创建机器人 · 手填凭证.- U
+```
+
+### 旅程：从注册到在 QQ 里聊天
+
+```mermaid
+flowchart LR
+  A[用户中心] --> B[注册登录]
+  B --> C[添饭]
+  C --> D[接鱼向导]
+  D --> E[QQ 手填或微信扫码]
+  E --> F[引擎建实例]
+  F --> G[QQ 开聊]
+  G --> H[用量账单]
+```
+
+### 接鱼回家（QQ 图文步骤）
+
+与用户中心向导一致，完整说明见 [接鱼回家教程](docs/customer/getting-started/bind-bot.md)。
+
+| | | | |
+| :---: | :---: | :---: | :---: |
+| ![打开 QQ 开放平台](docs/customer/assets/qq-bind/01-open-platform.png) | ![我的机器人](docs/customer/assets/qq-bind/02-my-bots.png) | ![创建机器人](docs/customer/assets/qq-bind/03-create-bot.png) | ![手动连接参数](docs/customer/assets/qq-bind/04-manual-params.png) |
+| 1. 开放平台 | 2. 我的机器人 | 3. 创建 | 4. AppID + Secret |
+
 | 文档 | 说明 |
 | --- | --- |
 | [PRD.md](./PRD.md) | 产品需求与验收 |
