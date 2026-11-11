@@ -19,23 +19,10 @@ These paths use the current default sidebar with a fixed menu order. Extension i
 | Commands / Command Management | Extensions → Handlers → Command |
 | Standalone MCP / Skills entries | Extensions → MCP Servers / Skills |
 | System Settings → General → Cache → Export diagnostics | System Settings → Maintenance → Diagnostics → Export diagnostics |
-| Top Chat / Bot switch (optional move) | Enable `System Settings → Appearance → Show Chat in the sidebar`: Chat above `System` → sessions; `Back to navigation` → previous admin page |
 | System Settings → Appearance → Customize Sidebar | Removed; the sidebar uses the default menu layout |
 | Custom Rules / Future Tasks / SubAgents | Custom Rules is under `System`; Future Tasks is under `Extensions`. Subagent management moves to `Configuration → AI → Capabilities → Subagents → Configure Specialized Agents`. |
 
 Old log, trace, conversation, and statistics URLs still redirect to the corresponding tabs. Agent runners are now saved in each profile; they are no longer created as model providers. See [Agent Execution Mode](./agent-runner.md) for the setup steps.
-
-## Chat in the Sidebar
-
-Enable `System Settings → Appearance → Show Chat in the sidebar`. This option is off by default, takes effect immediately, and is saved in the current browser across reloads.
-
-The top Chat / Bot switch moves above `System` in the sidebar. Click `Chat` to switch the sidebar to projects and sessions with a page transition and open the chat page, restoring the last visited session when available. Click `Back to navigation` to return to the previous admin page and menu. From a collapsed sidebar, the Chat icon expands the session list. On mobile, open the top-left menu first; switching keeps the drawer open, and selecting a session closes it.
-
-Turn the option off to restore the top switch. The standalone `/chatbox` page is unaffected.
-
-![Admin sidebar with Chat enabled (sample data)](images/chat-sidebar-navigation-en.png)
-
-![Session sidebar after opening Chat (sample data)](images/chat-sidebar-sessions-en.png)
 
 ## Documentation Navigation
 
