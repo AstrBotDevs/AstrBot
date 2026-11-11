@@ -535,22 +535,30 @@ class ProviderGoogleGenAI(Provider):
         ]
         return "".join(thought_buf).strip()
 
-    def _extract_usage(
-        self, usage_metadata: types.GenerateContentResponseUsageMetadata
-    ) -> TokenUsage:
-        """Extract usage from response metadata.
+    def _set_usage(
+        self,
+        response: LLMResponse,
+        usage_metadata: types.GenerateContentResponseUsageMetadata,
+    ) -> None:
+        """Record total usage and the estimate used for context compression.
 
         `prompt_token_count` includes tokens served from cache, so subtract
-        `cached_content_token_count` to avoid double-counting cached input
-        (matching the OpenAI provider's TokenUsage accounting).
+        `cached_content_token_count` to avoid double-counting cached input.
+        The full internal thinking count measures generation, not retained history.
+
+        Args:
+            response: AstrBot response receiving the usage counts.
+            usage_metadata: Token counts reported by Gemini.
         """
         prompt_tokens = usage_metadata.prompt_token_count or 0
         cached = usage_metadata.cached_content_token_count or 0
-        return TokenUsage(
+        candidate_tokens = usage_metadata.candidates_token_count or 0
+        response.usage = TokenUsage(
             input_other=prompt_tokens - cached,
             input_cached=cached,
-            output=usage_metadata.candidates_token_count or 0,
+            output=candidate_tokens + (usage_metadata.thoughts_token_count or 0),
         )
+        response.context_token_usage = prompt_tokens + candidate_tokens
 
     @staticmethod
     def _ensure_usable_response(
@@ -778,7 +786,7 @@ class ProviderGoogleGenAI(Provider):
         )
         llm_response.id = result.response_id
         if result.usage_metadata:
-            llm_response.usage = self._extract_usage(result.usage_metadata)
+            self._set_usage(llm_response, result.usage_metadata)
         return llm_response
 
     async def _query_stream(
@@ -878,7 +886,7 @@ class ProviderGoogleGenAI(Provider):
                             )
                     llm_response.id = chunk.response_id
                     if chunk.usage_metadata:
-                        llm_response.usage = self._extract_usage(chunk.usage_metadata)
+                        self._set_usage(llm_response, chunk.usage_metadata)
                     yield llm_response
                     return
 
@@ -911,9 +919,7 @@ class ProviderGoogleGenAI(Provider):
                         )
                         final_response.id = chunk.response_id
                         if chunk.usage_metadata:
-                            final_response.usage = self._extract_usage(
-                                chunk.usage_metadata
-                            )
+                            self._set_usage(final_response, chunk.usage_metadata)
                     break
 
         # Yield final complete response with accumulated text
