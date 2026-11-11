@@ -308,6 +308,9 @@ class RespondStage(Stage):
                 )
             return
         if len(result.chain) > 0:
+            response_allowed = getattr(event, "can_send_response", None)
+            sent_any = False
+            rejected = False
             # 检查路径映射
             if mappings := self.platform_settings.get("path_mapping", []):
                 for idx, component in enumerate(result.chain):
@@ -354,12 +357,17 @@ class RespondStage(Stage):
                 for comp in result.chain:
                     i = await self._calc_comp_interval(comp)
                     await asyncio.sleep(i)
+                    # No await may occur between this guard and starting send.
+                    if response_allowed is not None and not response_allowed():
+                        rejected = True
+                        break
                     try:
                         if comp.type in need_separately:
                             await event.send(result.derive([comp]))
                         else:
                             await event.send(result.derive([*header_comps, comp]))
                             header_comps.clear()
+                        sent_any = True
                     except Exception as e:
                         logger.error(
                             "Failed to send the message chain: "
@@ -384,8 +392,12 @@ class RespondStage(Stage):
                 )
                 for comp in sep_comps:
                     chain = result.derive([comp])
+                    if response_allowed is not None and not response_allowed():
+                        rejected = True
+                        break
                     try:
                         await event.send(chain)
+                        sent_any = True
                     except Exception as e:
                         logger.error(
                             f"Failed to send the message chain: chain = {chain}, "
@@ -393,15 +405,22 @@ class RespondStage(Stage):
                             exc_info=True,
                         )
                 chain = result.derive(result.chain)
-                if result.chain and len(result.chain) > 0:
-                    try:
-                        await event.send(chain)
-                    except Exception as e:
-                        logger.error(
-                            f"Failed to send the message chain: chain = {chain}, "
-                            f"error = {e}",
-                            exc_info=True,
-                        )
+                if result.chain and len(result.chain) > 0 and not rejected:
+                    if response_allowed is not None and not response_allowed():
+                        rejected = True
+                    else:
+                        try:
+                            await event.send(chain)
+                            sent_any = True
+                        except Exception as e:
+                            logger.error(
+                                f"Failed to send the message chain: chain = {chain}, "
+                                f"error = {e}",
+                                exc_info=True,
+                            )
+            if rejected and not sent_any:
+                event.clear_result()
+                return
 
         if await call_event_hook(event, EventType.OnAfterMessageSentEvent):
             return

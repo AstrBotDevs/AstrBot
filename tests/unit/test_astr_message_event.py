@@ -1143,3 +1143,179 @@ class TestDefensiveGetattr:
         astr_message_event.message_obj = DummyMessage()
         message_type = astr_message_event.get_message_type()
         assert isinstance(message_type, MessageType)
+
+
+@pytest.mark.asyncio
+async def test_response_guard_rechecks_after_segment_wait(
+    astr_message_event, monkeypatch
+):
+    """An invalidated reply must not start delivery after a segment delay."""
+    event = astr_message_event
+    event.set_result(MessageEventResult().message("first").message("second"))
+    delivered = []
+    event.send = AsyncMock(side_effect=lambda chain: delivered.append(chain))
+    stage = RespondStage()
+    stage.config = {"provider_settings": {}}
+    stage.platform_settings = {"path_mapping": []}
+    stage.enable_seg = True
+    stage.only_llm_result = False
+    stage._calc_comp_interval = AsyncMock(return_value=0)
+    entered_wait = asyncio.Event()
+    release_wait = asyncio.Event()
+
+    async def pause(_):
+        entered_wait.set()
+        await release_wait.wait()
+
+    monkeypatch.setattr("astrbot.core.pipeline.respond.stage.asyncio.sleep", pause)
+    monkeypatch.setattr(
+        "astrbot.core.pipeline.respond.stage.call_event_hook",
+        AsyncMock(return_value=False),
+    )
+    current = True
+    event.register_response_send_guard(lambda: current)
+    task = asyncio.create_task(stage.process(event))
+    await entered_wait.wait()
+    current = False
+    release_wait.set()
+    await task
+    assert delivered == []
+    assert event.get_result() is None
+    current = True
+    await stage.process(event)
+    assert delivered == []
+
+
+@pytest.mark.asyncio
+async def test_response_guard_preserves_delivered_segment(
+    astr_message_event, monkeypatch
+):
+    """Only the not-yet-started segment is suppressed after supersession."""
+    event = astr_message_event
+    event.set_result(MessageEventResult().message("first").message("second"))
+    delivered = []
+    event.send = AsyncMock(side_effect=lambda chain: delivered.append(chain))
+    stage = RespondStage()
+    stage.config = {"provider_settings": {}}
+    stage.platform_settings = {"path_mapping": []}
+    stage.enable_seg = True
+    stage.only_llm_result = False
+    stage._calc_comp_interval = AsyncMock(return_value=0)
+    current = True
+    waits = 0
+
+    async def pause(_):
+        nonlocal current, waits
+        waits += 1
+        if waits == 2:
+            current = False
+
+    monkeypatch.setattr("astrbot.core.pipeline.respond.stage.asyncio.sleep", pause)
+    after_send = AsyncMock(return_value=False)
+    monkeypatch.setattr(
+        "astrbot.core.pipeline.respond.stage.call_event_hook", after_send
+    )
+    event.register_response_send_guard(lambda: current)
+    await stage.process(event)
+    assert [chain.chain[0].text for chain in delivered] == ["first"]
+    assert after_send.await_count == 1
+
+
+@pytest.mark.asyncio
+async def test_response_guard_failure_does_not_claim_delivery(
+    astr_message_event, monkeypatch
+):
+    """A failed guard closes this reply without calling send or after-send."""
+    event = astr_message_event
+    event.set_result(MessageEventResult().message("reply"))
+    event.send = AsyncMock()
+    stage = RespondStage()
+    stage.config = {"provider_settings": {}}
+    stage.platform_settings = {"path_mapping": []}
+    stage.enable_seg = False
+    after_send = AsyncMock(return_value=False)
+    monkeypatch.setattr(
+        "astrbot.core.pipeline.respond.stage.call_event_hook", after_send
+    )
+
+    def failure():
+        raise RuntimeError("private detail")
+
+    event.register_response_send_guard(lambda: True)
+    event.register_response_send_guard(failure)
+    await stage.process(event)
+    event.send.assert_not_awaited()
+    after_send.assert_not_awaited()
+    assert event.get_result() is None
+
+
+@pytest.mark.asyncio
+async def test_unguarded_response_keeps_previous_delivery(
+    astr_message_event, monkeypatch
+):
+    """An event without guards still delivers a normal response."""
+    event = astr_message_event
+    event.set_result(MessageEventResult().message("reply"))
+    event.send = AsyncMock()
+    stage = RespondStage()
+    stage.config = {"provider_settings": {}}
+    stage.platform_settings = {"path_mapping": []}
+    stage.enable_seg = False
+    monkeypatch.setattr(
+        "astrbot.core.pipeline.respond.stage.call_event_hook",
+        AsyncMock(return_value=False),
+    )
+    await stage.process(event)
+    assert [comp.text for comp in event.send.await_args.args[0].chain] == ["reply"]
+
+
+@pytest.mark.asyncio
+async def test_response_guard_rechecks_between_nonsegmented_sends(
+    astr_message_event, monkeypatch
+):
+    """A separately sent record cannot authorize a later text send."""
+    from astrbot.core.message.components import Record
+
+    event = astr_message_event
+    result = MessageEventResult()
+    result.chain = [Record(file="voice.wav"), Plain("later text")]
+    event.set_result(result)
+    delivered = []
+    current = True
+
+    async def send(chain):
+        nonlocal current
+        delivered.append(chain)
+        current = False
+
+    event.send = AsyncMock(side_effect=send)
+    stage = RespondStage()
+    stage.config = {"provider_settings": {}}
+    stage.platform_settings = {"path_mapping": []}
+    stage.enable_seg = False
+    after_send = AsyncMock(return_value=False)
+    monkeypatch.setattr(
+        "astrbot.core.pipeline.respond.stage.call_event_hook", after_send
+    )
+    event.register_response_send_guard(lambda: current)
+    await stage.process(event)
+    assert len(delivered) == 1
+    assert isinstance(delivered[0].chain[0], Record)
+    assert after_send.await_count == 1
+
+
+def test_response_guard_rejects_async_registration(astr_message_event):
+    """An async guard cannot create a last-check-to-send scheduling gap."""
+
+    async def delayed():
+        return True
+
+    with pytest.raises(TypeError):
+        astr_message_event.register_response_send_guard(delayed)
+
+    class AsyncGuard:
+        async def __call__(self):
+            return True
+
+    with pytest.raises(TypeError):
+        astr_message_event.register_response_send_guard(AsyncGuard())

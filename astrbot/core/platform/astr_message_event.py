@@ -1,10 +1,11 @@
 import abc
 import asyncio
 import hashlib
+import inspect
 import os
 import re
 import uuid
-from collections.abc import AsyncGenerator, Iterator
+from collections.abc import AsyncGenerator, Callable, Iterator
 from contextlib import contextmanager
 from contextvars import ContextVar
 from time import time
@@ -112,6 +113,7 @@ class AstrMessageEvent(abc.ABC):
         self.is_at_or_wake_command = False
         """是否是 At 机器人或者带有唤醒词或者是私聊(插件注册的事件监听器会让 is_wake 设为 True, 但是不会让这个属性置为 True)"""
         self._extras: dict[str, Any] = {}
+        self._response_send_guards: list[Callable[[], bool]] = []
         self._force_stopped: bool = False
         """独立的停止标志，不依赖 _result，不会被 clear_result() 重置"""
         message_type = getattr(message_obj, "type", None)
@@ -305,6 +307,43 @@ class AstrMessageEvent(abc.ABC):
         if isinstance(nickname, str):
             return nickname
         return str(nickname)
+
+    def register_response_send_guard(self, guard: Callable[[], bool]) -> None:
+        """Register an event-local guard for standard non-streaming pipeline replies.
+
+        The guard must be synchronous and must not perform I/O. It is evaluated
+        immediately before each RespondStage send, including delayed segments.
+        Streaming, direct sends, and sends inside adapters are not covered.
+
+        Args:
+            guard: Return True only while this event's reply may start sending.
+
+        Raises:
+            TypeError: If the guard is not a synchronous callable.
+        """
+        if (
+            not callable(guard)
+            or inspect.iscoroutinefunction(guard)
+            or inspect.iscoroutinefunction(getattr(guard, "__call__", None))
+        ):
+            raise TypeError("Response send guards must be synchronous callables")
+        self._response_send_guards.append(guard)
+
+    def can_send_response(self) -> bool:
+        """Check all event-local response guards without yielding control.
+
+        Returns:
+            True when no guard rejects this standard non-streaming response.
+        """
+        for guard in self._response_send_guards:
+            try:
+                if guard() is not True:
+                    return False
+            except Exception:
+                # Do not disclose the guard's exception or message contents.
+                logger.warning("A response send guard failed; suppressing response")
+                return False
+        return True
 
     def set_extra(self, key, value) -> None:
         """设置额外的信息。"""
