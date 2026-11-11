@@ -13,6 +13,23 @@ B 站视频：[一块钱也能养鱼!无需本地部署也能养鱼!大肥鱼鱼
 </p>
 <p align="center"><sub>用户中心吉祥物 · 图源 fish-console</sub></p>
 
+### 用户中心界面（fish-console · `http://localhost:5173`）
+
+本地 `cd fish-console && pnpm dev` 实拍界面（截图见 [`docs/assets/readme/fish-console/`](docs/assets/readme/fish-console/)）。
+
+| 登录 | 注册 |
+| :---: | :---: |
+| <img src="docs/assets/readme/fish-console/01-login.png" width="420" alt="登录页" /> | <img src="docs/assets/readme/fish-console/05-register.png" width="420" alt="注册页" /> |
+
+| 饭碗（仪表盘） | 电饭煲（添饭套餐） |
+| :---: | :---: |
+| <img src="docs/assets/readme/fish-console/02-dashboard.png" width="420" alt="仪表盘" /> | <img src="docs/assets/readme/fish-console/03-plans.png" width="420" alt="添饭套餐" /> |
+
+<p align="center">
+  <img src="docs/assets/readme/fish-console/04-bot-bind.png" width="860" alt="接鱼回家" />
+</p>
+<p align="center"><sub>接鱼回家 · 付费后可绑定 QQ / 微信机器人</sub></p>
+
 ## 产品示意图
 
 ### 架构：客户、鱼咖、QQ
