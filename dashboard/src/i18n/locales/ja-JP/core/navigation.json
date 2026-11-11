@@ -24,6 +24,7 @@
   },
   "config": "設定ファイル",
   "chat": "チャット",
+  "backToNavigation": "ナビゲーションに戻る",
   "botMode": "ボット",
   "options": "オプション",
   "cron": "スケジュールタスク",

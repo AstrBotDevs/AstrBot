@@ -1155,7 +1155,7 @@ onMounted(async () => {
 
       <!-- Bot/Chat mode switch - single button, hidden in chat mobile menu -->
       <v-btn
-        v-if="!isChatPath || !$vuetify.display.smAndDown"
+        v-if="!customizer.chatNavigationInSidebar && (!isChatPath || !$vuetify.display.smAndDown)"
         class="mode-switch-btn"
         :class="{ 'mr-4 hidden-xs': !isChatPath }"
         variant="text"
@@ -1196,8 +1196,10 @@ onMounted(async () => {
         <!-- Bot/Chat 模式切换 - 仅在手机端显示 -->
         <template
           v-if="
-            (isChatPath && $vuetify.display.smAndDown) ||
-            (!isChatPath && $vuetify.display.xs)
+            !customizer.chatNavigationInSidebar && (
+              (isChatPath && $vuetify.display.smAndDown) ||
+              (!isChatPath && $vuetify.display.xs)
+            )
           "
         >
           <div class="mobile-mode-switch-wrapper">

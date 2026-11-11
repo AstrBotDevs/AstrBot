@@ -24,6 +24,7 @@
   },
   "config": "配置文件",
   "chat": "聊天",
+  "backToNavigation": "返回导航",
   "botMode": "机器人",
   "options": "选项",
   "cron": "未来任务",
