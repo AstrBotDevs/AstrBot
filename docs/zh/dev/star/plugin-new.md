@@ -143,6 +143,40 @@ astrbot_version: ">=4.16,<5"
 当当前 AstrBot 版本不满足该范围时，插件会被阻止加载并提示版本不兼容。
 在 WebUI 安装插件时，你可以选择“无视警告，继续安装”来跳过这个检查。
 
+### 声明插件分类（Optional）
+
+你可以在 `metadata.yaml` 中新增 `category` 字段，主动声明插件的市场分类。插件市场、WebUI 与运行时都会以该字段为准，不再由审核人工指定分类。
+
+```yaml
+category: media_processing
+```
+
+`category` 必须是下列英文标识之一（区分不了大小写，写中文不会被识别）：
+
+| 标识 | 含义 |
+| --- | --- |
+| `ai_tools` | AI 增强 |
+| `ai_image` | AI 绘图 |
+| `ai_speech` | AI 语音 |
+| `ai_agent` | 智能体与编排 |
+| `platform_adapter` | 平台适配器 |
+| `media_processing` | 媒体处理 |
+| `automation` | 自动化与定时 |
+| `security` | 安全与审核 |
+| `long_term_memory` | 长期记忆 |
+| `knowledge_base` | 知识库 |
+| `tools` | 工具 |
+| `integrations` | 三方集成 |
+| `entertainment` | 娱乐 |
+| `group_games` | 群游戏 |
+| `productivity` | 效率 |
+| `utilities` | 生活实用 |
+| `other` | 其他 |
+
+取值会做轻度归一化：首尾空格、大小写以及 `-`、空格分隔符都会被忽略，因此 `AI Tools`、`ai-tools` 与 `ai_tools` 等价。
+
+未声明 `category` 的插件会归入 `other`。如果写了不支持的分类，AstrBot 会在日志中给出告警并同样归入 `other`，但**不会**阻止插件安装或更新。新增分类需要修改 AstrBot 源码，因此请优先使用上表中的标识。
+
 ### 调试插件
 
 AstrBot 采用在运行时注入插件的机制。因此，在调试插件时，需要启动 AstrBot 本体。

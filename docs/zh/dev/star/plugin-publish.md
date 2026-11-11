@@ -19,6 +19,7 @@ desc: 详细描述插件的功能、特性、使用方法等信息。 # 详细�
 version: 1.0.0                               # 插件版本号（遵循语义化版本规范）
 author: 作者名称                              # 作者名称
 repo: https://github.com/your-name/repo      # 插件仓库地址
+# category: tools                            # （可选）插件市场分类，标识见下方文档
 # astrbot_version: ">=4.17.0"                # （可选）支持的 AstrBot 版本范围
 # support_platforms:                         # （可选）支持的平台适配器列表
 #   - aiocqhttp

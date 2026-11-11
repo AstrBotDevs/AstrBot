@@ -141,6 +141,40 @@ If you only want to declare a minimum version, use:
 If the current AstrBot version does not satisfy this range, the plugin will be blocked from loading with a compatibility error.
 In the WebUI installation flow, you can choose to "Ignore Warning and Install" to bypass this check.
 
+### Declare Plugin Category (Optional)
+
+You can add a `category` field in `metadata.yaml` to declare the marketplace category of your plugin. The plugin marketplace, the WebUI and the runtime all follow this field instead of a category assigned during manual review.
+
+```yaml
+category: media_processing
+```
+
+`category` must be one of the following identifiers (case-insensitive; localized names are not accepted):
+
+| Identifier | Meaning |
+| --- | --- |
+| `ai_tools` | AI enhancement |
+| `ai_image` | AI image generation |
+| `ai_speech` | AI speech |
+| `ai_agent` | Agents and orchestration |
+| `platform_adapter` | Platform adapter |
+| `media_processing` | Media processing |
+| `automation` | Automation and scheduling |
+| `security` | Security and moderation |
+| `long_term_memory` | Long-term memory |
+| `knowledge_base` | Knowledge base |
+| `tools` | Tools |
+| `integrations` | Third-party integrations |
+| `entertainment` | Entertainment |
+| `group_games` | Group games |
+| `productivity` | Productivity |
+| `utilities` | Utilities |
+| `other` | Other |
+
+Declarations are lightly normalized: surrounding whitespace, letter case and `-`/space separators are ignored, so `AI Tools`, `ai-tools` and `ai_tools` are equivalent.
+
+Plugins that do not declare `category` are grouped under `other`. An unsupported value only logs a warning and is also grouped under `other`; it never blocks installation or updates. Adding a new category requires a code change in AstrBot, so prefer the identifiers above.
+
 ### Debugging Plugins
 
 AstrBot uses a runtime plugin injection mechanism. Therefore, when debugging plugins, you need to start the AstrBot main application.
