@@ -3541,6 +3541,45 @@ async def test_agent_runtimes_require_config_scope(
 
 
 @pytest.mark.asyncio
+async def test_acp_launch_settings_require_dashboard_login(
+    asgi_app, asgi_client, fake_core_lifecycle, fake_db
+):
+    from astrbot.core.acp_agent_runtime import AcpAgentRuntime
+
+    fake_core_lifecycle.agent_runtimes["acp"] = AcpAgentRuntime(fake_db)
+    store = asgi_app.state.services.agent_configs.store
+    store.save = AsyncMock(side_effect=lambda agent: agent)
+    fake_db.add_api_key("config-test", ["config"])
+    key_headers = {"Authorization": "ApiKey config-test"}
+    path = "/api/v1/agent-configs"
+    payload = {
+        "name": "ACP worker",
+        "runtime": "acp",
+        "config": {"command": "gemini", "args": ["--acp"]},
+    }
+
+    denied = await asgi_client.post(path, json=payload, headers=key_headers)
+    assert denied.status_code == 403
+    store.save.assert_not_awaited()
+
+    created = await asgi_client.post(path, json=payload, headers=_jwt_headers())
+    assert created.status_code == 200
+    data = created.json()["data"]
+    assert data["config"] == {"command": "gemini", "args": ["--acp"], "cwd": None}
+
+    store.get = AsyncMock(return_value=store.save.await_args.args[0])
+    stored_path = f"{path}/{data['config_id']}"
+    changed = {**payload, "config": {"command": "another-agent"}}
+    denied = await asgi_client.put(stored_path, json=changed, headers=key_headers)
+    assert denied.status_code == 403
+    assert store.save.await_count == 1
+
+    updated = await asgi_client.put(stored_path, json=changed, headers=_jwt_headers())
+    assert updated.status_code == 200
+    assert updated.json()["data"]["config"]["command"] == "another-agent"
+
+
+@pytest.mark.asyncio
 async def test_v1_plugin_extension_astrbot_web_api_reads_form_and_files(
     asgi_client: httpx.AsyncClient,
     fake_core_lifecycle,

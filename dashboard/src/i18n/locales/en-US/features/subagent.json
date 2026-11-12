@@ -71,6 +71,12 @@
     "customPersona": "Use custom prompt and tools",
     "runtime": "Agent Runtime",
     "runtimeConfig": "Runtime Configuration (JSON)",
+    "acpCommand": "Command",
+    "acpArgs": "Arguments",
+    "acpAddArg": "Add argument",
+    "acpRemoveArg": "Remove argument",
+    "acpCwd": "Working directory",
+    "acpCwdHint": "Leave empty to use a separate workspace for each worker.",
     "followProvider": "Follow conversation model",
     "externalRuntime": "External runtime configuration",
     "inheritPersona": "Leave empty to use the main agent’s persona",
@@ -79,6 +85,7 @@
     "followPersona": "Uses main agent persona"
   },
   "messages": {
+    "acpCommandRequired": "Enter a command.",
     "loadConfigFailed": "Failed to load config",
     "loadPersonaFailed": "Failed to load persona list",
     "unsavedChangesNotice": "You have unsaved changes on this page. Save before leaving.",

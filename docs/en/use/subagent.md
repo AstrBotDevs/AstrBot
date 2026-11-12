@@ -34,7 +34,7 @@ Each configuration profile embeds `{ runtime, config }` under `agent` as its def
 }
 ```
 
-`subagents` belongs to the `astrbot` runtime. Referenced AgentConfigs can select another registered runtime; ACP is not bundled in this phase. Native configurations have a form; other runtimes use a JSON editor. Configurations for unavailable runtimes remain stored but cannot create new sessions. Deletion is rejected while a profile or another AgentConfig references a record, and the API returns the reference locations.
+`subagents` belongs to the `astrbot` runtime. Referenced AgentConfigs can select another registered runtime. AstrBot and ACP have dedicated forms. Other runtimes use a JSON editor. Configurations for unavailable runtimes remain stored but cannot create new sessions. Deletion is rejected while a profile or another AgentConfig references a record, and the API returns the reference locations.
 
 Choose an Agent Runtime when creating or editing a configuration. For the AstrBot runtime, the form contains name, description, persona, and chat model. The description helps the main agent decide when to delegate. Empty persona and provider selections follow the main agent. Step limits, retries, compression, tool timeouts, and other runtime settings are inherited when the session is created instead of being duplicated in AgentConfig. The selected persona supplies instructions, tools, and skills, constrained by the parent’s authorized capabilities.
 
@@ -43,6 +43,16 @@ Choose an Agent Runtime when creating or editing a configuration. For the AstrBo
 The main system prompt lists only selected and enabled configurations, exposing their IDs, names, runtimes, and descriptions. Full instructions apply to the worker. The `spawn_agent` schema stays fixed: choose an optional `config_id`, or omit it for a generic native worker.
 
 Legacy `agent_runner` is migrated to `agent`, mapping `local` to `astrbot`. Legacy experts are removed from configuration files only after successful database import. Migration preserves existing sessions and history; already created agents retain their configuration snapshots.
+
+## ACP workers
+
+Install and authenticate an ACP agent on the AstrBot host using the account that runs AstrBot. Sign in to the WebUI, open **Configure Specialized Agents → Create Agent**, and choose **ACP**. For the Gemini CLI's [ACP mode](https://agentclientprotocol.github.io/python-sdk/quickstart/#optional-talk-to-the-gemini-cli), enter `gemini` as the command and add `--acp` as an argument. Save and select the agent in the profile's subagent settings.
+
+Use **Add argument** to enter each argument separately. The command can be an executable on the server's PATH or an absolute path. Enter an absolute working directory or leave it blank to use a separate workspace for each worker. Keep credentials in the agent's login configuration. Saving ACP command settings requires a dashboard login. Starting ACP workers and sending follow-ups requires an AstrBot administrator.
+
+ACP workers exchange prompts and text replies over stdio. Image and file inputs are sent as textual references. The ACP agent handles its own tools and authentication. AstrBot declines ACP permission requests and does not advertise client filesystem or terminal capabilities. The subprocess runs under the AstrBot host account with that account's access.
+
+Follow-up messages reuse the same ACP session. If its process exits, continuation requires the agent to support `session/resume` or `session/load`. Otherwise, start a new worker.
 
 ## Execution and continuation
 
@@ -78,7 +88,7 @@ Runtime adapters receive typed input through `AgentInput.content`: `PlainInput`,
 
 An `AgentRuntime` opens or restores an `AgentSession`. `session.run_turn(input)` returns an independently executing turn with replayable `events()`, `result()`, `cancel()`, queued `follow_up()`, and optional `steer()` at a safe boundary. Cancellation of an output reader or result waiter does not implicitly cancel execution. The owner explicitly cancels the turn when its pipeline stops.
 
-Extensions can register a runtime with `ctx.agent.register_runtime(name, runtime)` and select it in an AgentConfig’s `runtime` field. `spawn_agent` uses the configuration through `config_id`; generic workers use `astrbot`. An ACP runtime and continuous voice sessions are not included in this phase. Existing third-party main-agent execution paths remain unchanged.
+Extensions can register a runtime with `ctx.agent.register_runtime(name, runtime)` and select it in an AgentConfig’s `runtime` field. `spawn_agent` uses the configuration through `config_id`; generic workers use `astrbot`. ACP is available for specialized workers.
 
 `list_agents` returns each agent's public `agent_id`, `runtime`, and opaque runtime-owned session ID in `conversation_id`. `send_message` resolves the runtime and session by agent ID. `owner_conversation_id` identifies the separate owning main conversation.
 

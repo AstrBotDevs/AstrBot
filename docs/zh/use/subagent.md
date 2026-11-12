@@ -34,7 +34,7 @@
 }
 ```
 
-`subagents` 是 `astrbot` runtime 的配置。被引用的 AgentConfig 可以选择其他已注册 runtime；本次未内置 ACP。内置 runtime 提供表单，其他 runtime 使用 JSON 配置编辑。不可用 runtime 的配置仍保留，但不能新建对应会话。被配置档或其他 AgentConfig 引用的记录不能删除，删除接口会返回引用位置。
+`subagents` 是 `astrbot` runtime 的配置。被引用的 AgentConfig 可以选择其他已注册的运行时。AstrBot 和 ACP 提供专用表单，其他运行时使用 JSON 配置编辑。不可用 runtime 的配置仍保留，但不能新建对应会话。被配置档或其他 AgentConfig 引用的记录不能删除，删除接口会返回引用位置。
 
 创建和编辑时均可选择 Agent 运行时。选择 AstrBot 运行时后，表单配置名称、描述、人格和聊天模型。描述用于主代理判断何时委派任务；人格和模型留空时跟随主代理。步数、重试、上下文压缩、工具超时等其他运行设置在创建会话时继承主代理，不在 AgentConfig 中重复保存。所选人格决定提示词、工具和技能范围，最终权限仍受父代理本轮可委派能力限制。
 
@@ -43,6 +43,16 @@
 主代理 system prompt 仅列出当前配置档选中且启用的 AgentConfig 名称、ID、runtime 和用途。完整 prompt 不会加入主代理；`spawn_agent` 的 schema 保持固定，通过可选 `config_id` 选择配置，不指定则创建通用内置子代理。
 
 旧的 `agent_runner` 自动迁移为 `agent`，`local` 映射为 `astrbot`；旧全局专家在数据库导入成功后才从配置中清理。迁移不修改已有会话及历史，已经创建的 Agent 继续使用原配置快照。
+
+## ACP 子代理
+
+在 AstrBot 服务端安装支持 Agent Client Protocol（ACP）的 Agent，并用运行 AstrBot 的系统账户完成登录。登录 WebUI，在 **配置专用 Agent → 新建 Agent** 中选择 **ACP**。以 Gemini CLI 的 [ACP 模式](https://agentclientprotocol.github.io/python-sdk/quickstart/#optional-talk-to-the-gemini-cli)为例，启动命令填 `gemini`，启动参数添加 `--acp`。保存后在配置档的子代理设置中勾选该 Agent。
+
+使用 **添加参数** 逐项输入参数。启动命令可以填服务端 PATH 中的可执行文件名或绝对路径。工作目录填写绝对路径，留空时为每个子代理分配独立工作区。凭据由 Agent 的登录配置管理。保存 ACP 命令需要登录 WebUI，启动子代理和追加指令需要 AstrBot 管理员权限。
+
+ACP 子代理通过 stdio 收发提示词和文本回复。图片和文件以文本引用传递。ACP Agent 自己处理工具和登录。AstrBot 会拒绝 ACP 权限请求，且不向 ACP Agent 开放客户端文件系统和终端接口。子进程使用运行 AstrBot 的系统账户权限。
+
+追加指令会沿用同一个 ACP 会话。子进程退出后，续接依赖 Agent 支持 `session/resume` 或 `session/load`。不支持时需要新建子代理。
 
 ## 执行与继续对话
 
@@ -79,7 +89,7 @@ Runtime 适配器通过 `AgentInput.content` 接收有类型的输入：`PlainIn
 
 `AgentRuntime` 创建或恢复 `AgentSession`。`session.run_turn(input)` 返回独立执行的 turn，提供可重复读取的 `events()`、`result()`、`cancel()`、排队开始新一轮的 `follow_up()`，以及可选的安全边界 `steer()`。输出消费者或结果等待者被取消不会自动取消执行；流水线停止时，由调用方明确取消该 turn。
 
-扩展实现可以通过 `ctx.agent.register_runtime(name, runtime)` 注册，在 AgentConfig 的 `runtime` 字段选择；`spawn_agent` 通过 `config_id` 使用该配置。通用子代理使用 `astrbot`。本阶段不包含 ACP runtime 或持续实时语音会话；现有第三方主代理执行路径保持原样。
+扩展实现可以通过 `ctx.agent.register_runtime(name, runtime)` 注册，在 AgentConfig 的 `runtime` 字段选择；`spawn_agent` 通过 `config_id` 使用该配置。通用子代理使用 `astrbot`。ACP 可用于专用子代理。
 
 `list_agents` 返回每个 agent 的 `agent_id`、`runtime`，以及通过 `conversation_id` 字段提供的 runtime 私有会话 ID。`send_message` 根据 agent ID 找回 runtime 和会话。`owner_conversation_id` 单独表示所属主会话。
 
