@@ -36,7 +36,6 @@ from astrbot.core.platform.message_type import MessageType
 from astrbot.core.platform.platform_metadata import PlatformMetadata
 from astrbot.core.provider.entities import LLMResponse
 from astrbot.core.provider.func_tool_manager import FunctionToolManager
-from astrbot.core.star.session_llm_manager import SessionServiceManager
 from astrbot.core.utils import trace as trace_module
 
 
@@ -148,16 +147,6 @@ async def runtime(monkeypatch):
     monkeypatch.setattr(native_builder, "build_main_agent", build)
     monkeypatch.setattr(native_session, "record_agent_stats", AsyncMock())
     monkeypatch.setattr(native_session.Metric, "upload", AsyncMock())
-    monkeypatch.setattr(
-        SessionServiceManager,
-        "should_process_llm_request",
-        AsyncMock(return_value=True),
-    )
-    monkeypatch.setattr(
-        SessionServiceManager,
-        "is_session_enabled",
-        AsyncMock(return_value=True),
-    )
     monkeypatch.setitem(trace_module.astrbot_config, "trace_enable", True)
     monkeypatch.setattr(
         trace_module,

@@ -27,7 +27,6 @@ from astrbot.core.message.components import Image
 from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.platform.astr_message_event import current_message_event, event_context
 from astrbot.core.provider.entities import LLMResponse
-from astrbot.core.star.session_llm_manager import SessionServiceManager
 from astrbot.core.star.star_handler import EventType
 
 
@@ -67,11 +66,6 @@ async def sdk(environment, monkeypatch):
     env.context.conversation_manager.update_conversation.side_effect = save
     env.platform_send = AsyncMock()
     env.context.platform_manager.platform_insts[0].send_by_session = env.platform_send
-    monkeypatch.setattr(
-        SessionServiceManager,
-        "should_process_llm_request",
-        AsyncMock(return_value=True),
-    )
     monkeypatch.setattr(native_session, "record_agent_stats", AsyncMock())
     monkeypatch.setattr(native_session.Metric, "upload", AsyncMock())
     try:
