@@ -9,7 +9,7 @@
   </v-btn>
 
   <v-dialog v-model="showDialog" max-width="720" scrollable>
-    <v-card rounded="xl">
+    <v-card>
       <v-card-title class="text-h3 pa-4 pb-0 pl-6">{{ tm('health.title') }}</v-card-title>
       <v-card-text class="pa-6">
         <v-alert v-if="loadFailed" type="warning" variant="tonal" class="mb-4">

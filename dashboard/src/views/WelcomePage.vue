@@ -84,7 +84,7 @@
     </section>
 
     <v-dialog v-model="showComputerAccessDialog" max-width="540">
-      <v-card rounded="xl">
+      <v-card>
         <v-card-title class="text-h3 pa-4 pb-0 pl-6">{{ tm('onboard.step3Title') }}</v-card-title>
         <v-card-text class="pa-6">
           <p class="text-body-2 text-medium-emphasis mb-5">{{ tm('onboard.step3Desc') }}</p>
