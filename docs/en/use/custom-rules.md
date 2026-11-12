@@ -59,9 +59,9 @@ Click **Need custom settings for a session?** beside the session profile instruc
 
 `/provider <index>`, `/provider tts <index>`, and `/provider stt <index>` update the session's model overrides. `/provider --inherit` restores all three model selections to the profile.
 
-`/persona <name>` changes the session persona; `/persona --inherit` restores inheritance. These commands require administrator permissions. Refresh the editor to see changes made through commands.
+The model commands above require administrator permissions. Refresh the editor to see changes made through commands.
 
-There is no separate forced-persona or conversation-persona priority layer. Commands and the editor update the same field. Creating or switching conversation histories within the same UMO does not reset its overrides.
+The built-in `/persona` command has been removed. Set the session persona or restore inheritance under **Config → Manage session mappings → Overrides → Persona**. There is no separate forced-persona or conversation-persona priority layer. Creating or switching conversation histories within the same UMO does not reset its overrides.
 
 ## Plugins and blocked sessions
 

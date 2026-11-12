@@ -1,6 +1,5 @@
 from astrbot.api import star
 from astrbot.api.event import AstrMessageEvent, filter
-from astrbot.core.session_overrides import update_overrides
 from astrbot.core.star.filter.command import GreedyStr
 
 from .commands import (
@@ -80,47 +79,6 @@ class Main(star.Star):
     async def update_dashboard(self, event: AstrMessageEvent) -> None:
         """Update AstrBot WebUI"""
         await self.admin_c.update_dashboard(event)
-
-    @filter.permission_type(filter.PermissionType.ADMIN)
-    @filter.command("persona")
-    async def persona(self, event: AstrMessageEvent, name: GreedyStr = "") -> None:
-        """Select the session persona or restore profile inheritance.
-
-        Args:
-            event: Command event identifying the target session.
-            name: Persona name, or --inherit to follow the profile.
-        """
-        config = self.context.get_config(event.unified_msg_origin)
-        path = (
-            "agent.config.persona.persona_id"
-            if config.get("agent", {}).get("runtime") == "astrbot"
-            else "agent.config.persona_id"
-        )
-        name = name.strip()
-        if not name:
-            names = [item["name"] for item in self.context.persona_manager.personas_v3]
-            event.set_result(
-                event.plain_result(
-                    "Usage: /persona <name> or /persona --inherit\n" + "\n".join(names)
-                )
-            )
-            return
-        if (
-            name != "--inherit"
-            and not self.context.persona_manager.get_persona_v3_by_id(name)
-        ):
-            event.set_result(event.plain_result("Persona not found."))
-            return
-        await update_overrides(
-            event.unified_msg_origin, {path: None if name == "--inherit" else name}
-        )
-        event.set_result(
-            event.plain_result(
-                "Following profile persona."
-                if name == "--inherit"
-                else f"Session persona: {name}"
-            )
-        )
 
     @filter.command("set")
     async def set_variable(self, event: AstrMessageEvent, key: str, value: str) -> None:

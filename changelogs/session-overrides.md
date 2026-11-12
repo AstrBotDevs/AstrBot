@@ -2,7 +2,8 @@
 
 - Merge Custom Rules into **Config → Manage session mappings**, with a Material-style settings list, per-setting dialogs, three-state choices, unified saving, and restore-inheritance actions.
 - Redirect `/session-management` to `/config?scope=sessions`. Previous Custom Rules, Session Management, and More Features → Custom Rules entries now map to Config → Manage session mappings.
-- Share model and persona overrides between commands and the editor. New or switched conversation histories within a UMO keep its overrides.
+- Share model overrides between commands and the editor. New or switched conversation histories within a UMO keep its overrides.
+- Remove the built-in `/persona` command; manage session personas and restore inheritance through **Config → Manage session mappings → Overrides → Persona**.
 - Add `disabled_plugins` and `platform_settings.id_blacklist` to profiles. Lists replace inherited lists, including explicit empty lists.
 - Migrate legacy rules and current conversation personas; move remarks into UMO aliases without replacing existing aliases. Remove the unused session Rerank toggle and field. Preserve groups, conversation selection, variables, and unrelated preferences.
 - Preserve knowledge-base IDs during migration, including unavailable instances; recognize both names and IDs in the knowledge-base selector.
