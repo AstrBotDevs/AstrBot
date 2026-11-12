@@ -1226,7 +1226,7 @@ class TestEnsurePersonaAndSkills:
         req = ProviderRequest()
         req.conversation = MagicMock(persona_id=None)
 
-        with patch.object(pm.sp, "get_async", new=AsyncMock(return_value={})):
+        with patch.object(pm, "get_overrides", new=AsyncMock(return_value={})):
             await _apply_persona_capabilities(req, {}, mock_context, mock_event)
 
         assert persona_build.CHATUI_SPECIAL_DEFAULT_PERSONA_PROMPT in req.system_prompt
