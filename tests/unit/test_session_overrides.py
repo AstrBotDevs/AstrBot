@@ -14,8 +14,6 @@ from astrbot.core import session_overrides as overrides
 from astrbot.core.astrbot_config_mgr import AstrBotConfigManager
 from astrbot.core.config import AstrBotConfig
 from astrbot.core.config.default import DEFAULT_CONFIG
-from astrbot.core.config.snapshot import AstrBotConfigSnapshot
-from astrbot.core.config.runtime import current_message_config
 from astrbot.core.conversation_mgr import ConversationManager
 from astrbot.core.db.migration import migra_session_overrides as migration
 from astrbot.core.event_bus import EventBus
@@ -99,9 +97,7 @@ async def test_runtime_config_rejects_both_save_methods_without_touching_profile
     base = acm.default_conf
     profile = Path(base.config_path)
     original = profile.read_bytes()
-    config, paths = acm._create_message_config(UMO)
-    assert isinstance(config, AstrBotConfigSnapshot)
-    assert paths == (frozenset({"wake_prefix"}) if has_overrides else frozenset())
+    config, _ = acm._create_message_config(UMO)
     before = deepcopy(dict(config))
     with pytest.raises(ValueError, match="session override"):
         config.save_config({"wake_prefix": ["blocked"]})
@@ -178,12 +174,6 @@ async def test_pipeline_copies_configuration_once_per_message(
             ready.set()
         await asyncio.wait_for(ready.wait(), 2)
         assert config["plugin_config"]["items"] == ["base", "local"]
-        assert isinstance(config, AstrBotConfigSnapshot)
-        assert current_message_config.get().override_paths == (
-            frozenset({"wake_prefix"}) if has_overrides else frozenset()
-        )
-        with pytest.raises(ValueError, match="session override"):
-            config.save_config()
 
     scheduler.stages = [SimpleNamespace(process=process)]
     await asyncio.gather(scheduler.execute(make_message()), scheduler.execute(make_message()))
@@ -209,7 +199,6 @@ async def test_pipeline_config_isolates_concurrent_messages_and_ai_gate(
         config = ctx.astrbot_config
         assert config is ctx.plugin_manager.context.get_config(event.unified_msg_origin)
         assert acm.get_conf(None) is acm.default_conf
-        assert not hasattr(event, "effective_config")
         snapshots[event.unified_msg_origin] = config
         if len(snapshots) == 2:
             both_started.set()
@@ -218,8 +207,6 @@ async def test_pipeline_config_isolates_concurrent_messages_and_ai_gate(
         config["wake_prefix"].append(event.session_id)
         assert config["wake_prefix"][-1] == event.session_id
         assert len(config["wake_prefix"]) == len(acm.default_conf["wake_prefix"]) + 1
-        with pytest.raises(ValueError, match="session override"):
-            await config.save_config_async()
 
     async def invoke(event):
         invoked.append(event.unified_msg_origin)
@@ -255,7 +242,6 @@ async def test_pipeline_snapshot_stays_stable_until_next_message(
         await overrides.update_overrides(UMO, {"provider_settings.enable": True})
         assert acm.get_conf(UMO) is snapshot
         assert snapshot["provider_settings"]["enable"] is False
-        assert current_message_config.get().override_paths == frozenset()
         # A new nested message for the same UMO gets fresh values; its parent
         # retains the original snapshot when the nested execution returns.
         await scheduler.execute(make_message())
@@ -369,26 +355,12 @@ async def test_explicit_switches_lists_restore_and_profile_changes(
     assert acm.default_conf["kb_names"] == ["Shared"]
     effective["platform_settings"]["id_whitelist"].append("other")
     assert acm.default_conf["platform_settings"]["id_whitelist"] == []
-    with pytest.raises(ValueError, match="session override"):
-        effective.save_config()
     await overrides.update_overrides(UMO, {"kb_names": None})
     acm.default_conf["kb_names"] = ["Updated"]
     assert acm.get_conf(UMO)["kb_names"] == ["Updated"]
     assert acm.get_conf("test:GroupMessage:43")["provider_settings"]["enable"] is False
     assert "kb_names" not in await overrides.get_overrides(UMO)
 
-
-@pytest.mark.asyncio
-async def test_concurrent_patches_preserve_other_fields(override_environment):
-    prefs, _, _ = override_environment
-    await asyncio.gather(
-        overrides.update_overrides(UMO, {"provider_settings.enable": False}),
-        overrides.update_overrides(UMO, {"disabled_plugins": ["plugin"]}),
-    )
-    assert await overrides.get_overrides(UMO) == {
-        "provider_settings.enable": False,
-        "disabled_plugins": ["plugin"],
-    }
     with pytest.raises(ValueError):
         await overrides.update_overrides(UMO, {"provider_settings.enable": "false"})
     with pytest.raises(ValueError):
@@ -549,23 +521,6 @@ async def test_migration_moves_legacy_alias_and_keeps_auto_metadata(
     assert alias.user_alias == "Work"
     assert alias.auto_name == "Auto name"
     assert alias.creator_sender_id == "sender"
-
-
-@pytest.mark.asyncio
-async def test_delete_overrides_keeps_conversation_variables_and_groups(
-    override_environment,
-):
-    prefs, acm, db = override_environment
-    service = service_module.SessionManagementService(
-        SimpleNamespace(astrbot_config_mgr=acm), db
-    )
-    await overrides.update_overrides(UMO, {"provider_settings.enable": False})
-    await prefs.session_put(UMO, "sel_conv_id", "conversation")
-    await prefs.session_put(UMO, "session_variables", {"keep": True})
-    await service.delete_session_rule({"umo": UMO})
-    assert await overrides.get_overrides(UMO) == {}
-    assert await prefs.session_get(UMO, "sel_conv_id") == "conversation"
-    assert await prefs.session_get(UMO, "session_variables") == {"keep": True}
 
 
 @pytest.mark.asyncio

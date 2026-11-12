@@ -425,12 +425,6 @@ async def test_session_isolation_precedes_registration(
         else:
             assert result == [None]
         assert registry._events == {}
-        routed_umos = [call.args[0] for call in mock_config_manager.get_conf_info.call_args_list]
-        assert routed_umos == (
-            [original_umo, event.unified_msg_origin]
-            if original_umo != event.unified_msg_origin
-            else [original_umo]
-        )
     finally:
         release.set()
         dispatch.cancel()

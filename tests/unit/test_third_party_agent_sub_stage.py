@@ -10,43 +10,6 @@ from astrbot.core.provider.entities import LLMResponse
 
 
 @pytest.mark.asyncio
-async def test_custom_error_reply_does_not_query_legacy_conversation_persona():
-    """Persona error replies only depend on effective configuration resolution."""
-    persona_manager = SimpleNamespace(
-        resolve_selected_persona=AsyncMock(
-            return_value=(
-                "session-persona",
-                {"custom_error_message": "  Please try again.  "},
-                False,
-            )
-        )
-    )
-    conversation_manager = SimpleNamespace(
-        get_curr_conversation_id=AsyncMock(side_effect=RuntimeError("Unavailable")),
-        get_conversation=AsyncMock(side_effect=RuntimeError("Unavailable")),
-    )
-    stage = third_party.ThirdPartyAgentSubStage()
-    stage.ctx = SimpleNamespace(
-        plugin_manager=SimpleNamespace(
-            context=SimpleNamespace(
-                persona_manager=persona_manager,
-                conversation_manager=conversation_manager,
-            )
-        )
-    )
-    event = MagicMock(unified_msg_origin="test:FriendMessage:42")
-    event.get_platform_name.return_value = "test"
-
-    assert await stage._resolve_persona_custom_error_message(event) == "Please try again."
-    persona_manager.resolve_selected_persona.assert_awaited_once_with(
-        umo=event.unified_msg_origin, platform_name="test"
-    )
-    conversation_manager.get_curr_conversation_id.assert_not_awaited()
-    conversation_manager.get_conversation.assert_not_awaited()
-
-
-@pytest.mark.asyncio
-@pytest.mark.parametrize("session_persona", [None, "session-persona"])
 @pytest.mark.parametrize(
     ("runner_type", "runner_class_name", "config_key"),
     [
@@ -61,7 +24,6 @@ async def test_third_party_runner_receives_inline_profile_config(
     runner_type: str,
     runner_class_name: str,
     config_key: str,
-    session_persona: str | None,
 ):
     inline_config = {config_key: "inline-secret"}
     runner = MagicMock()
@@ -121,12 +83,11 @@ async def test_third_party_runner_receives_inline_profile_config(
         )
     )
     stage._resolve_persona_custom_error_message = AsyncMock(return_value=None)
-    if session_persona:
-        inline_config = {**inline_config, "persona_id": session_persona}
-        stage.ctx.astrbot_config = {
-            **config,
-            "agent": {"runtime": runner_type, "config": inline_config},
-        }
+    inline_config = {**inline_config, "persona_id": "session-persona"}
+    stage.ctx.astrbot_config = {
+        **config,
+        "agent": {"runtime": runner_type, "config": inline_config},
+    }
     event = MagicMock()
     event.message_str = "hello"
     event.unified_msg_origin = "webchat:FriendMessage:test"

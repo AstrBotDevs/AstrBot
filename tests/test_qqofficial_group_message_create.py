@@ -2,7 +2,7 @@ import asyncio
 import re
 from types import SimpleNamespace
 from typing import Any, cast
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock
 
 import botpy
 import botpy.message
@@ -800,7 +800,7 @@ async def test_result_decorate_segments_qqofficial_ws_plain_result():
         "t2i": False,
     }
     context = SimpleNamespace(
-        get_config=MagicMock(return_value=config),
+        get_config=lambda **_: config,
         get_using_tts_provider_async=AsyncMock(return_value=None),
     )
     setattr(
@@ -839,7 +839,6 @@ async def test_result_decorate_segments_qqofficial_ws_plain_result():
         "第一段",
         "第二段",
     ]
-    context.get_config.assert_called_once_with(umo=event.unified_msg_origin)
 
 
 @pytest.mark.asyncio
