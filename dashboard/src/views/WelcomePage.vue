@@ -250,53 +250,74 @@ const welcomeAnnouncement = computed(() =>
 );
 const showAnnouncement = computed(() => welcomeAnnouncement.value.length > 0);
 
+// Lunar New Year's Day as month-day in local time, 2025-2050.
+// Extend the table when a new year is needed; the dates follow the official
+// Hong Kong Observatory Gregorian-Lunar conversion tables.
 const springFestivalDates: Record<number, string> = {
   2025: '01-29',
   2026: '02-17',
   2027: '02-06',
   2028: '01-26',
   2029: '02-13',
-  2030: '02-03'
+  2030: '02-03',
+  2031: '01-23',
+  2032: '02-11',
+  2033: '01-31',
+  2034: '02-19',
+  2035: '02-08',
+  2036: '01-28',
+  2037: '02-15',
+  2038: '02-04',
+  2039: '01-24',
+  2040: '02-12',
+  2041: '02-01',
+  2042: '01-22',
+  2043: '02-10',
+  2044: '01-30',
+  2045: '02-17',
+  2046: '02-06',
+  2047: '01-26',
+  2048: '02-14',
+  2049: '02-02',
+  2050: '01-23'
+}
+
+function getSpringFestivalDay(year: number): Date | null {
+  const monthDay = springFestivalDates[year];
+  if (!monthDay) return null;
+
+  const [month, day] = monthDay.split('-').map(Number);
+  // Constructing from date components yields local midnight without mutation.
+  return new Date(year, month - 1, day);
 }
 
 function isSpringFestival() {
   const now = new Date();
-  const year = now.getFullYear();
-  const dateStr = springFestivalDates[year];
+  const festival = getSpringFestivalDay(now.getFullYear());
+  if (!festival) return false;
 
-  if (!dateStr) return false;
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+  const start = new Date(
+    festival.getFullYear(),
+    festival.getMonth(),
+    festival.getDate() - 5
+  ).getTime();
+  const end = new Date(
+    festival.getFullYear(),
+    festival.getMonth(),
+    festival.getDate() + 5
+  ).getTime();
 
-  const [month, day] = dateStr.split('-').map(Number);
-  const festivalDate = new Date(year, month - 1, day);
-
-  const start = new Date(festivalDate);
-  start.setDate(festivalDate.getDate() - 5);
-
-  const end = new Date(festivalDate);
-  end.setDate(festivalDate.getDate() + 5);
-
-  // start of day for comparison
-  const nowTime = now.setHours(0, 0, 0, 0);
-  const startTime = start.setHours(0, 0, 0, 0);
-  const endTime = end.setHours(0, 0, 0, 0);
-
-  return nowTime >= startTime && nowTime <= endTime;
+  return today >= start && today <= end;
 }
 
 function isExactSpringFestivalDay() {
   const now = new Date();
-  const year = now.getFullYear();
-  const dateStr = springFestivalDates[year];
+  const festival = getSpringFestivalDay(now.getFullYear());
+  if (!festival) return false;
 
-  if (!dateStr) return false;
-
-  const [month, day] = dateStr.split('-').map(Number);
-  const festivalDate = new Date(year, month - 1, day);
-
-  const nowTime = new Date(now).setHours(0, 0, 0, 0);
-  const festivalTime = festivalDate.setHours(0, 0, 0, 0);
-
-  return nowTime === festivalTime;
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+  return today === festival.getTime();
 }
 
 const greetingEmoji = computed(() => {
@@ -312,7 +333,7 @@ const greetingEmoji = computed(() => {
 
 const greetingText = computed(() => {
   if (isSpringFestival()) {
-    return tm('greeting.newYear');
+    return tm('greeting.springFestival');
   }
   const hour = new Date().getHours();
   if (hour < 12) return tm('greeting.morning');
