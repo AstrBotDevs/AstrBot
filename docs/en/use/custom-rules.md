@@ -106,3 +106,7 @@ Both use the `preferences` table with key `config_binding`:
 | Session | `umo` | Full UMO | `{"profile_id":null,"overrides":{"provider_settings.enable":false}}` |
 
 A null `profile_id` follows routing; `"default"` explicitly selects the default profile. Only routes use `order`. Explicit session fields are always applied after selecting one base profile.
+
+When deleting a bot, the former **Custom Rules** and **Config Routing** cleanup options are combined into **Session mappings**. Selecting it removes that bot’s profile assignments, session overrides, and routing rules together; clearing it preserves them. Shared configuration profiles are not deleted.
+
+![Session mappings cleanup when deleting a bot](./images/custom-rules-delete-en.png)

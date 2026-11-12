@@ -26,3 +26,5 @@
 - Add session wake-prefix overrides using the existing `wake_prefix` key, including whole-list replacement and restoration to the profile. Resolve wake prefixes and additional AI prefix normalization per session.
 - Group the continuous override list with small headings and dividers for Session, AI & conversation, Voice, Knowledge bases, and Plugins. Keep Session status and Wake prefixes first.
 - Add a direct entry to the existing mappings dialog beside the Bots page's session profile instructions. Refresh mappings on return while preserving unsaved bot edits.
+
+- Merge the bot deletion dialog’s former Custom Rules and Config Routing cleanup options into Session mappings, removing profile assignments, overrides, and routes together through the existing API.

@@ -268,9 +268,8 @@
     "hint": "Selected data for this bot will be permanently removed.",
     "failed": "Deletion did not finish. Some selected data may already be removed. Retry or check the logs.",
     "options": {
-      "custom_rules": "Custom rules",
+      "config_mappings": "Session mappings",
       "preferences": "Preferences",
-      "routing": "Configuration routes",
       "cron_jobs": "Future tasks",
       "conversations": "AI conversations",
       "message_history": "Message history",
@@ -278,9 +277,8 @@
       "stats": "Usage statistics"
     },
     "descriptions": {
-      "custom_rules": "Per-session service switches, persona, model, plugin and knowledge base rules for this bot.",
+      "config_mappings": "Profile assignments, overrides, and routing rules for this bot (formerly Custom Rules and Config Routing).",
       "preferences": "Selected model providers and other preferences saved for each conversation of this bot.",
-      "routing": "Configuration profile bindings and routing rules specific to this bot.",
       "cron_jobs": "Future tasks targeting this bot’s sessions, including active runs.",
       "conversations": "AI conversation context, titles, persona bindings and per-conversation token records.",
       "message_history": "Platform messages, session names, aliases and sender names.",
