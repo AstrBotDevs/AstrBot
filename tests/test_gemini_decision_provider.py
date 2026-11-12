@@ -1,4 +1,5 @@
 import asyncio
+import base64
 import copy
 import json
 import logging
@@ -99,9 +100,19 @@ async def test_mixed_questions_match_names_and_preserve_answer_semantics(
     provider_factory,
 ):
     sent = []
+    choice_criteria = dict(CHOICE.criteria)
+    score_criteria = list(SCORE.criteria)
+    questions = {
+        "需要回复？": BOOLEAN,
+        "action": DecisionChoiceQuestion(" Pick ", MappingProxyType(choice_criteria)),
+        "severity": DecisionScoreQuestion(SCORE.instructions, score_criteria),
+    }
 
     def handler(request):
         sent.append(request)
+        choice_criteria.clear()
+        score_criteria.clear()
+        questions.clear()
         return httpx.Response(
             200,
             json={
@@ -115,13 +126,7 @@ async def test_mixed_questions_match_names_and_preserve_answer_semantics(
 
     provider = provider_factory(handler)
     answers = await provider.ask(
-        {
-            "需要回复？": BOOLEAN,
-            "action": DecisionChoiceQuestion(
-                " Pick ", MappingProxyType(CHOICE.criteria)
-            ),
-            "severity": SCORE,
-        },
+        questions,
         "The service is down.",
     )
     assert len(sent) == 1
@@ -372,6 +377,11 @@ async def test_valid_choice_id_and_count_boundaries(provider_factory, option_id,
         ({"a": 0.5004, "b": 0.4996}, "b", False),
         ({"😀": 0.5, "中": 0.5}, "中", True),
         ({"😀": 0.5, "中": 0.5}, "😀", False),
+        (
+            {"billing": 0.99, "shipping": 0.004, "other": 0.003, "technical": 0.002},
+            "billing",
+            True,
+        ),
     ],
 )
 async def test_choice_winner_matches_maximum_and_utf8_tie_order(
@@ -585,8 +595,12 @@ async def test_content_filter_blocks_whole_batch_without_leaking_input(
     ],
 )
 async def test_endpoint_preserves_custom_route(provider_factory, base, expected):
-    provider = provider_factory(lambda request: httpx.Response(500), api_base=base)
-    assert provider.endpoint == expected
+    def handler(request):
+        assert str(request.url) == expected
+        return httpx.Response(200, json={"answers": {"q0": BOOL_ANSWER}})
+
+    provider = provider_factory(handler, api_base=base)
+    await provider.ask({"q": BOOLEAN})
 
 
 @pytest.mark.parametrize(
@@ -1072,8 +1086,34 @@ async def test_service_forwards_explicit_input(provider_factory, method):
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("kind", ["image", "document"])
+@pytest.mark.parametrize("size", [3, 4])
+async def test_inline_media_size_limits(provider_factory, monkeypatch, kind, size):
+    from astrbot.core.provider.sources import gemini_decision_source
+
+    monkeypatch.setattr(gemini_decision_source, "_MAX_INLINE_MEDIA_BYTES", 6)
+    monkeypatch.setattr(gemini_decision_source, "_MAX_INLINE_PDF_BYTES", 3)
+    media = DecisionMedia(
+        kind,
+        "image/png" if kind == "image" else "application/pdf",
+        data=base64.b64encode(b"x" * size).decode("ascii"),
+    )
+    state = DecisionInput([media, media] if kind == "image" else [media])
+    handler = MagicMock(
+        return_value=httpx.Response(200, json={"answers": {"q0": BOOL_ANSWER}})
+    )
+    provider = provider_factory(handler)
+    if size == 4:
+        with pytest.raises(ValueError, match="exceeds"):
+            await provider.ask({"q": BOOLEAN}, state)
+        handler.assert_not_called()
+    else:
+        assert (await provider.ask({"q": BOOLEAN}, state))["q"].probability == 0.05
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize("count", [2, 10, 11, 255])
-@pytest.mark.parametrize("score_error", [0, 0.1])
+@pytest.mark.parametrize("score_error", [0, 0.0005, 0.002])
 async def test_score_levels_and_expectation_at_extended_boundaries(
     provider_factory, count, score_error
 ):
@@ -1087,7 +1127,7 @@ async def test_score_levels_and_expectation_at_extended_boundaries(
                 "answers": {
                     "q0": {
                         "type": "score",
-                        "score": 0.25 * (count - 1) + score_error,
+                        "score": (0.25 + score_error) * (count - 1),
                         "confidence": 0.75,
                         "legend": {str(i): s for i, s in enumerate(criteria)},
                         "probabilities": {
@@ -1100,13 +1140,13 @@ async def test_score_levels_and_expectation_at_extended_boundaries(
         )
 
     provider = provider_factory(handler)
-    if score_error:
+    if score_error > 0.001:
         with pytest.raises(DecisionError):
             await provider.ask({"q": DecisionScoreQuestion("Rate", criteria)})
     else:
         answer = (await provider.ask({"q": DecisionScoreQuestion("Rate", criteria)}))[
             "q"
         ]
-        assert answer.score == 0.25 * (count - 1)
+        assert answer.score == (0.25 + score_error) * (count - 1)
         assert len(answer.legend) == count
         assert len(answer.probabilities) == count

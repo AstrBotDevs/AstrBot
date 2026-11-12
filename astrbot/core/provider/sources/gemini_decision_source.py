@@ -36,8 +36,10 @@ _DEFAULT_TIMEOUT = 5.0
 _DEFAULT_TOTAL_TIMEOUT = 10.0
 _DEFAULT_MAX_CONCURRENCY = 4
 # Probabilities arrive as JSON floats; allow rounding drift when checking that
-# a distribution sums to one.
-_PROBABILITY_SUM_TOLERANCE = 1e-3
+# a distribution sums to one, including binary rounding at the boundary.
+_PROBABILITY_SUM_TOLERANCE = 1e-3 + 1e-12
+_MAX_INLINE_MEDIA_BYTES = 100_000_000
+_MAX_INLINE_PDF_BYTES = 50_000_000
 _MEDIA_MIME_TYPES = {
     "image": {
         "image/png",
@@ -117,6 +119,7 @@ def _build_input(state: DecisionState | None) -> str | list[dict[str, Any]]:
     if not isinstance(state.content, list) or not state.content:
         raise ValueError("DecisionInput requires a non-empty content list")
     content: list[dict[str, Any]] = []
+    inline_bytes = 0
     for part in state.content:
         if isinstance(part, str):
             if not part:
@@ -138,6 +141,15 @@ def _build_input(state: DecisionState | None) -> str | list[dict[str, Any]]:
         if part.data is not None:
             if not isinstance(part.data, str) or not part.data:
                 raise ValueError("DecisionMedia data must be non-empty base64")
+            # Check decoded size before allocating a decoded copy of the media.
+            media_bytes = len(part.data) // 4 * 3 - (
+                2 if part.data.endswith("==") else int(part.data.endswith("="))
+            )
+            inline_bytes += media_bytes
+            if part.type == "document" and media_bytes > _MAX_INLINE_PDF_BYTES:
+                raise ValueError("Gemini inline PDF exceeds 50 MB")
+            if inline_bytes > _MAX_INLINE_MEDIA_BYTES:
+                raise ValueError("Gemini inline media exceeds 100 MB per request")
             try:
                 base64.b64decode(part.data, validate=True)
             except ValueError:
@@ -442,14 +454,14 @@ class GeminiDecisionProvider(DecisionProvider):
 
         answers: dict[str, DecisionAnswer] = {}
         for name, head in heads_by_name.items():
-            question = questions[head]
+            question = payload_questions[name]
             raw_answer = raw_answers[name]
             if not isinstance(raw_answer, Mapping):
                 raise invalid_answer("decision")
             confidence = raw_answer.get("confidence")
             if not _is_unit_number(confidence):
                 raise invalid_answer("confidence")
-            if isinstance(question, DecisionBooleanQuestion):
+            if question["type"] == "noul":
                 probability = raw_answer.get("noul")
                 if not (
                     raw_answer.get("type") == "noul"
@@ -466,11 +478,11 @@ class GeminiDecisionProvider(DecisionProvider):
                 answers[head] = DecisionBooleanAnswer(probability=float(probability))
                 continue
 
-            kind = "choice" if isinstance(question, DecisionChoiceQuestion) else "score"
+            kind = question["type"]
             expected_keys = (
-                set(question.criteria)
-                if isinstance(question, DecisionChoiceQuestion)
-                else {str(index) for index in range(len(question.criteria))}
+                set(question["criteria"])
+                if kind == "choice"
+                else {str(index) for index in range(len(question["criteria"]))}
             )
             raw_probabilities = raw_answer.get("probabilities")
             if not (
@@ -498,7 +510,7 @@ class GeminiDecisionProvider(DecisionProvider):
             ):
                 raise invalid_answer(kind)
 
-            if isinstance(question, DecisionChoiceQuestion):
+            if kind == "choice":
                 choice = raw_answer.get("choice")
                 # Exact ties use UTF-8 byte order, independent of response order.
                 expected_choice = min(
@@ -516,20 +528,21 @@ class GeminiDecisionProvider(DecisionProvider):
             else:
                 score = raw_answer.get("score")
                 legend = {
-                    str(index): level for index, level in enumerate(question.criteria)
+                    str(index): level
+                    for index, level in enumerate(question["criteria"])
                 }
                 weighted_score = sum(
                     int(level) * value for level, value in probabilities.items()
                 )
                 if not (
                     _is_finite_number(score)
-                    and 0 <= score <= len(question.criteria) - 1
+                    and 0 <= score <= len(question["criteria"]) - 1
                     and raw_answer.get("legend") == legend
                     and math.isclose(
                         score,
                         weighted_score,
                         rel_tol=0.0,
-                        abs_tol=_PROBABILITY_SUM_TOLERANCE,
+                        abs_tol=_PROBABILITY_SUM_TOLERANCE * (len(legend) - 1),
                     )
                 ):
                     raise invalid_answer(kind)

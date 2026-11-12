@@ -181,7 +181,7 @@ has_damage = await self.context.decision.yes_no(
 )
 ```
 
-同一个 `state` 也可用于 `ask()` 和 `choose()`。每个 `DecisionMedia` 必须指定真实的 `mime_type`，并且只提供 `uri` 或 `data` 中的一项。内联媒体使用 `data=base64.b64encode(file_bytes).decode("ascii")`，不加 data URI 前缀。适配器不会自动读取本地路径或上传文件。
+同一个 `state` 也可用于 `ask()` 和 `choose()`。每个 `DecisionMedia` 必须指定真实的 `mime_type`，并且只提供 `uri` 或 `data` 中的一项。内联媒体使用 `data=base64.b64encode(file_bytes).decode("ascii")`，不加 data URI 前缀。适配器在解码前检查内联媒体大小：按解码后的字节数计算，每次请求合计不超过 100 MB，每个 PDF 不超过 50 MB。适配器不会自动读取本地路径或上传文件。
 
 | `type` | MIME 类型示例 | 输入方式 |
 | --- | --- | --- |

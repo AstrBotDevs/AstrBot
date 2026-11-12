@@ -182,7 +182,7 @@ has_damage = await self.context.decision.yes_no(
 )
 ```
 
-The same `state` works with `ask()` and `choose()`. Each `DecisionMedia` requires its actual `mime_type` and exactly one of `uri` or `data`. For inline media, set `data=base64.b64encode(file_bytes).decode("ascii")`, with no data-URI prefix. The adapter does not read local paths or upload files automatically.
+The same `state` works with `ask()` and `choose()`. Each `DecisionMedia` requires its actual `mime_type` and exactly one of `uri` or `data`. For inline media, set `data=base64.b64encode(file_bytes).decode("ascii")`, with no data-URI prefix. Before decoding, the adapter checks inline media sizes: up to 100 MB of decoded bytes per request and 50 MB per PDF. The adapter does not read local paths or upload files automatically.
 
 | `type` | Example MIME type | Input |
 | --- | --- | --- |
