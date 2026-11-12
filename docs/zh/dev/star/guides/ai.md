@@ -137,9 +137,45 @@ answers = await self.context.decision.ask(
 - `str` 或省略：作为文本输入。
 - `dict`，或元素全部为 `dict` 的 `list`：作为 `input_json` 数据发送。其中的 `role`、`content`、`image_url` 等键只是普通数据，不会被解释为消息历史或图片。
 - 包含其他类型元素的 `list`（如字符串列表）：序列化为 JSON 后作为文本输入发送。
+- `DecisionInput`：作为一条 user 消息发送，文本块转为 `input_text`，图片转为 `input_image`，保持原有顺序。详见下方“显式图片输入”。
 - 不支持的类型、含 `NaN`/`Infinity` 或无法 JSON 序列化的值：在发送前抛出 `ValueError`。
 
-首版不支持图片输入、消息/工具调用历史、问题内的多模态指令、提示缓存控制与 `safety_identifier`。模型对任一问题拒答（`refusal`）时，整批 `ask()` 抛出 `DecisionError`，不会当作否定、零分或空结果；`yes_no(default=...)` 的降级行为保持不变。
+#### 显式图片输入
+
+共享 `state` 可以使用 `DecisionInput` 让文本与多张图片交错排列，用法与下方 Gemini 示例相同，只需传入 `provider_id="openai_decision"`。OpenAI 不会在相邻文本块之间插入分隔符，请自行添加空格或换行。
+
+```py
+from astrbot.api.provider import DecisionInput, DecisionMedia
+
+state = DecisionInput(content=[
+    "Reference:\n",
+    DecisionMedia(type="image", mime_type="image/png", uri="https://example.com/ref.png"),
+    "\nCandidate:\n",
+    DecisionMedia(type="image", mime_type="image/jpeg", data=jpeg_base64),
+])
+```
+
+- 仅支持 `type="image"`，`mime_type` 须为图片的实际 `image/*` 类型，其他媒体类型会被拒绝。官方 Decisions 文档未列出支持的图片格式，具体格式由 OpenAI 服务端校验。
+- `uri` 和 `data` 必须且只能提供一个。`uri` 需为可公开访问的 HTTP(S) 图片地址；`data` 为不带前缀的 Base64，适配器会按 `mime_type` 组装成 `data:` URL。不支持 `file_id`、本地路径和 `data:` 形式的 `uri`。
+- 不支持 `resolution`：传入任何值都会抛出 `ValueError`，不会映射为 OpenAI 的 `detail`。图片 `detail` 使用接口默认值 `auto`。
+- 组装后的单个图片 URL 不超过 1 GiB（接口 schema 上限）。官方 Decisions 文档未单独列出图片大小与数量限制，可访问性、总请求大小与图片数量由 OpenAI 服务端校验。
+
+三种问题的 `instructions` 也可以传入 `DecisionInput`，为每个问题单独提供图片，例如共享参考图放在 `state`，每题放不同的候选图。转换与校验规则同上，问题中的图片与 `state` 中的图片共享请求的图片额度。纯文本 `instructions` 仍可直接传字符串；`yes_no()` 和 `choose()` 只接受文本问题，需要图片时请使用 `ask()`。
+
+```py
+answers = await self.context.decision.ask(
+    {
+        "match_a": DecisionBooleanQuestion(DecisionInput(content=[
+            "Does this candidate match the reference?\n",
+            DecisionMedia(type="image", mime_type="image/png", uri="https://example.com/a.png"),
+        ])),
+    },
+    state=DecisionInput(content=["Reference:\n", reference_image]),
+    provider_id="openai_decision",
+)
+```
+
+不支持消息/工具调用历史、提示缓存控制与 `safety_identifier`。模型对任一问题拒答（`refusal`）时，整批 `ask()` 抛出 `DecisionError`，不会当作否定、零分或空结果；`yes_no(default=...)` 的降级行为保持不变。
 
 ### 使用 Gemini Decisions
 
@@ -192,7 +228,7 @@ has_damage = await self.context.decision.yes_no(
 
 Gemini 接受公开或签名 HTTPS URL（每个外部 URL 最多 15 MB），以及 Files API 返回的 HTTPS URI；不支持 YouTube URL 或直接使用 `gs://` URI。图片和视频可选 `resolution="low"`、`"medium"` 或 `"high"`，图片还支持 `"ultra_high"`；音频和 PDF 不设置此字段。完整格式和大小限制见[官方输入说明](https://aistudio.google.com/docs/decisions-api#input)，实际文件格式、可访问性及请求和媒体大小限制由 Google 校验。
 
-显式输入结构不合法时，会在发送前抛出 `ValueError`；接口请求失败时抛出 `DecisionError`。媒体内容不接受工具调用、思考或对话历史块。当前 OpenAI 适配器会明确以 `ValueError` 拒绝 `DecisionInput`，仍应传入文本或业务 JSON。
+显式输入结构不合法时，会在发送前抛出 `ValueError`；接口请求失败时抛出 `DecisionError`。媒体内容不接受工具调用、思考或对话历史块。OpenAI 适配器只接受其中的图片，限制见上文“显式图片输入”。
 
 ## 定义 Tool
 

@@ -45,11 +45,12 @@ class DecisionChoiceQuestion:
     """A decision question with a fixed set of choices.
 
     Attributes:
-        instructions: The question or instruction evaluated by the model.
+        instructions: The question or instruction evaluated by the model. Providers
+            that support it also accept explicit DecisionInput content.
         criteria: Mapping of option IDs to descriptions. At least two entries are required.
     """
 
-    instructions: str
+    instructions: str | DecisionInput
     criteria: Mapping[str, str]
 
 
@@ -58,10 +59,11 @@ class DecisionBooleanQuestion:
     """A decision question that asks for the probability of a statement being true.
 
     Attributes:
-        instructions: The statement or question evaluated by the model.
+        instructions: The statement or question evaluated by the model. Providers
+            that support it also accept explicit DecisionInput content.
     """
 
-    instructions: str
+    instructions: str | DecisionInput
 
 
 @dataclass(frozen=True, slots=True)
@@ -69,12 +71,13 @@ class DecisionScoreQuestion:
     """A decision question scored against ordered levels.
 
     Attributes:
-        instructions: The question or instruction evaluated by the model.
+        instructions: The question or instruction evaluated by the model. Providers
+            that support it also accept explicit DecisionInput content.
         criteria: At least two level descriptions, ordered from lowest to highest.
             The maximum number of levels depends on the provider.
     """
 
-    instructions: str
+    instructions: str | DecisionInput
     criteria: list[str]
 
 

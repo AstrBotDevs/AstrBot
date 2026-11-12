@@ -138,9 +138,45 @@ How `state` is sent:
 - `str` or omitted: sent as text input.
 - `dict`, or a `list` whose items are all `dict`: sent as `input_json` data. Keys such as `role`, `content`, or `image_url` stay plain data and are never treated as message history or images.
 - A `list` with other item types, such as a list of strings: serialized as JSON and sent as text input.
+- `DecisionInput`: sent as one user message, with text blocks as `input_text` and images as `input_image`, in their original order. See "Explicit image input" below.
 - Unsupported types, `NaN`/`Infinity`, or values that are not JSON serializable: `ValueError` is raised before sending.
 
-The first version does not support image input, message or tool-call history, multimodal question instructions, prompt-cache controls, or `safety_identifier`. If the model refuses any question (`refusal`), the whole `ask()` call raises `DecisionError`; a refusal is never reported as false, a zero score, or an empty result. `yes_no(default=...)` keeps its fallback behavior.
+#### Explicit image input
+
+Shared `state` can use `DecisionInput` to interleave text with multiple images. Usage matches the Gemini example below; pass `provider_id="openai_decision"`. OpenAI does not insert separators between adjacent text blocks, so include your own spaces or newlines.
+
+```py
+from astrbot.api.provider import DecisionInput, DecisionMedia
+
+state = DecisionInput(content=[
+    "Reference:\n",
+    DecisionMedia(type="image", mime_type="image/png", uri="https://example.com/ref.png"),
+    "\nCandidate:\n",
+    DecisionMedia(type="image", mime_type="image/jpeg", data=jpeg_base64),
+])
+```
+
+- Only `type="image"` is supported, and `mime_type` must be the image's actual `image/*` type; other media types are rejected. The official Decisions documentation does not list supported image formats, so OpenAI validates the format.
+- Provide exactly one of `uri` or `data`. `uri` must be a publicly accessible HTTP(S) image URL; `data` is Base64 without a prefix, and the adapter builds a `data:` URL from `mime_type`. `file_id`, local paths, and `data:` values in `uri` are not supported.
+- `resolution` is not supported: any value raises `ValueError` and is never mapped to OpenAI's `detail`. Image `detail` uses the API default, `auto`.
+- Each resulting image URL is limited to 1 GiB (the API schema limit). The official Decisions documentation does not list separate image size or count limits; OpenAI validates accessibility, total request size, and image count.
+
+All three question types also accept `DecisionInput` as `instructions`, giving each question its own images; for example, put a shared reference image in `state` and a different candidate image in each question. The same conversion and validation rules apply, and question images share the request's image limits with images in `state`. Text-only `instructions` can remain a string. `yes_no()` and `choose()` accept text questions only; use `ask()` for images.
+
+```py
+answers = await self.context.decision.ask(
+    {
+        "match_a": DecisionBooleanQuestion(DecisionInput(content=[
+            "Does this candidate match the reference?\n",
+            DecisionMedia(type="image", mime_type="image/png", uri="https://example.com/a.png"),
+        ])),
+    },
+    state=DecisionInput(content=["Reference:\n", reference_image]),
+    provider_id="openai_decision",
+)
+```
+
+Message or tool-call history, prompt-cache controls, and `safety_identifier` are not supported. If the model refuses any question (`refusal`), the whole `ask()` call raises `DecisionError`; a refusal is never reported as false, a zero score, or an empty result. `yes_no(default=...)` keeps its fallback behavior.
 
 ### Using Gemini Decisions
 
@@ -193,7 +229,7 @@ The same `state` works with `ask()` and `choose()`. Each `DecisionMedia` require
 
 Gemini accepts public/signed HTTPS URLs (up to 15 MB per external URL) and HTTPS URIs returned by its Files API. YouTube URLs and direct `gs://` URIs are unsupported. Optional `resolution` supports `low`, `medium`, or `high` for images and video, plus `ultra_high` for images only; omit it for audio and PDF. See the [official input reference](https://aistudio.google.com/docs/decisions-api#input) for supported formats and size limits. Google checks the actual file format, availability, and request/media limits.
 
-Malformed explicit input is rejected with `ValueError` before sending; API failures raise `DecisionError`. Tool-call, thought, and conversation-history blocks are not accepted as media content. The current OpenAI adapter explicitly rejects `DecisionInput` with `ValueError`; use text/business JSON there.
+Malformed explicit input is rejected with `ValueError` before sending; API failures raise `DecisionError`. Tool-call, thought, and conversation-history blocks are not accepted as media content. The OpenAI adapter accepts images only; see "Explicit image input" above for its limits.
 
 ## Defining Tools
 

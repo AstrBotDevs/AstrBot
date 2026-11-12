@@ -125,6 +125,8 @@ class SystemOneDecisionProvider(DecisionProvider):
 
         payload_questions: dict[str, dict[str, Any]] = {}
         for head, question in questions.items():
+            if not isinstance(question.instructions, str):
+                raise ValueError(f"question {head} instructions must be a string")
             instructions = question.instructions.strip()
             if not instructions:
                 raise ValueError(f"question {head} must not be empty")
