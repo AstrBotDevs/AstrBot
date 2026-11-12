@@ -4542,7 +4542,16 @@ paths:
   /api/v1/stats:
     get:
       tags: [Stats]
-      summary: Get runtime statistics
+      summary: Get usage and runtime statistics
+      description: >-
+        Returns message totals, trends and platform rankings, existing process
+        statistics, daily_usage, and host-level system resources. offset_sec only
+        controls the rolling message window. daily_usage uses server-local calendar
+        days; tokens and distinct active sessions come from internal model calls,
+        and messages come from platform counters. Top-level cpu_percent is process
+        CPU normalized by CPU count, and memory values are in MiB. system reports
+        host CPU and memory, data-filesystem disk usage in bytes, and process uptime.
+        Only requested sections are computed and returned; omitting sections returns all fields.
       operationId: getStats
       x-astrbot-scope: system
       parameters:
@@ -4551,9 +4560,44 @@ paths:
           schema:
             type: integer
             default: 86400
+        - name: sections
+          in: query
+          description: >-
+            Comma-separated categories. messages returns message_count,
+            message_time_series and platform; daily_usage returns daily_usage;
+            process returns cpu_percent, memory, running, start_time and thread_count;
+            system returns system; instances returns platform_count, plugin_count
+            and plugins. Whitespace and duplicate categories are accepted.
+            Omit for all categories. Empty or unknown categories return HTTP 400.
+          schema:
+            type: string
+          example: daily_usage,system
       responses:
         "200":
-          $ref: "#/components/responses/Ok"
+          description: Usage and runtime statistics
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessEnvelope"
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        additionalProperties: true
+                        properties:
+                          daily_usage:
+                            type: object
+                            required: [today, yesterday]
+                            properties:
+                              today:
+                                $ref: "#/components/schemas/StatsDailyUsage"
+                              yesterday:
+                                $ref: "#/components/schemas/StatsDailyUsage"
+                          system:
+                            $ref: "#/components/schemas/StatsSystemResources"
+        "400":
+          description: Invalid sections parameter.
 
   /api/v1/stats/provider-tokens:
     get:
@@ -5691,6 +5735,47 @@ components:
         type: string
 
   schemas:
+    StatsSystemResources:
+      type: object
+      required: [uptime_seconds, cpu_percent, memory, disk]
+      properties:
+        uptime_seconds:
+          type: integer
+          minimum: 0
+        cpu_percent:
+          type: number
+        memory:
+          $ref: "#/components/schemas/StatsResourceUsage"
+        disk:
+          description: Usage of the filesystem containing the AstrBot data directory, or null if unavailable.
+          allOf:
+            - $ref: "#/components/schemas/StatsResourceUsage"
+          nullable: true
+    StatsResourceUsage:
+      type: object
+      required: [used, total, percent]
+      properties:
+        used:
+          type: integer
+          description: Used bytes.
+        total:
+          type: integer
+          description: Total bytes.
+        percent:
+          type: number
+    StatsDailyUsage:
+      type: object
+      required: [tokens, messages, active_sessions]
+      properties:
+        tokens:
+          type: integer
+          minimum: 0
+        messages:
+          type: integer
+          minimum: 0
+        active_sessions:
+          type: integer
+          minimum: 0
     BotCleanupTarget:
       type: string
       enum: [custom_rules, preferences, routing, cron_jobs, conversations, message_history, traces, stats]

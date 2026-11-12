@@ -1038,7 +1038,7 @@ export default {
 .config-workspace-shell > .config-toolbar-header {
   flex: 0 0 auto;
   width: min(100%, 940px);
-  margin: 0 auto 24px;
+  margin: 8px auto 24px;
   padding: 0 18px;
 }
 

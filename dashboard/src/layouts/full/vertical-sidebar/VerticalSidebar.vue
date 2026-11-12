@@ -354,7 +354,7 @@ function toggleSidebar() {
   top: 0 !important;
   height: 100dvh !important;
   border-right: 0 !important;
-  background: rgb(var(--v-theme-surface)) !important;
+  background: var(--astrbot-chrome-bg, rgb(var(--v-theme-surface))) !important;
   user-select: none;
 }
 
@@ -447,7 +447,7 @@ function toggleSidebar() {
 /* The header draws across the whole width, above the full-height sidebar. */
 :global(.leftSidebar .sidebar-container) {
   /* Seat the brand's top edge at the content area's top edge, fully below the toolbar. */
-  padding-top: calc(var(--astrbot-toolbar-height, 40px) - 10px);
+  padding-top: calc(var(--astrbot-toolbar-height, 42px) - 10px);
   box-sizing: border-box;
 }
 
@@ -458,10 +458,10 @@ function toggleSidebar() {
 }
 
 :global(html:not([data-astrbot-desktop-platform='macos']) .leftSidebar .dashboard-sidebar-brand) {
-  min-height: var(--astrbot-toolbar-height, 40px);
+  min-height: var(--astrbot-toolbar-height, 42px);
 }
 
-/* On macOS the sidebar stays transparent; the shared tint is painted behind it. */
+/* The shared tint is painted behind the sidebar; avoid stacking another layer. */
 :global(html[data-astrbot-desktop-platform='macos'] .leftSidebar) {
   background: transparent !important;
 }
@@ -469,7 +469,7 @@ function toggleSidebar() {
 /* A temporary (mobile) drawer floats above the page, so the vibrancy
    transparency would let content bleed through; keep it opaque instead. */
 :global(html[data-astrbot-desktop-platform='macos'] .leftSidebar.v-navigation-drawer--temporary) {
-  background: rgb(var(--v-theme-surface)) !important;
+  background: var(--astrbot-chrome-bg, rgb(var(--v-theme-surface))) !important;
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.16) !important;
   z-index: 1007 !important;
 }

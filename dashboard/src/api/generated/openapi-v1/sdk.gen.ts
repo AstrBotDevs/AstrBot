@@ -2714,7 +2714,8 @@ export const exportConversations = <ThrowOnError extends boolean = false>(option
 };
 
 /**
- * Get runtime statistics
+ * Get usage and runtime statistics
+ * Returns message totals, trends and platform rankings, existing process statistics, daily_usage, and host-level system resources. offset_sec only controls the rolling message window. daily_usage uses server-local calendar days; tokens and distinct active sessions come from internal model calls, and messages come from platform counters. Top-level cpu_percent is process CPU normalized by CPU count, and memory values are in MiB. system reports host CPU and memory, data-filesystem disk usage in bytes, and process uptime. Only requested sections are computed and returned; omitting sections returns all fields.
  */
 export const getStats = <ThrowOnError extends boolean = false>(options?: OptionsLegacyParser<GetStatsData, ThrowOnError>) => {
     return (options?.client ?? client).get<GetStatsResponse, GetStatsError, ThrowOnError>({
