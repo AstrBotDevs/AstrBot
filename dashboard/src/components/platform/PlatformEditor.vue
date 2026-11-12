@@ -289,14 +289,9 @@
               icon="mdi-delete-outline"
               size="small"
               variant="text"
-              :aria-label="tm('workspace.routes.removeProfile')"
-              :title="tm('workspace.routes.removeProfile')"
-              :disabled="!binding.configId"
-              @click="
-                binding.overrideCount
-                  ? (binding.configId = '')
-                  : simpleBindings.splice(index, 1)
-              "
+              :aria-label="tm('workspace.routes.deleteMapping')"
+              :title="tm('workspace.routes.deleteMapping')"
+              @click="simpleBindings.splice(index, 1)"
             />
           </div>
         </div>
@@ -749,7 +744,7 @@ async function initialize(platform, preserveDraft = false) {
         (binding) => binding.umo === umo,
       );
       if (index >= 0) {
-        if (!after.has(umo) && !simpleBindings.value[index].overrideCount)
+        if (!after.has(umo))
           simpleBindings.value.splice(index, 1);
         else simpleBindings.value[index].configId = after.get(umo) || "";
       } else if (after.has(umo)) {
@@ -908,6 +903,11 @@ async function save() {
     let nextRoutingTable = null;
     const savedRoutes = JSON.parse(initialRouteSnapshot.value);
     const currentRoutes = JSON.parse(currentRouteSnapshot.value);
+    const deletedSessionUmos = new Set(
+      savedRoutes.simpleBindings
+        .filter(({ umo }) => !boundSessionSet.value.has(umo))
+        .map(({ umo }) => umo),
+    );
     delete savedRoutes.simpleBindings;
     delete currentRoutes.simpleBindings;
     const routingChanged =
@@ -925,7 +925,8 @@ async function save() {
           sessionChanges[umo] = binding.configId;
       }
       for (const umo of Object.keys(savedSessionBindings.value)) {
-        if (!(umo in nextSessionBindings)) sessionChanges[umo] = null;
+        if (!(umo in nextSessionBindings) && !deletedSessionUmos.has(umo))
+          sessionChanges[umo] = null;
       }
       const retainedEntries = Object.entries(fullRoutingTable.value).filter(
         ([pattern]) => {
@@ -946,7 +947,8 @@ async function save() {
         if (
           parsed?.platform === oldPlatformId &&
           isExactSessionPattern(parsed) &&
-          !(pattern in sessionChanges)
+          !(pattern in sessionChanges) &&
+          !deletedSessionUmos.has(pattern)
         ) {
           const target = rewritePatternPlatform(pattern, newPlatformId);
           routePatterns.add(target);
@@ -990,6 +992,14 @@ async function save() {
         rule_key: "config_overrides",
         rule_value: {},
         profile_id: profileId,
+      });
+      if (result.data.status !== "ok") throw new Error(result.data.message);
+      delete fullRoutingTable.value[umo];
+    }
+    for (const umo of deletedSessionUmos) {
+      const result = await sessionApi.deleteRules({
+        umo,
+        rule_key: "config_binding",
       });
       if (result.data.status !== "ok") throw new Error(result.data.message);
       delete fullRoutingTable.value[umo];

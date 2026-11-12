@@ -20,7 +20,7 @@
 - Use standard dialog actions for next, save, and restore-inheritance controls, outside the scrollable settings content.
 - Show the blacklist under Access Control, and hide the profile's Disabled plugins field when its list is empty.
 - Replace Add mapping’s Next step with a two-pane editor: reuse the session selector for multiple sessions, or select groups, on the left and edit the destination on the right. Batch overrides apply only explicitly edited fields and preserve other session settings. Stack panes on narrow screens.
-- Include override-only sessions on the Bots page, with their override count and routing inheritance. Removing a profile assignment retains overrides.
+- Include override-only sessions on the Bots page, with their override count and routing inheritance. Selecting Follow config routing retains overrides. The trash button removes the entire mapping, including overrides, when the bot editor is saved.
 - Replace the session editor’s Blocked sessions list with Session status (Follow profile / Enabled / Stopped). Keep blacklist lists in profile configuration; session status updates each target’s own blacklist while retaining unrelated entries.
 - Explain profile selection and session override priority below the mappings dialog title, including the former Custom Rules entry point. Place Session status first in the override editor.
 - Add session wake-prefix overrides using the existing `wake_prefix` key, including whole-list replacement and restoration to the profile. Resolve wake prefixes and additional AI prefix normalization per session.

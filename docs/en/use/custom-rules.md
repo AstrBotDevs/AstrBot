@@ -49,7 +49,7 @@ The settings list scrolls independently. **Restore all inheritance** and **Save 
 
 ![Override editor and dialog actions](./images/custom-rules-overrides-en.png)
 
-The Bots page also lists sessions that only have overrides, showing **Follow configuration routing** and an override count. Restoring routing removes the profile assignment while preserving overrides.
+The Bots page also lists sessions that only have overrides, showing **Follow configuration routing** and an override count. On the Bots page, selecting **Follow config routing** in the profile dropdown keeps overrides. The trash button instead removes the entire mapping from the draft, including override-only sessions. **Save Changes** deletes its profile assignment, overrides, and exact-session route together. Leaving without saving does not submit the deletion.
 
 Click **Need custom settings for a session?** beside the session profile instructions to open the same mappings dialog directly. Closing it refreshes the bot's mappings while preserving unsaved bot settings and mapping drafts.
 

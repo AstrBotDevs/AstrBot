@@ -49,7 +49,7 @@
       },
       "followRouting": "設定ルーティングに従う",
       "overrideCount": "{count} 件の上書き",
-      "removeProfile": "ルーティングに従う（上書きは保持）"
+      "deleteMapping": "マッピングを削除（上書き項目を含む）"
     }
   },
   "viewWebhook": "Webhook URL を表示",

@@ -49,7 +49,7 @@
       },
       "followRouting": "跟随配置路由",
       "overrideCount": "{count} 项覆盖",
-      "removeProfile": "恢复跟随配置路由（保留覆盖项）"
+      "deleteMapping": "删除映射（包含覆盖项）"
     }
   },
   "viewWebhook": "查看 Webhook 链接",

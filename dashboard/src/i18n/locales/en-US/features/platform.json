@@ -49,7 +49,7 @@
       },
       "followRouting": "Follow configuration routing",
       "overrideCount": "{count} overrides",
-      "removeProfile": "Follow routing (keep overrides)"
+      "deleteMapping": "Delete mapping (including overrides)"
     }
   },
   "viewWebhook": "View Webhook URL",
