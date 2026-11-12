@@ -660,18 +660,25 @@ class Context:
             raise ValueError("返回的 Provider 不是 STTProvider 类型")
         return prov
 
-    def get_config(self, umo: str | None = None) -> AstrBotConfig:
+    def get_config(
+        self, umo: str | None = None, *, snapshot: bool = False
+    ) -> AstrBotConfig:
         """Read the default profile or a session's effective configuration.
 
         Args:
             umo: Unified message origin of the session to resolve.
+            snapshot: Resolve a fresh, independent configuration for a new
+                pipeline execution, bypassing any active message snapshot.
 
         Returns:
-            The shared default profile when umo is omitted. For the active
+            A new independent configuration when snapshot is True. Otherwise,
+            the shared default profile when umo is omitted. For the active
             message's UMO, returns its pipeline configuration snapshot; other
             sessions resolve their current profiles and overrides normally.
 
         """
+        if snapshot:
+            return self.astrbot_config_mgr.get_conf(umo, snapshot=True)
         if not umo:
             # 使用默认配置
             return self._config

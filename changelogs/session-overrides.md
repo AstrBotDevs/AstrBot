@@ -5,6 +5,7 @@
 - Share model overrides between commands and the editor. New or switched conversation histories within a UMO keep its overrides.
 - Remove the built-in `/persona` command; manage session personas and restore inheritance through **Config → Manage session mappings → Overrides → Persona**.
 - Remove the unused internal `SessionServiceManager` and `SessionPluginManager` classes. Runtime checks read effective session configuration; writes use the shared override API.
+- Build message configuration snapshots with one full copy, reusing the independent override result instead of copying it again. Preserve isolation between concurrent messages and prevent snapshots from being saved as profiles.
 - Add `disabled_plugins` and `platform_settings.id_blacklist` to profiles. Lists replace inherited lists, including explicit empty lists.
 - Migrate legacy rules and current conversation personas; move remarks into UMO aliases without replacing existing aliases. Remove the unused session Rerank toggle and field. Preserve groups, conversation selection, variables, and unrelated preferences.
 - Preserve knowledge-base IDs during migration, including unavailable instances; recognize both names and IDs in the knowledge-base selector.

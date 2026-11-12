@@ -85,6 +85,50 @@ def make_message():
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("has_overrides", [False, True])
+async def test_pipeline_copies_configuration_once_per_message(
+    pipeline_environment, make_message, has_overrides,
+):
+    """Visit nested profile data only once while keeping same-UMO messages isolated."""
+    acm, ctx, scheduler = pipeline_environment
+    copies = []
+
+    class TrackedConfig(dict):
+        def __deepcopy__(self, memo):
+            copies.append(self)
+            return TrackedConfig(deepcopy(dict(self), memo))
+
+    acm.default_conf["plugin_config"] = TrackedConfig({"items": ["base"]})
+    if has_overrides:
+        await overrides.update_overrides(UMO, {"wake_prefix": ["!"]})
+    snapshots = []
+    ready = asyncio.Event()
+
+    async def process(event):
+        config = ctx.astrbot_config
+        assert config is acm.get_conf(UMO)
+        assert config["plugin_config"]["items"] == ["base"]
+        config["plugin_config"]["items"].append("local")
+        snapshots.append(config)
+        if len(snapshots) == 2:
+            ready.set()
+        await asyncio.wait_for(ready.wait(), 2)
+        assert config["plugin_config"]["items"] == ["base", "local"]
+        assert config._session_override_paths == (
+            frozenset({"wake_prefix"}) if has_overrides else frozenset()
+        )
+        with pytest.raises(ValueError, match="session override"):
+            config.save_config()
+
+    scheduler.stages = [SimpleNamespace(process=process)]
+    await asyncio.gather(scheduler.execute(make_message()), scheduler.execute(make_message()))
+    assert len(copies) == 2
+    assert snapshots[0] is not snapshots[1]
+    assert acm.default_conf["plugin_config"]["items"] == ["base"]
+    assert ctx.astrbot_config is acm.default_conf
+
+
+@pytest.mark.asyncio
 async def test_pipeline_config_isolates_concurrent_messages_and_ai_gate(
     pipeline_environment, make_message,
 ):
