@@ -26,28 +26,6 @@ These paths use the current default sidebar with a fixed menu order. Extension i
 
 Old log, trace, conversation, and statistics URLs still redirect to the corresponding tabs. Agent runners are now saved in each profile; they are no longer created as model providers. See [Agent Execution Mode](./agent-runner.md) for the setup steps.
 
-## Overview
-
-Overview and Data & Logs → Statistics share `GET /api/v1/stats`. The response adds `daily_usage.today`, `daily_usage.yesterday`, and host-level `system` resources while preserving the existing process statistics and message trends. `offset_sec` only changes the rolling message window, not the calendar-day totals. The separate `/api/v1/stats/overview` endpoint proposed during development has been removed.
-
-Use the comma-separated `sections` query parameter to compute and return only the categories you need. Omitting it returns all categories. Empty or unknown categories return HTTP 400; whitespace and duplicate categories are accepted.
-
-| Section | Returned fields |
-| --- | --- |
-| `messages` | `message_count`, `message_time_series`, `platform`: total messages, rolling trends and platform rankings |
-| `daily_usage` | `daily_usage`: today's and yesterday's tokens, messages and distinct active sessions |
-| `process` | `cpu_percent`, `memory`, `running`, `start_time`, `thread_count`: process statistics; the legacy `memory.system` field is total host memory in MiB |
-| `system` | `system`: host CPU, memory and data-filesystem disk usage, plus process uptime |
-| `instances` | `platform_count`, `plugin_count`, `plugins`: platform and plugin inventory |
-
-Overview requests `/api/v1/stats?sections=daily_usage,system`. Statistics requests `/api/v1/stats?sections=messages,process,instances&offset_sec=86400`. Unrequested database queries, CPU sampling and instance enumeration are skipped; response field names remain unchanged.
-
-**Welcome → Overview** is the new sidebar label; `/welcome` remains available. The page shows a time-of-day greeting, today's tokens, messages, and active sessions, compared with the entire previous day in the server's local timezone. Tokens and active sessions come from internal agent model calls; active sessions count distinct session sources. Message totals come from platform counters. When yesterday's value is zero, new usage is labelled **New activity** rather than an infinite percentage. The page refreshes every 30 seconds while visible.
-
-A compact system status bar sits below the daily statistics and above Quick setup and Resources. It shows AstrBot process uptime, host CPU and memory usage, and disk usage for the filesystem containing the data directory. The status button beside the page title shows **Running normally**, or **x issues** when bots have recorded errors, counting each affected bot once. Click it to see bot IDs, error counts, the latest error and timestamp, and expandable stack traces. **Manage bots** opens the bot page. A failed status request displays **Status unavailable** instead of a healthy result.
-
-**Quick setup** retains the model and bot configuration dialogs. Completed steps remain clickable. The computer-access step opens a permission dialog with an explanation of its scope. **Resources** links to GitHub, documentation, and Afdian. The layout follows the selected primary color and adapts to narrow screens.
-
 ## Documentation Navigation
 
 The **Usage → Plugins** documentation group contains Plugins, MCP, and Skills. **Usage → AstrBot Built-in AI** contains Agent Sandbox, SubAgent Orchestration, Proactive Capabilities, Web Search, Knowledge Base, and Context Compression. Their URLs remain unchanged.
