@@ -23,6 +23,7 @@ from PIL import Image as PILImage
 import astrbot.dashboard.services.config_service as config_service
 import astrbot.dashboard.services.stat_service as stat_service
 from astrbot.core import file_token_service
+from astrbot.core.star.plugin_categories import PLUGIN_CATEGORY_SLUGS
 from astrbot.core.utils import llm_metadata
 from astrbot.dashboard.api.app import create_dashboard_asgi_app
 from astrbot.dashboard.api.backups import download_backup as download_backup_route
@@ -947,6 +948,7 @@ def fake_core_lifecycle():
         logo_path=None,
         support_platforms=[],
         astrbot_version="",
+        category=None,
         i18n={},
         root_dir_name=None,
         star_handler_full_names=[],
@@ -2551,6 +2553,25 @@ async def test_v1_plugins_accept_api_key(
     data = response.json()
     assert data["status"] == "ok"
     assert [item["name"] for item in data["data"]] == ["astrbot_plugin_demo"]
+
+
+@pytest.mark.asyncio
+async def test_v1_plugin_market_categories_lists_canonical_slugs(
+    asgi_client: httpx.AsyncClient,
+    fake_db: FakeDb,
+):
+    raw_key = "abk_fastapi_v1_plugin_categories"
+    fake_db.add_api_key(raw_key, scopes=["plugin"])
+
+    response = await asgi_client.get(
+        "/api/v1/plugins/market/categories",
+        headers={"X-API-Key": raw_key},
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "ok"
+    assert data["data"]["categories"] == list(PLUGIN_CATEGORY_SLUGS)
 
 
 @pytest.mark.asyncio

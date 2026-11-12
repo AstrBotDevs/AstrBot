@@ -19,6 +19,7 @@ desc: Detailed description of your plugin's features, usage, etc.  # Detailed pl
 version: 1.0.0                               # Plugin version (follow semantic versioning)
 author: Author Name                          # Author name
 repo: https://github.com/your-name/repo      # Plugin repository URL
+# category: tools                            # (Optional) Marketplace category, see docs below
 # astrbot_version: ">=4.17.0"                # (Optional) AstrBot version range
 # support_platforms:                         # (Optional) Supported platform adapter list
 #   - aiocqhttp

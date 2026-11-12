@@ -52,6 +52,7 @@ from .command_management import sync_command_configs
 from .context import Context
 from .error_messages import format_plugin_error
 from .filter.permission import COMMAND_PERMISSION_TYPES, PermissionTypeFilter
+from .plugin_categories import normalize_plugin_category
 from .star import star_map, star_registry
 from .star_handler import EventType, star_handlers_registry
 from .updater import PLUGIN_METADATA_FILENAMES, _PluginUpdater
@@ -552,6 +553,10 @@ class PluginManager:
                     metadata["astrbot_version"]
                     if isinstance(metadata.get("astrbot_version"), str)
                     else None
+                ),
+                # The metadata was validated above, so do not warn twice.
+                category=normalize_plugin_category(
+                    metadata.get("category"), warn=False
                 ),
                 # "views" is the preferred key; "pages" stays as an alias.
                 views=metadata["views"]
@@ -1199,6 +1204,7 @@ class PluginManager:
                             metadata.display_name = metadata_yaml.display_name
                             metadata.support_platforms = metadata_yaml.support_platforms
                             metadata.astrbot_version = metadata_yaml.astrbot_version
+                            metadata.category = metadata_yaml.category
                             metadata.views = metadata_yaml.views
                             metadata.i18n = metadata_yaml.i18n
                     except Exception as e:

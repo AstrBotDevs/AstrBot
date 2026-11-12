@@ -1413,6 +1413,11 @@ export const pluginApi = {
   sources() {
     return typed<any>(openApiV1.listPluginSources());
   },
+  marketCategories() {
+    return typed<{ categories: string[] }>(
+      openApiV1.listPluginMarketCategories(),
+    );
+  },
   replaceSources(sources: OpenConfig[]) {
     return typed<OpenConfig>(
       openApiV1.replacePluginSources({ body: { sources: sources as any } }),

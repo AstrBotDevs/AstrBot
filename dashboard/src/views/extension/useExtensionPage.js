@@ -213,8 +213,23 @@ export const useExtensionPage = (initialTab = "installed") => {
   const sortOrder = ref("desc"); // desc (降序) or asc (升序)
   const randomPluginNames = ref([]);
   const marketCategoryFilter = ref("all");
+  // Canonical slug order served by the backend; empty until it loads.
+  const marketCategorySlugs = ref([]);
 
   // 插件市场拼音搜索
+
+  const loadMarketCategories = async () => {
+    try {
+      const res = await pluginApi.marketCategories();
+      const slugs = res.data?.data?.categories;
+      marketCategorySlugs.value = Array.isArray(slugs)
+        ? slugs.map((slug) => String(slug || "").trim()).filter(Boolean)
+        : [];
+    } catch (error) {
+      console.warn("Failed to load plugin market categories:", error);
+      marketCategorySlugs.value = [];
+    }
+  };
 
   const normalizeMarketCategory = (rawCategory) => {
     const normalized = String(rawCategory || "")
@@ -223,31 +238,28 @@ export const useExtensionPage = (initialTab = "installed") => {
     if (!normalized) {
       return "other";
     }
-    return normalized.replace(/[\s-]+/g, "_");
+    const slug = normalized.replace(/[\s-]+/g, "_");
+    // Unknown slugs collapse into "other" so that a typo or an ad-hoc value in
+    // a marketplace index cannot create a one-off filter entry. An empty
+    // vocabulary means the canonical list is unknown (still loading, or an
+    // older backend), not that nothing is valid, so the discovered values are
+    // kept: folding them into "other" would leave the filter with one category.
+    if (
+      marketCategorySlugs.value.length > 0 &&
+      !marketCategorySlugs.value.includes(slug)
+    ) {
+      return "other";
+    }
+    return slug;
   };
 
-  const getMarketCategoryLabel = (key, rawCategory = "") => {
-    const fallbackMap = {
-      all: "All",
-      ai_tools: "AI Tools",
-      entertainment: "Entertainment",
-      productivity: "Productivity",
-      integrations: "Integrations",
-      utilities: "Utilities",
-      other: "Other",
-    };
-    const i18nKey = `market.categories.${key}`;
-    const translated = tm(i18nKey);
+  const getMarketCategoryLabel = (key) => {
+    const translated = tm(`market.categories.${key}`);
     if (translated && !translated.includes("[MISSING:")) {
       return translated;
     }
-    if (fallbackMap[key]) {
-      return fallbackMap[key];
-    }
-    const normalizedRaw = String(rawCategory || "").trim();
-    if (normalizedRaw) {
-      return normalizedRaw;
-    }
+    // A missing label still renders as words instead of the raw identifier, so
+    // an ad-hoc marketplace category never shows up as a slug.
     return key
       .split(/[_-]+/)
       .filter(Boolean)
@@ -265,10 +277,7 @@ export const useExtensionPage = (initialTab = "installed") => {
         categoryData.count += 1;
         continue;
       }
-      categories.set(categoryKey, {
-        count: 1,
-        rawLabel: String(plugin?.category || "").trim(),
-      });
+      categories.set(categoryKey, { count: 1 });
     }
 
     return categories;
@@ -294,13 +303,21 @@ export const useExtensionPage = (initialTab = "installed") => {
       },
     ];
 
-    for (const [
-      categoryKey,
-      categoryData,
-    ] of marketCategoryMeta.value.entries()) {
+    // Prefer the backend order so the filter reads the same everywhere; fall
+    // back to discovery order when the vocabulary is unavailable.
+    const orderedKeys =
+      marketCategorySlugs.value.length > 0
+        ? marketCategorySlugs.value
+        : [...marketCategoryMeta.value.keys()];
+
+    for (const categoryKey of orderedKeys) {
+      const categoryData = marketCategoryMeta.value.get(categoryKey);
+      if (!categoryData) {
+        continue;
+      }
       items.push({
         value: categoryKey,
-        label: getMarketCategoryLabel(categoryKey, categoryData.rawLabel),
+        label: getMarketCategoryLabel(categoryKey),
         count: categoryData.count,
       });
     }
@@ -2366,6 +2383,10 @@ export const useExtensionPage = (initialTab = "installed") => {
     }
     loading_.value = true;
     try {
+      // Not awaited: the category vocabulary only refines ordering and the
+      // unknown-slug fallback, so a slow or stalled request must not hold back
+      // the plugin lists (the filter reacts to the ref once it arrives).
+      void loadMarketCategories();
       await getExtensions({ withLoading: false });
 
       // 检查是否有 open_config 参数

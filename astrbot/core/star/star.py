@@ -75,6 +75,11 @@ class StarMetadata:
     views: list[dict] = field(default_factory=list)
     """插件注册的 Views 元数据。"""
 
+    # Appended last on purpose: StarMetadata is constructed positionally by
+    # external consumers, so new fields must not shift existing ones.
+    category: str | None = None
+    """Plugin market category slug declared in metadata (None when undeclared)."""
+
     @property
     def plugin_id(self) -> str:
         p_name = (self.name or "unknown").lower().replace("/", "_")

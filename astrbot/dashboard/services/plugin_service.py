@@ -660,6 +660,7 @@ class PluginService:
             "logo": logo_url,
             "support_platforms": plugin.support_platforms,
             "astrbot_version": plugin.astrbot_version,
+            "category": plugin.category,
             "installed_at": installed_at,
             "i18n": plugin.i18n,
             "root_dir_name": plugin.root_dir_name,
