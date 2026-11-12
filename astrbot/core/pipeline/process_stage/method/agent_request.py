@@ -40,7 +40,7 @@ class AgentRequestSubStage(Stage):
             if provider_wake_prefix.startswith(prefix):
                 provider_wake_prefix = provider_wake_prefix[len(prefix) :]
 
-        agent_config = self.config.get("agent", {})
+        agent_config = config.get("agent", {})
         runtime_name = (
             event.agent_session.runtime
             if isinstance(event, AgentWakeupEvent) and event.agent_session is not None

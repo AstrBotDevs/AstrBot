@@ -158,10 +158,8 @@ async def _close_runner_if_supported(runner: "BaseAgentRunner") -> None:
 class ThirdPartyAgentSubStage(Stage):
     async def initialize(self, ctx: PipelineContext) -> None:
         self.ctx = ctx
-        self.conf = ctx.astrbot_config
-        agent_runner = self.conf["agent"]
+        agent_runner = ctx.astrbot_config["agent"]
         self.runner_type = agent_runner["runtime"]
-        self.runner_config = agent_runner["config"]
         settings = ctx.astrbot_config["provider_settings"]
         self.streaming_response: bool = settings["streaming_response"]
         self.unsupported_streaming_strategy: str = settings[
@@ -390,7 +388,7 @@ class ThirdPartyAgentSubStage(Stage):
                     tool_call_timeout=120,
                 ),
                 agent_hooks=MAIN_AGENT_HOOKS,
-                provider_config=self.runner_config,
+                provider_config=self.ctx.astrbot_config["agent"]["config"],
                 streaming=streaming_response,
             )
 

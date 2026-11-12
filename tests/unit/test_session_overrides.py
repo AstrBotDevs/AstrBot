@@ -14,9 +14,18 @@ from astrbot.core.config import AstrBotConfig
 from astrbot.core.config.default import DEFAULT_CONFIG
 from astrbot.core.conversation_mgr import ConversationManager
 from astrbot.core.db.migration import migra_session_overrides as migration
+from astrbot.core.event_bus import EventBus
 from astrbot.core.persona_mgr import PersonaManager
+from astrbot.core.pipeline.context import PipelineContext
+from astrbot.core.pipeline.process_stage.stage import ProcessStage
+from astrbot.core.pipeline.scheduler import PipelineScheduler
 from astrbot.core.pipeline.session_status_check.stage import SessionStatusCheckStage
+from astrbot.core.platform.astr_message_event import AstrMessageEvent
+from astrbot.core.platform.astrbot_message import AstrBotMessage, MessageMember
+from astrbot.core.platform.message_type import MessageType
+from astrbot.core.platform.platform_metadata import PlatformMetadata
 from astrbot.core.provider.entities import ProviderType
+from astrbot.core.star.context import Context
 from astrbot.core.provider.manager import ProviderManager
 from astrbot.core.umop_config_router import UmopConfigRouter
 from astrbot.core.utils.shared_preferences import SharedPreferences
@@ -42,6 +51,191 @@ async def override_environment(temp_db, tmp_path, monkeypatch):
     acm.abconf_data = {}
     yield prefs, acm, temp_db
     await prefs.close()
+
+
+@pytest.fixture
+def pipeline_environment(override_environment):
+    """Provide a real pipeline context and configuration access without plugins."""
+    _, acm, _ = override_environment
+    plugin_context = object.__new__(Context)
+    plugin_context._config = acm.default_conf
+    plugin_context.astrbot_config_mgr = acm
+    ctx = PipelineContext(
+        acm.default_conf, SimpleNamespace(context=plugin_context), "default"
+    )
+    return acm, ctx, PipelineScheduler(ctx)
+
+
+@pytest.fixture
+def make_message():
+    """Create independent group messages for concurrent and nested executions."""
+    def create(session_id="42"):
+        message = AstrBotMessage()
+        message.type = MessageType.GROUP_MESSAGE
+        message.group_id = session_id
+        message.sender = MessageMember(user_id="alice")
+        message.message = []
+        event = AstrMessageEvent(
+            "hello", message, PlatformMetadata("aiocqhttp", "test", "test"), session_id
+        )
+        event.is_at_or_wake_command = True
+        event.set_extra("activated_handlers", [])
+        return event
+    return create
+
+
+@pytest.mark.asyncio
+async def test_pipeline_config_isolates_concurrent_messages_and_ai_gate(
+    pipeline_environment, make_message,
+):
+    acm, ctx, scheduler = pipeline_environment
+    acm.default_conf["provider_settings"]["enable"] = False
+    await overrides.update_overrides(UMO, {"provider_settings.enable": True})
+    events = [make_message(), make_message("43")]
+    snapshots = {}
+    both_started = asyncio.Event()
+    invoked = []
+
+    async def inspect(event):
+        config = ctx.astrbot_config
+        assert config is ctx.plugin_manager.context.get_config(event.unified_msg_origin)
+        assert acm.get_conf(None) is acm.default_conf
+        assert not hasattr(event, "effective_config")
+        snapshots[event.unified_msg_origin] = config
+        if len(snapshots) == 2:
+            both_started.set()
+        await asyncio.wait_for(both_started.wait(), 2)
+        assert ctx.astrbot_config is config
+        config["wake_prefix"].append(event.session_id)
+        assert config["wake_prefix"][-1] == event.session_id
+        assert len(config["wake_prefix"]) == len(acm.default_conf["wake_prefix"]) + 1
+        with pytest.raises(ValueError, match="session override"):
+            await config.save_config_async()
+
+    async def invoke(event):
+        invoked.append(event.unified_msg_origin)
+        yield
+
+    process = ProcessStage()
+    process.ctx = ctx
+    process.agent_sub_stage = SimpleNamespace(process=invoke)
+    scheduler.stages = [SimpleNamespace(process=inspect), process]
+    await asyncio.gather(*(scheduler.execute(event) for event in events))
+    assert invoked == [UMO]
+    assert snapshots[UMO] is not snapshots[events[1].unified_msg_origin]
+    assert ctx.astrbot_config is acm.default_conf
+    assert acm.default_conf["provider_settings"]["enable"] is False
+
+
+@pytest.mark.asyncio
+async def test_pipeline_snapshot_stays_stable_until_next_message(
+    pipeline_environment, make_message,
+):
+    acm, ctx, scheduler = pipeline_environment
+    acm.default_conf["provider_settings"]["enable"] = False
+    entered = False
+
+    async def process(event):
+        nonlocal entered
+        snapshot = ctx.astrbot_config
+        if entered:
+            assert snapshot["provider_settings"]["enable"] is True
+            return
+        entered = True
+        assert snapshot["provider_settings"]["enable"] is False
+        await overrides.update_overrides(UMO, {"provider_settings.enable": True})
+        assert acm.get_conf(UMO) is snapshot
+        assert snapshot["provider_settings"]["enable"] is False
+        assert snapshot._session_override_paths == frozenset()
+        # A new nested message for the same UMO gets fresh values; its parent
+        # retains the original snapshot when the nested execution returns.
+        await scheduler.execute(make_message())
+        assert ctx.astrbot_config is snapshot
+        assert acm.get_conf(UMO) is snapshot
+
+    scheduler.stages = [SimpleNamespace(process=process)]
+    await scheduler.execute(make_message())
+    assert ctx.astrbot_config is acm.default_conf
+    assert acm.get_conf(UMO)["provider_settings"]["enable"] is True
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("completion", ["success", "error", "cancel"])
+async def test_pipeline_scope_cleans_up_including_inherited_tasks(
+    pipeline_environment, make_message, completion,
+):
+    acm, ctx, scheduler = pipeline_environment
+    await overrides.update_overrides(UMO, {"wake_prefix": ["old"]})
+    started = asyncio.Event()
+    released = asyncio.Event()
+    children = []
+
+    async def inherited():
+        assert ctx.astrbot_config["wake_prefix"] == ["old"]
+        started.set()
+        await released.wait()
+        assert ctx.astrbot_config is acm.default_conf
+        assert acm.get_conf(UMO)["wake_prefix"] == ["new"]
+
+    async def process(event):
+        children.append(asyncio.create_task(inherited()))
+        await started.wait()
+        if completion == "error":
+            raise RuntimeError("failed")
+        if completion == "cancel":
+            raise asyncio.CancelledError
+
+    scheduler.stages = [SimpleNamespace(process=process)]
+    try:
+        if completion == "success":
+            await scheduler.execute(make_message())
+        else:
+            with pytest.raises(RuntimeError if completion == "error" else asyncio.CancelledError):
+                await scheduler.execute(make_message())
+        assert ctx.astrbot_config is acm.default_conf
+        await overrides.update_overrides(UMO, {"wake_prefix": ["new"]})
+    finally:
+        released.set()
+        await asyncio.gather(*children)
+
+
+@pytest.mark.asyncio
+async def test_event_bus_routes_final_session_to_matching_pipeline(
+    pipeline_environment, make_message, tmp_path,
+):
+    acm, ctx, default_scheduler = pipeline_environment
+    acm.default_conf["platform_settings"]["unique_session"] = True
+    isolated_umo = "test:GroupMessage:alice_42"
+    config = AstrBotConfig(str(tmp_path / "isolated.json"), deepcopy(DEFAULT_CONFIG))
+    config["wake_prefix"] = ["isolated"]
+    acm.confs["isolated"] = config
+    acm.abconf_data["isolated"] = {"name": "Isolated", "path": "isolated.json"}
+    await overrides.update_overrides(
+        isolated_umo, {"wake_prefix": ["override"]},
+        profile_id="isolated", update_profile=True,
+    )
+    isolated_ctx = PipelineContext(config, ctx.plugin_manager, "isolated")
+    scheduler = PipelineScheduler(isolated_ctx)
+    finished = asyncio.Event()
+
+    async def process(event):
+        assert event.unified_msg_origin == isolated_umo
+        assert isolated_ctx.astrbot_config is acm.get_conf(isolated_umo)
+        assert isolated_ctx.astrbot_config["wake_prefix"] == ["override"]
+        finished.set()
+
+    scheduler.stages = [SimpleNamespace(process=process)]
+    default_scheduler._process_stages = AsyncMock()
+    queue = asyncio.Queue()
+    await queue.put(make_message())
+    bus = EventBus(queue, {"default": default_scheduler, "isolated": scheduler}, acm)
+    task = asyncio.create_task(bus.dispatch())
+    try:
+        await asyncio.wait_for(finished.wait(), 2)
+        default_scheduler._process_stages.assert_not_called()
+    finally:
+        task.cancel()
+        await asyncio.gather(task, *bus._pending_tasks, return_exceptions=True)
 
 
 @pytest.mark.asyncio

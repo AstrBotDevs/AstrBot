@@ -10,6 +10,7 @@ from astrbot.core.provider.entities import LLMResponse
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("session_persona", [None, "session-persona"])
 @pytest.mark.parametrize(
     ("runner_type", "runner_class_name", "config_key"),
     [
@@ -24,6 +25,7 @@ async def test_third_party_runner_receives_inline_profile_config(
     runner_type: str,
     runner_class_name: str,
     config_key: str,
+    session_persona: str | None,
 ):
     inline_config = {config_key: "inline-secret"}
     runner = MagicMock()
@@ -83,6 +85,12 @@ async def test_third_party_runner_receives_inline_profile_config(
         )
     )
     stage._resolve_persona_custom_error_message = AsyncMock(return_value=None)
+    if session_persona:
+        inline_config = {**inline_config, "persona_id": session_persona}
+        stage.ctx.astrbot_config = {
+            **config,
+            "agent": {"runtime": runner_type, "config": inline_config},
+        }
     event = MagicMock()
     event.message_str = "hello"
     event.unified_msg_origin = "webchat:FriendMessage:test"
@@ -94,6 +102,7 @@ async def test_third_party_runner_receives_inline_profile_config(
 
     assert results == [None]
     assert runner.reset.await_args.kwargs["provider_config"] is inline_config
+    assert "persona_id" not in config["agent"]["config"]
     assert runner_factory_calls == [True]
 
 

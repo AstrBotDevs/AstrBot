@@ -6,6 +6,7 @@ from typing import TypedDict, TypeVar
 from astrbot.core import AstrBotConfig, logger
 from astrbot.core.config.astrbot_config import ASTRBOT_CONFIG_PATH
 from astrbot.core.config.default import DEFAULT_CONFIG
+from astrbot.core.config.runtime import current_message_config
 from astrbot.core.config_bindings import BINDING_KEY
 from astrbot.core.platform.message_session import MessageSession
 from astrbot.core.session_overrides import apply_overrides
@@ -164,11 +165,28 @@ class AstrBotConfigManager:
         await self._persist_abconf_mapping(abconf_data)
 
     def get_conf(self, umo: str | MessageSession | None) -> AstrBotConfig:
-        """获取指定 umo 的配置文件。如果不存在，则 fallback 到默认配置文件。"""
+        """Read a session's effective configuration or its active message snapshot.
+
+        Args:
+            umo: Session origin, or None to read the shared default profile.
+
+        Returns:
+            The current message snapshot for a matching session and manager.
+            Outside that scope, the routed profile with explicit overrides applied.
+        """
         if not umo:
             return self.confs["default"]
         if isinstance(umo, MessageSession):
             umo = f"{umo.platform_id}:{umo.message_type}:{umo.session_id}"
+
+        scope = current_message_config.get()
+        if (
+            scope is not None
+            and scope.active
+            and scope.umo == umo
+            and scope.context.plugin_manager.context.astrbot_config_mgr is self
+        ):
+            return scope.config
 
         uuid_ = self._load_conf_mapping(umo)["id"]
 
@@ -183,6 +201,9 @@ class AstrBotConfigManager:
             effective.__dict__.update(conf.__dict__)
             effective.update(apply_overrides(conf, overrides))
             object.__setattr__(effective, "_session_override", True)
+            object.__setattr__(
+                effective, "_session_override_paths", frozenset(overrides)
+            )
             return effective
         return conf
 

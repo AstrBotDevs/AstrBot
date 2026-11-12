@@ -154,7 +154,9 @@ class PersonaManager:
             (item for item in self.personas_v3 if item["name"] == persona_id),
             None,
         )
-        overrides = await get_overrides(str(umo))
+        overrides = getattr(cfg, "_session_override_paths", None)
+        if overrides is None:
+            overrides = await get_overrides(str(umo))
         is_implicit_system_default = (
             "agent.config.persona.persona_id" not in overrides
             and "agent.config.persona_id" not in overrides

@@ -1,7 +1,10 @@
 from collections.abc import AsyncGenerator
+from copy import deepcopy
 from typing import cast
 
 from astrbot.core import logger
+from astrbot.core.config import AstrBotConfig
+from astrbot.core.config.runtime import MessageConfig, current_message_config
 from astrbot.core.log import log_context
 from astrbot.core.platform import AstrMessageEvent
 from astrbot.core.platform.astr_message_event import event_context
@@ -88,15 +91,40 @@ class PipelineScheduler:
             event (AstrMessageEvent): 事件对象
 
         """
-        with (
-            log_context(event.get_platform_id(), event.get_platform_name()),
-            event_context(event),
-            trace_execution(event.trace),
-        ):
-            await self._process_stages(event)
+        # A nested execution must resolve its own session, even for the same UMO.
+        token = current_message_config.set(None)
+        scope = None
+        try:
+            config = self.ctx.plugin_manager.context.get_config(
+                umo=event.unified_msg_origin
+            )
+            snapshot = dict.__new__(AstrBotConfig)
+            if isinstance(config, AstrBotConfig):
+                snapshot.__dict__.update(config.__dict__)
+            snapshot.update(deepcopy(dict(config)))
+            # A message must never persist its effective configuration to a profile.
+            object.__setattr__(snapshot, "_session_override", True)
+            object.__setattr__(
+                snapshot,
+                "_session_override_paths",
+                getattr(config, "_session_override_paths", None) or frozenset(),
+            )
+            scope = MessageConfig(event.unified_msg_origin, snapshot, self.ctx)
+            current_message_config.set(scope)
+            with (
+                log_context(event.get_platform_id(), event.get_platform_name()),
+                event_context(event),
+                trace_execution(event.trace),
+            ):
+                await self._process_stages(event)
 
-            # Send the closing frame before the event is marked complete.
-            if isinstance(event, WebChatMessageEvent | WecomAIBotMessageEvent):
-                await event.send(None)
+                # Send the closing frame before the event is marked complete.
+                if isinstance(event, WebChatMessageEvent | WecomAIBotMessageEvent):
+                    await event.send(None)
 
-            logger.debug("pipeline execution completed.")
+                logger.debug("pipeline execution completed.")
+        finally:
+            # Child tasks may outlive this scope; do not let them reuse stale values.
+            if scope is not None:
+                scope.active = False
+            current_message_config.reset(token)

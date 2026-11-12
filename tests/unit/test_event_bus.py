@@ -394,7 +394,7 @@ async def test_session_isolation_precedes_registration(
         Returns:
             The selected configuration profile metadata.
         """
-        assert umo == original_umo == event.unified_msg_origin
+        assert umo == event.unified_msg_origin
         return {"id": "test-conf-id"}
 
     mock_config_manager.get_conf_info.side_effect = select_config
@@ -422,7 +422,12 @@ async def test_session_isolation_precedes_registration(
         else:
             assert result == [None]
         assert registry._events == {}
-        mock_config_manager.get_conf_info.assert_called_once_with(original_umo)
+        routed_umos = [call.args[0] for call in mock_config_manager.get_conf_info.call_args_list]
+        assert routed_umos == (
+            [original_umo, event.unified_msg_origin]
+            if original_umo != event.unified_msg_origin
+            else [original_umo]
+        )
     finally:
         release.set()
         dispatch.cancel()

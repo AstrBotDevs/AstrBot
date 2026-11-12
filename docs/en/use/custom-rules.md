@@ -18,6 +18,8 @@ Whole-bot mappings are managed only on the Bots page and are hidden from this di
 
 Effective settings are the **assigned profile plus explicit session overrides**. Overrides belong to the UMO (Unified Message Origin) and never modify the shared profile.
 
+Each message uses a configuration snapshot throughout its pipeline. Changes saved while that message is being processed apply to subsequent messages. With per-member group isolation enabled, profile selection and overrides use the final isolated UMO; use `/sid` in the target session to identify it.
+
 - Switches have **Follow profile / On / Off** states. Explicitly enabling AI or speech output overrides a disabled profile setting; a working model is still required.
 - Select a setting row and choose **Set for this session** for models, personas, knowledge bases, or other fields. **Follow profile** removes that override.
 - Lists replace the corresponding profile list entirely. **An empty list clears the setting; use Follow profile to restore inheritance.**

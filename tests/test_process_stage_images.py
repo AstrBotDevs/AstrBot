@@ -183,16 +183,6 @@ def harness(tmp_path, monkeypatch):
     monkeypatch.setattr(
         knowledge_base_build, "retrieve_knowledge_base", AsyncMock(return_value=None)
     )
-    from astrbot.core.pipeline.process_stage.method.agent_request import (
-        SessionServiceManager,
-    )
-
-    monkeypatch.setattr(
-        SessionServiceManager,
-        "should_process_llm_request",
-        AsyncMock(return_value=True),
-    )
-
     from astrbot.core.agent.runtime import TurnResult
 
     async def run(runner, turn, max_steps):
