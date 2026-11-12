@@ -21,6 +21,7 @@ from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 from astrbot.core.utils.datetime_utils import generate_timestamp_id
 from astrbot.core.utils.media_utils import (
     MEDIA_MIME_EXTENSIONS,
+    detect_audio_mime_type,
     detect_image_mime_type_async,
 )
 
@@ -137,10 +138,15 @@ class WebChatMessageEvent(AstrMessageEvent):
                     return None
             elif isinstance(comp, Record):
                 # save record to local
-                filename = f"{generate_timestamp_id()}.wav"
-                path = os.path.join(attachments_dir, filename)
                 record_base64 = await comp.convert_to_base64()
                 record_bytes = base64.b64decode(record_base64)
+                # The payload keeps its original container (MP3 passthrough), so
+                # derive the extension from the real bytes; the dashboard serves
+                # the file with a Content-Type matching that extension.
+                record_mime_type = detect_audio_mime_type(record_bytes)
+                suffix = MEDIA_MIME_EXTENSIONS.get(record_mime_type, ".mp3")
+                filename = f"{generate_timestamp_id()}{suffix}"
+                path = os.path.join(attachments_dir, filename)
                 await asyncio.to_thread(Path(path).write_bytes, record_bytes)
                 data = f"[RECORD]{filename}"
                 accepted = await webchat_queue_mgr.put_back_queue(
