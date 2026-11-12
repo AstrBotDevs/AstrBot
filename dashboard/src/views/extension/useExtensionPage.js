@@ -2380,7 +2380,10 @@ export const useExtensionPage = (initialTab = "installed") => {
     }
     loading_.value = true;
     try {
-      await loadMarketCategories();
+      // Not awaited: the category vocabulary only refines ordering and the
+      // unknown-slug fallback, so a slow or stalled request must not hold back
+      // the plugin lists (the filter reacts to the ref once it arrives).
+      void loadMarketCategories();
       await getExtensions({ withLoading: false });
 
       // 检查是否有 open_config 参数

@@ -8,6 +8,8 @@ slug wherever it is displayed.
 
 from __future__ import annotations
 
+import re
+
 from astrbot.core import logger
 
 PLUGIN_CATEGORY_SLUGS: tuple[str, ...] = (
@@ -58,7 +60,9 @@ def normalize_plugin_category(value: object, *, warn: bool = True) -> str | None
         return None
 
     if isinstance(value, str):
-        slug = value.strip().lower().replace("-", "_").replace(" ", "_")
+        # Collapse separator runs so that "AI - Tools" matches what the WebUI
+        # derives from the same declaration instead of falling back to "other".
+        slug = re.sub(r"[\s-]+", "_", value.strip().lower())
         if slug in PLUGIN_CATEGORY_SLUGS:
             return slug
         if not slug:

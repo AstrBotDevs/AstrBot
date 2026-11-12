@@ -212,15 +212,27 @@ def test_load_plugin_metadata_includes_category(tmp_path: Path):
     assert loaded_metadata.category == "platform_adapter"
 
 
-def test_load_plugin_metadata_normalizes_category(tmp_path: Path):
+@pytest.mark.parametrize(
+    ("declared", "expected"),
+    [
+        ("Group Games", "group_games"),
+        ("platform-adapter", "platform_adapter"),
+        # Repeated and mixed separators must normalize like the WebUI does.
+        ("AI - Tools", "ai_tools"),
+        (" long-term  memory ", "long_term_memory"),
+    ],
+)
+def test_load_plugin_metadata_normalizes_category(
+    tmp_path: Path, declared: str, expected: str
+):
     plugin_path = tmp_path / "helloworld"
     _write_local_test_plugin(plugin_path, TEST_PLUGIN_REPO)
-    _write_plugin_category(plugin_path, "Group Games")
+    _write_plugin_category(plugin_path, declared)
 
     loaded_metadata = PluginManager._load_plugin_metadata(str(plugin_path))
 
     assert loaded_metadata is not None
-    assert loaded_metadata.category == "group_games"
+    assert loaded_metadata.category == expected
 
 
 def test_load_plugin_metadata_unknown_category_falls_back_to_other(tmp_path: Path):
