@@ -111,3 +111,15 @@
 删除机器人时，原「自定义规则」和「配置路由」两个清理选项合并为 **会话配置映射**。勾选后，一并清理此机器人的配置文件绑定、会话覆盖项及路由规则；取消勾选则保留这些数据。共享配置文件不会删除。
 
 ![删除机器人的会话配置映射选项](./images/custom-rules-delete-zh.png)
+
+## 旧接口迁移
+
+已删除以下会话状态与批量设置接口及其旧兼容入口：
+
+| 已删除接口 | 同时删除的旧入口 | 替代方式 |
+| --- | --- | --- |
+| `GET /api/v1/sessions` | `GET /api/session/list-all-with-status` | 使用 `GET /api/v1/sessions/active-umos` 获取已知会话，使用 `GET /api/v1/sessions/rules` 获取映射，使用 `GET /api/v1/sessions/overrides?umo=...` 获取单个会话的覆盖项和继承值 |
+| `PATCH /api/v1/sessions/provider` | `POST /api/session/batch-update-provider` | 通过 `POST /api/v1/sessions/rules` 更新模型对应的配置路径 |
+| `PATCH /api/v1/sessions/service` | `POST /api/session/batch-update-service` | 通过 `POST /api/v1/sessions/rules` 更新会话启停、AI 或语音输出对应的覆盖项 |
+
+新的写入请求使用 `rule_key: "config_overrides"`，`rule_value` 为本次修改的配置路径和值。批量操作需对每个目标 UMO 分别提交；分组成员可从 `GET /api/v1/session-groups` 获取。旧接口不再提供重定向。

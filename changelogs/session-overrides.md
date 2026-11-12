@@ -28,3 +28,5 @@
 - Add a direct entry to the existing mappings dialog beside the Bots page's session profile instructions. Refresh mappings on return while preserving unsaved bot edits.
 
 - Merge the bot deletion dialog’s former Custom Rules and Config Routing cleanup options into Session mappings, removing profile assignments, overrides, and routes together through the existing API.
+
+- Remove `GET /api/v1/sessions`, `PATCH /api/v1/sessions/provider`, and `PATCH /api/v1/sessions/service`, plus their `/api/session/list-all-with-status`, `/api/session/batch-update-provider`, and `/api/session/batch-update-service` aliases. Remove their dedicated services and schemas. API clients should read active UMOs/mappings and submit per-UMO configuration overrides through `/api/v1/sessions/rules`; migration details are documented in the session mappings guide.

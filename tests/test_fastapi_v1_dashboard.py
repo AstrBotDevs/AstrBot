@@ -1766,6 +1766,29 @@ async def test_v1_config_routes_can_replace_all_routes(
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("method", "path"),
+    [
+        ("GET", "/api/v1/sessions"),
+        ("PATCH", "/api/v1/sessions/provider"),
+        ("PATCH", "/api/v1/sessions/service"),
+        ("GET", "/api/session/list-all-with-status"),
+        ("POST", "/api/session/batch-update-provider"),
+        ("POST", "/api/session/batch-update-service"),
+    ],
+)
+async def test_removed_session_endpoints_are_unavailable(asgi_app, asgi_client, method, path):
+    """Retired session APIs must not remain accessible through legacy aliases."""
+    assert path not in {getattr(route, "path", None) for route in asgi_app.routes}
+    response = await asgi_client.request(method, path, headers=_jwt_headers())
+
+    # The static GET fallback rejects unknown write paths with Method Not Allowed.
+    assert response.status_code == (404 if method == "GET" else 405)
+    spec = (await asgi_client.get("/api/v1/openapi.json")).json()
+    assert path not in spec["paths"]
+
+
+@pytest.mark.asyncio
 async def test_v1_active_umos_uses_session_service(
     asgi_client: httpx.AsyncClient,
 ):

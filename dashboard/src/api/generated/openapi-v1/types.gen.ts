@@ -42,19 +42,6 @@ export type BackupUploadSessionRequest = {
     upload_id: string;
 };
 
-export type BatchSessionProviderRequest = UmoListRequest & {
-    provider_id: string;
-    provider_type: 'chat_completion' | 'speech_to_text' | 'text_to_speech';
-};
-
-export type provider_type = 'chat_completion' | 'speech_to_text' | 'text_to_speech';
-
-export type BatchSessionServiceRequest = UmoListRequest & {
-    session_enabled?: boolean;
-    llm_enabled?: boolean;
-    tts_enabled?: boolean;
-};
-
 export type BotCleanupTarget = 'custom_rules' | 'preferences' | 'routing' | 'cron_jobs' | 'conversations' | 'message_history' | 'traces' | 'stats';
 
 export type BotConfigRequest = {
@@ -3247,20 +3234,6 @@ export type ReorderPersonaItemsResponse = (SuccessEnvelope);
 
 export type ReorderPersonaItemsError = unknown;
 
-export type ListSessionsData = {
-    query?: {
-        message_type?: 'all' | 'group' | 'private';
-        page?: number;
-        page_size?: number;
-        platform?: string;
-        search?: string;
-    };
-};
-
-export type ListSessionsResponse = (SuccessEnvelope);
-
-export type ListSessionsError = unknown;
-
 export type ListActiveUmosData = {
     query?: {
         /**
@@ -3331,22 +3304,6 @@ export type DeleteSessionRulesData = {
 export type DeleteSessionRulesResponse = (SuccessEnvelope);
 
 export type DeleteSessionRulesError = unknown;
-
-export type BatchUpdateSessionProviderData = {
-    body: BatchSessionProviderRequest;
-};
-
-export type BatchUpdateSessionProviderResponse = (SuccessEnvelope);
-
-export type BatchUpdateSessionProviderError = unknown;
-
-export type BatchUpdateSessionServiceData = {
-    body: BatchSessionServiceRequest;
-};
-
-export type BatchUpdateSessionServiceResponse = (SuccessEnvelope);
-
-export type BatchUpdateSessionServiceError = unknown;
 
 export type ListSessionGroupsResponse = (SuccessEnvelope);
 

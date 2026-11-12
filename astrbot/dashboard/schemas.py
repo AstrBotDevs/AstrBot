@@ -680,24 +680,6 @@ class UmoListRequest(OpenModel):
     )
 
 
-class BatchSessionProviderRequest(UmoListRequest):
-    provider_id: str | None = None
-    provider_type: (
-        Literal[
-            "chat_completion",
-            "speech_to_text",
-            "text_to_speech",
-        ]
-        | None
-    ) = None
-
-
-class BatchSessionServiceRequest(UmoListRequest):
-    session_enabled: bool | None = None
-    llm_enabled: bool | None = None
-    tts_enabled: bool | None = None
-
-
 class SessionGroupRequest(OpenModel):
     id: str | None = None
     name: str | None = None

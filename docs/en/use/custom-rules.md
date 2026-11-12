@@ -110,3 +110,15 @@ A null `profile_id` follows routing; `"default"` explicitly selects the default 
 When deleting a bot, the former **Custom Rules** and **Config Routing** cleanup options are combined into **Session mappings**. Selecting it removes that bot’s profile assignments, session overrides, and routing rules together; clearing it preserves them. Shared configuration profiles are not deleted.
 
 ![Session mappings cleanup when deleting a bot](./images/custom-rules-delete-en.png)
+
+## Retired API migration
+
+The following session-status and batch-setting endpoints and their legacy aliases have been removed:
+
+| Removed endpoint | Removed legacy alias | Replacement |
+| --- | --- | --- |
+| `GET /api/v1/sessions` | `GET /api/session/list-all-with-status` | Use `GET /api/v1/sessions/active-umos` for known sessions, `GET /api/v1/sessions/rules` for mappings, and `GET /api/v1/sessions/overrides?umo=...` for one session’s explicit and inherited values |
+| `PATCH /api/v1/sessions/provider` | `POST /api/session/batch-update-provider` | Update the model configuration paths through `POST /api/v1/sessions/rules` |
+| `PATCH /api/v1/sessions/service` | `POST /api/session/batch-update-service` | Update the session-status, AI, or speech-output overrides through `POST /api/v1/sessions/rules` |
+
+Write requests use `rule_key: "config_overrides"` and a `rule_value` object containing the changed configuration paths and values. For batch operations, submit one request per target UMO; group members are available from `GET /api/v1/session-groups`. Removed endpoints do not redirect.

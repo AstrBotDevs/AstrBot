@@ -4172,32 +4172,6 @@ paths:
         "200":
           $ref: "#/components/responses/Ok"
 
-  /api/v1/sessions:
-    get:
-      tags: [Sessions]
-      summary: List active UMOs and session status
-      operationId: listSessions
-      x-astrbot-scope: data
-      parameters:
-        - $ref: "#/components/parameters/Page"
-        - $ref: "#/components/parameters/PageSize"
-        - name: search
-          in: query
-          schema:
-            type: string
-        - name: platform
-          in: query
-          schema:
-            type: string
-        - name: message_type
-          in: query
-          schema:
-            type: string
-            enum: [all, group, private]
-      responses:
-        "200":
-          $ref: "#/components/responses/Ok"
-
   /api/v1/sessions/active-umos:
     get:
       tags: [Sessions]
@@ -4312,38 +4286,6 @@ paths:
           application/json:
             schema:
               $ref: "#/components/schemas/UmoListRequest"
-      responses:
-        "200":
-          $ref: "#/components/responses/Ok"
-
-  /api/v1/sessions/provider:
-    patch:
-      tags: [Sessions]
-      summary: Batch update session provider selection
-      operationId: batchUpdateSessionProvider
-      x-astrbot-scope: data
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/BatchSessionProviderRequest"
-      responses:
-        "200":
-          $ref: "#/components/responses/Ok"
-
-  /api/v1/sessions/service:
-    patch:
-      tags: [Sessions]
-      summary: Batch update session service settings
-      operationId: batchUpdateSessionService
-      x-astrbot-scope: data
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/BatchSessionServiceRequest"
       responses:
         "200":
           $ref: "#/components/responses/Ok"
@@ -6669,30 +6611,6 @@ components:
           type: string
           description: For rule deletion, config_binding clears both profile selection and overrides; config_overrides or omission clears only overrides.
       additionalProperties: false
-
-    BatchSessionProviderRequest:
-      allOf:
-        - $ref: "#/components/schemas/UmoListRequest"
-        - type: object
-          required: [provider_id, provider_type]
-          properties:
-            provider_id:
-              type: string
-            provider_type:
-              type: string
-              enum: [chat_completion, speech_to_text, text_to_speech]
-
-    BatchSessionServiceRequest:
-      allOf:
-        - $ref: "#/components/schemas/UmoListRequest"
-        - type: object
-          properties:
-            session_enabled:
-              type: boolean
-            llm_enabled:
-              type: boolean
-            tts_enabled:
-              type: boolean
 
     SessionGroupRequest:
       type: object

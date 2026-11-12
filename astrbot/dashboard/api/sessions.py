@@ -6,8 +6,6 @@ from astrbot.core import logger
 from astrbot.dashboard.async_utils import run_maybe_async
 from astrbot.dashboard.responses import error, ok
 from astrbot.dashboard.schemas import (
-    BatchSessionProviderRequest,
-    BatchSessionServiceRequest,
     SessionGroupRequest,
     SessionRuleRequest,
     UmoListRequest,
@@ -69,32 +67,6 @@ async def _run_dashboard_json(
 ) -> dict:
     body = await _json_or_empty(request)
     return await _run(lambda: operation(body), label=label)
-
-
-@router.get("/sessions")
-async def list_sessions(
-    page: int = Query(1),
-    page_size: int = Query(20),
-    search: str = Query(""),
-    message_type: str = Query("all"),
-    platform: str = Query(""),
-    _auth: AuthContext = Depends(require_data_scope),
-    service: SessionManagementService = Depends(get_service),
-):
-    try:
-        return ok(
-            await service.list_all_umos_with_status(
-                page=page,
-                page_size=page_size,
-                search=search.strip(),
-                message_type=message_type,
-                platform=platform,
-            )
-        )
-    except SessionManagementServiceError as exc:
-        return _service_error(exc)
-    except Exception as exc:
-        return _unexpected_error("获取会话状态列表失败", exc)
 
 
 @router.get("/sessions/active-umos")
@@ -217,38 +189,6 @@ async def delete_session_rule(
         return _unexpected_error("删除会话规则失败", exc)
 
 
-@router.patch("/sessions/provider")
-async def update_session_provider(
-    payload: BatchSessionProviderRequest,
-    _auth: AuthContext = Depends(require_data_scope),
-    service: SessionManagementService = Depends(get_service),
-):
-    try:
-        return ok(
-            await service.batch_update_provider(payload.model_dump(exclude_none=True))
-        )
-    except SessionManagementServiceError as exc:
-        return _service_error(exc)
-    except Exception as exc:
-        return _unexpected_error("批量更新 Provider 失败", exc)
-
-
-@router.patch("/sessions/service")
-async def update_session_service(
-    payload: BatchSessionServiceRequest,
-    _auth: AuthContext = Depends(require_data_scope),
-    service: SessionManagementService = Depends(get_service),
-):
-    try:
-        return ok(
-            await service.batch_update_service(payload.model_dump(exclude_none=True))
-        )
-    except SessionManagementServiceError as exc:
-        return _service_error(exc)
-    except Exception as exc:
-        return _unexpected_error("批量更新服务状态失败", exc)
-
-
 @router.get("/session-groups")
 async def list_session_groups(
     _auth: AuthContext = Depends(require_data_scope),
@@ -369,54 +309,6 @@ async def list_dashboard_active_umos(
     service: SessionManagementService = Depends(get_service),
 ):
     return await _run(service.list_active_umos, label="获取 UMO 列表失败")
-
-
-@legacy_router.get("/list-all-with-status")
-async def list_dashboard_umos_with_status(
-    page: int = Query(1),
-    page_size: int = Query(20),
-    search: str = Query(""),
-    message_type: str = Query("all"),
-    platform: str = Query(""),
-    _username: str = Depends(require_dashboard_user),
-    service: SessionManagementService = Depends(get_service),
-):
-    return await _run(
-        lambda: service.list_all_umos_with_status(
-            page=page,
-            page_size=page_size,
-            search=search.strip(),
-            message_type=message_type,
-            platform=platform,
-        ),
-        label="获取会话状态列表失败",
-    )
-
-
-@legacy_router.post("/batch-update-service")
-async def batch_update_dashboard_session_service(
-    request: Request,
-    _username: str = Depends(require_dashboard_user),
-    service: SessionManagementService = Depends(get_service),
-):
-    return await _run_dashboard_json(
-        request,
-        service.batch_update_service,
-        label="批量更新服务状态失败",
-    )
-
-
-@legacy_router.post("/batch-update-provider")
-async def batch_update_dashboard_session_provider(
-    request: Request,
-    _username: str = Depends(require_dashboard_user),
-    service: SessionManagementService = Depends(get_service),
-):
-    return await _run_dashboard_json(
-        request,
-        service.batch_update_provider,
-        label="批量更新 Provider 失败",
-    )
 
 
 @legacy_router.get("/groups")
