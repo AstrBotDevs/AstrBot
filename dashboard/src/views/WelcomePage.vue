@@ -38,7 +38,6 @@
             <h2>{{ tm('onboard.title') }}</h2>
             <p>{{ tm('onboard.subtitle') }}</p>
           </div>
-          <v-chip color="primary" variant="tonal" size="small">{{ tm('onboard.progress', { count: completedSteps }) }}</v-chip>
         </div>
         <ol class="onboarding-steps">
           <li v-for="(step, index) in onboardingSteps" :key="step.key" class="onboarding-step">
@@ -185,7 +184,6 @@ const onboardingSteps = computed(() => [
   { key: 'step2', completed: platformStepState.value === 'completed', action: openPlatformDialog },
   { key: 'step3', completed: computerAccessStepState.value === 'completed', action: () => { showComputerAccessDialog.value = true; } },
 ]);
-const completedSteps = computed(() => onboardingSteps.value.filter(step => step.completed).length);
 
 async function loadOverview() {
   if (statsLoading.value) return;

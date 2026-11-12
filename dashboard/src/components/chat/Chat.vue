@@ -2232,7 +2232,7 @@ async function stopCurrentSession() {
 /* The header draws across the whole width, above the full-height chat sidebar. */
 :global(.chat-sidebar .v-navigation-drawer__content) {
   /* Seat the brand's top edge at the content area's top edge, fully below the toolbar. */
-  padding-top: calc(var(--astrbot-toolbar-height, 40px) - 10px);
+  padding-top: calc(var(--astrbot-toolbar-height, 42px) - 10px);
   box-sizing: border-box;
 }
 
@@ -2243,7 +2243,7 @@ async function stopCurrentSession() {
 }
 
 :global(html:not([data-astrbot-desktop-platform='macos']) .chat-sidebar .chat-sidebar-brand) {
-  min-height: var(--astrbot-toolbar-height, 40px);
+  min-height: var(--astrbot-toolbar-height, 42px);
 }
 
 /* On macOS the chat sidebar stays transparent; the shared tint is painted behind it. */

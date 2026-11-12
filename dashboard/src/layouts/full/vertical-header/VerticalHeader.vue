@@ -1083,7 +1083,7 @@ onMounted(async () => {
 <template>
   <v-app-bar
     elevation="0"
-    height="40"
+    height="42"
     data-tauri-drag-region
     class="top-header"
     :class="{
@@ -2559,12 +2559,13 @@ onMounted(async () => {
 
 html {
   /* Keep in sync with the app bar height above. */
-  --astrbot-toolbar-height: 40px;
+  --astrbot-toolbar-height: 42px;
 }
 
 .top-header,
 .top-header.chat-mode-header,
 .top-header.chat-mode-header.chat-mode-header--dark {
+  background: var(--astrbot-chrome-bg, #f2f2f7) !important;
   border-bottom: 0 !important;
   box-shadow: none !important;
 }

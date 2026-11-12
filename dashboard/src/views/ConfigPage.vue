@@ -1029,6 +1029,7 @@ export default {
 }
 
 .config-toolbar-header {
+  margin-top: 8px;
   margin-bottom: 28px;
 }
 
