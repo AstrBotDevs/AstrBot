@@ -236,12 +236,17 @@ async def update_conversation(
 async def delete_conversation(
     conversation_id: str,
     user_id: str = Query(...),
+    cleanup_metadata: bool = Query(default=False),
     _auth: AuthContext = Depends(require_data_scope),
     service: ConversationService = Depends(get_service),
 ):
     return await _run(
         lambda: service.delete_conversation(
-            {"user_id": user_id, "cid": conversation_id}
+            {
+                "user_id": user_id,
+                "cid": conversation_id,
+                "cleanup_metadata": cleanup_metadata,
+            }
         )
     )
 

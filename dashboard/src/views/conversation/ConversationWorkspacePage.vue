@@ -33,7 +33,7 @@ import { useI18n, useModuleI18n } from "@/i18n/composables";
 import { useCustomizerStore } from "@/stores/customizer";
 import { copyToClipboard } from "@/utils/clipboard";
 import {
-  askForConfirmation as askForConfirmationDialog,
+  askForConfirmationWithCheckbox as askForConfirmationDialog,
   useConfirmDialog,
 } from "@/utils/confirmDialog";
 import { getPlatformIcon } from "@/utils/platformUtils";
@@ -594,9 +594,16 @@ async function exportSelected() {
 
 async function deleteSelected() {
   if (!selectedItems.value.length) return;
-  const confirmed = await askForConfirmationDialog(
+
+  const { confirmed, checked } = await askForConfirmationDialog(
     tm("dialogs.batchDelete.message", { count: selectedItems.value.length }),
-    confirmDialog,
+    {
+      candidate: confirmDialog,
+      checkbox: {
+        label: tm("dialogs.batchDelete.cleanupMetadata"),
+        hint: tm("dialogs.batchDelete.cleanupMetadataHint"),
+      },
+    },
   );
   if (!confirmed) return;
 
@@ -609,6 +616,7 @@ async function deleteSelected() {
         user_id: item.user_id,
         cid: item.cid,
       })),
+      cleanup_metadata: checked,
     });
     if (response.data.status !== "ok") {
       throw new Error(response.data.message || tm("messages.batchDeleteError"));

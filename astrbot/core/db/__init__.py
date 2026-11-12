@@ -894,6 +894,25 @@ class BaseDatabase(abc.ABC):
         """Get alias metadata, optionally restricted to the given UMO list."""
         ...
 
+    @abc.abstractmethod
+    async def delete_umo_metadata_if_unreferenced(self, umo: str) -> dict:
+        """Delete alias and sender metadata for a UMO without conversations.
+
+        The reference check and the deletions run as conditional statements in
+        a single transaction, so metadata is not deleted while a committed
+        conversation still references the UMO.
+
+        Args:
+            umo: Unified message origin whose orphaned metadata should be deleted.
+
+        Returns:
+            Mapping with ``alias_deleted`` (whether an alias row was removed),
+            ``senders_deleted`` (number of sender rows removed) and
+            ``retained`` (True when a conversation still references the UMO and
+            nothing was deleted).
+        """
+        ...
+
     # ====
     # UMO Sender Management
     # ====

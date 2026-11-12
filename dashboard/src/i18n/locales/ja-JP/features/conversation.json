@@ -74,7 +74,9 @@
       "title": "削除の確認",
       "message": "会話 {title} を削除してもよろしいですか？この操作は元に戻せません。",
       "cancel": "キャンセル",
-      "confirm": "削除"
+      "confirm": "削除",
+      "cleanupMetadata": "セッションメタデータ（別名など）も削除する",
+      "cleanupMetadataHint": "他の会話が残っていない場合のみ削除します。デフォルトはオフです。"
     },
     "batchDelete": {
       "title": "一括削除の確認",
@@ -82,7 +84,9 @@
       "andMore": "ほか {count} 件",
       "cancel": "キャンセル",
       "confirm": "一括削除",
-      "warning": "警告：この操作は元に戻せません。"
+      "warning": "警告：この操作は元に戻せません。",
+      "cleanupMetadata": "会話が残っていないセッションメタデータも削除する（別名など）",
+      "cleanupMetadataHint": "他の会話が残っているセッションのメタデータは保持されます。"
     }
   },
   "messages": {
