@@ -276,15 +276,6 @@ class BotMessageAccumulator:
 
 
 def extract_web_search_refs(accumulated_text: str, accumulated_parts: list) -> dict:
-    """Collect web search citations in order of first appearance.
-
-    Args:
-        accumulated_text: Plain text of the assistant's reply.
-        accumulated_parts: Message parts containing the search tool results.
-
-    Returns:
-        The cited search results, or an empty dictionary if none were cited.
-    """
     supported = [
         "web_search_baidu",
         "web_search_tavily",
@@ -323,32 +314,25 @@ def extract_web_search_refs(accumulated_text: str, accumulated_parts: list) -> d
     if not web_search_results:
         return {}
 
-    first_positions: dict[str, int] = {}
-    url_to_index: dict[str, str] = {}
-    # Prefer an explicit reference for a URL that appears in several results.
-    for match in re.finditer(r"<ref>(.*?)</ref>", accumulated_text):
-        idx = match[1].strip()
-        if idx not in web_search_results:
-            continue
-        first_positions.setdefault(idx, match.start())
-        url = web_search_results[idx]["url"]
-        if url:
-            url_to_index.setdefault(url, idx)
-
+    # Collect matched indices in text order so cards render consistently.
+    matched_indices: dict[str, None] = {}
+    # Native citation format emitted by the model.
+    for match in re.findall(r"<ref>(.*?)</ref>", accumulated_text):
+        if (idx := match.strip()) in web_search_results:
+            matched_indices.setdefault(idx)
+    # Fallback: models may cite sources with plain or markdown URLs instead
+    # of <ref> tags; recover cards by matching URLs from the search results.
+    url_to_index = {}
     for idx, item in web_search_results.items():
-        url = item["url"]
-        if url:
-            url_to_index.setdefault(url, idx)
-
-    # Match common bare and Markdown URLs without parsing the document.
-    for match in re.finditer(r"https?://[^\s<>()\[\]{}\"'`|]+", accumulated_text):
-        url = match[0].rstrip(".,;:!?。，；：！？）】」")
-        if (idx := url_to_index.get(url)) is not None:
-            position = match.start()
-            first_positions[idx] = min(first_positions.get(idx, position), position)
+        if item.get("url") and item["url"] not in url_to_index:
+            url_to_index[item["url"]] = idx
+    for match in re.findall(r"https?://[^\s<>()\[\]{}\"']+", accumulated_text):
+        idx = url_to_index.get(match.rstrip(".,;:!?。)）】」"))
+        if idx:
+            matched_indices.setdefault(idx)
 
     used_refs = []
-    for ref_index in sorted(first_positions, key=first_positions.__getitem__):
+    for ref_index in matched_indices:
         payload = {"index": ref_index, **web_search_results[ref_index]}
         if favicon := sp.temporary_cache.get("_ws_favicon", {}).get(payload["url"]):
             payload["favicon"] = favicon

@@ -4,6 +4,7 @@ import asyncio
 import base64
 import json
 import os
+import re
 import time
 import uuid
 import wave
@@ -14,6 +15,7 @@ import jwt
 from starlette.websockets import WebSocketDisconnect
 
 from astrbot import logger
+from astrbot.core import sp
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
 from astrbot.core.platform.sources.webchat.message_parts_helper import (
     build_webchat_message_parts,
@@ -31,7 +33,6 @@ from astrbot.dashboard.services.chat_service import (
     BotMessageAccumulator,
     build_bot_history_content,
     collect_plain_text_from_message_parts,
-    extract_web_search_refs,
 )
 
 SendJson = Callable[[dict], Awaitable[None]]
@@ -279,7 +280,73 @@ class LiveChatService:
             display_name=display_name,
         )
 
-    extract_web_search_refs = staticmethod(extract_web_search_refs)
+    @staticmethod
+    def extract_web_search_refs(accumulated_text: str, accumulated_parts: list) -> dict:
+        supported = [
+            "web_search_baidu",
+            "web_search_tavily",
+            "web_search_bocha",
+            "web_search_brave",
+            "web_search_deepseek",
+            "web_search_serpapi",
+            "news_search_serpapi",
+            "image_search_serpapi",
+            "finance_search_serpapi",
+            "scholar_search_serpapi",
+        ]
+        web_search_results = {}
+        tool_call_parts = [
+            p
+            for p in accumulated_parts
+            if p.get("type") == "tool_call" and p.get("tool_calls")
+        ]
+
+        for part in tool_call_parts:
+            for tool_call in part["tool_calls"]:
+                if tool_call.get("name") not in supported or not tool_call.get(
+                    "result"
+                ):
+                    continue
+                try:
+                    result_data = json.loads(tool_call["result"])
+                    for item in result_data.get("results", []):
+                        if idx := item.get("index"):
+                            web_search_results[idx] = {
+                                "url": item.get("url"),
+                                "title": item.get("title"),
+                                "snippet": item.get("snippet"),
+                            }
+                except (json.JSONDecodeError, KeyError):
+                    pass
+
+        if not web_search_results:
+            return {}
+
+        # Collect matched indices in text order so cards render consistently.
+        matched_indices: dict[str, None] = {}
+        # Native citation format emitted by the model.
+        for match in re.findall(r"<ref>(.*?)</ref>", accumulated_text):
+            if (idx := match.strip()) in web_search_results:
+                matched_indices.setdefault(idx)
+        # Fallback: models may cite sources with plain or markdown URLs instead
+        # of <ref> tags; recover cards by matching URLs from the search results.
+        url_to_index = {}
+        for idx, item in web_search_results.items():
+            if item.get("url") and item["url"] not in url_to_index:
+                url_to_index[item["url"]] = idx
+        for match in re.findall(r"https?://[^\s<>()\[\]{}\"']+", accumulated_text):
+            idx = url_to_index.get(match.rstrip(".,;:!?。)）】」"))
+            if idx:
+                matched_indices.setdefault(idx)
+
+        used_refs = []
+        for ref_index in matched_indices:
+            payload = {"index": ref_index, **web_search_results[ref_index]}
+            if favicon := sp.temporary_cache.get("_ws_favicon", {}).get(payload["url"]):
+                payload["favicon"] = favicon
+            used_refs.append(payload)
+
+        return {"used": used_refs} if used_refs else {}
 
     async def save_bot_message(
         self,
