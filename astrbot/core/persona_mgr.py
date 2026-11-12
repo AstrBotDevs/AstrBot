@@ -125,17 +125,18 @@ class PersonaManager:
         self,
         *,
         umo: str | MessageSession,
-        conversation_persona_id: str | None,
         platform_name: str,
-        provider_settings: dict | None = None,
-    ) -> tuple[str | None, Personality | None, str | None, bool]:
-        """解析当前会话最终生效的人格。
+    ) -> tuple[str | None, Personality | None, bool]:
+        """Resolve the persona from the effective session configuration.
+
+        Args:
+            umo: Session whose effective configuration selects the persona.
+            platform_name: Platform name used for the WebChat default prompt.
 
         Returns:
             tuple:
                 - selected persona_id
                 - selected persona object
-                - force applied persona_id from session rule
                 - whether use webchat special default persona
         """
         scope = current_message_config.get()
@@ -158,8 +159,6 @@ class PersonaManager:
             if agent_runner.get("runtime") == "astrbot"
             else runner_config.get("persona_id", SYSTEM_DEFAULT_PERSONA_ID)
         )
-        # The legacy tuple slot is retained for callers; there is no forced layer.
-        force_applied_persona_id = None
 
         persona = next(
             (item for item in self.personas_v3 if item["name"] == persona_id),
@@ -168,16 +167,13 @@ class PersonaManager:
         is_implicit_system_default = (
             "agent.config.persona.persona_id" not in overrides
             and "agent.config.persona_id" not in overrides
-            and force_applied_persona_id is None
             and persona_id == SYSTEM_DEFAULT_PERSONA_ID
         )
         logger.debug(
-            "[persona] resolve_selected_persona: umo=%s conversation_persona_id=%r "
-            "force_applied=%r -> persona_id=%r matched_persona=%r "
+            "[persona] resolve_selected_persona: umo=%s -> persona_id=%r "
+            "matched_persona=%r "
             "implicit_system_default=%s",
             umo,
-            conversation_persona_id,
-            force_applied_persona_id,
             persona_id,
             persona["name"] if persona else None,
             is_implicit_system_default,
@@ -196,7 +192,6 @@ class PersonaManager:
         return (
             persona_id,
             persona,
-            force_applied_persona_id,
             use_webchat_special_default,
         )
 

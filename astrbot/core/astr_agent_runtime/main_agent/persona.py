@@ -106,13 +106,10 @@ async def apply_persona(
     (
         persona_id,
         persona,
-        _,
         use_webchat_special_default,
     ) = await plugin_context.persona_manager.resolve_selected_persona(
         umo=event.unified_msg_origin,
-        conversation_persona_id=req.conversation.persona_id,
         platform_name=event.get_platform_name(),
-        provider_settings=cfg,
     )
 
     event.set_extra("_trace_persona_id", persona_id)

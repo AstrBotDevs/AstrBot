@@ -116,7 +116,7 @@ def harness(tmp_path, monkeypatch):
     context.conversation_manager = MagicMock()
     context.get_config.return_value = config
     context.persona_manager.resolve_selected_persona = AsyncMock(
-        return_value=(None, None, None, False)
+        return_value=(None, None, False)
     )
     context.persona_manager.personas_v3 = []
     context.get_llm_tool_manager.return_value.get_builtin_tool.side_effect = (

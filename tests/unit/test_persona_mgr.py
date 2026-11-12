@@ -135,13 +135,10 @@ async def test_resolve_selected_persona_webchat_implicit_uses_chatui_default():
         (
             persona_id,
             persona,
-            _,
             use_webchat_special_default,
         ) = await manager.resolve_selected_persona(
             umo="test:umo",
-            conversation_persona_id=None,
             platform_name="webchat",
-            provider_settings={},
         )
 
     assert persona_id == "_chatui_default_"
@@ -157,41 +154,16 @@ async def test_resolve_selected_persona_non_webchat_implicit_uses_db_default():
         (
             persona_id,
             persona,
-            _,
             use_webchat_special_default,
         ) = await manager.resolve_selected_persona(
             umo="test:umo",
-            conversation_persona_id=None,
             platform_name="telegram",
-            provider_settings={},
         )
 
     assert persona_id == "default"
     assert persona is not None
     assert persona["prompt"] == "USER DEFAULT"
     assert use_webchat_special_default is False
-
-
-@pytest.mark.asyncio
-async def test_resolve_selected_persona_ignores_legacy_conversation_selection():
-    manager = make_manager([make_persona("default", "USER DEFAULT")])
-
-    with patch.object(pm, "get_overrides", new=AsyncMock(return_value={})):
-        (
-            persona_id,
-            persona,
-            _,
-            use_webchat_special_default,
-        ) = await manager.resolve_selected_persona(
-            umo="test:umo",
-            conversation_persona_id="default",
-            platform_name="webchat",
-            provider_settings={},
-        )
-
-    assert persona_id == "_chatui_default_"
-    assert persona is None
-    assert use_webchat_special_default is True
 
 
 @pytest.mark.asyncio
@@ -206,17 +178,13 @@ async def test_resolve_selected_persona_session_rule_default_uses_db_default():
         (
             persona_id,
             persona,
-            force_applied_persona_id,
             use_webchat_special_default,
         ) = await manager.resolve_selected_persona(
             umo="test:umo",
-            conversation_persona_id=None,
             platform_name="webchat",
-            provider_settings={},
         )
 
     assert persona_id == "default"
     assert persona is not None
     assert persona["prompt"] == "USER DEFAULT"
-    assert force_applied_persona_id is None
     assert use_webchat_special_default is False

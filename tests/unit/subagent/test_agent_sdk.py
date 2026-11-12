@@ -55,7 +55,7 @@ async def sdk(environment, monkeypatch):
     env.context.get_using_tts_provider_async = AsyncMock(return_value=None)
     env.context._star_manager = SimpleNamespace(context=env.context)
     env.context.persona_manager.resolve_selected_persona = AsyncMock(
-        return_value=(None, None, None, False)
+        return_value=(None, None, False)
     )
     env.conversation.persona_id = None
     env.conversations = {env.conversation.cid: env.conversation}

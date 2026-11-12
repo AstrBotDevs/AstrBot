@@ -22,7 +22,6 @@ from astrbot.core.message.message_event_result import (
     ResultContentType,
 )
 from astrbot.core.persona_error_reply import (
-    resolve_event_conversation_persona_id,
     resolve_persona_custom_error_message,
     set_persona_custom_error_message_on_event,
 )
@@ -180,15 +179,9 @@ class ThirdPartyAgentSubStage(Stage):
         self, event: AstrMessageEvent
     ) -> str | None:
         try:
-            conversation_persona_id = await resolve_event_conversation_persona_id(
-                event,
-                self.ctx.plugin_manager.context.conversation_manager,
-            )
             return await resolve_persona_custom_error_message(
                 event=event,
                 persona_manager=self.ctx.plugin_manager.context.persona_manager,
-                provider_settings={"default_personality": "default"},
-                conversation_persona_id=conversation_persona_id,
             )
         except Exception as e:
             logger.debug("Failed to resolve persona custom error message: %s", e)

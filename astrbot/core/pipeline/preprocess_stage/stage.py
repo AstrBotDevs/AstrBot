@@ -28,7 +28,6 @@ class PreProcessStage(Stage):
         self.config = ctx.astrbot_config
         self.plugin_manager = ctx.plugin_manager
 
-        self.stt_settings: dict = self.config.get("provider_stt_settings", {})
         self.platform_settings: dict = self.config.get("platform_settings", {})
 
     @staticmethod

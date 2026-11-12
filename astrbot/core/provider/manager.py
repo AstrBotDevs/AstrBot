@@ -245,14 +245,12 @@ class ProviderManager:
         self,
         provider_type: ProviderType,
         umo: str | None,
-        provider_id: str | None,
     ) -> Providers | None:
-        """Resolve a provider preference with configuration fallbacks.
+        """Resolve the configured provider with fallbacks.
 
         Args:
             provider_type: Provider type to resolve.
             umo: User message origin used to load session configuration.
-            provider_id: Preferred provider ID, if one is configured.
 
         Returns:
             Resolved provider instance, or None when the provider type is disabled
@@ -261,50 +259,48 @@ class ProviderManager:
         Raises:
             ValueError: If provider_type is unsupported.
         """
-        provider = self.inst_map.get(provider_id) if provider_id else None
-        if not provider:
-            # default setting
-            config = self.acm.get_conf(umo)
-            if provider_type == ProviderType.CHAT_COMPLETION:
-                agent_runner = config.get("agent", {})
-                provider_id = (
-                    agent_runner.get("config", {}).get("model", {}).get("provider_id")
-                    if agent_runner.get("runtime") == "astrbot"
-                    else None
+        provider_id = None
+        config = self.acm.get_conf(umo)
+        if provider_type == ProviderType.CHAT_COMPLETION:
+            agent_runner = config.get("agent", {})
+            provider_id = (
+                agent_runner.get("config", {}).get("model", {}).get("provider_id")
+                if agent_runner.get("runtime") == "astrbot"
+                else None
+            )
+            provider = self.inst_map.get(provider_id)
+            if not provider:
+                provider = self.provider_insts[0] if self.provider_insts else None
+        elif provider_type == ProviderType.SPEECH_TO_TEXT:
+            provider_id = config["provider_stt_settings"].get("provider_id")
+            if not config["provider_stt_settings"].get("enable"):
+                return None
+            if not provider_id:
+                return None
+            provider = self.inst_map.get(provider_id)
+            if not provider:
+                provider = (
+                    self.stt_provider_insts[0] if self.stt_provider_insts else None
                 )
-                provider = self.inst_map.get(provider_id)
-                if not provider:
-                    provider = self.provider_insts[0] if self.provider_insts else None
-            elif provider_type == ProviderType.SPEECH_TO_TEXT:
-                provider_id = config["provider_stt_settings"].get("provider_id")
-                if not config["provider_stt_settings"].get("enable"):
-                    return None
-                if not provider_id:
-                    return None
-                provider = self.inst_map.get(provider_id)
-                if not provider:
-                    provider = (
-                        self.stt_provider_insts[0] if self.stt_provider_insts else None
-                    )
-            elif provider_type == ProviderType.TEXT_TO_SPEECH:
-                provider_id = config["provider_tts_settings"].get("provider_id")
-                if not config["provider_tts_settings"].get("enable"):
-                    return None
-                if not provider_id:
-                    return None
-                provider = self.inst_map.get(provider_id)
-                if not provider:
-                    provider = (
-                        self.tts_provider_insts[0] if self.tts_provider_insts else None
-                    )
-            elif provider_type == ProviderType.DECISION:
-                provider = self.curr_decision_provider_inst or (
-                    self.decision_provider_insts[0]
-                    if self.decision_provider_insts
-                    else None
+        elif provider_type == ProviderType.TEXT_TO_SPEECH:
+            provider_id = config["provider_tts_settings"].get("provider_id")
+            if not config["provider_tts_settings"].get("enable"):
+                return None
+            if not provider_id:
+                return None
+            provider = self.inst_map.get(provider_id)
+            if not provider:
+                provider = (
+                    self.tts_provider_insts[0] if self.tts_provider_insts else None
                 )
-            else:
-                raise ValueError(f"Unknown provider type: {provider_type}")
+        elif provider_type == ProviderType.DECISION:
+            provider = self.curr_decision_provider_inst or (
+                self.decision_provider_insts[0]
+                if self.decision_provider_insts
+                else None
+            )
+        else:
+            raise ValueError(f"Unknown provider type: {provider_type}")
 
         if not provider and provider_id:
             logger.warning(
@@ -329,7 +325,7 @@ class ProviderManager:
         Returns:
             正在使用的提供商实例。
         """
-        return self._resolve_using_provider(provider_type, umo, None)
+        return self._resolve_using_provider(provider_type, umo)
 
     async def get_using_provider_async(
         self,
@@ -345,7 +341,7 @@ class ProviderManager:
         Returns:
             Provider instance currently in use, or None if unavailable.
         """
-        return self._resolve_using_provider(provider_type, umo, None)
+        return self._resolve_using_provider(provider_type, umo)
 
     async def initialize(self) -> None:
         # 逐个初始化提供商

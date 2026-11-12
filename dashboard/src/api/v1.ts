@@ -49,8 +49,6 @@ import {
   type ProviderConfigRequest,
   type PypiIndexTestRequest,
   type RuntimeInfo,
-  type BatchSessionProviderRequest,
-  type BatchSessionServiceRequest,
   type SetupAuthRequest,
   type SessionGroupRequest,
   type SessionRuleRequest,
@@ -176,14 +174,6 @@ export interface SkillListParams extends Record<string, unknown> {
 export interface BackupListParams {
   page?: number;
   page_size?: number;
-}
-
-export interface SessionListParams {
-  page?: number;
-  page_size?: number;
-  search?: string;
-  platform?: string;
-  message_type?: 'all' | 'group' | 'private';
 }
 
 export interface SessionRuleListParams {
@@ -1046,9 +1036,6 @@ export const sessionApi = {
       display_name: string;
     }> }>(openApiV1.listSessionSenders({ query: params }));
   },
-  list(params?: SessionListParams) {
-    return typed<any>(openApiV1.listSessions({ query: generatedQuery(params) }));
-  },
   activeUmos(params?: { platform_id?: string }) {
     return typed<any>(openApiV1.listActiveUmos({ query: params }));
   },
@@ -1062,16 +1049,6 @@ export const sessionApi = {
   },
   deleteRules(payload: UmoListRequest) {
     return typed<any>(openApiV1.deleteSessionRules({ body: payload }));
-  },
-  batchUpdateProvider(payload: BatchSessionProviderRequest) {
-    return typed<any>(
-      openApiV1.batchUpdateSessionProvider({ body: payload }),
-    );
-  },
-  batchUpdateService(payload: BatchSessionServiceRequest) {
-    return typed<any>(
-      openApiV1.batchUpdateSessionService({ body: payload }),
-    );
   },
   listGroups() {
     return typed<any>(openApiV1.listSessionGroups());

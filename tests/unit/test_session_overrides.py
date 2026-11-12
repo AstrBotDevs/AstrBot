@@ -131,21 +131,21 @@ async def test_persona_inheritance_uses_message_override_metadata(
 
     async def process(event):
         before = await personas.resolve_selected_persona(
-            umo=UMO, conversation_persona_id=None, platform_name="webchat"
+            umo=UMO, platform_name="webchat"
         )
-        assert before[3] is (not explicit_persona)
+        assert before[2] is (not explicit_persona)
         await overrides.update_overrides(UMO, {path: None if explicit_persona else "default"})
         after = await personas.resolve_selected_persona(
-            umo=UMO, conversation_persona_id=None, platform_name="webchat"
+            umo=UMO, platform_name="webchat"
         )
         assert after == before
 
     scheduler.stages = [SimpleNamespace(process=process)]
     await scheduler.execute(make_message())
     resolved = await personas.resolve_selected_persona(
-        umo=UMO, conversation_persona_id=None, platform_name="webchat"
+        umo=UMO, platform_name="webchat"
     )
-    assert resolved[3] is explicit_persona
+    assert resolved[2] is explicit_persona
 
 
 @pytest.mark.asyncio
@@ -414,14 +414,12 @@ async def test_model_and_persona_writes_use_same_overrides(override_environment)
     personas.personas_v3 = [{"name": "B", "prompt": "B"}, {"name": "C", "prompt": "C"}]
     resolved = await personas.resolve_selected_persona(
         umo=UMO,
-        conversation_persona_id="C",
         platform_name="test",
     )
     assert resolved[0] == "B"
     await overrides.update_overrides(UMO, {"agent.config.persona.persona_id": "C"})
     resolved = await personas.resolve_selected_persona(
         umo=UMO,
-        conversation_persona_id="B",
         platform_name="test",
     )
     assert resolved[0] == "C"
