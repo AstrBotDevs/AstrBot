@@ -240,7 +240,10 @@ export const useExtensionPage = (initialTab = "installed") => {
     }
     const slug = normalized.replace(/[\s-]+/g, "_");
     // Unknown slugs collapse into "other" so that a typo or an ad-hoc value in
-    // a marketplace index cannot create a one-off filter entry.
+    // a marketplace index cannot create a one-off filter entry. An empty
+    // vocabulary means the canonical list is unknown (still loading, or an
+    // older backend), not that nothing is valid, so the discovered values are
+    // kept: folding them into "other" would leave the filter with one category.
     if (
       marketCategorySlugs.value.length > 0 &&
       !marketCategorySlugs.value.includes(slug)
