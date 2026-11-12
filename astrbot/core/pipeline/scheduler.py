@@ -2,6 +2,7 @@ from collections.abc import AsyncGenerator
 from typing import cast
 
 from astrbot.core import logger
+from astrbot.core.config.runtime import MessageConfig, current_message_config
 from astrbot.core.log import log_context
 from astrbot.core.platform import AstrMessageEvent
 from astrbot.core.platform.astr_message_event import event_context
@@ -88,15 +89,29 @@ class PipelineScheduler:
             event (AstrMessageEvent): 事件对象
 
         """
-        with (
-            log_context(event.get_platform_id(), event.get_platform_name()),
-            event_context(event),
-            trace_execution(event.trace),
-        ):
-            await self._process_stages(event)
+        snapshot, override_paths = (
+            self.ctx.plugin_manager.context.astrbot_config_mgr._create_message_config(
+                event.unified_msg_origin
+            )
+        )
+        scope = MessageConfig(
+            event.unified_msg_origin, snapshot, self.ctx, override_paths
+        )
+        token = current_message_config.set(scope)
+        try:
+            with (
+                log_context(event.get_platform_id(), event.get_platform_name()),
+                event_context(event),
+                trace_execution(event.trace),
+            ):
+                await self._process_stages(event)
 
-            # Send the closing frame before the event is marked complete.
-            if isinstance(event, WebChatMessageEvent | WecomAIBotMessageEvent):
-                await event.send(None)
+                # Send the closing frame before the event is marked complete.
+                if isinstance(event, WebChatMessageEvent | WecomAIBotMessageEvent):
+                    await event.send(None)
 
-            logger.debug("pipeline execution completed.")
+                logger.debug("pipeline execution completed.")
+        finally:
+            # Child tasks may outlive this scope; do not let them reuse stale values.
+            scope.active = False
+            current_message_config.reset(token)

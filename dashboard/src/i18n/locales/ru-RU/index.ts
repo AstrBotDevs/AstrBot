@@ -8,7 +8,6 @@ import ruRUShared from './core/shared.json';
 import ruRUChat from './features/chat.json';
 import ruRUExtension from './features/extension.json';
 import ruRUConversation from './features/conversation.json';
-import ruRUSessionManagement from './features/session-management.json';
 import ruRUToolUse from './features/tool-use.json';
 import ruRUProvider from './features/provider.json';
 import ruRUPlatform from './features/platform.json';
@@ -50,7 +49,6 @@ export default {
       chat: ruRUChat,
       extension: ruRUExtension,
       conversation: ruRUConversation,
-      'session-management': ruRUSessionManagement,
       tooluse: ruRUToolUse,
       provider: ruRUProvider,
       platform: ruRUPlatform,

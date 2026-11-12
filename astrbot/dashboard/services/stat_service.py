@@ -301,8 +301,9 @@ class StatService:
                 }
         memory = psutil.virtual_memory()
         try:
+            # psutil's Windows extension requires a string rather than a Path.
             disk = await asyncio.to_thread(
-                psutil.disk_usage, Path(get_astrbot_data_path())
+                psutil.disk_usage, str(Path(get_astrbot_data_path()))
             )
             disk_usage = {
                 "used": disk.used,

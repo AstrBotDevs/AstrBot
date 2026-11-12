@@ -97,16 +97,14 @@ async def waking_stage(monkeypatch):
             db_helper=MagicMock(),
         )
     )
+    stage.ctx.plugin_manager = SimpleNamespace(
+        context=SimpleNamespace(get_config=lambda **_: stage.ctx.astrbot_config)
+    )
     stage._umo_auto_name_recorder = MagicMock()
     monkeypatch.setattr(
         waking.star_handlers_registry,
         "get_handlers_by_event_type",
         lambda *args, **kwargs: [],
-    )
-    monkeypatch.setattr(
-        waking.SessionPluginManager,
-        "filter_handlers_by_session",
-        AsyncMock(return_value=[]),
     )
     return stage
 

@@ -1,6 +1,7 @@
 import sys
 import time
 from datetime import datetime, timedelta
+from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import MagicMock, Mock
 
@@ -340,3 +341,22 @@ async def test_overview_empty_days(temp_db):
         "today": {"tokens": 0, "messages": 0, "active_sessions": 0},
         "yesterday": {"tokens": 0, "messages": 0, "active_sessions": 0},
     }
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("disk_unavailable", [False, True])
+async def test_overview_disk_usage_portable_path(temp_db, monkeypatch, disk_unavailable):
+    """Pass a string to psutil on every OS and tolerate unavailable disks."""
+    disk = SimpleNamespace(used=40, total=100, percent=40.0)
+    disk_usage = Mock(
+        return_value=disk,
+        side_effect=OSError("Disk unavailable") if disk_unavailable else None,
+    )
+    monkeypatch.setattr(stat_service.psutil, "disk_usage", disk_usage)
+
+    result = await _make_service(temp_db).get_overview()
+
+    disk_usage.assert_called_once_with(str(Path(stat_service.get_astrbot_data_path())))
+    assert result["system"]["disk"] == (
+        None if disk_unavailable else {"used": 40, "total": 100, "percent": 40.0}
+    )

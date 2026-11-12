@@ -6,6 +6,10 @@
 
 import json
 from collections.abc import Awaitable, Callable
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from astrbot.core.astrbot_config_mgr import AstrBotConfigManager
 
 from deprecated import deprecated
 
@@ -13,15 +17,19 @@ from astrbot.core import sp
 from astrbot.core.agent.message import AssistantMessageSegment, UserMessageSegment
 from astrbot.core.db import BaseDatabase
 from astrbot.core.db.po import Conversation, ConversationV2
+from astrbot.core.session_overrides import update_overrides
 from astrbot.core.utils.datetime_utils import to_utc_timestamp
 
 
 class ConversationManager:
     """负责管理会话与 LLM 的对话，某个会话当前正在用哪个对话。"""
 
-    def __init__(self, db_helper: BaseDatabase) -> None:
+    def __init__(
+        self, db_helper: BaseDatabase, acm: "AstrBotConfigManager | None" = None
+    ) -> None:
         self.session_conversations: dict[str, str] = {}
         self.db = db_helper
+        self.acm = acm
         self.save_interval = 60  # 每 60 秒保存一次
 
         # 会话删除回调函数列表（用于级联清理，如知识库配置）
@@ -294,6 +302,18 @@ class ConversationManager:
             token_usage (int | None): token 使用量。None 表示不更新
 
         """
+        if persona_id is not None:
+            runtime = (
+                self.acm.get_conf(unified_msg_origin).get("agent", {}).get("runtime")
+                if self.acm
+                else "astrbot"
+            )
+            path = (
+                "agent.config.persona.persona_id"
+                if runtime == "astrbot"
+                else "agent.config.persona_id"
+            )
+            await update_overrides(unified_msg_origin, {path: persona_id or None})
         if not conversation_id:
             # 如果没有提供 conversation_id，则获取当前的
             conversation_id = await self.get_curr_conversation_id(unified_msg_origin)

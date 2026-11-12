@@ -116,7 +116,7 @@ def harness(tmp_path, monkeypatch):
     context.conversation_manager = MagicMock()
     context.get_config.return_value = config
     context.persona_manager.resolve_selected_persona = AsyncMock(
-        return_value=(None, None, None, False)
+        return_value=(None, None, False)
     )
     context.persona_manager.personas_v3 = []
     context.get_llm_tool_manager.return_value.get_builtin_tool.side_effect = (
@@ -183,16 +183,6 @@ def harness(tmp_path, monkeypatch):
     monkeypatch.setattr(
         knowledge_base_build, "retrieve_knowledge_base", AsyncMock(return_value=None)
     )
-    from astrbot.core.pipeline.process_stage.method.agent_request import (
-        SessionServiceManager,
-    )
-
-    monkeypatch.setattr(
-        SessionServiceManager,
-        "should_process_llm_request",
-        AsyncMock(return_value=True),
-    )
-
     from astrbot.core.agent.runtime import TurnResult
 
     async def run(runner, turn, max_steps):

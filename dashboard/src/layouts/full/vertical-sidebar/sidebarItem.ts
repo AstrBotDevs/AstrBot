@@ -7,7 +7,6 @@ import {
   Database,
   House,
   Heart,
-  PencilRuler,
   Puzzle,
   SlidersHorizontal,
 } from '@lucide/vue';
@@ -77,11 +76,6 @@ const sidebarItem: menu[] = [
     title: 'core.navigation.data',
     icon: markRaw(Database),
     to: '/data'
-  },
-  {
-    title: 'core.navigation.sessionManagement',
-    icon: markRaw(PencilRuler),
-    to: '/session-management'
   },
   {
     header: EXTENSION_GROUP_KEY,

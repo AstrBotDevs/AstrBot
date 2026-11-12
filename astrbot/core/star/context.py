@@ -661,16 +661,16 @@ class Context:
         return prov
 
     def get_config(self, umo: str | None = None) -> AstrBotConfig:
-        """获取 AstrBot 的配置。
+        """Read the default profile or a session's effective configuration.
 
         Args:
-            umo: unified_message_origin 值，用于获取特定会话的配置。
+            umo: Unified message origin of the session to resolve.
 
         Returns:
-            AstrBot 配置对象。
+            The shared default profile when umo is omitted. For the active
+            message's UMO, returns its pipeline configuration snapshot; other
+            sessions resolve their current profiles and overrides normally.
 
-        Note:
-            如果不提供 umo 参数，将返回默认配置。
         """
         if not umo:
             # 使用默认配置

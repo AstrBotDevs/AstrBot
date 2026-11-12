@@ -45,6 +45,11 @@
             :search-keyword="searchKeyword"
             inline
           />
+          <div v-if="config_data.disabled_plugins?.length" class="mt-8">
+            <h3 class="text-subtitle-1 mb-2">{{ tm('overrides.fields.disabledPlugins') }}</h3>
+            <p class="text-body-2 text-medium-emphasis mb-4">{{ tm('overrides.disabledPluginsHint') }}</p>
+            <PluginSetSelector v-model="config_data.disabled_plugins" selection-only />
+          </div>
         </section>
 
         <section
