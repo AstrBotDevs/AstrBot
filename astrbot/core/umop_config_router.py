@@ -1,7 +1,8 @@
 import asyncio
 import fnmatch
 
-from astrbot.core.config_bindings import BINDING_KEY, migrate_config_bindings
+from astrbot.core.config_bindings import BINDING_KEY
+from astrbot.core.db.migration.migra_config_bindings import migrate_config_bindings
 from astrbot.core.utils.shared_preferences import SharedPreferences
 
 
