@@ -164,22 +164,17 @@ class AstrBotConfigManager:
         }
         await self._persist_abconf_mapping(abconf_data)
 
-    def get_conf(
-        self, umo: str | MessageSession | None, *, snapshot: bool = False
-    ) -> AstrBotConfig:
+    def get_conf(self, umo: str | MessageSession | None) -> AstrBotConfig:
         """Read a session's effective configuration or its active message snapshot.
 
         Args:
             umo: Session origin, or None to read the shared default profile.
-            snapshot: Resolve a fresh, independent message configuration instead
-                of reusing the active scope or returning a shared profile.
 
         Returns:
-            A new independent configuration when snapshot is True. Otherwise,
-            the current message snapshot for a matching session and manager.
+            The current message snapshot for a matching session and manager.
             Outside that scope, the routed profile with explicit overrides applied.
         """
-        if not umo and not snapshot:
+        if not umo:
             return self.confs["default"]
         if isinstance(umo, MessageSession):
             umo = f"{umo.platform_id}:{umo.message_type}:{umo.session_id}"
@@ -187,28 +182,21 @@ class AstrBotConfigManager:
         scope = current_message_config.get()
         if (
             scope is not None
-            and not snapshot
             and scope.active
             and scope.umo == umo
             and scope.context.plugin_manager.context.astrbot_config_mgr is self
         ):
             return scope.config
 
-        uuid_ = self._load_conf_mapping(umo)["id"] if umo else "default"
+        uuid_ = self._load_conf_mapping(umo)["id"]
 
         conf = self.confs.get(uuid_)
         if not conf:
             conf = self.confs["default"]  # default MUST exists
 
-        binding = (
-            (self.sp.get(BINDING_KEY, {}, scope="umo", scope_id=str(umo)) or {})
-            if umo
-            else {}
-        )
+        binding = self.sp.get(BINDING_KEY, {}, scope="umo", scope_id=str(umo)) or {}
         overrides = binding.get("overrides", {})
-        if overrides or snapshot:
-            # apply_overrides already deep-copies the complete configuration,
-            # including when there are no explicit overrides.
+        if overrides:
             effective = dict.__new__(AstrBotConfig)
             effective.__dict__.update(conf.__dict__)
             effective.update(apply_overrides(conf, overrides))
@@ -218,6 +206,31 @@ class AstrBotConfigManager:
             )
             return effective
         return conf
+
+    def _create_message_config(self, umo: str) -> AstrBotConfig:
+        """Create an independent configuration for a new pipeline execution.
+
+        Args:
+            umo: Final session origin of the incoming message.
+
+        Returns:
+            A fresh configuration that cannot be saved as a shared profile.
+        """
+        token = current_message_config.set(None)
+        try:
+            config = self.get_conf(umo)
+            # With no active scope, get_conf returns either a shared profile or
+            # a freshly copied override result. Only the shared case needs copying.
+            if not any(config is profile for profile in self.confs.values()):
+                return config
+            snapshot = dict.__new__(AstrBotConfig)
+            snapshot.__dict__.update(config.__dict__)
+            snapshot.update(apply_overrides(config, {}))
+            object.__setattr__(snapshot, "_session_override", True)
+            object.__setattr__(snapshot, "_session_override_paths", frozenset())
+            return snapshot
+        finally:
+            current_message_config.reset(token)
 
     @property
     def default_conf(self) -> AstrBotConfig:

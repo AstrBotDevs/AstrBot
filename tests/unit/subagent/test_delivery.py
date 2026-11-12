@@ -370,6 +370,9 @@ async def test_idle_result_runs_through_pipeline_once_and_commits_to_parent(
     config["agent"]["config"]["subagents"] = env.config
     config["provider_settings"]["streaming_response"] = False
     env.context.get_config = lambda **_: config
+    env.context.astrbot_config_mgr = SimpleNamespace(
+        _create_message_config=lambda _: copy.deepcopy(config)
+    )
     env.context.send_message = AsyncMock(return_value=True)
     monkeypatch.setattr(
         env.context, "get_using_tts_provider_async", AsyncMock(return_value=None)

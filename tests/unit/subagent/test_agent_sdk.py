@@ -48,6 +48,9 @@ async def sdk(environment, monkeypatch):
     config["agent"]["config"]["subagents"]["enabled"] = False
     env.config = config
     env.context.get_config = lambda **kwargs: config
+    env.context.astrbot_config_mgr = SimpleNamespace(
+        _create_message_config=lambda _: copy.deepcopy(config)
+    )
     env.context.get_using_provider_async = AsyncMock(return_value=env.provider)
     env.context.get_using_tts_provider_async = AsyncMock(return_value=None)
     env.context._star_manager = SimpleNamespace(context=env.context)

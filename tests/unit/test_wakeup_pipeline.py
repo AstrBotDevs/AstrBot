@@ -80,6 +80,7 @@ async def runtime(monkeypatch):
         get_event_queue=lambda: queue,
         get_platform_inst=lambda _: SimpleNamespace(meta=lambda: metadata),
         get_config=lambda **_: config,
+        astrbot_config_mgr=SimpleNamespace(_create_message_config=lambda _: copy.deepcopy(config)),
         conversation_manager=SimpleNamespace(
             get_curr_conversation_id=AsyncMock(return_value=conversation.cid),
             get_conversation=AsyncMock(side_effect=get_conversation),

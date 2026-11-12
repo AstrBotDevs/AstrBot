@@ -89,15 +89,14 @@ class PipelineScheduler:
             event (AstrMessageEvent): 事件对象
 
         """
-        # A nested execution must resolve its own session, even for the same UMO.
-        token = current_message_config.set(None)
-        scope = None
-        try:
-            snapshot = self.ctx.plugin_manager.context.get_config(
-                umo=event.unified_msg_origin, snapshot=True
+        snapshot = (
+            self.ctx.plugin_manager.context.astrbot_config_mgr._create_message_config(
+                event.unified_msg_origin
             )
-            scope = MessageConfig(event.unified_msg_origin, snapshot, self.ctx)
-            current_message_config.set(scope)
+        )
+        scope = MessageConfig(event.unified_msg_origin, snapshot, self.ctx)
+        token = current_message_config.set(scope)
+        try:
             with (
                 log_context(event.get_platform_id(), event.get_platform_name()),
                 event_context(event),
@@ -112,6 +111,5 @@ class PipelineScheduler:
                 logger.debug("pipeline execution completed.")
         finally:
             # Child tasks may outlive this scope; do not let them reuse stale values.
-            if scope is not None:
-                scope.active = False
+            scope.active = False
             current_message_config.reset(token)
