@@ -321,11 +321,11 @@ const localTabGroups = computed(() => {
       ? [{ key: 'persona', metadata: props.metadata.persona }]
       : [],
     capabilities: [
-      'knowledgebase',
       'websearch',
       'agent_computer_use',
-      'proactive_capability',
-      'subagents'
+      'subagents',
+      'knowledgebase',
+      'proactive_capability'
     ].filter((key) => props.metadata?.[key]).map((key) => ({
       key,
       metadata: props.metadata[key]

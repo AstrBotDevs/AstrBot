@@ -102,6 +102,7 @@ To return to the model configured in the selected profile, open the model select
 Select `Config` in the sidebar, then choose the profile to edit from the selector at the top. Sections appear in this order: `AI`, `Platforms & Messages`, `Access Control`, `Plugin`, and `Ext.`. Use the search control at the top to find a setting. The profile selector, search button, and section navigation stay fixed while only the configuration pane on the right scrolls.
 
 - In `AI`, built-in AI settings have `Model`, `Persona`, `Capabilities`, and `Advanced` tabs. Use `… → Change execution mode` beside the AI heading to connect a third-party agent.
+- In `AI → Capabilities`, settings appear in this order: Web Search, Agent Computer Use, Subagents, Knowledge Base, and Proactive Agent.
 - `Access Control` contains administrator IDs and the session whitelist, including whitelist logs and administrator exemptions.
 - `Platforms & Messages` contains message-trigger, session-isolation, and delivery settings.
 - `Plugin` selects the plugins enabled for this profile. To edit an individual plugin's parameters, open `Extensions` and click that plugin's gear icon (`Extension Config`).
