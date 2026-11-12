@@ -37,7 +37,7 @@ from astrbot.core.desktop_runtime import (
     is_desktop_session_auth_enabled,
 )
 from astrbot.core.umo_alias import build_umo_alias_map, serialize_umo_alias
-from astrbot.core.utils.astrbot_path import get_astrbot_path
+from astrbot.core.utils.astrbot_path import get_astrbot_data_path, get_astrbot_path
 from astrbot.core.utils.auth_password import (
     is_default_dashboard_password,
     is_md5_dashboard_password,
@@ -245,6 +245,83 @@ class StatService:
         except Exception as exc:
             logger.error("清理存储失败", exc_info=True)
             raise StatServiceError("清理存储失败，请查看后端日志了解详情。") from exc
+
+    async def get_overview(self) -> dict:
+        """Aggregate today's usage and the previous calendar day's usage.
+
+        Returns:
+            Daily token and platform message totals, plus distinct sessions with
+            internal model activity, using the server's local calendar dates,
+            and a snapshot of host resource usage.
+        """
+        today = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+        result = {}
+        async with self.db_helper.get_db() as session:
+            for label, start in (
+                ("today", today),
+                ("yesterday", today - timedelta(days=1)),
+            ):
+                end = start + timedelta(days=1)
+                # Platform counters use local timestamps; provider records use UTC.
+                start_utc = start.astimezone(timezone.utc).replace(tzinfo=None)
+                end_utc = end.astimezone(timezone.utc).replace(tzinfo=None)
+                messages = (
+                    await session.execute(
+                        select(func.coalesce(func.sum(PlatformStat.count), 0)).where(
+                            # Legacy counters omit fractional seconds at midnight.
+                            func.date(PlatformStat.timestamp) == start.date(),
+                        )
+                    )
+                ).scalar_one()
+                tokens, active_sessions = (
+                    await session.execute(
+                        select(
+                            func.coalesce(
+                                func.sum(
+                                    ProviderStat.token_input_other
+                                    + ProviderStat.token_input_cached
+                                    + ProviderStat.token_output
+                                ),
+                                0,
+                            ),
+                            func.count(
+                                func.distinct(func.nullif(ProviderStat.umo, ""))
+                            ),
+                        ).where(
+                            ProviderStat.agent_type == "internal",
+                            ProviderStat.created_at >= start_utc,
+                            ProviderStat.created_at < end_utc,
+                        )
+                    )
+                ).one()
+                result[label] = {
+                    "tokens": tokens,
+                    "messages": messages,
+                    "active_sessions": active_sessions,
+                }
+        memory = psutil.virtual_memory()
+        try:
+            disk = await asyncio.to_thread(
+                psutil.disk_usage, Path(get_astrbot_data_path())
+            )
+            disk_usage = {
+                "used": disk.used,
+                "total": disk.total,
+                "percent": disk.percent,
+            }
+        except OSError:
+            disk_usage = None
+        result["system"] = {
+            "uptime_seconds": max(0, int(time.time()) - self.core_lifecycle.start_time),
+            "cpu_percent": await asyncio.to_thread(psutil.cpu_percent, 0.1),
+            "memory": {
+                "used": memory.total - memory.available,
+                "total": memory.total,
+                "percent": memory.percent,
+            },
+            "disk": disk_usage,
+        }
+        return result
 
     async def get_stat(self, offset_sec: int) -> dict:
         try:

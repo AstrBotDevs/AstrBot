@@ -268,3 +268,75 @@ async def test_provider_token_ranking_includes_umo_display_names(temp_db):
             "tokens": 3,
         },
     ]
+
+
+@pytest.mark.asyncio
+async def test_overview_calendar_boundaries_and_distinct_sessions(temp_db):
+    """Daily usage must separate midnight boundaries and deduplicate sessions."""
+    from datetime import timezone
+
+    from astrbot.core.db.po import ProviderStat
+
+    today = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+    yesterday = today - timedelta(days=1)
+    async with temp_db.get_db() as session:
+        for timestamp, umo, tokens, agent_type in [
+            (today, "qq:group:a", 10, "internal"),
+            (today + timedelta(seconds=1), "qq:group:a", 20, "internal"),
+            (today, "qq:group:b", 5, "internal"),
+            (today, "", 2, "internal"),
+            (today, "external:session", 100, "external"),
+            (today - timedelta(microseconds=1), "qq:group:a", 7, "internal"),
+            (yesterday, "qq:group:b", 3, "internal"),
+            (yesterday - timedelta(microseconds=1), "old:session", 99, "internal"),
+            (today + timedelta(days=1), "future:session", 99, "internal"),
+        ]:
+            session.add(
+                ProviderStat(
+                    umo=umo,
+                    provider_id="test",
+                    agent_type=agent_type,
+                    token_input_other=tokens,
+                    token_input_cached=1,
+                    token_output=1,
+                    created_at=timestamp.astimezone(timezone.utc).replace(tzinfo=None),
+                )
+            )
+        await session.commit()
+    for timestamp, count in [
+        (today, 11),
+        (today - timedelta(seconds=1), 5),
+        (yesterday, 3),
+        (yesterday - timedelta(seconds=1), 99),
+        (today + timedelta(days=1), 99),
+    ]:
+        await temp_db.insert_platform_stats("qq", "qq", count, timestamp)
+
+    result = await _make_service(temp_db).get_overview()
+    system = result.pop("system")
+    assert system["uptime_seconds"] >= 0
+    assert 0 <= system["cpu_percent"] <= 100
+    assert 0 <= system["memory"]["used"] <= system["memory"]["total"]
+    if system["disk"] is not None:
+        assert 0 <= system["disk"]["used"] <= system["disk"]["total"]
+
+    assert result == {
+        "today": {"tokens": 45, "messages": 11, "active_sessions": 2},
+        "yesterday": {"tokens": 14, "messages": 8, "active_sessions": 2},
+    }
+
+
+@pytest.mark.asyncio
+async def test_overview_empty_days(temp_db):
+    """Days without activity must return zeros rather than missing values."""
+    result = await _make_service(temp_db).get_overview()
+    system = result.pop("system")
+    assert system["uptime_seconds"] >= 0
+    assert 0 <= system["cpu_percent"] <= 100
+    assert 0 <= system["memory"]["used"] <= system["memory"]["total"]
+    if system["disk"] is not None:
+        assert 0 <= system["disk"]["used"] <= system["disk"]["total"]
+    assert result == {
+        "today": {"tokens": 0, "messages": 0, "active_sessions": 0},
+        "yesterday": {"tokens": 0, "messages": 0, "active_sessions": 0},
+    }

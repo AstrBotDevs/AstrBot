@@ -8,6 +8,7 @@ These paths use the current default sidebar with a fixed menu order. Extension i
 
 | Previous entry point or name | Current entry point |
 | --- | --- |
+| Welcome / Welcome page | Overview (the `/welcome` URL remains available) |
 | Providers → Add Provider → Agent Runner | Config → Select a profile → AI → `…` beside the AI heading → Change execution mode |
 | Providers → Decision (after Chat Completion) | Providers → Decision (balance-scale icon, between Text to Speech and Embedding) |
 | Data / Dashboard | Data & Logs → Statistics |
@@ -23,6 +24,14 @@ These paths use the current default sidebar with a fixed menu order. Extension i
 | Custom Rules / Future Tasks / SubAgents | Custom Rules is under `System`; Future Tasks is under `Extensions`. Subagent management moves to `Configuration → AI → Capabilities → Subagents → Configure Specialized Agents`. |
 
 Old log, trace, conversation, and statistics URLs still redirect to the corresponding tabs. Agent runners are now saved in each profile; they are no longer created as model providers. See [Agent Execution Mode](./agent-runner.md) for the setup steps.
+
+## Overview
+
+**Welcome → Overview** is the new sidebar label; `/welcome` remains available. The page shows a time-of-day greeting, today's tokens, messages, and active sessions, compared with the entire previous day in the server's local timezone. Tokens and active sessions come from internal agent model calls; active sessions count distinct session sources. Message totals come from platform counters. When yesterday's value is zero, new usage is labelled **New activity** rather than an infinite percentage. The page refreshes every 30 seconds while visible.
+
+A compact system status bar sits below the daily statistics and above Quick setup and Resources. It shows AstrBot process uptime, host CPU and memory usage, and disk usage for the filesystem containing the data directory. The status button beside the page title shows **Running normally**, or **x issues** when bots have recorded errors, counting each affected bot once. Click it to see bot IDs, error counts, the latest error and timestamp, and expandable stack traces. **Manage bots** opens the bot page. A failed status request displays **Status unavailable** instead of a healthy result.
+
+**Quick setup** retains the model and bot configuration dialogs. Completed steps remain clickable. The computer-access step opens a permission dialog with an explanation of its scope. **Resources** links to GitHub, documentation, and Afdian. The layout follows the selected primary color and adapts to narrow screens.
 
 ## Documentation Navigation
 

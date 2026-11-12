@@ -4594,6 +4594,34 @@ paths:
         "200":
           $ref: "#/components/responses/Ok"
 
+  /api/v1/stats/overview:
+    get:
+      tags: [Stats]
+      summary: Get today's and yesterday's overview usage
+      description: Uses server-local calendar days. Tokens and distinct active session identifiers come from internal model calls; messages come from platform counters.
+      operationId: getOverviewStats
+      x-astrbot-scope: system
+      responses:
+        "200":
+          description: Daily usage totals
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessEnvelope"
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        required: [today, yesterday, system]
+                        properties:
+                          today:
+                            $ref: "#/components/schemas/OverviewDailyUsage"
+                          yesterday:
+                            $ref: "#/components/schemas/OverviewDailyUsage"
+                          system:
+                            $ref: "#/components/schemas/OverviewSystemStats"
+
   /api/v1/stats/provider-tokens:
     get:
       tags: [Stats]
@@ -5730,6 +5758,47 @@ components:
         type: string
 
   schemas:
+    OverviewSystemStats:
+      type: object
+      required: [uptime_seconds, cpu_percent, memory, disk]
+      properties:
+        uptime_seconds:
+          type: integer
+          minimum: 0
+        cpu_percent:
+          type: number
+        memory:
+          $ref: "#/components/schemas/OverviewResourceUsage"
+        disk:
+          description: Usage of the filesystem containing the AstrBot data directory, or null if unavailable.
+          allOf:
+            - $ref: "#/components/schemas/OverviewResourceUsage"
+          nullable: true
+    OverviewResourceUsage:
+      type: object
+      required: [used, total, percent]
+      properties:
+        used:
+          type: integer
+          description: Used bytes.
+        total:
+          type: integer
+          description: Total bytes.
+        percent:
+          type: number
+    OverviewDailyUsage:
+      type: object
+      required: [tokens, messages, active_sessions]
+      properties:
+        tokens:
+          type: integer
+          minimum: 0
+        messages:
+          type: integer
+          minimum: 0
+        active_sessions:
+          type: integer
+          minimum: 0
     BotCleanupTarget:
       type: string
       enum: [custom_rules, preferences, routing, cron_jobs, conversations, message_history, traces, stats]

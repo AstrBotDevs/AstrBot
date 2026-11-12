@@ -5,7 +5,7 @@ import {
   Box,
   Clock3,
   Database,
-  Hand,
+  House,
   Heart,
   PencilRuler,
   Puzzle,
@@ -50,7 +50,7 @@ const sidebarItem: menu[] = [
   },
   {
     title: 'core.navigation.welcome',
-    icon: markRaw(Hand),
+    icon: markRaw(House),
     to: '/welcome',
   },
   {

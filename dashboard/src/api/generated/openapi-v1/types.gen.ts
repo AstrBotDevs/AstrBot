@@ -440,6 +440,34 @@ export type NeoReleaseActionRequest = {
     [key: string]: unknown | string;
 };
 
+export type OverviewDailyUsage = {
+    tokens: number;
+    messages: number;
+    active_sessions: number;
+};
+
+export type OverviewResourceUsage = {
+    /**
+     * Used bytes.
+     */
+    used: number;
+    /**
+     * Total bytes.
+     */
+    total: number;
+    percent: number;
+};
+
+export type OverviewSystemStats = {
+    uptime_seconds: number;
+    cpu_percent: number;
+    memory: OverviewResourceUsage;
+    /**
+     * Usage of the filesystem containing the AstrBot data directory, or null if unavailable.
+     */
+    disk: ((OverviewResourceUsage) | null);
+};
+
 export type ParameterAttachmentId = string;
 
 export type ParameterAttachmentIdQuery = string;
@@ -3490,6 +3518,16 @@ export type GetStatsData = {
 export type GetStatsResponse = (SuccessEnvelope);
 
 export type GetStatsError = unknown;
+
+export type GetOverviewStatsResponse = ((SuccessEnvelope & {
+    data?: {
+        today: OverviewDailyUsage;
+        yesterday: OverviewDailyUsage;
+        system: OverviewSystemStats;
+    };
+}));
+
+export type GetOverviewStatsError = unknown;
 
 export type GetProviderTokenStatsData = {
     query?: {

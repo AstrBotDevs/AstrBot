@@ -1838,6 +1838,11 @@ export const conversationApi = {
 };
 
 export const statsApi = {
+  overview() {
+    return typed<{ today: openApiV1.OverviewDailyUsage; yesterday: openApiV1.OverviewDailyUsage; system: openApiV1.OverviewSystemStats }>(
+      openApiV1.getOverviewStats(),
+    );
+  },
   get(offsetSec?: number) {
     return typed<any>(
       openApiV1.getStats({
