@@ -1818,10 +1818,10 @@ export const conversationApi = {
 };
 
 export const statsApi = {
-  get(offsetSec?: number) {
+  get(offsetSec?: number, sections?: string) {
     return typed<any>(
       openApiV1.getStats({
-        query: offsetSec === undefined ? undefined : { offset_sec: offsetSec },
+        query: { offset_sec: offsetSec, sections },
       }),
     );
   },

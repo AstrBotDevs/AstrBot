@@ -189,7 +189,7 @@ async function loadOverview() {
   if (statsLoading.value) return;
   statsLoading.value = true;
   try {
-    const response = await statsApi.get();
+    const response = await statsApi.get(undefined, 'daily_usage,system');
     if (response.data.status !== 'ok') throw new Error(response.data.message || 'Failed to load overview');
     overview.value = response.data.data;
     statsFailed.value = false;

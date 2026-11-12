@@ -30,6 +30,18 @@ AstrBot 管理面板具有管理插件、查看日志、可视化配置、查看
 
 总览与「数据与日志 → 统计」共用 `GET /api/v1/stats`。响应新增 `daily_usage.today`、`daily_usage.yesterday` 和整机资源 `system`，原有进程统计与消息趋势字段保持不变。`offset_sec` 只控制消息的滚动时间窗口，不影响自然日汇总。开发阶段新增的独立 `/api/v1/stats/overview` 接口已移除。
 
+通过逗号分隔的 `sections` 查询参数按需计算和返回数据。不传时返回全部分类；空值或未知分类返回 HTTP 400，允许分类两侧空格和重复分类。
+
+| 分类 | 返回字段 |
+| --- | --- |
+| `messages` | `message_count`、`message_time_series`、`platform`：消息总量、滚动趋势和平台排行 |
+| `daily_usage` | `daily_usage`：今日与昨日的 Token、消息量、去重活跃会话 |
+| `process` | `cpu_percent`、`memory`、`running`、`start_time`、`thread_count`：进程状态；兼容字段 `memory.system` 为整机总内存，单位 MiB |
+| `system` | `system`：整机 CPU、内存、数据分区磁盘用量及进程运行时长 |
+| `instances` | `platform_count`、`plugin_count`、`plugins`：平台和插件信息 |
+
+总览请求 `/api/v1/stats?sections=daily_usage,system`；统计页请求 `/api/v1/stats?sections=messages,process,instances&offset_sec=86400`。未请求分类的数据库查询、CPU 采样及实例枚举均会跳过，响应字段名保持不变。
+
 侧边栏的「欢迎」已更名为「总览」。顶部展示时段问候语、今日 Token 使用量、今日消息量和活跃会话，并与昨日整天比较；统计以服务器本地日期为准。Token 和活跃会话基于内置 Agent 的模型调用记录，活跃会话按会话来源去重；消息量来自平台消息计数。昨日为零而今日有数据时显示「新增」，不会显示无穷大的百分比。页面在前台时每 30 秒刷新。
 
 统计卡片下方、快速引导和相关资源上方的系统状态栏展示运行时长、CPU、内存和磁盘用量。运行时长为 AstrBot 进程运行时间；CPU 和内存为服务器用量，磁盘为数据目录所在分区的用量。标题右侧的状态按钮默认显示「运行正常」；有错误记录的机器人会使它变为「x 个问题」，每个机器人计一个问题。点击后可查看机器人 ID、错误次数、最近错误时间、错误消息及可展开的堆栈，也可点击「管理机器人」排查。状态读取失败时显示「状态不可用」，不会当作运行正常。

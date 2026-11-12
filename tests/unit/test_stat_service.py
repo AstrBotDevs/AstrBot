@@ -3,7 +3,7 @@ import time
 from datetime import datetime, timedelta
 from pathlib import Path
 from types import SimpleNamespace
-from unittest.mock import MagicMock, Mock
+from unittest.mock import AsyncMock, MagicMock, Mock
 
 import pytest
 
@@ -363,3 +363,98 @@ async def test_stats_disk_usage_portable_path(temp_db, monkeypatch, disk_unavail
     assert result["system"]["disk"] == (
         None if disk_unavailable else {"used": 40, "total": 100, "percent": 40.0}
     )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "sections",
+    [
+        None,
+        "messages",
+        "daily_usage",
+        "process",
+        "system",
+        "instances",
+        "daily_usage,system",
+        "messages,process,instances",
+        " system , system ",
+    ],
+)
+async def test_stats_sections_skip_unrequested_work(temp_db, monkeypatch, sections):
+    """Selection must skip database queries, sampling, and instance enumeration."""
+    db = MagicMock()
+    db.get_db.side_effect = temp_db.get_db
+    service = _make_service(db)
+    daily_usage = AsyncMock(return_value={"today": {}, "yesterday": {}})
+    monkeypatch.setattr(service, "_get_daily_usage", daily_usage)
+    process = Mock()
+    process.cpu_percent.return_value = 20.0
+    process.memory_info.return_value = SimpleNamespace(rss=1024**2)
+    metrics = SimpleNamespace(
+        Process=Mock(return_value=process),
+        virtual_memory=Mock(
+            return_value=SimpleNamespace(
+                total=100 * 1024**2, available=60 * 1024**2, percent=40.0
+            )
+        ),
+        cpu_count=Mock(return_value=4),
+        cpu_percent=Mock(return_value=10.0),
+        disk_usage=Mock(return_value=SimpleNamespace(used=40, total=100, percent=40.0)),
+    )
+    monkeypatch.setattr(stat_service, "psutil", metrics)
+
+    result = await service.get_stat(3600, sections=sections)
+
+    fields = {
+        "messages": {"message_count", "message_time_series", "platform"},
+        "daily_usage": {"daily_usage"},
+        "process": {"cpu_percent", "memory", "running", "start_time", "thread_count"},
+        "system": {"system"},
+        "instances": {"platform_count", "plugin_count", "plugins"},
+    }
+    requested = (
+        set(fields)
+        if sections is None
+        else {item.strip() for item in sections.split(",")}
+    )
+    assert set(result) == set().union(*(fields[item] for item in requested))
+    assert db.get_db.call_count == int("messages" in requested)
+    assert daily_usage.await_count == int("daily_usage" in requested)
+    assert metrics.virtual_memory.call_count == int(
+        bool(requested & {"process", "system"})
+    )
+    assert metrics.Process.call_count == int("process" in requested)
+    assert process.cpu_percent.call_count == int("process" in requested)
+    assert process.memory_info.call_count == int("process" in requested)
+    assert metrics.cpu_count.call_count == int("process" in requested)
+    assert metrics.cpu_percent.call_count == int("system" in requested)
+    assert metrics.disk_usage.call_count == int("system" in requested)
+    assert service.core_lifecycle.star_context.get_all_stars.call_count == int(
+        "instances" in requested
+    )
+    assert service.core_lifecycle.platform_manager.get_insts.call_count == int(
+        "instances" in requested
+    )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "sections", ["", " ", "unknown", "system,unknown", "system,", ",system"]
+)
+async def test_stats_reject_invalid_sections_before_collecting(monkeypatch, sections):
+    """Malformed selections must fail before performing any expensive work."""
+    db = MagicMock()
+    service = _make_service(db)
+    daily_usage = AsyncMock()
+    monkeypatch.setattr(service, "_get_daily_usage", daily_usage)
+    metrics = Mock()
+    monkeypatch.setattr(stat_service, "psutil", metrics)
+
+    with pytest.raises(stat_service.StatServiceError, match="sections must be"):
+        await service.get_stat(3600, sections=sections)
+
+    db.get_db.assert_not_called()
+    daily_usage.assert_not_awaited()
+    assert metrics.mock_calls == []
+    service.core_lifecycle.star_context.get_all_stars.assert_not_called()
+    service.core_lifecycle.platform_manager.get_insts.assert_not_called()

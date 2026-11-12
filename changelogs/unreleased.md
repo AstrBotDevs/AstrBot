@@ -12,3 +12,6 @@
 
 - 总览统计合并至 `/api/v1/stats`：新增 `daily_usage` 与 `system`，保留现有字段和统计口径；移除开发阶段的 `/api/v1/stats/overview` 接口。
 - Consolidate overview metrics into `/api/v1/stats` with additive `daily_usage` and `system` fields, preserving existing statistics. Remove the development-only `/api/v1/stats/overview` endpoint.
+
+- `/api/v1/stats` 支持 `sections` 按需计算和返回 `messages`、`daily_usage`、`process`、`system`、`instances`。总览与统计页分别请求所需分类，不传参数仍返回全部数据；旧版 `/api/stat/get` 同样支持。
+- Add on-demand `sections` to `/api/v1/stats` and legacy `/api/stat/get`: `messages`, `daily_usage`, `process`, `system`, and `instances`. Overview and Statistics request only their required categories; omitted sections retain the full response.

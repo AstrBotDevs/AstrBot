@@ -1089,6 +1089,49 @@ async def test_stats_routes_include_daily_usage_and_system_resources(
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("path", ["/api/v1/stats", "/api/stat/get"])
+@pytest.mark.parametrize(
+    ("sections", "expected_fields"),
+    [
+        ("daily_usage,system", {"daily_usage", "system"}),
+        (
+            "messages,process,instances",
+            {
+                "message_count",
+                "message_time_series",
+                "platform",
+                "cpu_percent",
+                "memory",
+                "running",
+                "start_time",
+                "thread_count",
+                "platform_count",
+                "plugin_count",
+                "plugins",
+            },
+        ),
+        ("unknown", None),
+        ("", None),
+    ],
+)
+async def test_stats_routes_select_sections(
+    asgi_app, asgi_client, temp_db, path, sections, expected_fields
+):
+    """Both routes honor sections and reject malformed query selections."""
+    asgi_app.state.services.stats.db_helper = temp_db
+    response = await asgi_client.get(
+        path, params={"sections": sections}, headers=_jwt_headers()
+    )
+
+    if expected_fields is None:
+        assert response.status_code == 400
+        assert "sections must be" in response.json()["message"]
+    else:
+        assert response.status_code == 200
+        assert set(response.json()["data"]) == expected_fields
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize("desktop_auth", [False, True])
 @pytest.mark.parametrize("status", ["missing", "unavailable", "detected"])
 async def test_version_routes_return_startup_runtime_snapshot(

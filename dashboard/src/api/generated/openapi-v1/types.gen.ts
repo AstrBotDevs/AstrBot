@@ -3491,21 +3491,25 @@ export type ExportConversationsError = unknown;
 export type GetStatsData = {
     query?: {
         offset_sec?: number;
+        /**
+         * Comma-separated categories. messages returns message_count, message_time_series and platform; daily_usage returns daily_usage; process returns cpu_percent, memory, running, start_time and thread_count; system returns system; instances returns platform_count, plugin_count and plugins. Whitespace and duplicate categories are accepted. Omit for all categories. Empty or unknown categories return HTTP 400.
+         */
+        sections?: string;
     };
 };
 
 export type GetStatsResponse = ((SuccessEnvelope & {
     data?: {
-        daily_usage: {
+        daily_usage?: {
             today: StatsDailyUsage;
             yesterday: StatsDailyUsage;
         };
-        system: StatsSystemResources;
+        system?: StatsSystemResources;
         [key: string]: unknown | StatsSystemResources;
     };
 }));
 
-export type GetStatsError = unknown;
+export type GetStatsError = (unknown);
 
 export type GetProviderTokenStatsData = {
     query?: {
