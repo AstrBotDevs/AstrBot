@@ -1,10 +1,11 @@
 from astrbot import logger
-from astrbot.api import sp
 from astrbot.core.astrbot_config_mgr import AstrBotConfigManager
+from astrbot.core.config.runtime import current_message_config
 from astrbot.core.db import BaseDatabase
 from astrbot.core.db.po import Persona, PersonaFolder, Personality
 from astrbot.core.platform.message_session import MessageSession
 from astrbot.core.sentinels import NOT_GIVEN
+from astrbot.core.session_overrides import get_overrides
 
 SYSTEM_DEFAULT_PERSONA_ID = "default"
 """Reserved persona id for the built-in system default persona.
@@ -124,64 +125,55 @@ class PersonaManager:
         self,
         *,
         umo: str | MessageSession,
-        conversation_persona_id: str | None,
         platform_name: str,
-        provider_settings: dict | None = None,
-    ) -> tuple[str | None, Personality | None, str | None, bool]:
-        """解析当前会话最终生效的人格。
+    ) -> tuple[str | None, Personality | None, bool]:
+        """Resolve the persona from the effective session configuration.
+
+        Args:
+            umo: Session whose effective configuration selects the persona.
+            platform_name: Platform name used for the WebChat default prompt.
 
         Returns:
             tuple:
                 - selected persona_id
                 - selected persona object
-                - force applied persona_id from session rule
                 - whether use webchat special default persona
         """
-        session_service_config = (
-            await sp.get_async(
-                scope="umo",
-                scope_id=str(umo),
-                key="session_service_config",
-                default={},
+        scope = current_message_config.get()
+        if (
+            scope is not None
+            and scope.active
+            and scope.umo == str(umo)
+            and scope.context.plugin_manager.context.astrbot_config_mgr is self.acm
+        ):
+            overrides = scope.override_paths
+        else:
+            overrides = await get_overrides(str(umo))
+        cfg = self.acm.get_conf(umo)
+        agent_runner = cfg.get("agent", {})
+        runner_config = agent_runner.get("config", {})
+        persona_id = (
+            runner_config.get("persona", {}).get(
+                "persona_id", SYSTEM_DEFAULT_PERSONA_ID
             )
-            or {}
+            if agent_runner.get("runtime") == "astrbot"
+            else runner_config.get("persona_id", SYSTEM_DEFAULT_PERSONA_ID)
         )
-
-        force_applied_persona_id = session_service_config.get("persona_id")
-        persona_id = force_applied_persona_id
-
-        if not persona_id:
-            persona_id = conversation_persona_id
-            if persona_id == "[%None]":
-                pass
-            elif persona_id is None:
-                cfg = self.acm.get_conf(umo)
-                agent_runner = cfg.get("agent", {})
-                runner_config = agent_runner.get("config", {})
-                persona_id = (
-                    runner_config.get("persona", {}).get(
-                        "persona_id", SYSTEM_DEFAULT_PERSONA_ID
-                    )
-                    if agent_runner.get("runtime") == "astrbot"
-                    else runner_config.get("persona_id", SYSTEM_DEFAULT_PERSONA_ID)
-                )
 
         persona = next(
             (item for item in self.personas_v3 if item["name"] == persona_id),
             None,
         )
         is_implicit_system_default = (
-            force_applied_persona_id is None
-            and conversation_persona_id is None
+            "agent.config.persona.persona_id" not in overrides
+            and "agent.config.persona_id" not in overrides
             and persona_id == SYSTEM_DEFAULT_PERSONA_ID
         )
         logger.debug(
-            "[persona] resolve_selected_persona: umo=%s conversation_persona_id=%r "
-            "force_applied=%r -> persona_id=%r matched_persona=%r "
+            "[persona] resolve_selected_persona: umo=%s -> persona_id=%r "
+            "matched_persona=%r "
             "implicit_system_default=%s",
             umo,
-            conversation_persona_id,
-            force_applied_persona_id,
             persona_id,
             persona["name"] if persona else None,
             is_implicit_system_default,
@@ -200,7 +192,6 @@ class PersonaManager:
         return (
             persona_id,
             persona,
-            force_applied_persona_id,
             use_webchat_special_default,
         )
 

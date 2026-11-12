@@ -5280,3 +5280,17 @@ async def test_bot_delete_cleanup_query_is_validated(asgi_app, asgi_client, rout
     invalid = await asgi_client.delete(route, params={"bot_id": "bot", "cleanup": "unknown"}, headers=_jwt_headers())
     assert invalid.status_code == 422
     assert delete_bot.await_count == 1
+
+
+@pytest.mark.asyncio
+async def test_session_binding_distinguishes_follow_from_omitted_profile(asgi_client, monkeypatch):
+    from astrbot.dashboard.services.session_management_service import SessionManagementService
+
+    update = AsyncMock(return_value={})
+    monkeypatch.setattr(SessionManagementService, "update_session_rule", update)
+    payload = {"umo": "test:GroupMessage:42", "rule_key": "config_overrides", "rule_value": {}}
+    for selection in ({}, {"profile_id": None}, {"profile_id": "default"}):
+        response = await asgi_client.post("/api/v1/sessions/rules", headers=_jwt_headers(), json={**payload, **selection})
+        assert response.status_code == 200
+        assert response.json()["status"] == "ok"
+        assert update.await_args.args[0] == {**payload, **selection}

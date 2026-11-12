@@ -27,7 +27,6 @@ from astrbot.core.message.components import Image
 from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.platform.astr_message_event import current_message_event, event_context
 from astrbot.core.provider.entities import LLMResponse
-from astrbot.core.star.session_llm_manager import SessionServiceManager
 from astrbot.core.star.star_handler import EventType
 
 
@@ -49,11 +48,14 @@ async def sdk(environment, monkeypatch):
     config["agent"]["config"]["subagents"]["enabled"] = False
     env.config = config
     env.context.get_config = lambda **kwargs: config
+    env.context.astrbot_config_mgr = SimpleNamespace(
+        _create_message_config=lambda _: (copy.deepcopy(config), frozenset())
+    )
     env.context.get_using_provider_async = AsyncMock(return_value=env.provider)
     env.context.get_using_tts_provider_async = AsyncMock(return_value=None)
     env.context._star_manager = SimpleNamespace(context=env.context)
     env.context.persona_manager.resolve_selected_persona = AsyncMock(
-        return_value=(None, None, None, False)
+        return_value=(None, None, False)
     )
     env.conversation.persona_id = None
     env.conversations = {env.conversation.cid: env.conversation}
@@ -67,11 +69,6 @@ async def sdk(environment, monkeypatch):
     env.context.conversation_manager.update_conversation.side_effect = save
     env.platform_send = AsyncMock()
     env.context.platform_manager.platform_insts[0].send_by_session = env.platform_send
-    monkeypatch.setattr(
-        SessionServiceManager,
-        "should_process_llm_request",
-        AsyncMock(return_value=True),
-    )
     monkeypatch.setattr(native_session, "record_agent_stats", AsyncMock())
     monkeypatch.setattr(native_session.Metric, "upload", AsyncMock())
     try:

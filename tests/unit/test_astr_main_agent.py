@@ -40,7 +40,6 @@ from astrbot.core.pipeline.process_stage.method.agent_sub_stages import (
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from astrbot.core.platform.platform_metadata import PlatformMetadata
 from astrbot.core.provider import Provider
-from astrbot.core.provider import manager as provider_manager_module
 from astrbot.core.provider.entities import ProviderRequest, ProviderType
 from astrbot.core.provider.manager import ProviderManager
 from astrbot.core.skills.skill_manager import SkillInfo
@@ -94,7 +93,7 @@ def mock_context():
     ctx.persona_manager = MagicMock()
     ctx.persona_manager.personas_v3 = []
     ctx.persona_manager.resolve_selected_persona = AsyncMock(
-        return_value=(None, None, None, False)
+        return_value=(None, None, False)
     )
     ctx.persona_manager.get_persona_v3_by_id = MagicMock(return_value=None)
     tool_mgr = MagicMock()
@@ -432,27 +431,21 @@ class TestSelectProvider:
 
 
 @pytest.mark.asyncio
-async def test_provider_manager_async_selection_uses_session_preference(monkeypatch):
+async def test_provider_manager_async_selection_uses_effective_config():
     preferred_provider = object()
     manager = ProviderManager.__new__(ProviderManager)
     manager.inst_map = {"preferred": preferred_provider}
     manager.acm = MagicMock()
-
-    get_async = AsyncMock(return_value="preferred")
-    monkeypatch.setattr(provider_manager_module.sp, "get_async", get_async)
+    manager.acm.get_conf.return_value = {
+        "agent": {"runtime": "astrbot", "config": {"model": {"provider_id": "preferred"}}}
+    }
 
     result = await manager.get_using_provider_async(
-        ProviderType.CHAT_COMPLETION,
-        "session-1",
+        ProviderType.CHAT_COMPLETION, "session-1"
     )
 
     assert result is preferred_provider
-    get_async.assert_awaited_once_with(
-        "umo",
-        "session-1",
-        "provider_perf_chat_completion",
-        None,
-    )
+    manager.acm.get_conf.assert_called_once_with("session-1")
 
 
 class TestGetSessionConv:
@@ -1028,7 +1021,7 @@ class TestEnsurePersonaAndSkills:
         persona = {"name": "test-persona", "prompt": "You are helpful."}
         mock_context.persona_manager.personas_v3 = [persona]
         mock_context.persona_manager.resolve_selected_persona = AsyncMock(
-            return_value=("test-persona", persona, "test-persona", False)
+            return_value=("test-persona", persona, False)
         )
         mock_event.trace = MagicMock(record=MagicMock())
         req = ProviderRequest()
@@ -1053,7 +1046,7 @@ class TestEnsurePersonaAndSkills:
         persona = {"name": "conv-persona", "prompt": "Custom persona."}
         mock_context.persona_manager.personas_v3 = [persona]
         mock_context.persona_manager.resolve_selected_persona = AsyncMock(
-            return_value=("conv-persona", persona, None, False)
+            return_value=("conv-persona", persona, False)
         )
         req = ProviderRequest()
         req.conversation = MagicMock(persona_id="conv-persona")
@@ -1070,7 +1063,7 @@ class TestEnsurePersonaAndSkills:
         """Test inline GenUI instructions are independent of persona selection."""
         persona = {"name": "conv-persona", "prompt": "Custom persona."}
         mock_context.persona_manager.resolve_selected_persona = AsyncMock(
-            return_value=("conv-persona", persona, None, False)
+            return_value=("conv-persona", persona, False)
         )
         mock_event.get_extra.side_effect = lambda key: key == "enable_inline_genui"
         req = ProviderRequest()
@@ -1103,7 +1096,7 @@ class TestEnsurePersonaAndSkills:
     ):
         """Test the default ChatUI persona prompt honors its request flag."""
         mock_context.persona_manager.resolve_selected_persona = AsyncMock(
-            return_value=("_chatui_default_", None, None, True)
+            return_value=("_chatui_default_", None, True)
         )
         mock_event.get_extra.side_effect = lambda key: {
             "enable_inline_genui": False,
@@ -1125,7 +1118,7 @@ class TestEnsurePersonaAndSkills:
     ):
         """WebChat implicit default uses the ChatUI prompt, not the DB persona."""
         mock_context.persona_manager.resolve_selected_persona = AsyncMock(
-            return_value=("_chatui_default_", None, None, True)
+            return_value=("_chatui_default_", None, True)
         )
         mock_event.get_platform_name.return_value = "webchat"
         mock_event.get_extra.side_effect = lambda key: {
@@ -1149,7 +1142,7 @@ class TestEnsurePersonaAndSkills:
         """Non-WebChat implicit default injects the editable DB default persona."""
         persona = {"name": "default", "prompt": "EDITED DEFAULT"}
         mock_context.persona_manager.resolve_selected_persona = AsyncMock(
-            return_value=("default", persona, None, False)
+            return_value=("default", persona, False)
         )
         mock_event.get_extra.side_effect = lambda key: None
         req = ProviderRequest()
@@ -1169,7 +1162,7 @@ class TestEnsurePersonaAndSkills:
         """Explicitly selecting the default persona uses the record even when the flag is off."""
         persona = {"name": "default", "prompt": "EDITED DEFAULT"}
         mock_context.persona_manager.resolve_selected_persona = AsyncMock(
-            return_value=("default", persona, None, False)
+            return_value=("default", persona, False)
         )
         mock_event.get_platform_name.return_value = "webchat"
         mock_event.get_extra.side_effect = lambda key: {
@@ -1233,7 +1226,7 @@ class TestEnsurePersonaAndSkills:
         req = ProviderRequest()
         req.conversation = MagicMock(persona_id=None)
 
-        with patch.object(pm.sp, "get_async", new=AsyncMock(return_value={})):
+        with patch.object(pm, "get_overrides", new=AsyncMock(return_value={})):
             await _apply_persona_capabilities(req, {}, mock_context, mock_event)
 
         assert persona_build.CHATUI_SPECIAL_DEFAULT_PERSONA_PROMPT in req.system_prompt
@@ -1244,7 +1237,7 @@ class TestEnsurePersonaAndSkills:
         """Test that [%None] persona is explicitly set to no persona."""
         mock_context.persona_manager.personas_v3 = []
         mock_context.persona_manager.resolve_selected_persona = AsyncMock(
-            return_value=("[%None]", None, None, False)
+            return_value=("[%None]", None, False)
         )
         req = ProviderRequest()
         req.conversation = MagicMock(persona_id="[%None]")
@@ -1272,7 +1265,6 @@ class TestEnsurePersonaAndSkills:
         mock_context.persona_manager.resolve_selected_persona.return_value = (
             "persona",
             selected,
-            None,
             False,
         )
         req = ProviderRequest(conversation=MagicMock(persona_id="persona"))
@@ -1417,7 +1409,7 @@ class TestEnsurePersonaAndSkills:
 
         persona = {"name": "no-skills", "prompt": "", "skills": []}
         mock_context.persona_manager.resolve_selected_persona = AsyncMock(
-            return_value=("no-skills", persona, None, False)
+            return_value=("no-skills", persona, False)
         )
         req = ProviderRequest()
         req.conversation = MagicMock(persona_id="no-skills")
@@ -1500,7 +1492,7 @@ class TestEnsurePersonaAndSkills:
         persona = {"name": "persona", "prompt": "Test", "tools": ["test_tool"]}
         mock_context.persona_manager.personas_v3 = [persona]
         mock_context.persona_manager.resolve_selected_persona = AsyncMock(
-            return_value=("persona", persona, None, False)
+            return_value=("persona", persona, False)
         )
         tmgr = mock_context.get_llm_tool_manager.return_value
         tmgr.get_func.return_value = mock_tool
@@ -1534,7 +1526,7 @@ class TestEnsurePersonaAndSkills:
     ):
         persona = {"name": "locked", "prompt": "No tools.", "tools": []}
         mock_context.persona_manager.resolve_selected_persona = AsyncMock(
-            return_value=("locked", persona, None, False)
+            return_value=("locked", persona, False)
         )
         mock_event.platform_meta.support_proactive_message = False
         mock_context.get_config.return_value = {
@@ -1606,7 +1598,7 @@ class TestEnsurePersonaAndSkills:
         )
         persona = {"name": "locked", "prompt": "No tools.", "tools": []}
         mock_context.persona_manager.resolve_selected_persona = AsyncMock(
-            return_value=("locked", persona, None, False)
+            return_value=("locked", persona, False)
         )
         mock_event.platform_meta.support_proactive_message = False
         mock_event.role = role
@@ -1679,7 +1671,7 @@ class TestEnsurePersonaAndSkills:
     ):
         """The plugin compatibility entry does not activate native main routing."""
         mock_context.persona_manager.resolve_selected_persona = AsyncMock(
-            return_value=(None, None, None, False)
+            return_value=(None, None, False)
         )
         mock_context.persona_manager.get_persona_v3_by_id = MagicMock(
             return_value={"name": "default", "tools": ["tool_a"]}
@@ -3558,7 +3550,6 @@ async def test_feature_composition_preserves_tool_scope_and_instruction_order(
     mock_context.persona_manager.resolve_selected_persona.return_value = (
         "persona",
         selected,
-        None,
         False,
     )
     mock_event.plugins_name = []
