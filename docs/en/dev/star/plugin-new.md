@@ -147,13 +147,13 @@ In the WebUI installation flow, you can choose to "Ignore Warning and Install" t
 
 ### Declare Plugin Category (Optional)
 
-You can add a `category` field in `metadata.yaml` to declare the marketplace category of your plugin. The plugin marketplace, the WebUI and the runtime all follow this field.
+You can add a `category` field in `metadata.yaml` to declare the marketplace category of your plugin. The WebUI and the runtime follow this field. What the plugin marketplace shows depends on whether the market index copied the value, which happens when the index is updated, so editing `metadata.yaml` alone does not change the marketplace listing right away.
 
 ```yaml
 category: media processing
 ```
 
-`category` takes one of the following identifiers. The English label is only the display text, so writing it back is not accepted.
+`category` takes one of the following identifiers. Only the identifier column is canonical: the localized labels are display text, so the Chinese translation is not recognized, while an English spelling that normalizes to a supported identifier (such as `AI Tools`) is accepted.
 
 | Identifier | English label | Use it for |
 | --- | --- | --- |

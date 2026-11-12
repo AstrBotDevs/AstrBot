@@ -149,7 +149,7 @@ astrbot_version: ">=4.16,<5"
 
 ### 声明插件分类（Optional）
 
-你可以在 `metadata.yaml` 中新增 `category` 字段，主动声明插件的市场分类。插件市场、WebUI 与运行时都会以该字段为准。
+你可以在 `metadata.yaml` 中新增 `category` 字段，主动声明插件的市场分类。WebUI 与运行时都以该字段为准；插件市场里显示的分类取决于市场索引是否收录了该值，索引收录时会复制这个字段，因此只改 `metadata.yaml` 不会立刻改变市场展示。
 
 ```yaml
 category: media processing

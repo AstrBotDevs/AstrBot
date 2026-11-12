@@ -43,7 +43,7 @@ The same workspace has **Skills**, **MCP Servers**, and **Handlers** tabs for sk
 
 ### 2. Choose a suitable plugin
 
-Search by plugin name or a keyword describing the feature you want. You can also filter by category: each entry in the category row comes from the category a plugin declares in its `metadata.yaml` (such as AI Tools, AI Image, Entertainment, Group Games, Integrations, Utilities and Other), and selecting one shows only that category. Use the arrow on the right when the categories overflow. Open a plugin's details and check:
+Search by plugin name or a keyword describing the feature you want. You can also filter by category: each entry in the category row comes from the category a plugin declares in its `metadata.yaml` (such as AI Tools, AI Image, Entertainment, Group Games, Integrations, Utilities and Other), and selecting one shows only that category. Use the arrow on the right when the categories overflow (the category dropdown that used to sit in the toolbar has moved to this row above the list). Open a plugin's details and check:
 
 - **Features and usage**: whether it meets your needs and whether you use it through commands, natural language, or another trigger.
 - **Supported platforms**: whether it works with your messaging platform. Some features depend on platform-specific APIs.
