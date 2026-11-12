@@ -12,22 +12,24 @@ AstrBot 使用 GitHub 托管插件，因此你需要先将插件代码推送到�
 
 ```yaml
 name: astrbot_plugin_example                 # 插件标识符，英文，唯一
-display_name: 示例插件名称                    # 插件展示名称
+display_name: 示例插件名称                    # （可选）插件展示名称
 # short_desc: 一句话介绍你的插件功能           # （可选）紧凑 UI 使用的短描述
 desc: 详细描述插件的功能、特性、使用方法等信息。 # 详细描述插件的信息
   可以写多行文本，支持 Markdown 格式。
 version: 1.0.0                               # 插件版本号（遵循语义化版本规范）
 author: 作者名称                              # 作者名称
 repo: https://github.com/your-name/repo      # 插件仓库地址
-# category: tools                            # （可选）插件市场分类，标识见下方文档
+# category: other                            # （可选）插件市场分类
 # astrbot_version: ">=4.17.0"                # （可选）支持的 AstrBot 版本范围
 # support_platforms:                         # （可选）支持的平台适配器列表
 #   - aiocqhttp
 #   - qq_official
 # social_link: https://github.com/your-web   # （可选）你的个人网站、GitHub 主页等
-# tags:                                      # （可选）标签列表，用于插件市场分类和搜索
+# tags:                                      # （可选）标签列表，用于插件市场的搜索匹配
   # - example
 ```
+
+[目前可用的插件市场分类](plugin-new.md#声明插件分类-optional)
 
 [目前支持的平台适配器](plugin-new.md#声明支持平台-optional)
 

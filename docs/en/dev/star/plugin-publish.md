@@ -12,22 +12,24 @@ Here is a complete plugin metadata example (`metadata.yaml`) that the system wil
 
 ```yaml
 name: astrbot_plugin_example                 # Plugin identifier, English, unique
-display_name: Plugin Display Name            # Plugin display name
+display_name: Plugin Display Name            # (Optional) Plugin display name
 # short_desc: A one-line summary of your plugin # (Optional) Short description for compact UI
 desc: Detailed description of your plugin's features, usage, etc.  # Detailed plugin description
   Supports multi-line text with Markdown formatting.
 version: 1.0.0                               # Plugin version (follow semantic versioning)
 author: Author Name                          # Author name
 repo: https://github.com/your-name/repo      # Plugin repository URL
-# category: tools                            # (Optional) Marketplace category, see docs below
+# category: other                            # (Optional) Marketplace category
 # astrbot_version: ">=4.17.0"                # (Optional) AstrBot version range
 # support_platforms:                         # (Optional) Supported platform adapter list
 #   - aiocqhttp
 #   - qq_official
 # social_link: https://github.com/your-web   # (Optional) Your personal website, GitHub profile, etc.
-# tags:                                      # (Optional) Tag list for marketplace categorization and search
+# tags:                                      # (Optional) Tag list, matched by marketplace search
   # - example
 ```
+
+[Available marketplace categories](plugin-new.md#declare-plugin-category-optional)
 
 [Supported platform adapters](plugin-new.md#declare-supported-platforms-optional)
 
