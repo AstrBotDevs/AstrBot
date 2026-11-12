@@ -213,6 +213,7 @@ export const useExtensionPage = (initialTab = "installed") => {
   const sortOrder = ref("desc"); // desc (降序) or asc (升序)
   const randomPluginNames = ref([]);
   const marketCategoryFilter = ref("all");
+  const marketPlatformFilter = ref([]);
 
   // 插件市场拼音搜索
 
@@ -308,6 +309,23 @@ export const useExtensionPage = (initialTab = "installed") => {
     return items;
   });
 
+  const marketPlatformItems = computed(() => {
+    const platforms = new Set(
+      pluginMarketData.value.flatMap((plugin) =>
+        normalizePlatformList(plugin.support_platforms),
+      ),
+    );
+    return [
+      { value: "__undeclared__", title: tm("market.undeclaredPlatform") },
+      ...Array.from(platforms)
+        .sort()
+        .map((platform) => ({
+          value: platform,
+          title: getPlatformDisplayName(platform),
+        })),
+    ];
+  });
+
   // 过滤要显示的插件
   const filteredExtensions = computed(() => {
     const data = Array.isArray(extension_data?.data) ? extension_data.data : [];
@@ -361,14 +379,9 @@ export const useExtensionPage = (initialTab = "installed") => {
     const query = buildSearchQuery(debouncedMarketSearch.value);
     const targetCategory = normalizeMarketCategory(marketCategoryFilter.value);
     const shouldFilterByCategory = marketCategoryFilter.value !== "all";
-    if (!query) {
-      if (!shouldFilterByCategory) {
-        return pluginMarketData.value;
-      }
-      return pluginMarketData.value.filter(
-        (plugin) =>
-          normalizeMarketCategory(plugin?.category) === targetCategory,
-      );
+    const selectedPlatforms = new Set(marketPlatformFilter.value);
+    if (!query && !shouldFilterByCategory && selectedPlatforms.size === 0) {
+      return pluginMarketData.value;
     }
 
     return pluginMarketData.value.filter((plugin) => {
@@ -376,7 +389,13 @@ export const useExtensionPage = (initialTab = "installed") => {
       const matchesCategory = shouldFilterByCategory
         ? normalizeMarketCategory(plugin?.category) === targetCategory
         : true;
-      return matchesSearch && matchesCategory;
+      const platforms = normalizePlatformList(plugin.support_platforms);
+      const matchesPlatform =
+        selectedPlatforms.size === 0 ||
+        (platforms.length === 0
+          ? selectedPlatforms.has("__undeclared__")
+          : platforms.some((platform) => selectedPlatforms.has(platform)));
+      return matchesSearch && matchesCategory && matchesPlatform;
     });
   });
 
@@ -429,7 +448,7 @@ export const useExtensionPage = (initialTab = "installed") => {
   const RANDOM_PLUGINS_COUNT = 3;
 
   const randomPlugins = computed(() => {
-    const allPlugins = pluginMarketData.value;
+    const allPlugins = filteredMarketPlugins.value;
     if (allPlugins.length === 0) return [];
 
     // Key by the unique market plugin key: metadata `name` is not unique and
@@ -2247,7 +2266,21 @@ export const useExtensionPage = (initialTab = "installed") => {
 
   const normalizePlatformList = (platforms) => {
     if (!Array.isArray(platforms)) return [];
-    return platforms.filter((item) => typeof item === "string");
+    const aliases = {
+      onebot: "aiocqhttp",
+      "aiocqhttp(onebot v11)": "aiocqhttp",
+      feishu: "lark",
+      weixin_official_accounts: "weixin_official_account",
+    };
+    return [
+      ...new Set(
+        platforms
+          .filter((item) => typeof item === "string")
+          .map((item) => item.trim().toLowerCase())
+          .filter(Boolean)
+          .map((item) => (Object.hasOwn(aliases, item) ? aliases[item] : item)),
+      ),
+    ];
   };
 
   const getPlatformDisplayList = (platforms) => {
@@ -2500,10 +2533,18 @@ export const useExtensionPage = (initialTab = "installed") => {
     void replaceTabRoute(router, route, newTab);
   });
 
-  watch(marketCategoryFilter, () => {
-    if (activeTab.value === "market") {
-      currentPage.value = 1;
-    }
+  watch(
+    [marketCategoryFilter, marketPlatformFilter],
+    () => {
+      if (activeTab.value === "market") {
+        currentPage.value = 1;
+      }
+    },
+    { deep: true },
+  );
+
+  watch(selectedSource, () => {
+    marketPlatformFilter.value = [];
   });
 
   watch(
@@ -2553,6 +2594,8 @@ export const useExtensionPage = (initialTab = "installed") => {
     loading_,
     currentPage,
     marketCategoryFilter,
+    marketPlatformFilter,
+    marketPlatformItems,
     marketCategoryItems,
     marketCategoryCounts,
     dangerConfirmDialog,
