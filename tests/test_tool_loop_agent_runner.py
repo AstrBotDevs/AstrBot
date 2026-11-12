@@ -7,6 +7,7 @@ from typing import Any, cast
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
+import pytest_asyncio
 
 # 将项目根目录添加到 sys.path
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
@@ -2649,3 +2650,228 @@ async def test_unknown_tool_is_rejected_without_claiming_execution(
     assert rejected[0].error.code == "tool_not_found"
     assert not any(event.type in ("tool.started", "tool.finished") for event in events)
     assert not mock_hooks.tool_start_called
+
+
+@pytest_asyncio.fixture
+async def stop_receipt_conversation_manager(tmp_path):
+    from astrbot.core.conversation_mgr import ConversationManager
+    from astrbot.core.db.sqlite import SQLiteDatabase
+
+    database = SQLiteDatabase(str(tmp_path / "conversations.db"))
+    try:
+        yield ConversationManager(database)
+    finally:
+        await database.engine.dispose()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("streaming", [False, True])
+@pytest.mark.parametrize("image_result", [False, True])
+@pytest.mark.parametrize("signed_thinking", [False, True])
+async def test_stop_preserves_completed_tool_receipts_in_current_batch(
+    tmp_path,
+    mock_hooks,
+    streaming,
+    image_result,
+    signed_thinking,
+    stop_receipt_conversation_manager,
+):
+    """Stopping a later tool preserves completed effects and valid call pairing."""
+    import json
+
+    from mcp.types import CallToolResult, ImageContent, TextContent
+
+    from astrbot.core.agent.message import ThinkPart
+    from astrbot.core.astr_agent_runtime.history import save_agent_history
+    from astrbot.core.astr_agent_runtime.session import NativeAgentSession
+
+    written_file = tmp_path / "completed.txt"
+    blocked = asyncio.Event()
+    cancelled = asyncio.Event()
+    never_started = False
+    first_started = asyncio.Event()
+    finish_first = asyncio.Event()
+
+    async def write_file(event):
+        first_started.set()
+        await finish_first.wait()
+        written_file.write_text("completed effect", encoding="utf-8")
+        contents = [TextContent(type="text", text="Completed write receipt")]
+        if image_result:
+            contents.append(
+                ImageContent(
+                    type="image",
+                    mimeType="image/png",
+                    data=(
+                        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwC"
+                        "AAAAC0lEQVR42mP8/x8AAwMCAO+jKm0AAAAASUVORK5CYII="
+                    ),
+                )
+            )
+        return CallToolResult(content=contents)
+
+    async def unfinished_tool(event):
+        yield "Unfinished tool partial output"
+        blocked.set()
+        try:
+            await asyncio.Future()
+        finally:
+            cancelled.set()
+
+    async def unstarted_tool(event):
+        nonlocal never_started
+        never_started = True
+        return "must not execute"
+
+    handlers = [write_file, unfinished_tool, unstarted_tool]
+    tool_names = [handler.__name__ for handler in handlers]
+    call_ids = ["completed-call", "interrupted-call", "unstarted-call"]
+    metadata = {
+        call_id: {"google": {"thought_signature": "signed-tool-metadata"}}
+        for call_id in call_ids
+    }
+
+    class BatchProvider(MockProvider):
+        async def text_chat(self, **kwargs):
+            return LLMResponse(
+                role="assistant",
+                completion_text="Assistant output to discard on stop",
+                reasoning_content="Tool batch thinking",
+                reasoning_signature="thinking-signature" if signed_thinking else None,
+                tools_call_name=tool_names,
+                tools_call_args=[{}, {}, {}],
+                tools_call_ids=call_ids,
+                tools_call_extra_content=metadata,
+            )
+
+    event = MockEvent("test:FriendMessage:batch_stop", "user")
+    event.get_extra = lambda _key: None
+    manager = stop_receipt_conversation_manager
+    stored = await manager.db.create_conversation(
+        user_id=event.unified_msg_origin, platform_id="test"
+    )
+    conversation = await manager.get_conversation(
+        event.unified_msg_origin, stored.conversation_id
+    )
+    request = ProviderRequest(
+        prompt="Write a file and verify it",
+        conversation=conversation,
+        func_tool=ToolSet(
+            tools=[
+                FunctionTool(
+                    name=handler.__name__,
+                    description="Test tool",
+                    parameters={"type": "object", "properties": {}},
+                    handler=handler,
+                )
+                for handler in handlers
+            ]
+        ),
+    )
+    runner = ToolLoopAgentRunner()
+    await runner.reset(
+        provider=BatchProvider(),
+        request=request,
+        run_context=ContextWrapper(context=MockAgentContext(event)),
+        tool_executor=FunctionToolExecutor,
+        agent_hooks=mock_hooks,
+        streaming=streaming,
+    )
+
+    async def consume_step():
+        return [response async for response in runner.step()]
+
+    task = asyncio.create_task(consume_step())
+    try:
+        await asyncio.wait_for(first_started.wait(), timeout=5)
+        ticket = runner.follow_up(message_text="Remember the completed file")
+        finish_first.set()
+        await asyncio.wait_for(blocked.wait(), timeout=5)
+        runner.request_stop()
+        responses = await asyncio.wait_for(task, timeout=5)
+    finally:
+        if not task.done():
+            task.cancel()
+            await asyncio.gather(task, return_exceptions=True)
+
+    assert written_file.read_text(encoding="utf-8") == "completed effect"
+    assert cancelled.is_set()
+    assert not never_started
+    assert runner.was_aborted()
+    assert any(
+        response.type == "tool.finished"
+        and response.call_id == call_ids[1]
+        and response.status == "cancelled"
+        for response in responses
+    )
+    assert not any(
+        response.type == "tool.started" and response.call_id == call_ids[2]
+        for response in responses
+    )
+    assert ticket.consumed and ticket.resolved.is_set()
+
+    session = NativeAgentSession(
+        SimpleNamespace(context=SimpleNamespace(conversation_manager=manager)),
+        stored.conversation_id,
+        event.unified_msg_origin,
+    )
+    assert await save_agent_history(
+        req=request,
+        llm_response=runner.get_final_llm_resp(),
+        all_messages=runner.run_context.messages,
+        runner_stats=runner.stats,
+        user_aborted=True,
+        commit=session._commit_history,
+    )
+    restored = await manager.get_conversation(
+        event.unified_msg_origin, stored.conversation_id
+    )
+    saved = json.loads(restored.history)
+    assistant = next(message for message in saved if message.get("tool_calls"))
+    results = [message for message in saved if message["role"] == "tool"]
+    assert [call["id"] for call in assistant["tool_calls"]] == call_ids
+    assert [result["tool_call_id"] for result in results] == call_ids
+    assert "Completed write receipt" in results[0]["content"]
+    assert "Remember the completed file" in results[0]["content"]
+    assert "not a successful result" in results[1]["content"]
+    assert "not a successful result" in results[2]["content"]
+    assert "Unfinished tool partial output" not in json.dumps(saved)
+    assert "Assistant output to discard on stop" not in json.dumps(saved)
+    assert all(
+        call["extra_content"] == metadata[call["id"]]
+        for call in assistant["tool_calls"]
+    )
+    if signed_thinking:
+        assert (
+            ThinkPart(
+                think="Tool batch thinking", encrypted="thinking-signature"
+            ).model_dump()
+            in assistant["content"]
+        )
+    else:
+        assert "Tool batch thinking" not in json.dumps(saved)
+    assert [message["role"] for message in saved[-2:]] == ["user", "assistant"]
+    assert len(request.tool_calls_result) == 1
+    if image_result:
+        assert any(
+            part["type"] == "image_url"
+            for message in saved
+            if message["role"] == "user" and isinstance(message["content"], list)
+            for part in message["content"]
+        )
+
+    next_provider = CapturingProvider(modalities=["image", "audio", "tool_use"])
+    next_runner = ToolLoopAgentRunner()
+    await next_runner.reset(
+        provider=next_provider,
+        request=ProviderRequest(prompt="Continue", contexts=saved),
+        run_context=ContextWrapper(context=MockAgentContext(event)),
+        tool_executor=FunctionToolExecutor,
+        agent_hooks=mock_hooks,
+        streaming=streaming,
+    )
+    async for _ in next_runner.step_until_done(1):
+        pass
+    next_context = json.dumps(next_provider.received_contexts[0])
+    assert "Completed write receipt" in next_context
+    assert "not a successful result" in next_context
