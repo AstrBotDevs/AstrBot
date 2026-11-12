@@ -44,6 +44,7 @@ from astrbot.core.platform.button_interaction import decode_button_callback
 from astrbot.core.utils.media_utils import MediaResolver
 
 from ...register import register_platform_adapter
+from .qqofficial_forward import quoted_forward_images
 from .qqofficial_group_info import get_qq_group
 from .qqofficial_message_event import QQOfficialMessageEvent
 
@@ -968,6 +969,15 @@ class QQOfficialPlatformAdapter(Platform):
                     quoted_chain,
                     quoted_attachments,
                 )
+            existing_images = {
+                part.file
+                for part in quoted_chain
+                if isinstance(part, Image) and part.file
+            }
+            quoted_chain.extend(
+                Image.fromURL(url)
+                for url in quoted_forward_images(quoted_element, existing_images)
+            )
         if quoted_message_id or quoted_element_message_id or quoted_chain:
             msg.append(
                 Reply(

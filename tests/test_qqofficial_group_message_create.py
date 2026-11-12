@@ -176,6 +176,53 @@ async def test_parse_group_message_create_quoted_context():
     ][-1] == "answer"
 
 
+@pytest.mark.asyncio
+async def test_quoted_forward_images_are_scoped_to_the_reply():
+    cdn = "https://multimedia.nt.qq.com.cn/download?fileid="
+    record = (
+        "=== 消息 1 ===\n"
+        f"[附件1] 类型: 图片 文件名: photo.jpg URL: {cdn}first\n"
+        "[附件2] 类型: 图片 文件名: other.jpg URL: https://example.org/other"
+    )
+    _, message = _dispatch_group_message(
+        _make_group_payload(
+            content="describe the pictures",
+            message_type=103,
+            msg_elements=[
+                {
+                    "content": record,
+                    "msg_elements": [
+                        {
+                            "message_type": 102,
+                            "msg_elements": [
+                                {
+                                    "attachments": [
+                                        {"content_type": "image/png", "url": url}
+                                    ]
+                                }
+                                for url in [cdn + "first", cdn + "second"]
+                            ],
+                        }
+                    ],
+                },
+                {"content": record.replace("first", "unrelated")},
+            ],
+        )
+    )
+
+    abm = await QQOfficialPlatformAdapter._parse_from_qqofficial(
+        message, MessageType.GROUP_MESSAGE
+    )
+    reply = abm.message[0]
+    assert isinstance(reply, Reply)
+    assert reply.message_str == record
+    assert [part.file for part in reply.chain if isinstance(part, Image)] == [
+        cdn + "first",
+        cdn + "second",
+    ]
+    assert not any(isinstance(part, Image) for part in abm.message)
+
+
 @pytest.mark.parametrize(
     "mention_markup",
     ["<@bot-123>", "<@!bot-123>", '<qqbot-at-user id="bot-123" />'],
