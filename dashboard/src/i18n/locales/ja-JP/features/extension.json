@@ -142,7 +142,6 @@
   },
   "market": {
     "recommended": "🥳 おすすめ",
-    "category": "カテゴリ",
     "expandCategories": "すべてのカテゴリを表示",
     "collapseCategories": "カテゴリを折りたたむ",
     "refresh": "更新",

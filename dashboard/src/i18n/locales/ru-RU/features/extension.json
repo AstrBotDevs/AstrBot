@@ -142,7 +142,6 @@
     },
     "market": {
         "recommended": "🥳 Рекомендуем",
-        "category": "Категория",
         "expandCategories": "Показать все категории",
     "collapseCategories": "Свернуть категории",
     "refresh": "Обновить",

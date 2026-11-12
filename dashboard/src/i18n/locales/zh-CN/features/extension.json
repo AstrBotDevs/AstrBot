@@ -142,7 +142,6 @@
   },
   "market": {
     "recommended": "🥳 推荐",
-    "category": "分类",
     "expandCategories": "展开全部分类",
     "collapseCategories": "收起分类",
     "refresh": "刷新",
