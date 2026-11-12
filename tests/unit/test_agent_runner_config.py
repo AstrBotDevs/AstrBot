@@ -75,10 +75,12 @@ async def test_agent_request_normalizes_incomplete_runner_config():
         },
     }
     stage = AgentRequestSubStage()
+    context = SimpleNamespace(astrbot_config=config, agent_runtimes={})
 
-    await stage.initialize(SimpleNamespace(astrbot_config=config, agent_runtimes={}))
+    await stage.initialize(context)
 
-    assert stage.agent_sub_stage.runner_config == {
+    assert stage.agent_sub_stage.ctx is context
+    assert context.astrbot_config["agent"]["config"] == {
         **get_agent_runner_config_default("dify"),
         "dify_api_key": "saved-key",
     }
