@@ -1,5 +1,6 @@
 <script setup>
 import { ref, shallowRef, computed, watch } from 'vue';
+import { useRoute, useRouter } from 'vue-router';
 import { useCustomizerStore } from '../../../stores/customizer';
 import { useMobileDrawerStore } from '@/stores/mobileDrawer';
 import { useI18n } from '@/i18n/composables';
@@ -7,13 +8,15 @@ import sidebarItems, { EXTENSION_GROUP_KEY } from './sidebarItem';
 import NavItem from './NavItem.vue';
 import { usePluginSidebarItems } from '@/composables/usePluginSidebarItems';
 import { useDisplay } from 'vuetify';
-import { ChevronDown, ChevronRight, PanelLeft, Settings } from '@lucide/vue';
+import { ChevronDown, ChevronRight, MessageCircle, PanelLeft, Settings } from '@lucide/vue';
 import ChatUILogo from '@/components/chat/ChatUILogo.vue';
 import { useCommonStore } from '@/stores/common';
 
 const { t } = useI18n();
 
 const customizer = useCustomizerStore();
+const route = useRoute();
+const router = useRouter();
 const mobileDrawer = useMobileDrawerStore();
 const commonStore = useCommonStore();
 const { pluginItems, pluginGroups } = usePluginSidebarItems();
@@ -184,6 +187,14 @@ const visibleMenu = computed(() => {
 });
 const botVersion = computed(() => commonStore.astrbotVersion ? `v${commonStore.astrbotVersion}` : '');
 
+async function openChat() {
+  sessionStorage.setItem('astrbot:last_bot_route', route.fullPath);
+  const sessionId = sessionStorage.getItem('astrbot:last_chat_route');
+  customizer.SET_CHAT_SIDEBAR_COLLAPSED(false);
+  await router.push(sessionId ? `/chat/${sessionId}` : '/chat');
+  if (isMobile.value) mobileDrawer.SET(true);
+}
+
 function toggleSidebar() {
   if (isMobile.value) {
     mobileDrawer.SET(false);
@@ -208,6 +219,7 @@ function toggleSidebar() {
     floating
     app
     class="leftSidebar"
+    :class="{ 'sidebar-page-navigation': customizer.chatNavigationInSidebar }"
     :rail="isRailSidebar"
   >
     <div class="sidebar-container">
@@ -245,6 +257,19 @@ function toggleSidebar() {
       </div>
 
       <v-list :class="['dashboard-sidebar-list', 'listitem', 'flex-grow-1', { 'hidden-scrollbar': isRailSidebar }]" v-model:opened="openedItems" :open-strategy="'multiple'">
+        <v-list-item
+          v-if="customizer.chatNavigationInSidebar"
+          class="dashboard-nav-item sidebar-chat-entry"
+          style="--indent-padding: 0px"
+          :aria-label="t('core.navigation.chat')"
+          @click="openChat"
+        >
+          <template #prepend><MessageCircle :size="20" /></template>
+          <v-list-item-title>{{ t('core.navigation.chat') }}</v-list-item-title>
+          <template #append><ChevronRight :size="16" /></template>
+          <v-tooltip v-if="isRailSidebar" activator="parent" location="right"
+            :text="t('core.navigation.chat')" :open-delay="0" content-class="sidebar-rail-tooltip" />
+        </v-list-item>
         <template
           v-for="(item, i) in visibleMenu"
           :key="item.to || item.value || item.header || item.title || `sidebar-item-${i}`"
@@ -337,6 +362,21 @@ function toggleSidebar() {
   display: flex;
   height: 100%;
   flex-direction: column;
+}
+
+.sidebar-chat-entry :deep(.v-list-item-title) {
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.sidebar-page-navigation .dashboard-sidebar-list {
+  margin-top: 8px;
+  animation: sidebar-page-back 180ms ease-out;
+}
+
+@keyframes sidebar-page-back {
+  from { opacity: 0; transform: translateX(-16px); }
+  to { opacity: 1; transform: translateX(0); }
 }
 
 .sidebar-group-header {
@@ -731,6 +771,9 @@ function toggleSidebar() {
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .sidebar-page-navigation .dashboard-sidebar-list {
+    animation: none;
+  }
   .dashboard-sidebar-brand-logo--collapsed,
   .dashboard-sidebar-panel-toggle-icon,
   .sidebar-footer-btn {

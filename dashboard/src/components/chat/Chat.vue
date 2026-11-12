@@ -6,7 +6,7 @@
   >
     <v-navigation-drawer
       class="chat-sidebar"
-      :class="{ collapsed: isSidebarCollapsed }"
+      :class="{ collapsed: isSidebarCollapsed, 'sidebar-page-navigation': sidebarNavigation }"
       :model-value="isMobile ? mobileDrawer.open : true"
       @update:model-value="isMobile && mobileDrawer.SET($event)"
       :permanent="!isMobile"
@@ -31,7 +31,7 @@
             <ChatUILogo class="chat-sidebar-brand-logo" />
             <span class="chat-sidebar-brand-copy">
               <span class="chat-sidebar-brand-name">AstrBot</span>
-              <span class="chat-sidebar-brand-mode">ChatUI</span>
+              <span v-if="!sidebarNavigation" class="chat-sidebar-brand-mode">ChatUI</span>
             </span>
           </div>
           <button
@@ -60,6 +60,21 @@
             <PanelLeft :size="20" class="sidebar-panel-toggle-icon" />
           </v-btn>
         </div>
+
+        <v-btn
+          v-if="sidebarNavigation"
+          class="new-chat-btn sidebar-back-btn"
+          :class="{ 'icon-only': isSidebarCollapsed }"
+          variant="text"
+          :icon="isSidebarCollapsed"
+          :aria-label="t('core.navigation.backToNavigation')"
+          @click="backToNavigation"
+        >
+          <ChevronLeft :size="20" :class="{ 'mr-2': !isSidebarCollapsed }" />
+          <span v-if="!isSidebarCollapsed">{{ t('core.navigation.backToNavigation') }}</span>
+          <v-tooltip v-if="isSidebarCollapsed" activator="parent" location="right"
+            :text="t('core.navigation.backToNavigation')" :open-delay="0" />
+        </v-btn>
 
         <button
           v-if="isSidebarCollapsed"
@@ -543,6 +558,7 @@ import { useDisplay } from "vuetify";
 import { isAxiosError } from "axios";
 import {
   ArrowDown,
+  ChevronLeft,
   Box,
   PanelLeft,
   Pencil,
@@ -621,6 +637,7 @@ watch(
 );
 onUnmounted(() => headerContext.SET_COMPONENT(null));
 const customizer = useCustomizerStore();
+const sidebarNavigation = computed(() => customizer.chatNavigationInSidebar && !props.chatboxMode);
 const { t } = useI18n();
 const { tm } = useModuleI18n("features/chat");
 const confirmDialog = useConfirmDialog();
@@ -765,6 +782,12 @@ const isSidebarCollapsed = computed(
 const isProviderWorkspace = computed(
   () => activeWorkspace.value === "providers",
 );
+
+async function backToNavigation() {
+  const previousRoute = sessionStorage.getItem("astrbot:last_bot_route") || "/";
+  await router.push(previousRoute.startsWith("/chat") ? "/" : previousRoute);
+  if (isMobile.value) mobileDrawer.SET(true);
+}
 
 function toggleChatSidebar() {
   if (isMobile.value) {
@@ -2257,6 +2280,23 @@ async function stopCurrentSession() {
   padding-top: 0 !important;
 }
 
+.sidebar-page-navigation .sidebar-top > :not(.chat-sidebar-brand),
+.sidebar-page-navigation .sidebar-content {
+  animation: sidebar-page-forward 180ms ease-out;
+}
+
+@keyframes sidebar-page-forward {
+  from { opacity: 0; transform: translateX(16px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sidebar-page-navigation .sidebar-top > :not(.chat-sidebar-brand),
+  .sidebar-page-navigation .sidebar-content {
+    animation: none;
+  }
+}
+
 .sidebar-top {
   padding: 0 16px 2px;
 }
@@ -2432,6 +2472,11 @@ async function stopCurrentSession() {
   letter-spacing: 0;
   font-size: 14px;
   font-weight: 500;
+}
+
+.sidebar-back-btn {
+  margin-top: 8px;
+  margin-bottom: 2px;
 }
 
 .sidebar-provider-btn {

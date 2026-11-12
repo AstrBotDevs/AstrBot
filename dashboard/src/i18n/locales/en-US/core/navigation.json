@@ -16,6 +16,7 @@
   "toolUse": "MCP Tools",
   "config": "Config",
   "chat": "Chat",
+  "backToNavigation": "Back to navigation",
   "botMode": "Bot",
   "options": "Options",
   "cron": "Future Tasks",
