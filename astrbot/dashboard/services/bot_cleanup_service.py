@@ -5,6 +5,7 @@ import asyncio
 from sqlmodel import col, delete, func, select
 
 from astrbot.core import sp
+from astrbot.core.config_bindings import BINDING_KEY
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
 from astrbot.core.db.po import (
     ConversationV2,
@@ -51,7 +52,7 @@ async def delete_bot_data(
                 else:
                     await core.db.delete_cron_job(job.job_id)
 
-    if targets & {"custom_rules", "preferences", "conversations"}:
+    if targets & {"custom_rules", "preferences", "conversations", "routing"}:
         async with core.db.get_db() as session:
             preferences = (
                 (
@@ -66,6 +67,21 @@ async def delete_bot_data(
                 .all()
             )
         for preference in preferences:
+            if preference.key == BINDING_KEY:
+                binding = preference.value["val"]
+                if "custom_rules" in targets:
+                    binding["overrides"] = {}
+                if "routing" in targets:
+                    binding["profile_id"] = None
+                if targets & {"custom_rules", "routing"}:
+                    if (
+                        binding.get("overrides")
+                        or binding.get("profile_id") is not None
+                    ):
+                        await sp.session_put(preference.scope_id, BINDING_KEY, binding)
+                    else:
+                        await sp.session_remove(preference.scope_id, BINDING_KEY)
+                continue
             is_rule = preference.key in AVAILABLE_SESSION_RULE_KEYS
             if (
                 (is_rule and "custom_rules" in targets)

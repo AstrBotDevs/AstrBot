@@ -161,6 +161,30 @@ async def list_session_rules(
         return _unexpected_error("获取规则列表失败", exc)
 
 
+@router.get("/sessions/overrides")
+async def get_session_overrides(
+    umo: str = Query(..., min_length=1, max_length=512),
+    profile_id: str | None = Query(None, max_length=255),
+    _auth: AuthContext = Depends(require_data_scope),
+    service: SessionManagementService = Depends(get_service),
+):
+    """Read a session's explicit values and inherited profile settings.
+
+    Args:
+        umo: Exact unified message origin.
+        profile_id: Optional profile preview; empty string follows routing.
+        _auth: Authenticated caller with data access.
+        service: Session management service.
+
+    Returns:
+        Session editor data in the standard response envelope.
+    """
+    return await _run(
+        lambda: service.get_session_overrides(umo, profile_id),
+        label="Failed to read session overrides",
+    )
+
+
 @router.post("/sessions/rules")
 async def update_session_rule(
     payload: SessionRuleRequest,
@@ -169,7 +193,7 @@ async def update_session_rule(
 ):
     try:
         return ok(
-            await service.update_session_rule(payload.model_dump(exclude_none=True))
+            await service.update_session_rule(payload.model_dump(exclude_unset=True))
         )
     except SessionManagementServiceError as exc:
         return _service_error(exc)

@@ -218,7 +218,11 @@ class PreProcessStage(Stage):
                             )
 
         # STT
-        if self.stt_settings.get("enable", False):
+        if (
+            self.plugin_manager.context.get_config(umo=event.unified_msg_origin)
+            .get("provider_stt_settings", {})
+            .get("enable", False)
+        ):
             # TODO: 独立
             ctx = self.plugin_manager.context
             stt_provider = await ctx.get_using_stt_provider_async(

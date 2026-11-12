@@ -420,10 +420,6 @@
   content: "\F0219";
 }
 
-.mdi-file-document-edit-outline::before {
-  content: "\F0DC9";
-}
-
 .mdi-file-document-multiple::before {
   content: "\F1517";
 }
@@ -918,6 +914,10 @@
 
 .mdi-shuffle-variant::before {
   content: "\F049F";
+}
+
+.mdi-sitemap-outline::before {
+  content: "\F199C";
 }
 
 .mdi-skip-next-circle-outline::before {

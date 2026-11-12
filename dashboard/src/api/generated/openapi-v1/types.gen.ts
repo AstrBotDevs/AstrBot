@@ -688,6 +688,11 @@ export type SessionGroupRequest = {
 };
 
 export type SessionRuleRequest = {
+    /**
+     * Explicit base profile; null follows routing; omitted preserves selection.
+     */
+    profile_id?: (string) | null;
+    user_alias?: string;
     umo: string;
     rule_key: string;
     rule_value?: DynamicConfig;
@@ -756,6 +761,9 @@ export type UmoListRequest = {
     umos?: Array<(string)>;
     scope?: 'all' | 'group' | 'private' | 'custom_group';
     group_id?: string;
+    /**
+     * For rule deletion, config_binding clears both profile selection and overrides; config_overrides or omission clears only overrides.
+     */
     rule_key?: string;
 };
 
@@ -3281,6 +3289,20 @@ export type ListSessionSendersData = {
 export type ListSessionSendersResponse = (SuccessEnvelope);
 
 export type ListSessionSendersError = unknown;
+
+export type GetSessionOverridesData = {
+    query: {
+        /**
+         * Preview a base profile without saving; empty string follows routing.
+         */
+        profile_id?: string;
+        umo: string;
+    };
+};
+
+export type GetSessionOverridesResponse = (SuccessEnvelope);
+
+export type GetSessionOverridesError = unknown;
 
 export type ListSessionRulesData = {
     query?: {

@@ -40,7 +40,6 @@ from astrbot.core.pipeline.process_stage.method.agent_sub_stages import (
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from astrbot.core.platform.platform_metadata import PlatformMetadata
 from astrbot.core.provider import Provider
-from astrbot.core.provider import manager as provider_manager_module
 from astrbot.core.provider.entities import ProviderRequest, ProviderType
 from astrbot.core.provider.manager import ProviderManager
 from astrbot.core.skills.skill_manager import SkillInfo
@@ -432,27 +431,21 @@ class TestSelectProvider:
 
 
 @pytest.mark.asyncio
-async def test_provider_manager_async_selection_uses_session_preference(monkeypatch):
+async def test_provider_manager_async_selection_uses_effective_config():
     preferred_provider = object()
     manager = ProviderManager.__new__(ProviderManager)
     manager.inst_map = {"preferred": preferred_provider}
     manager.acm = MagicMock()
-
-    get_async = AsyncMock(return_value="preferred")
-    monkeypatch.setattr(provider_manager_module.sp, "get_async", get_async)
+    manager.acm.get_conf.return_value = {
+        "agent": {"runtime": "astrbot", "config": {"model": {"provider_id": "preferred"}}}
+    }
 
     result = await manager.get_using_provider_async(
-        ProviderType.CHAT_COMPLETION,
-        "session-1",
+        ProviderType.CHAT_COMPLETION, "session-1"
     )
 
     assert result is preferred_provider
-    get_async.assert_awaited_once_with(
-        "umo",
-        "session-1",
-        "provider_perf_chat_completion",
-        None,
-    )
+    manager.acm.get_conf.assert_called_once_with("session-1")
 
 
 class TestGetSessionConv:

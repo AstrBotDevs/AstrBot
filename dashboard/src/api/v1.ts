@@ -1034,6 +1034,9 @@ export const fileApi = {
 };
 
 export const sessionApi = {
+  overrides(umo: string, profileId?: string) {
+    return typed<any>(openApiV1.getSessionOverrides({ query: { umo, profile_id: profileId } }));
+  },
   senders(params?: { search?: string; limit?: number; page?: number; sender_ids?: string[] }) {
     return typed<{ page: number; has_more: boolean; senders: Array<{
       umo: string;

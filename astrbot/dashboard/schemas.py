@@ -661,6 +661,8 @@ class ConfigRouteUpsertRequest(BaseModel):
 
 
 class SessionRuleRequest(OpenModel):
+    profile_id: str | None = Field(None, min_length=1, max_length=255)
+    user_alias: str | None = Field(None, max_length=255)
     umo: str | None = None
     rule_key: str | None = None
     rule_value: Any = None
@@ -671,7 +673,11 @@ class UmoListRequest(OpenModel):
     umos: list[str] | None = None
     scope: Literal["all", "group", "private", "custom_group"] | None = None
     group_id: str | None = None
-    rule_key: str | None = None
+    rule_key: str | None = Field(
+        None,
+        description="For rule deletion, config_binding clears both profile selection "
+        "and overrides; config_overrides or omission clears only overrides.",
+    )
 
 
 class BatchSessionProviderRequest(UmoListRequest):

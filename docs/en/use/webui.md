@@ -20,7 +20,8 @@ These paths use the current default sidebar with a fixed menu order. Extension i
 | Standalone MCP / Skills entries | Extensions → MCP Servers / Skills |
 | System Settings → General → Cache → Export diagnostics | System Settings → Maintenance → Diagnostics → Export diagnostics |
 | System Settings → Appearance → Customize Sidebar | Removed; the sidebar uses the default menu layout |
-| Custom Rules / Future Tasks / SubAgents | Custom Rules is under `System`; Future Tasks is under `Extensions`. Subagent management moves to `Configuration → AI → Capabilities → Subagents → Configure Specialized Agents`. |
+| Custom Rules / Session Management | Config → Manage session mappings; old links redirect automatically |
+| Future Tasks / SubAgents | Future Tasks remains under Extensions; subagents are under Config → AI → Capabilities → Subagents |
 
 Old log, trace, conversation, and statistics URLs still redirect to the corresponding tabs. Agent runners are now saved in each profile; they are no longer created as model providers. See [Agent Execution Mode](./agent-runner.md) for the setup steps.
 

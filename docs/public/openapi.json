@@ -6183,6 +6183,43 @@
         }
       }
     },
+    "/api/v1/sessions/overrides": {
+      "get": {
+        "tags": [
+          "Sessions"
+        ],
+        "operationId": "getSessionOverrides",
+        "summary": "Read session overrides and inherited profile values",
+        "x-astrbot-scope": "data",
+        "parameters": [
+          {
+            "name": "umo",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 512
+            }
+          },
+          {
+            "name": "profile_id",
+            "in": "query",
+            "description": "Preview a base profile without saving; empty string follows routing.",
+            "schema": {
+              "type": "string",
+              "maxLength": 255
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          }
+        },
+        "description": "**Required scope:** `data`"
+      }
+    },
     "/api/v1/sessions/rules": {
       "get": {
         "tags": [
@@ -8235,6 +8272,19 @@
           "rule_key"
         ],
         "properties": {
+          "profile_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "minLength": 1,
+            "maxLength": 255,
+            "description": "Explicit base profile; null follows routing; omitted preserves selection."
+          },
+          "user_alias": {
+            "type": "string",
+            "maxLength": 255
+          },
           "umo": {
             "type": "string"
           },
@@ -8272,7 +8322,8 @@
             "type": "string"
           },
           "rule_key": {
-            "type": "string"
+            "type": "string",
+            "description": "For rule deletion, config_binding clears both profile selection and overrides; config_overrides or omission clears only overrides."
           }
         },
         "additionalProperties": false

@@ -1169,6 +1169,15 @@
     }
   },
   "access_group": {
+    "blacklist": {
+      "description": "黑名单",
+      "platform_settings": {
+        "id_blacklist": {
+          "description": "黑名单 ID 列表",
+          "hint": "停止处理这些会话的消息。黑名单优先于白名单，管理员也不会豁免。"
+        }
+      }
+    },
     "name": "访问控制",
     "admins": {
       "description": "管理员",

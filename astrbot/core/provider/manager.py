@@ -10,6 +10,7 @@ from deprecated import deprecated
 from astrbot.core import astrbot_config, logger, sp
 from astrbot.core.astrbot_config_mgr import AstrBotConfigManager
 from astrbot.core.db import BaseDatabase
+from astrbot.core.session_overrides import PROVIDER_PATHS, update_overrides
 from astrbot.core.utils.error_redaction import safe_error
 
 from .entities import ProviderType
@@ -178,11 +179,10 @@ class ProviderManager:
                 f"Provider {provider_id} does not exist and cannot be set."
             )
         if umo:
-            await sp.session_put(
-                umo,
-                f"provider_perf_{provider_type.value}",
-                provider_id,
-            )
+            path = PROVIDER_PATHS.get(provider_type.value)
+            if path is None:
+                raise ValueError(f"Unsupported session provider type: {provider_type}")
+            await update_overrides(umo, {path: provider_id})
             self._notify_provider_changed(provider_id, provider_type, umo)
             return
         # 不启用提供商会话隔离模式的情况
@@ -329,15 +329,7 @@ class ProviderManager:
         Returns:
             正在使用的提供商实例。
         """
-        provider_id = None
-        if umo:
-            provider_id = sp.get(
-                f"provider_perf_{provider_type.value}",
-                None,
-                scope="umo",
-                scope_id=umo,
-            )
-        return self._resolve_using_provider(provider_type, umo, provider_id)
+        return self._resolve_using_provider(provider_type, umo, None)
 
     async def get_using_provider_async(
         self,
@@ -353,15 +345,7 @@ class ProviderManager:
         Returns:
             Provider instance currently in use, or None if unavailable.
         """
-        provider_id = None
-        if umo:
-            provider_id = await sp.get_async(
-                "umo",
-                umo,
-                f"provider_perf_{provider_type.value}",
-                None,
-            )
-        return self._resolve_using_provider(provider_type, umo, provider_id)
+        return self._resolve_using_provider(provider_type, umo, None)
 
     async def initialize(self) -> None:
         # 逐个初始化提供商

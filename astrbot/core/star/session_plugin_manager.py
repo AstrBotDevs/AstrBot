@@ -1,7 +1,8 @@
 """会话插件管理器 - 负责管理每个会话的插件启停状态"""
 
-from astrbot.core import logger, sp
+from astrbot.core import logger
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
+from astrbot.core.session_overrides import get_overrides
 
 
 class SessionPluginManager:
@@ -23,13 +24,8 @@ class SessionPluginManager:
 
         """
         # 获取会话插件配置
-        session_plugin_config = await sp.get_async(
-            scope="umo",
-            scope_id=session_id,
-            key="session_plugin_config",
-            default={},
-        )
-        session_config = session_plugin_config.get(session_id, {})
+        session_plugin_config = await get_overrides(session_id)
+        session_config = session_plugin_config
 
         enabled_plugins = session_config.get("enabled_plugins", [])
         disabled_plugins = session_config.get("disabled_plugins", [])
@@ -65,13 +61,8 @@ class SessionPluginManager:
         session_id = event.unified_msg_origin
         filtered_handlers = []
 
-        session_plugin_config = await sp.get_async(
-            scope="umo",
-            scope_id=session_id,
-            key="session_plugin_config",
-            default={},
-        )
-        session_config = session_plugin_config.get(session_id, {})
+        session_plugin_config = await get_overrides(session_id)
+        session_config = session_plugin_config
         disabled_plugins = session_config.get("disabled_plugins", [])
 
         for handler in handlers:

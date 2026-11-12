@@ -910,8 +910,7 @@ class ConfigRoutingService:
 
     async def delete_route_by_umo(self, umo: str) -> None:
         if umo in self.ucr.umop_to_conf_id:
-            del self.ucr.umop_to_conf_id[umo]
-            await self.ucr.update_routing_data(self.ucr.umop_to_conf_id)
+            await self.ucr.delete_route(umo)
 
     async def delete_route_from_dashboard_payload(self, payload: object) -> str:
         if not isinstance(payload, dict) or not payload:

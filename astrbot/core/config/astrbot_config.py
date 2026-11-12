@@ -288,6 +288,8 @@ class AstrBotConfig(dict):
             replace_config: Values to merge into the configuration before saving.
             indent: Number of spaces used to indent the JSON output.
         """
+        if getattr(self, "_session_override", False):
+            raise ValueError("Save session changes through the session override API")
         snapshot, revision = self._prepare_config_snapshot(replace_config)
         self._write_config_snapshot(snapshot, revision, indent)
 
@@ -304,6 +306,8 @@ class AstrBotConfig(dict):
             Whether this snapshot was committed. A newer committed snapshot supersedes
             an older snapshot.
         """
+        if getattr(self, "_session_override", False):
+            raise ValueError("Save session changes through the session override API")
         snapshot, revision = self._prepare_config_snapshot(replace_config)
         return await asyncio.to_thread(
             self._write_config_snapshot,

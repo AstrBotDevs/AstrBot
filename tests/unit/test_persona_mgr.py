@@ -131,7 +131,7 @@ async def test_get_default_persona_v3_uses_db_default():
 async def test_resolve_selected_persona_webchat_implicit_uses_chatui_default():
     manager = make_manager([make_persona("default", "USER DEFAULT")])
 
-    with patch.object(pm.sp, "get_async", new=AsyncMock(return_value={})):
+    with patch.object(pm, "get_overrides", new=AsyncMock(return_value={})):
         (
             persona_id,
             persona,
@@ -153,7 +153,7 @@ async def test_resolve_selected_persona_webchat_implicit_uses_chatui_default():
 async def test_resolve_selected_persona_non_webchat_implicit_uses_db_default():
     manager = make_manager([make_persona("default", "USER DEFAULT")])
 
-    with patch.object(pm.sp, "get_async", new=AsyncMock(return_value={})):
+    with patch.object(pm, "get_overrides", new=AsyncMock(return_value={})):
         (
             persona_id,
             persona,
@@ -173,10 +173,10 @@ async def test_resolve_selected_persona_non_webchat_implicit_uses_db_default():
 
 
 @pytest.mark.asyncio
-async def test_resolve_selected_persona_explicit_default_ignores_chatui_default():
+async def test_resolve_selected_persona_ignores_legacy_conversation_selection():
     manager = make_manager([make_persona("default", "USER DEFAULT")])
 
-    with patch.object(pm.sp, "get_async", new=AsyncMock(return_value={})):
+    with patch.object(pm, "get_overrides", new=AsyncMock(return_value={})):
         (
             persona_id,
             persona,
@@ -189,10 +189,9 @@ async def test_resolve_selected_persona_explicit_default_ignores_chatui_default(
             provider_settings={},
         )
 
-    assert persona_id == "default"
-    assert persona is not None
-    assert persona["prompt"] == "USER DEFAULT"
-    assert use_webchat_special_default is False
+    assert persona_id == "_chatui_default_"
+    assert persona is None
+    assert use_webchat_special_default is True
 
 
 @pytest.mark.asyncio
@@ -200,7 +199,9 @@ async def test_resolve_selected_persona_session_rule_default_uses_db_default():
     manager = make_manager([make_persona("default", "USER DEFAULT")])
 
     with patch.object(
-        pm.sp, "get_async", new=AsyncMock(return_value={"persona_id": "default"})
+        pm,
+        "get_overrides",
+        new=AsyncMock(return_value={"agent.config.persona.persona_id": "default"}),
     ):
         (
             persona_id,
@@ -217,5 +218,5 @@ async def test_resolve_selected_persona_session_rule_default_uses_db_default():
     assert persona_id == "default"
     assert persona is not None
     assert persona["prompt"] == "USER DEFAULT"
-    assert force_applied_persona_id == "default"
+    assert force_applied_persona_id is None
     assert use_webchat_special_default is False

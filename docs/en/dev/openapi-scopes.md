@@ -194,6 +194,7 @@ Manage conversations and platform-session data.
 | `DELETE` | `/api/v1/session-groups/{group_id}` | — |
 | `GET` | `/api/v1/sessions` | — |
 | `GET` | `/api/v1/sessions/active-umos` | — |
+| `GET` | `/api/v1/sessions/overrides` | — |
 | `PATCH` | `/api/v1/sessions/provider` | — |
 | `GET` | `/api/v1/sessions/rules` | — |
 | `POST` | `/api/v1/sessions/rules` | — |

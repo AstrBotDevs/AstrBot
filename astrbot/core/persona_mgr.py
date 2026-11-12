@@ -1,10 +1,10 @@
 from astrbot import logger
-from astrbot.api import sp
 from astrbot.core.astrbot_config_mgr import AstrBotConfigManager
 from astrbot.core.db import BaseDatabase
 from astrbot.core.db.po import Persona, PersonaFolder, Personality
 from astrbot.core.platform.message_session import MessageSession
 from astrbot.core.sentinels import NOT_GIVEN
+from astrbot.core.session_overrides import get_overrides
 
 SYSTEM_DEFAULT_PERSONA_ID = "default"
 """Reserved persona id for the built-in system default persona.
@@ -137,42 +137,28 @@ class PersonaManager:
                 - force applied persona_id from session rule
                 - whether use webchat special default persona
         """
-        session_service_config = (
-            await sp.get_async(
-                scope="umo",
-                scope_id=str(umo),
-                key="session_service_config",
-                default={},
+        cfg = self.acm.get_conf(umo)
+        agent_runner = cfg.get("agent", {})
+        runner_config = agent_runner.get("config", {})
+        persona_id = (
+            runner_config.get("persona", {}).get(
+                "persona_id", SYSTEM_DEFAULT_PERSONA_ID
             )
-            or {}
+            if agent_runner.get("runtime") == "astrbot"
+            else runner_config.get("persona_id", SYSTEM_DEFAULT_PERSONA_ID)
         )
-
-        force_applied_persona_id = session_service_config.get("persona_id")
-        persona_id = force_applied_persona_id
-
-        if not persona_id:
-            persona_id = conversation_persona_id
-            if persona_id == "[%None]":
-                pass
-            elif persona_id is None:
-                cfg = self.acm.get_conf(umo)
-                agent_runner = cfg.get("agent", {})
-                runner_config = agent_runner.get("config", {})
-                persona_id = (
-                    runner_config.get("persona", {}).get(
-                        "persona_id", SYSTEM_DEFAULT_PERSONA_ID
-                    )
-                    if agent_runner.get("runtime") == "astrbot"
-                    else runner_config.get("persona_id", SYSTEM_DEFAULT_PERSONA_ID)
-                )
+        # The legacy tuple slot is retained for callers; there is no forced layer.
+        force_applied_persona_id = None
 
         persona = next(
             (item for item in self.personas_v3 if item["name"] == persona_id),
             None,
         )
+        overrides = await get_overrides(str(umo))
         is_implicit_system_default = (
-            force_applied_persona_id is None
-            and conversation_persona_id is None
+            "agent.config.persona.persona_id" not in overrides
+            and "agent.config.persona_id" not in overrides
+            and force_applied_persona_id is None
             and persona_id == SYSTEM_DEFAULT_PERSONA_ID
         )
         logger.debug(
