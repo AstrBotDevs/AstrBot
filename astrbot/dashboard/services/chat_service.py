@@ -5,11 +5,17 @@ import json
 import os
 import re
 import uuid
-from collections.abc import AsyncIterator
+from bisect import bisect_right
+from collections.abc import AsyncIterator, Callable, Iterator
 from copy import deepcopy
 from dataclasses import dataclass, field
 from pathlib import Path, PurePosixPath
 from typing import Any
+
+from markdown_it import MarkdownIt
+from markdown_it.rules_inline import autolink, link
+from markdown_it.rules_inline.state_inline import StateInline
+from mdit_py_plugins.footnote import footnote_plugin
 
 from astrbot.core import logger, sp
 from astrbot.core.agent.message import get_checkpoint_id, is_checkpoint_message
@@ -275,7 +281,167 @@ class BotMessageAccumulator:
         return parsed if isinstance(parsed, dict) else None
 
 
+def _track_link_position(
+    rule: Callable[[StateInline, bool], bool],
+) -> Callable[[StateInline, bool], bool]:
+    """Preserve the source offset of a Markdown link for citation ordering.
+
+    Args:
+        rule: The Markdown link parser rule.
+
+    Returns:
+        The rule with source positions attached to the links it emits.
+    """
+
+    def tracked(state: StateInline, silent: bool) -> bool:
+        position = state.pos
+        first_token = len(state.tokens)
+        if not rule(state, silent):
+            return False
+        if not silent:
+            for token in state.tokens[first_token:]:
+                if token.type == "link_open":
+                    token.meta["position"] = position
+                    break
+        return True
+
+    return tracked
+
+
+_CITATION_URL = re.compile(r"https?://[^\s<>\x60]+", re.IGNORECASE)
+_SENTENCE_PUNCTUATION = "。，、！？；：（）【】「」《》"
+
+
+def _bare_citation_url(state: StateInline, silent: bool) -> bool:
+    """Recognize a known URL while Markdown is parsing visible inline text.
+
+    Args:
+        state: Inline parser state at a possible URL.
+        silent: Whether the parser is looking ahead without emitting tokens.
+
+    Returns:
+        Whether a cited bare URL was consumed.
+    """
+    if silent or state.linkLevel or state.src[state.pos] not in "hH":
+        return False
+    start = state.pos
+    if start and re.fullmatch(r"[A-Za-z0-9]", state.src[start - 1]):
+        return False
+    match = _CITATION_URL.match(state.src, start, state.posMax)
+    if not match:
+        return False
+
+    linkifier = state.md.linkify
+    assert linkifier is not None
+    link_match = linkifier.match_at_start(match[0])
+    if link_match is None:
+        return False
+    url = link_match.raw
+    boundaries = [m.start() for m in re.finditer(f"[{_SENTENCE_PUNCTUATION}]", url)]
+    known_urls = state.env["citation_urls"]
+    for end in (len(url), *reversed(boundaries)):
+        # Retain Chinese sentence boundaries for replies without spaces.
+        candidate = (
+            link_match if end == len(url) else linkifier.match_at_start(url[:end])
+        )
+        if candidate is None:
+            continue
+        # The chat renderer strips trailing emphasis markers from autolinks.
+        target = candidate.raw.rstrip("*")
+        normalized = state.md.normalizeLink(target)
+        if normalized in known_urls:
+            token = state.push("citation_url", "", 0)
+            token.content = normalized
+            token.meta["position"] = start
+            state.pos = start + len(target)
+            return True
+    # Keep URLs embedded in an unmatched URL's query from becoming citations.
+    end = start + (boundaries[0] if boundaries else len(url))
+    state.pending += state.src[start:end]
+    state.pos = end
+    return True
+
+
+_CITATION_MARKDOWN = (
+    MarkdownIt().enable(["strikethrough", "table"]).use(footnote_plugin, inline=False)
+)
+for _char in ("h", "H"):
+    _CITATION_MARKDOWN.inline.add_terminator_char(_char)
+_CITATION_MARKDOWN.inline.ruler.before("text", "citation_url", _bare_citation_url)
+_CITATION_MARKDOWN.inline.ruler.at("link", _track_link_position(link))
+_CITATION_MARKDOWN.inline.ruler.at("autolink", _track_link_position(autolink))
+
+
+def _match_search_result_urls(
+    text: str, url_to_index: dict[str, str]
+) -> Iterator[tuple[int, str]]:
+    """Yield matched links at their positions in one rendered message part.
+
+    Args:
+        text: The Markdown source of a single reply part.
+        url_to_index: Search result indices keyed by normalized URLs.
+
+    Yields:
+        The source position and search result index of each matched URL.
+    """
+    if not url_to_index:
+        return
+    newline = re.compile(r"\r\n?|\n")
+    source_lines = newline.split(text)
+    source_starts = [0, *(m.end() for m in newline.finditer(text))]
+    source_cursors = [0] * len(source_lines)
+    for block in _CITATION_MARKDOWN.parse(text, {"citation_urls": url_to_index}):
+        if block.type != "inline" or not block.map:
+            continue
+        lines = block.content.split("\n")
+        starts = [0, *(m.end() for m in re.finditer("\n", block.content))]
+        prefixes = []
+        for line, content in enumerate(lines, block.map[0]):
+            cursor = source_cursors[line]
+            prefix = source_lines[line].find(content, cursor)
+            escaped_pipes = False
+            if "|" in content:
+                # Table tokens have already unescaped pipes within their cells.
+                escaped_prefix = source_lines[line].find(
+                    content.replace("|", r"\|"), cursor
+                )
+                if escaped_prefix >= 0 and (prefix < 0 or escaped_prefix < prefix):
+                    prefix = escaped_prefix
+                    escaped_pipes = True
+            prefix = max(cursor, prefix)
+            source_cursors[line] = (
+                prefix + len(content) + (content.count("|") if escaped_pipes else 0)
+            )
+            prefixes.append((prefix, escaped_pipes))
+        for token in block.children or ():
+            if token.type == "link_open":
+                url = token.attrGet("href")
+            elif token.type == "citation_url":
+                url = token.content
+            else:
+                continue
+            if not isinstance(url, str) or (idx := url_to_index.get(url)) is None:
+                continue
+            position = token.meta["position"]
+            line = bisect_right(starts, position) - 1
+            source_line = block.map[0] + line
+            prefix, escaped_pipes = prefixes[line]
+            column = position - starts[line]
+            if escaped_pipes:
+                column += lines[line].count("|", 0, column)
+            yield source_starts[source_line] + prefix + column, idx
+
+
 def extract_web_search_refs(accumulated_text: str, accumulated_parts: list) -> dict:
+    """Collect web search citations in order of first appearance.
+
+    Args:
+        accumulated_text: Plain text of the assistant's reply.
+        accumulated_parts: Message parts containing the search tool results.
+
+    Returns:
+        The cited search results, or an empty dictionary if none were cited.
+    """
     supported = [
         "web_search_baidu",
         "web_search_tavily",
@@ -314,25 +480,39 @@ def extract_web_search_refs(accumulated_text: str, accumulated_parts: list) -> d
     if not web_search_results:
         return {}
 
-    # Collect matched indices in text order so cards render consistently.
-    matched_indices: dict[str, None] = {}
-    # Native citation format emitted by the model.
-    for match in re.findall(r"<ref>(.*?)</ref>", accumulated_text):
-        if (idx := match.strip()) in web_search_results:
-            matched_indices.setdefault(idx)
-    # Fallback: models may cite sources with plain or markdown URLs instead
-    # of <ref> tags; recover cards by matching URLs from the search results.
-    url_to_index = {}
+    first_positions: dict[str, int] = {}
+    url_to_index: dict[str, str] = {}
+    # Prefer an explicit reference for a URL that appears in several results.
+    for match in re.finditer(r"<ref>(.*?)</ref>", accumulated_text):
+        idx = match[1].strip()
+        if idx not in web_search_results:
+            continue
+        first_positions.setdefault(idx, match.start())
+        url = web_search_results[idx]["url"]
+        if isinstance(url, str) and re.match(r"https?://", url, re.IGNORECASE):
+            url_to_index.setdefault(_CITATION_MARKDOWN.normalizeLink(url), idx)
+
     for idx, item in web_search_results.items():
-        if item.get("url") and item["url"] not in url_to_index:
-            url_to_index[item["url"]] = idx
-    for match in re.findall(r"https?://[^\s<>()\[\]{}\"']+", accumulated_text):
-        idx = url_to_index.get(match.rstrip(".,;:!?。)）】」"))
-        if idx:
-            matched_indices.setdefault(idx)
+        url = item["url"]
+        if isinstance(url, str) and re.match(r"https?://", url, re.IGNORECASE):
+            url_to_index.setdefault(_CITATION_MARKDOWN.normalizeLink(url), idx)
+
+    text_parts = [
+        text
+        for part in accumulated_parts
+        if part.get("type") == "plain"
+        and isinstance(text := part.get("text"), str)
+        and text
+    ]
+    part_start = 0
+    for text in text_parts or [accumulated_text]:
+        for offset, idx in _match_search_result_urls(text, url_to_index):
+            position = part_start + offset
+            first_positions[idx] = min(first_positions.get(idx, position), position)
+        part_start += len(text)
 
     used_refs = []
-    for ref_index in matched_indices:
+    for ref_index in sorted(first_positions, key=first_positions.__getitem__):
         payload = {"index": ref_index, **web_search_results[ref_index]}
         if favicon := sp.temporary_cache.get("_ws_favicon", {}).get(payload["url"]):
             payload["favicon"] = favicon
