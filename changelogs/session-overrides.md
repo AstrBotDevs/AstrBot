@@ -5,6 +5,7 @@
 - Share model and persona overrides between commands and the editor. New or switched conversation histories within a UMO keep its overrides.
 - Add `disabled_plugins` and `platform_settings.id_blacklist` to profiles. Lists replace inherited lists, including explicit empty lists.
 - Migrate legacy rules and current conversation personas; move remarks into UMO aliases without replacing existing aliases. Remove the unused session Rerank toggle and field. Preserve groups, conversation selection, variables, and unrelated preferences.
+- Preserve knowledge-base IDs during migration, including unavailable instances; recognize both names and IDs in the knowledge-base selector.
 - Keep group membership as a batch-operation aid, without introducing group inheritance. UI navigation changes accompany this feature because inherited and overridden values must be edited in one configuration workspace.
 - Unify ordered UMOP routes and session overrides as `config_binding` records. Migrate existing data without changing route order or pinning inherited profiles.
 - Replace the Session overrides tab with a Manage session mappings dialog. Keep a search icon beside the profile selector that expands on click; show routes, assigned profiles, and overrides in one table. Add mappings by selecting a session or group, then a profile or field overrides. Reuse existing route, session-rule, and group APIs.

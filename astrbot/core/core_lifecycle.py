@@ -270,9 +270,7 @@ class AstrBotCoreLifecycle:
             migrate_session_overrides,
         )
 
-        await migrate_session_overrides(
-            self.astrbot_config_mgr, self.db, self.kb_manager
-        )
+        await migrate_session_overrides(self.astrbot_config_mgr, self.db)
 
         # 初始化消息事件流水线调度器
         self.pipeline_scheduler_mapping = await self.load_pipeline_scheduler()

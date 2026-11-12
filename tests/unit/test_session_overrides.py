@@ -182,19 +182,14 @@ async def test_migration_preserves_alias_groups_and_unrelated_preferences(
     )
     await prefs.session_put(UMO, "provider_perf_chat_completion", "model-B")
     await db.upsert_umo_alias(UMO, "owner", "Auto name", "Existing alias")
-    kb = SimpleNamespace(
-        get_kb=AsyncMock(
-            return_value=SimpleNamespace(kb=SimpleNamespace(kb_name="Handbook"))
-        )
-    )
-    await migration.migrate_session_overrides(acm, db, kb)
+    await migration.migrate_session_overrides(acm, db)
     values = await overrides.get_overrides(UMO)
     assert values == {
         "agent.config.persona.persona_id": "rule-persona",
         "provider_tts_settings.enable": False,
         "platform_settings.id_blacklist": [UMO],
         "disabled_plugins": ["weather"],
-        "kb_names": ["Handbook"],
+        "kb_names": ["kb1"],
         "kb_final_top_k": 3,
         "agent.config.model.provider_id": "model-B",
     }
@@ -204,8 +199,41 @@ async def test_migration_preserves_alias_groups_and_unrelated_preferences(
     assert await prefs.session_get(UMO, "sel_conv_id") == conv.conversation_id
     assert await prefs.session_get(UMO, "kb_config") is None
     await overrides.update_overrides(UMO, {"agent.config.persona.persona_id": None})
-    await migration.migrate_session_overrides(acm, db, kb)
+    await migration.migrate_session_overrides(acm, db)
     assert "agent.config.persona.persona_id" not in await overrides.get_overrides(UMO)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("kb_ids", [["kb1", "not-loaded"], []])
+async def test_migration_keeps_kb_ids_until_instances_become_available(
+    override_environment, kb_ids
+):
+    """Keep references across unavailable KBs, later loading and renaming."""
+    from astrbot.core.knowledge_base.kb_mgr import KnowledgeBaseManager
+
+    prefs, acm, db = override_environment
+    manager = KnowledgeBaseManager.__new__(KnowledgeBaseManager)
+    manager.kb_insts = {}
+    manager.retrieval_manager = SimpleNamespace(retrieve=AsyncMock(return_value=[]))
+    await prefs.session_put(UMO, "kb_config", {"kb_ids": kb_ids, "top_k": 3})
+
+    await migration.migrate_session_overrides(acm, db)
+    values = await overrides.get_overrides(UMO)
+    assert values["kb_names"] == kb_ids
+    assert await prefs.session_get(UMO, "kb_config") is None
+    assert await manager.retrieve("question", values["kb_names"]) == {}
+
+    if kb_ids:
+        helper = SimpleNamespace(
+            kb=SimpleNamespace(kb_id="kb1", kb_name="Renamed handbook"),
+            init_error=None,
+        )
+        manager.kb_insts["kb1"] = helper
+        await manager.retrieve("question", acm.get_conf(UMO)["kb_names"])
+        manager.retrieval_manager.retrieve.assert_awaited_once()
+        assert manager.retrieval_manager.retrieve.call_args.kwargs["kb_ids"] == ["kb1"]
+    await migration.migrate_session_overrides(acm, db)
+    assert (await overrides.get_overrides(UMO))["kb_names"] == kb_ids
 
 
 @pytest.mark.asyncio
@@ -215,7 +243,7 @@ async def test_migration_moves_legacy_alias_and_keeps_auto_metadata(
     prefs, acm, db = override_environment
     await db.upsert_umo_auto_name(UMO, "sender", "Auto name")
     await prefs.session_put(UMO, "session_service_config", {"custom_name": "Work"})
-    await migration.migrate_session_overrides(acm, db, SimpleNamespace())
+    await migration.migrate_session_overrides(acm, db)
     alias = (await db.get_umo_aliases([UMO]))[0]
     assert alias.user_alias == "Work"
     assert alias.auto_name == "Auto name"

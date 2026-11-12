@@ -9,13 +9,12 @@ from astrbot.core.session_overrides import (
 from astrbot.core.umo_alias import normalize_umo_name
 
 
-async def migrate_session_overrides(acm, db, kb_manager) -> None:
+async def migrate_session_overrides(acm, db) -> None:
     """Move rules and the current conversation persona without deleting other data.
 
     Args:
         acm: Profile manager used to determine persona paths and inherited values.
         db: Main database containing conversations and aliases.
-        kb_manager: Initialized knowledge base manager for resolving legacy IDs.
     """
     if await sp.global_get("session_overrides_migrated", False):
         return
@@ -79,12 +78,8 @@ async def migrate_session_overrides(acm, db, kb_manager) -> None:
                 changes[path] = value
         kb = legacy.get("kb_config") or {}
         if "kb_ids" in kb:
-            names = []
-            for kb_id in kb["kb_ids"]:
-                helper = await kb_manager.get_kb(kb_id)
-                if helper:
-                    names.append(helper.kb.kb_name)
-            changes["kb_names"] = names
+            # Retrieval accepts IDs, so migration must not depend on loaded KBs.
+            changes["kb_names"] = list(kb["kb_ids"])
             changes["kb_final_top_k"] = kb.get("top_k", 5)
         # Existing overrides win on retries after a partially completed migration.
         existing = await get_overrides(umo)

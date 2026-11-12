@@ -82,6 +82,7 @@ Selecting **Configuration profile** changes only members' base profiles and pres
 On upgrade, startup automatically migrates legacy data:
 
 - Model selections, disabled plugins, knowledge bases, and retrieval counts become configuration overrides.
+- Knowledge-base references retain their original IDs. `kb_names` accepts names or IDs, so migration does not depend on loaded instances or clear temporarily unavailable references.
 - The selected conversation's persona becomes an override; an existing forced-persona rule takes precedence during migration.
 - Legacy disabled LLM/TTS flags become explicit Off values. Legacy enabled flags become Follow profile to avoid enabling capabilities previously disabled by the profile.
 - Disabled sessions receive a blacklist override containing their own UMO.
