@@ -1,7 +1,9 @@
 """Behavioral coverage for explicit overrides and legacy migration."""
 
 import asyncio
+import json
 from copy import deepcopy
+from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
@@ -12,6 +14,8 @@ from astrbot.core import session_overrides as overrides
 from astrbot.core.astrbot_config_mgr import AstrBotConfigManager
 from astrbot.core.config import AstrBotConfig
 from astrbot.core.config.default import DEFAULT_CONFIG
+from astrbot.core.config.patched import PatchedAstrBotConfig
+from astrbot.core.config.runtime import current_message_config
 from astrbot.core.conversation_mgr import ConversationManager
 from astrbot.core.db.migration import migra_session_overrides as migration
 from astrbot.core.event_bus import EventBus
@@ -86,6 +90,66 @@ def make_message():
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("has_overrides", [False, True])
+async def test_runtime_config_rejects_both_save_methods_without_touching_profile(
+    pipeline_environment, has_overrides,
+):
+    acm, _, _ = pipeline_environment
+    if has_overrides:
+        await overrides.update_overrides(UMO, {"wake_prefix": ["!"]})
+    base = acm.default_conf
+    profile = Path(base.config_path)
+    original = profile.read_bytes()
+    config, paths = acm._create_message_config(UMO)
+    assert isinstance(config, PatchedAstrBotConfig)
+    assert paths == (frozenset({"wake_prefix"}) if has_overrides else frozenset())
+    before = deepcopy(dict(config))
+    with pytest.raises(ValueError, match="session override"):
+        config.save_config({"wake_prefix": ["blocked"]})
+    with pytest.raises(ValueError, match="session override"):
+        await config.save_config_async({"wake_prefix": ["blocked"]})
+    assert config == before
+    assert profile.read_bytes() == original
+    # File-backed profiles retain their existing save behavior.
+    await base.save_config_async({"wake_prefix": ["saved"]})
+    assert json.loads(profile.read_text(encoding="utf-8-sig"))["wake_prefix"] == ["saved"]
+    assert config == before
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("explicit_persona", [False, True])
+async def test_persona_inheritance_uses_message_override_metadata(
+    pipeline_environment, override_environment, make_message, explicit_persona,
+):
+    acm, _, scheduler = pipeline_environment
+    _, _, db = override_environment
+    path = "agent.config.persona.persona_id"
+    acm.default_conf["agent"]["config"]["persona"]["persona_id"] = "default"
+    if explicit_persona:
+        await overrides.update_overrides(UMO, {path: "default"})
+    personas = PersonaManager(db, acm)
+    personas.personas_v3 = [{"name": "default", "prompt": "Profile persona"}]
+
+    async def process(event):
+        before = await personas.resolve_selected_persona(
+            umo=UMO, conversation_persona_id=None, platform_name="webchat"
+        )
+        assert before[3] is (not explicit_persona)
+        await overrides.update_overrides(UMO, {path: None if explicit_persona else "default"})
+        after = await personas.resolve_selected_persona(
+            umo=UMO, conversation_persona_id=None, platform_name="webchat"
+        )
+        assert after == before
+
+    scheduler.stages = [SimpleNamespace(process=process)]
+    await scheduler.execute(make_message())
+    resolved = await personas.resolve_selected_persona(
+        umo=UMO, conversation_persona_id=None, platform_name="webchat"
+    )
+    assert resolved[3] is explicit_persona
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("has_overrides", [False, True])
 async def test_pipeline_copies_configuration_once_per_message(
     pipeline_environment, make_message, has_overrides,
 ):
@@ -114,7 +178,8 @@ async def test_pipeline_copies_configuration_once_per_message(
             ready.set()
         await asyncio.wait_for(ready.wait(), 2)
         assert config["plugin_config"]["items"] == ["base", "local"]
-        assert config._session_override_paths == (
+        assert isinstance(config, PatchedAstrBotConfig)
+        assert current_message_config.get().override_paths == (
             frozenset({"wake_prefix"}) if has_overrides else frozenset()
         )
         with pytest.raises(ValueError, match="session override"):
@@ -190,7 +255,7 @@ async def test_pipeline_snapshot_stays_stable_until_next_message(
         await overrides.update_overrides(UMO, {"provider_settings.enable": True})
         assert acm.get_conf(UMO) is snapshot
         assert snapshot["provider_settings"]["enable"] is False
-        assert snapshot._session_override_paths == frozenset()
+        assert current_message_config.get().override_paths == frozenset()
         # A new nested message for the same UMO gets fresh values; its parent
         # retains the original snapshot when the nested execution returns.
         await scheduler.execute(make_message())

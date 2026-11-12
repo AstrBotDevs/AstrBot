@@ -49,7 +49,7 @@ async def sdk(environment, monkeypatch):
     env.config = config
     env.context.get_config = lambda **kwargs: config
     env.context.astrbot_config_mgr = SimpleNamespace(
-        _create_message_config=lambda _: copy.deepcopy(config)
+        _create_message_config=lambda _: (copy.deepcopy(config), frozenset())
     )
     env.context.get_using_provider_async = AsyncMock(return_value=env.provider)
     env.context.get_using_tts_provider_async = AsyncMock(return_value=None)

@@ -1,5 +1,6 @@
 from astrbot import logger
 from astrbot.core.astrbot_config_mgr import AstrBotConfigManager
+from astrbot.core.config.runtime import current_message_config
 from astrbot.core.db import BaseDatabase
 from astrbot.core.db.po import Persona, PersonaFolder, Personality
 from astrbot.core.platform.message_session import MessageSession
@@ -137,6 +138,16 @@ class PersonaManager:
                 - force applied persona_id from session rule
                 - whether use webchat special default persona
         """
+        scope = current_message_config.get()
+        if (
+            scope is not None
+            and scope.active
+            and scope.umo == str(umo)
+            and scope.context.plugin_manager.context.astrbot_config_mgr is self.acm
+        ):
+            overrides = scope.override_paths
+        else:
+            overrides = await get_overrides(str(umo))
         cfg = self.acm.get_conf(umo)
         agent_runner = cfg.get("agent", {})
         runner_config = agent_runner.get("config", {})
@@ -154,9 +165,6 @@ class PersonaManager:
             (item for item in self.personas_v3 if item["name"] == persona_id),
             None,
         )
-        overrides = getattr(cfg, "_session_override_paths", None)
-        if overrides is None:
-            overrides = await get_overrides(str(umo))
         is_implicit_system_default = (
             "agent.config.persona.persona_id" not in overrides
             and "agent.config.persona_id" not in overrides

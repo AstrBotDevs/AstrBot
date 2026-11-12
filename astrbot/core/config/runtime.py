@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from astrbot.core.config import AstrBotConfig
+    from astrbot.core.config.patched import PatchedAstrBotConfig
     from astrbot.core.pipeline.context import PipelineContext
 
 
@@ -14,8 +14,9 @@ class MessageConfig:
     """Keep a message snapshot private to its pipeline and inherited tasks."""
 
     umo: str
-    config: "AstrBotConfig"
+    config: "PatchedAstrBotConfig"
     context: "PipelineContext"
+    override_paths: frozenset[str]
     active: bool = True
 
 

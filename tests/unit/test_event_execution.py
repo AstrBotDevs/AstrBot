@@ -216,7 +216,7 @@ async def test_scheduler_uses_event_scope(event, frames, monkeypatch, failure_at
     """
     scheduler = object.__new__(scheduler_module.PipelineScheduler)
     scheduler.ctx = MagicMock()
-    scheduler.ctx.plugin_manager.context.get_config.return_value = {}
+    scheduler.ctx.plugin_manager.context.astrbot_config_mgr._create_message_config.return_value = ({}, frozenset())
 
     async def process(current):
         assert current is event

@@ -6,10 +6,10 @@ from typing import TypedDict, TypeVar
 from astrbot.core import AstrBotConfig, logger
 from astrbot.core.config.astrbot_config import ASTRBOT_CONFIG_PATH
 from astrbot.core.config.default import DEFAULT_CONFIG
+from astrbot.core.config.patched import PatchedAstrBotConfig
 from astrbot.core.config.runtime import current_message_config
 from astrbot.core.config_bindings import BINDING_KEY
 from astrbot.core.platform.message_session import MessageSession
-from astrbot.core.session_overrides import apply_overrides
 from astrbot.core.umop_config_router import UmopConfigRouter
 from astrbot.core.utils.astrbot_path import get_astrbot_config_path
 from astrbot.core.utils.shared_preferences import SharedPreferences
@@ -188,49 +188,30 @@ class AstrBotConfigManager:
         ):
             return scope.config
 
-        uuid_ = self._load_conf_mapping(umo)["id"]
-
-        conf = self.confs.get(uuid_)
-        if not conf:
-            conf = self.confs["default"]  # default MUST exists
-
-        binding = self.sp.get(BINDING_KEY, {}, scope="umo", scope_id=str(umo)) or {}
+        conf_id = self._load_conf_mapping(umo)["id"]
+        conf = self.confs.get(conf_id) or self.confs["default"]
+        binding = self.sp.get(BINDING_KEY, {}, scope="umo", scope_id=umo) or {}
         overrides = binding.get("overrides", {})
         if overrides:
-            effective = dict.__new__(AstrBotConfig)
-            effective.__dict__.update(conf.__dict__)
-            effective.update(apply_overrides(conf, overrides))
-            object.__setattr__(effective, "_session_override", True)
-            object.__setattr__(
-                effective, "_session_override_paths", frozenset(overrides)
-            )
-            return effective
+            return PatchedAstrBotConfig(conf, overrides)
         return conf
 
-    def _create_message_config(self, umo: str) -> AstrBotConfig:
+    def _create_message_config(
+        self, umo: str
+    ) -> tuple[PatchedAstrBotConfig, frozenset[str]]:
         """Create an independent configuration for a new pipeline execution.
 
         Args:
             umo: Final session origin of the incoming message.
 
         Returns:
-            A fresh configuration that cannot be saved as a shared profile.
+            A fresh runtime configuration and its explicit override paths.
         """
-        token = current_message_config.set(None)
-        try:
-            config = self.get_conf(umo)
-            # With no active scope, get_conf returns either a shared profile or
-            # a freshly copied override result. Only the shared case needs copying.
-            if not any(config is profile for profile in self.confs.values()):
-                return config
-            snapshot = dict.__new__(AstrBotConfig)
-            snapshot.__dict__.update(config.__dict__)
-            snapshot.update(apply_overrides(config, {}))
-            object.__setattr__(snapshot, "_session_override", True)
-            object.__setattr__(snapshot, "_session_override_paths", frozenset())
-            return snapshot
-        finally:
-            current_message_config.reset(token)
+        conf_id = self._load_conf_mapping(umo)["id"]
+        conf = self.confs.get(conf_id) or self.confs["default"]
+        binding = self.sp.get(BINDING_KEY, {}, scope="umo", scope_id=umo) or {}
+        overrides = binding.get("overrides", {})
+        return PatchedAstrBotConfig(conf, overrides), frozenset(overrides)
 
     @property
     def default_conf(self) -> AstrBotConfig:

@@ -342,7 +342,7 @@ async def test_session_isolation_precedes_registration(
         plugin_manager=SimpleNamespace(
             context=SimpleNamespace(
                 get_config=lambda **_: config,
-                astrbot_config_mgr=SimpleNamespace(_create_message_config=lambda _: config),
+                astrbot_config_mgr=SimpleNamespace(_create_message_config=lambda _: (config, frozenset())),
             )
         ),
         db_helper=None,

@@ -89,12 +89,14 @@ class PipelineScheduler:
             event (AstrMessageEvent): 事件对象
 
         """
-        snapshot = (
+        snapshot, override_paths = (
             self.ctx.plugin_manager.context.astrbot_config_mgr._create_message_config(
                 event.unified_msg_origin
             )
         )
-        scope = MessageConfig(event.unified_msg_origin, snapshot, self.ctx)
+        scope = MessageConfig(
+            event.unified_msg_origin, snapshot, self.ctx, override_paths
+        )
         token = current_message_config.set(scope)
         try:
             with (
