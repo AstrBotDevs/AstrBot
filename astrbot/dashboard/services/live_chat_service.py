@@ -334,7 +334,9 @@ class LiveChatService:
         for idx, item in web_search_results.items():
             if item.get("url") and item["url"] not in url_to_index:
                 url_to_index[item["url"]] = idx
-        for match in re.findall(r"https?://[^\s<>()\[\]{}\"']+", accumulated_text):
+        for match in re.findall(
+            r"https?://[^\s<>()\[\]{}\"'\u3000-\u303f\uff00-\uffef]+", accumulated_text
+        ):
             idx = url_to_index.get(match.rstrip(".,;:!?。)）】」"))
             if idx:
                 matched_indices.setdefault(idx)
