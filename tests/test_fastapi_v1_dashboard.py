@@ -991,6 +991,7 @@ def fake_core_lifecycle():
         umop_config_router=umop_config_router,
         platform_manager=SimpleNamespace(
             platform_insts=[platform],
+            get_insts=lambda: [platform],
             fake_platform=platform,
             reload=reload_platform,
             load_platform=load_platform,
@@ -1015,6 +1016,7 @@ def fake_core_lifecycle():
         agent_configs=SimpleNamespace(lock=asyncio.Lock()),
         agent_runtimes={},
         star_context=SimpleNamespace(
+            get_all_stars=lambda: [demo_plugin],
             registered_web_apis=[
                 ("/<path:plugin_path>", plugin_extension, ["GET", "POST"], "demo")
             ]
@@ -1057,6 +1059,33 @@ def _jwt_headers() -> dict[str, str]:
         algorithm="HS256",
     )
     return {"Authorization": f"Bearer {token}"}
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("path", ["/api/v1/stats", "/api/stat/get"])
+async def test_stats_routes_include_daily_usage_and_system_resources(
+    asgi_app, asgi_client, temp_db, path
+):
+    """Both stats routes preserve existing fields and expose daily and host data."""
+    asgi_app.state.services.stats.db_helper = temp_db
+    response = await asgi_client.get(
+        path, params={"offset_sec": 3600}, headers=_jwt_headers()
+    )
+
+    assert response.status_code == 200
+    data = response.json()["data"]
+    assert data["message_count"] == 0
+    assert len(data["message_time_series"]) == 1
+    assert data["daily_usage"] == {
+        "today": {"tokens": 0, "messages": 0, "active_sessions": 0},
+        "yesterday": {"tokens": 0, "messages": 0, "active_sessions": 0},
+    }
+    assert data["memory"]["system"] == data["system"]["memory"]["total"] >> 20
+    assert data["running"] == stat_service.StatService.get_running_time_components(
+        data["system"]["uptime_seconds"]
+    )
+    removed = await asgi_client.get("/api/v1/stats/overview", headers=_jwt_headers())
+    assert removed.status_code == 404
 
 
 @pytest.mark.asyncio

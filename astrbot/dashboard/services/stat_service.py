@@ -246,13 +246,12 @@ class StatService:
             logger.error("清理存储失败", exc_info=True)
             raise StatServiceError("清理存储失败，请查看后端日志了解详情。") from exc
 
-    async def get_overview(self) -> dict:
+    async def _get_daily_usage(self) -> dict:
         """Aggregate today's usage and the previous calendar day's usage.
 
         Returns:
             Daily token and platform message totals, plus distinct sessions with
-            internal model activity, using the server's local calendar dates,
-            and a snapshot of host resource usage.
+            internal model activity, using the server's local calendar dates.
         """
         today = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
         result = {}
@@ -299,32 +298,21 @@ class StatService:
                     "messages": messages,
                     "active_sessions": active_sessions,
                 }
-        memory = psutil.virtual_memory()
-        try:
-            # psutil's Windows extension requires a string rather than a Path.
-            disk = await asyncio.to_thread(
-                psutil.disk_usage, str(Path(get_astrbot_data_path()))
-            )
-            disk_usage = {
-                "used": disk.used,
-                "total": disk.total,
-                "percent": disk.percent,
-            }
-        except OSError:
-            disk_usage = None
-        result["system"] = {
-            "uptime_seconds": max(0, int(time.time()) - self.core_lifecycle.start_time),
-            "cpu_percent": await asyncio.to_thread(psutil.cpu_percent, 0.1),
-            "memory": {
-                "used": memory.total - memory.available,
-                "total": memory.total,
-                "percent": memory.percent,
-            },
-            "disk": disk_usage,
-        }
         return result
 
     async def get_stat(self, offset_sec: int) -> dict:
+        """Return message trends, daily usage, and process and host resources.
+
+        Args:
+            offset_sec: Rolling window in seconds for message trends and rankings.
+                Daily usage always follows server-local calendar dates.
+
+        Returns:
+            Existing process statistics plus daily_usage and host-level system data.
+
+        Raises:
+            StatServiceError: If statistics cannot be collected.
+        """
         try:
             now = int(time.time())
             start_time = now - offset_sec
@@ -370,6 +358,21 @@ class StatService:
                 for platform_id, count in per_platform.items()
             ]
 
+            daily_usage = await self._get_daily_usage()
+            memory = psutil.virtual_memory()
+            try:
+                # psutil's Windows extension requires a string rather than a Path.
+                disk = await asyncio.to_thread(
+                    psutil.disk_usage, str(Path(get_astrbot_data_path()))
+                )
+                disk_usage = {
+                    "used": disk.used,
+                    "total": disk.total,
+                    "percent": disk.percent,
+                }
+            except OSError:
+                disk_usage = None
+            system_cpu = await asyncio.to_thread(psutil.cpu_percent, 0.1)
             process_cpu = await asyncio.to_thread(psutil.Process().cpu_percent, 0.5)
             cpu_percent = process_cpu / (psutil.cpu_count() or 1)
             thread_count = threading.active_count()
@@ -384,9 +387,8 @@ class StatService:
                 }
                 plugin_info.append(info)
 
-            running_time = self.get_running_time_components(
-                int(time.time()) - self.core_lifecycle.start_time,
-            )
+            uptime_seconds = max(0, int(time.time()) - self.core_lifecycle.start_time)
+            running_time = self.get_running_time_components(uptime_seconds)
 
             return {
                 "platform": platform_stats,
@@ -400,11 +402,22 @@ class StatService:
                 "running": running_time,
                 "memory": {
                     "process": psutil.Process().memory_info().rss >> 20,
-                    "system": psutil.virtual_memory().total >> 20,
+                    "system": memory.total >> 20,
                 },
                 "cpu_percent": round(cpu_percent, 1),
                 "thread_count": thread_count,
                 "start_time": self.core_lifecycle.start_time,
+                "daily_usage": daily_usage,
+                "system": {
+                    "uptime_seconds": uptime_seconds,
+                    "cpu_percent": system_cpu,
+                    "memory": {
+                        "used": memory.total - memory.available,
+                        "total": memory.total,
+                        "percent": memory.percent,
+                    },
+                    "disk": disk_usage,
+                },
             }
         except Exception as exc:
             logger.error(traceback.format_exc())

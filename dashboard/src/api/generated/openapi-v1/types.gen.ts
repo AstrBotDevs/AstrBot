@@ -427,34 +427,6 @@ export type NeoReleaseActionRequest = {
     [key: string]: unknown | string;
 };
 
-export type OverviewDailyUsage = {
-    tokens: number;
-    messages: number;
-    active_sessions: number;
-};
-
-export type OverviewResourceUsage = {
-    /**
-     * Used bytes.
-     */
-    used: number;
-    /**
-     * Total bytes.
-     */
-    total: number;
-    percent: number;
-};
-
-export type OverviewSystemStats = {
-    uptime_seconds: number;
-    cpu_percent: number;
-    memory: OverviewResourceUsage;
-    /**
-     * Usage of the filesystem containing the AstrBot data directory, or null if unavailable.
-     */
-    disk: ((OverviewResourceUsage) | null);
-};
-
 export type ParameterAttachmentId = string;
 
 export type ParameterAttachmentIdQuery = string;
@@ -729,6 +701,34 @@ export type SkillPatchRequest = {
 export type SkillUploadRequest = {
     file: (Blob | File);
     overwrite?: boolean;
+};
+
+export type StatsDailyUsage = {
+    tokens: number;
+    messages: number;
+    active_sessions: number;
+};
+
+export type StatsResourceUsage = {
+    /**
+     * Used bytes.
+     */
+    used: number;
+    /**
+     * Total bytes.
+     */
+    total: number;
+    percent: number;
+};
+
+export type StatsSystemResources = {
+    uptime_seconds: number;
+    cpu_percent: number;
+    memory: StatsResourceUsage;
+    /**
+     * Usage of the filesystem containing the AstrBot data directory, or null if unavailable.
+     */
+    disk: ((StatsResourceUsage) | null);
 };
 
 export type StorageCleanupRequest = {
@@ -3494,19 +3494,18 @@ export type GetStatsData = {
     };
 };
 
-export type GetStatsResponse = (SuccessEnvelope);
-
-export type GetStatsError = unknown;
-
-export type GetOverviewStatsResponse = ((SuccessEnvelope & {
+export type GetStatsResponse = ((SuccessEnvelope & {
     data?: {
-        today: OverviewDailyUsage;
-        yesterday: OverviewDailyUsage;
-        system: OverviewSystemStats;
+        daily_usage: {
+            today: StatsDailyUsage;
+            yesterday: StatsDailyUsage;
+        };
+        system: StatsSystemResources;
+        [key: string]: unknown | StatsSystemResources;
     };
 }));
 
-export type GetOverviewStatsError = unknown;
+export type GetStatsError = unknown;
 
 export type GetProviderTokenStatsData = {
     query?: {

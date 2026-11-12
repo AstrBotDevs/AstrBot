@@ -4542,7 +4542,15 @@ paths:
   /api/v1/stats:
     get:
       tags: [Stats]
-      summary: Get runtime statistics
+      summary: Get usage and runtime statistics
+      description: >-
+        Returns message totals, trends and platform rankings, existing process
+        statistics, daily_usage, and host-level system resources. offset_sec only
+        controls the rolling message window. daily_usage uses server-local calendar
+        days; tokens and distinct active sessions come from internal model calls,
+        and messages come from platform counters. Top-level cpu_percent is process
+        CPU normalized by CPU count, and memory values are in MiB. system reports
+        host CPU and memory, data-filesystem disk usage in bytes, and process uptime.
       operationId: getStats
       x-astrbot-scope: system
       parameters:
@@ -4553,18 +4561,7 @@ paths:
             default: 86400
       responses:
         "200":
-          $ref: "#/components/responses/Ok"
-
-  /api/v1/stats/overview:
-    get:
-      tags: [Stats]
-      summary: Get today's and yesterday's overview usage
-      description: Uses server-local calendar days. Tokens and distinct active session identifiers come from internal model calls; messages come from platform counters.
-      operationId: getOverviewStats
-      x-astrbot-scope: system
-      responses:
-        "200":
-          description: Daily usage totals
+          description: Usage and runtime statistics
           content:
             application/json:
               schema:
@@ -4574,14 +4571,19 @@ paths:
                     properties:
                       data:
                         type: object
-                        required: [today, yesterday, system]
+                        additionalProperties: true
+                        required: [daily_usage, system]
                         properties:
-                          today:
-                            $ref: "#/components/schemas/OverviewDailyUsage"
-                          yesterday:
-                            $ref: "#/components/schemas/OverviewDailyUsage"
+                          daily_usage:
+                            type: object
+                            required: [today, yesterday]
+                            properties:
+                              today:
+                                $ref: "#/components/schemas/StatsDailyUsage"
+                              yesterday:
+                                $ref: "#/components/schemas/StatsDailyUsage"
                           system:
-                            $ref: "#/components/schemas/OverviewSystemStats"
+                            $ref: "#/components/schemas/StatsSystemResources"
 
   /api/v1/stats/provider-tokens:
     get:
@@ -5719,7 +5721,7 @@ components:
         type: string
 
   schemas:
-    OverviewSystemStats:
+    StatsSystemResources:
       type: object
       required: [uptime_seconds, cpu_percent, memory, disk]
       properties:
@@ -5729,13 +5731,13 @@ components:
         cpu_percent:
           type: number
         memory:
-          $ref: "#/components/schemas/OverviewResourceUsage"
+          $ref: "#/components/schemas/StatsResourceUsage"
         disk:
           description: Usage of the filesystem containing the AstrBot data directory, or null if unavailable.
           allOf:
-            - $ref: "#/components/schemas/OverviewResourceUsage"
+            - $ref: "#/components/schemas/StatsResourceUsage"
           nullable: true
-    OverviewResourceUsage:
+    StatsResourceUsage:
       type: object
       required: [used, total, percent]
       properties:
@@ -5747,7 +5749,7 @@ components:
           description: Total bytes.
         percent:
           type: number
-    OverviewDailyUsage:
+    StatsDailyUsage:
       type: object
       required: [tokens, messages, active_sessions]
       properties:

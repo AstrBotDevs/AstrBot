@@ -9,3 +9,6 @@
 
 - 总览：在统计卡片与快速引导、相关资源之间加入紧凑系统状态栏，展示运行时长和服务器 CPU、内存及数据分区磁盘用量。
 - Overview: Place a compact system status bar between usage cards and setup/resources, showing process uptime and host CPU, memory, and data-filesystem disk usage.
+
+- 总览统计合并至 `/api/v1/stats`：新增 `daily_usage` 与 `system`，保留现有字段和统计口径；移除开发阶段的 `/api/v1/stats/overview` 接口。
+- Consolidate overview metrics into `/api/v1/stats` with additive `daily_usage` and `system` fields, preserving existing statistics. Remove the development-only `/api/v1/stats/overview` endpoint.

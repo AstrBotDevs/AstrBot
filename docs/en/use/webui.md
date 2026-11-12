@@ -28,6 +28,8 @@ Old log, trace, conversation, and statistics URLs still redirect to the correspo
 
 ## Overview
 
+Overview and Data & Logs → Statistics share `GET /api/v1/stats`. The response adds `daily_usage.today`, `daily_usage.yesterday`, and host-level `system` resources while preserving the existing process statistics and message trends. `offset_sec` only changes the rolling message window, not the calendar-day totals. The separate `/api/v1/stats/overview` endpoint proposed during development has been removed.
+
 **Welcome → Overview** is the new sidebar label; `/welcome` remains available. The page shows a time-of-day greeting, today's tokens, messages, and active sessions, compared with the entire previous day in the server's local timezone. Tokens and active sessions come from internal agent model calls; active sessions count distinct session sources. Message totals come from platform counters. When yesterday's value is zero, new usage is labelled **New activity** rather than an infinite percentage. The page refreshes every 30 seconds while visible.
 
 A compact system status bar sits below the daily statistics and above Quick setup and Resources. It shows AstrBot process uptime, host CPU and memory usage, and disk usage for the filesystem containing the data directory. The status button beside the page title shows **Running normally**, or **x issues** when bots have recorded errors, counting each affected bot once. Click it to see bot IDs, error counts, the latest error and timestamp, and expandable stack traces. **Manage bots** opens the bot page. A failed status request displays **Status unavailable** instead of a healthy result.

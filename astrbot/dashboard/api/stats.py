@@ -61,23 +61,6 @@ async def get_stats(
     return await _run(service.get_stat(offset_sec))
 
 
-@router.get("/stats/overview")
-async def get_overview_stats(
-    _auth: AuthContext = Depends(require_system_scope),
-    service: StatService = Depends(get_service),
-):
-    """Return daily usage totals for the overview page.
-
-    Args:
-        _auth: Authenticated caller with system access.
-        service: Dashboard statistics service.
-
-    Returns:
-        Today's and yesterday's usage in a success envelope.
-    """
-    return await _run(service.get_overview())
-
-
 @router.get("/stats/provider-tokens")
 async def get_provider_token_stats(
     days: int = Query(default=1),

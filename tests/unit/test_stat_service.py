@@ -211,6 +211,8 @@ async def test_get_stat_aggregates_platform_stats(temp_db):
         "cpu_percent",
         "thread_count",
         "start_time",
+        "daily_usage",
+        "system",
     }
 
 
@@ -272,7 +274,8 @@ async def test_provider_token_ranking_includes_umo_display_names(temp_db):
 
 
 @pytest.mark.asyncio
-async def test_overview_calendar_boundaries_and_distinct_sessions(temp_db):
+@pytest.mark.parametrize("offset_sec", [1, 86400, 604800])
+async def test_stats_calendar_boundaries_and_distinct_sessions(temp_db, offset_sec):
     """Daily usage must separate midnight boundaries and deduplicate sessions."""
     from datetime import timezone
 
@@ -313,31 +316,31 @@ async def test_overview_calendar_boundaries_and_distinct_sessions(temp_db):
     ]:
         await temp_db.insert_platform_stats("qq", "qq", count, timestamp)
 
-    result = await _make_service(temp_db).get_overview()
-    system = result.pop("system")
+    result = await _make_service(temp_db).get_stat(offset_sec)
+    system = result["system"]
     assert system["uptime_seconds"] >= 0
     assert 0 <= system["cpu_percent"] <= 100
     assert 0 <= system["memory"]["used"] <= system["memory"]["total"]
     if system["disk"] is not None:
         assert 0 <= system["disk"]["used"] <= system["disk"]["total"]
 
-    assert result == {
+    assert result["daily_usage"] == {
         "today": {"tokens": 45, "messages": 11, "active_sessions": 2},
         "yesterday": {"tokens": 14, "messages": 8, "active_sessions": 2},
     }
 
 
 @pytest.mark.asyncio
-async def test_overview_empty_days(temp_db):
+async def test_stats_empty_days(temp_db):
     """Days without activity must return zeros rather than missing values."""
-    result = await _make_service(temp_db).get_overview()
-    system = result.pop("system")
+    result = await _make_service(temp_db).get_stat(86400)
+    system = result["system"]
     assert system["uptime_seconds"] >= 0
     assert 0 <= system["cpu_percent"] <= 100
     assert 0 <= system["memory"]["used"] <= system["memory"]["total"]
     if system["disk"] is not None:
         assert 0 <= system["disk"]["used"] <= system["disk"]["total"]
-    assert result == {
+    assert result["daily_usage"] == {
         "today": {"tokens": 0, "messages": 0, "active_sessions": 0},
         "yesterday": {"tokens": 0, "messages": 0, "active_sessions": 0},
     }
@@ -345,7 +348,7 @@ async def test_overview_empty_days(temp_db):
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("disk_unavailable", [False, True])
-async def test_overview_disk_usage_portable_path(temp_db, monkeypatch, disk_unavailable):
+async def test_stats_disk_usage_portable_path(temp_db, monkeypatch, disk_unavailable):
     """Pass a string to psutil on every OS and tolerate unavailable disks."""
     disk = SimpleNamespace(used=40, total=100, percent=40.0)
     disk_usage = Mock(
@@ -354,7 +357,7 @@ async def test_overview_disk_usage_portable_path(temp_db, monkeypatch, disk_unav
     )
     monkeypatch.setattr(stat_service.psutil, "disk_usage", disk_usage)
 
-    result = await _make_service(temp_db).get_overview()
+    result = await _make_service(temp_db).get_stat(86400)
 
     disk_usage.assert_called_once_with(str(Path(stat_service.get_astrbot_data_path())))
     assert result["system"]["disk"] == (

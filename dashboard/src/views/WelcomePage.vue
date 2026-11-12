@@ -131,7 +131,7 @@ import { computed, ref, watch, onMounted, onUnmounted } from 'vue';
 import axios from 'axios';
 import OverviewStatus from '@/components/overview/OverviewStatus.vue';
 import OverviewSystemStats from '@/components/overview/OverviewSystemStats.vue';
-import type { OverviewDailyUsage, OverviewSystemStats as SystemStats } from '@/api/generated/openapi-v1';
+import type { StatsDailyUsage, StatsSystemResources as SystemStats } from '@/api/generated/openapi-v1';
 import AddNewPlatform from '@/components/platform/AddNewPlatform.vue';
 import ProviderConfigDialog from '@/components/chat/ProviderConfigDialog.vue';
 import { configProfileApi, providerApi, systemConfigApi, statsApi } from '@/api/v1';
@@ -148,7 +148,7 @@ const { locale } = useI18n();
 const { success: showSuccess, error: showError } = useToast();
 
 const showComputerAccessDialog = ref(false);
-const overview = ref<{ today: OverviewDailyUsage; yesterday: OverviewDailyUsage; system: SystemStats } | null>(null);
+const overview = ref<{ daily_usage: { today: StatsDailyUsage; yesterday: StatsDailyUsage }; system: SystemStats } | null>(null);
 const statsLoading = ref(false);
 const statsFailed = ref(false);
 let overviewTimer: ReturnType<typeof setInterval>;
@@ -157,8 +157,8 @@ const metrics = computed(() => [
   { key: 'messages' as const, icon: 'mdi-chat-outline', tone: 'info' },
   { key: 'active_sessions' as const, icon: 'mdi-account-multiple-outline', tone: 'success' },
 ].map(metric => {
-  const current = overview.value?.today[metric.key];
-  const previous = overview.value?.yesterday[metric.key];
+  const current = overview.value?.daily_usage.today[metric.key];
+  const previous = overview.value?.daily_usage.yesterday[metric.key];
   const delta = current !== undefined && previous !== undefined ? current - previous : 0;
   const percentage = previous ? delta / previous * 100 : null;
   return {
@@ -189,7 +189,7 @@ async function loadOverview() {
   if (statsLoading.value) return;
   statsLoading.value = true;
   try {
-    const response = await statsApi.overview();
+    const response = await statsApi.get();
     if (response.data.status !== 'ok') throw new Error(response.data.message || 'Failed to load overview');
     overview.value = response.data.data;
     statsFailed.value = false;

@@ -12,10 +12,10 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 import { Server, Cpu, MemoryStick, HardDrive } from '@lucide/vue';
-import type { OverviewSystemStats } from '@/api/generated/openapi-v1';
+import type { StatsSystemResources } from '@/api/generated/openapi-v1';
 import { useI18n, useModuleI18n } from '@/i18n/composables';
 
-const props = defineProps<{ system?: OverviewSystemStats; systemUnavailable?: boolean }>();
+const props = defineProps<{ system?: StatsSystemResources; systemUnavailable?: boolean }>();
 const { tm } = useModuleI18n('features/welcome');
 const { locale } = useI18n();
 const systemItems = computed(() => {
