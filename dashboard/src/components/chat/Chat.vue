@@ -1405,6 +1405,10 @@ async function handleDeleteProject(projectId: string) {
     selectedProjectId.value = null;
     projectSessions.value = [];
   }
+  // The backend keeps the project's sessions and drops their project
+  // relations, so they now qualify as top-level sessions. Refetch the
+  // sidebar list so they appear immediately instead of after a refresh.
+  await getSessions();
 }
 
 function openSessionTitleDialog(
