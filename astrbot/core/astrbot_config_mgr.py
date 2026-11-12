@@ -6,8 +6,8 @@ from typing import TypedDict, TypeVar
 from astrbot.core import AstrBotConfig, logger
 from astrbot.core.config.astrbot_config import ASTRBOT_CONFIG_PATH
 from astrbot.core.config.default import DEFAULT_CONFIG
-from astrbot.core.config.patched import PatchedAstrBotConfig
 from astrbot.core.config.runtime import current_message_config
+from astrbot.core.config.snapshot import AstrBotConfigSnapshot
 from astrbot.core.config_bindings import BINDING_KEY
 from astrbot.core.platform.message_session import MessageSession
 from astrbot.core.umop_config_router import UmopConfigRouter
@@ -193,12 +193,12 @@ class AstrBotConfigManager:
         binding = self.sp.get(BINDING_KEY, {}, scope="umo", scope_id=umo) or {}
         overrides = binding.get("overrides", {})
         if overrides:
-            return PatchedAstrBotConfig(conf, overrides)
+            return AstrBotConfigSnapshot(conf, overrides)
         return conf
 
     def _create_message_config(
         self, umo: str
-    ) -> tuple[PatchedAstrBotConfig, frozenset[str]]:
+    ) -> tuple[AstrBotConfigSnapshot, frozenset[str]]:
         """Create an independent configuration for a new pipeline execution.
 
         Args:
@@ -211,7 +211,7 @@ class AstrBotConfigManager:
         conf = self.confs.get(conf_id) or self.confs["default"]
         binding = self.sp.get(BINDING_KEY, {}, scope="umo", scope_id=umo) or {}
         overrides = binding.get("overrides", {})
-        return PatchedAstrBotConfig(conf, overrides), frozenset(overrides)
+        return AstrBotConfigSnapshot(conf, overrides), frozenset(overrides)
 
     @property
     def default_conf(self) -> AstrBotConfig:

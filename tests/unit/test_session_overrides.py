@@ -14,7 +14,7 @@ from astrbot.core import session_overrides as overrides
 from astrbot.core.astrbot_config_mgr import AstrBotConfigManager
 from astrbot.core.config import AstrBotConfig
 from astrbot.core.config.default import DEFAULT_CONFIG
-from astrbot.core.config.patched import PatchedAstrBotConfig
+from astrbot.core.config.snapshot import AstrBotConfigSnapshot
 from astrbot.core.config.runtime import current_message_config
 from astrbot.core.conversation_mgr import ConversationManager
 from astrbot.core.db.migration import migra_session_overrides as migration
@@ -100,7 +100,7 @@ async def test_runtime_config_rejects_both_save_methods_without_touching_profile
     profile = Path(base.config_path)
     original = profile.read_bytes()
     config, paths = acm._create_message_config(UMO)
-    assert isinstance(config, PatchedAstrBotConfig)
+    assert isinstance(config, AstrBotConfigSnapshot)
     assert paths == (frozenset({"wake_prefix"}) if has_overrides else frozenset())
     before = deepcopy(dict(config))
     with pytest.raises(ValueError, match="session override"):
@@ -178,7 +178,7 @@ async def test_pipeline_copies_configuration_once_per_message(
             ready.set()
         await asyncio.wait_for(ready.wait(), 2)
         assert config["plugin_config"]["items"] == ["base", "local"]
-        assert isinstance(config, PatchedAstrBotConfig)
+        assert isinstance(config, AstrBotConfigSnapshot)
         assert current_message_config.get().override_paths == (
             frozenset({"wake_prefix"}) if has_overrides else frozenset()
         )

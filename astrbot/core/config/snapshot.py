@@ -1,11 +1,11 @@
-"""In-memory configuration with explicit session overrides."""
+"""Independent runtime configuration snapshots with optional session overrides."""
 
 from astrbot.core.session_overrides import apply_overrides
 
 from .astrbot_config import AstrBotConfig
 
 
-class PatchedAstrBotConfig(AstrBotConfig):
+class AstrBotConfigSnapshot(AstrBotConfig):
     """An independent configuration whose changes cannot be saved to a profile."""
 
     def __init__(self, base: AstrBotConfig, overrides: dict) -> None:
