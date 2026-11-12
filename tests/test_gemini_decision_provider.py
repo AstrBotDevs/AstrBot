@@ -477,20 +477,35 @@ async def test_http_safety_blocks_whole_batch_without_leaking_input(
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
-    "body",
+    ("body", "expected_status"),
     [
-        {},
-        [],
-        {"error": None},
-        {"error": []},
-        {"error": {"code": []}},
-        {"error": {"code": "unknown"}},
+        ({}, "HTTP 400"),
+        ([], "HTTP 400"),
+        ({"error": None}, "HTTP 400"),
+        ({"error": []}, "HTTP 400"),
+        ({"error": {"code": []}}, "HTTP 400"),
+        (
+            {"error": {"code": "private-context", "message": "private-context"}},
+            "HTTP 400",
+        ),
+        (
+            {"error": {"code": "invalid_request", "message": "private-context"}},
+            "HTTP 400 (invalid_request)",
+        ),
     ],
 )
-async def test_other_bad_requests_remain_http_errors(provider_factory, body):
+async def test_other_bad_requests_remain_http_errors(
+    provider_factory, body, expected_status, caplog
+):
     provider = provider_factory(lambda request: httpx.Response(400, json=body))
-    with pytest.raises(DecisionError, match="HTTP 400"):
+    caplog.set_level(logging.ERROR, logger="astrbot")
+    with pytest.raises(DecisionError, match="HTTP 400") as exc:
         await provider.ask({"answer": BOOLEAN})
+    assert str(exc.value) == f"Gemini decision endpoint returned {expected_status}"
+    assert f"[Gemini Decision] {expected_status}" in caplog.text
+    assert "private-context" not in caplog.text + "".join(
+        traceback.format_exception(exc.value)
+    )
 
 
 @pytest.mark.asyncio
@@ -553,7 +568,6 @@ async def test_rejects_invalid_answer_contract(
         {"answers": {"q0": BOOL_ANSWER, "extra": BOOL_ANSWER}},
         {"answers": {"q0": None}},
         {"answers": {"q0": {"type": "UNKNOWN"}}},
-        {"answers": {"q0": BOOL_ANSWER}, "prompt_feedback": "invalid"},
     ],
 )
 async def test_rejects_incomplete_or_malformed_batches(provider_factory, body):
@@ -563,25 +577,37 @@ async def test_rejects_incomplete_or_malformed_batches(provider_factory, body):
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("feedback", "blocked"),
+    [
+        ({"block_reason": "safety", "block_reason_message": "private-context"}, True),
+        ("private-context", False),
+        ({"block_reason": ["private-context"]}, False),
+    ],
+)
 async def test_content_filter_blocks_whole_batch_without_leaking_input(
-    provider_factory, caplog
+    provider_factory, caplog, feedback, blocked
 ):
+    private_state = "private-context"
     provider = provider_factory(
         lambda request: httpx.Response(
             200,
             json={
-                "answers": {"q0": BOOL_ANSWER},
-                "prompt_feedback": {
-                    "block_reason": "safety",
-                    "block_reason_message": "private-context",
-                },
+                "answers": {"q0": BOOL_ANSWER, "q1": CHOICE_ANSWER},
+                "prompt_feedback": feedback,
             },
         )
     )
     caplog.set_level(logging.WARNING, logger="astrbot")
-    with pytest.raises(DecisionError, match="blocked") as exc:
-        await provider.ask({"a": BOOLEAN, "b": CHOICE}, "private-context")
-    assert "private-context" not in str(exc.value) + caplog.text
+    if blocked:
+        with pytest.raises(DecisionError, match="blocked") as exc:
+            await provider.ask({"a": BOOLEAN, "b": CHOICE}, private_state)
+        assert private_state not in "".join(traceback.format_exception(exc.value))
+    else:
+        answers = await provider.ask({"a": BOOLEAN, "b": CHOICE}, private_state)
+        assert answers["a"].probability == 0.05
+        assert answers["b"].choice == "reply"
+    assert private_state not in caplog.text
 
 
 @pytest.mark.asyncio

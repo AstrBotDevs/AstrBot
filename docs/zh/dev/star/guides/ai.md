@@ -145,15 +145,15 @@ answers = await self.context.decision.ask(
 
 在 WebUI「模型提供商」→「判断」中新增「Gemini Decisions」模板。填写 Gemini API Key（支持 `$ENV_NAME` 环境变量引用），接口基础地址默认为 `https://generativelanguage.googleapis.com/v1beta`，模型填写 `gemini-decision-1`。AstrBot 会自动补全 `/decisions`（路径已以它结尾时不重复追加），通过 `x-goog-api-key` 请求头发送密钥。保存后使用提供商的连接测试检查访问权限。你的 Google API 项目需要具有该模型的访问权限与可用额度，添加配置本身不会开通它们。
 
-适配器直接调用 REST 接口，无需升级 Google SDK。超时、总超时（包含排队与重试）、最大并发、代理和自定义请求头与 OpenAI Decisions 使用同一套约定。它只在插件显式调用判断服务时运行，不会自动参与主对话流程。
+适配器直接调用 REST 接口，无需升级 Google SDK。超时、总超时（包含排队与重试）、最大并发、代理和自定义请求头与 OpenAI Decisions 使用同一套约定。处理大媒体时，请按需调高 `timeout`（默认 5 秒）和 `total_timeout`（默认 10 秒）。它只在插件显式调用判断服务时运行，不会自动参与主对话流程。
 
 使用上文通用的 `ask()`、`choose()` 和 `yes_no()` 方法，并指定 `provider_id="gemini_decision"`。
 
-Gemini 布尔题使用 `noul`，表示**为真**的概率，范围为 `[0.01, 0.99]`。`yes_no()` 将此概率与阈值比较，阈值高于 `0.99` 时不会命中。Gemini 的布尔置信度为 `max(p, 1-p)`。单选必须选择最高概率项；概率完全相同时，取 UTF-8 字节序最小的选项 ID。评分置信度为各等级概率中的最大值。
+Gemini 布尔题使用 `noul`，表示**为真**的概率，范围为 `[0.01, 0.99]`。`yes_no()` 将此概率与阈值比较，阈值高于 `0.99` 时不会命中。Gemini 的布尔置信度为 `max(p, 1-p)`。适配器尚未暴露可选布尔判定描述 `true_description` 和 `false_description`，可将相应定义写入 `instructions`。单选必须选择最高概率项；概率完全相同时，取 UTF-8 字节序最小的选项 ID。评分置信度为各等级概率中的最大值。
 
 每次请求支持 1–1,000 道题，每道单选支持 2–255 个选项，评分支持 2–255 档（推荐 2–10 档）。选项 ID 包含 1–128 个字符，最多 512 个 UTF-8 字节；允许内部 ASCII 空格、组合标记和变体选择符。禁止首尾空白、非 ASCII 空白，以及 Unicode Other 类字符（`Cc`、`Cf`、`Cs`、`Co`、`Cn`），包括零宽格式字符和私用区字符。描述可以为空。非法输入会在发送前抛出 `ValueError`。调用方的问题 ID 在内部映射，返回答案仍保留原始键。
 
-答案缺失或不一致会让整批调用抛出 `DecisionError`。[官方接口](https://aistudio.google.com/docs/decisions-api)通过 HTTP 400 返回安全拦截，`error.code` 为 `safety`、`prohibited_content`、`blocklist`、`image_safety` 或 `content_blocked`；适配器也识别 `prompt_feedback.block_reason`。错误不会暴露服务器消息，拦截不会被转换成答案。`yes_no(default=...)` 保留显式降级行为。
+答案缺失或不一致会让整批调用抛出 `DecisionError`。[官方接口](https://aistudio.google.com/docs/decisions-api)通过 HTTP 400 返回安全拦截，`error.code` 为 `safety`、`prohibited_content`、`blocklist`、`image_safety` 或 `content_blocked`；适配器也识别非空字符串形式的 `prompt_feedback.block_reason`，忽略未知的反馈结构。HTTP 400 错误包含已识别的 `invalid_request` 分类（若存在），不会输出未知错误码或服务器消息；拦截不会被转换成答案。`yes_no(default=...)` 保留显式降级行为。
 
 Gemini 将普通字典和列表（包括空容器）发送为 JSON 文本。省略 `state`、传入 `None` 或空字符串时，使用 JSON 文本 `"{}"`，因为接口不接受空输入。不支持或无法序列化的值以及 `NaN`/`Infinity` 会被拒绝。通过下方的 `DecisionInput` 显式传入媒体；问题指令仍只支持文本。
 
@@ -190,7 +190,7 @@ has_damage = await self.context.decision.yes_no(
 | `video` | `video/mp4` | base64 `data` 或 HTTPS `uri` |
 | `document` | `application/pdf` | base64 `data` 或 HTTPS `uri` |
 
-Gemini 接受公开或签名 HTTPS URL，以及 Files API 返回的 HTTPS URI；不支持 YouTube URL 或直接使用 `gs://` URI。图片和视频可选 `resolution="low"`、`"medium"` 或 `"high"`，图片还支持 `"ultra_high"`；音频和 PDF 不设置此字段。完整格式和大小限制见[官方输入说明](https://aistudio.google.com/docs/decisions-api#input)，实际文件格式、可访问性及请求和媒体大小限制由 Google 校验。
+Gemini 接受公开或签名 HTTPS URL（每个外部 URL 最多 15 MB），以及 Files API 返回的 HTTPS URI；不支持 YouTube URL 或直接使用 `gs://` URI。图片和视频可选 `resolution="low"`、`"medium"` 或 `"high"`，图片还支持 `"ultra_high"`；音频和 PDF 不设置此字段。完整格式和大小限制见[官方输入说明](https://aistudio.google.com/docs/decisions-api#input)，实际文件格式、可访问性及请求和媒体大小限制由 Google 校验。
 
 显式输入结构不合法时，会在发送前抛出 `ValueError`；接口请求失败时抛出 `DecisionError`。媒体内容不接受工具调用、思考或对话历史块。当前 OpenAI 适配器会明确以 `ValueError` 拒绝 `DecisionInput`，仍应传入文本或业务 JSON。
 

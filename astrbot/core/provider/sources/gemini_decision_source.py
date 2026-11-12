@@ -390,6 +390,7 @@ class GeminiDecisionProvider(DecisionProvider):
                 f"Gemini decision attempt timed out after {self.timeout:g}s"
             ) from None
         except httpx.HTTPStatusError as exc:
+            error_status = f"HTTP {exc.response.status_code}"
             if exc.response.status_code == 400:
                 try:
                     error_body = exc.response.json()
@@ -410,9 +411,14 @@ class GeminiDecisionProvider(DecisionProvider):
                     raise DecisionError(
                         "Gemini decision input was blocked by content filters"
                     ) from None
-            logger.error(f"[Gemini Decision] HTTP {exc.response.status_code}")
+                if (
+                    isinstance(error, Mapping)
+                    and error.get("code") == "invalid_request"
+                ):
+                    error_status += " (invalid_request)"
+            logger.error(f"[Gemini Decision] {error_status}")
             raise DecisionError(
-                f"Gemini decision endpoint returned HTTP {exc.response.status_code}"
+                f"Gemini decision endpoint returned {error_status}"
             ) from None
         except httpx.RequestError as exc:
             logger.warning(f"[Gemini Decision] Request failed ({type(exc).__name__})")
@@ -429,16 +435,13 @@ class GeminiDecisionProvider(DecisionProvider):
         if not isinstance(body, Mapping):
             raise DecisionError("Gemini decision endpoint returned an invalid response")
         feedback = body.get("prompt_feedback")
-        if feedback is not None:
-            if not isinstance(feedback, Mapping):
-                raise DecisionError(
-                    "Gemini decision endpoint returned invalid prompt feedback"
-                )
-            if feedback.get("block_reason"):
-                # Do not log server-provided text, which may contain private input.
-                raise DecisionError(
-                    "Gemini decision input was blocked by content filters"
-                )
+        if (
+            isinstance(feedback, Mapping)
+            and isinstance(feedback.get("block_reason"), str)
+            and feedback["block_reason"]
+        ):
+            # Do not log server-provided text, which may contain private input.
+            raise DecisionError("Gemini decision input was blocked by content filters")
         raw_answers = body.get("answers")
         if not isinstance(raw_answers, Mapping) or set(raw_answers) != set(
             heads_by_name
