@@ -552,6 +552,7 @@ class DeerFlowAgentRunner(BaseAgentRunner[TContext]):
         if delta_text:
             state.latest_text += delta_text
             if self.streaming:
+                state.prev_text_for_streaming = state.latest_text
                 return [
                     AgentResponse(
                         type="streaming_delta",

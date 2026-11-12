@@ -1,21 +1,68 @@
 import base64
 from io import BytesIO
+from unittest.mock import AsyncMock
 
 import pytest
 from PIL import Image as PILImage
 
+from astrbot.core.agent.hooks import BaseAgentRunHooks
+from astrbot.core.agent.run_context import ContextWrapper
 from astrbot.core.agent.runners.deerflow.deerflow_agent_runner import (
     DeerFlowAgentRunner,
 )
 from astrbot.core.agent.runners.deerflow.deerflow_content_mapper import (
     build_user_content_resolved,
 )
+from astrbot.core.provider.entities import ProviderRequest
 
 
 def _png_base64() -> str:
     image_buffer = BytesIO()
     PILImage.new("RGBA", (1, 1), (255, 0, 0, 255)).save(image_buffer, format="PNG")
     return base64.b64encode(image_buffer.getvalue()).decode("ascii")
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("suffix", ["", "!"])
+async def test_streaming_snapshot_emits_only_new_text(monkeypatch, suffix):
+    runner = DeerFlowAgentRunner()
+    await runner.reset(
+        request=ProviderRequest(prompt="Say hello", session_id="session-123"),
+        run_context=ContextWrapper(context=None),
+        agent_hooks=BaseAgentRunHooks(),
+        provider_config={},
+        streaming=True,
+    )
+    monkeypatch.setattr(
+        runner, "_ensure_thread_id", AsyncMock(return_value="thread-123")
+    )
+    full_text = "Hello world" + suffix
+
+    async def stream_run(**kwargs):
+        for content in ("Hello", " world"):
+            yield {
+                "event": "messages-tuple",
+                "data": [{"type": "AIMessageChunk", "content": content}, {}],
+            }
+        yield {
+            "event": "values",
+            "data": {"messages": [{"id": "reply", "type": "ai", "content": full_text}]},
+        }
+
+    monkeypatch.setattr(runner.api_client, "stream_run", stream_run)
+    try:
+        responses = [response async for response in runner.step()]
+    finally:
+        await runner.close()
+
+    deltas = [
+        response.data["chain"].get_plain_text()
+        for response in responses
+        if response.type == "streaming_delta"
+    ]
+    assert deltas == ["Hello", " world"] + ([suffix] if suffix else [])
+    assert responses[-1].type == "llm_result"
+    assert responses[-1].data["chain"].get_plain_text() == full_text
 
 
 def test_build_payload_includes_configurable_runtime_overrides_and_legacy_context():
