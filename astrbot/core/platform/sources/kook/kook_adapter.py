@@ -609,12 +609,7 @@ class KookPlatformAdapter(Platform):
                 )
                 abm.message = [File(name=file_name or "file", url=content)]
             elif data.type == KookMessageType.AUDIO:
-                path_wav = await MediaResolver(
-                    content,
-                    media_type="audio",
-                    default_suffix=".wav",
-                ).to_path(target_format="wav")
-                abm.message = [Record(file=path_wav, url=path_wav)]
+                abm.message = [Record(file=content, url=content)]
             else:
                 abm.message = [Video(file=content)]
         else:

@@ -4,7 +4,7 @@ import json
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, Mock
 
 import pytest
 
@@ -300,7 +300,7 @@ async def test_kook_button_click_enters_event_pipeline(monkeypatch):
         ),
         (
             KookMessageType.AUDIO,
-            Record(file=TEST_AUDIO_WAV_PATH, url=TEST_AUDIO_WAV_PATH),
+            Record(file=TEST_MEDIA_URL, url=TEST_MEDIA_URL),
         ),
         (KookMessageType.VIDEO, Video(file=TEST_MEDIA_URL)),
     ],
@@ -316,9 +316,10 @@ async def test_kook_standalone_media_enters_event_pipeline(
         "astrbot.core.platform.sources.kook.kook_adapter.KookRolesRecord",
         mock_kook_roles_record,
     )
+    media_resolver = Mock(side_effect=AssertionError("Media must be resolved after queuing"))
     monkeypatch.setattr(
         "astrbot.core.platform.sources.kook.kook_adapter.MediaResolver",
-        FakeMediaResolver,
+        media_resolver,
     )
 
     from astrbot.core.platform.sources.kook.kook_adapter import KookPlatformAdapter
@@ -344,6 +345,7 @@ async def test_kook_standalone_media_enters_event_pipeline(
     queued_event = event_queue.get_nowait()
     assert queued_event.message_obj.message == [expected_component]
     assert queued_event.message_str == f"[{message_type.name.lower()}]"
+    media_resolver.assert_not_called()
 
 
 @pytest.mark.asyncio
