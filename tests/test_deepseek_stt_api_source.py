@@ -4,6 +4,7 @@ import io
 import wave
 from pathlib import Path
 from types import SimpleNamespace
+from unittest.mock import AsyncMock
 
 import httpx
 import pytest
@@ -46,6 +47,26 @@ async def _use_mock_transport(provider: ProviderDeepSeekSTTAPI, handler) -> None
         transport=httpx.MockTransport(handler),
         headers=headers,
     )
+
+
+@pytest.fixture
+def mock_ensure_wav(monkeypatch):
+    """Simulate conversion while preserving real WAV validation and cleanup.
+
+    Args:
+        monkeypatch: Fixture used to replace the provider's audio converter.
+
+    Returns:
+        Mock recording conversion calls and writing valid PCM WAV output.
+    """
+
+    async def convert(audio_path, output_path, *, sample_rate, channels):
+        _write_wav(Path(output_path), sample_rate=sample_rate, channels=channels)
+        return output_path
+
+    converter = AsyncMock(side_effect=convert)
+    monkeypatch.setattr(deepseek_stt_api_source, "ensure_wav", converter)
+    return converter
 
 
 @pytest_asyncio.fixture
@@ -272,7 +293,7 @@ async def test_deepseek_stt_conversion_failure_cleans_temp_and_preserves_origina
 
 @pytest.mark.asyncio
 async def test_deepseek_stt_converts_to_mono_16khz_16bit_pcm_before_upload(
-    provider_factory, tmp_path
+    provider_factory, tmp_path, mock_ensure_wav
 ):
     captured = {}
 
@@ -292,6 +313,12 @@ async def test_deepseek_stt_converts_to_mono_16khz_16bit_pcm_before_upload(
     original_bytes = audio_path.read_bytes()
 
     assert await provider.get_text(str(audio_path)) == "converted"
+    mock_ensure_wav.assert_awaited_once_with(
+        str(audio_path),
+        mock_ensure_wav.await_args.args[1],
+        sample_rate=16000,
+        channels=1,
+    )
     uploaded_wav = captured["body"][
         captured["body"].index(b"RIFF") : captured["body"].rindex(b"\r\n--")
     ]
@@ -379,7 +406,7 @@ async def test_deepseek_stt_enforces_duration_boundary(
 
 @pytest.mark.asyncio
 async def test_deepseek_stt_request_failure_cleans_converted_temp_and_preserves_original(
-    provider_factory, tmp_path
+    provider_factory, tmp_path, mock_ensure_wav
 ):
     async def handle_request(request: httpx.Request):
         await request.aread()
@@ -393,13 +420,14 @@ async def test_deepseek_stt_request_failure_cleans_converted_temp_and_preserves_
 
     with pytest.raises(DeepSeekSTTError, match="HTTP 400"):
         await provider.get_text(str(audio_path))
+    mock_ensure_wav.assert_awaited_once()
     assert audio_path.read_bytes() == original_bytes
     assert _temp_files(tmp_path) == []
 
 
 @pytest.mark.asyncio
 async def test_deepseek_stt_cancellation_cleans_temp_and_preserves_original(
-    provider_factory, tmp_path
+    provider_factory, tmp_path, mock_ensure_wav
 ):
     request_started = asyncio.Event()
 
@@ -419,6 +447,7 @@ async def test_deepseek_stt_cancellation_cleans_temp_and_preserves_original(
     task.cancel()
     with pytest.raises(asyncio.CancelledError):
         await task
+    mock_ensure_wav.assert_awaited_once()
     assert audio_path.read_bytes() == original_bytes
     assert _temp_files(tmp_path) == []
 
@@ -474,17 +503,8 @@ async def test_deepseek_stt_cancellation_during_conversion_kills_ffmpeg_and_clea
 
 @pytest.mark.asyncio
 async def test_deepseek_stt_concurrent_conversions_use_unique_temp_files(
-    provider_factory, tmp_path, monkeypatch
+    provider_factory, tmp_path, mock_ensure_wav
 ):
-    conversion_paths = []
-    real_ensure_wav = deepseek_stt_api_source.ensure_wav
-
-    async def record_conversion(audio_path, output_path, **kwargs):
-        conversion_paths.append(output_path)
-        return await real_ensure_wav(audio_path, output_path, **kwargs)
-
-    monkeypatch.setattr(deepseek_stt_api_source, "ensure_wav", record_conversion)
-
     async def handle_request(request: httpx.Request):
         await request.aread()
         await asyncio.sleep(0.01)
@@ -500,6 +520,8 @@ async def test_deepseek_stt_concurrent_conversions_use_unique_temp_files(
     )
 
     assert results == ["concurrent"] * 4
+    assert mock_ensure_wav.await_count == 4
+    conversion_paths = [call.args[1] for call in mock_ensure_wav.await_args_list]
     assert len(set(conversion_paths)) == 4
     assert audio_path.exists()
     assert _temp_files(tmp_path) == []
