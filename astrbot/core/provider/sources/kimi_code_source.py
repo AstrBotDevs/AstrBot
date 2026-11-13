@@ -20,9 +20,6 @@ class ProviderKimiCode(ProviderAnthropic):
         merged_provider_config = dict(provider_config)
         merged_provider_config.setdefault("api_base", KIMI_CODE_API_BASE)
         merged_provider_config.setdefault("model", KIMI_CODE_DEFAULT_MODEL)
-        merged_provider_config["custom_headers"] = self._resolve_custom_headers(
-            merged_provider_config,
-            required_headers={"User-Agent": KIMI_CODE_USER_AGENT},
-        )
-
+        # The unified header split in AbstractProvider handles custom headers,
+        # defaulting the User-Agent exactly like any other Anthropic provider.
         super().__init__(merged_provider_config, provider_settings)

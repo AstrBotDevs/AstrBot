@@ -1051,6 +1051,36 @@ class TestContextManager:
         assert len(result) <= len(messages)
 
     @pytest.mark.asyncio
+    async def test_legacy_summary_compressor_subclass_keeps_single_argument_interface(
+        self,
+    ):
+        from astrbot.core.agent.context.compressor import LLMSummaryCompressor
+
+        class LegacySummaryCompressor(LLMSummaryCompressor):
+            called = False
+
+            async def __call__(self, messages: list[Message]) -> list[Message]:
+                self.called = True
+                return messages
+
+        compressor = LegacySummaryCompressor(provider=MockProvider())
+        compressor.should_compress = MagicMock(side_effect=[True, False])
+        manager = ContextManager(
+            ContextConfig(custom_compressor=compressor, max_context_tokens=100)
+        )
+        messages = self.create_messages(2)
+
+        result = await manager.process(
+            messages,
+            request_id="rid-1",
+            umo="aiocqhttp:GroupMessage:100",
+            conversation_id="cid-1",
+        )
+
+        assert result == messages
+        assert compressor.called
+
+    @pytest.mark.asyncio
     async def test_llm_compression_with_mock_provider(self):
         """Test LLM compression using MockProvider."""
         mock_provider = MockProvider()
@@ -1069,10 +1099,20 @@ class TestContextManager:
             self.create_message("user", "z" * 100),
         ]
 
-        result = await manager.process(messages)
+        result = await manager.process(
+            messages,
+            request_id="rid-1",
+            umo="aiocqhttp:GroupMessage:100",
+            conversation_id="cid-1",
+        )
 
         # Should have been compressed
         assert len(result) <= len(messages)
+        assert mock_provider.last_text_chat_kwargs["request_id"] == "rid-1"
+        assert (
+            mock_provider.last_text_chat_kwargs["umo"] == "aiocqhttp:GroupMessage:100"
+        )
+        assert mock_provider.last_text_chat_kwargs["conversation_id"] == "cid-1"
 
     # ==================== split_into_rounds Tests ====================
 

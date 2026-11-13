@@ -1573,7 +1573,7 @@
 
       "custom_headers": {
         "description": "Custom request headers",
-        "hint": "Key/value pairs added here are sent by AstrBot as custom HTTP headers to the provider. Values must be strings."
+        "hint": "Key/value pairs added here are sent by AstrBot as custom HTTP headers to the provider. Values must be strings; see the [documentation](https://docs.astrbot.app/en/providers/llm.html) for variable templates."
       },
       "ollama_disable_thinking": {
         "description": "Disable thinking mode",

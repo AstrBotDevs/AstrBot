@@ -349,22 +349,29 @@ async def test_gemini_stream_keeps_narration_emitted_before_tool_call(monkeypatc
 
 
 @pytest.mark.asyncio
-async def test_gemini_stream_keeps_conversation_header_until_consumed(
+async def test_gemini_stream_sends_request_headers_with_config(
     monkeypatch,
 ):
-    """The conversation header must be present while the stream is consumed."""
+    """Request headers travel with the stream config, not the shared client."""
     provider = _gemini_stream_provider()
-    headers: dict[str, str] = {}
-    provider.client._api_client = SimpleNamespace(
-        _http_options=SimpleNamespace(headers=headers),
+    create_kwargs: list[dict] = []
+    provider.client = SimpleNamespace(
+        models=SimpleNamespace(
+            generate_content_stream=lambda **kwargs: create_kwargs.append(kwargs)
+        )
     )
-    observed_headers: list[str | None] = []
+    client_headers = {"X-Existing": "1"}
+    provider.client._api_client = SimpleNamespace(
+        _http_options=SimpleNamespace(headers=client_headers),
+    )
+    observed_headers: list[dict[str, str]] = []
 
     async def fake_stream():
-        observed_headers.append(headers.get("x-astrbot-conversation-id"))
+        observed_headers.append(provider.client._api_client._http_options.headers)
         yield _gemini_stream_chunk(text="ok")
 
     async def fake_retry(provider_name, request_factory, max_attempts=None):
+        request_factory()
         return fake_stream()
 
     monkeypatch.setattr(gemini_source, "retry_provider_request", fake_retry)
@@ -377,12 +384,21 @@ async def test_gemini_stream_keeps_conversation_header_until_consumed(
             },
             tools=None,
             conversation_id="conversation-1",
+            request_headers={
+                "x-astrbot-conversation-id": "conversation-1",
+                "X-Custom": "{umo}",
+            },
         )
     ]
 
     assert responses[-1].completion_text == "ok"
-    assert observed_headers == ["conversation-1"]
-    assert "x-astrbot-conversation-id" not in headers
+    config = create_kwargs[0]["config"]
+    assert config.http_options is not None
+    assert config.http_options.headers == {
+        "x-astrbot-conversation-id": "conversation-1",
+        "X-Custom": "{umo}",
+    }
+    assert observed_headers == [{"X-Existing": "1"}]
 
 
 @pytest.mark.asyncio

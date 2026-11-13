@@ -590,7 +590,7 @@ async def test_max_step_final_request_includes_limit_prompt(
         streaming=False,
     )
 
-    async def snapshot_context_manager(messages, trusted_token_usage=0):
+    async def snapshot_context_manager(messages, trusted_token_usage=0, **_kwargs):
         return list(messages)
 
     runner.request_context_manager.process = snapshot_context_manager
@@ -620,7 +620,7 @@ async def test_tool_loop_next_request_includes_tool_result(
         streaming=False,
     )
 
-    async def snapshot_context_manager(messages, trusted_token_usage=0):
+    async def snapshot_context_manager(messages, trusted_token_usage=0, **_kwargs):
         return list(messages)
 
     runner.request_context_manager.process = snapshot_context_manager
@@ -2649,3 +2649,122 @@ async def test_unknown_tool_is_rejected_without_claiming_execution(
     assert rejected[0].error.code == "tool_not_found"
     assert not any(event.type in ("tool.started", "tool.finished") for event in events)
     assert not mock_hooks.tool_start_called
+
+
+@pytest.mark.asyncio
+async def test_runner_passes_stable_request_id_and_umo_across_tool_rounds(
+    runner, mock_tool_executor, mock_hooks, tool_set
+):
+    from astrbot.core.db.po import Conversation
+
+    captured: list[dict] = []
+
+    class RecordingProvider(MockProvider):
+        async def text_chat(self, **kwargs) -> LLMResponse:
+            self.call_count += 1
+            captured.append(kwargs)
+            if self.call_count == 1:
+                return LLMResponse(
+                    role="assistant",
+                    completion_text="调用工具",
+                    tools_call_name=["test_tool"],
+                    tools_call_args=[{"query": "test"}],
+                    tools_call_ids=["call_1"],
+                    usage=TokenUsage(input_other=1, output=1),
+                )
+            return LLMResponse(
+                role="assistant",
+                completion_text="完成",
+                usage=TokenUsage(input_other=1, output=1),
+            )
+
+    provider = RecordingProvider()
+    request = ProviderRequest(
+        prompt="请帮我查询信息",
+        func_tool=tool_set,
+        contexts=[],
+        session_id="legacy-session",
+        conversation=Conversation(
+            platform_id="aiocqhttp",
+            user_id="aiocqhttp:GroupMessage:100",
+            cid="cid-1",
+        ),
+    )
+
+    await runner.reset(
+        provider=provider,
+        request=request,
+        run_context=ContextWrapper(
+            context=MockAgentContext(
+                MockEvent(umo="aiocqhttp:GroupMessage:100", sender_id="sender-1")
+            )
+        ),
+        tool_executor=cast(Any, mock_tool_executor),
+        agent_hooks=mock_hooks,
+    )
+    process = AsyncMock(wraps=runner.request_context_manager.process)
+    runner.request_context_manager.process = process
+    async for _ in runner.step_until_done(max_step=3):
+        pass
+
+    assert process.call_count >= 1
+    for call in process.call_args_list:
+        assert call.kwargs["request_id"] == runner._request_id
+        assert call.kwargs["umo"] == "aiocqhttp:GroupMessage:100"
+        assert call.kwargs["conversation_id"] == "cid-1"
+
+    assert len(captured) >= 2
+    request_ids = {item["request_id"] for item in captured}
+    assert request_ids == {runner._request_id}
+    for item in captured:
+        assert item["umo"] == "aiocqhttp:GroupMessage:100"
+        assert item["session_id"] == "legacy-session"
+        assert item["conversation_id"] == "cid-1"
+
+
+@pytest.mark.asyncio
+async def test_runner_reuses_request_id_for_fallback_provider(
+    mock_tool_executor, mock_hooks
+):
+    captured: dict[str, list[dict]] = {"primary": [], "fallback": []}
+
+    class RecordingProvider(MockProvider):
+        def __init__(self, label: str, error: bool = False) -> None:
+            super().__init__()
+            self.label = label
+            self.error = error
+
+        async def text_chat(self, **kwargs) -> LLMResponse:
+            self.call_count += 1
+            captured[self.label].append(kwargs)
+            if self.error:
+                return LLMResponse(role="err", completion_text="boom")
+            return LLMResponse(
+                role="assistant",
+                completion_text="完成",
+                usage=TokenUsage(input_other=1, output=1),
+            )
+
+    primary = RecordingProvider("primary", error=True)
+    fallback = RecordingProvider("fallback")
+    runner = ToolLoopAgentRunner()
+
+    await runner.reset(
+        provider=primary,
+        request=ProviderRequest(prompt="hi", contexts=[], session_id="umo-1"),
+        run_context=ContextWrapper(
+            context=MockAgentContext(
+                MockEvent(umo="aiocqhttp:GroupMessage:100", sender_id="sender-1")
+            )
+        ),
+        tool_executor=cast(Any, mock_tool_executor),
+        agent_hooks=mock_hooks,
+        fallback_providers=[fallback],
+    )
+    async for _ in runner.step():
+        pass
+
+    primary_id = captured["primary"][0]["request_id"]
+    assert primary_id == runner._request_id
+    assert captured["fallback"][0]["request_id"] == primary_id
+    assert captured["fallback"][0]["umo"] == "aiocqhttp:GroupMessage:100"

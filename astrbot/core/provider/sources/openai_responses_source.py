@@ -302,6 +302,7 @@ class ProviderOpenAIResponses(ProviderOpenAIOfficial):
         *,
         request_max_retries: int | None = None,
         conversation_id: str | None = None,
+        request_headers: dict[str, str] | None = None,
     ) -> LLMResponse:
         """Send a non-streaming Responses API request.
 
@@ -309,6 +310,9 @@ class ProviderOpenAIResponses(ProviderOpenAIOfficial):
             payloads: Prepared Responses API payload.
             tools: Functions available to the model.
             request_max_retries: Maximum transport-level request attempts.
+            conversation_id: AstrBot conversation ID, used for the conversation
+                header only when ``request_headers`` is not given.
+            request_headers: Per-request headers prepared by ``text_chat``.
 
         Returns:
             Normalized AstrBot LLM response.
@@ -353,7 +357,11 @@ class ProviderOpenAIResponses(ProviderOpenAIOfficial):
                 **payloads,
                 stream=False,
                 extra_body=extra_body,
-                extra_headers=build_conversation_headers(conversation_id),
+                extra_headers=(
+                    request_headers
+                    if request_headers is not None
+                    else build_conversation_headers(conversation_id)
+                ),
             ),
             max_attempts=request_max_retries,
         )
@@ -373,6 +381,7 @@ class ProviderOpenAIResponses(ProviderOpenAIOfficial):
         *,
         request_max_retries: int | None = None,
         conversation_id: str | None = None,
+        request_headers: dict[str, str] | None = None,
     ) -> AsyncGenerator[LLMResponse, None]:
         """Send a streaming Responses API request.
 
@@ -380,6 +389,9 @@ class ProviderOpenAIResponses(ProviderOpenAIOfficial):
             payloads: Prepared Responses API payload.
             tools: Functions available to the model.
             request_max_retries: Maximum transport-level request attempts.
+            conversation_id: AstrBot conversation ID, used for the conversation
+                header only when ``request_headers`` is not given.
+            request_headers: Per-request headers prepared by ``text_chat``.
 
         Yields:
             Text/reasoning deltas followed by one complete normalized response.
@@ -424,7 +436,11 @@ class ProviderOpenAIResponses(ProviderOpenAIOfficial):
                 **payloads,
                 stream=True,
                 extra_body=extra_body,
-                extra_headers=build_conversation_headers(conversation_id),
+                extra_headers=(
+                    request_headers
+                    if request_headers is not None
+                    else build_conversation_headers(conversation_id)
+                ),
             ),
             max_attempts=request_max_retries,
         )
