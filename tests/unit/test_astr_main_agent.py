@@ -13,7 +13,7 @@ import pytest
 from astrbot.core import agent_input as core_input
 from astrbot.core import llm_error_messages as agent_errors
 from astrbot.core.agent.mcp_client import MCPTool
-from astrbot.core.agent.message import Message, dump_messages_with_checkpoints
+from astrbot.core.agent.message import Message, TextPart, dump_messages_with_checkpoints
 from astrbot.core.agent.runners.base import AgentState
 from astrbot.core.agent.tool import FunctionTool, ToolSet
 from astrbot.core.agent_wakeup import wake_main_agent
@@ -1651,8 +1651,10 @@ class TestEnsurePersonaAndSkills:
         assert shell_tool is not None
         assert "background" not in shell_tool.parameters["properties"]
         assert "yield_time_ms" in shell_tool.parameters["properties"]
-        assert result.provider_request.system_prompt.count(
-            computer_use_build.LOCAL_NETWORK_POLICY_NOTICE
+        assert sum(
+            isinstance(part, TextPart)
+            and computer_use_build.LOCAL_NETWORK_POLICY_NOTICE in part.text
+            for part in result.provider_request.extra_user_content_parts
         ) == int(
             allow_execution and not allow_network and isolation_status == "detected"
         )
@@ -3685,7 +3687,12 @@ async def test_feature_composition_preserves_tool_scope_and_instruction_order(
     if runtime == "local":
         markers.append(f"Current workspace: `{workspace_root}`")
         assert (
-            req.system_prompt.count(computer_use_build.LOCAL_NETWORK_POLICY_NOTICE) == 1
+            sum(
+                isinstance(part, TextPart)
+                and computer_use_build.LOCAL_NETWORK_POLICY_NOTICE in part.text
+                for part in req.extra_user_content_parts
+            )
+            == 1
         )
     tool_prompt = (
         builder_build.TOOL_CALL_PROMPT
@@ -3729,8 +3736,8 @@ async def test_feature_composition_preserves_tool_scope_and_instruction_order(
     assert "Workspace marker" not in environment
     if runtime == "local":
         assert "## Shell and sessions" in environment
-        assert "## Execution policy" in environment
-        assert "Local execution policy:" in environment
+        assert "## Execution policy" not in environment
+        assert "Local execution policy:" not in environment
         assert f"Current workspace: `{workspace_root}`" in environment
     else:
         assert "sandboxed environment" in environment
@@ -3817,3 +3824,49 @@ async def test_wakeup_collects_current_conversation_without_an_explicit_request(
     manager.get_conversation.assert_awaited_once_with(
         event.unified_msg_origin, "conversation"
     )
+
+
+@pytest.mark.asyncio
+async def test_local_network_notice_preserves_system_prompt(
+    monkeypatch, mock_context, mock_event
+):
+    """Keep speaker permissions temporary and out of the shared prompt/history."""
+    mock_context.mock_add_spec(Context)
+    notice = computer_use_build.LOCAL_NETWORK_POLICY_NOTICE
+    monkeypatch.setattr(
+        computer_use_build, "_apply_local_env_tools", lambda *args: "Local tools"
+    )
+    monkeypatch.setattr(
+        computer_use_build,
+        "get_workspace_instructions",
+        AsyncMock(return_value="Workspace"),
+    )
+    policy = SimpleNamespace(allow_execution=True, allow_network=True)
+    monkeypatch.setattr(
+        computer_use_build, "get_local_permission_policy", lambda *args: policy
+    )
+    config = ama.MainAgentBuildConfig(
+        tool_call_timeout=60, computer_use_runtime="local"
+    )
+    context = computer_use_build.AstrAgentContext(
+        context=mock_context, event=mock_event
+    )
+    admin = ProviderRequest(prompt="admin", system_prompt="Shared persona")
+    await computer_use_build.apply_computer_use(admin, MagicMock(), config, context)
+    policy.allow_network = False
+    member = ProviderRequest(prompt="member", system_prompt="Shared persona")
+    await computer_use_build.apply_computer_use(member, MagicMock(), config, context)
+    assert member.system_prompt == admin.system_prompt
+    assert admin.extra_user_content_parts == []
+    assert len(member.extra_user_content_parts) == 1
+    part = member.extra_user_content_parts[0]
+    assert isinstance(part, TextPart)
+    assert part.text == notice
+    assert part._no_save is True
+    saved = dump_messages_with_checkpoints(
+        [Message(role="user", content=[TextPart(text="member"), part])]
+    )
+    assert saved[0]["content"] == [{"type": "text", "text": "member"}]
+    # Rebuilding a request must not add a second copy of the temporary notice.
+    await computer_use_build.apply_computer_use(member, MagicMock(), config, context)
+    assert len(member.extra_user_content_parts) == 1
