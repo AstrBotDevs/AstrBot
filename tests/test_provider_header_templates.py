@@ -542,16 +542,6 @@ def _gemini_provider():
     )
 
 
-def _gemini_response(text="ok"):
-    candidate = SimpleNamespace(
-        content=SimpleNamespace(parts=[genai_types.Part.from_text(text=text)]),
-        finish_reason=genai_types.FinishReason.STOP,
-    )
-    return SimpleNamespace(
-        candidates=[candidate], response_id="resp-1", usage_metadata=None
-    )
-
-
 @pytest.mark.asyncio
 async def test_gemini_text_chat_sends_rendered_request_headers(monkeypatch):
     provider = _gemini_provider()
@@ -559,7 +549,13 @@ async def test_gemini_text_chat_sends_rendered_request_headers(monkeypatch):
 
     async def fake_generate_content(**kwargs):
         captured.append(kwargs)
-        return _gemini_response()
+        candidate = SimpleNamespace(
+            content=SimpleNamespace(parts=[genai_types.Part.from_text(text="ok")]),
+            finish_reason=genai_types.FinishReason.STOP,
+        )
+        return SimpleNamespace(
+            candidates=[candidate], response_id="resp-1", usage_metadata=None
+        )
 
     monkeypatch.setattr(
         provider.client.models, "generate_content", fake_generate_content
