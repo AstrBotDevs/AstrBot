@@ -4,6 +4,7 @@ import os
 from collections.abc import AsyncGenerator, Mapping
 from typing import Literal, TypeAlias, Union
 
+from astrbot import __version__, logger
 from astrbot.core.agent.message import ContentPart, Message, is_checkpoint_message
 from astrbot.core.agent.tool import ToolSet
 from astrbot.core.provider.entities import (
@@ -16,7 +17,14 @@ from astrbot.core.provider.entities import (
     RerankResult,
     ToolCallsResult,
 )
-from astrbot.core.provider.headers import build_provider_headers
+from astrbot.core.provider.headers import (
+    RequestHeaderContext,
+    build_conversation_headers,
+    build_provider_headers,
+    match_header_names,
+    render_request_headers,
+    split_provider_headers,
+)
 from astrbot.core.provider.register import provider_cls_map
 from astrbot.core.utils.astrbot_path import get_astrbot_path
 
@@ -33,13 +41,31 @@ Providers: TypeAlias = Union[
 class AbstractProvider(abc.ABC):
     """Provider Abstract Class"""
 
-    def __init__(self, provider_config: dict) -> None:
+    def __init__(
+        self, provider_config: dict, *, request_scoped_headers: bool = False
+    ) -> None:
+        """Initialize provider metadata and request headers.
+
+        Args:
+            provider_config: Provider configuration, already merged with its
+                provider source.
+            request_scoped_headers: Whether the provider can inject custom
+                headers per request instead of only at client creation.
+        """
         super().__init__()
         self.model_name = ""
         self.provider_config = provider_config
-        self.request_headers = build_provider_headers(
-            provider_config.get("custom_headers")
+        self._static_headers, self._header_templates = split_provider_headers(
+            provider_config.get("custom_headers"),
+            RequestHeaderContext(
+                provider_id=str(provider_config.get("id") or ""),
+                model=str(provider_config.get("model") or ""),
+                version=__version__,
+            ),
+            request_scoped=request_scoped_headers,
         )
+        self.request_headers = build_provider_headers(self._static_headers)
+        self._omitted_header_logs: set[str] = set()
 
     def set_model(self, model_name: str) -> None:
         """Set the current model name"""
@@ -80,8 +106,59 @@ class Provider(AbstractProvider):
         provider_config: dict,
         provider_settings: dict,
     ) -> None:
-        super().__init__(provider_config)
+        super().__init__(provider_config, request_scoped_headers=True)
         self.provider_settings = provider_settings
+
+    def resolve_request_headers(
+        self,
+        *,
+        conversation_id: str | None,
+        umo: str | None,
+        request_id: str,
+        model: str,
+        default_headers: Mapping[str, object] | None = None,
+    ) -> dict[str, str]:
+        """Build the per-request headers of one chat request.
+
+        Custom header templates are rendered and the conversation header is
+        added. Headers whose template references a missing value are omitted,
+        and the omission is logged once per provider and header name.
+
+        Args:
+            conversation_id: AstrBot conversation ID of the request.
+            umo: Unified message origin of the request.
+            request_id: Request ID shared by every attempt of one agent run.
+            model: Model used by the request.
+            default_headers: Headers the SDK client already sends. A rendered
+                header reuses the exact name of a default that differs only in
+                case, so the SDK replaces that default instead of sending both.
+
+        Returns:
+            Header mapping to send with the request.
+        """
+        headers = render_request_headers(
+            self._header_templates,
+            RequestHeaderContext(
+                conversation_id=conversation_id or "",
+                umo=umo or "",
+                request_id=request_id,
+                model=model,
+                provider_id=str(self.provider_config.get("id", "")),
+                version=__version__,
+            ),
+        )
+        for name in self._header_templates:
+            if name in headers or name in self._omitted_header_logs:
+                continue
+            self._omitted_header_logs.add(name)
+            logger.warning(
+                "Provider %s omitted custom header %s: template value is missing",
+                self.provider_config.get("id", ""),
+                name,
+            )
+        headers = match_header_names(headers, default_headers or {})
+        headers.update(build_conversation_headers(conversation_id))
+        return headers
 
     @abc.abstractmethod
     def get_current_key(self) -> str:

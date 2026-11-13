@@ -28,18 +28,20 @@ class ProviderXiaomiTokenPlan(ProviderAnthropic):
         # Keep api_base fixed; Token Plan users do not need to configure it.
         provider_config["api_base"] = "https://token-plan-cn.xiaomimimo.com/anthropic"
 
-        # Xiaomi Token Plan requires the Authorization: Bearer <token> header.
-        keys = provider_config.get("key", [])
-        actual_key = keys[0] if isinstance(keys, list) and keys else keys
-        if actual_key:
-            provider_config.setdefault("custom_headers", {})["Authorization"] = (
-                f"Bearer {actual_key}"
-            )
-
         super().__init__(
             provider_config,
             provider_settings,
+            use_api_key=False,
         )
+
+        # Xiaomi Token Plan requires the Authorization: Bearer <token> header.
+        # It is added after the custom header split so the API key is never
+        # parsed or validated as a header template.
+        keys = provider_config.get("key", [])
+        actual_key = keys[0] if isinstance(keys, list) and keys else keys
+        if actual_key:
+            self.custom_headers["Authorization"] = f"Bearer {actual_key}"
+        self._init_api_key(provider_config)
 
         configured_model = provider_config.get("model", "mimo-v2.5")
         if configured_model not in XIAOMI_TOKEN_PLAN_MODELS:

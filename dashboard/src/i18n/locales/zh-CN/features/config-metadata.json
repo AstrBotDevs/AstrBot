@@ -1594,7 +1594,7 @@
 
       "custom_headers": {
         "description": "自定义请求头",
-        "hint": "此处添加的键值对将作为自定义 HTTP 请求头，附加到 AstrBot 发往模型服务商的请求中。值必须为字符串。"
+        "hint": "此处添加的键值对将作为自定义 HTTP 请求头，附加到 AstrBot 发往模型服务商的请求中。值须为字符串，变量模板用法见[文档](https://docs.astrbot.app/providers/llm.html)。"
       },
       "ollama_disable_thinking": {
         "description": "关闭思考模式",

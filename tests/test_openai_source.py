@@ -218,12 +218,16 @@ async def test_text_chat_passes_request_max_retries_to_query():
 
     provider = ProviderOpenAIOfficial.__new__(ProviderOpenAIOfficial)
     provider.api_keys = ["test-key"]
-    provider.client = SimpleNamespace(api_key=None)
+    provider.client = SimpleNamespace(api_key=None, default_headers={})
+    provider.provider_config = {"id": "test-provider"}
+    provider._header_templates = {}
 
     async def fake_prepare_chat_payload(*args, **kwargs):
         return {"messages": [], "model": "gpt-4o-mini"}, []
 
-    async def fake_query(payloads, func_tool, *, request_max_retries=None):
+    async def fake_query(
+        payloads, func_tool, *, request_max_retries=None, request_headers=None
+    ):
         captured["request_max_retries"] = request_max_retries
         return LLMResponse(role="assistant", completion_text="ok")
 
