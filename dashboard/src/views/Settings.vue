@@ -65,7 +65,10 @@
                                 @focusout.capture="scheduleSystemConfigAutoSave"
                             >
                                 <div class="system-config-group__heading">
-                                    <div class="system-config-group__title">{{ group.title }}</div>
+                                    <div class="system-config-group__heading-text">
+                                        <div class="system-config-group__title">{{ group.title }}</div>
+                                        <div class="system-config-group__subtitle">{{ group.subtitle }}</div>
+                                    </div>
                                     <div
                                         v-if="group.key === 'runtime' && timezoneTimePreview"
                                         class="timezone-time-preview"
@@ -162,7 +165,12 @@
                                 class="system-config-group config-form"
                                 @focusout.capture="scheduleSystemConfigAutoSave"
                             >
-                                <div class="system-config-group__title">{{ group.title }}</div>
+                                <div class="system-config-group__heading">
+                                    <div class="system-config-group__heading-text">
+                                        <div class="system-config-group__title">{{ group.title }}</div>
+                                        <div class="system-config-group__subtitle">{{ group.subtitle }}</div>
+                                    </div>
+                                </div>
                                 <AstrBotConfigV4
                                     :metadata="group.metadata"
                                     :iterable="systemConfigData"
@@ -209,7 +217,12 @@
                                 class="system-config-group config-form"
                                 @focusout.capture="scheduleSystemConfigAutoSave"
                             >
-                                <div class="system-config-group__title">{{ group.title }}</div>
+                                <div class="system-config-group__heading">
+                                    <div class="system-config-group__heading-text">
+                                        <div class="system-config-group__title">{{ group.title }}</div>
+                                        <div class="system-config-group__subtitle">{{ group.subtitle }}</div>
+                                    </div>
+                                </div>
                                 <AstrBotConfigV4
                                     :metadata="group.metadata"
                                     :iterable="systemConfigData"
@@ -760,6 +773,7 @@ const systemConfigGroups = computed(() => {
         return {
             key,
             title: tm(`systemConfig.groups.${key}.title`),
+            subtitle: tm(`systemConfig.groups.${key}.subtitle`),
             metadata: {
                 [key]: {
                     type: 'object',
@@ -1424,12 +1438,25 @@ onUnmounted(() => {
     margin-bottom: 12px;
 }
 
+.system-config-group__heading-text {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+}
+
 .system-config-group__title {
     color: rgb(var(--v-theme-on-surface));
     font-size: 1.04rem;
     font-weight: 760;
     letter-spacing: 0;
     line-height: 1.32;
+}
+
+.system-config-group__subtitle {
+    margin-top: 4px;
+    color: rgba(var(--v-theme-on-surface), 0.76);
+    font-size: 0.78rem;
+    line-height: 1.45;
 }
 
 .timezone-time-preview {
