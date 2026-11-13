@@ -1,8 +1,10 @@
 """Tests for per-tool permission management."""
 
+from dataclasses import dataclass
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
+from pydantic import ValidationError
 
 from astrbot.core import sp
 from astrbot.core.agent.tool import FunctionTool
@@ -10,6 +12,7 @@ from astrbot.core.provider.func_tool_manager import (
     FunctionToolManager,
     _PermissionGuardedTool,
 )
+from astrbot.core.star.filter.permission import PermissionType
 from astrbot.dashboard.services.tools_service import ToolsService, ToolsServiceError
 
 # ── helpers ──────────────────────────────────────────────────────────
@@ -432,3 +435,374 @@ class TestUpdateToolPermission:
             await service.update_tool_permission(
                 {"name": "target_tool", "permission": "everyone"}
             )
+
+
+# ── declared default permission ──────────────────────────────────────
+
+
+def test_add_func_stores_declared_permission():
+    mgr = FunctionToolManager()
+
+    async def _handler(event):  # pragma: no cover - never invoked here
+        return None
+
+    mgr.add_func(
+        "added_tool",
+        [],
+        "A test tool",
+        _handler,
+        declared_permission_type="admin",
+    )
+
+    assert mgr._default_permission("added_tool") == "admin"
+
+
+def test_default_permission_uses_declared_admin():
+    mgr = FunctionToolManager()
+    tool = _dummy_tool("declared_admin_tool")
+    tool.declared_permission_type = "admin"
+    mgr.func_list.append(tool)
+
+    assert mgr._default_permission("declared_admin_tool") == "admin"
+
+
+def test_default_permission_fails_closed_on_unexpected_declared_value():
+    mgr = FunctionToolManager()
+    tool = _dummy_tool("invalid_declared_tool")
+    tool.declared_permission_type = "admim"  # intentionally invalid
+    mgr.func_list.append(tool)
+
+    assert mgr._default_permission("invalid_declared_tool") == "admin"
+
+
+def test_decorator_registers_declared_admin_permission():
+    from astrbot.api.event import filter
+    from astrbot.core.provider.register import llm_tools
+
+    @filter.llm_tool(
+        name="declared_admin_tool",
+        permission_type=filter.PermissionType.ADMIN,
+    )
+    async def declared_admin_tool(event):
+        """A test tool."""
+
+    try:
+        tool = llm_tools.get_func("declared_admin_tool")
+        assert tool is not None
+        assert tool.declared_permission_type == "admin"
+    finally:
+        llm_tools.remove_func("declared_admin_tool")
+
+
+def test_decorator_rejects_permission_type_as_positional_name():
+    from astrbot.api.event import filter
+
+    with pytest.raises(ValueError, match="keyword argument"):
+        filter.llm_tool(filter.PermissionType.ADMIN)
+
+
+def test_decorator_rejects_composite_permission_flag():
+    from astrbot.api.event import filter
+
+    with pytest.raises(ValueError, match="only supports"):
+        filter.llm_tool(
+            permission_type=filter.PermissionType.ADMIN | filter.PermissionType.MEMBER
+        )
+
+
+def test_decorator_rejects_declaration_for_agent_tools():
+    from astrbot.api.event import filter
+
+    with pytest.raises(ValueError, match="Agent"):
+        filter.llm_tool(
+            permission_type=filter.PermissionType.ADMIN,
+            registering_agent=object(),
+        )
+
+
+@pytest.mark.asyncio
+async def test_check_permission_denies_member_for_declared_admin_tool():
+    await _clear_tool_permissions()
+    mgr = FunctionToolManager()
+    tool = _dummy_tool("declared_admin_only")
+    tool.declared_permission_type = "admin"
+    mgr.func_list.append(tool)
+
+    error = await mgr._check_tool_permission(
+        "declared_admin_only", _make_context(role="member")
+    )
+
+    assert error is not None
+    assert "requires admin" in error
+
+
+@pytest.mark.asyncio
+async def test_guarded_tool_denies_member_for_declared_admin_tool():
+    await _clear_tool_permissions()
+    mgr = FunctionToolManager()
+    tool = _dummy_tool("declared_guarded_tool")
+    tool.declared_permission_type = "admin"
+    mgr.func_list.append(tool)
+    guarded = _PermissionGuardedTool(tool, mgr)
+
+    result = await guarded.call(_make_context(role="member"))
+
+    assert isinstance(result, str)
+    assert "requires admin" in result
+
+
+@pytest.mark.asyncio
+async def test_guarded_tool_allows_admin_for_declared_admin_tool():
+    await _clear_tool_permissions()
+    mgr = FunctionToolManager()
+
+    async def _handler(event):  # pragma: no cover - delegated, not asserted
+        return "ok"
+
+    tool = FunctionTool(
+        name="declared_guarded_admin_tool",
+        description="A test tool",
+        parameters={"type": "object", "properties": {}},
+        handler=_handler,
+        declared_permission_type="admin",
+    )
+    mgr.func_list.append(tool)
+    guarded = _PermissionGuardedTool(tool, mgr)
+
+    result = await guarded.call(_make_context(role="admin"))
+
+    assert result == "ok"
+
+
+@pytest.mark.asyncio
+async def test_executor_denies_member_for_declared_admin_tool():
+    from astrbot.core.astr_agent_runtime.tool_executor import FunctionToolExecutor
+
+    await _clear_tool_permissions()
+    tool = _dummy_tool("executor_declared_admin_tool")
+    tool.declared_permission_type = "admin"
+
+    results = [
+        result
+        async for result in FunctionToolExecutor.execute(
+            tool, _make_context(role="member")
+        )
+    ]
+
+    assert results
+    assert "requires admin" in results[0].content[0].text
+
+
+@pytest.mark.asyncio
+async def test_check_permission_prefers_dashboard_override_for_declared_tool():
+    await sp.global_put(
+        "tool_permissions",
+        {"_default": {"declared_overridden_check": "member"}},
+    )
+    try:
+        mgr = FunctionToolManager()
+        tool = _dummy_tool("declared_overridden_check")
+        tool.declared_permission_type = "admin"
+
+        error = await mgr._check_tool_permission(
+            "declared_overridden_check", _make_context(role="member"), tool
+        )
+
+        assert error is None
+    finally:
+        await _clear_tool_permissions()
+
+
+def test_dataclass_declared_permission_accepts_permission_type_enum():
+    tool = FunctionTool(
+        name="enum_declared_tool",
+        description="A test tool",
+        parameters={"type": "object", "properties": {}},
+        declared_permission_type=PermissionType.ADMIN,
+    )
+
+    assert tool.declared_permission_type == "admin"
+
+
+@pytest.mark.parametrize("value", ["admim", "Admin", "admin|member"])
+def test_dataclass_declared_permission_rejects_invalid_values(value):
+    with pytest.raises(ValidationError):
+        FunctionTool(
+            name="invalid_declared_tool",
+            description="A test tool",
+            parameters={"type": "object", "properties": {}},
+            declared_permission_type=value,
+        )
+
+
+@dataclass
+class _EnumDeclaredDataclassTool(FunctionTool):
+    """Stdlib dataclass tool whose declaration bypasses pydantic validation."""
+
+    declared_permission_type: str | None = PermissionType.ADMIN
+
+
+def test_default_permission_normalizes_enum_from_stdlib_dataclass():
+    mgr = FunctionToolManager()
+    tool = _EnumDeclaredDataclassTool(
+        name="stdlib_dataclass_admin_tool",
+        description="A test tool",
+        parameters={"type": "object", "properties": {}},
+    )
+    mgr.func_list.append(tool)
+
+    assert tool.declared_permission_type is PermissionType.ADMIN
+    assert mgr._default_permission("stdlib_dataclass_admin_tool") == "admin"
+
+
+@pytest.mark.asyncio
+async def test_executor_denies_member_for_stdlib_dataclass_declared_admin():
+    from astrbot.core.astr_agent_runtime.tool_executor import FunctionToolExecutor
+
+    await _clear_tool_permissions()
+    tool = _EnumDeclaredDataclassTool(
+        name="stdlib_dataclass_exec_tool",
+        description="A test tool",
+        parameters={"type": "object", "properties": {}},
+    )
+
+    results = [
+        result
+        async for result in FunctionToolExecutor.execute(
+            tool, _make_context(role="member")
+        )
+    ]
+
+    assert results
+    assert "requires admin" in results[0].content[0].text
+
+
+@pytest.mark.asyncio
+async def test_list_uses_declared_default_when_unconfigured():
+    await _clear_tool_permissions()
+    service = _make_tools_service()
+    tool = _dummy_tool("declared_default_tool")
+    tool.declared_permission_type = "admin"
+    service.tool_mgr.func_list.append(tool)
+
+    tools = await service.get_tool_list()
+
+    target = next(t for t in tools if t["name"] == "declared_default_tool")
+    assert target["permission"] == "admin"
+    assert target["permission_configured"] is False
+
+
+@pytest.mark.asyncio
+async def test_list_prefers_dashboard_override_over_declared_default():
+    service = _make_tools_service()
+    await sp.global_put(
+        "tool_permissions",
+        {"_default": {"declared_overridden_tool": "member"}},
+    )
+    try:
+        tool = _dummy_tool("declared_overridden_tool")
+        tool.declared_permission_type = "admin"
+        service.tool_mgr.func_list.append(tool)
+
+        tools = await service.get_tool_list()
+
+        target = next(t for t in tools if t["name"] == "declared_overridden_tool")
+        assert target["permission"] == "member"
+        assert target["permission_configured"] is True
+    finally:
+        await _clear_tool_permissions()
+
+
+def test_guarded_tool_mirrors_declared_permission():
+    mgr = FunctionToolManager()
+    tool = _dummy_tool("mirrored_declared_tool")
+    tool.declared_permission_type = "admin"
+    mgr.func_list.append(tool)
+
+    guarded = _PermissionGuardedTool(tool, mgr)
+
+    assert guarded.declared_permission_type == "admin"
+    assert mgr._default_permission("mirrored_declared_tool") == "admin"
+
+
+def test_guarded_tool_mirrors_enum_declaration():
+    mgr = FunctionToolManager()
+    tool = _dummy_tool("mirrored_enum_tool")
+    tool.declared_permission_type = PermissionType.ADMIN
+    mgr.func_list.append(tool)
+
+    guarded = _PermissionGuardedTool(tool, mgr)
+
+    assert guarded.declared_permission_type == "admin"
+
+
+def test_guarded_tool_drops_invalid_declaration_but_still_fails_closed():
+    mgr = FunctionToolManager()
+    tool = _dummy_tool("mirrored_invalid_tool")
+    tool.declared_permission_type = "admim"
+    mgr.func_list.append(tool)
+
+    guarded = _PermissionGuardedTool(tool, mgr)
+
+    assert guarded.declared_permission_type is None
+    assert mgr._default_permission("mirrored_invalid_tool") == "admin"
+
+
+@pytest.mark.asyncio
+async def test_check_permission_fails_closed_on_unknown_configured_value():
+    await sp.global_put(
+        "tool_permissions",
+        {"_default": {"dirty_configured_tool": "Admin"}},
+    )
+    try:
+        mgr = FunctionToolManager()
+
+        error = await mgr._check_tool_permission(
+            "dirty_configured_tool", _make_context(role="member")
+        )
+
+        assert error is not None
+        assert "requires admin" in error
+    finally:
+        await _clear_tool_permissions()
+
+
+@pytest.mark.asyncio
+async def test_list_mirrors_fail_closed_permission_for_unknown_value():
+    await sp.global_put(
+        "tool_permissions",
+        {"_default": {"dirty_listed_tool": "Admin"}},
+    )
+    try:
+        service = _make_tools_service()
+        tool = _dummy_tool("dirty_listed_tool")
+        service.tool_mgr.func_list.append(tool)
+
+        tools = await service.get_tool_list()
+
+        target = next(t for t in tools if t["name"] == "dirty_listed_tool")
+        assert target["permission"] == "admin"
+        assert target["permission_configured"] is True
+    finally:
+        await _clear_tool_permissions()
+
+
+@pytest.mark.asyncio
+async def test_list_falls_back_to_declared_value_for_explicit_null():
+    await sp.global_put(
+        "tool_permissions",
+        {"_default": {"null_configured_tool": None}},
+    )
+    try:
+        service = _make_tools_service()
+        tool = _dummy_tool("null_configured_tool")
+        tool.declared_permission_type = "member"
+        service.tool_mgr.func_list.append(tool)
+
+        tools = await service.get_tool_list()
+
+        target = next(t for t in tools if t["name"] == "null_configured_tool")
+        assert target["permission"] == "member"
+        assert target["permission_configured"] is True
+    finally:
+        await _clear_tool_permissions()

@@ -1,4 +1,5 @@
 import copy
+import enum
 import json
 from collections.abc import AsyncGenerator, Awaitable, Callable
 from typing import Any, Generic
@@ -6,7 +7,7 @@ from typing import Any, Generic
 import jsonschema
 import mcp
 from deprecated import deprecated
-from pydantic import Field, model_validator
+from pydantic import Field, field_validator, model_validator
 from pydantic.dataclasses import dataclass
 
 from astrbot.core.message.message_event_result import MessageEventResult
@@ -64,6 +65,41 @@ class FunctionTool(ToolSchema, Generic[TContext]):
     Declare this tool as a background task. Background tasks return immediately
     with a task identifier while the real work continues asynchronously.
     """
+    declared_permission_type: str | None = None
+    """
+    Default permission declared by the tool author, either ``"admin"`` or
+    ``"member"``. It is only used as a fallback when an administrator has not
+    configured the tool permission in the WebUI dashboard.
+    """
+
+    @field_validator("declared_permission_type", mode="before")
+    @classmethod
+    def _normalize_declared_permission_type(cls, value: Any) -> str | None:
+        """Validate a declared default permission.
+
+        Accepts ``None``, ``"admin"``, ``"member"`` and enum members such as
+        ``PermissionType.ADMIN`` / ``PermissionType.MEMBER``.
+
+        Args:
+            value: Raw value passed to the field.
+
+        Returns:
+            ``"admin"``, ``"member"`` or ``None``.
+
+        Raises:
+            ValueError: If the value is not a supported permission.
+        """
+        if value is None:
+            return None
+        if isinstance(value, enum.Enum):
+            value = value.name.lower()
+        if value not in ("admin", "member"):
+            raise ValueError(
+                'declared_permission_type must be "admin", "member" or None, '
+                f"got {value!r}."
+            )
+        return value
+
     execution_timeout: float | None = None
     """Optional per-call timeout in seconds, overriding the runner's default."""
 
