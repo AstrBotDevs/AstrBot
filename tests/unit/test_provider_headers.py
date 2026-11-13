@@ -1,5 +1,6 @@
 import hashlib
 from urllib.parse import unquote
+from uuid import NAMESPACE_URL, uuid5
 
 import pytest
 
@@ -48,7 +49,7 @@ def test_render_header_template_keeps_unknown_text_as_is(template, expected):
     assert render_header_template(template, FULL_CONTEXT) == expected
 
 
-def test_render_header_template_hashes_sha256_templates():
+def test_render_header_template_transforms_values():
     assert render_header_template("{sha256:{conversation_id}}", FULL_CONTEXT) == (
         hashlib.sha256(b"conversation-1").hexdigest()
     )
@@ -58,9 +59,17 @@ def test_render_header_template_hashes_sha256_templates():
     assert render_header_template("{sha256:pre-{model}}", FULL_CONTEXT) == (
         hashlib.sha256(b"pre-gpt-test").hexdigest()
     )
+    assert render_header_template("{uuid5:{conversation_id}}", FULL_CONTEXT) == str(
+        uuid5(NAMESPACE_URL, "astrbot:provider-header:conversation-1")
+    )
+    assert render_header_template("{uuid5:pre-{model}}", FULL_CONTEXT) == str(
+        uuid5(NAMESPACE_URL, "astrbot:provider-header:pre-gpt-test")
+    )
 
 
-@pytest.mark.parametrize("template", ["{umo}", "{model}", "{sha256:{umo}}"])
+@pytest.mark.parametrize(
+    "template", ["{umo}", "{model}", "{sha256:{umo}}", "{uuid5:{umo}}"]
+)
 def test_render_header_template_omits_missing_values(template):
     assert render_header_template(template, RequestHeaderContext()) is None
 
@@ -84,6 +93,10 @@ def test_render_header_template_percent_encodes_unhashed_values():
         hashlib.sha256(umo.encode()).hexdigest()
     )
 
+    assert render_header_template("{uuid5:{umo}}", ctx) == str(
+        uuid5(NAMESPACE_URL, "astrbot:provider-header:" + umo)
+    )
+
 
 def test_split_provider_headers_keeps_request_templates_out_of_static_headers():
     static, templates = split_provider_headers(
@@ -92,8 +105,10 @@ def test_split_provider_headers_keeps_request_templates_out_of_static_headers():
             "X-Json": '{"app":"x"}',
             "X-Braces": "{{value}}",
             "X-Sha": "{sha256:value}",
+            "X-Uuid": "{uuid5:value}",
             "X-Provider": "{provider_id}",
             "X-Session": "{sha256:{conversation_id}}",
+            "X-Session-Uuid": "{uuid5:{conversation_id}}",
             "X-Astrbot-Conversation-Id": "spoofed",
         },
         RequestHeaderContext(provider_id="provider-1", model="gpt-test"),
@@ -104,9 +119,13 @@ def test_split_provider_headers_keeps_request_templates_out_of_static_headers():
         "X-Json": '{"app":"x"}',
         "X-Braces": "{{value}}",
         "X-Sha": hashlib.sha256(b"value").hexdigest(),
+        "X-Uuid": str(uuid5(NAMESPACE_URL, "astrbot:provider-header:value")),
         "X-Provider": "provider-1",
     }
-    assert templates == {"X-Session": "{sha256:{conversation_id}}"}
+    assert templates == {
+        "X-Session": "{sha256:{conversation_id}}",
+        "X-Session-Uuid": "{uuid5:{conversation_id}}",
+    }
 
 
 def test_split_provider_headers_sends_auth_headers_as_configured():

@@ -5,6 +5,7 @@ import re
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from urllib.parse import quote
+from uuid import NAMESPACE_URL, uuid5
 
 from astrbot import __version__, logger
 
@@ -15,8 +16,10 @@ _VARIABLES = "conversation_id|umo|request_id|model|provider_id|version"
 # Only known placeholders are replaced. Any other text, including other braces,
 # is sent exactly as configured.
 _VARIABLE_RE = re.compile(rf"\{{({_VARIABLES})\}}")
-# {sha256:...} may only contain literal text and known variables.
-_SHA256_RE = re.compile(rf"\{{sha256:((?:[^{{}}]|\{{(?:{_VARIABLES})\}})+)\}}")
+# Hash and UUID transforms may only contain literal text and known variables.
+_TRANSFORM_RE = re.compile(
+    rf"\{{(sha256|uuid5):((?:[^{{}}]|\{{(?:{_VARIABLES})\}})+)\}}"
+)
 _REQUEST_TIME_VARIABLES = frozenset({"conversation_id", "umo", "request_id", "model"})
 # Printable ASCII except "%" is kept in variable values. Anything else, such as a
 # Chinese platform ID or a line break, is percent-encoded as UTF-8.
@@ -51,7 +54,7 @@ def render_header_template(template: str, ctx: RequestHeaderContext) -> str | No
 
     Returns:
         The rendered value, or None when a referenced variable is empty.
-        Unhashed variable values are percent-encoded outside printable ASCII.
+        Values outside hash and UUID transforms are percent-encoded outside printable ASCII.
     """
     values = {
         "conversation_id": ctx.conversation_id or ctx.request_id,
@@ -63,23 +66,24 @@ def render_header_template(template: str, ctx: RequestHeaderContext) -> str | No
     }
     missing = False
 
-    def value_of(match: re.Match[str], *, hashed: bool) -> str:
+    def value_of(match: re.Match[str], *, transformed: bool) -> str:
         nonlocal missing
         value = str(values[match.group(1)] or "")
         missing = missing or not value
-        # Hashing already yields valid header text, so only raw values are encoded.
-        return value if hashed else quote(value, safe=_HEADER_SAFE_CHARACTERS)
+        # Transforms yield valid header text, so only raw values are encoded.
+        return value if transformed else quote(value, safe=_HEADER_SAFE_CHARACTERS)
 
-    rendered = _SHA256_RE.sub(
-        lambda match: hashlib.sha256(
-            _VARIABLE_RE.sub(
-                lambda variable: value_of(variable, hashed=True), match.group(1)
-            ).encode("utf-8")
-        ).hexdigest(),
-        template,
-    )
+    def transform(match: re.Match[str]) -> str:
+        value = _VARIABLE_RE.sub(
+            lambda variable: value_of(variable, transformed=True), match.group(2)
+        )
+        if match.group(1) == "sha256":
+            return hashlib.sha256(value.encode("utf-8")).hexdigest()
+        return str(uuid5(NAMESPACE_URL, "astrbot:provider-header:" + value))
+
+    rendered = _TRANSFORM_RE.sub(transform, template)
     rendered = _VARIABLE_RE.sub(
-        lambda variable: value_of(variable, hashed=False), rendered
+        lambda variable: value_of(variable, transformed=False), rendered
     )
     return None if missing else rendered
 
@@ -135,7 +139,7 @@ def split_provider_headers(
             continue
         variables = set(_VARIABLE_RE.findall(value))
         if name.casefold() in _FIXED_HEADERS or not (
-            variables or _SHA256_RE.search(value)
+            variables or _TRANSFORM_RE.search(value)
         ):
             static_headers[name] = value
             continue
