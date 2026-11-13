@@ -28,10 +28,12 @@ class ContextManager:
 
         self.token_counter = config.custom_token_counter or EstimateTokenCounter()
         self.truncator = ContextTruncator()
+        self._uses_builtin_llm_compressor = False
 
         if config.custom_compressor:
             self.compressor = config.custom_compressor
         elif config.llm_compress_provider:
+            self._uses_builtin_llm_compressor = True
             self.compressor = LLMSummaryCompressor(
                 provider=config.llm_compress_provider,
                 keep_recent_ratio=config.llm_compress_keep_recent_ratio,
@@ -44,12 +46,21 @@ class ContextManager:
             )
 
     async def process(
-        self, messages: list[Message], trusted_token_usage: int = 0
+        self,
+        messages: list[Message],
+        trusted_token_usage: int = 0,
+        *,
+        request_id: str = "",
+        umo: str = "",
+        conversation_id: str = "",
     ) -> list[Message]:
         """Process the messages.
 
         Args:
             messages: The original message list.
+            request_id: Request ID shared with the current agent run.
+            umo: Unified message origin of the current event.
+            conversation_id: Conversation ID of the current request.
 
         Returns:
             The processed message list.
@@ -74,7 +85,13 @@ class ContextManager:
                 if self.compressor.should_compress(
                     result, total_tokens, self.config.max_context_tokens
                 ):
-                    result = await self._run_compression(result, total_tokens)
+                    result = await self._run_compression(
+                        result,
+                        total_tokens,
+                        request_id=request_id,
+                        umo=umo,
+                        conversation_id=conversation_id,
+                    )
 
             return result
         except Exception as e:
@@ -82,7 +99,13 @@ class ContextManager:
             return messages
 
     async def _run_compression(
-        self, messages: list[Message], prev_tokens: int
+        self,
+        messages: list[Message],
+        prev_tokens: int,
+        *,
+        request_id: str = "",
+        umo: str = "",
+        conversation_id: str = "",
     ) -> list[Message]:
         """
         Compress/truncate the messages.
@@ -95,13 +118,25 @@ class ContextManager:
         Args:
             messages: The original message list.
             prev_tokens: The token count before compression.
+            request_id: Request ID shared with the current agent run.
+            umo: Unified message origin of the current event.
+            conversation_id: Conversation ID of the current request.
 
         Returns:
             The compressed/truncated message list.
         """
         logger.debug("Compress triggered, starting compression...")
 
-        messages = await self.compressor(messages)
+        if self._uses_builtin_llm_compressor:
+            messages = await self.compressor(
+                messages,
+                request_id=request_id,
+                umo=umo,
+                conversation_id=conversation_id,
+            )
+        else:
+            # Custom compressors retain the original single-argument interface.
+            messages = await self.compressor(messages)
 
         # double check
         tokens_after_summary = self.token_counter.count_tokens(messages)

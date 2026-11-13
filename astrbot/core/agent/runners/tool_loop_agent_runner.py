@@ -1095,6 +1095,11 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             self.request_context_manager.process(
                 self.run_context.messages,
                 trusted_token_usage=token_usage,
+                request_id=self._request_id,
+                umo=self._umo,
+                conversation_id=(
+                    self.req.conversation.cid if self.req.conversation else None
+                ),
             )
         )
         if processed_messages is None:

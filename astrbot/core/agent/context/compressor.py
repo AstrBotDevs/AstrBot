@@ -203,12 +203,25 @@ class LLMSummaryCompressor:
 
         return rounds[:recent_start], rounds[recent_start:]
 
-    async def __call__(self, messages: list[Message]) -> list[Message]:
+    async def __call__(
+        self,
+        messages: list[Message],
+        *,
+        request_id: str = "",
+        umo: str = "",
+        conversation_id: str = "",
+    ) -> list[Message]:
         """Use LLM to generate a summary of the conversation history.
 
         Uses round-based splitting to preserve user-assistant turn boundaries.
         On LLM failure, returns the original messages unchanged (caller should
         fall back to truncation).
+
+        Args:
+            messages: Messages to compress.
+            request_id: Request ID shared with the current agent run.
+            umo: Unified message origin of the current event.
+            conversation_id: Conversation ID of the current request.
         """
         from .round_utils import split_into_rounds
 
@@ -278,6 +291,9 @@ class LLMSummaryCompressor:
             response = await self.provider.text_chat(
                 contexts=sanitized_summary_contexts,
                 request_max_retries=1,
+                request_id=request_id,
+                umo=umo,
+                conversation_id=conversation_id,
             )
             summary_content = (response.completion_text or "").strip()
         except Exception as e:

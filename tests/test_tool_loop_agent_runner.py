@@ -590,7 +590,7 @@ async def test_max_step_final_request_includes_limit_prompt(
         streaming=False,
     )
 
-    async def snapshot_context_manager(messages, trusted_token_usage=0):
+    async def snapshot_context_manager(messages, trusted_token_usage=0, **_kwargs):
         return list(messages)
 
     runner.request_context_manager.process = snapshot_context_manager
@@ -620,7 +620,7 @@ async def test_tool_loop_next_request_includes_tool_result(
         streaming=False,
     )
 
-    async def snapshot_context_manager(messages, trusted_token_usage=0):
+    async def snapshot_context_manager(messages, trusted_token_usage=0, **_kwargs):
         return list(messages)
 
     runner.request_context_manager.process = snapshot_context_manager
@@ -2702,8 +2702,16 @@ async def test_runner_passes_stable_request_id_and_umo_across_tool_rounds(
         tool_executor=cast(Any, mock_tool_executor),
         agent_hooks=mock_hooks,
     )
+    process = AsyncMock(wraps=runner.request_context_manager.process)
+    runner.request_context_manager.process = process
     async for _ in runner.step_until_done(max_step=3):
         pass
+
+    assert process.call_count >= 1
+    for call in process.call_args_list:
+        assert call.kwargs["request_id"] == runner._request_id
+        assert call.kwargs["umo"] == "aiocqhttp:GroupMessage:100"
+        assert call.kwargs["conversation_id"] == "cid-1"
 
     assert len(captured) >= 2
     request_ids = {item["request_id"] for item in captured}
