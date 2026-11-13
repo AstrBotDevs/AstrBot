@@ -3,9 +3,10 @@ import base64
 import json
 import logging
 import random
+import re
+import uuid
 from collections.abc import AsyncGenerator
-from contextlib import asynccontextmanager
-from typing import Literal, cast
+from typing import Any, Literal, cast
 
 import httpx
 from google import genai
@@ -36,6 +37,33 @@ class SuppressNonTextPartsWarning(logging.Filter):
 
     def filter(self, record):
         return "there are non-text parts in the response" not in record.getMessage()
+
+
+# google-genai prefixes a lower-case user-agent with this label, or sends the
+# label alone as an extra user-agent value.
+_GENAI_USER_AGENT_LABEL_RE = re.compile(r"^google-genai-sdk/\S+ gl-python/\S+ ?")
+
+
+async def _dedupe_request_headers(request: httpx.Request) -> None:
+    """Keep exactly one value for every header, preferring configured values.
+
+    google-genai merges its default headers, the client headers and per-request
+    HttpOptions case-sensitively, so a configured header whose case differs from
+    a default would otherwise be sent twice. Configured values come last, so the
+    last value wins. The SDK's own user-agent label is removed so it never
+    replaces or hides the configured User-Agent.
+
+    Args:
+        request: Outgoing request, modified in place.
+    """
+    for name in {name for name, _ in request.headers.multi_items()}:
+        original = request.headers.get_list(name)
+        values = original
+        if name == "user-agent":
+            labelled = (_GENAI_USER_AGENT_LABEL_RE.sub("", v) for v in original)
+            values = [v for v in labelled if v] or original
+        if len(values) > 1 or values != original:
+            request.headers[name] = values[-1]
 
 
 logging.getLogger("google_genai.types").addFilter(SuppressNonTextPartsWarning())
@@ -79,7 +107,6 @@ class ProviderGoogleGenAI(Provider):
 
         self._http_client: httpx.AsyncClient | None = None
         self._stale_http_clients: list[httpx.AsyncClient] = []
-        self._request_lock = asyncio.Lock()
         self._init_client()
         self.set_model(provider_config.get("model", "unknown"))
         self._init_safety_settings()
@@ -98,6 +125,7 @@ class ProviderGoogleGenAI(Provider):
         async_client_kwargs: dict = {
             "base_url": self.api_base,
             "timeout": self.timeout,
+            "event_hooks": {"request": [_dedupe_request_headers]},
         }
         if proxy:
             async_client_kwargs["proxy"] = proxy
@@ -118,43 +146,6 @@ class ProviderGoogleGenAI(Provider):
             api_key=self.chosen_api_key,
             http_options=http_options,
         ).aio
-        # The SDK adds its own lower-case UA alongside our explicit header.
-        self.client._api_client._http_options.headers.pop("user-agent", None)
-
-    @asynccontextmanager
-    async def _conversation_header(self, conversation_id: str | None):
-        """Temporarily attach a conversation ID to a Gemini HTTP request.
-
-        Args:
-            conversation_id: AstrBot conversation ID to associate with the request.
-
-        Yields:
-            Control while the request is using the temporary header.
-        """
-        http_options = getattr(getattr(self, "client", None), "_api_client", None)
-        http_options = getattr(http_options, "_http_options", None)
-        headers = getattr(http_options, "headers", None)
-        conversation_headers = build_conversation_headers(conversation_id)
-        if not isinstance(headers, dict) or not conversation_headers:
-            yield
-            return
-
-        request_lock = getattr(self, "_request_lock", None)
-        if request_lock is None:
-            request_lock = asyncio.Lock()
-            self._request_lock = request_lock
-        header_name, header_value = next(iter(conversation_headers.items()))
-        missing = object()
-        async with request_lock:
-            previous_value = headers.get(header_name, missing)
-            headers[header_name] = header_value
-            try:
-                yield
-            finally:
-                if previous_value is missing:
-                    headers.pop(header_name, None)
-                else:
-                    headers[header_name] = previous_value
 
     def _init_safety_settings(self) -> None:
         """初始化安全设置"""
@@ -205,6 +196,7 @@ class ProviderGoogleGenAI(Provider):
         tool_choice: Literal["auto", "required"] = "auto",
         system_instruction: str | None = None,
         modalities: list[str] | None = None,
+        request_headers: dict[str, str] | None = None,
     ) -> types.GenerateContentConfig:
         """Build the shared generation config for regular and streaming requests.
 
@@ -373,6 +365,11 @@ class ProviderGoogleGenAI(Provider):
             thinking_config=thinking_config,
             automatic_function_calling=types.AutomaticFunctionCallingConfig(
                 disable=True,
+            ),
+            http_options=(
+                types.HttpOptions(headers=dict(request_headers))
+                if request_headers
+                else None
             ),
         )
 
@@ -685,6 +682,7 @@ class ProviderGoogleGenAI(Provider):
         *,
         request_max_retries: int | None = None,
         conversation_id: str | None = None,
+        request_headers: dict[str, str] | None = None,
     ) -> LLMResponse:
         """非流式请求 Gemini API"""
         system_instruction = next(
@@ -710,17 +708,21 @@ class ProviderGoogleGenAI(Provider):
                     payloads.get("tool_choice", "auto"),
                     system_instruction,
                     modalities,
+                    request_headers=(
+                        request_headers
+                        if request_headers is not None
+                        else build_conversation_headers(conversation_id)
+                    ),
                 )
-                async with self._conversation_header(conversation_id):
-                    result = await retry_provider_request(
-                        "Gemini",
-                        lambda: self.client.models.generate_content(
-                            model=model,
-                            contents=cast(types.ContentListUnion, conversation),
-                            config=config,
-                        ),
-                        max_attempts=request_max_retries,
-                    )
+                result = await retry_provider_request(
+                    "Gemini",
+                    lambda: self.client.models.generate_content(
+                        model=model,
+                        contents=cast(types.ContentListUnion, conversation),
+                        config=config,
+                    ),
+                    max_attempts=request_max_retries,
+                )
                 logger.debug(f"genai result: {result}")
 
                 if not result.candidates:
@@ -788,6 +790,7 @@ class ProviderGoogleGenAI(Provider):
         *,
         request_max_retries: int | None = None,
         conversation_id: str | None = None,
+        request_headers: dict[str, str] | None = None,
     ) -> AsyncGenerator[LLMResponse, None]:
         """流式请求 Gemini API"""
         system_instruction = next(
@@ -805,17 +808,21 @@ class ProviderGoogleGenAI(Provider):
                     tools,
                     payloads.get("tool_choice", "auto"),
                     system_instruction,
+                    request_headers=(
+                        request_headers
+                        if request_headers is not None
+                        else build_conversation_headers(conversation_id)
+                    ),
                 )
-                async with self._conversation_header(conversation_id):
-                    result = await retry_provider_request(
-                        "Gemini",
-                        lambda: self.client.models.generate_content_stream(
-                            model=model,
-                            contents=cast(types.ContentListUnion, conversation),
-                            config=config,
-                        ),
-                        max_attempts=request_max_retries,
-                    )
+                result = await retry_provider_request(
+                    "Gemini",
+                    lambda: self.client.models.generate_content_stream(
+                        model=model,
+                        contents=cast(types.ContentListUnion, conversation),
+                        config=config,
+                    ),
+                    max_attempts=request_max_retries,
+                )
                 break
             except APIError as e:
                 if e.message is None:
@@ -839,82 +846,77 @@ class ProviderGoogleGenAI(Provider):
         accumulated_reasoning = ""
         final_response = None
 
-        async with self._conversation_header(conversation_id):
-            async for chunk in result:
-                llm_response = LLMResponse("assistant", is_chunk=True)
+        async for chunk in result:
+            llm_response = LLMResponse("assistant", is_chunk=True)
 
-                if not chunk.candidates:
-                    logger.warning(f"Gemini stream chunk has empty candidates: {chunk}")
-                    continue
-                if not chunk.candidates[0].content:
-                    logger.warning(f"Gemini stream chunk has empty content: {chunk}")
-                    continue
+            if not chunk.candidates:
+                logger.warning(f"Gemini stream chunk has empty candidates: {chunk}")
+                continue
+            if not chunk.candidates[0].content:
+                logger.warning(f"Gemini stream chunk has empty content: {chunk}")
+                continue
 
-                if chunk.candidates[0].content.parts and any(
-                    part.function_call for part in chunk.candidates[0].content.parts
-                ):
-                    llm_response = LLMResponse("assistant", is_chunk=False)
-                    llm_response.raw_completion = chunk
-                    llm_response.result_chain = self._process_content_parts(
+            if chunk.candidates[0].content.parts and any(
+                part.function_call for part in chunk.candidates[0].content.parts
+            ):
+                llm_response = LLMResponse("assistant", is_chunk=False)
+                llm_response.raw_completion = chunk
+                llm_response.result_chain = self._process_content_parts(
+                    chunk.candidates[0],
+                    llm_response,
+                    validate_output=False,
+                )
+                # This response replaces the whole turn in conversation
+                # history, so keep the narration and reasoning that were
+                # already streamed before the tool call. Dropping them made
+                # the user-visible text missing from history.
+                if accumulated_text or accumulated_reasoning:
+                    parts = list(llm_response.result_chain.chain or [])
+                    if accumulated_text:
+                        parts.insert(0, Comp.Plain(accumulated_text))
+                        llm_response.result_chain = MessageChain(chain=parts)
+                    if accumulated_reasoning:
+                        # _process_content_parts already stored the reasoning
+                        # that came with the tool-call chunk itself, so append
+                        # to it instead of overwriting that part.
+                        llm_response.reasoning_content = accumulated_reasoning + (
+                            llm_response.reasoning_content or ""
+                        )
+                llm_response.id = chunk.response_id
+                if chunk.usage_metadata:
+                    llm_response.usage = self._extract_usage(chunk.usage_metadata)
+                yield llm_response
+                return
+
+            _f = False
+
+            # 提取 reasoning content
+            reasoning = self._extract_reasoning_content(chunk.candidates[0])
+            if reasoning:
+                _f = True
+                accumulated_reasoning += reasoning
+                llm_response.reasoning_content = reasoning
+            if chunk.text:
+                _f = True
+                accumulated_text += chunk.text
+                llm_response.result_chain = MessageChain(chain=[Comp.Plain(chunk.text)])
+            if _f:
+                yield llm_response
+
+            if chunk.candidates[0].finish_reason:
+                # Process the final chunk for potential tool calls or other content
+                if chunk.candidates[0].content.parts:
+                    final_response = LLMResponse("assistant", is_chunk=False)
+                    final_response.raw_completion = chunk
+                    final_response.result_chain = self._process_content_parts(
                         chunk.candidates[0],
-                        llm_response,
+                        final_response,
                         validate_output=False,
                     )
-                    # This response replaces the whole turn in conversation
-                    # history, so keep the narration and reasoning that were
-                    # already streamed before the tool call. Dropping them made
-                    # the user-visible text missing from history.
-                    if accumulated_text or accumulated_reasoning:
-                        parts = list(llm_response.result_chain.chain or [])
-                        if accumulated_text:
-                            parts.insert(0, Comp.Plain(accumulated_text))
-                            llm_response.result_chain = MessageChain(chain=parts)
-                        if accumulated_reasoning:
-                            # _process_content_parts already stored the reasoning
-                            # that came with the tool-call chunk itself, so append
-                            # to it instead of overwriting that part.
-                            llm_response.reasoning_content = accumulated_reasoning + (
-                                llm_response.reasoning_content or ""
-                            )
-                    llm_response.id = chunk.response_id
+                    final_response.id = chunk.response_id
                     if chunk.usage_metadata:
-                        llm_response.usage = self._extract_usage(chunk.usage_metadata)
-                    yield llm_response
-                    return
-
-                _f = False
-
-                # 提取 reasoning content
-                reasoning = self._extract_reasoning_content(chunk.candidates[0])
-                if reasoning:
-                    _f = True
-                    accumulated_reasoning += reasoning
-                    llm_response.reasoning_content = reasoning
-                if chunk.text:
-                    _f = True
-                    accumulated_text += chunk.text
-                    llm_response.result_chain = MessageChain(
-                        chain=[Comp.Plain(chunk.text)]
-                    )
-                if _f:
-                    yield llm_response
-
-                if chunk.candidates[0].finish_reason:
-                    # Process the final chunk for potential tool calls or other content
-                    if chunk.candidates[0].content.parts:
-                        final_response = LLMResponse("assistant", is_chunk=False)
-                        final_response.raw_completion = chunk
-                        final_response.result_chain = self._process_content_parts(
-                            chunk.candidates[0],
-                            final_response,
-                            validate_output=False,
-                        )
-                        final_response.id = chunk.response_id
-                        if chunk.usage_metadata:
-                            final_response.usage = self._extract_usage(
-                                chunk.usage_metadata
-                            )
-                    break
+                        final_response.usage = self._extract_usage(chunk.usage_metadata)
+                break
 
         # Yield final complete response with accumulated text
         if not final_response:
@@ -955,6 +957,8 @@ class ProviderGoogleGenAI(Provider):
         **kwargs,
     ) -> LLMResponse:
         conversation_id = kwargs.pop("conversation_id", None)
+        umo = kwargs.pop("umo", None)
+        request_id = kwargs.pop("request_id", None) or uuid.uuid4().hex
         if contexts is None:
             contexts = []
         new_record = None
@@ -989,12 +993,20 @@ class ProviderGoogleGenAI(Provider):
         if func_tool and not func_tool.empty():
             payloads["tool_choice"] = tool_choice
 
+        # Duplicate headers are removed by the transport hook, not by name matching.
+        request_headers = self.resolve_request_headers(
+            conversation_id=conversation_id,
+            umo=umo,
+            request_id=request_id,
+            model=str(payloads.get("model", "")),
+        )
+
         retry = 10
         keys = self.api_keys.copy()
 
         for _ in range(retry):
             try:
-                query_kwargs = {}
+                query_kwargs: dict[str, Any] = {"request_headers": request_headers}
                 if conversation_id:
                     query_kwargs["conversation_id"] = conversation_id
                 return await self._query(
@@ -1027,6 +1039,8 @@ class ProviderGoogleGenAI(Provider):
         **kwargs,
     ) -> AsyncGenerator[LLMResponse, None]:
         conversation_id = kwargs.pop("conversation_id", None)
+        umo = kwargs.pop("umo", None)
+        request_id = kwargs.pop("request_id", None) or uuid.uuid4().hex
         if contexts is None:
             contexts = []
         new_record = None
@@ -1061,12 +1075,20 @@ class ProviderGoogleGenAI(Provider):
         if func_tool and not func_tool.empty():
             payloads["tool_choice"] = tool_choice
 
+        # Duplicate headers are removed by the transport hook, not by name matching.
+        request_headers = self.resolve_request_headers(
+            conversation_id=conversation_id,
+            umo=umo,
+            request_id=request_id,
+            model=str(payloads.get("model", "")),
+        )
+
         retry = 10
         keys = self.api_keys.copy()
 
         for _ in range(retry):
             try:
-                query_kwargs = {}
+                query_kwargs: dict[str, Any] = {"request_headers": request_headers}
                 if conversation_id:
                     query_kwargs["conversation_id"] = conversation_id
                 async for response in self._query_stream(

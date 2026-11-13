@@ -133,6 +133,72 @@ async def test_provider_sdk_sends_exactly_one_user_agent(
 
 
 @pytest.mark.asyncio
+async def test_gemini_text_chat_dedupes_dynamic_headers(provider_http_server):
+    # Per-request headers must replace SDK defaults without duplicate values.
+    base_url, requests = provider_http_server
+    provider = ProviderGoogleGenAI(
+        {
+            "id": "test-provider",
+            "model": "test-model",
+            "key": ["test-key"],
+            "api_base": base_url,
+            "custom_headers": {
+                "user-agent": "custom/{model}",
+                "X-Goog-Api-Client": "client/{model}",
+            },
+        },
+        {},
+    )
+    try:
+        # The stub server returns no candidates, so text_chat raises after capture.
+        with pytest.raises(Exception, match="candidates is empty"):
+            await provider.text_chat(prompt="hi", conversation_id="cid-1")
+        assert len(requests) == 1
+        assert requests[0].getall("User-Agent") == ["custom/test-model"]
+        assert requests[0].getall("x-goog-api-client") == ["client/test-model"]
+    finally:
+        await provider.terminate()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "provider_cls", [ProviderOpenAIOfficial, ProviderOpenAIResponses, ProviderAnthropic]
+)
+async def test_custom_headers_replace_sdk_defaults_of_other_case(
+    provider_cls, provider_http_server
+):
+    base_url, requests = provider_http_server
+    provider = provider_cls(
+        {
+            "id": "test-provider",
+            "model": "test-model",
+            "key": ["test-key"],
+            "api_base": base_url,
+            "custom_headers": {
+                "user-agent": "custom/{model}",
+                "accept": "application/json; m={model}",
+                "x-stainless-lang": "static-lang",
+            },
+        },
+        {},
+    )
+    try:
+        headers = provider.resolve_request_headers(
+            conversation_id=None,
+            umo=None,
+            request_id="request-1",
+            model="test-model",
+            default_headers=provider.client.default_headers,
+        )
+        await provider.client.models.list(extra_headers=headers)
+        assert requests[0].getall("User-Agent") == ["custom/test-model"]
+        assert requests[0].getall("Accept") == ["application/json; m=test-model"]
+        assert requests[0].getall("X-Stainless-Lang") == ["static-lang"]
+    finally:
+        await provider.terminate()
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize(
     "provider_cls",
     [
