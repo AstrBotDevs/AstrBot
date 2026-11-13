@@ -29,7 +29,14 @@ _HEADER_SAFE_CHARACTERS = "".join(
 # Authentication headers carry API keys, which are never a template variable.
 # They are always sent exactly as configured.
 _FIXED_HEADERS = frozenset(
-    {"authorization", "proxy-authorization", "x-api-key", "api-key", "x-goog-api-key"}
+    {
+        "authorization",
+        "proxy-authorization",
+        "x-api-key",
+        "api-key",
+        "x-goog-api-key",
+        "x-auth-token",
+    }
 )
 
 

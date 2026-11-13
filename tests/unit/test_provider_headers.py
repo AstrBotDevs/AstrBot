@@ -136,6 +136,7 @@ def test_split_provider_headers_sends_auth_headers_as_configured():
             "X-Api-Key",
             "api-key",
             "x-goog-api-key",
+            "X-Auth-Token",
         ),
         "Bearer sk-{umo}{unknown}}{{",
     )
