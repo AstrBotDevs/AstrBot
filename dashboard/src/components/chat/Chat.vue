@@ -2386,7 +2386,7 @@ async function stopCurrentSession() {
 
 .chat-sidebar-rail-btn {
   border: 0;
-  border-radius: 8px;
+  border-radius: var(--astrbot-radius-navigation);
   background: transparent;
   color: rgb(var(--v-theme-on-surface));
   cursor: pointer;
@@ -2448,7 +2448,7 @@ async function stopCurrentSession() {
 .new-chat-btn,
 .settings-btn {
   color: rgb(var(--v-theme-on-surface));
-  border-radius: 8px;
+  border-radius: var(--astrbot-radius-navigation);
 }
 
 .sidebar-action-icon {
@@ -2467,7 +2467,7 @@ async function stopCurrentSession() {
   min-height: 36px;
   height: 36px;
   justify-content: flex-start;
-  border-radius: 8px;
+  border-radius: var(--astrbot-radius-navigation);
   text-transform: none;
   letter-spacing: 0;
   font-size: 14px;
@@ -2561,7 +2561,7 @@ async function stopCurrentSession() {
   width: 100%;
   min-height: 30px;
   border: 0;
-  border-radius: 8px;
+  border-radius: var(--astrbot-radius-navigation);
   background: transparent;
   color: inherit;
   display: flex;

@@ -612,7 +612,7 @@ function toggleSidebar() {
   min-height: 36px !important;
   margin-bottom: 2px !important;
   padding-inline-start: calc(10px + var(--indent-padding) / 2) !important;
-  border-radius: 8px !important;
+  border-radius: var(--astrbot-radius-navigation) !important;
   color: rgba(var(--v-theme-on-surface), 0.76) !important;
 }
 
@@ -666,7 +666,7 @@ function toggleSidebar() {
   justify-content: flex-start !important;
   gap: 0;
   padding-inline: 10px !important;
-  border-radius: 8px !important;
+  border-radius: var(--astrbot-radius-navigation) !important;
   color: rgba(var(--v-theme-on-surface), 0.76);
   font-size: 14px;
   font-weight: 500;

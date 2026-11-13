@@ -776,7 +776,7 @@ async function testSingleProvider(provider) {
   align-items: center;
   background: transparent;
   border: 0;
-  border-radius: 8px;
+  border-radius: var(--astrbot-radius-control);
   color: rgba(var(--v-theme-on-surface), 0.58);
   cursor: pointer;
   display: inline-flex;
@@ -817,7 +817,7 @@ async function testSingleProvider(provider) {
 
 .provider-workbench {
   border: 1px solid var(--provider-border);
-  border-radius: 16px;
+  border-radius: var(--astrbot-radius-card);
   background: var(--provider-surface);
   display: grid;
   flex: 1;
@@ -993,10 +993,6 @@ async function testSingleProvider(provider) {
 @media (max-width: 600px) {
   .provider-tabs-scroll {
     padding-inline: 4px;
-  }
-
-  .provider-workbench {
-    border-radius: 12px;
   }
 
   .provider-tab {

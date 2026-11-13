@@ -1239,7 +1239,7 @@ onUnmounted(() => {
     min-height: 34px;
     padding: 6px 9px 6px 12px;
     border: 0;
-    border-radius: 8px;
+    border-radius: var(--astrbot-radius-control);
     background: transparent;
     color: rgba(var(--v-theme-on-surface), 0.64);
     cursor: pointer;
@@ -1274,17 +1274,6 @@ onUnmounted(() => {
     background: rgba(var(--v-theme-on-surface), 0.07);
     color: rgb(var(--v-theme-on-surface));
     font-weight: 760;
-}
-
-.settings-nav__item--active::before {
-    position: absolute;
-    top: 8px;
-    bottom: 8px;
-    left: 0;
-    width: 2px;
-    border-radius: 999px;
-    background: rgba(var(--v-theme-on-surface), 0.52);
-    content: "";
 }
 
 .settings-nav__item--active .settings-nav__icon {
@@ -1326,7 +1315,7 @@ onUnmounted(() => {
 .settings-list-card {
     overflow: hidden;
     border: 1px solid var(--settings-border);
-    border-radius: 10px;
+    border-radius: var(--astrbot-radius-card);
     background: rgb(var(--v-theme-surface));
     box-shadow: none;
 }
@@ -1409,12 +1398,12 @@ onUnmounted(() => {
 
 .settings-item__control :deep(.v-btn) {
     min-height: 36px;
-    border-radius: 10px;
+    border-radius: var(--astrbot-radius-control);
     font-size: 0.86rem;
 }
 
 .settings-item__control :deep(.v-field) {
-    border-radius: 10px;
+    border-radius: var(--astrbot-radius-control);
     background-color: transparent;
 }
 
@@ -1468,7 +1457,7 @@ onUnmounted(() => {
     padding-bottom: 0 !important;
     overflow: hidden !important;
     border: 1px solid var(--settings-border) !important;
-    border-radius: 10px !important;
+    border-radius: var(--astrbot-radius-card) !important;
     background: rgb(var(--v-theme-surface)) !important;
     box-shadow: none !important;
 }
@@ -1509,7 +1498,7 @@ onUnmounted(() => {
 
 .api-key-panel :deep(.v-field),
 .api-key-panel :deep(.v-btn) {
-    border-radius: 10px;
+    border-radius: var(--astrbot-radius-control);
 }
 
 .api-key-panel :deep(.v-field) {
@@ -1538,7 +1527,7 @@ onUnmounted(() => {
 .api-key-scope-list {
     overflow: hidden;
     border: 1px solid var(--settings-border);
-    border-radius: 10px;
+    border-radius: var(--astrbot-radius-card);
 }
 
 .api-key-scope-item {
@@ -1615,7 +1604,7 @@ onUnmounted(() => {
     width: 100%;
     overflow-x: auto;
     border: 1px solid var(--settings-border);
-    border-radius: 10px;
+    border-radius: var(--astrbot-radius-card);
 }
 
 .settings-table-wrap :deep(.v-table) {
@@ -1675,7 +1664,7 @@ onUnmounted(() => {
     z-index: 30;
     width: min(420px, calc(100vw - 48px));
     border: 0;
-    border-radius: 12px;
+    border-radius: var(--astrbot-radius-card);
     background:
         linear-gradient(rgba(var(--v-theme-on-surface), 0.055), rgba(var(--v-theme-on-surface), 0.055)),
         rgba(var(--v-theme-surface), 0.74);
@@ -1713,7 +1702,7 @@ onUnmounted(() => {
     flex: 0 0 auto;
     min-height: 32px;
     border: 0;
-    border-radius: 9px;
+    border-radius: var(--astrbot-radius-control);
     color: rgba(var(--v-theme-on-surface), 0.76) !important;
     background-color: rgba(var(--v-theme-on-surface), 0.1) !important;
     box-shadow: none !important;
