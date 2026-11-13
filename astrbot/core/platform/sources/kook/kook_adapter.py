@@ -92,7 +92,14 @@ class KookPlatformAdapter(Platform):
             f'[KOOK] 收到来自"{event.channel_type.name}"渠道的消息, 消息类型为: {event.type.name}({event.type.value})'
         )
         event_type = event.type
-        if event_type in (KookMessageType.KMARKDOWN, KookMessageType.CARD):
+        if event_type in (
+            KookMessageType.KMARKDOWN,
+            KookMessageType.CARD,
+            KookMessageType.IMAGE,
+            KookMessageType.FILE,
+            KookMessageType.AUDIO,
+            KookMessageType.VIDEO,
+        ):
             if self._should_ignore_event_by_bot_nickname(event.author_id):
                 logger.debug("[KOOK] 判断此消息为来自机器人自身的消息, 忽略此消息")
                 return
@@ -420,7 +427,7 @@ class KookPlatformAdapter(Platform):
             file_name = file[1]
             file_url = file[2]
             if file_type == KookModuleType.FILE:
-                message.append(File(name=file_name, file=file_url))
+                message.append(File(name=file_name, url=file_url))
             elif file_type == KookModuleType.VIDEO:
                 message.append(Video(file=file_url))
             elif file_type == KookModuleType.AUDIO:
@@ -585,6 +592,31 @@ class KookPlatformAdapter(Platform):
                 logger.error(f"[KOOK] 原始消息内容: {data.to_json()}")
                 abm.message_str = "[卡片消息解析失败]"
                 abm.message = [Plain(text="[卡片消息解析失败]")]
+        elif data.type in (
+            KookMessageType.IMAGE,
+            KookMessageType.FILE,
+            KookMessageType.AUDIO,
+            KookMessageType.VIDEO,
+        ):
+            content = str(data.content)
+            abm.message_str = f"[{data.type.name.lower()}]"
+            if data.type == KookMessageType.IMAGE:
+                abm.message = [Image(file=content)]
+            elif data.type == KookMessageType.FILE:
+                attachments = getattr(data.extra, "attachments", None)
+                file_name = (
+                    attachments.get("name") if isinstance(attachments, dict) else None
+                )
+                abm.message = [File(name=file_name or "file", url=content)]
+            elif data.type == KookMessageType.AUDIO:
+                path_wav = await MediaResolver(
+                    content,
+                    media_type="audio",
+                    default_suffix=".wav",
+                ).to_path(target_format="wav")
+                abm.message = [Record(file=path_wav, url=path_wav)]
+            else:
+                abm.message = [Video(file=content)]
         else:
             logger.warning(f'[KOOK] 不支持的kook消息类型: "{data.type.name}"')
             abm.message_str = "[不支持的消息类型]"
