@@ -24,7 +24,11 @@ def _png_base64() -> str:
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("suffix", ["", "!"])
-async def test_streaming_snapshot_emits_only_new_text(monkeypatch, suffix):
+@pytest.mark.parametrize("snapshot_is_blocks", [False, True])
+@pytest.mark.parametrize("deltas_are_blocks", [False, True])
+async def test_streaming_snapshot_emits_only_new_text(
+    monkeypatch, suffix, snapshot_is_blocks, deltas_are_blocks
+):
     runner = DeerFlowAgentRunner()
     await runner.reset(
         request=ProviderRequest(prompt="Say hello", session_id="session-123"),
@@ -37,16 +41,29 @@ async def test_streaming_snapshot_emits_only_new_text(monkeypatch, suffix):
         runner, "_ensure_thread_id", AsyncMock(return_value="thread-123")
     )
     full_text = "Hello world" + suffix
+    snapshot_content = (
+        [
+            {"type": "text", "text": "Hello"},
+            {"type": "text", "text": " world" + suffix},
+        ]
+        if snapshot_is_blocks
+        else full_text
+    )
 
     async def stream_run(**kwargs):
         for content in ("Hello", " world"):
+            chunk = (
+                [{"type": "text", "text": content}] if deltas_are_blocks else content
+            )
             yield {
                 "event": "messages-tuple",
-                "data": [{"type": "AIMessageChunk", "content": content}, {}],
+                "data": [{"type": "AIMessageChunk", "content": chunk}, {}],
             }
         yield {
             "event": "values",
-            "data": {"messages": [{"id": "reply", "type": "ai", "content": full_text}]},
+            "data": {
+                "messages": [{"id": "reply", "type": "ai", "content": snapshot_content}]
+            },
         }
 
     monkeypatch.setattr(runner.api_client, "stream_run", stream_run)
@@ -62,7 +79,7 @@ async def test_streaming_snapshot_emits_only_new_text(monkeypatch, suffix):
     ]
     assert deltas == ["Hello", " world"] + ([suffix] if suffix else [])
     assert responses[-1].type == "llm_result"
-    assert responses[-1].data["chain"].get_plain_text() == full_text
+    assert "".join(part.text for part in responses[-1].data["chain"].chain) == full_text
 
 
 def test_build_payload_includes_configurable_runtime_overrides_and_legacy_context():
