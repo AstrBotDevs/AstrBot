@@ -1537,6 +1537,9 @@ async def convert_audio_format(
     audio_path: str,
     output_format: str = "amr",
     output_path: str | None = None,
+    *,
+    sample_rate: int | None = None,
+    channels: int | None = None,
 ) -> str:
     """Convert an audio file to the requested format with ffmpeg.
 
@@ -1546,6 +1549,10 @@ async def convert_audio_format(
             ``wav``.
         output_path: Optional output file path. When omitted, a temporary path is
             created under AstrBot's temp directory.
+        sample_rate: Optional output sample rate in Hz. WAV output with explicit
+            conversion options is encoded as 16-bit PCM.
+        channels: Optional output channel count. WAV output with explicit
+            conversion options is encoded as 16-bit PCM.
 
     Returns:
         The converted audio file path.
@@ -1554,7 +1561,11 @@ async def convert_audio_format(
         Exception: Raised when ffmpeg is unavailable or conversion fails.
     """
     source_path = Path(audio_path)
-    if source_path.suffix.lower() == f".{output_format}":
+    if (
+        source_path.suffix.lower() == f".{output_format}"
+        and sample_rate is None
+        and channels is None
+    ):
         # The magic-byte probe performs synchronous file I/O. Keep it off the
         # event loop because this helper is called while processing messages.
         if not source_path.exists():
@@ -1597,6 +1608,12 @@ async def convert_audio_format(
         args.extend(["-acodec", "libopus", "-ac", "1", "-ar", "16000"])
     elif output_format == "opus":
         args.extend(["-acodec", "libopus", "-ac", "1", "-ar", "16000"])
+    if output_format == "wav" and (sample_rate is not None or channels is not None):
+        args.extend(["-acodec", "pcm_s16le"])
+    if sample_rate is not None:
+        args.extend(["-ar", str(sample_rate)])
+    if channels is not None:
+        args.extend(["-ac", str(channels)])
     args.append(output_path)
 
     try:
@@ -1605,7 +1622,24 @@ async def convert_audio_format(
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
         )
-        _, stderr = await process.communicate()
+        try:
+            _, stderr = await process.communicate()
+        except asyncio.CancelledError:
+            if process.returncode is None:
+                try:
+                    process.kill()
+                except ProcessLookupError:
+                    pass
+            await process.communicate()
+            if output_path and os.path.exists(output_path):
+                try:
+                    os.remove(output_path)
+                except OSError as e:
+                    logger.warning(
+                        "Failed to remove cancelled audio output file: %s",
+                        e,
+                    )
+            raise
         if process.returncode != 0:
             if output_path and os.path.exists(output_path):
                 try:
@@ -1645,13 +1679,21 @@ async def convert_audio_to_amr(audio_path: str, output_path: str | None = None) 
     )
 
 
-async def convert_audio_to_wav(audio_path: str, output_path: str | None = None) -> str:
+async def convert_audio_to_wav(
+    audio_path: str,
+    output_path: str | None = None,
+    *,
+    sample_rate: int | None = None,
+    channels: int | None = None,
+) -> str:
     """Convert an audio file to WAV format.
 
     Args:
         audio_path: Source audio file path.
         output_path: Optional output file path. When omitted, a temporary path is
             created under AstrBot's temp directory.
+        sample_rate: Optional output sample rate in Hz.
+        channels: Optional output channel count.
 
     Returns:
         The converted WAV file path.
@@ -1660,20 +1702,32 @@ async def convert_audio_to_wav(audio_path: str, output_path: str | None = None) 
         audio_path=audio_path,
         output_format="wav",
         output_path=output_path,
+        sample_rate=sample_rate,
+        channels=channels,
     )
 
 
-async def ensure_wav(audio_path: str, output_path: str | None = None) -> str:
-    """Ensure the audio path points to wav format by extension/guess and convert when needed.
+async def ensure_wav(
+    audio_path: str,
+    output_path: str | None = None,
+    *,
+    sample_rate: int | None = None,
+    channels: int | None = None,
+) -> str:
+    """Ensure audio is WAV, optionally normalizing its PCM encoding.
 
-    If the file appears to already be WAV, return it directly to avoid extra
-    conversion. If the file does not exist yet, return the original path so
-    upstream retry logic can handle platform races.
+    If the file appears to already be WAV and no conversion options are set,
+    return it directly to avoid extra conversion. If the file does not exist yet,
+    return the original path so upstream retry logic can handle platform races.
 
     Args:
         audio_path: Local audio path to inspect and convert when needed.
         output_path: Optional destination path. When omitted, conversion helpers
             create a temporary file under AstrBot's temp directory.
+        sample_rate: Optional output sample rate in Hz. Setting conversion options
+            forces WAV input to be re-encoded as 16-bit PCM.
+        channels: Optional output channel count. Setting conversion options forces
+            WAV input to be re-encoded as 16-bit PCM.
 
     Returns:
         The original path when it is already WAV or unavailable; otherwise the
@@ -1693,7 +1747,7 @@ async def ensure_wav(audio_path: str, output_path: str | None = None) -> str:
         return audio_path
 
     audio_type = _get_audio_magic_type(audio_path)
-    if audio_type == "wav":
+    if audio_type == "wav" and sample_rate is None and channels is None:
         return audio_path
 
     if audio_type == "silk":
@@ -1703,9 +1757,22 @@ async def ensure_wav(audio_path: str, output_path: str | None = None) -> str:
             output_path = os.path.join(
                 temp_dir, f"media_audio_{generate_timestamp_id()}.wav"
             )
-        return await tencent_silk_to_wav(audio_path, output_path)
+        if sample_rate is None and channels is None:
+            return await tencent_silk_to_wav(audio_path, output_path)
+        return await tencent_silk_to_wav(
+            audio_path,
+            output_path,
+            sample_rate=sample_rate or 24000,
+        )
 
-    return await convert_audio_to_wav(audio_path, output_path)
+    if sample_rate is None and channels is None:
+        return await convert_audio_to_wav(audio_path, output_path)
+    return await convert_audio_to_wav(
+        audio_path,
+        output_path,
+        sample_rate=sample_rate,
+        channels=channels,
+    )
 
 
 async def ensure_jpeg(image_path: str, output_path: str | None = None) -> str:

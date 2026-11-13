@@ -169,7 +169,9 @@ Connect AstrBot to your favorite chat platform.
 | OpenAI Whisper | Speech-to-Text Services |
 | SenseVoice | Speech-to-Text Services |
 | Xiaomi MiMo Omni | Speech-to-Text Services |
+| [DeepSeek STT](https://api-docs.deepseek.com/zh-cn/guides/asr/) | Speech-to-Text Services |
 | OpenAI TTS | Text-to-Speech Services |
+| [DeepSeek TTS](https://api-docs.deepseek.com/zh-cn/guides/tts/) | Text-to-Speech Services |
 | Gemini TTS | Text-to-Speech Services |
 | GPT-Sovits-Inference | Text-to-Speech Services |
 | GPT-Sovits | Text-to-Speech Services |

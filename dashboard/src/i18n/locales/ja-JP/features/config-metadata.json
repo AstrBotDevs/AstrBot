@@ -2026,6 +2026,15 @@
         "description": "voice",
         "hint": "OpenAI TTS のボイスです。OpenAI のデフォルト対応値: 'alloy', 'echo', 'fable', 'onyx', 'nova', 'shimmer'"
       },
+      "deepseek-tts-voice": {
+        "description": "ボイス",
+        "hint": "DeepSeek TTS のボイスです。対応する voice_id が API に送信されます。",
+        "labels": ["Stella（女性、デフォルト）", "Tide（男性）"]
+      },
+      "deepseek-tts-filter-markdown": {
+        "description": "Markdown をフィルター",
+        "hint": "合成前に Markdown 書式を削除します。デフォルトで有効です。"
+      },
       "elevenlabs-tts-voice-id": {
         "description": "ボイス ID",
         "hint": "ElevenLabs のボイス ID です。https://elevenlabs.io/app/voice-library でボイス ID を参照してコピーできます。デフォルトは 'JBFqnCBsd6RMkjVDRZzb'（George）です。"

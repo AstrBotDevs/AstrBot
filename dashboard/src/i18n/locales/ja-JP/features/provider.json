@@ -35,6 +35,12 @@
     "openaiDecisionHints": {
       "apiBase": "OpenAI API のベース URL（既定は https://api.openai.com/v1）。/decisions で終わらない場合は自動で追加されます。",
       "model": "OpenAI Decisions は現在 gpt-6-luna に対応しています。"
+    },
+    "deepseekTtsHints": {
+      "apiBase": "DeepSeek TTS API のベース URL（既定は https://api.deepseek.com/v1）。/tools/tts は自動で追加されるため、/v1 を重複して追加しないでください。"
+    },
+    "deepseekSttHints": {
+      "apiBase": "DeepSeek STT API のベース URL（既定は https://api.deepseek.com/v1）。/tools/asr は自動で追加されるため、/v1 を重複して追加しないでください。"
     }
   },
   "availability": {

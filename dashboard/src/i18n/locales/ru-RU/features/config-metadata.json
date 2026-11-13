@@ -2026,6 +2026,15 @@
                 "description": "API Base URL",
                 "hint": "Голоса OpenAI TTS: alloy, echo и др."
             },
+            "deepseek-tts-voice": {
+                "description": "Голос",
+                "hint": "Голос DeepSeek TTS. В API отправляется соответствующий voice_id.",
+                "labels": ["Stella (женский, по умолчанию)", "Tide (мужской)"]
+            },
+            "deepseek-tts-filter-markdown": {
+                "description": "Фильтровать Markdown",
+                "hint": "Удалять разметку Markdown перед синтезом. Включено по умолчанию."
+            },
             "elevenlabs-tts-voice-id": {
                 "description": "ID голоса",
                 "hint": "ID голоса ElevenLabs. Просмотрите и скопируйте ID на https://elevenlabs.io/app/voice-library. По умолчанию 'JBFqnCBsd6RMkjVDRZzb' (George)."
