@@ -146,8 +146,9 @@ class ConversationCommands:
         Args:
             message: Stop command event, excluded from the request.
         """
+        umo = message.unified_msg_origin
         stopped_count = active_event_registry.request_agent_stop_all(
-            message.unified_msg_origin, exclude=message
+            umo, exclude=message
         )
 
         if stopped_count > 0:
