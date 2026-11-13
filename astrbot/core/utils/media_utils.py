@@ -234,7 +234,11 @@ def file_uri_to_path(file_uri: MediaRefStr) -> str:
     if netloc and netloc.lower() != "localhost":
         if len(netloc) == 2 and netloc[1] == ":" and netloc[0].isalpha():
             return str(Path(url2pathname(f"{netloc}{path}")))
-        return str(Path(url2pathname(f"//{netloc}{path}")))
+        if os.name == "nt":
+            return str(Path(url2pathname(f"//{netloc}{path}")))
+        # POSIX has no standard representation for a remote file URI authority.
+        # Preserve it rather than making urllib reject an otherwise valid image.
+        return str(Path(f"//{netloc}{path}"))
 
     path = url2pathname(path)
     # url2pathname keeps "/" on POSIX but converts it to "\" on Windows, so
