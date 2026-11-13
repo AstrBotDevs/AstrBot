@@ -240,7 +240,7 @@ async function handleDeleteSession(session: Session) {
   width: 100%;
   min-height: 54px;
   border: 0;
-  border-radius: 10px;
+  border-radius: var(--astrbot-radius-navigation);
   background: transparent !important;
   color: rgb(var(--v-theme-on-surface));
   display: flex;

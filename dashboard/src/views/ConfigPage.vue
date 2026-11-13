@@ -1123,7 +1123,7 @@ export default {
 }
 
 .config-toolbar :is(.v-field) {
-  border-radius: 10px;
+  border-radius: var(--astrbot-radius-control);
 }
 
 .config-toolbar-separator {
