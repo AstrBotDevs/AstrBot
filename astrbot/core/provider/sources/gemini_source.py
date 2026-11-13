@@ -439,7 +439,8 @@ class ProviderGoogleGenAI(Provider):
             elif role == "assistant":
                 parts = []
                 if isinstance(content, str):
-                    parts.append(types.Part.from_text(text=content))
+                    if content:
+                        parts.append(types.Part.from_text(text=content))
                 elif isinstance(content, list):
                     thinking_signature = None
                     text = ""
@@ -460,7 +461,13 @@ class ProviderGoogleGenAI(Provider):
                             )
                             thinking_signature = None
 
-                    if (
+                    if not text and not thinking_signature:
+                        # Nothing to send, e.g. a turn from another provider that only
+                        # kept an unsigned think block. An empty text part has no payload;
+                        # relays that drop empty strings forward it as a Part without data,
+                        # which Gemini rejects.
+                        pass
+                    elif (
                         not text
                         and thinking_signature
                         and "tool_calls" in message
