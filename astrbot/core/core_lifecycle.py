@@ -47,6 +47,7 @@ from astrbot.core.updater import AstrBotUpdater
 from astrbot.core.utils.event_loop_diagnostics import (
     create_event_loop_diagnostic_tasks,
 )
+from astrbot.core.utils.lang_utils import validate_global_language
 from astrbot.core.utils.llm_metadata import update_llm_metadata
 from astrbot.core.utils.migra_helper import migra
 from astrbot.core.utils.temp_dir_cleaner import TempDirCleaner
@@ -67,6 +68,9 @@ class AstrBotCoreLifecycle:
         self.log_broker = log_broker  # 初始化日志代理
         self.astrbot_config = astrbot_config  # 初始化配置
         self.db = db  # 初始化数据库
+
+        # 校验全局 language 配置,非法值记一次 warning(不改写文件)
+        validate_global_language(astrbot_config)
 
         self.subagents: SubAgentService | None = None
         self.agent_configs = AgentConfigStore(db)
