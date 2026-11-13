@@ -557,10 +557,11 @@ class ProviderAnthropic(Provider):
         self._apply_thinking_config(payloads)
         self._sanitize_assistant_messages(payloads)
 
+        client = self.client
         try:
             completion = await retry_provider_request(
                 "Anthropic",
-                lambda: self.client.messages.create(
+                lambda: client.messages.create(
                     **payloads,
                     stream=False,
                     extra_body=extra_body,
@@ -681,9 +682,10 @@ class ProviderAnthropic(Provider):
         self._apply_thinking_config(payloads)
         self._sanitize_assistant_messages(payloads)
 
+        client = self.client
         async with retry_provider_request_context(
             "Anthropic",
-            lambda: self.client.messages.stream(
+            lambda: client.messages.stream(
                 **payloads,
                 extra_body=extra_body,
                 extra_headers=build_conversation_headers(conversation_id),
@@ -981,6 +983,7 @@ class ProviderAnthropic(Provider):
                     request_max_retries=request_max_retries,
                     **query_kwargs,
                 ):
+                    # Never replay a stream after yielding output to the caller.
                     has_output = True
                     yield llm_response
                 return
