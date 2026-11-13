@@ -1,6 +1,7 @@
 import asyncio
 import hashlib
 from types import SimpleNamespace
+from uuid import NAMESPACE_URL, uuid5
 
 import httpx
 import pytest
@@ -24,6 +25,7 @@ UMO = "aiocqhttp:GroupMessage:100"
 CUSTOM_HEADERS = {
     "x-session": "{sha256:{conversation_id}}",
     "x-umo": "{umo}",
+    "x-umo-uuid": "{uuid5:{umo}}",
     "x-request": "{request_id}",
     "x-model": "{model}",
     "x-provider": "{provider_id}",
@@ -36,6 +38,7 @@ def _expected_headers(conversation_id="cid-1", model="gpt-4o", request_id="rid-1
     return {
         "x-session": hashlib.sha256(conversation_id.encode()).hexdigest(),
         "x-umo": UMO,
+        "x-umo-uuid": str(uuid5(NAMESPACE_URL, "astrbot:provider-header:" + UMO)),
         "x-request": request_id,
         "x-model": model,
         "x-provider": "provider-1",
@@ -164,11 +167,12 @@ async def test_openai_text_chat_omits_headers_with_missing_values(monkeypatch):
 
     headers = captured[0]["extra_headers"]
     assert "x-umo" not in headers
+    assert "x-umo-uuid" not in headers
     assert "x-astrbot-conversation-id" not in headers
     assert headers["x-request"] == "rid-1"
     # {conversation_id} falls back to the request ID.
     assert headers["x-session"] == hashlib.sha256(b"rid-1").hexdigest()
-    assert provider._omitted_header_logs == {"x-umo"}
+    assert provider._omitted_header_logs == {"x-umo", "x-umo-uuid"}
 
 
 @pytest.mark.asyncio
@@ -230,6 +234,7 @@ async def test_openai_text_chat_generates_distinct_request_ids_without_one(monke
         assert "x-astrbot-conversation-id" not in headers
         # The deprecated session_id parameter must not leak as {umo}.
         assert "x-umo" not in headers
+        assert "x-umo-uuid" not in headers
         assert (
             headers["x-session"]
             == hashlib.sha256(headers["x-request"].encode()).hexdigest()
