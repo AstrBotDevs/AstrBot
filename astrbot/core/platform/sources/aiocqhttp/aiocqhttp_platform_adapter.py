@@ -418,7 +418,21 @@ class AiocqhttpAdapter(Platform):
                         )
                         continue
 
-        abm.timestamp = int(time.time())
+        event_time = event.get("time")
+        if isinstance(event_time, str):
+            try:
+                event_time = int(event_time)
+            except ValueError:
+                event_time = None
+        if (
+            isinstance(event_time, int)
+            and not isinstance(event_time, bool)
+            and event_time > 0
+        ):
+            abm.timestamp = event_time
+        elif not get_reply:
+            # A quoted message with no valid send time has an unknown age.
+            abm.timestamp = 0
         abm.message_str = message_str
         abm.raw_message = event
 
