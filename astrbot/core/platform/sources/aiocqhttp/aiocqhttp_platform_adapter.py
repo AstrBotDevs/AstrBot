@@ -1,7 +1,10 @@
 import asyncio
+import errno
 import inspect
 import itertools
 import logging
+import socket
+import sys
 import time
 import uuid
 from collections.abc import Awaitable
@@ -425,6 +428,24 @@ class AiocqhttpAdapter(Platform):
         return abm
 
     def run(self) -> Awaitable[Any]:
+        """Start the reverse WebSocket server coroutine of this adapter.
+
+        The port is probed before the server starts because hypercorn enables
+        ``SO_REUSEADDR`` unconditionally, which on Windows lets a second process
+        bind a port that is already served and hides the conflict. On Windows
+        the probe therefore binds with ``SO_EXCLUSIVEADDRUSE``; on POSIX,
+        ``SO_REUSEADDR`` still rejects a live listener while tolerating
+        ``TIME_WAIT``. The probe only binds and never listens, so it leaves no
+        ``TIME_WAIT`` entry and cannot delay a quick restart. A host containing
+        a colon (``::`` or ``::1``) is probed with ``AF_INET6``, otherwise
+        ``AF_INET``.
+
+        Returns:
+            The awaitable returned by the aiocqhttp task runner.
+
+        Raises:
+            OSError: When the configured ws_reverse port is already in use.
+        """
         if not self.host or not self.port:
             logger.warning(
                 "aiocqhttp: 未配置 ws_reverse_host 或 ws_reverse_port，将使用默认值：http://0.0.0.0:6199",
@@ -432,15 +453,81 @@ class AiocqhttpAdapter(Platform):
             self.host = "0.0.0.0"
             self.port = 6199
 
+        bind_host = str(self.host)
+        # An IPv6 literal is commonly written as "[::1]". getaddrinfo rejects the
+        # brackets while hypercorn strips them before binding, so probing the raw value
+        # would refuse a configuration that would otherwise work. Normalise here and
+        # hand the same value to the server afterwards.
+        if bind_host.startswith("[") and bind_host.endswith("]"):
+            bind_host = bind_host[1:-1]
+        bind_port = int(self.port)
+        family = socket.AF_INET6 if ":" in bind_host else socket.AF_INET
+        probe = socket.socket(family, socket.SOCK_STREAM)
+        try:
+            if sys.platform == "win32":
+                # SO_REUSEADDR on Windows silently succeeds against a live
+                # listener, so only SO_EXCLUSIVEADDRUSE can detect it.
+                probe.setsockopt(socket.SOL_SOCKET, socket.SO_EXCLUSIVEADDRUSE, 1)
+            else:
+                # On POSIX SO_REUSEADDR still rejects a live listener while
+                # tolerating TIME_WAIT, which keeps fast restarts working.
+                probe.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            probe.bind((bind_host, bind_port))
+        except OSError as exc:
+            # A bad ws_reverse_host (unresolvable name, address not assigned to this
+            # machine) fails the bind for a reason that has nothing to do with a
+            # port conflict, so only EADDRINUSE gets the "already in use" wording.
+            if exc.errno == errno.EADDRINUSE:
+                # This probe is deliberately stricter than the server that follows it: a
+                # listener holding a single address (say 127.0.0.1) blocks a 0.0.0.0 bind
+                # here, while hypercorn would have accepted it with SO_REUSEADDR. Splitting
+                # the message tells the operator which of the two situations they are in,
+                # because only one of them is a competing backend.
+                connect_host = {"0.0.0.0": "127.0.0.1", "::": "::1"}.get(
+                    bind_host, bind_host
+                )
+                answering = False
+                try:
+                    with socket.create_connection(
+                        (connect_host, bind_port), timeout=1.0
+                    ):
+                        answering = True
+                except OSError:
+                    answering = False
+                if answering:
+                    logger.error(
+                        f"aiocqhttp: ws_reverse port {bind_host}:{bind_port} is already served. "
+                        "Another AstrBot instance, a backend that was never stopped, or another "
+                        f"program accepts connections there. Stop it before starting this one. "
+                        f"Original error: {exc!r}"
+                    )
+                else:
+                    logger.error(
+                        f"aiocqhttp: ws_reverse port {bind_host}:{bind_port} is held by a socket "
+                        "that does not accept connections. This is normally a backend still "
+                        "shutting down, or a listener bound to one address of this port while "
+                        f"this instance wants all of them. Retry shortly, or stop that listener. "
+                        f"Original error: {exc!r}"
+                    )
+            else:
+                logger.error(
+                    f"aiocqhttp: cannot bind ws_reverse address {bind_host}:{bind_port}: "
+                    f"{exc!r}. Check ws_reverse_host in the platform configuration."
+                )
+            raise
+        finally:
+            probe.close()
+
+        logger.info(
+            f"aiocqhttp: starting reverse WebSocket server on {bind_host}:{bind_port}",
+        )
         coro = self.bot.run_task(
-            host=self.host,
-            port=int(self.port),
+            host=bind_host,
+            port=bind_port,
             shutdown_trigger=self.shutdown_trigger_placeholder,
         )
 
-        for handler in logging.root.handlers[:]:
-            logging.root.removeHandler(handler)
-        logging.getLogger("aiocqhttp").setLevel(logging.ERROR)
+        logging.getLogger("aiocqhttp").setLevel(logging.WARNING)
         self.shutdown_event = asyncio.Event()
         return coro
 
