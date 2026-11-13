@@ -41,7 +41,9 @@ or deletes source Issues/PRs.
   Project, preview catch-up before writes. Skip archived items and draft issues.
 - Release version verification runs only during full scans. Event runs defer it to
   the next full scan, while preserving an existing published result when its
-  implementation links are unchanged.
+  implementation links are unchanged. They still require every associated merge
+  commit to be reachable from the trusted default branch before reporting
+  `已合入待发布`; a merged state alone is not integration evidence.
 - Validate the Project schema/options and calculate all changes before writing;
   skip unchanged values and clear stale text. Paginate every GraphQL connection,
   reject stalled cursors, and serialize runs. Apply mode prints the plan first;

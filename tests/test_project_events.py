@@ -153,6 +153,43 @@ class EventTests(unittest.TestCase):
         self.assertFalse(any("pullRequests(first:" in query for query in queries))
         self.assertFalse(any("items(first:" in query for query in queries))
 
+    def test_merged_pr_event_marks_integrated_delivery_pending_release(self):
+        merged = {
+            **self.pr,
+            "state": "MERGED",
+            "mergeCommit": {"oid": "a" * 40},
+        }
+        with (
+            patch.object(sync, "event_snapshot", return_value=([merged], {}, {})),
+            patch.object(sync, "connection", side_effect=[self.fields]),
+            patch.object(sync, "ancestor", return_value=True),
+            patch.object(sync.subprocess, "run", return_value=Mock(stdout="a" * 40)),
+        ):
+            plan = sync.reconcile("P", "AstrBotDevs/AstrBot", subject=2)
+
+        self.assertEqual(plan[0]["changes"]["Status"], "Done")
+        self.assertEqual(plan[0]["changes"]["交付进度"], "已合入待发布")
+
+    def test_issue_event_keeps_unreachable_merge_out_of_integrated_delivery(self):
+        merged = {
+            **self.pr,
+            "state": "MERGED",
+            "mergeCommit": {"oid": "a" * 40},
+        }
+        with (
+            patch.object(
+                sync,
+                "event_snapshot",
+                return_value=([self.issue, merged], {}, {1: [merged]}),
+            ),
+            patch.object(sync, "connection", side_effect=[self.fields]),
+            patch.object(sync, "ancestor", return_value=False),
+            patch.object(sync.subprocess, "run", return_value=Mock(stdout="b" * 40)),
+        ):
+            plan = sync.reconcile("P", "AstrBotDevs/AstrBot", subject=1)
+
+        self.assertEqual(plan[0]["changes"]["交付进度"], "尚未合入")
+
     def test_subject_reads_never_scan_repository_or_project_connections(self):
         node = {**self.issue, "issueState": "OPEN"}
         with (
