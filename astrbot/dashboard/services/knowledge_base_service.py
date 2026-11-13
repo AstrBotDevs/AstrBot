@@ -441,6 +441,7 @@ class KnowledgeBaseService:
         if not current_kb:
             raise KnowledgeBaseServiceError("知识库不存在")
         current = current_kb.kb
+        previous_name = current.kb_name
         update_data = {key: getattr(current, key, None) for key in update_keys}
         update_data.update(provided_updates)
 
@@ -450,6 +451,25 @@ class KnowledgeBaseService:
         )
         if not kb_helper:
             raise KnowledgeBaseServiceError("知识库不存在")
+
+        # Retrieval resolves knowledge bases by name from the configuration
+        # (`kb_names`), so a rename that is not propagated makes every lookup
+        # silently miss this knowledge base until the user re-selects it.
+        new_name = kb_helper.kb.kb_name
+        if new_name != previous_name:
+            config_mgr = getattr(self.core_lifecycle, "astrbot_config_mgr", None)
+            if config_mgr is not None:
+                for conf in config_mgr.confs.values():
+                    kb_names = conf.get("kb_names") or []
+                    if previous_name not in kb_names:
+                        continue
+                    renamed: list[str] = []
+                    for name in kb_names:
+                        resolved = new_name if name == previous_name else name
+                        if resolved not in renamed:
+                            renamed.append(resolved)
+                    conf["kb_names"] = renamed
+                    await conf.save_config_async()
         return kb_helper.kb.model_dump(), "更新知识库成功"
 
     async def delete_kb(self, data: object) -> tuple[None, str]:
