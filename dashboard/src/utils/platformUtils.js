@@ -106,7 +106,9 @@ export function getPlatformDisplayName(platformId) {
   const displayNameMap = {
     aiocqhttp: 'aiocqhttp (OneBot v11)',
     qq_official: 'qq_official (QQ 官方机器人平台)',
+    qq_official_webhook: 'qq_official_webhook (QQ 官方机器人 Webhook)',
     weixin_official_account: 'weixin_official_account (微信公众号)',
+    weixin_oc: 'weixin_oc (个人微信)',
     wecom: 'wecom (企业微信应用)',
     wecom_ai_bot: 'wecom_ai_bot (企业微信智能机器人)',
     lark: 'lark (飞书)',
@@ -114,6 +116,7 @@ export function getPlatformDisplayName(platformId) {
     telegram: 'telegram (Telegram)',
     discord: 'discord (Discord)',
     misskey: 'misskey (Misskey)',
+    mattermost: 'mattermost (Mattermost)',
     slack: 'slack (Slack)',
     kook: 'kook (KOOK)',
     vocechat: 'vocechat (VoceChat)',
