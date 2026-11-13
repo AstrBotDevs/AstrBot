@@ -5,6 +5,10 @@ from collections import defaultdict
 from contextlib import asynccontextmanager
 
 
+class SessionLockTimeoutError(TimeoutError):
+    """The session remained busy until the lock acquisition deadline."""
+
+
 class _PerLoopSessionLockManager:
     """Per-event-loop session lock manager; keeps original simple semantics."""
 
@@ -14,14 +18,22 @@ class _PerLoopSessionLockManager:
         self._access_lock = asyncio.Lock()
 
     @asynccontextmanager
-    async def acquire_lock(self, session_id: str):
+    async def acquire_lock(self, session_id: str, timeout: float | None = None):
         async with self._access_lock:
             lock = self._locks[session_id]
             self._lock_count[session_id] += 1
 
         try:
-            async with lock:
+            try:
+                await asyncio.wait_for(lock.acquire(), timeout=timeout)
+            except asyncio.TimeoutError as exc:
+                raise SessionLockTimeoutError(
+                    "Timed out waiting for session lock"
+                ) from exc
+            try:
                 yield
+            finally:
+                lock.release()
         finally:
             async with self._access_lock:
                 self._lock_count[session_id] -= 1
@@ -46,9 +58,21 @@ class SessionLockManager:
             return self._loop_managers.setdefault(loop, _PerLoopSessionLockManager())
 
     @asynccontextmanager
-    async def acquire_lock(self, session_id: str):
+    async def acquire_lock(self, session_id: str, timeout: float | None = None):
+        """Serialize a session, optionally bounding only the wait for ownership.
+
+        Args:
+            session_id: Session whose operations must be serialized.
+            timeout: Maximum acquisition wait in seconds, or None to wait indefinitely.
+
+        Yields:
+            Control while holding the session lock.
+
+        Raises:
+            SessionLockTimeoutError: If acquisition exceeds the timeout.
+        """
         manager = self._get_loop_manager()
-        async with manager.acquire_lock(session_id):
+        async with manager.acquire_lock(session_id, timeout=timeout):
             yield
 
 

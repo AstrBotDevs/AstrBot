@@ -4,6 +4,7 @@
 在一个会话中可以建立多个对话, 并且支持对话的切换和删除
 """
 
+import asyncio
 import json
 from collections.abc import Awaitable, Callable
 from typing import TYPE_CHECKING
@@ -19,6 +20,7 @@ from astrbot.core.db import BaseDatabase
 from astrbot.core.db.po import Conversation, ConversationV2
 from astrbot.core.session_overrides import update_overrides
 from astrbot.core.utils.datetime_utils import to_utc_timestamp
+from astrbot.core.utils.session_lock import SessionLockManager
 
 
 class ConversationManager:
@@ -31,6 +33,8 @@ class ConversationManager:
         self.db = db_helper
         self.acm = acm
         self.save_interval = 60  # 每 60 秒保存一次
+        # Selection changes are short-lived and independent of native execution locks.
+        self._selection_locks = SessionLockManager()
 
         # 会话删除回调函数列表（用于级联清理，如知识库配置）
         self._on_session_deleted_callbacks: list[Callable[[str], Awaitable[None]]] = []
@@ -120,15 +124,18 @@ class ConversationManager:
                 platform_id = parts[0]
         if not platform_id:
             platform_id = "unknown"
-        conv = await self.db.create_conversation(
-            user_id=unified_msg_origin,
-            platform_id=platform_id,
-            content=content,
-            title=title,
-            persona_id=persona_id,
-        )
-        self.session_conversations[unified_msg_origin] = conv.conversation_id
-        await sp.session_put(unified_msg_origin, "sel_conv_id", conv.conversation_id)
+        async with self._selection_locks.acquire_lock(unified_msg_origin):
+            conv = await self.db.create_conversation(
+                user_id=unified_msg_origin,
+                platform_id=platform_id,
+                content=content,
+                title=title,
+                persona_id=persona_id,
+            )
+            self.session_conversations[unified_msg_origin] = conv.conversation_id
+            await sp.session_put(
+                unified_msg_origin, "sel_conv_id", conv.conversation_id
+            )
         return conv.conversation_id
 
     async def switch_conversation(
@@ -141,29 +148,63 @@ class ConversationManager:
             conversation_id (str): 对话 ID, 是 uuid 格式的字符串
 
         """
-        self.session_conversations[unified_msg_origin] = conversation_id
-        await sp.session_put(unified_msg_origin, "sel_conv_id", conversation_id)
+        async with self._selection_locks.acquire_lock(unified_msg_origin):
+            self.session_conversations[unified_msg_origin] = conversation_id
+            await sp.session_put(unified_msg_origin, "sel_conv_id", conversation_id)
 
     async def delete_conversation(
         self,
         unified_msg_origin: str,
         conversation_id: str | None = None,
+        *,
+        on_current_deleted: Callable[[str], Awaitable[object]] | None = None,
     ) -> None:
-        """删除会话的对话，当 conversation_id 为 None 时删除会话当前的对话
+        """Delete a conversation and finish cleanup before selection can change.
 
         Args:
-            unified_msg_origin (str): 统一的消息来源字符串。格式为 platform_name:message_type:session_id
-            conversation_id (str): 对话 ID, 是 uuid 格式的字符串
-
+            unified_msg_origin: Unified message origin owning the selection.
+            conversation_id: Conversation to delete, or None for the selected one.
+            on_current_deleted: Optional cleanup for the deleted selection. Runs with
+                selection changes locked and must not create, switch, or delete a
+                conversation for the same origin.
         """
-        if not conversation_id:
-            conversation_id = await self.get_curr_conversation_id(unified_msg_origin)
-        if conversation_id:
-            await self.db.delete_conversation(cid=conversation_id)
+        async with self._selection_locks.acquire_lock(unified_msg_origin):
             curr_cid = await self.get_curr_conversation_id(unified_msg_origin)
-            if curr_cid == conversation_id:
-                self.session_conversations.pop(unified_msg_origin, None)
-                await sp.session_remove(unified_msg_origin, "sel_conv_id")
+            if not conversation_id:
+                conversation_id = curr_cid
+            if conversation_id:
+                deletion = asyncio.create_task(
+                    self.db.delete_conversation(cid=conversation_id)
+                )
+                try:
+                    try:
+                        await asyncio.shield(deletion)
+                    except asyncio.CancelledError:
+                        # Settle the database operation before releasing selection.
+                        await deletion
+                        raise
+                finally:
+                    if (
+                        curr_cid == conversation_id
+                        and deletion.done()
+                        and not deletion.cancelled()
+                        and deletion.exception() is None
+                    ):
+                        self.session_conversations.pop(unified_msg_origin, None)
+                        try:
+                            await sp.session_remove(unified_msg_origin, "sel_conv_id")
+                        finally:
+                            # Persisted deletion must invalidate buffered observations
+                            # even if preference cleanup fails or the caller cancels.
+                            if on_current_deleted is not None:
+                                cleanup = asyncio.ensure_future(
+                                    on_current_deleted(unified_msg_origin)
+                                )
+                                try:
+                                    await asyncio.shield(cleanup)
+                                except asyncio.CancelledError:
+                                    await cleanup
+                                    raise
 
     async def delete_conversations_by_user_id(self, unified_msg_origin: str) -> None:
         """删除会话的所有对话
@@ -172,9 +213,10 @@ class ConversationManager:
             unified_msg_origin (str): 统一的消息来源字符串。格式为 platform_name:message_type:session_id
 
         """
-        await self.db.delete_conversations_by_user_id(user_id=unified_msg_origin)
-        self.session_conversations.pop(unified_msg_origin, None)
-        await sp.session_remove(unified_msg_origin, "sel_conv_id")
+        async with self._selection_locks.acquire_lock(unified_msg_origin):
+            await self.db.delete_conversations_by_user_id(user_id=unified_msg_origin)
+            self.session_conversations.pop(unified_msg_origin, None)
+            await sp.session_remove(unified_msg_origin, "sel_conv_id")
 
         # 触发会话删除回调（级联清理）
         await self._trigger_session_deleted(unified_msg_origin)

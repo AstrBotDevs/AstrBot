@@ -4,6 +4,7 @@ import json
 import random
 import uuid
 from collections import defaultdict, deque
+from weakref import WeakValueDictionary
 
 from astrbot import logger
 from astrbot.api import star
@@ -44,7 +45,7 @@ class GroupChatContext:
     def __init__(self, acm: AstrBotConfigManager, context: star.Context) -> None:
         self.acm = acm
         self.context = context
-        self._locks: dict[str, asyncio.Lock] = {}
+        self._locks: WeakValueDictionary[str, asyncio.Lock] = WeakValueDictionary()
         self.raw_records: dict[str, deque[str]] = defaultdict(deque)
         self._record_ids: dict[str, deque[str]] = defaultdict(deque)
 
@@ -129,27 +130,48 @@ class GroupChatContext:
                 return random.random() < cfg["ar_possibility"]
         return False
 
-    async def remove_session(self, event: AstrMessageEvent) -> int:
-        umo = event.unified_msg_origin
+    async def remove_session(self, event: AstrMessageEvent | str) -> int:
+        """Discard pending observations for a command or dashboard deletion.
+
+        Args:
+            event: Message event or unified message origin to clear.
+
+        Returns:
+            Number of discarded observations.
+        """
+        umo = event if isinstance(event, str) else event.unified_msg_origin
+        records = self.raw_records.get(umo)
         lock = self._get_lock(umo)
         async with lock:
-            cnt = len(self.raw_records.get(umo, deque()))
+            # A queued clear only invalidates the buffer it originally observed.
+            if self.raw_records.get(umo) is not records:
+                return 0
+            cnt = len(records) if records is not None else 0
             self.raw_records.pop(umo, None)
             self._record_ids.pop(umo, None)
-        self._locks.pop(umo, None)
+        # Weak references retain the same lock while any holder or waiter uses it.
         return cnt
 
     async def handle_message(self, event: AstrMessageEvent) -> None:
+        """Buffer a group message unless its context is cleared while formatting.
+
+        Args:
+            event: Incoming group message to format and retain.
+        """
         if event.get_message_type() != MessageType.GROUP_MESSAGE:
             return
 
         umo = event.unified_msg_origin
         cfg = self.cfg(event)
+        records = self.raw_records[umo]
+        record_ids = self._record_ids[umo]
         final_message = await self._format_message(event, cfg)
 
         async with self._get_lock(umo):
-            records = self.raw_records[umo]
-            record_ids = self._record_ids[umo]
+            # Clearing a session invalidates formatting already in progress,
+            # such as an image caption that completes after dashboard deletion.
+            if self.raw_records.get(umo) is not records:
+                return
             record_id = uuid.uuid4().hex
             records.append(final_message)
             record_ids.append(record_id)
@@ -175,7 +197,10 @@ class GroupChatContext:
 
             raw_list = list(records)
             id_list = list(self._record_ids.get(umo, deque()))
-            if isinstance(record_id, str) and record_id in id_list:
+            if isinstance(record_id, str):
+                # A cleared or trimmed event cannot consume a newer buffer by index.
+                if record_id not in id_list:
+                    return
                 prompt_idx = id_list.index(record_id)
 
             if prompt_idx >= len(raw_list):
