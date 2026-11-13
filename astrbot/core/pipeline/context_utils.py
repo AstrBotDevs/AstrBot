@@ -4,7 +4,7 @@ import typing as T
 
 from astrbot import logger
 from astrbot.core.agent.conversation_events import ConversationEventWriter
-from astrbot.core.agent.message import dump_messages_with_checkpoints
+from astrbot.core.agent.message import dump_messages
 from astrbot.core.message.message_event_result import CommandResult, MessageEventResult
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from astrbot.core.star.star import star_map
@@ -104,7 +104,7 @@ async def call_event_hook(
     # get plugin retention. Earlier framework/custom-runner mutations stay unknown.
     if handlers and writer is not None and not writer.closed:
         if writer.runtime_context is not None:
-            history = dump_messages_with_checkpoints(
+            history = dump_messages(
                 [
                     m
                     for i, m in enumerate(writer.runtime_context.messages)
@@ -188,7 +188,7 @@ async def call_event_hook(
     finally:
         if handlers and writer is not None and not writer.closed:
             if writer.runtime_context is not None:
-                history = dump_messages_with_checkpoints(
+                history = dump_messages(
                     [
                         m
                         for i, m in enumerate(writer.runtime_context.messages)

@@ -181,10 +181,12 @@ class AstrAgentRuntime(AgentRuntime):
             if ("subagent", session_id) in self._sessions:
                 profile = "subagent"
             else:
-                conversation = await self.context.conversation_manager.get_conversation(
-                    umo, session_id
+                conversation = (
+                    await self.context.conversation_manager.db.get_conversation_by_id(
+                        session_id
+                    )
                 )
-                if conversation is None or conversation.cid != session_id:
+                if conversation is None or conversation.conversation_id != session_id:
                     profile = "subagent"
         if profile == "subagent":
             async with self._opening:
@@ -239,11 +241,13 @@ class AstrAgentRuntime(AgentRuntime):
                         conversation = await _get_session_conv(
                             input.event, self.context
                         )
-                        session_id = conversation.cid
+                        session_id = conversation.conversation_id
             if session_id is None:
                 raise ValueError("Unable to resolve the main agent conversation")
-            conversation = await self.context.conversation_manager.get_conversation(
-                umo, session_id
+            conversation = (
+                await self.context.conversation_manager.db.get_conversation_by_id(
+                    session_id
+                )
             )
             if self._closed:
                 raise ValueError("AstrBot agent runtime closed during session creation")

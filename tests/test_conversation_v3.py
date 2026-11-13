@@ -336,8 +336,8 @@ async def test_failed_migration_keeps_legacy_data_and_can_retry(tmp_path, monkey
 
 
 @pytest.mark.asyncio
-async def test_native_append_and_legacy_nested_edits_share_runtime(database):
-    from astrbot.core.agent.message import Message, dump_messages_with_checkpoints
+async def test_native_writes_leave_working_context_edits_to_runner(database):
+    from astrbot.core.agent.message import Message, dump_messages
     from astrbot.core.agent.run_context import ContextWrapper
 
     conv = await database.create_conversation("umo", "p")
@@ -346,11 +346,13 @@ async def test_native_append_and_legacy_nested_edits_share_runtime(database):
     writer.runtime_context = ContextWrapper(context=None, messages=[Message(role="user", content="input")])
     writer.stage_history([{"role": "user", "content": "input"}])
     native = await writer.append_message({"role": "assistant", "content": [{"type": "text", "text": "native"}]}, event_id="native")
-    assert len(writer.runtime_context.messages) == 2
+    assert len(writer.runtime_context.messages) == 1
+    writer.runtime_context.messages.append(Message.model_validate(native.payload["message"]))
     await writer.append_message({"role": "user", "content": "journal only"}, include_in_context=False)
-    assert writer.runtime_context.messages[-1]._no_save
+    assert len(writer.runtime_context.messages) == 2
+    assert not writer.runtime_context.messages[-1]._no_save
     writer.runtime_context.messages[1].content[0].text = "plugin edited"
-    history = dump_messages_with_checkpoints([m for m in writer.runtime_context.messages if not m._no_save])
+    history = dump_messages([m for m in writer.runtime_context.messages if not m._no_save])
     await writer.save_history(history)
     restored = await database.conversation_store.read(conv.conversation_id)
     assert restored.messages == history
@@ -418,12 +420,12 @@ async def test_old_backup_import_and_new_backup_round_trip(database):
 
 @pytest.mark.asyncio
 async def test_temporary_parts_are_recorded_once_and_excluded_from_projection(database):
-    from astrbot.core.agent.message import Message, TextPart, dump_messages_with_checkpoints
+    from astrbot.core.agent.message import Message, TextPart, dump_messages
     conv = await database.create_conversation("umo", "p")
     writer = ConversationEventWriter(database.conversation_store, await database.conversation_store.read(conv.conversation_id))
     await writer.start_turn({"kind": "agent"})
     messages = [Message(role="user", content=[TextPart(text="keep"), TextPart(text="temporary").mark_as_temp()])]
-    raw = dump_messages_with_checkpoints(messages, include_temporary=True)
+    raw = dump_messages(messages, include_temporary=True)
     writer.stage_history(raw)
     writer.stage_history(raw)
     await writer.save_history(raw)

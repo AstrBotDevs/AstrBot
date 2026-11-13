@@ -17,11 +17,8 @@ class PlatformMessageHistoryManager:
         sender_name: str | None = None,
         turn_id: str | None = None,
         max_messages: int | None = None,
-        llm_checkpoint_id: str | None = None,
     ) -> PlatformMessageHistory:
         """Insert a new platform message history record."""
-        if turn_id is None:
-            turn_id = llm_checkpoint_id
         return await self.db.insert_platform_message_history(
             platform_id=platform_id,
             user_id=user_id,
@@ -155,11 +152,8 @@ class PlatformMessageHistoryManager:
         message_id: int,
         content: dict | None = None,
         turn_id: str | None = None,
-        llm_checkpoint_id: str | None = None,
     ) -> None:
         """Update a platform message history record."""
-        if turn_id is None:
-            turn_id = llm_checkpoint_id
         await self.db.update_platform_message_history(
             message_id=message_id,
             content=content,

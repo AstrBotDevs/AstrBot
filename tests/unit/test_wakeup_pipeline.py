@@ -10,11 +10,11 @@ import pytest
 import pytest_asyncio
 from opentelemetry.trace import format_trace_id, get_current_span
 
-from astrbot.core.astr_agent_runtime import AstrAgentRuntime
 from astrbot.core.agent.hooks import BaseAgentRunHooks
 from astrbot.core.agent.run_context import ContextWrapper
 from astrbot.core.agent.runtime import AgentSessionRef
 from astrbot.core.agent_wakeup import wake_main_agent
+from astrbot.core.astr_agent_runtime import AstrAgentRuntime
 from astrbot.core.astr_agent_runtime import session as native_session
 from astrbot.core.astr_agent_runtime.main_agent import MainAgentBuildResult
 from astrbot.core.astr_agent_runtime.main_agent import builder as native_builder
@@ -90,6 +90,23 @@ async def runtime(monkeypatch):
         get_llm_tool_manager=lambda: FunctionToolManager(),
         send_message=AsyncMock(return_value=True),
     )
+
+    async def read_history(cid):
+        event = current_message_event.get()
+        umo = event.unified_msg_origin if event else conversation.user_id
+        record = await context.conversation_manager.get_conversation(umo, cid)
+        if record is None:
+            return None
+        return SimpleNamespace(
+            **vars(record),
+            conversation_id=record.cid,
+            content=json.loads(record.history),
+        )
+
+    context.conversation_manager.db = SimpleNamespace(
+        get_conversation_by_id=AsyncMock(side_effect=read_history)
+    )
+    context.conversation_manager._to_conversation = lambda record: record
 
     async def respond(**kwargs):
         event = current_message_event.get()

@@ -452,18 +452,18 @@ export function useMessages(options: UseMessagesOptions) {
     const run = activeRuns[0];
     if (!run?.run_id || isSessionRunning(sessionId)) return;
 
-    const checkpointId = run.turn_id || null;
+    const turnId = run.turn_id || null;
     const records = (messagesBySession[sessionId] || []).filter((record) => {
       return !(
-        checkpointId &&
-        record.turn_id === checkpointId &&
+        turnId &&
+        record.turn_id === turnId &&
         messageContent(record).type === "bot"
       );
     });
     const botRecord = normalizeHistoryRecord({
       id: `active-run-${run.run_id}`,
       content: run.content || { type: "bot", message: [] },
-      turn_id: checkpointId,
+      turn_id: turnId,
       created_at: new Date().toISOString(),
     });
     botRecord.content.isLoading = botRecord.content.message.length === 0;

@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING
 
@@ -73,9 +72,8 @@ class MainAgentSession(NativeAgentSession):
         input = turn.input
         event = input.event
         context = self.runtime.context
-        conversation = await context.conversation_manager.get_conversation(
-            self.umo, self.id
-        )
+        manager = context.conversation_manager
+        conversation = await manager.db.get_conversation_by_id(self.id)
         if conversation is None:
             raise ValueError("The bound agent conversation no longer exists")
         req = input.request if isinstance(input, MainAgentInput) else None
@@ -115,8 +113,8 @@ class MainAgentSession(NativeAgentSession):
         # Explicit unbound SDK/plugin contexts keep their established semantics.
         # Ordinary turns always reload this session's history after execution admission.
         if not explicit or req.conversation is not None:
-            req.conversation = conversation
-            req.contexts = json.loads(conversation.history)
+            req.conversation = manager._to_conversation(conversation)
+            req.contexts = conversation.content or []
         if not explicit:
             event.set_extra("provider_request", req)
         collected = CollectedInput(

@@ -315,13 +315,15 @@ ChatUI 展示历史仍独立保存。fork 查询消息后的上下文位置；�
 
 旧插件继续使用原有的可变 `ProviderRequest.contexts`、运行时消息对象和 ConversationManager 接口。业务写入保持追加，插件拿到与持久化状态隔离的工作副本；同一阶段的插件按顺序看到前面插件的修改。
 
-兼容层在原有保存边界比较阶段输入与最终输出，不对每个插件复制整份历史：
+兼容层在原有保存边界比较阶段输入与最终输出，不对每个插件复制整份历史。writer 的阶段暂存和数据库的完整历史更新共用 `reconcile_history()`，统一临时内容过滤、追加判断和消息 ID 保留；数据库更新仍在版本校验后的写入事务内计算差异：
 
 - 无变化：不产生上下文事件。
 
 - 原消息前缀不变、只追加：生成 `message.appended`。
 
-- 删除、重排、嵌套修改或整体替换：生成 `context.rebased(reason=legacy_replace)`。
+- 删除、重排、嵌套修改或整体替换：生成 `context.rebased(reason=legacy_replace)`。未变消息保留原 ID，相同消息的多个实例按原顺序匹配，新增或改变的消息获得新 ID。
+
+核心读取数据库返回的结构化消息列表；`Conversation.history` 的 JSON 字符串仅用于旧插件接口。writer 提交单条事件不会回写运行中的上下文，runner 自己维护工作消息；插件的独立写入仍通过版本冲突防止覆盖当前历史。`add_message_pair()` 统一写入事件，不再保留整份历史覆盖的后备路径。
 
 插件通过 `ctx.conversations` 操作上下文，不直接访问 writer：
 

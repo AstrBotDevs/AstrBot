@@ -1,7 +1,9 @@
 """Transactional event storage and legacy conversation projections."""
 
+import hashlib
 import json
 import uuid
+from collections import Counter, defaultdict, deque
 from collections.abc import Sequence
 from copy import deepcopy
 from dataclasses import dataclass, field
@@ -73,16 +75,21 @@ def persistent_messages(messages: list[dict], *, detach: bool = True) -> list[di
     """Project working messages while excluding temporary content.
 
     Args:
-        messages: Legacy message dictionaries, including checkpoint markers.
+        messages: Working message dictionaries with optional temporary content.
         detach: Copy the projected messages. When false, the result may share
             data with the input and is only safe for immediate read-only use.
 
     Returns:
         Dictionaries eligible for future model context.
+
+    Raises:
+        ValueError: A message has an unsupported role.
     """
     result = []
     for message in messages:
-        if message.get("_no_save") or message.get("role") == "_checkpoint":
+        if message.get("role") not in ("system", "user", "assistant", "tool"):
+            raise ValueError("Unsupported message role")
+        if message.get("_no_save"):
             continue
         content = message.get("content")
         if isinstance(content, list) and any(
@@ -102,6 +109,111 @@ def persistent_messages(messages: list[dict], *, detach: bool = True) -> list[di
             message = {k: v for k, v in message.items() if k != "_no_save"}
         result.append(deepcopy(message) if detach else message)
     return result
+
+
+def reconcile_history(
+    entries: list[dict],
+    history: list[dict],
+    *,
+    reason: str = "legacy_replace",
+    origin: str = "unknown",
+    turn_id: str | None = None,
+    excluded_counts: Counter[str] | None = None,
+) -> tuple[list[dict], list[dict]]:
+    """Convert a working history into context events while retaining message IDs.
+
+    Args:
+        entries: Previous context entries with stable message identities.
+        history: Complete working messages, including temporary content.
+        reason: Reason for replacing existing context.
+        origin: Host-attributed source of the change.
+        turn_id: Owning turn, if the change belongs to an execution.
+        excluded_counts: Optional execution-local counts, updated to avoid
+            recording the same temporary content at every staging boundary.
+
+    Returns:
+        Context entries and the events needed to reach them. Unchanged entries
+        retain their identities; new message bodies are detached from history.
+
+    Raises:
+        ValueError: A message has an unsupported role.
+    """
+    entries = list(entries)
+    drafts = []
+    known_exclusions = excluded_counts if excluded_counts is not None else Counter()
+    projected = []
+    current_exclusions = Counter()
+    for message in history:
+        effective = persistent_messages([message], detach=False)
+        projected.extend(effective)
+        if effective == [message]:
+            continue
+        fingerprint = hashlib.sha256(
+            json.dumps(message, sort_keys=True).encode()
+        ).hexdigest()
+        current_exclusions[fingerprint] += 1
+        if current_exclusions[fingerprint] <= known_exclusions[fingerprint]:
+            continue
+        identity = str(uuid.uuid4())
+        drafts.append(
+            {
+                "event_id": identity,
+                "type": "message.appended",
+                "payload": {
+                    "turn_id": turn_id,
+                    "message": deepcopy(message),
+                    "include_in_context": False,
+                },
+            }
+        )
+    # The projection can share data with the plugin until it is staged.
+    previous_count = len(entries)
+    if len(projected) >= previous_count and all(
+        entry["message"] == message for entry, message in zip(entries, projected)
+    ):
+        for message in projected[previous_count:]:
+            identity = str(uuid.uuid4())
+            drafts.append(
+                {
+                    "event_id": identity,
+                    "type": "message.appended",
+                    "payload": {
+                        "turn_id": turn_id,
+                        "message": deepcopy(message),
+                    },
+                }
+            )
+            entries.append({"id": identity, "message": deepcopy(message)})
+    else:
+        identity = str(uuid.uuid4())
+        retained_ids = defaultdict(deque)
+        for entry in entries:
+            retained_ids[json.dumps(entry["message"], sort_keys=True)].append(
+                entry["id"]
+            )
+        entries = []
+        for message in projected:
+            matches = retained_ids[json.dumps(message, sort_keys=True)]
+            entries.append(
+                {
+                    "id": matches.popleft() if matches else str(uuid.uuid4()),
+                    "message": deepcopy(message),
+                }
+            )
+        drafts.append(
+            {
+                "event_id": identity,
+                "type": "context.rebased",
+                "payload": {
+                    "reason": "reset" if not projected else reason,
+                    "origin": origin,
+                    "turn_id": turn_id,
+                    "messages": deepcopy(entries),
+                },
+            }
+        )
+    known_exclusions |= current_exclusions
+    return entries, drafts
 
 
 @dataclass
@@ -210,9 +322,7 @@ class ConversationStore:
             )
             if content is not None or inherited is not None:
                 for message in content or []:
-                    if message.get("role") != "_checkpoint" and persistent_messages(
-                        [message]
-                    ) != [message]:
+                    if persistent_messages([message]) != [message]:
                         conv.head_seq += 1
                         session.add(
                             ConversationEvent(
@@ -638,42 +748,11 @@ class ConversationStore:
                     "Conversation changed; reload before committing"
                 )
             if history is not None:
-                for message in history:
-                    if message.get("role") != "_checkpoint" and persistent_messages(
-                        [message]
-                    ) != [message]:
-                        drafts.append(
-                            {
-                                "type": "message.appended",
-                                "payload": {
-                                    "message": deepcopy(message),
-                                    "include_in_context": False,
-                                },
-                            }
-                        )
-                history = persistent_messages(history)
                 snapshot = await self.project(session, conv)
-                before = snapshot.messages
-                if history != before:
-                    if len(history) >= len(before) and history[: len(before)] == before:
-                        drafts.extend(
-                            {"type": "message.appended", "payload": {"message": m}}
-                            for m in history[len(before) :]
-                        )
-                    else:
-                        drafts.append(
-                            {
-                                "type": "context.rebased",
-                                "payload": {
-                                    "reason": "reset" if not history else reason,
-                                    "origin": origin,
-                                    "messages": [
-                                        {"id": str(uuid.uuid4()), "message": m}
-                                        for m in history
-                                    ],
-                                },
-                            }
-                        )
+                _, history_drafts = reconcile_history(
+                    snapshot.entries, history, reason=reason, origin=origin
+                )
+                drafts.extend(history_drafts)
             committed = []
             # Keep the ORM row clean while flushing events that later drafts may reference.
             head_seq = conv.head_seq
@@ -719,8 +798,8 @@ class ConversationStore:
                         message.get("role"), str
                     ):
                         raise ValueError("A message requires a role")
-                    if message["role"] == "_checkpoint":
-                        raise ValueError("Checkpoint markers are not model messages")
+                    if message["role"] not in ("system", "user", "assistant", "tool"):
+                        raise ValueError("Unsupported message role")
                     if not isinstance(payload.get("include_in_context", True), bool):
                         raise ValueError("include_in_context must be boolean")
                 elif kind == "context.rebased":

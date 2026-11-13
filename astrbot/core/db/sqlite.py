@@ -153,7 +153,7 @@ class SQLiteDatabase(BaseDatabase):
             await self._ensure_persona_folder_columns(conn)
             await self._ensure_persona_skills_column(conn)
             await self._ensure_persona_custom_error_message_column(conn)
-            await self._ensure_platform_message_history_checkpoint_column(conn)
+            await self._ensure_platform_message_history_event_columns(conn)
             await self._ensure_chatui_project_workspace_columns(conn)
             # The table-level unique constraint already provides an index for UMO
             # lookups. Older schemas also created this redundant explicit index.
@@ -204,7 +204,7 @@ class SQLiteDatabase(BaseDatabase):
                 text("ALTER TABLE personas ADD COLUMN custom_error_message TEXT")
             )
 
-    async def _ensure_platform_message_history_checkpoint_column(self, conn) -> None:
+    async def _ensure_platform_message_history_event_columns(self, conn) -> None:
         """Migrate WebChat associations from legacy markers to event identities.
 
         Args:
@@ -815,11 +815,8 @@ class SQLiteDatabase(BaseDatabase):
         sender_name=None,
         turn_id=None,
         max_messages=None,
-        llm_checkpoint_id: str | None = None,
     ):
         """Insert a new platform message history record."""
-        if turn_id is None:
-            turn_id = llm_checkpoint_id
         async with self.get_db() as session:
             session: AsyncSession
             async with session.begin():
@@ -944,11 +941,8 @@ class SQLiteDatabase(BaseDatabase):
         message_id: int,
         content: dict | None = None,
         turn_id: str | None = None,
-        llm_checkpoint_id: str | None = None,
     ) -> None:
         """Update a platform message history record."""
-        if turn_id is None:
-            turn_id = llm_checkpoint_id
         values = {}
         if content is not None:
             values["content"] = content

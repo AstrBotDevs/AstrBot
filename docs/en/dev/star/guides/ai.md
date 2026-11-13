@@ -494,6 +494,17 @@ A tool must not wait for another queued turn in its own session: that turn is wa
 
 ## Conversation Manager
 
+Runtime history contains only model messages (`system`, `user`, `assistant`, and
+`tool`). Legacy `_checkpoint` markers are consumed during database migration or
+old-backup import. Platform history links use `turn_id` and `context_event_id`;
+`llm_checkpoint_id` is no longer accepted. Internal message conversion uses
+`load_messages` / `dump_messages`, preserving the existing `_no_save` semantics.
+Core reads structured message lists directly from storage. The plugin-facing
+`Conversation.history` remains a JSON string. Full-history updates and running
+agent staging share the same reconciliation rules, retaining unchanged message
+IDs through reordering. Independent plugin writes do not modify a running
+agent's working messages; stale writes still fail with a revision conflict.
+
 Use `self.context.conversations` for conversation operations. It provides the existing
 `new_conversation`, `get_conversation`, selection, update, and deletion methods.
 `self.context.conversation_manager` remains a compatibility alias. The previous

@@ -13,7 +13,7 @@ import pytest
 from astrbot.core import agent_input as core_input
 from astrbot.core import llm_error_messages as agent_errors
 from astrbot.core.agent.mcp_client import MCPTool
-from astrbot.core.agent.message import Message, dump_messages_with_checkpoints
+from astrbot.core.agent.message import Message, dump_messages
 from astrbot.core.agent.runners.base import AgentState
 from astrbot.core.agent.tool import FunctionTool, ToolSet
 from astrbot.core.agent_wakeup import wake_main_agent
@@ -91,6 +91,7 @@ def mock_context():
         side_effect=lambda *args, **kwargs: ctx.get_using_provider(*args, **kwargs)
     )
     ctx.conversation_manager = MagicMock()
+    ctx.conversation_manager._to_conversation.side_effect = lambda record: record
     ctx.persona_manager = MagicMock()
     ctx.persona_manager.personas_v3 = []
     ctx.persona_manager.resolve_selected_persona = AsyncMock(
@@ -140,6 +141,7 @@ def mock_conversation():
     conv.cid = "conv-id"
     conv.persona_id = None
     conv.history = "[]"
+    conv.content = []
     return conv
 
 
@@ -176,6 +178,7 @@ def _new_mock_conversation(cid: str = "conv-id") -> MagicMock:
     conv.cid = cid
     conv.persona_id = None
     conv.history = "[]"
+    conv.content = []
     return conv
 
 
@@ -183,7 +186,7 @@ def _setup_conversation_for_build(conv_mgr, cid: str = "conv-id") -> MagicMock:
     conv_mgr.get_curr_conversation_id = AsyncMock(return_value=None)
     conv_mgr.new_conversation = AsyncMock(return_value=cid)
     conversation = _new_mock_conversation(cid=cid)
-    conv_mgr.get_conversation = AsyncMock(return_value=conversation)
+    conv_mgr.db.get_conversation_by_id = AsyncMock(return_value=conversation)
     return conversation
 
 
@@ -465,7 +468,7 @@ class TestGetSessionConv:
         """Test getting existing conversation."""
         conv_mgr = mock_context.conversation_manager
         conv_mgr.get_curr_conversation_id = AsyncMock(return_value="existing-conv-id")
-        conv_mgr.get_conversation = AsyncMock(return_value=mock_conversation)
+        conv_mgr.db.get_conversation_by_id = AsyncMock(return_value=mock_conversation)
 
         result = await request_build._get_session_conv(mock_event, mock_context)
 
@@ -473,8 +476,8 @@ class TestGetSessionConv:
         conv_mgr.get_curr_conversation_id.assert_called_once_with(
             mock_event.unified_msg_origin
         )
-        conv_mgr.get_conversation.assert_called_once_with(
-            mock_event.unified_msg_origin, "existing-conv-id"
+        conv_mgr.db.get_conversation_by_id.assert_called_once_with(
+            "existing-conv-id"
         )
 
     @pytest.mark.asyncio
@@ -487,7 +490,7 @@ class TestGetSessionConv:
         mock_conversation.cid = "new-conv-id"
         mock_conversation.persona_id = None
         mock_conversation.history = "[]"
-        conv_mgr.get_conversation = AsyncMock(return_value=mock_conversation)
+        conv_mgr.db.get_conversation_by_id = AsyncMock(return_value=mock_conversation)
 
         result = await request_build._get_session_conv(mock_event, mock_context)
 
@@ -501,19 +504,19 @@ class TestGetSessionConv:
         """Test retrying conversation creation after failure."""
         conv_mgr = mock_context.conversation_manager
         conv_mgr.get_curr_conversation_id = AsyncMock(return_value="conv-id")
-        conv_mgr.get_conversation = AsyncMock(return_value=None)
+        conv_mgr.db.get_conversation_by_id = AsyncMock(return_value=None)
         conv_mgr.new_conversation = AsyncMock(return_value="retry-conv-id")
         mock_conversation = MagicMock(spec=Conversation)
         mock_conversation.cid = "retry-conv-id"
         mock_conversation.persona_id = None
         mock_conversation.history = "[]"
-        conv_mgr.get_conversation.side_effect = [None, mock_conversation]
+        conv_mgr.db.get_conversation_by_id.side_effect = [None, mock_conversation]
 
         result = await request_build._get_session_conv(mock_event, mock_context)
 
         assert result == mock_conversation
         assert conv_mgr.new_conversation.call_count == 1
-        assert conv_mgr.get_conversation.call_count == 2
+        assert conv_mgr.db.get_conversation_by_id.call_count == 2
 
     @pytest.mark.asyncio
     async def test_get_session_conv_failure(self, mock_event, mock_context):
@@ -521,7 +524,7 @@ class TestGetSessionConv:
         conv_mgr = mock_context.conversation_manager
         conv_mgr.get_curr_conversation_id = AsyncMock(return_value=None)
         conv_mgr.new_conversation = AsyncMock(return_value="new-conv-id")
-        conv_mgr.get_conversation = AsyncMock(return_value=None)
+        conv_mgr.db.get_conversation_by_id = AsyncMock(return_value=None)
 
         with pytest.raises(RuntimeError, match="无法创建新的对话。"):
             await request_build._get_session_conv(mock_event, mock_context)
@@ -554,7 +557,7 @@ class TestApplyKb:
         assert isinstance(message.content, list)
         assert message.content[0].text == "test question"
         assert message.content[1].text == "[Related Knowledge Base Results]:\nKB result"
-        assert dump_messages_with_checkpoints([message]) == [
+        assert dump_messages([message]) == [
             {"role": "user", "content": [{"type": "text", "text": "test question"}]}
         ]
 
@@ -3794,10 +3797,11 @@ async def test_wakeup_collects_current_conversation_without_an_explicit_request(
     from astrbot.core.platform.message_session import MessageSession
 
     history = [{"role": "user", "content": "Existing context"}]
-    conversation = SimpleNamespace(cid="conversation", history=json.dumps(history))
+    conversation = SimpleNamespace(cid="conversation", history=json.dumps(history), content=history)
     manager = SimpleNamespace(
         get_curr_conversation_id=AsyncMock(return_value="conversation"),
-        get_conversation=AsyncMock(return_value=conversation),
+        db=SimpleNamespace(get_conversation_by_id=AsyncMock(return_value=conversation)),
+        _to_conversation=lambda record: record,
     )
     context = SimpleNamespace(conversation_manager=manager)
     event = AgentWakeupEvent(
@@ -3823,6 +3827,4 @@ async def test_wakeup_collects_current_conversation_without_an_explicit_request(
     assert request.contexts == history
     assert request.session_id == event.unified_msg_origin
     manager.get_curr_conversation_id.assert_awaited_once_with(event.unified_msg_origin)
-    manager.get_conversation.assert_awaited_once_with(
-        event.unified_msg_origin, "conversation"
-    )
+    manager.db.get_conversation_by_id.assert_awaited_once_with("conversation")

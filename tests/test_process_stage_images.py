@@ -1,8 +1,5 @@
 """Exercise the real preprocess/process/build/reset sequence with generated images."""
 
-from astrbot.core.agent.events import TextDelta, ExecutionMetrics
-from astrbot.core.agent.output import PlainOutput
-
 import asyncio
 import base64
 import copy
@@ -17,16 +14,18 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 from PIL import Image as PILImage
 
+from astrbot.core.agent.events import ExecutionMetrics, TextDelta
 from astrbot.core.agent.message import (
     ImageURLPart,
     Message,
     TextPart,
-    bind_checkpoint_messages,
-    dump_messages_with_checkpoints,
+    dump_messages,
+    load_messages,
 )
+from astrbot.core.agent.output import PlainOutput
 from astrbot.core.agent.tool import FunctionTool, ToolSet
-from astrbot.core.astr_agent_runtime import main_agent as main
 from astrbot.core.astr_agent_runtime import AstrAgentRuntime
+from astrbot.core.astr_agent_runtime import main_agent as main
 from astrbot.core.astr_agent_runtime import session as native_session
 from astrbot.core.astr_agent_runtime.main_agent import builder as builder_build
 from astrbot.core.astr_agent_runtime.main_agent import (
@@ -127,6 +126,7 @@ def harness(tmp_path, monkeypatch):
         user_id="test:FriendMessage:images",
         persona_id=None,
         history="[]",
+        content=[],
         token_usage=None,
     )
     context.conversation_manager.get_curr_conversation_id = AsyncMock(
@@ -139,6 +139,18 @@ def harness(tmp_path, monkeypatch):
     context.conversation_manager.get_conversation = AsyncMock(
         side_effect=get_conversation, return_value=conversation
     )
+    context.conversation_manager.db.get_conversation_by_id = AsyncMock(
+        side_effect=lambda cid: SimpleNamespace(
+            **{
+                **vars(conversation),
+                "cid": cid,
+                "conversation_id": cid,
+                "user_id": cid.removeprefix("conv:")
+                if cid.startswith("conv:") else conversation.user_id,
+            }
+        )
+    )
+    context.conversation_manager._to_conversation.side_effect = lambda record: record
     context.conversation_manager.update_conversation = AsyncMock()
     provider = MagicMock(spec=Provider)
     provider.provider_config = {
@@ -408,9 +420,9 @@ async def test_persistent_animation_guidance_survives_history_reload(harness, tm
 
     message = Message.model_validate(await req.assemble_context())
     sent = Provider._ensure_message_to_dicts(harness.provider, [message])
-    saved = dump_messages_with_checkpoints([message])
+    saved = dump_messages([message])
     replayed = Provider._ensure_message_to_dicts(
-        harness.provider, bind_checkpoint_messages(saved)
+        harness.provider, load_messages(saved)
     )
 
     assert any(
@@ -646,7 +658,7 @@ async def test_plugin_request_extra_metadata_hook_and_history(
     assert detail["image_url"]["url"] == str(source)
     assert req.extra_user_content_parts[2]["image_url"]["detail"] == "high"
     assert req.extra_user_content_parts[2]["_no_save"]
-    saved = dump_messages_with_checkpoints(harness.captured[0].run_context.messages)
+    saved = dump_messages(harness.captured[0].run_context.messages)
     old_user = next(message for message in saved if message["role"] == "user")
     assert (
         old_user["content"][0]["image_url"]["url"]
@@ -1656,7 +1668,7 @@ async def test_temporary_skipped_image_does_not_persist_its_path(harness, tmp_pa
     )
     context = await req.assemble_context()
     assert any(str(source) in part.get("text", "") for part in context["content"])
-    saved = dump_messages_with_checkpoints([Message.model_validate(context)])
+    saved = dump_messages([Message.model_validate(context)])
     assert saved[0]["content"] == [{"type": "text", "text": "describe"}]
 
 

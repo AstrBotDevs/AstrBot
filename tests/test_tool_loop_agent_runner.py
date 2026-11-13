@@ -2279,7 +2279,7 @@ async def test_event_journal_records_requests_tools_and_final_context(
     tmp_path, runner, provider_request, mock_tool_executor, mock_hooks, streaming
 ):
     from astrbot.core.agent.conversation_events import ConversationEventWriter
-    from astrbot.core.agent.message import dump_messages_with_checkpoints
+    from astrbot.core.agent.message import dump_messages
     from astrbot.core.db.sqlite import SQLiteDatabase
 
     db = SQLiteDatabase(str(tmp_path / "runner_events.db"))
@@ -2298,7 +2298,7 @@ async def test_event_journal_records_requests_tools_and_final_context(
         writer.runtime_context = runner.run_context
         await writer.start_turn({"kind": "agent"})
         await collect_events(runner.step_until_done(3))
-        await writer.save_history(dump_messages_with_checkpoints(runner.run_context.messages))
+        await writer.save_history(dump_messages(runner.run_context.messages))
         await writer.finish_turn("completed")
         events = await db.conversation_store.events(conv.conversation_id)
         types = [e.type for e in events]
@@ -2690,16 +2690,16 @@ async def test_lifecycle_terminal_paths_notify_once(
         )
     elif exit_kind == "exception":
         runner.request_context_manager.process = AsyncMock(
-            side_effect=RuntimeError("checkpoint failed")
+            side_effect=RuntimeError("history save failed")
         )
     else:
         runner.request_stop()
 
     if exit_kind == "exception":
-        with pytest.raises(RuntimeError, match="checkpoint failed"):
+        with pytest.raises(RuntimeError, match="history save failed"):
             async for _ in runner.step_until_done(3):
                 pass
-        assert runner.run_context.run_error == "RuntimeError: checkpoint failed"
+        assert runner.run_context.run_error == "RuntimeError: history save failed"
         hooks.on_agent_done.assert_awaited_once_with(runner.run_context, None)
     else:
         async for _ in runner.step_until_done(3):

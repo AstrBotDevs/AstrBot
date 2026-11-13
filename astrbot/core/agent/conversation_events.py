@@ -1,10 +1,8 @@
 """Host-side event collection and branch-bound conversation commits."""
 
 import asyncio
-import hashlib
-import json
 import uuid
-from collections import Counter, defaultdict, deque
+from collections import Counter
 from copy import deepcopy
 
 from sqlalchemy.exc import SQLAlchemyError
@@ -13,7 +11,7 @@ from astrbot.core.agent.response import AgentResponse
 from astrbot.core.db.conversation import (
     CONTEXT_TYPES,
     ConversationSnapshot,
-    persistent_messages,
+    reconcile_history,
 )
 from astrbot.core.sentinels import NOT_GIVEN
 
@@ -101,9 +99,7 @@ class ConversationEventWriter:
                 "context.rebased",
             }:
                 payload.setdefault("turn_id", self.turn_id)
-            await self.append(
-                response.type, payload, event_id=response.event_id, sync_runtime=False
-            )
+            await self.append(response.type, payload, event_id=response.event_id)
         else:
             return False
         return True
@@ -114,7 +110,6 @@ class ConversationEventWriter:
         payload: dict,
         *,
         event_id=None,
-        sync_runtime=True,
     ):
         """Commit one common protocol event without exposing database internals.
 
@@ -122,7 +117,6 @@ class ConversationEventWriter:
             event_type: Core or namespaced plugin event type.
             payload: JSON-serializable event data.
             event_id: Stable identity reused for delivery retries.
-            sync_runtime: Apply plugin writes to working context; runner events already did so.
 
         Returns:
             The acknowledged immutable event.
@@ -186,29 +180,6 @@ class ConversationEventWriter:
                 self._entries = snapshot.entries
                 self._committed_entries = tuple(self._entries)
                 self._pending.clear()
-                if sync_runtime and self.runtime_context is not None:
-                    from astrbot.core.agent.message import Message
-
-                    if event_type == "message.appended":
-                        message = Message.model_validate(deepcopy(payload["message"]))
-                        message._no_save = not payload.get("include_in_context", True)
-                        self.runtime_context.messages.append(message)
-                        if message._no_save:
-                            excluded = deepcopy(payload["message"])
-                            excluded["_no_save"] = True
-                            fingerprint = hashlib.sha256(
-                                json.dumps(excluded, sort_keys=True).encode()
-                            ).hexdigest()
-                            self._excluded_counts[fingerprint] += 1
-                    else:
-                        leading_system = self.runtime_context.messages[:1]
-                        if not leading_system or leading_system[0].role != "system":
-                            leading_system = []
-                        self.runtime_context.messages = leading_system + [
-                            Message.model_validate(m) for m in snapshot.messages
-                        ]
-                elif sync_runtime and self.request is not None:
-                    self.request.contexts = snapshot.messages
             return acknowledged
 
     async def append_message(
@@ -218,7 +189,7 @@ class ConversationEventWriter:
         include_in_context=True,
         event_id=None,
     ):
-        """Persist a message and synchronize the runner's working context.
+        """Persist a message without modifying the execution's working context.
 
         Args:
             message: AstrBot message dictionary.
@@ -326,79 +297,15 @@ class ConversationEventWriter:
             reason: Reason for a replacement, such as compaction.
             origin: Trusted mutation source: user, plugin, system, or unknown.
         """
-        projected = []
-        excluded_counts = Counter()
-        for message in history:
-            effective = persistent_messages([message], detach=False)
-            projected.extend(effective)
-            if message.get("role") == "_checkpoint" or effective == [message]:
-                continue
-            fingerprint = hashlib.sha256(
-                json.dumps(message, sort_keys=True).encode()
-            ).hexdigest()
-            excluded_counts[fingerprint] += 1
-            if excluded_counts[fingerprint] <= self._excluded_counts[fingerprint]:
-                continue
-            identity = str(uuid.uuid4())
-            self._pending.append(
-                {
-                    "event_id": identity,
-                    "type": "message.appended",
-                    "payload": {
-                        "turn_id": self.turn_id,
-                        "message": deepcopy(message),
-                        "include_in_context": False,
-                    },
-                }
-            )
-        self._excluded_counts |= excluded_counts
-        # The projection can share data with the plugin until it is staged.
-        previous_count = len(self._entries)
-        if len(projected) >= previous_count and all(
-            entry["message"] == message
-            for entry, message in zip(self._entries, projected)
-        ):
-            for message in projected[previous_count:]:
-                identity = str(uuid.uuid4())
-                self._pending.append(
-                    {
-                        "event_id": identity,
-                        "type": "message.appended",
-                        "payload": {
-                            "turn_id": self.turn_id,
-                            "message": deepcopy(message),
-                        },
-                    }
-                )
-                self._entries.append({"id": identity, "message": deepcopy(message)})
-        else:
-            identity = str(uuid.uuid4())
-            retained_ids = defaultdict(deque)
-            for entry in self._entries:
-                retained_ids[json.dumps(entry["message"], sort_keys=True)].append(
-                    entry["id"]
-                )
-            self._entries = []
-            for message in projected:
-                matches = retained_ids[json.dumps(message, sort_keys=True)]
-                self._entries.append(
-                    {
-                        "id": matches.popleft() if matches else str(uuid.uuid4()),
-                        "message": deepcopy(message),
-                    }
-                )
-            self._pending.append(
-                {
-                    "event_id": identity,
-                    "type": "context.rebased",
-                    "payload": {
-                        "reason": "reset" if not projected else reason,
-                        "origin": origin,
-                        "turn_id": self.turn_id,
-                        "messages": deepcopy(self._entries),
-                    },
-                }
-            )
+        self._entries, drafts = reconcile_history(
+            self._entries,
+            history,
+            reason=reason,
+            origin=origin,
+            turn_id=self.turn_id,
+            excluded_counts=self._excluded_counts,
+        )
+        self._pending.extend(drafts)
 
     async def save_history(
         self, history: list[dict], *, token_usage=None, origin="unknown"
@@ -435,12 +342,12 @@ class ConversationEventWriter:
             self._pending.clear()
             self._committed_entries = tuple(self._entries)
             if self.runtime_context is not None:
-                from astrbot.core.agent.message import bind_checkpoint_messages
+                from astrbot.core.agent.message import load_messages
 
                 system = self.runtime_context.messages[:1]
                 if not system or system[0].role != "system":
                     system = []
-                self.runtime_context.messages = system + bind_checkpoint_messages(
+                self.runtime_context.messages = system + load_messages(
                     deepcopy(history)
                 )
             elif self.request is not None:

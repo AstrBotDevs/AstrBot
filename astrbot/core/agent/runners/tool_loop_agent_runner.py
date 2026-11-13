@@ -36,7 +36,7 @@ from astrbot.core.agent.message import (
     ImageURLPart,
     TextPart,
     ThinkPart,
-    dump_messages_with_checkpoints,
+    dump_messages,
 )
 from astrbot.core.agent.tool import FunctionTool, ToolSet
 from astrbot.core.agent.tool_image_cache import tool_image_cache
@@ -83,7 +83,7 @@ from ..message import (
     ContentPart,
     Message,
     ToolCallMessageSegment,
-    bind_checkpoint_messages,
+    load_messages,
 )
 from ..output import OutputComponent, PlainOutput
 from ..response import AgentResponse, AgentStats
@@ -392,7 +392,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             self.req.func_tool = light_set
 
         # append existing messages in the run context
-        messages = bind_checkpoint_messages(request.contexts or [])
+        messages = load_messages(request.contexts or [])
         if (
             request.prompt is not None
             or request.image_urls
@@ -1026,7 +1026,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         return AgentResponse(
             "context.updated",
             {
-                "messages": dump_messages_with_checkpoints(
+                "messages": dump_messages(
                     [
                         m
                         for i, m in enumerate(self.run_context.messages)

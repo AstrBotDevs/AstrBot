@@ -13,10 +13,10 @@ from astrbot.core.agent.message import (
     AssistantMessageSegment,
     ContentPart,
     UserMessageSegment,
-    dump_messages_with_checkpoints,
+    dump_messages,
 )
 from astrbot.core.db import BaseDatabase
-from astrbot.core.db.conversation import ConversationConflictError, ConversationStore
+from astrbot.core.db.conversation import ConversationConflictError
 from astrbot.core.db.po import (
     Conversation,
     ConversationData,
@@ -106,9 +106,7 @@ class ConversationManager:
         if not isinstance(content, (str, list)):
             raise ValueError("content must be text or a list of content parts")
         message = UserMessageSegment(content=content)
-        serialized = dump_messages_with_checkpoints([message], include_temporary=True)[
-            0
-        ]
+        serialized = dump_messages([message], include_temporary=True)[0]
         writer = await self._event_writer(conversation_id=cid)
         saved = await writer.append_message(serialized, event_id=message_id)
         return saved.event_id
@@ -469,32 +467,21 @@ class ConversationManager:
         Raises:
             Exception: If the conversation with the given ID is not found
         """
-        if isinstance(self.db.conversation_store, ConversationStore):
-            snapshot = await self.db.conversation_store.read(cid)
-            if snapshot is None:
-                raise ValueError(f"Conversation with id {cid} not found")
-            messages = [
-                m.model_dump() if hasattr(m, "model_dump") else m
-                for m in (user_message, assistant_message)
-            ]
-            await self.db.conversation_store.append(
-                cid,
-                [
-                    {"type": "message.appended", "payload": {"message": message}}
-                    for message in messages
-                ],
-                expected_leaf=snapshot.conversation.leaf_event_id,
-            )
-            return
-        conv = await self.db.get_conversation_by_id(cid=cid)
-        if conv is None:
+        snapshot = await self.db.conversation_store.read(cid)
+        if snapshot is None:
             raise ValueError(f"Conversation with id {cid} not found")
-        history = conv.content or []
-        history.extend(
+        messages = [
             m.model_dump() if hasattr(m, "model_dump") else m
             for m in (user_message, assistant_message)
+        ]
+        await self.db.conversation_store.append(
+            cid,
+            [
+                {"type": "message.appended", "payload": {"message": message}}
+                for message in messages
+            ],
+            expected_leaf=snapshot.conversation.leaf_event_id,
         )
-        await self.db.update_conversation(cid=cid, content=history)
 
     async def get_human_readable_context(
         self,
@@ -512,10 +499,10 @@ class ConversationManager:
             page_size (int): 每页大小
 
         """
-        conversation = await self.get_conversation(unified_msg_origin, conversation_id)
+        conversation = await self.db.get_conversation_by_id(conversation_id)
         if not conversation:
             return [], 0
-        history = json.loads(conversation.history)
+        history = conversation.content or []
 
         # contexts_groups 存放按顺序的段落（每个段落是一个 str 列表），
         # 之后会被展平成一个扁平的 str 列表返回。

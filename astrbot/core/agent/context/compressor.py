@@ -11,7 +11,7 @@ from ..event_stream import (
     request_context_for_journal,
     request_recorder_kwargs,
 )
-from ..message import Message, dump_messages_with_checkpoints
+from ..message import Message, dump_messages
 from ..response import AgentResponse
 from .token_counter import EstimateTokenCounter, TokenCounter
 
@@ -261,10 +261,9 @@ class LLMSummaryCompressor:
 
         summary_contexts = [
             Message.model_validate(item)
-            for item in dump_messages_with_checkpoints(
+            for item in dump_messages(
                 [message for message in summary_contexts if not message._no_save]
             )
-            if item.get("role") != "_checkpoint"
         ]
         if not summary_contexts:
             return messages

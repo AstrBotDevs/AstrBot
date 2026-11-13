@@ -330,7 +330,7 @@ class PlatformMessageHistory(TimestampMixin, SQLModel, table=True):
     """This class represents the message history for a specific platform.
 
     It stores user, bot, and platform-specific messages independently from LLM
-    conversation checkpoints.
+    conversation events.
     """
 
     __tablename__: str = "platform_message_history"
@@ -350,11 +350,6 @@ class PlatformMessageHistory(TimestampMixin, SQLModel, table=True):
     turn_id: str | None = Field(default=None, index=True)
     context_event_id: str | None = Field(default=None, index=True)
     is_active: bool = Field(default=True)
-
-    @property
-    def llm_checkpoint_id(self) -> str | None:
-        """Expose the old plugin-facing association name during migration."""
-        return self.turn_id
 
     __table_args__ = (
         Index(

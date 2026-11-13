@@ -514,7 +514,9 @@ async def test_large_append_keeps_exact_display_tip_forkable_without_snapshot(
             conversation_updates.append(statement)
         if statement.startswith("INSERT INTO conversation_events"):
             assert not many
-            event_insert_sizes.append(len(params) // len(ConversationEvent.__table__.columns))
+            event_insert_sizes.append(
+                len(params) // len(ConversationEvent.__table__.columns)
+            )
 
     engine = database.engine.sync_engine
     event.listen(engine, "before_cursor_execute", record_writes)
@@ -559,3 +561,46 @@ async def test_large_append_keeps_exact_display_tip_forkable_without_snapshot(
     assert (await store.read(side.conversation_id)).messages == (
         await store.read(conv.conversation_id)
     ).messages
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("operation", ["create", "replace", "append", "rebase"])
+async def test_runtime_writes_reject_legacy_markers(database, operation):
+    store = database.conversation_store
+    conv = await store.create(
+        umo="owner", platform_id="p", content=[{"role": "user", "content": "seed"}]
+    )
+    before = await store.events(conv.conversation_id)
+    marker = {"role": "_checkpoint", "content": {"id": "legacy-marker"}}
+
+    with pytest.raises(ValueError, match="role"):
+        if operation == "create":
+            await store.create(umo="owner", platform_id="p", content=[marker])
+        elif operation == "replace":
+            await store.append(conv.conversation_id, [], history=[marker])
+        elif operation == "append":
+            await store.append(
+                conv.conversation_id,
+                [{"type": "message.appended", "payload": {"message": marker}}],
+            )
+        else:
+            await store.append(
+                conv.conversation_id,
+                [
+                    {
+                        "type": "context.rebased",
+                        "payload": {
+                            "reason": "reset",
+                            "origin": "plugin",
+                            "messages": [{"id": "legacy-marker", "message": marker}],
+                        },
+                    }
+                ],
+            )
+
+    assert [
+        event.model_dump() for event in await store.events(conv.conversation_id)
+    ] == [event.model_dump() for event in before]
+    assert (await store.read(conv.conversation_id)).messages == [
+        {"role": "user", "content": "seed"}
+    ]

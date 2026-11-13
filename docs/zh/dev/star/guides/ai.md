@@ -492,6 +492,14 @@ Core 根据 `source_event` 或当前活跃的同 UMO 事件解析权限。没有
 
 ## 对话管理器
 
+运行时历史只包含模型消息（`system`、`user`、`assistant` 和 `tool`）。旧
+`_checkpoint` 标记在数据库迁移或旧备份导入时完成转换。平台历史关联使用
+`turn_id` 和 `context_event_id`，不再接受 `llm_checkpoint_id`。内部消息转换使用
+`load_messages` / `dump_messages`，保留原有的 `_no_save` 语义。
+核心直接读取结构化消息列表，插件接口的 `Conversation.history` 仍为 JSON 字符串。
+完整历史更新与 Agent 阶段暂存共用差异转换规则，重排时保留未变消息的 ID。
+插件的独立写入不修改正在运行的 Agent 工作消息；基于过期版本的写入仍会触发冲突。
+
 统一使用 `self.context.conversations` 操作对话，已有的 `new_conversation`、
 `get_conversation`、切换、更新和删除方法继续可用。
 `self.context.conversation_manager` 保留为兼容别名。原有的

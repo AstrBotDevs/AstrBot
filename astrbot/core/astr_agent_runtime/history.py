@@ -7,10 +7,8 @@ from typing import TYPE_CHECKING
 
 from astrbot.core import db_helper, logger
 from astrbot.core.agent.message import (
-    CheckpointData,
-    CheckpointMessageSegment,
     Message,
-    dump_messages_with_checkpoints,
+    dump_messages,
 )
 from astrbot.core.agent.response import AgentStats
 from astrbot.core.astr_agent_runtime.runner import AgentRunner
@@ -29,7 +27,6 @@ async def save_agent_history(
     runner_stats: AgentStats | None,
     commit: Callable[[list[dict], int | None], Awaitable[None]],
     user_aborted: bool = False,
-    checkpoint_id: str | None = None,
     writer: ConversationEventWriter | None = None,
 ) -> bool:
     """Commit native history after a settled or user-aborted execution.
@@ -41,7 +38,6 @@ async def save_agent_history(
         runner_stats: Execution statistics used for token accounting.
         commit: Storage writer for this session's canonical history.
         user_aborted: Whether partial output belongs to an explicit cancellation.
-        checkpoint_id: Optional checkpoint belonging to this conversation's input.
         writer: Revision-bound writer for event-backed history.
 
     Returns:
@@ -64,23 +60,15 @@ async def save_agent_history(
             continue
         messages_to_save.append(message)
 
-    checkpoint_id = checkpoint_id if isinstance(checkpoint_id, str) else ""
-    has_checkpoint = bool(checkpoint_id)
-    message_to_save = dump_messages_with_checkpoints(
+    message_to_save = dump_messages(
         messages_to_save, include_temporary=writer is not None
     )
     if not user_aborted and (llm_response is None or llm_response.role != "assistant"):
-        if writer is None and has_checkpoint:
-            message_to_save.append(
-                CheckpointMessageSegment(
-                    content=CheckpointData(id=checkpoint_id),
-                ).model_dump()
-            )
         if writer is not None and writer.turn_id:
             await writer.save_history(message_to_save)
             return True
-        if has_checkpoint or (llm_response is None and req.tool_calls_result):
-            token_usage = None if has_checkpoint else req.conversation.token_usage
+        if llm_response is None and req.tool_calls_result:
+            token_usage = req.conversation.token_usage
             await commit(message_to_save, token_usage)
             return True
         return False
@@ -102,13 +90,6 @@ async def save_agent_history(
     ):
         logger.debug("The LLM response is empty; not saving a record.")
         return False
-
-    if writer is None and has_checkpoint:
-        message_to_save.append(
-            CheckpointMessageSegment(
-                content=CheckpointData(id=checkpoint_id),
-            ).model_dump()
-        )
 
     token_usage = None
     if runner_stats:

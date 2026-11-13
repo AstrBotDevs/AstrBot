@@ -348,3 +348,116 @@ async def test_dashboard_history_edit_is_user_owned_and_survives_plugin_cleanup(
     assert events[user_baseline.event_id].payload == user_baseline.payload
     fork_id = await manager.fork_conversation("umo", user_baseline.event_id)
     assert (await store.read(fork_id)).messages == edited
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("write_path", ["writer", "store"])
+async def test_history_reconciliation_retains_duplicate_ids_and_temporary_content(
+    database, write_path
+):
+    store = database.conversation_store
+    repeated = {"role": "user", "content": "same"}
+    tail = {"role": "assistant", "content": "tail"}
+    conv = await store.create(
+        umo="umo", platform_id="p", content=[repeated, repeated, tail]
+    )
+    before = await store.read(conv.conversation_id)
+    history = [
+        repeated,
+        tail,
+        repeated,
+        {
+            "role": "user",
+            "content": [
+                {"type": "text", "text": "keep"},
+                {"type": "text", "text": "temporary", "_no_save": True},
+            ],
+        },
+    ]
+    if write_path == "writer":
+        writer = ConversationEventWriter(store, before)
+        writer.stage_history(history, origin="plugin")
+        writer.stage_history(history, origin="plugin")
+        await writer.save_history(history, origin="plugin")
+    else:
+        await store.append(
+            conv.conversation_id,
+            [],
+            history=history,
+            origin="plugin",
+            expected_leaf=before.conversation.leaf_event_id,
+        )
+
+    after = await store.read(conv.conversation_id)
+    assert [entry["id"] for entry in after.entries[:3]] == [
+        before.entries[index]["id"] for index in (0, 2, 1)
+    ]
+    assert after.entries[3]["id"] not in {entry["id"] for entry in before.entries}
+    assert after.messages == [
+        repeated,
+        tail,
+        repeated,
+        {"role": "user", "content": [{"type": "text", "text": "keep"}]},
+    ]
+    events = await store.events(conv.conversation_id)
+    exclusions = [
+        event
+        for event in events
+        if event.type == "message.appended"
+        and event.payload.get("include_in_context") is False
+    ]
+    assert len(exclusions) == 1
+    assert exclusions[0].payload["message"] == history[-1]
+    assert events[-1].payload["origin"] == "plugin"
+    history[-1]["content"][0]["text"] = "mutated after save"
+    assert (await store.read(conv.conversation_id)).messages == after.messages
+
+
+@pytest.mark.asyncio
+async def test_message_pair_uses_events_and_session_history_stays_detached(database):
+    import json
+
+    from astrbot.core.agent.runtime import AgentInput, AgentPermissions
+    from astrbot.core.astr_agent_runtime import AstrAgentRuntime
+
+    manager = ConversationManager(database)
+    cid = await manager.new_conversation("umo", "p")
+    await manager.add_message_pair(
+        cid,
+        Message(role="user", content="question"),
+        {"role": "assistant", "content": "answer"},
+    )
+    runtime = AstrAgentRuntime(
+        SimpleNamespace(conversation_manager=manager),
+        agent_configs=SimpleNamespace(),
+        subagents=SimpleNamespace(),
+    )
+    session = await runtime.open_session(
+        "umo",
+        input=AgentInput(
+            event=SimpleNamespace(unified_msg_origin="umo", get_extra=lambda key: None),
+            permissions=AgentPermissions(),
+        ),
+    )
+    assert session.id == cid
+    assert await runtime.open_session("umo", session_id=cid) is session
+    with pytest.raises(ValueError, match="another UMO"):
+        await runtime.open_session("other", session_id=cid)
+    history = await session.history()
+    legacy = await manager.get_conversation("umo", cid)
+    expected = [
+        {"role": "user", "content": "question"},
+        {"role": "assistant", "content": "answer"},
+    ]
+    assert history == json.loads(legacy.history) == expected
+    assert isinstance(legacy.history, str)
+    history[0]["content"] = "local edit"
+    assert await session.history() == expected
+    assert json.loads(legacy.history) == expected
+    events = await database.conversation_store.events(cid)
+    assert [event.type for event in events] == [
+        "conversation.created",
+        "message.appended",
+        "message.appended",
+    ]
+    await runtime.close()

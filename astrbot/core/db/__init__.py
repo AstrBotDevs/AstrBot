@@ -232,11 +232,8 @@ class BaseDatabase(abc.ABC):
         sender_name: str | None = None,
         turn_id: str | None = None,
         max_messages: int | None = None,
-        llm_checkpoint_id: str | None = None,
     ) -> PlatformMessageHistory:
         """Insert a new platform message history record."""
-        if turn_id is None:
-            turn_id = llm_checkpoint_id
         ...
 
     @abc.abstractmethod
@@ -245,11 +242,8 @@ class BaseDatabase(abc.ABC):
         message_id: int,
         content: dict | None = None,
         turn_id: str | None = None,
-        llm_checkpoint_id: str | None = None,
     ) -> None:
         """Update a platform message history record."""
-        if turn_id is None:
-            turn_id = llm_checkpoint_id
         ...
 
     @abc.abstractmethod

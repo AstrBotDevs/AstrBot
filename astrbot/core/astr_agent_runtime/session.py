@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import asyncio
-import json
 from contextlib import AbstractAsyncContextManager
 from typing import TYPE_CHECKING
 
@@ -210,9 +209,6 @@ class NativeAgentSession(AgentSession):
                         user_aborted=runner.was_aborted(),
                         writer=writer,
                         commit=self._commit_history,
-                        checkpoint_id=event.get_extra("llm_checkpoint_id")
-                        if self.is_main
-                        else None,
                     )
                 except Exception as exc:
                     status = TurnStatus.FAILED
@@ -307,7 +303,9 @@ class NativeAgentSession(AgentSession):
         Returns:
             Detached canonical model messages.
         """
-        conversation = await self.runtime.context.conversation_manager.get_conversation(
-            self.umo, self.id
+        conversation = (
+            await self.runtime.context.conversation_manager.db.get_conversation_by_id(
+                self.id
+            )
         )
-        return json.loads(conversation.history) if conversation is not None else []
+        return (conversation.content or []) if conversation is not None else []
