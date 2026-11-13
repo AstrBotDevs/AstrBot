@@ -10,11 +10,11 @@ import pytest
 import pytest_asyncio
 from opentelemetry.trace import format_trace_id, get_current_span
 
-from astrbot.core.astr_agent_runtime import AstrAgentRuntime
 from astrbot.core.agent.hooks import BaseAgentRunHooks
 from astrbot.core.agent.run_context import ContextWrapper
 from astrbot.core.agent.runtime import AgentSessionRef
 from astrbot.core.agent_wakeup import wake_main_agent
+from astrbot.core.astr_agent_runtime import AstrAgentRuntime
 from astrbot.core.astr_agent_runtime import session as native_session
 from astrbot.core.astr_agent_runtime.main_agent import MainAgentBuildResult
 from astrbot.core.astr_agent_runtime.main_agent import builder as native_builder
@@ -158,7 +158,9 @@ async def runtime(monkeypatch):
     native = AstrAgentRuntime(context, agent_configs=MagicMock(), subagents=MagicMock())
     runtimes = {"astrbot": native}
     scheduler = PipelineScheduler(
-        PipelineContext(config, SimpleNamespace(context=context), "profile", agent_runtimes=runtimes)
+        PipelineContext(
+            config, SimpleNamespace(context=context), "profile", agent_runtimes=runtimes
+        )
     )
     await scheduler.initialize()
     bus = EventBus(
@@ -207,6 +209,8 @@ async def test_wakeup_uses_current_context_and_sends_final_reply(
     event = runtime.events[0]
     assert event.unified_msg_origin == umo
     assert event.role == "member"
+    assert event.get_self_id() == "astrbot"
+    assert event.get_sender_id() == "user_group"
     assert event.get_extra("provider_request").conversation.cid == "conversation"
     assert event.get_extra("provider_request").prompt == "Continue"
     assert runtime.requests[0][0] == history[0]
