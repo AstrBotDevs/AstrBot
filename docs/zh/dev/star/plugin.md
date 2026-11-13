@@ -116,7 +116,7 @@ class AstrBotMessage:
 
     type: MessageType  # 消息类型
     self_id: str  # 机器人的识别id
-    session_id: str  # 会话id。取决于 unique_session 的设置。
+    session_id: str  # 会话id。此处保存平台适配器给出的原始值；开启隔离对话后，事件对象的 session_id 会被改写。
     message_id: str  # 消息id
     group_id: str = ""  # 群组id，如果为私聊，则为空
     sender: MessageMember  # 发送者
@@ -129,6 +129,9 @@ class AstrBotMessage:
 ```
 
 其中，`raw_message` 是消息平台适配器的**原始消息对象**。
+
+> [!NOTE]
+> 上面的 `session_id` 是**消息对象**上的值。事件对象 `event.session_id` 与 `event.unified_msg_origin` 会在开启隔离对话（`platform_settings.unique_session`）时被改写，以群为单位存储数据请使用 `event.get_group_id()`。详见[处理消息事件](./guides/listen-message-event)。
 
 ### 消息链
 
