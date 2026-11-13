@@ -50,7 +50,7 @@ async def test_branches_null_parent_and_excluded_messages(database):
     conv = await database.create_conversation("umo", "p")
     store = database.conversation_store
     first = (
-        await store.append(
+        (await store.append(
             conv.conversation_id,
             [
                 {
@@ -59,7 +59,7 @@ async def test_branches_null_parent_and_excluded_messages(database):
                     "payload": {"message": {"role": "user", "content": "root"}},
                 }
             ],
-        )
+        )).events
     )[0]
     await store.append(
         conv.conversation_id,
@@ -369,10 +369,10 @@ async def test_large_appended_message_keeps_the_existing_baseline(database):
     large = {"role": "assistant", "content": "x" * (4 * 1024 * 1024 + 1)}
     conv = await database.create_conversation("umo", "p", [initial])
     before = await store.read(conv.conversation_id)
-    events = await store.append(
+    events = (await store.append(
         conv.conversation_id,
         [{"type": "message.appended", "payload": {"message": large}}],
-    )
+    )).events
     assert [e.type for e in events] == ["message.appended"]
     after = await store.read(conv.conversation_id)
     assert after.conversation.replay_from_event_id == before.conversation.replay_from_event_id
@@ -501,13 +501,13 @@ async def test_retry_and_late_display_link_to_a_legacy_automatic_snapshot(databa
         }
         for i in range(257)
     ]
-    first = await store.append(
+    first = (await store.append(
         conv.conversation_id, drafts, expected_head=2, expected_leaf=None
-    )
+    )).events
     assert len(first) == len(drafts)
     projected = await store.read(conv.conversation_id)
     # Reproduce the event formerly inserted at the end of the original batch.
-    (legacy_snapshot,) = await store.append(
+    (legacy_snapshot,) = (await store.append(
         conv.conversation_id,
         [
             {
@@ -520,7 +520,7 @@ async def test_retry_and_late_display_link_to_a_legacy_automatic_snapshot(databa
                 },
             }
         ],
-    )
+    )).events
 
     selects = []
 
@@ -531,9 +531,9 @@ async def test_retry_and_late_display_link_to_a_legacy_automatic_snapshot(databa
     engine = database.engine.sync_engine
     event.listen(engine, "before_cursor_execute", record_select)
     try:
-        retried = await store.append(
+        retried = (await store.append(
             conv.conversation_id, drafts, expected_head=2, expected_leaf=None
-        )
+        )).events
     finally:
         event.remove(engine, "before_cursor_execute", record_select)
 
@@ -593,10 +593,10 @@ async def test_declared_read_revision_rejects_context_changes(database, change):
     store = database.conversation_store
     manager = ConversationManager(database)
     created = await database.create_conversation("umo", "p")
-    first = (await store.append(created.conversation_id, [
+    first = ((await store.append(created.conversation_id, [
         {"type": "message.appended", "payload": {"message": {"role": "user", "content": "first"}}},
         {"type": "message.appended", "payload": {"message": {"role": "assistant", "content": "second"}}},
-    ]))[0]
+    ])).events)[0]
     record = await database.get_conversation_by_id(created.conversation_id)
     conversation = await manager.get_conversation("umo", created.conversation_id)
     assert isinstance(record, ConversationRead)

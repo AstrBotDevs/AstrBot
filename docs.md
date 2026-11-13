@@ -28,9 +28,17 @@
 - `ConversationEventWriter` 由一次 Agent 执行明确拥有，管理本次执行的事件和工作上下文。每次执行创建 `MainAgentHooks(writer)`，通过内部参数将同一个 writer 传给 hook 调度函数；不使用共享 hooks 实例或环境变量查找 writer。插件不接收 writer，`AstrMessageEvent` 也不携带 writer 字段。
 - `db/conversation.py` 的 `ConversationStore` 负责事件校验、幂等与版本冲突、上下文投影、快照和保留策略。它仍是 SQLite 实现，不代表已经支持 PostgreSQL / MySQL。
 - `db/migration/migra_conversation_events.py` 负责旧整份历史、旧树状事件和旧展示关联的迁移。启动初始化和旧备份导入显式调用迁移；正常事件追加不经过迁移代码。
-- `db/webchat_projection.py` 维护追加事件对应的展示消息位置，以及自动快照产生的等价位置映射。它接收已校验、有序的事件和现有数据库 session，不创建或提交事务。
+- `db/webchat_projection.py` 维护追加事件对应的展示消息位置。它接收已校验、有序的事件和现有数据库 session，不创建或提交事务。
 
-`ConversationStore.append()` 持有唯一写入事务：取得写锁并读取版本 → 校验幂等与并发条件 → 转换兼容历史并校验、插入事件 → 更新上下文位置和必要的快照 → 更新 WebChat 展示关联 → 回收符合条件的旧插件基线 → 提交。任何一步失败，事件、会话指针和展示关联一起回滚。WebChat 编辑与历史位置切换仍由各自的存储操作持有完整事务，不通过提交后的异步监听器维护关联。
+`ConversationStore.append()` 持有唯一写入事务：取得写锁并读取版本 → 校验幂等与并发条件 → 转换兼容历史并校验、插入事件 → 更新上下文位置 → 更新 WebChat 展示关联 → 回收符合条件的旧插件基线 → 提交。任何一步失败，事件、会话指针和展示关联一起回滚。WebChat 编辑与历史位置切换仍由各自的存储操作持有完整事务，不通过提交后的异步监听器维护关联。
+
+`ConversationStore.append()` 返回 `ConversationAppendResult`：`events` 是已确认事件，`replayed` 表示整批已存在的幂等重试。writer 在确认后按事件顺序增量维护 committed projection：普通消息只复制新增正文，rebase 替换整份 projection。`_entries` 在无暂存修改时与 `_committed_entries` 共用列表；阶段差异计算生成独立的 staged 列表。确认前不改变 committed revision，也不清除未确认的暂存事件。保存历史的 token usage 元数据同样保留稳定事件 ID 以支持 ACK 丢失后的整批重试。
+
+writer 分别维护执行日志的 `head_seq`、已应用上下文的 sequence、`leaf_event_id` 和 `replay_from_event_id`。执行日志推进不能跳过尚未确认的上下文，旧 ACK 不能回退已应用的位置。成功 ACK 中包含旧版本生成的 snapshot 时，按完整基线更新 projection 和指针。
+
+普通新提交不再调用 `project()`。仅当收到尚未应用、且没有完整 rebase 的历史重试 ACK 时，writer 恢复 ACK 指向的精确历史位置：返回的事件可能省略其他 writer 写入的中间消息，不能直接拼接到本地上下文。这个例外不读取会话当前选中的位置；后续基于旧位置的写入仍触发乐观并发冲突。
+
+本次不新增自动 snapshot，也不承诺恢复 replay 的长度有固定阈值。初始化、历史位置恢复、完整历史返回、完整 rebase 和 hook 的整份历史比较仍可能是 O(Context 大小)。同一 writer 的普通连续追加只维护新增消息，消除逐次全量查询、重放和列表复制；历史重试的必要恢复及仍有 staged 工作时的重建不属于这条普通热路径。
 
 迁移单独持有事务，转换并校验全部旧对话、更新关联后，才删除旧 `conversations` 表并提交。失败时旧表和数据保留，初始化失败，系统不会自动切回旧实现运行；修复原因后可重启重试。启动阶段较早执行的建表和补列有独立提交，因此数据迁移回滚不等于整个数据库恢复为升级前的 schema。备份导入则传入已有 session，由外层导入事务统一提交或回滚。
 

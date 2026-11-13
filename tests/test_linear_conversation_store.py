@@ -30,39 +30,47 @@ async def test_plugin_reclamation_preserves_user_versions_independent_fork_and_r
     store = database.conversation_store
     conv = await store.create(umo="owner", platform_id="p")
     first = (
-        await store.append(
-            conv.conversation_id,
-            [],
-            history=[{"role": "user", "content": "original"}],
-            origin="plugin",
-        )
+        (
+            await store.append(
+                conv.conversation_id,
+                [],
+                history=[{"role": "user", "content": "original"}],
+                origin="plugin",
+            )
+        ).events
     )[0]
     plugin = (
-        await store.append(
-            conv.conversation_id,
-            [],
-            history=[{"role": "user", "content": "plugin memory"}],
-            origin="plugin",
-        )
+        (
+            await store.append(
+                conv.conversation_id,
+                [],
+                history=[{"role": "user", "content": "plugin memory"}],
+                origin="plugin",
+            )
+        ).events
     )[0]
     side = await store.create(
         umo="owner", platform_id="p", source_event_id=plugin.event_id
     )
     user = (
-        await store.append(
-            conv.conversation_id,
-            [],
-            history=[{"role": "user", "content": "user edit"}],
-            origin="user",
-        )
+        (
+            await store.append(
+                conv.conversation_id,
+                [],
+                history=[{"role": "user", "content": "user edit"}],
+                origin="user",
+            )
+        ).events
     )[0]
     latest = (
-        await store.append(
-            conv.conversation_id,
-            [],
-            history=[{"role": "user", "content": "new plugin"}],
-            origin="plugin",
-        )
+        (
+            await store.append(
+                conv.conversation_id,
+                [],
+                history=[{"role": "user", "content": "new plugin"}],
+                origin="plugin",
+            )
+        ).events
     )[0]
     events = {e.event_id: e for e in await store.events(conv.conversation_id)}
     assert events[plugin.event_id].payload is None
@@ -101,16 +109,18 @@ async def test_plugin_reclamation_preserves_user_versions_independent_fork_and_r
                 {"id": plugin.event_id},
             )
         ).scalar_one() == 1
-    receipt = await store.append(
-        conv.conversation_id,
-        [
-            {
-                "event_id": plugin.event_id,
-                "type": plugin.type,
-                "payload": {"different": "body cannot be verified"},
-            }
-        ],
-    )
+    receipt = (
+        await store.append(
+            conv.conversation_id,
+            [
+                {
+                    "event_id": plugin.event_id,
+                    "type": plugin.type,
+                    "payload": {"different": "body cannot be verified"},
+                }
+            ],
+        )
+    ).events
     assert receipt[0].payload is None
     with pytest.raises(ConversationConflictError):
         await store.append(
@@ -130,7 +140,9 @@ async def test_unfinished_executions_protect_only_their_required_baseline(databa
         umo="owner", platform_id="p", content=[{"role": "user", "content": "seed"}]
     )
     protected = (
-        await store.append(conv.conversation_id, [], history=[], origin="plugin")
+        (
+            await store.append(conv.conversation_id, [], history=[], origin="plugin")
+        ).events
     )[0]
     await store.append(
         conv.conversation_id,
@@ -151,26 +163,38 @@ async def test_unfinished_executions_protect_only_their_required_baseline(databa
         ],
     )
     second = (
-        await store.append(
-            conv.conversation_id,
-            [
-                {
-                    "type": "context.rebased",
-                    "payload": {"reason": "reset", "origin": "plugin", "messages": []},
-                }
-            ],
-        )
+        (
+            await store.append(
+                conv.conversation_id,
+                [
+                    {
+                        "type": "context.rebased",
+                        "payload": {
+                            "reason": "reset",
+                            "origin": "plugin",
+                            "messages": [],
+                        },
+                    }
+                ],
+            )
+        ).events
     )[0]
     third = (
-        await store.append(
-            conv.conversation_id,
-            [
-                {
-                    "type": "context.rebased",
-                    "payload": {"reason": "reset", "origin": "plugin", "messages": []},
-                }
-            ],
-        )
+        (
+            await store.append(
+                conv.conversation_id,
+                [
+                    {
+                        "type": "context.rebased",
+                        "payload": {
+                            "reason": "reset",
+                            "origin": "plugin",
+                            "messages": [],
+                        },
+                    }
+                ],
+            )
+        ).events
     )[0]
     assert await store.get_context_availability(
         conv.conversation_id, [protected.event_id, second.event_id, third.event_id]
@@ -210,19 +234,21 @@ async def test_unfinished_executions_protect_only_their_required_baseline(databa
 async def test_select_historical_position_creates_two_user_snapshots(database):
     store = database.conversation_store
     conv = await store.create(umo="owner", platform_id="p")
-    a, b = await store.append(
-        conv.conversation_id,
-        [
-            {
-                "type": "message.appended",
-                "payload": {"message": {"role": "user", "content": "a"}},
-            },
-            {
-                "type": "message.appended",
-                "payload": {"message": {"role": "assistant", "content": "b"}},
-            },
-        ],
-    )
+    a, b = (
+        await store.append(
+            conv.conversation_id,
+            [
+                {
+                    "type": "message.appended",
+                    "payload": {"message": {"role": "user", "content": "a"}},
+                },
+                {
+                    "type": "message.appended",
+                    "payload": {"message": {"role": "assistant", "content": "b"}},
+                },
+            ],
+        )
+    ).events
     state = await store.read(conv.conversation_id)
     await store.select_branch(
         conv.conversation_id,
@@ -261,9 +287,11 @@ async def test_prune_failure_and_invalid_batch_roll_back_all_changes(database):
     conv = await store.create(
         umo="owner", platform_id="p", content=[{"role": "user", "content": "seed"}]
     )
-    first = (await store.append(conv.conversation_id, [], history=[], origin="plugin"))[
-        0
-    ]
+    first = (
+        (
+            await store.append(conv.conversation_id, [], history=[], origin="plugin")
+        ).events
+    )[0]
     before = await store.events(conv.conversation_id)
     with pytest.raises(ValueError):
         await store.append(
@@ -464,7 +492,9 @@ async def test_large_append_keeps_exact_display_tip_forkable_without_snapshot(
         umo="owner", platform_id="p", content=[{"role": "user", "content": "seed"}]
     )
     plugin = (
-        await store.append(conv.conversation_id, [], history=[], origin="plugin")
+        (
+            await store.append(conv.conversation_id, [], history=[], origin="plugin")
+        ).events
     )[0]
     await store.append(
         conv.conversation_id,
@@ -521,7 +551,7 @@ async def test_large_append_keeps_exact_display_tip_forkable_without_snapshot(
     engine = database.engine.sync_engine
     event.listen(engine, "before_cursor_execute", record_writes)
     try:
-        committed = await store.append(conv.conversation_id, drafts)
+        committed = (await store.append(conv.conversation_id, drafts)).events
     finally:
         event.remove(engine, "before_cursor_execute", record_writes)
 

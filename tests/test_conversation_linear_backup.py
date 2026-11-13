@@ -24,12 +24,14 @@ async def test_backup_round_trip_keeps_recycled_baseline_distinct_from_empty(dat
     conv = await store.create(
         umo="owner", platform_id="p", content=[{"role": "user", "content": "initial"}]
     )
-    first = await store.append(
-        conv.conversation_id,
-        [],
-        history=[{"role": "user", "content": "plugin version one"}],
-        origin="plugin",
-    )
+    first = (
+        await store.append(
+            conv.conversation_id,
+            [],
+            history=[{"role": "user", "content": "plugin version one"}],
+            origin="plugin",
+        )
+    ).events
     old_id = next(e.event_id for e in first if e.type == "context.rebased")
     await store.append(conv.conversation_id, [], history=[], origin="plugin")
     exported = await AstrBotExporter(database)._export_main_database()

@@ -223,11 +223,20 @@ class ConversationSnapshot:
     conversation: ConversationV3
     entries: list[dict] = field(default_factory=list)
     replay_count: int = 0
+    context_seq: int = 0
 
     @property
     def messages(self) -> list[dict]:
         """Return a mutable copy without exposing stored payload objects."""
         return deepcopy([entry["message"] for entry in self.entries])
+
+
+@dataclass
+class ConversationAppendResult:
+    """Acknowledged events and whether they came from an idempotent retry."""
+
+    events: list[ConversationEvent]
+    replayed: bool = False
 
 
 class ConversationStore:
@@ -405,6 +414,7 @@ class ConversationStore:
             or target.type not in CONTEXT_TYPES
         ):
             raise ValueError("Missing or inaccessible context leaf")
+        snapshot.context_seq = target.seq
         baseline_seq = 0
         if target.replay_from_event_id:
             baseline = (
@@ -656,7 +666,7 @@ class ConversationStore:
         history=None,
         reason="legacy_replace",
         origin="unknown",
-    ) -> list[ConversationEvent]:
+    ) -> ConversationAppendResult:
         """Atomically validate and append a batch, optionally committing legacy history.
 
         Args:
@@ -669,7 +679,7 @@ class ConversationStore:
             origin: Host-attributed source of a legacy context replacement.
 
         Returns:
-            Committed events, including previously committed identical retries.
+            Acknowledged events and whether the complete batch was already stored.
 
         Raises:
             ConversationConflictError: A stale revision or conflicting ID was supplied.
@@ -740,7 +750,7 @@ class ConversationStore:
                         == context_events[-1].event_id
                     ):
                         existing.append(baseline)
-                return existing
+                return ConversationAppendResult(existing, replayed=True)
             if (expected_head is not NOT_GIVEN and conv.head_seq != expected_head) or (
                 expected_leaf is not NOT_GIVEN and conv.leaf_event_id != expected_leaf
             ):
@@ -995,7 +1005,7 @@ class ConversationStore:
                     {"owner": conv.id, "baseline": conv.replay_from_event_id},
                 )
             await session.commit()
-            return committed
+            return ConversationAppendResult(committed)
 
     async def events(
         self,

@@ -10,7 +10,10 @@ from sqlalchemy.exc import SQLAlchemyError
 from astrbot.core.agent.response import AgentResponse
 from astrbot.core.db.conversation import (
     CONTEXT_TYPES,
+    ContextUnavailableError,
+    ConversationAppendResult,
     ConversationSnapshot,
+    persistent_messages,
     reconcile_history,
 )
 from astrbot.core.sentinels import NOT_GIVEN
@@ -49,13 +52,16 @@ class ConversationEventWriter:
         self.umo = snapshot.conversation.umo
         self.head_seq = snapshot.conversation.head_seq
         self.leaf_event_id = snapshot.conversation.leaf_event_id
+        self.replay_from_event_id = snapshot.conversation.replay_from_event_id
+        self._context_seq = snapshot.context_seq
+        self._conversation = snapshot.conversation.model_copy()
         self.turn_id: str | None = None
         self.closed = False
         self.turn_result: AgentResponse | None = None
         self._lock = asyncio.Lock()
         self._pending: list[dict] = []
         self._entries = deepcopy(snapshot.entries)
-        self._committed_entries = tuple(self._entries)
+        self._committed_entries = self._entries
         self._excluded_counts: Counter[str] = Counter()
         self.runtime_context = None
         self.request = None
@@ -153,34 +159,116 @@ class ConversationEventWriter:
                 raise ConversationPersistenceError(
                     "Conversation event was not acknowledged"
                 ) from exc
-            acknowledged = next(e for e in committed if e.event_id == draft["event_id"])
-            if all(e.seq <= self.head_seq for e in committed):
-                return acknowledged
-            self.head_seq = max(self.head_seq, *(e.seq for e in committed))
-            for event in committed:
-                if event.type in CONTEXT_TYPES:
-                    self.leaf_event_id = event.event_id
-            if context_change:
-                # Read this immutable tip, even if another writer has since selected a branch.
-                async with self.store.db.get_db() as session:
-                    from sqlmodel import select
-
-                    from astrbot.core.db.po import ConversationV3
-
-                    conv = (
-                        await session.execute(
-                            select(ConversationV3).where(
-                                ConversationV3.conversation_id == self.cid
-                            )
-                        )
-                    ).scalar_one()
-                    snapshot = await self.store.project(
-                        session, conv, self.leaf_event_id
-                    )
-                self._entries = snapshot.entries
-                self._committed_entries = tuple(self._entries)
-                self._pending.clear()
+            acknowledged = next(
+                event
+                for event in committed.events
+                if event.event_id == draft["event_id"]
+            )
+            await self._acknowledge(committed)
             return acknowledged
+
+    async def _acknowledge(self, result: ConversationAppendResult) -> None:
+        """Apply an ACK without replaying history on ordinary append operations.
+
+        Args:
+            result: Stored events, including any legacy snapshot returned on retry.
+
+        Raises:
+            ContextUnavailableError: An unseen retried context has been reclaimed.
+            ValueError: An acknowledged context cannot be projected.
+        """
+        context_events = sorted(
+            (
+                event
+                for event in result.events
+                if event.type in CONTEXT_TYPES and event.seq > self._context_seq
+            ),
+            key=lambda event: event.seq,
+        )
+        acknowledged_ids = {event.event_id for event in result.events}
+        remaining = [
+            draft
+            for draft in self._pending
+            if draft["event_id"] not in acknowledged_ids
+        ]
+        replacement = None
+        additions = []
+        if context_events:
+            # A complete rebase supersedes all earlier context in the ACK, including
+            # bodies that may have since been reclaimed by plugin retention.
+            rebase_index = next(
+                (
+                    index
+                    for index in range(len(context_events) - 1, -1, -1)
+                    if context_events[index].type == "context.rebased"
+                ),
+                None,
+            )
+            if result.replayed and rebase_index is None:
+                # An unseen historical ACK need not follow our local context: other
+                # writers may have appended intervening messages. Restore this exact
+                # immutable tip, never the conversation's currently selected tip.
+                async with self.store.db.get_db() as session:
+                    snapshot = await self.store.project(
+                        session, self._conversation, context_events[-1].event_id
+                    )
+                replacement = snapshot.entries
+            else:
+                for event in context_events[rebase_index or 0 :]:
+                    if event.payload is None:
+                        raise ContextUnavailableError(
+                            "Acknowledged context payload is unavailable"
+                        )
+                    if event.type == "context.rebased":
+                        replacement = deepcopy(event.payload["messages"])
+                    elif event.payload.get("include_in_context", True):
+                        effective = persistent_messages([event.payload["message"]])
+                        if effective:
+                            additions.append(
+                                {"id": event.event_id, "message": effective[0]}
+                            )
+
+        # Prepare any still-staged projection before confirming the ACK. Staging
+        # may have occurred while storage was awaited; only acknowledged drafts
+        # are removed. This full reference copy is confined to pending work.
+        staged = None
+        if remaining and (context_events or len(remaining) != len(self._pending)):
+            staged = list(
+                self._committed_entries if replacement is None else replacement
+            )
+            staged.extend(additions)
+            for draft in remaining:
+                payload = draft["payload"]
+                if draft["type"] == "context.rebased":
+                    staged = deepcopy(payload["messages"])
+                elif draft["type"] == "message.appended" and payload.get(
+                    "include_in_context", True
+                ):
+                    effective = persistent_messages([payload["message"]])
+                    if effective:
+                        staged.append(
+                            {"id": draft["event_id"], "message": effective[0]}
+                        )
+
+        # No await or projection work follows: all committed state moves together.
+        if context_events:
+            if replacement is not None:
+                self._committed_entries = replacement
+            self._committed_entries.extend(additions)
+            tip = context_events[-1]
+            self._context_seq = tip.seq
+            self.leaf_event_id = tip.event_id
+            self.replay_from_event_id = tip.replay_from_event_id
+        if staged is not None:
+            self._entries = staged
+        elif not remaining:
+            self._entries = self._committed_entries
+        self._pending = remaining
+        self.head_seq = (
+            max(self.head_seq, *(event.seq for event in result.events))
+            if result.events
+            else self.head_seq
+        )
 
     async def append_message(
         self,
@@ -286,6 +374,7 @@ class ConversationEventWriter:
             )
             self.closed = True
             self._pending.clear()
+            self._entries = self._committed_entries
 
     def stage_history(
         self, history: list[dict], *, reason="legacy_replace", origin="unknown"
@@ -319,28 +408,28 @@ class ConversationEventWriter:
         """
         async with self._lock:
             self.stage_history(history, origin=origin)
-            drafts = list(self._pending)
             if token_usage is not None:
-                drafts.append(
-                    {
-                        "type": "conversation.updated",
-                        "payload": {
-                            "changes": {},
-                            "token_usage": token_usage,
-                        },
-                    }
-                )
+                payload = {"changes": {}, "token_usage": token_usage}
+                if (
+                    not self._pending
+                    or self._pending[-1]["type"] != "conversation.updated"
+                    or self._pending[-1]["payload"] != payload
+                ):
+                    self._pending.append(
+                        {
+                            "event_id": str(uuid.uuid4()),
+                            "type": "conversation.updated",
+                            "payload": payload,
+                        }
+                    )
             committed = await self.store.append(
                 self.cid,
-                drafts,
+                list(self._pending),
                 expected_leaf=self.leaf_event_id,
             )
-            for event in committed:
-                self.head_seq = event.seq
-                if event.type in CONTEXT_TYPES:
-                    self.leaf_event_id = event.event_id
-            self._pending.clear()
-            self._committed_entries = tuple(self._entries)
+            await self._acknowledge(committed)
+            if self._pending:
+                return
             if self.runtime_context is not None:
                 from astrbot.core.agent.message import load_messages
 
