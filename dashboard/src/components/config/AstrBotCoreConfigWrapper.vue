@@ -45,6 +45,11 @@
             :search-keyword="searchKeyword"
             inline
           />
+          <div v-if="config_data.disabled_plugins?.length" class="mt-8">
+            <h3 class="text-subtitle-1 mb-2">{{ tm('overrides.fields.disabledPlugins') }}</h3>
+            <p class="text-body-2 text-medium-emphasis mb-4">{{ tm('overrides.disabledPluginsHint') }}</p>
+            <PluginSetSelector v-model="config_data.disabled_plugins" selection-only />
+          </div>
         </section>
 
         <section
@@ -255,7 +260,7 @@ export default {
   min-height: 34px;
   padding: 6px 9px 6px 12px;
   border: 0;
-  border-radius: 8px;
+  border-radius: var(--astrbot-radius-control);
   background: transparent;
   color: rgba(var(--v-theme-on-surface), 0.64);
   cursor: pointer;
@@ -275,17 +280,6 @@ export default {
   background: rgba(var(--v-theme-on-surface), 0.07);
   color: rgb(var(--v-theme-on-surface));
   font-weight: 760;
-}
-
-.config-workspace__nav-item--active::before {
-  position: absolute;
-  top: 8px;
-  bottom: 8px;
-  left: 0;
-  width: 2px;
-  border-radius: 999px;
-  background: rgba(var(--v-theme-on-surface), 0.52);
-  content: '';
 }
 
 .config-workspace__main {
@@ -329,7 +323,7 @@ export default {
   margin-bottom: 28px !important;
   overflow: hidden !important;
   border: 1px solid var(--config-border) !important;
-  border-radius: 10px !important;
+  border-radius: var(--astrbot-radius-card) !important;
   background: rgb(var(--v-theme-surface)) !important;
   box-shadow: none !important;
 }

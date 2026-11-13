@@ -2,7 +2,6 @@ from collections.abc import AsyncGenerator
 
 from astrbot.core import logger
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
-from astrbot.core.star.session_llm_manager import SessionServiceManager
 
 from ..context import PipelineContext
 from ..stage import Stage, register_stage
@@ -21,7 +20,16 @@ class SessionStatusCheckStage(Stage):
         event: AstrMessageEvent,
     ) -> None | AsyncGenerator[None, None]:
         # 检查会话是否整体启用
-        if not await SessionServiceManager.is_session_enabled(event.unified_msg_origin):
+        config = self.ctx.plugin_manager.context.get_config(
+            umo=event.unified_msg_origin
+        )
+        blacklist = {
+            str(item).strip()
+            for item in config.get("platform_settings", {}).get("id_blacklist", [])
+        }
+        if event.unified_msg_origin in blacklist or str(
+            event.get_group_id()
+        ).strip() in blacklist - {""}:
             logger.debug(
                 f"Session {event.unified_msg_origin} is disabled; event propagation "
                 "was stopped."

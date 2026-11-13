@@ -98,10 +98,7 @@ async def test_cleanup_is_selective_and_matches_exact_platform(
                 ]
             )
             await preferences.session_put(
-                umo, "session_service_config", {"llm_enabled": False}
-            )
-            await preferences.session_put(
-                umo, "provider_perf_chat_completion", "shared"
+                umo, "config_binding", {"profile_id": None, "overrides": {"provider_settings.enable": False}}
             )
             await preferences.session_put(umo, "session_variables", {"name": platform})
             await preferences.session_put(umo, "sel_conv_id", platform)
@@ -149,8 +146,8 @@ async def test_cleanup_is_selective_and_matches_exact_platform(
             selected = platform == bot_id
             rules_removed = selected and "custom_rules" in targets
             prefs_removed = selected and "preferences" in targets
-            assert await preferences.session_get(umo, "session_service_config") == (
-                None if rules_removed else {"llm_enabled": False}
+            assert await preferences.session_get(umo, "config_binding") == (
+                None if rules_removed else {"profile_id": None, "overrides": {"provider_settings.enable": False}}
             )
             assert await preferences.session_get(umo, "session_variables") == (
                 None if prefs_removed else {"name": platform}
@@ -183,9 +180,10 @@ async def test_cleanup_is_selective_and_matches_exact_platform(
             if "routing" not in targets or pattern.partition(":")[0] != bot_id
         }
         assert core.umop_config_router.umop_to_conf_id == expected_routes
-        assert (
-            await preferences.global_get("umop_config_routing", {}) == expected_routes
-        )
+        reloaded_router = UmopConfigRouter(preferences)
+        await reloaded_router.initialize()
+        assert reloaded_router.umop_to_conf_id == expected_routes
+        assert await preferences.global_get("umop_config_routing") is None
         assert trace_calls == ([{"platform_id": bot_id}] if "traces" in targets else [])
     finally:
         await preferences.close()

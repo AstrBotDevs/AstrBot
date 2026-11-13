@@ -1148,6 +1148,15 @@
     }
   },
   "access_group": {
+    "blacklist": {
+      "description": "Blacklist",
+      "platform_settings": {
+        "id_blacklist": {
+          "description": "Blocked session IDs",
+          "hint": "Stop processing these sessions. Blacklist takes priority over whitelist, including administrators."
+        }
+      }
+    },
     "name": "Access Control",
     "admins": {
       "description": "Administrators",

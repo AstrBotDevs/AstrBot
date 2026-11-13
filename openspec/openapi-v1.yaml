@@ -4172,32 +4172,6 @@ paths:
         "200":
           $ref: "#/components/responses/Ok"
 
-  /api/v1/sessions:
-    get:
-      tags: [Sessions]
-      summary: List active UMOs and session status
-      operationId: listSessions
-      x-astrbot-scope: data
-      parameters:
-        - $ref: "#/components/parameters/Page"
-        - $ref: "#/components/parameters/PageSize"
-        - name: search
-          in: query
-          schema:
-            type: string
-        - name: platform
-          in: query
-          schema:
-            type: string
-        - name: message_type
-          in: query
-          schema:
-            type: string
-            enum: [all, group, private]
-      responses:
-        "200":
-          $ref: "#/components/responses/Ok"
-
   /api/v1/sessions/active-umos:
     get:
       tags: [Sessions]
@@ -4250,6 +4224,25 @@ paths:
         "200":
           $ref: "#/components/responses/Ok"
 
+  /api/v1/sessions/overrides:
+    get:
+      tags: [Sessions]
+      operationId: getSessionOverrides
+      summary: Read session overrides and inherited profile values
+      x-astrbot-scope: data
+      parameters:
+        - name: umo
+          in: query
+          required: true
+          schema: { type: string, minLength: 1, maxLength: 512 }
+        - name: profile_id
+          in: query
+          description: Preview a base profile without saving; empty string follows routing.
+          schema: { type: string, maxLength: 255 }
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+
   /api/v1/sessions/rules:
     get:
       tags: [Sessions]
@@ -4293,38 +4286,6 @@ paths:
           application/json:
             schema:
               $ref: "#/components/schemas/UmoListRequest"
-      responses:
-        "200":
-          $ref: "#/components/responses/Ok"
-
-  /api/v1/sessions/provider:
-    patch:
-      tags: [Sessions]
-      summary: Batch update session provider selection
-      operationId: batchUpdateSessionProvider
-      x-astrbot-scope: data
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/BatchSessionProviderRequest"
-      responses:
-        "200":
-          $ref: "#/components/responses/Ok"
-
-  /api/v1/sessions/service:
-    patch:
-      tags: [Sessions]
-      summary: Batch update session service settings
-      operationId: batchUpdateSessionService
-      x-astrbot-scope: data
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/BatchSessionServiceRequest"
       responses:
         "200":
           $ref: "#/components/responses/Ok"
@@ -4581,7 +4542,16 @@ paths:
   /api/v1/stats:
     get:
       tags: [Stats]
-      summary: Get runtime statistics
+      summary: Get usage and runtime statistics
+      description: >-
+        Returns message totals, trends and platform rankings, existing process
+        statistics, daily_usage, and host-level system resources. offset_sec only
+        controls the rolling message window. daily_usage uses server-local calendar
+        days; tokens and distinct active sessions come from internal model calls,
+        and messages come from platform counters. Top-level cpu_percent is process
+        CPU normalized by CPU count, and memory values are in MiB. system reports
+        host CPU and memory, data-filesystem disk usage in bytes, and process uptime.
+        Only requested sections are computed and returned; omitting sections returns all fields.
       operationId: getStats
       x-astrbot-scope: system
       parameters:
@@ -4590,9 +4560,44 @@ paths:
           schema:
             type: integer
             default: 86400
+        - name: sections
+          in: query
+          description: >-
+            Comma-separated categories. messages returns message_count,
+            message_time_series and platform; daily_usage returns daily_usage;
+            process returns cpu_percent, memory, running, start_time and thread_count;
+            system returns system; instances returns platform_count, plugin_count
+            and plugins. Whitespace and duplicate categories are accepted.
+            Omit for all categories. Empty or unknown categories return HTTP 400.
+          schema:
+            type: string
+          example: daily_usage,system
       responses:
         "200":
-          $ref: "#/components/responses/Ok"
+          description: Usage and runtime statistics
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessEnvelope"
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        additionalProperties: true
+                        properties:
+                          daily_usage:
+                            type: object
+                            required: [today, yesterday]
+                            properties:
+                              today:
+                                $ref: "#/components/schemas/StatsDailyUsage"
+                              yesterday:
+                                $ref: "#/components/schemas/StatsDailyUsage"
+                          system:
+                            $ref: "#/components/schemas/StatsSystemResources"
+        "400":
+          description: Invalid sections parameter.
 
   /api/v1/stats/provider-tokens:
     get:
@@ -5730,6 +5735,47 @@ components:
         type: string
 
   schemas:
+    StatsSystemResources:
+      type: object
+      required: [uptime_seconds, cpu_percent, memory, disk]
+      properties:
+        uptime_seconds:
+          type: integer
+          minimum: 0
+        cpu_percent:
+          type: number
+        memory:
+          $ref: "#/components/schemas/StatsResourceUsage"
+        disk:
+          description: Usage of the filesystem containing the AstrBot data directory, or null if unavailable.
+          allOf:
+            - $ref: "#/components/schemas/StatsResourceUsage"
+          nullable: true
+    StatsResourceUsage:
+      type: object
+      required: [used, total, percent]
+      properties:
+        used:
+          type: integer
+          description: Used bytes.
+        total:
+          type: integer
+          description: Total bytes.
+        percent:
+          type: number
+    StatsDailyUsage:
+      type: object
+      required: [tokens, messages, active_sessions]
+      properties:
+        tokens:
+          type: integer
+          minimum: 0
+        messages:
+          type: integer
+          minimum: 0
+        active_sessions:
+          type: integer
+          minimum: 0
     BotCleanupTarget:
       type: string
       enum: [custom_rules, preferences, routing, cron_jobs, conversations, message_history, traces, stats]
@@ -6616,6 +6662,14 @@ components:
       type: object
       required: [umo, rule_key]
       properties:
+        profile_id:
+          type: [string, "null"]
+          minLength: 1
+          maxLength: 255
+          description: Explicit base profile; null follows routing; omitted preserves selection.
+        user_alias:
+          type: string
+          maxLength: 255
         umo:
           type: string
         rule_key:
@@ -6640,31 +6694,8 @@ components:
           type: string
         rule_key:
           type: string
+          description: For rule deletion, config_binding clears both profile selection and overrides; config_overrides or omission clears only overrides.
       additionalProperties: false
-
-    BatchSessionProviderRequest:
-      allOf:
-        - $ref: "#/components/schemas/UmoListRequest"
-        - type: object
-          required: [provider_id, provider_type]
-          properties:
-            provider_id:
-              type: string
-            provider_type:
-              type: string
-              enum: [chat_completion, speech_to_text, text_to_speech]
-
-    BatchSessionServiceRequest:
-      allOf:
-        - $ref: "#/components/schemas/UmoListRequest"
-        - type: object
-          properties:
-            session_enabled:
-              type: boolean
-            llm_enabled:
-              type: boolean
-            tts_enabled:
-              type: boolean
 
     SessionGroupRequest:
       type: object

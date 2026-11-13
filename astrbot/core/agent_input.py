@@ -468,17 +468,27 @@ async def admit_agent_input(context: Context, input: AgentInput) -> bool:
         Whether the input remains authorized to execute.
     """
     from astrbot.core.agent.runtime import AgentPermissions
-    from astrbot.core.star.session_llm_manager import SessionServiceManager
 
     event = input.event
     current_config = context.get_config(umo=event.unified_msg_origin)
-    if (
-        event.is_stopped()
-        or not current_config.get("provider_settings", {}).get("enable", True)
-        or not await SessionServiceManager.should_process_llm_request(event)
+    if event.is_stopped() or not current_config.get("provider_settings", {}).get(
+        "enable", True
     ):
         return False
     enabled = current_config.get("plugin_set", ["*"])
+    disabled = current_config.get("disabled_plugins", [])
+    if disabled:
+        from astrbot.core.star.star import star_registry
+
+        enabled = [
+            p.name
+            for p in star_registry
+            if p.name
+            and (
+                p.reserved
+                or (p.name not in disabled and ("*" in enabled or p.name in enabled))
+            )
+        ]
     event.plugins_name = None if enabled == ["*"] else list(enabled)
     input.permissions = AgentPermissions.from_event(event)
     input.plugin_tools, input.plugin_skills = collect_plugin_capabilities(

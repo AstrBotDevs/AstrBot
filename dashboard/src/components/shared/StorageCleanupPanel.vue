@@ -192,7 +192,7 @@ onMounted(() => {
 .storage-cleanup-card {
     overflow: hidden;
     border: 1px solid var(--settings-border, rgba(17, 24, 39, 0.13));
-    border-radius: 10px;
+    border-radius: var(--astrbot-radius-card);
     background: rgb(var(--v-theme-surface));
     box-shadow: none;
 }
@@ -233,7 +233,7 @@ onMounted(() => {
 
 .storage-cleanup-control :deep(.v-btn),
 .storage-cleanup-control :deep(.v-chip) {
-    border-radius: 10px;
+    border-radius: var(--astrbot-radius-control);
 }
 
 .storage-cleanup-chip,

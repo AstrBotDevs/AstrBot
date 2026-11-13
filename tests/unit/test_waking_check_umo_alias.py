@@ -9,7 +9,6 @@ import pytest
 from astrbot.core.pipeline.waking_check.stage import WakingCheckStage
 from astrbot.core.pipeline.waking_check.umo_auto_name import UmoAutoNameRecorder
 from astrbot.core.platform.message_type import MessageType
-from astrbot.core.star.session_plugin_manager import SessionPluginManager
 
 
 def make_group_event(group_id: str, group_name: str | None, message: str = "/hello"):
@@ -68,6 +67,9 @@ async def make_stage(db_helper: MagicMock) -> WakingCheckStage:
             db_helper=db_helper,
         )
     )
+    stage.ctx.plugin_manager = SimpleNamespace(
+        context=SimpleNamespace(get_config=lambda **_: stage.ctx.astrbot_config)
+    )
     return stage
 
 
@@ -86,11 +88,6 @@ async def test_waking_stage_records_only_awakened_events(monkeypatch):
     async def return_handlers(_event, handlers):
         return handlers
 
-    monkeypatch.setattr(
-        SessionPluginManager,
-        "filter_handlers_by_session",
-        return_handlers,
-    )
 
     ignored_event = make_group_event("group-1", "Engineering", "hello")
     await stage.process(ignored_event)

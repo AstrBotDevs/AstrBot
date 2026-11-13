@@ -210,6 +210,8 @@ async def test_get_stat_aggregates_platform_stats(temp_db):
         "cpu_percent",
         "thread_count",
         "start_time",
+        "daily_usage",
+        "system",
     }
 
 

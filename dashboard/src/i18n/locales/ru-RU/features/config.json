@@ -1,203 +1,359 @@
-﻿{
-    "title": "Конфигурация",
-    "subtitle": "Управление системными настройками",
-    "editor": {
-        "visual": "Визуальный редактор",
-        "code": "Редактор кода",
-        "revertCode": "Отменить изменения",
-        "applyConfig": "Применить",
-        "applyTip": "Кнопка «Применить» временно фиксирует изменения в визуальном редакторе. Чтобы сохранить их на постоянной основе, нажмите кнопку «Сохранить» в правом нижнем углу."
+{
+  "title": "Конфигурация",
+  "subtitle": "Управление системными настройками",
+  "editor": {
+    "visual": "Визуальный редактор",
+    "code": "Редактор кода",
+    "revertCode": "Отменить изменения",
+    "applyConfig": "Применить",
+    "applyTip": "Кнопка «Применить» временно фиксирует изменения в визуальном редакторе. Чтобы сохранить их на постоянной основе, нажмите кнопку «Сохранить» в правом нижнем углу."
+  },
+  "actions": {
+    "save": "Сохранить",
+    "delete": "Удалить",
+    "add": "Добавить",
+    "reset": "Сбросить настройки",
+    "export": "Экспорт",
+    "import": "Импорт",
+    "validate": "Проверить"
+  },
+  "help": {
+    "documentation": "Документация",
+    "support": "Поддержка",
+    "helpText": "Нужна помощь? См. {documentation} или обратитесь в {support}.",
+    "helpPrefix": "Нужна помощь? См.",
+    "helpMiddle": "или обратитесь в",
+    "helpSuffix": "."
+  },
+  "messages": {
+    "configApplied": "Настройки применены образно. Нажмите «Сохранить» для окончательной записи.",
+    "configApplyError": "Ошибка применения: некорректный формат JSON.",
+    "unsavedChangesNotice": "Не сохранено. Нажмите кнопку в правом нижнем углу, чтобы сохранить.",
+    "saveSuccess": "Настройки успешно сохранены",
+    "saveError": "Ошибка при сохранении",
+    "loadError": "Ошибка при загрузке настроек",
+    "deleteSuccess": "Удалено",
+    "deleteError": "Ошибка удаления",
+    "updateSuccess": "Обновлено",
+    "updateError": "Ошибка обновления"
+  },
+  "sections": {
+    "general": "Основные",
+    "advanced": "Расширенные",
+    "security": "Безопасность",
+    "appearance": "Внешний вид",
+    "notification": "Уведомления",
+    "moreConfig": "Дополнительные настройки"
+  },
+  "aiSettings": {
+    "title": "ИИ",
+    "enable": "Включить ИИ",
+    "more": "Другие действия",
+    "changeRunner": "Изменить режим выполнения",
+    "localSettingsTitle": "Встроенный ИИ AstrBot",
+    "settingsSuffix": "Настройки",
+    "tabs": {
+      "model": "Модель",
+      "persona": "Персона",
+      "capabilities": "Возможности",
+      "advanced": "Расширенные"
     },
-    "actions": {
-        "save": "Сохранить",
-        "delete": "Удалить",
-        "add": "Добавить",
-        "reset": "Сбросить настройки",
-        "export": "Экспорт",
-        "import": "Импорт",
-        "validate": "Проверить"
+    "groups": {
+      "model": "Модель",
+      "modelHint": "Выберите модели чата и стратегию повторных попыток для встроенного ИИ.",
+      "execution": "Выполнение",
+      "executionHint": "Настройте цикл вызова инструментов и процесс выполнения.",
+      "media": "Изображения и речь",
+      "mediaHint": "Настройте распознавание изображений, речи и синтез речи.",
+      "behavior": "Обработка сообщений",
+      "behaviorHint": "Эти настройки применяются ко всем режимам выполнения в профиле."
     },
-    "help": {
-        "documentation": "Документация",
-        "support": "Поддержка",
-        "helpText": "Нужна помощь? См. {documentation} или обратитесь в {support}.",
-        "helpPrefix": "Нужна помощь? См.",
-        "helpMiddle": "или обратитесь в",
-        "helpSuffix": "."
+    "common": {
+      "title": "Общие настройки",
+      "subtitle": "Эти настройки не меняются при смене режима выполнения."
     },
-    "messages": {
-        "configApplied": "Настройки применены образно. Нажмите «Сохранить» для окончательной записи.",
-        "configApplyError": "Ошибка применения: некорректный формат JSON.",
-        "unsavedChangesNotice": "Не сохранено. Нажмите кнопку в правом нижнем углу, чтобы сохранить.",
-        "saveSuccess": "Настройки успешно сохранены",
-        "saveError": "Ошибка при сохранении",
-        "loadError": "Ошибка при загрузке настроек",
-        "deleteSuccess": "Удалено",
-        "deleteError": "Ошибка удаления",
-        "updateSuccess": "Обновлено",
-        "updateError": "Ошибка обновления"
+    "disabled": {
+      "title": "ИИ отключён",
+      "subtitle": "Включите ИИ для обработки сообщений с помощью модели."
     },
-    "sections": {
-        "general": "Основные",
-        "advanced": "Расширенные",
-        "security": "Безопасность",
-        "appearance": "Внешний вид",
-        "notification": "Уведомления",
-        "moreConfig": "Дополнительные настройки"
+    "runnerDialog": {
+      "title": "Изменить режим выполнения",
+      "subtitle": "Изменяйте этот параметр только при подключении внешнего ИИ-приложения. Для большинства пользователей подходит встроенный ИИ.",
+      "warningPrefix": "После переключения будут применены настройки нового режима. Конфигурация текущего режима ",
+      "warningEmphasis": "не сохранится",
+      "warningSuffix": ".",
+      "confirm": "Использовать режим"
     },
-    "aiSettings": {
-        "title": "ИИ",
-        "enable": "Включить ИИ",
-        "more": "Другие действия",
-        "changeRunner": "Изменить режим выполнения",
-        "localSettingsTitle": "Встроенный ИИ AstrBot",
-        "settingsSuffix": "Настройки",
-        "tabs": {
-            "model": "Модель",
-            "persona": "Персона",
-            "capabilities": "Возможности",
-            "advanced": "Расширенные"
-        },
-        "groups": {
-            "model": "Модель",
-            "modelHint": "Выберите модели чата и стратегию повторных попыток для встроенного ИИ.",
-            "execution": "Выполнение",
-            "executionHint": "Настройте цикл вызова инструментов и процесс выполнения.",
-            "media": "Изображения и речь",
-            "mediaHint": "Настройте распознавание изображений, речи и синтез речи.",
-            "behavior": "Обработка сообщений",
-            "behaviorHint": "Эти настройки применяются ко всем режимам выполнения в профиле."
-        },
-        "common": {
-            "title": "Общие настройки",
-            "subtitle": "Эти настройки не меняются при смене режима выполнения."
-        },
-        "disabled": {
-            "title": "ИИ отключён",
-            "subtitle": "Включите ИИ для обработки сообщений с помощью модели."
-        },
-        "runnerDialog": {
-            "title": "Изменить режим выполнения",
-            "subtitle": "Изменяйте этот параметр только при подключении внешнего ИИ-приложения. Для большинства пользователей подходит встроенный ИИ.",
-            "warningPrefix": "После переключения будут применены настройки нового режима. Конфигурация текущего режима ",
-            "warningEmphasis": "не сохранится",
-            "warningSuffix": ".",
-            "confirm": "Использовать режим"
-        },
-        "runners": {
-            "astrbot": {
-                "title": "Встроенный ИИ",
-                "summary": "Настройте возможности ИИ AstrBot, включая модели, персоны, базы знаний и инструменты.",
-                "description": "Встроенный ИИ AstrBot поддерживает модели, персоны, базы знаний и инструменты."
-            },
-            "dify": {
-                "title": "Dify",
-                "summary": "Диалоги ИИ обрабатываются приложением Dify.",
-                "description": "Подключите приложение Dify и настройте параметры доступа."
-            },
-            "coze": {
-                "title": "Coze",
-                "summary": "Диалоги ИИ обрабатываются ботом Coze.",
-                "description": "Подключите Coze Bot и настройте параметры доступа."
-            },
-            "dashscope": {
-                "title": "Alibaba Cloud Model Studio",
-                "summary": "Диалоги ИИ обрабатываются приложением Model Studio.",
-                "description": "Подключите приложение Model Studio и настройте параметры доступа."
-            },
-            "deerflow": {
-                "title": "DeerFlow",
-                "summary": "Диалоги ИИ обрабатываются DeerFlow.",
-                "description": "Подключите DeerFlow и настройте параметры выполнения."
-            }
-        }
-    },
-    "general": {
-        "botName": "Имя бота",
-        "language": "Язык интерфейса",
-        "timezone": "Часовой пояс",
-        "autoSave": "Автосохранение",
-        "debugMode": "Режим отладки"
-    },
-    "advanced": {
-        "logLevel": "Уровень логирования",
-        "maxConnections": "Макс. соединений",
-        "timeout": "Тайм-аут",
-        "retryAttempts": "Попытки повтора",
-        "cacheSize": "Размер кэша"
-    },
-    "security": {
-        "apiKey": "Ключ API",
-        "allowedHosts": "Разрешенные хосты",
-        "rateLimit": "Лимит запросов",
-        "encryption": "Шифрование"
-    },
-    "configSelection": {
-        "selectConfig": "Выбор конфигурации",
-        "defaultConfig": "Конфигурация по умолчанию",
-        "search": "Поиск конфигураций",
-        "noResults": "Подходящие конфигурации не найдены",
-        "normalConfig": "Обычная",
-        "systemConfig": "Системная"
-    },
-    "search": {
-        "placeholder": "Поиск по настройкам (поле/описание/подсказка)",
-        "noResult": "Совпадений не найдено"
-    },
-    "configManagement": {
-        "title": "Управление конфигурациями",
-        "description": "AstrBot поддерживает несколько конфигураций для разных ботов. Если конфигурация не указана, используется конфигурация по умолчанию.",
-        "newConfig": "Новая конфигурация",
-        "copyConfig": "Копировать конфигурацию",
-        "editConfig": "Изменить конфигурацию",
-        "manageConfigs": "Управление файлами...",
-        "configName": "Имя",
-        "fillConfigName": "Введите имя конфигурации",
-        "confirmDelete": "Вы уверены, что хотите удалить конфигурацию «{name}»? Это действие необратимо.",
-        "pleaseEnterName": "Пожалуйста, введите имя",
-        "nameExists": "Имя конфигурации уже существует. Используйте другое имя.",
-        "createFailed": "Ошибка создания конфигурации",
-        "copyFailed": "Ошибка копирования конфигурации",
-        "deleteFailed": "Ошибка удаления",
-        "updateFailed": "Ошибка обновления"
-    },
-    "buttons": {
-        "cancel": "Отмена",
-        "create": "Создать",
-        "update": "Обновить"
-    },
-    "codeEditor": {
-        "title": "Редактирование файла"
-    },
-    "fileUpload": {
-        "button": "Файлы",
-        "dialogTitle": "Загруженные файлы",
-        "dropzone": "Загрузить файлы",
-        "allowedTypes": "Разрешенные типы: {types}",
-        "empty": "Файлов нет",
-        "statusMissing": "Файл отсутствует",
-        "statusUnconfigured": "Не в конфиге",
-        "uploadSuccess": "Загружено файлов: {count}",
-        "uploadFailed": "Ошибка загрузки",
-        "loadFailed": "Ошибка получения списка файлов",
-        "fileTooLarge": "Файл слишком велик (макс. {max} МБ): {name}",
-        "deleteSuccess": "Файл удален",
-        "deleteFailed": "Ошибка удаления",
-        "addToConfig": "Добавлено в конфигурацию",
-        "fileCount": "Файлов: {count}",
-        "done": "Готово"
-    },
-    "unsavedChangesWarning": {
-        "dialogTitle": "Несохраненные изменения",
-        "leavePage": "У вас есть несохраненные изменения. Сохранить перед уходом?",
-        "switchConfig": "Переключение конфигурации приведет к потере несохраненных изменений. Сохранить?",
-        "options": {
-            "save": "Сохранить",
-            "saveAndSwitch": "Сохранить и переключить",
-            "discardAndSwitch": "Сбросить и переключить",
-            "closeCard": "Закрыть",
-            "confirm": "ОК",
-            "cancel": "Отмена"
-        }
+    "runners": {
+      "astrbot": {
+        "title": "Встроенный ИИ",
+        "summary": "Настройте возможности ИИ AstrBot, включая модели, персоны, базы знаний и инструменты.",
+        "description": "Встроенный ИИ AstrBot поддерживает модели, персоны, базы знаний и инструменты."
+      },
+      "dify": {
+        "title": "Dify",
+        "summary": "Диалоги ИИ обрабатываются приложением Dify.",
+        "description": "Подключите приложение Dify и настройте параметры доступа."
+      },
+      "coze": {
+        "title": "Coze",
+        "summary": "Диалоги ИИ обрабатываются ботом Coze.",
+        "description": "Подключите Coze Bot и настройте параметры доступа."
+      },
+      "dashscope": {
+        "title": "Alibaba Cloud Model Studio",
+        "summary": "Диалоги ИИ обрабатываются приложением Model Studio.",
+        "description": "Подключите приложение Model Studio и настройте параметры доступа."
+      },
+      "deerflow": {
+        "title": "DeerFlow",
+        "summary": "Диалоги ИИ обрабатываются DeerFlow.",
+        "description": "Подключите DeerFlow и настройте параметры выполнения."
+      }
     }
+  },
+  "general": {
+    "botName": "Имя бота",
+    "language": "Язык интерфейса",
+    "timezone": "Часовой пояс",
+    "autoSave": "Автосохранение",
+    "debugMode": "Режим отладки"
+  },
+  "advanced": {
+    "logLevel": "Уровень логирования",
+    "maxConnections": "Макс. соединений",
+    "timeout": "Тайм-аут",
+    "retryAttempts": "Попытки повтора",
+    "cacheSize": "Размер кэша"
+  },
+  "security": {
+    "apiKey": "Ключ API",
+    "allowedHosts": "Разрешенные хосты",
+    "rateLimit": "Лимит запросов",
+    "encryption": "Шифрование"
+  },
+  "configSelection": {
+    "selectConfig": "Выбор конфигурации",
+    "defaultConfig": "Конфигурация по умолчанию",
+    "search": "Поиск конфигураций",
+    "noResults": "Подходящие конфигурации не найдены",
+    "normalConfig": "Обычная",
+    "systemConfig": "Системная"
+  },
+  "search": {
+    "placeholder": "Поиск по настройкам (поле/описание/подсказка)",
+    "noResult": "Совпадений не найдено"
+  },
+  "configManagement": {
+    "title": "Управление конфигурациями",
+    "description": "AstrBot поддерживает несколько конфигураций для разных ботов. Если конфигурация не указана, используется конфигурация по умолчанию.",
+    "newConfig": "Новая конфигурация",
+    "copyConfig": "Копировать конфигурацию",
+    "editConfig": "Изменить конфигурацию",
+    "manageConfigs": "Управление файлами...",
+    "configName": "Имя",
+    "fillConfigName": "Введите имя конфигурации",
+    "confirmDelete": "Вы уверены, что хотите удалить конфигурацию «{name}»? Это действие необратимо.",
+    "pleaseEnterName": "Пожалуйста, введите имя",
+    "nameExists": "Имя конфигурации уже существует. Используйте другое имя.",
+    "createFailed": "Ошибка создания конфигурации",
+    "copyFailed": "Ошибка копирования конфигурации",
+    "deleteFailed": "Ошибка удаления",
+    "updateFailed": "Ошибка обновления"
+  },
+  "buttons": {
+    "cancel": "Отмена",
+    "create": "Создать",
+    "update": "Обновить"
+  },
+  "codeEditor": {
+    "title": "Редактирование файла"
+  },
+  "fileUpload": {
+    "button": "Файлы",
+    "dialogTitle": "Загруженные файлы",
+    "dropzone": "Загрузить файлы",
+    "allowedTypes": "Разрешенные типы: {types}",
+    "empty": "Файлов нет",
+    "statusMissing": "Файл отсутствует",
+    "statusUnconfigured": "Не в конфиге",
+    "uploadSuccess": "Загружено файлов: {count}",
+    "uploadFailed": "Ошибка загрузки",
+    "loadFailed": "Ошибка получения списка файлов",
+    "fileTooLarge": "Файл слишком велик (макс. {max} МБ): {name}",
+    "deleteSuccess": "Файл удален",
+    "deleteFailed": "Ошибка удаления",
+    "addToConfig": "Добавлено в конфигурацию",
+    "fileCount": "Файлов: {count}",
+    "done": "Готово"
+  },
+  "unsavedChangesWarning": {
+    "dialogTitle": "Несохраненные изменения",
+    "leavePage": "У вас есть несохраненные изменения. Сохранить перед уходом?",
+    "switchConfig": "Переключение конфигурации приведет к потере несохраненных изменений. Сохранить?",
+    "options": {
+      "save": "Сохранить",
+      "saveAndSwitch": "Сохранить и переключить",
+      "discardAndSwitch": "Сбросить и переключить",
+      "closeCard": "Закрыть",
+      "confirm": "ОК",
+      "cancel": "Отмена"
+    }
+  },
+  "mappings": {
+    "source": "Session / route",
+    "perPage": "Rows per page",
+    "pageText": "{start}–{end} of {total}",
+    "title": "Manage session mappings",
+    "add": "Add mapping",
+    "back": "Back",
+    "close": "Close",
+    "search": "Search sessions, rules or profiles",
+    "groups": "Manage groups",
+    "empty": "No configuration mappings",
+    "target": "Session / group",
+    "profile": "Configuration profile",
+    "overrides": "Overrides",
+    "routeOrder": "Routing rule · #{order}",
+    "follows": "Follow routing · {name}",
+    "overrideCount": "{count} overrides",
+    "addOverride": "Add overrides",
+    "remove": "Remove mapping for {name}",
+    "session": "Session",
+    "group": "Existing group",
+    "chooseSession": "Select a session",
+    "chooseGroup": "Select a group",
+    "groupHint": "Apply the mapping to the {count} current members of this group.",
+    "destination": "Mapping destination",
+    "next": "Next",
+    "groupTargets": "{name} · {count} sessions",
+    "followRouting": "Follow configuration routing",
+    "profileHint": "Existing field overrides are preserved when selecting a profile.",
+    "batchHint": "Apply only these changes to {count} sessions and preserve other settings.",
+    "save": "Save mapping",
+    "discard": "Discard unsaved changes?",
+    "removeConfirm": "Remove the mapping for \"{name}\"? Sessions will use the remaining routing rules.",
+    "error": "Operation failed. Please try again.",
+    "selectedCount": "Выбрано сеансов: {count}",
+    "selectTargetsHint": "Выберите сеансы или группы слева",
+    "addTargets": "Добавить сеансы или группы",
+    "groupCount": "Группа · {count} сеансов",
+    "removeTarget": "Убрать {name}",
+    "description": "Выбирайте профили для отдельных сеансов или изменяйте модель, персону, состояние сеанса и другие настройки. Индивидуальные настройки имеют приоритет над профилем. Сюда перенесены прежние «Пользовательские правила»."
+  },
+  "overrides": {
+    "baseProfile": "Base configuration",
+    "followsRouting": "Follow routing · {name}",
+    "moreActions": "More actions",
+    "valueCustom": "{value} · Session override",
+    "valueFollowing": "Follow profile · {value}",
+    "setForSession": "Set for this session",
+    "workspaceHint": "Set shared defaults, then make exceptions for individual sessions.",
+    "profiles": "Profiles",
+    "sessionScope": "Session overrides",
+    "sessions": "Sessions",
+    "refresh": "Refresh",
+    "intro": "Change only what this session needs. Everything else follows its profile.",
+    "chooseSession": "Choose a session",
+    "search": "Search session or alias",
+    "groups": "Session groups",
+    "allOverrides": "Configured sessions",
+    "count": "{count} overrides",
+    "noSessions": "No matching overrides. Choose a session to create one.",
+    "commandsHint": "Model and persona changes made in chat use these same overrides.",
+    "alias": "Edit alias",
+    "inherits": "Inherits from {name}",
+    "inheritanceHint": "Explicit values apply only to this session. Profile changes flow through all inherited fields.",
+    "ai": "AI & chat",
+    "plugins": "Plugins",
+    "access": "Access",
+    "onlyOverrides": "Only overridden",
+    "inheritedValue": "Profile",
+    "custom": "Overridden",
+    "follow": "Follow profile",
+    "following": "Following profile",
+    "customize": "Change",
+    "listHint": "This list replaces the profile list. An empty list clears it; use Follow profile to inherit.",
+    "noOverridesHere": "No overridden settings.",
+    "unsaved": "Unsaved changes",
+    "saved": "Up to date",
+    "saveHint": "Changes apply to new messages after saving.",
+    "resetAll": "Restore all inheritance",
+    "applyGroup": "Apply changes to group ({count})",
+    "save": "Save changes",
+    "emptyTitle": "A different setup for one session",
+    "emptyHint": "Choose a chat to adjust its model, persona or plugins. Other settings follow its configuration profile.",
+    "aliasHint": "This alias is shared across AstrBot. Save changes in the editor to apply it.",
+    "done": "Done",
+    "groupHint": "Groups organize sessions for filtering and batch updates. Membership does not create configuration inheritance.",
+    "members": "{count} sessions",
+    "edit": "Edit",
+    "delete": "Delete",
+    "groupName": "Group name",
+    "newGroup": "New group",
+    "cancel": "Cancel",
+    "saveSuccess": "Changes saved",
+    "on": "On",
+    "off": "Off",
+    "emptyValue": "Not set",
+    "allPlugins": "All available plugins",
+    "discardConfirm": "Discard unsaved changes?",
+    "resetConfirm": "Restore all fields to the profile? This takes effect when you save.",
+    "groupConfirm": "Apply only the changed fields to {count} sessions? Other overrides and aliases will be kept.",
+    "deleteGroupConfirm": "Delete group “{name}”? Sessions and their overrides will be kept.",
+    "error": "Unable to complete the request.",
+    "disabledPluginsHint": "Exclude these plugins from the allowed set. An empty list adds no restrictions.",
+    "fields": {
+      "aiEnabled": "AI replies",
+      "chatModel": "Chat model",
+      "persona": "Persona",
+      "sttEnabled": "Speech recognition",
+      "sttModel": "Speech recognition model",
+      "ttsEnabled": "Speech output",
+      "ttsModel": "Speech synthesis model",
+      "knowledgeBases": "Knowledge bases",
+      "retrievalCount": "Retrieved results",
+      "allowedPlugins": "Allowed plugins",
+      "disabledPlugins": "Disabled plugins",
+      "sessionStatus": "Состояние сеанса",
+      "wakePrefix": "Префиксы активации"
+    },
+    "followShort": "Inherit",
+    "otherSession": "Choose another session",
+    "showAll": "Show all settings",
+    "sections": {
+      "conversation": {
+        "title": "Conversation",
+        "hint": "Model and persona"
+      },
+      "voice": {
+        "title": "Voice",
+        "hint": "Recognition and synthesis"
+      },
+      "knowledge": {
+        "title": "Knowledge",
+        "hint": "Sources and retrieval"
+      },
+      "plugins": {
+        "title": "Plugins",
+        "hint": "Availability and exclusions"
+      },
+      "access": {
+        "title": "Access",
+        "hint": "Control session responses"
+      }
+    },
+    "batchUnchanged": "Сохранить текущую настройку каждого сеанса",
+    "sessionEnabled": "Включён",
+    "sessionStopped": "Остановлен",
+    "sessionStatusHint": "Остановка прекращает обработку сообщений в выбранных сеансах, включая ответы ИИ и плагины. При включении остальные правила доступа продолжают действовать.",
+    "fieldGroups": {
+      "session": "Сеанс",
+      "ai": "ИИ и диалог",
+      "voice": "Голос",
+      "knowledge": "Базы знаний",
+      "plugins": "Плагины"
+    },
+    "wakePrefixHint": "Задайте префиксы активации для этого сеанса, например /. Список заменяет префиксы профиля. Пустой список отключает активацию по префиксу; упоминания и другие способы продолжают работать. Необходимость префикса в личных сообщениях определяется профилем."
+  }
 }

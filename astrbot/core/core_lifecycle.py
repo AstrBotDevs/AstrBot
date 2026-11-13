@@ -216,7 +216,9 @@ class AstrBotCoreLifecycle:
         self.platform_manager = PlatformManager(self.astrbot_config, self.event_queue)
 
         # 初始化对话管理器
-        self.conversation_manager = ConversationManager(self.db)
+        self.conversation_manager = ConversationManager(
+            self.db, self.astrbot_config_mgr
+        )
 
         # 初始化平台消息历史管理器
         self.platform_message_history_manager = PlatformMessageHistoryManager(self.db)
@@ -264,6 +266,11 @@ class AstrBotCoreLifecycle:
         self._warn_about_unset_default_chat_provider()
 
         await self.kb_manager.initialize()
+        from astrbot.core.db.migration.migra_session_overrides import (
+            migrate_session_overrides,
+        )
+
+        await migrate_session_overrides(self.astrbot_config_mgr, self.db)
 
         # 初始化消息事件流水线调度器
         self.pipeline_scheduler_mapping = await self.load_pipeline_scheduler()

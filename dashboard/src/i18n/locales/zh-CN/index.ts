@@ -8,7 +8,6 @@ import zhCNShared from './core/shared.json';
 import zhCNChat from './features/chat.json';
 import zhCNExtension from './features/extension.json';
 import zhCNConversation from './features/conversation.json';
-import zhCNSessionManagement from './features/session-management.json';
 import zhCNToolUse from './features/tool-use.json';
 import zhCNProvider from './features/provider.json';
 import zhCNPlatform from './features/platform.json';
@@ -50,7 +49,6 @@ export default {
       chat: zhCNChat,
       extension: zhCNExtension,
       conversation: zhCNConversation,
-      'session-management': zhCNSessionManagement,
       tooluse: zhCNToolUse,
       provider: zhCNProvider,
       platform: zhCNPlatform,

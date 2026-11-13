@@ -192,14 +192,12 @@ outline: deep
 | `POST` | `/api/v1/session-groups` | — |
 | `PUT` | `/api/v1/session-groups/{group_id}` | — |
 | `DELETE` | `/api/v1/session-groups/{group_id}` | — |
-| `GET` | `/api/v1/sessions` | — |
 | `GET` | `/api/v1/sessions/active-umos` | — |
-| `PATCH` | `/api/v1/sessions/provider` | — |
+| `GET` | `/api/v1/sessions/overrides` | — |
 | `GET` | `/api/v1/sessions/rules` | — |
 | `POST` | `/api/v1/sessions/rules` | — |
 | `POST` | `/api/v1/sessions/rules/delete` | — |
 | `GET` | `/api/v1/sessions/senders` | — |
-| `PATCH` | `/api/v1/sessions/service` | — |
 
 ## `file`
 
