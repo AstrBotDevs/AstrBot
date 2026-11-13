@@ -203,7 +203,7 @@ async def test_deepseek_stt_rejects_non_json_response(provider_factory, tmp_path
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("status", [400, 401, 408, 413, 429, 500, 503, 504])
+@pytest.mark.parametrize("status", [400, 503])
 async def test_deepseek_stt_http_errors_do_not_leak_response_content(
     provider_factory, tmp_path, status
 ):

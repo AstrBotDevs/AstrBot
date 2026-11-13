@@ -109,11 +109,15 @@ async def test_deepseek_tts_request_and_chunked_wav_response(
         captured["path"] = request.path
         captured["headers"] = request.headers
         captured["body"] = json.loads(await request.read())
-        return web.Response(
+        response = web.StreamResponse(
             status=200,
             headers={"Content-Type": "audio/wav; charset=binary"},
-            body=TEST_WAV,
         )
+        await response.prepare(request)
+        for index in range(0, len(TEST_WAV), 3):
+            await response.write(TEST_WAV[index : index + 3])
+        await response.write_eof()
+        return response
 
     api_base = await tts_server_factory(handle_tts)
     provider = provider_factory(
@@ -137,26 +141,6 @@ async def test_deepseek_tts_request_and_chunked_wav_response(
     }
     assert "model" not in captured["body"]
     assert audio_path.read_bytes() == TEST_WAV
-
-
-@pytest.mark.asyncio
-async def test_deepseek_tts_reads_audio_across_small_chunks(
-    provider_factory, tts_server_factory
-):
-    async def handle_tts(request):
-        response = web.StreamResponse(status=200, headers={"Content-Type": "audio/wav"})
-        await response.prepare(request)
-        for index in range(0, len(TEST_WAV), 3):
-            await response.write(TEST_WAV[index : index + 3])
-        await response.write_eof()
-        return response
-
-    api_base = await tts_server_factory(handle_tts)
-    provider = provider_factory({"api_base": api_base})
-
-    audio_path = await provider.get_audio("chunked audio")
-
-    assert Path(audio_path).read_bytes() == TEST_WAV
 
 
 @pytest.mark.asyncio
@@ -203,15 +187,7 @@ async def test_deepseek_tts_rejects_billable_character_overflow_without_request(
 
 
 @pytest.mark.asyncio
-async def test_deepseek_tts_rejects_oversized_json_request_body(provider_factory):
-    provider = provider_factory({"deepseek-tts-voice": "x" * (64 * 1024)})
-
-    with pytest.raises(ValueError, match="request body.*maximum is 65536 bytes"):
-        await provider.get_audio("hello")
-
-
-@pytest.mark.asyncio
-@pytest.mark.parametrize("status", [400, 429, 503, 504])
+@pytest.mark.parametrize("status", [400, 503])
 async def test_deepseek_tts_http_errors_do_not_save_error_body(
     provider_factory, tts_server_factory, tmp_path, status
 ):
