@@ -1,4 +1,5 @@
 import mirarouterIcon from '@/assets/images/provider_logos/mirarouter.svg?no-inline';
+import ionetIcon from '@/assets/images/provider_logos/ionet.svg?no-inline';
 
 /**
  * 提供商相关的工具函数
@@ -12,6 +13,7 @@ import mirarouterIcon from '@/assets/images/provider_logos/mirarouter.svg?no-inl
 export function getProviderIcon(type) {
   const icons = {
     'mirarouter': mirarouterIcon,
+    'ionet': ionetIcon,
     'openai': 'https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@latest/icons/openai.svg',
     'azure': 'https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@latest/icons/azure.svg',
     'xai': 'https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@latest/icons/xai.svg',
@@ -82,6 +84,7 @@ export function isMonochromeProviderIcon(type) {
     'kimi',
     'kimi-code',
     'ppio',
+    'ionet',
     'lm_studio',
     'minimax',
     'minimax-token-plan',
