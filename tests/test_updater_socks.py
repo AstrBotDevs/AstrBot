@@ -1408,6 +1408,10 @@ async def test_plugin_updater_shallow_clones_non_github_repository(
     assert plugin_path == str(tmp_path / "demo_plugin")
     assert clone_args == (
         "/git",
+        # The credential helper list is cleared on the command line so an
+        # inherited helper cannot stop a non-interactive clone.
+        "-c",
+        "credential.helper=",
         "clone",
         "--depth",
         "1",

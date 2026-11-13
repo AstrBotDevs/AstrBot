@@ -2,6 +2,8 @@ import asyncio
 import os
 import re
 import shutil
+import signal
+import sys
 import tempfile
 import zipfile
 from copy import copy
@@ -11,6 +13,7 @@ import yaml
 
 from astrbot.core import logger
 from astrbot.core.repository import (
+    GitCloneTimeoutError,
     GitHubRepository,
     GitUnavailableError,
     normalize_repository_url,
@@ -30,6 +33,7 @@ PLUGIN_METADATA_REQUIRED_FIELDS = ("name", "desc", "version", "author")
 PLUGIN_METADATA_MAX_BYTES = 1024 * 1024
 PLUGIN_REPOSITORY_TIMEOUT_SECONDS = 15
 PLUGIN_GIT_CLONE_TIMEOUT_SECONDS = 180
+PLUGIN_GIT_CLONE_KILL_TIMEOUT_SECONDS = 5
 
 __all__ = ["PLUGIN_METADATA_FILENAMES"]
 
@@ -60,7 +64,9 @@ class _PluginUpdater(_RepoZipUpdater):
             target_path: New directory that will receive the working tree.
 
         Raises:
-            RuntimeError: If Git is unavailable, times out, or clone fails.
+            GitUnavailableError: If the Git executable is unavailable.
+            GitCloneTimeoutError: If the clone exceeds its deadline.
+            RuntimeError: If the clone fails.
         """
         git_executable = shutil.which("git")
         if not git_executable:
@@ -73,9 +79,22 @@ class _PluginUpdater(_RepoZipUpdater):
             raise RuntimeError(f"Git clone target already exists: {target}")
         target.parent.mkdir(parents=True, exist_ok=True)
         process_env = os.environ.copy()
+        # Keep the clone non-interactive on every supported transport.
+        # GIT_TERMINAL_PROMPT only silences git's own prompt: credential helpers (Git
+        # Credential Manager, IDE askpass bridges) are separate programs that can wait
+        # for a GUI dialog to be dismissed. An empty credential.helper resets the helper
+        # list and, as command-line config, wins over system/global/local config. The
+        # askpass hooks point at the null device: it exists everywhere but is not an
+        # executable program, so an inherited askpass fails instead of prompting and no
+        # git version has to interpret an empty value.
         process_env["GIT_TERMINAL_PROMPT"] = "0"
+        process_env["GIT_ASKPASS"] = os.devnull
+        process_env["SSH_ASKPASS"] = os.devnull
+        process_env.setdefault("GIT_SSH_COMMAND", "ssh -oBatchMode=yes")
         process = await asyncio.create_subprocess_exec(
             git_executable,
+            "-c",
+            "credential.helper=",
             "clone",
             "--depth",
             "1",
@@ -84,9 +103,14 @@ class _PluginUpdater(_RepoZipUpdater):
             "--",
             repo_url,
             str(target),
+            stdin=asyncio.subprocess.DEVNULL,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
             env=process_env,
+            # Give the clone its own session/process group so the timeout path can take
+            # down every helper it spawned in one signal. Windows ignores this and uses
+            # `taskkill /T` instead.
+            start_new_session=True,
         )
         try:
             _, stderr = await asyncio.wait_for(
@@ -94,11 +118,74 @@ class _PluginUpdater(_RepoZipUpdater):
                 timeout=PLUGIN_GIT_CLONE_TIMEOUT_SECONDS,
             )
         except asyncio.TimeoutError as exc:
-            process.kill()
-            await process.communicate()
-            if target.exists():
-                remove_dir(str(target))
-            raise RuntimeError("Git clone timed out.") from exc
+            # Take down the clone together with every helper it spawned. The clone leads
+            # its own session on POSIX, so its pid is also its process group id. Windows
+            # has no process group to signal, so `taskkill /T` has to walk the live tree
+            # while the clone is still alive: once the parent exits, its helpers are
+            # reparented and the tree can no longer be found. A nonzero exit code means
+            # `taskkill` gave up on part of the tree, so the tree is not proven dead yet
+            # and the single-process kill below is the only remaining guarantee.
+            try:
+                if sys.platform == "win32":
+                    killer = await asyncio.create_subprocess_exec(
+                        "taskkill",
+                        "/T",
+                        "/F",
+                        "/PID",
+                        str(process.pid),
+                        stdout=asyncio.subprocess.DEVNULL,
+                        stderr=asyncio.subprocess.DEVNULL,
+                    )
+                    await asyncio.wait_for(
+                        killer.wait(),
+                        timeout=PLUGIN_GIT_CLONE_KILL_TIMEOUT_SECONDS,
+                    )
+                    if killer.returncode != 0:
+                        raise RuntimeError(f"taskkill exited with {killer.returncode}")
+                else:
+                    # The group kill also takes down git-remote-https and whatever
+                    # credential helper it started.
+                    os.killpg(process.pid, signal.SIGKILL)
+            except Exception:
+                logger.warning(
+                    "Failed to kill the git clone process tree; killing the clone "
+                    "process only.",
+                    exc_info=True,
+                )
+                try:
+                    process.kill()
+                except OSError:
+                    pass
+            # `wait()` completes only once the process exited and every inherited pipe
+            # reached EOF, so a helper that survived the kill would keep it pending
+            # forever. Bound it instead: the deadline is the reason this path exists.
+            try:
+                await asyncio.wait_for(
+                    process.wait(),
+                    timeout=PLUGIN_GIT_CLONE_KILL_TIMEOUT_SECONDS,
+                )
+            except asyncio.TimeoutError:
+                logger.warning(
+                    "The timed-out git clone process %s did not exit within %ss.",
+                    process.pid,
+                    PLUGIN_GIT_CLONE_KILL_TIMEOUT_SECONDS,
+                )
+            # Removing the partial checkout is best effort: a helper that is still alive
+            # can hold files in it, and a cleanup error must not replace the timeout the
+            # caller has to see.
+            try:
+                if target.exists():
+                    remove_dir(str(target))
+            except OSError:
+                logger.warning(
+                    "Failed to remove the partial checkout at %s after the git clone "
+                    "timed out.",
+                    target,
+                    exc_info=True,
+                )
+            raise GitCloneTimeoutError(
+                f"Git clone timed out after {PLUGIN_GIT_CLONE_TIMEOUT_SECONDS}s."
+            ) from exc
 
         if process.returncode != 0:
             if target.exists():
@@ -138,7 +225,11 @@ class _PluginUpdater(_RepoZipUpdater):
         if repository.transport == "git":
             temp_parent = Path(get_astrbot_temp_path()) / "repository-inspection"
             temp_parent.mkdir(mode=0o700, parents=True, exist_ok=True)
-            with tempfile.TemporaryDirectory(dir=temp_parent) as temp_dir:
+            # A killed clone can still have files held by a surviving helper, and a
+            # teardown error here would replace the reason the inspection failed.
+            with tempfile.TemporaryDirectory(
+                dir=temp_parent, ignore_cleanup_errors=True
+            ) as temp_dir:
                 checkout_path = Path(temp_dir) / repository.name
                 await self._clone_repository(normalized_url, checkout_path)
                 metadata = self.inspect_plugin_directory(checkout_path)["metadata"]
@@ -237,8 +328,18 @@ class _PluginUpdater(_RepoZipUpdater):
                 await self._clone_repository(normalized_url, plugin_path)
                 self.inspect_plugin_directory(plugin_path)
             except Exception:
-                if os.path.exists(plugin_path):
-                    remove_dir(plugin_path)
+                # A failed clean-up must not replace the error that describes why the
+                # installation failed; a killed clone can still hold files here.
+                try:
+                    if os.path.exists(plugin_path):
+                        remove_dir(plugin_path)
+                except OSError:
+                    logger.warning(
+                        "Failed to remove the staging directory %s after a failed "
+                        "clone.",
+                        plugin_path,
+                        exc_info=True,
+                    )
                 raise
             return plugin_path
         else:
@@ -296,9 +397,12 @@ class _PluginUpdater(_RepoZipUpdater):
             await self._download_file(download_url, plugin_path + ".zip")
         elif repository and repository.transport == "git":
             ensure_dir(self.plugin_store_path)
+            # A killed clone can still have files held by a surviving helper, and a
+            # teardown error here would replace the reason the update failed.
             with tempfile.TemporaryDirectory(
                 prefix=".plugin-update-",
                 dir=self.plugin_store_path,
+                ignore_cleanup_errors=True,
             ) as temp_dir:
                 checkout_path = Path(temp_dir) / repository.name
                 await self._clone_repository(normalized_url, checkout_path)
