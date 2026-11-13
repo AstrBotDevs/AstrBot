@@ -7,6 +7,9 @@ from typing import TypedDict, TypeVar
 from astrbot.core import AstrBotConfig, logger
 from astrbot.core.config.astrbot_config import ASTRBOT_CONFIG_PATH
 from astrbot.core.config.default import DEFAULT_CONFIG
+from astrbot.core.config.runtime import current_message_config
+from astrbot.core.config.snapshot import AstrBotConfigSnapshot
+from astrbot.core.config_bindings import BINDING_KEY
 from astrbot.core.platform.message_session import MessageSession
 from astrbot.core.platform.message_type import MessageType
 from astrbot.core.umop_config_router import UmopConfigRouter
@@ -102,12 +105,17 @@ class AstrBotConfigManager:
                 )
                 continue
 
-    def _load_conf_mapping(self, umo: str | MessageSession) -> ConfInfo:
-        """获取指定 umo 的配置文件 uuid, 如果不存在则返回默认配置(返回 "default")
+    def _load_conf_mapping(
+        self, umo: str | MessageSession, *, follow_route: bool = False
+    ) -> ConfInfo:
+        """Resolve one base profile, with explicit session selection taking priority.
+
+        Args:
+            umo: Session origin used for exact selection and ordered route matching.
+            follow_route: Ignore explicit session selection when previewing routing.
 
         Returns:
-            ConfInfo: 包含配置文件的 uuid, 路径和名称等信息, 是一个 dict 类型
-
+            Selected profile metadata, falling back to the default profile.
         """
         # uuid -> { "path": str, "name": str }
         abconf_data = self._get_abconf_data()
@@ -120,7 +128,14 @@ class AstrBotConfigManager:
             except Exception:
                 return DEFAULT_CONFIG_CONF_INFO
 
-        conf_id = self.ucr.get_conf_id_for_umop(umo)
+        binding = (
+            {}
+            if follow_route
+            else self.sp.get(BINDING_KEY, {}, scope="umo", scope_id=umo) or {}
+        )
+        conf_id = None if follow_route else binding.get("profile_id")
+        if conf_id is None:
+            conf_id = self.ucr.get_conf_id_for_umop(umo)
         if conf_id:
             meta = abconf_data.get(conf_id)
             if meta and isinstance(meta, dict):
@@ -152,21 +167,38 @@ class AstrBotConfigManager:
         await self._persist_abconf_mapping(abconf_data)
 
     def get_conf(self, umo: str | MessageSession | None) -> AstrBotConfig:
-        """获取指定 umo 的配置文件。如果不存在，则 fallback 到默认配置文件。"""
+        """Read a session's effective configuration or its active message snapshot.
+
+        Args:
+            umo: Session origin, or None to read the shared default profile.
+
+        Returns:
+            The current message snapshot for a matching session and manager.
+            Outside that scope, the routed profile with explicit overrides applied.
+        """
         if not umo:
             return self.confs["default"]
         if isinstance(umo, MessageSession):
             umo = f"{umo.platform_id}:{umo.message_type}:{umo.session_id}"
 
-        uuid_ = self._load_conf_mapping(umo)["id"]
+        scope = current_message_config.get()
+        if (
+            scope is not None
+            and scope.active
+            and scope.umo == umo
+            and scope.context.plugin_manager.context.astrbot_config_mgr is self
+        ):
+            return scope.config
 
-        conf = self.confs.get(uuid_)
-        if not conf:
-            conf = self.confs["default"]  # default MUST exists
-
+        conf_id = self._load_conf_mapping(umo)["id"]
+        conf = self.confs.get(conf_id) or self.confs["default"]
+        binding = self.sp.get(BINDING_KEY, {}, scope="umo", scope_id=umo) or {}
+        overrides = binding.get("overrides", {})
+        if overrides:
+            return AstrBotConfigSnapshot(conf, overrides)
         return conf
 
-    def get_platform_configs(
+    async def get_platform_configs(
         self, platform_id: str, message_types: tuple[MessageType, ...]
     ) -> list[AstrBotConfig]:
         """Collect possible profiles for bot-wide command registration.
@@ -183,6 +215,7 @@ class AstrBotConfigManager:
         """
         profiles: dict[str, AstrBotConfig] = {}
         metadata = self._get_abconf_data()
+        configs: list[AstrBotConfig] = []
         for message_type in message_types:
             seen_patterns: set[str] = set()
             for pattern, conf_id in self.ucr.umop_to_conf_id.items():
@@ -214,19 +247,114 @@ class AstrBotConfigManager:
                 # Without a session catch-all, unmatched sessions still use
                 # the default profile, even when some sessions are routed.
                 profiles["default"] = self.default_conf
-        return list(profiles.values())
+        configs.extend(profiles.values())
+        configs.extend(
+            await self._binding_configs(platform_id, message_types, metadata)
+        )
+        return configs
+
+    async def _binding_configs(
+        self,
+        platform_id: str,
+        message_types: tuple[MessageType, ...],
+        metadata: dict,
+    ) -> list[AstrBotConfig]:
+        """Collect effective profiles selected by exact session bindings.
+
+        Args:
+            platform_id: Adapter instance ID, not the platform type.
+            message_types: Message types supported by the registered commands.
+            metadata: Loaded profile metadata keyed by profile ID.
+
+        Returns:
+            One effective configuration per binding that outranks routing for a
+            session of this adapter, with its session overrides applied.
+        """
+        configs: list[AstrBotConfig] = []
+        for umo, binding in (await self._session_bindings()).items():
+            parts = self.ucr._split_umo(umo)
+            if parts is None:
+                continue
+            platform_pattern, type_pattern, _session_pattern = parts
+            if not fnmatch.fnmatchcase(platform_id, platform_pattern or "*"):
+                continue
+            if not any(
+                fnmatch.fnmatchcase(message_type.value, type_pattern or "*")
+                for message_type in message_types
+            ):
+                continue
+            conf_id = binding.get("profile_id") or self.ucr.get_conf_id_for_umop(umo)
+            meta = metadata.get(conf_id)
+            config = self.confs.get(conf_id)
+            if not (meta and isinstance(meta, dict) and config):
+                config = self.default_conf
+            overrides = binding.get("overrides") or {}
+            configs.append(
+                AstrBotConfigSnapshot(config, overrides) if overrides else config
+            )
+        return configs
+
+    async def _session_bindings(self) -> dict[str, dict]:
+        """Read exact session bindings used by the dashboard and overrides.
+
+        Returns:
+            Binding UMO patterns mapped to their stored binding data. An empty
+            mapping means the backend cannot list them, so route matching alone
+            decides which profiles may serve the adapter.
+        """
+        try:
+            records = await self.sp.range_get_async("umo", key=BINDING_KEY)
+        except Exception as exc:
+            logger.warning(f"Failed to read session bindings: {exc}")
+            return {}
+        if not isinstance(records, (list, tuple)):
+            return {}
+        bindings: dict[str, dict] = {}
+        for record in records:
+            value = getattr(record, "value", None)
+            binding = value.get("val") if isinstance(value, dict) else None
+            if isinstance(binding, dict):
+                bindings[record.scope_id] = binding
+        return bindings
+
+    def _create_message_config(
+        self, umo: str
+    ) -> tuple[AstrBotConfigSnapshot, frozenset[str]]:
+        """Create an independent configuration for a new pipeline execution.
+
+        Args:
+            umo: Final session origin of the incoming message.
+
+        Returns:
+            A fresh runtime configuration and its explicit override paths.
+        """
+        conf_id = self._load_conf_mapping(umo)["id"]
+        conf = self.confs.get(conf_id) or self.confs["default"]
+        binding = self.sp.get(BINDING_KEY, {}, scope="umo", scope_id=umo) or {}
+        overrides = binding.get("overrides", {})
+        return AstrBotConfigSnapshot(conf, overrides), frozenset(overrides)
 
     @property
     def default_conf(self) -> AstrBotConfig:
         """获取默认配置文件"""
         return self.confs["default"]
 
-    def get_conf_info(self, umo: str | MessageSession) -> ConfInfo:
-        """获取指定 umo 的配置文件元数据"""
+    def get_conf_info(
+        self, umo: str | MessageSession, *, follow_route: bool = False
+    ) -> ConfInfo:
+        """Return the metadata of the session's selected base profile.
+
+        Args:
+            umo: Exact session origin.
+            follow_route: Preview the routing result without the explicit selection.
+
+        Returns:
+            Metadata of the selected base profile.
+        """
         if isinstance(umo, MessageSession):
             umo = f"{umo.platform_id}:{umo.message_type}:{umo.session_id}"
 
-        return self._load_conf_mapping(umo)
+        return self._load_conf_mapping(umo, follow_route=follow_route)
 
     def get_conf_list(self) -> list[ConfInfo]:
         """获取所有配置文件的元数据列表"""

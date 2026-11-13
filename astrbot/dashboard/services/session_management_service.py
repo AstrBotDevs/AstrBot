@@ -7,20 +7,24 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import col, func, select
 
 from astrbot.core import logger, sp
+from astrbot.core.config_bindings import BINDING_KEY
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
 from astrbot.core.db import BaseDatabase
 from astrbot.core.db.po import ConversationV2, Preference, UmoAlias, UmoSender
-from astrbot.core.provider.entities import ProviderType
-from astrbot.core.umo_alias import build_umo_alias_map, parse_umo, serialize_umo_alias
+from astrbot.core.platform.message_session import MessageSession
+from astrbot.core.session_overrides import (
+    OVERRIDE_KEY,
+    OVERRIDE_TYPES,
+    update_overrides,
+)
+from astrbot.core.umo_alias import (
+    build_umo_alias_map,
+    normalize_umo_name,
+    parse_umo,
+    serialize_umo_alias,
+)
 
-AVAILABLE_SESSION_RULE_KEYS = [
-    "session_service_config",
-    "session_plugin_config",
-    "kb_config",
-    f"provider_perf_{ProviderType.CHAT_COMPLETION.value}",
-    f"provider_perf_{ProviderType.SPEECH_TO_TEXT.value}",
-    f"provider_perf_{ProviderType.TEXT_TO_SPEECH.value}",
-]
+AVAILABLE_SESSION_RULE_KEYS = [OVERRIDE_KEY]
 
 
 class SessionManagementServiceError(Exception):
@@ -169,30 +173,54 @@ class SessionManagementService:
             return all_umos
         return []
 
-    async def get_umo_rules(
+    async def get_umo_bindings(
         self,
         page: int = 1,
         page_size: int = 10,
         search: str = "",
     ) -> tuple[dict, int]:
+        """List stored session bindings, including profile-only assignments.
+
+        Args:
+            page: One-based page number.
+            page_size: Maximum number of bindings to return.
+            search: Optional case-insensitive UMO or alias filter.
+
+        Returns:
+            A mapping of UMOs to bindings and the total matching count.
+        """
         umo_rules = {}
         async with self.db_helper.get_db() as session:
             session: AsyncSession
             result = await session.execute(
                 select(Preference).where(
                     col(Preference.scope) == "umo",
-                    col(Preference.key).in_(AVAILABLE_SESSION_RULE_KEYS),
+                    col(Preference.key) == BINDING_KEY,
                 )
             )
             prefs = result.scalars().all()
             for pref in prefs:
                 umo_id = pref.scope_id
-                if umo_id not in umo_rules:
-                    umo_rules[umo_id] = {}
-                if pref.key == "session_plugin_config" and umo_id in pref.value["val"]:
-                    umo_rules[umo_id][pref.key] = pref.value["val"][umo_id]
-                else:
-                    umo_rules[umo_id][pref.key] = pref.value["val"]
+                umo_rules[umo_id] = pref.value["val"]
+
+        # Present legacy exact routes as sessions without changing their current resolution.
+        acm = self.core_lifecycle.astrbot_config_mgr
+        for pattern in acm.ucr.umop_to_conf_id:
+            parts = pattern.split(":", 2)
+            if len(parts) != 3 or any(
+                not part or any(char in part for char in "*?[") for part in parts
+            ):
+                continue
+            try:
+                MessageSession.from_str(pattern)
+            except (ValueError, KeyError):
+                continue
+            binding = umo_rules.get(pattern, {})
+            if binding.get("profile_id") is None:
+                umo_rules[pattern] = {
+                    **binding,
+                    "profile_id": acm.get_conf_info(pattern)["id"],
+                }
 
         if search:
             alias_map = await self.get_umo_alias_map(list(umo_rules.keys()))
@@ -200,12 +228,6 @@ class SessionManagementService:
             filtered_rules = {}
             for umo_id, rules in umo_rules.items():
                 if search_lower in umo_id.lower():
-                    filtered_rules[umo_id] = rules
-                    continue
-
-                svc_config = rules.get("session_service_config", {})
-                custom_name = svc_config.get("custom_name", "") if svc_config else ""
-                if custom_name and search_lower in custom_name.lower():
                     filtered_rules[umo_id] = rules
                     continue
 
@@ -234,7 +256,7 @@ class SessionManagementService:
         search: str,
     ) -> dict:
         page, page_size = self._normalize_page(page, page_size, default_page_size=10)
-        umo_rules, total = await self.get_umo_rules(
+        umo_rules, total = await self.get_umo_bindings(
             page=page,
             page_size=page_size,
             search=search,
@@ -243,7 +265,9 @@ class SessionManagementService:
         alias_map = await self.get_umo_alias_map(list(umo_rules.keys()))
         rules_list = [
             {
-                "rules": rules,
+                "rules": {OVERRIDE_KEY: rules.get("overrides", {})},
+                "profile_id": rules.get("profile_id"),
+                "profile": self.core_lifecycle.astrbot_config_mgr.get_conf_info(umo),
                 **self.build_umo_info(umo, alias_map),
             }
             for umo, rules in umo_rules.items()
@@ -305,24 +329,107 @@ class SessionManagementService:
             "available_rule_keys": AVAILABLE_SESSION_RULE_KEYS,
         }
 
+    async def get_session_overrides(
+        self, umo: str, profile_id: str | None = None
+    ) -> dict:
+        """Return editable session values and their inheritance source.
+
+        Args:
+            umo: Exact unified message origin.
+            profile_id: Optional preview profile; empty string previews following routing.
+
+        Returns:
+            Profile metadata, explicit overrides, inherited values and alias.
+
+        Raises:
+            SessionManagementServiceError: If the UMO is invalid.
+        """
+        try:
+            MessageSession.from_str(umo)
+        except Exception as exc:
+            raise SessionManagementServiceError("Invalid session origin") from exc
+        acm = self.core_lifecycle.astrbot_config_mgr
+        binding = await sp.session_get(umo, BINDING_KEY, {}) or {}
+        routing_profile = acm.get_conf_info(umo, follow_route=True)
+        profiles = acm.get_conf_list()
+        profile = acm.get_conf_info(umo)
+        if profile_id is not None:
+            profile = (
+                routing_profile
+                if profile_id == ""
+                else next((item for item in profiles if item["id"] == profile_id), None)
+            )
+            if profile is None:
+                raise SessionManagementServiceError("Unknown configuration profile")
+        base = acm.confs.get(profile["id"], acm.default_conf)
+        values = {}
+        for path in OVERRIDE_TYPES:
+            value = base
+            for part in path.split("."):
+                value = value.get(part) if isinstance(value, dict) else None
+            values[path] = value
+        aliases = await self.get_umo_alias_map([umo])
+        return {
+            **self.build_umo_info(umo, aliases),
+            "profile": profile,
+            "profile_id": binding.get("profile_id"),
+            "routing_profile": routing_profile,
+            "profiles": profiles,
+            "runtime": base.get("agent", {}).get("runtime", "astrbot"),
+            "inherited": values,
+            "overrides": binding.get("overrides", {}),
+        }
+
     async def update_session_rule(self, data: object) -> dict:
+        """Patch session configuration and optionally update its display alias.
+
+        Args:
+            data: UMO, config_overrides rule key, changed paths and optional alias.
+
+        Returns:
+            The updated session editor data.
+
+        Raises:
+            SessionManagementServiceError: If the payload is invalid.
+        """
         payload = self._payload(data)
         umo = payload.get("umo")
-        rule_key = payload.get("rule_key")
-        rule_value = payload.get("rule_value")
-
-        if not umo:
-            raise SessionManagementServiceError("缺少必要参数: umo")
-        if not rule_key:
-            raise SessionManagementServiceError("缺少必要参数: rule_key")
-        if rule_key not in AVAILABLE_SESSION_RULE_KEYS:
-            raise SessionManagementServiceError(f"不支持的规则键: {rule_key}")
-
-        if rule_key == "session_plugin_config":
-            rule_value = {umo: rule_value}
-
-        await sp.session_put(umo, rule_key, rule_value)
-        return {"message": f"规则 {rule_key} 已更新", "umo": umo}
+        if payload.get("rule_key") != OVERRIDE_KEY:
+            raise SessionManagementServiceError(
+                "Use config_overrides for session settings"
+            )
+        changes = payload.get("rule_value")
+        if not isinstance(changes, dict):
+            raise SessionManagementServiceError("Overrides must be an object")
+        await self.get_session_overrides(umo)
+        profile_id = payload.get("profile_id")
+        if (
+            profile_id is not None
+            and profile_id not in self.core_lifecycle.astrbot_config_mgr.confs
+        ):
+            raise SessionManagementServiceError("Unknown configuration profile")
+        try:
+            await update_overrides(
+                umo,
+                changes,
+                profile_id=profile_id,
+                update_profile="profile_id" in payload,
+            )
+        except ValueError as exc:
+            raise SessionManagementServiceError(str(exc)) from exc
+        if "profile_id" in payload:
+            # An explicit edit replaces the legacy exact route with the session binding.
+            await self.core_lifecycle.astrbot_config_mgr.ucr.delete_route(umo)
+        if "user_alias" in payload:
+            aliases = await self.db_helper.get_umo_aliases([umo])
+            alias = aliases[0] if aliases else None
+            await self.db_helper.upsert_umo_alias(
+                umo,
+                alias.creator_sender_id if alias else "",
+                alias.auto_name if alias else None,
+                normalize_umo_name(payload["user_alias"]) or None,
+            )
+        return await self.get_session_overrides(umo)
 
     async def delete_session_rule(self, data: object) -> dict:
         payload = self._payload(data)
@@ -333,12 +440,18 @@ class SessionManagementService:
             raise SessionManagementServiceError("缺少必要参数: umo")
 
         if rule_key:
-            if rule_key not in AVAILABLE_SESSION_RULE_KEYS:
+            if rule_key not in [*AVAILABLE_SESSION_RULE_KEYS, BINDING_KEY]:
                 raise SessionManagementServiceError(f"不支持的规则键: {rule_key}")
-            await sp.session_remove(umo, rule_key)
+            if rule_key == BINDING_KEY:
+                await self.core_lifecycle.astrbot_config_mgr.ucr.delete_route(umo)
+            await update_overrides(
+                umo, {}, clear_overrides=True, update_profile=rule_key == BINDING_KEY
+            )
             return {"message": f"规则 {rule_key} 已删除", "umo": umo}
 
-        await sp.clear_async("umo", umo)
+        await update_overrides(
+            umo, {}, clear_overrides=True, update_profile=rule_key == BINDING_KEY
+        )
         return {"message": "所有规则已删除", "umo": umo}
 
     async def delete_session_rules(self, data: object) -> dict:
@@ -361,17 +474,21 @@ class SessionManagementService:
             raise SessionManagementServiceError("缺少必要参数: umos 或有效的 scope")
         if not isinstance(umos, list):
             raise SessionManagementServiceError("参数 umos 必须是数组")
-        if rule_key and rule_key not in AVAILABLE_SESSION_RULE_KEYS:
+        if rule_key and rule_key not in [*AVAILABLE_SESSION_RULE_KEYS, BINDING_KEY]:
             raise SessionManagementServiceError(f"不支持的规则键: {rule_key}")
 
         success_count = 0
         failed_umos = []
         for umo in umos:
             try:
-                if rule_key:
-                    await sp.session_remove(umo, rule_key)
-                else:
-                    await sp.clear_async("umo", umo)
+                if rule_key == BINDING_KEY:
+                    await self.core_lifecycle.astrbot_config_mgr.ucr.delete_route(umo)
+                await update_overrides(
+                    umo,
+                    {},
+                    clear_overrides=True,
+                    update_profile=rule_key == BINDING_KEY,
+                )
                 success_count += 1
             except Exception as exc:
                 logger.error(f"删除 umo {umo} 的规则失败: {exc!s}")
@@ -393,221 +510,6 @@ class SessionManagementService:
                 }
             )
         return result
-
-    async def list_all_umos_with_status(
-        self,
-        *,
-        page: int,
-        page_size: int,
-        search: str,
-        message_type: str,
-        platform: str,
-    ) -> dict:
-        page, page_size = self._normalize_page(page, page_size, default_page_size=20)
-        all_umos = await self.list_known_umos()
-        alias_map = await self.get_umo_alias_map(all_umos)
-        umo_rules, _ = await self.get_umo_rules(page=1, page_size=99999, search="")
-
-        umos_with_status = []
-        for umo in all_umos:
-            umo_info = self.build_umo_info(umo, alias_map)
-            umo_platform = umo_info["platform"]
-            umo_message_type = umo_info["message_type"]
-
-            if message_type != "all":
-                if message_type == "group" and umo_message_type not in [
-                    "group",
-                    "GroupMessage",
-                ]:
-                    continue
-                if message_type == "private" and umo_message_type not in [
-                    "private",
-                    "FriendMessage",
-                    "friend",
-                ]:
-                    continue
-
-            if platform and umo_platform != platform:
-                continue
-
-            rules = umo_rules.get(umo, {})
-            svc_config = rules.get("session_service_config", {})
-
-            custom_name = svc_config.get("custom_name", "") if svc_config else ""
-            session_enabled = (
-                svc_config.get("session_enabled", True) if svc_config else True
-            )
-            llm_enabled = svc_config.get("llm_enabled", True) if svc_config else True
-            tts_enabled = svc_config.get("tts_enabled", True) if svc_config else True
-
-            if search:
-                search_lower = search.lower()
-                search_targets = [
-                    umo,
-                    custom_name,
-                    umo_info["auto_name"],
-                    umo_info["user_alias"],
-                    umo_info["display_name"],
-                ]
-                if not any(
-                    search_lower in target.lower()
-                    for target in search_targets
-                    if target
-                ):
-                    continue
-
-            chat_provider_key = f"provider_perf_{ProviderType.CHAT_COMPLETION.value}"
-            tts_provider_key = f"provider_perf_{ProviderType.TEXT_TO_SPEECH.value}"
-            stt_provider_key = f"provider_perf_{ProviderType.SPEECH_TO_TEXT.value}"
-
-            umos_with_status.append(
-                {
-                    **umo_info,
-                    "custom_name": custom_name,
-                    "session_enabled": session_enabled,
-                    "llm_enabled": llm_enabled,
-                    "tts_enabled": tts_enabled,
-                    "has_rules": umo in umo_rules,
-                    "chat_provider": rules.get(chat_provider_key),
-                    "tts_provider": rules.get(tts_provider_key),
-                    "stt_provider": rules.get(stt_provider_key),
-                }
-            )
-
-        total = len(umos_with_status)
-        start_idx = (page - 1) * page_size
-        end_idx = start_idx + page_size
-        paginated = umos_with_status[start_idx:end_idx]
-        platforms = list({u["platform"] for u in umos_with_status})
-        provider_manager = self.core_lifecycle.provider_manager
-
-        return {
-            "sessions": paginated,
-            "total": total,
-            "page": page,
-            "page_size": page_size,
-            "platforms": platforms,
-            "available_chat_providers": self._serialize_provider_insts(
-                getattr(provider_manager, "provider_insts", [])
-            ),
-            "available_tts_providers": self._serialize_provider_insts(
-                getattr(provider_manager, "tts_provider_insts", [])
-            ),
-            "available_stt_providers": self._serialize_provider_insts(
-                getattr(provider_manager, "stt_provider_insts", [])
-            ),
-        }
-
-    async def batch_update_service(self, data: object) -> dict:
-        payload = self._payload(data)
-        umos = payload.get("umos", [])
-        scope = payload.get("scope", "")
-        group_id = payload.get("group_id", "")
-        llm_enabled = payload.get("llm_enabled")
-        tts_enabled = payload.get("tts_enabled")
-        session_enabled = payload.get("session_enabled")
-
-        if llm_enabled is None and tts_enabled is None and session_enabled is None:
-            raise SessionManagementServiceError("至少需要指定一个要修改的状态")
-
-        if scope and not umos:
-            umos = await self.get_umos_by_scope(scope, group_id)
-
-        if not umos:
-            raise SessionManagementServiceError("没有找到符合条件的会话")
-
-        success_count = 0
-        failed_umos = []
-
-        for umo in umos:
-            try:
-                session_config = (
-                    await sp.session_get(umo, "session_service_config", {}) or {}
-                )
-
-                if llm_enabled is not None:
-                    session_config["llm_enabled"] = llm_enabled
-                if tts_enabled is not None:
-                    session_config["tts_enabled"] = tts_enabled
-                if session_enabled is not None:
-                    session_config["session_enabled"] = session_enabled
-
-                await sp.session_put(
-                    umo,
-                    "session_service_config",
-                    session_config,
-                )
-                success_count += 1
-            except Exception as exc:
-                logger.error(f"更新 {umo} 服务状态失败: {exc!s}")
-                failed_umos.append(umo)
-
-        status_changes = []
-        if llm_enabled is not None:
-            status_changes.append(f"LLM={'启用' if llm_enabled else '禁用'}")
-        if tts_enabled is not None:
-            status_changes.append(f"TTS={'启用' if tts_enabled else '禁用'}")
-        if session_enabled is not None:
-            status_changes.append(f"会话={'启用' if session_enabled else '禁用'}")
-
-        return {
-            "message": f"已更新 {success_count} 个会话 ({', '.join(status_changes)})",
-            "success_count": success_count,
-            "failed_count": len(failed_umos),
-            "failed_umos": failed_umos,
-        }
-
-    async def batch_update_provider(self, data: object) -> dict:
-        payload = self._payload(data)
-        umos = payload.get("umos", [])
-        scope = payload.get("scope", "")
-        provider_type = payload.get("provider_type")
-        provider_id = payload.get("provider_id")
-
-        if not provider_type or not provider_id:
-            raise SessionManagementServiceError(
-                "缺少必要参数: provider_type, provider_id"
-            )
-
-        provider_type_map = {
-            "chat_completion": ProviderType.CHAT_COMPLETION,
-            "text_to_speech": ProviderType.TEXT_TO_SPEECH,
-            "speech_to_text": ProviderType.SPEECH_TO_TEXT,
-        }
-        if provider_type not in provider_type_map:
-            raise SessionManagementServiceError(
-                f"不支持的 provider_type: {provider_type}"
-            )
-
-        group_id = payload.get("group_id", "")
-        if scope and not umos:
-            umos = await self.get_umos_by_scope(scope, group_id)
-
-        if not umos:
-            raise SessionManagementServiceError("没有找到符合条件的会话")
-
-        success_count = 0
-        failed_umos = []
-        provider_manager = self.core_lifecycle.provider_manager
-
-        for umo in umos:
-            try:
-                await provider_manager.set_provider(
-                    provider_id=provider_id,
-                    provider_type=provider_type_map[provider_type],
-                    umo=umo,
-                )
-                success_count += 1
-            except Exception as exc:
-                logger.error(f"更新 {umo} Provider 失败: {exc!s}")
-                failed_umos.append(umo)
-
-        return {
-            "message": f"已更新 {success_count} 个会话的 {provider_type} 为 {provider_id}",
-            "success_count": success_count,
-            "failed_count": len(failed_umos),
-            "failed_umos": failed_umos,
-        }
 
     async def get_groups(self) -> dict:
         groups = await sp.get_async(

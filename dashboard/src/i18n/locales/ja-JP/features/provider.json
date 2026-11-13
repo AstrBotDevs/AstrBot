@@ -31,6 +31,10 @@
       "apiBase": "System One のエンドポイントです。ベース URL には /systemone が自動追加されます。末尾を / にするとそのまま使用します。",
       "model": "System One のモデル ID（例: jev-latest、jev-preview、またはサービス指定のモデル名）。",
       "customHeaders": "AstrBot の判定リクエストに追加する HTTP ヘッダーです。"
+    },
+    "openaiDecisionHints": {
+      "apiBase": "OpenAI API のベース URL（既定は https://api.openai.com/v1）。/decisions で終わらない場合は自動で追加されます。",
+      "model": "OpenAI Decisions は現在 gpt-6-luna に対応しています。"
     }
   },
   "availability": {

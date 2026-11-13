@@ -108,6 +108,40 @@ should_reply = await self.context.decision.yes_no(
 
 Pass `provider_id="provider_id"` to use a specific configured decision provider; otherwise the default one is used. `DecisionError` is raised for an unconfigured provider, timeout, connection failure, HTTP error, invalid JSON, or an answer outside the requested contract. Underlying details are written to the AstrBot log, so plugins can catch the exception and decide whether to skip or degrade this decision.
 
+### Using OpenAI Decisions
+
+Besides System One, a decision provider can use the OpenAI Decisions API (`POST /v1/decisions`). In the WebUI, open **Model Providers → Decision** and add the **OpenAI Decisions** template. Fill in the API key (`$ENV_NAME` references an environment variable), the endpoint (default `https://api.openai.com/v1`; `/decisions` is appended), and the model (the template defaults to `gpt-6-luna`). Timeout, total timeout, max concurrency, proxy, and custom headers work as they do for System One.
+
+It is an independent decision provider and does not affect chat models: once configured, the main agent never calls it automatically. Requests are sent only when a plugin calls `self.context.decision` explicitly or passes its `provider_id`. Plugin code does not change:
+
+```py
+answers = await self.context.decision.ask(
+    {
+        "should_reply": DecisionChoiceQuestion(
+            instructions="Should the assistant reply to this message?",
+            criteria={"reply": "Reply now", "ignore": "Stay silent"},
+        ),
+        "severity": DecisionScoreQuestion(
+            instructions="How severe is the reported problem?",
+            criteria=["No impact", "Degraded", "Unavailable"],
+        ),
+    },
+    state={"messages": recent_messages},
+    provider_id="openai_decision",
+)
+```
+
+Request mapping: boolean questions become `predicate`; choice questions become `choice`, with option IDs as `value` and descriptions as `description`; score questions become `score`, with levels labeled `"0"`, `"1"`, ... in order, matching the returned `legend`. The returned `score` keeps its fractional value, `probabilities` holds the full distribution, and `confidence` is separate from the selected option's probability. Answers are matched by question name, not by their order in the response.
+
+How `state` is sent:
+
+- `str` or omitted: sent as text input.
+- `dict`, or a `list` whose items are all `dict`: sent as `input_json` data. Keys such as `role`, `content`, or `image_url` stay plain data and are never treated as message history or images.
+- A `list` with other item types, such as a list of strings: serialized as JSON and sent as text input.
+- Unsupported types, `NaN`/`Infinity`, or values that are not JSON serializable: `ValueError` is raised before sending.
+
+The first version does not support image input, message or tool-call history, multimodal question instructions, prompt-cache controls, or `safety_identifier`. If the model refuses any question (`refusal`), the whole `ask()` call raises `DecisionError`; a refusal is never reported as false, a zero score, or an empty result. `yes_no(default=...)` keeps its fallback behavior.
+
 ## Defining Tools
 
 Tools enable large language models to invoke external capabilities.
@@ -116,9 +150,12 @@ Tools enable large language models to invoke external capabilities.
 from pydantic import Field
 from pydantic.dataclasses import dataclass
 
-from astrbot.core.agent.run_context import ContextWrapper
-from astrbot.core.agent.tool import FunctionTool, ToolExecResult
-from astrbot.core.astr_agent_context import AstrAgentContext
+# Before AstrBot v4.30.0:
+# from astrbot.core.agent.run_context import ContextWrapper
+# from astrbot.core.agent.tool import FunctionTool, ToolExecResult
+# from astrbot.core.astr_agent_context import AstrAgentContext
+from astrbot.api import FunctionTool, ToolExecResult
+from astrbot.api.agents import AstrAgentContext, ContextWrapper
 
 
 @dataclass
@@ -237,10 +274,12 @@ In the example below, we define a Main Agent responsible for delegating tasks to
 Define Tools:
 
 ```py
-from astrbot.api import logger
-from astrbot.core.agent.run_context import ContextWrapper
-from astrbot.core.agent.tool import FunctionTool, ToolExecResult, ToolSet
-from astrbot.core.astr_agent_context import AstrAgentContext
+# Before AstrBot v4.30.0:
+# from astrbot.core.agent.run_context import ContextWrapper
+# from astrbot.core.agent.tool import FunctionTool, ToolExecResult, ToolSet
+# from astrbot.core.astr_agent_context import AstrAgentContext
+from astrbot.api import FunctionTool, ToolExecResult, ToolSet, logger
+from astrbot.api.agents import AstrAgentContext, ContextWrapper
 from pydantic import Field
 from pydantic.dataclasses import dataclass
 
@@ -383,12 +422,84 @@ async def test(self, event: AstrMessageEvent):
     yield event.plain_result(llm_resp.completion_text)
 ```
 
+## Running an Agent in an Existing Conversation
+
+Use `self.context.agent.run_turn()` for programmatic inputs that inherit the target conversation's persona, history, tools, skills and Agent hooks. Plugins do not need to construct events or runners. The built-in Agent runtime is currently supported.
+
+```py
+from astrbot.api.agents import PlainInput
+
+run = await self.context.agent.run_turn(
+    umo=event.unified_msg_origin,
+    input_message=[PlainInput(text="Video analysis is complete. Explain the result briefly.")],
+)
+result = await run.result()
+```
+
+Submission returns after binding to a runtime turn, without waiting for model execution. Inputs in the same session execute serially and read fresh history when admitted. AstrBot sends replies through its normal output handling by default; do not send `result.text` again. `result()` waits for execution, history persistence and Core output handling. Cancelling a waiter leaves execution running; use `await run.cancel()` to stop the run.
+
+The returned `AgentRun` exposes turn identity, output, cancellation, steering, and follow-up. Its `session` property gives a read-only status snapshot.
+
+Core selects a registered implementation using the profile's `agent.runtime`. After `ctx.agent.register_runtime(name, runtime)`, an implementation can serve main turns or be called as a subagent by the built-in runtime. Unregistered names fail explicitly; existing Dify, Coze and other legacy paths retain their execution flow.
+
+`/stop` calls `turn.request_stop()` for submitted turns in the matching UMO. For a running turn, `AgentSession.request_stop_turn(turn)` returns `True` if the runtime accepts the request and will settle the turn, or `False` to fall back to `cancel_turn()` and local task cancellation. Queued turns are cancelled directly. `request_stop()` returns immediately, and `await turn.result()` waits for cleanup.
+
+Core supplies public `AgentInput`: the original `AstrMessageEvent`, permissions, optional plain/image/file content, authorized plugin tools/skills, and a streaming preference. Core matches and removes the AI trigger prefix before dispatch, passing the processed text in `content` without changing the original event. Platform inputs without a text override may retain `content=None`; source attachments remain available on the event. SDK inputs carry explicit content. Runtime configuration is passed through `open_session(..., options={"config": ...})` for the implementation to interpret. Core does not construct native `MainAgentInput`, `MainAgentBuildConfig`, or model requests.
+
+Reuse `AgentSession.run_turn()` when implementing a runtime. Core supplies admission through the scheduling argument `run_turn(input, admit=...)`, independently of `AgentInput`. It runs inside the session lock and the implementation's `_execution_scope()`, before `execute_turn()`. AI enablement, permissions and plugin contributions are refreshed after queued work; do not bypass admission by replacing scheduling. Additional locks belong to the runtime. Optional `active_turn(umo)` supports discovery for ordinary-message steering; its default is `None`, while the session still handles queued execution. The built-in runtime constructs `ProviderRequest`, resolves model configuration, and invokes existing model hooks in its own execution stage. External implementations need not import `astr_agent_runtime`.
+
+Set `send_to_user=False` to handle the model reply yourself:
+
+```py
+from astrbot.api.event import MessageChain
+
+run = await self.context.agent.run_turn(
+    umo=event.unified_msg_origin,
+    input_message=[PlainInput(text="Summarize the video analysis.")],
+    send_to_user=False,
+)
+result = await run.result()
+if result.text:
+    await self.context.send_message(
+        event.unified_msg_origin,
+        MessageChain().message(f"Video analysis: {result.text}"),
+    )
+```
+
+`send_to_user=False` skips Core's automatic output presentation, platform reply decoration and automatic TTS, while preserving execution history. Explicit tool or plugin calls to `event.send()`, `Context.send_message()` or `send_message_to_user` still send normally; the framework does not intercept them.
+
+Multiple independent `events()` observers can watch or replay runtime events such as `message.completed` and tool calls without intercepting output or duplicating delivery. The SDK's terminal `turn.finished` event follows automatic output completion.
+
+```py
+# Queue another turn in this exact conversation, inheriting the output policy.
+next_run = await run.follow_up(
+    input_message=[PlainInput(text="Now suggest three improvements.")],
+)
+
+# Submit steering while the current turn is still active.
+receipt = await run.steer(
+    input_message=[PlainInput(text="Also focus on safety concerns.")],
+)
+if receipt is not None:
+    consumed = await receipt
+```
+
+Follow-ups retain the original runtime and conversation even if the profile runtime or the UMO's current selection changes. Steering returns `None` when rejected, or an `InputReceipt` when accepted. Awaiting it confirms whether input was actually consumed and persisted. Rejected steering never silently becomes a queued turn. Images and files in steering currently become text references.
+
+`run.session.state` is `idle`, `queued`, `running`, or `closed`. The snapshot contains `ref`, `pending_turn_count`, and `active_turn_id`. Read the property again to refresh it.
+
+Core resolves permissions from `source_event` or the current active same-UMO event. Background calls without a source run as members. A source event from another UMO is rejected.
+
+A tool must not wait for another queued turn in its own session: that turn is waiting for the tool's current turn to finish. Submit and return, or use steering as appropriate.
+
 ## Conversation Manager
 
 ### Getting the Current LLM Conversation History for a Session
 
 ```py
-from astrbot.core.conversation_mgr import Conversation
+# Before AstrBot v4.30.0:
+# from astrbot.core.conversation_mgr import Conversation
+from astrbot.api.provider import Conversation
 
 uid = event.unified_msg_origin
 conv_mgr = self.context.conversation_manager
@@ -426,7 +537,9 @@ class Conversation:
 ### Quickly Adding LLM Records to a Conversation `add_message_pair`
 
 ```py
-from astrbot.core.agent.message import (
+# Before AstrBot v4.30.0:
+# from astrbot.core.agent.message import AssistantMessageSegment, UserMessageSegment, TextPart
+from astrbot.api.agents import (
     AssistantMessageSegment,
     UserMessageSegment,
     TextPart,

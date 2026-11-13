@@ -31,6 +31,10 @@
       "apiBase": "System One 接口地址。填写基础地址时自动补全 /systemone；以 / 结尾则按完整地址请求。",
       "model": "System One 模型 ID，如 jev-latest、jev-preview，或服务商指定的模型名。",
       "customHeaders": "附加到 AstrBot 判断请求的 HTTP 请求头。"
+    },
+    "openaiDecisionHints": {
+      "apiBase": "OpenAI API 基础地址，默认 https://api.openai.com/v1；自动补全 /decisions，已以 /decisions 结尾则按原样请求。",
+      "model": "OpenAI Decisions 当前支持 gpt-6-luna。"
     }
   },
   "availability": {

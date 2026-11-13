@@ -2,6 +2,10 @@
   "page": {
     "title": "设置"
   },
+  "chatNavigation": {
+    "title": "在侧边栏显示 Chat 入口",
+    "subtitle": "将顶部 Chat 切换入口移至侧边栏“系统”上方，点击后切换为聊天会话列表。仅保存在当前浏览器。"
+  },
   "sections": {
     "general": {
       "title": "常规"

@@ -991,6 +991,7 @@ def fake_core_lifecycle():
         umop_config_router=umop_config_router,
         platform_manager=SimpleNamespace(
             platform_insts=[platform],
+            get_insts=lambda: [platform],
             fake_platform=platform,
             reload=reload_platform,
             load_platform=load_platform,
@@ -1012,12 +1013,16 @@ def fake_core_lifecycle():
             reload=reload_plugin,
             _validate_astrbot_version_specifier=validate_astrbot_version_specifier,
         ),
+        agent_configs=SimpleNamespace(lock=asyncio.Lock()),
+        agent_runtimes={},
         star_context=SimpleNamespace(
+            get_all_stars=lambda: [demo_plugin],
             registered_web_apis=[
                 ("/<path:plugin_path>", plugin_extension, ["GET", "POST"], "demo")
             ]
         ),
         kb_manager=None,
+        subagents=None,
     )
 
 
@@ -1057,6 +1062,76 @@ def _jwt_headers() -> dict[str, str]:
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("path", ["/api/v1/stats", "/api/stat/get"])
+async def test_stats_routes_include_daily_usage_and_system_resources(
+    asgi_app, asgi_client, temp_db, path
+):
+    """Both stats routes preserve existing fields and expose daily and host data."""
+    asgi_app.state.services.stats.db_helper = temp_db
+    response = await asgi_client.get(
+        path, params={"offset_sec": 3600}, headers=_jwt_headers()
+    )
+
+    assert response.status_code == 200
+    data = response.json()["data"]
+    assert data["message_count"] == 0
+    assert len(data["message_time_series"]) == 1
+    assert data["daily_usage"] == {
+        "today": {"tokens": 0, "messages": 0, "active_sessions": 0},
+        "yesterday": {"tokens": 0, "messages": 0, "active_sessions": 0},
+    }
+    assert data["memory"]["system"] == data["system"]["memory"]["total"] >> 20
+    assert data["running"] == stat_service.StatService.get_running_time_components(
+        data["system"]["uptime_seconds"]
+    )
+    removed = await asgi_client.get("/api/v1/stats/overview", headers=_jwt_headers())
+    assert removed.status_code == 404
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("path", ["/api/v1/stats", "/api/stat/get"])
+@pytest.mark.parametrize(
+    ("sections", "expected_fields"),
+    [
+        ("daily_usage,system", {"daily_usage", "system"}),
+        (
+            "messages,process,instances",
+            {
+                "message_count",
+                "message_time_series",
+                "platform",
+                "cpu_percent",
+                "memory",
+                "running",
+                "start_time",
+                "thread_count",
+                "platform_count",
+                "plugin_count",
+                "plugins",
+            },
+        ),
+        ("unknown", None),
+        ("", None),
+    ],
+)
+async def test_stats_routes_select_sections(
+    asgi_app, asgi_client, temp_db, path, sections, expected_fields
+):
+    """Both routes honor sections and reject malformed query selections."""
+    asgi_app.state.services.stats.db_helper = temp_db
+    response = await asgi_client.get(
+        path, params={"sections": sections}, headers=_jwt_headers()
+    )
+
+    if expected_fields is None:
+        assert response.status_code == 400
+        assert "sections must be" in response.json()["message"]
+    else:
+        assert response.status_code == 200
+        assert set(response.json()["data"]) == expected_fields
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize("desktop_auth", [False, True])
 @pytest.mark.parametrize("status", ["missing", "unavailable", "detected"])
 async def test_version_routes_return_startup_runtime_snapshot(
@@ -1066,7 +1141,7 @@ async def test_version_routes_return_startup_runtime_snapshot(
     platform = SimpleNamespace(
         system=Mock(return_value="Linux"), machine=Mock(return_value="aarch64")
     )
-    from astrbot.core.computer import process_sandbox
+    from astrbot.core.astr_agent_runtime.computer import process_sandbox
 
     process_sandbox.get_process_sandbox_status.cache_clear()
     monkeypatch.setattr(process_sandbox, "platform", platform)
@@ -1903,13 +1978,15 @@ async def test_v1_system_config_update_preserves_independent_bot_provider_sectio
 async def test_config_update_revokes_only_affected_shell_sessions(
     asgi_app, fake_core_lifecycle, monkeypatch, tmp_path, change
 ):
-    from astrbot.core.computer import computer_client
-    from astrbot.core.computer.booters.local import LocalBooter
-    from astrbot.core.tools.computer_tools import shell as shell_tools
+    from astrbot.core.astr_agent_runtime.computer import computer_client
+    from astrbot.core.astr_agent_runtime.computer.booters.local import LocalBooter
+    from astrbot.core.astr_agent_runtime.tools.computer_tools import (
+        shell as shell_tools,
+    )
 
     config = fake_core_lifecycle.astrbot_config
     config["admins_id"] = ["creator", "other-admin"]
-    config["agent_runner"] = {"runner_type": "local"}
+    config["agent"] = {"runtime": "astrbot"}
     config["provider_settings"] = {
         "computer_use_runtime": "local",
         "computer_use_local_permissions": {
@@ -2034,7 +2111,7 @@ async def test_config_api_saves_local_permissions_without_isolation(
         runtime["sandbox"]["error"] = reason
     original = copy.deepcopy(fake_core_lifecycle.astrbot_config)
     payload = copy.deepcopy(original)
-    payload["agent_runner"] = {"runner_type": "local"}
+    payload["agent"] = {"runtime": "astrbot"}
     payload["provider_settings"] = {
         "computer_use_runtime": "local",
         "computer_use_local_permissions": {
@@ -2077,7 +2154,7 @@ async def test_welcome_page_can_enable_local_computer_access_without_isolation(
     runtime = asgi_app.state.services.stats.runtime
     runtime.update({"os": "linux", "sandbox": {"status": status}})
     config = fake_core_lifecycle.astrbot_config
-    config["agent_runner"] = {"runner_type": "local"}
+    config["agent"] = {"runtime": "astrbot"}
     config["provider_settings"] = {
         "computer_use_runtime": "none",
         "computer_use_local_permissions": get_local_permission_defaults("Linux"),
@@ -3441,6 +3518,26 @@ async def test_v1_plugin_extension_supports_astrbot_web_api(
         "username": "fastapi-v1-test",
         "plugin_name": "web",
     }
+
+
+@pytest.mark.asyncio
+async def test_agent_runtimes_require_config_scope(
+    asgi_client,
+    fake_core_lifecycle,
+    fake_db,
+):
+    fake_core_lifecycle.subagents = None
+    fake_db.add_api_key("plugin-test", ["plugin"])
+    response = await asgi_client.get(
+        "/api/v1/agent-runtimes",
+        headers={"Authorization": "ApiKey plugin-test"},
+    )
+    assert response.status_code == 403
+    response = await asgi_client.get(
+        "/api/v1/agent-runtimes", headers=_jwt_headers()
+    )
+    assert response.status_code == 200
+    assert response.json()["data"] == []
 
 
 @pytest.mark.asyncio
@@ -5255,3 +5352,17 @@ async def test_bot_delete_cleanup_query_is_validated(asgi_app, asgi_client, rout
     invalid = await asgi_client.delete(route, params={"bot_id": "bot", "cleanup": "unknown"}, headers=_jwt_headers())
     assert invalid.status_code == 422
     assert delete_bot.await_count == 1
+
+
+@pytest.mark.asyncio
+async def test_session_binding_distinguishes_follow_from_omitted_profile(asgi_client, monkeypatch):
+    from astrbot.dashboard.services.session_management_service import SessionManagementService
+
+    update = AsyncMock(return_value={})
+    monkeypatch.setattr(SessionManagementService, "update_session_rule", update)
+    payload = {"umo": "test:GroupMessage:42", "rule_key": "config_overrides", "rule_value": {}}
+    for selection in ({}, {"profile_id": None}, {"profile_id": "default"}):
+        response = await asgi_client.post("/api/v1/sessions/rules", headers=_jwt_headers(), json={**payload, **selection})
+        assert response.status_code == 200
+        assert response.json()["status"] == "ok"
+        assert update.await_args.args[0] == {**payload, **selection}

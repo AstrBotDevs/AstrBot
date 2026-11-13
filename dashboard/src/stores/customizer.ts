@@ -13,6 +13,7 @@ export const useCustomizerStore = defineStore('customizer', {
     uiTheme: config.uiTheme,
     themeMode: config.themeMode as ThemeMode,
     inputBg: config.inputBg,
+    chatNavigationInSidebar: localStorage.getItem('chatNavigationInSidebar') === 'true',
     chatSidebarOpen: false, // chat mode mobile sidebar state
     chatSidebarCollapsed: false, // chat mode desktop sidebar state
   }),
@@ -46,6 +47,11 @@ export const useCustomizerStore = defineStore('customizer', {
       const uiTheme = resolveUiTheme(mode);
       this.uiTheme = uiTheme;
       localStorage.setItem('uiTheme', uiTheme);
+    },
+
+    SET_CHAT_NAVIGATION_IN_SIDEBAR(payload: boolean) {
+      this.chatNavigationInSidebar = payload;
+      localStorage.setItem('chatNavigationInSidebar', String(payload));
     },
 
     TOGGLE_CHAT_SIDEBAR() {

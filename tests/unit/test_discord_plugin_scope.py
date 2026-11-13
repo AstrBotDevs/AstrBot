@@ -24,6 +24,8 @@ from astrbot.core.umop_config_router import UmopConfigRouter
 @pytest.fixture
 def config_manager():
     preferences = Mock()
+    preferences.get.return_value = {}
+    preferences.range_get_async = AsyncMock(return_value=[])
     router = UmopConfigRouter(preferences)
     manager = AstrBotConfigManager({"plugin_set": ["*"]}, router, preferences)
     manager.confs.update(
@@ -42,6 +44,19 @@ def config_manager():
     manager.confs["orphaned"] = {"plugin_set": ["demo_plugin"]}
     manager.abconf_data["unloaded"] = {"name": "Unloaded", "path": "missing.json"}
     return manager
+
+
+def _session_binding(scope_id, profile_id=None, overrides=None):
+    """Build one stored exact session binding record."""
+    return SimpleNamespace(
+        scope_id=scope_id,
+        value={
+            "val": {
+                "profile_id": profile_id,
+                "overrides": overrides or {},
+            }
+        },
+    )
 
 
 @pytest.fixture
@@ -197,6 +212,74 @@ async def test_discord_registration_uses_bot_profile_union(
 
 
 @pytest.mark.asyncio
+async def test_explicit_session_binding_profile_joins_command_union(
+    config_manager, command_registry
+):
+    config_manager.ucr.umop_to_conf_id = {"bot:*:*": "blocked"}
+    config_manager.sp.range_get_async.return_value = [
+        _session_binding("bot:GroupMessage:123", profile_id="demo")
+    ]
+    adapter = DiscordPlatformAdapter({"id": "bot"}, {}, asyncio.Queue())
+    adapter.astrbot_config_mgr = config_manager
+    adapter.client = SimpleNamespace(
+        add_application_command=Mock(), sync_commands=AsyncMock()
+    )
+
+    await adapter._collect_and_register_commands()
+
+    assert {
+        call.args[0].name
+        for call in adapter.client.add_application_command.call_args_list
+    } == {"demo", "help"}
+
+
+@pytest.mark.asyncio
+async def test_explicit_plugin_set_override_joins_command_union(
+    config_manager, command_registry
+):
+    config_manager.ucr.umop_to_conf_id = {"bot:*:*": "blocked"}
+    config_manager.sp.range_get_async.return_value = [
+        _session_binding(
+            "bot:GroupMessage:123", overrides={"plugin_set": ["other_plugin"]}
+        )
+    ]
+    adapter = DiscordPlatformAdapter({"id": "bot"}, {}, asyncio.Queue())
+    adapter.astrbot_config_mgr = config_manager
+    adapter.client = SimpleNamespace(
+        add_application_command=Mock(), sync_commands=AsyncMock()
+    )
+
+    await adapter._collect_and_register_commands()
+
+    assert {
+        call.args[0].name
+        for call in adapter.client.add_application_command.call_args_list
+    } == {"other", "help"}
+
+
+@pytest.mark.asyncio
+async def test_session_binding_of_another_adapter_is_ignored(
+    config_manager, command_registry
+):
+    config_manager.ucr.umop_to_conf_id = {"bot:*:*": "blocked"}
+    config_manager.sp.range_get_async.return_value = [
+        _session_binding("other_bot:GroupMessage:123", profile_id="demo")
+    ]
+    adapter = DiscordPlatformAdapter({"id": "bot"}, {}, asyncio.Queue())
+    adapter.astrbot_config_mgr = config_manager
+    adapter.client = SimpleNamespace(
+        add_application_command=Mock(), sync_commands=AsyncMock()
+    )
+
+    await adapter._collect_and_register_commands()
+
+    assert {
+        call.args[0].name
+        for call in adapter.client.add_application_command.call_args_list
+    } == {"help"}
+
+
+@pytest.mark.asyncio
 async def test_discord_registration_without_manager_keeps_existing_behavior(
     command_registry,
 ):
@@ -213,6 +296,7 @@ async def test_discord_registration_without_manager_keeps_existing_behavior(
     } == {"demo", "other", "help"}
 
 
+@pytest.mark.asyncio
 @pytest.mark.parametrize(
     "routes",
     [
@@ -226,13 +310,13 @@ async def test_discord_registration_without_manager_keeps_existing_behavior(
         {"bot:GroupMessage:?": "blocked", "bot:GroupMessage:*": "other"},
     ],
 )
-def test_platform_profile_union_never_hides_sampled_session_config(
+async def test_platform_profile_union_never_hides_sampled_session_config(
     config_manager, routes
 ):
     config_manager.ucr.umop_to_conf_id = routes
     message_types = (MessageType.GROUP_MESSAGE, MessageType.FRIEND_MESSAGE)
     for platform_id in ("bot", "bot_test", "other_bot"):
-        profiles = config_manager.get_platform_configs(platform_id, message_types)
+        profiles = await config_manager.get_platform_configs(platform_id, message_types)
         for message_type in message_types:
             for session_id in (
                 "",

@@ -23,7 +23,7 @@
                 </button>
             </nav>
 
-            <main class="settings-main">
+            <main class="settings-main pe-3">
                 <v-slide-y-reverse-transition>
                     <div v-if="systemConfigRestartRequired" class="system-config-restart-bar" role="status">
                         <div class="system-config-restart-bar__inner">
@@ -98,6 +98,23 @@
                     </div>
                     <div class="settings-section__content">
                         <div class="settings-list-card">
+                            <div class="settings-item">
+                                <div class="settings-item__label">
+                                    <div class="settings-item__title">{{ tm('chatNavigation.title') }}</div>
+                                    <div class="settings-item__subtitle">{{ tm('chatNavigation.subtitle') }}</div>
+                                </div>
+                                <div class="settings-item__control">
+                                    <v-switch
+                                        :model-value="customizer.chatNavigationInSidebar"
+                                        @update:model-value="customizer.SET_CHAT_NAVIGATION_IN_SIDEBAR(Boolean($event))"
+                                        :aria-label="tm('chatNavigation.title')"
+                                        color="primary"
+                                        inset
+                                        hide-details
+                                        density="compact"
+                                    />
+                                </div>
+                            </div>
                             <div class="settings-item settings-item--color">
                                 <div class="settings-item__label">
                                     <div class="settings-item__title">{{ tm('theme.customize.title') }}</div>
@@ -513,6 +530,7 @@ import { copyToClipboard } from '@/utils/clipboard';
 import { useI18n, useModuleI18n } from '@/i18n/composables';
 import { useTheme } from 'vuetify';
 import { PurpleTheme } from '@/theme/LightTheme';
+import { useCustomizerStore } from '@/stores/customizer';
 import { useToastStore } from '@/stores/toast';
 import { askForConfirmation, useConfirmDialog } from '@/utils/confirmDialog';
 
@@ -520,6 +538,7 @@ const { tm } = useModuleI18n('features/settings');
 const { tm: tmMeta } = useModuleI18n('features/config-metadata');
 const { t, locale } = useI18n();
 const toastStore = useToastStore();
+const customizer = useCustomizerStore();
 const confirmDialog = useConfirmDialog();
 const theme = useTheme();
 

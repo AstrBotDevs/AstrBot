@@ -552,7 +552,7 @@ class DiscordPlatformAdapter(Platform):
             enabled_plugins = set()
             # Discord registers commands per bot, not per AstrBot session. Keep
             # commands usable in any profile that may serve this bot.
-            for config in self.astrbot_config_mgr.get_platform_configs(
+            for config in await self.astrbot_config_mgr.get_platform_configs(
                 self.meta().id,
                 (MessageType.GROUP_MESSAGE, MessageType.FRIEND_MESSAGE),
             ):

@@ -100,14 +100,15 @@ Seatbelt 是 macOS 的内置沙箱机制。AstrBot 在 macOS 上使用 `/usr/bin
 
 [bubblewrap](https://github.com/containers/bubblewrap) 是 Linux 上的用户空间沙箱工具。
 
-检查是否安装 bubblewrap 并且可用：
+AstrBot 使用 bubblewrap 的 `--size` 参数限制沙盒内的临时文件系统 `/tmp` 的容量，该参数需要 bubblewrap **0.7.0 或更高版本**。请检查是否安装了 bubblewrap、版本是否满足要求，并且可用：
 
 ```bash
 command -v bwrap
-bwrap --unshare-all --ro-bind / / --proc /proc --dev /dev /bin/sh -c 'echo "AstrBot is good to go!"'
+bwrap --version
+bwrap --unshare-all --ro-bind / / --dir /tmp --size 268435456 --tmpfs /tmp --proc /proc --dev /dev /bin/sh -c 'echo "AstrBot is good to go!"'
 ```
 
-如果正常输出 `AstrBot is good to go!`，说明 bubblewrap 安装成功且可用。
+如果正常输出 `AstrBot is good to go!`，说明 bubblewrap 安装成功、版本满足要求且可用。
 
 如果没有安装 bubblewrap，可以按发行版安装：
 
@@ -131,6 +132,7 @@ sudo pacman -S bubblewrap
 如果启动失败：
 
 - **找不到 `bwrap`**：检查是否装在运行 AstrBot 的同一环境，以及进程启动时的 `PATH`。
+- **`Unknown option --size` 之类的报错**：bubblewrap 版本低于 **0.7.0**，不支持 AstrBot 使用的 `--size` 参数，请升级到 0.7.0 或更高版本。只是一般性地运行 bwrap 命令（不使用 `--size`）检测通过并不能代表 AstrBot 中可用。
 - **`Operation not permitted` 或用户命名空间错误**：检查用户命名空间限制、AppArmor 和其他系统安全策略。可通过 `sysctl user.max_user_namespaces` 查看命名空间数量上限，通过 `sudo journalctl -k` 查看相关内核日志。
 - **AppArmor 拒绝**：按发行版要求为实际运行环境设置允许创建用户命名空间的策略。不要仅为通过检查而关闭整台机器的安全策略。
 - **容器部署**：继续阅读 [Docker 用户](#local-docker)，宿主机安装 `bwrap` 不能替代容器内安装。

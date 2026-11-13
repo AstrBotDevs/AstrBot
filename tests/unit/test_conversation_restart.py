@@ -68,7 +68,7 @@ def restart_handlers(monkeypatch):
 def restart(monkeypatch):
     context = MagicMock()
     config = {
-        "agent_runner": {"runner_type": "local"},
+        "agent": {"runtime": "astrbot"},
         "platform_settings": {},
     }
     context.get_config.return_value = config
@@ -177,11 +177,6 @@ async def test_restart_permissions_follow_pipeline_isolation(
             "star_map",
             {handler.handler_module_path: StarMetadata(name="builtin_commands")},
         )
-    monkeypatch.setattr(
-        waking.SessionPluginManager,
-        "filter_handlers_by_session",
-        AsyncMock(side_effect=lambda event, handlers: handlers),
-    )
     profiles = {}
     # Interleave profiles and reload one of them, without changing global filters.
     for profile, enabled in [
@@ -204,6 +199,9 @@ async def test_restart_permissions_follow_pipeline_isolation(
                     astrbot_config_id=profile,
                     db_helper=MagicMock(),
                 )
+            )
+            stage.ctx.plugin_manager = SimpleNamespace(
+                context=SimpleNamespace(get_config=lambda stage=stage, **_: stage.ctx.astrbot_config)
             )
             stage._umo_auto_name_recorder = MagicMock()
             profiles[profile] = stage
@@ -323,7 +321,7 @@ async def test_reset_order_and_clearing_failure(restart):
 @pytest.mark.parametrize("entry", ["new_conv", "reset"])
 @pytest.mark.parametrize("runner", commands.THIRD_PARTY_AGENT_RUNNER_KEY)
 async def test_external_runner_restart(restart, monkeypatch, entry, runner):
-    restart.config["agent_runner"]["runner_type"] = runner
+    restart.config["agent"]["runtime"] = runner
     remove = AsyncMock()
     cleanup = AsyncMock()
     monkeypatch.setattr(commands.sp, "remove_async", remove)
@@ -469,7 +467,7 @@ async def test_external_new_creates_local_conversation_and_keeps_old_record(
     monkeypatch.setattr(commands.sp, "remove_async", remove)
     manager = conversation_mgr.ConversationManager(temp_db)
     restart.context.conversation_manager = manager
-    restart.config["agent_runner"]["runner_type"] = "dify"
+    restart.config["agent"]["runtime"] = "dify"
     umo = restart.event.unified_msg_origin
     history = [{"role": "user", "content": "Keep this record"}]
     old_id = await manager.new_conversation(

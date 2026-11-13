@@ -8,6 +8,7 @@ These paths use the current default sidebar with a fixed menu order. Extension i
 
 | Previous entry point or name | Current entry point |
 | --- | --- |
+| Welcome / Welcome page | Overview (the `/welcome` URL remains available) |
 | Providers → Add Provider → Agent Runner | Config → Select a profile → AI → `…` beside the AI heading → Change execution mode |
 | Providers → Decision (after Chat Completion) | Providers → Decision (balance-scale icon, between Text to Speech and Embedding) |
 | Data / Dashboard | Data & Logs → Statistics |
@@ -20,7 +21,8 @@ These paths use the current default sidebar with a fixed menu order. Extension i
 | Standalone MCP / Skills entries | Extensions → MCP Servers / Skills |
 | System Settings → General → Cache → Export diagnostics | System Settings → Maintenance → Diagnostics → Export diagnostics |
 | System Settings → Appearance → Customize Sidebar | Removed; the sidebar uses the default menu layout |
-| Custom Rules / Future Tasks / SubAgents | Custom Rules is under the sidebar `System` group; Future Tasks and SubAgents are under the `Extensions` group |
+| Custom Rules / Session Management | Config → Manage session mappings; old links redirect automatically |
+| Future Tasks / SubAgents | Future Tasks remains under Extensions; subagents are under Config → AI → Capabilities → Subagents |
 
 Old log, trace, conversation, and statistics URLs still redirect to the corresponding tabs. Agent runners are now saved in each profile; they are no longer created as model providers. See [Agent Execution Mode](./agent-runner.md) for the setup steps.
 
@@ -261,3 +263,5 @@ Modify the `password` in the `dashboard` configuration in the data/cmd_config.js
 
 > [!TIP]
 > For more details, see [FAQ - Forgot Dashboard Password](/en/faq.md#forgot-dashboard-password).
+
+Subagent management is removed from the sidebar and opened through `Configuration → AI → Capabilities → Subagents → Configure Specialized Agents`; it opens in a dialog, while the previous `/subagent` URL remains accessible. Enabling subagents immediately allows generic workers. Configuring and selecting specialized agents is optional.

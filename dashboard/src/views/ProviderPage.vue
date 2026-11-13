@@ -406,9 +406,15 @@ const {
   showMessage
 })
 
+const decisionHintKeys = {
+  system_one_decision: 'decisionHints',
+  openai_decision: 'openaiDecisionHints'
+}
+
 const legacyConfigSchema = computed(() => {
   const schema = JSON.parse(JSON.stringify(configSchema.value || {}))
-  if (selectedLegacyProvider.value?.type !== 'system_one_decision') return schema
+  const hintKey = decisionHintKeys[selectedLegacyProvider.value?.type]
+  if (!hintKey) return schema
 
   const items = schema.provider?.items
   if (!items) return schema
@@ -416,8 +422,16 @@ const legacyConfigSchema = computed(() => {
     items.key.type = 'string'
     delete items.key.items
   }
-  if (items.api_base) items.api_base.hint = tm('providers.decisionHints.apiBase')
-  if (items.model) items.model.hint = tm('providers.decisionHints.model')
+  // The schema only shows these fields for System One; every decision type uses them.
+  for (const field of ['total_timeout', 'max_concurrency']) {
+    if (items[field]) delete items[field].condition
+  }
+  if (items.api_base) items.api_base.hint = tm(`providers.${hintKey}.apiBase`)
+  if (items.model && selectedLegacyProvider.value?.type === 'openai_decision') {
+    items.model.hint = tm('providers.openaiDecisionHints.model')
+  } else if (items.model) {
+    items.model.hint = tm('providers.decisionHints.model')
+  }
   if (items.custom_headers) {
     items.custom_headers.hint = tm('providers.decisionHints.customHeaders')
   }
@@ -434,7 +448,7 @@ const loading = ref(false)
 const isLegacyProviderModified = ref(false)
 const legacyConfigSections = computed(() => {
   const config = newSelectedProviderConfig.value
-  if (config.type !== 'system_one_decision') return { basic: config, advanced: null }
+  if (!decisionHintKeys[config.type]) return { basic: config, advanced: null }
 
   const advancedFields = new Set([
     'timeout', 'total_timeout', 'max_concurrency',

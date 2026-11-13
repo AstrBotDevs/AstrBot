@@ -49,8 +49,6 @@ import {
   type ProviderConfigRequest,
   type PypiIndexTestRequest,
   type RuntimeInfo,
-  type BatchSessionProviderRequest,
-  type BatchSessionServiceRequest,
   type SetupAuthRequest,
   type SessionGroupRequest,
   type SessionRuleRequest,
@@ -176,14 +174,6 @@ export interface SkillListParams extends Record<string, unknown> {
 export interface BackupListParams {
   page?: number;
   page_size?: number;
-}
-
-export interface SessionListParams {
-  page?: number;
-  page_size?: number;
-  search?: string;
-  platform?: string;
-  message_type?: 'all' | 'group' | 'private';
 }
 
 export interface SessionRuleListParams {
@@ -1034,6 +1024,9 @@ export const fileApi = {
 };
 
 export const sessionApi = {
+  overrides(umo: string, profileId?: string) {
+    return typed<any>(openApiV1.getSessionOverrides({ query: { umo, profile_id: profileId } }));
+  },
   senders(params?: { search?: string; limit?: number; page?: number; sender_ids?: string[] }) {
     return typed<{ page: number; has_more: boolean; senders: Array<{
       umo: string;
@@ -1042,9 +1035,6 @@ export const sessionApi = {
       platform: string;
       display_name: string;
     }> }>(openApiV1.listSessionSenders({ query: params }));
-  },
-  list(params?: SessionListParams) {
-    return typed<any>(openApiV1.listSessions({ query: generatedQuery(params) }));
   },
   activeUmos(params?: { platform_id?: string }) {
     return typed<any>(openApiV1.listActiveUmos({ query: params }));
@@ -1059,16 +1049,6 @@ export const sessionApi = {
   },
   deleteRules(payload: UmoListRequest) {
     return typed<any>(openApiV1.deleteSessionRules({ body: payload }));
-  },
-  batchUpdateProvider(payload: BatchSessionProviderRequest) {
-    return typed<any>(
-      openApiV1.batchUpdateSessionProvider({ body: payload }),
-    );
-  },
-  batchUpdateService(payload: BatchSessionServiceRequest) {
-    return typed<any>(
-      openApiV1.batchUpdateSessionService({ body: payload }),
-    );
   },
   listGroups() {
     return typed<any>(openApiV1.listSessionGroups());
@@ -1111,17 +1091,26 @@ export const cronApi = {
   },
 };
 
-export const subagentApi = {
-  getConfig() {
-    return typed<OpenConfig>(openApiV1.getSubagentConfig());
+export type AgentConfig = {
+  config_id: string;
+  name: string;
+  description: string;
+  enabled: boolean;
+  runtime: string;
+  config: Record<string, any>;
+};
+export type AgentConfigInput = Omit<AgentConfig, 'config_id'>;
+export type AgentRuntimeInfo = { runtime: string; config: Record<string, any> };
+
+export const agentConfigApi = {
+  list() { return typed<AgentConfig[]>(openApiV1.listAgentConfigs()); },
+  runtimes() { return typed<AgentRuntimeInfo[]>(openApiV1.listAgentRuntimes()); },
+  create(body: AgentConfigInput) { return typed<AgentConfig>(openApiV1.createAgentConfig({ body })); },
+  update(configId: string, body: AgentConfigInput) {
+    return typed<AgentConfig>(openApiV1.updateAgentConfig({ path: { config_id: configId }, body }));
   },
-  updateConfig(config: OpenConfig) {
-    return typed<OpenConfig>(
-      openApiV1.updateSubagentConfig({ body: config }),
-    );
-  },
-  availableTools() {
-    return typed<any>(openApiV1.listSubagentAvailableTools());
+  delete(configId: string) {
+    return typed<unknown>(openApiV1.deleteAgentConfig({ path: { config_id: configId } }));
   },
 };
 
@@ -1829,10 +1818,10 @@ export const conversationApi = {
 };
 
 export const statsApi = {
-  get(offsetSec?: number) {
+  get(offsetSec?: number, sections?: string) {
     return typed<any>(
       openApiV1.getStats({
-        query: offsetSec === undefined ? undefined : { offset_sec: offsetSec },
+        query: { offset_sec: offsetSec, sections },
       }),
     );
   },
