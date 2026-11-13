@@ -4756,7 +4756,7 @@ CONFIG_METADATA_3 = {
                     "platform_settings.segmented_reply.log_base": {
                         "description": "对数底数",
                         "type": "float",
-                        "hint": "对数间隔的底数，默认为 2.6。取值范围为 1.0-10.0。",
+                        "hint": "对数间隔的底数，默认为 2.6。取值范围为大于 1.0 且不超过 10.0。",
                         "condition": {
                             "platform_settings.segmented_reply.enable": True,
                             "platform_settings.segmented_reply.interval_method": "log",
