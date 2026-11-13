@@ -18,10 +18,6 @@ from openai.types.completion_usage import CompletionUsage
 import astrbot.core.message.components as Comp
 from astrbot import logger
 from astrbot.api.provider import Provider
-from astrbot.core.agent.event_stream import (
-    RequestEventRecorder,
-    request_recorder_kwargs,
-)
 from astrbot.core.agent.message import (
     AudioURLPart,
     ContentPart,
@@ -33,6 +29,10 @@ from astrbot.core.agent.tool import ToolSet
 from astrbot.core.exceptions import EmptyModelOutputError
 from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.provider.entities import LLMResponse, TokenUsage, ToolCallsResult
+from astrbot.core.provider.request_observer import (
+    RequestAttemptObserver,
+    request_recorder_kwargs,
+)
 from astrbot.core.utils.media_utils import (
     describe_media_ref,
     resolve_media_ref_to_base64_data,
@@ -539,7 +539,7 @@ class ProviderOpenAIOfficial(Provider):
         tools: ToolSet | None,
         *,
         request_max_retries: int | None = None,
-        request_event_recorder: RequestEventRecorder | None = None,
+        request_event_recorder: RequestAttemptObserver | None = None,
         conversation_id: str | None = None,
     ) -> LLMResponse:
         if tools:
@@ -601,7 +601,7 @@ class ProviderOpenAIOfficial(Provider):
         tools: ToolSet | None,
         *,
         request_max_retries: int | None = None,
-        request_event_recorder: RequestEventRecorder | None = None,
+        request_event_recorder: RequestAttemptObserver | None = None,
         conversation_id: str | None = None,
     ) -> AsyncGenerator[LLMResponse, None]:
         """流式查询API，逐步返回结果"""
@@ -1211,7 +1211,7 @@ class ProviderOpenAIOfficial(Provider):
         extra_user_content_parts=None,
         tool_choice: Literal["auto", "required"] = "auto",
         request_max_retries: int | None = None,
-        request_event_recorder: RequestEventRecorder | None = None,
+        request_event_recorder: RequestAttemptObserver | None = None,
         **kwargs,
     ) -> LLMResponse:
         conversation_id = kwargs.pop("conversation_id", None)
@@ -1295,7 +1295,7 @@ class ProviderOpenAIOfficial(Provider):
         model=None,
         tool_choice: Literal["auto", "required"] = "auto",
         request_max_retries: int | None = None,
-        request_event_recorder: RequestEventRecorder | None = None,
+        request_event_recorder: RequestAttemptObserver | None = None,
         **kwargs,
     ) -> AsyncGenerator[LLMResponse, None]:
         """流式对话，与服务商交互并逐步返回结果"""

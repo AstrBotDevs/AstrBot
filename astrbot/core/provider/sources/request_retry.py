@@ -11,7 +11,7 @@ from tenacity import (
 )
 
 from astrbot import logger
-from astrbot.core.agent.event_stream import RequestEventRecorder
+from astrbot.core.provider.request_observer import RequestAttemptObserver
 from astrbot.core.utils.config_number import coerce_int_config
 from astrbot.core.utils.network_utils import is_connection_error
 
@@ -119,7 +119,7 @@ async def retry_provider_request(
     *,
     retry_rate_limits: bool = True,
     max_attempts: int | None = None,
-    request_event_recorder: RequestEventRecorder | None = None,
+    request_event_recorder: RequestAttemptObserver | None = None,
     log_error_details: bool = True,
 ) -> T:
     """Run a provider request with bounded retries.
@@ -168,7 +168,7 @@ async def retry_provider_request_context(
     *,
     retry_rate_limits: bool = True,
     max_attempts: int | None = None,
-    request_event_recorder: RequestEventRecorder | None = None,
+    request_event_recorder: RequestAttemptObserver | None = None,
 ) -> AsyncIterator[T]:
     manager: AbstractAsyncContextManager[T] | None = None
 

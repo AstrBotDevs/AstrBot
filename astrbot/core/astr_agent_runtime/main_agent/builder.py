@@ -9,6 +9,7 @@ from astrbot.core.agent_input import CollectedInput
 from astrbot.core.astr_agent_runtime.context import (
     AstrAgentContext,
 )
+from astrbot.core.astr_agent_runtime.history import ConversationHistoryObserver
 from astrbot.core.astr_agent_runtime.main_agent.providers import decoded_blocked
 from astrbot.core.astr_agent_runtime.runner import AgentRunner
 from astrbot.core.astr_agent_runtime.tools.cron_tools import FutureTaskTool
@@ -232,15 +233,19 @@ async def build_main_agent(
     writer = None
     manager = plugin_context.conversation_manager
     if req.conversation is not None and isinstance(manager, ConversationManager):
-        writer = await manager._event_writer(
+        writer = await manager.create_event_writer(
             req.conversation.cid,
             unified_msg_origin=event.unified_msg_origin,
             expected_revision=req.conversation.revision,
         )
-        writer.request = req
     if config.call_request_hook:
         if await call_event_hook(
-            event, EventType.OnLLMRequestEvent, req, writer=writer
+            event,
+            EventType.OnLLMRequestEvent,
+            req,
+            context_observer=ConversationHistoryObserver(writer, req)
+            if writer
+            else None,
         ):
             return None
         # Hooks may add images; preserve the cache from input preparation.

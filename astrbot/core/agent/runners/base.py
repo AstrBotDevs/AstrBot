@@ -20,8 +20,6 @@ class AgentState(Enum):
 
 
 class BaseAgentRunner(T.Generic[TContext]):
-    conversation_event_capabilities: frozenset[str] = frozenset({"turn", "messages"})
-
     @abc.abstractmethod
     async def reset(self, *args: T.Any, **kwargs: T.Any) -> None:
         """Reset the agent to its initial state.

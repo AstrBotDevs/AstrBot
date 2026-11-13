@@ -3,8 +3,6 @@ import traceback
 import typing as T
 
 from astrbot import logger
-from astrbot.core.agent.conversation_events import ConversationEventWriter
-from astrbot.core.agent.message import dump_messages
 from astrbot.core.message.message_event_result import CommandResult, MessageEventResult
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from astrbot.core.star.star import star_map
@@ -81,7 +79,7 @@ async def call_event_hook(
     event: AstrMessageEvent,
     hook_type: EventType,
     *args,
-    writer: ConversationEventWriter | None = None,
+    context_observer: T.Callable[[str], None] | None = None,
     **kwargs,
 ) -> bool:
     """Invoke plugin hooks and record changes to this execution's working context.
@@ -90,7 +88,7 @@ async def call_event_hook(
         event: Message used to select eligible plugin handlers.
         hook_type: Hook to dispatch.
         *args: Positional arguments passed to plugin handlers.
-        writer: Explicit execution-owned writer, consumed only by the host.
+        context_observer: Host callback observing working history before and after hooks.
         **kwargs: Keyword arguments passed to plugin handlers.
 
     Returns:
@@ -100,27 +98,8 @@ async def call_event_hook(
         hook_type,
         plugins_name=event.plugins_name,
     )
-    # Snapshot once around the hook group: only mutations during plugin execution
-    # get plugin retention. Earlier framework/custom-runner mutations stay unknown.
-    if handlers and writer is not None and not writer.closed:
-        if writer.runtime_context is not None:
-            history = dump_messages(
-                [
-                    m
-                    for i, m in enumerate(writer.runtime_context.messages)
-                    if not (i == 0 and m.role == "system")
-                ],
-                include_temporary=True,
-            )
-        else:
-            history = (
-                writer.request.contexts
-                if writer.request is not None
-                and writer.request.conversation is not None
-                else None
-            )
-        if history is not None:
-            writer.stage_history(history, origin="unknown")
+    if handlers and context_observer is not None:
+        context_observer("unknown")
     try:
         for handler in handlers:
             plugin = star_map.get(handler.handler_module_path)
@@ -186,22 +165,5 @@ async def call_event_hook(
         return event.is_stopped()
 
     finally:
-        if handlers and writer is not None and not writer.closed:
-            if writer.runtime_context is not None:
-                history = dump_messages(
-                    [
-                        m
-                        for i, m in enumerate(writer.runtime_context.messages)
-                        if not (i == 0 and m.role == "system")
-                    ],
-                    include_temporary=True,
-                )
-            else:
-                history = (
-                    writer.request.contexts
-                    if writer.request is not None
-                    and writer.request.conversation is not None
-                    else None
-                )
-            if history is not None:
-                writer.stage_history(history, origin="plugin")
+        if handlers and context_observer is not None:
+            context_observer("plugin")

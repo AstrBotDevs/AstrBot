@@ -554,6 +554,25 @@ class ConversationStore:
                         )
         return result
 
+    async def restore_context(
+        self, conversation: ConversationV3, leaf: str
+    ) -> ConversationSnapshot:
+        """Restore a confirmed historical position using an owned read session.
+
+        Args:
+            conversation: Previously loaded metadata identifying the owner.
+            leaf: Exact acknowledged event identity, not the current selected tip.
+
+        Returns:
+            Detached context at the requested position.
+
+        Raises:
+            ContextUnavailableError: The historical baseline was reclaimed.
+            ValueError: The requested leaf does not belong to this conversation.
+        """
+        async with self.db.get_db() as session:
+            return await self.project(session, conversation, leaf)
+
     async def read(self, cid: str) -> ConversationSnapshot | None:
         """Read an initialized conversation by its public ID.
 
@@ -655,6 +674,189 @@ class ConversationStore:
             )
             for conv in conversations
         ]
+
+    async def _validate_event(self, session, conv, draft, leaf_event_id) -> None:
+        """Validate event shape and references within the active append transaction.
+
+        Args:
+            session: Transaction containing any earlier events in this batch.
+            conv: Owning conversation metadata.
+            draft: Normalized event to validate.
+            leaf_event_id: Context position after earlier drafts in this batch.
+
+        Raises:
+            ValueError: Event shape or ownership is invalid.
+            ConversationConflictError: A context or execution revision conflicts.
+        """
+        kind = draft["type"]
+        payload = draft.get("payload", {})
+        if kind not in EVENT_TYPES and not kind.startswith("plugin."):
+            raise ValueError(f"Unknown event type: {kind}")
+        if draft.get("version", 1) != 1 or not isinstance(payload, dict):
+            raise ValueError("Unsupported event version or payload")
+        if kind == "conversation.created":
+            raise ValueError("Use create() to create a conversation")
+        if "parent_event_id" in draft:
+            raise ValueError(
+                "Use a complete rebase to continue from historical context"
+            )
+        if kind == "message.appended":
+            message = payload.get("message")
+            if not isinstance(message, dict) or not isinstance(
+                message.get("role"), str
+            ):
+                raise ValueError("A message requires a role")
+            if message["role"] not in ("system", "user", "assistant", "tool"):
+                raise ValueError("Unsupported message role")
+            if not isinstance(payload.get("include_in_context", True), bool):
+                raise ValueError("include_in_context must be boolean")
+        elif kind == "context.rebased":
+            if payload.get("origin", "unknown") not in {
+                "user",
+                "plugin",
+                "system",
+                "unknown",
+            }:
+                raise ValueError("Invalid rebase origin")
+            if payload.get("reason") not in REBASE_REASONS or not isinstance(
+                payload.get("messages"), list
+            ):
+                raise ValueError("A rebase requires a reason and complete messages")
+            ids = set()
+            for entry in payload["messages"]:
+                if (
+                    not isinstance(entry, dict)
+                    or not isinstance(entry.get("id"), str)
+                    or entry["id"] in ids
+                ):
+                    raise ValueError("Rebase message identities must be unique")
+                ids.add(entry["id"])
+                message = entry.get("message")
+                if (
+                    not isinstance(message, dict)
+                    or "role" not in message
+                    or persistent_messages([message]) != [message]
+                ):
+                    raise ValueError("Invalid or temporary rebase message")
+        elif kind == "conversation.updated":
+            changes = payload.get("changes", {})
+            if set(changes) - {"title", "persona_id"}:
+                raise ValueError("Unsupported conversation metadata change")
+            for key, value in changes.items():
+                if value is not None and not isinstance(value, str):
+                    raise ValueError("Metadata must be text or null")
+        elif kind in {"turn.finished", "request.finished", "tool.finished"}:
+            if payload.get("status") not in {
+                "completed",
+                "failed",
+                "cancelled",
+            }:
+                raise ValueError("Invalid execution status")
+            key = {
+                "turn.finished": "turn_id",
+                "request.finished": "request_id",
+                "tool.finished": "execution_id",
+            }[kind]
+            start = (
+                await session.execute(
+                    select(ConversationEvent).where(
+                        ConversationEvent.event_id == payload.get(key, "")
+                    )
+                )
+            ).scalar_one_or_none()
+            if (
+                not start
+                or start.conversation_ref != conv.id
+                or start.type != kind.replace("finished", "started")
+            ):
+                raise ValueError("Missing matching execution start")
+            if kind == "request.finished" and "usage" in payload:
+                usage = payload["usage"]
+                if not isinstance(usage, dict) or any(
+                    type(value) is not int or value < 0 for value in usage.values()
+                ):
+                    raise ValueError("Token usage must contain nonnegative integers")
+                if usage.get("cached_input_tokens", 0) > usage.get("input_tokens", 0):
+                    raise ValueError("Cached input tokens are a subset of input tokens")
+            duplicate = (
+                await session.execute(
+                    select(ConversationEvent.event_id)
+                    .where(
+                        ConversationEvent.conversation_ref == conv.id,
+                        ConversationEvent.type == kind,
+                        ConversationEvent.seq > start.seq,
+                        ConversationEvent.payload[key].as_string() == payload[key],
+                    )
+                    .limit(1)
+                )
+            ).first()
+            if duplicate:
+                raise ConversationConflictError("Execution already finished")
+        elif kind in {"request.started", "tool.started"}:
+            turn = (
+                await session.execute(
+                    select(ConversationEvent).where(
+                        ConversationEvent.event_id == payload.get("turn_id", "")
+                    )
+                )
+            ).scalar_one_or_none()
+            if (
+                not turn
+                or turn.conversation_ref != conv.id
+                or turn.type != "turn.started"
+            ):
+                raise ValueError("Missing parent turn")
+            if (
+                kind == "request.started"
+                and "input_context" in payload
+                and payload.get("context_leaf_event_id") != leaf_event_id
+            ):
+                raise ConversationConflictError(
+                    "Request input is based on a different context"
+                )
+            if kind == "tool.started" and (
+                not isinstance(payload.get("tool_name"), str)
+                or not isinstance(payload.get("tool_call_id"), str)
+                or not isinstance(payload.get("arguments"), dict)
+            ):
+                raise ValueError(
+                    "A tool execution requires a name, call ID and arguments"
+                )
+
+    async def _prune_plugin_context(self, session, conv) -> None:
+        """Reclaim superseded plugin bodies while retaining active execution baselines.
+
+        Args:
+            session: The append transaction, including its new lifecycle events.
+            conv: Conversation with its updated baseline pointer.
+        """
+        await session.flush()
+        await session.execute(
+            text("""UPDATE conversation_events AS old SET payload=NULL
+            WHERE old.conversation_ref=:owner AND old.type='context.rebased'
+              AND json_extract(old.payload,'$.origin')='plugin' AND old.payload IS NOT NULL
+              AND old.seq < (SELECT seq FROM conversation_events WHERE event_id=:baseline)
+              AND NOT EXISTS (
+                  SELECT 1 FROM conversation_events AS context
+                  JOIN conversation_events AS started
+                    ON started.conversation_ref=:owner AND started.type='turn.started'
+                   AND json_extract(started.payload,'$.base_leaf_event_id')=context.event_id
+                  WHERE context.replay_from_event_id=old.event_id
+                    AND NOT EXISTS (SELECT 1 FROM conversation_events AS finished
+                      WHERE finished.conversation_ref=:owner AND finished.type='turn.finished'
+                        AND json_extract(finished.payload,'$.turn_id')=started.event_id))
+              AND NOT EXISTS (
+                  SELECT 1 FROM conversation_events AS context
+                  JOIN conversation_events AS started
+                    ON started.conversation_ref=:owner AND started.type='request.started'
+                   AND json_extract(started.payload,'$.context_leaf_event_id')=context.event_id
+                  WHERE context.replay_from_event_id=old.event_id
+                    AND NOT EXISTS (SELECT 1 FROM conversation_events AS finished
+                      WHERE finished.conversation_ref=:owner AND finished.type='request.finished'
+                        AND json_extract(finished.payload,'$.request_id')=started.event_id))
+            """),
+            {"owner": conv.id, "baseline": conv.replay_from_event_id},
+        )
 
     async def append(
         self,
@@ -792,149 +994,9 @@ class ConversationStore:
                     )
                     message_rows.clear()
                     message_batch_bytes = 0
-                if kind not in EVENT_TYPES and not kind.startswith("plugin."):
-                    raise ValueError(f"Unknown event type: {kind}")
-                if draft.get("version", 1) != 1 or not isinstance(payload, dict):
-                    raise ValueError("Unsupported event version or payload")
-                if kind == "conversation.created":
-                    raise ValueError("Use create() to create a conversation")
-                if "parent_event_id" in draft:
-                    raise ValueError(
-                        "Use a complete rebase to continue from historical context"
-                    )
-                if kind == "message.appended":
-                    message = payload.get("message")
-                    if not isinstance(message, dict) or not isinstance(
-                        message.get("role"), str
-                    ):
-                        raise ValueError("A message requires a role")
-                    if message["role"] not in ("system", "user", "assistant", "tool"):
-                        raise ValueError("Unsupported message role")
-                    if not isinstance(payload.get("include_in_context", True), bool):
-                        raise ValueError("include_in_context must be boolean")
-                elif kind == "context.rebased":
-                    if payload.get("origin", "unknown") not in {
-                        "user",
-                        "plugin",
-                        "system",
-                        "unknown",
-                    }:
-                        raise ValueError("Invalid rebase origin")
-                    if payload.get("reason") not in REBASE_REASONS or not isinstance(
-                        payload.get("messages"), list
-                    ):
-                        raise ValueError(
-                            "A rebase requires a reason and complete messages"
-                        )
-                    ids = set()
-                    for entry in payload["messages"]:
-                        if (
-                            not isinstance(entry, dict)
-                            or not isinstance(entry.get("id"), str)
-                            or entry["id"] in ids
-                        ):
-                            raise ValueError("Rebase message identities must be unique")
-                        ids.add(entry["id"])
-                        message = entry.get("message")
-                        if (
-                            not isinstance(message, dict)
-                            or "role" not in message
-                            or persistent_messages([message]) != [message]
-                        ):
-                            raise ValueError("Invalid or temporary rebase message")
-                elif kind == "conversation.updated":
-                    changes = payload.get("changes", {})
-                    if set(changes) - {"title", "persona_id"}:
-                        raise ValueError("Unsupported conversation metadata change")
-                    for key, value in changes.items():
-                        if value is not None and not isinstance(value, str):
-                            raise ValueError("Metadata must be text or null")
-                        metadata_changes[key] = value
-                elif kind in {"turn.finished", "request.finished", "tool.finished"}:
-                    if payload.get("status") not in {
-                        "completed",
-                        "failed",
-                        "cancelled",
-                    }:
-                        raise ValueError("Invalid execution status")
-                    key = {
-                        "turn.finished": "turn_id",
-                        "request.finished": "request_id",
-                        "tool.finished": "execution_id",
-                    }[kind]
-                    start = (
-                        await session.execute(
-                            select(ConversationEvent).where(
-                                ConversationEvent.event_id == payload.get(key, "")
-                            )
-                        )
-                    ).scalar_one_or_none()
-                    if (
-                        not start
-                        or start.conversation_ref != conv.id
-                        or start.type != kind.replace("finished", "started")
-                    ):
-                        raise ValueError("Missing matching execution start")
-                    if kind == "request.finished" and "usage" in payload:
-                        usage = payload["usage"]
-                        if not isinstance(usage, dict) or any(
-                            type(value) is not int or value < 0
-                            for value in usage.values()
-                        ):
-                            raise ValueError(
-                                "Token usage must contain nonnegative integers"
-                            )
-                        if usage.get("cached_input_tokens", 0) > usage.get(
-                            "input_tokens", 0
-                        ):
-                            raise ValueError(
-                                "Cached input tokens are a subset of input tokens"
-                            )
-                    duplicate = (
-                        await session.execute(
-                            select(ConversationEvent.event_id)
-                            .where(
-                                ConversationEvent.conversation_ref == conv.id,
-                                ConversationEvent.type == kind,
-                                ConversationEvent.seq > start.seq,
-                                ConversationEvent.payload[key].as_string()
-                                == payload[key],
-                            )
-                            .limit(1)
-                        )
-                    ).first()
-                    if duplicate:
-                        raise ConversationConflictError("Execution already finished")
-                elif kind in {"request.started", "tool.started"}:
-                    turn = (
-                        await session.execute(
-                            select(ConversationEvent).where(
-                                ConversationEvent.event_id == payload.get("turn_id", "")
-                            )
-                        )
-                    ).scalar_one_or_none()
-                    if (
-                        not turn
-                        or turn.conversation_ref != conv.id
-                        or turn.type != "turn.started"
-                    ):
-                        raise ValueError("Missing parent turn")
-                    if (
-                        kind == "request.started"
-                        and "input_context" in payload
-                        and payload.get("context_leaf_event_id") != leaf_event_id
-                    ):
-                        raise ConversationConflictError(
-                            "Request input is based on a different context"
-                        )
-                    if kind == "tool.started" and (
-                        not isinstance(payload.get("tool_name"), str)
-                        or not isinstance(payload.get("tool_call_id"), str)
-                        or not isinstance(payload.get("arguments"), dict)
-                    ):
-                        raise ValueError(
-                            "A tool execution requires a name, call ID and arguments"
-                        )
+                await self._validate_event(session, conv, draft, leaf_event_id)
+                if kind == "conversation.updated":
+                    metadata_changes.update(payload.get("changes", {}))
                 head_seq += 1
                 event = ConversationEvent(
                     conversation_ref=conv.id,
@@ -977,33 +1039,7 @@ class ConversationStore:
                 )
                 and conv.replay_from_event_id
             ):
-                await session.flush()
-                await session.execute(
-                    text("""UPDATE conversation_events AS old SET payload=NULL
-                    WHERE old.conversation_ref=:owner AND old.type='context.rebased'
-                      AND json_extract(old.payload,'$.origin')='plugin' AND old.payload IS NOT NULL
-                      AND old.seq < (SELECT seq FROM conversation_events WHERE event_id=:baseline)
-                      AND NOT EXISTS (
-                          SELECT 1 FROM conversation_events AS context
-                          JOIN conversation_events AS started
-                            ON started.conversation_ref=:owner AND started.type='turn.started'
-                           AND json_extract(started.payload,'$.base_leaf_event_id')=context.event_id
-                          WHERE context.replay_from_event_id=old.event_id
-                            AND NOT EXISTS (SELECT 1 FROM conversation_events AS finished
-                              WHERE finished.conversation_ref=:owner AND finished.type='turn.finished'
-                                AND json_extract(finished.payload,'$.turn_id')=started.event_id))
-                      AND NOT EXISTS (
-                          SELECT 1 FROM conversation_events AS context
-                          JOIN conversation_events AS started
-                            ON started.conversation_ref=:owner AND started.type='request.started'
-                           AND json_extract(started.payload,'$.context_leaf_event_id')=context.event_id
-                          WHERE context.replay_from_event_id=old.event_id
-                            AND NOT EXISTS (SELECT 1 FROM conversation_events AS finished
-                              WHERE finished.conversation_ref=:owner AND finished.type='request.finished'
-                                AND json_extract(finished.payload,'$.request_id')=started.event_id))
-                    """),
-                    {"owner": conv.id, "baseline": conv.replay_from_event_id},
-                )
+                await self._prune_plugin_context(session, conv)
             await session.commit()
             return ConversationAppendResult(committed)
 

@@ -13,14 +13,14 @@ from anthropic.types.usage import Usage
 
 from astrbot import logger
 from astrbot.api.provider import Provider
-from astrbot.core.agent.event_stream import (
-    RequestEventRecorder,
-    request_recorder_kwargs,
-)
 from astrbot.core.agent.message import AudioURLPart, ContentPart, ImageURLPart, TextPart
 from astrbot.core.exceptions import EmptyModelOutputError
 from astrbot.core.provider.entities import LLMResponse, TokenUsage
 from astrbot.core.provider.func_tool_manager import ToolSet
+from astrbot.core.provider.request_observer import (
+    RequestAttemptObserver,
+    request_recorder_kwargs,
+)
 from astrbot.core.utils.media_utils import (
     describe_media_ref,
     resolve_media_ref_to_base64_data,
@@ -526,7 +526,7 @@ class ProviderAnthropic(Provider):
         tools: ToolSet | None,
         *,
         request_max_retries: int | None = None,
-        request_event_recorder: RequestEventRecorder | None = None,
+        request_event_recorder: RequestAttemptObserver | None = None,
         conversation_id: str | None = None,
     ) -> LLMResponse:
         if tools:
@@ -648,7 +648,7 @@ class ProviderAnthropic(Provider):
         tools: ToolSet | None,
         *,
         request_max_retries: int | None = None,
-        request_event_recorder: RequestEventRecorder | None = None,
+        request_event_recorder: RequestAttemptObserver | None = None,
         conversation_id: str | None = None,
     ) -> AsyncGenerator[LLMResponse, None]:
         if tools:
@@ -842,7 +842,7 @@ class ProviderAnthropic(Provider):
         extra_user_content_parts=None,
         tool_choice: Literal["auto", "any", "tool", "none"] | dict[str, str] = "auto",
         request_max_retries: int | None = None,
-        request_event_recorder: RequestEventRecorder | None = None,
+        request_event_recorder: RequestAttemptObserver | None = None,
         **kwargs,
     ) -> LLMResponse:
         conversation_id = kwargs.pop("conversation_id", None)
@@ -922,7 +922,7 @@ class ProviderAnthropic(Provider):
         extra_user_content_parts=None,
         tool_choice: Literal["auto", "any", "tool", "none"] | dict[str, str] = "auto",
         request_max_retries: int | None = None,
-        request_event_recorder: RequestEventRecorder | None = None,
+        request_event_recorder: RequestAttemptObserver | None = None,
         **kwargs,
     ):
         conversation_id = kwargs.pop("conversation_id", None)

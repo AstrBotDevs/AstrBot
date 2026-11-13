@@ -2288,16 +2288,19 @@ async def test_event_journal_records_requests_tools_and_final_context(
         conv = await db.create_conversation("umo", "p")
         writer = ConversationEventWriter(db.conversation_store, await db.conversation_store.read(conv.conversation_id))
         provider = VaryingUsageProvider()
+        sink = AsyncMock(wraps=writer.consume)
         await runner.reset(
             provider=provider, request=provider_request,
             run_context=ContextWrapper(context=None),
             tool_executor=mock_tool_executor, agent_hooks=mock_hooks,
             streaming=streaming,
-            conversation_event_sink=writer.consume,
+            conversation_event_sink=sink,
         )
-        writer.runtime_context = runner.run_context
         await writer.start_turn({"kind": "agent"})
-        await collect_events(runner.step_until_done(3))
+        runtime_events = await collect_events(runner.step_until_done(3))
+        captured = [call.args[0] for call in sink.await_args_list]
+        assert sum(event.type == "context.updated" for event in captured) == 1
+        assert sum(event.type == "context.appended" for event in captured) == 2
         await writer.save_history(dump_messages(runner.run_context.messages))
         await writer.finish_turn("completed")
         events = await db.conversation_store.events(conv.conversation_id)
@@ -2305,6 +2308,9 @@ async def test_event_journal_records_requests_tools_and_final_context(
         assert types.count("request.started") == types.count("request.finished") == 2
         assert types.count("tool.started") == types.count("tool.finished") == 1
         assert types[-1] == "turn.finished"
+        assert [e.payload["invocation_id"] for e in events if e.type == "request.started"] == [
+            e.request_id for e in runtime_events if e.type == "request.started"
+        ]
         usage = [e.payload["usage"] for e in events if e.type == "request.finished"]
         assert sum(item["input_tokens"] for item in usage) == 330
         assert sum(item["cached_input_tokens"] for item in usage) == 30
@@ -2355,7 +2361,6 @@ async def test_request_journal_captures_hook_edited_provider_input(
             streaming=False,
             conversation_event_sink=writer.consume,
         )
-        writer.runtime_context = runner.run_context
         await writer.start_turn({"kind": "test"})
         runner.run_context.messages[1].content = "after hook"
         if temporary:
@@ -2923,3 +2928,106 @@ async def test_unknown_tool_is_rejected_without_claiming_execution(
     assert rejected[0].error.code == "tool_not_found"
     assert not any(event.type in ("tool.started", "tool.finished") for event in events)
     assert not mock_hooks.tool_start_called
+
+
+@pytest.mark.asyncio
+async def test_in_place_compression_emits_full_context_replacement(
+    runner, mock_tool_executor, mock_hooks
+):
+    class InPlaceCompressor:
+        def __init__(self):
+            self.called = False
+
+        def should_compress(self, *args):
+            return not self.called
+
+        async def __call__(self, messages):
+            self.called = True
+            messages[0].content = "compressed in place"
+            return messages
+
+    provider = MockProvider()
+    provider.should_call_tools = False
+    captured = []
+
+    async def persist(response):
+        captured.append(response)
+        return True
+
+    await runner.reset(
+        provider=provider,
+        request=ProviderRequest(prompt="question"),
+        run_context=ContextWrapper(context=None),
+        tool_executor=mock_tool_executor,
+        agent_hooks=mock_hooks,
+        streaming=False,
+        max_context_tokens=100,
+        custom_compressor=InPlaceCompressor(),
+        conversation_event_sink=persist,
+    )
+    original_messages = runner.run_context.messages
+    await collect_events(runner.step_until_done(1))
+    assert runner.run_context.messages is original_messages
+    replacements = [event for event in captured if event.type == "context.updated"]
+    assert len(replacements) == 2
+    assert replacements[-1].data["reason"] == "compaction"
+    assert replacements[-1].data["messages"][0]["content"] == "compressed in place"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("fallback", [False, True])
+async def test_stream_message_identity_and_completion_across_fallback(
+    runner, provider_request, mock_tool_executor, mock_hooks, monkeypatch, fallback
+):
+    """Keep incremental output and final snapshots within their provider invocation."""
+    from astrbot.core.agent.events import (
+        MessageCompleted, ReasoningDelta, RequestStarted, TextDelta,
+    )
+
+    primary, secondary = MockProvider(), MockProvider()
+
+    async def primary_stream(**kwargs):
+        yield LLMResponse(role="assistant", is_chunk=True, reasoning_content="Thinking")
+        yield LLMResponse(
+            role="assistant", is_chunk=True, result_chain=MessageChain().message("Hel")
+        )
+        yield LLMResponse(role="assistant", is_chunk=True, completion_text="lo")
+        if fallback:
+            raise RuntimeError("Provider connection lost")
+        yield LLMResponse(
+            role="assistant", reasoning_content="Final reasoning", completion_text="Final reply"
+        )
+
+    async def secondary_stream(**kwargs):
+        yield LLMResponse(role="assistant", is_chunk=True, completion_text="Backup")
+        yield LLMResponse(role="assistant", completion_text="Backup reply")
+
+    monkeypatch.setattr(primary, "text_chat_stream", primary_stream)
+    monkeypatch.setattr(secondary, "text_chat_stream", secondary_stream)
+    await runner.reset(
+        provider=primary, request=provider_request,
+        run_context=ContextWrapper(context=None), tool_executor=mock_tool_executor,
+        agent_hooks=mock_hooks, streaming=True,
+        fallback_providers=[secondary] if fallback else [],
+    )
+    events = await collect_events(runner.step_until_done(3))
+    deltas = [event for event in events if isinstance(event, (TextDelta, ReasoningDelta))]
+    completed = [event for event in events if isinstance(event, MessageCompleted)]
+    assert [(event.type, event.part_index, event.text) for event in deltas[:3]] == [
+        ("reasoning.delta", 0, "Thinking"),
+        ("text.delta", 1, "Hel"),
+        ("text.delta", 1, "lo"),
+    ]
+    assert {event.message_id for event in deltas[:3]} == {completed[0].message_id}
+    assert len(completed) == (2 if fallback else 1)
+    if fallback:
+        assert completed[0].status == "failed"
+        assert [part.text for part in completed[0].content] == ["Thinking", "Hello"]
+        second_start = [event for event in events if isinstance(event, RequestStarted)][1]
+        assert events.index(completed[0]) < events.index(second_start)
+        assert deltas[-1].part_index == 0
+        assert deltas[-1].message_id == completed[1].message_id != completed[0].message_id
+        assert [part.text for part in completed[1].content] == ["Backup reply"]
+    else:
+        assert [part.text for part in completed[0].content] == ["Final reasoning", "Final reply"]
+    assert completed[-1].status == "completed"

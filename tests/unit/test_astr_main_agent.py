@@ -90,7 +90,7 @@ def mock_context():
         side_effect=lambda *args, **kwargs: ctx.get_using_provider(*args, **kwargs)
     )
     ctx.conversation_manager = MagicMock()
-    ctx.conversation_manager._to_conversation.side_effect = lambda record: record
+    ctx.conversation_manager.to_legacy_conversation.side_effect = lambda record: record
     ctx.persona_manager = MagicMock()
     ctx.persona_manager.personas_v3 = []
     ctx.persona_manager.resolve_selected_persona = AsyncMock(
@@ -1840,7 +1840,7 @@ class TestBuildMainAgent:
         mock_context.mock_add_spec(Context)
         req = ProviderRequest(prompt="Original input")
 
-        async def hook(event, kind, request, *, writer=None):
+        async def hook(event, kind, request, *, context_observer=None):
             request.prompt = "Plugin input"
             request.system_prompt = "Plugin instructions"
             return False
@@ -2835,7 +2835,7 @@ class TestBuildMainAgent:
         conv_mgr = mock_context.conversation_manager
         _setup_conversation_for_build(conv_mgr)
 
-        async def request_hook(event, kind, req, *, writer=None):
+        async def request_hook(event, kind, req, *, context_observer=None):
             assert kind is builder_build.EventType.OnLLMRequestEvent
             mock_runner.reset.assert_not_called()
             req.prompt = "Changed by the plugin"
@@ -3792,7 +3792,7 @@ async def test_wakeup_collects_current_conversation_without_an_explicit_request(
     manager = SimpleNamespace(
         get_curr_conversation_id=AsyncMock(return_value="conversation"),
         db=SimpleNamespace(get_conversation_by_id=AsyncMock(return_value=conversation)),
-        _to_conversation=lambda record: record,
+        to_legacy_conversation=lambda record: record,
     )
     context = SimpleNamespace(conversation_manager=manager)
     event = AgentWakeupEvent(

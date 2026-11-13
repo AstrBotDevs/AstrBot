@@ -113,7 +113,7 @@ class MainAgentSession(NativeAgentSession):
         # Explicit unbound SDK/plugin contexts keep their established semantics.
         # Ordinary turns always reload this session's history after execution admission.
         if not explicit or req.conversation is not None:
-            req.conversation = manager._to_conversation(conversation)
+            req.conversation = manager.to_legacy_conversation(conversation)
             req.contexts = conversation.content or []
         if not explicit:
             event.set_extra("provider_request", req)

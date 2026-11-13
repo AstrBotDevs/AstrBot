@@ -14,7 +14,8 @@ class AgentResponse:
     """One runner output, dispatched by its literal type.
 
     Display responses carry ``chain``; protocol responses carry event payloads.
-    ``context.updated`` is an in-memory snapshot for legacy mutation adaptation.
+    ``context.updated`` reconciles a complete working history; ``context.appended``
+    stages newly produced messages without scanning unchanged history.
     Event IDs identify durable records and must be reused on redelivery.
     """
 
@@ -33,6 +34,7 @@ class AgentResponse:
         "tool.started",
         "tool.finished",
         "context.updated",
+        "context.appended",
         "message.appended",
         "context.rebased",
     ]

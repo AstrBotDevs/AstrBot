@@ -9,7 +9,6 @@ from ...provider.modalities import (
 from ..event_stream import (
     RequestEventRecorder,
     request_context_for_journal,
-    request_recorder_kwargs,
 )
 from ..message import Message, dump_messages
 from ..response import AgentResponse
@@ -24,6 +23,8 @@ else:
         import logging
 
         logger = logging.getLogger("astrbot")
+
+from astrbot.core.provider.request_observer import request_recorder_kwargs
 
 if TYPE_CHECKING:
     from astrbot.core.provider.provider import Provider

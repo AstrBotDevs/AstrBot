@@ -63,8 +63,14 @@ class ConversationEventWriter:
         self._entries = deepcopy(snapshot.entries)
         self._committed_entries = self._entries
         self._excluded_counts: Counter[str] = Counter()
-        self.runtime_context = None
-        self.request = None
+
+    def get_messages(self) -> list[dict]:
+        """Read a detached view of the current projection, including staged edits.
+
+        Returns:
+            Full messages whose mutation cannot alter this writer's state.
+        """
+        return deepcopy([entry["message"] for entry in self._entries])
 
     async def consume(self, response: AgentResponse) -> bool:
         """Collect a runner event before allowing execution to resume.
@@ -75,7 +81,9 @@ class ConversationEventWriter:
         Returns:
             Whether the response belongs to persistence rather than display.
         """
-        if response.type == "context.updated":
+        if response.type == "context.appended":
+            self.stage_messages(response.data["messages"])
+        elif response.type == "context.updated":
             self.stage_history(
                 response.data["messages"],
                 reason=response.data.get("reason", "legacy_replace"),
@@ -208,10 +216,9 @@ class ConversationEventWriter:
                 # An unseen historical ACK need not follow our local context: other
                 # writers may have appended intervening messages. Restore this exact
                 # immutable tip, never the conversation's currently selected tip.
-                async with self.store.db.get_db() as session:
-                    snapshot = await self.store.project(
-                        session, self._conversation, context_events[-1].event_id
-                    )
+                snapshot = await self.store.restore_context(
+                    self._conversation, context_events[-1].event_id
+                )
                 replacement = snapshot.entries
             else:
                 for event in context_events[rebase_index or 0 :]:
@@ -376,6 +383,25 @@ class ConversationEventWriter:
             self._pending.clear()
             self._entries = self._committed_entries
 
+    def stage_messages(self, messages: list[dict]) -> None:
+        """Stage a framework-owned append without comparing the previous history.
+
+        Args:
+            messages: Only new working messages, including temporary content.
+        """
+        exclusions = Counter()
+        entries, drafts = reconcile_history(
+            [], messages, turn_id=self.turn_id, excluded_counts=exclusions
+        )
+        if entries:
+            # Detach the list once when staging begins; message bodies stay shared
+            # with the immutable committed projection until a replacement occurs.
+            if self._entries is self._committed_entries:
+                self._entries = list(self._entries)
+            self._entries.extend(entries)
+        self._pending.extend(drafts)
+        self._excluded_counts.update(exclusions)
+
     def stage_history(
         self, history: list[dict], *, reason="legacy_replace", origin="unknown"
     ) -> None:
@@ -428,16 +454,3 @@ class ConversationEventWriter:
                 expected_leaf=self.leaf_event_id,
             )
             await self._acknowledge(committed)
-            if self._pending:
-                return
-            if self.runtime_context is not None:
-                from astrbot.core.agent.message import load_messages
-
-                system = self.runtime_context.messages[:1]
-                if not system or system[0].role != "system":
-                    system = []
-                self.runtime_context.messages = system + load_messages(
-                    deepcopy(history)
-                )
-            elif self.request is not None:
-                self.request.contexts = deepcopy(history)

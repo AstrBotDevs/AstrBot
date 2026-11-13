@@ -1,7 +1,6 @@
 """Storage-independent runner events and acknowledged delivery."""
 
 import asyncio
-import inspect
 import uuid
 from collections.abc import AsyncGenerator, Awaitable, Callable
 from copy import deepcopy
@@ -91,24 +90,6 @@ class AgentEventStream(Generic[TEvent]):
                 acknowledged.cancel()
 
 
-def request_recorder_kwargs(call: Callable, recorder) -> dict:
-    """Pass instrumentation only to adapters that explicitly accept it.
-
-    Args:
-        call: Provider method, which may be implemented by an older plugin.
-        recorder: Optional request attempt recorder.
-
-    Returns:
-        Local instrumentation arguments, never arbitrary model request kwargs.
-    """
-    if (
-        recorder is not None
-        and "request_event_recorder" in inspect.signature(call).parameters
-    ):
-        return {"request_event_recorder": recorder}
-    return {}
-
-
 def request_context_for_journal(
     contexts, *, source_contexts, modalities, extra_user_content_parts=None
 ) -> dict:
@@ -186,23 +167,36 @@ class RequestEventRecorder:
     """Pair provider attempts while attaching final usage after response decoding."""
 
     def __init__(
-        self, emit: Callable[[AgentResponse], Awaitable[object]], payload: dict
+        self,
+        emit: Callable[[AgentResponse], Awaitable[object]],
+        payload: dict,
+        *,
+        invocation_id: str | None = None,
     ):
         """Attach an explicit runtime sink to one provider invocation.
 
         Args:
             emit: Awaited delivery of events to the runner's consumer.
             payload: Request metadata and optional filtered provider context.
+            invocation_id: Parent runtime call identity shared by all retry attempts.
         """
         self.emit = emit
         self.payload = payload
+        self.invocation_id = invocation_id or str(uuid.uuid4())
+        self.attempt = 0
         self.current_id = None
         self.network_attempt_seen = False
 
     async def begin(self):
         """Start an attempt, retaining its ID until settlement."""
         self.current_id = str(uuid.uuid4())
-        await self.emit(AgentResponse("request.started", self.payload, self.current_id))
+        self.attempt += 1
+        payload = {
+            **self.payload,
+            "invocation_id": self.invocation_id,
+            "attempt": self.attempt,
+        }
+        await self.emit(AgentResponse("request.started", payload, self.current_id))
 
     async def before_network_attempt(self):
         """Open another attempt when the shared provider retry loop retries."""

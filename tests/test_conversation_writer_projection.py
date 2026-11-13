@@ -371,19 +371,19 @@ async def test_save_ack_does_not_overwrite_later_hook_work(database, monkeypatch
     writer = ConversationEventWriter(store, await store.read(conv.conversation_id))
     history = [{"role": "user", "content": "committed"}]
     late = [{"role": "user", "content": "hook replacement"}]
-    writer.request = SimpleNamespace(contexts=history)
+    request = SimpleNamespace(contexts=history)
     original_append = store.append
 
     async def stage_before_ack(*args, **kwargs):
         result = await original_append(*args, **kwargs)
-        writer.request.contexts = late
+        request.contexts = late
         writer.stage_history(late, origin="plugin")
         return result
 
     with monkeypatch.context() as patch:
         patch.setattr(store, "append", stage_before_ack)
         await writer.save_history(history)
-    assert writer.request.contexts == late
+    assert request.contexts == late
     assert [entry["message"] for entry in writer._committed_entries] == history
     assert [entry["message"] for entry in writer._entries] == late
     assert writer._pending
@@ -405,3 +405,45 @@ async def test_failed_turn_discards_only_uncommitted_work(database):
     assert not writer._pending
     assert writer._entries is writer._committed_entries
     assert writer._entries == (await store.read(conv.conversation_id)).entries
+
+
+@pytest.mark.asyncio
+async def test_staged_deltas_keep_committed_state_and_temporary_records(
+    database, monkeypatch
+):
+    store = database.conversation_store
+    old = {"role": "user", "content": "existing history"}
+    conv = await store.create(umo="owner", platform_id="p", content=[old] * 100)
+    writer = ConversationEventWriter(store, await store.read(conv.conversation_id))
+    committed = writer._committed_entries
+    original = conversation_db.reconcile_history
+    compared_lengths = []
+
+    def reconcile(entries, history, **kwargs):
+        compared_lengths.append(len(entries))
+        return original(entries, history, **kwargs)
+
+    monkeypatch.setattr(
+        "astrbot.core.agent.conversation_events.reconcile_history", reconcile
+    )
+    temporary = {"role": "user", "content": "temporary", "_no_save": True}
+    expected = [old] * 100
+    for index in range(20):
+        message = {"role": "assistant", "content": str(index)}
+        writer.stage_messages([message, temporary])
+        expected.extend([deepcopy(message), temporary])
+        message["content"] = "caller mutation"
+    assert compared_lengths == [0] * 20
+    assert len(committed) == 100
+    assert writer._committed_entries is committed
+    assert writer._entries[0] is committed[0]
+    detached = writer.get_messages()
+    detached[0]["content"] = "caller mutation"
+    detached.clear()
+    assert writer.get_messages()[0] == old
+    await writer.save_history(expected)
+    records = await store.events(conv.conversation_id, event_type="message.appended")
+    excluded = [e for e in records if e.payload.get("include_in_context") is False]
+    assert len(excluded) == 20
+    assert writer.get_messages() == (await store.read(conv.conversation_id)).messages
+    assert len(writer.get_messages()) == 120

@@ -14,6 +14,7 @@ from astrbot.core.agent.runners.deerflow.deerflow_agent_runner import (
 )
 from astrbot.core.agent.runners.dify.dify_agent_runner import DifyAgentRunner
 from astrbot.core.agent_input import matches_provider_wake_prefix
+from astrbot.core.astr_agent_runtime.history import ConversationHistoryObserver
 from astrbot.core.astr_agent_runtime.hooks import MainAgentHooks
 from astrbot.core.conversation_mgr import ConversationManager
 from astrbot.core.message.components import Image, Record
@@ -333,14 +334,17 @@ class ThirdPartyAgentSubStage(Stage):
                 cid = await manager.new_conversation(
                     event.unified_msg_origin, event.get_platform_id()
                 )
-            event_writer = await manager._event_writer(
+            event_writer = await manager.create_event_writer(
                 cid, unified_msg_origin=event.unified_msg_origin
             )
-            event_writer.request = req
+
+        context_observer = (
+            ConversationHistoryObserver(event_writer, req) if event_writer else None
+        )
 
         # call event hook
         if await call_event_hook(
-            event, EventType.OnLLMRequestEvent, req, writer=event_writer
+            event, EventType.OnLLMRequestEvent, req, context_observer=context_observer
         ):
             return
 
@@ -390,7 +394,7 @@ class ThirdPartyAgentSubStage(Stage):
                     if event.is_stopped() or not runner.done():
                         status = "cancelled"
                     if status == "completed":
-                        history = [entry["message"] for entry in event_writer._entries]
+                        history = event_writer.get_messages()
                         history.append(await req.assemble_context())
                         if final.completion_text:
                             history.append(
@@ -431,7 +435,7 @@ class ThirdPartyAgentSubStage(Stage):
                     context=astr_agent_ctx,
                     tool_call_timeout=120,
                 ),
-                agent_hooks=MainAgentHooks(writer=event_writer),
+                agent_hooks=MainAgentHooks(context_observer=context_observer),
                 provider_config=self.ctx.astrbot_config["agent"]["config"],
                 streaming=streaming_response,
             )

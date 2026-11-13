@@ -213,7 +213,7 @@ async def test_core_and_request_hooks_run_once_and_can_stop_input(
 
     calls = []
 
-    async def hook(event, kind, *args, writer=None):
+    async def hook(event, kind, *args, context_observer=None):
         calls.append(kind)
         if kind == EventType.OnLLMRequestEvent:
             args[0].prompt += " with plugin context"

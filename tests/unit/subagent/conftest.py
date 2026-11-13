@@ -144,7 +144,7 @@ async def environment(tmp_path, request):
     context.conversation_manager.db = SimpleNamespace(
         get_conversation_by_id=AsyncMock(side_effect=read_history)
     )
-    context.conversation_manager._to_conversation = lambda record: record
+    context.conversation_manager.to_legacy_conversation = lambda record: record
     context.platform_manager.platform_insts = [
         SimpleNamespace(
             meta=lambda: PlatformMetadata(id="test", name="test", description="Test")

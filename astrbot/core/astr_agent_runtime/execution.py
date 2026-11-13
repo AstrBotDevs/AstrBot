@@ -18,6 +18,7 @@ from astrbot.core.agent.output import PlainOutput
 from astrbot.core.agent.run_context import ContextWrapper
 from astrbot.core.agent.runtime import AgentTurn, TurnResult, TurnStatus
 from astrbot.core.agent_output_content import content_from_chain
+from astrbot.core.astr_agent_runtime.history import ConversationHistoryObserver
 from astrbot.core.astr_agent_runtime.runner import AgentRunner, _watch_agent_stop_signal
 
 if TYPE_CHECKING:
@@ -79,6 +80,7 @@ async def create_native_runner(
         and compression_provider is None
     ):
         compression_provider = provider
+    context_observer = ConversationHistoryObserver(writer, request) if writer else None
     await runner.reset(
         provider=provider,
         request=request,
@@ -86,7 +88,7 @@ async def create_native_runner(
             context=agent_context, tool_call_timeout=config.tool_call_timeout
         ),
         tool_executor=FunctionToolExecutor(),
-        agent_hooks=MainAgentHooks(request, writer=writer),
+        agent_hooks=MainAgentHooks(request, context_observer=context_observer),
         conversation_event_sink=writer.consume if writer else None,
         streaming=config.streaming_response,
         max_context_tokens=max_context_tokens,
@@ -105,8 +107,8 @@ async def create_native_runner(
         tool_result_overflow_dir=get_astrbot_system_tmp_path() if read_tool else None,
         read_tool=read_tool,
     )
-    if writer is not None:
-        writer.runtime_context = runner.run_context
+    if context_observer is not None:
+        context_observer.runtime_context = runner.run_context
     return runner
 
 

@@ -45,7 +45,7 @@ class ConversationManager:
         # 会话删除回调函数列表（用于级联清理，如知识库配置）
         self._on_session_deleted_callbacks: list[Callable[[str], Awaitable[None]]] = []
 
-    async def _event_writer(
+    async def create_event_writer(
         self,
         conversation_id: str,
         *,
@@ -115,7 +115,7 @@ class ConversationManager:
             raise ValueError("content must be text or a list of content parts")
         message = UserMessageSegment(content=content)
         serialized = dump_messages([message], include_temporary=True)[0]
-        writer = await self._event_writer(conversation_id=cid)
+        writer = await self.create_event_writer(conversation_id=cid)
         saved = await writer.append_message(serialized, event_id=message_id)
         return saved.event_id
 
@@ -156,7 +156,7 @@ class ConversationManager:
             raise ValueError("data must be a JSON object")
         if event_id is not None and (not isinstance(event_id, str) or not event_id):
             raise ValueError("event_id must be a nonempty string")
-        writer = await self._event_writer(conversation_id=cid)
+        writer = await self.create_event_writer(conversation_id=cid)
         saved = await writer.append(f"plugin.{event_type}", data, event_id=event_id)
         return saved.event_id
 
@@ -211,7 +211,7 @@ class ConversationManager:
                     f"会话删除回调执行失败 (session: {unified_msg_origin}): {e}",
                 )
 
-    def _to_conversation(
+    def to_legacy_conversation(
         self,
         record: ConversationData,
         include_history: bool = True,
@@ -363,7 +363,7 @@ class ConversationManager:
             conv = await self.db.get_conversation_by_id(cid=conversation_id)
         conv_res = None
         if conv:
-            conv_res = self._to_conversation(conv)
+            conv_res = self.to_legacy_conversation(conv)
         return conv_res
 
     async def get_conversations(
@@ -386,7 +386,7 @@ class ConversationManager:
         )
         convs_res = []
         for conv in convs:
-            conv_res = self._to_conversation(conv)
+            conv_res = self.to_legacy_conversation(conv)
             convs_res.append(conv_res)
         return convs_res
 
@@ -422,7 +422,7 @@ class ConversationManager:
         convs, cnt = await self.db.get_filtered_conversations(**query_kwargs)
         convs_res = []
         for conv in convs:
-            conv_res = self._to_conversation(
+            conv_res = self.to_legacy_conversation(
                 conv,
                 include_history=include_history,
             )

@@ -25,7 +25,7 @@
 ## 实现职责与事务边界
 
 - `ConversationManager` 通过 `ctx.conversations` 提供插件业务接口，按明确的对话目标执行独立持久化操作，不查找或复用正在运行的 writer。`ctx.conversation_manager` 保留为兼容别名。
-- `ConversationEventWriter` 由一次 Agent 执行明确拥有，管理本次执行的事件和工作上下文。每次执行创建 `MainAgentHooks(writer)`，通过内部参数将同一个 writer 传给 hook 调度函数；不使用共享 hooks 实例或环境变量查找 writer。插件不接收 writer，`AstrMessageEvent` 也不携带 writer 字段。
+- `ConversationEventWriter` 由一次 Agent 执行明确拥有，只管理事件暂存、提交和已确认的上下文投影，不持有或回写 Runner、ProviderRequest。执行层通过 `ConversationHistoryObserver` 在插件 hook 前后读取工作上下文并交给 writer 暂存；通用 hook 调度函数只接收观察回调，不了解 Writer 或运行时对象的内部结构。插件不接收这个回调，`AstrMessageEvent` 也不携带 writer 字段。
 - `db/conversation.py` 的 `ConversationStore` 负责事件校验、幂等与版本冲突、上下文投影、快照和保留策略。它仍是 SQLite 实现，不代表已经支持 PostgreSQL / MySQL。
 - `db/migration/migra_conversation_events.py` 负责旧整份历史、旧树状事件和旧展示关联的迁移。启动初始化和旧备份导入显式调用迁移；正常事件追加不经过迁移代码。
 - `db/webchat_projection.py` 维护追加事件对应的展示消息位置。它接收已校验、有序的事件和现有数据库 session，不创建或提交事务。
@@ -36,7 +36,9 @@
 
 writer 分别维护执行日志的 `head_seq`、已应用上下文的 sequence、`leaf_event_id` 和 `replay_from_event_id`。执行日志推进不能跳过尚未确认的上下文，旧 ACK 不能回退已应用的位置。成功 ACK 中包含旧版本生成的 snapshot 时，按完整基线更新 projection 和指针。
 
-普通新提交不再调用 `project()`。仅当收到尚未应用、且没有完整 rebase 的历史重试 ACK 时，writer 恢复 ACK 指向的精确历史位置：返回的事件可能省略其他 writer 写入的中间消息，不能直接拼接到本地上下文。这个例外不读取会话当前选中的位置；后续基于旧位置的写入仍触发乐观并发冲突。
+原生 Runner 初次绑定时发送完整 `context.updated`，后续由框架新增的消息通过 `context.appended` 增量暂存；插件修改边界和真正发生压缩、截断的路径仍比较完整历史。自定义压缩器即使原地修改消息，也会推进 ContextManager revision，触发完整同步。
+
+普通新提交不再调用 `project()`。仅当收到尚未应用、且没有完整 rebase 的历史重试 ACK 时，writer 恢复 ACK 指向的精确历史位置：返回的事件可能省略其他 writer 写入的中间消息，不能直接拼接到本地上下文。这个例外通过 Store 的 `restore_context()` 管理读事务，不由 Writer 打开数据库 Session；不读取会话当前选中的位置；后续基于旧位置的写入仍触发乐观并发冲突。
 
 本次不新增自动 snapshot，也不承诺恢复 replay 的长度有固定阈值。初始化、历史位置恢复、完整历史返回、完整 rebase 和 hook 的整份历史比较仍可能是 O(Context 大小)。同一 writer 的普通连续追加只维护新增消息，消除逐次全量查询、重放和列表复制；历史重试的必要恢复及仍有 staged 工作时的重建不属于这条普通热路径。
 
@@ -373,3 +375,5 @@ event_id = await ctx.conversations.append_plugin_event(
 永久追加上下文使用 `append_message()`；旧插件通过原有 `update_conversation()` 或 hook 修改历史的行为仍由兼容层记录。临时检索内容使用现有临时标记排除未来投影，但标记不保证原始事件正文不落盘。恢复上下文读取已记录的数据，不重新执行插件逻辑。
 
 完整用法见 [插件开发文档](docs/zh/dev/star/guides/ai.md#对话管理器)。
+
+Provider 请求观察使用 `RequestAttemptObserver` 最小接口，不依赖 Agent 的具体记录器。运行时模型调用和持久化请求尝试通过 `invocation_id` 关联，同一调用内每次重试使用独立事件 ID 和递增 `attempt`。直接调用 Provider 且未提供观察器的插件请求不会自动进入事件日志。

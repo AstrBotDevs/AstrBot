@@ -19,6 +19,43 @@ if TYPE_CHECKING:
     from astrbot.core.agent.conversation_events import ConversationEventWriter
 
 
+class ConversationHistoryObserver:
+    """Adapt mutable host context to staged events at plugin boundaries."""
+
+    def __init__(
+        self, writer: ConversationEventWriter, request: ProviderRequest | None = None
+    ):
+        """Bind one execution's persistence and its legacy request context.
+
+        Args:
+            writer: Revision-bound event writer owned by the host.
+            request: Request used before a native runtime context is available.
+        """
+        self.writer = writer
+        self.request = request
+        self.runtime_context = None
+
+    def __call__(self, origin: str) -> None:
+        """Stage context changes without exposing host objects to persistence.
+
+        Args:
+            origin: Attribution for changes observed at this boundary.
+        """
+        if self.writer.closed:
+            return
+        if self.runtime_context is not None:
+            messages = self.runtime_context.messages
+            history = dump_messages(
+                messages[1:] if messages and messages[0].role == "system" else messages,
+                include_temporary=True,
+            )
+        elif self.request is not None and self.request.conversation is not None:
+            history = self.request.contexts
+        else:
+            return
+        self.writer.stage_history(history, origin=origin)
+
+
 async def save_agent_history(
     *,
     req: ProviderRequest,

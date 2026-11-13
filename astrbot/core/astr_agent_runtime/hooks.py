@@ -2,11 +2,11 @@ from typing import TYPE_CHECKING, Any
 
 from mcp.types import CallToolResult
 
-from astrbot.core.agent.conversation_events import ConversationEventWriter
 from astrbot.core.agent.hooks import BaseAgentRunHooks
 from astrbot.core.agent.run_context import ContextWrapper
 from astrbot.core.agent.tool import FunctionTool
 from astrbot.core.astr_agent_runtime.context import AstrAgentContext
+from astrbot.core.astr_agent_runtime.history import ConversationHistoryObserver
 from astrbot.core.pipeline.context_utils import call_event_hook
 from astrbot.core.star.star_handler import EventType
 
@@ -19,16 +19,16 @@ class MainAgentHooks(BaseAgentRunHooks[AstrAgentContext]):
         self,
         request: "ProviderRequest | None" = None,
         *,
-        writer: ConversationEventWriter | None = None,
+        context_observer: ConversationHistoryObserver | None = None,
     ) -> None:
         """Bind hooks to the prepared native request when one is available.
 
         Args:
             request: Native request with conversation and tool settings.
-            writer: Event writer owned by this execution, when available.
+            context_observer: Host observer for plugin context mutations.
         """
         self._request = request
-        self._writer = writer
+        self._context_observer = context_observer
 
     async def on_agent_begin(
         self, run_context: ContextWrapper[AstrAgentContext]
@@ -46,7 +46,7 @@ class MainAgentHooks(BaseAgentRunHooks[AstrAgentContext]):
             run_context.context.event,
             EventType.OnAgentBeginEvent,
             run_context,
-            writer=self._writer,
+            context_observer=self._context_observer,
         )
 
     async def on_llm_response(self, run_context, llm_response) -> None:
@@ -60,7 +60,7 @@ class MainAgentHooks(BaseAgentRunHooks[AstrAgentContext]):
             run_context.context.event,
             EventType.OnLLMResponseEvent,
             llm_response,
-            writer=self._writer,
+            context_observer=self._context_observer,
         )
 
     async def on_agent_done(self, run_context, llm_response) -> None:
@@ -69,7 +69,7 @@ class MainAgentHooks(BaseAgentRunHooks[AstrAgentContext]):
             EventType.OnAgentDoneEvent,
             run_context,
             llm_response,
-            writer=self._writer,
+            context_observer=self._context_observer,
         )
 
     async def on_tool_start(
@@ -83,7 +83,7 @@ class MainAgentHooks(BaseAgentRunHooks[AstrAgentContext]):
             EventType.OnUsingLLMToolEvent,
             tool,
             tool_args,
-            writer=self._writer,
+            context_observer=self._context_observer,
         )
 
     async def on_tool_end(
@@ -100,7 +100,7 @@ class MainAgentHooks(BaseAgentRunHooks[AstrAgentContext]):
             tool,
             tool_args,
             tool_result,
-            writer=self._writer,
+            context_observer=self._context_observer,
         )
 
 

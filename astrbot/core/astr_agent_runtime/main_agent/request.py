@@ -388,7 +388,7 @@ async def prepare_request(
                 return None
         else:
             conversation = await _get_session_conv(event, plugin_context)
-        req.conversation = plugin_context.conversation_manager._to_conversation(
+        req.conversation = plugin_context.conversation_manager.to_legacy_conversation(
             conversation
         )
         req.contexts = conversation.content or []

@@ -181,7 +181,6 @@ async def test_replay_ignores_large_execution_log_and_pages_by_cursor(database):
 
 @pytest.mark.asyncio
 async def test_plugin_manager_entrypoint_isolates_explicit_conversations(database):
-    from astrbot.core.agent.run_context import ContextWrapper
     from astrbot.core.conversation_mgr import ConversationManager
 
     manager = ConversationManager(database)
@@ -189,8 +188,7 @@ async def test_plugin_manager_entrypoint_isolates_explicit_conversations(databas
     writers = []
     for plugin_id in ("memory", "search"):
         conv = await database.create_conversation(plugin_id, "p")
-        writer = await manager._event_writer(conv.conversation_id, unified_msg_origin=plugin_id)
-        writer.runtime_context = ContextWrapper(context=None, messages=[])
+        writer = await manager.create_event_writer(conv.conversation_id, unified_msg_origin=plugin_id)
         writers.append(writer)
 
     async def append_records(writer, plugin_id):
@@ -225,7 +223,7 @@ async def test_plugin_manager_entrypoint_isolates_explicit_conversations(databas
     for writer, plugin_id in zip(writers, ("memory", "search")):
         snapshot = await store.read(writer.cid)
         assert snapshot.messages == [{"role": "user", "content": plugin_id}]
-        assert writer.runtime_context.messages == []
+        assert writer.get_messages() == []
         with pytest.raises(ConversationConflictError):
             await writer.save_history([{"role": "user", "content": "stale"}])
 
@@ -236,7 +234,7 @@ async def test_plugin_manager_entrypoint_isolates_explicit_conversations(databas
     with pytest.raises(ValueError, match="content"):
         await manager.append_message({"role": "_checkpoint"}, cid=writers[0].cid)
     with pytest.raises(ValueError, match="not accessible"):
-        await manager._event_writer(writers[0].cid, unified_msg_origin="other")
+        await manager.create_event_writer(writers[0].cid, unified_msg_origin="other")
 
 
 @pytest.mark.asyncio
@@ -451,7 +449,7 @@ async def test_provider_retry_has_distinct_attempts(database):
         "complete": True,
     }
     recorder = RequestEventRecorder(
-        writer.consume, {"turn_id": writer.turn_id, "input_context": input_context}
+        writer.consume, {"turn_id": writer.turn_id, "input_context": input_context}, invocation_id="runtime-call"
     )
     await recorder.begin()
     attempts = 0
@@ -474,6 +472,8 @@ async def test_provider_retry_has_distinct_attempts(database):
     starts = [e for e in events if e.type == "request.started"]
     finishes = [e for e in events if e.type == "request.finished"]
     assert len(starts) == len(finishes) == 2
+    assert [e.payload["invocation_id"] for e in starts] == ["runtime-call", "runtime-call"]
+    assert [e.payload["attempt"] for e in starts] == [1, 2]
     assert [e.payload["request_id"] for e in finishes] == [e.event_id for e in starts]
     assert [e.payload["status"] for e in finishes] == ["failed", "completed"]
     for start in starts:
@@ -607,10 +607,10 @@ async def test_declared_read_revision_rejects_context_changes(database, change):
     assert "revision" not in ConversationV2.__table__.columns
     with pytest.raises(FrozenInstanceError):
         conversation.revision.head_seq = 0
-    writer = await manager._event_writer(created.conversation_id, unified_msg_origin="umo", expected_revision=conversation.revision)
+    writer = await manager.create_event_writer(created.conversation_id, unified_msg_origin="umo", expected_revision=conversation.revision)
     if change == "plugin_event":
         await writer.append("plugin.test.changed", {})
-        await manager._event_writer(
+        await manager.create_event_writer(
             created.conversation_id,
             unified_msg_origin="umo",
             expected_revision=conversation.revision,
@@ -625,7 +625,7 @@ async def test_declared_read_revision_rejects_context_changes(database, change):
             expected_leaf=record.revision.leaf_event_id,
         )
     with pytest.raises(ConversationConflictError, match="preparing"):
-        await manager._event_writer(created.conversation_id, unified_msg_origin="umo", expected_revision=conversation.revision)
+        await manager.create_event_writer(created.conversation_id, unified_msg_origin="umo", expected_revision=conversation.revision)
 
 
 @pytest.mark.asyncio
