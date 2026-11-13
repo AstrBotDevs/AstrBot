@@ -9,11 +9,13 @@ AstrBot supports all client implementations that implement OneBot v11 reverse We
 
 Common OneBot v11 implementation projects are listed below:
 
-- [NapCat](https://github.com/NapNeko/NapCatQQ)
 - [OneDisc](https://github.com/ITCraftDevelopmentTeam/OneDisc)
 - [Tele-KiraLink](https://github.com/Echomirix/Tele-KiraLink)
 
 Please refer to each implementation project's deployment documentation.
+
+> [!WARNING]
+> NapCat is no longer maintained. Its repository no longer ships the program or deployment documentation, and the former one-click scripts, Docker images, and Kubernetes manifests are all unavailable. If you still need OneBot v11 on a personal QQ account, evaluate other OneBot v11 implementations for availability and safety yourself; AstrBot does not guarantee third-party implementations.
 
 ## 1. Configure OneBot v11
 
@@ -28,7 +30,7 @@ Fill in the form:
 - Enable (`enable`): check it.
 - Reverse WebSocket host: fill your machine IP, usually `0.0.0.0`.
 - Reverse WebSocket port: choose any port, default is `6199`.
-- Reverse WebSocket token: fill this only when NapCat network configuration has a token set.
+- Reverse WebSocket token: fill this only when the protocol implementation enables a token in its network configuration.
 
 Click `Save`.
 
