@@ -4,8 +4,12 @@ from unittest.mock import AsyncMock, call
 import pytest
 
 from astrbot.api.platform import Group
+from astrbot.core.message.mention_projection import project_self_mentions
 from astrbot.core.platform.sources.aiocqhttp.aiocqhttp_message_event import (
     AiocqhttpMessageEvent,
+)
+from astrbot.core.platform.sources.aiocqhttp.aiocqhttp_platform_adapter import (
+    AiocqhttpAdapter,
 )
 
 
@@ -131,3 +135,40 @@ async def test_aiocqhttp_get_group_honors_explicit_group_id(
             self_id="bot-1",
         ),
     ]
+
+
+@pytest.mark.asyncio
+async def test_aiocqhttp_repeated_self_mentions_keep_positions_and_later_text():
+    from aiocqhttp import Event
+
+    adapter = AiocqhttpAdapter.__new__(AiocqhttpAdapter)
+    adapter.bot = SimpleNamespace(call_action=AsyncMock(return_value={"card": "清漪"}))
+    event = Event.from_payload(
+        {
+            "post_type": "message",
+            "message_type": "group",
+            "self_id": 123,
+            "user_id": 456,
+            "group_id": 789,
+            "sender": {"user_id": 456, "nickname": "Tester"},
+            "message_id": 1,
+            "message": [
+                {"type": "at", "data": {"qq": 123}},
+                {"type": "text", "data": {"text": " 先总结，"}},
+                {"type": "at", "data": {"qq": 123}},
+                {"type": "text", "data": {"text": " 再检查"}},
+                {"type": "at", "data": {"qq": 123}},
+                {"type": "at", "data": {"qq": 123}},
+            ],
+        }
+    )
+
+    abm = await adapter._convert_handle_message_event(event)
+    raw_text = abm.message_str
+    final_text = raw_text.strip() + "继续检查"
+    trim = len(raw_text) - len(raw_text.lstrip())
+
+    assert (
+        project_self_mentions(final_text, abm._self_mention_spans, trim)
+        == "@清漪（you） 先总结，@清漪（you） 再检查@清漪（you） @清漪（you） 继续检查"
+    )

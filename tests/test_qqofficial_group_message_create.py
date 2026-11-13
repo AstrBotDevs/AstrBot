@@ -12,6 +12,7 @@ from botpy import ConnectionSession
 from astrbot.api.event import MessageChain
 from astrbot.api.message_components import At, Image, Plain, Reply
 from astrbot.api.platform import Group
+from astrbot.core.message.mention_projection import project_self_mentions
 from astrbot.core.message.message_event_result import (
     MessageEventResult,
     ResultContentType,
@@ -1129,3 +1130,58 @@ async def test_webhook_send_by_session_use_markdown_config_false_sends_content()
     assert kwargs["content"] == "webhook plain content"
     assert "markdown" not in kwargs
     assert "msg_type" not in kwargs
+
+
+@pytest.mark.asyncio
+async def test_group_mention_projection_keeps_clause_and_uses_id_fallback():
+    _, message = _dispatch_group_message(
+        _make_group_payload(
+            content="@Alice 你总结一下，<@bot-123> 你不用管",
+            mentions=[{"id": "bot-123", "is_you": True}],
+        )
+    )
+
+    abm = await QQOfficialPlatformAdapter._parse_from_qqofficial(
+        message,
+        MessageType.GROUP_MESSAGE,
+    )
+
+    assert (
+        project_self_mentions(abm.message_str, abm._self_mention_spans)
+        == "@Alice 你总结一下，@bot-123（you） 你不用管"
+    )
+
+
+@pytest.mark.parametrize(
+    ("content", "trim", "final_text", "expected"),
+    [
+        (
+            '说明一下 <qqbot-at-user id="bot-123" />',
+            0,
+            "说明一下继续检查",
+            "说明一下@bot-123（you） 继续检查",
+        ),
+        (
+            "/llm<@bot-123>",
+            4,
+            "总结一下文件里面讲了什么？",
+            "@bot-123（you） 总结一下文件里面讲了什么？",
+        ),
+    ],
+)
+@pytest.mark.asyncio
+async def test_tail_mention_does_not_consume_later_text(
+    content, trim, final_text, expected
+):
+    _, message = _dispatch_group_message(
+        _make_group_payload(
+            content=content,
+            mentions=[{"id": "bot-123", "is_you": True}],
+        )
+    )
+    abm = await QQOfficialPlatformAdapter._parse_from_qqofficial(
+        message,
+        MessageType.GROUP_MESSAGE,
+    )
+
+    assert project_self_mentions(final_text, abm._self_mention_spans, trim) == expected

@@ -9,6 +9,8 @@ from astrbot.api.event import AstrMessageEvent, filter
 from astrbot.api.message_components import Image, Json, Plain
 from astrbot.api.provider import LLMResponse, ProviderRequest
 from astrbot.core import logger
+from astrbot.core.agent.message import TextPart
+from astrbot.core.message.mention_projection import is_self_mention
 from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.platform.message_type import MessageType
 from astrbot.core.utils.session_waiter import (
@@ -322,6 +324,15 @@ class Main(star.Star):
         self, event: AstrMessageEvent, req: ProviderRequest
     ) -> None:
         """在请求 LLM 前注入人格信息、Identifier、时间、回复内容等 System Prompt"""
+        if event.get_message_type() == MessageType.GROUP_MESSAGE and any(
+            is_self_mention(comp, event.get_self_id()) for comp in event.get_messages()
+        ):
+            req.extra_user_content_parts.append(
+                TextPart(
+                    text="<system_reminder>DIRECTED AT YOU</system_reminder>"
+                ).mark_as_temp()
+            )
+
         if self.group_chat_context and self.group_context_enabled(event):
             try:
                 await self.group_chat_context.on_req_llm(event, req)

@@ -4,8 +4,8 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from astrbot.api.message_components import Json, Plain
-from astrbot.api.provider import LLMResponse
+from astrbot.api.message_components import At, Image, Json, Plain
+from astrbot.api.provider import LLMResponse, ProviderRequest
 from astrbot.builtin_stars.astrbot.group_chat_context import GroupChatContext
 from astrbot.builtin_stars.astrbot.main import Main
 from astrbot.core.message.message_event_result import MessageChain
@@ -300,3 +300,110 @@ async def test_format_message_truncates_long_json_card_fields():
     formatted = await context._format_message(event, {})
 
     assert f"Description: {'a' * 200}...]" in formatted
+
+
+@pytest.mark.asyncio
+async def test_group_self_mention_adds_only_a_temporary_reminder():
+    main = Main.__new__(Main)
+    main.group_chat_context = None
+    event = make_event()
+    event.get_message_type.return_value = MessageType.GROUP_MESSAGE
+    event.get_self_id.return_value = "bot-1"
+    event.get_messages.return_value = [At(qq="bot-1", name="清漪"), Plain("hello")]
+    req = ProviderRequest(prompt="hello")
+
+    await main.decorate_llm_req(event, req)
+
+    assert req.prompt == "hello"
+    assert len(req.extra_user_content_parts) == 1
+    reminder = req.extra_user_content_parts[0]
+    assert reminder.text == "<system_reminder>DIRECTED AT YOU</system_reminder>"
+    assert reminder._no_save is True
+
+
+@pytest.mark.asyncio
+async def test_group_history_keeps_self_mention_at_its_clause():
+    context = GroupChatContext(MagicMock(), MagicMock())
+    event = make_event()
+    event.message_obj.sender = SimpleNamespace(nickname="Alice")
+    event.get_message_str.return_value = "你总结  你不用管"
+    event.get_self_id.return_value = "bot-1"
+    event.get_messages.return_value = [
+        Plain("你总结 "),
+        At(qq="bot-1", name="清漪"),
+        Plain(" 你不用管"),
+    ]
+    event.set_extra("_self_mention_spans", [(4, 4, "清漪")])
+
+    formatted = await context._format_message(event, {})
+
+    body = formatted.split("]: ", 1)[1]
+    assert " ".join(body.split()) == "你总结 @清漪（you） 你不用管"
+    assert "DIRECTED AT YOU" not in formatted
+
+
+@pytest.mark.asyncio
+async def test_group_history_preserves_onebot_component_order():
+    context = GroupChatContext(MagicMock(), MagicMock())
+    event = make_event()
+    event.message_obj.sender = SimpleNamespace(nickname="Alice")
+    event.get_platform_name.return_value = "aiocqhttp"
+    event.get_message_str.return_value = "前言 @Other(456) Other @Other(456) Other"
+    event.get_self_id.return_value = "bot-1"
+    event.get_messages.return_value = [
+        Plain("前言"),
+        Image(file="before.jpg"),
+        At(qq="456", name="Other"),
+        Plain("Other"),
+        At(qq="bot-1", name="清漪"),
+        At(qq="456", name="Other"),
+        Image(file="after.jpg"),
+        Plain("Other"),
+    ]
+    event.set_extra("_self_mention_spans", [(20, 20, "清漪")])
+
+    formatted = await context._format_message(event, {"image_caption": False})
+
+    assert " ".join(formatted.split("]: ", 1)[1].split()) == (
+        "前言 [Image] [At: Other] Other @清漪（you） [At: Other] [Image] Other"
+    )
+
+
+@pytest.mark.asyncio
+async def test_group_history_uses_qqofficial_original_text_coordinates():
+    context = GroupChatContext(MagicMock(), MagicMock())
+    event = make_event()
+    event.message_obj.sender = SimpleNamespace(nickname="Alice")
+    event.get_platform_name.return_value = "qq_official"
+    event.get_message_str.return_value = "甲乙丙 丁戊己"
+    event.get_self_id.return_value = "bot-1"
+    event.get_messages.return_value = [
+        At(qq="bot-1", name="清漪"),
+        Plain("/ 甲乙丙 丁戊己"),
+        Plain("继续检查"),
+    ]
+    event.set_extra("_self_mention_spans", [(5, 6, "清漪")])
+    event.set_extra("_self_mention_trim", 2)
+
+    formatted = await context._format_message(event, {})
+
+    assert formatted.split("]: ", 1)[1] == " / 甲乙丙@清漪（you） 丁戊己 继续检查"
+
+
+@pytest.mark.asyncio
+async def test_group_history_keeps_qqofficial_unknown_position_notice():
+    context = GroupChatContext(MagicMock(), MagicMock())
+    event = make_event()
+    event.message_obj.sender = SimpleNamespace(nickname="Alice")
+    event.get_platform_name.return_value = "qq_official_webhook"
+    event.get_self_id.return_value = "bot-1"
+    event.get_messages.return_value = [
+        At(qq="bot-1", name="清漪"),
+        Plain("legacy group text"),
+    ]
+    event.set_extra("_self_mention_position_unknown", True)
+
+    formatted = await context._format_message(event, {})
+
+    assert "legacy group text" in formatted
+    assert "original mention position is unavailable" in formatted

@@ -3,12 +3,14 @@ from __future__ import annotations
 import asyncio
 from dataclasses import dataclass
 
+from astrbot.core.agent.input import PlainInput
 from astrbot.core.agent.runtime import (
     AgentInput,
     AgentPermissions,
     AgentTurn,
     InputReceipt,
 )
+from astrbot.core.message.mention_projection import self_mention_view
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
 
 _FOLLOW_UP_ORDER_STATE: dict[str, dict[str, object]] = {}
@@ -28,6 +30,13 @@ class FollowUpCapture:
     order_seq: int
     monitor_task: asyncio.Task[None]
     target_run_id: str | None = None
+
+
+def _event_follow_up_text(event: AstrMessageEvent) -> str:
+    text = (event.get_message_str() or "").strip()
+    if text:
+        return self_mention_view(event, text)
+    return event.get_message_outline(mark_self_mention=True).strip()
 
 
 def _get_follow_up_order_state(umo: str) -> dict[str, object]:
@@ -167,6 +176,9 @@ def try_capture_follow_up(
         AgentInput(
             event=event,
             permissions=AgentPermissions.from_event(event),
+            content=[
+                PlainInput.model_construct(text=_event_follow_up_text(event)),
+            ],
         )
     )
     if receipt is None:

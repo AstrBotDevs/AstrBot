@@ -2,6 +2,7 @@ from collections.abc import AsyncGenerator
 
 from astrbot import logger
 from astrbot.core.message.components import At, AtAll, ButtonInteraction, Reply
+from astrbot.core.message.mention_projection import SELF_MENTION_TRIM
 from astrbot.core.message.message_event_result import MessageChain, MessageEventResult
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from astrbot.core.platform.button_interaction import (
@@ -93,9 +94,11 @@ class WakingCheckStage(Stage):
         preserve_whitespace = event.get_platform_name() == "lark" and (
             getattr(event.message_obj.raw_message, "message_type", None) == "post"
         )
-        message_str = event.message_str.strip()
+        raw_message_str = event.message_str or ""
+        message_str = raw_message_str.strip()
         if not preserve_whitespace:
             event.message_str = message_str
+        mention_trim = len(raw_message_str) - len(raw_message_str.lstrip())
         api_key_allow_admin_role = event.get_extra("_api_key_allow_admin_role")
         for admin_id in (
             []
@@ -134,9 +137,14 @@ class WakingCheckStage(Stage):
                         event.message_str = event.message_str.lstrip()[
                             len(wake_prefix) :
                         ]
+                        mention_trim += len(wake_prefix)
                 else:
-                    event.message_str = message_str[len(wake_prefix) :].strip()
+                    rest = message_str[len(wake_prefix) :]
+                    mention_trim += len(wake_prefix) + len(rest) - len(rest.lstrip())
+                    event.message_str = rest.strip()
                 break
+        if mention_trim:
+            event.set_extra(SELF_MENTION_TRIM, mention_trim)
         if not is_wake:
             # 检查是否有at消息 / at全体成员消息 / 引用了bot的消息
             for message in messages:

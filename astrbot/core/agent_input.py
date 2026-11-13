@@ -12,6 +12,7 @@ from typing import TYPE_CHECKING, Protocol
 from astrbot.core import logger
 from astrbot.core.agent.message import TextPart
 from astrbot.core.message.components import File, Reply
+from astrbot.core.message.mention_projection import self_mention_view
 from astrbot.core.platform.agent_wakeup_event import AgentWakeupEvent
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from astrbot.core.provider import Provider
@@ -329,6 +330,10 @@ async def prepare_input_content(
         )
         if captioned_ref:
             captioned_refs.add(captioned_ref)
+    if event.get_extra("_agent_prompt_from_event"):
+        event.set_extra("_agent_prompt_from_event", False)
+        if (req.prompt or "").strip() or req.image_urls or req.audio_urls:
+            req.prompt = self_mention_view(event, req.prompt or "")
     apply_prompt_prefix(req, cfg)
     if (
         req.conversation

@@ -24,6 +24,7 @@ from astrbot.core.agent_input import (
 from astrbot.core.conversation_mgr import Conversation
 from astrbot.core.llm_error_messages import LLM_ERROR_MESSAGE_EXTRA_KEY
 from astrbot.core.message.components import File, Image, Record, Reply, Video
+from astrbot.core.message.mention_projection import SELF_MENTION_TRIM
 from astrbot.core.platform.agent_wakeup_event import AgentWakeupEvent
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from astrbot.core.provider import Provider
@@ -93,6 +94,8 @@ async def collect_initial_request(
                 return None, None
 
             req.prompt = event.message_str
+            base_trim = int(event.get_extra(SELF_MENTION_TRIM, 0) or 0)
+            consumed = 0
             prefix_text = event.message_str
             if event.get_platform_name() == "lark":
                 prefix_text = prefix_text.lstrip()
@@ -102,6 +105,7 @@ async def collect_initial_request(
                 and prefix_text.startswith(provider_wake_prefix)
             ):
                 req.prompt = prefix_text[len(provider_wake_prefix) :]
+                consumed = len(provider_wake_prefix)
 
             # media files attachments
             for comp in event.message_obj.message:
@@ -278,6 +282,8 @@ async def collect_initial_request(
                             exc_info=True,
                         )
 
+            event.set_extra(SELF_MENTION_TRIM, base_trim + consumed)
+            event.set_extra("_agent_prompt_from_event", True)
     req.image_urls = normalize_and_dedupe_strings(req.image_urls)
     quote_image_ref = None
     quote = next(
