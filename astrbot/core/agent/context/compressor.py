@@ -45,14 +45,15 @@ class ContextCompressor(Protocol):
         """
         ...
 
-    async def __call__(self, messages: list[Message]) -> list[Message]:
+    async def __call__(self, messages: list[Message]) -> list[Message] | None:
         """Compress the message list.
 
         Args:
             messages: The original message list.
 
         Returns:
-            The compressed message list.
+            The compressed message list, or None when compression failed and
+            the caller should fall back to truncation.
         """
         ...
 
@@ -203,12 +204,19 @@ class LLMSummaryCompressor:
 
         return rounds[:recent_start], rounds[recent_start:]
 
-    async def __call__(self, messages: list[Message]) -> list[Message]:
+    async def __call__(self, messages: list[Message]) -> list[Message] | None:
         """Use LLM to generate a summary of the conversation history.
 
         Uses round-based splitting to preserve user-assistant turn boundaries.
-        On LLM failure, returns the original messages unchanged (caller should
-        fall back to truncation).
+
+        Args:
+            messages: The original message list.
+
+        Returns:
+            The compressed message list, or None when the summary request
+            failed or came back empty (the caller then falls back to
+            truncation). The original list is returned unchanged when there
+            is nothing meaningful to summarize.
         """
         from .round_utils import split_into_rounds
 
@@ -282,11 +290,11 @@ class LLMSummaryCompressor:
             summary_content = (response.completion_text or "").strip()
         except Exception as e:
             logger.error(f"Failed to generate summary: {e}")
-            return messages
+            return None
 
         if not summary_content:
             logger.warning("LLM context compression returned an empty summary.")
-            return messages
+            return None
 
         # Build result: system messages + summary pair + recent rounds
         result = _extract_system_messages(messages)
