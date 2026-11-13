@@ -21,7 +21,9 @@ class ContextTruncator:
         Returns:
             tuple: (system_messages, non_system_messages)
         """
-        first_non_system = 0
+        # Default to the end so an all-system list lands entirely in the system
+        # half; otherwise the loop never breaks and the split would be reversed.
+        first_non_system = len(messages)
         for i, msg in enumerate(messages):
             if msg.role != "system":
                 first_non_system = i
