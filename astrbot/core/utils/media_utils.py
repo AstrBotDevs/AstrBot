@@ -21,7 +21,7 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import TypeAlias
+from typing import NamedTuple, TypeAlias
 from urllib.parse import unquote, urlparse, urlsplit
 from urllib.request import url2pathname
 
@@ -1031,6 +1031,9 @@ def is_recoverable_image_error(error: Exception) -> bool:
 MODEL_IMAGE_MAX_BYTES = 512 * 1024
 """Model input image files must be strictly smaller than this limit."""
 
+MODEL_IMAGE_MAX_DECODED_PIXELS = 40_000_000
+"""Single-frame decode limit, so a compressed source cannot exhaust memory."""
+
 
 def normalize_model_image_max_size(value: object) -> int:
     """Normalize the model image longest-edge cap.
@@ -1160,8 +1163,18 @@ def _prepare_model_image_sync(source_bytes: bytes, max_size: int) -> tuple[bytes
 
     Returns:
         Encoded image bytes and whether they represent an animation montage.
+
+    Raises:
+        ImageInputTooLargeError: The frame exceeds the decoded pixel limit. The
+            check uses the header size, so the frame is never decoded.
     """
     with PILImage.open(io.BytesIO(source_bytes)) as image:
+        # A tiny, highly compressed source can declare a huge frame, so cap the
+        # decoded pixels before Pillow allocates the frame buffer.
+        if image.width * image.height > MODEL_IMAGE_MAX_DECODED_PIXELS:
+            raise ImageInputTooLargeError(
+                f"frame {image.width}x{image.height} exceeds the decoded pixel limit",
+            )
         if getattr(image, "n_frames", 1) > 1:
             return _extract_animation_montage_sync(image, max_size), True
         if (
@@ -1262,12 +1275,32 @@ class ImageInputTooLargeError(ValueError):
     """Raised with the retained source path when an image exceeds the input cap."""
 
 
+class PreparedModelImage(NamedTuple):
+    """Image ready for a model request plus who owns each produced file.
+
+    Attributes:
+        path: Reference to forward to the provider.
+        is_montage: Whether ``path`` tiles the frames of an animation.
+        temporary: Whether the caller must delete ``path`` after use.
+        original_path: Retained source path, exposed for later file-tool access.
+        original_temporary: Whether ``original_path`` was materialized by the
+            resolver for this call. ``False`` means the file belongs to the
+            caller or event, so the caller must not delete it.
+    """
+
+    path: str
+    is_montage: bool
+    temporary: bool
+    original_path: str
+    original_temporary: bool
+
+
 async def prepare_model_image(
     image_ref: str,
     *,
     max_size: int,
     output_dir: Path,
-) -> tuple[str, bool, bool, str] | None:
+) -> PreparedModelImage | None:
     """Prepare an image, reusing compliant local files without copying them.
 
     Args:
@@ -1276,14 +1309,16 @@ async def prepare_model_image(
         output_dir: Directory for event-owned working files.
 
     Returns:
-        The image path, whether it is an animation montage, whether the caller must
-        delete the preview after use, and the retained original path. Compliant
-        originals are reused directly. Returns None for a recoverable failure.
+        The prepared image, including whether the caller owns the preview and the
+        retained original. Compliant originals are reused directly. Returns None
+        for a recoverable failure.
 
     Raises:
-        ImageInputTooLargeError: The input exceeds the size cap. Its original path
-            is retained for file-tool access and returned as the error message.
+        ImageInputTooLargeError: The input exceeds the byte or decoded-pixel cap.
+            Its original path is retained for file-tool access and returned as the
+            error message.
     """
+    original_temporary = False
     try:
         async with MediaResolver(image_ref, media_type="image").as_path() as source:
             input_size = source.path.stat().st_size
@@ -1295,15 +1330,28 @@ async def prepare_model_image(
                 )
                 source.detach()
                 raise ImageInputTooLargeError(str(source.path))
+            # Only resolver-created files appear here, so this separates our own
+            # downloads from a source the caller already owned.
+            original_temporary = bool(source.cleanup_paths)
             image_bytes = await asyncio.to_thread(source.read_bytes)
-            converted_bytes, is_montage = await asyncio.to_thread(
-                _prepare_model_image_sync, image_bytes, max_size
-            )
+            try:
+                converted_bytes, is_montage = await asyncio.to_thread(
+                    _prepare_model_image_sync, image_bytes, max_size
+                )
+            except ImageInputTooLargeError:
+                source.detach()
+                raise ImageInputTooLargeError(str(source.path)) from None
             original_path = str(source.path)
             # Final image labels expose this original for later file-tool access.
             source.detach()
             if converted_bytes is image_bytes:
-                return original_path, is_montage, False, original_path
+                return PreparedModelImage(
+                    original_path,
+                    is_montage,
+                    False,
+                    original_path,
+                    original_temporary,
+                )
         # Publish the working file synchronously after encoding, so cancellation
         # cannot leave an untracked background write alive after this call.
         output_dir.mkdir(parents=True, exist_ok=True)
@@ -1318,7 +1366,13 @@ async def prepare_model_image(
         except BaseException:
             output_path.unlink(missing_ok=True)
             raise
-        return str(output_path), is_montage, True, original_path
+        return PreparedModelImage(
+            str(output_path),
+            is_montage,
+            True,
+            original_path,
+            original_temporary,
+        )
     except ImageInputTooLargeError:
         raise
     except Exception as exc:

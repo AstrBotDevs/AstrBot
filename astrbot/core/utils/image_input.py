@@ -78,7 +78,7 @@ async def prepare_request_images(
             original_path = str(exc)
             status = "oversized"
         if image:
-            path, is_montage, needs_cleanup, original_path = image
+            path, is_montage, needs_cleanup, original_path, _original_temporary = image
             if needs_cleanup:
                 event.track_temporary_local_file(path)
         elif status is None:
