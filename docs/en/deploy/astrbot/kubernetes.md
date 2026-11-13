@@ -101,9 +101,11 @@ Edit the `02-deployment.yaml` file and add `volumes` and `volumeMounts` under `s
 
 ## View Logs
 
-```bash
-kubectl logs -f -n astrbot-standalone-ns deployment/astrbot-standalone
-```
+*   **Standalone Deployment Mode:**
+
+    ```bash
+    kubectl logs -f -n astrbot-standalone-ns deployment/astrbot-standalone
+    ```
 
 ## 🎉 All Done!
 

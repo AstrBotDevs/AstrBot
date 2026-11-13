@@ -101,9 +101,11 @@ image: m.daocloud.io/docker.io/soulter/astrbot:latest
 
 ## 查看日志
 
-```bash
-kubectl logs -f -n astrbot-standalone-ns deployment/astrbot-standalone
-```
+*   **独立部署模式:**
+
+    ```bash
+    kubectl logs -f -n astrbot-standalone-ns deployment/astrbot-standalone
+    ```
 
 ## 🎉 大功告成
 
