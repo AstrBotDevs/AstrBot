@@ -99,6 +99,8 @@
     "placeholder": "继续追问这段内容..."
   },
   "conversation": {
+    "loading": "正在加载会话",
+    "loadFailed": "会话列表加载失败",
     "title": "对话",
     "newConversation": "新的聊天",
     "noHistory": "暂无对话历史",
@@ -165,12 +167,14 @@
     "name": "项目名称",
     "emoji": "图标 (Emoji)",
     "description": "项目描述（可选）",
+    "moreSettings": "更多设置",
     "workspace": {
       "type": "工作区",
       "session": "按会话分开",
       "project": "项目共享工作区",
       "custom": "自定义路径",
-      "path": "工作区路径"
+      "path": "工作区路径",
+      "selectPath": "选择文件夹"
     },
     "loadingSessions": "加载对话中...",
     "noSessions": "该项目暂无对话",
@@ -184,6 +188,7 @@
     "refresh": "刷新文件树",
     "filter": "筛选文件...",
     "clearFilter": "清除文件筛选",
+    "selectSession": "请先选择一个会话以浏览其工作区文件",
     "empty": "工作区暂无文件",
     "noMatches": "没有匹配的文件",
     "loadFailed": "加载工作区文件失败",

@@ -63,6 +63,18 @@ def sanitize_upload_filename(filename: str | None) -> str:
     return name
 
 
+def unique_attachment_filename(filename: str) -> str:
+    # Pasted screenshots are all named "image.png", so prefix the stored name
+    # to keep uploads apart, and stay within the 255-byte filename limit.
+    prefix = f"{generate_timestamp_id()}_"
+    budget = 255 - len(prefix.encode())
+    stem, suffix = os.path.splitext(filename)
+    if len(suffix.encode()) >= budget:
+        stem, suffix = filename, ""
+    stem = stem.encode()[: budget - len(suffix.encode())].decode(errors="ignore")
+    return f"{prefix}{stem}{suffix}"
+
+
 class LocalUploadFile:
     """Adapt a merged local file to the upload contract save_uploaded_file() consumes.
 
@@ -181,7 +193,12 @@ class BotMessageAccumulator:
         else:
             self.pending_text = result_text
 
-    def add_attachment(self, part: dict | None) -> None:
+    def add_part(self, part: dict | None) -> None:
+        """Append a structured non-text message part.
+
+        Args:
+            part: WebChat message part ready for history storage.
+        """
         if not part:
             return
         self._flush_pending_text()
@@ -264,6 +281,12 @@ def extract_web_search_refs(accumulated_text: str, accumulated_parts: list) -> d
         "web_search_tavily",
         "web_search_bocha",
         "web_search_brave",
+        "web_search_deepseek",
+        "web_search_serpapi",
+        "news_search_serpapi",
+        "image_search_serpapi",
+        "finance_search_serpapi",
+        "scholar_search_serpapi",
     ]
     web_search_results = {}
     tool_call_parts = [
@@ -649,7 +672,9 @@ class ChatService:
             attach_type = "file"
 
         attachments_dir = Path(self.attachments_dir).resolve(strict=False)
-        file_path = (attachments_dir / filename).resolve(strict=False)
+        file_path = (attachments_dir / unique_attachment_filename(filename)).resolve(
+            strict=False
+        )
         if not file_path.is_relative_to(attachments_dir):
             raise ChatServiceError("Invalid filename")
 
@@ -676,6 +701,7 @@ class ChatService:
                         )
                     await asyncio.to_thread(file_path.rename, target_path)
                     file_path = target_path
+                    filename = os.path.splitext(filename)[0] + detected_suffix
         attachment = await self.db.insert_attachment(
             path=str(file_path),
             type=attach_type,
@@ -687,7 +713,8 @@ class ChatService:
 
         return {
             "attachment_id": attachment.attachment_id,
-            "filename": os.path.basename(attachment.path),
+            "filename": filename,
+            "stored_filename": os.path.basename(attachment.path),
             "type": attach_type,
         }
 
@@ -1151,7 +1178,7 @@ class ChatService:
                         display_name=display_name,
                     )
                     for accumulator in (pending_accumulator, display_accumulator):
-                        accumulator.add_attachment(part)
+                        accumulator.add_part(part)
                     if part and part.get("attachment_id") and part.get("type"):
                         attachment_saved_payload = {
                             "type": "attachment_saved",
@@ -1160,6 +1187,10 @@ class ChatService:
                                 "type": part["type"],
                             },
                         }
+                elif msg_type == "actionrow" and isinstance(result_text, dict):
+                    part = {"type": "actionrow", **result_text}
+                    for accumulator in (pending_accumulator, display_accumulator):
+                        accumulator.add_part(part)
 
                 snapshot_accumulator = deepcopy(display_accumulator)
                 run.message_parts = snapshot_accumulator.build_message_parts(
@@ -1273,23 +1304,23 @@ class ChatService:
             )
 
         if platform_history_id == "webchat":
-            try:
-                platform_session = await self.db.get_platform_session_by_id(
-                    webchat_conv_id
-                )
-                if platform_session is None:
+            platform_session = await self.db.get_platform_session_by_id(webchat_conv_id)
+            if platform_session is not None and platform_session.creator != username:
+                raise ChatServiceError("Permission denied")
+            if platform_session is None:
+                try:
                     await self.db.create_platform_session(
                         creator=username,
                         platform_id="webchat",
                         session_id=webchat_conv_id,
                         is_group=0,
                     )
-            except Exception as exc:
-                logger.warning(
-                    "Failed to ensure WebChat platform session %s: %s",
-                    webchat_conv_id,
-                    exc,
-                )
+                except Exception as exc:
+                    logger.warning(
+                        "Failed to create WebChat platform session %s: %s",
+                        webchat_conv_id,
+                        exc,
+                    )
 
         message_id = str(uuid.uuid4())
         llm_checkpoint_id = post_data.get("_llm_checkpoint_id") or str(uuid.uuid4())
@@ -1342,6 +1373,7 @@ class ChatService:
                         "selected_provider": selected_provider,
                         "selected_model": selected_model,
                         "flags": flags,
+                        "locale": post_data.get("locale"),
                         "message_id": message_id,
                         "llm_checkpoint_id": llm_checkpoint_id,
                         "thread_selected_text": thread_selected_text,
@@ -1619,6 +1651,15 @@ class ChatService:
         )
 
         response_data = {
+            "session": {
+                "session_id": session.session_id,
+                "platform_id": session.platform_id,
+                "creator": session.creator,
+                "display_name": session.display_name,
+                "is_group": session.is_group,
+                "created_at": to_utc_isoformat(session.created_at),
+                "updated_at": to_utc_isoformat(session.updated_at),
+            },
             "history": [serialize_history_entry(history) for history in history_ls],
             "total": total,
             "page": page,
@@ -1765,14 +1806,23 @@ class ChatService:
         if thread.creator != username:
             raise ChatServiceError("Permission denied")
 
+        message = data.get("message", [])
+        is_button_interaction = (
+            isinstance(message, list)
+            and len(message) == 1
+            and isinstance(message[0], dict)
+            and message[0].get("type") == "button_interaction"
+        )
         return {
             "session_id": thread.thread_id,
-            "message": data.get("message", []),
+            "message": message,
             "flags": resolve_webchat_request_flags(data),
+            "locale": data.get("locale"),
             "selected_provider": data.get("selected_provider"),
             "selected_model": data.get("selected_model"),
             "_platform_history_id": "webchat_thread",
             "_thread_selected_text": thread.selected_text,
+            "_skip_user_history": is_button_interaction,
         }
 
     async def prepare_thread_chat_payload_from_dashboard_payload(
@@ -2007,6 +2057,7 @@ class ChatService:
             "session_id": session_id,
             "message": source_user_record.content.get("message", []),
             "flags": resolve_webchat_request_flags(data),
+            "locale": data.get("locale"),
             "selected_provider": data.get("selected_provider"),
             "selected_model": data.get("selected_model"),
             "_skip_user_history": True,

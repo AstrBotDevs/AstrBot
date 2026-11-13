@@ -13,7 +13,8 @@ from astrbot.core.agent.runners.deerflow.deerflow_agent_runner import (
     DeerFlowAgentRunner,
 )
 from astrbot.core.agent.runners.dify.dify_agent_runner import DifyAgentRunner
-from astrbot.core.astr_agent_hooks import MAIN_AGENT_HOOKS
+from astrbot.core.agent_input import matches_provider_wake_prefix
+from astrbot.core.astr_agent_runtime.hooks import MAIN_AGENT_HOOKS
 from astrbot.core.message.components import Image, Record
 from astrbot.core.message.message_event_result import (
     MessageChain,
@@ -21,7 +22,6 @@ from astrbot.core.message.message_event_result import (
     ResultContentType,
 )
 from astrbot.core.persona_error_reply import (
-    resolve_event_conversation_persona_id,
     resolve_persona_custom_error_message,
     set_persona_custom_error_message_on_event,
 )
@@ -35,7 +35,9 @@ from astrbot.core.provider.entities import (
     ProviderRequest,
 )
 from astrbot.core.star.star_handler import EventType
+from astrbot.core.utils.active_event_registry import active_event_registry
 from astrbot.core.utils.config_number import coerce_int_config
+from astrbot.core.utils.media_utils import describe_media_ref
 from astrbot.core.utils.metrics import Metric
 
 from .....astr_agent_context import AgentContextWrapper, AstrAgentContext
@@ -155,10 +157,8 @@ async def _close_runner_if_supported(runner: "BaseAgentRunner") -> None:
 class ThirdPartyAgentSubStage(Stage):
     async def initialize(self, ctx: PipelineContext) -> None:
         self.ctx = ctx
-        self.conf = ctx.astrbot_config
-        agent_runner = self.conf["agent_runner"]
-        self.runner_type = agent_runner["runner_type"]
-        self.runner_config = agent_runner["config"]
+        agent_runner = ctx.astrbot_config["agent"]
+        self.runner_type = agent_runner["runtime"]
         settings = ctx.astrbot_config["provider_settings"]
         self.streaming_response: bool = settings["streaming_response"]
         self.unsupported_streaming_strategy: str = settings[
@@ -179,15 +179,9 @@ class ThirdPartyAgentSubStage(Stage):
         self, event: AstrMessageEvent
     ) -> str | None:
         try:
-            conversation_persona_id = await resolve_event_conversation_persona_id(
-                event,
-                self.ctx.plugin_manager.context.conversation_manager,
-            )
             return await resolve_persona_custom_error_message(
                 event=event,
                 persona_manager=self.ctx.plugin_manager.context.persona_manager,
-                provider_settings={"default_personality": "default"},
-                conversation_persona_id=conversation_persona_id,
             )
         except Exception as e:
             logger.debug("Failed to resolve persona custom error message: %s", e)
@@ -280,24 +274,48 @@ class ThirdPartyAgentSubStage(Stage):
     ) -> AsyncGenerator[None, None]:
         req: ProviderRequest | None = None
 
-        if provider_wake_prefix and not event.message_str.startswith(
-            provider_wake_prefix
+        if not matches_provider_wake_prefix(
+            event,
+            provider_wake_prefix,
         ):
             return
 
         # make provider request
         req = ProviderRequest()
         req.session_id = event.unified_msg_origin
-        req.prompt = event.message_str[len(provider_wake_prefix) :]
+        req.prompt = event.message_str
+        prefix_text = event.message_str
+        if event.get_platform_name() == "lark":
+            prefix_text = prefix_text.lstrip()
+        if provider_wake_prefix and prefix_text.startswith(provider_wake_prefix):
+            req.prompt = prefix_text[len(provider_wake_prefix) :]
         for comp in event.message_obj.message:
             if isinstance(comp, Image):
-                image_path = await comp.convert_to_base64()
+                try:
+                    image_path = await comp.convert_to_base64()
+                except Exception as exc:  # noqa: BLE001
+                    logger.warning(
+                        "Image attachment is unavailable (%s): %s",
+                        type(exc).__name__,
+                        describe_media_ref(comp.url or comp.file),
+                    )
+                    continue
                 req.image_urls.append(image_path)
             elif isinstance(comp, Record):
-                audio_path = await comp.convert_to_file_path()
+                try:
+                    audio_path = await comp.convert_to_file_path()
+                except Exception as exc:  # noqa: BLE001
+                    logger.warning(
+                        "Voice attachment is unavailable (%s).",
+                        type(exc).__name__,
+                    )
+                    continue
                 req.audio_urls.append(audio_path)
 
-        if not req.prompt and not req.image_urls and not req.audio_urls:
+        empty_prompt = not req.prompt or (
+            event.get_platform_name() == "lark" and not req.prompt.strip()
+        )
+        if empty_prompt and not req.image_urls and not req.audio_urls:
             return
 
         custom_error_message = await self._resolve_persona_custom_error_message(event)
@@ -352,7 +370,10 @@ class ThirdPartyAgentSubStage(Stage):
             if stream_watchdog_task and not stream_watchdog_task.done():
                 stream_watchdog_task.cancel()
 
+        active_event_registry.register_agent_stop_callback(event, event.stop_event)
         try:
+            if active_event_registry.get_background_stop_signal(event).is_set():
+                return
             await runner.reset(
                 request=req,
                 run_context=AgentContextWrapper(
@@ -360,7 +381,7 @@ class ThirdPartyAgentSubStage(Stage):
                     tool_call_timeout=120,
                 ),
                 agent_hooks=MAIN_AGENT_HOOKS,
-                provider_config=self.runner_config,
+                provider_config=self.ctx.astrbot_config["agent"]["config"],
                 streaming=streaming_response,
             )
 
@@ -387,6 +408,9 @@ class ThirdPartyAgentSubStage(Stage):
                 ):
                     yield
         finally:
+            active_event_registry.unregister_agent_stop_callback(
+                event, event.stop_event
+            )
             if (
                 stream_watchdog_task
                 and not stream_watchdog_task.done()

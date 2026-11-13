@@ -16,7 +16,9 @@ import certifi
 
 from astrbot.api import sp
 from astrbot.core import DEMO_MODE, file_token_service, logger
-from astrbot.core.computer.computer_client import sync_skills_to_active_sandboxes
+from astrbot.core.astr_agent_runtime.computer.computer_client import (
+    sync_skills_to_active_sandboxes,
+)
 from astrbot.core.repository import (
     GitUnavailableError,
     normalize_repository_url,
@@ -291,11 +293,21 @@ class PluginService:
         return f"/api/file/{logo_token}" if logo_token else None
 
     async def get_plugin_logo_token(self, logo_path: str) -> str | None:
+        """Get a reusable logo token, replacing expired cached tokens.
+
+        Args:
+            logo_path: The local path to the plugin logo.
+
+        Returns:
+            An active file token, or None if the file cannot be registered.
+        """
         try:
             if token := self._logo_cache.get(logo_path):
                 if not await file_token_service.check_token_expired(token):
                     return token
-            token = await file_token_service.register_file(logo_path, timeout=300)
+            token = await file_token_service.register_file(
+                logo_path, timeout=300, single_use=False
+            )
             self._logo_cache[logo_path] = token
             return token
         except Exception as exc:
@@ -889,6 +901,10 @@ class PluginService:
             "descriptions": self._get_command_i18n_descriptions(command_filter),
             "names": self._get_command_i18n_names(command_filter),
         }
+        handler_md = getattr(command_filter, "handler_md", None)
+        if handler_md:
+            component["handler_full_name"] = handler_md.handler_full_name
+            component["handler_name"] = handler_md.handler_name
         return self._wrap_command_component(parts[:-1], component)
 
     def _build_command_group_component(
@@ -936,12 +952,17 @@ class PluginService:
                 component["subcommands"] = subcommands
             return component
 
-        return {
+        component = {
             "name": command_filter.command_name,
             "description": self._get_command_description(command_filter),
             "descriptions": self._get_command_i18n_descriptions(command_filter),
             "names": self._get_command_i18n_names(command_filter),
         }
+        handler_md = getattr(command_filter, "handler_md", None)
+        if handler_md:
+            component["handler_full_name"] = handler_md.handler_full_name
+            component["handler_name"] = handler_md.handler_name
+        return component
 
     @staticmethod
     def _wrap_command_component(parent_names: list[str], component: dict) -> dict:

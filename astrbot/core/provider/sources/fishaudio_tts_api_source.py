@@ -152,16 +152,21 @@ class ProviderFishAudioTTSAPI(TTSProvider):
         )
         self.headers["content-type"] = "application/msgpack"
         request = await self._generate_request(text)
-        async with AsyncClient(
-            base_url=self.api_base,
-            timeout=self.timeout,
-            proxy=self.proxy if self.proxy else None,
-        ).stream(
-            "POST",
-            "/tts",
-            headers=self.headers,
-            content=ormsgpack.packb(request, option=ormsgpack.OPT_SERIALIZE_PYDANTIC),
-        ) as response:
+        async with (
+            AsyncClient(
+                base_url=self.api_base,
+                timeout=self.timeout,
+                proxy=self.proxy if self.proxy else None,
+            ) as client,
+            client.stream(
+                "POST",
+                "/tts",
+                headers=self.headers,
+                content=ormsgpack.packb(
+                    request, option=ormsgpack.OPT_SERIALIZE_PYDANTIC
+                ),
+            ) as response,
+        ):
             if response.status_code == 200 and response.headers.get(
                 "content-type", ""
             ).startswith("audio/"):

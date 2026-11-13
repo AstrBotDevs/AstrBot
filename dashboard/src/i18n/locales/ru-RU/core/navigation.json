@@ -1,5 +1,5 @@
 ﻿{
-    "welcome": "Добро пожаловать",
+    "welcome": "Обзор",
     "dashboard": "Статистика",
     "platforms": "Боты",
     "providers": "Провайдеры моделей",
@@ -12,7 +12,7 @@
         "logs": "Логи",
         "trace": "Трассировка"
     },
-    "subagent": "Субагенты",
+    "subagent": "Управление субагентами",
     "toolUse": "Инструменты MCP",
     "extension": "Плагины",
     "extensionTabs": {
@@ -24,6 +24,9 @@
     },
     "config": "Конфигурация",
     "chat": "Чат",
+    "backToNavigation": "Назад к навигации",
+    "botMode": "Бот",
+    "options": "Параметры",
     "cron": "Запланированные задачи",
     "conversation": "Данные диалогов",
     "sessionManagement": "Пользовательские правила",
@@ -32,14 +35,22 @@
     "alkaid": "Alkaid Lab",
     "knowledgeBase": "База знаний",
     "about": "О программе",
-    "settings": "Настройки",
+    "settings": "Системные настройки",
+    "pin": "Закрепить",
+    "unpin": "Открепить",
+    "groupByPlugin": "Группировать по плагинам",
+    "ungroupByPlugin": "Отменить группировку",
+    "expandSidebar": "Развернуть боковую панель",
+    "collapseSidebar": "Свернуть боковую панель",
     "changelog": "Журнал изменений",
     "documentation": "Документация",
     "faq": "FAQ",
     "github": "GitHub",
     "drag": "Перетащить",
     "groups": {
-        "more": "Дополнительно"
+        "more": "Дополнительно",
+        "system": "Система",
+        "extension": "Расширения"
     },
     "changelogDialog": {
         "title": "Журнал изменений",
@@ -53,5 +64,6 @@
         "normal": "Обычная конфигурация",
         "system": "Системная конфигурация"
     },
-    "pluginWebui": "Страницы плагинов"
+    "pluginView": "Представления плагинов",
+    "pluginViewType": "Представление плагина"
 }

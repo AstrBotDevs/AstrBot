@@ -16,6 +16,7 @@ from astrbot.core.provider.func_tool_manager import PY_TO_JSON_TYPE, SUPPORTED_T
 from astrbot.core.provider.register import llm_tools
 from astrbot.core.utils.lang_utils import MultiLangAlias
 
+from ..filter.button_action import ButtonActionFilter
 from ..filter.command import CommandFilter
 from ..filter.command_group import CommandGroupFilter
 from ..filter.custom_filter import CustomFilterAnd, CustomFilterOr
@@ -294,6 +295,29 @@ def register_event_message_type(event_message_type: EventMessageType, **kwargs):
     return decorator
 
 
+def register_button_action(action_id: str | None = None, **kwargs):
+    """Register a handler for portable button interactions.
+
+    Args:
+        action_id: Optional action ID to match. ``None`` matches every button.
+        **kwargs: Handler metadata passed to the common registrar.
+
+    Returns:
+        A decorator for an adapter message event handler.
+    """
+
+    def decorator(awaitable):
+        handler_md = get_handler_or_create(
+            awaitable,
+            EventType.AdapterMessageEvent,
+            **kwargs,
+        )
+        handler_md.event_filters.append(ButtonActionFilter(action_id))
+        return awaitable
+
+    return decorator
+
+
 def register_platform_adapter_type(
     platform_adapter_type: PlatformAdapterType,
     **kwargs,
@@ -525,7 +549,10 @@ def register_on_agent_begin(**kwargs):
 
 
 def register_on_agent_done(**kwargs):
-    """当 Agent 运行完成后的事件
+    """Register an Agent exit handler, including errors and cancellation.
+
+    The response can be None when execution exits without a final response.
+    Inspect run_context.run_end_reason and run_context.run_error for details.
 
     Examples:
     ```py
@@ -538,7 +565,7 @@ def register_on_agent_done(**kwargs):
         self,
         event: AstrMessageEvent,
         run_context: ContextWrapper[AstrAgentContext],
-        response: LLMResponse,
+        response: LLMResponse | None,
     ) -> None:
         ...
     ```

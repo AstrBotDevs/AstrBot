@@ -146,8 +146,14 @@ class NetworkRenderStrategy(RenderStrategy):
         tmpl_data: dict,
         return_url: bool = True,
         options: dict | None = None,
+        endpoint: str | None = None,
     ) -> str:
-        """使用自定义文转图模板"""
+        """使用自定义文转图模板
+
+        Args:
+            endpoint: Optional per-call render service URL. When given, only
+                this endpoint is used instead of the configured endpoint pool.
+        """
         default_options = {
             "full_page": True,
             "type": "jpeg",
@@ -168,8 +174,13 @@ class NetworkRenderStrategy(RenderStrategy):
             "options": default_options,
         }
 
-        endpoints = self.endpoints.copy() if self.endpoints else [self.BASE_RENDER_URL]
-        random.shuffle(endpoints)
+        if endpoint:
+            endpoints = [self._clean_url(endpoint)]
+        else:
+            endpoints = (
+                self.endpoints.copy() if self.endpoints else [self.BASE_RENDER_URL]
+            )
+            random.shuffle(endpoints)
         last_exception = None
         for endpoint in endpoints:
             try:
@@ -208,6 +219,7 @@ class NetworkRenderStrategy(RenderStrategy):
         text: str,
         return_url: bool = False,
         template_name: str | None = "base",
+        endpoint: str | None = None,
     ) -> str:
         """返回图像的文件路径"""
         if not template_name:
@@ -220,6 +232,7 @@ class NetworkRenderStrategy(RenderStrategy):
                 "version": f"v{VERSION}",
             },
             return_url,
+            endpoint=endpoint,
         )
 
     @staticmethod

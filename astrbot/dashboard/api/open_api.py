@@ -197,13 +197,22 @@ async def chat_sessions(
 ):
     if auth.via != "api_key":
         try:
+            if "page" in request.query_params or "page_size" in request.query_params:
+                return ok(
+                    await service.get_chat_sessions(
+                        username=auth.username,
+                        page_raw=request.query_params.get("page", 1),
+                        page_size_raw=request.query_params.get("page_size", 20),
+                        platform_id=request.query_params.get("platform_id"),
+                    )
+                )
             return ok(
                 await chat_service.get_sessions(
                     auth.username,
                     request.query_params.get("platform_id"),
                 )
             )
-        except ChatServiceError as exc:
+        except (ChatServiceError, OpenApiServiceError) as exc:
             return error(str(exc))
 
     try:

@@ -178,7 +178,7 @@ class ConversationService:
         if not conversation:
             raise ConversationServiceError("对话不存在")
 
-        persona_id = payload.get("persona_id", conversation.persona_id)
+        persona_id = payload.get("persona_id")
 
         if title is not None or persona_id is not None:
             await self.conv_mgr.update_conversation(

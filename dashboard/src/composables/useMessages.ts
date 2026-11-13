@@ -1,6 +1,8 @@
 import { computed, onBeforeUnmount, reactive, ref, type Ref } from "vue";
+import { useI18n } from "@/i18n/composables";
 import { chatApi, fileApi } from "@/api/v1";
 import { fetchWithAuth } from "@/api/http";
+import type { Session } from "@/composables/useSessions";
 
 export type TransportMode = "sse" | "websocket";
 
@@ -146,6 +148,12 @@ interface CreateLocalExchangeOptions {
   parts: MessagePart[];
 }
 
+interface SendButtonInteractionOptions {
+  sessionId: string;
+  sourceMessageId?: string | number;
+  callbackData: string;
+}
+
 interface UseMessagesOptions {
   currentSessionId: Ref<string>;
   onSessionsChanged?: () => Promise<void> | void;
@@ -153,10 +161,12 @@ interface UseMessagesOptions {
 }
 
 export function useMessages(options: UseMessagesOptions) {
+  const { locale } = useI18n();
   const loadingMessagesState = ref(false);
   const sending = ref(false);
   const messagesBySession = reactive<Record<string, ChatRecord[]>>({});
   const loadedSessions = reactive<Record<string, boolean>>({});
+  const sessionDetails = reactive<Record<string, Session>>({});
   const paginationBySession = reactive<Record<string, HistoryPaginationState>>(
     {},
   );
@@ -351,6 +361,7 @@ export function useMessages(options: UseMessagesOptions) {
         };
       }
       sessionProjects[sessionId] = normalizeSessionProject(payload.project);
+      if (payload.session) sessionDetails[sessionId] = payload.session;
       loadedSessions[sessionId] = true;
       if (resumeRuns && Array.isArray(payload.active_runs)) {
         await restoreNextActiveRun(sessionId, payload.active_runs);
@@ -556,6 +567,44 @@ export function useMessages(options: UseMessagesOptions) {
     );
   }
 
+  function sendButtonInteraction({
+    sessionId,
+    sourceMessageId,
+    callbackData,
+  }: SendButtonInteractionOptions) {
+    if (!sessionId || !callbackData) return;
+    const messageId = crypto.randomUUID?.() || `${Date.now()}-${Math.random()}`;
+    const botRecord = reactive<ChatRecord>({
+      id: `local-button-bot-${messageId}`,
+      created_at: new Date().toISOString(),
+      content: {
+        type: "bot",
+        message: [],
+        reasoning: "",
+        isLoading: true,
+      },
+    });
+
+    startSseStream(
+      sessionId,
+      messageId,
+      [
+        {
+          type: "button_interaction",
+          callback_data: callbackData,
+          source_message_id: sourceMessageId,
+        },
+      ],
+      botRecord,
+      undefined,
+      true,
+      true,
+      "",
+      "",
+      true,
+    );
+  }
+
   async function editMessage(
     sessionId: string,
     record: ChatRecord,
@@ -682,6 +731,7 @@ export function useMessages(options: UseMessagesOptions) {
             selected_provider: selectedProvider,
             selected_model: selectedModel,
             flags: buildChatRequestFlags(enableStreaming, enableReasoning),
+            locale: locale.value,
           }),
           signal: abort.signal,
         },
@@ -804,6 +854,7 @@ export function useMessages(options: UseMessagesOptions) {
         session_id: sessionId,
         message: parts.map(partToPayload),
         flags: buildChatRequestFlags(enableStreaming, enableReasoning),
+        locale: locale.value,
         selected_provider: selectedProvider,
         selected_model: selectedModel,
         _skip_user_history: skipUserHistory,
@@ -955,6 +1006,7 @@ export function useMessages(options: UseMessagesOptions) {
       message_id: messageId,
       message: parts.map(partToPayload),
       flags: buildChatRequestFlags(enableStreaming, enableReasoning),
+      locale: locale.value,
       selected_provider: selectedProvider,
       selected_model: selectedModel,
     });
@@ -1112,12 +1164,18 @@ export function useMessages(options: UseMessagesOptions) {
   function ensureBotRecordVisible(connection: ActiveConnection) {
     const { botRecord, userRecord } = connection;
     if (!botRecord) return;
-    const records = messagesBySession[connection.sessionId] || [];
+    const records =
+      messagesBySession[connection.sessionId] ||
+      (messagesBySession[connection.sessionId] = []);
     if (records.includes(botRecord)) {
       connection.botVisible = true;
       return;
     }
-    if (!userRecord) return;
+    if (!userRecord) {
+      records.push(botRecord);
+      connection.botVisible = true;
+      return;
+    }
 
     const userIndex = records.indexOf(userRecord);
     let insertionAnchor = connection.deferredBeforeBot;
@@ -1287,6 +1345,15 @@ export function useMessages(options: UseMessagesOptions) {
       return;
     }
 
+    if (msgType === "actionrow" && data && typeof data === "object") {
+      markMessageStarted(botRecord);
+      messageContent(botRecord).message.push({
+        type: "actionrow",
+        ...(data as Record<string, unknown>),
+      });
+      return;
+    }
+
     if (["image", "record", "file", "video"].includes(msgType)) {
       markMessageStarted(botRecord);
       const rawFilename = String(data)
@@ -1323,6 +1390,7 @@ export function useMessages(options: UseMessagesOptions) {
     sending,
     messagesBySession,
     loadedSessions,
+    sessionDetails,
     paginationBySession,
     sessionProjects,
     activeMessages,
@@ -1335,6 +1403,7 @@ export function useMessages(options: UseMessagesOptions) {
     loadEarlierMessages,
     createLocalExchange,
     sendMessageStream,
+    sendButtonInteraction,
     editMessage,
     continueEditedMessage,
     regenerateMessage,
@@ -1526,6 +1595,13 @@ function partToPayload(part: MessagePart) {
       type: "reply",
       message_id: part.message_id,
       selected_text: part.selected_text || "",
+    };
+  }
+  if (part.type === "button_interaction") {
+    return {
+      type: "button_interaction",
+      callback_data: part.callback_data,
+      source_message_id: part.source_message_id,
     };
   }
   return {

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from "vue";
+import { computed, watch } from "vue";
 import { RouterLink, RouterView, useRoute } from "vue-router";
 import {
   ChartNoAxesColumnIncreasing,
@@ -40,6 +40,17 @@ const tabs = computed(() => [
 ]);
 
 const activeTab = computed(() => String(route.meta.dataTab || "statistics"));
+
+// Watch the route metadata directly so leaving this workspace does not save
+// the Statistics fallback as the last opened tab.
+watch(
+  () => route.meta.dataTab,
+  (value) => {
+    const tab = tabs.value.find((item) => item.value === value);
+    if (tab) localStorage.setItem("data_last_tab", tab.routeName);
+  },
+  { immediate: true },
+);
 </script>
 
 <template>
@@ -106,7 +117,7 @@ const activeTab = computed(() => String(route.meta.dataTab || "statistics"));
 
 .data-tab {
   align-items: center;
-  border-radius: 8px;
+  border-radius: var(--astrbot-radius-control);
   color: rgba(var(--v-theme-on-surface), 0.58);
   display: inline-flex;
   font-size: 0.8125rem;

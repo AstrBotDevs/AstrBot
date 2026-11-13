@@ -54,6 +54,9 @@ class RateLimitStage(Stage):
             MessageEventResult: 继续或停止事件处理的结果。
 
         """
+        if self.rate_limit_count <= 0:
+            return
+
         umo = event.unified_msg_origin
 
         async with self.locks[umo]:  # 确保同一会话不会并发修改队列

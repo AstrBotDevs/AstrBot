@@ -167,10 +167,18 @@
               @click="clearSelection"
             >
               <v-list-item-title class="provider-item-title">
-                {{ sharedTm("providerSelector.clearSelection") }}
+                {{
+                  variant === "config"
+                    ? sharedTm("providerSelector.clearSelection")
+                    : sharedTm("providerSelector.defaultModel")
+                }}
               </v-list-item-title>
               <v-list-item-subtitle class="provider-subtitle">
-                {{ sharedTm("providerSelector.clearSelectionSubtitle") }}
+                {{
+                  variant === "config"
+                    ? sharedTm("providerSelector.clearSelectionSubtitle")
+                    : sharedTm("providerSelector.defaultModelSubtitle")
+                }}
               </v-list-item-subtitle>
               <template #append>
                 <v-icon
@@ -298,6 +306,23 @@
                       </template>
                       <span>{{ providerTm("models.testButton") }}</span>
                     </v-tooltip>
+                    <v-tooltip v-if="variant === 'config'" location="top">
+                      <template #activator="{ props: editTooltipProps }">
+                        <v-btn
+                          v-bind="editTooltipProps"
+                          icon="mdi-cog-outline"
+                          size="x-small"
+                          variant="text"
+                          :aria-label="`${providerTm(
+                            'dialogs.config.editTitle',
+                          )} ${provider.id}`"
+                          :loading="editingProviderId === provider.id"
+                          :disabled="Boolean(editingProviderId)"
+                          @click.stop="editProvider(provider)"
+                        />
+                      </template>
+                      <span>{{ providerTm("dialogs.config.editTitle") }}</span>
+                    </v-tooltip>
                     <v-icon
                       v-if="isProviderSelected(provider.id)"
                       class="provider-selected-icon"
@@ -345,6 +370,31 @@
         </div>
       </v-card>
     </v-menu>
+    <v-tooltip
+      v-if="
+        variant === 'config' &&
+        !multiple &&
+        typeof modelValue === 'string' &&
+        modelValue
+      "
+      location="top"
+    >
+      <template #activator="{ props: editTooltipProps }">
+        <v-btn
+          v-bind="editTooltipProps"
+          icon="mdi-cog-outline"
+          size="x-small"
+          variant="text"
+          :aria-label="`${providerTm(
+            'dialogs.config.editTitle',
+          )} ${modelValue}`"
+          :loading="editingProviderId === modelValue"
+          :disabled="Boolean(editingProviderId)"
+          @click.stop="editProvider({ id: modelValue })"
+        />
+      </template>
+      <span>{{ providerTm("dialogs.config.editTitle") }}</span>
+    </v-tooltip>
   </div>
 
   <v-overlay
@@ -369,12 +419,49 @@
       </div>
     </v-card>
   </v-overlay>
+
+  <v-dialog v-model="showProviderEditDialog" width="800">
+    <v-card>
+      <v-card-title class="text-h3 pa-4 pb-0 pl-6">
+        {{ providerEditDialogTitle }}
+      </v-card-title>
+      <v-card-text class="py-4 config-form">
+        <AstrBotConfig
+          v-if="providerEditData"
+          :iterable="providerEditData"
+          :metadata="providerModelConfigSchema"
+          metadata-key="provider"
+          :is-editing="true"
+        />
+      </v-card-text>
+      <v-card-actions class="pa-4">
+        <v-spacer />
+        <v-btn
+          variant="text"
+          :disabled="savingProviders.includes(providerEditData?.id)"
+          @click="showProviderEditDialog = false"
+        >
+          {{ providerTm("dialogs.config.cancel") }}
+        </v-btn>
+        <v-btn
+          color="primary"
+          variant="tonal"
+          :loading="savingProviders.includes(providerEditData?.id)"
+          @click="saveEditedProvider"
+        >
+          {{ providerTm("dialogs.config.save") }}
+        </v-btn>
+      </v-card-actions>
+    </v-card>
+  </v-dialog>
 </template>
 
 <script setup lang="ts">
 import { computed, nextTick, ref, shallowRef, watch } from "vue";
 import { useDisplay } from "vuetify";
 import { providerApi } from "@/api/v1";
+import AstrBotConfig from "@/components/shared/AstrBotConfig.vue";
+import { useProviderModelConfigDialog } from "@/composables/useProviderModelConfigDialog";
 import ProviderChatCompletionPanel from "@/components/provider/ProviderChatCompletionPanel.vue";
 import ProviderPage from "@/views/ProviderPage.vue";
 import { useModuleI18n } from "@/i18n/composables";
@@ -447,6 +534,25 @@ const providerListRef = ref<{ $el: HTMLElement } | null>(null);
 const providerDrawer = ref(false);
 const loadingProviders = ref(false);
 const providersLoaded = ref(false);
+const editingProviderId = ref("");
+const configSchema = ref<Record<string, any>>({});
+const selectedProviderSource = ref<any | null>(null);
+const {
+  showProviderEditDialog,
+  providerEditData,
+  savingProviders,
+  providerModelConfigSchema,
+  providerEditDialogTitle,
+  openProviderEdit,
+  saveEditedProvider,
+} = useProviderModelConfigDialog({
+  selectedProviderSource,
+  configSchema,
+  loadConfig: () => loadProviderConfigs(true),
+  tm: providerTm,
+  showMessage: (message, color) =>
+    color === "error" ? toastError(message) : toastSuccess(message),
+});
 
 const selectedProviderIds = computed(() =>
   props.multiple && Array.isArray(props.modelValue)
@@ -703,6 +809,42 @@ async function testProvider(provider: ProviderConfig) {
   }
 }
 
+async function editProvider(provider: ProviderConfig) {
+  if (editingProviderId.value) return;
+  editingProviderId.value = provider.id;
+  try {
+    // The selector list may include inherited fields; edit the stored model config.
+    const response = await providerApi.schema();
+    if (response.data.status === "error") {
+      throw new Error(
+        response.data.message || providerTm("providerSources.saveError"),
+      );
+    }
+    const data = response.data.data;
+    const storedProvider = data.providers?.find(
+      (item) => item.id === provider.id,
+    );
+    if (!storedProvider) {
+      throw new Error(providerTm("providerSources.saveError"));
+    }
+    configSchema.value = data.config_schema || {};
+    selectedProviderSource.value =
+      data.provider_sources?.find(
+        (source) => source.id === storedProvider.provider_source_id,
+      ) || storedProvider;
+    openProviderEdit(storedProvider);
+    menuOpen.value = false;
+  } catch (error: any) {
+    toastError(
+      error.response?.data?.message ||
+        error.message ||
+        providerTm("providerSources.saveError"),
+    );
+  } finally {
+    editingProviderId.value = "";
+  }
+}
+
 function handleMenuToggle(isOpen: boolean) {
   if (isOpen) {
     scrollToSelectionPending = true;
@@ -780,6 +922,7 @@ defineExpose({ getCurrentSelection });
 
 .provider-select-menu--config {
   display: flex;
+  align-items: center;
   width: 100%;
   justify-content: flex-end;
 }
@@ -835,12 +978,11 @@ defineExpose({ getCurrentSelection });
 
 .provider-trigger--header {
   height: 24px;
-  margin-top: 2px;
   padding: 0;
 }
 
 .provider-trigger--header .provider-trigger-title {
-  font-size: 17px;
+  font-size: 0.88rem;
   font-weight: 620;
   line-height: 24px;
 }
@@ -879,18 +1021,23 @@ defineExpose({ getCurrentSelection });
   opacity: 0.64;
 }
 
+.provider-menu-card,
+.provider-source-menu {
+  --astrbot-menu-shadow: 0 3px 10px rgba(0, 0, 0, 0.06);
+}
+
 .provider-menu-card {
   width: min(420px, calc(100vw - 24px));
   overflow: hidden;
   border: 1px solid rgba(var(--v-theme-on-surface), 0.09);
   border-radius: 14px !important;
   background: rgb(var(--v-theme-surface));
-  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.07) !important;
+  box-shadow: var(--astrbot-menu-shadow) !important;
 }
 
 :global(.v-overlay.v-menu .v-overlay__content > .provider-menu-card) {
   border: 1px solid rgba(var(--v-theme-on-surface), 0.09) !important;
-  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.07) !important;
+  box-shadow: var(--astrbot-menu-shadow) !important;
 }
 
 .provider-menu-body {
@@ -985,6 +1132,9 @@ defineExpose({ getCurrentSelection });
 }
 
 .provider-menu-item {
+  /* Keep the selected fill from accumulating a second state overlay. */
+  --v-hover-opacity: 0;
+  --v-activated-opacity: 0;
   height: 54px;
   min-height: 54px !important;
   margin: 0 0 2px !important;
@@ -1011,8 +1161,12 @@ defineExpose({ getCurrentSelection });
 }
 
 .provider-menu-item.v-list-item--active {
-  background: rgba(var(--v-theme-primary), 0.08);
+  background: rgba(var(--v-theme-on-surface), 0.06);
   color: rgb(var(--v-theme-on-surface));
+}
+
+.provider-menu-item.v-list-item--active:hover {
+  background: rgba(var(--v-theme-on-surface), 0.09);
 }
 
 .provider-item-title {
@@ -1136,10 +1290,6 @@ defineExpose({ getCurrentSelection });
 }
 
 @media (max-width: 768px) {
-  .provider-trigger--header .provider-trigger-title {
-    font-size: 16px;
-  }
-
   .provider-trigger--header .provider-trigger-meta {
     display: none;
   }
@@ -1178,3 +1328,5 @@ defineExpose({ getCurrentSelection });
   }
 }
 </style>
+
+<style scoped src="@/styles/config-form.css"></style>

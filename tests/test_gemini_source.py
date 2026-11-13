@@ -349,6 +349,43 @@ async def test_gemini_stream_keeps_narration_emitted_before_tool_call(monkeypatc
 
 
 @pytest.mark.asyncio
+async def test_gemini_stream_keeps_conversation_header_until_consumed(
+    monkeypatch,
+):
+    """The conversation header must be present while the stream is consumed."""
+    provider = _gemini_stream_provider()
+    headers: dict[str, str] = {}
+    provider.client._api_client = SimpleNamespace(
+        _http_options=SimpleNamespace(headers=headers),
+    )
+    observed_headers: list[str | None] = []
+
+    async def fake_stream():
+        observed_headers.append(headers.get("x-astrbot-conversation-id"))
+        yield _gemini_stream_chunk(text="ok")
+
+    async def fake_retry(provider_name, request_factory, max_attempts=None):
+        return fake_stream()
+
+    monkeypatch.setattr(gemini_source, "retry_provider_request", fake_retry)
+    responses = [
+        response
+        async for response in provider._query_stream(
+            payloads={
+                "messages": [{"role": "user", "content": "hello"}],
+                "model": "gemini-3.7-flash",
+            },
+            tools=None,
+            conversation_id="conversation-1",
+        )
+    ]
+
+    assert responses[-1].completion_text == "ok"
+    assert observed_headers == ["conversation-1"]
+    assert "x-astrbot-conversation-id" not in headers
+
+
+@pytest.mark.asyncio
 async def test_gemini_stream_keeps_reasoning_from_tool_call_chunk(monkeypatch):
     """Reasoning on the tool-call chunk itself must not be overwritten."""
     provider = _gemini_stream_provider()
