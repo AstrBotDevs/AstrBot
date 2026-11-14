@@ -1,17 +1,17 @@
 {
   "greeting": {
-    "morning": "おはようございます。AstrBot へようこそ",
-    "afternoon": "こんにちは。AstrBot へようこそ",
-    "evening": "こんばんは。AstrBot へようこそ",
+    "morning": "おはようございます",
+    "afternoon": "こんにちは",
+    "evening": "こんばんは",
     "newYear": "あけましておめでとうございます！"
   },
-  "subtitle": "まずクイックガイドを完了しましょう。プラットフォームと会話プロバイダーは後から設定することもできます。",
+  "subtitle": "AstrBot へようこそ。今日の稼働状況を確認し、設定を進めましょう。",
   "announcement": {
     "title": "お知らせ"
   },
   "onboard": {
     "title": "クイックガイド",
-    "subtitle": "このページで初期設定を完了できます。",
+    "subtitle": "基本設定を完了して AstrBot を使い始めましょう。",
     "step1Title": "AI モデルを設定",
     "step1Desc": "AstrBot で使用する AI モデルを設定します。",
     "step2Title": "プラットフォームボットを設定",
@@ -38,7 +38,9 @@
     "computerAccessUpdateFailed": "エージェントのコンピューターアクセス権限を更新できませんでした",
     "computerAccessAllowed": "エージェントにコンピューターへのアクセスと使用を許可しました",
     "computerAccessDenied": "エージェントによるコンピューターへのアクセスと使用を許可しませんでした",
-    "step3HelpItem3": "権限と機能をさらに細かく設定するには、「設定ファイル -> AI -> 機能 -> コンピューター操作機能」で設定してください。"
+    "step3HelpItem3": "権限と機能をさらに細かく設定するには、「設定ファイル -> AI -> 機能 -> コンピューター操作機能」で設定してください。",
+    "progress": "{count} / 3 完了",
+    "learnMore": "権限について"
   },
   "resources": {
     "title": "関連リソース",
@@ -46,6 +48,42 @@
     "docsTitle": "ドキュメント",
     "docsDesc": "AstrBot の公式ドキュメントをご覧ください。",
     "afdianTitle": "Afdian",
-    "afdianDesc": "Afdian で AstrBot チームを支援できます。"
+    "afdianDesc": "Afdian で AstrBot チームを支援できます。",
+    "subtitle": "ドキュメント、コミュニティ、関連リソースをご活用ください。"
+  },
+  "metrics": {
+    "title": "今日の稼働状況",
+    "tokens": "今日のトークン使用量",
+    "messages": "今日のメッセージ数",
+    "active_sessions": "アクティブセッション",
+    "vsYesterday": "昨日比",
+    "newActivity": "新規アクティビティ",
+    "loadFailed": "統計を読み込めません。表示中のデータは最新でない可能性があります。"
+  },
+  "health": {
+    "title": "ボットの稼働状況",
+    "healthy": "正常に稼働中",
+    "issues": "{count} 件の問題",
+    "checking": "確認中",
+    "unavailable": "状態を取得できません",
+    "loadFailed": "最新のボット状態を取得できません。再試行してください。",
+    "description": "エラーが記録されたボットを 1 件の問題として数えます。最新のエラーを表示します。再起動またはエラーをクリアした後に再確認してください。",
+    "noIssues": "エラーを報告しているボットはありません。",
+    "errorCount": "{count} 回のエラー",
+    "noDetails": "エラー詳細はありません",
+    "traceback": "スタックトレース",
+    "manageBots": "ボットを管理",
+    "refresh": "更新"
+  },
+  "system": {
+    "title": "システム状態",
+    "uptime": "稼働時間",
+    "cpu": "CPU",
+    "memory": "メモリ",
+    "disk": "ディスク",
+    "daysHours": "{days}日 {hours}時間",
+    "hoursMinutes": "{hours}時間 {minutes}分",
+    "scope": "稼働時間は AstrBot プロセスの起動からの時間です。CPU とメモリはホスト全体、ディスクはデータディレクトリのあるファイルシステムの使用量です。",
+    "unavailable": "リソース使用量を取得できません。ページを更新してください。"
   }
 }

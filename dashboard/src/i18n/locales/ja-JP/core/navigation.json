@@ -1,5 +1,5 @@
 {
-  "welcome": "ようこそ",
+  "welcome": "概要",
   "dashboard": "ダッシュボード",
   "platforms": "ボット",
   "providers": "モデルプロバイダー",
@@ -12,7 +12,7 @@
     "logs": "ログ",
     "trace": "トレース"
   },
-  "subagent": "サブエージェント編成",
+  "subagent": "サブエージェント管理",
   "toolUse": "MCP",
   "extension": "プラグイン",
   "extensionTabs": {
@@ -24,6 +24,7 @@
   },
   "config": "設定ファイル",
   "chat": "チャット",
+  "backToNavigation": "ナビゲーションに戻る",
   "botMode": "ボット",
   "options": "オプション",
   "cron": "スケジュールタスク",

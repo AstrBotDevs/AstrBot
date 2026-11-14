@@ -1,17 +1,17 @@
 {
   "greeting": {
-    "morning": "Good morning, welcome to AstrBot",
-    "afternoon": "Good afternoon, welcome to AstrBot",
-    "evening": "Good evening, welcome to AstrBot",
+    "morning": "Good morning",
+    "afternoon": "Good afternoon",
+    "evening": "Good evening",
     "newYear": "Happy New Year!"
   },
-  "subtitle": "You can complete the basic onboarding first. Platform and chat provider setup can both be skipped.",
+  "subtitle": "Welcome to AstrBot. See how things are running today and continue your setup.",
   "announcement": {
     "title": "Announcement"
   },
   "onboard": {
     "title": "Quick Onboarding",
-    "subtitle": "Complete initialization directly on the welcome page.",
+    "subtitle": "Complete the basics and start using AstrBot.",
     "step1Title": "Configure AI Model",
     "step1Desc": "Configure AI models for AstrBot.",
     "step2Title": "Configure Platform Bot",
@@ -38,7 +38,9 @@
     "computerAccessUpdateFailed": "Failed to update Agent computer access",
     "computerAccessAllowed": "Agent is now allowed to access and use the computer",
     "computerAccessDenied": "Agent is no longer allowed to access and use the computer",
-    "step3HelpItem3": "For more detailed control, configure the Computer Access options under Config -> AI -> Capabilities -> Agent Computer Use."
+    "step3HelpItem3": "For more detailed control, configure the Computer Access options under Config -> AI -> Capabilities -> Agent Computer Use.",
+    "progress": "{count} / 3 complete",
+    "learnMore": "About these permissions"
   },
   "resources": {
     "title": "Resources",
@@ -46,6 +48,42 @@
     "docsTitle": "Documentation",
     "docsDesc": "Read the official AstrBot documentation.",
     "afdianTitle": "Afdian",
-    "afdianDesc": "Support the AstrBot team on Afdian."
+    "afdianDesc": "Support the AstrBot team on Afdian.",
+    "subtitle": "Documentation, community, and resources for getting more from AstrBot."
+  },
+  "metrics": {
+    "title": "Today's activity",
+    "tokens": "Tokens today",
+    "messages": "Messages today",
+    "active_sessions": "Active sessions",
+    "vsYesterday": "vs. yesterday",
+    "newActivity": "New activity",
+    "loadFailed": "Unable to load usage. Previously loaded data may be out of date."
+  },
+  "health": {
+    "title": "Bot health",
+    "healthy": "Running normally",
+    "issues": "{count} issues",
+    "checking": "Checking status",
+    "unavailable": "Status unavailable",
+    "loadFailed": "Unable to read the latest bot status. Please try again.",
+    "description": "Each bot with recorded errors counts as one issue. The latest error is shown below; check again after restarting the bot or clearing its errors.",
+    "noIssues": "No bots are reporting errors.",
+    "errorCount": "{count} errors",
+    "noDetails": "No error details available",
+    "traceback": "Stack trace",
+    "manageBots": "Manage bots",
+    "refresh": "Refresh"
+  },
+  "system": {
+    "title": "System status",
+    "uptime": "Uptime",
+    "cpu": "CPU",
+    "memory": "Memory",
+    "disk": "Disk",
+    "daysHours": "{days}d {hours}h",
+    "hoursMinutes": "{hours}h {minutes}m",
+    "scope": "Uptime measures the AstrBot process. CPU and memory show host usage; disk shows the filesystem containing the AstrBot data directory.",
+    "unavailable": "Resource usage is unavailable. Refresh the page to try again."
   }
 }

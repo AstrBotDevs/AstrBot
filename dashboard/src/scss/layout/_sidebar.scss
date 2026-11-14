@@ -11,7 +11,7 @@
   }
   .v-list-group__items .v-list-item,
   .v-list-item {
-    border-radius: $border-radius-root;
+    border-radius: var(--astrbot-radius-navigation);
     padding-inline-start: calc(12px + var(--indent-padding) / 2) !important;
     &:hover {
       color: rgb(var(--v-theme-secondary));

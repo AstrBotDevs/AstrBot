@@ -333,7 +333,7 @@ function processPayload(
     const nextRecord: ChatRecord = {
       id: `local-thread-bot-${botRecord.id}`,
       created_at: new Date().toISOString(),
-      llm_checkpoint_id: botRecord.llm_checkpoint_id,
+      turn_id: botRecord.turn_id,
       content: { type: "bot", message: [], isLoading: true },
     };
     const insertIndex =
@@ -350,8 +350,8 @@ function processPayload(
     if (!userRecord) return;
     userRecord.id = data?.id || userRecord.id;
     userRecord.created_at = data?.created_at || userRecord.created_at;
-    userRecord.llm_checkpoint_id =
-      data?.llm_checkpoint_id || userRecord.llm_checkpoint_id;
+    userRecord.turn_id =
+      data?.turn_id || userRecord.turn_id;
     return;
   }
 
@@ -359,8 +359,8 @@ function processPayload(
     markMessageStarted(botRecord);
     botRecord.id = data?.id || botRecord.id;
     botRecord.created_at = data?.created_at || botRecord.created_at;
-    botRecord.llm_checkpoint_id =
-      data?.llm_checkpoint_id || botRecord.llm_checkpoint_id;
+    botRecord.turn_id =
+      data?.turn_id || botRecord.turn_id;
     if (data?.refs) {
       botRecord.content.refs = data.refs;
     }

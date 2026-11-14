@@ -116,12 +116,12 @@ for (const { accepted, segmented } of [
   }`, async () => {
     const user = {
       id: 1,
-      llm_checkpoint_id: "old",
+      turn_id: "old",
       content: { type: "user", message: [] },
     };
     const unrelated = {
       id: 2,
-      llm_checkpoint_id: "earlier",
+      turn_id: "earlier",
       content: {
         type: "bot",
         message: [{ type: "plain", text: "Earlier turn" }],
@@ -132,7 +132,7 @@ for (const { accepted, segmented } of [
       user,
       ...[10, 11, 12].map((id) => ({
         id,
-        llm_checkpoint_id: "old",
+        turn_id: "old",
         content: {
           type: "bot",
           message: [{ type: "plain", text: `Old ${id}` }],
@@ -172,7 +172,7 @@ for (const { accepted, segmented } of [
           receive({ type: "plain", data: `New ${index}`, streaming: false });
           receive({
             type: "message_saved",
-            data: { id: 20 + index, llm_checkpoint_id: "new" },
+            data: { id: 20 + index, turn_id: "new" },
           });
         }
         receive({ type: "end", data: "" });
@@ -230,7 +230,7 @@ for (const resume of [false, true]) {
     receiveFirst("plain", "A1");
     receiveFirst("message_saved", {
       id: 10,
-      llm_checkpoint_id: "checkpoint-a",
+      turn_id: "checkpoint-a",
     });
     const next = context.createLocalExchange({
       sessionId: "session",
@@ -248,12 +248,12 @@ for (const resume of [false, true]) {
     receiveFirst("plain", "A2");
     receiveFirst("message_saved", {
       id: 11,
-      llm_checkpoint_id: "checkpoint-a",
+      turn_id: "checkpoint-a",
     });
     if (resume) {
       receiveFirst("run_snapshot", {
         run_id: "a",
-        llm_checkpoint_id: "checkpoint-a",
+        turn_id: "checkpoint-a",
         status: "running",
         messages: JSON.parse(
           JSON.stringify(
@@ -273,7 +273,7 @@ for (const resume of [false, true]) {
     receiveFirst("plain", "A3");
     receiveFirst("message_saved", {
       id: 12,
-      llm_checkpoint_id: "checkpoint-a",
+      turn_id: "checkpoint-a",
     });
     receiveFirst("end", "");
     delete context.activeConnections.a;
@@ -379,13 +379,13 @@ for (const handler of ["sse", "thread"]) {
         { type: "complete", data: "", streaming: false },
         {
           type: "message_saved",
-          data: { id: 1, llm_checkpoint_id: "checkpoint" },
+          data: { id: 1, turn_id: "checkpoint" },
         },
         { type: "plain", data: "Next message.", streaming: false },
         { type: "complete", data: "", streaming: false },
         {
           type: "message_saved",
-          data: { id: 2, llm_checkpoint_id: "checkpoint" },
+          data: { id: 2, turn_id: "checkpoint" },
         },
       ]) {
         if (handler === "thread")
@@ -475,7 +475,7 @@ for (const handler of ["sse", "thread"]) {
         if (!scenario.streaming) {
           receive({
             type: "message_saved",
-            data: { id: index + 1, llm_checkpoint_id: "checkpoint" },
+            data: { id: index + 1, turn_id: "checkpoint" },
           });
           assert.deepEqual(
             getBots().map((record) => record.id),
@@ -507,7 +507,7 @@ for (const handler of ["sse", "thread"]) {
             data: {
               run_id: "run",
               status: "running",
-              llm_checkpoint_id: "checkpoint",
+              turn_id: "checkpoint",
               messages: snapshotMessages,
             },
           };

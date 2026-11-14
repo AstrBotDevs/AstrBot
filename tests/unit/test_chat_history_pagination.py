@@ -4,6 +4,7 @@ from copy import deepcopy
 from datetime import datetime, timezone
 from inspect import signature
 from types import SimpleNamespace
+from unittest.mock import AsyncMock
 
 import pytest
 
@@ -30,7 +31,7 @@ class FakeHistory:
         self.sender_id = "bot"
         self.sender_name = "bot"
         self.content = content
-        self.llm_checkpoint_id = "checkpoint"
+        self.turn_id = "turn-1"
         self.created_at = datetime.now(timezone.utc)
         self.updated_at = self.created_at
 
@@ -42,7 +43,7 @@ class FakeHistory:
             "sender_id": self.sender_id,
             "sender_name": self.sender_name,
             "content": deepcopy(self.content),
-            "llm_checkpoint_id": self.llm_checkpoint_id,
+            "turn_id": self.turn_id,
         }
 
 
@@ -112,6 +113,9 @@ async def test_get_session_returns_complete_content_and_pagination_metadata(
 
     service = object.__new__(ChatService)
     service.db = Database()
+    service.conv_mgr = SimpleNamespace(
+        get_curr_conversation_id=AsyncMock(return_value=None)
+    )
     service.platform_history_mgr = Manager()
     service.running_convs = {}
     service.get_active_chat_runs = lambda _username, _session_id: []

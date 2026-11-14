@@ -63,7 +63,14 @@ export interface ChatRecord {
   created_at?: string;
   sender_id?: string;
   sender_name?: string;
-  llm_checkpoint_id?: string | null;
+  turn_id?: string | null;
+  context_event_id?: string | null;
+  can_fork?: boolean;
+  can_edit?: boolean;
+  can_retry?: boolean;
+  fork_unavailable_reason?: string | null;
+  edit_unavailable_reason?: string | null;
+  retry_unavailable_reason?: string | null;
   threads?: ChatThread[];
 }
 
@@ -80,7 +87,7 @@ export interface ChatThread {
   thread_id: string;
   parent_session_id: string;
   parent_message_id: number;
-  base_checkpoint_id: string;
+  base_event_id: string;
   selected_text: string;
   created_at?: string;
   updated_at?: string;
@@ -95,7 +102,7 @@ export interface ChatSessionProject {
 interface ActiveChatRun {
   run_id: string;
   session_id: string;
-  llm_checkpoint_id?: string | null;
+  turn_id?: string | null;
   status?: string;
   revision?: number;
   content?: ChatContent;
@@ -132,7 +139,7 @@ interface SendMessageStreamOptions {
   userRecord?: ChatRecord;
   botRecord: ChatRecord;
   skipUserHistory?: boolean;
-  llmCheckpointId?: string | null;
+  turnId?: string | null;
 }
 
 interface ContinueEditedMessageOptions {
@@ -448,11 +455,11 @@ export function useMessages(options: UseMessagesOptions) {
     const run = activeRuns[0];
     if (!run?.run_id || isSessionRunning(sessionId)) return;
 
-    const checkpointId = run.llm_checkpoint_id || null;
+    const turnId = run.turn_id || null;
     const records = (messagesBySession[sessionId] || []).filter((record) => {
       return !(
-        checkpointId &&
-        record.llm_checkpoint_id === checkpointId &&
+        turnId &&
+        record.turn_id === turnId &&
         messageContent(record).type === "bot"
       );
     });
@@ -463,7 +470,7 @@ export function useMessages(options: UseMessagesOptions) {
       normalizeHistoryRecord({
         ...record,
         id: record.id ?? `active-run-${run.run_id}-${index}`,
-        llm_checkpoint_id: checkpointId,
+        turn_id: turnId,
         created_at: record.created_at || new Date().toISOString(),
       }),
     );
@@ -545,7 +552,7 @@ export function useMessages(options: UseMessagesOptions) {
     botRecord,
     userRecord,
     skipUserHistory = false,
-    llmCheckpointId = null,
+    turnId = null,
   }: SendMessageStreamOptions) {
     if (transport === "websocket") {
       startWebSocketStream(
@@ -572,7 +579,7 @@ export function useMessages(options: UseMessagesOptions) {
       selectedProvider,
       selectedModel,
       skipUserHistory,
-      llmCheckpointId,
+      turnId,
     );
   }
 
@@ -693,7 +700,7 @@ export function useMessages(options: UseMessagesOptions) {
       selectedProvider,
       selectedModel,
       true,
-      sourceRecord.llm_checkpoint_id || null,
+      sourceRecord.turn_id || null,
     );
   }
 
@@ -705,9 +712,14 @@ export function useMessages(options: UseMessagesOptions) {
     enableStreaming = true,
     enableReasoning = true,
   ) {
-    if (!sessionId || botRecord.id == null) return;
+    if (!sessionId || botRecord.id == null || botRecord.can_retry === false) return;
     const targetMessageId = botRecord.id;
-    const checkpointId = botRecord.llm_checkpoint_id;
+    const turnId = botRecord.turn_id;
+    const records = messagesBySession[sessionId] || [];
+    const targetIndex = records.indexOf(botRecord);
+    const userRecord = records.slice(0, targetIndex).reverse().find(
+      (record) => record.content.type === "user" && record.turn_id === turnId,
+    );
 
     const abort = new AbortController();
     const connection: ActiveConnection = {
@@ -716,6 +728,7 @@ export function useMessages(options: UseMessagesOptions) {
       transport: "sse",
       abort,
       botRecord,
+      userRecord,
       botVisible: true,
     };
     activeConnections[connection.messageId] = connection;
@@ -745,13 +758,16 @@ export function useMessages(options: UseMessagesOptions) {
         const payload = await response.json().catch(() => null);
         throw new Error(payload?.message || "Regenerate failed.");
       }
-      // The backend replaces every bot message belonging to this checkpoint.
-      if (checkpointId) {
+      // Replace the retried turn only after the backend accepts the request.
+      if (targetIndex >= 0) {
+        messagesBySession[sessionId] = records.slice(0, targetIndex + 1);
+      }
+      if (turnId) {
         messagesBySession[sessionId] = (messagesBySession[sessionId] || []).filter(
           (record) =>
             record === botRecord ||
             record.content.type !== "bot" ||
-            record.llm_checkpoint_id !== checkpointId,
+            record.turn_id !== turnId,
         );
       }
       botRecord.id = connection.messageId;
@@ -849,7 +865,7 @@ export function useMessages(options: UseMessagesOptions) {
     selectedProvider: string,
     selectedModel: string,
     skipUserHistory = false,
-    llmCheckpointId: string | null = null,
+    turnId: string | null = null,
   ) {
     const abort = new AbortController();
     const connection: ActiveConnection = {
@@ -877,7 +893,7 @@ export function useMessages(options: UseMessagesOptions) {
         selected_provider: selectedProvider,
         selected_model: selectedModel,
         _skip_user_history: skipUserHistory,
-        _llm_checkpoint_id: llmCheckpointId || undefined,
+        _turn_id: turnId || undefined,
       }),
       signal: abort.signal,
     })
@@ -1248,7 +1264,7 @@ export function useMessages(options: UseMessagesOptions) {
       botRecord = reactive<ChatRecord>({
         id: `local-bot-${connection.messageId}-${botRecord.id}`,
         created_at: new Date().toISOString(),
-        llm_checkpoint_id: botRecord.llm_checkpoint_id,
+        turn_id: botRecord.turn_id,
         content: { type: "bot", message: [], isLoading: true },
       });
       records.splice(
@@ -1314,11 +1330,11 @@ export function useMessages(options: UseMessagesOptions) {
       const snapshot = data && typeof data === "object" ? data : {};
       if (connection && Array.isArray(snapshot.messages)) {
         const records = messagesBySession[connection.sessionId] || [];
-        const checkpointId = snapshot.llm_checkpoint_id;
+        const turnId = snapshot.turn_id;
         const belongsToRun = (record: ChatRecord) =>
           record === botRecord ||
-          (checkpointId &&
-            record.llm_checkpoint_id === checkpointId &&
+          (turnId &&
+            record.turn_id === turnId &&
             record.content.type === "bot");
         const firstIndex = records.findIndex(belongsToRun);
         const remaining = records.filter((record) => !belongsToRun(record));
@@ -1330,7 +1346,7 @@ export function useMessages(options: UseMessagesOptions) {
             normalizeHistoryRecord({
               ...record,
               id: record.id ?? `active-run-${snapshot.run_id}-${index}`,
-              llm_checkpoint_id: checkpointId || null,
+              turn_id: turnId || null,
               created_at: record.created_at || new Date().toISOString(),
             }),
         );
@@ -1362,13 +1378,13 @@ export function useMessages(options: UseMessagesOptions) {
       const snapshotRecord = normalizeHistoryRecord({
         id: `active-run-${snapshot.run_id || "unknown"}`,
         content: snapshot.content || { type: "bot", message: [] },
-        llm_checkpoint_id: snapshot.llm_checkpoint_id || null,
+        turn_id: snapshot.turn_id || null,
       });
       snapshotRecord.content.isLoading =
         snapshot.status === "running" &&
         snapshotRecord.content.message.length === 0;
       botRecord.content = snapshotRecord.content;
-      botRecord.llm_checkpoint_id = snapshotRecord.llm_checkpoint_id;
+      botRecord.turn_id = snapshotRecord.turn_id;
       void resolveRecordMedia([botRecord]);
       return;
     }
@@ -1376,8 +1392,8 @@ export function useMessages(options: UseMessagesOptions) {
       if (userRecord) {
         userRecord.id = data?.id || userRecord.id;
         userRecord.created_at = data?.created_at || userRecord.created_at;
-        userRecord.llm_checkpoint_id =
-          data?.llm_checkpoint_id || userRecord.llm_checkpoint_id;
+        userRecord.turn_id =
+          data?.turn_id || userRecord.turn_id;
       }
       return;
     }
@@ -1385,8 +1401,8 @@ export function useMessages(options: UseMessagesOptions) {
       markMessageStarted(botRecord);
       botRecord.id = data?.id || botRecord.id;
       botRecord.created_at = data?.created_at || botRecord.created_at;
-      botRecord.llm_checkpoint_id =
-        data?.llm_checkpoint_id || botRecord.llm_checkpoint_id;
+      botRecord.turn_id =
+        data?.turn_id || botRecord.turn_id;
       if (data?.refs) {
         messageContent(botRecord).refs = data.refs;
       }
