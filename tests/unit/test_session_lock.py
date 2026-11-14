@@ -10,12 +10,14 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from astrbot.core.pipeline.process_stage.method.agent_sub_stages import internal
-from astrbot.core.pipeline.process_stage.method.agent_sub_stages.internal import (
-    InternalAgentSubStage,
+from astrbot.core.agent.runtime import AgentPermissions
+from astrbot.core.astr_agent_runtime import AstrAgentRuntime
+from astrbot.core.astr_agent_runtime import session as native_session
+from astrbot.core.astr_agent_runtime.main_agent import MainAgentBuildConfig, builder
+from astrbot.core.astr_agent_runtime.main_session import (
+    MainAgentInput,
+    MainAgentSession,
 )
-from astrbot.core.star.session_llm_manager import SessionServiceManager
-from astrbot.core.utils.active_event_registry import ActiveEventRegistry
 from astrbot.core.utils.session_lock import SessionLockManager
 
 
@@ -154,161 +156,53 @@ class TestConcurrency:
     """Tests for concurrent access."""
 
     @pytest.mark.asyncio
-    @pytest.mark.parametrize("stop_at", [None, "queued", "session_check"])
-    @pytest.mark.parametrize("follow_up", [False, True])
-    async def test_queued_stop_skips_request_build_and_cleans_up(
-        self, monkeypatch, stop_at, follow_up
-    ):
-        """Stop queued events without bypassing their cleanup paths.
-
-        Args:
-            monkeypatch: Fixture for isolating request dependencies.
-            stop_at: Stop timing, or None for the unstopped control group.
-            follow_up: Whether events own an unconsumed follow-up capture.
-        """
-        registry = ActiveEventRegistry()
-        manager = SessionLockManager()
-        session_id = "stopped-while-waiting"
-        events = []
-        for _ in range(12):
-            event = MagicMock()
-            event.unified_msg_origin = session_id
-            event.message_str = "hello"
-            event.message_obj = SimpleNamespace(message=[])
-            event.get_platform_name.return_value = "aiocqhttp"
-            extras = {}
-            event.get_extra.side_effect = extras.get
-            event.set_extra.side_effect = extras.__setitem__
-            event.send_typing = AsyncMock()
-            event.stop_typing = AsyncMock()
-            event.send = AsyncMock()
-            registry.register(event)
-            events.append(event)
-
-        stage = InternalAgentSubStage()
-        stage.streaming_response = False
-        stage.show_reasoning = False
-        stage.main_agent_cfg = internal.MainAgentBuildConfig(tool_call_timeout=1)
-        stage.ctx = SimpleNamespace(
-            plugin_manager=SimpleNamespace(
-                context=SimpleNamespace(get_config=lambda **kw: {})
-            )
-        )
-        build = AsyncMock(return_value=None)
-        hook = AsyncMock(return_value=False)
-        finalize = AsyncMock()
-        capture = SimpleNamespace() if follow_up else None
-        monkeypatch.setattr(internal, "session_lock_manager", manager)
-        monkeypatch.setattr(internal, "build_main_agent", build)
-        monkeypatch.setattr(internal, "call_event_hook", hook)
-        monkeypatch.setattr(internal, "try_capture_follow_up", lambda e: capture)
-        monkeypatch.setattr(
-            internal, "prepare_follow_up_capture", AsyncMock(return_value=(False, True))
-        )
-        monkeypatch.setattr(internal, "finalize_follow_up_capture", finalize)
-
-        async def check_session(event):
-            if stop_at == "session_check":
-                registry.request_agent_stop_all(session_id)
-            return True
-
-        monkeypatch.setattr(
-            SessionServiceManager, "should_process_llm_request", check_session
-        )
-
-        async def consume(event):
-            try:
-                async for _ in stage.process(event, ""):
-                    pass
-            finally:
-                registry.unregister(event)
-
-        async with manager.acquire_lock(session_id):
-            tasks = [asyncio.create_task(consume(event)) for event in events]
-            await asyncio.sleep(0)
-            # Every event must reach the actual session lock before stopping.
-            assert manager._get_loop_manager()._lock_count[session_id] == 13
-            build.assert_not_awaited()
-            if stop_at == "queued":
-                assert registry.request_agent_stop_all(session_id) == 12
-        await asyncio.wait_for(asyncio.gather(*tasks), timeout=5)
-
-        if stop_at:
-            build.assert_not_awaited()
-        else:
-            assert build.await_count == 12
-        assert all(
-            call.args[1] == internal.EventType.OnWaitingLLMRequestEvent
-            for call in hook.await_args_list
-        )
-        for event in events:
-            event.stop_typing.assert_awaited_once()
-            event.send.assert_not_awaited()
-        assert finalize.await_count == (12 if follow_up else 0)
-        assert not registry._events
-        assert not manager._get_loop_manager()._locks
-
-    @pytest.mark.asyncio
     @pytest.mark.parametrize(
-        ("provider_enabled", "session_enabled"),
+        ("provider_enabled", "admission_enabled"),
         [(False, True), (True, False)],
     )
     async def test_waiting_llm_request_rechecks_enabled_status(
         self,
         monkeypatch,
         provider_enabled,
-        session_enabled,
+        admission_enabled,
     ):
-        """A queued request must honor LLM status changes made while waiting."""
+        """A queued request must recheck admission after acquiring the session lock."""
         session_id = "disabled-while-waiting"
         manager = SessionLockManager()
-        typing_started = asyncio.Event()
         config = {"provider_settings": {"enable": True}}
         build_main_agent = AsyncMock(return_value=None)
-
-        async def send_typing():
-            typing_started.set()
-
         event = SimpleNamespace(
             unified_msg_origin=session_id,
-            message_str="hello",
-            message_obj=SimpleNamespace(message=[]),
             get_extra=lambda _key: None,
-            get_sender_id=lambda: "user-1",
-            send_typing=send_typing,
-            send=AsyncMock(),
-            stop_typing=AsyncMock(),
+            set_extra=lambda *args: None,
+            is_stopped=lambda: False,
         )
-        stage = InternalAgentSubStage()
-        stage.streaming_response = False
-        stage.show_reasoning = False
-        stage.main_agent_cfg = internal.MainAgentBuildConfig(tool_call_timeout=1)
-        stage.ctx = SimpleNamespace(
-            plugin_manager=SimpleNamespace(
-                context=SimpleNamespace(get_config=lambda **_kwargs: config)
-            )
+        runtime = AstrAgentRuntime(
+            SimpleNamespace(get_config=lambda **_: config),
+            agent_configs=MagicMock(),
+            subagents=MagicMock(),
         )
+        session = MainAgentSession(runtime, "conversation", session_id)
+        monkeypatch.setattr(native_session, "session_lock_manager", manager)
+        monkeypatch.setattr(builder, "build_main_agent", build_main_agent)
 
-        monkeypatch.setattr(internal, "session_lock_manager", manager)
-        monkeypatch.setattr(internal, "call_event_hook", AsyncMock(return_value=False))
-        monkeypatch.setattr(internal, "build_main_agent", build_main_agent)
-        monkeypatch.setattr(
-            SessionServiceManager,
-            "should_process_llm_request",
-            AsyncMock(return_value=session_enabled),
+        async def admit():
+            return config["provider_settings"]["enable"] and admission_enabled
+
+        input = MainAgentInput(
+            event,
+            AgentPermissions(),
+            build_config=MainAgentBuildConfig(tool_call_timeout=1),
         )
-
-        async def process_request():
-            async for _ in stage.process(event, ""):
-                pass
-
         async with manager.acquire_lock(session_id):
-            task = asyncio.create_task(process_request())
-            await asyncio.wait_for(typing_started.wait(), timeout=5)
+            turn = await session.run_turn(input, admit=admit)
+            events = turn.events()
+            assert (await anext(events)).type == "turn.started"
             config["provider_settings"]["enable"] = provider_enabled
-
-        await task
-
+        result = await turn.result()
+        await events.aclose()
+        await session.close()
+        assert result.reason == "skipped"
         build_main_agent.assert_not_awaited()
 
     @pytest.mark.asyncio

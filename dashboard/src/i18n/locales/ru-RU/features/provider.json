@@ -31,6 +31,10 @@
             "apiBase": "Адрес System One. К базовому URL автоматически добавляется /systemone; завершите URL символом /, чтобы использовать его без изменений.",
             "model": "ID модели System One, например jev-latest, jev-preview или имя модели, указанное провайдером.",
             "customHeaders": "HTTP-заголовки, добавляемые AstrBot к запросам принятия решений."
+        },
+        "openaiDecisionHints": {
+            "apiBase": "Базовый URL OpenAI API, по умолчанию https://api.openai.com/v1. Если URL не оканчивается на /decisions, этот путь добавляется автоматически.",
+            "model": "OpenAI Decisions сейчас поддерживает gpt-6-luna."
         }
     },
     "availability": {

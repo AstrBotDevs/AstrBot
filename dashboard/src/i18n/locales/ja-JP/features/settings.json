@@ -2,6 +2,10 @@
   "page": {
     "title": "設定"
   },
+  "chatNavigation": {
+    "title": "サイドバーに Chat を表示",
+    "subtitle": "上部の Chat 切り替えをサイドバーの「システム」の上に移動します。クリックするとチャット一覧に切り替わります。このブラウザーにのみ保存されます。"
+  },
   "sections": {
     "general": {
       "title": "一般"

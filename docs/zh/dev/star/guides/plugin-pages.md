@@ -207,7 +207,9 @@ enabled = bool(payload.get("enabled"))
 ```python
 from pathlib import Path
 
-from astrbot.core.utils.astrbot_path import get_astrbot_plugin_data_path
+# AstrBot v4.30.0 之前的导入方式：
+# from astrbot.core.utils.astrbot_path import get_astrbot_plugin_data_path
+from astrbot.api.util import get_astrbot_plugin_data_path
 from astrbot.api.web import PluginUploadFile, error_response, json_response, request
 
 
@@ -332,7 +334,11 @@ const context = await bridge.ready();
   "pageTitle": "Bridge Demo",
   "locale": "zh-CN",
   "i18n": {},
-  "isDark": false
+  "isDark": false,
+  "themeColors": {
+    "primary": "#3c96ca",
+    "secondary": "#2f86bd"
+  }
 }
 ```
 
@@ -630,6 +636,25 @@ body {
 ```
 
 服务端返回 HTML 时会预先注入 `data-theme`，减少初始闪烁。需要在 JavaScript 中响应主题变化时，读取 `bridge.getContext()?.isDark` 并监听 `onContext()`。
+
+### 跟随用户配色
+
+`context.themeColors` 提供当前生效的 `primary`（主色）和 `secondary`（辅助色），值为 CSS 颜色字符串，由 View 自行应用到样式。
+
+通过 `bridge.onContext(handler)` 接收初始配色，以及主题切换、颜色修改和重置后的更新。服务端预注入的初始上下文和旧版 AstrBot 可能没有该字段；缺失时使用 View 的默认配色，不要仅依赖 `ready()` 的首次返回值。
+
+```js
+const bridge = window.AstrBotPluginView;
+
+await bridge.ready();
+const off = bridge.onContext((context) => {
+  const primary = context.themeColors?.primary ?? "#3c96ca";
+  const secondary = context.themeColors?.secondary ?? "#2f86bd";
+  // 将配色应用到视图样式。
+});
+
+// 视图销毁时调用 off() 取消订阅。
+```
 
 ## 静态资源路径
 

@@ -11,13 +11,13 @@ from astrbot.core.agent.handoff import HandoffTool
 from astrbot.core.agent.run_context import ContextWrapper
 from astrbot.core.agent.runners.tool_loop_agent_runner import ToolLoopAgentRunner
 from astrbot.core.agent.tool import FunctionTool
-from astrbot.core.astr_agent_tool_exec import FunctionToolExecutor
+from astrbot.core.astr_agent_runtime.tool_executor import FunctionToolExecutor
+from astrbot.core.astr_agent_runtime.tools.computer_tools.shell import ShellSessionTool
 from astrbot.core.message.components import Image
 from astrbot.core.provider.func_tool_manager import (
     FunctionToolManager,
     _PermissionGuardedTool,
 )
-from astrbot.core.tools.computer_tools.shell import ShellSessionTool
 from astrbot.core.utils.active_event_registry import (
     ActiveEventRegistry,
 )
@@ -50,6 +50,65 @@ def _build_run_context(message_components: list[object] | None = None):
 
 
 @pytest.mark.asyncio
+async def test_legacy_agent_registration_executes_nested_tool(monkeypatch):
+    """An existing plugin can register an Agent and execute its nested tools."""
+    from astrbot.api import agent
+    from astrbot.core.astr_agent_runtime import tool_executor as executor
+    from astrbot.core.star.register import register_agent
+    from astrbot.core.star.register import star_handler as registration
+    from astrbot.core.star.star_manager import PluginManager
+
+    assert agent is register_agent
+    manager = FunctionToolManager()
+    monkeypatch.setattr(registration, "llm_tools", manager)
+    monkeypatch.setattr(executor, "llm_tools", manager)
+
+    @agent(name="legacy_expert", instruction="Use the nested lookup tool.")
+    async def legacy_expert():
+        pass
+
+    @legacy_expert.llm_tool(name="legacy_lookup")
+    async def lookup(event, query: str):
+        """Look up the requested value.
+
+        Args:
+            query(string): Value to look up.
+        """
+        return f"found: {query}"
+
+    handoff = manager.get_func("transfer_to_legacy_expert")
+    assert isinstance(handoff, HandoffTool)
+    nested_tools = list(PluginManager._iter_concrete_llm_tools(handoff))
+    assert [tool.name for tool in nested_tools] == ["legacy_lookup"]
+    assert manager.get_func("legacy_lookup") is None
+
+    event = _DummyEvent()
+
+    async def run_expert(**kwargs):
+        assert kwargs["prompt"] == "example"
+        assert kwargs["system_prompt"] == "Use the nested lookup tool."
+        nested = kwargs["tools"].get_tool("legacy_lookup")
+        assert nested is nested_tools[0]
+        result = await nested.handler(event, query=kwargs["prompt"])
+        return SimpleNamespace(completion_text=result)
+
+    context = SimpleNamespace(
+        get_current_chat_provider_id=AsyncMock(return_value="test-provider"),
+        get_config=lambda **_kwargs: {"provider_settings": {}},
+        get_llm_tool_manager=lambda: manager,
+        tool_loop_agent=run_expert,
+    )
+    run_context = ContextWrapper(context=SimpleNamespace(event=event, context=context))
+    results = [
+        result
+        async for result in FunctionToolExecutor.execute(
+            handoff, run_context, input="example"
+        )
+    ]
+    assert results[0].content[0].text == "found: example"
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize("action", ["poll", "write", "write_line", "interrupt"])
 @pytest.mark.parametrize(
     ("yield_time_ms", "configured_timeout", "expected_timeout"),
@@ -58,7 +117,7 @@ def _build_run_context(message_components: list[object] | None = None):
 async def test_shell_session_wait_fits_inside_tool_timeout(
     monkeypatch, action, yield_time_ms, configured_timeout, expected_timeout
 ):
-    from astrbot.core import astr_agent_tool_exec as tool_exec
+    from astrbot.core.astr_agent_runtime import tool_executor as tool_exec
 
     tool = ShellSessionTool()
     monkeypatch.setattr(tool, "call", AsyncMock(return_value="output"))
@@ -244,7 +303,7 @@ async def test_do_handoff_background_reports_prepared_image_urls(
         classmethod(_fake_execute_handoff),
     )
     run_context = _build_run_context()
-    monkeypatch.setattr("astrbot.core.astr_agent_tool_exec.wake_main_agent", _fake_wake)
+    monkeypatch.setattr("astrbot.core.astr_agent_runtime.tool_executor.wake_main_agent", _fake_wake)
     await FunctionToolExecutor._do_handoff_background(
         tool=_DummyTool(),
         run_context=run_context,
@@ -298,7 +357,7 @@ async def test_execute_handoff_skips_renormalize_when_image_urls_prepared(
     )
 
     monkeypatch.setattr(
-        "astrbot.core.astr_agent_tool_exec.normalize_and_dedupe_strings", _boom
+        "astrbot.core.astr_agent_runtime.tool_executor.normalize_and_dedupe_strings", _boom
     )
 
     results = []
@@ -324,7 +383,7 @@ async def test_collect_handoff_image_urls_keeps_extensionless_existing_event_fil
 
     monkeypatch.setattr(Image, "convert_to_file_path", _fake_convert_to_file_path)
     monkeypatch.setattr(
-        "astrbot.core.astr_agent_tool_exec.get_astrbot_temp_path", lambda: "/tmp"
+        "astrbot.core.astr_agent_runtime.tool_executor.get_astrbot_temp_path", lambda: "/tmp"
     )
     monkeypatch.setattr(
         "astrbot.core.utils.image_ref_utils.os.path.exists", lambda _: True
@@ -348,7 +407,7 @@ async def test_collect_handoff_image_urls_filters_extensionless_missing_event_fi
 
     monkeypatch.setattr(Image, "convert_to_file_path", _fake_convert_to_file_path)
     monkeypatch.setattr(
-        "astrbot.core.astr_agent_tool_exec.get_astrbot_temp_path", lambda: "/tmp"
+        "astrbot.core.astr_agent_runtime.tool_executor.get_astrbot_temp_path", lambda: "/tmp"
     )
     monkeypatch.setattr(
         "astrbot.core.utils.image_ref_utils.os.path.exists", lambda _: False
@@ -421,7 +480,7 @@ async def test_collect_handoff_image_urls_filters_extensionless_file_outside_tem
 
     monkeypatch.setattr(Image, "convert_to_file_path", _fake_convert_to_file_path)
     monkeypatch.setattr(
-        "astrbot.core.astr_agent_tool_exec.get_astrbot_temp_path", lambda: "/tmp"
+        "astrbot.core.astr_agent_runtime.tool_executor.get_astrbot_temp_path", lambda: "/tmp"
     )
     monkeypatch.setattr(
         "astrbot.core.utils.image_ref_utils.os.path.exists", lambda _: True
@@ -445,7 +504,7 @@ async def test_background_execution_lifecycle(
 ):
     registry = ActiveEventRegistry()
     monkeypatch.setattr(
-        "astrbot.core.astr_agent_tool_exec.active_event_registry", registry
+        "astrbot.core.astr_agent_runtime.tool_executor.active_event_registry", registry
     )
     run_context = _build_run_context()
     event = run_context.context.event
@@ -467,7 +526,7 @@ async def test_background_execution_lifecycle(
         delivered.set()
 
     wakeup = AsyncMock(side_effect=wake)
-    monkeypatch.setattr("astrbot.core.astr_agent_tool_exec.wake_main_agent", wakeup)
+    monkeypatch.setattr("astrbot.core.astr_agent_runtime.tool_executor.wake_main_agent", wakeup)
     monkeypatch.setattr(
         FunctionToolExecutor,
         "_execute_local" if kind == "tool" else "_execute_handoff",
@@ -558,3 +617,29 @@ async def test_external_runner_cancel_closes_pending_tool_executor():
             task.cancel()
         await asyncio.gather(task, return_exceptions=True)
         await results.aclose()
+
+
+@pytest.mark.asyncio
+async def test_tool_specific_timeout_survives_permission_wrapper(monkeypatch):
+    from astrbot.core.astr_agent_runtime import tool_executor as executor
+    from astrbot.core.provider.func_tool_manager import FunctionToolManager
+
+    manager = FunctionToolManager()
+    tool = FunctionTool(
+        name="waiting",
+        description="Wait",
+        parameters={},
+        handler=AsyncMock(return_value="done"),
+        execution_timeout=65,
+    )
+    manager.func_list = [tool]
+    context = _build_run_context()
+    context.tool_call_timeout = 1
+    waiting = AsyncMock(wraps=asyncio.wait_for)
+    monkeypatch.setattr(executor.asyncio, "wait_for", waiting)
+    guarded = manager.get_full_tool_set().get_tool("waiting")
+    results = [
+        result async for result in FunctionToolExecutor._execute_local(guarded, context)
+    ]
+    assert results[0].content[0].text == "done"
+    assert waiting.await_args_list[0].kwargs["timeout"] == 65

@@ -8,6 +8,7 @@ These paths use the current default sidebar with a fixed menu order. Extension i
 
 | Previous entry point or name | Current entry point |
 | --- | --- |
+| Welcome / Welcome page | Overview (the `/welcome` URL remains available) |
 | Providers → Add Provider → Agent Runner | Config → Select a profile → AI → `…` beside the AI heading → Change execution mode |
 | Providers → Decision (after Chat Completion) | Providers → Decision (balance-scale icon, between Text to Speech and Embedding) |
 | Data / Dashboard | Data & Logs → Statistics |
@@ -20,7 +21,8 @@ These paths use the current default sidebar with a fixed menu order. Extension i
 | Standalone MCP / Skills entries | Extensions → MCP Servers / Skills |
 | System Settings → General → Cache → Export diagnostics | System Settings → Maintenance → Diagnostics → Export diagnostics |
 | System Settings → Appearance → Customize Sidebar | Removed; the sidebar uses the default menu layout |
-| Custom Rules / Future Tasks / SubAgents | Custom Rules is under the sidebar `System` group; Future Tasks and SubAgents are under the `Extensions` group |
+| Custom Rules / Session Management | Config → Manage session mappings; old links redirect automatically |
+| Future Tasks / SubAgents | Future Tasks remains under Extensions; subagents are under Config → AI → Capabilities → Subagents |
 
 Old log, trace, conversation, and statistics URLs still redirect to the corresponding tabs. Agent runners are now saved in each profile; they are no longer created as model providers. See [Agent Execution Mode](./agent-runner.md) for the setup steps.
 
@@ -100,6 +102,7 @@ To return to the model configured in the selected profile, open the model select
 Select `Config` in the sidebar, then choose the profile to edit from the selector at the top. Sections appear in this order: `AI`, `Platforms & Messages`, `Access Control`, `Plugin`, and `Ext.`. Use the search control at the top to find a setting. The profile selector, search button, and section navigation stay fixed while only the configuration pane on the right scrolls.
 
 - In `AI`, built-in AI settings have `Model`, `Persona`, `Capabilities`, and `Advanced` tabs. Use `… → Change execution mode` beside the AI heading to connect a third-party agent.
+- In `AI → Capabilities`, settings appear in this order: Web Search, Agent Computer Use, Subagents, Knowledge Base, and Proactive Agent.
 - `Access Control` contains administrator IDs and the session whitelist, including whitelist logs and administrator exemptions.
 - `Platforms & Messages` contains message-trigger, session-isolation, and delivery settings.
 - `Plugin` selects the plugins enabled for this profile. To edit an individual plugin's parameters, open `Extensions` and click that plugin's gear icon (`Extension Config`).
@@ -261,3 +264,5 @@ Modify the `password` in the `dashboard` configuration in the data/cmd_config.js
 
 > [!TIP]
 > For more details, see [FAQ - Forgot Dashboard Password](/en/faq.md#forgot-dashboard-password).
+
+Subagent management is removed from the sidebar and opened through `Configuration → AI → Capabilities → Subagents → Configure Specialized Agents`; it opens in a dialog, while the previous `/subagent` URL remains accessible. Enabling subagents immediately allows generic workers. Configuring and selecting specialized agents is optional.

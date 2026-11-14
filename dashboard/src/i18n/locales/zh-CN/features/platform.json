@@ -16,21 +16,22 @@
     "configDescription": "配置机器人与消息平台的连接方式。",
     "routes": {
       "title": "会话配置",
-      "description": "让不同会话使用不同的配置文件。没有单独绑定的会话会使用下方的默认配置。",
+      "description": "为会话指定基础配置文件，并查看已有覆盖项。",
       "loadFailed": "会话配置加载失败。接入设置仍可编辑，但本次不会修改会话配置。",
       "defaultTitle": "此机器人的默认配置",
       "defaultDescription": "所有没有单独设置的会话都会使用它。",
       "systemDefault": "系统默认配置（default）",
       "bindTitle": "为特定会话选择配置",
       "bindDescription": "先选择一个已有会话，再指定它要使用的配置文件。",
+      "configureOverrides": "需要为会话单独配置？",
       "sessionLabel": "选择会话",
       "configLabel": "配置文件",
       "bind": "添加绑定",
       "noSessions": "暂无会话。请先在对应的消息平台与这个机器人产生一次对话。",
-      "boundTitle": "已绑定的会话",
+      "boundTitle": "已配置的会话",
       "boundCount": "{count} 个",
       "remove": "移除绑定",
-      "noBindings": "暂未单独绑定会话，所有会话将使用默认配置。",
+      "noBindings": "暂无专属映射。",
       "advanced": "高级路由规则",
       "advancedDescription": "使用 UMO pattern 批量匹配会话。规则按从上到下的顺序匹配，适合熟悉 AstrBot 会话来源格式的用户。",
       "patternLabel": "UMO pattern",
@@ -38,13 +39,17 @@
       "addPattern": "添加规则",
       "patternRequired": "请输入 UMO pattern",
       "patternInvalid": "格式应为 平台:消息类型:会话 ID",
+      "useSessionBinding": "完整会话请使用上方的会话配置选择器。",
       "patternPlatformMismatch": "规则的平台部分必须是当前机器人的 ID",
       "duplicatePattern": "存在重复的配置路由，请检查后重试。",
       "sessionTypes": {
         "group": "群聊",
         "friend": "私聊",
         "other": "会话"
-      }
+      },
+      "followRouting": "跟随配置路由",
+      "overrideCount": "{count} 项覆盖",
+      "deleteMapping": "删除映射（包含覆盖项）"
     }
   },
   "viewWebhook": "查看 Webhook 链接",
@@ -263,9 +268,8 @@
     "hint": "仅清理此机器人的数据，所选数据不可恢复。",
     "failed": "删除未完成，部分所选数据可能已清理。请重试或查看日志。",
     "options": {
-      "custom_rules": "自定义规则",
+      "config_mappings": "会话配置映射",
       "preferences": "偏好设置",
-      "routing": "配置路由",
       "cron_jobs": "未来任务",
       "conversations": "AI 对话数据",
       "message_history": "消息历史记录",
@@ -273,9 +277,8 @@
       "stats": "使用统计"
     },
     "descriptions": {
-      "custom_rules": "此机器人各会话的服务开关、人格、模型、插件和知识库规则。",
+      "config_mappings": "此机器人的会话配置文件绑定、覆盖项及配置路由（原自定义规则与配置路由）。",
       "preferences": "机器人各会话保存的所选模型提供商等偏好信息。",
-      "routing": "此机器人的配置文件绑定与专属路由规则。",
       "cron_jobs": "发送到此机器人会话的未来任务，包含正在执行的任务。",
       "conversations": "AI 使用的对话上下文、标题、人格绑定和对话 token 记录。",
       "message_history": "平台收发消息，以及会话名称、别名和发送者名称。",

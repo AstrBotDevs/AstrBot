@@ -17,7 +17,9 @@ class ActiveEventRegistry:
 
     def __init__(self) -> None:
         self._events: dict[str, set[AstrMessageEvent]] = defaultdict(set)
-        self._agent_stop_callbacks: dict[AstrMessageEvent, Callable[[], None]] = {}
+        self._agent_stop_callbacks: dict[AstrMessageEvent, set[Callable[[], None]]] = (
+            defaultdict(set)
+        )
         self._background_tasks: dict[
             str, dict[asyncio.Task[None], AstrMessageEvent]
         ] = defaultdict(dict)
@@ -38,21 +40,30 @@ class ActiveEventRegistry:
         event: AstrMessageEvent,
         callback: Callable[[], None],
     ) -> None:
-        """Register immediate Agent cancellation for an active event.
+        """Register one execution's stop request with its owning event.
 
         Args:
             event: Event that owns the active Agent execution.
             callback: Callback that requests cancellation of the active execution.
         """
-        self._agent_stop_callbacks[event] = callback
+        self._agent_stop_callbacks[event].add(callback)
+        if self.get_background_stop_signal(event).is_set():
+            callback()
 
-    def unregister_agent_stop_callback(self, event: AstrMessageEvent) -> None:
+    def unregister_agent_stop_callback(
+        self, event: AstrMessageEvent, callback: Callable[[], None]
+    ) -> None:
         """Remove the Agent cancellation callback for an event.
 
         Args:
             event: Event whose active Agent execution has finished.
+            callback: Stop request registered for that execution.
         """
-        self._agent_stop_callbacks.pop(event, None)
+        callbacks = self._agent_stop_callbacks.get(event)
+        if callbacks is not None:
+            callbacks.discard(callback)
+            if not callbacks:
+                del self._agent_stop_callbacks[event]
 
     def get_background_stop_signal(self, event: AstrMessageEvent) -> asyncio.Event:
         """Return the shared stop signal for an event's background execution.
@@ -107,6 +118,15 @@ class ActiveEventRegistry:
 
         task.add_done_callback(remove_task)
         if self.get_background_stop_signal(event).is_set():
+            self.cancel_background_task(task)
+
+    def cancel_background_task(self, task: asyncio.Task) -> None:
+        """Cancel a task once, so repeated stops do not interrupt its cleanup.
+
+        Args:
+            task: Background task owned by an event in this registry.
+        """
+        if not task.done() and task not in self._background_cancel_requested:
             self._background_cancel_requested.add(task)
             task.cancel()
 
@@ -115,25 +135,16 @@ class ActiveEventRegistry:
         umo: str,
         exclude: AstrMessageEvent | None = None,
     ) -> int:
-        """Stop a session's active events and their background tasks.
+        """终止指定 UMO 的所有活跃事件及其后台任务。
 
         Args:
-            umo: Unified message origin identifying the session.
-            exclude: Event to exclude, usually the command event itself.
+            umo: 统一消息来源标识符。
+            exclude: 需要排除的事件（通常是发起 reset 的事件本身）。
 
         Returns:
-            Number of events newly marked for Agent stop by this call.
+            被终止的事件数量。
         """
-        events = set(self._events.get(umo, []))
-        events.update(
-            event
-            for task, event in self._background_tasks.get(umo, {}).items()
-            if not task.done()
-        )
-        for event in events:
-            if event is not exclude:
-                event.stop_event()
-        return self.request_agent_stop_all(umo, exclude)
+        return self._request_stop(umo, exclude, stop_event=True)
 
     async def stop_platform(self, platform_id: str) -> None:
         """Stop and drain background executions owned by an adapter.
@@ -142,7 +153,8 @@ class ActiveEventRegistry:
             platform_id: Exact adapter instance whose data is being removed.
         """
         tasks = []
-        for umo in set(self._events) | set(self._background_tasks):
+        registered = {event.unified_msg_origin for event in self._agent_stop_callbacks}
+        for umo in set(self._events) | set(self._background_tasks) | registered:
             if umo.partition(":")[0] == platform_id:
                 tasks.extend(self._background_tasks.get(umo, {}))
                 self.stop_all(umo)
@@ -153,43 +165,55 @@ class ActiveEventRegistry:
         umo: str,
         exclude: AstrMessageEvent | None = None,
     ) -> int:
-        """Request Agent cancellation for a session's active events.
-
-        Event propagation continues so cleanup and history saving can finish.
-        Events remain registered until their owners finish processing them.
+        """Request each execution's own stop behavior and cancel background work.
 
         Args:
-            umo: Unified message origin identifying the session.
-            exclude: Event to exclude from the stop request.
+            umo: Unified message origin of the work to stop.
+            exclude: Event that requested the stop and should continue.
 
         Returns:
-            Number of events newly marked for Agent stop by this call.
-            Events already stopping or aborted are not counted while exiting.
+            Number of events newly marked for stop; already stopping events are excluded.
+        """
+        return self._request_stop(umo, exclude, stop_event=False)
+
+    def _request_stop(
+        self, umo: str, exclude: AstrMessageEvent | None, *, stop_event: bool
+    ) -> int:
+        """Signal each matching event before requesting execution cleanup.
+
+        Args:
+            umo: Unified message origin to stop.
+            exclude: Event that should continue.
+            stop_event: Whether to also terminate event propagation.
+
+        Returns:
+            Number of events newly marked for stop; already stopping events are excluded.
         """
         tasks = self._background_tasks.get(umo, {})
         events = set(self._events.get(umo, []))
         events.update(event for task, event in tasks.items() if not task.done())
+        events.update(
+            event
+            for event in self._agent_stop_callbacks
+            if event.unified_msg_origin == umo
+        )
+        if exclude is not None:
+            events.discard(exclude)
         count = 0
         for event in events:
-            if event is not exclude:
-                if not event.get_extra("agent_stop_requested") and not event.get_extra(
-                    "agent_user_aborted"
-                ):
-                    count += 1
-                event.set_extra("agent_stop_requested", True)
-                self.get_background_stop_signal(event).set()
-                callback = self._agent_stop_callbacks.get(event)
-                if callback:
-                    callback()
-        for task, event in list(tasks.items()):
-            if (
-                event is not exclude
-                and not task.done()
-                and task not in self._background_cancel_requested
+            if not event.get_extra("agent_stop_requested") and not event.get_extra(
+                "agent_user_aborted"
             ):
-                # 重复停止请求不能打断任务正在执行的取消清理。
-                self._background_cancel_requested.add(task)
-                task.cancel()
+                count += 1
+            if stop_event:
+                event.stop_event()
+            event.set_extra("agent_stop_requested", True)
+            self.get_background_stop_signal(event).set()
+            for callback in tuple(self._agent_stop_callbacks.get(event, ())):
+                callback()
+        for task, event in list(tasks.items()):
+            if event is not exclude:
+                self.cancel_background_task(task)
         return count
 
 
