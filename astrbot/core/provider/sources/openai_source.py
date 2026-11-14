@@ -39,6 +39,10 @@ from astrbot.core.utils.network_utils import (
     log_connection_failure,
 )
 from astrbot.core.utils.string_utils import normalize_and_dedupe_strings
+from astrbot.core.utils.tool_protocol import (
+    ToolMessageProtocolError,
+    validate_tool_message_sequence,
+)
 
 from ..headers import build_conversation_headers
 from ..register import register_provider_adapter
@@ -506,15 +510,19 @@ class ProviderOpenAIOfficial(Provider):
                 continue
             role = msg.get("role")
             if role == "assistant" and msg.get("tool_calls"):
+                calls = msg["tool_calls"]
                 pending_tool_call_ids = {
                     tc["id"]
-                    for tc in msg["tool_calls"]
-                    if isinstance(tc, dict) and "id" in tc
+                    for tc in (calls if isinstance(calls, list) else [])
+                    if isinstance(tc, dict) and isinstance(tc.get("id"), str)
                 }
                 final.append(msg)
             elif role == "tool":
                 tool_call_id = msg.get("tool_call_id")
-                if tool_call_id in pending_tool_call_ids:
+                if (
+                    isinstance(tool_call_id, str)
+                    and tool_call_id in pending_tool_call_ids
+                ):
                     final.append(msg)
                     pending_tool_call_ids.remove(tool_call_id)
                 else:
@@ -566,6 +574,13 @@ class ProviderOpenAIOfficial(Provider):
         model = payloads.get("model", "").lower()
 
         self._sanitize_assistant_messages(payloads)
+
+        # The SDK merges extra_body last, including an explicit messages=None.
+        validate_tool_message_sequence(
+            extra_body["messages"]
+            if "messages" in extra_body
+            else payloads.get("messages")
+        )
 
         completion = await retry_provider_request(
             "OpenAI",
@@ -626,6 +641,12 @@ class ProviderOpenAIOfficial(Provider):
         self._apply_provider_specific_request_overrides(payloads, extra_body)
 
         self._sanitize_assistant_messages(payloads)
+
+        validate_tool_message_sequence(
+            extra_body["messages"]
+            if "messages" in extra_body
+            else payloads.get("messages")
+        )
 
         stream = await retry_provider_request(
             "OpenAI",
@@ -1088,6 +1109,8 @@ class ProviderOpenAIOfficial(Provider):
         image_fallback_used: bool = False,
     ) -> tuple:
         """处理API错误并尝试恢复"""
+        if isinstance(e, ToolMessageProtocolError):
+            raise e
         if "429" in str(e):
             logger.warning(
                 f"API 调用过于频繁，尝试使用其他 Key 重试。当前 Key: {chosen_key[:12]}",
