@@ -5,7 +5,8 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 import pytest_asyncio
 
-from astrbot.core.astr_main_agent import _process_quote_message, collect_initial_request
+from astrbot.core.agent_media import append_quoted_content
+from astrbot.core.astr_agent_runtime.main_agent.request import collect_initial_request
 from astrbot.core.message.components import Reply
 from astrbot.core.pipeline.process_stage.method.agent_sub_stages import third_party
 from astrbot.core.pipeline.waking_check import stage as waking
@@ -26,6 +27,7 @@ def lark_message():
     adapter = LarkPlatformAdapter.__new__(LarkPlatformAdapter)
     adapter.config = {"id": "lark-test"}
     adapter.bot_open_id, adapter.bot_name = "ou_bot", "AstrBot"
+    adapter._user_name_cache = {}
     adapter.commit_event = MagicMock()
     parent = SimpleNamespace(
         message_id="parent-1",
@@ -40,6 +42,18 @@ def lark_message():
         ],
     )
     adapter.lark_api = MagicMock()
+    adapter.lark_api._astrbot_group_info_cache = None
+    adapter.lark_api.contact.v3.user.aget = AsyncMock(
+        return_value=SimpleNamespace(
+            success=lambda: True,
+            data=SimpleNamespace(user=SimpleNamespace(name="Sender")),
+        )
+    )
+    adapter.lark_api.im.v1.chat.aget = AsyncMock(
+        return_value=SimpleNamespace(
+            success=lambda: False, data=None, code=403, msg="permission denied"
+        )
+    )
     adapter.lark_api.im.v1.message.aget = AsyncMock(
         return_value=SimpleNamespace(
             success=lambda: True, data=SimpleNamespace(items=[parent])
@@ -47,6 +61,7 @@ def lark_message():
     )
     event = MagicMock()
     event.event.sender.sender_id.open_id = "ou_sender"
+    event.event.sender.sender_type = "user"
     event.event.message = SimpleNamespace(
         create_time="1700000000000",
         chat_type="group",
@@ -82,16 +97,14 @@ async def waking_stage(monkeypatch):
             db_helper=MagicMock(),
         )
     )
+    stage.ctx.plugin_manager = SimpleNamespace(
+        context=SimpleNamespace(get_config=lambda **_: stage.ctx.astrbot_config)
+    )
     stage._umo_auto_name_recorder = MagicMock()
     monkeypatch.setattr(
         waking.star_handlers_registry,
         "get_handlers_by_event_type",
         lambda *args, **kwargs: [],
-    )
-    monkeypatch.setattr(
-        waking.SessionPluginManager,
-        "filter_handlers_by_session",
-        AsyncMock(return_value=[]),
     )
     return stage
 
@@ -162,7 +175,7 @@ async def test_lark_post_preserves_formatting(
         reply = message.message[0]
         assert type(reply) is Reply
         request = ProviderRequest()
-        await _process_quote_message(parsed_event, request, "", MagicMock())
+        await append_quoted_content(parsed_event, request, "", MagicMock())
         assert request.extra_user_content_parts[0].text == (
             f"<Quoted Message>\n({reply.sender_nickname}): {expected}\n</Quoted Message>"
         )
@@ -175,7 +188,7 @@ async def test_lark_post_preserves_formatting(
         waking_stage.ctx.astrbot_config["wake_prefix"] = [wake_prefix]
         main_agent_build_config.provider_wake_prefix = provider_prefix
         monkeypatch.setattr(
-            "astrbot.core.astr_main_agent._get_session_conv",
+            "astrbot.core.astr_agent_runtime.main_agent.request._get_session_conv",
             AsyncMock(return_value=SimpleNamespace(history="[]")),
         )
         await waking_stage.process(parsed_event)
@@ -189,6 +202,7 @@ async def test_lark_post_preserves_formatting(
         )
         assert request.prompt == expected_prompt
         third_party_stage = third_party.ThirdPartyAgentSubStage()
+        third_party_stage.ctx = MagicMock()
         third_party_stage._resolve_persona_custom_error_message = AsyncMock(
             return_value=None
         )

@@ -3,6 +3,7 @@ from io import BytesIO
 from types import SimpleNamespace
 
 import pytest
+import pytest_asyncio
 
 from astrbot.core.message.components import Image, Plain, Reply
 from astrbot.core.pipeline.preprocess_stage import stage as preprocess_stage
@@ -15,6 +16,7 @@ class FakeEvent:
     def __init__(self, message):
         self.message_obj = SimpleNamespace(message=message, message_str="")
         self.message_str = ""
+        self.unified_msg_origin = "test:FriendMessage:media"
         self.is_at_or_wake_command = False
         self.temporary_local_files: list[str] = []
         self._temporary_local_files = self.temporary_local_files
@@ -29,9 +31,21 @@ class FakeEvent:
     untrack_temporary_local_file = AstrMessageEvent.untrack_temporary_local_file
 
 
+@pytest_asyncio.fixture
+async def stage():
+    """Initialize preprocessing with the same session configuration API as production."""
+    config = {"provider_stt_settings": {"enable": False}}
+    stage = PreProcessStage()
+    await stage.initialize(SimpleNamespace(
+        astrbot_config=config,
+        plugin_manager=SimpleNamespace(context=SimpleNamespace(get_config=lambda **_: config)),
+    ))
+    return stage
+
+
 @pytest.mark.asyncio
 async def test_preprocess_preserves_image_formats_without_tracking_temp_files(
-    tmp_path, monkeypatch
+    tmp_path, monkeypatch, stage
 ):
     from PIL import Image as PILImage
 
@@ -78,11 +92,6 @@ async def test_preprocess_preserves_image_formats_without_tracking_temp_files(
             ),
         ]
     )
-    stage = PreProcessStage()
-    stage.config = {}
-    stage.platform_settings = {}
-    stage.stt_settings = {"enable": False}
-
     await stage.process(event)
 
     main_image = event.get_messages()[0]
@@ -110,7 +119,7 @@ async def test_preprocess_preserves_image_formats_without_tracking_temp_files(
 )
 @pytest.mark.parametrize("pretracked", [False, True])
 async def test_preprocess_image_cleanup_preserves_usable_file(
-    tmp_path, monkeypatch, quoted, source_kind, pretracked
+    tmp_path, monkeypatch, quoted, source_kind, pretracked, stage
 ):
     from pathlib import Path
 
@@ -131,10 +140,6 @@ async def test_preprocess_image_cleanup_preserves_usable_file(
     original = source_path.read_bytes()
     if pretracked:
         event.track_temporary_local_file(str(source_path))
-    stage = PreProcessStage()
-    stage.config = {}
-    stage.platform_settings = {}
-    stage.stt_settings = {"enable": False}
 
     await stage.process(event)
 
@@ -153,7 +158,7 @@ async def test_preprocess_image_cleanup_preserves_usable_file(
 @pytest.mark.asyncio
 @pytest.mark.parametrize("quoted", [False, True])
 async def test_preprocess_image_cleanup_removes_invalid_materialized_file(
-    tmp_path, monkeypatch, quoted
+    tmp_path, monkeypatch, quoted, stage
 ):
     monkeypatch.setattr(media_utils, "get_astrbot_temp_path", lambda: str(tmp_path))
     monkeypatch.setattr(
@@ -162,10 +167,6 @@ async def test_preprocess_image_cleanup_removes_invalid_materialized_file(
     reference = "data:image/png;base64," + base64.b64encode(b"not an image").decode()
     image = Image(file=reference)
     event = FakeEvent([Reply(id="reply-1", chain=[image])] if quoted else [image])
-    stage = PreProcessStage()
-    stage.config = {}
-    stage.platform_settings = {}
-    stage.stt_settings = {"enable": False}
 
     await stage.process(event)
 
@@ -180,7 +181,7 @@ async def test_preprocess_image_cleanup_removes_invalid_materialized_file(
 
 
 @pytest.mark.asyncio
-async def test_preprocess_path_mapping_accepts_file_uri(tmp_path):
+async def test_preprocess_path_mapping_accepts_file_uri(tmp_path, stage):
     from PIL import Image as PILImage
 
     source_root = tmp_path / "source"
@@ -191,10 +192,7 @@ async def test_preprocess_path_mapping_accepts_file_uri(tmp_path):
     target_image = target_root / "photo.jpg"
     PILImage.new("RGB", (2, 2), (255, 0, 0)).save(target_image)
     event = FakeEvent([Image(file="", url=source_image.as_uri())])
-    stage = PreProcessStage()
-    stage.config = {}
     stage.platform_settings = {"path_mapping": [f"{source_root}:{target_root}"]}
-    stage.stt_settings = {"enable": False}
 
     await stage.process(event)
 
@@ -205,7 +203,7 @@ async def test_preprocess_path_mapping_accepts_file_uri(tmp_path):
 
 @pytest.mark.asyncio
 async def test_preprocess_path_mapping_accepts_windows_source_to_posix_target(
-    tmp_path,
+    tmp_path, stage,
 ):
     from PIL import Image as PILImage
 
@@ -216,10 +214,7 @@ async def test_preprocess_path_mapping_accepts_windows_source_to_posix_target(
 
     source_prefix = r"C:\remote\media"
     event = FakeEvent([Image(file="", url=f"{source_prefix}/photo.jpg")])
-    stage = PreProcessStage()
-    stage.config = {}
     stage.platform_settings = {"path_mapping": [f"{source_prefix}:{target_root}"]}
-    stage.stt_settings = {"enable": False}
 
     await stage.process(event)
 

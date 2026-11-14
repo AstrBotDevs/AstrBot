@@ -6,12 +6,14 @@
 from sqlmodel import SQLModel
 
 from astrbot.core.db.po import (
+    AgentConfigRecord,
     ApiKey,
     Attachment,
     ChatUIProject,
     CommandConfig,
     CommandConflict,
-    ConversationV2,
+    ConversationEvent,
+    ConversationV3,
     CronJob,
     DashboardTrustedDevice,
     Persona,
@@ -23,6 +25,7 @@ from astrbot.core.db.po import (
     ProviderStat,
     SessionProjectRelation,
     UmoAlias,
+    UmoSender,
     WebChatThread,
 )
 from astrbot.core.knowledge_base.models import (
@@ -47,8 +50,10 @@ from astrbot.core.utils.astrbot_path import (
 # 主数据库模型类映射
 MAIN_DB_MODELS: dict[str, type[SQLModel]] = {
     "platform_stats": PlatformStat,
+    "conversations_v3": ConversationV3,
+    "conversation_events": ConversationEvent,
     "provider_stats": ProviderStat,
-    "conversations": ConversationV2,
+    "agent_configs": AgentConfigRecord,
     "cron_jobs": CronJob,
     "personas": Persona,
     "persona_folders": PersonaFolder,
@@ -62,6 +67,7 @@ MAIN_DB_MODELS: dict[str, type[SQLModel]] = {
     "command_configs": CommandConfig,
     "command_conflicts": CommandConflict,
     "umo_aliases": UmoAlias,
+    "umo_senders": UmoSender,
     "api_keys": ApiKey,
 }
 

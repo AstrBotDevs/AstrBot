@@ -21,6 +21,7 @@ from astrbot.core.pipeline.scheduler import PipelineScheduler
 from astrbot.core.platform.message_type import MessageType
 
 from .platform import AstrMessageEvent
+from .utils.active_event_registry import active_event_registry
 
 UNIQUE_SESSION_ID_BUILDERS: dict[str, Callable[[AstrMessageEvent], str | None]] = {
     "aiocqhttp": lambda e: f"{e.get_sender_id()}_{e.get_group_id()}",
@@ -48,16 +49,18 @@ class EventBus:
         self.pipeline_scheduler_mapping = pipeline_scheduler_mapping
         self.astrbot_config_mgr = astrbot_config_mgr
         # 持有正在执行的 pipeline 任务的强引用, 防止 task 在 pending 状态被 GC 回收
-        self._pending_tasks: set[asyncio.Task] = set()
+        self._pending_tasks: dict[asyncio.Task, AstrMessageEvent] = {}
+        self.stopped_platforms: set[str] = set()
 
     async def dispatch(self) -> None:
         while True:
             event: AstrMessageEvent = await self.event_queue.get()
-            conf_info = self.astrbot_config_mgr.get_conf_info(event.unified_msg_origin)
+            if event.get_platform_id() in self.stopped_platforms:
+                event.trace.record("pipeline_end", status="cancelled")
+                continue
+            original_umo = event.unified_msg_origin
+            conf_info = self.astrbot_config_mgr.get_conf_info(original_umo)
             conf_id = conf_info["id"]
-            conf_name = conf_info.get("name") or conf_id
-            with event.trace.context():
-                self._print_event(event, conf_name)
             scheduler = self.pipeline_scheduler_mapping.get(conf_id)
             if not scheduler:
                 logger.error(
@@ -65,9 +68,52 @@ class EventBus:
                 )
                 continue
             self._apply_session_isolation(event, scheduler.ctx.astrbot_config)
+            if event.unified_msg_origin != original_umo:
+                # Isolation changes the routing key. Match the scheduler to the
+                # same final UMO used by providers and other configuration readers.
+                conf_info = self.astrbot_config_mgr.get_conf_info(
+                    event.unified_msg_origin
+                )
+                conf_id = conf_info["id"]
+                scheduler = self.pipeline_scheduler_mapping.get(conf_id)
+                if not scheduler:
+                    logger.error(
+                        f"PipelineScheduler not found for id: {conf_id}, event ignored."
+                    )
+                    continue
+            conf_name = conf_info.get("name") or conf_id
+            with event.trace.context():
+                self._print_event(event, conf_name)
             task = asyncio.create_task(scheduler.execute(event))
-            self._pending_tasks.add(task)
+            self._pending_tasks[task] = event
             task.add_done_callback(self._on_task_done)
+
+    async def stop_platform(self, platform_id: str) -> None:
+        """Block queued messages and drain an adapter's active executions.
+
+        Args:
+            platform_id: Exact adapter instance being deleted.
+        """
+        self.stopped_platforms.add(platform_id)
+        retained = []
+        while not self.event_queue.empty():
+            event = self.event_queue.get_nowait()
+            if event.get_platform_id() == platform_id:
+                event.trace.record("pipeline_end", status="cancelled")
+            else:
+                retained.append(event)
+        for event in retained:
+            self.event_queue.put_nowait(event)
+        tasks = [
+            task
+            for task, event in self._pending_tasks.items()
+            if event.get_platform_id() == platform_id
+        ]
+        for task in tasks:
+            if not task.done():
+                task.cancel()
+        await asyncio.gather(*tasks, return_exceptions=True)
+        await active_event_registry.stop_platform(platform_id)
 
     def _apply_session_isolation(
         self,
@@ -80,6 +126,8 @@ class EventBus:
             event: Incoming event whose original UMO was used to select a profile.
             config: Selected profile's configuration controlling session isolation.
         """
+        if event.get_extra("_session_resolved") is True:
+            return
         event.set_extra("_session_isolated", False)
         platform_settings = config.get("platform_settings", {})
         if platform_settings.get("unique_session", False) and (
@@ -93,7 +141,7 @@ class EventBus:
 
     def _on_task_done(self, task: asyncio.Task) -> None:
         """pipeline 任务结束回调: 移除强引用并暴露未捕获的异常"""
-        self._pending_tasks.discard(task)
+        self._pending_tasks.pop(task, None)
         if task.cancelled():
             return
         exc = task.exception()
@@ -108,7 +156,9 @@ class EventBus:
 
         """
         log_extra = {
-            "category": "user_chat",
+            "category": "user_chat"
+            if event.event_kind == "message"
+            else event.event_kind,
             "platform_id": event.get_platform_id(),
             "platform_type": event.get_platform_name(),
         }

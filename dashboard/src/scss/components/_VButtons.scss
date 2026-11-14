@@ -16,6 +16,7 @@
 .v-btn {
   text-transform: capitalize;
   letter-spacing: $btn-letter-spacing;
+  border-radius: var(--astrbot-radius-control);
 }
 .v-btn--icon.v-btn--density-default {
   width: calc(var(--v-btn-height) + 6px);

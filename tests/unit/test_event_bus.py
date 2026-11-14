@@ -69,6 +69,50 @@ class TestEventBusInit:
         assert bus.astrbot_config_mgr == mock_config_manager
 
 
+@pytest.mark.asyncio
+async def test_stop_platform_drains_only_owned_messages(event_bus, monkeypatch):
+    """Drop queued messages and finish cancellation before database cleanup."""
+    registry = ActiveEventRegistry()
+    monkeypatch.setattr("astrbot.core.event_bus.active_event_registry", registry)
+    owned, other = MagicMock(), MagicMock()
+    owned.get_platform_id.return_value = "bot"
+    owned.unified_msg_origin = "bot:GroupMessage:1"
+    owned.get_extra.return_value = None
+    other.get_platform_id.return_value = "bot-other"
+    cleaned = asyncio.Event()
+    started = asyncio.Event()
+
+    async def run():
+        try:
+            started.set()
+            await asyncio.Event().wait()
+        finally:
+            await asyncio.sleep(0)
+            cleaned.set()
+
+    foreground = asyncio.create_task(run())
+    background = asyncio.create_task(asyncio.Event().wait())
+    unrelated = asyncio.create_task(asyncio.Event().wait())
+    registry.register_background_task(owned, background)
+    event_bus._pending_tasks = {foreground: owned, unrelated: other}
+    event_bus.event_queue.put_nowait(owned)
+    event_bus.event_queue.put_nowait(other)
+    await asyncio.wait_for(started.wait(), 1)
+    try:
+        await asyncio.wait_for(event_bus.stop_platform("bot"), 1)
+        assert foreground.cancelled() and background.cancelled()
+        assert cleaned.is_set()
+        assert not unrelated.done()
+        assert event_bus.event_queue.get_nowait() is other
+        assert event_bus.event_queue.empty()
+        owned.trace.record.assert_called_once_with("pipeline_end", status="cancelled")
+        assert event_bus.stopped_platforms == {"bot"}
+    finally:
+        for task in (foreground, background, unrelated):
+            task.cancel()
+        await asyncio.gather(foreground, background, unrelated, return_exceptions=True)
+
+
 class TestEventBusDispatch:
     """Tests for EventBus dispatch method."""
 
@@ -244,7 +288,13 @@ class TestEventBusDispatch:
         ("slack", MessageType.GROUP_MESSAGE, True, "group", "alice_group"),
         ("dingtalk", MessageType.GROUP_MESSAGE, True, "group", "alice"),
         ("qq_official", MessageType.GROUP_MESSAGE, True, "group", "alice_group"),
-        ("qq_official_webhook", MessageType.GROUP_MESSAGE, True, "group", "alice_group"),
+        (
+            "qq_official_webhook",
+            MessageType.GROUP_MESSAGE,
+            True,
+            "group",
+            "alice_group",
+        ),
         ("lark", MessageType.GROUP_MESSAGE, True, "group", "alice%group"),
         ("misskey", MessageType.GROUP_MESSAGE, True, "group", "group_alice"),
         ("matrix", MessageType.GROUP_MESSAGE, True, "group", "alice_group"),
@@ -289,6 +339,12 @@ async def test_session_isolation_precedes_registration(
     ctx = SimpleNamespace(
         astrbot_config=config,
         astrbot_config_id="test-conf-id",
+        plugin_manager=SimpleNamespace(
+            context=SimpleNamespace(
+                get_config=lambda **_: config,
+                astrbot_config_mgr=SimpleNamespace(_create_message_config=lambda _: (config, frozenset())),
+            )
+        ),
         db_helper=None,
     )
     scheduler = PipelineScheduler(ctx)
@@ -300,7 +356,9 @@ async def test_session_isolation_precedes_registration(
         lambda *_args, **_kwargs: [],
     )
     registry = ActiveEventRegistry()
-    monkeypatch.setattr("astrbot.core.platform.astr_message_event.active_event_registry", registry)
+    monkeypatch.setattr(
+        "astrbot.core.platform.astr_message_event.active_event_registry", registry
+    )
     started = asyncio.Event()
     release = asyncio.Event()
 
@@ -339,7 +397,7 @@ async def test_session_isolation_precedes_registration(
         Returns:
             The selected configuration profile metadata.
         """
-        assert umo == original_umo == event.unified_msg_origin
+        assert umo == event.unified_msg_origin
         return {"id": "test-conf-id"}
 
     mock_config_manager.get_conf_info.side_effect = select_config
@@ -367,7 +425,6 @@ async def test_session_isolation_precedes_registration(
         else:
             assert result == [None]
         assert registry._events == {}
-        mock_config_manager.get_conf_info.assert_called_once_with(original_umo)
     finally:
         release.set()
         dispatch.cancel()

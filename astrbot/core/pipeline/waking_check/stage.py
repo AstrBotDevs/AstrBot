@@ -1,12 +1,17 @@
 from collections.abc import AsyncGenerator
 
 from astrbot import logger
-from astrbot.core.message.components import At, AtAll, Reply
+from astrbot.core.message.components import At, AtAll, ButtonInteraction, Reply
 from astrbot.core.message.message_event_result import MessageChain, MessageEventResult
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
+from astrbot.core.platform.button_interaction import (
+    BUTTON_ACTION_EXPIRED_MESSAGE,
+    ButtonActionExpiredError,
+    decode_button_callback,
+)
+from astrbot.core.star.filter.button_action import ButtonActionFilter
 from astrbot.core.star.filter.command_group import CommandGroupFilter
 from astrbot.core.star.filter.permission import PermissionTypeFilter
-from astrbot.core.star.session_plugin_manager import SessionPluginManager
 from astrbot.core.star.star import star_map
 from astrbot.core.star.star_handler import EventType, star_handlers_registry
 from astrbot.core.utils.session_waiter import FILTERS, USER_SESSIONS
@@ -72,6 +77,18 @@ class WakingCheckStage(Stage):
             event.stop_event()
             return
 
+        interaction = event.get_button_interaction()
+        if isinstance(interaction, ButtonInteraction) and interaction.callback_data:
+            try:
+                decode_button_callback(interaction.callback_data)
+            except ButtonActionExpiredError:
+                event.stop_event()
+                await event.send(MessageChain().message(BUTTON_ACTION_EXPIRED_MESSAGE))
+                return
+            except ValueError:
+                event.stop_event()
+                return
+
         # 设置 sender 身份
         preserve_whitespace = event.get_platform_name() == "lark" and (
             getattr(event.message_obj.raw_message, "message_type", None) == "post"
@@ -80,7 +97,11 @@ class WakingCheckStage(Stage):
         if not preserve_whitespace:
             event.message_str = message_str
         api_key_allow_admin_role = event.get_extra("_api_key_allow_admin_role")
-        for admin_id in self.ctx.astrbot_config["admins_id"]:
+        for admin_id in (
+            []
+            if event.get_extra("_role_resolved", False)
+            else self.ctx.astrbot_config["admins_id"]
+        ):
             if (
                 api_key_allow_admin_role is not False
                 and str(event.get_sender_id()) == admin_id
@@ -89,10 +110,13 @@ class WakingCheckStage(Stage):
                 break
 
         # 检查 wake
-        wake_prefixes = self.ctx.astrbot_config["wake_prefix"]
+        effective_config = self.ctx.plugin_manager.context.get_config(
+            umo=event.unified_msg_origin
+        )
+        wake_prefixes = effective_config["wake_prefix"]
         messages = event.get_messages()
-        is_wake = False
-        for wake_prefix in wake_prefixes:
+        is_wake = event.is_wake
+        for wake_prefix in [] if is_wake else wake_prefixes:
             if message_str.startswith(wake_prefix):
                 if (
                     not event.is_private_chat()
@@ -133,9 +157,13 @@ class WakingCheckStage(Stage):
                     event.is_at_or_wake_command = True
                     break
             # 检查是否是私聊
-            if event.is_private_chat() and (
-                not self.friend_message_needs_wake_prefix
-                or event.get_platform_name() == "webchat"
+            if (
+                not event.is_button_interaction()
+                and event.is_private_chat()
+                and (
+                    not self.friend_message_needs_wake_prefix
+                    or event.get_platform_name() == "webchat"
+                )
             ):
                 is_wake = True
                 event.is_wake = True
@@ -147,7 +175,26 @@ class WakingCheckStage(Stage):
         handlers_parsed_params = {}  # 注册了指令的 handler
 
         # 将 plugins_name 设置到 event 中
-        enabled_plugins_name = self.ctx.astrbot_config.get("plugin_set", ["*"])
+        disabled_plugins = effective_config.get("disabled_plugins", [])
+        enabled_plugins_name = effective_config.get("plugin_set", ["*"])
+        if disabled_plugins:
+            from astrbot.core.star.star import star_registry
+
+            enabled_plugins_name = [
+                plugin.name
+                for plugin in star_registry
+                if plugin.name
+                and (
+                    plugin.reserved
+                    or (
+                        plugin.name not in disabled_plugins
+                        and (
+                            "*" in enabled_plugins_name
+                            or plugin.name in enabled_plugins_name
+                        )
+                    )
+                )
+            ]
         if enabled_plugins_name == ["*"]:
             # 如果是 *，则表示所有插件都启用
             event.plugins_name = None
@@ -159,6 +206,14 @@ class WakingCheckStage(Stage):
             EventType.AdapterMessageEvent,
             plugins_name=event.plugins_name,
         ):
+            plugin = star_map.get(handler.handler_module_path)
+            if plugin and not plugin.reserved and plugin.name in disabled_plugins:
+                continue
+            if event.is_button_interaction() and not any(
+                isinstance(handler_filter, ButtonActionFilter)
+                for handler_filter in handler.event_filters
+            ):
+                continue
             if (
                 self.disable_builtin_commands
                 and handler.handler_module_path
@@ -176,10 +231,10 @@ class WakingCheckStage(Stage):
             for filter in handler.event_filters:
                 try:
                     if isinstance(filter, PermissionTypeFilter):
-                        if not filter.filter(event, self.ctx.astrbot_config):
+                        if not filter.filter(event, effective_config):
                             permission_not_pass = True
                             permission_filter_raise_error = filter.raise_error
-                    elif not filter.filter(event, self.ctx.astrbot_config):
+                    elif not filter.filter(event, effective_config):
                         passed = False
                         break
                 except Exception as e:
@@ -229,10 +284,6 @@ class WakingCheckStage(Stage):
             event._extras.pop("parsed_params", None)
 
         # 根据会话配置过滤插件处理器
-        activated_handlers = await SessionPluginManager.filter_handlers_by_session(
-            event,
-            activated_handlers,
-        )
 
         event.set_extra("activated_handlers", activated_handlers)
         event.set_extra("handlers_parsed_params", handlers_parsed_params)

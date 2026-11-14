@@ -8,11 +8,11 @@ from zoneinfo import ZoneInfo
 
 import pytest
 
+from astrbot.core.astr_agent_runtime.tools.cron_tools import FutureTaskTool
 from astrbot.core.astrbot_config_mgr import AstrBotConfigManager
 from astrbot.core.cron.manager import CronJobManager
 from astrbot.core.db.sqlite import SQLiteDatabase
 from astrbot.core.star.context import Context
-from astrbot.core.tools.cron_tools import FutureTaskTool
 from astrbot.core.umop_config_router import UmopConfigRouter
 from astrbot.dashboard.services.cron_service import CronService
 
@@ -39,7 +39,7 @@ async def test_cron_uses_system_timezone_with_a_bound_profile(
     config_manager = AstrBotConfigManager(
         default_config={"timezone": "Etc/GMT-2"},
         ucr=router,
-        sp=MagicMock(),
+        sp=MagicMock(get=MagicMock(return_value={})),
     )
     config_manager.abconf_data = {
         "profile": {"name": "Chat profile", "path": "profile.json"}

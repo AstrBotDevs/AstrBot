@@ -56,37 +56,23 @@ def _patch_download_sessions(monkeypatch, responses: list[_FakeResponse | Except
 
 
 @pytest.mark.asyncio
-async def test_download_file_rejects_non_200_response(monkeypatch, tmp_path):
-    target_path = tmp_path / "missing.bin"
-    _patch_download_session(
-        monkeypatch,
-        _FakeResponse(status=404, chunks=[b"not found"]),
-    )
-
-    with pytest.raises(io.DownloadFileHTTPError, match="HTTP status code: 404"):
-        await io.download_file("https://example.test/missing", str(target_path))
-
-    assert not target_path.exists()
-
-
-@pytest.mark.asyncio
-async def test_download_file_rejects_non_200_response_after_ssl_fallback(
-    monkeypatch,
-    tmp_path,
+@pytest.mark.parametrize("ssl_fallback", [False, True])
+async def test_download_file_rejects_non_200_response(
+    monkeypatch, tmp_path, ssl_fallback
 ):
     class FakeSSLError(Exception):
         pass
 
     target_path = tmp_path / "missing.bin"
-    _patch_download_sessions(
-        monkeypatch,
-        [
-            FakeSSLError(),
-            _FakeResponse(status=404, chunks=[b"not found"]),
-        ],
-    )
-    monkeypatch.setattr(io.aiohttp, "ClientConnectorSSLError", FakeSSLError)
-    monkeypatch.setattr(io.aiohttp, "ClientConnectorCertificateError", FakeSSLError)
+    response = _FakeResponse(status=404, chunks=[b"not found"])
+    if ssl_fallback:
+        _patch_download_sessions(monkeypatch, [FakeSSLError(), response])
+        monkeypatch.setattr(io.aiohttp, "ClientConnectorSSLError", FakeSSLError)
+        monkeypatch.setattr(
+            io.aiohttp, "ClientConnectorCertificateError", FakeSSLError
+        )
+    else:
+        _patch_download_session(monkeypatch, response)
 
     with pytest.raises(io.DownloadFileHTTPError, match="HTTP status code: 404"):
         await io.download_file("https://example.test/missing", str(target_path))

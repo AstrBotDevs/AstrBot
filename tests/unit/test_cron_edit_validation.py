@@ -7,9 +7,9 @@ from unittest.mock import AsyncMock
 import pytest
 import pytest_asyncio
 
+from astrbot.core.astr_agent_runtime.tools.cron_tools import FutureTaskTool
 from astrbot.core.cron.manager import CronJobManager, CronJobSchedulingError
 from astrbot.core.db.sqlite import SQLiteDatabase
-from astrbot.core.tools.cron_tools import FutureTaskTool
 from astrbot.dashboard.services.cron_service import CronService, CronServiceError
 
 
