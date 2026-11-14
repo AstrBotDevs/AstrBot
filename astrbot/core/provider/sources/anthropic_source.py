@@ -31,6 +31,11 @@ from ..headers import build_conversation_headers, build_provider_headers
 from ..register import register_provider_adapter
 from .request_retry import retry_provider_request, retry_provider_request_context
 
+# Anthropic rejects a single image whose base64 payload exceeds 5 MB. History
+# images are inlined as they are, without the downscaling applied to the current
+# turn, so anything above this budget would fail the whole request.
+ANTHROPIC_IMAGE_MAX_BASE64_BYTES = 5 * 1024 * 1024
+
 
 @register_provider_adapter(
     "anthropic_chat_completion",
@@ -176,7 +181,7 @@ class ProviderAnthropic(Provider):
                 "type": "enabled",
             }
 
-    def _prepare_payload(self, messages: list[dict]):
+    async def _prepare_payload(self, messages: list[dict]):
         """准备 Anthropic API 的请求 payload
 
         Args:
@@ -301,9 +306,45 @@ class ProviderAnthropic(Provider):
                                         f"Failed to parse image data URI: {url[:50]}..."
                                     )
                             else:
-                                logger.warning(
-                                    f"Unsupported image URL format for Anthropic: {url[:50]}..."
-                                )
+                                # History keeps images cached by plugins as local
+                                # paths, which this branch used to drop. Resolve
+                                # non-remote refs so the model still sees them.
+                                # Remote URLs are not re-fetched here: the payload
+                                # is rebuilt on every request.
+                                image_data = None
+                                if not url.startswith(("http://", "https://")):
+                                    image_data = await resolve_media_ref_to_base64_data(
+                                        url,
+                                        media_type="image",
+                                    )
+                                if image_data and (
+                                    len(image_data.base64_data)
+                                    > ANTHROPIC_IMAGE_MAX_BASE64_BYTES
+                                ):
+                                    # Failing the whole turn is worse than
+                                    # dropping one oversized history image.
+                                    logger.warning(
+                                        "Skipping oversized history image for "
+                                        f"Anthropic: {url[:50]}... (base64 length "
+                                        f"{len(image_data.base64_data)} exceeds "
+                                        f"{ANTHROPIC_IMAGE_MAX_BASE64_BYTES})"
+                                    )
+                                    image_data = None
+                                if image_data:
+                                    converted_content.append(
+                                        {
+                                            "type": "image",
+                                            "source": {
+                                                "type": "base64",
+                                                "media_type": image_data.mime_type,
+                                                "data": image_data.base64_data,
+                                            },
+                                        }
+                                    )
+                                else:
+                                    logger.warning(
+                                        f"Unsupported image URL format for Anthropic: {url[:50]}..."
+                                    )
                         elif part.get("type") == "audio_url":
                             converted_content.append(
                                 {
@@ -866,7 +907,7 @@ class ProviderAnthropic(Provider):
                 for tool_call_result in tool_calls_result:
                     context_query.extend(tool_call_result.to_openai_messages())
 
-        system_prompt, new_messages = self._prepare_payload(context_query)
+        system_prompt, new_messages = await self._prepare_payload(context_query)
 
         model = model or self.get_model()
 
@@ -943,7 +984,7 @@ class ProviderAnthropic(Provider):
                 for tool_call_result in tool_calls_result:
                     context_query.extend(tool_call_result.to_openai_messages())
 
-        system_prompt, new_messages = self._prepare_payload(context_query)
+        system_prompt, new_messages = await self._prepare_payload(context_query)
 
         model = model or self.get_model()
 
