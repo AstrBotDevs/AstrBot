@@ -157,8 +157,8 @@ async def test_webchat_edit_preserves_original_branch_and_side_thread(database):
         conv.conversation_id,
         user.id,
         content={"type": "user", "message": [{"type": "plain", "text": "edited"}]},
-        expected_head=snapshot.conversation.head_seq,
-        expected_leaf=snapshot.conversation.leaf_event_id,
+        expected_head=snapshot.revision.head_seq,
+        expected_leaf=snapshot.revision.leaf_event_id,
     )
     assert replacement.id != user.id
     assert (await store.read(conv.conversation_id)).messages == []

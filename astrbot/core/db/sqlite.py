@@ -87,11 +87,16 @@ def _conversation_content_match(keyword: str):
     return text("""EXISTS (
         WITH branch AS (
             SELECT e.type, e.payload FROM conversation_events e
-            JOIN conversation_events tip ON tip.event_id = conversations_v3.leaf_event_id
+            JOIN conversation_events tip ON tip.conversation_ref = conversations_v3.id
+              AND tip.seq = (SELECT seq FROM conversation_events
+                  WHERE conversation_ref = conversations_v3.id
+                    AND type IN ('message.appended', 'context.rebased')
+                  ORDER BY seq DESC LIMIT 1)
             WHERE e.conversation_ref = conversations_v3.id
               AND e.seq <= tip.seq
               AND e.seq >= coalesce((SELECT seq FROM conversation_events
-                  WHERE event_id = tip.replay_from_event_id), 0)
+                  WHERE conversation_ref = conversations_v3.id AND type = 'context.rebased'
+                    AND seq <= tip.seq ORDER BY seq DESC LIMIT 1), 0)
         ), raw_messages AS (
             SELECT CASE branch.type WHEN 'message.appended' THEN item.value
                    ELSE json_extract(item.value, '$.message') END AS body
@@ -703,8 +708,8 @@ class SQLiteDatabase(BaseDatabase):
             cid,
             drafts,
             history=content,
-            expected_head=snapshot.conversation.head_seq,
-            expected_leaf=snapshot.conversation.leaf_event_id,
+            expected_head=snapshot.revision.head_seq,
+            expected_leaf=snapshot.revision.leaf_event_id,
         )
         return await self.get_conversation_by_id(cid)
 

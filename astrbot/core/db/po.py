@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 from typing import TypedDict
 
 from deprecated import deprecated
-from sqlalchemy import BigInteger, CheckConstraint, Column, DateTime, Index, desc
+from sqlalchemy import BigInteger, CheckConstraint, Column, DateTime, Index, desc, text
 from sqlmodel import JSON, Field, SQLModel, Text, UniqueConstraint
 
 
@@ -84,7 +84,7 @@ class ProviderStat(TimestampMixin, SQLModel, table=True):
 
 @dataclass(frozen=True, slots=True)
 class ConversationRevision:
-    """Committed event position and selected branch observed by a reader."""
+    """Derived event head and context position observed by a reader."""
 
     head_seq: int
     leaf_event_id: str | None
@@ -148,7 +148,7 @@ class ConversationV2(ConversationData, table=True):
 
 
 class ConversationV3(TimestampMixin, SQLModel, table=True):
-    """Current metadata and branch pointers for an event-backed conversation."""
+    """Conversation metadata; event positions are derived from the journal."""
 
     __tablename__: str = "conversations_v3"
 
@@ -158,9 +158,6 @@ class ConversationV3(TimestampMixin, SQLModel, table=True):
     umo: str = Field(index=True)
     title: str | None = None
     persona_id: str | None = None
-    head_seq: int = Field(default=0, sa_type=BigInteger)
-    leaf_event_id: str | None = None
-    replay_from_event_id: str | None = None
 
     __table_args__ = (
         Index("ix_conversations_v3_created_id", "created_at", "id"),
@@ -178,7 +175,6 @@ class ConversationEvent(SQLModel, table=True):
     conversation_ref: int = Field(foreign_key="conversations_v3.id", primary_key=True)
     seq: int = Field(primary_key=True, sa_type=BigInteger)
     event_id: str = Field(default_factory=lambda: str(uuid.uuid4()), unique=True)
-    replay_from_event_id: str | None = None
     type: str
     version: int = Field(default=1)
     payload: dict | None = Field(
@@ -193,7 +189,12 @@ class ConversationEvent(SQLModel, table=True):
         CheckConstraint("seq > 0"),
         CheckConstraint("version > 0"),
         Index("ix_conversation_events_type_seq", "conversation_ref", "type", "seq"),
-        Index("ix_conversation_events_baseline", "replay_from_event_id"),
+        Index(
+            "ix_conversation_events_context_seq",
+            "conversation_ref",
+            "seq",
+            sqlite_where=text("type IN ('message.appended', 'context.rebased')"),
+        ),
     )
 
 

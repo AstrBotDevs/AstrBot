@@ -45,7 +45,7 @@ async def test_transaction_failure_keeps_staged_work_unconfirmed(database, monke
     writer = ConversationEventWriter(store, await store.read(conv.conversation_id))
     writer.stage_history([{"role": "user", "content": "staged"}])
     staged_ids = [draft["event_id"] for draft in writer._pending]
-    before = (writer.head_seq, writer.leaf_event_id, writer.replay_from_event_id)
+    before = (writer.head_seq, writer.leaf_event_id)
     with monkeypatch.context() as patch:
         patch.setattr(
             conversation_db,
@@ -63,7 +63,6 @@ async def test_transaction_failure_keeps_staged_work_unconfirmed(database, monke
     assert (
         writer.head_seq,
         writer.leaf_event_id,
-        writer.replay_from_event_id,
     ) == before
     assert (await store.read(conv.conversation_id)).messages == []
     assert [draft["event_id"] for draft in writer._pending] == staged_ids
@@ -127,7 +126,6 @@ async def test_lost_ack_retry_updates_context_even_after_execution_head_advances
         assert project.await_count == (0 if legacy_snapshot else 1)
     assert writer.head_seq == execution_head
     assert writer.leaf_event_id == (baseline_id or "reply")
-    assert writer.replay_from_event_id == baseline_id
     assert len(writer._entries) == 2
     assert not writer._pending
     await writer.append_message(

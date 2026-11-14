@@ -18,16 +18,21 @@ async def test_unfinished_executions_protect_only_their_required_baseline(databa
         conv.conversation_id,
         [
             {
+                "event_id": "message",
+                "type": "message.appended",
+                "payload": {"message": {"role": "user", "content": "active input"}},
+            },
+            {
                 "event_id": "turn",
                 "type": "turn.started",
-                "payload": {"base_leaf_event_id": protected.event_id},
+                "payload": {"base_leaf_event_id": "message"},
             },
             {
                 "event_id": "request",
                 "type": "request.started",
                 "payload": {
                     "turn_id": "turn",
-                    "context_leaf_event_id": protected.event_id,
+                    "context_leaf_event_id": "message",
                 },
             },
         ],

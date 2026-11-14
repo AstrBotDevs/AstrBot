@@ -64,9 +64,8 @@ class ConversationEventWriter:
         self._link_display = link_display
         self.cid = snapshot.conversation.conversation_id
         self.umo = snapshot.conversation.umo
-        self.head_seq = snapshot.conversation.head_seq
-        self.leaf_event_id = snapshot.conversation.leaf_event_id
-        self.replay_from_event_id = snapshot.conversation.replay_from_event_id
+        self.head_seq = snapshot.revision.head_seq
+        self.leaf_event_id = snapshot.revision.leaf_event_id
         self._context_seq = snapshot.context_seq
         self._conversation = snapshot.conversation.model_copy()
         self.turn_id: str | None = None
@@ -302,7 +301,6 @@ class ConversationEventWriter:
             tip = context_events[-1]
             self._context_seq = tip.seq
             self.leaf_event_id = tip.event_id
-            self.replay_from_event_id = tip.replay_from_event_id
         if staged is not None:
             self._entries = staged
         elif not remaining:

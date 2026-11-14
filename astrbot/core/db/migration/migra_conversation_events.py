@@ -52,7 +52,7 @@ def linearize_legacy_events(
     # Complete ancestry reconstruction is confined to one-time migration. Normal
     # requests use the indexed baseline and tail instead.
     for conv in conversations:
-        sequence, last, baseline = 0, None, None
+        sequence, last = 0, None
         current = conv.get("leaf_event_id")
         pending = sorted(grouped[conv["id"]], key=lambda row: row["seq"])
         pending.append({"type": "_selected_leaf", "event_id": None, "payload": {}})
@@ -118,7 +118,6 @@ def linearize_legacy_events(
                         "conversation_ref": conv["id"],
                         "seq": sequence,
                         "event_id": baseline,
-                        "replay_from_event_id": baseline,
                         "type": "context.rebased",
                         "version": 1,
                         "payload": {
@@ -138,19 +137,18 @@ def linearize_legacy_events(
                 continue
             sequence += 1
             event = {
-                key: value for key, value in old.items() if key != "parent_event_id"
+                key: value
+                for key, value in old.items()
+                if key not in {"parent_event_id", "replay_from_event_id"}
             }
             event["seq"] = sequence
             if kind == "context.rebased":
-                baseline = event["event_id"]
                 event["payload"].setdefault("origin", "unknown")
-            event["replay_from_event_id"] = baseline if kind in CONTEXT_TYPES else None
             if kind in CONTEXT_TYPES:
                 last = event["event_id"]
             result.append(event)
-        conv["head_seq"] = sequence
-        conv["leaf_event_id"] = last
-        conv["replay_from_event_id"] = baseline
+        for name in ("head_seq", "leaf_event_id", "replay_from_event_id"):
+            conv.pop(name, None)
     return conversations, result
 
 
@@ -192,22 +190,20 @@ async def migrate_conversations(store: ConversationStore, *, session=None) -> No
                     if isinstance(event["payload"], str)
                     else event["payload"]
                 )
-            migrated_conversations, migrated_events = linearize_legacy_events(
-                old_conversations, old_events
-            )
+            _, migrated_events = linearize_legacy_events(old_conversations, old_events)
             await session.execute(
                 text("""CREATE TABLE conversation_events_linear (
                 conversation_ref INTEGER NOT NULL REFERENCES conversations_v3(id),
                 seq BIGINT NOT NULL CHECK(seq > 0), event_id VARCHAR NOT NULL UNIQUE,
-                replay_from_event_id VARCHAR, type VARCHAR NOT NULL,
+                type VARCHAR NOT NULL,
                 version INTEGER NOT NULL CHECK(version > 0), payload JSON,
                 created_at DATETIME NOT NULL, PRIMARY KEY(conversation_ref, seq))""")
             )
             if migrated_events:
                 await session.execute(
                     text("""INSERT INTO conversation_events_linear
-                    (conversation_ref,seq,event_id,replay_from_event_id,type,version,payload,created_at)
-                    VALUES (:conversation_ref,:seq,:event_id,:replay_from_event_id,:type,:version,:payload,:created_at)"""),
+                    (conversation_ref,seq,event_id,type,version,payload,created_at)
+                    VALUES (:conversation_ref,:seq,:event_id,:type,:version,:payload,:created_at)"""),
                     [
                         {
                             **event,
@@ -229,17 +225,29 @@ async def migrate_conversations(store: ConversationStore, *, session=None) -> No
                     "CREATE INDEX ix_conversation_events_type_seq ON conversation_events(conversation_ref,type,seq)"
                 )
             )
-            await session.execute(
-                text(
-                    "CREATE INDEX ix_conversation_events_baseline ON conversation_events(replay_from_event_id)"
-                )
-            )
-            for conv in migrated_conversations:
-                await session.execute(
-                    text("""UPDATE conversations_v3 SET head_seq=:head_seq,
-                    leaf_event_id=:leaf_event_id,replay_from_event_id=:replay_from_event_id WHERE id=:id"""),
-                    conv,
-                )
+        await session.execute(
+            text("DROP INDEX IF EXISTS ix_conversation_events_baseline")
+        )
+        for table, obsolete in (
+            ("conversation_events", ("replay_from_event_id",)),
+            ("conversations_v3", ("replay_from_event_id", "head_seq", "leaf_event_id")),
+        ):
+            existing_columns = {
+                row[1]
+                for row in (
+                    await session.execute(text(f"PRAGMA table_info({table})"))
+                ).all()
+            }
+            for name in obsolete:
+                if name in existing_columns:
+                    await session.execute(
+                        text(f"ALTER TABLE {table} DROP COLUMN {name}")
+                    )
+        await session.execute(
+            text("""CREATE INDEX IF NOT EXISTS ix_conversation_events_context_seq
+            ON conversation_events(conversation_ref,seq)
+            WHERE type IN ('message.appended', 'context.rebased')""")
+        )
         # Partial indexes contain only live plugin baselines and lifecycle
         # references, so cleanup need not inspect historical event payloads.
         await session.execute(
@@ -313,7 +321,6 @@ async def migrate_conversations(store: ConversationStore, *, session=None) -> No
                 persona_id=old.persona_id,
                 created_at=old.created_at,
                 updated_at=old.updated_at,
-                head_seq=1,
             )
             session.add(conv)
             await session.flush()
@@ -332,6 +339,7 @@ async def migrate_conversations(store: ConversationStore, *, session=None) -> No
                     },
                 )
             )
+            head_seq, leaf_event_id = 1, None
             pending = []
             groups = []
             for message in old.content or []:
@@ -351,28 +359,27 @@ async def migrate_conversations(store: ConversationStore, *, session=None) -> No
             entries = []
             for messages, checkpoint in groups:
                 turn_id = str(uuid.uuid4())
-                conv.head_seq += 1
+                head_seq += 1
                 session.add(
                     ConversationEvent(
                         conversation_ref=conv.id,
-                        seq=conv.head_seq,
+                        seq=head_seq,
                         event_id=turn_id,
                         type="turn.started",
                         created_at=old.created_at,
                         payload={
                             "trigger": {"kind": "migration"},
-                            "base_leaf_event_id": conv.leaf_event_id,
+                            "base_leaf_event_id": leaf_event_id,
                         },
                     )
                 )
                 first_user = None
                 for message in messages:
                     effective = persistent_messages([message])
-                    conv.head_seq += 1
+                    head_seq += 1
                     event = ConversationEvent(
                         conversation_ref=conv.id,
-                        seq=conv.head_seq,
-                        replay_from_event_id=conv.replay_from_event_id,
+                        seq=head_seq,
                         type="message.appended",
                         created_at=old.created_at,
                         payload={
@@ -381,7 +388,7 @@ async def migrate_conversations(store: ConversationStore, *, session=None) -> No
                         },
                     )
                     session.add(event)
-                    conv.leaf_event_id = event.event_id
+                    leaf_event_id = event.event_id
                     if effective:
                         entries.append({"id": event.event_id, "message": effective[0]})
                     if (
@@ -410,20 +417,20 @@ async def migrate_conversations(store: ConversationStore, *, session=None) -> No
                         record.context_event_id = (
                             first_user
                             if record.content.get("type") == "user"
-                            else conv.leaf_event_id
+                            else leaf_event_id
                         )
                         session.add(record)
                         if record.content.get("type") == "bot":
                             await session.execute(
                                 update(WebChatThread)
                                 .where(WebChatThread.parent_message_id == record.id)
-                                .values(base_event_id=conv.leaf_event_id)
+                                .values(base_event_id=leaf_event_id)
                             )
-                conv.head_seq += 1
+                head_seq += 1
                 session.add(
                     ConversationEvent(
                         conversation_ref=conv.id,
-                        seq=conv.head_seq,
+                        seq=head_seq,
                         type="turn.finished",
                         created_at=old.updated_at,
                         payload={
@@ -433,11 +440,10 @@ async def migrate_conversations(store: ConversationStore, *, session=None) -> No
                         },
                     )
                 )
-            conv.head_seq += 1
+            head_seq += 1
             baseline = ConversationEvent(
                 conversation_ref=conv.id,
-                seq=conv.head_seq,
-                replay_from_event_id=conv.replay_from_event_id,
+                seq=head_seq,
                 type="context.rebased",
                 created_at=old.updated_at,
                 payload={
@@ -446,9 +452,7 @@ async def migrate_conversations(store: ConversationStore, *, session=None) -> No
                     "messages": entries,
                 },
             )
-            baseline.replay_from_event_id = baseline.event_id
             session.add(baseline)
-            conv.leaf_event_id = conv.replay_from_event_id = baseline.event_id
             conv.updated_at = old.updated_at
             flag_modified(conv, "updated_at")
             session.add(conv)

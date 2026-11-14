@@ -252,6 +252,7 @@ class ConversationSnapshot:
     """A detached branch projection and its write revision."""
 
     conversation: ConversationV3
+    revision: ConversationRevision
     entries: list[dict] = field(default_factory=list)
     replay_count: int = 0
     context_seq: int = 0
@@ -268,6 +269,37 @@ class ConversationAppendResult:
 
     events: list[ConversationEvent]
     replayed: bool = False
+
+
+def conversation_revision_columns(owner=ConversationV3.id):
+    """Build indexed revision expressions for a metadata or batch query.
+
+    Args:
+        owner: SQL expression identifying the owning conversation row.
+
+    Returns:
+        Labeled scalar expressions for the event head and latest context identity.
+    """
+    head = (
+        select(ConversationEvent.seq)
+        .where(ConversationEvent.conversation_ref == owner)
+        .order_by(ConversationEvent.seq.desc())
+        .limit(1)
+        .correlate_except(ConversationEvent)
+        .scalar_subquery()
+    )
+    leaf = (
+        select(ConversationEvent.event_id)
+        .where(
+            ConversationEvent.conversation_ref == owner,
+            text("type IN ('message.appended', 'context.rebased')"),
+        )
+        .order_by(ConversationEvent.seq.desc())
+        .limit(1)
+        .correlate_except(ConversationEvent)
+        .scalar_subquery()
+    )
+    return func.coalesce(head, 0).label("head_seq"), leaf.label("leaf_event_id")
 
 
 class ConversationStore:
@@ -340,7 +372,6 @@ class ConversationStore:
                 persona_id=persona_id,
                 created_at=created_at or datetime.now(timezone.utc),
                 updated_at=updated_at or created_at or datetime.now(timezone.utc),
-                head_seq=1,
             )
             session.add(conv)
             await session.flush()
@@ -363,10 +394,9 @@ class ConversationStore:
             if content is not None or inherited is not None:
                 # Validate roles, but store the original body only once.
                 persistent_messages(content or [], detach=False)
-                conv.head_seq += 1
                 baseline = ConversationEvent(
                     conversation_ref=conv.id,
-                    seq=conv.head_seq,
+                    seq=2,
                     type="context.rebased",
                     payload={
                         "reason": "snapshot" if inherited is not None else "migration",
@@ -384,16 +414,14 @@ class ConversationStore:
                         ),
                     },
                 )
-                baseline.replay_from_event_id = baseline.event_id
                 session.add(baseline)
-                conv.leaf_event_id = conv.replay_from_event_id = baseline.event_id
             conv.updated_at = updated_at or created_at or conv.updated_at
             flag_modified(conv, "updated_at")
             await session.commit()
             return conv
 
     async def project(
-        self, session, conv: ConversationV3, leaf=NOT_GIVEN
+        self, session, conv: ConversationV3, leaf=NOT_GIVEN, *, revision=None
     ) -> ConversationSnapshot:
         """Restore an exact position from its baseline and indexed linear tail.
 
@@ -401,6 +429,7 @@ class ConversationStore:
             session: Active transaction.
             conv: Owning conversation metadata.
             leaf: Optional historical position; None denotes the empty root.
+            revision: Optional revision from the same database read transaction.
 
         Returns:
             Detached messages, revision, and replay event count.
@@ -410,54 +439,74 @@ class ConversationStore:
             ValueError: A context position or baseline is missing or invalid.
         """
         conv = ConversationV3(**conv.model_dump())
-        if leaf is not NOT_GIVEN:
-            conv.leaf_event_id = leaf
-        snapshot = ConversationSnapshot(conv)
-        conv.replay_from_event_id = None
-        if conv.leaf_event_id is None:
-            return snapshot
+        if revision is not None and (
+            leaf is None or (leaf is NOT_GIVEN and revision.leaf_event_id is None)
+        ):
+            return ConversationSnapshot(
+                conv, ConversationRevision(revision.head_seq, None)
+            )
+        head, current_leaf = conversation_revision_columns()
+        if revision is not None:
+            head, current_leaf = (
+                literal(revision.head_seq),
+                literal(revision.leaf_event_id),
+            )
+        target_leaf = current_leaf if leaf is NOT_GIVEN else literal(leaf)
         baseline_event = aliased(ConversationEvent)
+        baseline_lookup = aliased(ConversationEvent)
+        baseline_seq_query = (
+            select(baseline_lookup.seq)
+            .where(
+                baseline_lookup.conversation_ref == ConversationEvent.conversation_ref,
+                baseline_lookup.type == "context.rebased",
+                baseline_lookup.seq <= ConversationEvent.seq,
+            )
+            .order_by(baseline_lookup.seq.desc())
+            .limit(1)
+            .correlate(ConversationEvent)
+            .scalar_subquery()
+        )
         position = (
             await session.execute(
                 select(
+                    head.label("head_seq"),
                     ConversationEvent.event_id,
                     ConversationEvent.conversation_ref,
                     ConversationEvent.type,
                     ConversationEvent.seq,
-                    ConversationEvent.replay_from_event_id,
                     baseline_event,
                 )
-                .select_from(ConversationEvent)
+                .select_from(ConversationV3)
+                .outerjoin(ConversationEvent, ConversationEvent.event_id == target_leaf)
                 .outerjoin(
                     baseline_event,
-                    baseline_event.event_id == ConversationEvent.replay_from_event_id,
+                    (
+                        baseline_event.conversation_ref
+                        == ConversationEvent.conversation_ref
+                    )
+                    & (baseline_event.seq == baseline_seq_query),
                 )
-                .where(ConversationEvent.event_id == conv.leaf_event_id)
+                .where(ConversationV3.id == conv.id)
             )
         ).one_or_none()
-        if (
-            position is None
-            or position.conversation_ref != conv.id
-            or position.type not in CONTEXT_TYPES
-        ):
+        if position is None:
+            raise ValueError("Conversation not found")
+        snapshot = ConversationSnapshot(
+            conv, ConversationRevision(position.head_seq, position.event_id)
+        )
+        if position.event_id is None and (leaf is NOT_GIVEN or leaf is None):
+            return snapshot
+        if position.conversation_ref != conv.id or position.type not in CONTEXT_TYPES:
             raise ValueError("Missing or inaccessible context leaf")
         target, baseline = position, position[-1]
         snapshot.context_seq = target.seq
         baseline_seq = 0
-        if target.replay_from_event_id:
-            if (
-                baseline is None
-                or baseline.conversation_ref != conv.id
-                or baseline.type != "context.rebased"
-                or baseline.seq > target.seq
-            ):
-                raise ValueError("Missing or invalid context baseline")
+        if baseline is not None:
             if baseline.payload is None:
                 raise ContextUnavailableError("Historical context has been cleared")
             if baseline.version != 1:
                 raise ValueError("Unsupported context event version")
             snapshot.entries = persistent_entries(baseline.payload["messages"])
-            conv.replay_from_event_id = baseline.event_id
             baseline_seq = baseline.seq
             snapshot.replay_count = 1
         query = (
@@ -476,7 +525,6 @@ class ConversationStore:
                 event.type != "message.appended"
                 or event.version != 1
                 or event.payload is None
-                or event.replay_from_event_id != conv.replay_from_event_id
             ):
                 raise ValueError("Invalid linear context segment")
             effective = persistent_messages([event.payload["message"]])
@@ -512,6 +560,20 @@ class ConversationStore:
             if conv is None:
                 return dict.fromkeys(event_ids, "missing")
             ids = list({value for value in event_ids if value is not None})
+            baseline = aliased(ConversationEvent)
+            lookup = aliased(ConversationEvent)
+            baseline_seq = (
+                select(lookup.seq)
+                .where(
+                    lookup.conversation_ref == ConversationEvent.conversation_ref,
+                    lookup.type == "context.rebased",
+                    lookup.seq <= ConversationEvent.seq,
+                )
+                .order_by(lookup.seq.desc())
+                .limit(1)
+                .correlate(ConversationEvent)
+                .scalar_subquery()
+            )
             for offset in range(0, len(ids), 400):
                 rows = (
                     await session.execute(
@@ -519,62 +581,36 @@ class ConversationStore:
                             ConversationEvent.event_id,
                             ConversationEvent.conversation_ref,
                             ConversationEvent.type,
-                            ConversationEvent.seq,
                             ConversationEvent.version,
-                            ConversationEvent.replay_from_event_id,
-                        ).where(
+                            baseline.version.label("baseline_version"),
+                            baseline.payload.is_(None).label("pruned"),
+                        )
+                        .outerjoin(
+                            baseline,
+                            (
+                                baseline.conversation_ref
+                                == ConversationEvent.conversation_ref
+                            )
+                            & (baseline.seq == baseline_seq),
+                        )
+                        .where(
                             col(ConversationEvent.event_id).in_(
                                 ids[offset : offset + 400]
                             )
                         )
                     )
                 ).all()
-                bases = list(
-                    {
-                        row.replay_from_event_id
-                        for row in rows
-                        if row.conversation_ref == conv.id and row.replay_from_event_id
-                    }
-                )
-                available = (
-                    {
-                        row.event_id: row
-                        for row in (
-                            await session.execute(
-                                select(
-                                    ConversationEvent.event_id,
-                                    ConversationEvent.conversation_ref,
-                                    ConversationEvent.type,
-                                    ConversationEvent.seq,
-                                    ConversationEvent.version,
-                                    ConversationEvent.payload.is_(None).label("pruned"),
-                                ).where(col(ConversationEvent.event_id).in_(bases))
-                            )
-                        ).all()
-                    }
-                    if bases
-                    else {}
-                )
                 for row in rows:
                     if row.conversation_ref != conv.id:
                         result[row.event_id] = "forbidden"
                     elif row.type not in CONTEXT_TYPES or row.version != 1:
                         result[row.event_id] = "missing"
-                    elif row.replay_from_event_id is None:
+                    elif row.baseline_version is None:
                         result[row.event_id] = "available"
+                    elif row.baseline_version != 1:
+                        result[row.event_id] = "missing"
                     else:
-                        baseline = available.get(row.replay_from_event_id)
-                        result[row.event_id] = (
-                            "missing"
-                            if baseline is None
-                            or baseline.conversation_ref != conv.id
-                            or baseline.type != "context.rebased"
-                            or baseline.seq > row.seq
-                            or baseline.version != 1
-                            else "pruned"
-                            if baseline.pruned
-                            else "available"
-                        )
+                        result[row.event_id] = "pruned" if row.pruned else "available"
         return result
 
     async def restore_context(
@@ -638,6 +674,7 @@ class ConversationStore:
                 await session.execute(
                     select(
                         ConversationV3,
+                        *conversation_revision_columns(),
                         func.coalesce(
                             latest_usage.where(
                                 ConversationEvent.type == "conversation.updated"
@@ -652,8 +689,9 @@ class ConversationStore:
             ).one_or_none()
             if loaded is None:
                 return None
-            conv, usage = loaded
-            snapshot = await self.project(session, conv)
+            conv, head, leaf, usage = loaded
+            revision = ConversationRevision(head, leaf)
+            snapshot = await self.project(session, conv, revision=revision)
             record = ConversationRead(
                 inner_conversation_id=conv.id,
                 conversation_id=conv.conversation_id,
@@ -664,29 +702,38 @@ class ConversationStore:
                 created_at=conv.created_at,
                 updated_at=conv.updated_at,
                 token_usage=usage,
-                revision=ConversationRevision(conv.head_seq, conv.leaf_event_id),
+                revision=revision,
                 content=snapshot.messages,
             )
             return record, snapshot
 
-    async def read(self, cid: str) -> ConversationSnapshot | None:
-        """Read an initialized conversation by its public ID.
+    async def read(
+        self, cid: str, *, include_history: bool = True
+    ) -> ConversationSnapshot | None:
+        """Read a conversation and its derived revision from one database view.
 
         Args:
             cid: Public conversation identity.
+            include_history: Whether to load message bodies.
 
         Returns:
-            Detached snapshot, or None when absent.
+            Detached metadata and revision, with context when requested, or None.
         """
         async with self.db.get_db(consistent_read=True) as session:
-            conv = (
+            row = (
                 await session.execute(
-                    select(ConversationV3).where(ConversationV3.conversation_id == cid)
+                    select(ConversationV3, *conversation_revision_columns()).where(
+                        ConversationV3.conversation_id == cid
+                    )
                 )
-            ).scalar_one_or_none()
-            if conv:
-                return await self.project(session, conv)
-        return None
+            ).one_or_none()
+            if row is None:
+                return None
+            conv, head, leaf = row
+            revision = ConversationRevision(head, leaf)
+            if include_history:
+                return await self.project(session, conv, revision=revision)
+            return ConversationSnapshot(conv, revision)
 
     async def read_result(
         self, session, conv: ConversationV3, include_history=True
@@ -749,9 +796,13 @@ class ConversationStore:
             select(
                 conversation_ids.c.value,
                 func.coalesce(updated_usage, created_usage, 0),
+                *conversation_revision_columns(conversation_ids.c.value),
             )
         )
-        usage_by_id = dict(usage_rows.all())
+        usage_by_id = {
+            owner: (usage, ConversationRevision(head, leaf))
+            for owner, usage, head, leaf in usage_rows
+        }
         return [
             ConversationRead(
                 inner_conversation_id=conv.id,
@@ -762,9 +813,11 @@ class ConversationStore:
                 persona_id=conv.persona_id,
                 created_at=conv.created_at,
                 updated_at=conv.updated_at,
-                token_usage=usage_by_id[conv.id],
-                revision=ConversationRevision(conv.head_seq, conv.leaf_event_id),
-                content=(await self.project(session, conv)).messages
+                token_usage=usage_by_id[conv.id][0],
+                revision=usage_by_id[conv.id][1],
+                content=(
+                    await self.project(session, conv, revision=usage_by_id[conv.id][1])
+                ).messages
                 if include_history
                 else None,
             )
@@ -947,31 +1000,46 @@ class ConversationStore:
             conv: Conversation with its updated baseline pointer.
         """
         await session.flush()
+        # A baseline owns [seq, next rebase). Restrict reference checks to that
+        # segment and use the partial indexes instead of scanning execution history.
+        # Unary + removes VARCHAR affinity so JSON expression indexes can match
+        # the reference value, rather than only their conversation prefix.
         await session.execute(
-            text("""UPDATE conversation_events AS old SET payload=NULL
+            text("""UPDATE conversation_events AS old INDEXED BY ix_context_plugin_live
+            SET payload=NULL
             WHERE old.conversation_ref=:owner AND old.type='context.rebased'
               AND json_extract(old.payload,'$.origin')='plugin' AND old.payload IS NOT NULL
-              AND old.seq < (SELECT seq FROM conversation_events WHERE event_id=:baseline)
+              AND old.seq < (SELECT seq FROM conversation_events
+                  WHERE conversation_ref=:owner AND type='context.rebased'
+                  ORDER BY seq DESC LIMIT 1)
               AND NOT EXISTS (
                   SELECT 1 FROM conversation_events AS context
-                  JOIN conversation_events AS started
+                  JOIN conversation_events AS started INDEXED BY ix_context_turn_started
                     ON started.conversation_ref=:owner AND started.type='turn.started'
-                   AND json_extract(started.payload,'$.base_leaf_event_id')=context.event_id
-                  WHERE context.replay_from_event_id=old.event_id
-                    AND NOT EXISTS (SELECT 1 FROM conversation_events AS finished
-                      WHERE finished.conversation_ref=:owner AND finished.type='turn.finished'
-                        AND json_extract(finished.payload,'$.turn_id')=started.event_id))
+                   AND json_extract(started.payload,'$.base_leaf_event_id')=+context.event_id
+                  WHERE context.conversation_ref=:owner AND context.seq >= old.seq
+                    AND context.seq < (SELECT seq FROM conversation_events
+                        WHERE conversation_ref=:owner AND type='context.rebased'
+                          AND seq > old.seq ORDER BY seq LIMIT 1)
+                    AND NOT EXISTS (
+                        SELECT 1 FROM conversation_events AS finished
+                        WHERE finished.conversation_ref=:owner AND finished.type='turn.finished'
+                          AND json_extract(finished.payload,'$.turn_id')=+started.event_id))
               AND NOT EXISTS (
                   SELECT 1 FROM conversation_events AS context
-                  JOIN conversation_events AS started
+                  JOIN conversation_events AS started INDEXED BY ix_context_request_started
                     ON started.conversation_ref=:owner AND started.type='request.started'
-                   AND json_extract(started.payload,'$.context_leaf_event_id')=context.event_id
-                  WHERE context.replay_from_event_id=old.event_id
-                    AND NOT EXISTS (SELECT 1 FROM conversation_events AS finished
-                      WHERE finished.conversation_ref=:owner AND finished.type='request.finished'
-                        AND json_extract(finished.payload,'$.request_id')=started.event_id))
+                   AND json_extract(started.payload,'$.context_leaf_event_id')=+context.event_id
+                  WHERE context.conversation_ref=:owner AND context.seq >= old.seq
+                    AND context.seq < (SELECT seq FROM conversation_events
+                        WHERE conversation_ref=:owner AND type='context.rebased'
+                          AND seq > old.seq ORDER BY seq LIMIT 1)
+                    AND NOT EXISTS (
+                        SELECT 1 FROM conversation_events AS finished
+                        WHERE finished.conversation_ref=:owner AND finished.type='request.finished'
+                          AND json_extract(finished.payload,'$.request_id')=+started.event_id))
             """),
-            {"owner": conv.id, "baseline": conv.replay_from_event_id},
+            {"owner": conv.id},
         )
 
     async def append(
@@ -1012,13 +1080,24 @@ class ConversationStore:
         del serialized_drafts
         async with self.db.get_db() as session:
             await session.execute(text("BEGIN IMMEDIATE"))
-            conv = (
+            metadata = (
                 await session.execute(
-                    select(ConversationV3).where(ConversationV3.conversation_id == cid)
+                    select(
+                        ConversationV3,
+                        *conversation_revision_columns(),
+                        text("""EXISTS (
+                            SELECT 1 FROM conversation_events INDEXED BY ix_context_plugin_live
+                            WHERE conversation_ref=conversations_v3.id
+                              AND type='context.rebased'
+                              AND json_extract(payload,'$.origin')='plugin'
+                              AND payload IS NOT NULL
+                        ) AS has_plugin_baseline"""),
+                    ).where(ConversationV3.conversation_id == cid)
                 )
-            ).scalar_one_or_none()
-            if conv is None:
+            ).one_or_none()
+            if metadata is None:
                 raise ValueError("Conversation not found")
+            conv, head_seq, leaf_event_id, has_plugin_baseline = metadata
             event_ids = {draft["event_id"] for draft in drafts if draft.get("event_id")}
             existing_by_id: dict[str, ConversationEvent] = {}
             if event_ids:
@@ -1072,23 +1151,24 @@ class ConversationStore:
                     ):
                         existing.append(baseline)
                 return ConversationAppendResult(existing, replayed=True)
-            if (expected_head is not NOT_GIVEN and conv.head_seq != expected_head) or (
-                expected_leaf is not NOT_GIVEN and conv.leaf_event_id != expected_leaf
+            if (expected_head is not NOT_GIVEN and head_seq != expected_head) or (
+                expected_leaf is not NOT_GIVEN and leaf_event_id != expected_leaf
             ):
                 raise ConversationConflictError(
                     "Conversation changed; reload before committing"
                 )
             if history is not None:
-                snapshot = await self.project(session, conv)
+                snapshot = await self.project(
+                    session,
+                    conv,
+                    revision=ConversationRevision(head_seq, leaf_event_id),
+                )
                 _, history_drafts = reconcile_history(
                     snapshot.entries, history, reason=reason, origin=origin
                 )
                 drafts.extend(history_drafts)
             committed = []
             # Validate against earlier batch events without flushing each row.
-            head_seq = conv.head_seq
-            leaf_event_id = conv.leaf_event_id
-            replay_from_event_id = conv.replay_from_event_id
             metadata_changes: dict[str, str | None] = {}
             rows: list[dict] = []
             batch_bytes = 0
@@ -1120,14 +1200,9 @@ class ConversationStore:
                     conversation_ref=conv.id,
                     seq=head_seq,
                     event_id=draft.get("event_id") or str(uuid.uuid4()),
-                    replay_from_event_id=replay_from_event_id
-                    if kind in CONTEXT_TYPES
-                    else None,
                     type=kind,
                     payload=payload,
                 )
-                if kind == "context.rebased":
-                    event.replay_from_event_id = event.event_id
                 # Payloads are already detached above. Serializing them again via
                 # Pydantic would traverse an entire rebase before the JSON bind.
                 rows.append(
@@ -1138,26 +1213,24 @@ class ConversationStore:
                 committed.append(event)
                 if kind in CONTEXT_TYPES:
                     leaf_event_id = event.event_id
-                    replay_from_event_id = event.replay_from_event_id
+                if kind == "context.rebased" and payload.get("origin") == "plugin":
+                    has_plugin_baseline = True
             if rows:
                 await session.execute(insert(ConversationEvent).values(rows))
-            if committed:
-                conv.head_seq = head_seq
-                conv.leaf_event_id = leaf_event_id
-                conv.replay_from_event_id = replay_from_event_id
+            # Execution progress only appends events. Refresh the conversation
+            # once at turn settlement, or when its metadata is explicitly edited.
+            if metadata_changes or any(
+                event.type == "turn.finished" for event in committed
+            ):
                 for key, value in metadata_changes.items():
                     setattr(conv, key, value)
                 conv.updated_at = datetime.now(timezone.utc)
             # Display links are a derived projection, committed with the events.
             if link_display:
                 await project_webchat_event_links(session, committed)
-            if (
-                any(
-                    event.type
-                    in {"context.rebased", "turn.finished", "request.finished"}
-                    for event in committed
-                )
-                and conv.replay_from_event_id
+            if has_plugin_baseline and any(
+                event.type in {"context.rebased", "turn.finished", "request.finished"}
+                for event in committed
             ):
                 await self._prune_plugin_context(session, conv)
             await session.commit()
@@ -1294,22 +1367,31 @@ class ConversationStore:
         """
         async with self.db.get_db() as session:
             await session.execute(text("BEGIN IMMEDIATE"))
-            conv = (
+            conv, head_seq, leaf_event_id = (
                 await session.execute(
-                    select(ConversationV3).where(ConversationV3.conversation_id == cid)
+                    select(ConversationV3, *conversation_revision_columns()).where(
+                        ConversationV3.conversation_id == cid
+                    )
                 )
-            ).scalar_one()
-            if conv.head_seq != expected_head or conv.leaf_event_id != expected_leaf:
+            ).one()
+            if head_seq != expected_head or leaf_event_id != expected_leaf:
                 raise ConversationConflictError(
                     "Conversation changed before branch selection"
                 )
-            snapshot = await self.project(session, conv, leaf)
-            previous = await self.project(session, conv)
-            for saved, source in [(previous, conv.leaf_event_id), (snapshot, leaf)]:
-                conv.head_seq += 1
+            snapshot = await self.project(
+                session,
+                conv,
+                leaf,
+                revision=ConversationRevision(head_seq, leaf_event_id),
+            )
+            previous = await self.project(
+                session, conv, revision=ConversationRevision(head_seq, leaf_event_id)
+            )
+            for saved, source in [(previous, leaf_event_id), (snapshot, leaf)]:
+                head_seq += 1
                 baseline = ConversationEvent(
                     conversation_ref=conv.id,
-                    seq=conv.head_seq,
+                    seq=head_seq,
                     type="context.rebased",
                     payload={
                         "reason": "snapshot",
@@ -1318,7 +1400,6 @@ class ConversationStore:
                         "messages": saved.entries,
                     },
                 )
-                baseline.replay_from_event_id = baseline.event_id
                 session.add(baseline)
                 if saved is previous and source:
                     await session.execute(
@@ -1326,7 +1407,6 @@ class ConversationStore:
                         .where(PlatformMessageHistory.context_event_id == source)
                         .values(context_event_id=baseline.event_id)
                     )
-                conv.leaf_event_id = conv.replay_from_event_id = baseline.event_id
             conv.updated_at = datetime.now(timezone.utc)
             session.add(conv)
             await session.commit()
@@ -1348,12 +1428,14 @@ class ConversationStore:
         """
         async with self.db.get_db() as session:
             await session.execute(text("BEGIN IMMEDIATE"))
-            conv = (
+            conv, head_seq, leaf_event_id = (
                 await session.execute(
-                    select(ConversationV3).where(ConversationV3.conversation_id == cid)
+                    select(ConversationV3, *conversation_revision_columns()).where(
+                        ConversationV3.conversation_id == cid
+                    )
                 )
-            ).scalar_one()
-            if conv.head_seq != expected_head or conv.leaf_event_id != expected_leaf:
+            ).one()
+            if head_seq != expected_head or leaf_event_id != expected_leaf:
                 raise ConversationConflictError("Conversation changed before editing")
             target = await session.get(PlatformMessageHistory, message_id)
             if not target or not target.is_active or not target.turn_id:
@@ -1383,16 +1465,23 @@ class ConversationStore:
             if source is None or turn is None:
                 raise ValueError("The original user turn is unavailable")
             source_event_id = turn.payload.get("base_leaf_event_id")
-            snapshot = await self.project(session, conv, source_event_id)
-            previous = await self.project(session, conv)
+            snapshot = await self.project(
+                session,
+                conv,
+                source_event_id,
+                revision=ConversationRevision(head_seq, leaf_event_id),
+            )
+            previous = await self.project(
+                session, conv, revision=ConversationRevision(head_seq, leaf_event_id)
+            )
             for saved, source_id in [
-                (previous, conv.leaf_event_id),
+                (previous, leaf_event_id),
                 (snapshot, source_event_id),
             ]:
-                conv.head_seq += 1
+                head_seq += 1
                 baseline = ConversationEvent(
                     conversation_ref=conv.id,
-                    seq=conv.head_seq,
+                    seq=head_seq,
                     type="context.rebased",
                     payload={
                         "reason": "snapshot",
@@ -1401,7 +1490,6 @@ class ConversationStore:
                         "messages": saved.entries,
                     },
                 )
-                baseline.replay_from_event_id = baseline.event_id
                 session.add(baseline)
                 if saved is previous and source_id:
                     await session.execute(
@@ -1409,7 +1497,6 @@ class ConversationStore:
                         .where(PlatformMessageHistory.context_event_id == source_id)
                         .values(context_event_id=baseline.event_id)
                     )
-                conv.leaf_event_id = conv.replay_from_event_id = baseline.event_id
             conv.updated_at = datetime.now(timezone.utc)
             # Old display records remain available to existing side threads.
             await session.execute(

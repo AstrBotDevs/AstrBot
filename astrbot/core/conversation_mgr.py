@@ -76,14 +76,16 @@ class ConversationManager:
         if snapshot is None:
             snapshot = await self.db.conversation_store.read(conversation_id)
         else:
-            current = await self.db.conversation_store.get_metadata(conversation_id)
+            current = await self.db.conversation_store.read(
+                conversation_id, include_history=False
+            )
             if (
                 current is None
                 or snapshot.conversation.conversation_id != conversation_id
-                or snapshot.conversation.umo != current.umo
+                or snapshot.conversation.umo != current.conversation.umo
             ):
                 raise ValueError("Conversation is not accessible")
-            if current.leaf_event_id != snapshot.conversation.leaf_event_id:
+            if current.revision.leaf_event_id != snapshot.revision.leaf_event_id:
                 raise ConversationConflictError(
                     "Conversation changed while preparing the request"
                 )
@@ -520,7 +522,7 @@ class ConversationManager:
                 {"type": "message.appended", "payload": {"message": message}}
                 for message in messages
             ],
-            expected_leaf=snapshot.conversation.leaf_event_id,
+            expected_leaf=snapshot.revision.leaf_event_id,
         )
 
     async def get_human_readable_context(

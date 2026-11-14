@@ -1863,8 +1863,8 @@ class ChatService:
                 conversation_id,
                 message_id,
                 content=content,
-                expected_head=snapshot.conversation.head_seq,
-                expected_leaf=snapshot.conversation.leaf_event_id,
+                expected_head=snapshot.revision.head_seq,
+                expected_leaf=snapshot.revision.leaf_event_id,
             )
         except ContextUnavailableError as exc:
             raise ChatServiceError(
@@ -1937,8 +1937,8 @@ class ChatService:
             replacement = await self.db.conversation_store.rewind_webchat(
                 conversation_id,
                 message_id,
-                expected_head=snapshot.conversation.head_seq,
-                expected_leaf=snapshot.conversation.leaf_event_id,
+                expected_head=snapshot.revision.head_seq,
+                expected_leaf=snapshot.revision.leaf_event_id,
             )
         except ContextUnavailableError as exc:
             raise ChatServiceError(

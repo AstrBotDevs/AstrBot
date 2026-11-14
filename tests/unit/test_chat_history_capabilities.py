@@ -23,36 +23,32 @@ async def service(tmp_path):
         session.add_all([conv, other])
         await session.flush()
         rows = [
-            (conv.id, "pruned", "context.rebased", None, "pruned"),
+            (conv.id, "pruned", "context.rebased", None),
             (
                 conv.id,
                 "old",
                 "message.appended",
                 {"message": {"role": "assistant", "content": "old"}},
-                "pruned",
             ),
-            (conv.id, "kept", "context.rebased", {"messages": []}, "kept"),
+            (conv.id, "kept", "context.rebased", {"messages": []}),
             (
                 conv.id,
                 "turn-edit",
                 "turn.started",
                 {"base_leaf_event_id": "kept"},
-                None,
             ),
             (
                 conv.id,
                 "turn-retry",
                 "turn.started",
                 {"base_leaf_event_id": "old"},
-                None,
             ),
-            (conv.id, "turn-empty", "turn.started", {"base_leaf_event_id": None}, None),
+            (conv.id, "turn-empty", "turn.started", {"base_leaf_event_id": None}),
             (
                 other.id,
                 "foreign-turn",
                 "turn.started",
                 {"base_leaf_event_id": None},
-                None,
             ),
         ]
         session.add_all(
@@ -63,11 +59,8 @@ async def service(tmp_path):
                     event_id=identity,
                     type=kind,
                     payload=payload,
-                    replay_from_event_id=baseline,
                 )
-                for seq, (owner, identity, kind, payload, baseline) in enumerate(
-                    rows, 1
-                )
+                for seq, (owner, identity, kind, payload) in enumerate(rows, 1)
             ]
         )
         await session.commit()

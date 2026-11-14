@@ -622,40 +622,43 @@ class AstrBotImporter:
         }
         baselines = {}
         latest_context = {}
+        latest_seq = {}
         for event in sorted(
             event_rows.values(), key=lambda row: (row["conversation_ref"], row["seq"])
         ):
             kind = event["type"]
             owner = event["conversation_ref"]
+            latest_seq[owner] = event["seq"]
             if event.get("payload") is None and kind != "context.rebased":
                 raise ValueError("Only a rebase may have a recycled payload")
-            baseline_id = event.get("replay_from_event_id")
-            if kind == "context.rebased" and baseline_id != event["event_id"]:
-                raise ValueError(
-                    "A rebase must identify itself as its recovery baseline"
-                )
             if kind == "context.rebased":
                 baselines[owner] = event["event_id"]
+            # Validate legacy pointers before discarding them. New backups derive
+            # recovery boundaries solely from the ordered rebase events.
+            if "replay_from_event_id" in event and event["replay_from_event_id"] != (
+                baselines.get(owner)
+                if kind in {"message.appended", "context.rebased"}
+                else None
+            ):
+                raise ValueError("Invalid conversation recovery baseline in backup")
             if kind in {"message.appended", "context.rebased"}:
-                if baseline_id != baselines.get(owner):
-                    raise ValueError("Invalid conversation recovery baseline in backup")
                 latest_context[owner] = event["event_id"]
-            if baseline_id is not None:
-                baseline = event_rows.get(baseline_id)
-                if (
-                    kind not in {"message.appended", "context.rebased"}
-                    or baseline is None
-                    or baseline["type"] != "context.rebased"
-                    or baseline["conversation_ref"] != event["conversation_ref"]
-                    or baseline["seq"] > event["seq"]
-                ):
-                    raise ValueError("Invalid conversation recovery baseline in backup")
 
         for conv in data.get("conversations_v3", []):
             baseline_id = baselines.get(conv["id"])
             if (
-                conv.get("leaf_event_id") != latest_context.get(conv["id"])
-                or conv.get("replay_from_event_id") != baseline_id
+                (
+                    "leaf_event_id" in conv
+                    and conv["leaf_event_id"] != latest_context.get(conv["id"])
+                )
+                or (
+                    "head_seq" in conv
+                    and conv["head_seq"] != latest_seq.get(conv["id"], 0)
+                )
+                or (
+                    "replay_from_event_id" in conv
+                    and conv["replay_from_event_id"] != baseline_id
+                )
                 or (baseline_id and event_rows[baseline_id]["payload"] is None)
             ):
                 raise ValueError("Invalid current conversation context in backup")

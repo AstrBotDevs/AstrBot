@@ -33,10 +33,10 @@ async def test_backup_round_trip_keeps_recycled_baseline_distinct_from_empty(dat
     current = await store.read(conv.conversation_id)
     assert current.messages == []
     status = await store.get_context_availability(
-        conv.conversation_id, [old_id, current.conversation.leaf_event_id, None]
+        conv.conversation_id, [old_id, current.revision.leaf_event_id, None]
     )
     assert status[old_id] == "pruned"
-    assert status[current.conversation.leaf_event_id] == "available"
+    assert status[current.revision.leaf_event_id] == "available"
     assert status[None] == "available"
 
 

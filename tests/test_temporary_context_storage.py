@@ -74,7 +74,7 @@ async def test_raw_bodies_are_stored_once_and_filtered_on_every_projection(
     fork = await store.create(
         umo="owner",
         platform_id="p",
-        source_event_id=recovered.conversation.leaf_event_id,
+        source_event_id=recovered.revision.leaf_event_id,
     )
     assert (await store.read(fork.conversation_id)).messages == expected
     for keyword in ["hidden-part", "hidden-message"]:
@@ -117,8 +117,6 @@ async def test_legacy_double_records_remain_readable_and_retryable(database):
             ]
         )
         metadata = await session.get(ConversationV3, conv.id)
-        metadata.head_seq = 3
-        metadata.leaf_event_id = "filtered-old"
         await session.commit()
     snapshot = await store.read(conv.conversation_id)
     assert snapshot.messages == [visible]
