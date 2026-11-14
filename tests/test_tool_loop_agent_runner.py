@@ -20,6 +20,7 @@ from astrbot.core.agent.runners.tool_loop_agent_runner import ToolLoopAgentRunne
 from astrbot.core.agent.tool import FunctionTool, ToolSet
 from astrbot.core.astr_agent_runtime.runner import run_agent
 from astrbot.core.astr_agent_runtime.tool_executor import FunctionToolExecutor
+from astrbot.core.db.po import Conversation
 from astrbot.core.exceptions import EmptyModelOutputError
 from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.provider.entities import LLMResponse, ProviderRequest, TokenUsage
@@ -342,6 +343,7 @@ class CapturingToolLoopProvider(MockProvider):
         super().__init__()
         self.tool_name = tool_name
         self.received_contexts = []
+        self.first_response_usage = TokenUsage(input_other=10, output=5)
 
     async def text_chat(self, **kwargs) -> LLMResponse:
         self.call_count += 1
@@ -360,7 +362,7 @@ class CapturingToolLoopProvider(MockProvider):
             tools_call_name=[self.tool_name],
             tools_call_args=[{"query": "test"}],
             tools_call_ids=["call_context_refresh"],
-            usage=TokenUsage(input_other=10, output=5),
+            usage=self.first_response_usage,
         )
 
 
@@ -629,11 +631,153 @@ async def test_tool_loop_next_request_includes_tool_result(
         pass
 
     assert provider.call_count == 2
+    assert (
+        runner.request_context_manager.token_counter.count_tokens(
+            provider.received_contexts[0]
+        )
+        < 820
+    )
     second_contexts = provider.received_contexts[1]
     tool_messages = [msg for msg in second_contexts if msg.role == "tool"]
     assert len(tool_messages) == 1
     assert tool_messages[0].tool_call_id == "call_context_refresh"
     assert "工具执行结果" in tool_messages[0].content
+
+
+@pytest.mark.asyncio
+async def test_context_compression_ignores_persisted_conversation_token_usage(
+    runner, mock_provider, provider_request, mock_tool_executor, mock_hooks
+):
+    """A previous request's usage must not compress a small current context."""
+    mock_provider.provider_config["max_context_tokens"] = 1_000_000
+    mock_provider.should_call_tools = False
+    provider_request.contexts = [
+        {"role": "user", "content": "x" * 320_000},
+        {"role": "assistant", "content": "important historical answer"},
+    ]
+    provider_request.prompt = "current question"
+    provider_request.conversation = Conversation(
+        platform_id="webchat",
+        user_id="user",
+        cid="conversation-id",
+        token_usage=3_879_963,
+    )
+
+    await runner.reset(
+        provider=mock_provider,
+        request=provider_request,
+        run_context=ContextWrapper(context=None),
+        tool_executor=mock_tool_executor,
+        agent_hooks=mock_hooks,
+        streaming=False,
+    )
+
+    original_messages = list(runner.run_context.messages)
+    estimated_tokens = runner.request_context_manager.token_counter.count_tokens(
+        original_messages
+    )
+    assert estimated_tokens < 820_000
+
+    legacy_messages = await runner.request_context_manager.process(
+        original_messages,
+        trusted_token_usage=provider_request.conversation.token_usage,
+    )
+    assert "current question" not in [
+        message.content
+        for message in legacy_messages
+        if isinstance(message.content, str)
+    ]
+
+    async for _ in runner.step_until_done(1):
+        pass
+
+    contents = [
+        message.content
+        for message in runner.run_context.messages
+        if isinstance(message.content, str)
+    ]
+    assert "important historical answer" in contents
+    assert "current question" in contents
+
+
+@pytest.mark.asyncio
+async def test_tool_loop_uses_current_run_context_usage_snapshot(
+    runner, provider_request, mock_tool_executor, mock_hooks
+):
+    """Use the last matching provider prompt to guard the next tool-loop request."""
+    provider = CapturingToolLoopProvider("test_tool")
+    provider.provider_config["max_context_tokens"] = 1_000
+    provider.first_response_usage = TokenUsage(input_other=900, output=10)
+    provider_request.contexts = [
+        {"role": "user", "content": "previous question"},
+        {"role": "assistant", "content": "important historical answer"},
+    ]
+    provider_request.prompt = "current question"
+
+    await runner.reset(
+        provider=provider,
+        request=provider_request,
+        run_context=ContextWrapper(context=None),
+        tool_executor=mock_tool_executor,
+        agent_hooks=mock_hooks,
+        streaming=False,
+    )
+
+    async for _ in runner.step_until_done(3):
+        pass
+
+    assert provider.call_count == 2
+    second_contexts = provider.received_contexts[1]
+    second_contents = [
+        message.content
+        for message in second_contexts
+        if isinstance(message.content, str)
+    ]
+    assert "important historical answer" not in second_contents
+    assert "current question" in second_contents
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("mutation", ["message", "tool_schema"])
+async def test_tool_loop_reestimates_after_in_place_request_mutation(
+    runner, provider_request, mock_tool_executor, mutation
+):
+    """Do not reuse prompt usage after a hook mutates the request in place."""
+
+    class MutatingHooks(MockHooks):
+        async def on_tool_end(self, run_context, tool, tool_args, tool_result):
+            await super().on_tool_end(run_context, tool, tool_args, tool_result)
+            if mutation == "message":
+                run_context.messages[0].content = "changed historical question"
+            else:
+                tool.parameters["properties"]["extra"] = {"type": "string"}
+
+    provider = CapturingToolLoopProvider("test_tool")
+    provider.first_response_usage = TokenUsage(input_other=900, output=10)
+    mutating_hooks = MutatingHooks()
+
+    await runner.reset(
+        provider=provider,
+        request=provider_request,
+        run_context=ContextWrapper(context=None),
+        tool_executor=mock_tool_executor,
+        agent_hooks=mutating_hooks,
+        streaming=False,
+    )
+
+    trusted_token_usages = []
+
+    async def capture_context_processing(messages, trusted_token_usage=0):
+        trusted_token_usages.append(trusted_token_usage)
+        return list(messages)
+
+    runner.request_context_manager.process = capture_context_processing
+
+    async for _ in runner.step_until_done(3):
+        pass
+
+    assert provider.call_count == 2
+    assert trusted_token_usages == [0, 0]
 
 
 @pytest.mark.asyncio
@@ -1362,7 +1506,6 @@ async def test_empty_output_retries_exhausted_then_uses_fallback_provider(
     assert final_resp.completion_text == "这是我的最终回答"
     assert primary_provider.call_count == runner.EMPTY_OUTPUT_RETRY_ATTEMPTS
     assert fallback_provider.call_count == 1
-
 
 
 @pytest.mark.asyncio
@@ -2286,13 +2429,18 @@ async def test_event_journal_records_requests_tools_and_final_context(
     await db.initialize()
     try:
         conv = await db.create_conversation("umo", "p")
-        writer = ConversationEventWriter(db.conversation_store, await db.conversation_store.read(conv.conversation_id))
+        writer = ConversationEventWriter(
+            db.conversation_store,
+            await db.conversation_store.read(conv.conversation_id),
+        )
         provider = VaryingUsageProvider()
         sink = AsyncMock(wraps=writer.consume)
         await runner.reset(
-            provider=provider, request=provider_request,
+            provider=provider,
+            request=provider_request,
             run_context=ContextWrapper(context=None),
-            tool_executor=mock_tool_executor, agent_hooks=mock_hooks,
+            tool_executor=mock_tool_executor,
+            agent_hooks=mock_hooks,
             streaming=streaming,
             conversation_event_sink=sink,
         )
@@ -2308,9 +2456,9 @@ async def test_event_journal_records_requests_tools_and_final_context(
         assert types.count("request.started") == types.count("request.finished") == 2
         assert types.count("tool.started") == types.count("tool.finished") == 1
         assert types[-1] == "turn.finished"
-        assert [e.payload["invocation_id"] for e in events if e.type == "request.started"] == [
-            e.request_id for e in runtime_events if e.type == "request.started"
-        ]
+        assert [
+            e.payload["invocation_id"] for e in events if e.type == "request.started"
+        ] == [e.request_id for e in runtime_events if e.type == "request.started"]
         usage = [e.payload["usage"] for e in events if e.type == "request.finished"]
         assert sum(item["input_tokens"] for item in usage) == 330
         assert sum(item["cached_input_tokens"] for item in usage) == 30
@@ -2318,7 +2466,12 @@ async def test_event_journal_records_requests_tools_and_final_context(
         assert finished_tool.payload["status"] == "completed"
         assert finished_tool.payload["result"]["content"][0]["type"] == "text"
         history = (await db.conversation_store.read(conv.conversation_id)).messages
-        assert [m["role"] for m in history] == ["user", "assistant", "tool", "assistant"]
+        assert [m["role"] for m in history] == [
+            "user",
+            "assistant",
+            "tool",
+            "assistant",
+        ]
         assert history[-1]["content"] == [{"type": "text", "text": "final"}]
     finally:
         await db.engine.dispose()
@@ -2337,9 +2490,14 @@ async def test_journal_failure_does_not_retry_a_model_or_fallback(
 
     primary, fallback = MockProvider(), MockProvider()
     await runner.reset(
-        provider=primary, fallback_providers=[fallback], request=provider_request,
-        run_context=ContextWrapper(context=None), tool_executor=mock_tool_executor,
-        agent_hooks=mock_hooks, streaming=False, conversation_event_sink=persist,
+        provider=primary,
+        fallback_providers=[fallback],
+        request=provider_request,
+        run_context=ContextWrapper(context=None),
+        tool_executor=mock_tool_executor,
+        agent_hooks=mock_hooks,
+        streaming=False,
+        conversation_event_sink=persist,
     )
     with pytest.raises(ConversationPersistenceError):
         await collect_events(runner.step())
@@ -2368,9 +2526,13 @@ async def test_tool_started_is_acknowledged_before_creating_executor(
         return True
 
     await runner.reset(
-        provider=provider, request=provider_request,
-        run_context=ContextWrapper(context=None), tool_executor=executor,
-        agent_hooks=mock_hooks, streaming=False, conversation_event_sink=persist,
+        provider=provider,
+        request=provider_request,
+        run_context=ContextWrapper(context=None),
+        tool_executor=executor,
+        agent_hooks=mock_hooks,
+        streaming=False,
+        conversation_event_sink=persist,
     )
     with pytest.raises(ConversationPersistenceError):
         await collect_events(runner.step_until_done(3))
