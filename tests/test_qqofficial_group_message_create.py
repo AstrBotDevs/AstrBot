@@ -713,6 +713,34 @@ async def test_media_upload_propagates_qq_api_error(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_ws_send_by_session_raises_when_there_is_no_msg_id_and_no_group_scene():
+    adapter = QQOfficialPlatformAdapter(
+        {
+            "id": "qq-official-test",
+            "appid": "123",
+            "secret": "secret",
+            "enable_group_c2c": True,
+            "enable_guild_direct_message": False,
+        },
+        {},
+        asyncio.Queue(),
+    )
+    adapter.client.api = SimpleNamespace(
+        post_group_message=AsyncMock(),
+        post_message=AsyncMock(),
+    )
+
+    with pytest.raises(RuntimeError, match="No cached msg_id"):
+        await adapter.send_by_session(
+            MessageSession("qq_official", MessageType.GROUP_MESSAGE, "group-1"),
+            MessageChain(chain=[Plain("proactive hello")]),
+        )
+
+    adapter.client.api.post_group_message.assert_not_awaited()
+    adapter.client.api.post_message.assert_not_awaited()
+
+
+@pytest.mark.asyncio
 async def test_webhook_group_send_by_session_without_cached_msg_id_omits_msg_id():
     adapter = QQOfficialWebhookPlatformAdapter(
         {
