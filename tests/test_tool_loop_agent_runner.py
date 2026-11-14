@@ -1587,8 +1587,9 @@ async def test_stop_interrupts_pending_regular_tool(mock_hooks):
 
 
 @pytest.mark.asyncio
-async def test_tool_result_injects_follow_up_notice(
-    runner, mock_provider, provider_request, mock_tool_executor, mock_hooks
+@pytest.mark.parametrize("tool_count", [1, 2])
+async def test_steering_appends_user_messages_after_all_tool_results(
+    runner, mock_provider, provider_request, mock_tool_executor, mock_hooks, tool_count
 ):
     mock_event = MockEvent("test:FriendMessage:follow_up", "u1")
     run_context = ContextWrapper(context=MockAgentContext(mock_event))
@@ -1602,6 +1603,12 @@ async def test_tool_result_injects_follow_up_notice(
         streaming=False,
     )
 
+    mock_provider.text_chat = AsyncMock(return_value=LLMResponse(
+        role="assistant",
+        tools_call_name=["test_tool"] * tool_count,
+        tools_call_args=[{"query": "test"}] * tool_count,
+        tools_call_ids=[f"call_{index}" for index in range(tool_count)],
+    ))
     ticket1 = runner.follow_up(
         message_text="follow up 1",
     )
@@ -1617,12 +1624,13 @@ async def test_tool_result_injects_follow_up_notice(
     assert provider_request.tool_calls_result is not None
     assert isinstance(provider_request.tool_calls_result, list)
     assert provider_request.tool_calls_result
-    tool_result = str(
-        provider_request.tool_calls_result[0].tool_calls_result[0].content
-    )
-    assert "SYSTEM NOTICE" in tool_result
-    assert "1. follow up 1" in tool_result
-    assert "2. follow up 2" in tool_result
+    results = provider_request.tool_calls_result[0].tool_calls_result
+    assert [result.content for result in results] == ["工具执行结果"] * tool_count
+    tail = runner.run_context.messages[-(tool_count + 2):]
+    assert [message.role for message in tail] == [
+        "assistant", *(["tool"] * tool_count), "user",
+    ]
+    assert tail[-1].content == [TextPart(text="follow up 1"), TextPart(text="follow up 2")]
     assert ticket1.resolved.is_set() is True
     assert ticket2.resolved.is_set() is True
     assert ticket1.consumed is True
@@ -2098,52 +2106,6 @@ async def test_follow_up_rejected_after_stop_before_tool_call(
 
 
 @pytest.mark.asyncio
-async def test_follow_up_merged_into_tool_result_before_stop(
-    runner, mock_provider, provider_request, mock_tool_executor, mock_hooks
-):
-    """Test that follow-ups queued before stop are merged into tool results."""
-
-    mock_event = MockEvent("test:FriendMessage:merge_before_stop", "u1")
-    run_context = ContextWrapper(context=MockAgentContext(mock_event))
-
-    await runner.reset(
-        provider=mock_provider,
-        request=provider_request,
-        run_context=run_context,
-        tool_executor=mock_tool_executor,
-        agent_hooks=mock_hooks,
-        streaming=False,
-    )
-
-    # Queue follow-ups before stop
-    ticket1 = runner.follow_up(message_text="follow up 1 before stop")
-    ticket2 = runner.follow_up(message_text="follow up 2 before stop")
-    assert ticket1 is not None
-    assert ticket2 is not None
-
-    # Run the agent step (should execute tool and merge follow-ups)
-    async for _ in runner.step():
-        pass
-
-    # Verify follow-ups were merged into tool result
-    assert provider_request.tool_calls_result is not None
-    assert isinstance(provider_request.tool_calls_result, list)
-    assert provider_request.tool_calls_result
-    tool_result = str(
-        provider_request.tool_calls_result[0].tool_calls_result[0].content
-    )
-
-    # Should contain the follow-up notice
-    assert "SYSTEM NOTICE" in tool_result
-    assert "follow up 1 before stop" in tool_result
-    assert "follow up 2 before stop" in tool_result
-
-    # Tickets should be marked as consumed
-    assert ticket1.consumed is True
-    assert ticket2.consumed is True
-
-
-@pytest.mark.asyncio
 async def test_follow_up_rejected_and_runner_stops_without_execution(
     runner, mock_provider, provider_request, mock_tool_executor, mock_hooks
 ):
@@ -2194,20 +2156,10 @@ async def test_follow_up_rejected_and_runner_stops_without_execution(
 
 
 @pytest.mark.asyncio
-async def test_follow_up_after_stop_not_merged_into_tool_result(
+async def test_follow_up_after_stop_not_added_to_context(
     runner, mock_provider, provider_request, mock_tool_executor, mock_hooks
 ):
-    """Regression test for issue #6626: verify post-stop follow-ups are not injected into tool results.
-
-    This test simulates the race condition where:
-    1. Runner is active and executing tools
-    2. A follow-up is queued (should be included in tool result)
-    3. Stop is requested
-    4. Another follow-up is attempted (should be rejected)
-    5. Tool execution completes and merges follow-ups into result
-
-    The key assertion is that only pre-stop follow-ups are merged into the tool result.
-    """
+    """Reject new steering after stop without losing unresolved input tickets."""
 
     mock_event = MockEvent("test:FriendMessage:regression_6626", "u1")
     run_context = ContextWrapper(context=MockAgentContext(mock_event))
@@ -2221,7 +2173,7 @@ async def test_follow_up_after_stop_not_merged_into_tool_result(
         streaming=False,
     )
 
-    # Add a follow-up before stop (should be included in tool result)
+    # Queue input before requesting stop.
     ticket_before = runner.follow_up(message_text="valid before stop")
     assert ticket_before is not None
     assert ticket_before in runner._pending_follow_ups
@@ -2238,34 +2190,20 @@ async def test_follow_up_after_stop_not_merged_into_tool_result(
     assert len(runner._pending_follow_ups) == 1
     assert runner._pending_follow_ups[0].text == "valid before stop"
 
-    # Run the agent step - this will execute tool and merge follow-ups into result
+    # Let the step settle pending input after stop.
     async for response in runner.step():
         # The runner should execute tools and then stop
         pass
 
-    # Verify tool result was created with follow-up merged
-    # Note: When stop is requested, the tool may or may not execute depending on timing.
-    # The key assertion is that IF tool_calls_result exists, it only contains pre-stop follow-ups.
-    if provider_request.tool_calls_result is not None:
-        assert isinstance(provider_request.tool_calls_result, list)
-        assert provider_request.tool_calls_result
-        tool_result = str(
-            provider_request.tool_calls_result[0].tool_calls_result[0].content
-        )
-
-        # Should contain the pre-stop follow-up
-        assert "valid before stop" in tool_result
-
-        # Should NOT contain the post-stop follow-up
-        assert "invalid after stop" not in tool_result
-        assert "after stop" not in tool_result or "after stop" in "valid before stop"
-
-        # Ticket should be marked as consumed (merged into tool result)
-        assert ticket_before.consumed is True
-    else:
-        # If tool execution was aborted by stop, the ticket should still be resolved
-        # but not consumed (since there was no tool call to merge into)
-        assert ticket_before.resolved.is_set()
+    assert all(
+        message.content != [TextPart(text="invalid after stop")]
+        for message in runner.run_context.messages
+    )
+    assert ticket_before.resolved.is_set()
+    assert ticket_before.consumed == any(
+        message.role == "user" and message.content == [TextPart(text="valid before stop")]
+        for message in runner.run_context.messages
+    )
 
 
 if __name__ == "__main__":
@@ -2297,10 +2235,11 @@ async def test_event_journal_records_requests_tools_and_final_context(
             conversation_event_sink=sink,
         )
         await writer.start_turn({"kind": "agent"})
+        ticket = runner.follow_up(message_text="steering input")
         runtime_events = await collect_events(runner.step_until_done(3))
         captured = [call.args[0] for call in sink.await_args_list]
         assert sum(event.type == "context.updated" for event in captured) == 1
-        assert sum(event.type == "context.appended" for event in captured) == 2
+        assert sum(event.type == "context.appended" for event in captured) == 3
         await writer.save_history(dump_messages(runner.run_context.messages))
         await writer.finish_turn("completed")
         events = await db.conversation_store.events(conv.conversation_id)
@@ -2318,7 +2257,9 @@ async def test_event_journal_records_requests_tools_and_final_context(
         assert finished_tool.payload["status"] == "completed"
         assert finished_tool.payload["result"]["content"][0]["type"] == "text"
         history = (await db.conversation_store.read(conv.conversation_id)).messages
-        assert [m["role"] for m in history] == ["user", "assistant", "tool", "assistant"]
+        assert [m["role"] for m in history] == ["user", "assistant", "tool", "user", "assistant"]
+        assert ticket is not None and ticket.consumed
+        assert history[-2]["content"] == [{"type": "text", "text": "steering input"}]
         assert history[-1]["content"] == [{"type": "text", "text": "final"}]
     finally:
         await db.engine.dispose()
