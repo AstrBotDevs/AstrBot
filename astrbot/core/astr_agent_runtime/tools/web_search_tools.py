@@ -1410,7 +1410,11 @@ class BraveWebSearchTool(FunctionTool[AstrAgentContext]):
                 },
                 "freshness": {
                     "type": "string",
-                    "description": 'Optional. One of "day", "week", "month", "year".',
+                    "description": (
+                        'Optional. Freshness filter: "pd" (past 24 hours), '
+                        '"pw" (past 7 days), "pm" (past 31 days), or "py" (past 365 days). '
+                        'Also accepts "day", "week", "month", "year" respectively.'
+                    ),
                 },
             },
             "required": ["query"],
@@ -1434,9 +1438,16 @@ class BraveWebSearchTool(FunctionTool[AstrAgentContext]):
             "country": kwargs.get("country", "US"),
             "search_lang": kwargs.get("search_lang", "zh-hans"),
         }
-        freshness = kwargs.get("freshness", "")
-        if freshness in ["day", "week", "month", "year"]:
-            payload["freshness"] = freshness
+        freshness = kwargs.get("freshness")
+        if isinstance(freshness, str):
+            freshness = {
+                "day": "pd",
+                "week": "pw",
+                "month": "pm",
+                "year": "py",
+            }.get(freshness, freshness)
+            if freshness in ["pd", "pw", "pm", "py"]:
+                payload["freshness"] = freshness
 
         results = await _brave_search(provider_settings, payload)
         if not results:
