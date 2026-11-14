@@ -706,6 +706,94 @@ class TestAstrBotImporter:
         importer._import_main_database.assert_not_awaited()
 
 
+class TestBackupListing:
+    """Backup listing must use metadata from the archive it actually read."""
+
+    @pytest.mark.parametrize("valid_zip", [False, True])
+    def test_list_backups_skips_archive_without_readable_manifest(
+        self, temp_backup_dir, monkeypatch, valid_zip
+    ):
+        """Unreadable archives and archives without manifests are omitted."""
+        invalid = temp_backup_dir / "invalid.zip"
+        if valid_zip:
+            with zipfile.ZipFile(invalid, "w") as archive:
+                archive.writestr("not-manifest.txt", "payload")
+        else:
+            invalid.write_bytes(b"not a zip archive")
+
+        survivor = temp_backup_dir / "survivor.zip"
+        with zipfile.ZipFile(survivor, "w") as archive:
+            archive.writestr(
+                "manifest.json",
+                json.dumps({"origin": "exported", "astrbot_version": "4.0.0"}),
+            )
+
+        service = BackupService.__new__(BackupService)
+        service.backup_dir = str(temp_backup_dir)
+        monkeypatch.setattr(
+            BackupService, "ensure_cleanup_task_started", lambda self: None
+        )
+
+        result = service.list_backups(page=1, page_size=10)
+
+        assert [item["filename"] for item in result["items"]] == ["survivor.zip"]
+        assert result["total"] == 1
+
+    @pytest.mark.parametrize("replace_archive", [False, True])
+    def test_list_backups_skips_archive_changed_after_manifest_read(
+        self, temp_backup_dir, monkeypatch, replace_archive
+    ):
+        """A vanished or replaced archive must not produce a stale listing row."""
+        victim = temp_backup_dir / "victim.zip"
+        survivor = temp_backup_dir / "survivor.zip"
+        for path in (victim, survivor):
+            with zipfile.ZipFile(path, "w") as archive:
+                archive.writestr(
+                    "manifest.json",
+                    json.dumps(
+                        {
+                            "origin": "exported",
+                            "astrbot_version": "4.0.0",
+                        }
+                    ),
+                )
+
+        service = BackupService.__new__(BackupService)
+        service.backup_dir = str(temp_backup_dir)
+        monkeypatch.setattr(
+            BackupService, "ensure_cleanup_task_started", lambda self: None
+        )
+
+        manifest_read = False
+        real_read = zipfile.ZipFile.read
+
+        def read_then_race(archive, name, *args, **kwargs):
+            nonlocal manifest_read
+            data = real_read(archive, name, *args, **kwargs)
+            if name == "manifest.json" and Path(archive.filename).name == victim.name:
+                manifest_read = True
+            return data
+
+        real_stat = os.stat
+
+        def racing_stat(path, *args, **kwargs):
+            if manifest_read and os.fspath(path) == str(victim):
+                if not replace_archive:
+                    raise FileNotFoundError(2, "No such file or directory", str(path))
+                values = list(real_stat(path, *args, **kwargs))
+                values[1] += 1
+                return os.stat_result(values)
+            return real_stat(path, *args, **kwargs)
+
+        monkeypatch.setattr(zipfile.ZipFile, "read", read_then_race)
+        monkeypatch.setattr(os, "stat", racing_stat)
+
+        result = service.list_backups(page=1, page_size=10)
+
+        assert [item["filename"] for item in result["items"]] == ["survivor.zip"]
+        assert result["total"] == 1
+
+
 class TestSecureFilename:
     """安全文件名函数测试"""
 
