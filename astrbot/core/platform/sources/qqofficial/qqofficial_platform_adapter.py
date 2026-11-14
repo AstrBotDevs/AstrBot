@@ -38,6 +38,7 @@ from astrbot.api.platform import (
     Platform,
     PlatformMetadata,
 )
+from astrbot.core import sp
 from astrbot.core.message.components import BaseMessageComponent
 from astrbot.core.platform.astr_message_event import MessageSesion
 from astrbot.core.platform.button_interaction import decode_button_callback
@@ -192,7 +193,7 @@ async def _handle_interaction_create(client: Any, interaction: Interaction) -> N
         return
 
     await client.api.on_interaction_result(interaction.id, 0)
-    client.platform.remember_session_scene(abm.session_id, interaction.scene)
+    await client.platform.remember_session_scene(abm.session_id, interaction.scene)
     client.platform.commit_event(client.platform.create_event(abm))
 
 
@@ -239,7 +240,7 @@ class botClient(Client):
         )
         abm.group_id = cast(str, message.group_openid)
         abm.session_id = abm.group_id
-        self.platform.remember_session_scene(abm.session_id, "group")
+        await self.platform.remember_session_scene(abm.session_id, "group")
         self._commit(abm)
 
     async def on_group_message_create(
@@ -252,7 +253,7 @@ class botClient(Client):
         )
         abm.group_id = cast(str, message.group_openid)
         abm.session_id = abm.group_id
-        self.platform.remember_session_scene(abm.session_id, "group")
+        await self.platform.remember_session_scene(abm.session_id, "group")
         self._commit(abm)
 
     # 收到频道消息
@@ -263,7 +264,7 @@ class botClient(Client):
         )
         abm.group_id = message.channel_id
         abm.session_id = abm.group_id
-        self.platform.remember_session_scene(abm.session_id, "channel")
+        await self.platform.remember_session_scene(abm.session_id, "channel")
         self._commit(abm)
 
     # 收到私聊消息
@@ -275,7 +276,7 @@ class botClient(Client):
             MessageType.FRIEND_MESSAGE,
         )
         abm.session_id = abm.sender.user_id
-        self.platform.remember_session_scene(abm.session_id, "friend")
+        await self.platform.remember_session_scene(abm.session_id, "friend")
         self._commit(abm)
 
     # 收到 C2C 消息
@@ -285,7 +286,7 @@ class botClient(Client):
             MessageType.FRIEND_MESSAGE,
         )
         abm.session_id = abm.sender.user_id
-        self.platform.remember_session_scene(abm.session_id, "friend")
+        await self.platform.remember_session_scene(abm.session_id, "friend")
         self._commit(abm)
 
     async def on_interaction_create(self, interaction: Interaction) -> None:
@@ -367,7 +368,6 @@ class QQOfficialPlatformAdapter(Platform):
 
         self._session_last_message_id: dict[str, str] = {}
         self._session_scene: dict[str, str] = {}
-        self._allow_group_proactive_send = True
 
         self.test_mode = os.environ.get("TEST_MODE", "off") == "on"
 
@@ -391,6 +391,9 @@ class QQOfficialPlatformAdapter(Platform):
 
         Returns:
             None.
+
+        Raises:
+            ValueError: The group or channel delivery scene is unknown.
         """
         if session.message_type == MessageType.GROUP_MESSAGE:
             session = MessageSesion(
@@ -442,24 +445,22 @@ class QQOfficialPlatformAdapter(Platform):
         ):
             return
 
-        # 主动推送不需要 msg_id，见 https://github.com/AstrBotDevs/AstrBot/issues/7904
-        msg_id = self._session_last_message_id.get(session.session_id)
         scene = self._session_scene.get(session.session_id)
-        allow_group_proactive_send = (
-            session.message_type == MessageType.GROUP_MESSAGE
-            and scene == "group"
-            and getattr(self, "_allow_group_proactive_send", False)
-        )
-        if (
-            not msg_id
-            and session.message_type != MessageType.FRIEND_MESSAGE
-            and not allow_group_proactive_send
-        ):
-            logger.warning(
-                "[QQOfficial] No cached msg_id for session: %s, skip send_by_session",
-                session.session_id,
-            )
-            return
+        if session.message_type == MessageType.GROUP_MESSAGE:
+            if scene is None:
+                scene = await sp.get_async(
+                    "qqofficial",
+                    f"{self.meta().id}:{self.appid}",
+                    f"group_scene:{session.session_id}",
+                    None,
+                )
+            if scene not in ("group", "channel"):
+                raise ValueError(
+                    "[QQOfficial] Unknown delivery scene for session "
+                    f"{session.session_id}; receive a message from this group or "
+                    "channel first to establish its route."
+                )
+            self._session_scene[session.session_id] = scene
 
         use_md = getattr(message_chain, "use_markdown_", None)
         if use_md is False or (use_md is None and not self.use_markdown_default):
@@ -471,8 +472,7 @@ class QQOfficialPlatformAdapter(Platform):
             }
         if keyboard:
             payload["keyboard"] = keyboard
-        if msg_id and not allow_group_proactive_send:
-            payload["msg_id"] = msg_id
+        # Session sends are proactive; cached reply IDs may be expired.
         ret: Any = None
         send_helper = SimpleNamespace(bot=self.client)
 
@@ -631,9 +631,31 @@ class QQOfficialPlatformAdapter(Platform):
             return
         self._session_last_message_id[session_id] = message_id
 
-    def remember_session_scene(self, session_id: str, scene: str) -> None:
+    async def remember_session_scene(self, session_id: str, scene: str) -> None:
+        """Persist group delivery routes before dispatching incoming events.
+
+        Args:
+            session_id: Raw group OpenID, channel ID, or private sender ID.
+            scene: Delivery scene reported by the incoming event.
+        """
         if not session_id or not scene:
             return
+        if self._session_scene.get(session_id) == scene:
+            return
+        if scene in ("group", "channel"):
+            try:
+                await sp.put_async(
+                    "qqofficial",
+                    f"{self.meta().id}:{self.appid}",
+                    f"group_scene:{session_id}",
+                    scene,
+                )
+            except Exception:
+                logger.exception(
+                    "[QQOfficial] Failed to persist delivery scene for session %s",
+                    session_id,
+                )
+                raise
         self._session_scene[session_id] = scene
 
     def _extract_message_id(self, ret: Any) -> str | None:
