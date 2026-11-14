@@ -161,6 +161,7 @@ export default defineConfig({
             base: "/use",
             items: [
               { text: "WebUI", link: "/webui" },
+              { text: "备份与恢复", link: "/backup" },
               { text: "AstrBot CLI", link: "/cli" },
               { text: "内置指令", link: "/command" },
               {
@@ -441,6 +442,7 @@ export default defineConfig({
             collapsed: true,
             items: [
               { text: "WebUI", link: "/webui" },
+              { text: "Backup and Restore", link: "/backup" },
               { text: "AstrBot CLI", link: "/cli" },
               { text: "Built-in Commands", link: "/command" },
               {
