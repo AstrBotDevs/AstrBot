@@ -173,11 +173,17 @@ class InternalAgentSubStage(Stage):
             )
             live = event.get_extra("action_type") == "live"
             if live:
-                provider = (
-                    await self.ctx.plugin_manager.context.get_using_tts_provider_async(
+                live_config = self.ctx.plugin_manager.context.get_config(
+                    umo=event.unified_msg_origin
+                )
+                live_tts_mode = str(
+                    live_config.get("provider_tts_settings", {}).get("mode", "always")
+                )
+                provider = None
+                if live_tts_mode != "tool":
+                    provider = await self.ctx.plugin_manager.context.get_using_tts_provider_async(
                         event.unified_msg_origin
                     )
-                )
                 chains = stream_speech(chains, provider, event=event)
             if live or streaming and not stream_to_general:
                 event.set_result(

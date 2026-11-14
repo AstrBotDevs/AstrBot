@@ -147,6 +147,10 @@
           "description": "Voice Replies",
           "hint": "Use a text-to-speech model to turn text into voice replies."
         },
+        "mode": {
+          "description": "Voice Reply Mode",
+          "hint": "always: convert every reply to voice automatically; tool: send voice only when the model calls the send_voice tool."
+        },
         "provider_id": {
           "description": "Default Text-to-Speech Model",
           "hint": "You can also use /provider to select a model for an individual conversation."

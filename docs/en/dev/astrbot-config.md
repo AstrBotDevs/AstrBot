@@ -88,6 +88,7 @@ The default AstrBot configuration is as follows:
     },
     "provider_tts_settings": {
         "enable": False,
+        "mode": "always",
         "provider_id": "",
         "dual_output": False,
         "use_file_service": False,
@@ -411,6 +412,13 @@ General settings for Text-to-Speech (TTS) providers.
 #### `provider_tts_settings.enable`
 
 Whether to enable TTS services. Default is `false`.
+
+#### `provider_tts_settings.mode`
+
+Voice reply mode. Default is `always`.
+
+- `always`: convert every reply to voice automatically (legacy behavior).
+- `tool`: send voice only when the model calls the `send_voice` tool, so the model decides per turn. Automatic conversion is disabled in this mode.
 
 #### `provider_tts_settings.provider_id`
 

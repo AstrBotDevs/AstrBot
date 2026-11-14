@@ -159,6 +159,10 @@
           "description": "语音回复",
           "hint": "使用文字转语音模型将文字转为语音回复。"
         },
+        "mode": {
+          "description": "语音回复模式",
+          "hint": "always：每条回复自动转语音；tool：仅当模型调用 send_voice 工具时发送语音。"
+        },
         "provider_id": {
           "description": "默认文本转语音模型",
           "hint": "也可使用 /provider 指令单独选择会话的模型。"

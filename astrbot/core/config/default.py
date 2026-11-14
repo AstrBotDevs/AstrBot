@@ -216,6 +216,7 @@ DEFAULT_CONFIG = {
     },
     "provider_tts_settings": {
         "enable": False,
+        "mode": "always",
         "provider_id": "",
         "dual_output": False,
         "use_file_service": False,
@@ -3199,6 +3200,9 @@ CONFIG_METADATA_2 = {
                     "enable": {
                         "type": "bool",
                     },
+                    "mode": {
+                        "type": "string",
+                    },
                     "provider_id": {
                         "type": "string",
                     },
@@ -3650,6 +3654,15 @@ CONFIG_METADATA_3 = {
                         "description": "语音回复",
                         "type": "bool",
                         "hint": "使用文字转语音模型将文字转为语音回复。",
+                    },
+                    "provider_tts_settings.mode": {
+                        "description": "语音回复模式",
+                        "hint": "always：每条回复自动转语音；tool：仅当模型调用 send_voice 工具时发送语音。",
+                        "type": "string",
+                        "options": ["always", "tool"],
+                        "condition": {
+                            "provider_tts_settings.enable": True,
+                        },
                     },
                     "provider_tts_settings.provider_id": {
                         "description": "默认文本转语音模型",

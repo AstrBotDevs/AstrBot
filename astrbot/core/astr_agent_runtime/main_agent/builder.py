@@ -17,6 +17,7 @@ from astrbot.core.astr_agent_runtime.tools.message_tools import (
     GetGroupMessageHistoryTool,
     SendMessageToUserTool,
 )
+from astrbot.core.astr_agent_runtime.tools.tts_tools import SendVoiceTool
 from astrbot.core.conversation_mgr import ConversationManager
 from astrbot.core.llm_error_messages import LLM_ERROR_MESSAGE_EXTRA_KEY
 from astrbot.core.pipeline.context_utils import call_event_hook
@@ -185,6 +186,23 @@ async def build_main_agent(
         and config.group_message_history_enabled
     ):
         builtin_types.append(GetGroupMessageHistoryTool)
+    tts_settings = plugin_context.get_config(umo=event.unified_msg_origin).get(
+        "provider_tts_settings",
+        {},
+    )
+    if (
+        bool(tts_settings.get("enable"))
+        and str(tts_settings.get("mode", "always")) == "tool"
+    ):
+        try:
+            tts_provider = await plugin_context.get_using_tts_provider_async(
+                event.unified_msg_origin,
+            )
+        except Exception as exc:
+            logger.warning("Failed to resolve TTS provider for send_voice: %s", exc)
+            tts_provider = None
+        if tts_provider is not None:
+            builtin_types.append(SendVoiceTool)
     if builtin_types:
         if req.func_tool is None:
             req.func_tool = ToolSet()
