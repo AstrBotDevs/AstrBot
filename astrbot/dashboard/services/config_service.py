@@ -238,7 +238,8 @@ def validate_config(
                 is_core
                 and path == "provider."
                 and key == "key"
-                and data.get("type") in {"system_one_decision", "openai_decision"}
+                and data.get("type")
+                in {"system_one_decision", "openai_decision", "gemini_decision"}
             ):
                 # Decision providers use a single key within the shared provider schema.
                 meta = {**meta, "type": "string"}

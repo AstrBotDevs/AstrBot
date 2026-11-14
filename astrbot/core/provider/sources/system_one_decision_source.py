@@ -17,6 +17,7 @@ from ..entities import (
     DecisionChoiceAnswer,
     DecisionChoiceQuestion,
     DecisionError,
+    DecisionInput,
     DecisionQuestion,
     DecisionScoreAnswer,
     DecisionScoreQuestion,
@@ -110,12 +111,17 @@ class SystemOneDecisionProvider(DecisionProvider):
             Validated answers keyed by the same identifiers as ``questions``.
 
         Raises:
-            ValueError: A question is empty or its criteria are unusable.
+            ValueError: A question is empty, its criteria are unusable, or state
+                is an unsupported DecisionInput.
             DecisionError: The request fails or the response violates the
                 decision contract.
         """
         if not questions:
             raise ValueError("questions must not be empty")
+        if isinstance(state, DecisionInput):
+            raise ValueError(
+                "System One decision provider does not support DecisionInput"
+            )
 
         payload_questions: dict[str, dict[str, Any]] = {}
         for head, question in questions.items():

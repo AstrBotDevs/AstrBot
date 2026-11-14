@@ -4,7 +4,7 @@ import enum
 import json
 from collections.abc import Mapping
 from dataclasses import dataclass, field
-from typing import Any, TypeAlias
+from typing import Any, Literal, TypeAlias
 
 from anthropic.types import Message as AnthropicMessage
 from deprecated import deprecated
@@ -70,7 +70,8 @@ class DecisionScoreQuestion:
 
     Attributes:
         instructions: The question or instruction evaluated by the model.
-        criteria: Two to ten level descriptions, ordered from lowest to highest.
+        criteria: At least two level descriptions, ordered from lowest to highest.
+            The maximum number of levels depends on the provider.
     """
 
     instructions: str
@@ -80,7 +81,41 @@ class DecisionScoreQuestion:
 DecisionQuestion: TypeAlias = (
     DecisionChoiceQuestion | DecisionBooleanQuestion | DecisionScoreQuestion
 )
-DecisionState: TypeAlias = str | list[Any] | dict[str, Any]
+
+
+@dataclass(frozen=True, slots=True)
+class DecisionMedia:
+    """Explicit media content for a decision provider that supports it.
+
+    Attributes:
+        type: Media kind. Supported kinds depend on the provider.
+        mime_type: Actual media MIME type, such as image/png or application/pdf.
+        data: Base64-encoded media bytes. Supply exactly one of data or uri.
+        uri: Media URI accepted by the provider, not a local filesystem path.
+        resolution: Optional image/video resolution supported by the provider.
+    """
+
+    type: Literal["image", "audio", "video", "document"]
+    mime_type: str
+    data: str | None = None
+    uri: str | None = None
+    resolution: Literal["low", "medium", "high", "ultra_high"] | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class DecisionInput:
+    """Explicit text and media input, distinct from ordinary business JSON.
+
+    Attributes:
+        content: Non-empty ordered list of text strings and media blocks.
+            Text separators must be included by the caller. Provider support
+            is required; ordinary dict/list state retains its JSON semantics.
+    """
+
+    content: list[str | DecisionMedia]
+
+
+DecisionState: TypeAlias = str | list[Any] | dict[str, Any] | DecisionInput
 
 
 @dataclass(frozen=True, slots=True)
