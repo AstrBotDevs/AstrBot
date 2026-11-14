@@ -493,6 +493,47 @@ async def test_convert_audio_format_transcodes_amr_bytes_misnamed_as_wav(
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "source_bytes",
+    [b"#!AMR\n" + b"\x00" * 32, b"RIFF\x24\x00\x00\x00WAVEfmt " + b"\x00" * 16],
+)
+async def test_ensure_wav_passes_pcm_normalization_options_to_ffmpeg(
+    tmp_path, monkeypatch, source_bytes
+):
+    source_path = tmp_path / "voice.wav"
+    source_path.write_bytes(source_bytes)
+    converted_path = tmp_path / "converted.wav"
+    calls = []
+
+    class FakeProcess:
+        returncode = 0
+
+        async def communicate(self):
+            return b"", b""
+
+    async def fake_create_subprocess_exec(*args, **kwargs):
+        calls.append(args)
+        return FakeProcess()
+
+    monkeypatch.setattr(
+        media_utils.asyncio, "create_subprocess_exec", fake_create_subprocess_exec
+    )
+
+    result = await media_utils.ensure_wav(
+        str(source_path), str(converted_path), sample_rate=16000, channels=1
+    )
+
+    assert result == str(converted_path)
+    assert calls == [
+        (
+            "ffmpeg", "-y", "-i", str(source_path),
+            "-acodec", "pcm_s16le", "-ar", "16000", "-ac", "1",
+            str(converted_path),
+        )
+    ]
+
+
+@pytest.mark.asyncio
 async def test_convert_audio_format_rewrites_misnamed_target_format(
     tmp_path, monkeypatch
 ):

@@ -166,7 +166,9 @@ uv tool upgrade astrbot --python 3.12
 | OpenAI Whisper | 語音轉文字服務 |
 | SenseVoice | 語音轉文字服務 |
 | Xiaomi MiMo Omni | 語音轉文字服務 |
+| [DeepSeek STT](https://api-docs.deepseek.com/zh-cn/guides/asr/) | 語音轉文字服務 |
 | OpenAI TTS | 文字轉語音服務 |
+| [DeepSeek TTS](https://api-docs.deepseek.com/zh-cn/guides/tts/) | 文字轉語音服務 |
 | Gemini TTS | 文字轉語音服務 |
 | GPT-Sovits-Inference | 文字轉語音服務 |
 | GPT-Sovits | 文字轉語音服務 |

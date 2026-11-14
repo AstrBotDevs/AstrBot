@@ -167,7 +167,9 @@ AstrBot をよく使うチャットプラットフォームに接続できます
 | OpenAI Whisper | 音声認識サービス |
 | SenseVoice | 音声認識サービス |
 | Xiaomi MiMo Omni | 音声認識サービス |
+| [DeepSeek STT](https://api-docs.deepseek.com/zh-cn/guides/asr/) | 音声認識サービス |
 | OpenAI TTS | 音声合成サービス |
+| [DeepSeek TTS](https://api-docs.deepseek.com/zh-cn/guides/tts/) | 音声合成サービス |
 | Gemini TTS | 音声合成サービス |
 | GPT-Sovits-Inference | 音声合成サービス |
 | GPT-Sovits | 音声合成サービス |

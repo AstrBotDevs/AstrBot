@@ -35,6 +35,12 @@
     "openaiDecisionHints": {
       "apiBase": "OpenAI API base URL, https://api.openai.com/v1 by default. /decisions is appended unless the URL already ends with it.",
       "model": "OpenAI Decisions currently supports gpt-6-luna."
+    },
+    "deepseekTtsHints": {
+      "apiBase": "DeepSeek TTS API base URL, https://api.deepseek.com/v1 by default. /tools/tts is appended automatically; do not add another /v1."
+    },
+    "deepseekSttHints": {
+      "apiBase": "DeepSeek STT API base URL, https://api.deepseek.com/v1 by default. /tools/asr is appended automatically; do not add another /v1."
     }
   },
   "availability": {
