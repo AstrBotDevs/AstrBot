@@ -34,7 +34,7 @@ llm_resp = await self.context.llm_generate(
 
 A Decision Provider handles low-latency structured choices, such as whether to reply, which message to answer, or which branch to execute. Configure one under **Providers → Decision** in the WebUI, then call it from a plugin through `self.context.decision`. It is independent of the chat model.
 
-One request can answer multiple questions. `state` is passed to the decision model as-is and must be a `str`, `list`, or `dict`:
+One request can answer multiple questions. `state` accepts text (`str`) or business JSON (`list`/`dict`). Providers with multimodal support also accept explicit `DecisionInput`; ordinary JSON is never automatically interpreted as media:
 
 ```py
 from astrbot.api.provider import (
@@ -88,7 +88,7 @@ if (
 
 Results use three independent frozen dataclasses: `DecisionChoiceAnswer`, `DecisionBooleanAnswer`, and `DecisionScoreAnswer`. `DecisionAnswer` is their union type. After calling `ask()`, use `isinstance()` to identify the result type before accessing its fields. `choose()` returns `DecisionChoiceAnswer`, while `yes_no()` returns `bool`.
 
-`DecisionScoreQuestion.criteria` is a list of 2–10 string levels, ordered from lowest to highest and numbered from 0. `DecisionScoreAnswer.score` is a probability-weighted rating, possibly fractional, from `0` to `len(criteria) - 1`. Both `legend` and `probabilities` use string level numbers such as `"0"` as keys, mapping to descriptions and probabilities; `confidence` reports certainty. A score answer contains only these four fields. All three question types can be mixed in one `ask()` call.
+`DecisionScoreQuestion.criteria` is a list of at least two string levels, ordered from lowest to highest and numbered from 0. The provider determines the maximum: Gemini accepts 2–255 levels, while the current OpenAI adapter accepts 2–10. `DecisionScoreAnswer.score` is a probability-weighted rating, possibly fractional, from `0` to `len(criteria) - 1`. Both `legend` and `probabilities` use string level numbers such as `"0"` as keys, mapping to descriptions and probabilities; `confidence` reports certainty. A score answer contains only these four fields. All three question types can be mixed in one `ask()` call.
 
 Use the convenience methods for a single question:
 
@@ -138,9 +138,98 @@ How `state` is sent:
 - `str` or omitted: sent as text input.
 - `dict`, or a `list` whose items are all `dict`: sent as `input_json` data. Keys such as `role`, `content`, or `image_url` stay plain data and are never treated as message history or images.
 - A `list` with other item types, such as a list of strings: serialized as JSON and sent as text input.
+- `DecisionInput`: sent as one user message, with text blocks as `input_text` and images as `input_image`, in their original order. See "Explicit image input" below.
 - Unsupported types, `NaN`/`Infinity`, or values that are not JSON serializable: `ValueError` is raised before sending.
 
-The first version does not support image input, message or tool-call history, multimodal question instructions, prompt-cache controls, or `safety_identifier`. If the model refuses any question (`refusal`), the whole `ask()` call raises `DecisionError`; a refusal is never reported as false, a zero score, or an empty result. `yes_no(default=...)` keeps its fallback behavior.
+#### Explicit image input
+
+Shared `state` can use `DecisionInput` to interleave text with multiple images. Usage matches the Gemini example below; pass `provider_id="openai_decision"`. OpenAI does not insert separators between adjacent text blocks, so include your own spaces or newlines.
+
+```py
+from astrbot.api.provider import DecisionInput, DecisionMedia
+
+state = DecisionInput(content=[
+    "Reference:\n",
+    DecisionMedia(type="image", mime_type="image/png", uri="https://example.com/ref.png"),
+    "\nCandidate:\n",
+    DecisionMedia(type="image", mime_type="image/jpeg", data=jpeg_base64),
+])
+```
+
+- Only `type="image"` is supported, and `mime_type` must be the image's actual `image/*` type; other media types are rejected. The official Decisions documentation does not list supported image formats, so OpenAI validates the format.
+- Provide exactly one of `uri` or `data`. `uri` must be a publicly accessible HTTP(S) image URL; `data` is Base64 without a prefix, and the adapter builds a `data:` URL from `mime_type`. `file_id`, local paths, and `data:` values in `uri` are not supported.
+- `resolution` is not supported: any value raises `ValueError` and is never mapped to OpenAI's `detail`. Image `detail` uses the API default, `auto`.
+- Each resulting image URL is limited to 1 GiB (the API schema limit). The official Decisions documentation does not list separate image size or count limits; OpenAI validates accessibility, total request size, and image count.
+
+All three question types also accept `DecisionInput` as `instructions`, giving each question its own images; for example, put a shared reference image in `state` and a different candidate image in each question. The same conversion and validation rules apply, and question images share the request's image limits with images in `state`. Text-only `instructions` can remain a string. `yes_no()` and `choose()` accept text questions only; use `ask()` for images.
+
+```py
+answers = await self.context.decision.ask(
+    {
+        "match_a": DecisionBooleanQuestion(DecisionInput(content=[
+            "Does this candidate match the reference?\n",
+            DecisionMedia(type="image", mime_type="image/png", uri="https://example.com/a.png"),
+        ])),
+    },
+    state=DecisionInput(content=["Reference:\n", reference_image]),
+    provider_id="openai_decision",
+)
+```
+
+Message or tool-call history, prompt-cache controls, and `safety_identifier` are not supported. If the model refuses any question (`refusal`), the whole `ask()` call raises `DecisionError`; a refusal is never reported as false, a zero score, or an empty result. `yes_no(default=...)` keeps its fallback behavior.
+
+### Using Gemini Decisions
+
+In **Model Providers → Decision**, add the **Gemini Decisions** template. Enter a Gemini API key (or an `$ENV_NAME` reference), keep the default API base `https://generativelanguage.googleapis.com/v1beta`, and use model `gemini-decision-1`. AstrBot appends `/decisions` unless the path already ends with it, and sends the key in the `x-goog-api-key` header. Save the provider and use its connection test to check access. The model must be available to your Google API project; configuring a provider does not enable access or quota.
+
+The adapter calls the REST endpoint directly and does not require a Google SDK upgrade. It uses the same timeout, total timeout (including queueing and retries), max concurrency, proxy, and custom-header settings as OpenAI Decisions. For large media, increase `timeout` (default 5 seconds) and `total_timeout` (default 10 seconds) as needed. It runs only when a plugin explicitly calls the decision service; it does not join the main chat flow.
+
+Use the common `ask()`, `choose()`, and `yes_no()` methods above with `provider_id="gemini_decision"`.
+
+Gemini boolean questions use `noul`, the probability of **true**, in `[0.01, 0.99]`. `yes_no()` compares that probability with its threshold; thresholds above `0.99` cannot match. Gemini's boolean confidence is `max(p, 1-p)`. The adapter does not expose the optional boolean criteria `true_description` and `false_description`; include those definitions in `instructions` instead. Choice answers must select the highest-probability option; exact ties use the first ID in UTF-8 byte order. Score confidence is the largest level probability.
+
+Requests accept 1–1,000 questions, 2–255 options per choice, and 2–255 score levels (2–10 recommended). Choice IDs contain 1–128 characters, at most 512 UTF-8 bytes; internal ASCII spaces, combining marks, and variation selectors are allowed. Surrounding/non-ASCII whitespace and Unicode Other categories (`Cc`, `Cf`, `Cs`, `Co`, `Cn`), including zero-width format and private-use characters, are rejected. Descriptions may be empty. Invalid inputs raise `ValueError` before sending. Caller question IDs are mapped internally, and answers retain the original keys.
+
+Missing or inconsistent answers fail the whole batch with `DecisionError`. The [official API](https://aistudio.google.com/docs/decisions-api) reports safety blocking as HTTP 400 with `error.code` equal to `safety`, `prohibited_content`, `blocklist`, `image_safety`, or `content_blocked`. The adapter also recognizes a non-empty string `prompt_feedback.block_reason` and ignores unknown feedback shapes. HTTP 400 errors include the known `invalid_request` code when present; unknown codes and server messages remain hidden. Errors are sanitized; blocking never becomes an answer. `yes_no(default=...)` retains its explicit fallback behavior.
+
+Gemini sends ordinary dict/list state as JSON text, including empty containers. Omitted state, `None`, and an empty string become the JSON text `"{}"` because the API rejects empty input. Unsupported or non-serializable values and `NaN`/`Infinity` are rejected. Use `DecisionInput` below to send media explicitly; question instructions remain text-only.
+
+#### Explicit multimodal input
+
+Import `DecisionInput` and `DecisionMedia` from `astrbot.api.provider`. `DecisionInput.content` is a non-empty ordered list of text strings and `DecisionMedia` objects. Gemini concatenates adjacent text blocks without inserting separators, so include your own spaces or newlines.
+
+```py
+from astrbot.api.provider import DecisionInput, DecisionMedia
+
+photo = DecisionInput(content=[
+    "Inspect this product photo.\n",
+    DecisionMedia(
+        type="image",
+        uri="https://example.com/product.png",  # Replace with an accessible media URL.
+        mime_type="image/png",
+        resolution="low",
+    ),
+])
+
+has_damage = await self.context.decision.yes_no(
+    "Does the product have visible damage?",
+    state=photo,
+    provider_id="gemini_decision",
+)
+```
+
+The same `state` works with `ask()` and `choose()`. Each `DecisionMedia` requires its actual `mime_type` and exactly one of `uri` or `data`. For inline media, set `data=base64.b64encode(file_bytes).decode("ascii")`, with no data-URI prefix. Before decoding, the adapter checks inline media sizes: up to 100 MB of decoded bytes per request and 50 MB per PDF. The adapter does not read local paths or upload files automatically.
+
+| `type` | Example MIME type | Input |
+| --- | --- | --- |
+| `image` | `image/png`, `image/jpeg` | Base64 `data` or HTTPS `uri` |
+| `audio` | `audio/wav`, `audio/mp3` | Base64 `data` or HTTPS `uri` |
+| `video` | `video/mp4` | Base64 `data` or HTTPS `uri` |
+| `document` | `application/pdf` | Base64 `data` or HTTPS `uri` |
+
+Gemini accepts public/signed HTTPS URLs (up to 15 MB per external URL) and HTTPS URIs returned by its Files API. YouTube URLs and direct `gs://` URIs are unsupported. Optional `resolution` supports `low`, `medium`, or `high` for images and video, plus `ultra_high` for images only; omit it for audio and PDF. See the [official input reference](https://aistudio.google.com/docs/decisions-api#input) for supported formats and size limits. Google checks the actual file format, availability, and request/media limits.
+
+Malformed explicit input is rejected with `ValueError` before sending; API failures raise `DecisionError`. Tool-call, thought, and conversation-history blocks are not accepted as media content. The OpenAI adapter accepts images only; see "Explicit image input" above for its limits.
 
 ## Defining Tools
 

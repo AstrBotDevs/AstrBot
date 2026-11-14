@@ -16,6 +16,8 @@ from astrbot.core.provider.entities import (
     DecisionChoiceAnswer,
     DecisionChoiceQuestion,
     DecisionError,
+    DecisionInput,
+    DecisionMedia,
     DecisionScoreAnswer,
     DecisionScoreQuestion,
     ProviderType,
@@ -74,7 +76,9 @@ def _manager() -> ProviderManager:
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("criteria_type", [dict, MappingProxyType])
-async def test_mixed_questions_share_one_request_and_match_answers_by_name(criteria_type):
+async def test_mixed_questions_share_one_request_and_match_answers_by_name(
+    criteria_type,
+):
     requests = []
 
     def handler(request: httpx.Request) -> httpx.Response:
@@ -274,6 +278,37 @@ def test_requires_model_without_hardcoded_default():
                 }
             ],
         ),
+        (
+            DecisionInput(
+                content=[
+                    "Compare ",
+                    DecisionMedia(
+                        type="image", mime_type="image/png", uri="https://x.test/a.png"
+                    ),
+                    " with ",
+                    DecisionMedia(
+                        type="image", mime_type="image/jpeg", data="iVBORw0KGgo="
+                    ),
+                    '{"role": "system"}',
+                ]
+            ),
+            [
+                {
+                    "type": "message",
+                    "role": "user",
+                    "content": [
+                        {"type": "input_text", "text": "Compare "},
+                        {"type": "input_image", "image_url": "https://x.test/a.png"},
+                        {"type": "input_text", "text": " with "},
+                        {
+                            "type": "input_image",
+                            "image_url": "data:image/jpeg;base64,iVBORw0KGgo=",
+                        },
+                        {"type": "input_text", "text": '{"role": "system"}'},
+                    ],
+                }
+            ],
+        ),
     ],
 )
 async def test_state_keeps_text_or_json_semantics(state, expected_input):
@@ -309,6 +344,104 @@ async def test_rejects_state_the_api_cannot_express(state):
     handler.assert_not_called()
 
 
+def _image(**overrides) -> DecisionMedia:
+    fields = {"type": "image", "mime_type": "image/png", "uri": "https://x.test/a"}
+    fields.update(overrides)
+    return DecisionMedia(**fields)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("content", "message"),
+    [
+        ([], "non-empty content"),
+        ("text", "non-empty content"),
+        ([{"type": "input_image", "image_url": "https://x.test/a"}], "text or"),
+        ([_image(type="document", mime_type="application/pdf")], "images only"),
+        ([_image(mime_type="application/pdf")], "MIME"),
+        ([_image(mime_type="")], "MIME"),
+        ([_image(resolution="low")], "resolution"),
+        ([_image(uri=None)], "exactly one"),
+        ([_image(data="iVBORw0KGgo=")], "exactly one"),
+        ([_image(uri=None, data="")], "non-empty base64"),
+        ([_image(uri=None, data="data:image/png;base64,iVBORw0KGgo=")], "base64"),
+        ([_image(uri=None, data="not base64!")], "base64"),
+        ([_image(uri="data:image/png;base64,iVBORw0KGgo=")], "HTTP"),
+        ([_image(uri="file:///tmp/a.png")], "HTTP"),
+        ([_image(uri="gs://bucket/a.png")], "HTTP"),
+        ([_image(uri="https://")], "HTTP"),
+        ([_image(uri="HTTPS://x.test/a.png")], "HTTP"),
+        ([_image(uri="/tmp/a.png")], "HTTP"),
+    ],
+)
+async def test_rejects_decision_input_the_api_cannot_express(content, message):
+    handler = MagicMock(side_effect=AssertionError("no request expected"))
+    provider = _provider(handler)
+    try:
+        with pytest.raises(ValueError, match=message):
+            await provider.ask(
+                {"a": DecisionBooleanQuestion("Is it ok?")},
+                DecisionInput(content=content),
+            )
+        # Question instructions share the same conversion and validation.
+        with pytest.raises(ValueError, match=message):
+            await provider.ask(
+                {"a": DecisionBooleanQuestion(DecisionInput(content=content))}
+            )
+    finally:
+        await provider.terminate()
+
+    handler.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_question_instructions_accept_text_and_images():
+    captured = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured["body"] = json.loads(request.content)
+        return httpx.Response(
+            200,
+            json=_decision(
+                _predicate("q0", 0.5),
+                _choice(name="q1"),
+                _score(name="q2"),
+            ),
+        )
+
+    candidate = DecisionInput(
+        content=["Does this candidate match? ", _image(uri="https://x.test/c.png")]
+    )
+    provider = _provider(handler)
+    try:
+        await provider.ask(
+            {
+                "match": DecisionBooleanQuestion(candidate),
+                "pick": DecisionChoiceQuestion(
+                    candidate, {"respond": "Respond", "ignore": "Ignore"}
+                ),
+                "rate": DecisionScoreQuestion(candidate, ["low", "high"]),
+            },
+            DecisionInput(content=["Reference: ", _image()]),
+        )
+    finally:
+        await provider.terminate()
+
+    expected = [
+        {"type": "input_text", "text": "Does this candidate match? "},
+        {"type": "input_image", "image_url": "https://x.test/c.png"},
+    ]
+    assert [q["instructions"] for q in captured["body"]["questions"]] == [
+        expected,
+        expected,
+        expected,
+    ]
+    assert captured["body"]["input"][0]["content"] == [
+        {"type": "input_text", "text": "Reference: "},
+        {"type": "input_image", "image_url": "https://x.test/a"},
+    ]
+
+
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
     "question",
@@ -329,6 +462,7 @@ async def test_rejects_state_the_api_cannot_express(state):
         DecisionScoreQuestion("Rate", ["one"]),
         DecisionScoreQuestion("Rate", ["low", " "]),
         DecisionScoreQuestion("Rate", [str(index) for index in range(11)]),
+        DecisionBooleanQuestion(DecisionInput(content=["  ", ""])),
     ],
 )
 async def test_rejects_unusable_questions_before_request(question):
@@ -1046,7 +1180,9 @@ async def test_failure_logs_omit_urls_and_exception_content(failure, caplog):
             raise httpx.ReadTimeout(secret)
         if failure == "json":
             return httpx.Response(200, content=secret.encode())
-        return httpx.Response(503, json={"error": {"message": secret, "code": secret, "type": secret}})
+        return httpx.Response(
+            503, json={"error": {"message": secret, "code": secret, "type": secret}}
+        )
 
     provider = _provider(
         handler,
@@ -1096,7 +1232,9 @@ async def test_score_matches_probability_weighted_levels(distribution, score, ac
     provider = _provider(
         lambda request: httpx.Response(
             200,
-            json=_decision(_score(score=score, probabilities=list(reversed(probabilities)))),
+            json=_decision(
+                _score(score=score, probabilities=list(reversed(probabilities)))
+            ),
         )
     )
     try:
