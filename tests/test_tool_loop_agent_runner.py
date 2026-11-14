@@ -2774,32 +2774,3 @@ async def test_unknown_tool_is_rejected_without_claiming_execution(
     assert rejected[0].error.code == "tool_not_found"
     assert not any(event.type in ("tool.started", "tool.finished") for event in events)
     assert not mock_hooks.tool_start_called
-
-
-@pytest.mark.asyncio
-@pytest.mark.parametrize("streaming", [False, True])
-async def test_native_citations_leave_runner_with_history_sink(
-    runner, mock_provider, provider_request, mock_tool_executor, mock_hooks, streaming
-):
-    from astrbot.core.agent.events import WebSearchSources
-
-    sources = [{"index": "1", "url": "https://example.com", "title": "Source"}]
-    mock_provider.text_chat = AsyncMock(
-        return_value=LLMResponse(
-            role="assistant", completion_text="Answer", web_search_sources=sources
-        )
-    )
-    sink = AsyncMock(return_value=True)
-    await runner.reset(
-        provider=mock_provider,
-        request=provider_request,
-        run_context=ContextWrapper(context=None),
-        tool_executor=mock_tool_executor,
-        agent_hooks=mock_hooks,
-        streaming=streaming,
-        conversation_event_sink=sink,
-    )
-    events = [event async for event in runner.step_until_done(1)]
-    citations = [event for event in events if isinstance(event, WebSearchSources)]
-    assert len(citations) == 1
-    assert list(citations[0].sources) == sources

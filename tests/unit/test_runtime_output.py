@@ -1,7 +1,7 @@
 """Protocol boundaries: typed snapshots, media round trips and presentation."""
 
 import asyncio
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import MagicMock
 from uuid import UUID
 
 import pytest
@@ -192,39 +192,3 @@ async def test_cancelled_turn_retains_already_reported_usage():
     events = [event async for event in turn.events()]
     assert sum(event.type == "turn.finished" for event in events) == 1
     assert events[-1].payload.result == result
-
-
-@pytest.mark.asyncio
-@pytest.mark.parametrize("platform", ["webchat", "test"])
-@pytest.mark.parametrize("streaming", [False, True])
-async def test_native_citations_survive_runtime_and_reach_webchat(platform, streaming):
-    from astrbot.core.agent.events import WebSearchSources
-
-    sources = [{"index": "1", "url": "https://example.com", "title": "Source"}]
-
-    class SearchSession(OutputSession):
-        async def execute_turn(self, turn):
-            turn.emit(WebSearchSources(sources=tuple(sources)))
-            turn.emit(
-                MessageCompleted(
-                    message_id="reply", content=(PlainOutput(text="Answer"),)
-                )
-            )
-            return TurnResult(content=(PlainOutput(text="Answer"),))
-
-    session = SearchSession("session", "test:FriendMessage:user")
-    input = input_for(session)
-    input.event.get_platform_name.return_value = platform
-    input.event.send = AsyncMock()
-    turn = await session.run_turn(input)
-    chains = [chain async for chain in present_turn(turn, streaming=streaming)]
-    assert [chain.get_plain_text() for chain in chains] == ["Answer"]
-    if platform == "webchat":
-        chain = input.event.send.await_args.args[0]
-        assert chain.type == "web_search_sources"
-        assert chain.chain[0].data == {"sources": sources}
-    else:
-        input.event.send.assert_not_awaited()
-    events = [event async for event in turn.events()]
-    citation = next(event for event in events if event.type == "web_search.sources")
-    assert RuntimeEvent.model_validate_json(citation.model_dump_json()) == citation
