@@ -151,6 +151,34 @@ After modifying the plugin code, open `Extensions → Plugins` in the AstrBot We
 
 If the plugin fails to load due to code errors or other reasons, click its `Reload` button in the `Failed to Load Plugins` list on the same page.
 
+### Hot Reload Boundaries
+
+Reloading calls the plugin's `terminate()` first and then re-imports the code, and it only re-imports modules **inside the plugin directory**. Keeping these two boundaries in mind avoids two common traps: "I reloaded but nothing changed" and "the same logic now runs twice after reloading".
+
+**Code inside the plugin directory is re-executed.** On reload, AstrBot first unloads every module in `sys.modules` whose name starts with `data.plugins.<plugin_dir>` (the log shows `Removed module data.plugins.<plugin_dir>.main from plugin <plugin_dir>`), then imports the plugin again. `main.py`, sub-packages under the plugin directory, and `skills/` therefore take effect as soon as you reload.
+
+**Modules outside the plugin directory are not re-imported; restart the AstrBot process after changing them.** Typical cases:
+
+- The plugin appends a custom path to `sys.path` and imports your own package from outside the plugin directory.
+- You modify or replace a third-party library that the plugin depends on.
+- Shared code lives in `data/` or elsewhere and is used by several plugins.
+
+Auto-reload (`astrbot run --reload` / `-r`) watches the plugin directory only, so changes outside it do not trigger a reload.
+
+When debugging "I reloaded but the code did not change", first check which file the module was actually loaded from:
+
+```python
+import your_shared_module
+
+logger.info(your_shared_module.__file__)
+```
+
+If the printed path is not under `data/plugins/<your_plugin_dir>/`, that module is outside the reload scope.
+
+**`terminate()` is responsible for cleaning up resources.** Reloading calls `terminate()` once, so background tasks started in the plugin (`asyncio.create_task`, `aiohttp.ClientSession`, threads, timers) should be cancelled or closed there. Otherwise every reload leaves one more running copy of the old instance behind, which shows up as the same message being answered several times. `__del__` is a deprecated legacy hook; when a plugin implements both, only `__del__` is called, so keep cleanup in `terminate` only.
+
+Changes to `_conf_schema.json` also require a reload before the WebUI picks up the new configuration items.
+
 ### Plugin Dependency Management
 
 Currently, AstrBot manages plugin dependencies using pip's built-in `requirements.txt` file. If your plugin requires third-party libraries, please be sure to create a `requirements.txt` file in the plugin directory and list the dependencies used, to prevent Module Not Found errors when users install your plugin.
