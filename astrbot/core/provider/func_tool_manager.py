@@ -25,6 +25,7 @@ from astrbot.core.astr_agent_runtime.tools.registry import (
     iter_builtin_tool_classes,
 )
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
+from astrbot.core.utils.ssrf_guard import validate_mcp_url
 
 BuiltinToolT = TypeVar("BuiltinToolT", bound=FunctionTool)
 
@@ -169,6 +170,8 @@ async def _quick_test_mcp_connection(config: dict) -> tuple[bool, str]:
     timeout = cfg.get("timeout", 10)
 
     try:
+        validate_mcp_url(url)
+
         async with aiohttp.ClientSession() as session:
             if cfg.get("transport") == "streamable_http":
                 test_payload = {
