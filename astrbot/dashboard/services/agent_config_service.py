@@ -63,20 +63,33 @@ class AgentConfigService:
         """
         return [item.model_dump() for item in await self.store.list()]
 
-    async def save(self, data: dict, config_id: str | None = None) -> dict:
+    async def save(
+        self,
+        data: dict,
+        config_id: str | None = None,
+        *,
+        dashboard_authenticated: bool = False,
+    ) -> dict:
         """Create or update one configuration under the shared resource lock.
 
         Args:
             data: Validated request fields.
             config_id: Existing ID, or None to create a new resource.
+            dashboard_authenticated: Whether the request has a dashboard login.
 
         Returns:
             The persisted configuration resource.
         """
         store = self.store
         async with store.lock:
-            if config_id is not None:
-                await store.get(config_id)
+            current = await store.get(config_id) if config_id is not None else None
+            if not dashboard_authenticated and (
+                data["runtime"] == "acp"
+                or (current is not None and current.runtime == "acp")
+            ):
+                raise ApiError(
+                    "Sign in to the dashboard to manage ACP settings.", status_code=403
+                )
             agent = await self.validate(
                 {"runtime": data["runtime"], "config": data.get("config", {})},
                 delegated=True,
@@ -139,6 +152,6 @@ class AgentConfigService:
             Runtime names and default configuration objects.
         """
         return [
-            {"runtime": name, "config": runtime.normalize_config({}, delegated=True)}
+            {"runtime": name, "config": runtime.default_config(delegated=True)}
             for name, runtime in self._runtimes.items()
         ]

@@ -71,6 +71,12 @@
     "customPersona": "Use custom prompt and tools",
     "runtime": "Agent Runtime",
     "runtimeConfig": "Runtime Configuration (JSON)",
+    "acpCommand": "起動コマンド",
+    "acpArgs": "引数",
+    "acpAddArg": "引数を追加",
+    "acpRemoveArg": "引数を削除",
+    "acpCwd": "作業ディレクトリ",
+    "acpCwdHint": "空欄の場合はエージェントごとに個別のワークスペースを使います。",
     "followProvider": "Follow conversation model",
     "externalRuntime": "External runtime configuration",
     "inheritPersona": "Leave empty to use the main agent’s persona",
@@ -79,6 +85,7 @@
     "followPersona": "Uses main agent persona"
   },
   "messages": {
+    "acpCommandRequired": "起動コマンドを入力してください。",
     "loadConfigFailed": "設定の取得に失敗しました",
     "loadPersonaFailed": "ペルソナ一覧の取得に失敗しました",
     "unsavedChangesNotice": "このページには未保存の変更があります。移動する前に保存してください。",

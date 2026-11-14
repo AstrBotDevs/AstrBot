@@ -46,6 +46,42 @@
               <v-select :model-value="draft.runtime" :items="runtimeOptions" :label="tm('form.runtime')" variant="outlined" density="comfortable" hide-details="auto" @update:model-value="changeRuntime" />
               <v-alert v-if="!runtimeAvailable(draft.runtime)" type="warning" variant="tonal" class="mb-4">{{ tm('status.unavailable') }}</v-alert>
               <NativeAgentConfigForm v-if="draft.runtime === 'astrbot'" v-model="draft.config" />
+              <template v-else-if="draft.runtime === 'acp'">
+                <v-text-field
+                  v-model="draft.config.command"
+                  :label="tm('form.acpCommand')"
+                  :rules="[value => Boolean(value?.trim()) || tm('messages.acpCommandRequired')]"
+                  variant="outlined"
+                  density="comfortable"
+                  hide-details="auto"
+                />
+                <div class="d-flex flex-column ga-2">
+                  <div class="d-flex align-center justify-space-between">
+                    <span class="text-body-2">{{ tm('form.acpArgs') }}</span>
+                    <v-btn variant="text" size="small" prepend-icon="mdi-plus" @click="(draft.config.args ??= []).push('')">
+                      {{ tm('form.acpAddArg') }}
+                    </v-btn>
+                  </div>
+                  <div v-for="(_, index) in draft.config.args" :key="index" class="d-flex align-center ga-2">
+                    <v-text-field
+                      v-model="draft.config.args[index]"
+                      :aria-label="`${tm('form.acpArgs')} ${index + 1}`"
+                      variant="outlined"
+                      density="compact"
+                      hide-details
+                    />
+                    <v-btn icon="mdi-close" variant="text" size="small" :aria-label="tm('form.acpRemoveArg')" @click="draft.config.args.splice(index, 1)" />
+                  </div>
+                </div>
+                <v-text-field
+                  v-model="draft.config.cwd"
+                  :label="tm('form.acpCwd')"
+                  :hint="tm('form.acpCwdHint')"
+                  variant="outlined"
+                  density="comfortable"
+                  persistent-hint
+                />
+              </template>
               <v-textarea v-else v-model="rawConfig" :label="tm('form.runtimeConfig')" :rules="[validateJson]" variant="outlined" rows="12" class="json-editor" />
               <v-alert v-if="saveError" type="error" variant="tonal" class="mt-4">{{ saveError }}</v-alert>
             </v-form>
@@ -92,12 +128,13 @@ const rawConfig = ref('{}');
 const form = ref<{ validate: () => Promise<{ valid: boolean }>; resetValidation: () => void } | null>(null);
 const snackbar = ref({ show: false, text: '', color: 'error' });
 const draft = ref<AgentConfigInput>({ name: '', description: '', enabled: true, runtime: 'astrbot', config: {} });
-const runtimeOptions = computed(() => [...new Set([...runtimes.value.map(item => item.runtime), draft.value.runtime])]);
+const runtimeOptions = computed(() => [...new Set([...runtimes.value.map(item => item.runtime), draft.value.runtime])]
+  .map(value => ({ value, title: value === 'acp' ? 'ACP' : value })));
 const runtimeAvailable = (runtime: string) => runtimes.value.some(item => item.runtime === runtime);
 const clone = <T,>(value: T): T => JSON.parse(JSON.stringify(value));
 const summary = (agent: AgentConfig) => agent.runtime === 'astrbot'
   ? [agent.config.persona?.persona_id || tm('form.followPersona'), agent.config.model?.provider_id || tm('form.followProvider')].join(' · ')
-  : tm('form.externalRuntime');
+  : agent.runtime === 'acp' ? (agent.config.command || agent.config.launcher) : tm('form.externalRuntime');
 function errorText(error: any) {
   const payload = error.response?.data;
   const references = payload?.data?.references;
@@ -143,6 +180,12 @@ async function save() {
       draft.value.config = {
         persona: { persona_id: draft.value.config.persona?.persona_id || '' },
         model: { provider_id: draft.value.config.model?.provider_id || '' }
+      };
+    } else if (draft.value.runtime === 'acp') {
+      draft.value.config = {
+        command: draft.value.config.command.trim(),
+        args: draft.value.config.args || [],
+        cwd: draft.value.config.cwd?.trim() || null
       };
     } else draft.value.config = JSON.parse(rawConfig.value);
     const response = editingId.value ? await agentConfigApi.update(editingId.value, draft.value) : await agentConfigApi.create(draft.value);

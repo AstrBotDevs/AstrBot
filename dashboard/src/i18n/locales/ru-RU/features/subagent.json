@@ -71,6 +71,12 @@
     "customPersona": "Use custom prompt and tools",
     "runtime": "Agent Runtime",
     "runtimeConfig": "Runtime Configuration (JSON)",
+    "acpCommand": "Команда запуска",
+    "acpArgs": "Аргументы",
+    "acpAddArg": "Добавить аргумент",
+    "acpRemoveArg": "Удалить аргумент",
+    "acpCwd": "Рабочий каталог",
+    "acpCwdHint": "Оставьте поле пустым, чтобы использовать отдельную рабочую область для каждого агента.",
     "followProvider": "Follow conversation model",
     "externalRuntime": "External runtime configuration",
     "inheritPersona": "Leave empty to use the main agent’s persona",
@@ -79,6 +85,7 @@
     "followPersona": "Uses main agent persona"
   },
   "messages": {
+    "acpCommandRequired": "Введите команду запуска.",
     "loadConfigFailed": "Не удалось загрузить конфигурацию",
     "loadPersonaFailed": "Не удалось загрузить список персонажей",
     "unsavedChangesNotice": "На странице есть несохраненные изменения. Сохраните их перед уходом.",

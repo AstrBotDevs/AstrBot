@@ -19,6 +19,7 @@ from pathlib import Path
 
 from astrbot.api import logger, sp
 from astrbot.core import LogBroker, LogManager
+from astrbot.core.acp_agent_runtime import AcpAgentRuntime
 from astrbot.core.agent.config_store import AgentConfigStore
 from astrbot.core.agent.runtime import AgentRuntime
 from astrbot.core.astr_agent_runtime import AstrAgentRuntime
@@ -252,6 +253,7 @@ class AstrBotCoreLifecycle:
         )
         self.star_context.agent.register_runtime("astrbot", runtime)
         await runtime.initialize()
+        self.star_context.agent.register_runtime("acp", AcpAgentRuntime(self.db))
         self.star_context.html_renderer = html_renderer
 
         # 初始化插件管理器
@@ -403,6 +405,9 @@ class AstrBotCoreLifecycle:
             await context.agent.close()
         if self.subagents is not None:
             await self.subagents.close()
+        await asyncio.gather(
+            *(runtime.close() for runtime in self.agent_runtimes.values())
+        )
 
         for plugin in self.plugin_manager.context.get_all_stars():
             try:
@@ -445,6 +450,9 @@ class AstrBotCoreLifecycle:
             await context.agent.close()
         if self.subagents is not None:
             await self.subagents.close()
+        await asyncio.gather(
+            *(runtime.close() for runtime in self.agent_runtimes.values())
+        )
         await self.provider_manager.terminate()
         await self.platform_manager.terminate()
         await self.kb_manager.terminate()

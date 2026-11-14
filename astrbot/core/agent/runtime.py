@@ -520,6 +520,17 @@ class AgentSession(ABC):
 class AgentRuntime(ABC):
     """Host integration boundary; implementations own sessions and history."""
 
+    def default_config(self, *, delegated: bool = False) -> dict:
+        """Provide editor defaults without requiring a complete configuration.
+
+        Args:
+            delegated: Whether the configuration describes a specialized worker.
+
+        Returns:
+            Initial configuration values for the editor.
+        """
+        return self.normalize_config({}, delegated=delegated)
+
     def normalize_config(self, config: dict, *, delegated: bool = False) -> dict:
         """Validate runtime-owned configuration without interpreting its fields.
 

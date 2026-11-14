@@ -6,10 +6,11 @@ from astrbot.dashboard.responses import ApiError, ok
 from astrbot.dashboard.schemas import AgentConfigRequest
 from astrbot.dashboard.services.agent_config_service import AgentConfigService
 
-from .auth import ScopeDependency
+from .auth import AuthContext, ScopeDependency
 
+require_config_scope = ScopeDependency("config")
 router = APIRouter(
-    tags=["Agent Configurations"], dependencies=[Depends(ScopeDependency("config"))]
+    tags=["Agent Configurations"], dependencies=[Depends(require_config_scope)]
 )
 
 
@@ -36,10 +37,16 @@ async def get_agent_config(
 
 @router.post("/agent-configs")
 async def create_agent_config(
-    payload: AgentConfigRequest, service: AgentConfigService = Depends(get_service)
+    payload: AgentConfigRequest,
+    service: AgentConfigService = Depends(get_service),
+    auth: AuthContext = Depends(require_config_scope),
 ) -> dict:
     try:
-        return ok(await service.save(payload.model_dump()))
+        return ok(
+            await service.save(
+                payload.model_dump(), dashboard_authenticated=auth.via == "jwt"
+            )
+        )
     except ValueError as exc:
         raise ApiError(str(exc)) from exc
 
@@ -49,9 +56,16 @@ async def update_agent_config(
     config_id: str,
     payload: AgentConfigRequest,
     service: AgentConfigService = Depends(get_service),
+    auth: AuthContext = Depends(require_config_scope),
 ) -> dict:
     try:
-        return ok(await service.save(payload.model_dump(), config_id))
+        return ok(
+            await service.save(
+                payload.model_dump(),
+                config_id,
+                dashboard_authenticated=auth.via == "jwt",
+            )
+        )
     except ValueError as exc:
         raise ApiError(str(exc)) from exc
 
