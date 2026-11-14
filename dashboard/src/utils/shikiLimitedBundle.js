@@ -1,82 +1,24 @@
 import { createHighlighterCore } from "shiki/core";
 import { createJavaScriptRegexEngine } from "shiki/engine/javascript";
-import bash from "shiki/langs/bash.mjs";
-import c from "shiki/langs/c.mjs";
-import css from "shiki/langs/css.mjs";
-import cpp from "shiki/langs/cpp.mjs";
-import csharp from "shiki/langs/csharp.mjs";
-import dart from "shiki/langs/dart.mjs";
-import diff from "shiki/langs/diff.mjs";
-import dockerfile from "shiki/langs/dockerfile.mjs";
-import go from "shiki/langs/go.mjs";
-import html from "shiki/langs/html.mjs";
-import ini from "shiki/langs/ini.mjs";
-import java from "shiki/langs/java.mjs";
-import javascript from "shiki/langs/javascript.mjs";
-import json from "shiki/langs/json.mjs";
-import jsx from "shiki/langs/jsx.mjs";
-import kotlin from "shiki/langs/kotlin.mjs";
-import lua from "shiki/langs/lua.mjs";
-import markdown from "shiki/langs/markdown.mjs";
-import php from "shiki/langs/php.mjs";
-import powershell from "shiki/langs/powershell.mjs";
-import python from "shiki/langs/python.mjs";
-import r from "shiki/langs/r.mjs";
-import ruby from "shiki/langs/ruby.mjs";
-import rust from "shiki/langs/rust.mjs";
-import scala from "shiki/langs/scala.mjs";
-import sql from "shiki/langs/sql.mjs";
-import swift from "shiki/langs/swift.mjs";
-import tsx from "shiki/langs/tsx.mjs";
-import typescript from "shiki/langs/typescript.mjs";
-import vue from "shiki/langs/vue.mjs";
-import xml from "shiki/langs/xml.mjs";
-import yaml from "shiki/langs/yaml.mjs";
+import { bundledLanguages, bundledLanguagesInfo } from "shiki/langs";
 import githubDark from "shiki/themes/github-dark.mjs";
 import githubLight from "shiki/themes/github-light.mjs";
-import vitesseDark from "shiki/themes/vitesse-dark.mjs";
-import vitesseLight from "shiki/themes/vitesse-light.mjs";
 
-export const LIMITED_SHIKI_LANGUAGES = [
-  ...bash,
-  ...c,
-  ...css,
-  ...cpp,
-  ...csharp,
-  ...dart,
-  ...diff,
-  ...dockerfile,
-  ...go,
-  ...html,
-  ...ini,
-  ...java,
-  ...javascript,
-  ...json,
-  ...jsx,
-  ...kotlin,
-  ...lua,
-  ...markdown,
-  ...php,
-  ...powershell,
-  ...python,
-  ...r,
-  ...ruby,
-  ...rust,
-  ...scala,
-  ...sql,
-  ...swift,
-  ...tsx,
-  ...typescript,
-  ...vue,
-  ...xml,
-  ...yaml,
-];
+const supportedLanguages = new Set([
+  "c", "cpp", "csharp", "css", "dart", "diff", "docker", "glsl", "go",
+  "graphql", "haml", "html", "html-derivative", "ini", "java", "javascript",
+  "json", "jsx", "kotlin", "lua", "markdown", "php", "powershell", "python",
+  "r", "regexp", "ruby", "rust", "scala", "shellscript", "sql", "swift",
+  "tsx", "typescript", "vue", "xml", "yaml",
+]);
 
-const THEME_BY_NAME = {
-  "github-dark": githubDark,
-  "github-light": githubLight,
-  "vitesse-dark": vitesseDark,
-  "vitesse-light": vitesseLight,
+// These grammars are bundled with their parent language.
+const embeddedLanguages = {
+  "cpp-macro": "cpp",
+  "markdown-vue": "vue",
+  "vue-directives": "vue",
+  "vue-interpolations": "vue",
+  "vue-sfc-style-variable-injection": "vue",
 };
 
 const BUILT_IN_LANGUAGES = ["text", "plaintext", "plain"];
@@ -123,36 +65,11 @@ export const LIMITED_SHIKI_LANGUAGE_ALIASES = {
 
 export const LIMITED_SHIKI_SUPPORTED_LANGUAGES = new Set([
   ...BUILT_IN_LANGUAGES,
-  ...LIMITED_SHIKI_LANGUAGES.flatMap((language) => [
-    language.name,
-    ...(language.aliases || []),
-  ]),
+  ...Object.keys(embeddedLanguages),
+  ...bundledLanguagesInfo
+    .filter(({ id }) => supportedLanguages.has(id))
+    .flatMap(({ id, aliases = [] }) => [id, ...aliases]),
 ]);
-
-function getThemeName(theme) {
-  return typeof theme === "string" ? theme : theme?.name;
-}
-
-function resolveTheme(theme) {
-  if (!theme) return null;
-  if (typeof theme !== "string") return theme;
-  return THEME_BY_NAME[theme] || null;
-}
-
-function uniqueThemes(themes) {
-  const seen = new Set();
-  const result = [];
-
-  for (const theme of themes) {
-    const resolved = resolveTheme(theme);
-    const name = getThemeName(resolved);
-    if (!resolved || !name || seen.has(name)) continue;
-    seen.add(name);
-    result.push(resolved);
-  }
-
-  return result;
-}
 
 export function normalizeLimitedShikiLanguage(language) {
   const normalized = String(language || "text")
@@ -169,67 +86,37 @@ export function normalizeLimitedShikiLanguage(language) {
   return LIMITED_SHIKI_SUPPORTED_LANGUAGES.has(normalized) ? normalized : "text";
 }
 
-function normalizeCodeOptions(options) {
-  if (!options || typeof options !== "object") return options;
-  return {
-    ...options,
-    lang: normalizeLimitedShikiLanguage(options.lang),
-  };
-}
-
-function wrapLimitedHighlighter(highlighter) {
-  const codeToHtml = highlighter.codeToHtml.bind(highlighter);
-  const codeToTokens = highlighter.codeToTokens.bind(highlighter);
-  const codeToHast = highlighter.codeToHast.bind(highlighter);
-  const getLanguage = highlighter.getLanguage.bind(highlighter);
-  const getLoadedLanguages = highlighter.getLoadedLanguages.bind(highlighter);
-  const loadThemeSync = highlighter.loadThemeSync?.bind(highlighter);
-  const loadTheme = highlighter.loadTheme?.bind(highlighter);
-
-  return {
-    ...highlighter,
-    codeToHast(code, options) {
-      return codeToHast(code, normalizeCodeOptions(options));
-    },
-    codeToHtml(code, options) {
-      return codeToHtml(code, normalizeCodeOptions(options));
-    },
-    codeToTokens(code, options) {
-      return codeToTokens(code, normalizeCodeOptions(options));
-    },
-    getLanguage(language) {
-      return getLanguage(normalizeLimitedShikiLanguage(language));
-    },
-    getLoadedLanguages() {
-      return [...new Set([...getLoadedLanguages(), ...BUILT_IN_LANGUAGES])];
-    },
-    loadLanguage() {
-      return Promise.resolve();
-    },
-    loadLanguageSync() {},
-    async loadTheme(...themes) {
-      const resolved = uniqueThemes(themes.flat());
-      if (resolved.length && loadTheme) await loadTheme(...resolved);
-    },
-    loadThemeSync(...themes) {
-      const resolved = uniqueThemes(themes.flat());
-      if (resolved.length && loadThemeSync) loadThemeSync(...resolved);
-    },
-  };
-}
-
-export async function createHighlighter(options = {}) {
-  const themes = uniqueThemes([
-    ...(Array.isArray(options.themes) ? options.themes : []),
-    ...Object.values(THEME_BY_NAME),
-  ]);
-
-  const highlighter = await createHighlighterCore({
-    ...options,
-    engine: options.engine || createJavaScriptRegexEngine(),
-    langs: LIMITED_SHIKI_LANGUAGES,
-    themes,
+export function createHighlighter() {
+  return createHighlighterCore({
+    engine: createJavaScriptRegexEngine(),
+    themes: [githubLight, githubDark],
+    langs: [],
   });
+}
 
-  return wrapLimitedHighlighter(highlighter);
+export async function loadShikiLanguages(highlighter, languages) {
+  const loaded = new Set(highlighter.getLoadedLanguages());
+  const grammars = [];
+  let pending = new Set(languages.map(normalizeLimitedShikiLanguage));
+  while (pending.size) {
+    const loaders = new Set(
+      [...pending]
+        .filter((language) => language !== "text" && !loaded.has(language))
+        .map((language) => bundledLanguages[embeddedLanguages[language] ?? language]),
+    );
+    pending = new Set();
+    const modules = await Promise.all([...loaders].map((load) => load()));
+    for (const { default: registrations } of modules) {
+      for (const grammar of registrations) {
+        loaded.add(grammar.name);
+        for (const alias of grammar.aliases ?? []) loaded.add(alias);
+        // Keep the embedded highlighting that the preloaded bundle provided.
+        for (const embedded of grammar.embeddedLangsLazy ?? []) {
+          if (supportedLanguages.has(embedded)) pending.add(embedded);
+        }
+      }
+      grammars.push(...registrations);
+    }
+  }
+  if (grammars.length) highlighter.loadLanguageSync(grammars);
 }
