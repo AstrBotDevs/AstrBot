@@ -136,13 +136,6 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
     EMPTY_OUTPUT_RETRY_WAIT_MAX_S = 4
     USER_INTERRUPTION_REQUEST = "Stop output."
     USER_INTERRUPTION_MESSAGE = "Output stopped."
-    FOLLOW_UP_NOTICE_TEMPLATE = (
-        "\n\n[SYSTEM NOTICE] User sent follow-up messages while tool execution "
-        "was in progress. Prioritize these follow-up instructions in your next "
-        "actions. In your very next action, briefly acknowledge to the user "
-        "that their follow-up message(s) were received before continuing.\n"
-        "{follow_up_lines}"
-    )
     MAX_STEPS_REACHED_PROMPT = (
         "[SYSTEM NOTICE: Agent step budget exhausted] "
         "Remaining steps: 0. Stop using tools; summarize results and unfinished work. "
@@ -899,7 +892,14 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         *,
         message_text: str,
     ) -> FollowUpTicket | None:
-        """Queue a follow-up message for the next tool result."""
+        """Queue user input after the next complete batch of tool results.
+
+        Args:
+            message_text: Additional user input to append without modification.
+
+        Returns:
+            A consumption ticket, or None if the input cannot be accepted.
+        """
         if self.done() or self._is_stop_requested():
             return None
         text = (message_text or "").strip()
@@ -917,27 +917,6 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         self._pending_follow_ups = []
         for ticket in follow_ups:
             ticket.resolved.set()
-
-    def _consume_follow_up_notice(self) -> str:
-        if not self._pending_follow_ups:
-            return ""
-        follow_ups = self._pending_follow_ups
-        self._pending_follow_ups = []
-        for ticket in follow_ups:
-            ticket.consumed = True
-            ticket.resolved.set()
-        follow_up_lines = "\n".join(
-            f"{idx}. {ticket.text}" for idx, ticket in enumerate(follow_ups, start=1)
-        )
-        return self.FOLLOW_UP_NOTICE_TEMPLATE.format(
-            follow_up_lines=follow_up_lines,
-        )
-
-    def _merge_follow_up_notice(self, content: str) -> str:
-        notice = self._consume_follow_up_notice()
-        if not notice:
-            return content
-        return f"{content}{notice}"
 
     def _track_tool_call_streak(
         self,
@@ -1411,6 +1390,18 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
 
             self.req.append_tool_calls_result(tool_calls_result)
 
+            if tool_call_result_blocks and self._pending_follow_ups:
+                # Keep all tool replies together before adding new user input.
+                follow_ups = list(self._pending_follow_ups)
+                await self._append_context_messages(
+                    [Message(role="user", content=ticket.text) for ticket in follow_ups]
+                )
+                # Preserve inputs arriving while the context sink was awaited.
+                del self._pending_follow_ups[: len(follow_ups)]
+                for ticket in follow_ups:
+                    ticket.consumed = True
+                    ticket.resolved.set()
+
     async def step_until_done(
         self, max_step: int
     ) -> T.AsyncGenerator[RunnerEventPayload, None]:
@@ -1468,7 +1459,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                 ToolCallMessageSegment(
                     role="tool",
                     tool_call_id=tool_call_id,
-                    content=self._merge_follow_up_notice(content),
+                    content=content,
                 ),
             )
 

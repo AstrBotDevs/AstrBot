@@ -486,6 +486,8 @@ if receipt is not None:
 
 Follow-ups retain the original runtime and conversation even if the profile runtime or the UMO's current selection changes. Steering returns `None` when rejected, or an `InputReceipt` when accepted. Awaiting it confirms whether input was actually consumed and persisted. Rejected steering never silently becomes a queued turn. Images and files in steering currently become text references.
 
+The built-in runtime appends steering input as separate `user` messages, in arrival order, after a complete batch of tool results. It does not modify tool result bodies. Different senders may steer within the same UMO and conversation, provided their permissions and plugin scope match the active turn.
+
 `run.session.state` is `idle`, `queued`, `running`, or `closed`. The snapshot contains `ref`, `pending_turn_count`, and `active_turn_id`. Read the property again to refresh it.
 
 Core resolves permissions from `source_event` or the current active same-UMO event. Background calls without a source run as members. A source event from another UMO is rejected.
