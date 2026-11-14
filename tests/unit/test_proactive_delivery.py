@@ -24,9 +24,9 @@ from astrbot.core.astr_agent_runtime.runner import AgentRunner
 from astrbot.core.astr_agent_runtime.tool_executor import FunctionToolExecutor
 from astrbot.core.astr_agent_runtime.tools.message_tools import SendMessageToUserTool
 from astrbot.core.config.default import DEFAULT_CONFIG
+from astrbot.core.conversation_mgr import ConversationManager
 from astrbot.core.event_bus import EventBus
 from astrbot.core.log import _log_context
-from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.pipeline.context import PipelineContext
 from astrbot.core.pipeline.scheduler import PipelineScheduler
 from astrbot.core.platform.astr_message_event import (
@@ -43,10 +43,11 @@ from astrbot.core.utils import trace as trace_module
 
 @pytest_asyncio.fixture
 async def runtime(monkeypatch, database):
-    """Wire real execution components to an offline provider and in-memory history.
+    """Wire real execution components to an offline provider and SQLite history.
 
     Args:
         monkeypatch: Patch manager for external services and background metrics.
+        database: Isolated SQLite database with initialized event storage.
 
     Yields:
         Controls for provider execution, delivery, and pipeline completion.
@@ -57,46 +58,26 @@ async def runtime(monkeypatch, database):
     config["provider_settings"]["datetime_system_prompt"] = False
     config["platform_settings"]["unique_session"] = True
     config["admins_id"] = ["astrbot"]
-    conversation = SimpleNamespace(cid="conversation", history="[]", token_usage=0)
     store = database.conversation_store
     record = await store.create(umo="target:FriendMessage:user", platform_id="target")
-    conversation.cid = record.conversation_id
-    append = store.append
-
-    async def append_and_refresh(*args, **kwargs):
-        result = await append(*args, **kwargs)
-        snapshot = await store.read(conversation.cid)
-        conversation.history = json.dumps(snapshot.messages)
-        return result
-
-    monkeypatch.setattr(store, "append", append_and_refresh)
+    manager = ConversationManager(database)
+    manager.session_conversations["target:FriendMessage:user"] = record.conversation_id
     queue = asyncio.Queue()
     metadata = PlatformMetadata(id="target", name="aiocqhttp", description="Target")
     control = SimpleNamespace(
         started=asyncio.Event(),
         gate=asyncio.Event(),
-        cleaned=asyncio.Event(),
         requests=[],
-        events=[],
         runners=[],
-        deliver=False,
-        tool_delivery=False,
         completion=None,
         delivered=asyncio.Event(),
         after_delivery=asyncio.Event(),
         fail=False,
         store=store,
-        writers=[],
+        cid=record.conversation_id,
     )
     control.gate.set()
     control.after_delivery.set()
-
-    async def save(*args, **kwargs):
-        conversation.history = json.dumps(kwargs["history"])
-
-    async def get_conversation(umo, cid):
-        conversation.user_id = umo
-        return conversation
 
     context = SimpleNamespace(
         get_event_queue=lambda: queue,
@@ -105,41 +86,11 @@ async def runtime(monkeypatch, database):
         astrbot_config_mgr=SimpleNamespace(
             _create_message_config=lambda _: (copy.deepcopy(config), frozenset())
         ),
-        conversation_manager=SimpleNamespace(
-            get_curr_conversation_id=AsyncMock(return_value=conversation.cid),
-            get_conversation=AsyncMock(side_effect=get_conversation),
-            update_conversation=AsyncMock(side_effect=save),
-        ),
+        conversation_manager=manager,
         get_using_tts_provider_async=AsyncMock(return_value=None),
         get_llm_tool_manager=lambda: FunctionToolManager(),
         send_message=AsyncMock(return_value=True),
     )
-
-    async def read_history(cid):
-        event = current_message_event.get()
-        umo = event.unified_msg_origin if event else conversation.user_id
-        record = await context.conversation_manager.get_conversation(umo, cid)
-        if record is None:
-            return None
-        return SimpleNamespace(
-            **vars(record),
-            conversation_id=record.cid,
-            umo=record.user_id,
-            content=json.loads(record.history),
-        )
-
-    async def read_execution(cid):
-        record = await read_history(cid)
-        return (record, None) if record is not None else None
-
-    context.conversation_manager.db = SimpleNamespace(
-        get_conversation_by_id=AsyncMock(side_effect=read_history),
-        conversation_store=SimpleNamespace(
-            get_metadata=AsyncMock(side_effect=read_history),
-            read_for_execution=AsyncMock(side_effect=read_execution),
-        ),
-    )
-    context.conversation_manager.to_legacy_conversation = lambda record: record
 
     async def respond(**kwargs):
         event = current_message_event.get()
@@ -150,32 +101,27 @@ async def runtime(monkeypatch, database):
         )
         control.requests.append(kwargs["contexts"])
         control.started.set()
-        try:
-            await control.gate.wait()
-            if control.tool_delivery and len(control.requests) == 1:
-                return LLMResponse(
-                    role="assistant",
-                    tools_call_name=["send_message_to_user"],
-                    tools_call_args=[
-                        {"messages": [{"type": "plain", "text": "Take your medicine"}]}
-                    ],
-                    tools_call_ids=["reminder"],
-                )
-            if control.tool_delivery and len(control.requests) == 2:
-                control.delivered.set()
-                await control.after_delivery.wait()
-            if control.deliver:
-                await event.send(MessageChain().message("Explicit delivery"))
+        await control.gate.wait()
+        if len(control.requests) == 1:
             return LLMResponse(
-                role="err" if control.fail else "assistant",
-                completion_text=(
-                    control.completion
-                    if control.completion is not None
-                    else f"Reply {len(control.requests)}"
-                ),
+                role="assistant",
+                tools_call_name=["send_message_to_user"],
+                tools_call_args=[
+                    {"messages": [{"type": "plain", "text": "Take your medicine"}]}
+                ],
+                tools_call_ids=["reminder"],
             )
-        finally:
-            control.cleaned.set()
+        if len(control.requests) == 2:
+            control.delivered.set()
+            await control.after_delivery.wait()
+        return LLMResponse(
+            role="err" if control.fail else "assistant",
+            completion_text=(
+                control.completion
+                if control.completion is not None
+                else f"Reply {len(control.requests)}"
+            ),
+        )
 
     async def respond_stream(**kwargs):
         response = await respond(**kwargs)
@@ -199,11 +145,8 @@ async def runtime(monkeypatch, database):
             event, plugin_context, config, provider, req, collected_input
         )
         assert prepared is not None
-        control.events.append(event)
-        if control.tool_delivery:
-            prepared.request.func_tool = ToolSet([SendMessageToUserTool()])
-        writer = ConversationEventWriter(store, await store.read(conversation.cid))
-        control.writers.append(writer)
+        prepared.request.func_tool = ToolSet([SendMessageToUserTool()])
+        writer = ConversationEventWriter(store, await store.read(record.conversation_id))
         runner = AgentRunner()
         await runner.reset(
             provider=provider,
@@ -251,9 +194,7 @@ async def runtime(monkeypatch, database):
             await asyncio.sleep(0)
             await asyncio.gather(*list(bus._pending_tasks), return_exceptions=True)
 
-    control.native = native
-    control.context, control.conversation = context, conversation
-    control.bus, control.scheduler, control.drain = bus, scheduler, drain
+    control.context, control.bus, control.drain = context, bus, drain
     control.agent_stage = next(
         s for s in scheduler.stages if type(s).__name__ == "ProcessStage"
     ).agent_sub_stage.agent_sub_stage
@@ -273,7 +214,6 @@ async def test_proactive_tool_delivery_is_saved_before_wakeup_finishes(
     runtime, outcome, streaming
 ):
     """Retain delivered text while the agent is still running and after it exits."""
-    runtime.tool_delivery = True
     runtime.after_delivery.clear()
     runtime.fail = outcome == "failed"
     runtime.agent_stage.streaming_response = streaming
@@ -285,14 +225,14 @@ async def test_proactive_tool_delivery_is_saved_before_wakeup_finishes(
     )
     await asyncio.wait_for(runtime.delivered.wait(), 1)
     delivered = {"role": "assistant", "content": "Take your medicine"}
-    before_completion = json.loads(runtime.conversation.history)
+    before_completion = (await runtime.store.read(runtime.cid)).messages
     if outcome == "cancelled":
         await runtime.bus.stop_platform("target")
     else:
         runtime.after_delivery.set()
         await asyncio.wait_for(runtime.drain(), 1)
     assert delivered in before_completion
-    history = json.loads(runtime.conversation.history)
+    history = (await runtime.store.read(runtime.cid)).messages
     if outcome == "completed":
         assert history.count(delivered) == 1
         assert "Take your medicine" in json.dumps(history)
@@ -304,7 +244,6 @@ async def test_proactive_tool_delivery_is_saved_before_wakeup_finishes(
 @pytest.mark.asyncio
 async def test_reply_to_running_wakeup_waits_and_sees_delivered_text(runtime):
     """Serialize a quick user reply and preserve the actual reminder in its context."""
-    runtime.tool_delivery = True
     runtime.after_delivery.clear()
     await wake_main_agent(
         runtime.context,
@@ -341,7 +280,6 @@ async def test_tool_delivery_survives_duplicate_or_empty_final_reply(
     runtime, completion
 ):
     """Keep exactly one assistant record when the final reply adds no new text."""
-    runtime.tool_delivery = True
     runtime.completion = completion
     await wake_main_agent(
         runtime.context,
@@ -350,7 +288,7 @@ async def test_tool_delivery_survives_duplicate_or_empty_final_reply(
         source="background_task",
     )
     await asyncio.wait_for(runtime.drain(), 1)
-    history = json.loads(runtime.conversation.history)
+    history = (await runtime.store.read(runtime.cid)).messages
     texts = [
         message["content"]
         if isinstance(message["content"], str)
@@ -371,7 +309,6 @@ async def test_proactive_delivery_distinguishes_send_and_storage_failures(
     runtime, failure, monkeypatch
 ):
     """Only confirmed text becomes assistant history; storage failure never resends."""
-    runtime.tool_delivery = True
     if failure == "missing_platform":
         runtime.context.send_message.return_value = False
     elif failure == "transport":
@@ -405,9 +342,8 @@ async def test_proactive_delivery_distinguishes_send_and_storage_failures(
         if call.args[1].get_plain_text() == "Take your medicine"
     ]
     assert len(deliveries) == 1
-    assert {"role": "assistant", "content": "Take your medicine"} not in json.loads(
-        runtime.conversation.history
-    )
+    snapshot = await runtime.store.read(runtime.cid)
+    assert {"role": "assistant", "content": "Take your medicine"} not in snapshot.messages
 
 
 @pytest.mark.asyncio
@@ -416,7 +352,6 @@ async def test_proactive_delivery_stays_bound_to_its_original_conversation(
     runtime, change
 ):
     """Never redirect a delivery to a newly selected or replacement conversation."""
-    runtime.tool_delivery = True
     runtime.gate.clear()
     runtime.after_delivery.clear()
     await wake_main_agent(
@@ -427,17 +362,17 @@ async def test_proactive_delivery_stays_bound_to_its_original_conversation(
     )
     await asyncio.wait_for(runtime.started.wait(), 1)
     manager = runtime.context.conversation_manager
-    manager.get_curr_conversation_id.return_value = "another-conversation"
+    manager.session_conversations["target:FriendMessage:user"] = "another-conversation"
     if change == "deleted":
-        await runtime.store.delete(cid=runtime.conversation.cid)
+        await runtime.store.delete(cid=runtime.cid)
     runtime.gate.set()
     if change == "deleted":
         await asyncio.wait_for(runtime.drain(), 2)
-        assert await runtime.store.read(runtime.conversation.cid) is None
+        assert await runtime.store.read(runtime.cid) is None
     else:
         await asyncio.wait_for(runtime.delivered.wait(), 2)
         await runtime.bus.stop_platform("target")
-        snapshot = await runtime.store.read(runtime.conversation.cid)
+        snapshot = await runtime.store.read(runtime.cid)
         assert {
             "role": "assistant",
             "content": "Take your medicine",
@@ -452,7 +387,6 @@ async def test_temporary_final_text_cannot_replace_a_confirmed_delivery(
     runtime, monkeypatch, temporary_scope, streaming
 ):
     """Only persisted final content may suppress the delivered assistant record."""
-    runtime.tool_delivery = True
     runtime.completion = "Take your medicine"
     runtime.agent_stage.streaming_response = streaming
 
@@ -472,7 +406,7 @@ async def test_temporary_final_text_cannot_replace_a_confirmed_delivery(
         source="plugin",
     )
     await asyncio.wait_for(runtime.drain(), 1)
-    snapshot = await runtime.store.read(runtime.conversation.cid)
+    snapshot = await runtime.store.read(runtime.cid)
     assert (
         snapshot.messages.count({"role": "assistant", "content": "Take your medicine"})
         == 1
@@ -481,7 +415,6 @@ async def test_temporary_final_text_cannot_replace_a_confirmed_delivery(
 
 @pytest.mark.asyncio
 async def test_platform_stop_waits_for_delivery_commit(runtime, monkeypatch):
-    runtime.tool_delivery = True
     entered, release = asyncio.Event(), asyncio.Event()
     save_history = ConversationEventWriter.save_history
 
@@ -504,7 +437,7 @@ async def test_platform_stop_waits_for_delivery_commit(runtime, monkeypatch):
     assert not stopping.done()
     release.set()
     await asyncio.wait_for(stopping, 2)
-    snapshot = await runtime.store.read(runtime.conversation.cid)
+    snapshot = await runtime.store.read(runtime.cid)
     assert (
         snapshot.messages.count({"role": "assistant", "content": "Take your medicine"})
         == 1
@@ -513,7 +446,6 @@ async def test_platform_stop_waits_for_delivery_commit(runtime, monkeypatch):
 
 @pytest.mark.asyncio
 async def test_dashboard_edit_is_not_overwritten_by_wakeup(runtime):
-    runtime.tool_delivery = True
     runtime.after_delivery.clear()
     await wake_main_agent(
         runtime.context,
@@ -523,10 +455,10 @@ async def test_dashboard_edit_is_not_overwritten_by_wakeup(runtime):
     )
     await asyncio.wait_for(runtime.delivered.wait(), 2)
     writer = ConversationEventWriter(
-        runtime.store, await runtime.store.read(runtime.conversation.cid)
+        runtime.store, await runtime.store.read(runtime.cid)
     )
     edited = [{"role": "assistant", "content": "Dashboard edit"}]
     await writer.save_history(edited, origin="user")
     runtime.after_delivery.set()
     await asyncio.wait_for(runtime.drain(), 2)
-    assert (await runtime.store.read(runtime.conversation.cid)).messages == edited
+    assert (await runtime.store.read(runtime.cid)).messages == edited
