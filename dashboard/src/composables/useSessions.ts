@@ -111,11 +111,15 @@ export function useSessions(chatboxMode: boolean = false) {
         try {
             await chatApi.deleteSession(sessionId);
             await getSessions();
-            currSessionId.value = '';
-            selectedSessions.value = [];
+            if (currSessionId.value === sessionId) {
+                currSessionId.value = '';
+                selectedSessions.value = [];
+                return true;
+            }
         } catch (err) {
             console.error(err);
         }
+        return false;
     }
 
     interface BatchDeleteFailedItem {
