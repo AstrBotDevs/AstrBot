@@ -194,7 +194,7 @@ import ActionRef from './message_list_comps/ActionRef.vue';
 enableKatex();
 enableMermaid();
 
-// 注册 message-list 专用组件：引用节点 + 代码块渲染
+// Register the reference and code block renderers for the message list.
 setCustomComponents('message-list', {
     ref: RefNode,
     code_block: CodeBlockNode
