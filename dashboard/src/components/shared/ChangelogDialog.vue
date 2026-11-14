@@ -1,5 +1,6 @@
 <script setup>
 import { ref, watch, computed } from 'vue';
+import { useTheme } from 'vuetify';
 import { changelogApi, statsApi } from '@/api/v1';
 import { useI18n } from '@/i18n/composables';
 import { MarkdownRender, enableKatex, enableMermaid } from 'markstream-vue';
@@ -10,6 +11,7 @@ enableKatex();
 enableMermaid();
 
 const { t } = useI18n();
+const theme = useTheme();
 
 const props = defineProps({
   modelValue: {
@@ -208,7 +210,7 @@ getCurrentVersion();
             {{ changelogError }}
           </v-alert>
           <div v-else-if="changelogContent" class="changelog-content">
-            <MarkdownRender :content="changelogContent" :typewriter="false" class="markdown-content" />
+            <MarkdownRender :content="changelogContent" :is-dark="theme.global.current.value.dark" :typewriter="false" class="markdown-content" />
           </div>
         </div>
       </v-card-text>
