@@ -23,7 +23,9 @@ def _context(
         context=SimpleNamespace(
             context=SimpleNamespace(
                 cron_manager=cron_mgr,
-                get_config=lambda umo=None: {"timezone": tz_name},
+                get_config=lambda umo=None: {
+                    "timezone": tz_name if umo is None else "Asia/Shanghai"
+                },
             ),
             event=SimpleNamespace(
                 unified_msg_origin=umo,
