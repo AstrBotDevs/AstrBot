@@ -46,6 +46,10 @@ except ImportError:  # pragma: no cover
 if os.name == "nt":
     # Windows 的 mimetypes 会把 .svg 映射成非标准的 image/svg,这里强制覆盖为标准类型
     mimetypes.add_type("image/svg+xml", ".svg", strict=True)
+    # The registry can also map .js to text/plain. Browsers refuse to run module
+    # scripts served that way, so the WebUI stays blank.
+    mimetypes.add_type("text/javascript", ".js", strict=True)
+    mimetypes.add_type("text/javascript", ".mjs", strict=True)
 
 # Multipart framing (boundaries, part headers) rides on top of the file
 # payload, so whole-file upload routes get slack beyond the file size limit;
