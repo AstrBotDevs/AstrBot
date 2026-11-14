@@ -37,7 +37,10 @@ from astrbot.core.message.components import File, Image, Plain, Record, Reply, V
 from astrbot.core.pipeline.process_stage.method.agent_sub_stages import (
     webchat as webchat_build,
 )
+from astrbot.core.platform.agent_wakeup_event import AgentWakeupEvent
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
+from astrbot.core.platform.message_session import MessageSession
+from astrbot.core.platform.message_type import MessageType
 from astrbot.core.platform.platform_metadata import PlatformMetadata
 from astrbot.core.provider import Provider
 from astrbot.core.provider.entities import ProviderRequest, ProviderType
@@ -1902,6 +1905,132 @@ class TestBuildMainAgent:
 
         assert result is not None
         assert isinstance(result, ama.MainAgentBuildResult)
+
+    @pytest.mark.asyncio
+    async def test_proactive_build_gets_registered_plugin_tools(
+        self, mock_event, mock_context, mock_provider
+    ):
+        """Wakeup builds must carry tools registered through @llm_tool."""
+        plugin_tool = FunctionTool(
+            name="search_memes",
+            description="Search memes",
+            parameters={"type": "object", "properties": {}},
+        )
+        inactive_tool = FunctionTool(
+            name="disabled_meme_tool",
+            description="Disabled",
+            parameters={"type": "object", "properties": {}},
+            active=False,
+        )
+        mock_context.persona_manager.resolve_selected_persona = AsyncMock(
+            return_value=(
+                "locked",
+                {"name": "locked", "prompt": "No tools.", "tools": []},
+                None,
+                False,
+            )
+        )
+        mock_event.platform_meta.support_proactive_message = False
+        mock_context.get_config.return_value = {"provider_settings": {}}
+
+        event = AgentWakeupEvent(
+            context=mock_context,
+            session=MessageSession(
+                "test_platform", MessageType.FRIEND_MESSAGE, "session123"
+            ),
+            platform_meta=mock_event.platform_meta,
+            prompt="run scheduled task",
+            source="cron",
+        )
+        req = ProviderRequest(prompt="run scheduled task")
+        req.conversation = MagicMock(persona_id="locked", history="[]")
+        config = ama.MainAgentBuildConfig(
+            tool_call_timeout=60,
+            provider_settings={"web_search": False},
+            computer_use_runtime="none",
+            add_cron_tools=True,
+        )
+
+        with (
+            patch.object(native_execution, "AgentRunner") as mock_runner_cls,
+            patch.object(
+                builder_build,
+                "AstrAgentContext",
+                side_effect=lambda **kwargs: SimpleNamespace(**kwargs),
+            ),
+        ):
+            mock_runner = MagicMock()
+            mock_runner.reset = AsyncMock()
+            mock_runner_cls.return_value = mock_runner
+            result = await ama.build_main_agent(
+                event=event,
+                plugin_context=mock_context,
+                config=config,
+                provider=mock_provider,
+                req=req,
+                plugin_tools=ToolSet([plugin_tool, inactive_tool]),
+            )
+
+        assert result is not None
+        names = result.provider_request.func_tool.names()
+        assert "search_memes" in names
+        assert "disabled_meme_tool" not in names
+        assert "future_task" in names
+
+    @pytest.mark.asyncio
+    async def test_interactive_build_does_not_force_registered_plugin_tools(
+        self, mock_event, mock_context, mock_provider
+    ):
+        """Interactive builds keep their persona-filtered tool set."""
+        plugin_tool = FunctionTool(
+            name="search_memes",
+            description="Search memes",
+            parameters={"type": "object", "properties": {}},
+        )
+        mock_context.persona_manager.resolve_selected_persona = AsyncMock(
+            return_value=(
+                "locked",
+                {"name": "locked", "prompt": "No tools.", "tools": []},
+                None,
+                False,
+            )
+        )
+        mock_event.platform_meta.support_proactive_message = False
+        mock_context.get_config.return_value = {"provider_settings": {}}
+
+        req = ProviderRequest(prompt="hello")
+        req.conversation = MagicMock(persona_id="locked", history="[]")
+        config = ama.MainAgentBuildConfig(
+            tool_call_timeout=60,
+            provider_settings={"web_search": False},
+            computer_use_runtime="none",
+            add_cron_tools=True,
+        )
+
+        with (
+            patch.object(native_execution, "AgentRunner") as mock_runner_cls,
+            patch.object(
+                builder_build,
+                "AstrAgentContext",
+                side_effect=lambda **kwargs: SimpleNamespace(**kwargs),
+            ),
+        ):
+            mock_runner = MagicMock()
+            mock_runner.reset = AsyncMock()
+            mock_runner_cls.return_value = mock_runner
+            result = await ama.build_main_agent(
+                event=mock_event,
+                plugin_context=mock_context,
+                config=config,
+                provider=mock_provider,
+                req=req,
+                plugin_tools=ToolSet([plugin_tool]),
+            )
+
+        assert result is not None
+        names = result.provider_request.func_tool.names()
+        assert "search_memes" not in names
+        assert "future_task" in names
 
     @pytest.mark.asyncio
     async def test_build_main_agent_passes_max_context_length_to_runner(
