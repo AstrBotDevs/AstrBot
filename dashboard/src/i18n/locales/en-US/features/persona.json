@@ -69,6 +69,21 @@
       "title": "Edit Persona"
     }
   },
+  "importDialog": {
+    "title": "Persona Import Format",
+    "description": "Only persona JSON files exported from AstrBot are supported. The supported fields are listed below:",
+    "fieldColumn": "Field",
+    "requiredColumn": "Required",
+    "notesColumn": "Notes",
+    "required": "Yes",
+    "optional": "No",
+    "systemPromptNote": "System prompt. Import fails if it is missing.",
+    "personaIdNote": "Persona ID. Defaults to imported_persona. If it already exists, an _imported suffix is appended; on further conflicts, _imported_1, _imported_2, and so on are appended.",
+    "beginDialogsNote": "Preset dialog list. Defaults to an empty array.",
+    "exampleTitle": "Example:",
+    "toolsSkillsWarning": "Tools and Skills are not imported: the persona uses all tools and Skills by default after import. Configure them manually if you need to restrict them.",
+    "chooseFile": "Choose File"
+  },
   "empty": {
     "title": "No Persona Configured",
     "description": "Create your first persona to start using personalized chatbots",

@@ -69,6 +69,21 @@
       "title": "ペルソナを編集"
     }
   },
+  "importDialog": {
+    "title": "ペルソナインポート形式の説明",
+    "description": "AstrBot からエクスポートしたペルソナ JSON ファイルのみに対応しています。対応するフィールドは以下のとおりです：",
+    "fieldColumn": "フィールド",
+    "requiredColumn": "必須",
+    "notesColumn": "説明",
+    "required": "はい",
+    "optional": "いいえ",
+    "systemPromptNote": "システムプロンプト。存在しない場合はインポートに失敗します。",
+    "personaIdNote": "ペルソナ ID。省略時は imported_persona になります。既に存在する場合は _imported サフィックスが付与され、さらに衝突する場合は _imported_1、_imported_2 などが付与されます。",
+    "beginDialogsNote": "プリセット会話のリスト。省略時は空の配列になります。",
+    "exampleTitle": "例：",
+    "toolsSkillsWarning": "ツール（tools）とスキル（skills）はインポートされません。インポート後、このペルソナはデフォルトですべてのツールとスキルが有効になります。制限する場合はインポート後に手動で設定してください。",
+    "chooseFile": "ファイルを選択"
+  },
   "empty": {
     "title": "ペルソナが設定されていません",
     "description": "ペルソナを作成してみましょう！",
