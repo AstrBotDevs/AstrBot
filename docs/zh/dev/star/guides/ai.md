@@ -486,6 +486,8 @@ if receipt is not None:
 
 内置 runtime 在一批工具结果之后，将同一批 steer 输入合为一条独立的 `user` 消息，`content` 使用按到达顺序排列的文本片段列表，不改写工具结果。相同 UMO 和会话内允许不同发送者 steer，但权限和插件范围仍须与当前执行一致。
 
+等待工具结果时收到 steer，内置执行器会将已运行的工具转到后台，不会重复调用工具；前台收到包含任务 ID 的移交结果后继续处理 steer。工具结束或失败时，通过 wakeup 将结果送回原 runtime 会话。停止会话会同时取消这些后台工具；不支持后台移交的执行器继续等待工具结果。
+
 `run.session.state` 为 `idle`、`queued`、`running` 或 `closed`。快照包含 `ref`、`pending_turn_count` 和 `active_turn_id`，重新读取属性即可刷新。
 
 Core 根据 `source_event` 或当前活跃的同 UMO 事件解析权限。没有来源事件的后台调用使用 member 权限，来源事件与目标 UMO 不一致会报错。

@@ -488,6 +488,8 @@ Follow-ups retain the original runtime and conversation even if the profile runt
 
 The built-in runtime appends each batch of steering input as one `user` message with an ordered list of text content parts, after a complete batch of tool results. It does not modify tool result bodies. Different senders may steer within the same UMO and conversation, provided their permissions and plugin scope match the active turn.
 
+When steering arrives while a tool result is pending, the built-in executor moves the running tool to the background without executing it again. The foreground receives a handoff result containing the task ID and proceeds with steering. Completion or failure triggers a wakeup in the original runtime conversation. Stopping the session cancels these background tools too; executors without handoff support keep waiting for the tool result.
+
 `run.session.state` is `idle`, `queued`, `running`, or `closed`. The snapshot contains `ref`, `pending_turn_count`, and `active_turn_id`. Read the property again to refresh it.
 
 Core resolves permissions from `source_event` or the current active same-UMO event. Background calls without a source run as members. A source event from another UMO is rejected.

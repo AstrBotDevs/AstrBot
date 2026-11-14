@@ -401,15 +401,13 @@ async def test_targeted_wakeup_queues_on_its_parent_after_conversation_switch(ru
     runtime.context.conversation_manager.get_conversation.side_effect = (
         lambda source, cid: conversations.get(cid)
     )
-    event = AgentWakeupEvent(
-        context=runtime.context,
-        session=runtime.events[0].session,
-        platform_meta=runtime.events[0].platform_meta,
-        prompt="Child result",
-        source="plugin",
+    await wake_main_agent(
+        runtime.context,
+        umo=umo,
+        user_prompt="Child result",
+        source="background_task",
         agent_session=AgentSessionRef("astrbot", "conversation"),
     )
-    await runtime.context.get_event_queue().put(event)
     runtime.gate.set()
     await asyncio.wait_for(runtime.drain(), 1)
     parent.steer.assert_not_called()
