@@ -8,27 +8,36 @@ from astrbot.cli.utils.plugin import PluginStatus, build_plug_list, download_rep
 
 
 class FakeResponse:
+    def __init__(self, data):
+        self.data = data
+
     def raise_for_status(self):
         return None
 
     def json(self):
-        return {
-            "local-plugin": {
-                "desc": "remote description",
-                "version": "2.0.0",
-                "author": "remote-author",
-                "repo": "https://example.com/local-plugin",
-            },
-            "remote-only": {
-                "desc": "remote only",
-                "version": "1.0.0",
-                "author": "remote-author",
-                "repo": "https://example.com/remote-only",
-            },
-        }
+        return self.data
 
 
 class FakeClient:
+    market = {
+        "local-plugin": {
+            "desc": "remote description",
+            "version": "2.0.0",
+            "author": "remote-author",
+            "repo": "https://example.com/local-plugin",
+        },
+        "remote-only": {
+            "desc": "remote only",
+            "version": "1.0.0",
+            "author": "remote-author",
+            "repo": "https://example.com/remote-only",
+        },
+    }
+
+    def __init__(self, **kwargs):
+        # The market URL answers with a redirect.
+        assert kwargs == {"follow_redirects": True, "trust_env": True}
+
     def __enter__(self):
         return self
 
@@ -37,7 +46,7 @@ class FakeClient:
 
     def get(self, url):
         assert url == "https://api.soulter.top/astrbot/plugins"
-        return FakeResponse()
+        return FakeResponse(self.market)
 
 
 def test_download_repository_uses_head_without_metadata_lookup(
@@ -106,6 +115,38 @@ def test_build_plug_list_merges_local_and_remote_plugins(monkeypatch, tmp_path):
     assert plugins_by_name["unpublished-plugin"]["status"] == PluginStatus.NOT_PUBLISHED
     assert plugins_by_name["remote-only"]["status"] == PluginStatus.NOT_INSTALLED
     assert len(plugins) == 3
+
+
+def test_build_plug_list_reads_author_keyed_market(monkeypatch, tmp_path):
+    class AuthorKeyedClient(FakeClient):
+        market = {
+            "$meta": {"schema_version": 1, "name": "AstrBot Official Plugin Market"},
+            "remote-author/local-plugin": {
+                "author": "remote-author",
+                "name": "local-plugin",
+                "version": "2.0.0",
+                "repo": "https://example.com/local-plugin",
+                "desc": "remote description",
+            },
+            "remote-author/remote-only": {
+                "author": "remote-author",
+                "name": "remote-only",
+                "version": "1.0.0",
+                "repo": "https://example.com/remote-only",
+                "desc": "remote only",
+            },
+        }
+
+    write_metadata(tmp_path / "local-plugin", "local-plugin", "1.0.0")
+    monkeypatch.setattr("astrbot.cli.utils.plugin.httpx.Client", AuthorKeyedClient)
+
+    plugins = build_plug_list(tmp_path)
+    plugins_by_name = {plugin["name"]: plugin for plugin in plugins}
+
+    assert set(plugins_by_name) == {"local-plugin", "remote-only"}
+    assert plugins_by_name["local-plugin"]["status"] == PluginStatus.NEED_UPDATE
+    assert plugins_by_name["remote-only"]["status"] == PluginStatus.NOT_INSTALLED
+    assert plugins_by_name["remote-only"]["repo"] == "https://example.com/remote-only"
 
 
 @pytest.mark.parametrize("path_kind", ["file", "missing"])
