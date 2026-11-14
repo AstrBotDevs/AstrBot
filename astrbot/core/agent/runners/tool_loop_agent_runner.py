@@ -1261,6 +1261,23 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                 if self._is_stop_requested():
                     await self._finalize_aborted_step()
                     return
+                if requery_resp is None:
+                    logger.warning(
+                        "skills_like tool parameter generation failed; no tool was executed."
+                    )
+                    self.run_context.messages.append(
+                        Message(
+                            role="user",
+                            content=(
+                                "Tool parameter generation failed for "
+                                f"{', '.join(llm_resp.tools_call_name)} after repeated empty "
+                                "model responses. No tool was executed. Decide whether "
+                                "to retry with complete parameters or explain the failure "
+                                "to the user."
+                            ),
+                        )
+                    )
+                    return
                 if not requery_resp.tools_call_name:
                     llm_resp = requery_resp
                     logger.warning(
@@ -1768,10 +1785,66 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                 subset.add_tool(tool)
         return subset
 
+    async def _requery_tool_params(
+        self,
+        payload: dict[str, T.Any],
+        *,
+        contexts: list[dict[str, T.Any]],
+    ) -> LLMResponse | None:
+        """Re-query the LLM for tool parameters, retrying empty completions.
+
+        The main step loop already retries ``EmptyModelOutputError`` and switches
+        to a fallback provider, but the skills_like re-query request is issued
+        outside that wrapper, so a single empty completion used to raise out of
+        the runner and abort the whole Agent run. Retry here with the main loop's
+        timing, without switching providers mid re-query. On exhaustion return
+        ``None`` so the caller can report the failure instead of executing
+        unvalidated light-schema arguments.
+
+        Args:
+            payload: Provider arguments for the re-query request.
+            contexts: Messages to send for this re-query request.
+
+        Returns:
+            The provider reply, or None when every attempt returned no usable output.
+        """
+        retrying = AsyncRetrying(
+            retry=retry_if_exception_type(EmptyModelOutputError),
+            stop=stop_after_attempt(self.EMPTY_OUTPUT_RETRY_ATTEMPTS),
+            wait=wait_exponential(
+                multiplier=1,
+                min=self.EMPTY_OUTPUT_RETRY_WAIT_MIN_S,
+                max=self.EMPTY_OUTPUT_RETRY_WAIT_MAX_S,
+            ),
+            before_sleep=lambda state: logger.warning(
+                "skills_like tool re-query returned an empty completion on attempt %s/%s.",
+                state.attempt_number,
+                self.EMPTY_OUTPUT_RETRY_ATTEMPTS,
+            ),
+            reraise=True,
+        )
+        response: LLMResponse | None = None
+        try:
+            async for attempt in retrying:
+                with attempt:
+                    response = None
+                    async for recorded in self._recorded_responses(
+                        payload, contexts=contexts, streaming=False
+                    ):
+                        response = recorded
+        except EmptyModelOutputError:
+            logger.warning(
+                "skills_like tool re-query still returned an empty completion after %s attempts; skipping the re-query.",
+                self.EMPTY_OUTPUT_RETRY_ATTEMPTS,
+                exc_info=True,
+            )
+            return None
+        return response
+
     async def _resolve_tool_exec(
         self,
         llm_resp: LLMResponse,
-    ) -> tuple[LLMResponse, ToolSet | None]:
+    ) -> tuple[LLMResponse | None, ToolSet | None]:
         """Used in 'skills_like' tool schema mode to re-query LLM with param-only tool schemas."""
         tool_names = llm_resp.tools_call_name
         if not tool_names:
@@ -1790,8 +1863,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             )
             if param_subset.tools and tool_names:
                 contexts = self._build_tool_requery_context(tool_names)
-                requery_resp = None
-                async for recorded in self._recorded_responses(
+                requery_resp = await self._requery_tool_params(
                     {
                         "func_tool": param_subset,
                         "model": self.req.model,
@@ -1802,12 +1874,11 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                         "request_max_retries": self.request_max_retries,
                     },
                     contexts=contexts,
-                    streaming=False,
-                ):
-                    requery_resp = recorded
-                if requery_resp:
-                    llm_resp = requery_resp
-                    self._sanitize_malformed_tool_calls(llm_resp)
+                )
+                if requery_resp is None:
+                    return None, subset
+                llm_resp = requery_resp
+                self._sanitize_malformed_tool_calls(llm_resp)
 
                 # If the re-query still returns no tool calls, and also does not have a meaningful assistant reply,
                 # we consider it as a failure of the LLM to follow the tool-use instruction,
@@ -1823,8 +1894,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                         tool_names,
                         extra_instruction=self.SKILLS_LIKE_REQUERY_REPAIR_INSTRUCTION,
                     )
-                    repair_resp = None
-                    async for recorded in self._recorded_responses(
+                    repair_resp = await self._requery_tool_params(
                         {
                             "func_tool": param_subset,
                             "model": self.req.model,
@@ -1835,12 +1905,16 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                             "request_max_retries": self.request_max_retries,
                         },
                         contexts=repair_contexts,
-                        streaming=False,
+                    )
+                    if repair_resp is None:
+                        return None, subset
+                    llm_resp = repair_resp
+                    self._sanitize_malformed_tool_calls(llm_resp)
+                    if (
+                        not llm_resp.tools_call_name
+                        and not self._has_meaningful_assistant_reply(llm_resp)
                     ):
-                        repair_resp = recorded
-                    if repair_resp:
-                        llm_resp = repair_resp
-                        self._sanitize_malformed_tool_calls(llm_resp)
+                        return None, subset
 
         return llm_resp, subset
 
