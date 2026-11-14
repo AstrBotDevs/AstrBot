@@ -30,7 +30,7 @@ Old log, trace, conversation, and statistics URLs still redirect to the correspo
 
 The **Usage → Plugins** documentation group contains Plugins, MCP, and Skills. **Usage → AstrBot Built-in AI** contains Agent Sandbox, SubAgent Orchestration, Proactive Capabilities, Web Search, Knowledge Base, and Context Compression. Their URLs remain unchanged.
 
-The Usage sidebar order is WebUI, AstrBot CLI, Built-in Commands, Plugins, AstrBot Built-in AI, Custom Rules, Agent Execution Mode, and Unified Webhook Mode.
+The Usage sidebar order is WebUI, Backup and Restore, AstrBot CLI, Built-in Commands, Plugins, AstrBot Built-in AI, Custom Rules, Agent Execution Mode, and Unified Webhook Mode.
 
 | Previous documentation entry | Current documentation entry |
 | --- | --- |
@@ -141,7 +141,7 @@ The page title and section navigation stay fixed while only the settings pane on
 
 System configuration changes save automatically. Check for a successful save message and restart AstrBot if the page indicates that a restart is required.
 
-Backups under `Maintenance` include session aliases, model usage statistics, OpenAPI access keys, and MCP server configuration. Workspace files require a separate backup. TOTP trusted devices are excluded; replacing data from a backup clears existing device trust and requires device verification again. Older backups cannot recover data they did not include: export a new backup from the original instance before migrating. If a backup has no MCP configuration, the target instance's MCP configuration is kept.
+Backups under `Maintenance` include session aliases, model usage statistics, OpenAPI access keys, and MCP server configuration. Workspace files require a separate backup. TOTP trusted devices are excluded; replacing data from a backup clears existing device trust and requires device verification again. Older backups cannot recover data they did not include: export a new backup from the original instance before migrating. If a backup has no MCP configuration, the target instance's MCP configuration is kept. Read [Backup and Restore](/en/use/backup) before restoring — it covers the version rules, the clear-first behaviour, and how to recover from a failed restore.
 
 ## Plugins
 
