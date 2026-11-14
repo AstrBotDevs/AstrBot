@@ -22,6 +22,7 @@ PUBLIC_OPEN_API_SCOPES = (
     "config",
     "chat",
     "data",
+    "backup",
     "file",
     "plugin",
     "mcp",

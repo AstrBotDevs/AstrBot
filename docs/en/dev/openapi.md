@@ -38,7 +38,7 @@ If the API Key does not include the required scope for the target endpoint, the 
 - `config:edit_admin` and `chat:admin` must be granted explicitly and are never inherited from their parent scopes.
 - Deselecting `bot` or `provider` in the WebUI also removes the dependent `config` scope.
 
-Developer API keys currently support 11 top-level scopes and two sensitive sub-scopes. `tool`, `skills`, `kb`, and `system` are not valid developer API key scopes. Use the singular `skill` scope for `/api/v1/skills/*` endpoints.
+Developer API keys currently support 12 top-level scopes and two sensitive sub-scopes. `tool`, `skills`, `kb`, and `system` are not valid developer API key scopes. Use the singular `skill` scope for `/api/v1/skills/*` endpoints.
 
 Every operation in the interactive reference also displays `Required scope: ...`; operations involving administrator capabilities additionally display `Conditional sensitive scope: ...`.
 
