@@ -263,9 +263,13 @@ async def _exec_python_json(
 ) -> dict:
     result = await booter.python.exec(script)
     data = result.get("data") if isinstance(result.get("data"), dict) else {}
+    if not data and isinstance(result.get("output"), (dict, str)):
+        data = result
     if not isinstance(data, dict):
         raise RuntimeError(f"{action} failed: invalid result format")
-    output = data.get("output") if isinstance(data.get("output"), dict) else {}
+    output = data.get("output") if isinstance(data.get("output"), (dict, str)) else {}
+    if isinstance(output, str):
+        output = {"text": output}
     if not isinstance(output, dict):
         raise RuntimeError(f"{action} failed: invalid output format")
     error_text = str(data.get("error", "") or result.get("error", "") or "").strip()
