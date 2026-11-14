@@ -194,6 +194,99 @@ async def test_telegram_command_for_another_bot_skips_reply_side_effects():
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("separator", ["\n", "\t", "  "])
+async def test_telegram_command_preserves_whitespace_arguments(separator):
+    adapter = _load_telegram_adapter()(
+        make_platform_config("telegram"), {}, asyncio.Queue()
+    )
+    text = f"/help@TEST_BOT{separator}details"
+    result = await adapter.convert_message(
+        create_mock_update(message_text=text, chat_type="group"), _build_context()
+    )
+    assert result.message_str == f"/help{separator}details"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "target, expected", [("test_bot", "/help\narg"), ("other_bot", None)]
+)
+async def test_telegram_photo_caption_command_target(target, expected):
+    adapter = _load_telegram_adapter()(
+        make_platform_config("telegram"), {}, asyncio.Queue()
+    )
+    photo = create_mock_file()
+    update = create_mock_update(
+        message_text=None,
+        chat_type="group",
+        photo=[photo],
+        caption=f"/help@{target}\narg",
+    )
+    result = await adapter.convert_message(update, _build_context())
+    if expected is None:
+        assert result is None
+        photo.get_file.assert_not_awaited()
+    else:
+        assert result.message_str == expected
+        assert any(
+            isinstance(item, Comp.Plain) and item.text == expected
+            for item in result.message
+        )
+
+
+@pytest.mark.asyncio
+async def test_telegram_reply_to_start_is_not_executed():
+    adapter = _load_telegram_adapter()(
+        make_platform_config("telegram"), {}, asyncio.Queue()
+    )
+    adapter.start = AsyncMock()
+    reply = create_mock_update(
+        message_text="/start@test_bot", chat_type="group"
+    ).message
+    update = create_mock_update(
+        message_text="hello", chat_type="group", reply_to_message=reply
+    )
+    result = await adapter.convert_message(update, _build_context())
+    assert result is not None
+    assert any(isinstance(item, Comp.Reply) for item in result.message)
+    adapter.start.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_telegram_text_reply_retains_existing_wake_prefix():
+    adapter = _load_telegram_adapter()(
+        make_platform_config("telegram"), {}, asyncio.Queue()
+    )
+    reply = create_mock_update(message_text="previous", user_id=12345678).message
+    update = create_mock_update(
+        message_text="hello", chat_type="group", reply_to_message=reply
+    )
+    result = await adapter.convert_message(update, _build_context())
+    assert result.message_str == "/ hello"
+
+
+@pytest.mark.asyncio
+async def test_telegram_album_with_foreign_caption_is_ignored_before_download():
+    adapter = _load_telegram_adapter()(
+        make_platform_config("telegram"), {}, asyncio.Queue()
+    )
+    first = create_mock_update(
+        message_text=None, chat_type="group", photo=[create_mock_file()]
+    )
+    photo = create_mock_file()
+    second = create_mock_update(
+        message_text=None, chat_type="group", photo=[photo], caption="/help@other_bot"
+    )
+    adapter.media_group_cache = {
+        "album": {"items": [(first, _build_context()), (second, _build_context())]}
+    }
+    adapter.handle_msg = AsyncMock()
+    await adapter.process_media_group("album")
+    photo.get_file.assert_not_awaited()
+    first.message.photo[0].get_file.assert_not_awaited()
+    adapter.handle_msg.assert_not_awaited()
+
+
+@pytest.mark.asyncio
 async def test_telegram_topic_with_missing_name_falls_back_to_group_name():
     TelegramPlatformAdapter = _load_telegram_adapter()
     adapter = TelegramPlatformAdapter(

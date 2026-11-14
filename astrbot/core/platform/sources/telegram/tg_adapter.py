@@ -43,6 +43,20 @@ else:
     from typing_extensions import override
 
 
+def _normalize_targeted_command(
+    text: str, username: str, *, is_group: bool
+) -> str | None:
+    if not text.startswith("/"):
+        return text
+    match = re.match(r"^(\S+)(.*)$", text, re.DOTALL)
+    if not match or "@" not in match.group(1):
+        return text
+    command, target = match.group(1).split("@", 1)
+    if target.casefold() != username.casefold():
+        return None if is_group else text
+    return command + match.group(2)
+
+
 @register_platform_adapter("telegram", "telegram 适配器")
 class TelegramPlatformAdapter(Platform):
     _FORUM_TOPIC_NAME_CACHE_MAX_SIZE = 1000
@@ -477,7 +491,14 @@ class TelegramPlatformAdapter(Platform):
                             + f" ({entity.url})".encode("utf-16-le")
                             + caption_utf16[end:]
                         )
-                message.message_str = caption_utf16.decode("utf-16-le")
+                caption = caption_utf16.decode("utf-16-le")
+                message.message_str = (
+                    _normalize_targeted_command(
+                        caption, context.bot.username, is_group=False
+                    )
+                    if get_reply
+                    else caption
+                )
                 message.message.append(Comp.Plain(message.message_str))
             if update.message.caption and update.message.caption_entities:
                 for entity in update.message.caption_entities:
@@ -574,20 +595,24 @@ class TelegramPlatformAdapter(Platform):
         message.message = []
 
         if (
-            message.type == MessageType.GROUP_MESSAGE
-            and update.message.text
-            and update.message.text.startswith("/")
+            get_reply
+            and _normalize_targeted_command(
+                update.message.text or update.message.caption or "",
+                context.bot.username,
+                is_group=message.type == MessageType.GROUP_MESSAGE,
+            )
+            is None
         ):
-            command_token = update.message.text.split(" ", 1)[0]
-            if "@" in command_token:
-                _, bot_name = command_token.split("@", 1)
-                if bot_name.casefold() != context.bot.username.casefold():
-                    return None
+            return None
 
-        if update.message.reply_to_message and not (
-            update.message.is_topic_message
-            and update.message.message_thread_id
-            == update.message.reply_to_message.message_id
+        if (
+            get_reply
+            and update.message.reply_to_message
+            and not (
+                update.message.is_topic_message
+                and update.message.message_thread_id
+                == update.message.reply_to_message.message_id
+            )
         ):
             # 获取回复消息
             reply_update = Update(
@@ -679,21 +704,16 @@ class TelegramPlatformAdapter(Platform):
                 plain_text2 = f"/@{context.bot.username} " + plain_text
                 plain_text = plain_text2
 
-            # Normalize commands explicitly addressed to a Telegram bot.
-            if plain_text.startswith("/"):
-                command_parts = plain_text.split(" ", 1)
-                if "@" in command_parts[0]:
-                    command, bot_name = command_parts[0].split("@", 1)
-                    if bot_name.casefold() == context.bot.username.casefold():
-                        plain_text = command + (
-                            f" {command_parts[1]}" if len(command_parts) > 1 else ""
-                        )
+            if get_reply:
+                plain_text = _normalize_targeted_command(
+                    plain_text, context.bot.username, is_group=False
+                )
 
             if plain_text:
                 message.message.append(Comp.Plain(plain_text))
             message.message_str = plain_text
 
-            if message.message_str.strip() == "/start":
+            if get_reply and message.message_str.strip() == "/start":
                 await self.start(update, context)
                 return None
 
@@ -871,6 +891,18 @@ class TelegramPlatformAdapter(Platform):
         if not updates_and_contexts:
             logger.warning(f"Media group {media_group_id} is empty")
             return
+
+        for update, context in updates_and_contexts:
+            if (
+                update.message
+                and _normalize_targeted_command(
+                    update.message.text or update.message.caption or "",
+                    context.bot.username,
+                    is_group=update.message.chat.type != ChatType.PRIVATE,
+                )
+                is None
+            ):
+                return
 
         logger.info(
             f"Processing media group {media_group_id}, total {len(updates_and_contexts)} items"
