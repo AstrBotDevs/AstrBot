@@ -5,7 +5,6 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 import pytest
-import pytest_asyncio
 from sqlalchemy import event
 from sqlalchemy.exc import SQLAlchemyError
 
@@ -15,15 +14,6 @@ from astrbot.core.agent.conversation_events import (
 )
 from astrbot.core.db import conversation as conversation_db
 from astrbot.core.db.conversation import ConversationConflictError
-from astrbot.core.db.sqlite import SQLiteDatabase
-
-
-@pytest_asyncio.fixture
-async def database(tmp_path):
-    db = SQLiteDatabase(str(tmp_path / "writer.db"))
-    await db.initialize()
-    yield db
-    await db.engine.dispose()
 
 
 @pytest.mark.asyncio
@@ -70,7 +60,11 @@ async def test_continuous_append_reads_no_old_context_and_copies_only_new_messag
 
     # Per append: metadata and exact retry-ID lookup; no context range reads.
     assert len(selects) <= 2 * count
-    assert all("json_each" in sql for sql in selects if "conversation_events" in sql)
+    assert all(
+        "json_each" in sql or "json_array_elements_text" in sql
+        for sql in selects
+        if "conversation_events" in sql
+    )
     assert copied == [{"role": "assistant", "content": str(i)} for i in range(count)]
     restored = await store.read(conv.conversation_id)
     assert writer._entries == restored.entries
@@ -447,3 +441,165 @@ async def test_staged_deltas_keep_committed_state_and_temporary_records(
     assert len(excluded) == 20
     assert writer.get_messages() == (await store.read(conv.conversation_id)).messages
     assert len(writer.get_messages()) == 120
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("batch_size", [2, 100])
+@pytest.mark.parametrize("duplicate_finish", [False, True])
+async def test_lifecycle_batch_validates_unflushed_references_atomically(
+    database, monkeypatch, batch_size, duplicate_finish
+):
+    monkeypatch.setattr(conversation_db, "EVENT_INSERT_BATCH_ROWS", batch_size)
+    store = database.conversation_store
+    conv = await store.create(umo="owner", platform_id="p")
+    drafts = [
+        {"event_id": "turn", "type": "turn.started", "payload": {}},
+        {
+            "event_id": "request",
+            "type": "request.started",
+            "payload": {"turn_id": "turn"},
+        },
+        {
+            "event_id": "response",
+            "type": "request.finished",
+            "payload": {"request_id": "request", "status": "completed"},
+        },
+        {
+            "event_id": "done",
+            "type": "turn.finished",
+            "payload": {"turn_id": "turn", "status": "completed"},
+        },
+    ]
+    if duplicate_finish:
+        drafts.append({**drafts[2], "event_id": "duplicate"})
+        with pytest.raises(conversation_db.ConversationConflictError):
+            await store.append(conv.conversation_id, drafts)
+        assert [record.type for record in await store.events(conv.conversation_id)] == [
+            "conversation.created"
+        ]
+    else:
+        result = await store.append(conv.conversation_id, drafts)
+        assert [record.event_id for record in result.events] == [
+            draft["event_id"] for draft in drafts
+        ]
+        retry = await store.append(conv.conversation_id, drafts)
+        assert retry.replayed
+
+
+@pytest.mark.asyncio
+async def test_execution_load_reuses_projection_without_sharing_plugin_mutations(
+    database, monkeypatch
+):
+    from astrbot.core.conversation_mgr import ConversationManager
+
+    store = database.conversation_store
+    conv = await store.create(
+        umo="owner", platform_id="p", content=[{"role": "user", "content": "before"}]
+    )
+    await database.update_conversation(conv.conversation_id, token_usage=123)
+    project = AsyncMock(wraps=store.project)
+    monkeypatch.setattr(store, "project", project)
+    record, snapshot = await store.read_for_execution(conv.conversation_id)
+    assert record.token_usage == 123
+    manager = ConversationManager(database)
+    writer = await manager.create_event_writer(
+        conv.conversation_id,
+        unified_msg_origin="owner",
+        expected_revision=record.revision,
+        snapshot=snapshot,
+    )
+    assert project.await_count == 1
+    record.content[0]["content"] = "plugin edit"
+    assert writer.get_messages() == [{"role": "user", "content": "before"}]
+    await store.append(
+        conv.conversation_id, [], history=[{"role": "user", "content": "external edit"}]
+    )
+    with pytest.raises(ConversationConflictError):
+        await manager.create_event_writer(conv.conversation_id, snapshot=snapshot)
+
+
+@pytest.mark.asyncio
+async def test_existing_session_reads_do_not_hold_runtime_registry_lock(
+    database, monkeypatch
+):
+    import asyncio
+
+    from astrbot.core.astr_agent_runtime import AstrAgentRuntime
+
+    store = database.conversation_store
+    first = await store.create(umo="first", platform_id="p")
+    second = await store.create(umo="second", platform_id="p")
+    runtime = AstrAgentRuntime(
+        SimpleNamespace(conversation_manager=SimpleNamespace(db=database)),
+        agent_configs=None,
+        subagents=None,
+    )
+    entered, release = asyncio.Event(), asyncio.Event()
+    get_metadata = store.get_metadata
+
+    async def delayed(cid):
+        if cid == first.conversation_id:
+            entered.set()
+            await release.wait()
+        return await get_metadata(cid)
+
+    monkeypatch.setattr(store, "get_metadata", delayed)
+    pending = asyncio.create_task(
+        runtime.open_session("first", session_id=first.conversation_id)
+    )
+    try:
+        await asyncio.wait_for(entered.wait(), 2)
+        other = await asyncio.wait_for(
+            runtime.open_session("second", session_id=second.conversation_id), 2
+        )
+        assert other.umo == "second" and not pending.done()
+        assert (
+            await runtime.open_session("second", session_id=second.conversation_id)
+            is other
+        )
+    finally:
+        release.set()
+        await pending
+        await runtime.close()
+
+
+@pytest.mark.asyncio
+async def test_concurrent_first_inputs_create_one_main_session(database):
+    import asyncio
+
+    from astrbot.core.astr_agent_runtime import AstrAgentRuntime
+
+    selected = None
+    creations = 0
+
+    async def current(umo):
+        await asyncio.sleep(0)
+        return selected
+
+    async def create(umo, **kwargs):
+        nonlocal selected, creations
+        creations += 1
+        row = await database.conversation_store.create(umo=umo, platform_id="p")
+        await asyncio.sleep(0)
+        selected = row.conversation_id
+        return selected
+
+    runtime = AstrAgentRuntime(
+        SimpleNamespace(
+            conversation_manager=SimpleNamespace(
+                db=database,
+                get_curr_conversation_id=current,
+                new_conversation=create,
+            )
+        ),
+        agent_configs=None,
+        subagents=None,
+    )
+    try:
+        first, second = await asyncio.gather(
+            runtime.open_session("owner"), runtime.open_session("owner")
+        )
+        assert first is second
+        assert creations == 1
+    finally:
+        await runtime.close()

@@ -80,7 +80,9 @@ async def runtime(monkeypatch):
         get_event_queue=lambda: queue,
         get_platform_inst=lambda _: SimpleNamespace(meta=lambda: metadata),
         get_config=lambda **_: config,
-        astrbot_config_mgr=SimpleNamespace(_create_message_config=lambda _: (copy.deepcopy(config), frozenset())),
+        astrbot_config_mgr=SimpleNamespace(
+            _create_message_config=lambda _: (copy.deepcopy(config), frozenset())
+        ),
         conversation_manager=SimpleNamespace(
             get_curr_conversation_id=AsyncMock(return_value=conversation.cid),
             get_conversation=AsyncMock(side_effect=get_conversation),
@@ -100,11 +102,20 @@ async def runtime(monkeypatch):
         return SimpleNamespace(
             **vars(record),
             conversation_id=record.cid,
+            umo=record.user_id,
             content=json.loads(record.history),
         )
 
+    async def read_execution(cid):
+        record = await read_history(cid)
+        return (record, None) if record is not None else None
+
     context.conversation_manager.db = SimpleNamespace(
-        get_conversation_by_id=AsyncMock(side_effect=read_history)
+        get_conversation_by_id=AsyncMock(side_effect=read_history),
+        conversation_store=SimpleNamespace(
+            get_metadata=AsyncMock(side_effect=read_history),
+            read_for_execution=AsyncMock(side_effect=read_execution),
+        ),
     )
     context.conversation_manager.to_legacy_conversation = lambda record: record
 
@@ -175,7 +186,9 @@ async def runtime(monkeypatch):
     native = AstrAgentRuntime(context, agent_configs=MagicMock(), subagents=MagicMock())
     runtimes = {"astrbot": native}
     scheduler = PipelineScheduler(
-        PipelineContext(config, SimpleNamespace(context=context), "profile", agent_runtimes=runtimes)
+        PipelineContext(
+            config, SimpleNamespace(context=context), "profile", agent_runtimes=runtimes
+        )
     )
     await scheduler.initialize()
     bus = EventBus(

@@ -4,7 +4,6 @@ import json
 from datetime import datetime, timezone
 
 import pytest
-import pytest_asyncio
 from sqlalchemy import event, text
 
 from astrbot.core.db.conversation import (
@@ -12,15 +11,6 @@ from astrbot.core.db.conversation import (
     ConversationConflictError,
 )
 from astrbot.core.db.po import ConversationEvent, ConversationV3
-from astrbot.core.db.sqlite import SQLiteDatabase
-
-
-@pytest_asyncio.fixture
-async def database(tmp_path):
-    db = SQLiteDatabase(str(tmp_path / "linear.db"))
-    await db.initialize()
-    yield db
-    await db.engine.dispose()
 
 
 @pytest.mark.asyncio
@@ -320,6 +310,8 @@ async def test_prune_failure_and_invalid_batch_roll_back_all_changes(database):
 async def test_tree_schema_migration_preserves_every_position_and_cross_conversation_fork(
     database, broken
 ):
+    if database.engine.dialect.name != "sqlite":
+        pytest.skip("Legacy tree schema existed only in SQLite")
     stamp = datetime.now(timezone.utc).isoformat()
     async with database.get_db() as session:
         original = ConversationV3(
@@ -556,7 +548,7 @@ async def test_large_append_keeps_exact_display_tip_forkable_without_snapshot(
         event.remove(engine, "before_cursor_execute", record_writes)
 
     assert len(conversation_updates) == 1
-    assert event_insert_sizes == [100, 100, 56, 1]
+    assert event_insert_sizes == [100, 100, 57]
     saved = await store.read(conv.conversation_id)
     assert saved.conversation.head_seq == committed[-1].seq
     assert saved.conversation.leaf_event_id == "display-tip"

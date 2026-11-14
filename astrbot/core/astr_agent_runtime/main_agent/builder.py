@@ -45,6 +45,7 @@ from .config import MainAgentBuildConfig
 if TYPE_CHECKING:
     from astrbot.core.agent.conversation_events import ConversationEventWriter
     from astrbot.core.astr_agent_runtime.runtime import AstrAgentRuntime
+    from astrbot.core.db.conversation import ConversationSnapshot
 
 TOOL_CALL_PROMPT = (
     "<tool_use_instructions>\n"
@@ -104,6 +105,7 @@ async def build_main_agent(
     plugin_tools: ToolSet | None = None,
     plugin_skills: list[SkillInfo] | None = None,
     runtime: "AstrAgentRuntime | None" = None,
+    conversation_snapshot: "ConversationSnapshot | None" = None,
 ) -> MainAgentBuildResult | None:
     """Build a main agent through the same ordered stages for every trigger.
 
@@ -117,6 +119,7 @@ async def build_main_agent(
         plugin_tools: Core-authorized plugin tools, or None for legacy lookup.
         plugin_skills: Core-authorized plugin skills, or None for legacy lookup.
         runtime: Native session owner supplying internal agent services.
+        conversation_snapshot: Committed history already loaded by the session.
 
     Returns:
         An initialized runner with its request and provider, or None when the
@@ -237,6 +240,8 @@ async def build_main_agent(
             req.conversation.cid,
             unified_msg_origin=event.unified_msg_origin,
             expected_revision=req.conversation.revision,
+            snapshot=conversation_snapshot,
+            link_display=event.get_platform_name() == "webchat",
         )
     if config.call_request_hook:
         if await call_event_hook(

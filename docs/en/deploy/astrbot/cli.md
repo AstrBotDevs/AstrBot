@@ -77,6 +77,24 @@ python main.py
 :::
 
 
+## Optional PostgreSQL backend
+
+SQLite remains the default. For the main application database, PostgreSQL can be selected at startup:
+
+```bash
+uv sync --extra postgres
+export ASTRBOT_DATABASE_URL='postgresql://user:password@localhost:5432/astrbot'
+uv run main.py
+```
+
+On PowerShell, set the variable with `$env:ASTRBOT_DATABASE_URL = 'postgresql://user:password@localhost:5432/astrbot'` before starting. For a pip installation, install `psycopg[binary]>=3.2,<4` in the same environment. Create the database and grant its account permission to create tables and indexes beforehand. URL-encode special characters in credentials.
+
+The backend creates its schema on startup. Changing the URL does not copy an existing SQLite database: export an AstrBot backup first, stop the old instance, then restore the backup in the new instance. Keep the original database until the restored history is verified. Unset the variable to use SQLite again.
+
+This setting covers the main database, including conversation events, preferences and display history. Knowledge-base storage, button callback tokens and local trace files retain their existing local storage. Plugins that use the database API remain compatible; plugins issuing SQLite-specific SQL or directly opening `data_v4.db` need adaptation. This does not enable multiple AstrBot instances to share runtime state.
+
+Backend integration tests can use `ASTRBOT_TEST_POSTGRES_URL`; each test creates and removes its own schema, so use a dedicated test database whose account can create schemas.
+
 ## 🎉 All Done!
 
 If everything goes well, you will see logs printed by AstrBot.

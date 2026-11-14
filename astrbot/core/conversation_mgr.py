@@ -20,7 +20,7 @@ from astrbot.core.agent.message import (
     dump_messages,
 )
 from astrbot.core.db import BaseDatabase
-from astrbot.core.db.conversation import ConversationConflictError
+from astrbot.core.db.conversation import ConversationConflictError, ConversationSnapshot
 from astrbot.core.db.po import (
     Conversation,
     ConversationData,
@@ -51,6 +51,8 @@ class ConversationManager:
         *,
         unified_msg_origin: str | None = None,
         expected_revision: ConversationRevision | None = None,
+        snapshot: ConversationSnapshot | None = None,
+        link_display: bool = True,
     ) -> ConversationEventWriter:
         """Create a writer for an explicitly selected conversation revision.
 
@@ -58,6 +60,9 @@ class ConversationManager:
             conversation_id: Public conversation identity.
             unified_msg_origin: Optional explicit owner UMO for host access checks.
             expected_revision: Revision used to prepare the host's request.
+            snapshot: Optional projection already loaded for this execution.
+                Its current position is checked without replaying message bodies.
+            link_display: Whether the host maintains display rows for this run.
 
         Returns:
             A new writer owned by the caller, independent of other executions.
@@ -68,13 +73,28 @@ class ConversationManager:
         """
         if not isinstance(conversation_id, str) or not conversation_id:
             raise ValueError("Provide a nonempty cid explicitly")
-        snapshot = await self.db.conversation_store.read(conversation_id)
+        if snapshot is None:
+            snapshot = await self.db.conversation_store.read(conversation_id)
+        else:
+            current = await self.db.conversation_store.get_metadata(conversation_id)
+            if (
+                current is None
+                or snapshot.conversation.conversation_id != conversation_id
+                or snapshot.conversation.umo != current.umo
+            ):
+                raise ValueError("Conversation is not accessible")
+            if current.leaf_event_id != snapshot.conversation.leaf_event_id:
+                raise ConversationConflictError(
+                    "Conversation changed while preparing the request"
+                )
         if snapshot is None or (
             unified_msg_origin is not None
             and snapshot.conversation.umo != unified_msg_origin
         ):
             raise ValueError("Conversation is not accessible")
-        writer = ConversationEventWriter(self.db.conversation_store, snapshot)
+        writer = ConversationEventWriter(
+            self.db.conversation_store, snapshot, link_display=link_display
+        )
         if (
             expected_revision is not None
             and expected_revision.leaf_event_id != writer.leaf_event_id

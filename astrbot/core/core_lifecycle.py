@@ -25,7 +25,7 @@ from astrbot.core.astr_agent_runtime import AstrAgentRuntime
 from astrbot.core.astr_agent_runtime.subagents.service import SubAgentService
 from astrbot.core.astr_agent_runtime.subagents.store import SubAgentStore
 from astrbot.core.astrbot_config_mgr import AstrBotConfigManager
-from astrbot.core.config.default import VERSION
+from astrbot.core.config.default import DB_PATH, VERSION
 from astrbot.core.conversation_mgr import ConversationManager
 from astrbot.core.cron import CronJobManager
 from astrbot.core.db import BaseDatabase
@@ -160,7 +160,8 @@ class AstrBotCoreLifecycle:
             LogManager.configure_logger(logger, self.astrbot_config)
 
         await self.db.initialize()
-        button_callback_db_path = getattr(self.db, "db_path", None)
+        # Callback tokens retain their local SQLite storage with either backend.
+        button_callback_db_path = getattr(self.db, "db_path", DB_PATH)
         if isinstance(button_callback_db_path, (str, Path)):
             configure_button_callback_registry(button_callback_db_path)
         if sp.db_helper is self.db:

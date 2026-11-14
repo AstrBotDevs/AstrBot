@@ -10,9 +10,11 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 
 from sqlalchemy import insert
+from sqlalchemy.orm import aliased
 from sqlalchemy.orm.attributes import flag_modified
 from sqlmodel import col, delete, func, select, text, update
 
+from astrbot.core.db import json_text, json_value_rows
 from astrbot.core.db.po import (
     ConversationEvent,
     ConversationRead,
@@ -35,8 +37,8 @@ EVENT_TYPES = CONTEXT_TYPES | {
     "tool.finished",
 }
 REBASE_REASONS = {"compaction", "reset", "legacy_replace", "migration", "snapshot"}
-MESSAGE_INSERT_BATCH_ROWS = 100
-MESSAGE_INSERT_BATCH_BYTES = 4 * 1024 * 1024
+EVENT_INSERT_BATCH_ROWS = 100
+EVENT_INSERT_BATCH_BYTES = 4 * 1024 * 1024
 
 
 class ContextUnavailableError(ValueError):
@@ -275,7 +277,7 @@ class ConversationStore:
             Newly committed metadata.
         """
         async with self.db.get_db() as session:
-            await session.execute(text("BEGIN IMMEDIATE"))
+            await self.db.begin_write(session)
             inherited = None
             if source_event_id:
                 source = (
@@ -286,7 +288,9 @@ class ConversationStore:
                     )
                 ).scalar_one_or_none()
                 owner = (
-                    await session.get(ConversationV3, source.conversation_ref)
+                    await session.get(
+                        ConversationV3, source.conversation_ref, with_for_update=True
+                    )
                     if source
                     else None
                 )
@@ -397,7 +401,8 @@ class ConversationStore:
         conv.replay_from_event_id = None
         if conv.leaf_event_id is None:
             return snapshot
-        target = (
+        baseline_event = aliased(ConversationEvent)
+        position = (
             await session.execute(
                 select(
                     ConversationEvent.event_id,
@@ -405,25 +410,26 @@ class ConversationStore:
                     ConversationEvent.type,
                     ConversationEvent.seq,
                     ConversationEvent.replay_from_event_id,
-                ).where(ConversationEvent.event_id == conv.leaf_event_id)
+                    baseline_event,
+                )
+                .select_from(ConversationEvent)
+                .outerjoin(
+                    baseline_event,
+                    baseline_event.event_id == ConversationEvent.replay_from_event_id,
+                )
+                .where(ConversationEvent.event_id == conv.leaf_event_id)
             )
         ).one_or_none()
         if (
-            target is None
-            or target.conversation_ref != conv.id
-            or target.type not in CONTEXT_TYPES
+            position is None
+            or position.conversation_ref != conv.id
+            or position.type not in CONTEXT_TYPES
         ):
             raise ValueError("Missing or inaccessible context leaf")
+        target, baseline = position, position[-1]
         snapshot.context_seq = target.seq
         baseline_seq = 0
         if target.replay_from_event_id:
-            baseline = (
-                await session.execute(
-                    select(ConversationEvent).where(
-                        ConversationEvent.event_id == target.replay_from_event_id
-                    )
-                )
-            ).scalar_one_or_none()
             if (
                 baseline is None
                 or baseline.conversation_ref != conv.id
@@ -480,7 +486,7 @@ class ConversationStore:
             event_id: "available" if event_id is None else "missing"
             for event_id in event_ids
         }
-        async with self.db.get_db() as session:
+        async with self.db.get_db(consistent_read=True) as session:
             conv = (
                 await session.execute(
                     select(ConversationV3).where(ConversationV3.conversation_id == cid)
@@ -570,8 +576,81 @@ class ConversationStore:
             ContextUnavailableError: The historical baseline was reclaimed.
             ValueError: The requested leaf does not belong to this conversation.
         """
-        async with self.db.get_db() as session:
+        async with self.db.get_db(consistent_read=True) as session:
             return await self.project(session, conversation, leaf)
+
+    async def get_metadata(self, cid: str) -> ConversationV3 | None:
+        """Read identity and ownership without loading message bodies.
+
+        Args:
+            cid: Public conversation identity.
+
+        Returns:
+            Detached metadata, or None when the conversation is absent.
+        """
+        async with self.db.get_db() as session:
+            return await session.scalar(
+                select(ConversationV3).where(ConversationV3.conversation_id == cid)
+            )
+
+    async def read_for_execution(
+        self, cid: str
+    ) -> tuple[ConversationRead, ConversationSnapshot] | None:
+        """Load a request and its writer projection from the same database view.
+
+        Args:
+            cid: Public conversation identity.
+
+        Returns:
+            Plugin-compatible history and an independent writer snapshot sharing
+            one committed revision, or None if the conversation is absent.
+        """
+        async with self.db.get_db(consistent_read=True) as session:
+            token_usage = ConversationEvent.payload["token_usage"].as_integer()
+            latest_usage = (
+                select(token_usage)
+                .where(
+                    ConversationEvent.conversation_ref == ConversationV3.id,
+                    token_usage.is_not(None),
+                )
+                .order_by(ConversationEvent.seq.desc())
+                .limit(1)
+                .correlate(ConversationV3)
+            )
+            loaded = (
+                await session.execute(
+                    select(
+                        ConversationV3,
+                        func.coalesce(
+                            latest_usage.where(
+                                ConversationEvent.type == "conversation.updated"
+                            ).scalar_subquery(),
+                            latest_usage.where(
+                                ConversationEvent.type == "conversation.created"
+                            ).scalar_subquery(),
+                            0,
+                        ),
+                    ).where(ConversationV3.conversation_id == cid)
+                )
+            ).one_or_none()
+            if loaded is None:
+                return None
+            conv, usage = loaded
+            snapshot = await self.project(session, conv)
+            record = ConversationRead(
+                inner_conversation_id=conv.id,
+                conversation_id=conv.conversation_id,
+                platform_id=conv.platform_id,
+                user_id=conv.umo,
+                title=conv.title,
+                persona_id=conv.persona_id,
+                created_at=conv.created_at,
+                updated_at=conv.updated_at,
+                token_usage=usage,
+                revision=ConversationRevision(conv.head_seq, conv.leaf_event_id),
+                content=snapshot.messages,
+            )
+            return record, snapshot
 
     async def read(self, cid: str) -> ConversationSnapshot | None:
         """Read an initialized conversation by its public ID.
@@ -582,7 +661,7 @@ class ConversationStore:
         Returns:
             Detached snapshot, or None when absent.
         """
-        async with self.db.get_db() as session:
+        async with self.db.get_db(consistent_read=True) as session:
             conv = (
                 await session.execute(
                     select(ConversationV3).where(ConversationV3.conversation_id == cid)
@@ -627,9 +706,11 @@ class ConversationStore:
             return []
 
         # Use one bound parameter even when a page contains entire session groups.
-        conversation_ids = func.json_each(
-            json.dumps([conv.id for conv in conversations])
-        ).table_valued("value")
+        conversation_ids = json_value_rows(
+            [conv.id for conv in conversations],
+            self.db.engine.dialect.name,
+            integers=True,
+        )
         token_usage = ConversationEvent.payload["token_usage"].as_integer()
         usage_query = (
             select(token_usage)
@@ -675,7 +756,9 @@ class ConversationStore:
             for conv in conversations
         ]
 
-    async def _validate_event(self, session, conv, draft, leaf_event_id) -> None:
+    async def _validate_event(
+        self, session, conv, draft, leaf_event_id, batch_events, batch_finishes
+    ) -> None:
         """Validate event shape and references within the active append transaction.
 
         Args:
@@ -683,6 +766,8 @@ class ConversationStore:
             conv: Owning conversation metadata.
             draft: Normalized event to validate.
             leaf_event_id: Context position after earlier drafts in this batch.
+            batch_events: Already validated events, including unflushed batch rows.
+            batch_finishes: Execution settlements already validated in this batch.
 
         Raises:
             ValueError: Event shape or ownership is invalid.
@@ -735,7 +820,7 @@ class ConversationStore:
                 if (
                     not isinstance(message, dict)
                     or "role" not in message
-                    or persistent_messages([message]) != [message]
+                    or persistent_messages([message], detach=False) != [message]
                 ):
                     raise ValueError("Invalid or temporary rebase message")
         elif kind == "conversation.updated":
@@ -757,13 +842,35 @@ class ConversationStore:
                 "request.finished": "request_id",
                 "tool.finished": "execution_id",
             }[kind]
-            start = (
-                await session.execute(
-                    select(ConversationEvent).where(
-                        ConversationEvent.event_id == payload.get(key, "")
+            start = batch_events.get(payload.get(key, ""))
+            duplicate = False
+            if start is None:
+                start_event = aliased(ConversationEvent)
+                already_finished = (
+                    select(ConversationEvent.event_id)
+                    .where(
+                        ConversationEvent.conversation_ref == conv.id,
+                        ConversationEvent.type == kind,
+                        ConversationEvent.seq > start_event.seq,
+                        json_text(
+                            ConversationEvent.payload, key, session.bind.dialect.name
+                        )
+                        == payload.get(key, ""),
                     )
+                    .correlate(start_event)
+                    .exists()
                 )
-            ).scalar_one_or_none()
+                start = (
+                    await session.execute(
+                        select(
+                            start_event.conversation_ref,
+                            start_event.type,
+                            start_event.seq,
+                            already_finished.label("finished"),
+                        ).where(start_event.event_id == payload.get(key, ""))
+                    )
+                ).one_or_none()
+                duplicate = start is not None and start.finished
             if (
                 not start
                 or start.conversation_ref != conv.id
@@ -778,28 +885,24 @@ class ConversationStore:
                     raise ValueError("Token usage must contain nonnegative integers")
                 if usage.get("cached_input_tokens", 0) > usage.get("input_tokens", 0):
                     raise ValueError("Cached input tokens are a subset of input tokens")
-            duplicate = (
-                await session.execute(
-                    select(ConversationEvent.event_id)
-                    .where(
-                        ConversationEvent.conversation_ref == conv.id,
-                        ConversationEvent.type == kind,
-                        ConversationEvent.seq > start.seq,
-                        ConversationEvent.payload[key].as_string() == payload[key],
-                    )
-                    .limit(1)
-                )
-            ).first()
-            if duplicate:
+            # A start created in this batch cannot have a committed finish.
+            # Earlier batch finishes remain visible even before rows are flushed.
+            if duplicate or (kind, payload[key]) in batch_finishes:
                 raise ConversationConflictError("Execution already finished")
+            batch_finishes.add((kind, payload[key]))
         elif kind in {"request.started", "tool.started"}:
-            turn = (
-                await session.execute(
-                    select(ConversationEvent).where(
-                        ConversationEvent.event_id == payload.get("turn_id", "")
+            turn = batch_events.get(payload.get("turn_id", ""))
+            if turn is None:
+                turn = (
+                    await session.execute(
+                        select(
+                            ConversationEvent.conversation_ref,
+                            ConversationEvent.type,
+                        ).where(
+                            ConversationEvent.event_id == payload.get("turn_id", "")
+                        )
                     )
-                )
-            ).scalar_one_or_none()
+                ).one_or_none()
             if (
                 not turn
                 or turn.conversation_ref != conv.id
@@ -831,29 +934,45 @@ class ConversationStore:
             conv: Conversation with its updated baseline pointer.
         """
         await session.flush()
+        # Keep the predicates literal so both backends can use partial indexes.
+        # All aliases and keys below are schema constants, never user input.
+        json_fields = {
+            f"{alias}.{key}": (
+                f"json_extract({alias}.payload,'$.{key}')"
+                if session.bind.dialect.name == "sqlite"
+                else f"CAST({alias}.payload ->> '{key}' AS VARCHAR)"
+            )
+            for alias, key in (
+                ("old", "origin"),
+                ("started", "base_leaf_event_id"),
+                ("started", "context_leaf_event_id"),
+                ("finished", "turn_id"),
+                ("finished", "request_id"),
+            )
+        }
         await session.execute(
-            text("""UPDATE conversation_events AS old SET payload=NULL
+            text(f"""UPDATE conversation_events AS old SET payload=NULL
             WHERE old.conversation_ref=:owner AND old.type='context.rebased'
-              AND json_extract(old.payload,'$.origin')='plugin' AND old.payload IS NOT NULL
+              AND {json_fields["old.origin"]}='plugin' AND old.payload IS NOT NULL
               AND old.seq < (SELECT seq FROM conversation_events WHERE event_id=:baseline)
               AND NOT EXISTS (
                   SELECT 1 FROM conversation_events AS context
                   JOIN conversation_events AS started
                     ON started.conversation_ref=:owner AND started.type='turn.started'
-                   AND json_extract(started.payload,'$.base_leaf_event_id')=context.event_id
+                   AND {json_fields["started.base_leaf_event_id"]}=context.event_id
                   WHERE context.replay_from_event_id=old.event_id
                     AND NOT EXISTS (SELECT 1 FROM conversation_events AS finished
                       WHERE finished.conversation_ref=:owner AND finished.type='turn.finished'
-                        AND json_extract(finished.payload,'$.turn_id')=started.event_id))
+                        AND {json_fields["finished.turn_id"]}=started.event_id))
               AND NOT EXISTS (
                   SELECT 1 FROM conversation_events AS context
                   JOIN conversation_events AS started
                     ON started.conversation_ref=:owner AND started.type='request.started'
-                   AND json_extract(started.payload,'$.context_leaf_event_id')=context.event_id
+                   AND {json_fields["started.context_leaf_event_id"]}=context.event_id
                   WHERE context.replay_from_event_id=old.event_id
                     AND NOT EXISTS (SELECT 1 FROM conversation_events AS finished
                       WHERE finished.conversation_ref=:owner AND finished.type='request.finished'
-                        AND json_extract(finished.payload,'$.request_id')=started.event_id))
+                        AND {json_fields["finished.request_id"]}=started.event_id))
             """),
             {"owner": conv.id, "baseline": conv.replay_from_event_id},
         )
@@ -868,6 +987,7 @@ class ConversationStore:
         history=None,
         reason="legacy_replace",
         origin="unknown",
+        link_display: bool = True,
     ) -> ConversationAppendResult:
         """Atomically validate and append a batch, optionally committing legacy history.
 
@@ -879,6 +999,8 @@ class ConversationStore:
             history: Optional complete legacy working history to reconcile.
             reason: Reason for a non-append history change.
             origin: Host-attributed source of a legacy context replacement.
+            link_display: Maintain display links in the transaction. Hosts without
+                display rows can opt out; existing callers retain projection.
 
         Returns:
             Acknowledged events and whether the complete batch was already stored.
@@ -892,10 +1014,12 @@ class ConversationStore:
         drafts = [json.loads(serialized) for serialized in serialized_drafts]
         del serialized_drafts
         async with self.db.get_db() as session:
-            await session.execute(text("BEGIN IMMEDIATE"))
+            await self.db.begin_write(session)
             conv = (
                 await session.execute(
-                    select(ConversationV3).where(ConversationV3.conversation_id == cid)
+                    select(ConversationV3)
+                    .where(ConversationV3.conversation_id == cid)
+                    .with_for_update()
                 )
             ).scalar_one_or_none()
             if conv is None:
@@ -904,7 +1028,7 @@ class ConversationStore:
             existing_by_id: dict[str, ConversationEvent] = {}
             if event_ids:
                 # Bind one JSON array so large batches stay within SQLite's parameter limit.
-                ids = func.json_each(json.dumps(list(event_ids))).table_valued("value")
+                ids = json_value_rows(list(event_ids), self.db.engine.dialect.name)
                 stored_events = await session.scalars(
                     select(ConversationEvent).where(
                         col(ConversationEvent.event_id).in_(select(ids.c.value))
@@ -966,35 +1090,34 @@ class ConversationStore:
                 )
                 drafts.extend(history_drafts)
             committed = []
-            # Keep the ORM row clean while flushing events that later drafts may reference.
+            # Validate against earlier batch events without flushing each row.
             head_seq = conv.head_seq
             leaf_event_id = conv.leaf_event_id
             replay_from_event_id = conv.replay_from_event_id
             metadata_changes: dict[str, str | None] = {}
-            message_rows: list[dict] = []
-            message_batch_bytes = 0
+            rows: list[dict] = []
+            batch_bytes = 0
+            batch_events: dict[str, ConversationEvent] = {}
+            batch_finishes: set[tuple[str, str]] = set()
             for index, draft in enumerate(drafts):
                 kind = draft["type"]
                 payload = draft.get("payload", {})
-                message_size = 0
-                if kind == "message.appended":
-                    # Legacy history may add drafts after the initial normalization.
-                    message_size = (
-                        draft_sizes[index]
-                        if index < len(draft_sizes)
-                        else len(json.dumps(payload))
-                    )
-                if message_rows and (
-                    kind != "message.appended"
-                    or len(message_rows) >= MESSAGE_INSERT_BATCH_ROWS
-                    or message_batch_bytes + message_size > MESSAGE_INSERT_BATCH_BYTES
+                # Legacy history may add drafts after the initial normalization.
+                size = (
+                    draft_sizes[index]
+                    if index < len(draft_sizes)
+                    else len(json.dumps(payload))
+                )
+                if rows and (
+                    len(rows) >= EVENT_INSERT_BATCH_ROWS
+                    or batch_bytes + size > EVENT_INSERT_BATCH_BYTES
                 ):
-                    await session.execute(
-                        insert(ConversationEvent).values(message_rows)
-                    )
-                    message_rows.clear()
-                    message_batch_bytes = 0
-                await self._validate_event(session, conv, draft, leaf_event_id)
+                    await session.execute(insert(ConversationEvent).values(rows))
+                    rows.clear()
+                    batch_bytes = 0
+                await self._validate_event(
+                    session, conv, draft, leaf_event_id, batch_events, batch_finishes
+                )
                 if kind == "conversation.updated":
                     metadata_changes.update(payload.get("changes", {}))
                 head_seq += 1
@@ -1010,18 +1133,19 @@ class ConversationStore:
                 )
                 if kind == "context.rebased":
                     event.replay_from_event_id = event.event_id
-                if kind == "message.appended":
-                    message_rows.append(event.model_dump())
-                    message_batch_bytes += message_size
-                else:
-                    session.add(event)
-                    await session.flush()
+                # Payloads are already detached above. Serializing them again via
+                # Pydantic would traverse an entire rebase before the JSON bind.
+                rows.append(
+                    {**event.model_dump(exclude={"payload"}), "payload": payload}
+                )
+                batch_bytes += size
+                batch_events[event.event_id] = event
                 committed.append(event)
                 if kind in CONTEXT_TYPES:
                     leaf_event_id = event.event_id
                     replay_from_event_id = event.replay_from_event_id
-            if message_rows:
-                await session.execute(insert(ConversationEvent).values(message_rows))
+            if rows:
+                await session.execute(insert(ConversationEvent).values(rows))
             if committed:
                 conv.head_seq = head_seq
                 conv.leaf_event_id = leaf_event_id
@@ -1030,7 +1154,8 @@ class ConversationStore:
                     setattr(conv, key, value)
                 conv.updated_at = datetime.now(timezone.utc)
             # Display links are a derived projection, committed with the events.
-            await project_webchat_event_links(session, committed)
+            if link_display:
+                await project_webchat_event_links(session, committed)
             if (
                 any(
                     event.type
@@ -1119,7 +1244,7 @@ class ConversationStore:
             ContextUnavailableError: The required historical context was reclaimed.
             ValueError: The stored input references an invalid message range.
         """
-        async with self.db.get_db() as session:
+        async with self.db.get_db(consistent_read=True) as session:
             row = (
                 await session.execute(
                     select(ConversationEvent, ConversationV3)
@@ -1173,10 +1298,12 @@ class ConversationStore:
             expected_leaf: Previously selected tip.
         """
         async with self.db.get_db() as session:
-            await session.execute(text("BEGIN IMMEDIATE"))
+            await self.db.begin_write(session)
             conv = (
                 await session.execute(
-                    select(ConversationV3).where(ConversationV3.conversation_id == cid)
+                    select(ConversationV3)
+                    .where(ConversationV3.conversation_id == cid)
+                    .with_for_update()
                 )
             ).scalar_one()
             if conv.head_seq != expected_head or conv.leaf_event_id != expected_leaf:
@@ -1227,10 +1354,12 @@ class ConversationStore:
             New user display record for the replacement turn.
         """
         async with self.db.get_db() as session:
-            await session.execute(text("BEGIN IMMEDIATE"))
+            await self.db.begin_write(session)
             conv = (
                 await session.execute(
-                    select(ConversationV3).where(ConversationV3.conversation_id == cid)
+                    select(ConversationV3)
+                    .where(ConversationV3.conversation_id == cid)
+                    .with_for_update()
                 )
             ).scalar_one()
             if conv.head_seq != expected_head or conv.leaf_event_id != expected_leaf:
@@ -1324,13 +1453,19 @@ class ConversationStore:
             ValueError: The conversation selection is invalid.
         """
         async with self.db.get_db() as session:
-            await session.execute(text("BEGIN IMMEDIATE"))
+            await self.db.begin_write(session)
             query = (
                 select(ConversationV3.id).where(ConversationV3.conversation_id == cid)
                 if cid
                 else select(ConversationV3.id).where(ConversationV3.umo == umo)
             )
-            ids = list((await session.execute(query)).scalars())
+            ids = list(
+                (
+                    await session.execute(
+                        query.order_by(ConversationV3.id).with_for_update()
+                    )
+                ).scalars()
+            )
             if ids:
                 await session.execute(
                     delete(ConversationEvent).where(

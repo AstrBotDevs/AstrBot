@@ -7,7 +7,7 @@ import pytest
 from sqlalchemy import Column, DateTime, MetaData, create_engine, literal, select
 from sqlmodel import SQLModel
 
-import astrbot.core.db.sqlite as sqlite_module
+import astrbot.core.db.relational as relational_module
 from astrbot.core.db.po import (
     ConversationV2,
     PlatformMessageHistory,
@@ -141,7 +141,7 @@ async def test_delete_platform_message_offset_compares_in_utc(
                     return now_utc.replace(tzinfo=None) + timedelta(hours=8)
                 return now_utc.astimezone(tz)
 
-        monkeypatch.setattr(sqlite_module, "datetime", LocalTime)
+        monkeypatch.setattr(relational_module, "datetime", LocalTime)
         await db.delete_platform_message_offset("p1", "u1", offset_sec=86400)
 
         rows = await db.get_platform_message_history("p1", "u1")

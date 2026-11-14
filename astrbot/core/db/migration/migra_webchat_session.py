@@ -28,7 +28,7 @@ async def migrate_webchat_session(db_helper: BaseDatabase) -> None:
             query = (
                 select(
                     col(PlatformMessageHistory.user_id),
-                    col(PlatformMessageHistory.sender_name),
+                    func.min(col(PlatformMessageHistory.sender_name)),
                     func.min(PlatformMessageHistory.created_at).label("earliest"),
                     func.max(PlatformMessageHistory.updated_at).label("latest"),
                 )

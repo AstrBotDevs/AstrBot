@@ -6,9 +6,12 @@ from contextlib import nullcontext
 from copy import deepcopy
 from datetime import datetime, timezone
 
+from sqlalchemy import inspect, literal_column
 from sqlalchemy.orm.attributes import flag_modified
+from sqlalchemy.types import JSON
 from sqlmodel import select, text, update
 
+from astrbot.core.db import json_text
 from astrbot.core.db.conversation import (
     CONTEXT_TYPES,
     ConversationStore,
@@ -165,13 +168,13 @@ async def migrate_conversations(store: ConversationStore, *, session=None) -> No
         store.db.AsyncSessionLocal() if owns_transaction else nullcontext(session)
     ) as session:
         if owns_transaction:
-            await session.execute(text("BEGIN IMMEDIATE"))
-        columns = {
-            row[1]
-            for row in (
-                await session.execute(text("PRAGMA table_info(conversation_events)"))
-            ).all()
-        }
+            await store.db.begin_write(session)
+        connection = await session.connection()
+        columns = await connection.run_sync(
+            lambda conn: {
+                col["name"] for col in inspect(conn).get_columns("conversation_events")
+            }
+        )
         if "parent_event_id" in columns:
             old_conversations = [
                 dict(row)
@@ -200,7 +203,7 @@ async def migrate_conversations(store: ConversationStore, *, session=None) -> No
                 seq BIGINT NOT NULL CHECK(seq > 0), event_id VARCHAR NOT NULL UNIQUE,
                 replay_from_event_id VARCHAR, type VARCHAR NOT NULL,
                 version INTEGER NOT NULL CHECK(version > 0), payload JSON,
-                created_at DATETIME NOT NULL, PRIMARY KEY(conversation_ref, seq))""")
+                created_at TIMESTAMP NOT NULL, PRIMARY KEY(conversation_ref, seq))""")
             )
             if migrated_events:
                 await session.execute(
@@ -239,19 +242,35 @@ async def migrate_conversations(store: ConversationStore, *, session=None) -> No
                     leaf_event_id=:leaf_event_id,replay_from_event_id=:replay_from_event_id WHERE id=:id"""),
                     conv,
                 )
-        # Partial indexes contain only live plugin baselines and lifecycle
-        # references, so cleanup need not inspect historical event payloads.
+        # Literal paths keep index expressions identical to the hot-path queries.
+        payload = literal_column("payload", JSON)
+        expressions = {
+            key: str(
+                json_text(payload, key, session.bind.dialect.name).compile(
+                    dialect=session.bind.dialect, compile_kwargs={"literal_binds": True}
+                )
+            )
+            for key in (
+                "origin",
+                "reason",
+                "source_event_id",
+                "base_leaf_event_id",
+                "context_leaf_event_id",
+                "turn_id",
+                "request_id",
+            )
+        }
         await session.execute(
-            text("""CREATE INDEX IF NOT EXISTS ix_context_plugin_live
+            text(f"""CREATE INDEX IF NOT EXISTS ix_context_plugin_live
             ON conversation_events(conversation_ref,seq)
-            WHERE type='context.rebased' AND json_extract(payload,'$.origin')='plugin'
+            WHERE type='context.rebased' AND {expressions["origin"]}='plugin'
                 AND payload IS NOT NULL""")
         )
         await session.execute(
-            text("""CREATE INDEX IF NOT EXISTS ix_context_snapshot_source
-            ON conversation_events(conversation_ref,json_extract(payload,'$.source_event_id'))
-            WHERE type='context.rebased' AND json_extract(payload,'$.reason')='snapshot'
-                AND json_extract(payload,'$.origin')='system'""")
+            text(f"""CREATE INDEX IF NOT EXISTS ix_context_snapshot_source
+            ON conversation_events(conversation_ref,({expressions["source_event_id"]}))
+            WHERE type='context.rebased' AND {expressions["reason"]}='snapshot'
+                AND {expressions["origin"]}='system'""")
         )
         for kind, field_name in [
             ("turn.started", "base_leaf_event_id"),
@@ -262,26 +281,21 @@ async def migrate_conversations(store: ConversationStore, *, session=None) -> No
             index_name = "ix_context_" + kind.replace(".", "_")
             await session.execute(
                 text(f"""CREATE INDEX IF NOT EXISTS {index_name}
-                ON conversation_events(conversation_ref,json_extract(payload,'$.{field_name}'))
+                ON conversation_events(conversation_ref,({expressions[field_name]}))
                 WHERE type='{kind}'""")
             )
-        exists = (
-            await session.execute(
-                text(
-                    "SELECT 1 FROM sqlite_master WHERE type='table' AND name='conversations'"
-                )
-            )
-        ).first()
+        exists = await connection.run_sync(
+            lambda conn: inspect(conn).has_table("conversations")
+        )
         if not exists:
             if owns_transaction:
                 await session.commit()
             return
-        columns = {
-            r[1]
-            for r in (
-                await session.execute(text("PRAGMA table_info(conversations)"))
-            ).all()
-        }
+        columns = await connection.run_sync(
+            lambda conn: {
+                col["name"] for col in inspect(conn).get_columns("conversations")
+            }
+        )
         if "token_usage" not in columns:
             await session.execute(
                 text(

@@ -335,7 +335,9 @@ class ThirdPartyAgentSubStage(Stage):
                     event.unified_msg_origin, event.get_platform_id()
                 )
             event_writer = await manager.create_event_writer(
-                cid, unified_msg_origin=event.unified_msg_origin
+                cid,
+                unified_msg_origin=event.unified_msg_origin,
+                link_display=event.get_platform_name() == "webchat",
             )
 
         context_observer = (

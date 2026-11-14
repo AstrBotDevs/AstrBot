@@ -46,8 +46,19 @@ class ConversationEventWriter:
     and never replay tool side effects to resolve a storage conflict.
     """
 
-    def __init__(self, store, snapshot: ConversationSnapshot):
+    def __init__(
+        self, store, snapshot: ConversationSnapshot, *, link_display: bool = True
+    ):
+        """Bind committed context and the host's display projection policy.
+
+        Args:
+            store: Transactional conversation event store.
+            snapshot: Detached committed context.
+            link_display: Maintain display links; hosts without display rows can
+                disable this. Defaults to true for existing API callers.
+        """
         self.store = store
+        self._link_display = link_display
         self.cid = snapshot.conversation.conversation_id
         self.umo = snapshot.conversation.umo
         self.head_seq = snapshot.conversation.head_seq
@@ -162,6 +173,7 @@ class ConversationEventWriter:
                     self.cid,
                     drafts,
                     expected_leaf=self.leaf_event_id if checks_context else NOT_GIVEN,
+                    link_display=self._link_display,
                 )
             except (SQLAlchemyError, ValueError) as exc:
                 raise ConversationPersistenceError(
@@ -452,5 +464,6 @@ class ConversationEventWriter:
                 self.cid,
                 list(self._pending),
                 expected_leaf=self.leaf_event_id,
+                link_display=self._link_display,
             )
             await self._acknowledge(committed)

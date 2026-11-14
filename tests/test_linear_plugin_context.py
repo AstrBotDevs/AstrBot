@@ -4,30 +4,20 @@ from types import SimpleNamespace
 from unittest.mock import MagicMock
 
 import pytest
-import pytest_asyncio
 
 from astrbot.core.agent import conversation_events
 from astrbot.core.agent.conversation_events import (
     ConversationEventWriter,
 )
-from astrbot.core.astr_agent_runtime.history import ConversationHistoryObserver
 from astrbot.core.agent.message import Message
 from astrbot.core.agent.response import AgentResponse
+from astrbot.core.astr_agent_runtime.history import ConversationHistoryObserver
 from astrbot.core.conversation_mgr import ConversationManager
 from astrbot.core.db import conversation as conversation_db
 from astrbot.core.db.conversation import ConversationConflictError
-from astrbot.core.db.sqlite import SQLiteDatabase
 from astrbot.core.pipeline import context_utils
 from astrbot.core.star.star_handler import EventType
 from astrbot.dashboard.services.conversation_service import ConversationService
-
-
-@pytest_asyncio.fixture
-async def database(tmp_path):
-    db = SQLiteDatabase(str(tmp_path / "plugin-events.db"))
-    await db.initialize()
-    yield db
-    await db.engine.dispose()
 
 
 @pytest.fixture
@@ -81,7 +71,10 @@ async def test_hook_compares_without_copying_and_detects_nested_edits(
         patch.setattr(conversation_db, "deepcopy", unexpected_copy)
         patch.setattr(conversation_events, "deepcopy", unexpected_copy)
         await context_utils.call_event_hook(
-            event, EventType.OnLLMRequestEvent, observer.request, context_observer=observer
+            event,
+            EventType.OnLLMRequestEvent,
+            observer.request,
+            context_observer=observer,
         )
     assert not writer._pending
 
@@ -126,7 +119,9 @@ async def test_iris_clear_is_plugin_reset_and_previous_body_is_reclaimed(
         snapshot = await store.read(conv.conversation_id)
         writer = ConversationEventWriter(store, snapshot)
         observer = ConversationHistoryObserver(writer)
-        observer.request = SimpleNamespace(contexts=snapshot.messages, conversation=conv)
+        observer.request = SimpleNamespace(
+            contexts=snapshot.messages, conversation=conv
+        )
         event = SimpleNamespace(
             plugins_name=None,
             is_stopped=lambda: False,
@@ -134,7 +129,10 @@ async def test_iris_clear_is_plugin_reset_and_previous_body_is_reclaimed(
         )
         await writer.start_turn({"kind": "test"})
         await context_utils.call_event_hook(
-            event, EventType.OnLLMRequestEvent, observer.request, context_observer=observer
+            event,
+            EventType.OnLLMRequestEvent,
+            observer.request,
+            context_observer=observer,
         )
         history = [
             {"role": "user", "content": "private memory", "_no_save": True},
@@ -194,7 +192,10 @@ async def test_pre_hook_changes_stay_unknown_and_done_hook_changes_are_plugin(
     install_hook(edit_history)
     await writer.start_turn({"kind": "test"})
     await context_utils.call_event_hook(
-        event, EventType.OnAgentDoneEvent, observer.runtime_context, context_observer=observer
+        event,
+        EventType.OnAgentDoneEvent,
+        observer.runtime_context,
+        context_observer=observer,
     )
     await writer.save_history([{"role": "user", "content": "plugin edited history"}])
     await writer.finish_turn("completed")
@@ -249,7 +250,9 @@ async def test_manager_writes_are_independent_of_execution_and_keep_unknown_orig
     assert external.payload["origin"] == "unknown"
     await manager.update_conversation("umo", conv.conversation_id, history=[])
     assert (await store.events(conv.conversation_id))[-1].payload["origin"] == "unknown"
-    writer = await manager.create_event_writer(conv.conversation_id, unified_msg_origin="umo")
+    writer = await manager.create_event_writer(
+        conv.conversation_id, unified_msg_origin="umo"
+    )
     await writer.append_message({"role": "user", "content": "restore"})
     await manager.update_conversation("umo", conv.conversation_id, history=[])
     assert (await store.events(conv.conversation_id))[-1].payload["origin"] == "unknown"
@@ -269,7 +272,9 @@ async def test_runner_context_source_is_explicit_and_linear_fork_is_independent(
     conv = await store.create(
         umo="umo", platform_id="p", content=[{"role": "user", "content": "old"}]
     )
-    writer = await manager.create_event_writer(conv.conversation_id, unified_msg_origin="umo")
+    writer = await manager.create_event_writer(
+        conv.conversation_id, unified_msg_origin="umo"
+    )
     await writer.consume(
         AgentResponse(
             "context.updated",
@@ -340,7 +345,9 @@ async def test_dashboard_history_edit_is_user_owned_and_survives_plugin_cleanup(
     user_baseline = (await store.events(conv.conversation_id))[-1]
     assert user_baseline.type == "context.rebased"
     assert user_baseline.payload["origin"] == "user"
-    writer = await manager.create_event_writer(conv.conversation_id, unified_msg_origin="umo")
+    writer = await manager.create_event_writer(
+        conv.conversation_id, unified_msg_origin="umo"
+    )
     await writer.save_history(
         [{"role": "user", "content": "memory 1"}], origin="plugin"
     )

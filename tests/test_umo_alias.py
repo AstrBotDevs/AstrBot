@@ -137,6 +137,8 @@ async def test_concurrent_manual_and_auto_name_upserts_preserve_manual_alias(tem
 
 @pytest.mark.asyncio
 async def test_database_initialization_removes_redundant_umo_index(temp_db):
+    if temp_db.engine.dialect.name != "sqlite":
+        pytest.skip("SQLite legacy index migration")
     async with temp_db.get_db() as session:
         async with session.begin():
             await session.execute(

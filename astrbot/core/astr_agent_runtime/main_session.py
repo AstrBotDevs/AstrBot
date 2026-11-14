@@ -73,9 +73,10 @@ class MainAgentSession(NativeAgentSession):
         event = input.event
         context = self.runtime.context
         manager = context.conversation_manager
-        conversation = await manager.db.get_conversation_by_id(self.id)
-        if conversation is None:
+        loaded = await manager.db.conversation_store.read_for_execution(self.id)
+        if loaded is None:
             raise ValueError("The bound agent conversation no longer exists")
+        conversation, snapshot = loaded
         req = input.request if isinstance(input, MainAgentInput) else None
         explicit = req is not None or event.get_extra("provider_request") is not None
         # Portable attachments replace source media; a text override retains it.
@@ -129,6 +130,7 @@ class MainAgentSession(NativeAgentSession):
             plugin_tools=input.plugin_tools,
             plugin_skills=input.plugin_skills,
             runtime=self.runtime,
+            conversation_snapshot=snapshot if req.conversation is not None else None,
         )
         if result is None:
             error = event.get_extra(LLM_ERROR_MESSAGE_EXTRA_KEY)

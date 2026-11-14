@@ -121,6 +121,7 @@ async def environment(tmp_path, request):
         MagicMock(),
         agent_runtimes=runtimes,
     )
+
     async def read_history(cid):
         """Read structured data from the fixture's mutable conversation records.
 
@@ -138,11 +139,20 @@ async def environment(tmp_path, request):
         return SimpleNamespace(
             **vars(record),
             conversation_id=record.cid,
+            umo=record.user_id,
             content=json.loads(record.history),
         )
 
+    async def read_execution(cid):
+        record = await read_history(cid)
+        return (record, None) if record is not None else None
+
     context.conversation_manager.db = SimpleNamespace(
-        get_conversation_by_id=AsyncMock(side_effect=read_history)
+        get_conversation_by_id=AsyncMock(side_effect=read_history),
+        conversation_store=SimpleNamespace(
+            get_metadata=AsyncMock(side_effect=read_history),
+            read_for_execution=AsyncMock(side_effect=read_execution),
+        ),
     )
     context.conversation_manager.to_legacy_conversation = lambda record: record
     context.platform_manager.platform_insts = [

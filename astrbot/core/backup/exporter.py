@@ -213,7 +213,12 @@ class AstrBotExporter:
         export_data: dict[str, list[dict]] = {}
 
         async with self.main_db.get_db() as session:
-            await session.execute(text("BEGIN"))
+            if self.main_db.engine.dialect.name == "postgresql":
+                await session.execute(
+                    text("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ, READ ONLY")
+                )
+            else:
+                await session.execute(text("BEGIN"))
             for table_name, model_class in MAIN_DB_MODELS.items():
                 try:
                     result = await session.execute(select(model_class))

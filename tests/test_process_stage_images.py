@@ -146,11 +146,27 @@ def harness(tmp_path, monkeypatch):
                 "cid": cid,
                 "conversation_id": cid,
                 "user_id": cid.removeprefix("conv:")
-                if cid.startswith("conv:") else conversation.user_id,
+                if cid.startswith("conv:")
+                else conversation.user_id,
             }
         )
     )
-    context.conversation_manager.to_legacy_conversation.side_effect = lambda record: record
+
+    async def read_metadata(cid):
+        record = await context.conversation_manager.db.get_conversation_by_id(cid)
+        record.umo = record.user_id
+        return record
+
+    async def read_execution(cid):
+        return await read_metadata(cid), None
+
+    context.conversation_manager.db.conversation_store = SimpleNamespace(
+        get_metadata=AsyncMock(side_effect=read_metadata),
+        read_for_execution=AsyncMock(side_effect=read_execution),
+    )
+    context.conversation_manager.to_legacy_conversation.side_effect = lambda record: (
+        record
+    )
     context.conversation_manager.update_conversation = AsyncMock()
     provider = MagicMock(spec=Provider)
     provider.provider_config = {
@@ -199,6 +215,9 @@ def harness(tmp_path, monkeypatch):
 
     async def run(runner, turn, max_steps):
         captured.append(runner)
+        # This harness bypasses step() to inspect prepared input before execution.
+        runner._message_parts = []
+        runner._message_indices = {}
         async for response in runner._iter_llm_responses_with_fallback():
             runner.final_llm_resp = response
         return TurnResult(
@@ -411,9 +430,7 @@ async def test_persistent_animation_guidance_survives_history_reload(harness, tm
     message = Message.model_validate(await req.assemble_context())
     sent = Provider._ensure_message_to_dicts(harness.provider, [message])
     saved = dump_messages([message])
-    replayed = Provider._ensure_message_to_dicts(
-        harness.provider, load_messages(saved)
-    )
+    replayed = Provider._ensure_message_to_dicts(harness.provider, load_messages(saved))
 
     assert any(
         "Images labeled as animation montages" in part.get("text", "")

@@ -378,7 +378,8 @@ async def test_multi_platform_summary_uses_global_order_index_and_batches_usage(
     ]
     assert all(item.content is None for item in conversations)
     assert [item.token_usage for item in conversations] == [42, 0, 0, 0, 0]
-    assert len(statements) == 3
+    assert statements[0] == "BEGIN"
+    assert len(statements[1:]) == 3
 
     ordered_queries = [statement for statement in statements if "ORDER BY" in statement and "FROM conversations_v3" in statement]
     assert len(ordered_queries) == 1
