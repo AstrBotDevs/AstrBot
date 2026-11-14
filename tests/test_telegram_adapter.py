@@ -158,6 +158,29 @@ async def test_telegram_media_reply_to_bot_uses_self_id_without_text_fallback():
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("media_type", ["document", "sticker"])
+async def test_telegram_other_media_replies_to_bot_use_self_id(media_type):
+    adapter = _load_telegram_adapter()(
+        make_platform_config("telegram"), {}, asyncio.Queue()
+    )
+    reply = create_mock_update(message_text="previous", user_id=12345678).message
+    media = create_mock_file("https://api.telegram.org/file/test/item")
+    media.file_name = "test.txt"
+    media.is_animated = False
+    media.is_video = False
+    media.emoji = "🐾"
+    update = create_mock_update(
+        message_text=None,
+        chat_type="group",
+        reply_to_message=reply,
+        **{media_type: media},
+    )
+    result = await adapter.convert_message(update, _build_context())
+    assert result is not None
+    assert _find_reply_component(result).sender_id == result.self_id == "test_bot"
+
+
+@pytest.mark.asyncio
 async def test_telegram_reply_to_user_preserves_sender_and_message():
     TelegramPlatformAdapter = _load_telegram_adapter()
     adapter = TelegramPlatformAdapter(
