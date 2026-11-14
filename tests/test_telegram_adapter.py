@@ -92,7 +92,13 @@ def _build_context() -> MagicMock:
 
 
 @pytest.mark.asyncio
-async def test_telegram_media_group_debounce_stays_within_max_wait():
+@pytest.mark.parametrize(
+    ("second_arrival", "run_at", "wall_shift"),
+    [(1.0, 3.5, 0), (9.0, 10.0, 0), (9.0, 10.0, -1), (11.0, 11.0, 0)],
+)
+async def test_telegram_media_group_debounce_stays_within_max_wait(
+    second_arrival, run_at, wall_shift
+):
     TelegramPlatformAdapter = _load_telegram_adapter()
     adapter = TelegramPlatformAdapter(
         make_platform_config("telegram"), {}, asyncio.Queue()
@@ -101,22 +107,62 @@ async def test_telegram_media_group_debounce_stays_within_max_wait():
     adapter.media_group_max_wait = 10.0
     start = datetime(2026, 1, 1, 12)
     context = _build_context()
+    adapter.convert_message = AsyncMock(
+        side_effect=[
+            SimpleNamespace(message=["first"]),
+            SimpleNamespace(message=["second"]),
+        ]
+    )
+    adapter.handle_msg = AsyncMock()
+    loop = asyncio.get_running_loop()
 
-    with patch("datetime.datetime", wraps=datetime) as clock:
-        clock.now.return_value = start
+    with (
+        patch.object(loop, "time", return_value=100.0) as monotonic,
+        patch("datetime.datetime", wraps=datetime) as wall_clock,
+    ):
+        wall_clock.now.return_value = start
         await adapter.handle_media_group_message(
             create_mock_update(media_group_id="album"), context
         )
-        first_run = adapter.scheduler.add_job.call_args.kwargs["run_date"]
-        assert first_run == start + timedelta(seconds=2.5)
+        await asyncio.sleep(0)
 
-        clock.now.return_value = start + timedelta(seconds=9)
+        monotonic.return_value = 100.0 + second_arrival
+        wall_clock.now.return_value = start + timedelta(
+            seconds=second_arrival, hours=wall_shift
+        )
         await adapter.handle_media_group_message(
             create_mock_update(media_group_id="album"), context
         )
-        capped_run = adapter.scheduler.add_job.call_args.kwargs["run_date"]
 
-    assert capped_run == start + timedelta(seconds=10)
+        if run_at > second_arrival:
+            monotonic.return_value = 100.0 + run_at - 0.25
+            await asyncio.sleep(0)
+            await asyncio.sleep(0)
+            adapter.handle_msg.assert_not_awaited()
+
+        monotonic.return_value = 100.0 + run_at
+        for _ in range(3):
+            await asyncio.sleep(0)
+        adapter.handle_msg.assert_awaited_once()
+        assert adapter.handle_msg.await_args.args[0].message == ["first", "second"]
+        assert adapter.media_group_cache == {}
+
+
+@pytest.mark.asyncio
+async def test_telegram_termination_cancels_pending_album():
+    TelegramPlatformAdapter = _load_telegram_adapter()
+    adapter = TelegramPlatformAdapter(
+        make_platform_config("telegram"), {}, asyncio.Queue()
+    )
+    adapter.handle_msg = AsyncMock()
+    await adapter.handle_media_group_message(
+        create_mock_update(media_group_id="album"), _build_context()
+    )
+    await adapter.terminate()
+
+    adapter.handle_msg.assert_not_awaited()
+    assert adapter.media_group_cache == {}
+    assert not adapter._media_group_tasks
 
 
 @pytest.mark.asyncio

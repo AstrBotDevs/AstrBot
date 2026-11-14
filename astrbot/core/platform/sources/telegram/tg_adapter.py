@@ -135,8 +135,9 @@ class TelegramPlatformAdapter(Platform):
         self._build_application()
 
         # Media group handling
-        # Cache structure: {media_group_id: {"created_at": datetime, "items": [(update, context), ...]}}
+        # Each group tracks its first arrival, collected updates and debounce task.
         self.media_group_cache: dict[str, dict] = {}
+        self._media_group_tasks: set[asyncio.Task[None]] = set()
         self.media_group_timeout = self.config.get(
             "telegram_media_group_timeout", 2.5
         )  # seconds - debounce delay between messages
@@ -886,16 +887,15 @@ class TelegramPlatformAdapter(Platform):
         media items before sending to the pipeline. Uses debounce mechanism with
         a hard cap (max_wait) to prevent indefinite delay.
         """
-        from datetime import datetime, timedelta
-
-        if not update.message:
+        if self._terminating or not update.message:
             return
 
         media_group_id = update.message.media_group_id
         if not media_group_id:
             return
 
-        now = datetime.now()
+        loop = asyncio.get_running_loop()
+        now = loop.time()
         # Initialize cache for this media group if needed
         if media_group_id not in self.media_group_cache:
             self.media_group_cache[media_group_id] = {
@@ -912,24 +912,21 @@ class TelegramPlatformAdapter(Platform):
             f"currently has {len(entry['items'])} items.",
         )
 
-        deadline = entry["created_at"] + timedelta(seconds=self.media_group_max_wait)
-        run_at = max(
-            now, min(now + timedelta(seconds=self.media_group_timeout), deadline)
-        )
-        logger.debug(
-            "Scheduled media group %s to be processed at %s", media_group_id, run_at
-        )
+        previous_task = entry.get("task")
+        if previous_task is not None:
+            previous_task.cancel()
 
-        # Schedule/reschedule processing (replace_existing=True handles debounce)
-        job_id = f"media_group_{media_group_id}"
-        self.scheduler.add_job(
-            self.process_media_group,
-            "date",
-            run_date=run_at,
-            args=[media_group_id],
-            id=job_id,
-            replace_existing=True,
-        )
+        deadline = entry["created_at"] + self.media_group_max_wait
+        run_at = min(now + self.media_group_timeout, deadline)
+        task = loop.create_task(self._process_media_group_at(media_group_id, run_at))
+        entry["task"] = task
+        self._media_group_tasks.add(task)
+        task.add_done_callback(self._media_group_tasks.discard)
+
+    async def _process_media_group_at(self, media_group_id: str, run_at: float) -> None:
+        loop = asyncio.get_running_loop()
+        await asyncio.sleep(max(0.0, run_at - loop.time()))
+        await self.process_media_group(media_group_id)
 
     async def process_media_group(self, media_group_id: str) -> None:
         """Process a complete media group by merging all collected messages.
@@ -1008,6 +1005,12 @@ class TelegramPlatformAdapter(Platform):
     async def terminate(self) -> None:
         try:
             self._terminating = True
+            album_tasks = tuple(self._media_group_tasks)
+            for task in album_tasks:
+                task.cancel()
+            if album_tasks:
+                await asyncio.gather(*album_tasks, return_exceptions=True)
+            self.media_group_cache.clear()
             if self.scheduler.running:
                 self.scheduler.shutdown()
             self._polling_recovery_requested.set()
