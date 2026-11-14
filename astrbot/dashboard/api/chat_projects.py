@@ -167,11 +167,14 @@ async def list_chat_project_sessions(
 async def list_chat_project_workspace_files(
     project_id: str,
     path: str = Query(default=""),
+    session_id: str | None = Query(default=None),
     auth: AuthContext = Depends(require_chat_scope),
     service: ChatUIProjectService = Depends(get_service),
 ):
     return await _run(
-        lambda: service.list_workspace_files(auth.username, project_id, path)
+        lambda: service.list_workspace_files(
+            auth.username, project_id, path, session_id
+        )
     )
 
 
@@ -179,11 +182,12 @@ async def list_chat_project_workspace_files(
 async def get_chat_project_workspace_file(
     project_id: str,
     path: str,
+    session_id: str | None = Query(default=None),
     auth: AuthContext = Depends(require_chat_scope),
     service: ChatUIProjectService = Depends(get_service),
 ):
     return await _run(
-        lambda: service.get_workspace_file(auth.username, project_id, path)
+        lambda: service.get_workspace_file(auth.username, project_id, path, session_id)
     )
 
 
@@ -191,6 +195,7 @@ async def get_chat_project_workspace_file(
 async def download_chat_project_workspace_file(
     project_id: str,
     path: str,
+    session_id: str | None = Query(default=None),
     auth: AuthContext = Depends(require_chat_scope),
     service: ChatUIProjectService = Depends(get_service),
 ):
@@ -199,6 +204,7 @@ async def download_chat_project_workspace_file(
             auth.username,
             project_id,
             path,
+            session_id,
         )
     except ChatUIProjectServiceError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc

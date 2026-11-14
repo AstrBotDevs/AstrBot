@@ -1,20 +1,17 @@
 # Unreleased
 
-- WebUI: Add model settings shortcuts beside selected models and inside model/fallback menus. Model edits save immediately for all profiles using that model.
-- WebUI: Move **Platform → General → Administrator IDs** to **Access Control → Administrators**, and **Platform → Whitelist** to **Access Control → Whitelist**. Rename Platform to Platforms & Messages. Order sections as AI, Platforms & Messages, Access Control, Plugin, and Extensions; remove the “configuration” suffix from section labels.
-- WebUI：模型选择器旁及模型、回退模型菜单内新增设置齿轮，模型设置保存后立即影响引用它的所有配置文件。
-- WebUI：**平台配置 → 基本 → 管理员 ID** 移至 **访问控制 → 管理员**，**平台配置 → 白名单** 移至 **访问控制 → 白名单**；平台分区改名为平台与消息；分区顺序调整为 AI、平台与消息、访问控制、插件、扩展功能，分区名称去掉“配置”后缀。
+- QQ Official: a failed image upload no longer dumps the base64 payload into the log (a single multi-MB line could freeze log writing and the web dashboard), and image upload retries drop from 5 to 3 with a single summary warning instead of one per attempt.
 
-- Generate numbered original-path notices in the image preparation stage during main-agent construction, including quoted images. After request hooks, apply the same size and format policy only to newly introduced image references and refresh their notices. Skipped and captioned attachments retain explicit status without taking a visual index; animation labels identify frame montages.
-- Raise the model image input cap from 32 MiB to 64 MiB. Larger originals are skipped before reading image bytes, with a model notice retaining their paths and suggesting the file-reading tool or a smaller upload; accepted inputs still produce images strictly below 512 KiB.
-- Local Agent input images are always prepared as JPEG/PNG files strictly below 512 KiB. Compliant local images are reused without copying. Transparent previews retain PNG alpha; animations become 3×3 montages. Original attachment paths remain available to tools, and event-owned previews are deleted after use without a shared conversion cache.
-- Configuration mapping: **Enable image compression** (`provider_settings.image_compress_enabled`) is replaced by always-on preparation; **JPEG quality** (`provider_settings.image_compress_options.quality`) is replaced by automatic size control; **Maximum edge length** is renamed to **Input image maximum edge length** (`provider_settings.image_compress_options.max_size`). User attachments in CUA sessions follow the same limits.
+### Overview page / 总览页
 
-- WebUI: Keep content corners and borders fixed while pages scroll inside the card. Add 6px right and bottom gaps on desktop; mobile keeps a full-width, flat layout. (#10479)
-- WebUI: Restore the content card's right and bottom borders and use the primary theme color for the active sidebar Settings button.
-- WebUI: Pin configuration and settings headers and section navigation while only the right content pane scrolls, including embedded configuration drawers.
-- WebUI: **System Settings → Appearance → Customize Sidebar → removed**; the sidebar uses the default menu layout. Theme colors and extension collapsing, pinning, and grouping remain available.
-- WebUI：页面在内容卡片内部滚动，圆角和边线保持固定。桌面端右侧和底部各保留 6px 间隔，移动端保持全宽平面布局。 (#10479)
-- WebUI：补齐内容卡片右侧和底部边框，侧边栏设置按钮选中时使用主题主色背景及文字。
-- WebUI：配置页和设置页固定顶部及分区导航，仅滚动右侧内容；嵌入式配置抽屉也采用相同行为。
-- WebUI：**系统设置 → 外观 → 自定义侧边栏 → 已移除**；侧边栏使用默认菜单布局。仍可调整主题颜色，以及折叠、置顶和按插件分组扩展功能。
+- 欢迎 → 总览：保留 `/welcome` 地址，按主题色重排今日统计、快速引导和资源入口，不使用波浪背景。机器人报错时显示问题数量，点击可查看错误详情。
+- Welcome → Overview: Preserve `/welcome`, add daily usage comparisons, and arrange setup and resource cards using the selected theme. Bot errors appear as an issue count with a details dialog.
+
+- 总览：在统计卡片与快速引导、相关资源之间加入紧凑系统状态栏，展示运行时长和服务器 CPU、内存及数据分区磁盘用量。
+- Overview: Place a compact system status bar between usage cards and setup/resources, showing process uptime and host CPU, memory, and data-filesystem disk usage.
+
+- 总览统计合并至 `/api/v1/stats`：新增 `daily_usage` 与 `system`，保留现有字段和统计口径；移除开发阶段的 `/api/v1/stats/overview` 接口。
+- Consolidate overview metrics into `/api/v1/stats` with additive `daily_usage` and `system` fields, preserving existing statistics. Remove the development-only `/api/v1/stats/overview` endpoint.
+
+- `/api/v1/stats` 支持 `sections` 按需计算和返回 `messages`、`daily_usage`、`process`、`system`、`instances`。总览与统计页分别请求所需分类，不传参数仍返回全部数据；旧版 `/api/stat/get` 同样支持。
+- Add on-demand `sections` to `/api/v1/stats` and legacy `/api/stat/get`: `messages`, `daily_usage`, `process`, `system`, and `instances`. Overview and Statistics request only their required categories; omitted sections retain the full response.

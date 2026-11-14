@@ -1,10 +1,17 @@
+import asyncio
+from collections.abc import Awaitable, Callable
 from typing import TYPE_CHECKING, Protocol, runtime_checkable
 
 from ...provider.modalities import (
     log_context_sanitize_stats,
     sanitize_contexts_by_modalities,
 )
-from ..message import Message
+from ..event_stream import (
+    RequestEventRecorder,
+    request_context_for_journal,
+)
+from ..message import Message, dump_messages
+from ..response import AgentResponse
 from .token_counter import EstimateTokenCounter, TokenCounter
 
 if TYPE_CHECKING:
@@ -16,6 +23,8 @@ else:
         import logging
 
         logger = logging.getLogger("astrbot")
+
+from astrbot.core.provider.request_observer import request_recorder_kwargs
 
 if TYPE_CHECKING:
     from astrbot.core.provider.provider import Provider
@@ -130,6 +139,7 @@ class LLMSummaryCompressor:
         instruction_text: str | None = None,
         compression_threshold: float = 0.82,
         token_counter: TokenCounter | None = None,
+        request_event_emitter: Callable[[AgentResponse], Awaitable[None]] | None = None,
     ) -> None:
         """Initialize the LLM summary compressor.
 
@@ -139,8 +149,11 @@ class LLMSummaryCompressor:
                 exact context. Clamped to 0-0.3.
             instruction_text: Custom instruction for summary generation.
             compression_threshold: The compression trigger threshold (default: 0.82).
+            token_counter: Optional context token estimator.
+            request_event_emitter: Optional acknowledged runner event sink.
         """
         self.provider = provider
+        self.request_event_emitter = request_event_emitter
         self.keep_recent_ratio = min(max(float(keep_recent_ratio), 0.0), 0.3)
         self.compression_threshold = compression_threshold
         self.token_counter = token_counter or EstimateTokenCounter()
@@ -247,6 +260,15 @@ class LLMSummaryCompressor:
             if not any(msg.role != "system" for msg in summary_contexts):
                 return messages
 
+        summary_contexts = [
+            Message.model_validate(item)
+            for item in dump_messages(
+                [message for message in summary_contexts if not message._no_save]
+            )
+        ]
+        if not summary_contexts:
+            return messages
+
         if summary_contexts[-1].role != "assistant":
             summary_contexts.append(
                 Message(
@@ -275,10 +297,42 @@ class LLMSummaryCompressor:
         # falls back to truncation, so retrying (e.g. on an exhausted quota)
         # would only hold up the reply.
         try:
-            response = await self.provider.text_chat(
-                contexts=sanitized_summary_contexts,
-                request_max_retries=1,
-            )
+            recorder = None
+            if self.request_event_emitter:
+                recorder = RequestEventRecorder(
+                    self.request_event_emitter,
+                    {
+                        "purpose": "compaction",
+                        "provider_id": self.provider.provider_config.get("id", ""),
+                        "model": self.provider.get_model(),
+                        "input_context": request_context_for_journal(
+                            sanitized_summary_contexts,
+                            source_contexts=summary_contexts,
+                            modalities=self.provider.provider_config.get("modalities"),
+                        ),
+                    },
+                )
+                await recorder.begin()
+            try:
+                response = await self.provider.text_chat(
+                    contexts=sanitized_summary_contexts,
+                    request_max_retries=1,
+                    **request_recorder_kwargs(self.provider.text_chat, recorder),
+                )
+                if recorder:
+                    await recorder.finish(
+                        "failed" if response.role == "err" else "completed",
+                        usage=response.usage,
+                    )
+            except BaseException as exc:
+                if recorder:
+                    await recorder.finish(
+                        "cancelled"
+                        if isinstance(exc, asyncio.CancelledError)
+                        else "failed",
+                        error_code=type(exc).__name__,
+                    )
+                raise
             summary_content = (response.completion_text or "").strip()
         except Exception as e:
             logger.error(f"Failed to generate summary: {e}")
