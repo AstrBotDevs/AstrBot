@@ -117,6 +117,7 @@ DEFAULT_CONFIG = {
             "interval": "1.5,3.5",
             "log_base": 2.6,
             "words_count_threshold": 150,
+            "max_segments": 0,
             "split_mode": "regex",  # regex 或 words
             "regex": ".*?[。？！~…]+|.+$",
             "split_words": [
@@ -1208,6 +1209,9 @@ CONFIG_METADATA_2 = {
                                 "type": "float",
                             },
                             "words_count_threshold": {
+                                "type": "int",
+                            },
+                            "max_segments": {
                                 "type": "int",
                             },
                             "regex": {
@@ -4765,6 +4769,14 @@ CONFIG_METADATA_3 = {
                     "platform_settings.segmented_reply.words_count_threshold": {
                         "description": "分段回复字数阈值",
                         "hint": "分段回复的字数上限。只有字数小于此值的消息才会被分段，超过此值的长消息将直接发送（不分段）。默认为 150",
+                        "type": "int",
+                        "condition": {
+                            "platform_settings.segmented_reply.enable": True,
+                        },
+                    },
+                    "platform_settings.segmented_reply.max_segments": {
+                        "description": "分段数上限",
+                        "hint": "每个原始文本段最多输出的分段数量。超过上限时，剩余内容会合并到最后一段。0 表示不限制，默认为 0。",
                         "type": "int",
                         "condition": {
                             "platform_settings.segmented_reply.enable": True,
