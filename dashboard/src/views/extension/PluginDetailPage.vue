@@ -13,6 +13,7 @@ import MarkdownIt from "markdown-it";
 import defaultPluginIcon from "/favicon.svg";
 import { pluginApi } from "@/api/v1";
 import { useI18n } from "@/i18n/composables";
+import { resolveRelativeUrls } from "@/utils/markdownUrls.mjs";
 import { usePluginI18n } from "@/utils/pluginI18n";
 import PluginPlatformChip from "@/components/shared/PluginPlatformChip.vue";
 
@@ -568,7 +569,7 @@ const goBack = () => {
   });
 };
 
-const renderMarkdown = (source) => {
+const renderMarkdown = (source, { docUrl = "" } = {}) => {
   const normalizedSource = String(source || "")
     .replace(/[“”]/g, '"')
     .replace(/[‘’]/g, "'");
@@ -577,6 +578,7 @@ const renderMarkdown = (source) => {
   const container = document.createElement("div");
   container.innerHTML = cleanHtml;
 
+  resolveRelativeUrls(container, { docUrl, repoUrl: repoUrl.value });
   // Generate heading ids so README table-of-contents anchors can resolve.
   const usedIds = new Set();
   container.querySelectorAll("h1, h2, h3, h4, h5, h6").forEach((heading) => {
@@ -715,7 +717,7 @@ const fetchReadme = async () => {
         readmeEmpty.value = true;
         return;
       }
-      renderedReadme.value = renderMarkdown(content);
+      renderedReadme.value = renderMarkdown(content, { docUrl: readmeUrl });
     } catch (err) {
       readmeError.value = err?.message || String(err);
     } finally {
@@ -786,7 +788,7 @@ const fetchChangelog = async () => {
         changelogEmpty.value = true;
         return;
       }
-      renderedChangelog.value = renderMarkdown(content);
+      renderedChangelog.value = renderMarkdown(content, { docUrl: changelogUrl });
     } catch (err) {
       changelogError.value = err?.message || String(err);
     } finally {
