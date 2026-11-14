@@ -755,18 +755,10 @@ class LiveChatService:
                 elif result_type == "actionrow" and isinstance(result_text, dict):
                     message_accumulator.add_part({"type": "actionrow", **result_text})
 
-                should_save = False
-                if result_type == "end":
-                    should_save = bool(
-                        message_accumulator.has_content() or refs or agent_stats
-                    )
-                elif (streaming and result_type == "complete") or not streaming:
-                    if chain_type not in (
-                        "tool_call",
-                        "tool_call_result",
-                        "agent_stats",
-                    ):
-                        should_save = True
+                should_save = result_type == "end" or (
+                    result_type == "complete"
+                    and chain_type not in ("reasoning", "tool_call", "tool_call_result")
+                )
 
                 if should_save:
                     saved_record = await flush_pending_bot_message()
