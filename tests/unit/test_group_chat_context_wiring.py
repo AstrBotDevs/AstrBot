@@ -300,3 +300,41 @@ async def test_format_message_truncates_long_json_card_fields():
     formatted = await context._format_message(event, {})
 
     assert f"Description: {'a' * 200}...]" in formatted
+
+@pytest.mark.parametrize(
+    ("configured_provider_id", "expected_provider_id"),
+    [
+        (None, "default-provider"),
+        ("", "default-provider"),
+        ("group-provider", "group-provider"),
+    ],
+)
+def test_cfg_uses_group_or_default_image_caption_provider(
+    configured_provider_id,
+    expected_provider_id,
+):
+    context = MagicMock()
+    context.get_config.return_value = {
+        "provider_ltm_settings": {
+            "image_caption": True,
+            "image_caption_provider_id": configured_provider_id,
+            "active_reply": {
+                "enable": False,
+                "method": "possibility_reply",
+                "possibility_reply": 0,
+            },
+        },
+        "provider_settings": {
+            "image_caption_prompt": "Describe this image.",
+            "default_image_caption_provider_id": "default-provider",
+        },
+    }
+    group_context = GroupChatContext(MagicMock(), context)
+    event = MagicMock()
+    event.unified_msg_origin = "aiocqhttp:GroupMessage:user_123_group_456"
+
+    cfg = group_context.cfg(event)
+
+    assert cfg["image_caption_provider_id"] == expected_provider_id
+    assert cfg["image_caption"] is True
+    context.get_config.assert_called_once_with(umo=event.unified_msg_origin)
