@@ -11,9 +11,9 @@ from typing import Any, get_args
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from astrbot.core import file_token_service, logger
-from astrbot.core.computer import computer_client
-from astrbot.core.computer.booters.local import LocalShellComponent
-from astrbot.core.config.agent_runner import normalize_agent_runner
+from astrbot.core.astr_agent_runtime.computer import computer_client
+from astrbot.core.astr_agent_runtime.computer.booters.local import LocalShellComponent
+from astrbot.core.config.agent import normalize_agent
 from astrbot.core.config.astrbot_config import AstrBotConfig
 from astrbot.core.config.default import (
     CONFIG_METADATA_2,
@@ -234,6 +234,14 @@ def validate_config(
             if key not in metadata:
                 continue
             meta = metadata[key]
+            if (
+                is_core
+                and path == "provider."
+                and key == "key"
+                and data.get("type") in {"system_one_decision", "openai_decision"}
+            ):
+                # Decision providers use a single key within the shared provider schema.
+                meta = {**meta, "type": "string"}
             if "type" not in meta:
                 logger.debug(f"配置项 {path}{key} 没有类型定义, 跳过校验")
                 continue
@@ -364,6 +372,17 @@ def validate_config(
                     is False
                 ):
                     policy["allow_network"] = False
+                if (
+                    runtime is not None
+                    and runtime["os"] == "windows"
+                    and scope == "host"
+                    and policy.get("allow_execution", defaults[role]["allow_execution"])
+                    and not policy.get("allow_network", defaults[role]["allow_network"])
+                ):
+                    errors.append(
+                        f"Local permission {role}: Windows Local isolation supports workspace scope only; "
+                        "host access with networking disabled is unavailable."
+                    )
 
     else:
         validate(data, schema)
@@ -471,7 +490,9 @@ async def _validate_neo_connectivity(post_config: dict) -> str | None:
 
     access_token = sandbox.get("shipyard_neo_access_token", "")
     if not access_token:
-        from astrbot.core.computer.computer_client import _discover_bay_credentials
+        from astrbot.core.astr_agent_runtime.computer.computer_client import (
+            _discover_bay_credentials,
+        )
 
         access_token = _discover_bay_credentials(endpoint)
 
@@ -520,9 +541,7 @@ def save_config(
         ValueError: If configuration validation fails.
     """
     if is_core:
-        post_config["agent_runner"] = normalize_agent_runner(
-            post_config.get("agent_runner")
-        )
+        post_config["agent"] = normalize_agent(post_config.get("agent"))
 
     try:
         if is_core:
@@ -636,19 +655,22 @@ class ConfigProfileService:
                 status_code=403,
             )
         profile_config = copy.deepcopy(config or DEFAULT_CONFIG)
-        if "agent_runner" in profile_config:
-            profile_config["agent_runner"] = normalize_agent_runner(
-                profile_config["agent_runner"]
-            )
+        if "agent" in profile_config:
+            profile_config["agent"] = normalize_agent(profile_config["agent"])
         errors, profile_config = validate_config(
             profile_config, CONFIG_METADATA_2, is_core=True, runtime=self.runtime
         )
         if errors:
             raise ValueError(f"Configuration validation failed: {errors}")
-        conf_id = await self.acm.create_conf(
-            name=name,
-            config=profile_config,
-        )
+        from astrbot.dashboard.services.agent_config_service import AgentConfigService
+
+        host = self.core_lifecycle
+        async with host.agent_configs.lock:
+            if profile_config.get("agent", {}).get("runtime") in host.agent_runtimes:
+                profile_config["agent"] = await AgentConfigService(
+                    host.agent_configs, host.agent_runtimes, self.acm
+                ).validate(profile_config["agent"])
+            conf_id = await self.acm.create_conf(name=name, config=profile_config)
         await self.core_lifecycle.reload_pipeline_scheduler(conf_id)
         return {"conf_id": conf_id}
 
@@ -748,9 +770,17 @@ class ConfigProfileService:
             _set_nested_value(config, ("dashboard", "totp", "recovery_code_hash"), "")
 
         set_pending_totp_secret(None)
-        save_config(
-            config, self.acm.confs[config_id], is_core=True, runtime=self.runtime
-        )
+        from astrbot.dashboard.services.agent_config_service import AgentConfigService
+
+        host = self.core_lifecycle
+        async with host.agent_configs.lock:
+            if config.get("agent", {}).get("runtime") in host.agent_runtimes:
+                config["agent"] = await AgentConfigService(
+                    host.agent_configs, host.agent_runtimes, self.acm
+                ).validate(config["agent"])
+            save_config(
+                config, self.acm.confs[config_id], is_core=True, runtime=self.runtime
+            )
         booter = computer_client.local_booter
         if booter is not None and isinstance(booter.shell, LocalShellComponent):
             await booter.shell.shutdown_sessions(invalid_only=True)
@@ -880,8 +910,7 @@ class ConfigRoutingService:
 
     async def delete_route_by_umo(self, umo: str) -> None:
         if umo in self.ucr.umop_to_conf_id:
-            del self.ucr.umop_to_conf_id[umo]
-            await self.ucr.update_routing_data(self.ucr.umop_to_conf_id)
+            await self.ucr.delete_route(umo)
 
     async def delete_route_from_dashboard_payload(self, payload: object) -> str:
         if not isinstance(payload, dict) or not payload:
@@ -1134,7 +1163,21 @@ class ConfigFileService:
         if errors:
             raise ValueError(f"格式校验未通过: {errors}")
         metadata.config.save_config(post_configs)
-        await self.core_lifecycle.plugin_manager.reload(plugin_name)
+        try:
+            success, error_message = await self.core_lifecycle.plugin_manager.reload(
+                plugin_name
+            )
+        except Exception as exc:
+            logger.exception(
+                f"Failed to reload plugin {plugin_name} after saving its configuration."
+            )
+            raise ValueError(
+                f"插件 {plugin_name} 配置已保存，但重载失败: {str(exc) or '未知错误，请查看日志'}"
+            ) from exc
+        if not success:
+            raise ValueError(
+                f"插件 {plugin_name} 配置已保存，但重载失败: {error_message or '未知错误，请查看日志'}"
+            )
 
     async def save_plugin_configs_from_dashboard_payload(
         self,
@@ -1512,6 +1555,7 @@ class ProviderConfigService:
         "tts": "text_to_speech",
         "embedding": "embedding",
         "rerank": "rerank",
+        "decision": "decision",
     }
 
     def __init__(self, core_lifecycle: AstrBotCoreLifecycle) -> None:
@@ -1953,7 +1997,7 @@ class ProviderConfigService:
             await target.test()
             result["status"] = "available"
         except Exception as exc:
-            result["error"] = str(exc)
+            result["error"] = str(exc) or type(exc).__name__
         return result
 
     async def test_provider_from_dashboard_args(self, args) -> dict:

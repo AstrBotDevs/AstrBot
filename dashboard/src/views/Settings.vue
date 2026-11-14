@@ -23,7 +23,7 @@
                 </button>
             </nav>
 
-            <main class="settings-main">
+            <main class="settings-main pe-3">
                 <v-slide-y-reverse-transition>
                     <div v-if="systemConfigRestartRequired" class="system-config-restart-bar" role="status">
                         <div class="system-config-restart-bar__inner">
@@ -98,6 +98,23 @@
                     </div>
                     <div class="settings-section__content">
                         <div class="settings-list-card">
+                            <div class="settings-item">
+                                <div class="settings-item__label">
+                                    <div class="settings-item__title">{{ tm('chatNavigation.title') }}</div>
+                                    <div class="settings-item__subtitle">{{ tm('chatNavigation.subtitle') }}</div>
+                                </div>
+                                <div class="settings-item__control">
+                                    <v-switch
+                                        :model-value="customizer.chatNavigationInSidebar"
+                                        @update:model-value="customizer.SET_CHAT_NAVIGATION_IN_SIDEBAR(Boolean($event))"
+                                        :aria-label="tm('chatNavigation.title')"
+                                        color="primary"
+                                        inset
+                                        hide-details
+                                        density="compact"
+                                    />
+                                </div>
+                            </div>
                             <div class="settings-item settings-item--color">
                                 <div class="settings-item__label">
                                     <div class="settings-item__title">{{ tm('theme.customize.title') }}</div>
@@ -153,6 +170,18 @@
                                 />
                             </div>
                         </template>
+
+                        <div class="settings-list-card">
+                            <div class="settings-item settings-item--stack settings-item--proxy">
+                                <div class="settings-item__label">
+                                    <div class="settings-item__title">{{ tm('network.pypiMirror.title') }}</div>
+                                    <div class="settings-item__subtitle">{{ tm('network.pypiMirror.subtitle') }}</div>
+                                </div>
+                                <div class="settings-item__control settings-item__control--proxy">
+                                    <PypiMirrorSelector v-model="systemConfigData.pypi_index_url" />
+                                </div>
+                            </div>
+                        </div>
 
                         <div class="settings-list-card">
                             <div class="settings-item settings-item--stack settings-item--proxy">
@@ -490,6 +519,7 @@ import { apiKeyApi, systemConfigApi } from '@/api/v1';
 import AstrBotConfigV4 from '@/components/shared/AstrBotConfigV4.vue';
 import WaitingForRestart from '@/components/shared/WaitingForRestart.vue';
 import ProxySelector from '@/components/shared/ProxySelector.vue';
+import PypiMirrorSelector from '@/components/shared/PypiMirrorSelector.vue';
 import BackupDialog from '@/components/shared/BackupDialog.vue';
 import StorageCleanupPanel from '@/components/shared/StorageCleanupPanel.vue';
 import LogExportButton from '@/components/shared/LogExportButton.vue';
@@ -500,6 +530,7 @@ import { copyToClipboard } from '@/utils/clipboard';
 import { useI18n, useModuleI18n } from '@/i18n/composables';
 import { useTheme } from 'vuetify';
 import { PurpleTheme } from '@/theme/LightTheme';
+import { useCustomizerStore } from '@/stores/customizer';
 import { useToastStore } from '@/stores/toast';
 import { askForConfirmation, useConfirmDialog } from '@/utils/confirmDialog';
 
@@ -507,6 +538,7 @@ const { tm } = useModuleI18n('features/settings');
 const { tm: tmMeta } = useModuleI18n('features/config-metadata');
 const { t, locale } = useI18n();
 const toastStore = useToastStore();
+const customizer = useCustomizerStore();
 const confirmDialog = useConfirmDialog();
 const theme = useTheme();
 
@@ -741,7 +773,7 @@ const systemConfigGroups = computed(() => {
 
     return [
         createGroup('runtime', ['timezone', 'callback_api_base']),
-        createGroup('network', ['http_proxy', 'no_proxy', 'pip_install_arg', 'pypi_index_url']),
+        createGroup('network', ['http_proxy', 'no_proxy', 'pip_install_arg']),
         createGroup('webuiSecurity', [
             'dashboard.trust_proxy_headers',
             'dashboard.ssl.enable',
@@ -1207,7 +1239,7 @@ onUnmounted(() => {
     min-height: 34px;
     padding: 6px 9px 6px 12px;
     border: 0;
-    border-radius: 8px;
+    border-radius: var(--astrbot-radius-control);
     background: transparent;
     color: rgba(var(--v-theme-on-surface), 0.64);
     cursor: pointer;
@@ -1242,17 +1274,6 @@ onUnmounted(() => {
     background: rgba(var(--v-theme-on-surface), 0.07);
     color: rgb(var(--v-theme-on-surface));
     font-weight: 760;
-}
-
-.settings-nav__item--active::before {
-    position: absolute;
-    top: 8px;
-    bottom: 8px;
-    left: 0;
-    width: 2px;
-    border-radius: 999px;
-    background: rgba(var(--v-theme-on-surface), 0.52);
-    content: "";
 }
 
 .settings-nav__item--active .settings-nav__icon {
@@ -1294,7 +1315,7 @@ onUnmounted(() => {
 .settings-list-card {
     overflow: hidden;
     border: 1px solid var(--settings-border);
-    border-radius: 10px;
+    border-radius: var(--astrbot-radius-card);
     background: rgb(var(--v-theme-surface));
     box-shadow: none;
 }
@@ -1377,12 +1398,12 @@ onUnmounted(() => {
 
 .settings-item__control :deep(.v-btn) {
     min-height: 36px;
-    border-radius: 10px;
+    border-radius: var(--astrbot-radius-control);
     font-size: 0.86rem;
 }
 
 .settings-item__control :deep(.v-field) {
-    border-radius: 10px;
+    border-radius: var(--astrbot-radius-control);
     background-color: transparent;
 }
 
@@ -1436,7 +1457,7 @@ onUnmounted(() => {
     padding-bottom: 0 !important;
     overflow: hidden !important;
     border: 1px solid var(--settings-border) !important;
-    border-radius: 10px !important;
+    border-radius: var(--astrbot-radius-card) !important;
     background: rgb(var(--v-theme-surface)) !important;
     box-shadow: none !important;
 }
@@ -1477,7 +1498,7 @@ onUnmounted(() => {
 
 .api-key-panel :deep(.v-field),
 .api-key-panel :deep(.v-btn) {
-    border-radius: 10px;
+    border-radius: var(--astrbot-radius-control);
 }
 
 .api-key-panel :deep(.v-field) {
@@ -1506,7 +1527,7 @@ onUnmounted(() => {
 .api-key-scope-list {
     overflow: hidden;
     border: 1px solid var(--settings-border);
-    border-radius: 10px;
+    border-radius: var(--astrbot-radius-card);
 }
 
 .api-key-scope-item {
@@ -1583,7 +1604,7 @@ onUnmounted(() => {
     width: 100%;
     overflow-x: auto;
     border: 1px solid var(--settings-border);
-    border-radius: 10px;
+    border-radius: var(--astrbot-radius-card);
 }
 
 .settings-table-wrap :deep(.v-table) {
@@ -1643,7 +1664,7 @@ onUnmounted(() => {
     z-index: 30;
     width: min(420px, calc(100vw - 48px));
     border: 0;
-    border-radius: 12px;
+    border-radius: var(--astrbot-radius-card);
     background:
         linear-gradient(rgba(var(--v-theme-on-surface), 0.055), rgba(var(--v-theme-on-surface), 0.055)),
         rgba(var(--v-theme-surface), 0.74);
@@ -1681,7 +1702,7 @@ onUnmounted(() => {
     flex: 0 0 auto;
     min-height: 32px;
     border: 0;
-    border-radius: 9px;
+    border-radius: var(--astrbot-radius-control);
     color: rgba(var(--v-theme-on-surface), 0.76) !important;
     background-color: rgba(var(--v-theme-on-surface), 0.1) !important;
     box-shadow: none !important;

@@ -1,5 +1,5 @@
 {
-  "welcome": "欢迎",
+  "welcome": "总览",
   "dashboard": "数据统计",
   "platforms": "机器人",
   "providers": "模型提供商",
@@ -12,7 +12,7 @@
     "logs": "日志",
     "trace": "追踪"
   },
-  "subagent": "子代理编排",
+  "subagent": "子代理管理",
   "toolUse": "MCP",
   "extension": "插件",
   "extensionTabs": {
@@ -24,6 +24,7 @@
   },
   "config": "配置文件",
   "chat": "聊天",
+  "backToNavigation": "返回导航",
   "botMode": "机器人",
   "options": "选项",
   "cron": "未来任务",

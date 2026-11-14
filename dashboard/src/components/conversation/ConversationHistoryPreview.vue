@@ -58,13 +58,6 @@ type PreviewPart = {
 
 const records = computed(() =>
   props.messages
-    .filter(
-      (entry) =>
-        !entry ||
-        typeof entry !== "object" ||
-        !("role" in entry) ||
-        entry.role !== "_checkpoint",
-    )
     .map((entry) => {
       const message =
         entry && typeof entry === "object" && !Array.isArray(entry)

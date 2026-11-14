@@ -137,7 +137,7 @@
       "name": "T2I"
     },
     {
-      "name": "Subagents"
+      "name": "Agent Configurations"
     }
   ],
   "paths": {
@@ -2382,6 +2382,15 @@
               "type": "string",
               "default": ""
             }
+          },
+          {
+            "name": "session_id",
+            "in": "query",
+            "required": false,
+            "description": "Optional for per-session workspaces; must belong to this project and user when provided. Omitted or empty values use the legacy default workspace.",
+            "schema": {
+              "type": "string"
+            }
           }
         ],
         "responses": {
@@ -2416,6 +2425,15 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "name": "session_id",
+            "in": "query",
+            "required": false,
+            "description": "Optional for per-session workspaces; must belong to this project and user when provided. Omitted or empty values use the legacy default workspace.",
+            "schema": {
+              "type": "string"
+            }
           }
         ],
         "responses": {
@@ -2447,6 +2465,15 @@
             "name": "path",
             "in": "query",
             "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "session_id",
+            "in": "query",
+            "required": false,
+            "description": "Optional for per-session workspaces; must belong to this project and user when provided. Omitted or empty values use the legacy default workspace.",
             "schema": {
               "type": "string"
             }
@@ -6029,56 +6056,6 @@
         "description": "**Required scope:** `persona`"
       }
     },
-    "/api/v1/sessions": {
-      "get": {
-        "tags": [
-          "Sessions"
-        ],
-        "summary": "List active UMOs and session status",
-        "operationId": "listSessions",
-        "x-astrbot-scope": "data",
-        "parameters": [
-          {
-            "$ref": "#/components/parameters/Page"
-          },
-          {
-            "$ref": "#/components/parameters/PageSize"
-          },
-          {
-            "name": "search",
-            "in": "query",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "platform",
-            "in": "query",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "message_type",
-            "in": "query",
-            "schema": {
-              "type": "string",
-              "enum": [
-                "all",
-                "group",
-                "private"
-              ]
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "$ref": "#/components/responses/Ok"
-          }
-        },
-        "description": "**Required scope:** `data`"
-      }
-    },
     "/api/v1/sessions/active-umos": {
       "get": {
         "tags": [
@@ -6156,6 +6133,43 @@
         }
       }
     },
+    "/api/v1/sessions/overrides": {
+      "get": {
+        "tags": [
+          "Sessions"
+        ],
+        "operationId": "getSessionOverrides",
+        "summary": "Read session overrides and inherited profile values",
+        "x-astrbot-scope": "data",
+        "parameters": [
+          {
+            "name": "umo",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 512
+            }
+          },
+          {
+            "name": "profile_id",
+            "in": "query",
+            "description": "Preview a base profile without saving; empty string follows routing.",
+            "schema": {
+              "type": "string",
+              "maxLength": 255
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          }
+        },
+        "description": "**Required scope:** `data`"
+      }
+    },
     "/api/v1/sessions/rules": {
       "get": {
         "tags": [
@@ -6225,58 +6239,6 @@
             "application/json": {
               "schema": {
                 "$ref": "#/components/schemas/UmoListRequest"
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "$ref": "#/components/responses/Ok"
-          }
-        },
-        "description": "**Required scope:** `data`"
-      }
-    },
-    "/api/v1/sessions/provider": {
-      "patch": {
-        "tags": [
-          "Sessions"
-        ],
-        "summary": "Batch update session provider selection",
-        "operationId": "batchUpdateSessionProvider",
-        "x-astrbot-scope": "data",
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/BatchSessionProviderRequest"
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "$ref": "#/components/responses/Ok"
-          }
-        },
-        "description": "**Required scope:** `data`"
-      }
-    },
-    "/api/v1/sessions/service": {
-      "patch": {
-        "tags": [
-          "Sessions"
-        ],
-        "summary": "Batch update session service settings",
-        "operationId": "batchUpdateSessionService",
-        "x-astrbot-scope": "data",
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/BatchSessionServiceRequest"
               }
             }
           }
@@ -6879,13 +6841,13 @@
         "description": "**Required scope:** `config`"
       }
     },
-    "/api/v1/subagents/config": {
+    "/api/v1/agent-configs": {
       "get": {
         "tags": [
-          "Subagents"
+          "Agent Configurations"
         ],
-        "summary": "Get subagent orchestrator configuration",
-        "operationId": "getSubagentConfig",
+        "summary": "List reusable agent configurations",
+        "operationId": "listAgentConfigs",
         "x-astrbot-scope": "config",
         "responses": {
           "200": {
@@ -6894,19 +6856,19 @@
         },
         "description": "**Required scope:** `config`"
       },
-      "put": {
+      "post": {
         "tags": [
-          "Subagents"
+          "Agent Configurations"
         ],
-        "summary": "Update subagent orchestrator configuration",
-        "operationId": "updateSubagentConfig",
+        "summary": "Create an agent configuration",
+        "operationId": "createAgentConfig",
         "x-astrbot-scope": "config",
         "requestBody": {
           "required": true,
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/DynamicConfig"
+                "$ref": "#/components/schemas/AgentConfigRequest"
               }
             }
           }
@@ -6919,13 +6881,67 @@
         "description": "**Required scope:** `config`"
       }
     },
-    "/api/v1/subagents/available-tools": {
+    "/api/v1/agent-configs/{config_id}": {
       "get": {
         "tags": [
-          "Subagents"
+          "Agent Configurations"
         ],
-        "summary": "List tools available to subagents",
-        "operationId": "listSubagentAvailableTools",
+        "summary": "Get an agent configuration",
+        "operationId": "getAgentConfig",
+        "x-astrbot-scope": "config",
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          }
+        },
+        "description": "**Required scope:** `config`"
+      },
+      "put": {
+        "tags": [
+          "Agent Configurations"
+        ],
+        "summary": "Update an agent configuration",
+        "operationId": "updateAgentConfig",
+        "x-astrbot-scope": "config",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AgentConfigRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          }
+        },
+        "description": "**Required scope:** `config`"
+      },
+      "delete": {
+        "tags": [
+          "Agent Configurations"
+        ],
+        "summary": "Delete an unreferenced agent configuration",
+        "operationId": "deleteAgentConfig",
+        "x-astrbot-scope": "config",
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          }
+        },
+        "description": "**Required scope:** `config`"
+      }
+    },
+    "/api/v1/agent-runtimes": {
+      "get": {
+        "tags": [
+          "Agent Configurations"
+        ],
+        "summary": "List registered callable agent runtimes",
+        "operationId": "listAgentRuntimes",
         "x-astrbot-scope": "config",
         "responses": {
           "200": {
@@ -7191,6 +7207,37 @@
         },
         "additionalProperties": false
       },
+      "AgentConfigRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "name",
+          "runtime"
+        ],
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "description": {
+            "type": "string",
+            "default": ""
+          },
+          "enabled": {
+            "type": "boolean",
+            "default": true
+          },
+          "runtime": {
+            "type": "string",
+            "minLength": 1
+          },
+          "config": {
+            "type": "object",
+            "additionalProperties": true
+          }
+        }
+      },
       "DynamicConfig": {
         "type": "object",
         "additionalProperties": true
@@ -7203,7 +7250,8 @@
           "stt",
           "tts",
           "embedding",
-          "rerank"
+          "rerank",
+          "decision"
         ]
       },
       "CreateConfigProfileRequest": {
@@ -7463,9 +7511,9 @@
             "type": "boolean",
             "description": "Internal WebUI flag for edit/regenerate flows."
           },
-          "_llm_checkpoint_id": {
+          "_turn_id": {
             "type": "string",
-            "description": "Internal WebUI checkpoint override."
+            "description": "Internal WebUI turn ID override."
           },
           "_platform_history_id": {
             "type": "string",
@@ -8122,6 +8170,19 @@
           "rule_key"
         ],
         "properties": {
+          "profile_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "minLength": 1,
+            "maxLength": 255,
+            "description": "Explicit base profile; null follows routing; omitted preserves selection."
+          },
+          "user_alias": {
+            "type": "string",
+            "maxLength": 255
+          },
           "umo": {
             "type": "string"
           },
@@ -8159,58 +8220,11 @@
             "type": "string"
           },
           "rule_key": {
-            "type": "string"
+            "type": "string",
+            "description": "For rule deletion, config_binding clears both profile selection and overrides; config_overrides or omission clears only overrides."
           }
         },
         "additionalProperties": false
-      },
-      "BatchSessionProviderRequest": {
-        "allOf": [
-          {
-            "$ref": "#/components/schemas/UmoListRequest"
-          },
-          {
-            "type": "object",
-            "required": [
-              "provider_id",
-              "provider_type"
-            ],
-            "properties": {
-              "provider_id": {
-                "type": "string"
-              },
-              "provider_type": {
-                "type": "string",
-                "enum": [
-                  "chat_completion",
-                  "speech_to_text",
-                  "text_to_speech"
-                ]
-              }
-            }
-          }
-        ]
-      },
-      "BatchSessionServiceRequest": {
-        "allOf": [
-          {
-            "$ref": "#/components/schemas/UmoListRequest"
-          },
-          {
-            "type": "object",
-            "properties": {
-              "session_enabled": {
-                "type": "boolean"
-              },
-              "llm_enabled": {
-                "type": "boolean"
-              },
-              "tts_enabled": {
-                "type": "boolean"
-              }
-            }
-          }
-        ]
       },
       "SessionGroupRequest": {
         "type": "object",

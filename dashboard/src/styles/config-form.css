@@ -74,7 +74,7 @@
 }
 
 .config-form :deep(.v-field) {
-  border-radius: 10px;
+  border-radius: var(--astrbot-radius-control);
   background: transparent;
 }
 
@@ -89,6 +89,24 @@
   }
 
   .config-form :deep(.property-info) {
+    padding-right: 0;
+  }
+
+  .config-form :deep(.config-input) {
+    justify-content: stretch;
+    padding-top: 10px;
+  }
+
+  .config-form :deep(.config-input > :not(.config-field--full-width)) {
+    max-width: none;
+  }
+}
+
+@container provider-config (max-width: 600px) {
+  .config-form :deep(.property-info),
+  .config-form :deep(.config-input) {
+    flex: 0 0 100%;
+    max-width: 100%;
     padding-right: 0;
   }
 
