@@ -373,10 +373,11 @@ class TelegramPlatformEvent(AstrMessageEvent):
                 payload["reply_markup"] = reply_markup
 
             if isinstance(i, Plain):
+                text = i.text
                 if at_user_id and not at_flag:
-                    i.text = f"@{at_user_id} {i.text}"
+                    text = f"@{at_user_id} {text}"
                     at_flag = True
-                await cls._send_text_chunks(client, i.text, payload)
+                await cls._send_text_chunks(client, text, payload)
             elif isinstance(i, Image):
                 image_path = await i.convert_to_file_path()
                 if _is_gif(image_path):
