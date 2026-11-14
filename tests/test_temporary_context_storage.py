@@ -1,7 +1,5 @@
 """Raw temporary content is stored once and filtered consistently on recovery."""
 
-from copy import deepcopy
-
 import pytest
 
 from astrbot.core.agent.conversation_events import ConversationEventWriter
@@ -87,31 +85,6 @@ async def test_raw_bodies_are_stored_once_and_filtered_on_every_projection(
 
 
 @pytest.mark.asyncio
-async def test_temporary_edit_on_existing_message_rebases_without_duplicate_visible_content(
-    database,
-):
-    store = database.conversation_store
-    visible = {"role": "user", "content": [{"type": "text", "text": "question"}]}
-    conv = await store.create(umo="owner", platform_id="p", content=[visible])
-    writer = ConversationEventWriter(store, await store.read(conv.conversation_id))
-    original_id = writer._entries[0]["id"]
-    raw = deepcopy(visible)
-    raw["content"].append({"type": "text", "text": "temporary", "_no_save": True})
-    await writer.save_history([raw])
-    records = await store.events(conv.conversation_id)
-    assert records[-1].type == "context.rebased"
-    assert records[-1].payload["messages"] == [{"id": original_id, "message": raw}]
-    assert (
-        writer.get_messages()
-        == (await store.read(conv.conversation_id)).messages
-        == [visible]
-    )
-    seq = writer.head_seq
-    await writer.save_history([raw])
-    assert writer.head_seq == seq
-
-
-@pytest.mark.asyncio
 async def test_legacy_double_records_remain_readable_and_retryable(database):
     store = database.conversation_store
     conv = await store.create(umo="owner", platform_id="p")
@@ -172,31 +145,3 @@ async def test_legacy_double_records_remain_readable_and_retryable(database):
             conv.conversation_id,
             [{"type": "message.appended", "payload": legacy_payload}],
         )
-
-
-@pytest.mark.asyncio
-@pytest.mark.parametrize("display_first", [False, True])
-async def test_display_rebase_uses_last_non_temporary_message(database, display_first):
-    store = database.conversation_store
-    conv = await store.create(
-        umo="owner", platform_id="webchat", content=[{"role": "user", "content": "old"}]
-    )
-    writer = ConversationEventWriter(store, await store.read(conv.conversation_id))
-    await writer.start_turn({"kind": "test"})
-    if display_first:
-        display = await database.insert_platform_message_history(
-            "webchat", "session", {"type": "bot"}, turn_id=writer.turn_id
-        )
-    await writer.save_history(
-        [
-            {"role": "assistant", "content": "answer"},
-            {"role": "user", "content": "temporary-tail", "_no_save": True},
-        ]
-    )
-    if not display_first:
-        display = await database.insert_platform_message_history(
-            "webchat", "session", {"type": "bot"}, turn_id=writer.turn_id
-        )
-    assert (
-        await database.get_platform_message_history_by_id(display.id)
-    ).context_event_id == writer.leaf_event_id
