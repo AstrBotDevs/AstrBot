@@ -8,6 +8,7 @@ import uuid
 from collections.abc import Awaitable, Callable
 from contextlib import aclosing, suppress
 from dataclasses import dataclass, field, replace
+from functools import partial
 from pathlib import Path
 
 from mcp.types import (
@@ -337,6 +338,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         self._aborted = False
         self._abort_signal = asyncio.Event()
         self._pending_follow_ups: list[FollowUpTicket] = []
+        self._steering_signal = asyncio.Event()
         self._follow_up_seq = 0
         self._last_tool_name: str | None = None
         self._last_tool_args: dict[str, T.Any] | None = None
@@ -908,6 +910,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         ticket = FollowUpTicket(seq=self._follow_up_seq, text=text)
         self._follow_up_seq += 1
         self._pending_follow_ups.append(ticket)
+        self._steering_signal.set()
         return ticket
 
     def _resolve_unconsumed_follow_ups(self) -> None:
@@ -915,6 +918,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             return
         follow_ups = self._pending_follow_ups
         self._pending_follow_ups = []
+        self._steering_signal.clear()
         for ticket in follow_ups:
             ticket.resolved.set()
 
@@ -1405,6 +1409,8 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                 )
                 # Preserve inputs arriving while the context sink was awaited.
                 del self._pending_follow_ups[: len(follow_ups)]
+                if not self._pending_follow_ups:
+                    self._steering_signal.clear()
                 for ticket in follow_ups:
                     ticket.consumed = True
                     ticket.resolved.set()
@@ -1943,10 +1949,22 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         self._tool_execution_started = True
         executor = None
         try:
-            executor = self.tool_executor.execute(
-                tool=tool, run_context=self.run_context, **arguments
+            detach = getattr(self.tool_executor, "detach", None)
+            executor = self._iter_tool_executor_results(
+                self.tool_executor.execute(
+                    tool=tool, run_context=self.run_context, **arguments
+                ),
+                detach=partial(
+                    detach,
+                    tool=tool,
+                    run_context=self.run_context,
+                    task_id=execution_id,
+                    arguments=arguments,
+                )
+                if detach is not None
+                else None,
             )
-            async for item in self._iter_tool_executor_results(executor):
+            async for item in executor:
                 if isinstance(item, CallToolResult):
                     if record:
                         raw_result = item.model_dump(mode="json", exclude_none=True)
@@ -2024,8 +2042,20 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
     async def _iter_tool_executor_results(
         self,
         executor: T.AsyncGenerator[ToolExecutorResultT, None],
-    ) -> T.AsyncGenerator[ToolExecutorResultT, None]:
+        *,
+        detach: Callable[..., CallToolResult | None] | None = None,
+    ) -> T.AsyncGenerator[ToolExecutorResultT | CallToolResult, None]:
+        """Read tools until completion, stop, or accepted background ownership.
+
+        Args:
+            executor: Tool iterator whose original task must survive a handoff.
+            detach: Optional executor callback accepting ownership of a pending read.
+
+        Yields:
+            Tool results, or a submission receipt when execution moves to the background.
+        """
         executor = iterate_in_task(executor)
+        detached = False
 
         async def _next_executor_result() -> ToolExecutorResultT:
             return await anext(executor)
@@ -2039,11 +2069,39 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
 
                 next_result_task = asyncio.create_task(_next_executor_result())
                 abort_task = asyncio.create_task(self._abort_signal.wait())
+                steering_task = (
+                    asyncio.create_task(self._steering_signal.wait())
+                    if detach
+                    else None
+                )
                 try:
+                    waiters = {next_result_task, abort_task}
+                    if steering_task is not None:
+                        waiters.add(steering_task)
                     done, _ = await asyncio.wait(
-                        {next_result_task, abort_task},
+                        waiters,
                         return_when=asyncio.FIRST_COMPLETED,
                     )
+
+                    if (
+                        steering_task in done
+                        and not next_result_task.done()
+                        and abort_task not in done
+                        and detach is not None
+                    ):
+                        receipt = detach(
+                            executor=executor, pending_result=next_result_task
+                        )
+                        if receipt is not None:
+                            detached = True
+                            yield receipt
+                            return
+                        # Unsupported executors keep waiting without spinning on steering.
+                        detach = None
+                        done, _ = await asyncio.wait(
+                            {next_result_task, abort_task},
+                            return_when=asyncio.FIRST_COMPLETED,
+                        )
 
                     if abort_task in done:
                         if not next_result_task.done():
@@ -2058,16 +2116,19 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                         yield next_result_task.result()
                     except StopAsyncIteration:
                         return
-                except asyncio.CancelledError:
-                    if not next_result_task.done():
-                        next_result_task.cancel()
-                    # The reader must finish before its async generator can be closed.
-                    await asyncio.gather(next_result_task, return_exceptions=True)
+                except BaseException:
+                    if not detached:
+                        if not next_result_task.done():
+                            next_result_task.cancel()
+                        # Finish the read before closing its async generator.
+                        await asyncio.gather(next_result_task, return_exceptions=True)
                     raise
                 finally:
-                    if not abort_task.done():
-                        abort_task.cancel()
-                        with suppress(asyncio.CancelledError):
-                            await abort_task
+                    for task in (abort_task, steering_task):
+                        if task is not None:
+                            if not task.done():
+                                task.cancel()
+                            await asyncio.gather(task, return_exceptions=True)
         finally:
-            await executor.aclose()
+            if not detached:
+                await executor.aclose()
