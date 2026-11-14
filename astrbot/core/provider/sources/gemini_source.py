@@ -5,12 +5,14 @@ import logging
 import random
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
+from pathlib import Path
 from typing import Literal, cast
 
 import httpx
 from google import genai
 from google.genai import types
 from google.genai.errors import APIError
+from google.oauth2 import service_account
 
 import astrbot.core.message.components as Comp
 from astrbot import logger
@@ -73,7 +75,10 @@ class ProviderGoogleGenAI(Provider):
         self.chosen_api_key: str = self.api_keys[0] if len(self.api_keys) > 0 else ""
         self.timeout: int = int(provider_config.get("timeout", 180))
 
-        self.api_base: str | None = provider_config.get("api_base", None)
+        self.vertexai: bool = bool(provider_config.get("gm_vertexai", False))
+        # An empty API base lets the SDK pick the default endpoint (required for
+        # Vertex AI, whose endpoint depends on the configured location).
+        self.api_base: str | None = provider_config.get("api_base", None) or None
         if self.api_base and self.api_base.endswith("/"):
             self.api_base = self.api_base[:-1]
 
@@ -96,7 +101,7 @@ class ProviderGoogleGenAI(Provider):
         # 强制使用 httpx 作为异步 HTTP 后端，避免 aiohttp 响应类型兼容问题 (#7564)
         # httpx.AsyncClient 的 timeout 单位为秒（与 HttpOptions 的毫秒不同）
         async_client_kwargs: dict = {
-            "base_url": self.api_base,
+            "base_url": self.api_base or "",
             "timeout": self.timeout,
         }
         if proxy:
@@ -114,10 +119,40 @@ class ProviderGoogleGenAI(Provider):
         self._http_client = httpx.AsyncClient(**async_client_kwargs)
         http_options.httpx_async_client = self._http_client
 
-        self.client = genai.Client(
-            api_key=self.chosen_api_key,
-            http_options=http_options,
-        ).aio
+        if self.vertexai:
+            # Vertex AI: authenticate with an API key, a service account file or
+            # Application Default Credentials. The SDK resolves the regional
+            # endpoint from the location.
+            client_kwargs: dict = {"vertexai": True}
+            project = self.provider_config.get("gm_vertex_project", "") or None
+            location = self.provider_config.get("gm_vertex_location", "") or "global"
+            if self.chosen_api_key:
+                client_kwargs["api_key"] = self.chosen_api_key
+                # Without a project, the key runs in express mode, which routes
+                # to a default region. With a project (e.g. a key bound to a
+                # service account), requests target the configured location.
+                if project:
+                    client_kwargs["project"] = project
+                    client_kwargs["location"] = location
+            else:
+                credentials_file = self.provider_config.get(
+                    "gm_vertex_credentials_file", ""
+                )
+                if credentials_file:
+                    credentials = service_account.Credentials.from_service_account_file(
+                        str(Path(credentials_file).expanduser()),
+                        scopes=["https://www.googleapis.com/auth/cloud-platform"],
+                    )
+                    client_kwargs["credentials"] = credentials
+                    project = project or credentials.project_id
+                client_kwargs["project"] = project
+                client_kwargs["location"] = location
+            self.client = genai.Client(**client_kwargs, http_options=http_options).aio
+        else:
+            self.client = genai.Client(
+                api_key=self.chosen_api_key,
+                http_options=http_options,
+            ).aio
         # The SDK adds its own lower-case UA alongside our explicit header.
         self.client._api_client._http_options.headers.pop("user-agent", None)
 
@@ -1088,6 +1123,10 @@ class ProviderGoogleGenAI(Provider):
                 "Gemini",
                 lambda: self.client.models.list(),
             )
+            if self.vertexai:
+                # Vertex AI returns publisher models ("publishers/google/models/x")
+                # without supported_actions, so keep them all and strip the prefix.
+                return [m.name.rsplit("/", 1)[-1] for m in models if m.name]
             return [
                 m.name.replace("models/", "")
                 for m in models
@@ -1096,6 +1135,13 @@ class ProviderGoogleGenAI(Provider):
                 and m.name
             ]
         except APIError as e:
+            if self.vertexai and self.chosen_api_key:
+                # Google rejects API keys on the Vertex AI model list endpoint.
+                raise Exception(
+                    "Vertex AI does not allow listing models with an API key. "
+                    "Add the model ID manually, e.g. gemini-2.5-flash. "
+                    f"Details: {e.message}"
+                )
             raise Exception(f"Failed to fetch Gemini model list: {e.message}")
 
     def get_current_key(self) -> str:
