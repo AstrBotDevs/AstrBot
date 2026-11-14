@@ -1626,11 +1626,11 @@ async def test_steering_appends_user_messages_after_all_tool_results(
     assert provider_request.tool_calls_result
     results = provider_request.tool_calls_result[0].tool_calls_result
     assert [result.content for result in results] == ["工具执行结果"] * tool_count
-    tail = runner.run_context.messages[-(tool_count + 3):]
+    tail = runner.run_context.messages[-(tool_count + 2):]
     assert [message.role for message in tail] == [
-        "assistant", *(["tool"] * tool_count), "user", "user",
+        "assistant", *(["tool"] * tool_count), "user",
     ]
-    assert [message.content for message in tail[-2:]] == ["follow up 1", "follow up 2"]
+    assert tail[-1].content == [TextPart(text="follow up 1"), TextPart(text="follow up 2")]
     assert ticket1.resolved.is_set() is True
     assert ticket2.resolved.is_set() is True
     assert ticket1.consumed is True
@@ -2196,12 +2196,12 @@ async def test_follow_up_after_stop_not_added_to_context(
         pass
 
     assert all(
-        message.content != "invalid after stop"
+        message.content != [TextPart(text="invalid after stop")]
         for message in runner.run_context.messages
     )
     assert ticket_before.resolved.is_set()
     assert ticket_before.consumed == any(
-        message.role == "user" and message.content == "valid before stop"
+        message.role == "user" and message.content == [TextPart(text="valid before stop")]
         for message in runner.run_context.messages
     )
 
@@ -2259,7 +2259,7 @@ async def test_event_journal_records_requests_tools_and_final_context(
         history = (await db.conversation_store.read(conv.conversation_id)).messages
         assert [m["role"] for m in history] == ["user", "assistant", "tool", "user", "assistant"]
         assert ticket is not None and ticket.consumed
-        assert history[-2]["content"] == "steering input"
+        assert history[-2]["content"] == [{"type": "text", "text": "steering input"}]
         assert history[-1]["content"] == [{"type": "text", "text": "final"}]
     finally:
         await db.engine.dispose()

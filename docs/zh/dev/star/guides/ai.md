@@ -484,7 +484,7 @@ if receipt is not None:
 
 `follow_up()` 固定提交给原 runtime 和 conversation，配置档切换 runtime 或 UMO 切换当前对话不会改变目标。`steer()` 无法接收时返回 `None`，已接收时返回 `InputReceipt`；等待回执得到的布尔值表示输入是否实际消费并保存，不会自动转成下一轮。目前 steer 中的图片、文件以文本引用传递。
 
-内置 runtime 在一批工具结果之后，将 steer 输入按到达顺序作为独立的 `user` 消息加入上下文，不改写工具结果。相同 UMO 和会话内允许不同发送者 steer，但权限和插件范围仍须与当前执行一致。
+内置 runtime 在一批工具结果之后，将同一批 steer 输入合为一条独立的 `user` 消息，`content` 使用按到达顺序排列的文本片段列表，不改写工具结果。相同 UMO 和会话内允许不同发送者 steer，但权限和插件范围仍须与当前执行一致。
 
 `run.session.state` 为 `idle`、`queued`、`running` 或 `closed`。快照包含 `ref`、`pending_turn_count` 和 `active_turn_id`，重新读取属性即可刷新。
 

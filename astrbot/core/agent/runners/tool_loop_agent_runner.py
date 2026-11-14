@@ -1394,7 +1394,14 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                 # Keep all tool replies together before adding new user input.
                 follow_ups = list(self._pending_follow_ups)
                 await self._append_context_messages(
-                    [Message(role="user", content=ticket.text) for ticket in follow_ups]
+                    [
+                        Message(
+                            role="user",
+                            content=[
+                                TextPart(text=ticket.text) for ticket in follow_ups
+                            ],
+                        )
+                    ]
                 )
                 # Preserve inputs arriving while the context sink was awaited.
                 del self._pending_follow_ups[: len(follow_ups)]
