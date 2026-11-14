@@ -389,12 +389,47 @@ class DiscordPlatformAdapter(Platform):
                     )
             # Deleted references are sentinels without message content.
             if isinstance(quoted, discord.Message):
+                # Messages from other bots often carry only embeds, and uploads
+                # often carry only attachments, so content alone may be empty.
+                text_parts = [quoted.content] if quoted.content else []
+                media_chain = []
+                for embed in quoted.embeds:
+                    text_parts.extend(
+                        part
+                        for part in (
+                            embed.author.name if embed.author else None,
+                            embed.title,
+                            embed.description,
+                            *(f"{field.name}: {field.value}" for field in embed.fields),
+                            embed.footer.text if embed.footer else None,
+                        )
+                        if part
+                    )
+                    for embed_media in (embed.image, embed.thumbnail):
+                        if embed_media and embed_media.url:
+                            media_chain.append(Image(file=embed_media.url))
+                for attachment in quoted.attachments:
+                    content_type = attachment.content_type or ""
+                    if content_type.startswith("image/"):
+                        media_chain.append(
+                            Image(file=attachment.url, filename=attachment.filename)
+                        )
+                    elif content_type.startswith("audio/"):
+                        media_chain.append(
+                            Record(file=attachment.url, url=attachment.url)
+                        )
+                    else:
+                        media_chain.append(
+                            File(name=attachment.filename, url=attachment.url)
+                        )
+                quoted_text = "\n".join(text_parts)
                 abm.message.insert(
                     0,
                     Reply(
                         id=str(quoted.id),
-                        chain=[Plain(text=quoted.content)] if quoted.content else [],
-                        message_str=quoted.content,
+                        chain=([Plain(text=quoted_text)] if quoted_text else [])
+                        + media_chain,
+                        message_str=quoted_text,
                         sender_id=str(quoted.author.id),
                         sender_nickname=quoted.author.display_name,
                     ),

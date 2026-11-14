@@ -89,6 +89,8 @@ async def test_discord_reply_body_reaches_model_request(source):
         id=41,
         content="<@1> TEST_CODE 1008",
         author=SimpleNamespace(id=3, display_name="original sender"),
+        embeds=[],
+        attachments=[],
     )
     channel = SimpleNamespace(
         id=123, guild=None, fetch_message=AsyncMock(return_value=quoted)
@@ -121,6 +123,75 @@ async def test_discord_reply_body_reaches_model_request(source):
         channel.fetch_message.assert_awaited_once_with(41)
     else:
         channel.fetch_message.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_discord_reply_embeds_and_attachments_reach_model_request():
+    """Verify that quoted embeds and attachments survive an empty reply body."""
+    from astrbot.core.agent_media import append_quoted_content
+    from astrbot.core.provider.entities import ProviderRequest
+    from astrbot.core.utils.quoted_message.extractor import (
+        extract_quoted_message_images,
+    )
+
+    adapter = DiscordPlatformAdapter.__new__(DiscordPlatformAdapter)
+    adapter.bot_self_id = "1"
+    adapter.client = SimpleNamespace(user=SimpleNamespace(id=1))
+    embed = (
+        discord.Embed(title="Weather", description="Sunny all day")
+        .set_author(name="Forecast Bot")
+        .add_field(name="High", value="28C")
+        .set_footer(text="Updated hourly")
+        .set_image(url="https://cdn.example.com/embed.png")
+    )
+    quoted = Mock(
+        spec=discord.Message,
+        id=41,
+        content="",
+        author=SimpleNamespace(id=3, display_name="other bot"),
+        embeds=[discord.Embed(), embed],
+        attachments=[
+            SimpleNamespace(
+                content_type="image/png",
+                url="https://cdn.example.com/upload.png",
+                filename="upload.png",
+            ),
+            SimpleNamespace(
+                content_type=None,
+                url="https://cdn.example.com/notes.txt",
+                filename="notes.txt",
+            ),
+        ],
+    )
+    message = SimpleNamespace(
+        id=42,
+        type=discord.MessageType.reply,
+        content="<@1> Summarize this",
+        channel=SimpleNamespace(id=123, guild=None, fetch_message=AsyncMock()),
+        author=SimpleNamespace(id=2, display_name="tester"),
+        attachments=[],
+        reference=SimpleNamespace(message_id=41, resolved=quoted, cached_message=None),
+    )
+
+    abm = await adapter.convert_message({"message": message})
+
+    reply = next(comp for comp in abm.message if isinstance(comp, Reply))
+    expected_text = "Forecast Bot\nWeather\nSunny all day\nHigh: 28C\nUpdated hourly"
+    assert reply.message_str == expected_text
+    assert reply.chain[0] == Plain(text=expected_text)
+    assert [type(comp) for comp in reply.chain[1:]] == [Image, Image, File]
+    assert reply.chain[3].name == "notes.txt"
+    event = SimpleNamespace(message_obj=abm)
+    assert await extract_quoted_message_images(event, reply) == [
+        "https://cdn.example.com/embed.png",
+        "https://cdn.example.com/upload.png",
+    ]
+    req = ProviderRequest(prompt=abm.message_str)
+    await append_quoted_content(event, req, "", Mock())
+    quoted_text = "\n".join(part.text for part in req.extra_user_content_parts)
+    assert "[Empty Text]" not in quoted_text
+    assert "Sunny all day" in quoted_text
+    assert "[File:notes.txt]" in quoted_text
 
 
 @pytest.mark.asyncio
