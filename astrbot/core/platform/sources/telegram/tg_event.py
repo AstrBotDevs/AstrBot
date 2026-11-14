@@ -1,7 +1,7 @@
 import asyncio
 import os
 import re
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 from typing import Any, cast
 
 import telegramify_markdown
@@ -12,7 +12,7 @@ from telegram import (
     ReactionTypeEmoji,
 )
 from telegram.constants import ChatAction
-from telegram.error import BadRequest
+from telegram.error import BadRequest, TimedOut
 from telegram.ext import ExtBot
 
 from astrbot import logger
@@ -212,6 +212,18 @@ class TelegramPlatformEvent(AstrMessageEvent):
                 return action
         return ChatAction.TYPING
 
+    @staticmethod
+    async def _send_media_request(request: Awaitable[object]) -> None:
+        try:
+            await request
+        except TimedOut as exc:
+            # Transport error text may contain the Bot API URL and its token.
+            cause = exc.__cause__ or exc
+            logger.error(
+                "[Telegram] Media request timed out (%s)", type(cause).__name__
+            )
+            raise
+
     @classmethod
     async def _send_media_with_action(
         cls,
@@ -233,7 +245,7 @@ class TelegramPlatformEvent(AstrMessageEvent):
         send_payload = dict(payload)
         if effective_thread_id and "message_thread_id" not in send_payload:
             send_payload["message_thread_id"] = effective_thread_id
-        await send_coro(**send_payload)
+        await cls._send_media_request(send_coro(**send_payload))
         await cls._send_chat_action(
             client, user_name, ChatAction.TYPING, effective_thread_id
         )
@@ -271,7 +283,9 @@ class TelegramPlatformEvent(AstrMessageEvent):
                     **cast(Any, media_payload),
                 )
             else:
-                await client.send_voice(voice=path, **cast(Any, payload))
+                await cls._send_media_request(
+                    client.send_voice(voice=path, **cast(Any, payload))
+                )
         except BadRequest as e:
             # python-telegram-bot raises BadRequest for Voice_messages_forbidden;
             # distinguish the voice-privacy case via the API error message.
@@ -295,10 +309,12 @@ class TelegramPlatformEvent(AstrMessageEvent):
                     **cast(Any, media_payload),
                 )
             else:
-                await client.send_document(
-                    document=path,
-                    caption=caption,
-                    **cast(Any, payload),
+                await cls._send_media_request(
+                    client.send_document(
+                        document=path,
+                        caption=caption,
+                        **cast(Any, payload),
+                    )
                 )
 
     async def _ensure_typing(
@@ -385,12 +401,16 @@ class TelegramPlatformEvent(AstrMessageEvent):
                 else:
                     send_coro = client.send_photo
                     media_kwarg = {"photo": image_path}
-                await send_coro(**media_kwarg, **cast(Any, payload))
+                await cls._send_media_request(
+                    send_coro(**media_kwarg, **cast(Any, payload))
+                )
             elif isinstance(i, File):
                 path = await i.get_file()
                 name = i.name or os.path.basename(path)
-                await client.send_document(
-                    document=path, filename=name, **cast(Any, payload)
+                await cls._send_media_request(
+                    client.send_document(
+                        document=path, filename=name, **cast(Any, payload)
+                    )
                 )
             elif isinstance(i, Record):
                 path = await i.convert_to_file_path()
@@ -403,10 +423,12 @@ class TelegramPlatformEvent(AstrMessageEvent):
                 )
             elif isinstance(i, Video):
                 path = await i.convert_to_file_path()
-                await client.send_video(
-                    video=path,
-                    caption=getattr(i, "text", None) or None,
-                    **cast(Any, payload),
+                await cls._send_media_request(
+                    client.send_video(
+                        video=path,
+                        caption=getattr(i, "text", None) or None,
+                        **cast(Any, payload),
+                    )
                 )
 
         if action_rows and last_renderable_index is None:

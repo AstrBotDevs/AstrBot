@@ -1,15 +1,26 @@
 import asyncio
 import importlib
+import logging
 import sys
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import httpx
 import pytest
 from telegram import Message, MessageEntity, TextQuote
+from telegram.error import TimedOut
+from telegram.ext import ExtBot
+from telegram.request import HTTPXRequest
 
 import astrbot.api.message_components as Comp
 from astrbot.api.event import MessageChain
-from astrbot.api.platform import Group
+from astrbot.api.platform import (
+    AstrBotMessage,
+    Group,
+    MessageMember,
+    MessageType,
+    PlatformMetadata,
+)
 from astrbot.core.platform.button_interaction import (
     decode_button_callback,
     encode_button_callback,
@@ -1127,6 +1138,66 @@ async def test_telegram_button_only_message_uses_fallback_text():
     client.send_message.assert_awaited_once()
     assert client.send_message.await_args.kwargs["text"] == "Try again?"
     assert "reply_markup" in client.send_message.await_args.kwargs
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("streaming", [False, True])
+@pytest.mark.parametrize("timeout_type", [httpx.WriteTimeout, httpx.ReadTimeout])
+async def test_telegram_media_timeout_reports_transport_phase(
+    streaming, timeout_type, tmp_path, monkeypatch, caplog
+):
+    TelegramPlatformEvent = _load_telegram_platform_event()
+    video_path = tmp_path / "video.mp4"
+    video_path.write_bytes(b"test video")
+    message = MessageChain([Comp.Video.fromFileSystem(video_path)])
+    token = "123456:dummy-token"
+
+    def handle_request(request):
+        if request.url.path.endswith("/sendChatAction"):
+            return httpx.Response(200, json={"ok": True, "result": True})
+        assert request.url.path.endswith("/sendVideo")
+        assert request.headers["content-type"].startswith("multipart/form-data")
+        raise timeout_type(str(request.url), request=request)
+
+    request = HTTPXRequest(
+        httpx_kwargs={"transport": httpx.MockTransport(handle_request)}
+    )
+    bot = ExtBot(token=token, request=request)
+    monkeypatch.setattr(logging.getLogger("astrbot"), "propagate", True)
+
+    async def chunks():
+        yield message
+
+    try:
+        with (
+            caplog.at_level(logging.ERROR, logger="astrbot"),
+            pytest.raises(TimedOut) as error,
+        ):
+            if streaming:
+                incoming = AstrBotMessage()
+                incoming.type = MessageType.GROUP_MESSAGE
+                incoming.group_id = "-100123"
+                incoming.sender = MessageMember("123")
+                incoming.message = []
+                event = TelegramPlatformEvent(
+                    "",
+                    incoming,
+                    PlatformMetadata("telegram", "Telegram", "test"),
+                    "-100123",
+                    bot,
+                )
+                await event.send_streaming(chunks())
+            else:
+                await TelegramPlatformEvent.send_with_client(bot, message, "-100123")
+    finally:
+        await request.shutdown()
+
+    assert isinstance(error.value.__cause__, timeout_type)
+    assert (
+        f"[Telegram] Media request timed out ({timeout_type.__name__})"
+        in caplog.messages
+    )
+    assert all(token not in message for message in caplog.messages)
 
 
 @pytest.mark.asyncio

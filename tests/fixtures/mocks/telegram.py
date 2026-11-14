@@ -7,6 +7,7 @@ import sys
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
+from telegram.error import TimedOut
 
 
 class MockTelegramNetworkError(Exception):
@@ -40,11 +41,13 @@ def create_mock_telegram_modules():
     mock_telegram.constants.ChatAction.UPLOAD_VOICE = "upload_voice"
     mock_telegram.constants.ChatAction.UPLOAD_DOCUMENT = "upload_document"
     mock_telegram.constants.ChatAction.UPLOAD_PHOTO = "upload_photo"
+    mock_telegram.constants.ChatAction.UPLOAD_VIDEO = "upload_video"
     mock_telegram.error = MagicMock()
     mock_telegram.error.BadRequest = Exception
     mock_telegram.error.Forbidden = MockTelegramForbidden
     mock_telegram.error.InvalidToken = MockTelegramInvalidToken
     mock_telegram.error.NetworkError = MockTelegramNetworkError
+    mock_telegram.error.TimedOut = TimedOut
     mock_telegram.ReactionTypeCustomEmoji = MagicMock
     mock_telegram.ReactionTypeEmoji = MagicMock
 
