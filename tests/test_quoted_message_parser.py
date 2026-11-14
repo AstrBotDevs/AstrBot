@@ -57,11 +57,17 @@ def _make_event(
 
 
 @pytest.mark.asyncio
-async def test_extract_quoted_message_text_from_reply_chain():
-    reply = Reply(id="1", chain=[Plain(text="quoted content")], message_str="")
+@pytest.mark.parametrize("with_chain", [True, False])
+async def test_extract_quoted_message_text_keeps_default_normalization(with_chain):
+    content = "    first()\n    second()\n"
+    reply = Reply(
+        id="1",
+        chain=[Plain(text=content)] if with_chain else [],
+        message_str="" if with_chain else content,
+    )
     event = _make_event(reply)
     text = await extract_quoted_message_text(event)
-    assert text == "quoted content"
+    assert text == content.strip()
 
 
 @pytest.mark.asyncio

@@ -296,7 +296,12 @@ async def _drain_gemini_stream(provider, monkeypatch, chunks):
         for chunk in chunks:
             yield chunk
 
-    async def fake_retry(provider_name, request_factory, max_attempts=None):
+    async def fake_retry(
+        provider_name,
+        request_factory,
+        max_attempts=None,
+        request_event_recorder=None,
+    ):
         return fake_stream()
 
     monkeypatch.setattr(gemini_source, "retry_provider_request", fake_retry)
@@ -364,7 +369,9 @@ async def test_gemini_stream_keeps_conversation_header_until_consumed(
         observed_headers.append(headers.get("x-astrbot-conversation-id"))
         yield _gemini_stream_chunk(text="ok")
 
-    async def fake_retry(provider_name, request_factory, max_attempts=None):
+    async def fake_retry(
+        provider_name, request_factory, max_attempts=None, request_event_recorder=None
+    ):
         return fake_stream()
 
     monkeypatch.setattr(gemini_source, "retry_provider_request", fake_retry)

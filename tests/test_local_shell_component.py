@@ -6,18 +6,23 @@ import shlex
 import shutil
 import subprocess
 import sys
+import threading
 from pathlib import Path
+from types import SimpleNamespace
+from unittest.mock import Mock
 
 import pytest
 
-from astrbot.core.computer import process_sandbox
-from astrbot.core.computer.booters import local as local_booter
-from astrbot.core.computer.booters.local import (
+from astrbot.core.astr_agent_runtime.computer import process_sandbox
+from astrbot.core.astr_agent_runtime.computer.booters import local as local_booter
+from astrbot.core.astr_agent_runtime.computer.booters.local import (
     LocalFileSystemComponent,
     LocalPythonComponent,
     LocalShellComponent,
 )
-from astrbot.core.computer.process_sandbox.unix import UnixProcessSandbox
+from astrbot.core.astr_agent_runtime.computer.process_sandbox.unix import (
+    UnixProcessSandbox,
+)
 
 
 class _FakePopen:
@@ -200,6 +205,8 @@ def test_local_shell_component_keeps_platform_shell_outside_windows(monkeypatch)
 @pytest.mark.asyncio
 async def test_managed_shell_uses_windows_powershell(monkeypatch, tmp_path):
     calls = []
+    monkeypatch.setattr(local_booter, "WindowsProcessJob", Mock())
+    monkeypatch.setattr("psutil.Process", Mock())
 
     class FakeStdout:
         def __init__(self):
@@ -283,7 +290,7 @@ def test_process_sandbox_selects_system_implementation(
 
 
 def test_process_sandbox_fails_closed_on_unsupported_system(monkeypatch):
-    monkeypatch.setattr(process_sandbox.sys, "platform", "win32")
+    monkeypatch.setattr(process_sandbox.sys, "platform", "unsupported")
 
     with pytest.raises(RuntimeError, match="No Local process sandbox backend"):
         process_sandbox.create_process_sandbox()
@@ -908,6 +915,53 @@ async def test_sandboxed_managed_shell_delegates_launch(monkeypatch, tmp_path):
 
 
 @pytest.mark.asyncio
+async def test_windows_sandbox_cleanup_after_leader_exits(monkeypatch):
+    """Keep terminating sandbox descendants after the leader has exited."""
+    monkeypatch.setattr(local_booter, "os", SimpleNamespace(name="nt"))
+    process = Mock(returncode=0)
+    wait_task = asyncio.get_running_loop().create_future()
+    wait_task.set_result(0)
+    session = SimpleNamespace(
+        windows_job=None, sandboxed=True, process=process, wait_task=wait_task
+    )
+
+    await LocalShellComponent()._terminate_process(session)
+
+    process.terminate.assert_called_once_with()
+    process.kill.assert_called_once_with()
+
+
+@pytest.mark.asyncio
+async def test_sandbox_session_cleanup_waits_before_closing_process():
+    """Keep native handles open until the process waiter has completed."""
+    shell = LocalShellComponent()
+    wait_task = asyncio.get_running_loop().create_future()
+    process = Mock()
+    session = SimpleNamespace(
+        session_id="sandbox-cleanup",
+        timeout_task=None,
+        output_lock=threading.Lock(),
+        output_file=Mock(),
+        windows_job=None,
+        sandboxed=True,
+        process=process,
+        wait_task=wait_task,
+    )
+    shell._sessions[session.session_id] = session
+    cleanup_task = asyncio.create_task(shell._remove_session(session))
+    try:
+        await asyncio.sleep(0)
+        assert not cleanup_task.done()
+        process.close.assert_not_called()
+    finally:
+        wait_task.set_result(0)
+        await cleanup_task
+
+    process.close.assert_called_once_with()
+    assert session.session_id not in shell._sessions
+
+
+@pytest.mark.asyncio
 @pytest.mark.skipif(os.name == "nt", reason="Unix sandbox requires POSIX.")
 async def test_sandboxed_managed_shell_stops_at_output_limit(monkeypatch, tmp_path):
     process_stopped = asyncio.Event()
@@ -1058,6 +1112,8 @@ async def test_sandboxed_local_python_handles_backend_timeout(monkeypatch, tmp_p
 @pytest.mark.asyncio
 async def test_managed_shell_prefers_pwsh_when_available(monkeypatch, tmp_path):
     calls = []
+    monkeypatch.setattr(local_booter, "WindowsProcessJob", Mock())
+    monkeypatch.setattr("psutil.Process", Mock())
 
     class FakeStdout:
         def __init__(self):
@@ -1272,6 +1328,143 @@ async def test_managed_shell_cleans_children_after_leader_exits():
         assert not shell._sessions
     finally:
         await shell.shutdown_sessions()
+
+
+@pytest.mark.asyncio
+@pytest.mark.skipif(os.name != "nt", reason="Native Windows job ownership.")
+async def test_windows_managed_shell_cleans_children_after_leader_exits(tmp_path):
+    import psutil
+
+    child = tmp_path / "job_child.py"
+    child.write_text(
+        "import os, pathlib, time\n"
+        f"marker = pathlib.Path({str(tmp_path / 'child.pid')!r})\n"
+        "pending = marker.with_suffix('.tmp')\n"
+        "pending.write_text(str(os.getpid()))\n"
+        "pending.replace(marker)\n"
+        "time.sleep(30)\n",
+        encoding="utf-8",
+    )
+    launcher = tmp_path / "job_launcher.py"
+    launcher.write_text(
+        f"import subprocess, sys\nsubprocess.Popen([sys.executable, {str(child)!r}])\n",
+        encoding="utf-8",
+    )
+    command = "& " + " ".join(
+        "'" + item.replace("'", "''") + "'" for item in (sys.executable, str(launcher))
+    )
+    shell = LocalShellComponent()
+    result = await shell.exec_managed(
+        command,
+        owner_id="job-test",
+        creator_id="creator",
+        creator_is_admin=True,
+        sandboxed=False,
+        permission_check=lambda: True,
+        yield_time_ms=0,
+    )
+    session = shell._sessions[result["session_id"]]
+    child_pid = None
+    try:
+        for _ in range(500):
+            if (
+                tmp_path / "child.pid"
+            ).exists() and session.process.returncode is not None:
+                break
+            await asyncio.sleep(0.01)
+        child_pid = int((tmp_path / "child.pid").read_text())
+        assert session.process.returncode is not None
+        assert psutil.pid_exists(child_pid)
+        child_process = psutil.Process(child_pid)
+        assert not session.reader_task.done()
+        await asyncio.wait_for(shell.shutdown_sessions(), 5)
+        await asyncio.to_thread(child_process.wait, 5)
+        assert session.reader_task.done() and session.output_file.closed
+        assert not shell._sessions
+    finally:
+        if child_pid is not None and psutil.pid_exists(child_pid):
+            psutil.Process(child_pid).kill()
+        await asyncio.wait_for(shell.shutdown_sessions(), 8)
+
+
+@pytest.mark.asyncio
+@pytest.mark.skipif(os.name != "nt", reason="Native Windows job ownership.")
+async def test_windows_shell_timeout_cleans_children_after_wait_finishes(
+    monkeypatch, tmp_path
+):
+    """Keep enforcing the deadline after the Shell's wait has completed."""
+    import psutil
+
+    async def wait_for_leader(process):
+        # Reproduce Process.wait() observing an already-exited Shell while a
+        # descendant still owns the output pipe.
+        for _ in range(500):
+            if process.returncode is not None:
+                return process.returncode
+            await asyncio.sleep(0.01)
+        raise TimeoutError("Shell leader did not exit")
+
+    monkeypatch.setattr(asyncio.subprocess.Process, "wait", wait_for_leader)
+    marker = tmp_path / "timeout-child.pid"
+    child = tmp_path / "timeout_child.py"
+    child.write_text(
+        "import os, pathlib, time\n"
+        f"marker = pathlib.Path({str(marker)!r})\n"
+        "pending = marker.with_suffix('.tmp')\n"
+        "pending.write_text(str(os.getpid()))\n"
+        "pending.replace(marker)\n"
+        "time.sleep(30)\n",
+        encoding="utf-8",
+    )
+    launcher = tmp_path / "timeout_launcher.py"
+    launcher.write_text(
+        f"import subprocess, sys\nsubprocess.Popen([sys.executable, {str(child)!r}])\n",
+        encoding="utf-8",
+    )
+    command = "& " + " ".join(
+        "'" + item.replace("'", "''") + "'" for item in (sys.executable, str(launcher))
+    )
+    shell = LocalShellComponent()
+    try:
+        result = await asyncio.wait_for(
+            shell.exec_managed(
+                command,
+                owner_id="timeout-test",
+                creator_id="creator",
+                creator_is_admin=True,
+                sandboxed=False,
+                permission_check=lambda: True,
+                timeout=3,
+                yield_time_ms=0,
+            ),
+            6,
+        )
+        session = shell._sessions[result["session_id"]]
+        for _ in range(200):
+            if marker.exists() and session.wait_task.done():
+                break
+            await asyncio.sleep(0.01)
+        child_process = psutil.Process(int(marker.read_text()))
+        assert session.wait_task.done()
+        assert child_process.is_running()
+        assert not session.reader_task.done()
+        result = await asyncio.wait_for(
+            shell.poll_session(
+                owner_id="timeout-test",
+                requester_id="creator",
+                requester_is_admin=True,
+                session_id=session.session_id,
+            ),
+            5,
+        )
+        assert session.timed_out
+        assert result["status"] == "timed_out"
+        assert result["session_closed"]
+        await asyncio.to_thread(child_process.wait, 5)
+        assert session.reader_task.done() and session.output_file.closed
+        assert not shell._sessions
+    finally:
+        await asyncio.wait_for(shell.shutdown_sessions(), 8)
 
 
 @pytest.mark.asyncio
@@ -1584,3 +1777,62 @@ async def test_managed_shell_keeps_completed_session_until_output_is_drained():
         ) == {"sessions": []}
     finally:
         await shell.shutdown_sessions()
+
+
+@pytest.mark.asyncio
+@pytest.mark.skipif(os.name != "nt", reason="Native Windows job ownership.")
+async def test_windows_managed_shell_attach_failure_releases_resources(
+    monkeypatch, tmp_path
+):
+    spawned = []
+    jobs = []
+    outputs = []
+    create_process = asyncio.create_subprocess_exec
+    create_output = local_booter.tempfile.TemporaryFile
+
+    class FailingJob(local_booter.WindowsProcessJob):
+        def __init__(self):
+            super().__init__()
+            jobs.append(self)
+
+        def attach(self, pid):
+            raise OSError("Job attachment failed")
+
+    async def spawn(*args, **kwargs):
+        assert kwargs["creationflags"] & 0x00000004
+        process = await create_process(*args, **kwargs)
+        spawned.append(process)
+        return process
+
+    def output(*args, **kwargs):
+        handle = create_output(*args, **kwargs)
+        outputs.append(handle)
+        return handle
+
+    monkeypatch.setattr(local_booter, "WindowsProcessJob", FailingJob)
+    monkeypatch.setattr(local_booter.asyncio, "create_subprocess_exec", spawn)
+    monkeypatch.setattr(local_booter.tempfile, "TemporaryFile", output)
+    shell = LocalShellComponent()
+    marker = tmp_path / "must-not-run"
+    command = _python_command(
+        f"from pathlib import Path; Path({str(marker)!r}).touch()"
+    )
+    with pytest.raises(OSError, match="Job attachment failed"):
+        await asyncio.wait_for(
+            shell.exec_managed(
+                command,
+                owner_id="job-failure",
+                creator_id="creator",
+                creator_is_admin=True,
+                sandboxed=False,
+                permission_check=lambda: True,
+                yield_time_ms=0,
+            ),
+            8,
+        )
+    assert len(spawned) == len(jobs) == len(outputs) == 1
+    assert spawned[0].returncode is not None
+    assert jobs[0]._handle is None
+    assert outputs[0].closed
+    assert not marker.exists()
+    assert not shell._sessions

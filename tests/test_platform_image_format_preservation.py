@@ -16,39 +16,28 @@ from astrbot.core.platform.sources.webchat import webchat_event
 
 
 @pytest.mark.asyncio
-async def test_satori_image_data_url_preserves_png_mime_type():
+@pytest.mark.parametrize(
+    ("image_format", "mode", "color", "mime_type"),
+    [
+        ("PNG", "RGBA", (255, 0, 0, 128), "image/png"),
+        ("JPEG", "RGB", (0, 255, 0), "image/jpeg"),
+    ],
+)
+async def test_satori_image_data_url_preserves_mime_type(
+    image_format, mode, color, mime_type
+):
     image_buffer = BytesIO()
-    PILImage.new("RGBA", (2, 2), (255, 0, 0, 128)).save(
-        image_buffer,
-        format="PNG",
-    )
+    PILImage.new(mode, (2, 2), color).save(image_buffer, format=image_format)
     image_ref = (
-        "data:image/png;base64," + base64.b64encode(image_buffer.getvalue()).decode()
+        f"data:{mime_type};base64,"
+        + base64.b64encode(image_buffer.getvalue()).decode()
     )
 
     result = await SatoriPlatformEvent._convert_component_to_satori_static(
         Image(file=image_ref),
     )
 
-    assert result.startswith('<img src="data:image/png;base64,')
-
-
-@pytest.mark.asyncio
-async def test_satori_image_data_url_preserves_jpeg_mime_type():
-    image_buffer = BytesIO()
-    PILImage.new("RGB", (2, 2), (0, 255, 0)).save(
-        image_buffer,
-        format="JPEG",
-    )
-    image_ref = (
-        "data:image/jpeg;base64," + base64.b64encode(image_buffer.getvalue()).decode()
-    )
-
-    result = await SatoriPlatformEvent._convert_component_to_satori_static(
-        Image(file=image_ref),
-    )
-
-    assert result.startswith('<img src="data:image/jpeg;base64,')
+    assert result.startswith(f'<img src="data:{mime_type};base64,')
 
 
 @pytest.mark.asyncio

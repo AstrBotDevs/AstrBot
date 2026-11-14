@@ -4,7 +4,9 @@ import hashlib
 import os
 import re
 import uuid
-from collections.abc import AsyncGenerator
+from collections.abc import AsyncGenerator, Iterator
+from contextlib import contextmanager
+from contextvars import ContextVar
 from time import time
 from typing import Any
 
@@ -17,6 +19,7 @@ from astrbot.core.message.components import (
     At,
     AtAll,
     BaseMessageComponent,
+    ButtonInteraction,
     Face,
     Forward,
     Image,
@@ -26,6 +29,7 @@ from astrbot.core.message.components import (
 from astrbot.core.message.message_event_result import MessageChain, MessageEventResult
 from astrbot.core.platform.message_type import MessageType
 from astrbot.core.provider.entities import ProviderRequest
+from astrbot.core.utils.active_event_registry import active_event_registry
 from astrbot.core.utils.metrics import Metric
 from astrbot.core.utils.trace import TraceSpan
 
@@ -33,15 +37,68 @@ from .astrbot_message import AstrBotMessage, Group
 from .message_session import MessageSesion, MessageSession  # noqa
 from .platform_metadata import PlatformMetadata
 
+streaming_response_event: ContextVar["AstrMessageEvent | None"] = ContextVar(
+    "streaming_response_event", default=None
+)
+current_message_event: ContextVar["AstrMessageEvent | None"] = ContextVar(
+    "current_message_event", default=None
+)
+
+
+@contextmanager
+def event_context(event: "AstrMessageEvent") -> Iterator[None]:
+    """Bind the current event and clean up event-owned resources.
+
+    Logging and tracing scopes are owned separately by the framework entry
+    point. Nested scopes do not unregister the event or clean up files early.
+
+    Args:
+        event: Event whose outermost scope owns registration and cleanup.
+
+    Yields:
+        Control while the event is active.
+    """
+    if event._execution_active:
+        yield
+        return
+    event._execution_active = True
+    event_token = current_message_event.set(event)
+    active_event_registry.register(event)
+    try:
+        yield
+    finally:
+        try:
+            event.cleanup_temporary_local_files()
+        finally:
+            try:
+                active_event_registry.unregister(event)
+            finally:
+                event._execution_active = False
+                current_message_event.reset(event_token)
+
 
 class AstrMessageEvent(abc.ABC):
+    event_kind: str = "message"
+    trace_name: str = "AstrMessageEvent"
+
     def __init__(
         self,
         message_str: str,
         message_obj: AstrBotMessage,
         platform_meta: PlatformMetadata,
         session_id: str,
+        *,
+        event_metadata: dict[str, str] | None = None,
     ) -> None:
+        """Initialize shared event state and its initial trace record.
+
+        Args:
+            message_str: Text input associated with the event.
+            message_obj: Message components and sender information.
+            platform_meta: Metadata of the target platform.
+            session_id: Target session identifier within the platform.
+            event_metadata: Additional attributes for the initial trace record.
+        """
         self.message_str = message_str
         """纯文本的消息"""
         self.message_obj = message_obj
@@ -80,7 +137,7 @@ class AstrMessageEvent(abc.ABC):
         self.created_at = time()
         """事件创建时间(Unix timestamp)"""
         self.trace = TraceSpan(
-            name="AstrMessageEvent",
+            name=self.trace_name,
             umo=self.unified_msg_origin,
             sender_name=self.get_sender_name(),
             message_outline=self.get_message_outline(),
@@ -88,6 +145,17 @@ class AstrMessageEvent(abc.ABC):
         """用于记录事件处理的 TraceSpan 对象"""
         self.span = self.trace
         """事件级 TraceSpan(别名: span)"""
+        self.trace.record(
+            "event_received",
+            **{
+                **(event_metadata or {}),
+                "kind": self.event_kind,
+                "platform_id": platform_meta.id,
+                "platform_name": platform_meta.name,
+                "message_type": self.get_message_type().value,
+                "message": self.get_message_outline(),
+            },
+        )
 
         self._has_send_oper = False
         """在此次事件中是否有过至少一次发送消息的操作"""
@@ -101,6 +169,7 @@ class AstrMessageEvent(abc.ABC):
 
         # back_compability
         self.platform = platform_meta
+        self._execution_active = False
 
     @property
     def unified_msg_origin(self) -> str:
@@ -180,6 +249,24 @@ class AstrMessageEvent(abc.ABC):
     def get_messages(self) -> list[BaseMessageComponent]:
         """获取消息链。"""
         return getattr(self.message_obj, "message", [])
+
+    def is_button_interaction(self) -> bool:
+        """Return whether this event represents a portable button click."""
+        return any(
+            isinstance(component, ButtonInteraction)
+            for component in self.get_messages()
+        )
+
+    def get_button_interaction(self) -> ButtonInteraction | None:
+        """Return the normalized button click carried by this event, if any."""
+        return next(
+            (
+                component
+                for component in self.get_messages()
+                if isinstance(component, ButtonInteraction)
+            ),
+            None,
+        )
 
     def get_message_type(self) -> MessageType:
         """获取消息类型。"""
@@ -487,6 +574,19 @@ class AstrMessageEvent(abc.ABC):
             message (MessageChain): 消息链，具体使用方式请参考文档。
 
         """
+        if (
+            message is not None
+            and message.chain
+            and streaming_response_event.get() is not self
+        ):
+            self.trace.record(
+                "response_sent",
+                kind="response",
+                message=self._outline_chain(message.chain),
+                component_types=[str(component.type) for component in message.chain],
+                component_count=len(message.chain),
+                message_type=message.type,
+            )
         # Leverage BLAKE2 hash function to generate a non-reversible hash of the sender ID for privacy.
         hash_obj = hashlib.blake2b(self.get_sender_id().encode("utf-8"), digest_size=16)
         sid = str(uuid.UUID(bytes=hash_obj.digest()))

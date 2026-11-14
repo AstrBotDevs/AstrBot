@@ -207,7 +207,9 @@ enabled = bool(payload.get("enabled"))
 ```python
 from pathlib import Path
 
-from astrbot.core.utils.astrbot_path import get_astrbot_plugin_data_path
+# AstrBot v4.30.0 之前的导入方式：
+# from astrbot.core.utils.astrbot_path import get_astrbot_plugin_data_path
+from astrbot.api.util import get_astrbot_plugin_data_path
 from astrbot.api.web import PluginUploadFile, error_response, json_response, request
 
 
@@ -332,7 +334,11 @@ const context = await bridge.ready();
   "pageTitle": "Bridge Demo",
   "locale": "zh-CN",
   "i18n": {},
-  "isDark": false
+  "isDark": false,
+  "themeColors": {
+    "primary": "#3c96ca",
+    "secondary": "#2f86bd"
+  }
 }
 ```
 
@@ -492,7 +498,7 @@ async def export_file(self):
 
 ### `subscribeSSE(endpoint, handlers, params)`
 
-订阅插件后端 SSE，返回 `Promise<subscriptionId>`。`handlers` 可以包含 `onOpen`、`onMessage`、`onError`。
+订阅插件后端 SSE，返回 `Promise<subscriptionId>`。`handlers` 可以包含 `onOpen`、`onMessage`、`onClose`、`onError`。
 
 ```js
 const subscriptionId = await bridge.subscribeSSE(
@@ -504,6 +510,9 @@ const subscriptionId = await bridge.subscribeSSE(
     onMessage(event) {
       console.log(event.raw, event.parsed, event.lastEventId);
     },
+    onClose() {
+      console.log("SSE stream ended");
+    },
     onError() {
       console.warn("SSE error");
     },
@@ -513,6 +522,8 @@ const subscriptionId = await bridge.subscribeSSE(
 ```
 
 `event.raw` 是原始字符串；如果内容是 JSON 字符串，`event.parsed` 会自动解析，否则等于原始字符串。`event.eventType` 对应 SSE 的 `event:` 字段，未设置时为 `message`。
+
+流结束时调用 `onClose`，读取流失败时调用 `onError`。主动调用 `unsubscribeSSE` 不会触发这两个回调。桥接层不会自动重连；需要时请自行重新订阅。初始订阅失败时，返回的 Promise 会被拒绝。
 
 后端必须返回 `text/event-stream`：
 
@@ -538,9 +549,24 @@ window.addEventListener("beforeunload", () => {
 });
 ```
 
-##视图国际化
+## 视图元数据与国际化
 
-插件可视化视图复用插件 i18n 资源文件。给 `.astrbot-plugin/i18n/<locale>.json` 增加 `views.<view_name>`：
+视图的标题、描述等元数据写在插件目录的 `.astrbot-plugin/i18n/<locale>.json` 中，并按 `views.<view_name>` 组织。`views` 是 locale JSON 的顶层字段，与 `metadata`、`config` 并列；`<view_name>` 必须与 `views/` 下的目录名完全一致。
+
+例如 `bridge-demo` 视图的中文元数据位于：
+
+```text
+astrbot_plugin_view_demo/
+├─ views/
+│  └─ bridge-demo/
+│     └─ index.html
+└─ .astrbot-plugin/
+   └─ i18n/
+      ├─ zh-CN.json
+      └─ en-US.json
+```
+
+`.astrbot-plugin/i18n/zh-CN.json`：
 
 ```json
 {
@@ -555,7 +581,17 @@ window.addEventListener("beforeunload", () => {
 }
 ```
 
-`title` 用于 WebUI 外壳标题和插件详情页的视图组件名称；`description` 用于插件详情页的视图组件描述。视图内部使用 `bridge.t()` 渲染文案，并通过 `onContext()` 响应语言切换。
+字段说明：
+
+| 字段 | 是否必填 | 用途 |
+| --- | --- | --- |
+| `title` | 否 | 侧边栏、WebUI 外壳标题和插件详情页中的视图名称。 |
+| `description` | 否 | 插件详情页中的视图描述。 |
+| 其他字段 | 否 | 视图自己的翻译文案，例如示例中的 `heading`、`refresh`；通过 `bridge.t()` 读取。 |
+
+每种语言分别写入对应的 locale 文件，例如英文写入 `.astrbot-plugin/i18n/en-US.json`。推荐使用 `views`；旧的 `pages` 键仅作为兼容别名保留。修改 locale 文件后需要重载插件，才能确保 WebUI 获取到最新元数据。
+
+当前语言未提供 `title` 时，未分组的侧边栏显示插件名称；按插件分组后显示视图目录名，因为分组标题已经显示了插件名称。视图内部使用 `bridge.t()` 渲染其他文案，并通过 `onContext()` 响应语言切换：
 
 ```js
 function render() {
@@ -600,6 +636,25 @@ body {
 ```
 
 服务端返回 HTML 时会预先注入 `data-theme`，减少初始闪烁。需要在 JavaScript 中响应主题变化时，读取 `bridge.getContext()?.isDark` 并监听 `onContext()`。
+
+### 跟随用户配色
+
+`context.themeColors` 提供当前生效的 `primary`（主色）和 `secondary`（辅助色），值为 CSS 颜色字符串，由 View 自行应用到样式。
+
+通过 `bridge.onContext(handler)` 接收初始配色，以及主题切换、颜色修改和重置后的更新。服务端预注入的初始上下文和旧版 AstrBot 可能没有该字段；缺失时使用 View 的默认配色，不要仅依赖 `ready()` 的首次返回值。
+
+```js
+const bridge = window.AstrBotPluginView;
+
+await bridge.ready();
+const off = bridge.onContext((context) => {
+  const primary = context.themeColors?.primary ?? "#3c96ca";
+  const secondary = context.themeColors?.secondary ?? "#2f86bd";
+  // 将配色应用到视图样式。
+});
+
+// 视图销毁时调用 off() 取消订阅。
+```
 
 ## 静态资源路径
 

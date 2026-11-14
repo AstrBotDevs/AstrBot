@@ -1,0 +1,44 @@
+// Keep Vuetify's interaction handling and clipping, with a softer Material You state layer.
+.v-ripple__container .v-ripple__animation {
+  background: none;
+  overflow: visible;
+
+  &::before {
+    content: "";
+    position: absolute;
+    // Vuetify's circle already fits the control's diagonal. Extend the soft edge
+    // beyond it so the solid 65% core covers the entire control on a held press.
+    // The outer ripple container still clips the effect to the control's shape.
+    inset: -30%;
+    border-radius: 50%;
+    background: radial-gradient(
+      closest-side,
+      currentColor max(calc(100% - 70px), 65%),
+      transparent 100%
+    );
+  }
+
+  &--in {
+    opacity: 0.12;
+    transition:
+      transform 450ms cubic-bezier(0.2, 0, 0, 1),
+      opacity 105ms linear;
+  }
+
+  &--out {
+    opacity: 0;
+    // Continue expanding on release; Vuetify removes the ripple after 300ms.
+    transition:
+      transform 450ms cubic-bezier(0.2, 0, 0, 1),
+      opacity 300ms linear;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .v-ripple__container .v-ripple__animation {
+    &--in,
+    &--out {
+      transition: opacity 100ms linear;
+    }
+  }
+}

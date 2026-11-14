@@ -5,16 +5,15 @@ import {
   Box,
   Clock3,
   Database,
-  Hand,
+  House,
   Heart,
-  PencilRuler,
   Puzzle,
   SlidersHorizontal,
-  Workflow,
 } from '@lucide/vue';
 
 export interface menu {
   header?: string;
+  value?: string;
   title?: string;
   icon?: string | Component;
   to?: string;
@@ -50,7 +49,7 @@ const sidebarItem: menu[] = [
   },
   {
     title: 'core.navigation.welcome',
-    icon: markRaw(Hand),
+    icon: markRaw(House),
     to: '/welcome',
   },
   {
@@ -79,11 +78,6 @@ const sidebarItem: menu[] = [
     to: '/data'
   },
   {
-    title: 'core.navigation.sessionManagement',
-    icon: markRaw(PencilRuler),
-    to: '/session-management'
-  },
-  {
     header: EXTENSION_GROUP_KEY,
     collapsible: true,
     groupToggle: true,
@@ -102,11 +96,6 @@ const sidebarItem: menu[] = [
     title: 'core.navigation.cron',
     icon: markRaw(Clock3),
     to: '/cron'
-  },
-  {
-    title: 'core.navigation.subagent',
-    icon: markRaw(Workflow),
-    to: '/subagent'
   },
 ];
 
