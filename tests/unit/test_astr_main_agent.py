@@ -41,6 +41,7 @@ from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from astrbot.core.platform.platform_metadata import PlatformMetadata
 from astrbot.core.provider import Provider
 from astrbot.core.provider.entities import ProviderRequest, ProviderType
+from astrbot.core.provider.func_tool_manager import FunctionToolManager
 from astrbot.core.provider.manager import ProviderManager
 from astrbot.core.skills.skill_manager import SkillInfo
 from astrbot.core.star import agent_capabilities as plugins_build
@@ -664,6 +665,29 @@ class TestBuiltinToolInjection:
         )
 
     @pytest.mark.asyncio
+    async def test_yuanbao_injects_search_tool(self, mock_event, mock_context):
+        """Verify the registered Yuanbao tool reaches the model request."""
+        req = ProviderRequest()
+        mock_context.get_config.return_value = {
+            "provider_settings": {"web_search": True, "websearch_provider": "yuanbao"}
+        }
+        tool_mgr = FunctionToolManager()
+        mock_context.get_llm_tool_manager.return_value = tool_mgr
+
+        web_search_build.apply_web_search(
+            req,
+            mock_context,
+            mock_context.get_config()["provider_settings"],
+            mock_event,
+        )
+
+        assert req.func_tool.names() == ["web_search_yuanbao"]
+        assert isinstance(
+            req.func_tool.get_tool("web_search_yuanbao"),
+            web_search_build.YuanbaoWebSearchTool,
+        )
+
+    @pytest.mark.asyncio
     async def test_apply_web_search_tools_uses_builtin_tool_manager(
         self, mock_event, mock_context
     ):
@@ -765,6 +789,7 @@ class TestBuiltinToolInjection:
             "image_search_serpapi",
             "finance_search_serpapi",
             "scholar_search_serpapi",
+            "web_search_yuanbao",
         ],
     )
     def test_apply_web_search_citation_prompt_for_webchat(self, mock_event, tool_name):
