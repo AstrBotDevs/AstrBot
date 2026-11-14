@@ -153,13 +153,17 @@ class ConversationCommands:
         if stopped_count > 0:
             message.set_result(
                 MessageEventResult().message(
-                    f"✅ Requested to stop {stopped_count} running tasks."
+                    f"✅ Requested to stop {stopped_count} additional tasks. "
+                    "Previously requested tasks may still be stopping."
                 )
             )
             return
 
         message.set_result(
-            MessageEventResult().message("✅ No running tasks in the current session.")
+            MessageEventResult().message(
+                "✅ No new tasks to stop in the current session. "
+                "Previously requested tasks may still be stopping."
+            )
         )
 
     async def new_conv(self, message: AstrMessageEvent) -> None:

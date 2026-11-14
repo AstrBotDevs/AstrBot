@@ -172,7 +172,7 @@ class ActiveEventRegistry:
             exclude: Event that requested the stop and should continue.
 
         Returns:
-            Number of distinct events receiving the stop request.
+            Number of events newly marked for stop; already stopping events are excluded.
         """
         return self._request_stop(umo, exclude, stop_event=False)
 
@@ -187,7 +187,7 @@ class ActiveEventRegistry:
             stop_event: Whether to also terminate event propagation.
 
         Returns:
-            Number of distinct events receiving the stop request.
+            Number of events newly marked for stop; already stopping events are excluded.
         """
         tasks = self._background_tasks.get(umo, {})
         events = set(self._events.get(umo, []))
@@ -199,7 +199,12 @@ class ActiveEventRegistry:
         )
         if exclude is not None:
             events.discard(exclude)
+        count = 0
         for event in events:
+            if not event.get_extra("agent_stop_requested") and not event.get_extra(
+                "agent_user_aborted"
+            ):
+                count += 1
             if stop_event:
                 event.stop_event()
             event.set_extra("agent_stop_requested", True)
@@ -209,7 +214,7 @@ class ActiveEventRegistry:
         for task, event in list(tasks.items()):
             if event is not exclude:
                 self.cancel_background_task(task)
-        return len(events)
+        return count
 
 
 active_event_registry = ActiveEventRegistry()
