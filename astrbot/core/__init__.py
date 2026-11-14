@@ -35,13 +35,7 @@ html_renderer = HtmlRenderer(t2i_base_url)
 """**Deprecated**. For plugin developers, please use `self.context.html_renderer` instead."""
 logger = LogManager.GetLogger(log_name="astrbot")
 LogManager.configure_logger(logger, astrbot_config)
-database_url = os.getenv("ASTRBOT_DATABASE_URL")
-if database_url:
-    from astrbot.core.db.postgres import PostgreSQLDatabase
-
-    db_helper = PostgreSQLDatabase(database_url)
-else:
-    db_helper = SQLiteDatabase(DB_PATH)
+db_helper = SQLiteDatabase(DB_PATH)
 sp = SharedPreferences(db_helper=db_helper)
 file_token_service = FileTokenService()
 pip_installer = PipInstaller(

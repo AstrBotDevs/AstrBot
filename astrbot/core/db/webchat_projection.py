@@ -1,9 +1,10 @@
 """Maintain display-message links to committed conversation context positions."""
 
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlmodel import col, select, text, update
+import json
 
-from astrbot.core.db import json_value_rows
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlmodel import col, func, select, update
+
 from astrbot.core.db.po import ConversationEvent, PlatformMessageHistory
 
 
@@ -54,13 +55,7 @@ async def project_webchat_event_links(
 
     # Look up the roles that have display rows once, using the turn ID index.
     # A single bound parameter also supports batches spanning many turns.
-    if session.bind.dialect.name == "postgresql":
-        for turn_id in sorted(links):
-            await session.execute(
-                text("SELECT pg_advisory_xact_lock(hashtextextended(:turn_id, 0))"),
-                {"turn_id": turn_id},
-            )
-    turn_ids = json_value_rows(list(links), session.bind.dialect.name)
+    turn_ids = func.json_each(json.dumps(list(links))).table_valued("value")
     display_type = PlatformMessageHistory.content["type"].as_string()
     display_roles = await session.execute(
         select(PlatformMessageHistory.turn_id, display_type)

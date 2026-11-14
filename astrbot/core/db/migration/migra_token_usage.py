@@ -17,10 +17,6 @@ async def migrate_token_usage(db_helper: BaseDatabase) -> None:
 
     This migration adds a new column to track token consumption in conversations.
     """
-    # PostgreSQL starts with the current event schema, without this legacy table.
-    if db_helper.engine.dialect.name != "sqlite":
-        return
-
     # 检查是否已经完成迁移
     migration_done = await db_helper.get_preference(
         "global", "global", "migration_done_token_usage_1"

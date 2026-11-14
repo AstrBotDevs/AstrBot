@@ -9,12 +9,11 @@ from copy import deepcopy
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 
-from sqlalchemy import insert
+from sqlalchemy import insert, literal
 from sqlalchemy.orm import aliased
 from sqlalchemy.orm.attributes import flag_modified
 from sqlmodel import col, delete, func, select, text, update
 
-from astrbot.core.db import json_text, json_value_rows
 from astrbot.core.db.po import (
     ConversationEvent,
     ConversationRead,
@@ -277,7 +276,7 @@ class ConversationStore:
             Newly committed metadata.
         """
         async with self.db.get_db() as session:
-            await self.db.begin_write(session)
+            await session.execute(text("BEGIN IMMEDIATE"))
             inherited = None
             if source_event_id:
                 source = (
@@ -288,9 +287,7 @@ class ConversationStore:
                     )
                 ).scalar_one_or_none()
                 owner = (
-                    await session.get(
-                        ConversationV3, source.conversation_ref, with_for_update=True
-                    )
+                    await session.get(ConversationV3, source.conversation_ref)
                     if source
                     else None
                 )
@@ -706,11 +703,9 @@ class ConversationStore:
             return []
 
         # Use one bound parameter even when a page contains entire session groups.
-        conversation_ids = json_value_rows(
-            [conv.id for conv in conversations],
-            self.db.engine.dialect.name,
-            integers=True,
-        )
+        conversation_ids = func.json_each(
+            json.dumps([conv.id for conv in conversations])
+        ).table_valued("value")
         token_usage = ConversationEvent.payload["token_usage"].as_integer()
         usage_query = (
             select(token_usage)
@@ -852,8 +847,9 @@ class ConversationStore:
                         ConversationEvent.conversation_ref == conv.id,
                         ConversationEvent.type == kind,
                         ConversationEvent.seq > start_event.seq,
-                        json_text(
-                            ConversationEvent.payload, key, session.bind.dialect.name
+                        func.json_extract(
+                            ConversationEvent.payload,
+                            literal(f"$.{key}", literal_execute=True),
                         )
                         == payload.get(key, ""),
                     )
@@ -934,45 +930,29 @@ class ConversationStore:
             conv: Conversation with its updated baseline pointer.
         """
         await session.flush()
-        # Keep the predicates literal so both backends can use partial indexes.
-        # All aliases and keys below are schema constants, never user input.
-        json_fields = {
-            f"{alias}.{key}": (
-                f"json_extract({alias}.payload,'$.{key}')"
-                if session.bind.dialect.name == "sqlite"
-                else f"CAST({alias}.payload ->> '{key}' AS VARCHAR)"
-            )
-            for alias, key in (
-                ("old", "origin"),
-                ("started", "base_leaf_event_id"),
-                ("started", "context_leaf_event_id"),
-                ("finished", "turn_id"),
-                ("finished", "request_id"),
-            )
-        }
         await session.execute(
-            text(f"""UPDATE conversation_events AS old SET payload=NULL
+            text("""UPDATE conversation_events AS old SET payload=NULL
             WHERE old.conversation_ref=:owner AND old.type='context.rebased'
-              AND {json_fields["old.origin"]}='plugin' AND old.payload IS NOT NULL
+              AND json_extract(old.payload,'$.origin')='plugin' AND old.payload IS NOT NULL
               AND old.seq < (SELECT seq FROM conversation_events WHERE event_id=:baseline)
               AND NOT EXISTS (
                   SELECT 1 FROM conversation_events AS context
                   JOIN conversation_events AS started
                     ON started.conversation_ref=:owner AND started.type='turn.started'
-                   AND {json_fields["started.base_leaf_event_id"]}=context.event_id
+                   AND json_extract(started.payload,'$.base_leaf_event_id')=context.event_id
                   WHERE context.replay_from_event_id=old.event_id
                     AND NOT EXISTS (SELECT 1 FROM conversation_events AS finished
                       WHERE finished.conversation_ref=:owner AND finished.type='turn.finished'
-                        AND {json_fields["finished.turn_id"]}=started.event_id))
+                        AND json_extract(finished.payload,'$.turn_id')=started.event_id))
               AND NOT EXISTS (
                   SELECT 1 FROM conversation_events AS context
                   JOIN conversation_events AS started
                     ON started.conversation_ref=:owner AND started.type='request.started'
-                   AND {json_fields["started.context_leaf_event_id"]}=context.event_id
+                   AND json_extract(started.payload,'$.context_leaf_event_id')=context.event_id
                   WHERE context.replay_from_event_id=old.event_id
                     AND NOT EXISTS (SELECT 1 FROM conversation_events AS finished
                       WHERE finished.conversation_ref=:owner AND finished.type='request.finished'
-                        AND {json_fields["finished.request_id"]}=started.event_id))
+                        AND json_extract(finished.payload,'$.request_id')=started.event_id))
             """),
             {"owner": conv.id, "baseline": conv.replay_from_event_id},
         )
@@ -1014,12 +994,10 @@ class ConversationStore:
         drafts = [json.loads(serialized) for serialized in serialized_drafts]
         del serialized_drafts
         async with self.db.get_db() as session:
-            await self.db.begin_write(session)
+            await session.execute(text("BEGIN IMMEDIATE"))
             conv = (
                 await session.execute(
-                    select(ConversationV3)
-                    .where(ConversationV3.conversation_id == cid)
-                    .with_for_update()
+                    select(ConversationV3).where(ConversationV3.conversation_id == cid)
                 )
             ).scalar_one_or_none()
             if conv is None:
@@ -1028,7 +1006,7 @@ class ConversationStore:
             existing_by_id: dict[str, ConversationEvent] = {}
             if event_ids:
                 # Bind one JSON array so large batches stay within SQLite's parameter limit.
-                ids = json_value_rows(list(event_ids), self.db.engine.dialect.name)
+                ids = func.json_each(json.dumps(list(event_ids))).table_valued("value")
                 stored_events = await session.scalars(
                     select(ConversationEvent).where(
                         col(ConversationEvent.event_id).in_(select(ids.c.value))
@@ -1298,12 +1276,10 @@ class ConversationStore:
             expected_leaf: Previously selected tip.
         """
         async with self.db.get_db() as session:
-            await self.db.begin_write(session)
+            await session.execute(text("BEGIN IMMEDIATE"))
             conv = (
                 await session.execute(
-                    select(ConversationV3)
-                    .where(ConversationV3.conversation_id == cid)
-                    .with_for_update()
+                    select(ConversationV3).where(ConversationV3.conversation_id == cid)
                 )
             ).scalar_one()
             if conv.head_seq != expected_head or conv.leaf_event_id != expected_leaf:
@@ -1354,12 +1330,10 @@ class ConversationStore:
             New user display record for the replacement turn.
         """
         async with self.db.get_db() as session:
-            await self.db.begin_write(session)
+            await session.execute(text("BEGIN IMMEDIATE"))
             conv = (
                 await session.execute(
-                    select(ConversationV3)
-                    .where(ConversationV3.conversation_id == cid)
-                    .with_for_update()
+                    select(ConversationV3).where(ConversationV3.conversation_id == cid)
                 )
             ).scalar_one()
             if conv.head_seq != expected_head or conv.leaf_event_id != expected_leaf:
@@ -1453,19 +1427,13 @@ class ConversationStore:
             ValueError: The conversation selection is invalid.
         """
         async with self.db.get_db() as session:
-            await self.db.begin_write(session)
+            await session.execute(text("BEGIN IMMEDIATE"))
             query = (
                 select(ConversationV3.id).where(ConversationV3.conversation_id == cid)
                 if cid
                 else select(ConversationV3.id).where(ConversationV3.umo == umo)
             )
-            ids = list(
-                (
-                    await session.execute(
-                        query.order_by(ConversationV3.id).with_for_update()
-                    )
-                ).scalars()
-            )
+            ids = list((await session.execute(query)).scalars())
             if ids:
                 await session.execute(
                     delete(ConversationEvent).where(

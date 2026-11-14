@@ -76,24 +76,6 @@ python main.py
 :::
 
 
-## 可选 PostgreSQL 后端
-
-默认仍使用 SQLite。主数据库可以在启动时切换到 PostgreSQL：
-
-```bash
-uv sync --extra postgres
-export ASTRBOT_DATABASE_URL='postgresql://user:password@localhost:5432/astrbot'
-uv run main.py
-```
-
-PowerShell 使用 `$env:ASTRBOT_DATABASE_URL = 'postgresql://user:password@localhost:5432/astrbot'` 设置变量。通过 pip 安装时，请在同一环境安装 `psycopg[binary]>=3.2,<4`。需要预先创建数据库，并授予连接账号创建表和索引的权限；凭据中的特殊字符需要 URL 编码。
-
-程序启动时创建表结构。修改连接地址不会搬运已有 SQLite 数据：请先导出 AstrBot 备份，停止旧实例，再在新实例中恢复备份，验证历史完整后再处理原数据库。取消设置该变量即可重新使用 SQLite。
-
-该设置覆盖主数据库，包括会话事件、偏好设置和展示历史。知识库、按钮回调令牌与本地 Trace 文件仍使用原有本地存储。使用数据库 API 的插件保持兼容；直接执行 SQLite 专用 SQL 或打开 `data_v4.db` 的插件需要适配。这一功能不代表多个 AstrBot 实例可以共享运行时状态。
-
-后端集成测试可设置 `ASTRBOT_TEST_POSTGRES_URL`。每个测试创建并删除独立 schema，请使用允许创建 schema 的专用测试数据库账号。
-
 ## 🎉 大功告成！
 
 如果一切顺利，你会看到 AstrBot 打印出的日志。

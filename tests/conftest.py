@@ -290,17 +290,12 @@ def main_agent_build_config():
 # ============================================================
 
 
-@pytest_asyncio.fixture(params=["sqlite", "postgres"])
-async def temp_db(temp_db_file: Path, request):
+@pytest_asyncio.fixture
+async def temp_db(temp_db_file: Path):
     """创建临时数据库实例。"""
     from astrbot.core.db.sqlite import SQLiteDatabase
 
-    if request.param == "postgres":
-        from astrbot.core.db.postgres import PostgreSQLDatabase
-
-        db = PostgreSQLDatabase(request.getfixturevalue("postgres_test_url"))
-    else:
-        db = SQLiteDatabase(str(temp_db_file))
+    db = SQLiteDatabase(str(temp_db_file))
     try:
         yield db
     finally:
@@ -410,36 +405,8 @@ def pytest_runtest_setup(item):
             pytest.skip(f"TEST_{required_platform.upper()}_ENABLED not set")
 
 
-@pytest.fixture
-def postgres_test_url():
-    """Provide an isolated schema when PostgreSQL integration tests are enabled."""
-    import uuid
-
-    from sqlalchemy import create_engine, text
-    from sqlalchemy.engine import make_url
-    from sqlalchemy.pool import NullPool
-
-    value = os.getenv("ASTRBOT_TEST_POSTGRES_URL")
-    if not value:
-        pytest.skip("Set ASTRBOT_TEST_POSTGRES_URL to test PostgreSQL")
-    pytest.importorskip("psycopg")
-    url = make_url(value).set(drivername="postgresql+psycopg")
-    schema = "astrbot_test_" + uuid.uuid4().hex
-    engine = create_engine(url, poolclass=NullPool)
-    with engine.begin() as connection:
-        connection.execute(text(f'CREATE SCHEMA "{schema}"'))
-    try:
-        yield url.update_query_dict(
-            {"options": f"-c search_path={schema} -c timezone=UTC"}
-        )
-    finally:
-        with engine.begin() as connection:
-            connection.execute(text(f'DROP SCHEMA "{schema}" CASCADE'))
-        engine.dispose()
-
-
 @pytest_asyncio.fixture
 async def database(temp_db):
-    """Provide an initialized relational database for event-storage tests."""
+    """Provide an initialized SQLite database for event-storage tests."""
     await temp_db.initialize()
     return temp_db

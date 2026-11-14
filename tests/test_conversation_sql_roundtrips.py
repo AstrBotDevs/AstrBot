@@ -100,9 +100,7 @@ async def test_im_writer_skips_display_queries_for_append_and_save(
         {"role": "assistant", "content": "answer"},
     ]
     await writer.save_history(expected)
-    assert not any(
-        "platform_message_history" in sql or "pg_advisory" in sql for sql in statements
-    )
+    assert not any("platform_message_history" in sql for sql in statements)
     assert (await store.read(conv.conversation_id)).messages == expected
 
 
@@ -156,3 +154,46 @@ async def test_combined_finish_check_rejects_concurrent_duplicate_and_allows_ret
         len(await store.events(conv.conversation_id, event_type=f"{kind}.finished"))
         == 1
     )
+
+
+@pytest.mark.asyncio
+async def test_context_read_survives_concurrent_baseline_reclamation(
+    temp_db, monkeypatch
+):
+    """Metadata and payloads must come from one view, even if a writer prunes."""
+    from sqlalchemy.ext.asyncio import AsyncSession
+    from sqlalchemy.sql import Select
+
+    from astrbot.core.db.po import ConversationV3
+
+    await temp_db.initialize()
+    store = temp_db.conversation_store
+    conv = await store.create(umo="owner", platform_id="p")
+    original = [{"role": "user", "content": "before"}]
+    replacement = [{"role": "user", "content": "after"}]
+    await store.append(conv.conversation_id, [], history=original, origin="plugin")
+    execute = AsyncSession.execute
+    replaced = False
+
+    async def interleave(session, statement, *args, **kwargs):
+        nonlocal replaced
+        result = await execute(session, statement, *args, **kwargs)
+        if (
+            not replaced
+            and isinstance(statement, Select)
+            and any(
+                column.get("entity") is ConversationV3
+                for column in statement.column_descriptions
+            )
+        ):
+            replaced = True
+            await store.append(
+                conv.conversation_id, [], history=replacement, origin="plugin"
+            )
+        return result
+
+    with monkeypatch.context() as patch:
+        patch.setattr(AsyncSession, "execute", interleave)
+        observed = await store.read(conv.conversation_id)
+    assert replaced and observed.messages == original
+    assert (await store.read(conv.conversation_id)).messages == replacement

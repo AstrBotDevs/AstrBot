@@ -3,9 +3,19 @@
 from copy import deepcopy
 
 import pytest
+import pytest_asyncio
 
 from astrbot.core.backup.exporter import AstrBotExporter
 from astrbot.core.backup.importer import AstrBotImporter
+from astrbot.core.db.sqlite import SQLiteDatabase
+
+
+@pytest_asyncio.fixture
+async def database(tmp_path):
+    db = SQLiteDatabase(str(tmp_path / "backup.db"))
+    await db.initialize()
+    yield db
+    await db.engine.dispose()
 
 
 @pytest.mark.asyncio

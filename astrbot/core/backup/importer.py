@@ -16,7 +16,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from sqlalchemy import Integer, delete
+from sqlalchemy import delete
 
 from astrbot.core import logger
 from astrbot.core.config.default import VERSION
@@ -600,7 +600,7 @@ class AstrBotImporter:
             linearize_legacy_events,
             migrate_conversations,
         )
-        from astrbot.core.db.po import ConversationV2, SQLModel
+        from astrbot.core.db.po import ConversationV2
 
         if data.get("conversations") and data.get("conversations_v3"):
             raise ValueError("Backup contains ambiguous V2 and V3 conversations")
@@ -662,10 +662,8 @@ class AstrBotImporter:
 
         async with self.main_db.get_db() as session:
             async with session.begin():
-                await self.main_db.begin_write(session)
-                postgres = self.main_db.engine.dialect.name == "postgresql"
-                if not postgres:
-                    await session.execute(text("PRAGMA defer_foreign_keys=ON"))
+                await session.execute(text("BEGIN IMMEDIATE"))
+                await session.execute(text("PRAGMA defer_foreign_keys=ON"))
                 if "conversations" in data:
                     connection = await session.connection()
                     await connection.run_sync(
@@ -673,14 +671,7 @@ class AstrBotImporter:
                             conn, checkfirst=True
                         )
                     )
-                table_order = {
-                    table.name: index
-                    for index, table in enumerate(SQLModel.metadata.sorted_tables)
-                }
-                for table_name in sorted(
-                    data, key=lambda name: table_order.get(name, -1)
-                ):
-                    rows = data[table_name]
+                for table_name, rows in data.items():
                     model_class = (
                         ConversationV2
                         if table_name == "conversations"
@@ -689,13 +680,6 @@ class AstrBotImporter:
                     if not model_class:
                         logger.warning(f"未知的表: {table_name}")
                         continue
-                    if postgres:
-                        # Restore owns these tables until rows and sequences agree.
-                        await session.execute(
-                            text(
-                                f'LOCK TABLE "{model_class.__tablename__}" IN SHARE ROW EXCLUSIVE MODE'
-                            )
-                        )
                     normalized_rows = self._preprocess_main_table_rows(table_name, rows)
 
                     count = 0
@@ -732,26 +716,6 @@ class AstrBotImporter:
 
                     imported[table_name] = count
                     logger.debug(f"导入表 {table_name}: {count} 条记录")
-                    if postgres:
-                        await session.flush()
-                        primary_keys = list(model_class.__table__.primary_key.columns)
-                        if len(primary_keys) == 1 and isinstance(
-                            primary_keys[0].type, Integer
-                        ):
-                            key = primary_keys[0].name
-                            sequence = (
-                                await session.execute(
-                                    text("SELECT pg_get_serial_sequence(:table, :key)"),
-                                    {"table": table_name, "key": key},
-                                )
-                            ).scalar_one_or_none()
-                            if sequence:
-                                await session.execute(
-                                    text(
-                                        f'SELECT setval(:sequence, GREATEST(COALESCE((SELECT max("{key}") FROM "{table_name}"), 1), nextval(:sequence)), true)'
-                                    ),
-                                    {"sequence": sequence},
-                                )
                 await session.flush()
                 if "conversations" in data:
                     await migrate_conversations(

@@ -2,8 +2,10 @@
 
 import asyncio
 import json
+from pathlib import Path
 
 import pytest
+import pytest_asyncio
 from sqlalchemy import event, text
 from sqlmodel import select
 
@@ -16,6 +18,14 @@ from astrbot.core.db.po import (
     PlatformMessageHistory,
 )
 from astrbot.core.db.sqlite import SQLiteDatabase
+
+
+@pytest_asyncio.fixture
+async def database(tmp_path: Path):
+    db = SQLiteDatabase(str(tmp_path / "events.db"))
+    await db.initialize()
+    yield db
+    await db.engine.dispose()
 
 
 @pytest.mark.asyncio
@@ -713,21 +723,13 @@ async def test_display_context_lookup_holds_the_write_transaction(database, monk
             column.get("entity") is ConversationEvent
             for column in statement.column_descriptions
         ):
-            if database.engine.dialect.name == "postgresql":
-                with database.sync_engine.begin() as contender:
-                    assert not contender.execute(
-                        text("SELECT pg_try_advisory_xact_lock(hashtextextended(:turn_id, 0))"),
-                        {"turn_id": writer.turn_id},
-                    ).scalar_one()
+            contender = sqlite3.connect(database.engine.url.database, timeout=0)
+            try:
+                with pytest.raises(sqlite3.OperationalError, match="locked"):
+                    contender.execute("BEGIN IMMEDIATE")
                 checked = True
-            else:
-                contender = sqlite3.connect(database.engine.url.database, timeout=0)
-                try:
-                    with pytest.raises(sqlite3.OperationalError, match="locked"):
-                        contender.execute("BEGIN IMMEDIATE")
-                    checked = True
-                finally:
-                    contender.close()
+            finally:
+                contender.close()
         return result
 
     with monkeypatch.context() as patch:

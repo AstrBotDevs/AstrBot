@@ -310,8 +310,6 @@ async def test_prune_failure_and_invalid_batch_roll_back_all_changes(database):
 async def test_tree_schema_migration_preserves_every_position_and_cross_conversation_fork(
     database, broken
 ):
-    if database.engine.dialect.name != "sqlite":
-        pytest.skip("Legacy tree schema existed only in SQLite")
     stamp = datetime.now(timezone.utc).isoformat()
     async with database.get_db() as session:
         original = ConversationV3(

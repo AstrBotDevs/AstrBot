@@ -1,16 +1,12 @@
 import abc
 import datetime
-import json
 import typing as T
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
 
 from deprecated import deprecated
-from sqlalchemy import Integer, String, cast, create_engine, func, literal, select, text
-from sqlalchemy.engine import make_url
+from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
-from sqlalchemy.pool import NullPool
-from sqlalchemy.types import JSON
 
 from astrbot.core.db.po import (
     ApiKey,
@@ -36,46 +32,6 @@ from astrbot.core.db.po import (
 from astrbot.core.sentinels import NOT_GIVEN
 
 
-def json_text(column, key: str, dialect: str):
-    """Read a scalar JSON key with a constant path matching expression indexes.
-
-    Args:
-        column: JSON payload expression.
-        key: Top-level schema key, not a user-supplied query path.
-        dialect: SQLAlchemy database dialect name.
-
-    Returns:
-        A textual SQL expression for the key's value.
-    """
-    if dialect == "sqlite":
-        return func.json_extract(column, literal(f"$.{key}", literal_execute=True))
-    return column[literal(key, literal_execute=True)].as_string()
-
-
-def json_value_rows(values: list, dialect: str, *, integers: bool = False):
-    """Expose a bound list as rows without exceeding parameter limits.
-
-    Args:
-        values: JSON scalar values used by a batched lookup.
-        dialect: SQLAlchemy database dialect name.
-        integers: Cast the result to integer identifiers.
-
-    Returns:
-        A SQL subquery with a single value column.
-    """
-    encoded = json.dumps(values)
-    if dialect == "sqlite":
-        rows = func.json_each(encoded).table_valued("value")
-    else:
-        rows = (
-            func.json_array_elements_text(cast(literal(encoded, String), JSON))
-            .table_valued("value")
-            .render_derived()
-        )
-    value = cast(rows.c.value, Integer) if integers else rows.c.value
-    return select(value.label("value")).subquery()
-
-
 @dataclass
 class BaseDatabase(abc.ABC):
     """数据库基类"""
@@ -88,19 +44,13 @@ class BaseDatabase(abc.ABC):
         # second write is attempted.  Setting timeout=30 tells SQLite to
         # wait up to 30 s for the lock, which is enough to ride out brief
         # write bursts from concurrent agent/metrics/session operations.
-        is_sqlite = make_url(self.DATABASE_URL).get_backend_name() == "sqlite"
+        is_sqlite = "sqlite" in self.DATABASE_URL
         connect_args = {"timeout": 30} if is_sqlite else {}
         self.engine = create_async_engine(
             self.DATABASE_URL,
             echo=False,
             future=True,
             connect_args=connect_args,
-        )
-        sync_url = make_url(self.DATABASE_URL)
-        if is_sqlite:
-            sync_url = sync_url.set(drivername="sqlite")
-        self.sync_engine = create_engine(
-            sync_url, poolclass=NullPool, connect_args=connect_args
         )
         from astrbot.core.db.conversation import ConversationStore
 
@@ -110,17 +60,6 @@ class BaseDatabase(abc.ABC):
             class_=AsyncSession,
             expire_on_commit=False,
         )
-
-    async def begin_write(self, session: AsyncSession) -> None:
-        """Reserve SQLite's writer before reading a mutable revision.
-
-        PostgreSQL instead locks the selected conversation using FOR UPDATE.
-
-        Args:
-            session: Transaction that will read and update the revision.
-        """
-        if self.engine.dialect.name == "sqlite":
-            await session.execute(text("BEGIN IMMEDIATE"))
 
     async def initialize(self) -> None:
         """初始化数据库连接"""
@@ -143,12 +82,7 @@ class BaseDatabase(abc.ABC):
             self.inited = True
         async with self.AsyncSessionLocal() as session:
             if consistent_read:
-                if self.engine.dialect.name == "postgresql":
-                    await session.connection(
-                        execution_options={"isolation_level": "REPEATABLE READ"}
-                    )
-                else:
-                    await session.execute(text("BEGIN"))
+                await session.execute(text("BEGIN"))
             yield session
 
     @deprecated(version="4.0.0", reason="Use get_platform_stats instead")
