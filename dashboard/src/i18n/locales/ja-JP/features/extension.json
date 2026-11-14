@@ -57,7 +57,7 @@
     "back": "戻る",
     "selectFile": "ファイルを選択",
     "refresh": "再読み込み",
-    "updateAll": "すべてのプラグインを更新",
+    "updateAll": "プラグインを一括更新",
     "pin": "上部に固定",
     "unpin": "固定を解除",
     "deleteSource": "ソースを削除",
@@ -255,9 +255,9 @@
       "confirm": "強制更新"
     },
     "updateAllConfirm": {
-      "title": "すべてのプラグインを更新",
-      "message": "{count} 個のプラグインをすべて更新しますか？この操作には時間がかかる場合があります。",
-      "confirm": "すべて更新"
+      "title": "プラグインの更新を確認",
+      "message": "更新するプラグインを選択してください。現在 {count} 個を選択しています。",
+      "confirm": "更新を確認"
     },
     "sourceBinding": {
       "title": "プラグインソースを変更",
@@ -292,7 +292,7 @@
     "fillUrlOrFile": "プラグインの URL を入力するか、プラグインファイルをアップロードしてください",
     "dontFillBoth": "プラグインの URL 入力とファイルのアップロードを同時に行わないでください",
     "supportedFormats": ".zip 形式のプラグインファイルに対応しています",
-    "updateAllSuccess": "更新可能なプラグインをすべて更新しました",
+    "updateAllSuccess": "選択したプラグインをすべて更新しました",
     "updateAllFailed": "{total} 個中 {failed} 個のプラグインを更新できませんでした：",
     "noUpdatesAvailable": "現在、更新可能なプラグインはありません",
     "updateDisabled": "このプラグインには利用可能なインストール元またはリポジトリ URL がないため、更新や再インストールはできません",

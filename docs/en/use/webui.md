@@ -19,6 +19,7 @@ These paths use the current default sidebar with a fixed menu order. Extension i
 | Config → System Config | System Settings → General, Appearance, Network, or Security, depending on the setting |
 | Commands / Command Management | Extensions → Handlers → Command |
 | Standalone MCP / Skills entries | Extensions → MCP Servers / Skills |
+| Extensions → Installed → Update All | Extensions → Installed → Batch Update Plugins; all updates are selected by default, and individual plugins can be unchecked |
 | System Settings → General → Cache → Export diagnostics | System Settings → Maintenance → Diagnostics → Export diagnostics |
 | System Settings → Appearance → Customize Sidebar | Removed; the sidebar uses the default menu layout |
 | Custom Rules / Session Management | Config → Manage session mappings; old links redirect automatically |
