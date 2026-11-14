@@ -460,6 +460,7 @@ CONFIG_METADATA_2 = {
                         "telegram_command_auto_refresh": True,
                         "telegram_command_register_interval": 300,
                         "telegram_polling_restart_delay": 5.0,
+                        "telegram_proxy": "",
                     },
                     "Discord": {
                         "id": "discord",
@@ -640,6 +641,12 @@ CONFIG_METADATA_2 = {
                         "description": "文件 API 地址",
                         "type": "string",
                         "hint": "Telegram Bot API 文件下载接口的基础地址。使用官方服务时通常无需修改。",
+                        "show_key": True,
+                    },
+                    "telegram_proxy": {
+                        "description": "Telegram 代理地址",
+                        "type": "string",
+                        "hint": "可选，仅对该 Telegram 机器人生效：http://ip:port 或 socks5://ip:port。留空则沿用全局网络设置。",
                         "show_key": True,
                     },
                     "bot_token": {
