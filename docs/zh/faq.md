@@ -191,21 +191,21 @@ astrbot password
 如果发现插件作者没有填写 `requirements.txt` 文件，请在插件仓库提交 Issue，提醒作者补充。
 
 
-## OneBot v11 实现端 NapCat 连接相关
+## OneBot v11 实现端连接相关
 
-### 我明明按照文档的步骤做了，为什么 NapCat 连不上 Astrbot？
+### 我明明按照文档的步骤做了，为什么协议实现端连不上 AstrBot？
 
-1. 如果你两个**全都**是使用 Docker 部署，请尝试在终端运行：
+1. 如果你两个**全都**是使用 Docker 部署，请尝试在终端运行（将 `napcat` 换成协议实现端的容器名）：
 
 ```bash
-sudo docker network create newnet           # 创建新网络 
-sudo docker network connect newnet astrbot  
+sudo docker network create newnet           # 创建新网络
+sudo docker network connect newnet astrbot
 sudo docker network connect newnet napcat   # 让两个容器连到一起
 sudo docker restart astrbot
 sudo docker restart napcat                  # 重启容器
 ```
 
-运行无报错则回到 NapCat 的 WebUI，网络配置中，将你之前填写的 `ws://127.0.0.1:6199/ws` 修改为 `ws://astrbot:6199/ws`。
+运行无报错则回到协议实现端的 WebUI，网络配置中，将你之前填写的 `ws://127.0.0.1:6199/ws` 修改为 `ws://astrbot:6199/ws`。
 
-2. 如果只有 NapCat 是 Docker 部署，请将 NapCat 的 WebUI 网络配置中的 `ws://127.0.0.1:6199/ws` 修改为 `ws://宿主机IP:6199/ws`（宿主机 IP 请自行搜索如何查看）。
-3. 如果都不是 Docker 部署，则请将 NapCat 的 WebUI 网络配置中的 `ws://127.0.0.1:6199/ws` 修改为 `ws://localhost:6199/ws` 或 `ws://127.0.0.1:6199/ws`。
+2. 如果只有协议实现端是 Docker 部署，请将其 WebUI 网络配置中的 `ws://127.0.0.1:6199/ws` 修改为 `ws://宿主机IP:6199/ws`（宿主机 IP 请自行搜索如何查看）。
+3. 如果都不是 Docker 部署，则请将协议实现端 WebUI 网络配置中的 `ws://127.0.0.1:6199/ws` 修改为 `ws://localhost:6199/ws` 或 `ws://127.0.0.1:6199/ws`。
