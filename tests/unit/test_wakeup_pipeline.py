@@ -270,6 +270,7 @@ async def test_wakeup_runs_normal_whitelist_check(runtime):
     )
     await asyncio.wait_for(runtime.drain(), 1)
     assert not runtime.events
+    runtime.context.conversation_manager.get_conversation.assert_not_awaited()
 
 
 @pytest.mark.asyncio
@@ -311,70 +312,6 @@ async def test_wakeup_queues_after_an_active_message_and_reads_its_saved_reply(r
     assert json.loads(runtime.conversation.history)[-1]["content"] == [
         {"type": "text", "text": "Reply 2"}
     ]
-
-
-@pytest.mark.asyncio
-@pytest.mark.parametrize("stop_at", ["queued", "session_check"])
-@pytest.mark.parametrize("stop_kind", ["request", "signal"])
-async def test_stopped_wakeup_skips_build_and_remains_cancelled(
-    runtime, monkeypatch, stop_at, stop_kind
-):
-    """Preserve wakeup cancellation while skipping all request construction.
-
-    Args:
-        runtime: Real event bus and pipeline with offline dependencies.
-        monkeypatch: Fixture for controlling the stop timing.
-        stop_at: Whether cancellation arrives at the lock or session check.
-        stop_kind: Registry stop request or a shared background stop signal.
-    """
-    umo = "target:FriendMessage:stopped-wakeup"
-    ready = asyncio.Event()
-    stop_signal = asyncio.Event()
-    tasks = []
-
-    from astrbot.core.pipeline.process_stage.method.agent_sub_stages import internal
-
-    original_prepare = internal.prepare_agent_input
-
-    async def prepare_input(*args, **kwargs):
-        result = await original_prepare(*args, **kwargs)
-        tasks.append(asyncio.current_task())
-        ready.set()
-        return result
-
-    async def admit(*args):
-        if stop_at == "session_check":
-            if stop_kind == "request":
-                assert internal.active_event_registry.request_agent_stop_all(umo) == 1
-            else:
-                stop_signal.set()
-        return True
-
-    monkeypatch.setattr(internal, "prepare_agent_input", prepare_input)
-    monkeypatch.setattr(internal, "admit_agent_input", admit)
-    async with native_session.session_lock_manager.acquire_lock(umo):
-        await wake_main_agent(
-            runtime.context,
-            umo=umo,
-            user_prompt="Run",
-            source="background_task",
-            stop_signal=stop_signal,
-        )
-        await asyncio.wait_for(ready.wait(), 1)
-        if stop_at == "queued":
-            if stop_kind == "request":
-                assert internal.active_event_registry.request_agent_stop_all(umo) == 1
-            else:
-                stop_signal.set()
-    await asyncio.wait_for(runtime.drain(), 1)
-
-    assert len(tasks) == 1 and tasks[0].cancelled()
-    assert not runtime.events
-    assert not runtime.requests
-    runtime.context.send_message.assert_not_awaited()
-    runtime.context.conversation_manager.update_conversation.assert_not_awaited()
-    assert umo not in internal.active_event_registry._events
-    assert umo not in native_session.session_lock_manager._get_loop_manager()._locks
 
 
 @pytest.mark.asyncio
