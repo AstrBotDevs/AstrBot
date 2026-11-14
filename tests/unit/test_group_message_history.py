@@ -4,12 +4,14 @@ from types import SimpleNamespace
 
 import pytest
 
+from astrbot.core.astr_agent_runtime.tools.message_tools import (
+    GetGroupMessageHistoryTool,
+)
 from astrbot.core.db.sqlite import SQLiteDatabase
 from astrbot.core.message.components import File, Image, Plain, Record, Video
 from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.platform.message_type import MessageType
 from astrbot.core.platform_message_history_mgr import PlatformMessageHistoryManager
-from astrbot.core.tools.message_tools import GetGroupMessageHistoryTool
 
 
 def _parse_history_csv(result: str) -> tuple[list[dict[str, str]], dict[str, str]]:
@@ -76,7 +78,7 @@ async def test_group_message_history_retains_latest_rows_and_safe_parts(tmp_path
             {"type": "plain", "text": "[Video]"},
             {"type": "plain", "text": "[File]"},
         ]
-        assert all(item.llm_checkpoint_id is None for item in history)
+        assert all(item.turn_id is None for item in history)
     finally:
         await db.engine.dispose()
 

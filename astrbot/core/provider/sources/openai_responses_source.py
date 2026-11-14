@@ -13,6 +13,7 @@ from astrbot.core.agent.tool import ToolSet
 from astrbot.core.exceptions import EmptyModelOutputError
 from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.provider.entities import LLMResponse, TokenUsage, ToolCallsResult
+from astrbot.core.provider.request_observer import RequestAttemptObserver
 
 from ..headers import build_conversation_headers
 from ..register import register_provider_adapter
@@ -296,7 +297,14 @@ class ProviderOpenAIResponses(ProviderOpenAIOfficial):
         return payloads, context_query
 
     def _build_response_tools(self, tools: ToolSet | None) -> list[dict]:
-        """Build the Responses tools list, appending xAI's native web_search when enabled."""
+        """Build function tools and optionally include xAI native search.
+
+        Args:
+            tools: Function tools exposed to the model.
+
+        Returns:
+            Tool definitions for the Responses request.
+        """
         response_tools: list[dict] = []
         if tools:
             for tool in tools.openai_schema():
@@ -316,6 +324,7 @@ class ProviderOpenAIResponses(ProviderOpenAIOfficial):
         tools: ToolSet | None,
         *,
         request_max_retries: int | None = None,
+        request_event_recorder: RequestAttemptObserver | None = None,
         conversation_id: str | None = None,
     ) -> LLMResponse:
         """Send a non-streaming Responses API request.
@@ -367,6 +376,7 @@ class ProviderOpenAIResponses(ProviderOpenAIOfficial):
                 extra_headers=build_conversation_headers(conversation_id),
             ),
             max_attempts=request_max_retries,
+            request_event_recorder=request_event_recorder,
         )
         if not isinstance(response, Response):
             raise TypeError(
@@ -383,6 +393,7 @@ class ProviderOpenAIResponses(ProviderOpenAIOfficial):
         tools: ToolSet | None,
         *,
         request_max_retries: int | None = None,
+        request_event_recorder: RequestAttemptObserver | None = None,
         conversation_id: str | None = None,
     ) -> AsyncGenerator[LLMResponse, None]:
         """Send a streaming Responses API request.
@@ -434,6 +445,7 @@ class ProviderOpenAIResponses(ProviderOpenAIOfficial):
                 extra_headers=build_conversation_headers(conversation_id),
             ),
             max_attempts=request_max_retries,
+            request_event_recorder=request_event_recorder,
         )
 
         response_id: str | None = None

@@ -163,48 +163,35 @@
             </div>
             <div class="route-builder__description">
               {{ tm("workspace.routes.bindDescription") }}
+              <v-btn
+                variant="text"
+                color="primary"
+                size="small"
+                class="px-1"
+                :disabled="!routesReady || saving"
+                @click="mappingsDialogOpen = true"
+              >
+                {{ tm("workspace.routes.configureOverrides") }}
+              </v-btn>
             </div>
           </div>
 
           <div class="route-builder__controls">
-            <v-autocomplete
+            <UmoSelector
+              v-if="originalPlatformId"
               v-model="pendingSessionUmo"
-              :items="availableSessionUmos"
-              :loading="loadingSessions"
+              :platform-id="originalPlatformId"
+              :excluded-umos="[...boundSessionSet]"
+              :allow-manual="false"
               :label="tm('workspace.routes.sessionLabel')"
-              :no-data-text="tm('workspace.routes.noSessions')"
-              density="compact"
-              variant="outlined"
-              hide-details
-              clearable
               :disabled="!routesReady"
-            >
-              <template #item="{ props: itemProps, item }">
-                <v-list-item v-bind="itemProps">
-                  <template #title>
-                    <UmoDisplay
-                      v-bind="getSessionDisplayProps(item.raw)"
-                      compact
-                      :show-info="false"
-                      :show-platform="false"
-                      :show-meta="false"
-                      :show-raw-title="false"
-                    />
-                  </template>
-                </v-list-item>
-              </template>
-              <template #selection="{ item }">
-                <UmoDisplay
-                  v-if="item"
-                  v-bind="getSessionDisplayProps(item.raw)"
-                  compact
-                  :show-info="false"
-                  :show-platform="false"
-                  :show-meta="false"
-                  :show-raw-title="false"
-                />
-              </template>
-            </v-autocomplete>
+              @loaded="
+                (infos) =>
+                  (knownSessionInfo = Object.fromEntries(
+                    infos.map((info) => [info.umo, info]),
+                  ))
+              "
+            />
 
             <v-select
               v-model="pendingConfigId"
@@ -271,13 +258,26 @@
                 :show-meta="false"
                 :show-raw-title="false"
               />
+              <div
+                v-if="binding.overrideCount"
+                class="text-caption text-medium-emphasis mt-1"
+              >
+                {{
+                  tm("workspace.routes.overrideCount", {
+                    count: binding.overrideCount,
+                  })
+                }}
+              </div>
             </div>
             <v-icon class="route-binding__arrow" size="18">
               mdi-arrow-right
             </v-icon>
             <v-select
               v-model="binding.configId"
-              :items="configProfiles"
+              :items="[
+                { id: '', name: tm('workspace.routes.followRouting') },
+                ...configProfiles,
+              ]"
               item-title="name"
               item-value="id"
               density="compact"
@@ -289,8 +289,8 @@
               icon="mdi-delete-outline"
               size="small"
               variant="text"
-              :aria-label="tm('workspace.routes.remove')"
-              :title="tm('workspace.routes.remove')"
+              :aria-label="tm('workspace.routes.deleteMapping')"
+              :title="tm('workspace.routes.deleteMapping')"
               @click="simpleBindings.splice(index, 1)"
             />
           </div>
@@ -388,10 +388,8 @@
       </section>
     </div>
   </div>
-  <ConfigProfileDrawer
-    v-model="configDrawerOpen"
-    :config-id="configDrawerId"
-  />
+  <ConfigProfileDrawer v-model="configDrawerOpen" :config-id="configDrawerId" />
+  <SessionMappingsDialog v-model="mappingsDialogOpen" />
 </template>
 
 <script setup>
@@ -400,11 +398,13 @@ import {
   botApi,
   configProfileApi,
   configRouteApi,
-  fileApi,
   sessionApi,
+  fileApi,
 } from "@/api/v1";
 import AstrBotConfig from "@/components/shared/AstrBotConfig.vue";
 import ConfigProfileDrawer from "@/components/config/ConfigProfileDrawer.vue";
+import SessionMappingsDialog from "@/components/config/SessionMappingsDialog.vue";
+import UmoSelector from "@/components/shared/UmoSelector.vue";
 import UmoDisplay from "@/components/shared/UmoDisplay.vue";
 import { ArrowUpRight } from "@lucide/vue";
 import { useModuleI18n } from "@/i18n/composables";
@@ -444,6 +444,7 @@ const { tm: sharedTm } = useModuleI18n("core/shared");
 
 const configDrawerOpen = ref(false);
 const configDrawerId = ref("");
+const mappingsDialogOpen = ref(false);
 
 function openConfigDrawer(configId) {
   // The sentinel means "system default", which is the "default" profile.
@@ -460,12 +461,11 @@ const loading = ref(false);
 const saving = ref(false);
 const routesReady = ref(false);
 const routeLoadFailed = ref(false);
-const loadingSessions = ref(false);
 const fullRoutingTable = ref({});
 const configProfiles = ref([]);
-const knownSessionUmos = ref([]);
 const knownSessionInfo = ref({});
 const simpleBindings = ref([]);
+const savedSessionBindings = ref({});
 const advancedRoutes = ref([]);
 const fallbackConfigId = ref(SYSTEM_DEFAULT_CONFIG);
 const pendingSessionUmo = ref(null);
@@ -498,10 +498,6 @@ const defaultConfigOptions = computed(() => [
 
 const boundSessionSet = computed(
   () => new Set(simpleBindings.value.map((binding) => binding.umo)),
-);
-
-const availableSessionUmos = computed(() =>
-  knownSessionUmos.value.filter((umo) => !boundSessionSet.value.has(umo)),
 );
 
 const currentRouteSnapshot = computed(() =>
@@ -545,6 +541,10 @@ watch(
   },
   { immediate: true },
 );
+
+watch(mappingsDialogOpen, (open, wasOpen) => {
+  if (!open && wasOpen) void initialize(props.platform, true);
+});
 
 watch(
   () => props.platform.enable,
@@ -614,7 +614,17 @@ function mergeConfigWithTemplate(sourceConfig, templateConfig) {
   return merge(sourceConfig, templateConfig);
 }
 
-async function initialize(platform) {
+async function initialize(platform, preserveDraft = false) {
+  // Refresh mappings after the dialog closes without losing unsaved bot edits.
+  const previous = preserveDraft
+    ? {
+        draft: draft.value,
+        configSnapshot: initialConfigSnapshot.value,
+        routes: JSON.parse(currentRouteSnapshot.value),
+        savedRoutes: JSON.parse(initialRouteSnapshot.value),
+        pendingSession: pendingSessionUmo.value,
+      }
+    : null;
   const version = ++loadVersion;
   loading.value = true;
   routesReady.value = false;
@@ -626,14 +636,31 @@ async function initialize(platform) {
     ? mergeConfigWithTemplate(platformCopy, template)
     : platformCopy;
   simpleBindings.value = [];
+  savedSessionBindings.value = {};
   advancedRoutes.value = [];
   fallbackConfigId.value = SYSTEM_DEFAULT_CONFIG;
   pendingSessionUmo.value = null;
 
-  const [profilesResult, routesResult] = await Promise.allSettled([
-    configProfileApi.list(),
-    configRouteApi.list(),
-  ]);
+  const [profilesResult, routesResult, sessionsResult] =
+    await Promise.allSettled([
+      configProfileApi.list(),
+      configRouteApi.list(),
+      (async () => {
+        const sessions = [];
+        let page = 1;
+        while (true) {
+          const response = await sessionApi.listRules({ page, page_size: 100 });
+          if (response.data.status !== "ok")
+            throw new Error(response.data.message);
+          const items = response.data.data.rules || [];
+          sessions.push(...items);
+          if (!items.length || sessions.length >= response.data.data.total)
+            break;
+          page++;
+        }
+        return sessions;
+      })(),
+    ]);
   if (version !== loadVersion) return;
 
   if (profilesResult.status === "fulfilled") {
@@ -650,42 +677,86 @@ async function initialize(platform) {
     showError(profilesResult.reason);
   }
 
-  if (routesResult.status === "fulfilled") {
+  if (
+    routesResult.status === "fulfilled" &&
+    routesResult.value.data.status === "ok" &&
+    sessionsResult.status === "fulfilled"
+  ) {
     fullRoutingTable.value = routesResult.value.data.data.routing || {};
     loadBotRoutes(originalPlatformId.value);
+    for (const session of sessionsResult.value) {
+      if (parseUmo(session.umo)?.platform !== originalPlatformId.value)
+        continue;
+      knownSessionInfo.value[session.umo] = session;
+      const overrideCount = Object.keys(
+        session.rules?.config_overrides || {},
+      ).length;
+      if (session.profile_id == null && !overrideCount) continue;
+      simpleBindings.value.push({
+        key: `session-${routeKey++}`,
+        umo: session.umo,
+        configId: session.profile_id ?? "",
+        overrideCount,
+      });
+      if (session.profile_id != null)
+        savedSessionBindings.value[session.umo] = session.profile_id;
+    }
     routesReady.value = true;
   } else {
     fullRoutingTable.value = {};
     routeLoadFailed.value = true;
   }
 
-  loadingSessions.value = true;
-  try {
-    const sessionsResponse = await sessionApi.activeUmos();
-    if (version === loadVersion && sessionsResponse.data.status === "ok") {
-      knownSessionUmos.value = (sessionsResponse.data.data?.umos || []).filter(
-        (umo) => parseUmo(umo)?.platform === originalPlatformId.value,
-      );
-      knownSessionInfo.value = Object.fromEntries(
-        (sessionsResponse.data.data?.umo_infos || [])
-          .filter((info) => info?.umo)
-          .map((info) => [info.umo, info]),
-      );
-    }
-  } catch (error) {
-    if (version === loadVersion) {
-      knownSessionUmos.value = [];
-      knownSessionInfo.value = {};
-    }
-  } finally {
-    if (version === loadVersion) {
-      loadingSessions.value = false;
-    }
-  }
-
   if (version !== loadVersion) return;
   initialConfigSnapshot.value = JSON.stringify(draft.value);
   initialRouteSnapshot.value = currentRouteSnapshot.value;
+  if (previous) {
+    draft.value = previous.draft;
+    initialConfigSnapshot.value = previous.configSnapshot;
+    pendingSessionUmo.value = previous.pendingSession;
+    if (
+      previous.routes.fallbackConfigId !== previous.savedRoutes.fallbackConfigId
+    )
+      fallbackConfigId.value = previous.routes.fallbackConfigId;
+    if (
+      JSON.stringify(previous.routes.advancedRoutes) !==
+      JSON.stringify(previous.savedRoutes.advancedRoutes)
+    )
+      advancedRoutes.value = previous.routes.advancedRoutes.map((route) => ({
+        ...route,
+        key: `route-${routeKey++}`,
+      }));
+    const before = new Map(
+      previous.savedRoutes.simpleBindings.map(({ umo, configId }) => [
+        umo,
+        configId,
+      ]),
+    );
+    const after = new Map(
+      previous.routes.simpleBindings.map(({ umo, configId }) => [
+        umo,
+        configId,
+      ]),
+    );
+    for (const umo of new Set([...before.keys(), ...after.keys()])) {
+      if (before.get(umo) === after.get(umo)) continue;
+      const index = simpleBindings.value.findIndex(
+        (binding) => binding.umo === umo,
+      );
+      if (index >= 0) {
+        if (!after.has(umo))
+          simpleBindings.value.splice(index, 1);
+        else simpleBindings.value[index].configId = after.get(umo) || "";
+      } else if (after.has(umo)) {
+        simpleBindings.value.push({
+          key: `session-${routeKey++}`,
+          umo,
+          configId: after.get(umo),
+          overrideCount: 0,
+        });
+      }
+    }
+  }
   loading.value = false;
 }
 
@@ -701,14 +772,7 @@ function loadBotRoutes(platformId) {
       continue;
     }
 
-    if (isExactSessionPattern(parsed)) {
-      simpleBindings.value.push({
-        key: `session-${routeKey++}`,
-        umo: pattern,
-        configId,
-      });
-      continue;
-    }
+    if (isExactSessionPattern(parsed)) continue;
 
     advancedRoutes.value.push({
       key: `pattern-${routeKey++}`,
@@ -743,7 +807,12 @@ function isBotFallbackPattern(parsed) {
 }
 
 function isExactSessionPattern(parsed) {
-  return !hasGlob(parsed.messageType) && !hasGlob(parsed.sessionId);
+  return (
+    !!parsed.messageType &&
+    !!parsed.sessionId &&
+    !hasGlob(parsed.messageType) &&
+    !hasGlob(parsed.sessionId)
+  );
 }
 
 function getSessionDisplayProps(umo) {
@@ -814,6 +883,8 @@ function getPatternError(pattern) {
   if (!validPlatformIds.has(parsed.platform)) {
     return tm("workspace.routes.patternPlatformMismatch");
   }
+  if (isExactSessionPattern(parsed))
+    return tm("workspace.routes.useSessionBinding");
   return "";
 }
 
@@ -830,7 +901,33 @@ async function save() {
     const oldPlatformId = originalPlatformId.value;
     const newPlatformId = draft.value.id || oldPlatformId;
     let nextRoutingTable = null;
+    const savedRoutes = JSON.parse(initialRouteSnapshot.value);
+    const currentRoutes = JSON.parse(currentRouteSnapshot.value);
+    const deletedSessionUmos = new Set(
+      savedRoutes.simpleBindings
+        .filter(({ umo }) => !boundSessionSet.value.has(umo))
+        .map(({ umo }) => umo),
+    );
+    delete savedRoutes.simpleBindings;
+    delete currentRoutes.simpleBindings;
+    const routingChanged =
+      JSON.stringify(savedRoutes) !== JSON.stringify(currentRoutes);
+    const nextSessionBindings = {};
+    const sessionChanges = {};
     if (routesReady.value) {
+      for (const binding of simpleBindings.value) {
+        if (!binding.configId) continue;
+        const umo = rewritePatternPlatform(binding.umo, newPlatformId);
+        if (umo in nextSessionBindings)
+          throw new Error(tm("workspace.routes.duplicatePattern"));
+        nextSessionBindings[umo] = binding.configId;
+        if (savedSessionBindings.value[umo] !== binding.configId)
+          sessionChanges[umo] = binding.configId;
+      }
+      for (const umo of Object.keys(savedSessionBindings.value)) {
+        if (!(umo in nextSessionBindings) && !deletedSessionUmos.has(umo))
+          sessionChanges[umo] = null;
+      }
       const retainedEntries = Object.entries(fullRoutingTable.value).filter(
         ([pattern]) => {
           const parsed = parseUmo(pattern);
@@ -842,14 +939,21 @@ async function save() {
       const botEntries = [];
       const routePatterns = new Set();
 
-      for (const binding of simpleBindings.value) {
-        if (!binding.configId) continue;
-        const pattern = rewritePatternPlatform(binding.umo, newPlatformId);
-        if (routePatterns.has(pattern)) {
-          throw new Error(tm("workspace.routes.duplicatePattern"));
+      // Preserve untouched legacy exact routes until an explicit session edit replaces them.
+      for (const [pattern, configId] of Object.entries(
+        fullRoutingTable.value,
+      )) {
+        const parsed = parseUmo(pattern);
+        if (
+          parsed?.platform === oldPlatformId &&
+          isExactSessionPattern(parsed) &&
+          !(pattern in sessionChanges) &&
+          !deletedSessionUmos.has(pattern)
+        ) {
+          const target = rewritePatternPlatform(pattern, newPlatformId);
+          routePatterns.add(target);
+          botEntries.push([target, configId]);
         }
-        routePatterns.add(pattern);
-        botEntries.push([pattern, binding.configId]);
       }
 
       for (const route of advancedRoutes.value) {
@@ -882,10 +986,32 @@ async function save() {
       );
     }
 
-    if (nextRoutingTable) {
-      await configRouteApi.replace({ routing: nextRoutingTable });
+    for (const [umo, profileId] of Object.entries(sessionChanges)) {
+      const result = await sessionApi.upsertRule({
+        umo,
+        rule_key: "config_overrides",
+        rule_value: {},
+        profile_id: profileId,
+      });
+      if (result.data.status !== "ok") throw new Error(result.data.message);
+      delete fullRoutingTable.value[umo];
+    }
+    for (const umo of deletedSessionUmos) {
+      const result = await sessionApi.deleteRules({
+        umo,
+        rule_key: "config_binding",
+      });
+      if (result.data.status !== "ok") throw new Error(result.data.message);
+      delete fullRoutingTable.value[umo];
+    }
+    if (nextRoutingTable && routingChanged) {
+      const result = await configRouteApi.replace({
+        routing: nextRoutingTable,
+      });
+      if (result.data.status !== "ok") throw new Error(result.data.message);
       fullRoutingTable.value = nextRoutingTable;
     }
+    if (routesReady.value) savedSessionBindings.value = nextSessionBindings;
 
     initialConfigSnapshot.value = JSON.stringify(draft.value);
     initialRouteSnapshot.value = currentRouteSnapshot.value;

@@ -574,3 +574,48 @@ async def test_save_uploaded_file_rejects_oversized_saved_file(
         await chat_service_instance.save_uploaded_file(FakeUpload())
 
     assert not list(Path(chat_service_instance.attachments_dir).iterdir())
+
+
+@pytest.mark.asyncio
+async def test_native_search_sources_are_saved_and_published(chat_service_instance):
+    service = chat_service_instance
+    stream = await service.build_chat_stream(
+        "alice", {"message": "search", "session_id": "search-session"}
+    )
+    run = next(iter(service.chat_runs.values()))
+    refs = {"used": [{"index": "1", "url": "https://example.com", "title": "Source"}]}
+    received = []
+
+    async def consume():
+        async for event in stream:
+            received.append(_decode_sse_event(event))
+
+    consumer = asyncio.create_task(consume())
+    try:
+        for payload in [
+            {
+                "type": "plain",
+                "chain_type": "web_search_sources",
+                "data": json.dumps({"sources": refs["used"]}),
+            },
+            {"type": "plain", "data": "Answer", "streaming": True},
+            {"type": "complete", "data": "Answer", "streaming": True},
+            {"type": "end", "data": ""},
+        ]:
+            await chat_service.webchat_queue_mgr.put_back_queue(
+                run.run_id, {**payload, "message_id": run.run_id}
+            )
+            await asyncio.sleep(0)
+        await asyncio.wait_for(run.task, 2)
+        await asyncio.wait_for(consumer, 2)
+        assert service.save_bot_message.await_args.args[3] == refs
+        saved = [event for event in received if event["type"] == "message_saved"]
+        assert saved[0]["data"]["refs"] == refs
+        assert saved[0]["data"]["turn_id"] == run.turn_id
+    finally:
+        for task in [consumer, run.task]:
+            if task and not task.done():
+                task.cancel()
+                await asyncio.gather(task, return_exceptions=True)
+        await stream.aclose()
+        chat_service.webchat_queue_mgr.remove_queues("search-session")

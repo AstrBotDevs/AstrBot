@@ -43,25 +43,23 @@ class NvidiaRerankProvider(RerankProvider):
         return self.client
 
     def _get_endpoint(self) -> str:
-        """
-        构建完整API URL。
+        """Build the API URL while preserving model-specific path conventions.
 
-        根据 Nvidia Rerank API 文档来看，当前URL存在不同模型格式不一致的问题。
-        这里针对模型名做一个基础判断用以适配，后续要等Nvidia统一API格式后再做调整。
-
-        例：
-        模型： nv-rerank-qa-mistral-4b:1
-        URL: .../v1/retrieval/nvidia/reranking
-
-        模型： nvidia/llama-nemotron-rerank-1b-v2
-        URL: .../v1/retrieval/nvidia/llama-nemotron-rerank-1b-v2/reranking
+        Returns:
+            The full reranking endpoint URL for the configured model.
         """
 
         model_path = "nvidia"
         logger.debug(f"[NVIDIA Rerank] Building endpoint for model: {self.model}")
         if "/" in self.model:
-            """遵循NVIDIA API的URL规则，替换模型名中特殊字符"""
-            model_path = self.model.strip("/").replace(".", "_")
+            model_path = self.model.strip("/")
+            # Only these legacy models use underscores instead of dots in URLs.
+            if model_path in {
+                "nvidia/llama-3.2-nv-rerankqa-1b-v1",
+                "nvidia/llama-3.2-nv-rerankqa-1b-v2",
+                "nvidia/llama-3.2-nemoretriever-500m-rerank-v2",
+            }:
+                model_path = model_path.replace(".", "_")
         endpoint = self.model_endpoint.lstrip("/")
         return f"{self.base_url}/{model_path}/{endpoint}"
 

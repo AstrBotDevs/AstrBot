@@ -1861,8 +1861,8 @@ def _get_audio_magic_type(audio_path: str) -> str:
     if header.startswith(b"#!SILK_V3"):
         return "silk"
 
-    # Tencent SILK: leading \x02 byte before #!SILK_V3
-    if header.startswith(b"\x02#!SILK_V3"):
+    # Tencent SILK may have a leading 0x02 or 0x03 marker before the header.
+    if header.startswith((b"\x02#!SILK_V3", b"\x03#!SILK_V3")):
         return "silk"
 
     return ""

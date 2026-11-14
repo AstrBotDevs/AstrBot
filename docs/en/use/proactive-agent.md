@@ -41,7 +41,7 @@ You can also ask it to:
 - “Move my break reminder to 3 PM tomorrow.”
 - “Delete the news task I just created.”
 
-Chat-based listing, editing, and deletion are limited to tasks created by **the current sender in the current conversation**. Group members cannot edit or delete each other's tasks. Tasks created in the WebUI do not belong to a chat sender; administrators should manage them in the WebUI.
+All group members can list **every task in the current group conversation**, including its creator. Regular members can only edit and delete tasks they created in that group. AstrBot admins can also delete other members' tasks in the current group, but editing remains limited to the creator. Tasks created in the WebUI without a recorded chat creator also appear in the corresponding group's list and can be deleted by AstrBot admins. These permissions stay within the current conversation and do not allow access across groups. In private chats, listing, editing, and deletion remain limited to tasks created by the current sender in the current conversation.
 
 ## Create and manage tasks in the WebUI
 
@@ -119,4 +119,4 @@ Create a one-off task a few minutes ahead that sends a short test reminder. Conf
 | Task ran but no message arrived | Check the delivery target, platform support, connection, and send permissions. No target means no automatic delivery. |
 | Search or file operations fail | Test those tools' configuration, dependencies, and permissions separately. Scheduling only wakes the Agent. |
 | A one-off task disappeared | Scheduled execution deletes it even on failure. Inspect logs for the outcome. |
-| Chat cannot find an existing task | Query as the original sender in the original conversation. Use the WebUI for tasks created by others or by the dashboard. |
+| Chat cannot find an existing task | Query in the task's original conversation. All group members can list every task in their current group; private chats require the original sender. Otherwise use the WebUI. |

@@ -5,8 +5,13 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 import astrbot.api.message_components as Comp
+from astrbot.api.event import MessageChain
 from astrbot.api.platform import Group
 from astrbot.core.pipeline.preprocess_stage import stage as preprocess_stage
+from astrbot.core.platform.button_interaction import (
+    decode_button_callback,
+    encode_button_callback,
+)
 from astrbot.core.platform.sources.mattermost.client import MattermostClient
 from astrbot.core.platform.sources.mattermost.mattermost_adapter import (
     MattermostPlatformAdapter,
@@ -119,6 +124,141 @@ async def test_mattermost_parse_post_attachments_maps_media_types(tmp_path):
 
 
 @pytest.mark.asyncio
+async def test_mattermost_send_message_chain_maps_portable_buttons():
+    callback_url = "https://bot.example.com/api/platform/webhook/mattermost-callback"
+    client = MattermostClient(
+        "https://chat.example.com",
+        "test_token",
+        action_callback_url=callback_url,
+    )
+    client.create_post = AsyncMock(return_value={"id": "post-1"})
+
+    await client.send_message_chain(
+        "channel-1",
+        MessageChain(
+            [
+                Comp.Plain("Review request"),
+                Comp.ActionRow(
+                    buttons=[
+                        Comp.Button(
+                            id="approve",
+                            label="Approve",
+                            action=Comp.Button.CallbackAction(data={"request_id": 42}),
+                            style=Comp.Button.Style.SUCCESS,
+                        ),
+                        Comp.Button(
+                            id="details",
+                            label="Details",
+                            action=Comp.Button.UrlAction(url="https://example.com/42"),
+                            style=Comp.Button.Style.PRIMARY,
+                        ),
+                    ],
+                    fallback_text="Review actions",
+                ),
+            ]
+        ),
+    )
+
+    payload = client.create_post.await_args.kwargs
+    callback_token = payload["props"]["attachments"][0]["actions"][0]["integration"][
+        "context"
+    ]["astrbot_callback"]
+    assert payload["props"] == {
+        "attachments": [
+            {
+                "fallback": "Review actions",
+                "text": "Review actions\n[Details](https://example.com/42)",
+                "actions": [
+                    {
+                        "id": "astrbot1b0",
+                        "type": "button",
+                        "name": "Approve",
+                        "style": "success",
+                        "integration": {
+                            "url": callback_url,
+                            "context": {
+                                "astrbot_callback": callback_token,
+                            },
+                        },
+                    }
+                ],
+            }
+        ]
+    }
+    assert decode_button_callback(callback_token) == (
+        "approve",
+        {"request_id": 42},
+    )
+
+
+@pytest.mark.asyncio
+async def test_mattermost_callback_button_degrades_without_public_callback():
+    client = MattermostClient("https://chat.example.com", "test_token")
+    client.create_post = AsyncMock(return_value={"id": "post-1"})
+
+    await client.send_message_chain(
+        "channel-1",
+        MessageChain(
+            [
+                Comp.ActionRow(
+                    buttons=[
+                        Comp.Button(
+                            id="approve",
+                            label="Approve",
+                            action=Comp.Button.CallbackAction(),
+                        )
+                    ],
+                    fallback_text="Choose an action",
+                )
+            ]
+        ),
+    )
+
+    attachment = client.create_post.await_args.kwargs["props"]["attachments"][0]
+    assert attachment == {
+        "fallback": "Choose an action",
+        "text": "Choose an action\nApprove",
+    }
+
+
+@pytest.mark.asyncio
+async def test_mattermost_webhook_acknowledges_then_dispatches_button():
+    adapter = _build_adapter()
+    adapter.client.get_channel = AsyncMock(return_value={"type": "O"})
+    callback_token = encode_button_callback(
+        "approve",
+        {"request_id": 42},
+    )
+
+    class FakeRequest:
+        async def get_json(self, *, silent: bool = False):
+            assert silent is False
+            return {
+                "trigger_id": "trigger-1",
+                "user_id": "user-1",
+                "user_name": "alice",
+                "channel_id": "channel-1",
+                "post_id": "post-1",
+                "context": {"astrbot_callback": callback_token},
+            }
+
+    response = await adapter.webhook_callback(FakeRequest())
+
+    assert response == {}
+    await asyncio.sleep(0)
+    await asyncio.sleep(0)
+    event = adapter._event_queue.get_nowait()
+    assert event.get_sender_id() == "user-1"
+    assert event.get_session_id() == "channel-1"
+    interaction = event.get_button_interaction()
+    assert interaction is not None
+    assert interaction.action_id == "approve"
+    assert interaction.data == {"request_id": 42}
+    assert interaction.interaction_id == "trigger-1"
+    assert interaction.source_message_id == "post-1"
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize("image_kind", ["png", "jpeg", "invalid"])
 async def test_mattermost_attachments_follow_preprocessing_cleanup_rules(
     tmp_path, monkeypatch, image_kind
@@ -174,7 +314,10 @@ async def test_mattermost_attachments_follow_preprocessing_cleanup_rules(
     stage = preprocess_stage.PreProcessStage()
     stage.config = {}
     stage.platform_settings = {}
-    stage.stt_settings = {"enable": False}
+    stage.plugin_manager = MagicMock()
+    stage.plugin_manager.context.get_config.return_value = {
+        "provider_stt_settings": {"enable": False}
+    }
 
     await stage.process(event)
     event.cleanup_temporary_local_files()

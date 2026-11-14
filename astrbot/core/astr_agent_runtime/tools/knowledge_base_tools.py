@@ -1,0 +1,122 @@
+from pydantic import Field
+from pydantic.dataclasses import dataclass
+
+from astrbot.api import logger
+from astrbot.core.agent.run_context import ContextWrapper
+from astrbot.core.agent.tool import FunctionTool, ToolExecResult
+from astrbot.core.astr_agent_runtime.context import AstrAgentContext
+from astrbot.core.astr_agent_runtime.tools.registry import builtin_tool
+from astrbot.core.knowledge_base.kb_helper import KBHelper
+from astrbot.core.star.context import Context
+
+_KNOWLEDGE_BASE_TOOL_CONFIG = {
+    "kb_agentic_mode": True,
+}
+
+
+def check_all_kb(kb_list: list[KBHelper | None]) -> bool:
+    """检查是否所有的知识库都为空
+
+    Args:
+        kb_list: 知识库实例列表，可能包含 None（未找到的知识库）
+
+    Returns:
+        bool: True 表示所有知识库都为空或未找到
+    """
+    # 检查是否有未找到的知识库（None）
+    none_count = sum(1 for kb in kb_list if kb is None)
+    if none_count > 0:
+        logger.warning(
+            f"[知识库] {none_count}/{len(kb_list)} 个知识库未找到或未加载，"
+            "请检查配置中的知识库名称或 ID 是否正确"
+        )
+
+    # 检查是否所有非 None 的知识库都为空
+    return not any(
+        kb and (kb.kb.doc_count != 0 or kb.kb.chunk_count != 0) for kb in kb_list
+    )
+
+
+async def retrieve_knowledge_base(
+    query: str,
+    umo: str,
+    context: Context,
+) -> str | None:
+    """Retrieve knowledge base context for the given query."""
+    kb_mgr = context.kb_manager
+    config = context.get_config(umo=umo)
+
+    kb_names = config.get("kb_names", [])
+    top_k = config.get("kb_final_top_k", 5)
+
+    top_k_fusion = config.get("kb_fusion_top_k", 20)
+    if not kb_names:
+        return None
+
+    all_kbs = [await kb_mgr.get_kb_by_name(kb) for kb in kb_names]
+    if check_all_kb(all_kbs):
+        logger.debug("所配置的所有知识库全为空，跳过检索过程")
+        return None
+
+    logger.debug(f"[知识库] 开始检索知识库，数量: {len(kb_names)}, top_k={top_k}")
+    kb_context = await kb_mgr.retrieve(
+        query=query,
+        kb_names=kb_names,
+        top_k_fusion=top_k_fusion,
+        top_m_final=top_k,
+    )
+    if not kb_context:
+        return None
+
+    formatted = kb_context.get("context_text", "")
+    if formatted:
+        results = kb_context.get("results", [])
+        logger.debug(f"[知识库] 为会话 {umo} 注入了 {len(results)} 条相关知识块")
+        return formatted
+    return None
+
+
+@builtin_tool(config=_KNOWLEDGE_BASE_TOOL_CONFIG)
+@dataclass
+class KnowledgeBaseQueryTool(FunctionTool[AstrAgentContext]):
+    name: str = "astr_kb_search"
+    description: str = (
+        "Query the knowledge base for facts or relevant context. "
+        "Use this tool when the user's question requires factual information, "
+        "definitions, background knowledge, or previously indexed content. "
+        "Only send short keywords or a concise question as the query."
+    )
+    parameters: dict = Field(
+        default_factory=lambda: {
+            "type": "object",
+            "properties": {
+                "query": {
+                    "type": "string",
+                    "description": "A concise keyword query for the knowledge base.",
+                },
+            },
+            "required": ["query"],
+        }
+    )
+
+    async def call(
+        self, context: ContextWrapper[AstrAgentContext], **kwargs
+    ) -> ToolExecResult:
+        query = kwargs.get("query", "")
+        if not query:
+            return "error: Query parameter is empty."
+        result = await retrieve_knowledge_base(
+            query=query,
+            umo=context.context.event.unified_msg_origin,
+            context=context.context.context,
+        )
+        if not result:
+            return "No relevant knowledge found."
+        return result
+
+
+__all__ = [
+    "KnowledgeBaseQueryTool",
+    "check_all_kb",
+    "retrieve_knowledge_base",
+]

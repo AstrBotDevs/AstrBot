@@ -1,8 +1,10 @@
 from collections.abc import AsyncGenerator
+from contextlib import aclosing
 
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from astrbot.core.provider.entities import ProviderRequest
 from astrbot.core.star.star_handler import StarHandlerMetadata
+from astrbot.core.utils.session_waiter import FILTERS, USER_SESSIONS, SessionWaiter
 
 from ..context import PipelineContext
 from ..stage import Stage, register_stage
@@ -14,7 +16,6 @@ from .method.star_request import StarRequestSubStage
 class ProcessStage(Stage):
     async def initialize(self, ctx: PipelineContext) -> None:
         self.ctx = ctx
-        self.config = ctx.astrbot_config
         self.plugin_manager = ctx.plugin_manager
 
         # initialize agent sub stage
@@ -30,6 +31,15 @@ class ProcessStage(Stage):
         event: AstrMessageEvent,
     ) -> None | AsyncGenerator[None, None]:
         """处理事件"""
+        # Dispatch after access/safety checks and preprocessing, before plugins.
+        for session_filter in tuple(FILTERS):
+            session_id = session_filter.filter(event)
+            session = USER_SESSIONS.get(session_id)
+            if session and not session.session_controller.future.done():
+                await SessionWaiter.trigger(session_id, event)
+                event.stop_event()
+                return
+
         activated_handlers: list[StarHandlerMetadata] = event.get_extra(
             "activated_handlers",
         )
@@ -41,9 +51,12 @@ class ProcessStage(Stage):
                     # Handler 的 LLM 请求
                     event.set_extra("provider_request", resp)
                     _t = False
-                    async for _ in self.agent_sub_stage.process(event):
-                        _t = True
-                        yield
+                    async with aclosing(
+                        self.agent_sub_stage.process(event)
+                    ) as responses:
+                        async for _ in responses:
+                            _t = True
+                            yield
                     if not _t:
                         yield
                 else:
@@ -62,5 +75,6 @@ class ProcessStage(Stage):
             if (
                 event.get_result() and not event.is_stopped()
             ) or not event.get_result():
-                async for _ in self.agent_sub_stage.process(event):
-                    yield
+                async with aclosing(self.agent_sub_stage.process(event)) as responses:
+                    async for _ in responses:
+                        yield

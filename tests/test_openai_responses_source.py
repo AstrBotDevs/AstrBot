@@ -397,3 +397,73 @@ async def test_parse_failed_response_raises_provider_error():
 
     with pytest.raises(RuntimeError, match="server_error: failed"):
         await provider._parse_response(response, tools=None)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("streaming", [False, True])
+@pytest.mark.parametrize("enabled", [False, True])
+async def test_xai_search_preserves_tools_and_citations(
+    monkeypatch, streaming, enabled
+):
+    provider = _make_provider({"provider": "xai", "xai_native_search": enabled})
+    response = _make_response(
+        [
+            {
+                "type": "message",
+                "id": "msg_1",
+                "status": "completed",
+                "role": "assistant",
+                "content": [
+                    {
+                        "type": "output_text",
+                        "text": "Answer",
+                        "annotations": [
+                            {
+                                "type": "url_citation",
+                                "url": "https://example.com",
+                                "title": "Source",
+                                "start_index": 0,
+                                "end_index": 6,
+                            }
+                        ],
+                    }
+                ],
+            }
+        ]
+    )
+    captured = {}
+
+    async def stream():
+        yield SimpleNamespace(type="response.output_text.delta", delta="Answer")
+        yield SimpleNamespace(type="response.completed", response=response)
+
+    async def create(**kwargs):
+        captured.update(kwargs)
+        return stream() if streaming else response
+
+    monkeypatch.setattr(provider.client.responses, "create", create)
+    tools = SimpleNamespace(
+        openai_schema=lambda: [
+            {
+                "type": "function",
+                "function": {"name": "weather", "parameters": {"type": "object"}},
+            }
+        ]
+    )
+    try:
+        payload = {"model": "grok-test", "input": "hi"}
+        if streaming:
+            results = [
+                result async for result in provider._query_stream(payload, tools)
+            ]
+            result = results[-1]
+        else:
+            result = await provider._query(payload, tools)
+        assert [tool["type"] for tool in captured["tools"]] == (
+            ["function", "web_search"] if enabled else ["function"]
+        )
+        assert result.web_search_sources == [
+            {"index": "1", "url": "https://example.com", "title": "Source"}
+        ]
+    finally:
+        await provider.client.close()

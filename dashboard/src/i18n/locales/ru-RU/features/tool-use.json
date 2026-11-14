@@ -23,22 +23,22 @@
             "useTemplateSse": "Шаблон SSE",
             "sync": "Синхронизировать"
         },
-  "empty": "MCP-сервера не найдены. Нажмите «Добавить сервер».",
-  "searchPlaceholder": "Поиск MCP-серверов...",
-  "noSearchResult": "Подходящие MCP-серверы не найдены",
-  "select": "Выбрать",
-  "selectServer": "Выбрать сервер {name}",
-  "selectAll": "Выбрать все",
-  "clearSelection": "Снять выбор",
-  "deleteSelected": "Удалить выбранные ({count})",
-  "cancel": "Отмена",
-  "batchDeleteTitle": "Удалить MCP-серверы",
-  "batchDeleteMessage": "Удалить выбранные MCP-серверы ({count})? Это действие нельзя отменить.",
-  "batchDeleteConfirm": "Удалить ({count})",
-  "batchDeleteSuccess": "Удалено MCP-серверов: {count}",
-  "batchDeletePartial": "Удалено: {succeeded}, ошибок: {failed}",
-  "status": {
-    "installed": "Установленные",
+        "empty": "MCP-сервера не найдены. Нажмите «Добавить сервер».",
+        "searchPlaceholder": "Поиск MCP-серверов...",
+        "noSearchResult": "Подходящие MCP-серверы не найдены",
+        "select": "Выбрать",
+        "selectServer": "Выбрать сервер {name}",
+        "selectAll": "Выбрать все",
+        "clearSelection": "Снять выбор",
+        "deleteSelected": "Удалить выбранные ({count})",
+        "cancel": "Отмена",
+        "batchDeleteTitle": "Удалить MCP-серверы",
+        "batchDeleteMessage": "Удалить выбранные MCP-серверы ({count})? Это действие нельзя отменить.",
+        "batchDeleteConfirm": "Удалить ({count})",
+        "batchDeleteSuccess": "Удалено MCP-серверов: {count}",
+        "batchDeletePartial": "Удалено: {succeeded}, ошибок: {failed}",
+        "status": {
+            "installed": "Установленные",
             "noTools": "Нет доступных инструментов",
             "availableTools": "Доступные инструменты",
             "connected": "Подключен",
@@ -140,43 +140,7 @@
                 "importConfig": "Импортировать конфиг"
             }
         },
-        "confirmDelete": "Вы уверены, что хотите удалить сервер «{name}»?",
-        "syncProvider": {
-            "title": "Синхронизация MCP",
-            "subtitle": "Загрузка конфигурации MCP-серверов от провайдера",
-            "steps": {
-                "selectProvider": "Шаг 1: Провайдер",
-                "configureAuth": "Шаг 2: Авторизация",
-                "syncServers": "Шаг 3: Синхронизация"
-            },
-            "providers": {
-                "modelscope": "ModelScope",
-                "description": "ModelScope — это сообщество моделей с открытым исходным кодом, предоставляющее различные MCP-сервера для AI-сервисов"
-            },
-            "fields": {
-                "provider": "Выберите провайдера",
-                "accessToken": "Токен доступа",
-                "tokenRequired": "Токен обязателен",
-                "tokenHint": "Введите ваш токен доступа ModelScope"
-            },
-            "buttons": {
-                "cancel": "Отмена",
-                "previous": "Назад",
-                "next": "Далее",
-                "sync": "Начать",
-                "getToken": "Получить токен"
-            },
-            "status": {
-                "selectProvider": "Пожалуйста, выберите провайдера MCP-серверов",
-                "enterToken": "Введите токен для продолжения",
-                "readyToSync": "Готов к синхронизации"
-            },
-            "messages": {
-                "syncSuccess": "MCP-сервера успешно синхронизированы!",
-                "syncError": "Ошибка синхронизации: {error}",
-                "tokenHelp": "Как получить токен ModelScope? Нажмите кнопку справа для инструкции"
-            }
-        }
+        "confirmDelete": "Вы уверены, что хотите удалить сервер «{name}»?"
     },
     "messages": {
         "getServersError": "Ошибка получения списка серверов: {error}",

@@ -25,6 +25,7 @@ class ContextManager:
             config: The context configuration.
         """
         self.config = config
+        self.revision = 0
 
         self.token_counter = config.custom_token_counter or EstimateTokenCounter()
         self.truncator = ContextTruncator()
@@ -37,6 +38,7 @@ class ContextManager:
                 keep_recent_ratio=config.llm_compress_keep_recent_ratio,
                 instruction_text=config.llm_compress_instruction,
                 token_counter=self.token_counter,
+                request_event_emitter=config.request_event_emitter,
             )
         else:
             self.compressor = TruncateByTurnsCompressor(
@@ -65,6 +67,9 @@ class ContextManager:
                     drop_turns=self.config.truncate_turns,
                 )
 
+            if result is not messages:
+                self.revision += 1
+
             # 2. 基于 token 的压缩
             if self.config.max_context_tokens > 0:
                 total_tokens = self.token_counter.count_tokens(
@@ -74,6 +79,8 @@ class ContextManager:
                 if self.compressor.should_compress(
                     result, total_tokens, self.config.max_context_tokens
                 ):
+                    # Custom compressors may mutate the existing list in place.
+                    self.revision += 1
                     result = await self._run_compression(result, total_tokens)
 
             return result

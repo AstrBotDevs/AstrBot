@@ -29,6 +29,7 @@ from astrbot.core.platform.sources.webchat.request_flags import (
 from astrbot.core.platform.sources.webchat.webchat_queue_mgr import webchat_queue_mgr
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path, get_astrbot_temp_path
 from astrbot.core.utils.datetime_utils import generate_timestamp_id, to_utc_isoformat
+from astrbot.core.utils.event_id import new_event_id
 from astrbot.dashboard.services.chat_service import (
     BotMessageAccumulator,
     build_bot_history_content,
@@ -288,6 +289,12 @@ class LiveChatService:
             "web_search_tavily",
             "web_search_bocha",
             "web_search_brave",
+            "web_search_deepseek",
+            "web_search_serpapi",
+            "news_search_serpapi",
+            "image_search_serpapi",
+            "finance_search_serpapi",
+            "scholar_search_serpapi",
         ]
         web_search_results = {}
         tool_call_parts = [
@@ -338,7 +345,7 @@ class LiveChatService:
         message_parts: list[dict],
         agent_stats: dict,
         refs: dict,
-        llm_checkpoint_id: str | None = None,
+        turn_id: str | None = None,
     ):
         new_his = build_bot_history_content(
             message_parts,
@@ -352,7 +359,7 @@ class LiveChatService:
             content=new_his,
             sender_id="bot",
             sender_name="bot",
-            llm_checkpoint_id=llm_checkpoint_id,
+            turn_id=turn_id,
         )
 
     async def send_chat_payload(
@@ -557,7 +564,7 @@ class LiveChatService:
         await self.ensure_chat_subscription(session, session_id, send_json)
 
         back_queue = webchat_queue_mgr.get_or_create_back_queue(message_id, session_id)
-        llm_checkpoint_id = str(uuid.uuid4())
+        turn_id = new_event_id()
 
         pending_bot_message_flusher = None
         try:
@@ -577,7 +584,7 @@ class LiveChatService:
                         "flags": flags,
                         "locale": message.get("locale"),
                         "message_id": message_id,
-                        "llm_checkpoint_id": llm_checkpoint_id,
+                        "turn_id": turn_id,
                     },
                 ),
             )
@@ -589,7 +596,7 @@ class LiveChatService:
                 content={"type": "user", "message": message_parts_for_storage},
                 sender_id=session.username,
                 sender_name=session.username,
-                llm_checkpoint_id=llm_checkpoint_id,
+                turn_id=turn_id,
             )
             await self.send_chat_payload(
                 session,
@@ -599,7 +606,7 @@ class LiveChatService:
                     "data": {
                         "id": saved_user_record.id,
                         "created_at": to_utc_isoformat(saved_user_record.created_at),
-                        "llm_checkpoint_id": llm_checkpoint_id,
+                        "turn_id": turn_id,
                     },
                     **request_metadata,
                 },
@@ -640,7 +647,7 @@ class LiveChatService:
                     message_parts_to_save,
                     agent_stats,
                     extracted_refs,
-                    llm_checkpoint_id,
+                    turn_id,
                 )
                 message_accumulator = BotMessageAccumulator()
                 agent_stats = {}
@@ -721,12 +728,12 @@ class LiveChatService:
                 elif result_type == "image":
                     filename = str(result_text).replace("[IMAGE]", "")
                     part = await self.create_attachment_from_file(filename, "image")
-                    message_accumulator.add_attachment(part)
+                    message_accumulator.add_part(part)
                     await send_attachment_saved_event(part)
                 elif result_type == "record":
                     filename = str(result_text).replace("[RECORD]", "")
                     part = await self.create_attachment_from_file(filename, "record")
-                    message_accumulator.add_attachment(part)
+                    message_accumulator.add_part(part)
                     await send_attachment_saved_event(part)
                 elif result_type == "file":
                     filename = str(result_text).replace("[FILE]", "", 1)
@@ -738,7 +745,7 @@ class LiveChatService:
                         "file",
                         display_name=display_name,
                     )
-                    message_accumulator.add_attachment(part)
+                    message_accumulator.add_part(part)
                     await send_attachment_saved_event(part)
                 elif result_type == "video":
                     filename = str(result_text).replace("[VIDEO]", "", 1)
@@ -750,8 +757,10 @@ class LiveChatService:
                         "video",
                         display_name=display_name,
                     )
-                    message_accumulator.add_attachment(part)
+                    message_accumulator.add_part(part)
                     await send_attachment_saved_event(part)
+                elif result_type == "actionrow" and isinstance(result_text, dict):
+                    message_accumulator.add_part({"type": "actionrow", **result_text})
 
                 should_save = False
                 if result_type == "end":
@@ -779,7 +788,7 @@ class LiveChatService:
                                     "created_at": to_utc_isoformat(
                                         saved_record.created_at
                                     ),
-                                    "llm_checkpoint_id": llm_checkpoint_id,
+                                    "turn_id": turn_id,
                                 },
                                 **request_metadata,
                             },
