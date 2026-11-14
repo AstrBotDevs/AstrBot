@@ -6,6 +6,7 @@ import json
 from html import escape
 from typing import TYPE_CHECKING
 
+from astrbot import logger
 from astrbot.core.agent.tool import ToolSet
 from astrbot.core.astr_agent_runtime.subagents.caller import AgentCaller
 from astrbot.core.astr_agent_runtime.subagents.context import SubAgentContext
@@ -112,7 +113,11 @@ async def apply_subagents(
             if not agent_config.enabled:
                 continue
             if agent_config.runtime not in runtime.subagents.runtimes:
-                raise ValueError(f"Agent runtime unavailable: {agent_config.runtime}")
+                logger.warning(
+                    f"Skipping subagent configuration {agent_config.config_id}: "
+                    f"runtime {agent_config.runtime!r} is unavailable"
+                )
+                continue
             configurations.append(
                 {
                     "config_id": agent_config.config_id,
