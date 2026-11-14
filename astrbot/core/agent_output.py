@@ -16,6 +16,7 @@ from astrbot.core.agent.events import (
     TurnFinished,
     TurnPrepared,
     UsageUpdated,
+    WebSearchSources,
 )
 from astrbot.core.agent.output import PlainOutput, ReasoningOutput
 from astrbot.core.agent.runtime import AgentTurn, TurnStatus
@@ -179,6 +180,14 @@ async def present_turn(
                             event, payload.user_prompt, provider
                         )
                     )
+        elif isinstance(payload, WebSearchSources):
+            if event.get_platform_name() == "webchat":
+                await event.send(
+                    MessageChain(
+                        type="web_search_sources",
+                        chain=[Json(data={"sources": list(payload.sources)})],
+                    )
+                )
         elif isinstance(payload, (TextDelta, ReasoningDelta)):
             if (
                 streaming

@@ -1364,7 +1364,6 @@ async def test_empty_output_retries_exhausted_then_uses_fallback_provider(
     assert fallback_provider.call_count == 1
 
 
-
 @pytest.mark.asyncio
 async def test_stop_signal_returns_aborted_and_discards_partial_message(
     runner, provider_request, mock_tool_executor, mock_hooks
@@ -2286,13 +2285,18 @@ async def test_event_journal_records_requests_tools_and_final_context(
     await db.initialize()
     try:
         conv = await db.create_conversation("umo", "p")
-        writer = ConversationEventWriter(db.conversation_store, await db.conversation_store.read(conv.conversation_id))
+        writer = ConversationEventWriter(
+            db.conversation_store,
+            await db.conversation_store.read(conv.conversation_id),
+        )
         provider = VaryingUsageProvider()
         sink = AsyncMock(wraps=writer.consume)
         await runner.reset(
-            provider=provider, request=provider_request,
+            provider=provider,
+            request=provider_request,
             run_context=ContextWrapper(context=None),
-            tool_executor=mock_tool_executor, agent_hooks=mock_hooks,
+            tool_executor=mock_tool_executor,
+            agent_hooks=mock_hooks,
             streaming=streaming,
             conversation_event_sink=sink,
         )
@@ -2308,9 +2312,9 @@ async def test_event_journal_records_requests_tools_and_final_context(
         assert types.count("request.started") == types.count("request.finished") == 2
         assert types.count("tool.started") == types.count("tool.finished") == 1
         assert types[-1] == "turn.finished"
-        assert [e.payload["invocation_id"] for e in events if e.type == "request.started"] == [
-            e.request_id for e in runtime_events if e.type == "request.started"
-        ]
+        assert [
+            e.payload["invocation_id"] for e in events if e.type == "request.started"
+        ] == [e.request_id for e in runtime_events if e.type == "request.started"]
         usage = [e.payload["usage"] for e in events if e.type == "request.finished"]
         assert sum(item["input_tokens"] for item in usage) == 330
         assert sum(item["cached_input_tokens"] for item in usage) == 30
@@ -2318,7 +2322,12 @@ async def test_event_journal_records_requests_tools_and_final_context(
         assert finished_tool.payload["status"] == "completed"
         assert finished_tool.payload["result"]["content"][0]["type"] == "text"
         history = (await db.conversation_store.read(conv.conversation_id)).messages
-        assert [m["role"] for m in history] == ["user", "assistant", "tool", "assistant"]
+        assert [m["role"] for m in history] == [
+            "user",
+            "assistant",
+            "tool",
+            "assistant",
+        ]
         assert history[-1]["content"] == [{"type": "text", "text": "final"}]
     finally:
         await db.engine.dispose()
@@ -2337,9 +2346,14 @@ async def test_journal_failure_does_not_retry_a_model_or_fallback(
 
     primary, fallback = MockProvider(), MockProvider()
     await runner.reset(
-        provider=primary, fallback_providers=[fallback], request=provider_request,
-        run_context=ContextWrapper(context=None), tool_executor=mock_tool_executor,
-        agent_hooks=mock_hooks, streaming=False, conversation_event_sink=persist,
+        provider=primary,
+        fallback_providers=[fallback],
+        request=provider_request,
+        run_context=ContextWrapper(context=None),
+        tool_executor=mock_tool_executor,
+        agent_hooks=mock_hooks,
+        streaming=False,
+        conversation_event_sink=persist,
     )
     with pytest.raises(ConversationPersistenceError):
         await collect_events(runner.step())
@@ -2368,9 +2382,13 @@ async def test_tool_started_is_acknowledged_before_creating_executor(
         return True
 
     await runner.reset(
-        provider=provider, request=provider_request,
-        run_context=ContextWrapper(context=None), tool_executor=executor,
-        agent_hooks=mock_hooks, streaming=False, conversation_event_sink=persist,
+        provider=provider,
+        request=provider_request,
+        run_context=ContextWrapper(context=None),
+        tool_executor=executor,
+        agent_hooks=mock_hooks,
+        streaming=False,
+        conversation_event_sink=persist,
     )
     with pytest.raises(ConversationPersistenceError):
         await collect_events(runner.step_until_done(3))

@@ -74,6 +74,7 @@ from ..events import (
     ToolRejected,
     ToolStarted,
     TurnStatus,
+    WebSearchSources,
 )
 from ..hooks import BaseAgentRunHooks
 from ..message import (
@@ -1253,6 +1254,9 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             content.append(PlainOutput(text=llm_resp.completion_text))
         if content:
             self._message_content = tuple(content)
+
+        if llm_resp.web_search_sources:
+            yield WebSearchSources(sources=tuple(llm_resp.web_search_sources))
 
         # 如果有工具调用，还需处理工具调用
         if llm_resp.tools_call_name:
