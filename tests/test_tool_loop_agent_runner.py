@@ -1364,6 +1364,7 @@ async def test_empty_output_retries_exhausted_then_uses_fallback_provider(
     assert fallback_provider.call_count == 1
 
 
+
 @pytest.mark.asyncio
 async def test_stop_signal_returns_aborted_and_discards_partial_message(
     runner, provider_request, mock_tool_executor, mock_hooks
@@ -2273,6 +2274,112 @@ if __name__ == "__main__":
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("streaming", [False, True])
+async def test_event_journal_records_requests_tools_and_final_context(
+    tmp_path, runner, provider_request, mock_tool_executor, mock_hooks, streaming
+):
+    from astrbot.core.agent.conversation_events import ConversationEventWriter
+    from astrbot.core.agent.message import dump_messages
+    from astrbot.core.db.sqlite import SQLiteDatabase
+
+    db = SQLiteDatabase(str(tmp_path / "runner_events.db"))
+    await db.initialize()
+    try:
+        conv = await db.create_conversation("umo", "p")
+        writer = ConversationEventWriter(db.conversation_store, await db.conversation_store.read(conv.conversation_id))
+        provider = VaryingUsageProvider()
+        sink = AsyncMock(wraps=writer.consume)
+        await runner.reset(
+            provider=provider, request=provider_request,
+            run_context=ContextWrapper(context=None),
+            tool_executor=mock_tool_executor, agent_hooks=mock_hooks,
+            streaming=streaming,
+            conversation_event_sink=sink,
+        )
+        await writer.start_turn({"kind": "agent"})
+        runtime_events = await collect_events(runner.step_until_done(3))
+        captured = [call.args[0] for call in sink.await_args_list]
+        assert sum(event.type == "context.updated" for event in captured) == 1
+        assert sum(event.type == "context.appended" for event in captured) == 2
+        await writer.save_history(dump_messages(runner.run_context.messages))
+        await writer.finish_turn("completed")
+        events = await db.conversation_store.events(conv.conversation_id)
+        types = [e.type for e in events]
+        assert types.count("request.started") == types.count("request.finished") == 2
+        assert types.count("tool.started") == types.count("tool.finished") == 1
+        assert types[-1] == "turn.finished"
+        assert [e.payload["invocation_id"] for e in events if e.type == "request.started"] == [
+            e.request_id for e in runtime_events if e.type == "request.started"
+        ]
+        usage = [e.payload["usage"] for e in events if e.type == "request.finished"]
+        assert sum(item["input_tokens"] for item in usage) == 330
+        assert sum(item["cached_input_tokens"] for item in usage) == 30
+        finished_tool = next(e for e in events if e.type == "tool.finished")
+        assert finished_tool.payload["status"] == "completed"
+        assert finished_tool.payload["result"]["content"][0]["type"] == "text"
+        history = (await db.conversation_store.read(conv.conversation_id)).messages
+        assert [m["role"] for m in history] == ["user", "assistant", "tool", "assistant"]
+        assert history[-1]["content"] == [{"type": "text", "text": "final"}]
+    finally:
+        await db.engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_journal_failure_does_not_retry_a_model_or_fallback(
+    runner, provider_request, mock_tool_executor, mock_hooks
+):
+    from astrbot.core.agent.conversation_events import ConversationPersistenceError
+
+    async def persist(response):
+        if response.type == "request.started":
+            raise ConversationPersistenceError("unavailable")
+        return True
+
+    primary, fallback = MockProvider(), MockProvider()
+    await runner.reset(
+        provider=primary, fallback_providers=[fallback], request=provider_request,
+        run_context=ContextWrapper(context=None), tool_executor=mock_tool_executor,
+        agent_hooks=mock_hooks, streaming=False, conversation_event_sink=persist,
+    )
+    with pytest.raises(ConversationPersistenceError):
+        await collect_events(runner.step())
+    assert primary.call_count == fallback.call_count == 0
+
+
+@pytest.mark.asyncio
+async def test_tool_started_is_acknowledged_before_creating_executor(
+    runner, provider_request, mock_hooks
+):
+    from unittest.mock import Mock
+
+    from astrbot.core.agent.conversation_events import ConversationPersistenceError
+
+    provider = VaryingUsageProvider()
+    executor = SimpleNamespace(execute=Mock(side_effect=AssertionError("must not run")))
+    seen = []
+
+    async def persist(response):
+        seen.append(response.type)
+        if response.type == "request.started":
+            assert provider.call_count == 0
+        if response.type == "tool.started":
+            assert response.event_id
+            raise ConversationPersistenceError("unavailable")
+        return True
+
+    await runner.reset(
+        provider=provider, request=provider_request,
+        run_context=ContextWrapper(context=None), tool_executor=executor,
+        agent_hooks=mock_hooks, streaming=False, conversation_event_sink=persist,
+    )
+    with pytest.raises(ConversationPersistenceError):
+        await collect_events(runner.step_until_done(3))
+    executor.execute.assert_not_called()
+    assert seen.index("request.finished") < seen.index("tool.started")
+    assert not runner._events.active
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize("entrypoint", ["sdk", "chat"])
 @pytest.mark.parametrize("streaming", [False, True])
 async def test_step_notices_reach_model_once_per_threshold(
@@ -2416,16 +2523,16 @@ async def test_lifecycle_terminal_paths_notify_once(
         )
     elif exit_kind == "exception":
         runner.request_context_manager.process = AsyncMock(
-            side_effect=RuntimeError("checkpoint failed")
+            side_effect=RuntimeError("history save failed")
         )
     else:
         runner.request_stop()
 
     if exit_kind == "exception":
-        with pytest.raises(RuntimeError, match="checkpoint failed"):
+        with pytest.raises(RuntimeError, match="history save failed"):
             async for _ in runner.step_until_done(3):
                 pass
-        assert runner.run_context.run_error == "RuntimeError: checkpoint failed"
+        assert runner.run_context.run_error == "RuntimeError: history save failed"
         hooks.on_agent_done.assert_awaited_once_with(runner.run_context, None)
     else:
         async for _ in runner.step_until_done(3):

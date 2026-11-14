@@ -164,9 +164,9 @@ export type ChatRequest = {
      */
     _skip_user_history?: boolean;
     /**
-     * Internal WebUI checkpoint override.
+     * Internal WebUI turn ID override.
      */
-    _llm_checkpoint_id?: string;
+    _turn_id?: string;
     /**
      * Internal WebUI platform history override.
      */

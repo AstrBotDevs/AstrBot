@@ -15,7 +15,7 @@ class PlatformMessageHistoryManager:
         content: dict,
         sender_id: str | None = None,
         sender_name: str | None = None,
-        llm_checkpoint_id: str | None = None,
+        turn_id: str | None = None,
         max_messages: int | None = None,
     ) -> PlatformMessageHistory:
         """Insert a new platform message history record."""
@@ -25,7 +25,7 @@ class PlatformMessageHistoryManager:
             content=content,
             sender_id=sender_id,
             sender_name=sender_name,
-            llm_checkpoint_id=llm_checkpoint_id,
+            turn_id=turn_id,
             max_messages=max_messages,
         )
 
@@ -151,13 +151,13 @@ class PlatformMessageHistoryManager:
         self,
         message_id: int,
         content: dict | None = None,
-        llm_checkpoint_id: str | None = None,
+        turn_id: str | None = None,
     ) -> None:
         """Update a platform message history record."""
         await self.db.update_platform_message_history(
             message_id=message_id,
             content=content,
-            llm_checkpoint_id=llm_checkpoint_id,
+            turn_id=turn_id,
         )
 
     async def delete_by_id(self, message_id: int) -> None:

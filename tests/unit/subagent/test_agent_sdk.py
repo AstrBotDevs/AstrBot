@@ -25,7 +25,10 @@ from astrbot.core.astr_agent_runtime.tools.message_tools import SendMessageToUse
 from astrbot.core.config.default import DEFAULT_CONFIG
 from astrbot.core.message.components import Image
 from astrbot.core.message.message_event_result import MessageChain
-from astrbot.core.platform.astr_message_event import current_message_event, event_context
+from astrbot.core.platform.astr_message_event import (
+    current_message_event,
+    event_context,
+)
 from astrbot.core.provider.entities import LLMResponse
 from astrbot.core.star.star_handler import EventType
 
@@ -210,7 +213,7 @@ async def test_core_and_request_hooks_run_once_and_can_stop_input(
 
     calls = []
 
-    async def hook(event, kind, *args):
+    async def hook(event, kind, *args, context_observer=None):
         calls.append(kind)
         if kind == EventType.OnLLMRequestEvent:
             args[0].prompt += " with plugin context"
@@ -411,6 +414,7 @@ async def test_native_sessions_commit_whole_turn_after_execution(sdk, delegated)
     """Main and child histories remain unchanged until a complete turn settles."""
     from astrbot.core.agent.tool import FunctionTool, ToolSet
     from astrbot.core.astr_agent_runtime.main_session import MainAgentInput
+    from astrbot.core.conversation_mgr import ConversationManager
 
     class EchoTool(FunctionTool):
         async def call(self, context):
@@ -447,9 +451,12 @@ async def test_native_sessions_commit_whole_turn_after_execution(sdk, delegated)
         )
         turn = None
     else:
+        conversation = await sdk.db.create_conversation(sdk.scope.umo, "test")
+        sdk.context.conversation_manager = ConversationManager(sdk.db)
         session = await sdk.native.open_session(
-            sdk.scope.umo, session_id=sdk.conversation.cid
+            sdk.scope.umo, session_id=conversation.conversation_id
         )
+        sdk.event.set_extra("turn_id", "webchat-turn")
         turn = await session.run_turn(
             MainAgentInput(
                 event=sdk.event,
@@ -463,6 +470,25 @@ async def test_native_sessions_commit_whole_turn_after_execution(sdk, delegated)
         release.set()
         if turn is not None:
             assert (await turn.result()).text == "Done"
+            events = await sdk.db.conversation_store.events(session.id)
+            assert [
+                event.type for event in events if event.type != "message.appended"
+            ] == [
+                "conversation.created",
+                "turn.started",
+                "request.started",
+                "request.finished",
+                "tool.started",
+                "tool.finished",
+                "request.started",
+                "request.finished",
+                "turn.finished",
+            ]
+            assert events[1].event_id == "webchat-turn"
+            assert events[-1].payload == {
+                "turn_id": "webchat-turn",
+                "status": "completed",
+            }
         else:
             result = await sdk.service.wait(sdk.root, [agent["agent_id"]], 2000, "all")
             assert result["agents"][0]["result"] == "Done"
