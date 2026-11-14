@@ -155,31 +155,29 @@ AstrBot 采用在运行时注入插件的机制。因此，在调试插件时，
 
 ### 热重载的边界
 
-重载会先调用插件的 `terminate()`，然后重新导入代码，并且只重新导入**插件目录内**的模块。记住这两条边界，可以少踩两个坑：「点了重载却没生效」和「重载后同一段逻辑跑了两份」。
+重载做两件事：先调用插件的 `terminate()`，再从 `sys.modules` 里按**模块名**卸载旧代码、重新导入。记住这两条边界，可以少踩两个坑：「点了重载却没生效」和「重载后同一段逻辑跑了两份」。
 
-**插件目录内的代码会重新执行。** 重载时，AstrBot 先卸载 `sys.modules` 中所有以 `data.plugins.<插件目录>` 为前缀的模块（日志中可以看到 `Removed module data.plugins.<插件目录>.main from plugin <插件目录>`），再重新导入。因此 `main.py`、插件目录下的子包、`skills/` 都是点重载即生效。
+**判据是模块名，不是文件路径。** 重载时，AstrBot 删掉 `sys.modules` 里所有名字以 `data.plugins.<插件目录>` 开头的模块（这个动作记在 DEBUG 级别：`Removed module <模块名>`），然后重新导入插件。所以决定「会不会重新执行」的是模块在 `sys.modules` 里的名字：
 
-**插件目录之外的模块不会被重新导入，改完需要重启 AstrBot 进程。** 常见情况：
+- `main.py` 和插件目录下的子包（`data.plugins.<插件目录>.utils.foo`）名字带前缀，重载即生效。
+- 名字不带前缀的模块，**即使文件就在插件目录里，也不会重新执行**。最常见的是把插件目录（或它的上级）加进 `sys.path` 后 `import helper`：模块名只有 `helper`，重载看不见它。
+- 反过来，名字恰好带前缀的模块即使文件在别处也会被卸载。这种情况少见，但它说明判据不是路径。
 
-- 在插件里往 `sys.path` 追加了自定义路径，再 import 了插件目录之外的自有包；
-- 在本地修改或替换了插件所依赖的第三方库；
-- 与其他插件共用的、位于 `data/` 或其他位置的公共代码。
-
-使用 `astrbot run --reload`（`-r`）时的自动重载同样只监听插件目录，插件目录之外的文件改动不会触发重载。
-
-排查「重载了但代码没变」时，先确认模块实际是从哪个文件加载的：
+排查「重载了但代码没变」时，先看模块的真实身份：
 
 ```python
-import your_shared_module
+import your_module
 
-logger.info(your_shared_module.__file__)
+logger.info(your_module.__name__, your_module.__file__)
 ```
 
-如果打印出的路径不在 `data/plugins/<你的插件目录>/` 下，它就不在重载范围内。
+`__name__` 不以 `data.plugins.<你的插件目录>` 开头 → 重载不会重新执行它，改完必须重启 AstrBot 进程。
 
-**资源清理由 `terminate()` 负责。** 重载会调用一次 `terminate()`，所以你在插件里发起的后台任务（`asyncio.create_task`、`aiohttp.ClientSession`、线程、定时器）都应当在这里取消或关闭。否则每重载一次就会多出一份仍在运行的旧实例，表现为同一条消息被回复多次。`__del__` 是已废弃的旧钩子，与 `terminate` 同时实现时只有 `__del__` 会被调用，清理逻辑请只写在 `terminate` 里。
+**自动重载只认插件目录里的 `.py`。** `astrbot run --reload`（`-r`）用文件监听加 Python 过滤器：插件目录内的 `.py` 改动会触发重载；插件目录外的 `.py` 不会；`_conf_schema.json`、`skills/SKILL.md` 这类非 `.py` 文件也不会，改完要手动点重载。
 
-改完 `_conf_schema.json` 也需要重载插件，WebUI 才会读到新的配置项。
+**资源清理由 `terminate()` 负责，并且不要定义 `__del__`。** 重载会调用一次 `terminate()`，所以你在插件里发起的后台任务（`asyncio.create_task`、`aiohttp.ClientSession`、线程、定时器）都在这里取消或关闭；否则每重载一次就多留一份旧实例，表现为同一条消息被回复多次。
+
+`__del__` 是已废弃的旧钩子，而且它**会顶掉 `terminate`**：插件类自己定义了 `__del__` 时，AstrBot 只调 `__del__`、跳过 `terminate`；而 `__del__` 是在 executor 里发起、**不等待**的，重载会直接接着加载新实例——旧清理可能还没跑完就和新实例重叠。所以插件类里不要写 `__del__`，清理只放在 `terminate()`。
 
 ### 插件依赖管理
 
