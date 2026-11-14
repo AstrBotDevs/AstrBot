@@ -65,7 +65,11 @@ class ContentPart(BaseModel):
         return handler(source_type)
 
     def mark_as_temp(self: ContentPartT) -> ContentPartT:
-        """Mark this content part as provider-facing only, not persisted."""
+        """Exclude this part from restored context while retaining its raw event.
+
+        Returns:
+            This content part with its runtime exclusion marker set.
+        """
         self._no_save = True
         return self
 

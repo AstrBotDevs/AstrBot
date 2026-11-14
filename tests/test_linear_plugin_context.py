@@ -161,7 +161,8 @@ async def test_iris_clear_is_plugin_reset_and_previous_body_is_reclaimed(
     excluded = [
         e
         for e in events.values()
-        if e.type == "message.appended" and e.payload.get("include_in_context") is False
+        if e.type == "message.appended"
+        and e.payload.get("message", {}).get("_no_save") is True
     ]
     assert len(excluded) == 2
     assert all(e.payload["message"]["content"] == "private memory" for e in excluded)
@@ -412,14 +413,12 @@ async def test_history_reconciliation_retains_duplicate_ids_and_temporary_conten
         {"role": "user", "content": [{"type": "text", "text": "keep"}]},
     ]
     events = await store.events(conv.conversation_id)
-    exclusions = [
-        event
-        for event in events
-        if event.type == "message.appended"
-        and event.payload.get("include_in_context") is False
-    ]
-    assert len(exclusions) == 1
-    assert exclusions[0].payload["message"] == history[-1]
+    assert not any(
+        event.payload and "include_in_context" in event.payload for event in events
+    )
+    assert events[-1].type == "context.rebased"
+    assert events[-1].payload["messages"][-1]["message"] == history[-1]
+    assert not any(event.type == "message.appended" for event in events)
     assert events[-1].payload["origin"] == "plugin"
     history[-1]["content"][0]["text"] = "mutated after save"
     assert (await store.read(conv.conversation_id)).messages == after.messages

@@ -12,6 +12,7 @@ from sqlmodel import select, text, update
 from astrbot.core.db.conversation import (
     CONTEXT_TYPES,
     ConversationStore,
+    persistent_entries,
     persistent_messages,
     same_conversation_owner,
 )
@@ -98,7 +99,7 @@ def linearize_legacy_events(
                 entries = []
                 for ancestor in reversed(path):
                     if ancestor["type"] == "context.rebased":
-                        entries = deepcopy(ancestor["payload"]["messages"])
+                        entries = persistent_entries(ancestor["payload"]["messages"])
                     else:
                         effective = persistent_messages(
                             [ancestor["payload"]["message"]]
@@ -377,7 +378,6 @@ async def migrate_conversations(store: ConversationStore, *, session=None) -> No
                         payload={
                             "turn_id": turn_id,
                             "message": message,
-                            "include_in_context": bool(effective),
                         },
                     )
                     session.add(event)

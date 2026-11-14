@@ -1,6 +1,8 @@
 """Host-side event collection and branch-bound conversation commits."""
 
 import asyncio
+import hashlib
+import json
 import uuid
 from collections import Counter
 from copy import deepcopy
@@ -13,6 +15,7 @@ from astrbot.core.db.conversation import (
     ContextUnavailableError,
     ConversationAppendResult,
     ConversationSnapshot,
+    persistent_entries,
     persistent_messages,
     reconcile_history,
 )
@@ -73,7 +76,7 @@ class ConversationEventWriter:
         self._pending: list[dict] = []
         self._entries = deepcopy(snapshot.entries)
         self._committed_entries = self._entries
-        self._excluded_counts: Counter[str] = Counter()
+        self._temporary_counts: Counter[str] = Counter()
 
     def get_messages(self) -> list[dict]:
         """Read a detached view of the current projection, including staged edits.
@@ -184,7 +187,29 @@ class ConversationEventWriter:
                 for event in committed.events
                 if event.event_id == draft["event_id"]
             )
+            previous_context_seq = self._context_seq
             await self._acknowledge(committed)
+            if context_change and acknowledged.seq > previous_context_seq:
+                # Direct appends bypass staging. Remember their raw temporary
+                # bodies too, so a later history save does not record them again.
+                messages = (
+                    [acknowledged.payload["message"]]
+                    if event_type == "message.appended"
+                    else [
+                        entry["message"] for entry in acknowledged.payload["messages"]
+                    ]
+                )
+                temporary = Counter(
+                    hashlib.sha256(
+                        json.dumps(message, sort_keys=True).encode()
+                    ).hexdigest()
+                    for message in messages
+                    if persistent_messages([message], detach=False) != [message]
+                )
+                if event_type == "message.appended":
+                    self._temporary_counts.update(temporary)
+                else:
+                    self._temporary_counts |= temporary
             return acknowledged
 
     async def _acknowledge(self, result: ConversationAppendResult) -> None:
@@ -239,7 +264,7 @@ class ConversationEventWriter:
                             "Acknowledged context payload is unavailable"
                         )
                     if event.type == "context.rebased":
-                        replacement = deepcopy(event.payload["messages"])
+                        replacement = persistent_entries(event.payload["messages"])
                     elif event.payload.get("include_in_context", True):
                         effective = persistent_messages([event.payload["message"]])
                         if effective:
@@ -259,7 +284,7 @@ class ConversationEventWriter:
             for draft in remaining:
                 payload = draft["payload"]
                 if draft["type"] == "context.rebased":
-                    staged = deepcopy(payload["messages"])
+                    staged = persistent_entries(payload["messages"])
                 elif draft["type"] == "message.appended" and payload.get(
                     "include_in_context", True
                 ):
@@ -293,14 +318,12 @@ class ConversationEventWriter:
         self,
         message: dict,
         *,
-        include_in_context=True,
         event_id=None,
     ):
         """Persist a message without modifying the execution's working context.
 
         Args:
             message: AstrBot message dictionary.
-            include_in_context: Whether future projections include the message.
             event_id: Stable delivery ID.
 
         Returns:
@@ -311,8 +334,6 @@ class ConversationEventWriter:
             {
                 "message": message,
                 "turn_id": self.turn_id,
-                "include_in_context": include_in_context
-                and not message.get("_no_save", False),
             },
             event_id=event_id,
         )
@@ -401,9 +422,9 @@ class ConversationEventWriter:
         Args:
             messages: Only new working messages, including temporary content.
         """
-        exclusions = Counter()
+        temporary = Counter()
         entries, drafts = reconcile_history(
-            [], messages, turn_id=self.turn_id, excluded_counts=exclusions
+            [], messages, turn_id=self.turn_id, temporary_counts=temporary
         )
         if entries:
             # Detach the list once when staging begins; message bodies stay shared
@@ -412,7 +433,7 @@ class ConversationEventWriter:
                 self._entries = list(self._entries)
             self._entries.extend(entries)
         self._pending.extend(drafts)
-        self._excluded_counts.update(exclusions)
+        self._temporary_counts.update(temporary)
 
     def stage_history(
         self, history: list[dict], *, reason="legacy_replace", origin="unknown"
@@ -430,7 +451,7 @@ class ConversationEventWriter:
             reason=reason,
             origin=origin,
             turn_id=self.turn_id,
-            excluded_counts=self._excluded_counts,
+            temporary_counts=self._temporary_counts,
         )
         self._pending.extend(drafts)
 

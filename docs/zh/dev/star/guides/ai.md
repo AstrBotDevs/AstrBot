@@ -496,6 +496,11 @@ Core 根据 `source_event` 或当前活跃的同 UMO 事件解析权限。没有
 `_checkpoint` 标记在数据库迁移或旧备份导入时完成转换。平台历史关联使用
 `turn_id` 和 `context_event_id`，不再接受 `llm_checkpoint_id`。内部消息转换使用
 `load_messages` / `dump_messages`，保留原有的 `_no_save` 语义。
+
+在事件存储中，`_no_save` 表示不进入后续恢复的上下文，并不表示原文不落库。
+消息原文及标记只保存一份；恢复时，消息级 `_no_save=True` 会排除整条消息，
+内容片段级标记只排除对应片段。不会额外保存过滤后的副本，也不会在新事件中写入
+`include_in_context`。旧版本已有的排除事件仍按原规则读取，避免历史重复。
 核心直接读取结构化消息列表，插件接口的 `Conversation.history` 仍为 JSON 字符串。
 完整历史更新与 Agent 阶段暂存共用差异转换规则，重排时保留未变消息的 ID。
 插件的独立写入不修改正在运行的 Agent 工作消息；基于过期版本的写入仍会触发冲突。

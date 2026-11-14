@@ -430,8 +430,7 @@ async def test_display_links_are_written_once_per_role_and_only_for_existing_row
             "type": "message.appended",
             "payload": {
                 "turn_id": "turn",
-                "message": {"role": role, "content": event_id},
-                "include_in_context": event_id != "temporary",
+                "message": {"role": role, "content": event_id, "_no_save": event_id == "temporary"},
             },
         }
         for event_id, role in [

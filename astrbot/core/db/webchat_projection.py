@@ -39,9 +39,14 @@ async def project_webchat_event_links(
             role = (
                 payload["message"].get("role")
                 if kind == "message.appended"
-                else payload["messages"][-1]["message"].get("role")
-                if payload["messages"]
-                else None
+                else next(
+                    (
+                        entry["message"].get("role")
+                        for entry in reversed(payload["messages"])
+                        if not entry["message"].get("_no_save")
+                    ),
+                    None,
+                )
             )
             if role in {"user", "assistant"}:
                 turn_links = links.setdefault(payload["turn_id"], {})

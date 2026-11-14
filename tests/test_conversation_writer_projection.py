@@ -88,7 +88,7 @@ async def test_rebases_and_excluded_messages_match_persisted_projection(
             conv.conversation_id, [{"type": "plugin.test.observed", "payload": {}}]
         )
         await writer.append_message(
-            {"role": "user", "content": "journal only"}, include_in_context=False
+            {"role": "user", "content": "journal only", "_no_save": True}
         )
         await writer.append_message(
             {
@@ -437,7 +437,7 @@ async def test_staged_deltas_keep_committed_state_and_temporary_records(
     assert writer.get_messages()[0] == old
     await writer.save_history(expected)
     records = await store.events(conv.conversation_id, event_type="message.appended")
-    excluded = [e for e in records if e.payload.get("include_in_context") is False]
+    excluded = [e for e in records if e.payload.get("message", {}).get("_no_save") is True]
     assert len(excluded) == 20
     assert writer.get_messages() == (await store.read(conv.conversation_id)).messages
     assert len(writer.get_messages()) == 120

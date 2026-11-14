@@ -499,6 +499,13 @@ Runtime history contains only model messages (`system`, `user`, `assistant`, and
 old-backup import. Platform history links use `turn_id` and `context_event_id`;
 `llm_checkpoint_id` is no longer accepted. Internal message conversion uses
 `load_messages` / `dump_messages`, preserving the existing `_no_save` semantics.
+
+In event storage, `_no_save` excludes content from future restored context; it does
+not prevent the raw content from being persisted. The original message and its
+markers are stored once. Recovery skips a whole message marked `_no_save=True`,
+or only the marked parts within a message. New events contain neither an additional
+filtered copy nor an `include_in_context` field. Existing exclusion events retain
+their legacy read behavior so historical messages are not duplicated.
 Core reads structured message lists directly from storage. The plugin-facing
 `Conversation.history` remains a JSON string. Full-history updates and running
 agent staging share the same reconciliation rules, retaining unchanged message

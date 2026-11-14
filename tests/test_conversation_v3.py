@@ -67,8 +67,7 @@ async def test_branches_null_parent_and_excluded_messages(database):
             {
                 "type": "message.appended",
                 "payload": {
-                    "include_in_context": False,
-                    "message": {"role": "user", "content": "temporary"},
+                    "message": {"role": "user", "content": "temporary", "_no_save": True},
                 },
             }
         ],
@@ -157,7 +156,7 @@ async def test_staged_plugin_changes_no_save_and_private_journal(database):
     events = await database.conversation_store.events(conv.conversation_id)
     serialized = json.dumps([e.payload for e in events])
     assert "secret" in serialized and "old" in serialized
-    assert next(e for e in events if e.payload.get("message", {}).get("content") == "secret").payload["include_in_context"] is False
+    assert next(e for e in events if e.payload.get("message", {}).get("content") == "secret").payload["message"]["_no_save"] is True
     assert (await database.get_conversation_by_id(conv.conversation_id)).content == [{"role": "user", "content": "summary"}]
 
 
@@ -346,7 +345,7 @@ async def test_native_writes_leave_working_context_edits_to_runner(database):
     native = await writer.append_message({"role": "assistant", "content": [{"type": "text", "text": "native"}]}, event_id="native")
     assert len(writer.runtime_context.messages) == 1
     writer.runtime_context.messages.append(Message.model_validate(native.payload["message"]))
-    await writer.append_message({"role": "user", "content": "journal only"}, include_in_context=False)
+    await writer.append_message({"role": "user", "content": "journal only", "_no_save": True})
     assert len(writer.runtime_context.messages) == 2
     assert not writer.runtime_context.messages[-1]._no_save
     writer.runtime_context.messages[1].content[0].text = "plugin edited"
@@ -428,7 +427,8 @@ async def test_temporary_parts_are_recorded_once_and_excluded_from_projection(da
     writer.stage_history(raw)
     await writer.save_history(raw)
     events = await database.conversation_store.events(conv.conversation_id)
-    assert len([e for e in events if e.payload.get("include_in_context") is False]) == 1
+    assert len([e for e in events if e.type == "message.appended"]) == 1
+    assert all("include_in_context" not in e.payload for e in events)
     assert "temporary" in json.dumps([e.payload for e in events])
     projected = (await database.conversation_store.read(conv.conversation_id)).messages
     assert projected[0]["content"] == [{"type": "text", "text": "keep"}]

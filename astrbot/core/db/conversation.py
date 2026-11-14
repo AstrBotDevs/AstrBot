@@ -112,6 +112,22 @@ def persistent_messages(messages: list[dict], *, detach: bool = True) -> list[di
     return result
 
 
+def persistent_entries(entries: list[dict]) -> list[dict]:
+    """Project raw baseline entries without changing their message identities.
+
+    Args:
+        entries: Stored messages, including runtime exclusion markers.
+
+    Returns:
+        Detached entries with temporary messages and parts filtered out.
+    """
+    return [
+        {"id": entry["id"], "message": message}
+        for entry in entries
+        for message in persistent_messages([entry["message"]])
+    ]
+
+
 def reconcile_history(
     entries: list[dict],
     history: list[dict],
@@ -119,7 +135,7 @@ def reconcile_history(
     reason: str = "legacy_replace",
     origin: str = "unknown",
     turn_id: str | None = None,
-    excluded_counts: Counter[str] | None = None,
+    temporary_counts: Counter[str] | None = None,
 ) -> tuple[list[dict], list[dict]]:
     """Convert a working history into context events while retaining message IDs.
 
@@ -129,7 +145,7 @@ def reconcile_history(
         reason: Reason for replacing existing context.
         origin: Host-attributed source of the change.
         turn_id: Owning turn, if the change belongs to an execution.
-        excluded_counts: Optional execution-local counts, updated to avoid
+        temporary_counts: Optional execution-local counts, updated to avoid
             recording the same temporary content at every staging boundary.
 
     Returns:
@@ -141,38 +157,46 @@ def reconcile_history(
     """
     entries = list(entries)
     drafts = []
-    known_exclusions = excluded_counts if excluded_counts is not None else Counter()
+    known_temporary = temporary_counts if temporary_counts is not None else Counter()
     projected = []
-    current_exclusions = Counter()
+    raw_history = []
+    current_temporary = Counter()
+    raw_prefix_changed = False
     for message in history:
         effective = persistent_messages([message], detach=False)
+        raw_history.append((message, effective[0] if effective else None, False))
         projected.extend(effective)
         if effective == [message]:
             continue
         fingerprint = hashlib.sha256(
             json.dumps(message, sort_keys=True).encode()
         ).hexdigest()
-        current_exclusions[fingerprint] += 1
-        if current_exclusions[fingerprint] <= known_exclusions[fingerprint]:
+        current_temporary[fingerprint] += 1
+        if current_temporary[fingerprint] <= known_temporary[fingerprint]:
             continue
-        identity = str(uuid.uuid4())
-        drafts.append(
-            {
-                "event_id": identity,
-                "type": "message.appended",
-                "payload": {
-                    "turn_id": turn_id,
-                    "message": deepcopy(message),
-                    "include_in_context": False,
-                },
-            }
-        )
+        if effective:
+            # A newly changed temporary part on an existing message requires a
+            # replacement, not an append that would duplicate its visible part.
+            raw_prefix_changed |= len(projected) <= len(entries)
+            continue
+        raw_history[-1] = (message, None, True)
     # The projection can share data with the plugin until it is staged.
     previous_count = len(entries)
-    if len(projected) >= previous_count and all(
-        entry["message"] == message for entry, message in zip(entries, projected)
+    if (
+        not raw_prefix_changed
+        and len(projected) >= previous_count
+        and all(
+            entry["message"] == message for entry, message in zip(entries, projected)
+        )
     ):
-        for message in projected[previous_count:]:
+        position = 0
+        for original, message, new_temporary in raw_history:
+            if message is not None:
+                position += 1
+                if position <= previous_count:
+                    continue
+            elif not new_temporary:
+                continue
             identity = str(uuid.uuid4())
             drafts.append(
                 {
@@ -180,11 +204,12 @@ def reconcile_history(
                     "type": "message.appended",
                     "payload": {
                         "turn_id": turn_id,
-                        "message": deepcopy(message),
+                        "message": deepcopy(original),
                     },
                 }
             )
-            entries.append({"id": identity, "message": deepcopy(message)})
+            if message is not None:
+                entries.append({"id": identity, "message": deepcopy(message)})
     else:
         identity = str(uuid.uuid4())
         retained_ids = defaultdict(deque)
@@ -193,15 +218,20 @@ def reconcile_history(
                 entry["id"]
             )
         entries = []
-        for message in projected:
-            matches = retained_ids[json.dumps(message, sort_keys=True)]
-            entries.append(
-                {
-                    "id": matches.popleft() if matches else str(uuid.uuid4()),
-                    "message": deepcopy(message),
-                }
+        raw_entries = []
+        for original, message, _ in raw_history:
+            matches = (
+                retained_ids[json.dumps(message, sort_keys=True)]
+                if message is not None
+                else None
             )
-        drafts.append(
+            message_id = matches.popleft() if matches else str(uuid.uuid4())
+            raw_entries.append({"id": message_id, "message": deepcopy(original)})
+            if message is not None:
+                entries.append({"id": message_id, "message": deepcopy(message)})
+        # A rebase already contains the raw temporary messages; do not also
+        # write them as separate message events.
+        drafts = [
             {
                 "event_id": identity,
                 "type": "context.rebased",
@@ -209,11 +239,11 @@ def reconcile_history(
                     "reason": "reset" if not projected else reason,
                     "origin": origin,
                     "turn_id": turn_id,
-                    "messages": deepcopy(entries),
+                    "messages": raw_entries,
                 },
             }
-        )
-    known_exclusions |= current_exclusions
+        ]
+    known_temporary |= current_temporary
     return entries, drafts
 
 
@@ -331,20 +361,8 @@ class ConversationStore:
                 )
             )
             if content is not None or inherited is not None:
-                for message in content or []:
-                    if persistent_messages([message]) != [message]:
-                        conv.head_seq += 1
-                        session.add(
-                            ConversationEvent(
-                                conversation_ref=conv.id,
-                                seq=conv.head_seq,
-                                type="message.appended",
-                                payload={
-                                    "message": deepcopy(message),
-                                    "include_in_context": False,
-                                },
-                            )
-                        )
+                # Validate roles, but store the original body only once.
+                persistent_messages(content or [], detach=False)
                 conv.head_seq += 1
                 baseline = ConversationEvent(
                     conversation_ref=conv.id,
@@ -357,7 +375,7 @@ class ConversationStore:
                         if inherited is not None
                         else [
                             {"id": str(uuid.uuid4()), "message": m}
-                            for m in persistent_messages(content or [])
+                            for m in deepcopy(content or [])
                         ],
                         **(
                             {"source_event_id": source_event_id}
@@ -438,7 +456,7 @@ class ConversationStore:
                 raise ContextUnavailableError("Historical context has been cleared")
             if baseline.version != 1:
                 raise ValueError("Unsupported context event version")
-            snapshot.entries = deepcopy(baseline.payload["messages"])
+            snapshot.entries = persistent_entries(baseline.payload["messages"])
             conv.replay_from_event_id = baseline.event_id
             baseline_seq = baseline.seq
             snapshot.replay_count = 1
@@ -462,6 +480,8 @@ class ConversationStore:
             ):
                 raise ValueError("Invalid linear context segment")
             effective = persistent_messages([event.payload["message"]])
+            # Older journals contain a separate raw copy marked as excluded.
+            # Keep ignoring it so upgrading cannot replay both stored copies.
             if event.payload.get("include_in_context", True) and effective:
                 snapshot.entries.append({"id": event.event_id, "message": effective[0]})
             snapshot.replay_count += 1
@@ -788,8 +808,8 @@ class ConversationStore:
                 raise ValueError("A message requires a role")
             if message["role"] not in ("system", "user", "assistant", "tool"):
                 raise ValueError("Unsupported message role")
-            if not isinstance(payload.get("include_in_context", True), bool):
-                raise ValueError("include_in_context must be boolean")
+            if "include_in_context" in payload:
+                raise ValueError("Use message._no_save instead of include_in_context")
         elif kind == "context.rebased":
             if payload.get("origin", "unknown") not in {
                 "user",
@@ -812,12 +832,9 @@ class ConversationStore:
                     raise ValueError("Rebase message identities must be unique")
                 ids.add(entry["id"])
                 message = entry.get("message")
-                if (
-                    not isinstance(message, dict)
-                    or "role" not in message
-                    or persistent_messages([message], detach=False) != [message]
-                ):
-                    raise ValueError("Invalid or temporary rebase message")
+                if not isinstance(message, dict) or "role" not in message:
+                    raise ValueError("Invalid rebase message")
+                persistent_messages([message], detach=False)
         elif kind == "conversation.updated":
             changes = payload.get("changes", {})
             if set(changes) - {"title", "persona_id"}:

@@ -92,15 +92,30 @@ def _conversation_content_match(keyword: str):
               AND e.seq <= tip.seq
               AND e.seq >= coalesce((SELECT seq FROM conversation_events
                   WHERE event_id = tip.replay_from_event_id), 0)
+        ), raw_messages AS (
+            SELECT CASE branch.type WHEN 'message.appended' THEN item.value
+                   ELSE json_extract(item.value, '$.message') END AS body
+            FROM branch, json_each(CASE branch.type WHEN 'message.appended'
+                THEN json_array(json_extract(payload, '$.message'))
+                ELSE json_extract(payload, '$.messages') END) AS item
+            WHERE branch.type='context.rebased' OR
+                (branch.type='message.appended' AND
+                 coalesce(json_extract(payload, '$.include_in_context'), 1))
+        ), searchable AS (
+            SELECT json_remove(body, '$._no_save', '$.content') AS metadata,
+                CASE json_type(body, '$.content') WHEN 'array' THEN (
+                    SELECT json_group_array(CASE part.type WHEN 'object'
+                        THEN json(json_remove(part.value, '$._no_save'))
+                        ELSE part.value END)
+                    FROM json_each(body, '$.content') AS part
+                    WHERE CASE part.type WHEN 'object'
+                        THEN NOT coalesce(json_extract(part.value, '$._no_save'), 0)
+                        ELSE 1 END
+                ) ELSE json_extract(body, '$.content') END AS content
+            FROM raw_messages WHERE NOT coalesce(json_extract(body, '$._no_save'), 0)
         )
-        SELECT 1 FROM branch WHERE
-        (type = 'context.rebased' OR
-         (type = 'message.appended' AND coalesce(json_extract(payload, '$.include_in_context'), 1)
-          AND NOT coalesce(json_extract(payload, '$.message._no_save'), 0)))
-        AND (json_extract(payload, '$.message') LIKE :pattern
-             OR json_extract(payload, '$.messages') LIKE :pattern
-             OR json_extract(payload, '$.message') LIKE :escaped
-             OR json_extract(payload, '$.messages') LIKE :escaped)
+        SELECT 1 FROM searchable WHERE metadata LIKE :pattern OR content LIKE :pattern
+            OR metadata LIKE :escaped OR content LIKE :escaped
     )""").bindparams(
         bindparam("pattern", f"%{keyword}%", unique=True),
         bindparam(
@@ -841,6 +856,28 @@ class SQLiteDatabase(BaseDatabase):
                         )
                         .scalar_subquery()
                     )
+                    baseline_messages = func.json_each(
+                        ConversationEvent.payload, "$.messages"
+                    ).table_valued("key", "value")
+                    baseline_role = (
+                        select(
+                            func.json_extract(
+                                baseline_messages.c.value, "$.message.role"
+                            )
+                        )
+                        .where(
+                            ~func.coalesce(
+                                func.json_extract(
+                                    baseline_messages.c.value, "$.message._no_save"
+                                ),
+                                False,
+                            )
+                        )
+                        .order_by(baseline_messages.c.key.desc())
+                        .limit(1)
+                        .correlate(ConversationEvent)
+                        .scalar_subquery()
+                    )
                     query = (
                         select(ConversationEvent.event_id)
                         .where(
@@ -875,13 +912,7 @@ class SQLiteDatabase(BaseDatabase):
                                     == role
                                 ),
                                 (ConversationEvent.type == "context.rebased")
-                                & (
-                                    func.json_extract(
-                                        ConversationEvent.payload,
-                                        "$.messages[#-1].message.role",
-                                    )
-                                    == role
-                                ),
+                                & (baseline_role == role),
                             ),
                         )
                         .order_by(
