@@ -192,8 +192,41 @@ class WebChatQueueMgr:
                 try:
                     await self._listener_callback(data)
                 except Exception as e:
-                    logger.error(
+                    logger.exception(
                         f"Error processing message from conversation {conversation_id}: {e}"
+                    )
+                    _, _, payload = data
+                    request_id = payload.get("message_id")
+                    if not request_id:
+                        continue
+                    # Only expose known, actionable failures to the client.
+                    error_code = "messageProcessingFailed"
+                    error_message = "Message processing failed. Check the AstrBot logs and try again."
+                    if str(e) == "ffmpeg not found":
+                        error_code = "ffmpegNotFound"
+                        error_message = (
+                            "Audio processing failed: FFmpeg was not found in the AstrBot "
+                            "runtime environment. Install FFmpeg and ensure it is in PATH, "
+                            "then try again."
+                        )
+                    await self.put_back_queue(
+                        str(request_id),
+                        {
+                            "type": "error",
+                            "data": error_message,
+                            "error_code": error_code,
+                            "streaming": False,
+                            "message_id": str(request_id),
+                        },
+                    )
+                    await self.put_back_queue(
+                        str(request_id),
+                        {
+                            "type": "end",
+                            "data": "",
+                            "streaming": False,
+                            "message_id": str(request_id),
+                        },
                     )
             except asyncio.CancelledError:
                 break

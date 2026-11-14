@@ -33,7 +33,10 @@ test("history pages retain reasoning boundaries and complete tool results", () =
   };
   visit(ast);
   assert.equal(functions.length, names.size);
-  const context = vm.createContext({ exports: {} });
+  const context = vm.createContext({
+    exports: {},
+    useModuleI18n: () => ({ tm: (key) => key }),
+  });
   vm.runInContext(ts.transpile(functions.join("\n")), context);
 
   const parts = [

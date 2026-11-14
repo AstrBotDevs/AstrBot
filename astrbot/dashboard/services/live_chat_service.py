@@ -712,11 +712,14 @@ class LiveChatService:
                 outgoing = {"ct": "chat", **result}
                 await self.send_chat_payload(session, outgoing, send_json)
 
-                if result_type == "plain":
+                if result_type in ("plain", "error"):
                     message_accumulator.add_plain(
                         result_text,
                         chain_type=chain_type,
                         streaming=streaming,
+                        error_code=result.get("error_code")
+                        if result_type == "error"
+                        else None,
                     )
                 elif result_type == "image":
                     filename = str(result_text).replace("[IMAGE]", "")
