@@ -1,8 +1,10 @@
+import asyncio
 import base64
 import math
 import os
 import struct
 import sys
+import threading
 import wave
 from io import BytesIO
 from pathlib import Path
@@ -583,6 +585,241 @@ async def test_convert_audio_format_keeps_ogg_opus_without_reencoding(
     )
 
     assert result == str(source_path)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("source", ["http", "local"])
+async def test_media_resolver_image_cleanup_respects_ownership(
+    tmp_path, monkeypatch, source
+):
+    from PIL import Image as PILImage
+
+    monkeypatch.setattr(media_utils, "get_astrbot_temp_path", lambda: str(tmp_path))
+    image_buffer = BytesIO()
+    PILImage.new("RGB", (1, 1), "red").save(image_buffer, format="PNG")
+    image_bytes = image_buffer.getvalue()
+    local_path = tmp_path / "original.png"
+    if source == "local":
+        local_path.write_bytes(image_bytes)
+
+    async def download_image(url: str, target_path: str) -> None:
+        Path(target_path).write_bytes(image_bytes)
+
+    monkeypatch.setattr(media_utils, "download_file", download_image)
+    ref = "https://example.com/image.png" if source == "http" else str(local_path)
+    async with media_utils.MediaResolver(ref, media_type="image").as_path() as resolved:
+        resolved_path = resolved.path
+        assert resolved_path.suffix == ".png"
+        assert resolved.read_bytes() == image_bytes
+
+    if source == "http":
+        assert not list(tmp_path.iterdir())
+    else:
+        assert local_path.read_bytes() == image_bytes
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("cancel", [False, True])
+async def test_media_resolver_cleans_http_image_when_mime_detection_fails(
+    tmp_path, monkeypatch, cancel
+):
+    monkeypatch.setattr(media_utils, "get_astrbot_temp_path", lambda: str(tmp_path))
+    detection_started = asyncio.Event()
+    downloaded_paths = []
+
+    async def download_image(url: str, target_path: str) -> None:
+        path = Path(target_path)
+        path.write_bytes(b"\x89PNG\r\n\x1a\n")
+        downloaded_paths.append(path)
+
+    async def detect_image(path, **kwargs):
+        assert Path(path).exists()
+        detection_started.set()
+        if cancel:
+            await asyncio.Event().wait()
+        raise RuntimeError("MIME detection failed")
+
+    monkeypatch.setattr(media_utils, "download_file", download_image)
+    monkeypatch.setattr(media_utils, "detect_image_mime_type_async", detect_image)
+
+    task = asyncio.create_task(
+        media_utils.MediaResolver(
+            "https://example.com/image.png", media_type="image"
+        ).to_bytes()
+    )
+    await asyncio.wait_for(detection_started.wait(), timeout=2)
+    if cancel:
+        task.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await task
+    else:
+        with pytest.raises(RuntimeError, match="MIME detection failed"):
+            await task
+
+    assert downloaded_paths
+    assert not list(tmp_path.iterdir())
+
+
+@pytest.mark.asyncio
+async def test_http_images_reserve_distinct_paths_when_names_collide(
+    tmp_path, monkeypatch
+):
+    existing = tmp_path / "image.png"
+    existing.write_bytes(b"another resolver")
+    monkeypatch.setattr(
+        media_utils,
+        "_temp_media_path",
+        lambda _type, suffix: tmp_path / f"image{suffix}",
+    )
+
+    async def download(url, target):
+        Path(target).write_bytes(url.encode())
+
+    async def detect(*args, **kwargs):
+        return "image/png"
+
+    monkeypatch.setattr(media_utils, "download_file", download)
+    monkeypatch.setattr(media_utils, "detect_image_mime_type_async", detect)
+    first, second = await asyncio.gather(
+        media_utils._materialize_media_ref(
+            "https://example.com/one", media_type="image"
+        ),
+        media_utils._materialize_media_ref(
+            "https://example.com/two", media_type="image"
+        ),
+    )
+    try:
+        assert first.path != second.path
+        assert first.path.read_bytes() == b"https://example.com/one"
+        assert second.path.read_bytes() == b"https://example.com/two"
+        assert existing.read_bytes() == b"another resolver"
+    finally:
+        media_utils._cleanup_paths(first.cleanup_paths)
+        media_utils._cleanup_paths(second.cleanup_paths)
+    assert list(tmp_path.iterdir()) == [existing]
+
+
+@pytest.mark.asyncio
+async def test_http_image_rename_failure_preserves_existing_file(tmp_path, monkeypatch):
+    existing = tmp_path / "image.png"
+    existing.write_bytes(b"another resolver")
+    monkeypatch.setattr(
+        media_utils,
+        "_temp_media_path",
+        lambda _type, suffix: tmp_path / f"image{suffix}",
+    )
+
+    async def download(_url, target):
+        Path(target).write_bytes(b"download")
+
+    async def detect(*args, **kwargs):
+        return "image/png"
+
+    def fail_replace(*args):
+        raise OSError("rename failed")
+
+    monkeypatch.setattr(media_utils, "download_file", download)
+    monkeypatch.setattr(media_utils, "detect_image_mime_type_async", detect)
+    monkeypatch.setattr(media_utils.os, "replace", fail_replace)
+    with pytest.raises(OSError):
+        await media_utils._materialize_media_ref(
+            "https://example.com/image", media_type="image"
+        )
+    assert existing.read_bytes() == b"another resolver"
+    assert list(tmp_path.iterdir()) == [existing]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("before_replace", [True, False])
+async def test_http_image_cancel_during_rename_cleans_owned_files(
+    tmp_path, monkeypatch, before_replace
+):
+    existing = tmp_path / "image.png"
+    existing.write_bytes(b"another resolver")
+    monkeypatch.setattr(
+        media_utils,
+        "_temp_media_path",
+        lambda _type, suffix: tmp_path / f"image{suffix}",
+    )
+    started, release, finished = threading.Event(), threading.Event(), threading.Event()
+    replace = media_utils.os.replace
+
+    async def download(_url, target):
+        Path(target).write_bytes(b"download")
+
+    async def detect(*args, **kwargs):
+        return "image/png"
+
+    def delayed_replace(source, destination):
+        if not before_replace:
+            replace(source, destination)
+        started.set()
+        try:
+            if not release.wait(3):
+                raise TimeoutError("rename test timed out")
+            if before_replace:
+                try:
+                    replace(source, destination)
+                except FileNotFoundError:
+                    # Cancellation may have cleaned the source first.
+                    pass
+        finally:
+            finished.set()
+
+    monkeypatch.setattr(media_utils, "download_file", download)
+    monkeypatch.setattr(media_utils, "detect_image_mime_type_async", detect)
+    monkeypatch.setattr(media_utils.os, "replace", delayed_replace)
+    task = asyncio.create_task(
+        media_utils._materialize_media_ref(
+            "https://example.com/image", media_type="image"
+        )
+    )
+    try:
+        assert await asyncio.to_thread(started.wait, 3)
+        task.cancel()
+        await asyncio.sleep(0)
+        assert not task.done()
+        release.set()
+        with pytest.raises(asyncio.CancelledError):
+            await task
+    finally:
+        release.set()
+        assert await asyncio.to_thread(finished.wait, 3)
+    assert existing.read_bytes() == b"another resolver"
+    assert list(tmp_path.iterdir()) == [existing]
+
+
+@pytest.mark.asyncio
+async def test_http_image_uses_real_downloader_and_cleans_owned_paths(
+    tmp_path, monkeypatch
+):
+    from aiohttp import web
+    from PIL import Image as PILImage
+
+    monkeypatch.setattr(media_utils, "get_astrbot_temp_path", lambda: str(tmp_path))
+    image = BytesIO()
+    PILImage.new("RGB", (1, 1), "red").save(image, format="PNG")
+    body = image.getvalue()
+
+    async def serve_image(_request):
+        return web.Response(body=body)
+
+    app = web.Application()
+    app.router.add_get("/image", serve_image)
+    runner = web.AppRunner(app)
+    await runner.setup()
+    server = web.TCPSite(runner, "127.0.0.1", 0)
+    await server.start()
+    port = runner.addresses[0][1]
+    try:
+        async with media_utils.MediaResolver(
+            f"http://127.0.0.1:{port}/image", media_type="image"
+        ).as_path() as resolved:
+            assert resolved.path.suffix == ".png"
+            assert resolved.read_bytes() == body
+        assert not list(tmp_path.iterdir())
+    finally:
+        await runner.cleanup()
 
 
 @pytest.mark.asyncio
