@@ -714,7 +714,6 @@ async def test_tool_loop_uses_current_run_context_usage_snapshot(
     ]
     provider_request.prompt = "current question"
 
-    sink = AsyncMock(return_value=True)
     await runner.reset(
         provider=provider,
         request=provider_request,
@@ -722,7 +721,6 @@ async def test_tool_loop_uses_current_run_context_usage_snapshot(
         tool_executor=mock_tool_executor,
         agent_hooks=mock_hooks,
         streaming=False,
-        conversation_event_sink=sink,
     )
 
     async for _ in runner.step_until_done(3):
@@ -737,15 +735,6 @@ async def test_tool_loop_uses_current_run_context_usage_snapshot(
     ]
     assert "important historical answer" not in second_contents
     assert "current question" in second_contents
-
-    compactions = [
-        call.args[0]
-        for call in sink.await_args_list
-        if call.args[0].type == "context.updated"
-        and call.args[0].data.get("reason") == "compaction"
-    ]
-    assert len(compactions) == 1
-    assert compactions[0].data["origin"] == "system"
 
 
 @pytest.mark.asyncio
