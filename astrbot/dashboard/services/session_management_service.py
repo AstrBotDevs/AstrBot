@@ -10,7 +10,7 @@ from astrbot.core import logger, sp
 from astrbot.core.config_bindings import BINDING_KEY
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
 from astrbot.core.db import BaseDatabase
-from astrbot.core.db.po import ConversationV2, Preference, UmoAlias, UmoSender
+from astrbot.core.db.po import ConversationV3, Preference, UmoAlias, UmoSender
 from astrbot.core.platform.message_session import MessageSession
 from astrbot.core.session_overrides import (
     OVERRIDE_KEY,
@@ -67,8 +67,8 @@ class SessionManagementService:
         """
         sources = (
             select(
-                col(ConversationV2.user_id).label("umo"),
-                col(ConversationV2.updated_at).label("updated_at"),
+                col(ConversationV3.umo).label("umo"),
+                col(ConversationV3.updated_at).label("updated_at"),
             )
             .union_all(
                 select(UmoSender.umo, UmoSender.updated_at),

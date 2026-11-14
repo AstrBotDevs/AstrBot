@@ -78,7 +78,7 @@ async def test_group_message_history_retains_latest_rows_and_safe_parts(tmp_path
             {"type": "plain", "text": "[Video]"},
             {"type": "plain", "text": "[File]"},
         ]
-        assert all(item.llm_checkpoint_id is None for item in history)
+        assert all(item.turn_id is None for item in history)
     finally:
         await db.engine.dispose()
 

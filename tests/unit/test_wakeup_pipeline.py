@@ -10,11 +10,11 @@ import pytest
 import pytest_asyncio
 from opentelemetry.trace import format_trace_id, get_current_span
 
-from astrbot.core.astr_agent_runtime import AstrAgentRuntime
 from astrbot.core.agent.hooks import BaseAgentRunHooks
 from astrbot.core.agent.run_context import ContextWrapper
 from astrbot.core.agent.runtime import AgentSessionRef
 from astrbot.core.agent_wakeup import wake_main_agent
+from astrbot.core.astr_agent_runtime import AstrAgentRuntime
 from astrbot.core.astr_agent_runtime import session as native_session
 from astrbot.core.astr_agent_runtime.main_agent import MainAgentBuildResult
 from astrbot.core.astr_agent_runtime.main_agent import builder as native_builder
@@ -80,7 +80,9 @@ async def runtime(monkeypatch):
         get_event_queue=lambda: queue,
         get_platform_inst=lambda _: SimpleNamespace(meta=lambda: metadata),
         get_config=lambda **_: config,
-        astrbot_config_mgr=SimpleNamespace(_create_message_config=lambda _: (copy.deepcopy(config), frozenset())),
+        astrbot_config_mgr=SimpleNamespace(
+            _create_message_config=lambda _: (copy.deepcopy(config), frozenset())
+        ),
         conversation_manager=SimpleNamespace(
             get_curr_conversation_id=AsyncMock(return_value=conversation.cid),
             get_conversation=AsyncMock(side_effect=get_conversation),
@@ -90,6 +92,32 @@ async def runtime(monkeypatch):
         get_llm_tool_manager=lambda: FunctionToolManager(),
         send_message=AsyncMock(return_value=True),
     )
+
+    async def read_history(cid):
+        event = current_message_event.get()
+        umo = event.unified_msg_origin if event else conversation.user_id
+        record = await context.conversation_manager.get_conversation(umo, cid)
+        if record is None:
+            return None
+        return SimpleNamespace(
+            **vars(record),
+            conversation_id=record.cid,
+            umo=record.user_id,
+            content=json.loads(record.history),
+        )
+
+    async def read_execution(cid):
+        record = await read_history(cid)
+        return (record, None) if record is not None else None
+
+    context.conversation_manager.db = SimpleNamespace(
+        get_conversation_by_id=AsyncMock(side_effect=read_history),
+        conversation_store=SimpleNamespace(
+            get_metadata=AsyncMock(side_effect=read_history),
+            read_for_execution=AsyncMock(side_effect=read_execution),
+        ),
+    )
+    context.conversation_manager.to_legacy_conversation = lambda record: record
 
     async def respond(**kwargs):
         event = current_message_event.get()
@@ -158,7 +186,9 @@ async def runtime(monkeypatch):
     native = AstrAgentRuntime(context, agent_configs=MagicMock(), subagents=MagicMock())
     runtimes = {"astrbot": native}
     scheduler = PipelineScheduler(
-        PipelineContext(config, SimpleNamespace(context=context), "profile", agent_runtimes=runtimes)
+        PipelineContext(
+            config, SimpleNamespace(context=context), "profile", agent_runtimes=runtimes
+        )
     )
     await scheduler.initialize()
     bus = EventBus(

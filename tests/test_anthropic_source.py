@@ -541,3 +541,60 @@ async def test_query_concatenates_multiple_text_blocks():
     response = await provider._query({"model": "claude-test", "messages": []}, None)
 
     assert response.completion_text == "Let me search. The answer is 42."
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("streaming", [False, True])
+@pytest.mark.parametrize("status_code", [401, 403, 429])
+async def test_key_failover_preserves_request_recorder(
+    monkeypatch, streaming, status_code
+):
+    from anthropic import APIStatusError
+
+    from astrbot.core.provider.entities import LLMResponse
+
+    provider = ProviderAnthropic(
+        provider_config={"key": ["first-key", "backup-key"]},
+        provider_settings={},
+    )
+    recorder = object()
+    calls = []
+    response = LLMResponse(role="assistant", completion_text="ok")
+    error = APIStatusError(
+        "retry",
+        response=sdk_httpx.Response(
+            status_code, request=sdk_httpx.Request("POST", "https://example.test")
+        ),
+        body=None,
+    )
+
+    async def query(payloads, tools, *, request_event_recorder=None, **kwargs):
+        calls.append((provider.chosen_api_key, request_event_recorder))
+        if len(calls) == 1:
+            raise error
+        return response
+
+    async def stream(payloads, tools, *, request_event_recorder=None, **kwargs):
+        yield await query(
+            payloads, tools, request_event_recorder=request_event_recorder, **kwargs
+        )
+
+    monkeypatch.setattr(provider, "_query", query)
+    monkeypatch.setattr(provider, "_query_stream", stream)
+    try:
+        if streaming:
+            result = [
+                item
+                async for item in provider.text_chat_stream(
+                    prompt="hi", request_event_recorder=recorder
+                )
+            ]
+            assert result == [response]
+        else:
+            assert (
+                await provider.text_chat(prompt="hi", request_event_recorder=recorder)
+                is response
+            )
+        assert calls == [("first-key", recorder), ("backup-key", recorder)]
+    finally:
+        await provider.client.close()
