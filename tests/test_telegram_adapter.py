@@ -1,6 +1,7 @@
 import asyncio
 import importlib
 import sys
+from datetime import datetime, timedelta
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -88,6 +89,34 @@ def _build_context() -> MagicMock:
     context.bot.username = "test_bot"
     context.bot.id = 12345678
     return context
+
+
+@pytest.mark.asyncio
+async def test_telegram_media_group_debounce_stays_within_max_wait():
+    TelegramPlatformAdapter = _load_telegram_adapter()
+    adapter = TelegramPlatformAdapter(
+        make_platform_config("telegram"), {}, asyncio.Queue()
+    )
+    adapter.media_group_timeout = 2.5
+    adapter.media_group_max_wait = 10.0
+    start = datetime(2026, 1, 1, 12)
+    context = _build_context()
+
+    with patch("datetime.datetime", wraps=datetime) as clock:
+        clock.now.return_value = start
+        await adapter.handle_media_group_message(
+            create_mock_update(media_group_id="album"), context
+        )
+        first_run = adapter.scheduler.add_job.call_args.kwargs["run_date"]
+        assert first_run == start + timedelta(seconds=2.5)
+
+        clock.now.return_value = start + timedelta(seconds=9)
+        await adapter.handle_media_group_message(
+            create_mock_update(media_group_id="album"), context
+        )
+        capped_run = adapter.scheduler.add_job.call_args.kwargs["run_date"]
+
+    assert capped_run == start + timedelta(seconds=10)
 
 
 @pytest.mark.asyncio

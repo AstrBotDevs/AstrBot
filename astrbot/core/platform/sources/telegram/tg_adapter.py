@@ -895,10 +895,11 @@ class TelegramPlatformAdapter(Platform):
         if not media_group_id:
             return
 
+        now = datetime.now()
         # Initialize cache for this media group if needed
         if media_group_id not in self.media_group_cache:
             self.media_group_cache[media_group_id] = {
-                "created_at": datetime.now(),
+                "created_at": now,
                 "items": [],
             }
             logger.debug(f"Create media group cache: {media_group_id}")
@@ -911,28 +912,20 @@ class TelegramPlatformAdapter(Platform):
             f"currently has {len(entry['items'])} items.",
         )
 
-        # Calculate delay: if already waited too long, process immediately;
-        # otherwise use normal debounce timeout
-        elapsed = (datetime.now() - entry["created_at"]).total_seconds()
-        if elapsed >= self.media_group_max_wait:
-            delay = 0
-            logger.debug(
-                f"Media group {media_group_id} has reached max wait time "
-                f"({elapsed:.1f}s >= {self.media_group_max_wait}s), processing immediately.",
-            )
-        else:
-            delay = self.media_group_timeout
-            logger.debug(
-                f"Scheduled media group {media_group_id} to be processed in {delay} seconds "
-                f"(already waited {elapsed:.1f}s)"
-            )
+        deadline = entry["created_at"] + timedelta(seconds=self.media_group_max_wait)
+        run_at = max(
+            now, min(now + timedelta(seconds=self.media_group_timeout), deadline)
+        )
+        logger.debug(
+            "Scheduled media group %s to be processed at %s", media_group_id, run_at
+        )
 
         # Schedule/reschedule processing (replace_existing=True handles debounce)
         job_id = f"media_group_{media_group_id}"
         self.scheduler.add_job(
             self.process_media_group,
             "date",
-            run_date=datetime.now() + timedelta(seconds=delay),
+            run_date=run_at,
             args=[media_group_id],
             id=job_id,
             replace_existing=True,
