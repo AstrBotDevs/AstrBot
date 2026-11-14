@@ -12,19 +12,21 @@ from opentelemetry.trace import format_trace_id, get_current_span
 
 from astrbot.core.agent.hooks import BaseAgentRunHooks
 from astrbot.core.agent.run_context import ContextWrapper
-from astrbot.core.agent.tool import ToolSet
-from astrbot.core.astr_agent_run_util import AgentRunner
-from astrbot.core.astr_agent_tool_exec import FunctionToolExecutor
-from astrbot.core.astr_agent_wakeup import wake_main_agent
-from astrbot.core.astr_main_agent import MainAgentBuildResult
-from astrbot.core.astr_main_agent.request import prepare_request
+from astrbot.core.agent.runtime import AgentSessionRef
+from astrbot.core.agent_wakeup import wake_main_agent
+from astrbot.core.astr_agent_runtime import AstrAgentRuntime
+from astrbot.core.astr_agent_runtime import session as native_session
+from astrbot.core.astr_agent_runtime.main_agent import MainAgentBuildResult
+from astrbot.core.astr_agent_runtime.main_agent import builder as native_builder
+from astrbot.core.astr_agent_runtime.main_agent.request import prepare_request
+from astrbot.core.astr_agent_runtime.runner import AgentRunner
 from astrbot.core.config.default import DEFAULT_CONFIG
 from astrbot.core.event_bus import EventBus
 from astrbot.core.log import _log_context
 from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.pipeline.context import PipelineContext
-from astrbot.core.pipeline.process_stage.method.agent_sub_stages import internal
 from astrbot.core.pipeline.scheduler import PipelineScheduler
+from astrbot.core.platform.agent_wakeup_event import AgentWakeupEvent
 from astrbot.core.platform.astr_message_event import (
     AstrMessageEvent,
     current_message_event,
@@ -33,9 +35,8 @@ from astrbot.core.platform.astrbot_message import AstrBotMessage, MessageMember
 from astrbot.core.platform.message_type import MessageType
 from astrbot.core.platform.platform_metadata import PlatformMetadata
 from astrbot.core.provider.entities import LLMResponse
-from astrbot.core.tools.message_tools import SendMessageToUserTool
+from astrbot.core.provider.func_tool_manager import FunctionToolManager
 from astrbot.core.utils import trace as trace_module
-from astrbot.dashboard.services.conversation_service import ConversationService
 
 
 @pytest_asyncio.fixture
@@ -51,6 +52,7 @@ async def runtime(monkeypatch):
     config = copy.deepcopy(DEFAULT_CONFIG)
     config["provider_settings"]["streaming_response"] = False
     config["provider_settings"]["wake_prefix"] = "/llm "
+    config["provider_settings"]["datetime_system_prompt"] = False
     config["platform_settings"]["unique_session"] = True
     config["admins_id"] = ["astrbot"]
     conversation = SimpleNamespace(cid="conversation", history="[]", token_usage=0)
@@ -62,32 +64,60 @@ async def runtime(monkeypatch):
         cleaned=asyncio.Event(),
         requests=[],
         events=[],
-        runners=[],
         deliver=False,
-        tool_delivery=False,
-        completion=None,
-        delivered=asyncio.Event(),
-        after_delivery=asyncio.Event(),
         fail=False,
     )
     control.gate.set()
-    control.after_delivery.set()
 
     async def save(*args, **kwargs):
         conversation.history = json.dumps(kwargs["history"])
+
+    async def get_conversation(umo, cid):
+        conversation.user_id = umo
+        return conversation
 
     context = SimpleNamespace(
         get_event_queue=lambda: queue,
         get_platform_inst=lambda _: SimpleNamespace(meta=lambda: metadata),
         get_config=lambda **_: config,
+        astrbot_config_mgr=SimpleNamespace(
+            _create_message_config=lambda _: (copy.deepcopy(config), frozenset())
+        ),
         conversation_manager=SimpleNamespace(
             get_curr_conversation_id=AsyncMock(return_value=conversation.cid),
-            get_conversation=AsyncMock(return_value=conversation),
+            get_conversation=AsyncMock(side_effect=get_conversation),
             update_conversation=AsyncMock(side_effect=save),
         ),
         get_using_tts_provider_async=AsyncMock(return_value=None),
+        get_llm_tool_manager=lambda: FunctionToolManager(),
         send_message=AsyncMock(return_value=True),
     )
+
+    async def read_history(cid):
+        event = current_message_event.get()
+        umo = event.unified_msg_origin if event else conversation.user_id
+        record = await context.conversation_manager.get_conversation(umo, cid)
+        if record is None:
+            return None
+        return SimpleNamespace(
+            **vars(record),
+            conversation_id=record.cid,
+            umo=record.user_id,
+            content=json.loads(record.history),
+        )
+
+    async def read_execution(cid):
+        record = await read_history(cid)
+        return (record, None) if record is not None else None
+
+    context.conversation_manager.db = SimpleNamespace(
+        get_conversation_by_id=AsyncMock(side_effect=read_history),
+        conversation_store=SimpleNamespace(
+            get_metadata=AsyncMock(side_effect=read_history),
+            read_for_execution=AsyncMock(side_effect=read_execution),
+        ),
+    )
+    context.conversation_manager.to_legacy_conversation = lambda record: record
 
     async def respond(**kwargs):
         event = current_message_event.get()
@@ -100,35 +130,19 @@ async def runtime(monkeypatch):
         control.started.set()
         try:
             await control.gate.wait()
-            if control.tool_delivery and len(control.requests) == 1:
-                return LLMResponse(
-                    role="assistant",
-                    tools_call_name=["send_message_to_user"],
-                    tools_call_args=[
-                        {"messages": [{"type": "plain", "text": "Take your medicine"}]}
-                    ],
-                    tools_call_ids=["reminder"],
-                )
-            if control.tool_delivery and len(control.requests) == 2:
-                control.delivered.set()
-                await control.after_delivery.wait()
             if control.deliver:
                 await event.send(MessageChain().message("Explicit delivery"))
             return LLMResponse(
                 role="err" if control.fail else "assistant",
-                completion_text=(
-                    control.completion
-                    if control.completion is not None
-                    else f"Reply {len(control.requests)}"
-                ),
+                completion_text=f"Reply {len(control.requests)}",
             )
         finally:
             control.cleaned.set()
 
     async def respond_stream(**kwargs):
         response = await respond(**kwargs)
-        if response.role != "err" and response.completion_text:
-            for text in (response.completion_text[:3], response.completion_text[3:]):
+        if response.role != "err":
+            for text in ("Reply ", str(len(control.requests))):
                 yield LLMResponse(role="assistant", completion_text=text, is_chunk=True)
         yield response
 
@@ -140,39 +154,28 @@ async def runtime(monkeypatch):
         text_chat_stream=respond_stream,
     )
 
-    async def build(*, event, plugin_context, config):
-        prepared = await prepare_request(event, plugin_context, config, provider, None)
+    async def build(
+        *, event, plugin_context, config, req=None, collected_input=None, **kwargs
+    ):
+        prepared = await prepare_request(
+            event, plugin_context, config, provider, req, collected_input
+        )
         assert prepared is not None
         control.events.append(event)
-        if control.tool_delivery:
-            prepared.request.func_tool = ToolSet([SendMessageToUserTool()])
         runner = AgentRunner()
         await runner.reset(
             provider=provider,
             request=prepared.request,
-            run_context=ContextWrapper(
-                context=SimpleNamespace(event=event, context=context)
-            ),
-            tool_executor=FunctionToolExecutor,
+            run_context=ContextWrapper(context=SimpleNamespace(event=event)),
+            tool_executor=MagicMock(),
             agent_hooks=BaseAgentRunHooks(),
             streaming=config.streaming_response,
         )
-        control.runners.append(runner)
         return MainAgentBuildResult(runner, prepared.request, provider)
 
-    monkeypatch.setattr(internal, "build_main_agent", build)
-    monkeypatch.setattr(internal, "_record_internal_agent_stats", AsyncMock())
-    monkeypatch.setattr(internal.Metric, "upload", AsyncMock())
-    monkeypatch.setattr(
-        internal.SessionServiceManager,
-        "should_process_llm_request",
-        AsyncMock(return_value=True),
-    )
-    monkeypatch.setattr(
-        internal.SessionServiceManager,
-        "is_session_enabled",
-        AsyncMock(return_value=True),
-    )
+    monkeypatch.setattr(native_builder, "build_main_agent", build)
+    monkeypatch.setattr(native_session, "record_agent_stats", AsyncMock())
+    monkeypatch.setattr(native_session.Metric, "upload", AsyncMock())
     monkeypatch.setitem(trace_module.astrbot_config, "trace_enable", True)
     monkeypatch.setattr(
         trace_module,
@@ -180,8 +183,12 @@ async def runtime(monkeypatch):
         lambda *_: SimpleNamespace(append=lambda *args, **kwargs: True),
     )
     monkeypatch.setattr(trace_module, "_get_log_broker", lambda: None)
+    native = AstrAgentRuntime(context, agent_configs=MagicMock(), subagents=MagicMock())
+    runtimes = {"astrbot": native}
     scheduler = PipelineScheduler(
-        PipelineContext(config, SimpleNamespace(context=context), "profile")
+        PipelineContext(
+            config, SimpleNamespace(context=context), "profile", agent_runtimes=runtimes
+        )
     )
     await scheduler.initialize()
     bus = EventBus(
@@ -196,6 +203,7 @@ async def runtime(monkeypatch):
             await asyncio.sleep(0)
             await asyncio.gather(*list(bus._pending_tasks), return_exceptions=True)
 
+    control.native = native
     control.context, control.conversation = context, conversation
     control.bus, control.scheduler, control.drain = bus, scheduler, drain
     control.agent_stage = next(
@@ -207,6 +215,7 @@ async def runtime(monkeypatch):
     for task in pending:
         task.cancel()
     await asyncio.gather(*pending, return_exceptions=True)
+    await native.close()
 
 
 @pytest.mark.asyncio
@@ -228,6 +237,8 @@ async def test_wakeup_uses_current_context_and_sends_final_reply(
     event = runtime.events[0]
     assert event.unified_msg_origin == umo
     assert event.role == "member"
+    assert event.get_extra("provider_request").conversation.cid == "conversation"
+    assert event.get_extra("provider_request").prompt == "Continue"
     assert runtime.requests[0][0] == history[0]
     assert json.loads(runtime.conversation.history) == history + [
         {"role": "user", "content": [{"type": "text", "text": "Continue"}]},
@@ -321,6 +332,38 @@ async def test_platform_stop_cancels_the_wakeup_provider_and_preserves_history(r
 
 
 @pytest.mark.asyncio
+async def test_switching_conversations_does_not_steer_the_previous_active_turn(runtime):
+    umo = "target:FriendMessage:user"
+    runtime.gate.clear()
+    await wake_main_agent(runtime.context, umo=umo, user_prompt="First", source="cron")
+    await asyncio.wait_for(runtime.started.wait(), 1)
+    active = runtime.native.active_turn(umo)
+    active.steer = MagicMock(side_effect=AssertionError("Wrong conversation"))
+    second = SimpleNamespace(
+        cid="second",
+        user_id=umo,
+        token_usage=0,
+        history=json.dumps([{"role": "user", "content": "Second history"}]),
+    )
+    conversations = {"conversation": runtime.conversation, "second": second}
+    manager = runtime.context.conversation_manager
+    manager.get_curr_conversation_id.return_value = "second"
+    manager.get_conversation.side_effect = lambda source, cid: conversations[cid]
+
+    async def save(source, cid, **kwargs):
+        conversations[cid].history = json.dumps(kwargs["history"])
+
+    manager.update_conversation.side_effect = save
+    await wake_main_agent(runtime.context, umo=umo, user_prompt="Next", source="cron")
+    runtime.gate.set()
+    await asyncio.wait_for(runtime.drain(), 1)
+    active.steer.assert_not_called()
+    assert runtime.requests[1][0] == {"role": "user", "content": "Second history"}
+    assert "Second history" not in runtime.conversation.history
+    assert "First" not in second.history
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize("streaming", [False, True])
 async def test_wakeup_failure_is_traced_and_delivered(runtime, streaming):
     """Deliver the provider error while retaining the failed trace and history."""
@@ -343,282 +386,116 @@ async def test_wakeup_failure_is_traced_and_delivered(runtime, streaming):
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("outcome", ["completed", "cancelled", "failed"])
-@pytest.mark.parametrize("streaming", [False, True])
-async def test_proactive_tool_delivery_is_saved_before_wakeup_finishes(
-    runtime, outcome, streaming
-):
-    """Retain delivered text while the agent is still running and after it exits."""
-    runtime.tool_delivery = True
-    runtime.after_delivery.clear()
-    runtime.fail = outcome == "failed"
-    runtime.agent_stage.streaming_response = streaming
-    await wake_main_agent(
-        runtime.context,
-        umo="target:FriendMessage:user",
-        user_prompt="Send a reminder",
-        source="cron",
+async def test_targeted_wakeup_queues_on_its_parent_after_conversation_switch(runtime):
+    umo = "target:FriendMessage:user"
+    runtime.gate.clear()
+    await wake_main_agent(runtime.context, umo=umo, user_prompt="First", source="cron")
+    await asyncio.wait_for(runtime.started.wait(), 1)
+    parent = runtime.native.active_turn(umo)
+    parent.steer = MagicMock(
+        side_effect=AssertionError("Fallback must queue a new turn")
     )
-    await asyncio.wait_for(runtime.delivered.wait(), 1)
-    delivered = {"role": "assistant", "content": "Take your medicine"}
-    before_completion = json.loads(runtime.conversation.history)
-    if outcome == "cancelled":
-        await runtime.bus.stop_platform("target")
-    else:
-        runtime.after_delivery.set()
-        await asyncio.wait_for(runtime.drain(), 1)
-    assert delivered in before_completion
-    history = json.loads(runtime.conversation.history)
-    if outcome == "completed":
-        assert history.count(delivered) == 1
-        assert "Take your medicine" in json.dumps(history)
-        assert any(message["role"] == "tool" for message in history)
-    else:
-        assert history.count(delivered) == 1
-
-
-@pytest.mark.asyncio
-async def test_reply_to_running_wakeup_waits_and_sees_delivered_text(runtime):
-    """Serialize a quick user reply and preserve the actual reminder in its context."""
-    runtime.tool_delivery = True
-    runtime.after_delivery.clear()
-    await wake_main_agent(
-        runtime.context,
-        umo="target:FriendMessage:user",
-        user_prompt="Send a reminder",
-        source="cron",
+    other = SimpleNamespace(cid="other", user_id=umo, history="[]", token_usage=0)
+    conversations = {"conversation": runtime.conversation, "other": other}
+    runtime.context.conversation_manager.get_curr_conversation_id.return_value = "other"
+    runtime.context.conversation_manager.get_conversation.side_effect = (
+        lambda source, cid: conversations.get(cid)
     )
-    await asyncio.wait_for(runtime.delivered.wait(), 1)
-    message = AstrBotMessage()
-    message.type = MessageType.FRIEND_MESSAGE
-    message.self_id = "bot"
-    message.sender = MessageMember(user_id="alice")
-    message.message = []
-    reply = AstrMessageEvent(
-        "/llm Already taken",
-        message,
-        PlatformMetadata(id="target", name="aiocqhttp", description="Target"),
-        "user",
+    event = AgentWakeupEvent(
+        context=runtime.context,
+        session=runtime.events[0].session,
+        platform_meta=runtime.events[0].platform_meta,
+        prompt="Child result",
+        source="plugin",
+        agent_session=AgentSessionRef("astrbot", "conversation"),
     )
-    await runtime.context.get_event_queue().put(reply)
-    for _ in range(20):
-        await asyncio.sleep(0)
+    await runtime.context.get_event_queue().put(event)
+    runtime.gate.set()
+    await asyncio.wait_for(runtime.drain(), 1)
+    parent.steer.assert_not_called()
     assert len(runtime.requests) == 2
-    runtime.after_delivery.set()
-    await asyncio.wait_for(runtime.drain(), 1)
-    assert len(runtime.requests) == 3
-    assert "Take your medicine" in json.dumps(runtime.requests[2])
-    assert {"role": "assistant", "content": "Take your medicine"} in runtime.requests[2]
-
-
-@pytest.mark.asyncio
-async def test_dashboard_history_edit_waits_for_the_running_wakeup(runtime):
-    """Apply a dashboard edit after the agent snapshot so completion cannot erase it."""
-    runtime.gate.clear()
-    await wake_main_agent(
-        runtime.context,
-        umo="target:FriendMessage:user",
-        user_prompt="Run",
-        source="cron",
-    )
-    await asyncio.wait_for(runtime.started.wait(), 1)
-    service = ConversationService(MagicMock(), runtime.context)
-    edited_history = [{"role": "assistant", "content": "Dashboard edit"}]
-    editing = asyncio.create_task(
-        service.update_history(
-            {
-                "user_id": "target:FriendMessage:user",
-                "cid": runtime.conversation.cid,
-                "history": edited_history,
-            }
-        )
-    )
-    for _ in range(20):
-        await asyncio.sleep(0)
-    was_pending = not editing.done()
-    runtime.gate.set()
-    await asyncio.wait_for(runtime.drain(), 1)
-    await asyncio.wait_for(editing, 1)
-    assert was_pending
-    assert json.loads(runtime.conversation.history) == edited_history
-
-
-@pytest.mark.asyncio
-@pytest.mark.parametrize("completion", ["Take your medicine", ""])
-async def test_tool_delivery_survives_duplicate_or_empty_final_reply(
-    runtime, completion
-):
-    """Keep exactly one assistant record when the final reply adds no new text."""
-    runtime.tool_delivery = True
-    runtime.completion = completion
-    await wake_main_agent(
-        runtime.context,
-        umo="target:FriendMessage:user",
-        user_prompt="Send a reminder",
-        source="background_task",
-    )
-    await asyncio.wait_for(runtime.drain(), 1)
-    history = json.loads(runtime.conversation.history)
-    texts = [
-        message["content"]
-        if isinstance(message["content"], str)
-        else "".join(part.get("text", "") for part in (message["content"] or []))
-        for message in history
-        if message["role"] == "assistant"
-    ]
-    assert texts.count("Take your medicine") == 1
-    assert [
-        call.args[1].get_plain_text()
-        for call in runtime.context.send_message.await_args_list
-    ] == ["Take your medicine"]
-
-
-@pytest.mark.asyncio
-@pytest.mark.parametrize("operation", ["read", "write"])
-async def test_platform_stop_waits_for_confirmed_delivery_to_be_persisted(
-    runtime, operation
-):
-    """Do not release the pipeline lock while a confirmed delivery write is pending."""
-    runtime.tool_delivery = True
-    runtime.gate.clear()
-    await wake_main_agent(
-        runtime.context,
-        umo="target:FriendMessage:user",
-        user_prompt="Send a reminder",
-        source="cron",
-    )
-    await asyncio.wait_for(runtime.started.wait(), 1)
-    manager = runtime.context.conversation_manager
-    entered, release = asyncio.Event(), asyncio.Event()
-    original_save = manager.update_conversation.side_effect
-
-    async def blocked(*args, **kwargs):
-        entered.set()
-        await release.wait()
-        if operation == "read":
-            return runtime.conversation
-        await original_save(*args, **kwargs)
-
-    if operation == "read":
-        manager.get_conversation.side_effect = blocked
-    else:
-        manager.update_conversation.side_effect = blocked
-    runtime.gate.set()
-    await asyncio.wait_for(entered.wait(), 1)
-    stopping = asyncio.create_task(runtime.bus.stop_platform("target"))
-    for _ in range(20):
-        await asyncio.sleep(0)
-    was_pending = not stopping.done()
-    release.set()
-    await asyncio.wait_for(stopping, 1)
-    assert was_pending
-    assert json.loads(runtime.conversation.history) == [
-        {"role": "assistant", "content": "Take your medicine"}
-    ]
-
-
-@pytest.mark.asyncio
-@pytest.mark.parametrize("failure", ["missing_platform", "transport", "storage"])
-async def test_proactive_delivery_distinguishes_send_and_storage_failures(
-    runtime, failure
-):
-    """Only confirmed text becomes assistant history; storage failure never resends."""
-    runtime.tool_delivery = True
-    if failure == "missing_platform":
-        runtime.context.send_message.return_value = False
-    elif failure == "transport":
-        runtime.context.send_message.side_effect = RuntimeError("Transport unavailable")
-    else:
-        runtime.context.conversation_manager.update_conversation.side_effect = (
-            RuntimeError("Storage unavailable")
-        )
-    await wake_main_agent(
-        runtime.context,
-        umo="target:FriendMessage:user",
-        user_prompt="Send a reminder",
-        source="cron",
-    )
-    await asyncio.wait_for(runtime.drain(), 1)
-    results = [
-        message
-        for message in runtime.runners[0].run_context.messages
-        if message.role == "tool"
-    ]
-    assert len(results) == 1
-    if failure == "storage":
-        assert results[0].content.startswith("Message sent to session")
-    else:
-        assert results[0].content.startswith("error:")
-    deliveries = [
-        call
-        for call in runtime.context.send_message.await_args_list
-        if call.args[1].get_plain_text() == "Take your medicine"
-    ]
-    assert len(deliveries) == 1
-    assert {"role": "assistant", "content": "Take your medicine"} not in json.loads(
-        runtime.conversation.history
+    assert {
+        "role": "assistant",
+        "content": [{"type": "text", "text": "Reply 1"}],
+    } in runtime.requests[1]
+    assert "Child result" in runtime.conversation.history
+    assert other.history == "[]"
+    assert (
+        runtime.context.conversation_manager.get_curr_conversation_id.return_value
+        == "other"
     )
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("change", ["switched", "deleted"])
-async def test_proactive_delivery_stays_bound_to_its_original_conversation(
-    runtime, change
-):
-    """Never redirect a delivery to a newly selected or replacement conversation."""
-    runtime.tool_delivery = True
-    runtime.gate.clear()
-    runtime.after_delivery.clear()
-    await wake_main_agent(
-        runtime.context,
-        umo="target:FriendMessage:user",
-        user_prompt="Send a reminder",
-        source="cron",
-    )
-    await asyncio.wait_for(runtime.started.wait(), 1)
-    manager = runtime.context.conversation_manager
-    manager.get_curr_conversation_id.return_value = "another-conversation"
-    if change == "deleted":
-        manager.get_conversation.return_value = None
-    runtime.gate.set()
-    await asyncio.wait_for(runtime.delivered.wait(), 1)
-    manager.get_conversation.assert_awaited_with(
-        "target:FriendMessage:user", "conversation"
-    )
-    await runtime.bus.stop_platform("target")
-    if change == "deleted":
-        manager.update_conversation.assert_not_awaited()
-    else:
-        manager.update_conversation.assert_awaited_once_with(
-            "target:FriendMessage:user",
-            "conversation",
-            history=[{"role": "assistant", "content": "Take your medicine"}],
-        )
-
-
-@pytest.mark.asyncio
-async def test_temporary_final_text_cannot_replace_a_confirmed_delivery(
+async def test_waiting_hook_streaming_override_is_resolved_after_admission(
     runtime, monkeypatch
 ):
-    """Only persisted final content may suppress the delivered assistant record."""
-    runtime.tool_delivery = True
-    runtime.completion = "Take your medicine"
+    """Preserve waiting hooks that change this input's output preferences.
 
-    async def mark_final_text_temporary(self, run_context, llm_response):
-        for part in run_context.messages[-1].content:
-            part.mark_as_temp()
+    Args:
+        runtime: Real pipeline and offline model host.
+        monkeypatch: Core hook and native builder patch manager.
+    """
+    from astrbot.core.pipeline import context_utils
+    from astrbot.core.star.star_handler import EventType
 
-    monkeypatch.setattr(BaseAgentRunHooks, "on_agent_done", mark_final_text_temporary)
+    original = native_builder.build_main_agent
+    streaming = []
+
+    async def hook(event, kind, *args):
+        if kind == EventType.OnWaitingLLMRequestEvent:
+            event.set_extra("enable_streaming", True)
+        return False
+
+    async def build(**kwargs):
+        streaming.append(kwargs["config"].streaming_response)
+        return await original(**kwargs)
+
+    monkeypatch.setattr(context_utils, "call_event_hook", hook)
+    monkeypatch.setattr(native_builder, "build_main_agent", build)
     await wake_main_agent(
         runtime.context,
-        umo="target:FriendMessage:user",
-        user_prompt="Send a reminder",
+        umo="target:FriendMessage:alice",
+        user_prompt="Continue",
         source="plugin",
     )
     await asyncio.wait_for(runtime.drain(), 1)
-    assert (
-        json.loads(runtime.conversation.history).count(
-            {"role": "assistant", "content": "Take your medicine"}
-        )
-        == 1
+    assert streaming == [True]
+
+
+@pytest.mark.asyncio
+async def test_sdk_handle_keeps_permissions_and_follow_up_under_core_admission(runtime):
+    """Expose session status without exposing raw input submission."""
+    from astrbot.api.agents import PlainInput
+    from astrbot.core.agent_service import AgentService
+    from astrbot.core.platform.message_session import MessageSession
+
+    umo = "target:FriendMessage:user"
+    context = runtime.context
+    service = AgentService(context, {"astrbot": runtime.native})
+    source = AgentWakeupEvent(
+        context=context,
+        session=MessageSession.from_str(umo),
+        platform_meta=context.get_platform_inst("target").meta(),
+        source="plugin",
+        prompt="Continue",
+        role="admin",
     )
+    source.set_extra("_api_key_allow_admin_role", False)
+    run = await service.run_turn(
+        umo=umo,
+        input_message=[PlainInput(text="First input")],
+        send_to_user=False,
+        source_event=source,
+    )
+    assert not hasattr(run, "runtime_turn")
+    assert not hasattr(run.session, "run_turn")
+    assert run.session.ref == AgentSessionRef("astrbot", "conversation")
+    assert (await asyncio.wait_for(run.result(), 1)).text == "Reply 1"
+    assert runtime.events[0].role == "member"
+
+    context.get_config()["provider_settings"]["enable"] = False
+    follow_up = await run.follow_up(input_message=[PlainInput(text="Second input")])
+    assert follow_up.session.ref == run.session.ref
+    assert (await asyncio.wait_for(follow_up.result(), 1)).reason == "skipped"
+    assert len(runtime.requests) == 1

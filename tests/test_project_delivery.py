@@ -3,6 +3,8 @@
 import importlib.util
 import io
 import tempfile
+import threading
+import time
 import unittest
 from pathlib import Path
 from unittest.mock import Mock, patch
@@ -645,6 +647,52 @@ class DeliveryTests(unittest.TestCase):
         self.assertEqual(
             api.call_args_list[1].args[1]["value"], {"singleSelectOptionId": "D"}
         )
+
+    def test_apply_uses_four_workers_and_keeps_each_item_mutations_sequential(self):
+        plan = [
+            {
+                "content": f"C{index}",
+                "item": f"I{index}",
+                "number": index,
+                "changes": {"Status": "Done", "发布版本": f"v{index}"},
+            }
+            for index in range(8)
+        ]
+        fields = {
+            "Status": {"id": "S", "options": [{"name": "Done", "id": "D"}]},
+            "发布版本": {"id": "V"},
+        }
+        active, maximum, active_per_item, maximum_per_item = 0, 0, {}, {}
+        queries, lock = [], threading.Lock()
+        first_mutations = threading.Barrier(4)
+
+        def api(query, variables):
+            nonlocal active, maximum
+            with lock:
+                active += 1
+                maximum = max(maximum, active)
+                active_per_item[variables["item"]] = (
+                    active_per_item.get(variables["item"], 0) + 1
+                )
+                maximum_per_item[variables["item"]] = max(
+                    maximum_per_item.get(variables["item"], 0),
+                    active_per_item[variables["item"]],
+                )
+                queries.append((variables["item"], variables["field"]))
+            if variables["field"] == "S":
+                first_mutations.wait(timeout=10)
+            time.sleep(0.01)
+            with lock:
+                active -= 1
+                active_per_item[variables["item"]] -= 1
+            return {}
+
+        with patch.object(sync, "graphql", side_effect=api):
+            sync.apply_plan("P", fields, plan, apply=True)
+        self.assertEqual(sync.APPLY_WORKERS, 4)
+        self.assertEqual(maximum, 4)
+        self.assertEqual(set(maximum_per_item.values()), {1})
+        self.assertEqual(len(queries), 16)
 
 
 if __name__ == "__main__":

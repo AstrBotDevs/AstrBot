@@ -236,7 +236,7 @@ class AstrBotConfig(dict):
                     # Free-form mapping declared as "type": "dict": user-added
                     # keys are data instead of stale entries, keep them as-is.
                     new_conf[key] = conf[key]
-                elif (path + "." + key if path else key) == "agent_runner.config":
+                elif (path + "." + key if path else key) == "agent.config":
                     # Runner config is normalized according to runner_type when saved.
                     new_conf[key] = conf[key]
                 else:

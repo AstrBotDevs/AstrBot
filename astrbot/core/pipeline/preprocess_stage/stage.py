@@ -28,7 +28,6 @@ class PreProcessStage(Stage):
         self.config = ctx.astrbot_config
         self.plugin_manager = ctx.plugin_manager
 
-        self.stt_settings: dict = self.config.get("provider_stt_settings", {})
         self.platform_settings: dict = self.config.get("platform_settings", {})
 
     @staticmethod
@@ -218,7 +217,11 @@ class PreProcessStage(Stage):
                             )
 
         # STT
-        if self.stt_settings.get("enable", False):
+        if (
+            self.plugin_manager.context.get_config(umo=event.unified_msg_origin)
+            .get("provider_stt_settings", {})
+            .get("enable", False)
+        ):
             # TODO: 独立
             ctx = self.plugin_manager.context
             stt_provider = await ctx.get_using_stt_provider_async(

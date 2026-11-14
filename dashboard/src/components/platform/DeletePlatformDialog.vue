@@ -110,20 +110,20 @@ import { useModuleI18n } from "@/i18n/composables";
 const props = defineProps<{ platform: { id: string } | null }>();
 const emit = defineEmits(["update:platform", "deleted"]);
 const { tm } = useModuleI18n("features/platform");
-const defaultCleanup: BotCleanupTarget[] = [
-  "custom_rules",
+type CleanupOption = Exclude<BotCleanupTarget, "custom_rules" | "routing"> | "config_mappings";
+const defaultCleanup: CleanupOption[] = [
+  "config_mappings",
   "preferences",
-  "routing",
   "cron_jobs",
 ];
-const historyTargets: BotCleanupTarget[] = [
+const historyTargets: CleanupOption[] = [
   "conversations",
   "message_history",
   "traces",
   "stats",
 ];
 const cleanupTargets = [...defaultCleanup, ...historyTargets];
-const cleanup = ref<BotCleanupTarget[]>([...defaultCleanup]);
+const cleanup = ref<CleanupOption[]>([...defaultCleanup]);
 const deleting = ref(false);
 const error = ref("");
 const allHistorySelected = computed({
@@ -150,7 +150,10 @@ async function deletePlatform() {
   deleting.value = true;
   error.value = "";
   try {
-    await botApi.delete(id, cleanup.value);
+    const targets = cleanup.value.flatMap<BotCleanupTarget>((target) =>
+      target === "config_mappings" ? ["custom_rules", "routing"] : [target],
+    );
+    await botApi.delete(id, targets);
     emit("update:platform", null);
     emit("deleted", id);
   } catch (err) {

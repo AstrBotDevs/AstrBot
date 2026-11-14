@@ -16,7 +16,9 @@ import certifi
 
 from astrbot.api import sp
 from astrbot.core import DEMO_MODE, file_token_service, logger
-from astrbot.core.computer.computer_client import sync_skills_to_active_sandboxes
+from astrbot.core.astr_agent_runtime.computer.computer_client import (
+    sync_skills_to_active_sandboxes,
+)
 from astrbot.core.repository import (
     GitUnavailableError,
     normalize_repository_url,
