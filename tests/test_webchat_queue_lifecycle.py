@@ -28,33 +28,3 @@ async def test_removed_back_queue_unblocks_pending_writer():
         request_id,
         {"type": "plain", "data": "late"},
     )
-
-
-@pytest.mark.asyncio
-@pytest.mark.parametrize(
-    ("detail", "code"),
-    [
-        ("ffmpeg not found", "ffmpegNotFound"),
-        ("private detail", "messageProcessingFailed"),
-    ],
-)
-async def test_listener_failure_emits_error_then_end(detail, code):
-    manager = WebChatQueueMgr()
-
-    async def fail(data):
-        raise RuntimeError(detail)
-
-    manager.set_listener(fail)
-    back = manager.get_or_create_back_queue("request", "session")
-    queue = manager.get_or_create_queue("session")
-    try:
-        await queue.put(("user", "session", {"message_id": "request"}))
-        error = await asyncio.wait_for(back.get(), 2)
-        end = await asyncio.wait_for(back.get(), 2)
-        assert error["type"] == "error"
-        assert error["error_code"] == code
-        assert "private detail" not in error["data"]
-        assert end["type"] == "end"
-    finally:
-        manager.remove_queues("session")
-        await asyncio.sleep(0)

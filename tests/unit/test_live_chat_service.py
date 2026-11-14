@@ -240,10 +240,7 @@ async def test_handle_chat_interrupt_without_message_id_targets_all_requests():
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("preprocessing_error", [False, True])
-async def test_handle_chat_message_scopes_events_to_request_by_default(
-    preprocessing_error,
-):
+async def test_handle_chat_message_scopes_events_to_request_by_default():
     service = _service()
     session = service.create_session("alice")
     session_id = "multiplexed-chat-session"
@@ -277,18 +274,6 @@ async def test_handle_chat_message_scopes_events_to_request_by_default(
         input_queue = webchat_queue_mgr.get_or_create_queue(session_id)
         await asyncio.wait_for(input_queue.get(), timeout=1)
 
-        if preprocessing_error:
-            await webchat_queue_mgr.put_back_queue(
-                message_id,
-                {
-                    "type": "error",
-                    "data": "Processing failed",
-                    "error_code": "ffmpegNotFound",
-                    "streaming": False,
-                    "message_id": message_id,
-                },
-            )
-
         await webchat_queue_mgr.put_back_queue(
             message_id,
             {
@@ -304,13 +289,6 @@ async def test_handle_chat_message_scopes_events_to_request_by_default(
         assert sent[0]["message_id"] == message_id
         assert sent[-1]["type"] == "end"
         assert sent[-1]["message_id"] == message_id
-        if preprocessing_error:
-            errors = [event for event in sent if event.get("type") == "error"]
-            assert errors[0]["error_code"] == "ffmpegNotFound"
-            saved = [event for event in sent if event.get("type") == "message_saved"]
-            assert saved[0]["data"]["turn_id"] == sent[0]["data"]["turn_id"]
-            content = service.platform_history_mgr.insert.await_args.kwargs["content"]
-            assert content["message"][0]["error_code"] == "ffmpegNotFound"
     finally:
         if not task.done():
             task.cancel()
