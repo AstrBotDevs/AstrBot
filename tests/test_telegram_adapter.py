@@ -1007,6 +1007,23 @@ async def test_telegram_audio_caption_populates_message_text_and_plain(tmp_path)
 
 
 @pytest.mark.asyncio
+async def test_telegram_resending_a_message_chain_preserves_mention_text():
+    TelegramPlatformEvent = _load_telegram_platform_event()
+    client = MockTelegramBuilder.create_bot()
+    text = Comp.Plain("Please review")
+    message = MessageChain([Comp.At(qq=1234, name="alice"), text])
+
+    await TelegramPlatformEvent.send_with_client(client, message, "100")
+    await TelegramPlatformEvent.send_with_client(client, message, "200")
+
+    assert [call.kwargs["text"] for call in client.send_message.await_args_list] == [
+        "@alice Please review",
+        "@alice Please review",
+    ]
+    assert text.text == "Please review"
+
+
+@pytest.mark.asyncio
 async def test_telegram_renders_common_buttons_as_inline_keyboard():
     TelegramPlatformEvent = _load_telegram_platform_event()
     client = MockTelegramBuilder.create_bot()
