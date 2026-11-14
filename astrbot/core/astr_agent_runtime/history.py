@@ -114,6 +114,7 @@ async def save_agent_history(
         )
         if (
             final.role == "assistant"
+            and not final._no_save
             and not final.tool_calls
             and final_text in delivered_texts
         ):

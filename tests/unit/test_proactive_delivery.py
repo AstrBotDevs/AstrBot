@@ -446,16 +446,23 @@ async def test_proactive_delivery_stays_bound_to_its_original_conversation(
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("temporary_scope", ["message", "part"])
+@pytest.mark.parametrize("streaming", [False, True])
 async def test_temporary_final_text_cannot_replace_a_confirmed_delivery(
-    runtime, monkeypatch
+    runtime, monkeypatch, temporary_scope, streaming
 ):
     """Only persisted final content may suppress the delivered assistant record."""
     runtime.tool_delivery = True
     runtime.completion = "Take your medicine"
+    runtime.agent_stage.streaming_response = streaming
 
     async def mark_final_text_temporary(self, run_context, llm_response):
-        for part in run_context.messages[-1].content:
-            part.mark_as_temp()
+        final = run_context.messages[-1]
+        if temporary_scope == "message":
+            final._no_save = True
+        else:
+            for part in final.content:
+                part.mark_as_temp()
 
     monkeypatch.setattr(BaseAgentRunHooks, "on_agent_done", mark_final_text_temporary)
     await wake_main_agent(
@@ -465,10 +472,9 @@ async def test_temporary_final_text_cannot_replace_a_confirmed_delivery(
         source="plugin",
     )
     await asyncio.wait_for(runtime.drain(), 1)
+    snapshot = await runtime.store.read(runtime.conversation.cid)
     assert (
-        json.loads(runtime.conversation.history).count(
-            {"role": "assistant", "content": "Take your medicine"}
-        )
+        snapshot.messages.count({"role": "assistant", "content": "Take your medicine"})
         == 1
     )
 
