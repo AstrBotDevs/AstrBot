@@ -127,7 +127,11 @@ async def test_discord_reply_body_reaches_model_request(source):
 
 @pytest.mark.asyncio
 async def test_discord_reply_embeds_and_attachments_reach_model_request():
-    """Verify that quoted embeds and attachments survive an empty reply body."""
+    """Verify that quoted embeds and attachments survive an empty reply body.
+
+    Embed media must be fetched through Discord's proxy, never the
+    sender-controlled original URL.
+    """
     from astrbot.core.agent_media import append_quoted_content
     from astrbot.core.provider.entities import ProviderRequest
     from astrbot.core.utils.quoted_message.extractor import (
@@ -137,12 +141,20 @@ async def test_discord_reply_embeds_and_attachments_reach_model_request():
     adapter = DiscordPlatformAdapter.__new__(DiscordPlatformAdapter)
     adapter.bot_self_id = "1"
     adapter.client = SimpleNamespace(user=SimpleNamespace(id=1))
-    embed = (
-        discord.Embed(title="Weather", description="Sunny all day")
-        .set_author(name="Forecast Bot")
-        .add_field(name="High", value="28C")
-        .set_footer(text="Updated hourly")
-        .set_image(url="https://cdn.example.com/embed.png")
+    embed = discord.Embed.from_dict(
+        {
+            "title": "Weather",
+            "description": "Sunny all day",
+            "author": {"name": "Forecast Bot"},
+            "fields": [{"name": "High", "value": "28C"}],
+            "footer": {"text": "Updated hourly"},
+            "image": {
+                "url": "http://127.0.0.1/internal.png",
+                "proxy_url": "https://media.discordapp.net/external/embed.png",
+            },
+            # Without a proxy URL the thumbnail must be skipped.
+            "thumbnail": {"url": "http://169.254.169.254/latest/meta-data"},
+        }
     )
     quoted = Mock(
         spec=discord.Message,
@@ -181,9 +193,10 @@ async def test_discord_reply_embeds_and_attachments_reach_model_request():
     assert reply.chain[0] == Plain(text=expected_text)
     assert [type(comp) for comp in reply.chain[1:]] == [Image, Image, File]
     assert reply.chain[3].name == "notes.txt"
+    assert reply.chain[3].url == "https://cdn.example.com/notes.txt"
     event = SimpleNamespace(message_obj=abm)
     assert await extract_quoted_message_images(event, reply) == [
-        "https://cdn.example.com/embed.png",
+        "https://media.discordapp.net/external/embed.png",
         "https://cdn.example.com/upload.png",
     ]
     req = ProviderRequest(prompt=abm.message_str)
@@ -192,6 +205,55 @@ async def test_discord_reply_embeds_and_attachments_reach_model_request():
     assert "[Empty Text]" not in quoted_text
     assert "Sunny all day" in quoted_text
     assert "[File:notes.txt]" in quoted_text
+
+
+@pytest.mark.asyncio
+async def test_discord_audio_only_reply_is_not_empty_text():
+    """Verify that an audio-only quote is described instead of empty text."""
+    from astrbot.core.agent_media import append_quoted_content
+    from astrbot.core.provider.entities import ProviderRequest
+
+    adapter = DiscordPlatformAdapter.__new__(DiscordPlatformAdapter)
+    adapter.bot_self_id = "1"
+    adapter.client = SimpleNamespace(user=SimpleNamespace(id=1))
+    quoted = Mock(
+        spec=discord.Message,
+        id=41,
+        content="",
+        author=SimpleNamespace(id=3, display_name="speaker"),
+        embeds=[],
+        attachments=[
+            SimpleNamespace(
+                content_type="audio/ogg",
+                url="https://cdn.example.com/voice.ogg",
+                filename="voice.ogg",
+            )
+        ],
+    )
+    message = SimpleNamespace(
+        id=42,
+        type=discord.MessageType.reply,
+        content="<@1> What did they say?",
+        channel=SimpleNamespace(id=123, guild=None, fetch_message=AsyncMock()),
+        author=SimpleNamespace(id=2, display_name="tester"),
+        attachments=[],
+        reference=SimpleNamespace(message_id=41, resolved=quoted, cached_message=None),
+    )
+
+    abm = await adapter.convert_message({"message": message})
+
+    reply = next(comp for comp in abm.message if isinstance(comp, Reply))
+    assert reply.chain == [
+        Record(
+            file="https://cdn.example.com/voice.ogg",
+            url="https://cdn.example.com/voice.ogg",
+        )
+    ]
+    req = ProviderRequest(prompt=abm.message_str)
+    await append_quoted_content(SimpleNamespace(message_obj=abm), req, "", Mock())
+    quoted_text = "\n".join(part.text for part in req.extra_user_content_parts)
+    assert "[Empty Text]" not in quoted_text
+    assert "[Audio]" in quoted_text
 
 
 @pytest.mark.asyncio

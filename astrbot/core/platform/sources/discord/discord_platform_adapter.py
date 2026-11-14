@@ -405,9 +405,11 @@ class DiscordPlatformAdapter(Platform):
                         )
                         if part
                     )
+                    # Embed media URLs are chosen by the sender, so only fetch
+                    # them through Discord's media proxy to avoid SSRF.
                     for embed_media in (embed.image, embed.thumbnail):
-                        if embed_media and embed_media.url:
-                            media_chain.append(Image(file=embed_media.url))
+                        if embed_media and embed_media.proxy_url:
+                            media_chain.append(Image(file=embed_media.proxy_url))
                 for attachment in quoted.attachments:
                     content_type = attachment.content_type or ""
                     if content_type.startswith("image/"):
