@@ -1,3 +1,4 @@
+import asyncio
 import copy
 import traceback
 from collections.abc import Iterable
@@ -42,7 +43,12 @@ class Main(star.Star):
     async def handle_empty_mention(self, event: AstrMessageEvent):
         """处理只有一个 @ 或仅有唤醒前缀的消息，并等待用户下一条内容。"""
         try:
-            messages = event.get_messages()
+            # Ignore empty text segments for detection without changing the event.
+            messages = [
+                message
+                for message in event.get_messages()
+                if not (isinstance(message, Comp.Plain) and not message.text.strip())
+            ]
             cfg = self.context.get_config(umo=event.unified_msg_origin)
             p_settings = cfg["platform_settings"]
             wake_prefix = cfg.get("wake_prefix", [])
@@ -62,43 +68,6 @@ class Main(star.Star):
             if not (is_empty_mention or is_wake_prefix_only):
                 return
 
-            if p_settings.get("empty_mention_waiting_need_reply", True):
-                try:
-                    curr_cid = await self.context.conversation_manager.get_curr_conversation_id(
-                        event.unified_msg_origin,
-                    )
-                    conversation = None
-
-                    if curr_cid:
-                        conversation = (
-                            await self.context.conversation_manager.get_conversation(
-                                event.unified_msg_origin,
-                                curr_cid,
-                            )
-                        )
-                    else:
-                        curr_cid = (
-                            await self.context.conversation_manager.new_conversation(
-                                event.unified_msg_origin,
-                                platform_id=event.get_platform_id(),
-                            )
-                        )
-
-                    yield event.request_llm(
-                        prompt=(
-                            "注意，你正在社交媒体上中与用户进行聊天，用户只是通过@来唤醒你，但并未在这条消息中输入内容，他可能会在接下来一条发送他想发送的内容。"
-                            "你友好地询问用户想要聊些什么或者需要什么帮助，回复要符合人设，不要太过机械化。"
-                            "请注意，你仅需要输出要回复用户的内容，不要输出其他任何东西"
-                        ),
-                        session_id=curr_cid,
-                        contexts=[],
-                        system_prompt="",
-                        conversation=conversation,
-                    )
-                except Exception as e:
-                    logger.error(f"LLM response failed: {e!s}")
-                    yield event.plain_result("想要问什么呢？😄")
-
             @session_waiter(60)
             async def empty_mention_waiter(
                 controller: SessionController,
@@ -115,13 +84,51 @@ class Main(star.Star):
                 event.stop_event()
                 controller.stop()
 
+            wait_task = asyncio.create_task(empty_mention_waiter(event))
             try:
-                await empty_mention_waiter(event)
+                # Register before the greeting yields to the model pipeline.
+                await asyncio.sleep(0)
+                if p_settings.get("empty_mention_waiting_need_reply", True):
+                    try:
+                        curr_cid = await self.context.conversation_manager.get_curr_conversation_id(
+                            event.unified_msg_origin,
+                        )
+                        conversation = None
+
+                        if curr_cid:
+                            conversation = await self.context.conversation_manager.get_conversation(
+                                event.unified_msg_origin,
+                                curr_cid,
+                            )
+                        else:
+                            curr_cid = await self.context.conversation_manager.new_conversation(
+                                event.unified_msg_origin,
+                                platform_id=event.get_platform_id(),
+                            )
+
+                        yield event.request_llm(
+                            prompt=(
+                                "注意，你正在社交媒体上中与用户进行聊天，用户只是通过@来唤醒你，但并未在这条消息中输入内容，他可能会在接下来一条发送他想发送的内容。"
+                                "你友好地询问用户想要聊些什么或者需要什么帮助，回复要符合人设，不要太过机械化。"
+                                "请注意，你仅需要输出要回复用户的内容，不要输出其他任何东西"
+                            ),
+                            session_id=curr_cid,
+                            contexts=[],
+                            system_prompt="",
+                            conversation=conversation,
+                        )
+                    except Exception as e:
+                        logger.error(f"LLM response failed: {e!s}")
+                        yield event.plain_result("想要问什么呢？😄")
+                await wait_task
             except TimeoutError:
                 pass
             except Exception as e:
                 yield event.plain_result("发生错误，请联系管理员: " + str(e))
             finally:
+                if not wait_task.done():
+                    wait_task.cancel()
+                await asyncio.gather(wait_task, return_exceptions=True)
                 event.stop_event()
         except Exception as e:
             logger.error("handle_empty_mention error: " + str(e))
