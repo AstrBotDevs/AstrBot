@@ -229,6 +229,10 @@
           "description": "音声合成を有効化",
           "hint": "TTS のマスタースイッチ"
         },
+        "mode": {
+          "description": "音声返信モード",
+          "hint": "always：すべての返信を自動で音声に変換します。tool：モデルが send_voice ツールを呼び出したときだけ音声を送信します。"
+        },
         "provider_id": {
           "description": "デフォルト音声合成モデル",
           "hint": "/provider コマンドで会話ごとのモデルを選択することもできます。"
