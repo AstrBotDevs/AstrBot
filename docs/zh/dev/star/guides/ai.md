@@ -107,6 +107,40 @@ should_reply = await self.context.decision.yes_no(
 
 如需指定已配置的判断提供商，传入 `provider_id="provider_id"`；省略时使用默认判断提供商。提供商未配置、请求超时、连接失败、HTTP 错误、响应不是合法 JSON，或返回的选项与概率不符合请求契约时，统一抛出 `DecisionError`；底层异常详情会写入 AstrBot 日志。插件应捕获该异常并决定跳过本次判断或降级处理。
 
+### 使用 OpenAI Decisions
+
+除 System One 外，判断提供商也可以接入 OpenAI Decisions API（`POST /v1/decisions`）。在 WebUI「模型提供商」→「判断」中新增「OpenAI Decisions」模板，填写 API Key（支持 `$ENV_NAME` 引用环境变量）、接口地址（默认 `https://api.openai.com/v1`，自动补全 `/decisions`）和模型（模板默认 `gpt-6-luna`）。超时、总超时、最大并发、代理与自定义请求头的含义与 System One 相同。
+
+它是独立的判断提供商，与聊天模型互不影响：配置后不会被主对话 Agent 自动调用，只有插件通过 `self.context.decision` 或 `provider_id` 显式请求时才会发送决策请求。插件代码无需改动：
+
+```py
+answers = await self.context.decision.ask(
+    {
+        "should_reply": DecisionChoiceQuestion(
+            instructions="Should the assistant reply to this message?",
+            criteria={"reply": "Reply now", "ignore": "Stay silent"},
+        ),
+        "severity": DecisionScoreQuestion(
+            instructions="How severe is the reported problem?",
+            criteria=["No impact", "Degraded", "Unavailable"],
+        ),
+    },
+    state={"messages": recent_messages},
+    provider_id="openai_decision",
+)
+```
+
+请求映射：布尔题对应 `predicate`；选择题对应 `choice`，`criteria` 的选项 ID 作为 `value`、描述作为 `description`；评分题对应 `score`，等级按顺序以 `"0"`、`"1"`… 作为 `label`，与返回的 `legend` 一致。返回的 `score` 保留小数，`probabilities` 包含完整分布，`confidence` 与选中项概率相互独立。答案按问题名称匹配，与返回顺序无关。
+
+`state` 的处理：
+
+- `str` 或省略：作为文本输入。
+- `dict`，或元素全部为 `dict` 的 `list`：作为 `input_json` 数据发送。其中的 `role`、`content`、`image_url` 等键只是普通数据，不会被解释为消息历史或图片。
+- 包含其他类型元素的 `list`（如字符串列表）：序列化为 JSON 后作为文本输入发送。
+- 不支持的类型、含 `NaN`/`Infinity` 或无法 JSON 序列化的值：在发送前抛出 `ValueError`。
+
+首版不支持图片输入、消息/工具调用历史、问题内的多模态指令、提示缓存控制与 `safety_identifier`。模型对任一问题拒答（`refusal`）时，整批 `ask()` 抛出 `DecisionError`，不会当作否定、零分或空结果；`yes_no(default=...)` 的降级行为保持不变。
+
 ## 定义 Tool
 
 Tool 是大语言模型调用外部工具的能力。
@@ -458,6 +492,97 @@ Core 根据 `source_event` 或当前活跃的同 UMO 事件解析权限。没有
 
 ## 对话管理器
 
+运行时历史只包含模型消息（`system`、`user`、`assistant` 和 `tool`）。旧
+`_checkpoint` 标记在数据库迁移或旧备份导入时完成转换。平台历史关联使用
+`turn_id` 和 `context_event_id`，不再接受 `llm_checkpoint_id`。内部消息转换使用
+`load_messages` / `dump_messages`，保留原有的 `_no_save` 语义。
+
+在事件存储中，`_no_save` 表示不进入后续恢复的上下文，并不表示原文不落库。
+消息原文及标记只保存一份；恢复时，消息级 `_no_save=True` 会排除整条消息，
+内容片段级标记只排除对应片段。不会额外保存过滤后的副本，也不会在新事件中写入
+`include_in_context`。旧版本已有的排除事件仍按原规则读取，避免历史重复。
+核心直接读取结构化消息列表，插件接口的 `Conversation.history` 仍为 JSON 字符串。
+完整历史更新与 Agent 阶段暂存共用差异转换规则，重排时保留未变消息的 ID。
+插件的独立写入不修改正在运行的 Agent 工作消息；基于过期版本的写入仍会触发冲突。
+
+统一使用 `self.context.conversations` 操作对话，已有的 `new_conversation`、
+`get_conversation`、切换、更新和删除方法继续可用。
+`self.context.conversation_manager` 保留为兼容别名。原有的
+`event.conversation_events` 和 `get_conversation_events()` 入口已移除，
+插件通过 `conversations.append_message()` 和 `conversations.append_plugin_event()`
+写入，不再直接操作 writer。
+
+已移除过时的 `update_conversation_title()` 和 `update_conversation_persona_id()`。
+请分别改用 `update_conversation(..., title=...)` 和
+`update_conversation(..., persona_id=...)`。
+
+### 追加模型消息 `append_message`
+
+```py
+conversations = self.context.conversations
+message_id = await conversations.append_message(
+    "用户偏好简洁的回答。",
+    cid=target_cid,
+)
+```
+
+`content` 接受文本或 AstrBot 的 `ContentPart` 对象列表：
+
+```py
+from astrbot.core.agent.message import ImageURLPart, TextPart
+
+await conversations.append_message(
+    [
+        TextPart(text="请描述这张图片。"),
+        ImageURLPart(
+            image_url=ImageURLPart.ImageURL(url="https://example.com/image.png")
+        ),
+    ],
+    cid=target_cid,
+)
+```
+
+Core 固定补上 `role="user"`，
+插件不需要提交角色或完整消息对象。消息会持久化并追加到对话上下文。
+即使在 hook 或工具内调用，也不会修改正在运行的 Agent 的工作上下文。
+接口在数据库事务提交后返回字符串 ID；可通过可选的 `message_id` 标识同一次提交的重试。
+
+### 追加插件自定义事件 `append_plugin_event`
+
+```py
+event_id = await conversations.append_plugin_event(
+    event_type="my_plugin.retrieval_completed",
+    data={"document_ids": ["document-1"]},
+    cid=target_cid,
+)
+```
+
+该接口保存关联当前对话的自定义事件，不改变本次或后续模型上下文。
+建议 `event_type` 使用插件名称前缀以避免重名；Core 不会自动推断或校验名称中的插件身份。
+`data` 为可 JSON 序列化的对象。
+内部事件命名空间、版本、序号和创建时间由 Core 填充。
+接口返回已保存的事件 ID；可通过可选的 `event_id` 标识同一次提交的重试。
+
+插件自己的可变状态，如果不需要保留对话事件历史，继续使用
+[插件 KV 存储](./storage.md)，例如 `await self.put_kv_data(f"retrieval:{cid}", data)`。
+KV 按插件隔离；需要按对话区分时，由插件把 `cid` 放入 key。
+
+两个追加接口都必须显式传入关键字参数 `cid`，目标对话必须已存在，Core 从存储记录取得 UMO。
+无效或不存在的 CID 会抛出 `ValueError`，省略 `cid` 会抛出 `TypeError`。
+接口不会从活动消息、当前选中的对话或调用任务推断目标，也不会启动 Agent 或安排 follow-up。
+
+修改当前执行的上下文，应修改相应 hook 收到的 `ProviderRequest.contexts` 或运行时消息列表。
+宿主通过本次执行拥有的 writer 记录这些修改。插件 hook 的签名不变，也不会收到 writer。
+每次执行创建自己的 hooks 实例，后台任务和 cron 不通过 `ContextVar` 继承对话 writer 或插件身份。
+
+直接调用 `update_conversation()`、`add_message_pair()` 等对话服务，即使发生在 hook 内，
+也是独立的持久化操作，不会同步当前执行的工作上下文。若独立写入改变了存储版本，
+当前执行的下一次写入可能抛出 `ConversationConflictError`，而不是覆盖新历史。
+本次执行的上下文修改应使用 hook 参数；不能通过重试有副作用的工具来解决版本冲突。
+
+只有在插件 hook 边界捕获的工作上下文修改才会标记为插件来源并应用相应的基线回收策略。
+对话服务直接写入的历史修改保留 unknown 归因，采用保守的保留策略。
+
 ### 获取会话当前的 LLM 对话历史 `get_conversation`
 
 ```py
@@ -466,7 +591,7 @@ Core 根据 `source_event` 或当前活跃的同 UMO 事件解析权限。没有
 from astrbot.api.provider import Conversation
 
 uid = event.unified_msg_origin
-conv_mgr = self.context.conversation_manager
+conv_mgr = self.context.conversations
 curr_cid = await conv_mgr.get_curr_conversation_id(uid)
 conversation = await conv_mgr.get_conversation(uid, curr_cid)  # Conversation
 ```
@@ -509,7 +634,7 @@ from astrbot.api.agents import (
     TextPart,
 )
 
-conv_mgr = self.context.conversation_manager
+conv_mgr = self.context.conversations
 provider_id = await self.context.get_current_chat_provider_id(event.unified_msg_origin)
 curr_cid = await conv_mgr.get_curr_conversation_id(event.unified_msg_origin)
 user_msg = UserMessageSegment(content=[TextPart(text="hi")])

@@ -51,36 +51,14 @@ async def resolve_persona_custom_error_message(
     *,
     event: Any,
     persona_manager: Any,
-    provider_settings: dict | None = None,
-    conversation_persona_id: str | None = None,
 ) -> str | None:
     """Resolve normalized custom error reply text for the selected persona."""
     (
         _persona_id,
         persona,
-        _force_applied_persona_id,
         _use_webchat_special_default,
     ) = await persona_manager.resolve_selected_persona(
         umo=event.unified_msg_origin,
-        conversation_persona_id=conversation_persona_id,
         platform_name=event.get_platform_name(),
-        provider_settings=provider_settings,
     )
     return extract_persona_custom_error_message_from_persona(persona)
-
-
-async def resolve_event_conversation_persona_id(
-    event: Any, conversation_manager: Any
-) -> str | None:
-    """Resolve current conversation persona_id from event and conversation manager."""
-    curr_cid = await conversation_manager.get_curr_conversation_id(
-        event.unified_msg_origin
-    )
-    if not curr_cid:
-        return None
-    conversation = await conversation_manager.get_conversation(
-        event.unified_msg_origin, curr_cid
-    )
-    if not conversation:
-        return None
-    return conversation.persona_id

@@ -6,6 +6,7 @@ from astrbot import logger
 from astrbot.api import star
 from astrbot.api.event import AstrMessageEvent, MessageEventResult
 from astrbot.core.provider.entities import ProviderType
+from astrbot.core.session_overrides import PROVIDER_PATHS, update_overrides
 from astrbot.core.utils.error_redaction import safe_error
 
 
@@ -186,6 +187,9 @@ class ProviderCommands:
                 ret += "\nUse /provider stt <idx> to switch STT providers."
 
             event.set_result(MessageEventResult().message(ret))
+        elif idx == "--inherit":
+            await update_overrides(umo, dict.fromkeys(PROVIDER_PATHS.values(), None))
+            event.set_result(MessageEventResult().message("Following profile models."))
         elif idx == "tts":
             if idx2 is None:
                 event.set_result(

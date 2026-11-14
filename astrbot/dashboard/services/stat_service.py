@@ -37,7 +37,7 @@ from astrbot.core.desktop_runtime import (
     is_desktop_session_auth_enabled,
 )
 from astrbot.core.umo_alias import build_umo_alias_map, serialize_umo_alias
-from astrbot.core.utils.astrbot_path import get_astrbot_path
+from astrbot.core.utils.astrbot_path import get_astrbot_data_path, get_astrbot_path
 from astrbot.core.utils.auth_password import (
     is_default_dashboard_password,
     is_md5_dashboard_password,
@@ -246,88 +246,215 @@ class StatService:
             logger.error("清理存储失败", exc_info=True)
             raise StatServiceError("清理存储失败，请查看后端日志了解详情。") from exc
 
-    async def get_stat(self, offset_sec: int) -> dict:
-        try:
-            now = int(time.time())
-            start_time = now - offset_sec
+    async def _get_daily_usage(self) -> dict:
+        """Aggregate today's usage and the previous calendar day's usage.
 
-            async with self.db_helper.get_db() as session:
-                window_start = datetime.now() - timedelta(seconds=offset_sec)
-                result = await session.execute(
-                    select(PlatformStat)
-                    .where(PlatformStat.timestamp >= window_start)
-                    .order_by(col(PlatformStat.timestamp)),
-                )
-                # Convert to (epoch_seconds, count, platform_id) tuples once.
-                rows = [
-                    (int(r.timestamp.timestamp()), r.count, r.platform_id)
-                    for r in result.scalars().all()
-                ]
-                total_messages = (
+        Returns:
+            Daily token and platform message totals, plus distinct sessions with
+            internal model activity, using the server's local calendar dates.
+        """
+        today = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+        result = {}
+        async with self.db_helper.get_db() as session:
+            for label, start in (
+                ("today", today),
+                ("yesterday", today - timedelta(days=1)),
+            ):
+                end = start + timedelta(days=1)
+                # Platform counters use local timestamps; provider records use UTC.
+                start_utc = start.astimezone(timezone.utc).replace(tzinfo=None)
+                end_utc = end.astimezone(timezone.utc).replace(tzinfo=None)
+                messages = (
                     await session.execute(
-                        select(func.coalesce(func.sum(PlatformStat.count), 0)),
+                        select(func.coalesce(func.sum(PlatformStat.count), 0)).where(
+                            # Legacy counters omit fractional seconds at midnight.
+                            func.date(PlatformStat.timestamp) == start.date(),
+                        )
                     )
                 ).scalar_one()
-
-            # Bucket message counts into hourly slots for the time series chart.
-            message_time_based_stats = []
-            idx = 0
-            for bucket_end in range(start_time, now, 3600):
-                cnt = 0
-                while idx < len(rows) and rows[idx][0] < bucket_end:
-                    cnt += rows[idx][1]
-                    idx += 1
-                message_time_based_stats.append([bucket_end, cnt])
-
-            # Aggregate per-platform message counts within the window.
-            per_platform: dict[str, int] = defaultdict(int)
-            for _, count, platform_id in rows:
-                per_platform[platform_id] += count
-            platform_stats = [
-                {
-                    "name": platform_id,
-                    "count": count,
-                    "timestamp": int(window_start.timestamp()),
+                tokens, active_sessions = (
+                    await session.execute(
+                        select(
+                            func.coalesce(
+                                func.sum(
+                                    ProviderStat.token_input_other
+                                    + ProviderStat.token_input_cached
+                                    + ProviderStat.token_output
+                                ),
+                                0,
+                            ),
+                            func.count(
+                                func.distinct(func.nullif(ProviderStat.umo, ""))
+                            ),
+                        ).where(
+                            ProviderStat.agent_type == "internal",
+                            ProviderStat.created_at >= start_utc,
+                            ProviderStat.created_at < end_utc,
+                        )
+                    )
+                ).one()
+                result[label] = {
+                    "tokens": tokens,
+                    "messages": messages,
+                    "active_sessions": active_sessions,
                 }
-                for platform_id, count in per_platform.items()
-            ]
+        return result
 
-            process_cpu = await asyncio.to_thread(psutil.Process().cpu_percent, 0.5)
-            cpu_percent = process_cpu / (psutil.cpu_count() or 1)
-            thread_count = threading.active_count()
+    async def get_stat(self, offset_sec: int, sections: str | None = None) -> dict:
+        """Return only the requested categories of usage and runtime statistics.
 
-            plugins = self.core_lifecycle.star_context.get_all_stars()
-            plugin_info = []
-            for plugin in plugins:
-                info = {
-                    "name": getattr(plugin, "name", plugin.__class__.__name__),
-                    "version": getattr(plugin, "version", "1.0.0"),
-                    "is_enabled": True,
-                }
-                plugin_info.append(info)
+        Args:
+            offset_sec: Rolling window in seconds for message trends and rankings.
+                Daily usage always follows server-local calendar dates.
+            sections: Comma-separated messages, daily_usage, process, system, or
+                instances. Omit to collect all categories.
 
-            running_time = self.get_running_time_components(
-                int(time.time()) - self.core_lifecycle.start_time,
+        Returns:
+            Statistics in the existing response shape, omitting unrequested fields.
+
+        Raises:
+            StatServiceError: If sections are invalid or statistics cannot be collected.
+        """
+        available_sections = {
+            "messages",
+            "daily_usage",
+            "process",
+            "system",
+            "instances",
+        }
+        requested = (
+            available_sections
+            if sections is None
+            else {section.strip() for section in sections.split(",")}
+        )
+        if not requested <= available_sections:
+            raise StatServiceError(
+                "sections must be a comma-separated list of: "
+                "messages, daily_usage, process, system, instances"
             )
 
-            return {
-                "platform": platform_stats,
-                "message_count": total_messages,
-                "platform_count": len(
-                    self.core_lifecycle.platform_manager.get_insts(),
-                ),
-                "plugin_count": len(plugins),
-                "plugins": plugin_info,
-                "message_time_series": message_time_based_stats,
-                "running": running_time,
-                "memory": {
-                    "process": psutil.Process().memory_info().rss >> 20,
-                    "system": psutil.virtual_memory().total >> 20,
-                },
-                "cpu_percent": round(cpu_percent, 1),
-                "thread_count": thread_count,
-                "start_time": self.core_lifecycle.start_time,
-            }
+        try:
+            result = {}
+            if "messages" in requested:
+                now = int(time.time())
+                start_time = now - offset_sec
+                async with self.db_helper.get_db() as session:
+                    window_start = datetime.now() - timedelta(seconds=offset_sec)
+                    platform_result = await session.execute(
+                        select(PlatformStat)
+                        .where(PlatformStat.timestamp >= window_start)
+                        .order_by(col(PlatformStat.timestamp)),
+                    )
+                    # Convert to (epoch_seconds, count, platform_id) tuples once.
+                    rows = [
+                        (int(r.timestamp.timestamp()), r.count, r.platform_id)
+                        for r in platform_result.scalars().all()
+                    ]
+                    total_messages = (
+                        await session.execute(
+                            select(func.coalesce(func.sum(PlatformStat.count), 0)),
+                        )
+                    ).scalar_one()
+
+                # Bucket message counts into hourly slots for the time series chart.
+                message_time_based_stats = []
+                idx = 0
+                for bucket_end in range(start_time, now, 3600):
+                    cnt = 0
+                    while idx < len(rows) and rows[idx][0] < bucket_end:
+                        cnt += rows[idx][1]
+                        idx += 1
+                    message_time_based_stats.append([bucket_end, cnt])
+
+                per_platform: dict[str, int] = defaultdict(int)
+                for _, count, platform_id in rows:
+                    per_platform[platform_id] += count
+                result.update(
+                    {
+                        "message_count": total_messages,
+                        "message_time_series": message_time_based_stats,
+                        "platform": [
+                            {
+                                "name": platform_id,
+                                "count": count,
+                                "timestamp": int(window_start.timestamp()),
+                            }
+                            for platform_id, count in per_platform.items()
+                        ],
+                    }
+                )
+
+            if "daily_usage" in requested:
+                result["daily_usage"] = await self._get_daily_usage()
+
+            if requested & {"process", "system"}:
+                memory = psutil.virtual_memory()
+                uptime_seconds = max(
+                    0, int(time.time()) - self.core_lifecycle.start_time
+                )
+
+            if "process" in requested:
+                process = psutil.Process()
+                process_cpu = await asyncio.to_thread(process.cpu_percent, 0.5)
+                cpu_percent = process_cpu / (psutil.cpu_count() or 1)
+                result.update(
+                    {
+                        "running": self.get_running_time_components(uptime_seconds),
+                        "start_time": self.core_lifecycle.start_time,
+                        "cpu_percent": round(cpu_percent, 1),
+                        "memory": {
+                            "process": process.memory_info().rss >> 20,
+                            "system": memory.total >> 20,
+                        },
+                        "thread_count": threading.active_count(),
+                    }
+                )
+
+            if "system" in requested:
+                try:
+                    # psutil's Windows extension requires a string rather than a Path.
+                    disk = await asyncio.to_thread(
+                        psutil.disk_usage, str(Path(get_astrbot_data_path()))
+                    )
+                    disk_usage = {
+                        "used": disk.used,
+                        "total": disk.total,
+                        "percent": disk.percent,
+                    }
+                except OSError:
+                    disk_usage = None
+                result["system"] = {
+                    "uptime_seconds": uptime_seconds,
+                    "cpu_percent": await asyncio.to_thread(psutil.cpu_percent, 0.1),
+                    "memory": {
+                        "used": memory.total - memory.available,
+                        "total": memory.total,
+                        "percent": memory.percent,
+                    },
+                    "disk": disk_usage,
+                }
+
+            if "instances" in requested:
+                plugins = self.core_lifecycle.star_context.get_all_stars()
+                result.update(
+                    {
+                        "platform_count": len(
+                            self.core_lifecycle.platform_manager.get_insts()
+                        ),
+                        "plugin_count": len(plugins),
+                        "plugins": [
+                            {
+                                "name": getattr(
+                                    plugin, "name", plugin.__class__.__name__
+                                ),
+                                "version": getattr(plugin, "version", "1.0.0"),
+                                "is_enabled": True,
+                            }
+                            for plugin in plugins
+                        ],
+                    }
+                )
+            return result
         except Exception as exc:
             logger.error(traceback.format_exc())
             raise StatServiceError(str(exc)) from exc

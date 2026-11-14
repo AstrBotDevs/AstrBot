@@ -36,7 +36,7 @@ Using DeepSeek as an example, assuming you have registered and logged in to a De
 
 ## Provider Configuration in Narrow Windows
 
-The model configuration dialog on the Welcome and Chat pages, and the Providers page, adapt to the actual width of the configuration panel. When space is limited, the provider list collapses into a dropdown at the top. Use it to switch providers. Search and action controls wrap, and narrow forms place inputs below their descriptions.
+The model configuration dialog on the Overview and Chat pages, and the Providers page, adapt to the actual width of the configuration panel. When space is limited, the provider list collapses into a dropdown at the top. Use it to switch providers. Search and action controls wrap, and narrow forms place inputs below their descriptions.
 
 The configuration area supports vertical and horizontal scrolling. Use its bottom horizontal scrollbar or swipe sideways on a trackpad to view content that still exceeds the available width. Click **Advanced Configuration** to expand or collapse those settings.
 

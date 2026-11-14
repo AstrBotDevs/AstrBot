@@ -108,6 +108,40 @@ should_reply = await self.context.decision.yes_no(
 
 Pass `provider_id="provider_id"` to use a specific configured decision provider; otherwise the default one is used. `DecisionError` is raised for an unconfigured provider, timeout, connection failure, HTTP error, invalid JSON, or an answer outside the requested contract. Underlying details are written to the AstrBot log, so plugins can catch the exception and decide whether to skip or degrade this decision.
 
+### Using OpenAI Decisions
+
+Besides System One, a decision provider can use the OpenAI Decisions API (`POST /v1/decisions`). In the WebUI, open **Model Providers → Decision** and add the **OpenAI Decisions** template. Fill in the API key (`$ENV_NAME` references an environment variable), the endpoint (default `https://api.openai.com/v1`; `/decisions` is appended), and the model (the template defaults to `gpt-6-luna`). Timeout, total timeout, max concurrency, proxy, and custom headers work as they do for System One.
+
+It is an independent decision provider and does not affect chat models: once configured, the main agent never calls it automatically. Requests are sent only when a plugin calls `self.context.decision` explicitly or passes its `provider_id`. Plugin code does not change:
+
+```py
+answers = await self.context.decision.ask(
+    {
+        "should_reply": DecisionChoiceQuestion(
+            instructions="Should the assistant reply to this message?",
+            criteria={"reply": "Reply now", "ignore": "Stay silent"},
+        ),
+        "severity": DecisionScoreQuestion(
+            instructions="How severe is the reported problem?",
+            criteria=["No impact", "Degraded", "Unavailable"],
+        ),
+    },
+    state={"messages": recent_messages},
+    provider_id="openai_decision",
+)
+```
+
+Request mapping: boolean questions become `predicate`; choice questions become `choice`, with option IDs as `value` and descriptions as `description`; score questions become `score`, with levels labeled `"0"`, `"1"`, ... in order, matching the returned `legend`. The returned `score` keeps its fractional value, `probabilities` holds the full distribution, and `confidence` is separate from the selected option's probability. Answers are matched by question name, not by their order in the response.
+
+How `state` is sent:
+
+- `str` or omitted: sent as text input.
+- `dict`, or a `list` whose items are all `dict`: sent as `input_json` data. Keys such as `role`, `content`, or `image_url` stay plain data and are never treated as message history or images.
+- A `list` with other item types, such as a list of strings: serialized as JSON and sent as text input.
+- Unsupported types, `NaN`/`Infinity`, or values that are not JSON serializable: `ValueError` is raised before sending.
+
+The first version does not support image input, message or tool-call history, multimodal question instructions, prompt-cache controls, or `safety_identifier`. If the model refuses any question (`refusal`), the whole `ask()` call raises `DecisionError`; a refusal is never reported as false, a zero score, or an empty result. `yes_no(default=...)` keeps its fallback behavior.
+
 ## Defining Tools
 
 Tools enable large language models to invoke external capabilities.
@@ -460,6 +494,114 @@ A tool must not wait for another queued turn in its own session: that turn is wa
 
 ## Conversation Manager
 
+Runtime history contains only model messages (`system`, `user`, `assistant`, and
+`tool`). Legacy `_checkpoint` markers are consumed during database migration or
+old-backup import. Platform history links use `turn_id` and `context_event_id`;
+`llm_checkpoint_id` is no longer accepted. Internal message conversion uses
+`load_messages` / `dump_messages`, preserving the existing `_no_save` semantics.
+
+In event storage, `_no_save` excludes content from future restored context; it does
+not prevent the raw content from being persisted. The original message and its
+markers are stored once. Recovery skips a whole message marked `_no_save=True`,
+or only the marked parts within a message. New events contain neither an additional
+filtered copy nor an `include_in_context` field. Existing exclusion events retain
+their legacy read behavior so historical messages are not duplicated.
+Core reads structured message lists directly from storage. The plugin-facing
+`Conversation.history` remains a JSON string. Full-history updates and running
+agent staging share the same reconciliation rules, retaining unchanged message
+IDs through reordering. Independent plugin writes do not modify a running
+agent's working messages; stale writes still fail with a revision conflict.
+
+Use `self.context.conversations` for conversation operations. It provides the existing
+`new_conversation`, `get_conversation`, selection, update, and deletion methods.
+`self.context.conversation_manager` remains a compatibility alias. The previous
+`event.conversation_events` and `get_conversation_events()` entry points have been
+removed; plugins use `conversations.append_message()` and
+`conversations.append_plugin_event()` instead of accessing a writer.
+
+The deprecated `update_conversation_title()` and
+`update_conversation_persona_id()` methods have been removed. Use
+`update_conversation(..., title=...)` or
+`update_conversation(..., persona_id=...)` instead.
+
+### Appending Model Messages
+
+```py
+conversations = self.context.conversations
+message_id = await conversations.append_message(
+    "The user prefers concise answers.",
+    cid=target_cid,
+)
+```
+
+`content` accepts text or a list of AstrBot `ContentPart` objects:
+
+```py
+from astrbot.core.agent.message import ImageURLPart, TextPart
+
+await conversations.append_message(
+    [
+        TextPart(text="Describe this image."),
+        ImageURLPart(
+            image_url=ImageURLPart.ImageURL(url="https://example.com/image.png")
+        ),
+    ],
+    cid=target_cid,
+)
+```
+
+The host supplies `role="user"`;
+plugins do not submit a role or a complete message object. The message is persisted
+and appended to the stored conversation. It does not change a running agent's
+working context, including when called from a hook or tool. The call returns a
+string ID after the database transaction commits. An optional `message_id` can identify retries of the same submission.
+
+### Appending Plugin Events
+
+```py
+event_id = await conversations.append_plugin_event(
+    event_type="my_plugin.retrieval_completed",
+    data={"document_ids": ["document-1"]},
+    cid=target_cid,
+)
+```
+
+This stores a custom event associated with the conversation, without changing
+working or future model context. Use a plugin-prefixed `event_type` to avoid name
+collisions; the host does not infer or enforce plugin identity from this name.
+`data` is a JSON-serializable object. The host supplies the internal event namespace,
+version, sequence, and creation time. The call returns the committed event ID;
+an optional `event_id` identifies retries of the same submission.
+
+Use [plugin KV storage](./storage.md) for mutable plugin state that does not need
+a conversation event history, for example `await self.put_kv_data(f"retrieval:{cid}", data)`.
+KV storage is isolated by plugin. Include `cid` in the key when state belongs to
+one conversation.
+
+Both append methods require an explicit keyword-only `cid` identifying an existing
+conversation. The host reads its UMO from storage. Missing or invalid conversations
+raise `ValueError`; omitting `cid` raises `TypeError`. These operations do not infer
+a target from the active message, selected conversation, or calling task. Neither
+method starts an agent run or schedules a follow-up.
+
+To modify the current execution, edit the `ProviderRequest.contexts` or runtime
+messages supplied to the relevant hook. The host records those changes through the
+writer owned by that execution. Hook signatures are unchanged; plugins do not
+receive the writer. Each execution has its own hooks instance, and background or
+cron executions do not inherit a conversation writer or plugin identity through
+`ContextVar`.
+
+Direct service calls such as `update_conversation()` and `add_message_pair()` are
+independent persistence operations, even inside a hook. They do not synchronize an
+active execution's working context. If an independent write changes the stored
+revision, the running execution's next write can raise `ConversationConflictError`
+instead of overwriting that change. Use hook inputs for in-run changes; do not
+retry side-effecting tools to resolve a revision conflict.
+
+Only working-context changes captured at the plugin hook boundary are attributed
+to plugins for baseline retention. Direct service calls keep unknown attribution
+and are conservatively retained.
+
 ### Getting the Current LLM Conversation History for a Session
 
 ```py
@@ -468,7 +610,7 @@ A tool must not wait for another queued turn in its own session: that turn is wa
 from astrbot.api.provider import Conversation
 
 uid = event.unified_msg_origin
-conv_mgr = self.context.conversation_manager
+conv_mgr = self.context.conversations
 curr_cid = await conv_mgr.get_curr_conversation_id(uid)
 conversation = await conv_mgr.get_conversation(uid, curr_cid)  # Conversation
 ```
@@ -511,7 +653,7 @@ from astrbot.api.agents import (
     TextPart,
 )
 
-conv_mgr = self.context.conversation_manager
+conv_mgr = self.context.conversations
 provider_id = await self.context.get_current_chat_provider_id(event.unified_msg_origin)
 curr_cid = await conv_mgr.get_curr_conversation_id(event.unified_msg_origin)
 user_msg = UserMessageSegment(content=[TextPart(text="hi")])

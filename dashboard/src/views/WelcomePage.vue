@@ -1,169 +1,104 @@
 <template>
   <div class="welcome-page">
-    <v-container fluid class="pa-0">
-      <v-row class="px-4 py-3 pb-6">
-        <v-col cols="12">
-          <h1 class="text-h1 font-weight-bold mb-2 d-flex align-center">
-            {{ greetingText }} {{ greetingEmoji }}
-          </h1>
-          <p class="text-subtitle-1 text-medium-emphasis mb-0">
-            {{ tm('subtitle') }}
-          </p>
-        </v-col>
-      </v-row>
+    <header class="overview-header">
+      <div>
+        <h1 class="overview-greeting">{{ greetingText }} <span>{{ greetingEmoji }}</span></h1>
+      </div>
+      <OverviewStatus />
+    </header>
 
-      <v-row class="px-4">
-        <v-col cols="12">
-          <v-card class="welcome-card pa-6" elevation="0">
-            <div class="mb-4 text-h3 font-weight-bold">
-              {{ tm('onboard.title') }}
+    <v-alert v-if="statsFailed" type="warning" variant="tonal" class="mb-4">
+      {{ tm('metrics.loadFailed') }}
+      <template #append><v-btn variant="text" :loading="statsLoading" @click="loadOverview">{{ tm('health.refresh') }}</v-btn></template>
+    </v-alert>
+    <section class="metrics-grid" :aria-label="tm('metrics.title')" :aria-busy="statsLoading">
+      <article v-for="metric in metrics" :key="metric.key" class="metric-card" :class="`metric-card--${metric.tone}`">
+        <div class="metric-icon"><v-icon size="24">{{ metric.icon }}</v-icon></div>
+        <div class="metric-content">
+          <h2 class="metric-label">{{ tm(`metrics.${metric.key}`) }}</h2>
+          <div class="metric-value" :title="metric.exact">{{ metric.value }}</div>
+          <div class="metric-comparison">
+            <span :class="metric.direction ? 'text-success' : 'text-medium-emphasis'">
+              <v-icon v-if="metric.direction" size="18">{{ metric.direction > 0 ? 'mdi-arrow-up' : 'mdi-arrow-down' }}</v-icon>
+              {{ metric.change }}
+            </span>
+            <span class="text-medium-emphasis">{{ tm('metrics.vsYesterday') }}</span>
+          </div>
+        </div>
+      </article>
+    </section>
+
+    <OverviewSystemStats :system="overview?.system" :system-unavailable="statsFailed" />
+
+    <div class="overview-panels">
+      <section class="overview-panel">
+        <div class="panel-header">
+          <div class="panel-icon"><v-icon size="22">mdi-rocket-launch-outline</v-icon></div>
+          <div class="panel-heading">
+            <h2>{{ tm('onboard.title') }}</h2>
+            <p>{{ tm('onboard.subtitle') }}</p>
+          </div>
+        </div>
+        <ol class="onboarding-steps">
+          <li v-for="(step, index) in onboardingSteps" :key="step.key" class="onboarding-step">
+            <div class="step-marker" :class="{ 'step-marker--completed': step.completed }">
+              <v-icon v-if="step.completed" size="16">mdi-check</v-icon>
+              <span v-else>{{ index + 1 }}</span>
             </div>
-
-            <v-timeline align="start" side="end" density="compact" class="welcome-timeline" truncate-line="both">
-              <v-timeline-item :dot-color="providerStepState === 'completed' ? 'success' : 'primary'"
-                icon="mdi-numeric-1" fill-dot size="small">
-                <div class="pl-2">
-                  <div class="text-h6 font-weight-bold mb-1">{{ tm('onboard.step1Title') }}</div>
-                  <p class="text-body-2 text-medium-emphasis mb-3">{{ tm('onboard.step1Desc') }}</p>
-                  <div class="d-flex align-center">
-                    <v-btn color="primary" variant="flat" rounded="pill" class="px-6" @click="openProviderDialog">
-                      {{ tm('onboard.configure') }}
-                    </v-btn>
-                    <div v-if="providerStepState === 'completed'"
-                      class="text-success d-flex align-center text-body-2 font-weight-medium ml-3">
-                      {{ tm('onboard.completed') }}
-                    </div>
-                  </div>
-                </div>
-              </v-timeline-item>
-
-              <v-timeline-item :dot-color="platformStepState === 'completed' ? 'success' : 'primary'"
-                icon="mdi-numeric-2" fill-dot size="small">
-                <div class="pl-2">
-                  <div class="text-h6 font-weight-bold mb-1">{{ tm('onboard.step2Title') }}</div>
-                  <p class="text-body-2 text-medium-emphasis mb-3">{{ tm('onboard.step2Desc') }}</p>
-                  <div class="d-flex align-center">
-                    <v-btn color="primary" variant="flat" rounded="pill" class="px-6" :loading="loadingPlatformDialog"
-                      @click="openPlatformDialog">
-                      {{ tm('onboard.configure') }}
-                    </v-btn>
-                    <div v-if="platformStepState === 'completed'"
-                      class="text-success d-flex align-center text-body-2 font-weight-medium ml-3">
-                      {{ tm('onboard.completed') }}
-                    </div>
-                  </div>
-                </div>
-              </v-timeline-item>
-
-              <v-timeline-item :dot-color="computerAccessStepState === 'completed' ? 'success' : 'primary'"
-                icon="mdi-numeric-3" fill-dot size="small">
-                <div class="pl-2">
-                  <div class="d-flex align-center mb-1">
-                    <div class="text-h6 font-weight-bold">{{ tm('onboard.step3Title') }}</div>
-                    <v-btn
-                      icon
-                      variant="text"
-                      density="comfortable"
-                      size="small"
-                      class="ml-1"
-                      @click="showComputerAccessHelpDialog = true"
-                    >
-                      <span class="text-body-2 font-weight-bold">?</span>
-                    </v-btn>
-                  </div>
-                  <p class="text-body-2 text-medium-emphasis mb-3">{{ tm('onboard.step3Desc') }}</p>
-                  <div class="d-flex flex-wrap align-center ga-3">
-                    <v-select
-                      v-model="computerAccessRuntime"
-                      :items="computerAccessOptions"
-                      item-title="title"
-                      item-value="value"
-                      :label="tm('onboard.step3SelectLabel')"
-                      :loading="savingComputerAccess"
-                      :disabled="savingComputerAccess"
-                      hide-details
-                      density="comfortable"
-                      variant="outlined"
-                      class="computer-access-select"
-                    />
-                  </div>
-                </div>
-              </v-timeline-item>
-            </v-timeline>
-          </v-card>
-
-        </v-col>
-      </v-row>
-
-      <v-row class="px-4 mt-4">
-        <v-col cols="12">
-          <v-card class="welcome-card pa-6" elevation="0">
-            <div class="mb-4 text-h3 font-weight-bold">
-              {{ tm('resources.title') }}
+            <div class="step-copy">
+              <h3>{{ tm(`onboard.${step.key}Title`) }}</h3>
+              <p>{{ tm(`onboard.${step.key}Desc`) }}</p>
             </div>
-            <v-row>
-              <v-col cols="12" sm="4">
-                <!-- GitHub Card -->
-                <v-card variant="outlined" class="h-100 pa-4 d-flex flex-column"
-                  href="https://github.com/AstrBotDevs/AstrBot/" target="_blank">
-                  <div class="d-flex align-center mb-3">
-                    <v-icon size="32" class="mr-3">mdi-github</v-icon>
-                    <span class="text-h6 font-weight-bold">GitHub</span>
-                  </div>
-                  <p class="text-body-2 text-medium-emphasis mb-0">
-                    {{ tm('resources.githubDesc') }}
-                  </p>
-                </v-card>
-              </v-col>
+            <v-btn :color="step.completed ? 'success' : 'primary'" variant="tonal" rounded="pill" size="small"
+              :prepend-icon="step.completed ? 'mdi-check' : undefined" :append-icon="step.completed ? undefined : 'mdi-arrow-right'"
+              :loading="step.key === 'step2' && loadingPlatformDialog" @click="step.action">
+              {{ tm(step.completed ? 'onboard.completed' : 'onboard.configure') }}
+            </v-btn>
+          </li>
+        </ol>
+      </section>
 
-              <v-col cols="12" sm="4">
-                <!-- Docs Card -->
-                <v-card variant="outlined" class="h-100 pa-4 d-flex flex-column" href="https://docs.astrbot.app"
-                  target="_blank">
-                  <div class="d-flex align-center mb-3">
-                    <v-icon size="32" class="mr-3">mdi-book-open-variant</v-icon>
-                    <span class="text-h6 font-weight-bold">{{ tm('resources.docsTitle') }}</span>
-                  </div>
-                  <p class="text-body-2 text-medium-emphasis mb-0">
-                    {{ tm('resources.docsDesc') }}
-                  </p>
-                </v-card>
-              </v-col>
+      <section class="overview-panel resources-panel">
+        <div class="panel-header">
+          <div class="panel-icon"><v-icon size="22">mdi-book-open-outline</v-icon></div>
+          <div class="panel-heading">
+            <h2>{{ tm('resources.title') }}</h2>
+            <p>{{ tm('resources.subtitle') }}</p>
+          </div>
+        </div>
+        <div class="resources-grid">
+          <a v-for="resource in resources" :key="resource.key" :href="resource.href" target="_blank" rel="noopener noreferrer"
+            class="resource-card" :class="`resource-card--${resource.key}`">
+            <v-icon class="resource-external" size="18">mdi-open-in-new</v-icon>
+            <v-icon class="resource-icon" size="26">{{ resource.icon }}</v-icon>
+            <h3>{{ resource.key === 'github' ? 'GitHub' : tm(`resources.${resource.key}Title`) }}</h3>
+            <p>{{ tm(`resources.${resource.key}Desc`) }}</p>
+          </a>
+        </div>
+      </section>
+    </div>
 
-              <v-col cols="12" sm="4">
-                <!-- Afdian Card -->
-                <v-card variant="outlined" class="h-100 pa-4 d-flex flex-column"
-                  href="https://afdian.com/a/astrbot_team" target="_blank">
-                  <div class="d-flex align-center mb-3">
-                    <v-icon size="32" class="mr-3">mdi-hand-heart</v-icon>
-                    <span class="text-h6 font-weight-bold">{{ tm('resources.afdianTitle') }}</span>
-                  </div>
-                  <p class="text-body-2 text-medium-emphasis mb-0">
-                    {{ tm('resources.afdianDesc') }}
-                  </p>
-                </v-card>
-              </v-col>
+    <section v-if="showAnnouncement" class="overview-panel announcement-panel">
+      <h2 class="text-h3 font-weight-bold mb-4">{{ tm('announcement.title') }}</h2>
+      <MarkdownRender :content="welcomeAnnouncement" :typewriter="false" class="welcome-announcement-markdown markdown-content" />
+    </section>
 
-            </v-row>
-          </v-card>
-        </v-col>
-      </v-row>
-
-      <v-row v-if="showAnnouncement" class="px-4 mb-4">
-        <v-col cols="12">
-          <v-card class="welcome-card pa-6" elevation="0">
-            <div class="mb-4 text-h3 font-weight-bold">
-              {{ tm('announcement.title') }}
-            </div>
-            <MarkdownRender
-              :content="welcomeAnnouncement"
-              :typewriter="false"
-              class="welcome-announcement-markdown markdown-content"
-            />
-          </v-card>
-        </v-col>
-      </v-row>
-    </v-container>
+    <v-dialog v-model="showComputerAccessDialog" max-width="540">
+      <v-card>
+        <v-card-title class="text-h3 pa-4 pb-0 pl-6">{{ tm('onboard.step3Title') }}</v-card-title>
+        <v-card-text class="pa-6">
+          <p class="text-body-2 text-medium-emphasis mb-5">{{ tm('onboard.step3Desc') }}</p>
+          <v-select v-model="computerAccessRuntime" :items="computerAccessOptions" item-title="title" item-value="value"
+            :label="tm('onboard.step3SelectLabel')" :loading="savingComputerAccess" :disabled="savingComputerAccess"
+            hide-details density="comfortable" variant="outlined" />
+          <v-btn variant="text" color="primary" class="mt-3" @click="showComputerAccessHelpDialog = true">{{ tm('onboard.learnMore') }}</v-btn>
+        </v-card-text>
+        <v-card-actions class="px-6 pb-4">
+          <v-spacer />
+          <v-btn variant="tonal" color="primary" @click="showComputerAccessDialog = false">{{ tm('onboard.step3HelpClose') }}</v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
 
     <AddNewPlatform v-model:show="showAddPlatformDialog" :metadata="platformMetadata" :config_data="platformConfigData"
       @refresh-config="loadPlatformConfigBase" />
@@ -192,11 +127,14 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch, onMounted } from 'vue';
+import { computed, ref, watch, onMounted, onUnmounted } from 'vue';
 import axios from 'axios';
+import OverviewStatus from '@/components/overview/OverviewStatus.vue';
+import OverviewSystemStats from '@/components/overview/OverviewSystemStats.vue';
+import type { StatsDailyUsage, StatsSystemResources as SystemStats } from '@/api/generated/openapi-v1';
 import AddNewPlatform from '@/components/platform/AddNewPlatform.vue';
 import ProviderConfigDialog from '@/components/chat/ProviderConfigDialog.vue';
-import { configProfileApi, providerApi, systemConfigApi } from '@/api/v1';
+import { configProfileApi, providerApi, systemConfigApi, statsApi } from '@/api/v1';
 import { useI18n, useModuleI18n } from '@/i18n/composables';
 import { useToast } from '@/utils/toast';
 import { MarkdownRender } from 'markstream-vue';
@@ -208,6 +146,60 @@ type ComputerAccessRuntime = 'local' | 'none';
 const { tm } = useModuleI18n('features/welcome');
 const { locale } = useI18n();
 const { success: showSuccess, error: showError } = useToast();
+
+const showComputerAccessDialog = ref(false);
+const overview = ref<{ daily_usage: { today: StatsDailyUsage; yesterday: StatsDailyUsage }; system: SystemStats } | null>(null);
+const statsLoading = ref(false);
+const statsFailed = ref(false);
+let overviewTimer: ReturnType<typeof setInterval>;
+const metrics = computed(() => [
+  { key: 'tokens' as const, icon: 'mdi-layers-triple-outline', tone: 'primary' },
+  { key: 'messages' as const, icon: 'mdi-chat-outline', tone: 'info' },
+  { key: 'active_sessions' as const, icon: 'mdi-account-multiple-outline', tone: 'success' },
+].map(metric => {
+  const current = overview.value?.daily_usage.today[metric.key];
+  const previous = overview.value?.daily_usage.yesterday[metric.key];
+  const delta = current !== undefined && previous !== undefined ? current - previous : 0;
+  const percentage = previous ? delta / previous * 100 : null;
+  return {
+    ...metric,
+    exact: current?.toLocaleString(locale.value),
+    value: current === undefined ? '—' : new Intl.NumberFormat(locale.value, {
+      notation: metric.key === 'tokens' && current >= 100000 ? 'compact' : 'standard',
+      maximumFractionDigits: 2,
+    }).format(current),
+    direction: delta === 0 ? 0 : Math.sign(delta),
+    change: current === undefined ? '—' : percentage !== null
+      ? `${percentage > 0 ? '+' : ''}${percentage.toLocaleString(locale.value, { maximumFractionDigits: 1 })}%`
+      : delta > 0 ? tm('metrics.newActivity') : '0%',
+  };
+}));
+const resources = [
+  { key: 'github', icon: 'mdi-github', href: 'https://github.com/AstrBotDevs/AstrBot/' },
+  { key: 'docs', icon: 'mdi-file-document-outline', href: 'https://docs.astrbot.app' },
+  { key: 'afdian', icon: 'mdi-heart-outline', href: 'https://afdian.com/a/astrbot_team' },
+];
+const onboardingSteps = computed(() => [
+  { key: 'step1', completed: providerStepState.value === 'completed', action: openProviderDialog },
+  { key: 'step2', completed: platformStepState.value === 'completed', action: openPlatformDialog },
+  { key: 'step3', completed: computerAccessStepState.value === 'completed', action: () => { showComputerAccessDialog.value = true; } },
+]);
+
+async function loadOverview() {
+  if (statsLoading.value) return;
+  statsLoading.value = true;
+  try {
+    const response = await statsApi.get(undefined, 'daily_usage,system');
+    if (response.data.status !== 'ok') throw new Error(response.data.message || 'Failed to load overview');
+    overview.value = response.data.data;
+    statsFailed.value = false;
+  } catch (error) {
+    statsFailed.value = true;
+    console.error('Failed to load overview metrics:', error);
+  } finally {
+    statsLoading.value = false;
+  }
+}
 
 const showAddPlatformDialog = ref(false);
 const showProviderDialog = ref(false);
@@ -315,7 +307,7 @@ const greetingEmoji = computed(() => {
   if (hour >= 0 && hour < 5) {
     return '😴';
   }
-  return '😊';
+  return '👋';
 });
 
 const greetingText = computed(() => {
@@ -445,6 +437,7 @@ async function saveComputerAccessRuntime() {
       )
     );
   } catch (err: any) {
+    computerAccessRuntime.value = savedComputerAccessRuntime.value;
     showError(err?.response?.data?.message || err?.message || tm('onboard.computerAccessUpdateFailed'));
   } finally {
     savingComputerAccess.value = false;
@@ -462,7 +455,9 @@ async function loadWelcomeAnnouncement() {
 }
 
 onMounted(async () => {
-  await loadWelcomeAnnouncement();
+  void loadWelcomeAnnouncement();
+  void loadOverview();
+  overviewTimer = setInterval(() => { if (!document.hidden) void loadOverview(); }, 30000);
 
   try {
     await loadPlatformConfigBase();
@@ -489,6 +484,8 @@ onMounted(async () => {
     console.error(e);
   }
 });
+
+onUnmounted(() => clearInterval(overviewTimer));
 
 async function openPlatformDialog() {
   loadingPlatformDialog.value = true;
@@ -553,26 +550,70 @@ watch(computerAccessRuntime, async (value, oldValue) => {
 </script>
 
 <style scoped>
-.welcome-page {
-  height: 100%;
+.welcome-page { max-width: 1560px; margin: 0 auto; padding: 24px 20px; }
+.overview-header { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 24px; }
+.overview-greeting { font-size: clamp(22px, 2vw, 26px); line-height: 1.3; font-weight: 700; letter-spacing: -.4px; overflow-wrap: anywhere; }
+.overview-greeting span { display: inline-block; margin-inline-start: 8px; }
+.metrics-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; margin-bottom: 20px; }
+.metric-card { --metric-color: var(--v-theme-primary); display: flex; align-items: flex-start; gap: 16px; padding: 20px; border-radius: 18px; background: rgba(var(--metric-color), .07); }
+.metric-card--info { --metric-color: var(--v-theme-info); }
+.metric-card--success { --metric-color: var(--v-theme-success); }
+.metric-icon, .panel-icon { display: grid; place-items: center; flex-shrink: 0; width: 44px; height: 44px; border-radius: 50%; background: rgba(var(--metric-color, var(--v-theme-primary)), .09); color: rgb(var(--metric-color, var(--v-theme-primary))); }
+.metric-content { min-width: 0; }
+.metric-label { font-size: 14px; font-weight: 600; line-height: 1.5; }
+.metric-value { font-size: clamp(26px, 2.4vw, 30px); line-height: 1.25; font-weight: 700; margin: 6px 0; letter-spacing: -1px; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.metric-comparison { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; font-size: 13px; }
+.overview-panels { display: grid; grid-template-columns: 1.08fr 1fr; gap: 20px; }
+.overview-panel { min-width: 0; padding: 20px; border: 1px solid rgba(var(--v-theme-primary), .08); border-radius: 18px; background: rgb(var(--v-theme-surface)); box-shadow: 0 3px 16px rgba(var(--v-theme-primary), .025); }
+.panel-header { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; }
+.panel-heading { flex: 1; min-width: 0; }
+.panel-heading h2 { font-size: 18px; line-height: 1.4; font-weight: 700; }
+.panel-heading p, .step-copy p, .resource-card p { color: rgba(var(--v-theme-on-surface), .62); font-size: 13px; line-height: 1.6; margin: 4px 0 0; }
+.panel-icon { width: 40px; height: 40px; }
+.onboarding-steps { list-style: none; padding: 0; margin: 0; }
+.onboarding-step { position: relative; display: flex; align-items: center; gap: 12px; padding: 10px 0; min-height: 66px; }
+.onboarding-step:not(:last-child)::after { position: absolute; content: ''; top: calc(50% + 13px); bottom: calc(-50% + 13px); left: 13px; width: 2px; background: rgba(var(--v-theme-primary), .13); }
+.step-marker { display: grid; place-items: center; flex-shrink: 0; width: 28px; height: 28px; border-radius: 50%; color: rgb(var(--v-theme-on-primary)); background: rgb(var(--v-theme-primary)); font-size: 13px; z-index: 1; }
+.step-marker--completed { background: rgb(var(--v-theme-success)); color: #fff; }
+.step-copy { flex: 1; min-width: 0; }
+.step-copy h3 { font-size: 14px; line-height: 1.5; font-weight: 600; }
+.onboarding-step .v-btn { flex-shrink: 0; font-size: 12px; letter-spacing: 0; }
+.resources-panel { display: flex; flex-direction: column; }
+.resources-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin: auto 0; }
+.resource-card { position: relative; display: flex; flex-direction: column; align-items: flex-start; padding: 18px 14px; border-radius: 16px; background: rgba(var(--v-theme-primary), .06); color: rgb(var(--v-theme-on-surface)); text-decoration: none; transition: background .2s; }
+.resource-card:hover, .resource-card:focus-visible { background: rgba(var(--v-theme-primary), .13); }
+.resource-card:focus-visible { outline: 2px solid rgb(var(--v-theme-primary)); outline-offset: 3px; }
+.resource-card--github { background: rgba(var(--v-theme-info), .06); }
+.resource-card--afdian { background: rgba(var(--v-theme-error), .05); }
+.resource-external { position: absolute; top: 12px; right: 12px; opacity: .65; }
+.resource-icon { margin: 6px 0 14px; color: rgb(var(--v-theme-primary)); }
+.resource-card--github .resource-icon { color: rgb(var(--v-theme-on-surface)); }
+.resource-card--afdian .resource-icon { color: rgb(var(--v-theme-error)); }
+.resource-card h3 { font-size: 15px; font-weight: 600; }
+.announcement-panel { margin-top: 24px; }
+.welcome-announcement-markdown { line-height: 1.7; }
+.computer-access-help-list { margin: 0; padding-left: 1.25rem; }
+@media (max-width: 1200px) {
+  .welcome-page { padding: 24px 16px; }
+  .metric-card { padding: 18px; gap: 12px; }
+  .metric-icon { width: 40px; height: 40px; }
+  .overview-panels { grid-template-columns: 1fr; }
+  .resources-grid { margin: 0; }
 }
-
-.welcome-card {
-  border-radius: 16px;
-  border: 1px solid rgba(0, 0, 0, 0.08);
-}
-
-.welcome-announcement-markdown {
-  line-height: 1.7;
-}
-
-.computer-access-select {
-  max-width: 240px;
-  min-width: 220px;
-}
-
-.computer-access-help-list {
-  margin: 0;
-  padding-left: 1.25rem;
+@media (max-width: 700px) {
+  .welcome-page { padding: 20px 4px; }
+  .overview-header { flex-direction: column; align-items: flex-start; gap: 16px; margin-bottom: 20px; }
+  .metrics-grid { grid-template-columns: 1fr; gap: 12px; margin-bottom: 20px; }
+  .metric-card { padding: 16px; border-radius: 16px; }
+  .metric-value { margin: 6px 0; }
+  .overview-panel { padding: 16px; border-radius: 16px; }
+  .panel-header { flex-wrap: wrap; gap: 12px; margin-bottom: 20px; }
+  .panel-heading h2 { font-size: 18px; }
+  .onboarding-step { display: grid; grid-template-columns: 28px minmax(0, 1fr); gap: 8px 12px; padding-block: 12px; }
+  .onboarding-step .v-btn { grid-column: 2; justify-self: start; }
+  .onboarding-step:not(:last-child)::after { top: 40px; bottom: -12px; }
+  .resources-grid { grid-template-columns: 1fr; }
+  .resource-card { padding: 16px; }
+  .resource-icon { margin: 0 0 12px; }
 }
 </style>

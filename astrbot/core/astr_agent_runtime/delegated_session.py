@@ -13,8 +13,8 @@ from astrbot.core.agent.message import (
     ImageURLPart,
     Message,
     TextPart,
-    bind_checkpoint_messages,
-    dump_messages_with_checkpoints,
+    dump_messages,
+    load_messages,
 )
 from astrbot.core.agent.run_context import ContextWrapper
 from astrbot.core.agent.runtime import (
@@ -184,7 +184,7 @@ class DelegatedAgentSession(NativeAgentSession):
             tools=tools,
             skills=skills,
             runtime_config=config,
-            initial_dialogs=bind_checkpoint_messages(
+            initial_dialogs=load_messages(
                 [
                     {**item.model_dump(), "_no_save": item._no_save}
                     if isinstance(item, Message)
@@ -231,10 +231,8 @@ class DelegatedAgentSession(NativeAgentSession):
                 tools=data["tools"],
                 skills=data.get("skills"),
                 runtime_config=data.get("runtime_config", {"misc": {"max_steps": 30}}),
-                initial_dialogs=bind_checkpoint_messages(
-                    data.get("initial_dialogs", [])
-                ),
-                messages=bind_checkpoint_messages(data["messages"]),
+                initial_dialogs=load_messages(data.get("initial_dialogs", [])),
+                messages=load_messages(data["messages"]),
                 token_usage=data.get("token_usage", 0),
             ),
             umo,
@@ -272,7 +270,7 @@ class DelegatedAgentSession(NativeAgentSession):
                 "token_usage": token_usage or 0,
             },
         )
-        conversation.messages = bind_checkpoint_messages(history)
+        conversation.messages = load_messages(history)
         conversation.token_usage = token_usage or 0
 
     def _build_config(self, turn: AgentTurn) -> MainAgentBuildConfig:
@@ -442,4 +440,4 @@ class DelegatedAgentSession(NativeAgentSession):
             Serialized messages including portable image data.
         """
         conversation = self.conversation
-        return dump_messages_with_checkpoints(conversation.messages)
+        return dump_messages(conversation.messages)

@@ -1,7 +1,6 @@
 """Native conversation binding before Core-owned input preprocessing."""
 
 import copy
-import json
 from pathlib import Path
 
 from astrbot.core import logger
@@ -21,7 +20,7 @@ from astrbot.core.agent_input import (
 from astrbot.core.agent_input import (
     matches_provider_wake_prefix as matches_provider_wake_prefix,
 )
-from astrbot.core.conversation_mgr import Conversation
+from astrbot.core.db.po import ConversationRead
 from astrbot.core.llm_error_messages import LLM_ERROR_MESSAGE_EXTRA_KEY
 from astrbot.core.message.components import File, Image, Record, Reply, Video
 from astrbot.core.platform.agent_wakeup_event import AgentWakeupEvent
@@ -296,16 +295,28 @@ async def collect_initial_request(
 
 async def _get_session_conv(
     event: AstrMessageEvent, plugin_context: Context
-) -> Conversation:
+) -> ConversationRead:
+    """Read the selected structured history, creating a conversation if needed.
+
+    Args:
+        event: Incoming event identifying the conversation owner and platform.
+        plugin_context: Host conversation services.
+
+    Returns:
+        Detached conversation metadata, messages, and their observed revision.
+
+    Raises:
+        RuntimeError: A conversation could not be created or read.
+    """
     conv_mgr = plugin_context.conversation_manager
     umo = event.unified_msg_origin
     cid = await conv_mgr.get_curr_conversation_id(umo)
     if not cid:
         cid = await conv_mgr.new_conversation(umo, event.get_platform_id())
-    conversation = await conv_mgr.get_conversation(umo, cid)
+    conversation = await conv_mgr.db.get_conversation_by_id(cid)
     if not conversation:
         cid = await conv_mgr.new_conversation(umo, event.get_platform_id())
-        conversation = await conv_mgr.get_conversation(umo, cid)
+        conversation = await conv_mgr.db.get_conversation_by_id(cid)
     if not conversation:
         raise RuntimeError("无法创建新的对话。")
     return conversation
@@ -364,9 +375,10 @@ async def prepare_request(
         return None
     if not explicit:
         if req.conversation is not None:
-            conversation = await plugin_context.conversation_manager.get_conversation(
-                event.unified_msg_origin,
-                req.conversation.cid,
+            conversation = (
+                await plugin_context.conversation_manager.db.get_conversation_by_id(
+                    req.conversation.cid
+                )
             )
             if conversation is None:
                 event.set_extra(
@@ -376,8 +388,10 @@ async def prepare_request(
                 return None
         else:
             conversation = await _get_session_conv(event, plugin_context)
-        req.conversation = conversation
-        req.contexts = json.loads(conversation.history)
+        req.conversation = plugin_context.conversation_manager.to_legacy_conversation(
+            conversation
+        )
+        req.contexts = conversation.content or []
         event.set_extra("provider_request", req)
     prepared = await prepare_input_content(
         event,

@@ -9,6 +9,7 @@ from astrbot.core.agent_input import CollectedInput
 from astrbot.core.astr_agent_runtime.context import (
     AstrAgentContext,
 )
+from astrbot.core.astr_agent_runtime.history import ConversationHistoryObserver
 from astrbot.core.astr_agent_runtime.main_agent.providers import decoded_blocked
 from astrbot.core.astr_agent_runtime.runner import AgentRunner
 from astrbot.core.astr_agent_runtime.tools.cron_tools import FutureTaskTool
@@ -16,6 +17,7 @@ from astrbot.core.astr_agent_runtime.tools.message_tools import (
     GetGroupMessageHistoryTool,
     SendMessageToUserTool,
 )
+from astrbot.core.conversation_mgr import ConversationManager
 from astrbot.core.llm_error_messages import LLM_ERROR_MESSAGE_EXTRA_KEY
 from astrbot.core.pipeline.context_utils import call_event_hook
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
@@ -41,7 +43,9 @@ from . import (
 from .config import MainAgentBuildConfig
 
 if TYPE_CHECKING:
+    from astrbot.core.agent.conversation_events import ConversationEventWriter
     from astrbot.core.astr_agent_runtime.runtime import AstrAgentRuntime
+    from astrbot.core.db.conversation import ConversationSnapshot
 
 TOOL_CALL_PROMPT = (
     "<tool_use_instructions>\n"
@@ -87,6 +91,7 @@ class MainAgentBuildResult:
     agent_runner: AgentRunner
     provider_request: ProviderRequest
     provider: Provider
+    conversation_events: "ConversationEventWriter | None" = None
 
 
 async def build_main_agent(
@@ -100,6 +105,7 @@ async def build_main_agent(
     plugin_tools: ToolSet | None = None,
     plugin_skills: list[SkillInfo] | None = None,
     runtime: "AstrAgentRuntime | None" = None,
+    conversation_snapshot: "ConversationSnapshot | None" = None,
 ) -> MainAgentBuildResult | None:
     """Build a main agent through the same ordered stages for every trigger.
 
@@ -113,6 +119,7 @@ async def build_main_agent(
         plugin_tools: Core-authorized plugin tools, or None for legacy lookup.
         plugin_skills: Core-authorized plugin skills, or None for legacy lookup.
         runtime: Native session owner supplying internal agent services.
+        conversation_snapshot: Committed history already loaded by the session.
 
     Returns:
         An initialized runner with its request and provider, or None when the
@@ -226,8 +233,25 @@ async def build_main_agent(
                 "Provider API base %s was blocked for security reasons", api_base
             )
             return None
+    writer = None
+    manager = plugin_context.conversation_manager
+    if req.conversation is not None and isinstance(manager, ConversationManager):
+        writer = await manager.create_event_writer(
+            req.conversation.cid,
+            unified_msg_origin=event.unified_msg_origin,
+            expected_revision=req.conversation.revision,
+            snapshot=conversation_snapshot,
+            link_display=event.get_platform_name() == "webchat",
+        )
     if config.call_request_hook:
-        if await call_event_hook(event, EventType.OnLLMRequestEvent, req):
+        if await call_event_hook(
+            event,
+            EventType.OnLLMRequestEvent,
+            req,
+            context_observer=ConversationHistoryObserver(writer, req)
+            if writer
+            else None,
+        ):
             return None
         # Hooks may add images; preserve the cache from input preparation.
         await prepare_request_images(
@@ -247,7 +271,11 @@ async def build_main_agent(
         config,
         agent_context,
         fallback_providers=fallbacks,
+        writer=writer,
     )
     return MainAgentBuildResult(
-        agent_runner=agent_runner, provider_request=req, provider=provider
+        agent_runner=agent_runner,
+        provider_request=req,
+        provider=provider,
+        conversation_events=writer,
     )
