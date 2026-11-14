@@ -1,6 +1,7 @@
 from pydantic import Field
 from pydantic.dataclasses import dataclass
 
+from astrbot.core.agent.conversation_events import ConversationEventWriter
 from astrbot.core.agent.run_context import ContextWrapper
 from astrbot.core.agent.runtime import AgentPermissions, AgentRuntime, AgentSessionRef
 from astrbot.core.agent.tool import ToolSet
@@ -27,6 +28,8 @@ class AstrAgentContext:
     """Core-authorized plugin skills available for delegation."""
     agent_session: AgentSessionRef | None = None
     """The current agent's runtime address, retained when it delegates work."""
+    conversation_events: ConversationEventWriter | None = None
+    """Revision-bound writer for confirmed proactive deliveries."""
     _runtime: AgentRuntime | None = None
     """Internal owner used by native delegation tools."""
 

@@ -65,6 +65,7 @@ async def save_agent_history(
     commit: Callable[[list[dict], int | None], Awaitable[None]],
     user_aborted: bool = False,
     writer: ConversationEventWriter | None = None,
+    delivered_texts: list[str] | None = None,
 ) -> bool:
     """Commit native history after a settled or user-aborted execution.
 
@@ -76,6 +77,7 @@ async def save_agent_history(
         commit: Storage writer for this session's canonical history.
         user_aborted: Whether partial output belongs to an explicit cancellation.
         writer: Revision-bound writer for event-backed history.
+        delivered_texts: Text already delivered and recorded during this wakeup.
 
     Returns:
         Whether history was successfully committed.
@@ -96,6 +98,33 @@ async def save_agent_history(
         ):
             continue
         messages_to_save.append(message)
+
+    if delivered_texts and messages_to_save:
+        final = messages_to_save[-1]
+        persisted = dump_messages([final])
+        content = persisted[0].get("content") if persisted else None
+        final_text = (
+            content
+            if isinstance(content, str)
+            else "".join(
+                part.get("text", "")
+                for part in content or []
+                if part.get("type") == "text"
+            )
+        )
+        if (
+            final.role == "assistant"
+            and not final._no_save
+            and not final.tool_calls
+            and final_text in delivered_texts
+        ):
+            # Prefer the persisted final message, which may also contain reasoning.
+            # Temporary final text cannot replace a confirmed delivery.
+            for index in range(len(messages_to_save) - 2, -1, -1):
+                message = messages_to_save[index]
+                if message.role == "assistant" and message.content == final_text:
+                    messages_to_save.pop(index)
+                    break
 
     message_to_save = dump_messages(
         messages_to_save, include_temporary=writer is not None

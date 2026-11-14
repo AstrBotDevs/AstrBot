@@ -134,6 +134,7 @@ class NativeAgentSession(AgentSession):
             )
         )
         writer = result.conversation_events
+        runner.run_context.context.conversation_events = writer
         status = None
         try:
             if writer is not None:
@@ -208,6 +209,11 @@ class NativeAgentSession(AgentSession):
                         runner_stats=runner.stats,
                         user_aborted=runner.was_aborted(),
                         writer=writer,
+                        delivered_texts=event.get_extra(
+                            "_send_message_to_user_current_session_plain_texts", []
+                        )
+                        if isinstance(event, AgentWakeupEvent)
+                        else [],
                         commit=self._commit_history,
                     )
                 except Exception as exc:
