@@ -314,11 +314,27 @@ def extract_web_search_refs(accumulated_text: str, accumulated_parts: list) -> d
     if not web_search_results:
         return {}
 
-    ref_indices = {m.strip() for m in re.findall(r"<ref>(.*?)</ref>", accumulated_text)}
+    # Collect matched indices in text order so cards render consistently.
+    matched_indices: dict[str, None] = {}
+    # Native citation format emitted by the model.
+    for match in re.findall(r"<ref>(.*?)</ref>", accumulated_text):
+        if (idx := match.strip()) in web_search_results:
+            matched_indices.setdefault(idx)
+    # Fallback: models may cite sources with plain or markdown URLs instead
+    # of <ref> tags; recover cards by matching URLs from the search results.
+    url_to_index = {}
+    for idx, item in web_search_results.items():
+        if item.get("url") and item["url"] not in url_to_index:
+            url_to_index[item["url"]] = idx
+    for match in re.findall(
+        r"https?://[^\s<>()\[\]{}\"'\u3000-\u303f\uff00-\uffef]+", accumulated_text
+    ):
+        idx = url_to_index.get(match.rstrip(".,;:!?。)）】」"))
+        if idx:
+            matched_indices.setdefault(idx)
+
     used_refs = []
-    for ref_index in ref_indices:
-        if ref_index not in web_search_results:
-            continue
+    for ref_index in matched_indices:
         payload = {"index": ref_index, **web_search_results[ref_index]}
         if favicon := sp.temporary_cache.get("_ws_favicon", {}).get(payload["url"]):
             payload["favicon"] = favicon
