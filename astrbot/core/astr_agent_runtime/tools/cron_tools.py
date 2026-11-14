@@ -57,6 +57,8 @@ class FutureTaskTool(FunctionTool[AstrAgentContext]):
     description: str = (
         "Manage your future tasks. "
         "Use action='create' to schedule a recurring cron task or one-time run_at task. "
+        "Create requires note and either run_at or cron_expression. "
+        "If run_once is omitted, run_at without cron_expression implies one-time execution. "
         "Use action='edit' to update an existing task. "
         "Use action='list' to inspect existing tasks. "
         "Use action='delete' to remove a task by job_id. "
@@ -83,11 +85,11 @@ class FutureTaskTool(FunctionTool[AstrAgentContext]):
                 },
                 "note": {
                     "type": "string",
-                    "description": "Detailed instructions for your future agent to execute when it wakes.",
+                    "description": "Required for action='create': detailed instructions for your future agent to execute when it wakes. Preserve these instructions when correcting scheduling fields.",
                 },
                 "run_once": {
                     "type": "boolean",
-                    "description": "Run only once and delete after execution. Use with run_at.",
+                    "description": "Run only once and delete after execution. Use with run_at. For action='create', omitted run_once is inferred as true when run_at is supplied without cron_expression. An explicit false still requires cron_expression.",
                 },
                 "run_at": {
                     "type": "string",
@@ -113,16 +115,29 @@ class FutureTaskTool(FunctionTool[AstrAgentContext]):
         if action == "create":
             cron_expression = kwargs.get("cron_expression")
             run_at = kwargs.get("run_at")
-            run_once = bool(kwargs.get("run_once", False))
+            run_once = bool(
+                kwargs.get("run_once", bool(run_at) and not cron_expression)
+            )
             note = str(kwargs.get("note", "")).strip()
             name = str(kwargs.get("name") or "").strip() or "active_agent_task"
 
             if not note:
-                return "error: note is required when action=create."
+                return (
+                    "error: note is required when action=create. "
+                    "Provide the actual reminder instructions in note and retain "
+                    "the existing run_at or cron_expression."
+                )
             if run_once and not run_at:
-                return "error: run_at is required when run_once=true."
+                return (
+                    "error: run_at is required when run_once=true. "
+                    "Provide an ISO datetime for the one-time task and retain note."
+                )
             if (not run_once) and not cron_expression:
-                return "error: cron_expression is required when run_once=false."
+                return (
+                    "error: cron_expression is required when run_once=false. "
+                    "For a one-time task, provide run_at and set run_once=true "
+                    "or omit run_once; retain note."
+                )
             if run_once and cron_expression:
                 cron_expression = None
             try:
