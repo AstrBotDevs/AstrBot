@@ -28,7 +28,10 @@ def _entries(
     attachments = element.get("attachments")
     if in_record and isinstance(attachments, list):
         for item in attachments:
-            if isinstance(item, dict) and str(item.get("content_type")).startswith(
+            if not isinstance(item, dict):
+                continue
+            content_type = item.get("content_type") or item.get("contentType")
+            if isinstance(content_type, str) and content_type.lower().startswith(
                 "image/"
             ):
                 yield item.get("url")
