@@ -133,6 +133,7 @@ class TestCronJobManagerStart:
         """Test that early scheduler startup does not skip database sync."""
         mock_db.create_cron_job.return_value = sample_cron_job
         mock_db.list_cron_jobs.return_value = [sample_cron_job]
+        mock_db.get_cron_job.return_value = sample_cron_job
 
         await cron_manager.add_basic_job(
             name="Early Job",
@@ -500,6 +501,7 @@ class TestSyncFromDb:
         """Test that sync warns for basic jobs without handlers."""
         mock_db.list_cron_jobs.return_value = [sample_cron_job]
 
+        mock_db.get_cron_job.return_value = sample_cron_job
         with patch("astrbot.core.cron.manager.logger") as mock_logger:
             await cron_manager.sync_from_db()
 
@@ -523,6 +525,7 @@ class TestRemoveScheduled:
         )
         mock_db = cron_manager.db
         mock_db.list_cron_jobs = AsyncMock(return_value=[job])
+        mock_db.get_cron_job.return_value = job
         await cron_manager.start(mock_context)
 
         # Then remove it
@@ -637,7 +640,7 @@ class TestScheduleJob:
         await cron_manager.start(mock_context)
         cron_manager._schedule_job(job)
 
-        assert cron_manager.scheduler.get_job("run-once-job") is not None
+        assert cron_manager.get_next_run_time("run-once-job") is not None
 
 
 class TestRunJob:
@@ -757,7 +760,7 @@ class TestRunActiveAgentJob:
 
 
 class TestGetNextRunTime:
-    """Tests for _get_next_run_time method."""
+    """Tests for the live next-run time."""
 
     @pytest.mark.asyncio
     async def test_get_next_run_time_existing_job(
@@ -770,12 +773,12 @@ class TestGetNextRunTime:
         await cron_manager.start(mock_context)
         cron_manager._schedule_job(sample_cron_job)
 
-        next_run = cron_manager._get_next_run_time("test-job-id")
+        next_run = cron_manager.get_next_run_time("test-job-id")
 
         assert next_run is not None
 
     def test_get_next_run_time_nonexistent(self, cron_manager):
         """Test getting next run time for non-existent job."""
-        next_run = cron_manager._get_next_run_time("non-existent")
+        next_run = cron_manager.get_next_run_time("non-existent")
 
         assert next_run is None
