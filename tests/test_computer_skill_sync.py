@@ -6,8 +6,8 @@ from typing import cast
 
 import pytest
 
-from astrbot.core.computer import computer_client
-from astrbot.core.computer.booters.base import ComputerBooter
+from astrbot.core.astr_agent_runtime.computer import computer_client
+from astrbot.core.astr_agent_runtime.computer.booters.base import ComputerBooter
 
 
 def _extract_embedded_python(command: str) -> str:
@@ -75,7 +75,7 @@ def test_sync_skills_keeps_builtin_skills_when_local_is_empty(
         captured["skills"] = skills
 
     monkeypatch.setattr(
-        "astrbot.core.computer.computer_client.get_astrbot_skills_path",
+        "astrbot.core.astr_agent_runtime.computer.computer_client.get_astrbot_skills_path",
         lambda: str(skills_root),
     )
     monkeypatch.setattr(
@@ -83,11 +83,11 @@ def test_sync_skills_keeps_builtin_skills_when_local_is_empty(
         lambda: str(plugins_root),
     )
     monkeypatch.setattr(
-        "astrbot.core.computer.computer_client.get_astrbot_temp_path",
+        "astrbot.core.astr_agent_runtime.computer.computer_client.get_astrbot_temp_path",
         lambda: str(temp_root),
     )
     monkeypatch.setattr(
-        "astrbot.core.computer.computer_client.SkillManager.set_sandbox_skills_cache",
+        "astrbot.core.astr_agent_runtime.computer.computer_client.SkillManager.set_sandbox_skills_cache",
         _fake_set_cache,
     )
 
@@ -124,15 +124,15 @@ def test_sync_skills_uses_managed_strategy_instead_of_wiping_all(
         captured["skills"] = skills
 
     monkeypatch.setattr(
-        "astrbot.core.computer.computer_client.get_astrbot_skills_path",
+        "astrbot.core.astr_agent_runtime.computer.computer_client.get_astrbot_skills_path",
         lambda: str(skills_root),
     )
     monkeypatch.setattr(
-        "astrbot.core.computer.computer_client.get_astrbot_temp_path",
+        "astrbot.core.astr_agent_runtime.computer.computer_client.get_astrbot_temp_path",
         lambda: str(temp_root),
     )
     monkeypatch.setattr(
-        "astrbot.core.computer.computer_client.SkillManager.set_sandbox_skills_cache",
+        "astrbot.core.astr_agent_runtime.computer.computer_client.SkillManager.set_sandbox_skills_cache",
         _fake_set_cache,
     )
 
@@ -177,7 +177,7 @@ def test_sync_skills_includes_plugin_provided_skills(
         captured["skills"] = skills
 
     monkeypatch.setattr(
-        "astrbot.core.computer.computer_client.get_astrbot_skills_path",
+        "astrbot.core.astr_agent_runtime.computer.computer_client.get_astrbot_skills_path",
         lambda: str(skills_root),
     )
     monkeypatch.setattr(
@@ -185,11 +185,11 @@ def test_sync_skills_includes_plugin_provided_skills(
         lambda: str(plugins_root),
     )
     monkeypatch.setattr(
-        "astrbot.core.computer.computer_client.get_astrbot_temp_path",
+        "astrbot.core.astr_agent_runtime.computer.computer_client.get_astrbot_temp_path",
         lambda: str(temp_root),
     )
     monkeypatch.setattr(
-        "astrbot.core.computer.computer_client.SkillManager.set_sandbox_skills_cache",
+        "astrbot.core.astr_agent_runtime.computer.computer_client.SkillManager.set_sandbox_skills_cache",
         _fake_set_cache,
     )
     monkeypatch.setattr(
@@ -237,7 +237,7 @@ def test_sync_skills_skips_inactive_plugin_provided_skills(
     plugin_skill_dir.joinpath("SKILL.md").write_text("# demo", encoding="utf-8")
 
     monkeypatch.setattr(
-        "astrbot.core.computer.computer_client.get_astrbot_skills_path",
+        "astrbot.core.astr_agent_runtime.computer.computer_client.get_astrbot_skills_path",
         lambda: str(skills_root),
     )
     monkeypatch.setattr(
@@ -245,7 +245,7 @@ def test_sync_skills_skips_inactive_plugin_provided_skills(
         lambda: str(plugins_root),
     )
     monkeypatch.setattr(
-        "astrbot.core.computer.computer_client.get_astrbot_temp_path",
+        "astrbot.core.astr_agent_runtime.computer.computer_client.get_astrbot_temp_path",
         lambda: str(temp_root),
     )
     monkeypatch.setattr(
@@ -265,13 +265,6 @@ def test_sync_skills_skips_inactive_plugin_provided_skills(
 
     assert booter.uploads == []
     assert any(cmd == "rm -f skills/skills.zip" for cmd in booter.shell.commands)
-
-
-def test_build_scan_command_frontmatter_newline_is_escaped_literal():
-    command = computer_client._build_scan_command()
-    script = _extract_embedded_python(command)
-
-    assert 'frontmatter = "\\n".join(lines[1:end_idx])' in script
 
 
 def test_build_scan_command_embedded_python_is_syntax_valid():

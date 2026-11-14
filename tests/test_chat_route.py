@@ -574,3 +574,41 @@ async def test_save_uploaded_file_rejects_oversized_saved_file(
         await chat_service_instance.save_uploaded_file(FakeUpload())
 
     assert not list(Path(chat_service_instance.attachments_dir).iterdir())
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("error_code", ["ffmpegNotFound", "messageProcessingFailed"])
+async def test_preprocessing_failure_is_saved_before_stream_closes(
+    chat_service_instance, error_code
+):
+    service = chat_service_instance
+    stream = await service.build_chat_stream(
+        "alice", {"message": "hello", "session_id": "failed-session"}
+    )
+    run = next(iter(service.chat_runs.values()))
+    turn_id = run.turn_id
+    try:
+        await anext(stream)
+        for payload in [
+            {"type": "error", "data": "Processing failed", "error_code": error_code},
+            {"type": "end", "data": ""},
+        ]:
+            await chat_service.webchat_queue_mgr.put_back_queue(
+                run.run_id, {**payload, "streaming": False, "message_id": run.run_id}
+            )
+        await asyncio.wait_for(run.task, 2)
+        events = [_decode_sse_event(event) async for event in stream]
+        assert any(event["type"] == "error" for event in events)
+        assert any(event["type"] == "end" for event in events)
+        assert run.status == "failed"
+        assert run.turn_id == turn_id
+        saved_parts = service.save_bot_message.await_args.args[1]
+        assert saved_parts == [
+            {"type": "plain", "text": "Processing failed", "error_code": error_code}
+        ]
+    finally:
+        await stream.aclose()
+        if run.task and not run.task.done():
+            run.task.cancel()
+            await asyncio.gather(run.task, return_exceptions=True)
+        chat_service.webchat_queue_mgr.remove_queues("failed-session")

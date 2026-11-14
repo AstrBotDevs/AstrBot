@@ -33,8 +33,28 @@ test("history pages retain reasoning boundaries and complete tool results", () =
   };
   visit(ast);
   assert.equal(functions.length, names.size);
-  const context = vm.createContext({ exports: {} });
+  let locale = "en-US";
+  const translations = Object.fromEntries(
+    ["en-US", "zh-CN", "ja-JP", "ru-RU"].map((language) => [
+      language,
+      JSON.parse(readFileSync(new URL(`../src/i18n/locales/${language}/features/chat.json`, import.meta.url), "utf8").replace(/^\uFEFF/, "")),
+    ]),
+  );
+  const context = vm.createContext({
+    exports: {},
+    useModuleI18n: () => ({ tm: (key) => key.split(".").reduce((value, part) => value[part], translations[locale]) }),
+  });
   vm.runInContext(ts.transpile(functions.join("\n")), context);
+
+  for (const language of Object.keys(translations)) {
+    locale = language;
+    for (const code of ["ffmpegNotFound", "messageProcessingFailed"]) {
+      const content = { type: "bot", message: [{ type: "plain", text: "stored fallback", error_code: code }] };
+      const restored = context.normalizeHistoryRecord({ id: 2, content });
+      assert.equal(context.messageBlocks(restored.content)[0].parts[0].text, translations[locale].errors[code]);
+      assert.equal(content.message[0].text, "stored fallback");
+    }
+  }
 
   const parts = [
     { type: "think", think: "Before the tool" },

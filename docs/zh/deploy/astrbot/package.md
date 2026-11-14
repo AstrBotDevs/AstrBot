@@ -1,24 +1,65 @@
-# 包管理器部署（uv）
+# 脚本部署
 
-使用 `uv` 可以快速安装并启动 AstrBot。
+AstrBot 提供 Linux、macOS、WSL 和 Windows 安装脚本。脚本会安装 `uv`、AstrBot 及 Python 3.12。
 
-## 前置条件
+## Linux / macOS / WSL
 
-如果尚未安装 `uv`，请先按照官方文档安装：<https://docs.astral.sh/uv/>
-
-`uv` 支持 Linux、Windows、macOS。
-
-## 注意事项
-
-> [!WARNING]
-> 通过 `uv` 部署的 AstrBot **不支持在 WebUI 中进行版本升级**。如需更新，请在命令行中执行 `uv tool upgrade astrbot --python 3.12`。
-
-AstrBot 需要 Python 3.12 或更高版本。使用 `--python 3.12` 可以确保 `uv` 使用 Python 3.12 创建 tool 环境；如果启用了 Python 自动下载，`uv` 会在缺少 Python 3.12 时自动下载。
-
-## 安装并启动
+交互式安装：
 
 ```bash
-uv tool install astrbot --python 3.12
-astrbot init # 只需要在第一次部署时执行，后续启动不需要执行
+curl -fsSL https://docs.astrbot.app/install.sh | bash
+```
+
+无人值守安装：
+
+```bash
+curl -fsSL https://docs.astrbot.app/install.sh -o install.sh
+bash install.sh --language zh-CN --download-source china --non-interactive
+```
+
+`--download-source` 可选 `china`、`official` 或 `custom`。省略语言参数时默认使用 English；未指定下载源时，中文使用中国大陆加速下载镜像源，英文和日文使用官方源。
+
+## Windows
+
+在 PowerShell 5.1 或 PowerShell 7+ 中运行：
+
+交互式安装：
+
+```powershell
+irm https://docs.astrbot.app/install.ps1 | iex
+```
+
+无人值守安装：
+
+```powershell
+Invoke-WebRequest https://docs.astrbot.app/install.ps1 -OutFile install.ps1 -UseBasicParsing
+.\install.ps1 -Language zh-CN -DownloadSource china -NonInteractive
+```
+
+`-DownloadSource` 可选 `china`、`official` 或 `custom`；省略语言参数时默认使用 English；未指定下载源时，中文使用中国大陆加速下载镜像源，英文和日文使用官方源。
+
+选择中国大陆源时，脚本也会为 Python 3.12 配置 USTC 镜像，失败后使用官方 Python 源重试。已有的 Python 镜像环境变量或显式参数优先。
+
+## 安装完成后
+
+安装脚本会自动执行 `uv tool update-shell`。请根据你使用的终端重新加载环境：
+
+```bash
+# Bash
+source ~/.bashrc
+# Zsh
+source ~/.zshrc
+# Fish
+source ~/.config/fish/config.fish
+# PowerShell
+. $PROFILE
+```
+
+重新加载后，手动运行：
+
+```bash
+astrbot init
 astrbot run
 ```
+
+> 通过脚本部署的 AstrBot 不支持在 WebUI 中升级。更新请执行 `uv tool upgrade astrbot --python 3.12`。

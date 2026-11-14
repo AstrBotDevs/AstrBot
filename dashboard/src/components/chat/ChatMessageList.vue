@@ -227,6 +227,17 @@
                         />
                       </button>
 
+                      <ButtonActionRow
+                        v-else-if="part.type === 'actionrow'"
+                        :part="part"
+                        @callback="
+                          emit('buttonClick', {
+                            message: msg,
+                            callbackData: $event,
+                          })
+                        "
+                      />
+
                       <audio
                         v-else-if="part.type === 'record'"
                         class="audio-part"
@@ -329,17 +340,49 @@
             <span v-if="isUserMessage(msg) && msg.created_at">{{
               formatTime(msg.created_at)
             }}</span>
-            <v-btn
+            <span
               v-if="canEditMessage(msg, msgIndex)"
-              icon
-              size="x-small"
-              variant="text"
-              @click="emit('openEdit', msg)"
+              :title="
+                msg.can_edit === false
+                  ? tm(
+                      `history.${
+                        msg.edit_unavailable_reason || 'context_unavailable'
+                      }`,
+                    )
+                  : tm('history.edit')
+              "
             >
-              <SquarePen :size="14" :stroke-width="2" />
-            </v-btn>
+              <v-btn
+                icon
+                size="x-small"
+                variant="text"
+                :disabled="msg.can_edit === false"
+                :aria-label="
+                  msg.can_edit === false
+                    ? tm(
+                        `history.${
+                          msg.edit_unavailable_reason || 'context_unavailable'
+                        }`,
+                      )
+                    : tm('history.edit')
+                "
+                @click="emit('openEdit', msg)"
+              >
+                <SquarePen :size="14" :stroke-width="2" />
+              </v-btn>
+            </span>
             <RegenerateMenu
               v-if="canRegenerateMessage(msg, msgIndex)"
+              :disabled="msg.can_retry === false"
+              :unavailable-reason="
+                msg.can_retry === false
+                  ? tm(
+                      `history.${
+                        msg.retry_unavailable_reason || 'context_unavailable'
+                      }`,
+                    )
+                  : ''
+              "
               @retry="emit('regenerate', msg)"
               @retry-with-model="emit('regenerateWithModel', msg, $event)"
             />
@@ -488,6 +531,7 @@ import ToolCallItem from "@/components/chat/message_list_comps/ToolCallItem.vue"
 import IPythonToolBlock from "@/components/chat/message_list_comps/IPythonToolBlock.vue";
 import RefsSidebar from "@/components/chat/message_list_comps/RefsSidebar.vue";
 import ActionRef from "@/components/chat/message_list_comps/ActionRef.vue";
+import ButtonActionRow from "@/components/chat/ButtonActionRow.vue";
 import MarkdownMessagePart from "@/components/chat/message_list_comps/MarkdownMessagePart.vue";
 import StyledMenu from "@/components/shared/StyledMenu.vue";
 import {
@@ -556,6 +600,7 @@ const emit = defineEmits<{
   openThread: [thread: ChatThread];
   openReasoning: [payload: { message: ChatRecord; blockIndex: number }];
   openRefs: [refs: unknown];
+  buttonClick: [payload: { message: ChatRecord; callbackData: string }];
 }>();
 
 registerChatMarkdownComponents();
@@ -632,37 +677,22 @@ function isEditingMessage(message: ChatRecord) {
   );
 }
 
-function canEditMessage(message: ChatRecord, messageIndex: number) {
+function canEditMessage(message: ChatRecord, _messageIndex: number) {
   return (
     props.enableEdit &&
     isUserMessage(message) &&
-    messageIndex === latestEditableUserIndex() &&
+    Boolean(message.turn_id) &&
     message.id != null &&
     !String(message.id).startsWith("local-")
   );
-}
-
-function latestEditableUserIndex() {
-  for (let index = props.messages.length - 1; index >= 0; index -= 1) {
-    const message = props.messages[index];
-    if (
-      isUserMessage(message) &&
-      message.id != null &&
-      !String(message.id).startsWith("local-")
-    ) {
-      return index;
-    }
-  }
-  return -1;
 }
 
 function canRegenerateMessage(message: ChatRecord, messageIndex: number) {
   return (
     props.enableRegenerate &&
     !isUserMessage(message) &&
-    messageIndex === props.messages.length - 1 &&
     !isMessageStreaming(message, messageIndex) &&
-    Boolean(message.llm_checkpoint_id)
+    Boolean(message.turn_id)
   );
 }
 

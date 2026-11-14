@@ -10,6 +10,18 @@ from .run_context import ContextWrapper, TContext
 
 class BaseAgentRunHooks(Generic[TContext]):
     async def on_agent_begin(self, run_context: ContextWrapper[TContext]) -> None: ...
+    async def on_llm_response(
+        self,
+        run_context: ContextWrapper[TContext],
+        llm_response: LLMResponse,
+    ) -> None:
+        """Handle a final model reply independently from execution cleanup.
+
+        Args:
+            run_context: Context associated with the response.
+            llm_response: Final model response, available before delivery.
+        """
+
     async def on_tool_start(
         self,
         run_context: ContextWrapper[TContext],
@@ -26,5 +38,12 @@ class BaseAgentRunHooks(Generic[TContext]):
     async def on_agent_done(
         self,
         run_context: ContextWrapper[TContext],
-        llm_response: LLMResponse,
-    ) -> None: ...
+        llm_response: LLMResponse | None,
+    ) -> None:
+        """Handle execution exit, including failures and cancellation.
+
+        Args:
+            run_context: Context with run_end_reason and any run_error populated
+                by the built-in tool-loop runner.
+            llm_response: Final response, or None if execution produced none.
+        """
