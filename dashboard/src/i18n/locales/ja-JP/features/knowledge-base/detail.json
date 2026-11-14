@@ -53,7 +53,7 @@
     "title": "ドキュメントをアップロード",
     "selectFile": "ファイルを選択",
     "dropzone": "ここにファイルをドラッグ＆ドロップするか、クリックして選択",
-    "supportedFormats": "対応形式：.txt, .md, .markdown, .rst, .adoc, .pdf, .docx, .epub, .xls, .xlsx",
+    "supportedFormats": "対応形式：.txt, .md, .markdown, .rst, .adoc, .pdf, .docx, .pptx, .epub, .xls, .xlsx",
     "maxSize": "最大ファイルサイズ：128 MB",
     "chunkSettings": "チャンク設定",
     "batchSettings": "バッチ処理設定",
