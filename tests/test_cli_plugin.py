@@ -4,6 +4,7 @@ import pytest
 from click import ClickException
 from click.testing import CliRunner
 
+import astrbot.cli.commands.cmd_plug as cmd_plug
 import astrbot.cli.utils.plugin as plugin_utils
 from astrbot.cli.commands.cmd_plug import plug
 
@@ -189,3 +190,32 @@ def test_plugin_install_requires_name_or_editable_path(
 
     assert result.exit_code != 0
     assert "Missing plugin name or local plugin path" in result.output
+
+
+def test_plugin_list_prints_status_values(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    root = tmp_path / "root"
+    root.mkdir()
+    _write_astrbot_root(root)
+    monkeypatch.chdir(root)
+    monkeypatch.setattr(
+        cmd_plug,
+        "build_plug_list",
+        lambda _plugins_dir: [
+            {
+                "name": "astrbot_plugin_local_demo",
+                "desc": "Local plugin",
+                "version": "1.0.0",
+                "author": "AstrBot",
+                "status": plugin_utils.PluginStatus.NOT_PUBLISHED,
+            },
+        ],
+    )
+
+    result = CliRunner().invoke(plug, ["list"])
+
+    assert result.exit_code == 0
+    assert "unpublished" in result.output
+    assert "PluginStatus" not in result.output
