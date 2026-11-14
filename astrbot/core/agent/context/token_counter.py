@@ -19,9 +19,8 @@ class TokenCounter(Protocol):
 
         Args:
             messages: The message list.
-            trusted_token_usage: The total token usage that LLM API returned.
-                For some cases, this value is more accurate.
-                But some API does not return it, so the value defaults to 0.
+            trusted_token_usage: A trusted estimate of context tokens.
+                A value of 0 means no estimate was provided.
 
         Returns:
             The total token count.

@@ -97,7 +97,9 @@ async def save_agent_history(
 
     token_usage = None
     if runner_stats:
-        token_usage = llm_response.usage.total if llm_response.usage else None
+        token_usage = llm_response.context_token_usage
+        if token_usage is None and llm_response.usage:
+            token_usage = llm_response.usage.total
 
     await commit(message_to_save, token_usage)
     return True

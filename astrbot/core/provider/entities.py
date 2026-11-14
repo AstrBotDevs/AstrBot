@@ -484,6 +484,8 @@ class LLMResponse:
     """The ID of the response. For chunked responses, it's the ID of the chunk; for non-chunked responses, it's the ID of the response."""
     usage: TokenUsage | None = None
     """The usage of the response. For chunked responses, it's the usage of the chunk; for non-chunked responses, it's the usage of the response."""
+    context_token_usage: int | None = None
+    """Provider estimate of retained context, if different from total usage."""
 
     def __init__(
         self,
@@ -504,6 +506,7 @@ class LLMResponse:
         is_chunk: bool = False,
         id: str | None = None,
         usage: TokenUsage | None = None,
+        context_token_usage: int | None = None,
     ) -> None:
         """初始化 LLMResponse
 
@@ -536,6 +539,7 @@ class LLMResponse:
         self.reasoning_signature = reasoning_signature
         self.raw_completion = raw_completion
         self.is_chunk = is_chunk
+        self.context_token_usage = context_token_usage
 
         if id is not None:
             self.id = id

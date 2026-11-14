@@ -1,4 +1,5 @@
 from types import SimpleNamespace
+from unittest.mock import AsyncMock
 
 import httpx
 import pytest
@@ -7,8 +8,13 @@ from google.genai import types
 import astrbot.core.message.components as Comp
 import astrbot.core.provider.sources.gemini_source as gemini_source
 import astrbot.core.provider.sources.request_retry as request_retry
+from astrbot.core.agent.hooks import BaseAgentRunHooks
+from astrbot.core.agent.run_context import ContextWrapper
+from astrbot.core.agent.runners.tool_loop_agent_runner import ToolLoopAgentRunner
+from astrbot.core.astr_agent_runtime.history import save_agent_history
+from astrbot.core.db.po import Conversation
 from astrbot.core.exceptions import EmptyModelOutputError
-from astrbot.core.provider.entities import LLMResponse
+from astrbot.core.provider.entities import LLMResponse, ProviderRequest
 from astrbot.core.provider.sources.gemini_source import ProviderGoogleGenAI
 
 
@@ -172,40 +178,117 @@ def test_gemini_reasoning_only_output_is_allowed():
     )
 
 
-def test_gemini_extract_usage_excludes_cached_tokens_from_input_other():
+@pytest.mark.parametrize(
+    "cached_tokens, candidate_tokens, thought_tokens, output_tokens, context_tokens",
+    [
+        pytest.param(30, 50, None, 50, 150, id="cached-input"),
+        pytest.param(0, 20, 0, 20, 120, id="no-thinking"),
+        pytest.param(30, 50, 200, 250, 150, id="answer-and-thinking"),
+        pytest.param(None, None, 200, 200, 100, id="thinking-only"),
+    ],
+)
+def test_gemini_usage_accounting(
+    cached_tokens, candidate_tokens, thought_tokens, output_tokens, context_tokens
+):
     provider = ProviderGoogleGenAI.__new__(ProviderGoogleGenAI)
-
-    usage_metadata = SimpleNamespace(
-        prompt_token_count=100,
-        cached_content_token_count=30,
-        candidates_token_count=50,
+    response = LLMResponse("assistant")
+    provider._set_usage(
+        response,
+        types.GenerateContentResponseUsageMetadata(
+            prompt_token_count=100,
+            cached_content_token_count=cached_tokens,
+            candidates_token_count=candidate_tokens,
+            thoughts_token_count=thought_tokens,
+            total_token_count=100 + output_tokens,
+        ),
     )
 
-    usage = provider._extract_usage(usage_metadata)
-
-    # prompt_token_count already includes cached tokens; input_other must
-    # exclude them so input (input_other + input_cached) is not inflated.
-    assert usage.input_other == 70
-    assert usage.input_cached == 30
+    usage = response.usage
+    assert usage is not None
+    assert usage.input_cached == (cached_tokens or 0)
     assert usage.input == 100
-    assert usage.output == 50
+    assert usage.output == output_tokens
+    assert usage.total == 100 + output_tokens
+    assert response.context_token_usage == context_tokens
 
 
-def test_gemini_extract_usage_without_cache_keeps_full_prompt_tokens():
-    provider = ProviderGoogleGenAI.__new__(ProviderGoogleGenAI)
-
-    usage_metadata = SimpleNamespace(
-        prompt_token_count=100,
-        cached_content_token_count=0,
-        candidates_token_count=20,
+@pytest.mark.asyncio
+@pytest.mark.parametrize("streaming", [False, True])
+@pytest.mark.parametrize("prompt_tokens, expected_messages", [(78000, 5), (81000, 3)])
+async def test_gemini_thinking_usage_preserves_context_estimate(
+    streaming, prompt_tokens, expected_messages
+):
+    provider = _gemini_stream_provider()
+    provider.model_name = "gemini-2.5-flash"
+    provider.api_keys = ["unused"]
+    response = types.GenerateContentResponse(
+        candidates=[
+            types.Candidate(
+                content=types.ModelContent(parts=[types.Part(text="Answer")]),
+                finish_reason="STOP",
+            )
+        ],
+        usage_metadata=types.GenerateContentResponseUsageMetadata(
+            prompt_token_count=prompt_tokens,
+            candidates_token_count=2000,
+            thoughts_token_count=12000,
+            total_token_count=prompt_tokens + 14000,
+        ),
     )
 
-    usage = provider._extract_usage(usage_metadata)
+    async def stream():
+        yield response
 
-    assert usage.input_other == 100
-    assert usage.input_cached == 0
-    assert usage.input == 100
-    assert usage.output == 20
+    query = AsyncMock(return_value=response)
+    stream_query = AsyncMock(side_effect=lambda **kwargs: stream())
+    provider.client.models.generate_content = query
+    provider.client.models.generate_content_stream = stream_query
+    conversation = Conversation(platform_id="test", user_id="test", cid="test")
+    request = ProviderRequest(
+        prompt="Question",
+        contexts=[
+            {"role": "user", "content": "Previous question"},
+            {"role": "assistant", "content": "Previous answer"},
+        ],
+        conversation=conversation,
+    )
+    runner = ToolLoopAgentRunner()
+    options = {
+        "provider": provider,
+        "run_context": ContextWrapper(context=None),
+        "tool_executor": SimpleNamespace(),
+        "agent_hooks": BaseAgentRunHooks(),
+        "streaming": streaming,
+        "max_context_tokens": 100000,
+    }
+    await runner.reset(request=request, **options)
+    async for _ in runner.step_until_done(3):
+        pass
+
+    commit = AsyncMock()
+    await save_agent_history(
+        req=request,
+        llm_response=runner.final_llm_resp,
+        all_messages=runner.run_context.messages,
+        runner_stats=runner.stats,
+        commit=commit,
+    )
+    history, stored_context_tokens = commit.call_args.args
+    assert runner.stats.token_usage.total == prompt_tokens + 14000
+    assert conversation.token_usage == stored_context_tokens == prompt_tokens + 2000
+
+    conversation.token_usage = stored_context_tokens
+    await runner.reset(
+        request=ProviderRequest(
+            prompt="Continue", contexts=history, conversation=conversation
+        ),
+        **options,
+    )
+    async for _ in runner.step_until_done(3):
+        pass
+    last_call = (stream_query if streaming else query).call_args
+    sent_contents = last_call.kwargs["contents"]
+    assert len(sent_contents) == expected_messages
 
 
 @pytest.mark.asyncio
@@ -310,6 +393,51 @@ async def _drain_gemini_stream(provider, monkeypatch, chunks):
             tools=None,
         )
     ]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("tool_call", [False, True], ids=["text", "tool-call"])
+@pytest.mark.parametrize("usage_only_tail", [False, True], ids=["inline", "tail"])
+async def test_gemini_stream_reports_final_usage(monkeypatch, tool_call, usage_only_tail):
+    usage = types.GenerateContentResponseUsageMetadata(
+        prompt_token_count=100,
+        candidates_token_count=20,
+        thoughts_token_count=50,
+        total_token_count=170,
+    )
+    part = (
+        types.Part.from_function_call(name="get_weather", args={"city": "Shenyang"})
+        if tool_call
+        else types.Part(text="Answer")
+    )
+    chunks = [
+        types.GenerateContentResponse(
+            candidates=[
+                types.Candidate(
+                    content=types.ModelContent(parts=[part]),
+                    finish_reason="STOP",
+                )
+            ],
+            usage_metadata=None if usage_only_tail else usage,
+        )
+    ]
+    if usage_only_tail:
+        chunks.append(types.GenerateContentResponse(usage_metadata=usage))
+
+    responses = await _drain_gemini_stream(
+        _gemini_stream_provider(), monkeypatch, chunks
+    )
+
+    final = responses[-1]
+    assert not final.is_chunk
+    if tool_call:
+        assert final.tools_call_name == ["get_weather"]
+    else:
+        assert final.completion_text == "Answer"
+    assert final.usage is not None
+    assert final.usage.output == 70
+    assert final.usage.total == 170
+    assert final.context_token_usage == 120
 
 
 @pytest.mark.asyncio

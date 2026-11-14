@@ -1135,7 +1135,11 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                 self.stats.token_usage += llm_response.usage
                 self.stats.current_context_tokens = llm_response.usage.input
                 if self.req.conversation:
-                    self.req.conversation.token_usage = llm_response.usage.total
+                    self.req.conversation.token_usage = (
+                        llm_response.context_token_usage
+                        if llm_response.context_token_usage is not None
+                        else llm_response.usage.total
+                    )
             # Preserve legacy statistics for history and plugin readers.
             self.stats.end_time = time.time()
             break  # got final response
