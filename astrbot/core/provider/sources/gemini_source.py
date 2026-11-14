@@ -405,11 +405,21 @@ class ProviderGoogleGenAI(Provider):
                 mime_type=image_data.mime_type,
             )
 
-        def process_audio_url(audio_url_dict: dict) -> types.Part:
+        async def process_audio_url(audio_url_dict: dict) -> types.Part:
             url = audio_url_dict["url"]
-            mime_type = url.split(":")[1].split(";")[0]
-            audio_bytes = base64.b64decode(url.split(",", 1)[1])
-            return types.Part.from_bytes(data=audio_bytes, mime_type=mime_type)
+            audio_data = await resolve_media_ref_to_base64_data(
+                url,
+                media_type="audio",
+                strict=True,
+            )
+            if audio_data is None:
+                raise ValueError(
+                    f"Failed to resolve Gemini history audio: {describe_media_ref(url)}"
+                )
+            return types.Part.from_bytes(
+                data=base64.b64decode(audio_data.base64_data),
+                mime_type=audio_data.mime_type,
+            )
 
         def append_or_extend(
             contents: list[types.Content],
@@ -434,8 +444,8 @@ class ProviderGoogleGenAI(Provider):
                             parts.append(types.Part.from_text(text=item["text"] or " "))
                         elif item["type"] == "image_url":
                             parts.append(await process_image_url(item["image_url"]))
-                        else:
-                            parts.append(process_audio_url(item["audio_url"]))
+                        elif item["type"] == "audio_url":
+                            parts.append(await process_audio_url(item["audio_url"]))
                 else:
                     parts = [create_text_part(content)]
                 append_or_extend(gemini_contents, parts, types.UserContent)
