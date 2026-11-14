@@ -809,7 +809,9 @@ class ProviderOpenAIOfficial(Provider):
                         import ast
 
                         parsed = ast.literal_eval(check_content)
-                    except (ValueError, SyntaxError):
+                    except (ValueError, SyntaxError, TypeError):
+                        # TypeError: unhashable set elements / dict keys,
+                        # e.g. "[ {{...}} ]" is parsed as a set containing a dict
                         parsed = None
 
                 if isinstance(parsed, list):
