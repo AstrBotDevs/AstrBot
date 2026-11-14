@@ -106,6 +106,12 @@ Manage configuration profiles, system configuration, and shared configuration, e
 
 | Method | Endpoint | Conditional sensitive sub-scope |
 | --- | --- | --- |
+| `GET` | `/api/v1/agent-configs` | — |
+| `POST` | `/api/v1/agent-configs` | — |
+| `GET` | `/api/v1/agent-configs/{config_id}` | — |
+| `PUT` | `/api/v1/agent-configs/{config_id}` | — |
+| `DELETE` | `/api/v1/agent-configs/{config_id}` | — |
+| `GET` | `/api/v1/agent-runtimes` | — |
 | `POST` | `/api/v1/bot-types/{bot_type}/registration` | — |
 | `GET` | `/api/v1/config-profiles` | — |
 | `POST` | `/api/v1/config-profiles` | `config:edit_admin` |
@@ -118,9 +124,6 @@ Manage configuration profiles, system configuration, and shared configuration, e
 | `PUT` | `/api/v1/config-routes` | — |
 | `PUT` | `/api/v1/config-routes/{umo}` | — |
 | `DELETE` | `/api/v1/config-routes/{umo}` | — |
-| `GET` | `/api/v1/subagents/available-tools` | — |
-| `GET` | `/api/v1/subagents/config` | — |
-| `PUT` | `/api/v1/subagents/config` | — |
 | `GET` | `/api/v1/system-config` | — |
 | `PUT` | `/api/v1/system-config` | `config:edit_admin` |
 | `GET` | `/api/v1/system-config/runtime` | — |
@@ -189,13 +192,12 @@ Manage conversations and platform-session data.
 | `POST` | `/api/v1/session-groups` | — |
 | `PUT` | `/api/v1/session-groups/{group_id}` | — |
 | `DELETE` | `/api/v1/session-groups/{group_id}` | — |
-| `GET` | `/api/v1/sessions` | — |
 | `GET` | `/api/v1/sessions/active-umos` | — |
-| `PATCH` | `/api/v1/sessions/provider` | — |
+| `GET` | `/api/v1/sessions/overrides` | — |
 | `GET` | `/api/v1/sessions/rules` | — |
 | `POST` | `/api/v1/sessions/rules` | — |
 | `POST` | `/api/v1/sessions/rules/delete` | — |
-| `PATCH` | `/api/v1/sessions/service` | — |
+| `GET` | `/api/v1/sessions/senders` | — |
 
 ## `file`
 
@@ -254,13 +256,14 @@ Manage plugins, plugin configuration, plugin sources, and marketplace data.
 | `GET` | `/api/v1/plugins/market/categories` | — |
 | `GET` | `/api/v1/plugins/page` | — |
 | `GET` | `/api/v1/plugins/page-bridge-sdk.js` | — |
-| `GET` | `/api/v1/plugins/page/assets` | — |
 | `GET` | `/api/v1/plugins/pages` | — |
 | `GET` | `/api/v1/plugins/readme` | — |
 | `POST` | `/api/v1/plugins/reload` | — |
 | `POST` | `/api/v1/plugins/update` | — |
 | `POST` | `/api/v1/plugins/validate/repo` | — |
 | `POST` | `/api/v1/plugins/version-support/check` | — |
+| `GET` | `/api/v1/plugins/view` | — |
+| `GET` | `/api/v1/plugins/views` | — |
 | `GET` | `/api/v1/plugins/{plugin_id}` | — |
 | `DELETE` | `/api/v1/plugins/{plugin_id}` | — |
 | `GET` | `/api/v1/plugins/{plugin_id}/changelog` | — |
@@ -273,12 +276,13 @@ Manage plugins, plugin configuration, plugin sources, and marketplace data.
 | `PATCH` | `/api/v1/plugins/{plugin_id}/enabled` | — |
 | `PUT` | `/api/v1/plugins/{plugin_id}/log-level` | — |
 | `GET` | `/api/v1/plugins/{plugin_id}/pages` | — |
-| `GET` | `/api/v1/plugins/{plugin_id}/pages/{page_name}` | — |
-| `GET` | `/api/v1/plugins/{plugin_id}/pages/{page_name}/assets/{asset_path}` | — |
+| `GET` | `/api/v1/plugins/{plugin_id}/pages/{view_name}` | — |
 | `GET` | `/api/v1/plugins/{plugin_id}/readme` | — |
 | `POST` | `/api/v1/plugins/{plugin_id}/reload` | — |
 | `POST` | `/api/v1/plugins/{plugin_id}/source` | — |
 | `POST` | `/api/v1/plugins/{plugin_id}/update` | — |
+| `GET` | `/api/v1/plugins/{plugin_id}/views` | — |
+| `GET` | `/api/v1/plugins/{plugin_id}/views/{view_name}` | — |
 
 ## `mcp`
 

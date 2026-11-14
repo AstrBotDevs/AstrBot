@@ -60,7 +60,7 @@
                 </div>
               </div>
             </div>
-            <apexchart
+            <VueApexCharts
               type="area"
               height="320"
               :options="messageChartOptions"
@@ -110,7 +110,7 @@
                 <div class="section-title">{{ t('modelTrend.title') }}</div>
               </div>
             </div>
-            <apexchart
+            <VueApexCharts
               type="bar"
               height="420"
               :options="providerChartOptions"
@@ -252,6 +252,7 @@
 </template>
 
 <script setup lang="ts">
+import VueApexCharts from 'vue3-apexcharts'
 import type { ApexOptions } from 'apexcharts'
 import { Check, Copy, MessageCircle, MessageSquareText } from '@lucide/vue'
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
@@ -361,6 +362,7 @@ const themePalette = computed(() => {
 let refreshTimer: number | null = null
 let uptimeTimer: number | null = null
 let copyFeedbackTimer: number | null = null
+let isUnmounted = false
 
 function formatNumber(value: number): string {
   return new Intl.NumberFormat(locale.value).format(value)
@@ -453,7 +455,7 @@ function aggregateOverflowSeries(series: ProviderTrendItem[]): ProviderTrendItem
 }
 
 async function fetchBaseStats(): Promise<void> {
-  const response = await statsApi.get(selectedRange.value * 24 * 60 * 60)
+  const response = await statsApi.get(selectedRange.value * 24 * 60 * 60, 'messages,process,instances')
   baseStats.value = response.data.data
 }
 
@@ -712,6 +714,8 @@ watch(selectedRange, async () => {
 
 onMounted(async () => {
   await refreshStats()
+  // The initial request may settle after this component has unmounted.
+  if (isUnmounted) return
   refreshTimer = window.setInterval(() => {
     void refreshStats()
   }, 60_000)
@@ -721,6 +725,7 @@ onMounted(async () => {
 })
 
 onBeforeUnmount(() => {
+  isUnmounted = true
   if (refreshTimer !== null) {
     window.clearInterval(refreshTimer)
   }

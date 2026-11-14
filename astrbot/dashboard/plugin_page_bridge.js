@@ -198,13 +198,18 @@
       if (message.state === "open" && handlers?.onOpen) {
         handlers.onOpen();
       }
-      if (message.state === "error" && handlers?.onError) {
-        handlers.onError();
+      if (message.state === "closed" || message.state === "error") {
+        sseHandlers.delete(message.subscriptionId);
+        if (message.state === "closed" && handlers?.onClose) {
+          handlers.onClose();
+        } else if (message.state === "error" && handlers?.onError) {
+          handlers.onError();
+        }
       }
     }
   });
 
-  window.AstrBotPluginPage = {
+  window.AstrBotPluginView = {
     ready() {
       return readyPromise;
     },
@@ -283,6 +288,9 @@
       return makeRequest("sse:unsubscribe", { subscriptionId });
     },
   };
+
+  // "Views" is the preferred naming; AstrBotPluginPage stays as an alias.
+  window.AstrBotPluginPage = window.AstrBotPluginView;
 
   send("ready");
 })();

@@ -5,7 +5,7 @@ from unittest.mock import AsyncMock, Mock
 import pytest
 
 from astrbot.api.event import MessageChain
-from astrbot.api.message_components import Plain
+from astrbot.api.message_components import ActionRow, Button, Plain
 from astrbot.core.db.sqlite import SQLiteDatabase
 from astrbot.core.platform.message_session import MessageSession
 from astrbot.core.platform.message_type import MessageType
@@ -146,8 +146,9 @@ async def test_route_survives_new_adapter_and_store(
 @pytest.mark.asyncio
 @pytest.mark.parametrize("scene", ["group", "channel"])
 @pytest.mark.parametrize("cached_id", [None, "expired-reply-id"])
+@pytest.mark.parametrize("with_keyboard", [False, True])
 async def test_proactive_send_never_uses_cached_reply_id(
-    adapter_factory, scene, cached_id, monkeypatch
+    adapter_factory, scene, cached_id, with_keyboard, monkeypatch
 ):
     store = SimpleNamespace(get_async=AsyncMock())
     monkeypatch.setattr(qq, "sp", store)
@@ -156,14 +157,31 @@ async def test_proactive_send_never_uses_cached_reply_id(
     if cached_id:
         adapter._session_last_message_id["target"] = cached_id
     session = MessageSession("qq-test", MessageType.GROUP_MESSAGE, "target")
+    chain = MessageChain(chain=[Plain("hello")])
+    if with_keyboard:
+        chain.chain.append(
+            ActionRow(
+                buttons=[
+                    Button(
+                        id="approve",
+                        label="Approve",
+                        action=Button.CallbackAction(),
+                    )
+                ]
+            )
+        )
     # A second send must not use the bot's own ID cached by the first send.
     for _ in range(2):
-        await adapter.send_by_session(session, MessageChain(chain=[Plain("hello")]))
+        await adapter.send_by_session(session, chain)
     api = adapter.client.api
     selected = api.post_group_message if scene == "group" else api.post_message
     assert selected.await_count == 2
     for call in selected.await_args_list:
         assert "msg_id" not in call.kwargs
+        if with_keyboard:
+            assert call.kwargs["keyboard"] == qq.QQOfficialMessageEvent._parse_keyboard(
+                chain
+            )
         if scene == "channel":
             assert "msg_type" not in call.kwargs
     store.get_async.assert_not_awaited()
@@ -199,7 +217,8 @@ async def test_route_write_failure_is_retried_and_unchanged_routes_are_not_rewri
     )
     monkeypatch.setattr(qq, "sp", store)
     adapter = adapter_factory()
-    await adapter.remember_session_scene("target", "group")
+    with pytest.raises(OSError, match="disk error"):
+        await adapter.remember_session_scene("target", "group")
     assert "target" not in adapter._session_scene
     await adapter.remember_session_scene("target", "group")
     assert adapter._session_scene["target"] == "group"

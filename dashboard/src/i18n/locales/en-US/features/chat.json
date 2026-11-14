@@ -99,6 +99,8 @@
     "placeholder": "Ask about this excerpt..."
   },
   "conversation": {
+    "loading": "Loading conversations",
+    "loadFailed": "Could not load conversations",
     "title": "Conversations",
     "newConversation": "New Conversation",
     "noHistory": "No conversation history",
@@ -165,12 +167,14 @@
     "name": "Project Name",
     "emoji": "Icon (Emoji)",
     "description": "Description (Optional)",
+    "moreSettings": "More settings",
     "workspace": {
       "type": "Workspace",
       "session": "Per-session workspace",
       "project": "Shared project workspace",
       "custom": "Custom path",
-      "path": "Workspace path"
+      "path": "Workspace path",
+      "selectPath": "Select folder"
     },
     "loadingSessions": "Loading conversations...",
     "noSessions": "No conversations in this project",
@@ -184,6 +188,7 @@
     "refresh": "Refresh file tree",
     "filter": "Filter files...",
     "clearFilter": "Clear file filter",
+    "selectSession": "Select a conversation to browse its workspace files",
     "empty": "This workspace is empty",
     "noMatches": "No matching files",
     "loadFailed": "Failed to load workspace files",

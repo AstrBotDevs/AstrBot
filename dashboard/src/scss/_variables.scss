@@ -17,6 +17,12 @@ $code-text-color: #111827 !default;
   --astrbot-font-cjk-sans: #{$cjk-sans-fallback};
   --astrbot-font-cjk-mono: #{$cjk-mono-fallback};
   --astrbot-code-color: #{$code-text-color};
+  --astrbot-radius-control: 12px;
+  --astrbot-radius-navigation: 16px;
+  --astrbot-radius-menu: 16px;
+  --astrbot-radius-card: 20px;
+  --astrbot-radius-dialog: 28px;
+  --astrbot-radius-pill: 9999px;
 }
 
 $body-font-family: 'Outfit', 'Noto Sans', $cjk-sans-fallback, sans-serif !default;
@@ -34,6 +40,8 @@ $rounded: map-deep-merge(
     'md': $border-radius-root * 1,
     'lg': $border-radius-root * 2,
     'xl': $border-radius-root * 6,
+    'control': var(--astrbot-radius-control),
+    'card': var(--astrbot-radius-card),
     'pill': 9999px,
     'circle': 50%,
     'shaped': $border-radius-root * 6 0

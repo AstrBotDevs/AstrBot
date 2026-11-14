@@ -1,6 +1,6 @@
 <script setup>
 import MarkdownIt from 'markdown-it'
-import { VueMonacoEditor } from '@guolao/vue-monaco-editor'
+import { LazyMonacoEditor as VueMonacoEditor } from '@/components/shared/LazyMonacoEditor';
 import { ref, computed } from 'vue'
 import ConfigItemRenderer from './ConfigItemRenderer.vue'
 import TemplateListEditor from './TemplateListEditor.vue'
@@ -49,6 +49,12 @@ const hintMarkdown = new MarkdownIt({
   linkify: true,
   breaks: true
 })
+
+hintMarkdown.renderer.rules.link_open = (tokens, index, options, env, renderer) => {
+  tokens[index].attrSet('target', '_blank')
+  tokens[index].attrSet('rel', 'noopener noreferrer')
+  return renderer.renderToken(tokens, index, options)
+}
 
 const renderHint = (value) => {
   const text = translateIfKey(value)
@@ -178,7 +184,7 @@ function getVisibleItemEntries(collapsed = false) {
   const sectionItems = props.metadata?.[props.metadataKey]?.items || {}
   return Object.entries(sectionItems).filter(([itemKey, itemMeta]) => {
     const isCollapsed = Boolean(itemMeta?.collapsed)
-    return isCollapsed === collapsed && shouldShowItem(itemMeta, itemKey)
+    return isCollapsed === collapsed && !itemMeta?.invisible && shouldShowItem(itemMeta, itemKey)
   })
 }
 

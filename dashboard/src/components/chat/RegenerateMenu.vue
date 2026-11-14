@@ -15,7 +15,9 @@
 
     <v-list-item class="styled-menu-item" rounded="md" @click="emit('retry')">
       <template #prepend>
-        <RotateCw :size="18" :stroke-width="2" />
+        <v-icon size="18">
+          <RotateCw :size="18" :stroke-width="2" />
+        </v-icon>
       </template>
       <v-list-item-title>{{ tm("actions.retry") }}</v-list-item-title>
     </v-list-item>

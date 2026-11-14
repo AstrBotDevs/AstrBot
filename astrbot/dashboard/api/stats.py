@@ -4,7 +4,11 @@ from fastapi import APIRouter, Depends, Query, Request
 
 from astrbot.dashboard.async_utils import run_maybe_async
 from astrbot.dashboard.responses import ApiError, ok
-from astrbot.dashboard.schemas import GhProxyTestRequest, StorageCleanupRequest
+from astrbot.dashboard.schemas import (
+    GhProxyTestRequest,
+    PypiIndexTestRequest,
+    StorageCleanupRequest,
+)
 from astrbot.dashboard.services.stat_service import StatService, StatServiceError
 
 from .auth import AuthContext, require_dashboard_user, require_scope
@@ -51,10 +55,11 @@ def _parse_int(value: object, default: int, name: str) -> int:
 @router.get("/stats")
 async def get_stats(
     offset_sec: int = Query(default=86400),
+    sections: str | None = Query(default=None),
     _auth: AuthContext = Depends(require_system_scope),
     service: StatService = Depends(get_service),
 ):
-    return await _run(service.get_stat(offset_sec))
+    return await _run(service.get_stat(offset_sec, sections=sections))
 
 
 @router.get("/stats/provider-tokens")
@@ -102,6 +107,33 @@ async def test_ghproxy_connection(
     service: StatService = Depends(get_service),
 ):
     return await _run(service.test_ghproxy_connection(payload.proxy_url))
+
+
+@router.post("/stats/pypi-index/test")
+async def test_pypi_index_connection(
+    payload: PypiIndexTestRequest,
+    _auth: AuthContext = Depends(require_system_scope),
+    service: StatService = Depends(get_service),
+):
+    return await _run(service.test_pypi_index_connection(payload.index_url))
+
+
+@router.post("/stats/pypi-index/speed")
+async def measure_pypi_index_speed(
+    payload: PypiIndexTestRequest,
+    _auth: AuthContext = Depends(require_system_scope),
+    service: StatService = Depends(get_service),
+):
+    return await _run(service.measure_pypi_index_speed(payload.index_url))
+
+
+@router.post("/stats/ghproxy/speed")
+async def measure_ghproxy_speed(
+    payload: GhProxyTestRequest,
+    _auth: AuthContext = Depends(require_system_scope),
+    service: StatService = Depends(get_service),
+):
+    return await _run(service.measure_ghproxy_speed(payload.proxy_url))
 
 
 @router.get("/changelogs")
@@ -156,10 +188,13 @@ async def restart_system(
 @legacy_router.get("/get")
 async def get_dashboard_stats(
     offset_sec: int | None = Query(default=86400),
+    sections: str | None = Query(default=None),
     _username: str = Depends(require_dashboard_user),
     service: StatService = Depends(get_service),
 ):
-    return await _run(service.get_stat(_parse_int(offset_sec, 86400, "offset_sec")))
+    return await _run(
+        service.get_stat(_parse_int(offset_sec, 86400, "offset_sec"), sections=sections)
+    )
 
 
 @legacy_router.get("/provider-tokens")

@@ -37,6 +37,7 @@
     "cancel": "Cancel",
     "submit": "Create",
     "nameRequired": "Please enter knowledge base name",
+    "embeddingModelRequired": "Please select an embedding model",
     "nameChangeHint": "If you change the knowledge base name later, update it in the configuration file as well.",
     "embeddingLockedHint": "The embedding model cannot be changed after selection. Create a new knowledge base to use a different model."
   },

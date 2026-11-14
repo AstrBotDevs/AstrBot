@@ -336,7 +336,7 @@ async function handleDeleteSession(projectId: string, session: ProjectSession) {
   width: 100%;
   min-height: 30px;
   border: 0;
-  border-radius: 8px;
+  border-radius: var(--astrbot-radius-navigation);
   background: transparent;
   color: inherit;
   display: flex;
@@ -350,10 +350,14 @@ async function handleDeleteSession(projectId: string, session: ProjectSession) {
 }
 
 .project-row:hover,
-.project-row.active,
-.project-session-row:hover,
-.project-session-row.active {
+.project-session-row:hover {
   background: var(--chat-session-active-bg);
+}
+
+/* Active session stays clearly highlighted (subtle in light mode otherwise). */
+.project-row.active,
+.project-session-row.active {
+  background: rgba(var(--v-theme-primary), 0.22);
 }
 
 .project-emoji {

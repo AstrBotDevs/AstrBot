@@ -1,6 +1,17 @@
 # Unreleased
 
-- Generate numbered original-path notices in the image preparation stage during main-agent construction, including quoted images. After request hooks, apply the same size and format policy only to newly introduced image references and refresh their notices. Skipped and captioned attachments retain explicit status without taking a visual index; animation labels identify frame montages.
-- Raise the model image input cap from 32 MiB to 64 MiB. Larger originals are skipped before reading image bytes, with a model notice retaining their paths and suggesting the file-reading tool or a smaller upload; accepted inputs still produce images strictly below 512 KiB.
-- Local Agent input images are always prepared as JPEG/PNG files strictly below 512 KiB. Compliant local images are reused without copying. Transparent previews retain PNG alpha; animations become 3×3 montages. Original attachment paths remain available to tools, and event-owned previews are deleted after use without a shared conversion cache.
-- Configuration mapping: **Enable image compression** (`provider_settings.image_compress_enabled`) is replaced by always-on preparation; **JPEG quality** (`provider_settings.image_compress_options.quality`) is replaced by automatic size control; **Maximum edge length** is renamed to **Input image maximum edge length** (`provider_settings.image_compress_options.max_size`). User attachments in CUA sessions follow the same limits.
+- QQ Official: a failed image upload no longer dumps the base64 payload into the log (a single multi-MB line could freeze log writing and the web dashboard), and image upload retries drop from 5 to 3 with a single summary warning instead of one per attempt.
+
+### Overview page / 总览页
+
+- 欢迎 → 总览：保留 `/welcome` 地址，按主题色重排今日统计、快速引导和资源入口，不使用波浪背景。机器人报错时显示问题数量，点击可查看错误详情。
+- Welcome → Overview: Preserve `/welcome`, add daily usage comparisons, and arrange setup and resource cards using the selected theme. Bot errors appear as an issue count with a details dialog.
+
+- 总览：在统计卡片与快速引导、相关资源之间加入紧凑系统状态栏，展示运行时长和服务器 CPU、内存及数据分区磁盘用量。
+- Overview: Place a compact system status bar between usage cards and setup/resources, showing process uptime and host CPU, memory, and data-filesystem disk usage.
+
+- 总览统计合并至 `/api/v1/stats`：新增 `daily_usage` 与 `system`，保留现有字段和统计口径；移除开发阶段的 `/api/v1/stats/overview` 接口。
+- Consolidate overview metrics into `/api/v1/stats` with additive `daily_usage` and `system` fields, preserving existing statistics. Remove the development-only `/api/v1/stats/overview` endpoint.
+
+- `/api/v1/stats` 支持 `sections` 按需计算和返回 `messages`、`daily_usage`、`process`、`system`、`instances`。总览与统计页分别请求所需分类，不传参数仍返回全部数据；旧版 `/api/stat/get` 同样支持。
+- Add on-demand `sections` to `/api/v1/stats` and legacy `/api/stat/get`: `messages`, `daily_usage`, `process`, `system`, and `instances`. Overview and Statistics request only their required categories; omitted sections retain the full response.

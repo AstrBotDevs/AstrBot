@@ -1,4 +1,9 @@
 {
+  "configProfileDrawer": {
+      "title": "Edit Config Profile",
+      "loadFailed": "Failed to load the config profile",
+      "close": "Close"
+    },
   "knowledgeBaseSelector": {
     "notSelected": "Not selected",
     "buttonText": "Select Knowledge Base...",
@@ -43,6 +48,7 @@
     "filterSource": "Filter by provider source",
     "notSelected": "Not selected",
     "defaultModel": "Default model",
+    "defaultModelSubtitle": "Follow the selected profile's default model",
     "model": "Model",
     "searchPlaceholder": "Search models",
     "buttonText": "Select Provider...",
@@ -68,6 +74,7 @@
     "noDescription": "No description",
     "noPersonas": "No personas available",
     "createPersona": "Create New Persona",
+    "editPersona": "Edit Persona",
     "cancelSelection": "Cancel",
     "confirmSelection": "Confirm Selection",
     "selectPersonaPool": "Select Persona Pool...",
