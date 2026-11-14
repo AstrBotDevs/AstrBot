@@ -719,6 +719,37 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                     candidate_id,
                 )
             self.provider = candidate
+            fallback_max_context_tokens = candidate.provider_config.get(
+                "max_context_tokens", 0
+            )
+            if (
+                idx > 0
+                and fallback_max_context_tokens > 0
+                and fallback_max_context_tokens
+                != self.request_context_manager_config.max_context_tokens
+            ):
+                # Context processing happens before provider selection. Rebuild the
+                # run-scoped manager so a smaller fallback window is honored before
+                # the first request to that provider.
+                self.request_context_manager_config = replace(
+                    self.request_context_manager_config,
+                    max_context_tokens=fallback_max_context_tokens,
+                )
+                self.request_context_manager = ContextManager(
+                    self.request_context_manager_config
+                )
+                token_usage = (
+                    self.req.conversation.token_usage if self.req.conversation else 0
+                )
+                processed_messages = await self._await_or_stop(
+                    self.request_context_manager.process(
+                        self.run_context.messages,
+                        trusted_token_usage=token_usage,
+                    )
+                )
+                if processed_messages is None:
+                    return
+                self.run_context.messages = processed_messages
             try:
                 retrying = AsyncRetrying(
                     retry=retry_if_exception_type(EmptyModelOutputError),
