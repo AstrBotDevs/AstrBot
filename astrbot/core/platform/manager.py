@@ -2,6 +2,10 @@ import asyncio
 import traceback
 from asyncio import Queue
 from dataclasses import dataclass
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from astrbot.core.astrbot_config_mgr import AstrBotConfigManager
 
 from astrbot.core import logger
 from astrbot.core.config.astrbot_config import AstrBotConfig
@@ -21,7 +25,12 @@ class PlatformTasks:
 
 
 class PlatformManager:
-    def __init__(self, config: AstrBotConfig, event_queue: Queue) -> None:
+    def __init__(
+        self,
+        config: AstrBotConfig,
+        event_queue: Queue,
+        astrbot_config_mgr: "AstrBotConfigManager | None" = None,
+    ) -> None:
         self.platform_insts: list[Platform] = []
         """Loaded Platform instances."""
 
@@ -37,6 +46,7 @@ class PlatformManager:
         unique_session in the project must use the default configuration.
         """
         self.event_queue = event_queue
+        self.astrbot_config_mgr = astrbot_config_mgr
 
     def _is_valid_platform_id(self, platform_id: str | None) -> bool:
         if not platform_id:
@@ -235,6 +245,7 @@ class PlatformManager:
             return
         cls_type = platform_cls_map[platform_config["type"]]
         inst: Platform = cls_type(platform_config, self.settings, self.event_queue)
+        inst.astrbot_config_mgr = self.astrbot_config_mgr
         self._inst_map[platform_config["id"]] = {
             "inst": inst,
             "client_id": inst.client_self_id,

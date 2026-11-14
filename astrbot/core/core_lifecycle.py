@@ -213,7 +213,11 @@ class AstrBotCoreLifecycle:
         )
 
         # 初始化平台管理器
-        self.platform_manager = PlatformManager(self.astrbot_config, self.event_queue)
+        self.platform_manager = PlatformManager(
+            self.astrbot_config,
+            self.event_queue,
+            astrbot_config_mgr=self.astrbot_config_mgr,
+        )
 
         # 初始化对话管理器
         self.conversation_manager = ConversationManager(
