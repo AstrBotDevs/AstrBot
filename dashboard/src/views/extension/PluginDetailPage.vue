@@ -9,7 +9,7 @@ import {
 } from "vue";
 import axios from "axios";
 import DOMPurify from "dompurify";
-import MarkdownIt from "markdown-it";
+import MarkdownIt from "markdown-it-ts";
 import defaultPluginIcon from "/favicon.svg";
 import { pluginApi } from "@/api/v1";
 import { useI18n } from "@/i18n/composables";

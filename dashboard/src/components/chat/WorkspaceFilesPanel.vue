@@ -322,16 +322,16 @@ watch(
     if (!content || !path) return;
 
     try {
-      const { getShikiHighlighter, renderShikiCode } = await import(
+      const { ensureShikiLanguages, renderShikiCode } = await import(
         "@/utils/shiki"
       );
-      const highlighter = await getShikiHighlighter();
-      if (cancelled) return;
-
       const name = path.split("/").pop()?.toLowerCase() || "";
       const language = name.startsWith("dockerfile.")
         ? "dockerfile"
         : name.split(".").pop();
+      const highlighter = await ensureShikiLanguages([language]);
+      if (cancelled) return;
+
       highlightedContent.value = renderShikiCode(
         highlighter,
         content,

@@ -1596,6 +1596,7 @@ onMounted(async () => {
               <div class="release-message-preview">
                 <MarkdownRender
                   :content="releaseMessage"
+                  :is-dark="isDarkTheme"
                   :typewriter="false"
                   class="markdown-content"
                 />
@@ -1792,6 +1793,7 @@ onMounted(async () => {
         >
           <MarkdownRender
             :content="selectedReleaseNotes"
+            :is-dark="isDarkTheme"
             :typewriter="false"
             class="markdown-content"
           />

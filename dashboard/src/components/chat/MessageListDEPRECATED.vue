@@ -180,7 +180,7 @@
 
 <script>
 import { useI18n, useModuleI18n } from '@/i18n/composables';
-import { enableKatex, enableMermaid, MarkdownCodeBlockNode, setCustomComponents } from 'markstream-vue'
+import { enableKatex, enableMermaid, CodeBlockNode, setCustomComponents } from 'markstream-vue'
 import 'markstream-vue/index.css'
 import 'katex/dist/katex.min.css'
 import axios from 'axios';
@@ -194,10 +194,10 @@ import ActionRef from './message_list_comps/ActionRef.vue';
 enableKatex();
 enableMermaid();
 
-// 注册 message-list 专用组件：引用节点 + Shiki 代码块渲染
+// Register the reference and code block renderers for the message list.
 setCustomComponents('message-list', {
     ref: RefNode,
-    code_block: MarkdownCodeBlockNode
+    code_block: CodeBlockNode
 });
 
 export default {

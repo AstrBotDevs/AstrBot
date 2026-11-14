@@ -88,14 +88,6 @@ export default defineConfig(({ command }) => ({
   resolve: {
     alias: [
       {
-        find: /^shiki$/,
-        replacement: fileURLToPath(new URL('./src/utils/shikiLimitedBundle.js', import.meta.url))
-      },
-      {
-        find: /^stream-monaco$/,
-        replacement: fileURLToPath(new URL('./src/utils/streamMonacoDisabled.js', import.meta.url))
-      },
-      {
         find: '@',
         replacement: fileURLToPath(new URL('./src', import.meta.url))
       }
