@@ -15,6 +15,7 @@ class WebChatQueueMgr:
         self._request_conversation: dict[str, str] = {}
         self._queue_close_events: dict[str, asyncio.Event] = {}
         self._listener_tasks: dict[str, asyncio.Task] = {}
+        self._listener_clear_count = 0
         self._listener_callback: Callable[[tuple], Awaitable[None]] | None = None
         self.queue_maxsize = queue_maxsize
         self.back_queue_maxsize = back_queue_maxsize
@@ -143,29 +144,45 @@ class WebChatQueueMgr:
         listener_tasks = list(self._listener_tasks.values())
         for task in listener_tasks:
             task.cancel()
-        if listener_tasks:
-            await asyncio.gather(*listener_tasks, return_exceptions=True)
-        self._listener_tasks.clear()
+        self._listener_clear_count += 1
+        try:
+            if listener_tasks:
+                await asyncio.gather(*listener_tasks, return_exceptions=True)
+        finally:
+            self._listener_clear_count -= 1
+            if self._listener_clear_count == 0:
+                self._listener_tasks.clear()
+                # Defer synchronous registrations until old consumers finish.
+                for conversation_id in list(self.queues):
+                    self._start_listener_if_needed(conversation_id)
 
     def _start_listener_if_needed(self, conversation_id: str):
-        if self._listener_callback is None:
+        if self._listener_callback is None or self._listener_clear_count:
             return
         if conversation_id in self._listener_tasks:
             task = self._listener_tasks[conversation_id]
             if not task.done():
                 return
         queue = self.queues.get(conversation_id)
-        close_event = self._queue_close_events.get(conversation_id)
-        if queue is None or close_event is None:
+        if queue is None:
             return
+        close_event = self._queue_close_events.get(conversation_id)
+        if close_event is None:
+            # clear_listener preserves conversation queues but removes their
+            # close signals. A new listener needs a fresh signal on restart.
+            close_event = asyncio.Event()
+            self._queue_close_events[conversation_id] = close_event
         task = asyncio.create_task(
             self._listen_to_queue(conversation_id, queue, close_event),
             name=f"webchat_listener_{conversation_id}",
         )
         self._listener_tasks[conversation_id] = task
-        task.add_done_callback(
-            lambda _: self._listener_tasks.pop(conversation_id, None)
-        )
+
+        def remove_finished_listener(finished: asyncio.Task) -> None:
+            if self._listener_tasks.get(conversation_id) is finished:
+                self._listener_tasks.pop(conversation_id, None)
+
+        task.add_done_callback(remove_finished_listener)
         logger.debug(f"Started listener for conversation: {conversation_id}")
 
     async def _listen_to_queue(
