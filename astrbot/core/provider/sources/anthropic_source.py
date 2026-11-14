@@ -562,10 +562,11 @@ class ProviderAnthropic(Provider):
         self._apply_thinking_config(payloads)
         self._sanitize_assistant_messages(payloads)
 
+        client = self.client
         try:
             completion = await retry_provider_request(
                 "Anthropic",
-                lambda: self.client.messages.create(
+                lambda: client.messages.create(
                     **payloads,
                     stream=False,
                     extra_body=extra_body,
@@ -688,9 +689,10 @@ class ProviderAnthropic(Provider):
         self._apply_thinking_config(payloads)
         self._sanitize_assistant_messages(payloads)
 
+        client = self.client
         async with retry_provider_request_context(
             "Anthropic",
-            lambda: self.client.messages.stream(
+            lambda: client.messages.stream(
                 **payloads,
                 extra_body=extra_body,
                 extra_headers=build_conversation_headers(conversation_id),
@@ -891,22 +893,29 @@ class ProviderAnthropic(Provider):
                 else system_prompt
             )
 
-        llm_response = None
-        try:
-            query_kwargs = {}
-            if conversation_id:
-                query_kwargs["conversation_id"] = conversation_id
-            llm_response = await self._query(
-                payloads,
-                func_tool,
-                request_max_retries=request_max_retries,
-                **request_recorder_kwargs(self._query, request_event_recorder),
-                **query_kwargs,
-            )
-        except Exception as e:
-            raise e
-
-        return llm_response
+        query_kwargs = {}
+        if conversation_id:
+            query_kwargs["conversation_id"] = conversation_id
+        remaining_keys = iter(
+            [key for key in self.api_keys if key != self.chosen_api_key]
+        )
+        while True:
+            try:
+                return await self._query(
+                    payloads,
+                    func_tool,
+                    request_max_retries=request_max_retries,
+                    **request_recorder_kwargs(self._query, request_event_recorder),
+                    **query_kwargs,
+                )
+            except anthropic.APIStatusError as e:
+                next_key = next(remaining_keys, None)
+                if e.status_code not in (401, 403, 429) or next_key is None:
+                    raise
+                self.set_key(next_key)
+                logger.warning(
+                    "Anthropic request failed; retrying with another API key."
+                )
 
     async def text_chat_stream(
         self,
@@ -973,14 +982,37 @@ class ProviderAnthropic(Provider):
         query_kwargs = {}
         if conversation_id:
             query_kwargs["conversation_id"] = conversation_id
-        async for llm_response in self._query_stream(
-            payloads,
-            func_tool,
-            request_max_retries=request_max_retries,
-            **request_recorder_kwargs(self._query_stream, request_event_recorder),
-            **query_kwargs,
-        ):
-            yield llm_response
+        remaining_keys = iter(
+            [key for key in self.api_keys if key != self.chosen_api_key]
+        )
+        has_output = False
+        while True:
+            try:
+                async for llm_response in self._query_stream(
+                    payloads,
+                    func_tool,
+                    request_max_retries=request_max_retries,
+                    **request_recorder_kwargs(
+                        self._query_stream, request_event_recorder
+                    ),
+                    **query_kwargs,
+                ):
+                    # Never replay a stream after yielding output to the caller.
+                    has_output = True
+                    yield llm_response
+                return
+            except anthropic.APIStatusError as e:
+                next_key = next(remaining_keys, None)
+                if (
+                    has_output
+                    or e.status_code not in (401, 403, 429)
+                    or next_key is None
+                ):
+                    raise
+                self.set_key(next_key)
+                logger.warning(
+                    "Anthropic request failed; retrying with another API key."
+                )
 
     def _detect_image_mime_type(self, data: bytes) -> str:
         """根据图片二进制数据的 magic bytes 检测 MIME 类型"""
@@ -1101,6 +1133,22 @@ class ProviderAnthropic(Provider):
         return models_str
 
     def set_key(self, key: str) -> None:
+        """Update the SDK key and authentication headers for subsequent requests.
+
+        Args:
+            key: API key to use for subsequent requests.
+        """
+        headers = {"X-Api-Key": key}
+        for name, value in self.client.default_headers.items():
+            if (
+                name.lower() == "authorization"
+                and value == f"Bearer {self.chosen_api_key}"
+            ):
+                headers[name] = f"Bearer {key}"
+        self.client = self.client.with_options(
+            api_key=key,
+            default_headers=headers,
+        )
         self.chosen_api_key = key
 
     async def terminate(self):
