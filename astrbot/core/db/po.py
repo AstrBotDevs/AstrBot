@@ -7,6 +7,8 @@ from deprecated import deprecated
 from sqlalchemy import BigInteger, CheckConstraint, Column, DateTime, Index, desc, text
 from sqlmodel import JSON, Field, SQLModel, Text, UniqueConstraint
 
+from astrbot.core.utils.event_id import new_event_id
+
 
 class TimestampMixin(SQLModel):
     # Preserve legacy storage instead of SQLModel's inferred UTCDateTime type.
@@ -174,7 +176,7 @@ class ConversationEvent(SQLModel, table=True):
 
     conversation_ref: int = Field(foreign_key="conversations_v3.id", primary_key=True)
     seq: int = Field(primary_key=True, sa_type=BigInteger)
-    event_id: str = Field(default_factory=lambda: str(uuid.uuid4()), unique=True)
+    event_id: str = Field(default_factory=new_event_id, unique=True)
     type: str
     version: int = Field(default=1)
     payload: dict | None = Field(

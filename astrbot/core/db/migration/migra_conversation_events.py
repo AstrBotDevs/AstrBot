@@ -1,7 +1,6 @@
 """One-time conversion of legacy conversation histories and their display links."""
 
 import json
-import uuid
 from contextlib import nullcontext
 from copy import deepcopy
 from datetime import datetime, timezone
@@ -23,6 +22,7 @@ from astrbot.core.db.po import (
     PlatformMessageHistory,
     WebChatThread,
 )
+from astrbot.core.utils.event_id import new_event_id
 
 
 def linearize_legacy_events(
@@ -112,7 +112,7 @@ def linearize_legacy_events(
                                 {"id": ancestor["event_id"], "message": effective[0]}
                             )
                 sequence += 1
-                baseline = last = str(uuid.uuid4())
+                baseline = last = new_event_id()
                 result.append(
                     {
                         "conversation_ref": conv["id"],
@@ -358,7 +358,7 @@ async def migrate_conversations(store: ConversationStore, *, session=None) -> No
                 groups.append((pending, None))
             entries = []
             for messages, checkpoint in groups:
-                turn_id = str(uuid.uuid4())
+                turn_id = new_event_id()
                 head_seq += 1
                 session.add(
                     ConversationEvent(

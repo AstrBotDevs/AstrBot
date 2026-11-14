@@ -29,6 +29,7 @@ from astrbot.core.platform.sources.webchat.request_flags import (
 from astrbot.core.platform.sources.webchat.webchat_queue_mgr import webchat_queue_mgr
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path, get_astrbot_temp_path
 from astrbot.core.utils.datetime_utils import generate_timestamp_id, to_utc_isoformat
+from astrbot.core.utils.event_id import new_event_id
 from astrbot.dashboard.services.chat_service import (
     BotMessageAccumulator,
     build_bot_history_content,
@@ -562,7 +563,7 @@ class LiveChatService:
         await self.ensure_chat_subscription(session, session_id, send_json)
 
         back_queue = webchat_queue_mgr.get_or_create_back_queue(message_id, session_id)
-        turn_id = str(uuid.uuid4())
+        turn_id = new_event_id()
 
         pending_bot_message_flusher = None
         try:

@@ -23,6 +23,7 @@ from astrbot.core.db.po import (
 )
 from astrbot.core.db.webchat_projection import project_webchat_event_links
 from astrbot.core.sentinels import NOT_GIVEN
+from astrbot.core.utils.event_id import new_event_id
 
 CONTEXT_TYPES = {"message.appended", "context.rebased"}
 EVENT_TYPES = CONTEXT_TYPES | {
@@ -197,7 +198,7 @@ def reconcile_history(
                     continue
             elif not new_temporary:
                 continue
-            identity = str(uuid.uuid4())
+            identity = new_event_id()
             drafts.append(
                 {
                     "event_id": identity,
@@ -211,7 +212,7 @@ def reconcile_history(
             if message is not None:
                 entries.append({"id": identity, "message": deepcopy(message)})
     else:
-        identity = str(uuid.uuid4())
+        identity = new_event_id()
         retained_ids = defaultdict(deque)
         for entry in entries:
             retained_ids[json.dumps(entry["message"], sort_keys=True)].append(
@@ -225,7 +226,7 @@ def reconcile_history(
                 if message is not None
                 else None
             )
-            message_id = matches.popleft() if matches else str(uuid.uuid4())
+            message_id = matches.popleft() if matches else new_event_id()
             raw_entries.append({"id": message_id, "message": deepcopy(original)})
             if message is not None:
                 entries.append({"id": message_id, "message": deepcopy(message)})
@@ -404,7 +405,7 @@ class ConversationStore:
                         "messages": inherited.entries
                         if inherited is not None
                         else [
-                            {"id": str(uuid.uuid4()), "message": m}
+                            {"id": new_event_id(), "message": m}
                             for m in deepcopy(content or [])
                         ],
                         **(
@@ -1199,7 +1200,7 @@ class ConversationStore:
                 event = ConversationEvent(
                     conversation_ref=conv.id,
                     seq=head_seq,
-                    event_id=draft.get("event_id") or str(uuid.uuid4()),
+                    event_id=draft.get("event_id") or new_event_id(),
                     type=kind,
                     payload=payload,
                 )
@@ -1514,7 +1515,7 @@ class ConversationStore:
                 sender_id=source.sender_id,
                 sender_name=source.sender_name,
                 content=deepcopy(content if content is not None else source.content),
-                turn_id=str(uuid.uuid4()),
+                turn_id=new_event_id(),
             )
             session.add_all([conv, replacement])
             await session.commit()

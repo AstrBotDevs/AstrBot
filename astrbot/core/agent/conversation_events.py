@@ -3,7 +3,6 @@
 import asyncio
 import hashlib
 import json
-import uuid
 from collections import Counter
 from copy import deepcopy
 
@@ -20,6 +19,7 @@ from astrbot.core.db.conversation import (
     reconcile_history,
 )
 from astrbot.core.sentinels import NOT_GIVEN
+from astrbot.core.utils.event_id import new_event_id
 
 
 class ConversationPersistenceError(RuntimeError):
@@ -153,7 +153,7 @@ class ConversationEventWriter:
         draft = {
             "type": event_type,
             "payload": payload,
-            "event_id": event_id or str(uuid.uuid4()),
+            "event_id": event_id or new_event_id(),
         }
         async with self._lock:
             context_change = event_type in CONTEXT_TYPES
@@ -474,7 +474,7 @@ class ConversationEventWriter:
                 ):
                     self._pending.append(
                         {
-                            "event_id": str(uuid.uuid4()),
+                            "event_id": new_event_id(),
                             "type": "conversation.updated",
                             "payload": payload,
                         }

@@ -1,10 +1,11 @@
 """Storage-independent runner events and acknowledged delivery."""
 
 import asyncio
-import uuid
 from collections.abc import AsyncGenerator, Awaitable, Callable
 from copy import deepcopy
 from typing import Generic, TypeVar
+
+from astrbot.core.utils.event_id import new_event_id
 
 from .message import Message
 from .response import AgentResponse
@@ -182,14 +183,14 @@ class RequestEventRecorder:
         """
         self.emit = emit
         self.payload = payload
-        self.invocation_id = invocation_id or str(uuid.uuid4())
+        self.invocation_id = invocation_id or new_event_id()
         self.attempt = 0
         self.current_id = None
         self.network_attempt_seen = False
 
     async def begin(self):
         """Start an attempt, retaining its ID until settlement."""
-        self.current_id = str(uuid.uuid4())
+        self.current_id = new_event_id()
         self.attempt += 1
         payload = {
             **self.payload,
@@ -223,5 +224,5 @@ class RequestEventRecorder:
             }
         if error_code:
             payload["error"] = {"code": error_code}
-        await self.emit(AgentResponse("request.finished", payload, str(uuid.uuid4())))
+        await self.emit(AgentResponse("request.finished", payload, new_event_id()))
         self.current_id = None

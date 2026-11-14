@@ -2,6 +2,8 @@
 
 import asyncio
 import json
+from base64 import urlsafe_b64decode
+from uuid import UUID
 
 import pytest
 from sqlalchemy import text
@@ -24,21 +26,22 @@ async def test_concurrent_writers_and_idempotent_delivery(database):
     store = database.conversation_store
     snapshot = await store.read(conv.conversation_id)
     writers = [ConversationEventWriter(store, snapshot) for _ in range(2)]
+    event_ids = ["b2b69141-452b-4a14-b9cb-87b279a2cd98", "plugin-delivery-1"]
     results = await asyncio.gather(
         *(
-            writer.append("plugin.test.result", {"value": i}, event_id=f"p{i}")
+            writer.append("plugin.test.result", {"value": i}, event_id=event_ids[i])
             for i, writer in enumerate(writers)
         )
     )
-    assert {event.event_id for event in results} == {"p0", "p1"}
+    assert {event.event_id for event in results} == set(event_ids)
     assert len({event.seq for event in results}) == 2
     repeated = await writers[0].append(
-        "plugin.test.result", {"value": 0}, event_id="p0"
+        "plugin.test.result", {"value": 0}, event_id=event_ids[0]
     )
-    assert repeated.event_id == "p0"
+    assert repeated.event_id == event_ids[0]
     with pytest.raises(ConversationConflictError):
         await writers[0].append(
-            "plugin.test.result", {"value": "different"}, event_id="p0"
+            "plugin.test.result", {"value": "different"}, event_id=event_ids[0]
         )
     assert len(await store.events(conv.conversation_id)) == 3
 
@@ -248,6 +251,12 @@ async def test_provider_retry_has_distinct_attempts(database):
     )
     await recorder.finish("completed", usage=TokenUsage(input_other=10, output=3))
     events = await database.conversation_store.events(conv.conversation_id)
+    for event in events:
+        assert len(event.event_id) == 22
+        assert set(event.event_id) <= set(
+            "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_"
+        )
+        assert UUID(bytes=urlsafe_b64decode(event.event_id + "==")).version == 4
     starts = [e for e in events if e.type == "request.started"]
     finishes = [e for e in events if e.type == "request.finished"]
     assert len(starts) == len(finishes) == 2

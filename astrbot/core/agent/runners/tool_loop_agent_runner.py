@@ -53,6 +53,7 @@ from astrbot.core.provider.modalities import (
 from astrbot.core.provider.provider import Provider
 from astrbot.core.provider.request_observer import request_recorder_kwargs
 from astrbot.core.utils.async_generator import iterate_in_task
+from astrbot.core.utils.event_id import new_event_id
 
 from ..context.compressor import ContextCompressor
 from ..context.config import ContextConfig
@@ -580,7 +581,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         Yields:
             Provider replies for normal model processing and hooks.
         """
-        request_id = str(uuid.uuid4())
+        request_id = new_event_id()
         recorder = None
         payload["contexts"] = self._sanitize_contexts_for_provider(contexts)
         if self._events.active and self._conversation_event_sink is not None:
@@ -1910,7 +1911,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         """
         from ..output import ExtensionOutput, ImageOutput, InlineMedia
 
-        execution_id = str(uuid.uuid4())
+        execution_id = new_event_id()
         content: list[OutputComponent] = []
         status = TurnStatus.COMPLETED
         error: RuntimeErrorInfo | None = None

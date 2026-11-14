@@ -29,6 +29,7 @@ from astrbot.core.platform.sources.webchat.webchat_queue_mgr import webchat_queu
 from astrbot.core.utils.active_event_registry import active_event_registry
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 from astrbot.core.utils.datetime_utils import generate_timestamp_id, to_utc_isoformat
+from astrbot.core.utils.event_id import new_event_id
 from astrbot.core.utils.media_utils import (
     MEDIA_MIME_EXTENSIONS,
     detect_image_mime_type_async,
@@ -1163,7 +1164,7 @@ class ChatService:
                     )
 
         message_id = str(uuid.uuid4())
-        turn_id = post_data.get("_turn_id") or str(uuid.uuid4())
+        turn_id = post_data.get("_turn_id") or new_event_id()
         skip_user_history = bool(post_data.get("_skip_user_history"))
         saved_user_record = None
 
