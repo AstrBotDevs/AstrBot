@@ -42,6 +42,7 @@ class AiocqhttpAdapter(Platform):
         super().__init__(platform_config, event_queue)
 
         self.settings = platform_settings
+        self._recent_messages: dict[tuple[str, ...], float] = {}
         self.host = platform_config["ws_reverse_host"]
         self.port = platform_config["ws_reverse_port"]
 
@@ -448,6 +449,7 @@ class AiocqhttpAdapter(Platform):
         if hasattr(self, "shutdown_event"):
             self.shutdown_event.set()
         await self._close_reverse_ws_connections()
+        self._recent_messages.clear()
 
     async def _close_reverse_ws_connections(self) -> None:
         api_clients = getattr(self.bot, "_wsr_api_clients", None)
@@ -507,7 +509,42 @@ class AiocqhttpAdapter(Platform):
         )
 
     async def handle_msg(self, message: AstrBotMessage) -> None:
+        """Queue a message unless its OneBot identity was recently delivered.
+
+        Args:
+            message: Converted message retaining its raw OneBot event.
+        """
+        raw = message.raw_message
+        identity = None
+        if isinstance(raw, dict) and raw.get("post_type") == "message":
+            sender = raw.get("sender")
+            fields = (
+                raw.get("self_id"),
+                raw.get("message_type"),
+                raw.get("group_id")
+                if raw.get("message_type") == "group"
+                else raw.get("user_id"),
+                sender.get("user_id") if isinstance(sender, dict) else None,
+                raw.get("message_id"),
+            )
+            if all(isinstance(value, (str, int)) and value != "" for value in fields):
+                identity = tuple(str(value) for value in fields)
+                now = time.monotonic()
+                while self._recent_messages:
+                    oldest = next(iter(self._recent_messages))
+                    if now - self._recent_messages[oldest] < 60:
+                        break
+                    del self._recent_messages[oldest]
+                if identity in self._recent_messages:
+                    return
+
+        # Keep the check, enqueue and recording synchronous so concurrent callbacks
+        # cannot enqueue the same identity, and failed enqueues remain retryable.
         self.commit_event(self.create_event(message))
+        if identity is not None:
+            self._recent_messages[identity] = now
+            if len(self._recent_messages) > 1024:
+                del self._recent_messages[next(iter(self._recent_messages))]
 
     def get_client(self) -> CQHttp:
         return self.bot
