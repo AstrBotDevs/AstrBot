@@ -30,7 +30,7 @@ AstrBot 管理面板具有管理插件、查看日志、可视化配置、查看
 
 使用文档中的“插件”分组包含插件、MCP 和技能 Skills；“AstrBot 内置 AI”分组包含 Agent 沙盒环境、子代理管理、主动型能力、网页搜索、知识库和上下文压缩。各篇文档的地址保持不变。
 
-“使用”下的导航顺序为 WebUI、AstrBot CLI、内置指令、插件、AstrBot 内置 AI、自定义规则、Agent 执行方式、统一 Webhook 模式。
+“使用”下的导航顺序为 WebUI、备份与恢复、AstrBot CLI、内置指令、插件、AstrBot 内置 AI、自定义规则、Agent 执行方式、统一 Webhook 模式。
 
 | 原文档入口 | 当前文档入口 |
 | --- | --- |
