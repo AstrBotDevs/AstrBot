@@ -148,6 +148,48 @@ async def test_gemini_prepare_conversation_resolves_local_history_image(tmp_path
     assert image_part.inline_data.data == image_bytes
 
 
+@pytest.mark.asyncio
+async def test_gemini_prepare_conversation_resolves_url_history_audio(monkeypatch):
+    audio_url = "https://example.com/history.mp3"
+
+    async def fake_resolve_media_ref(media_ref, *, media_type, strict):
+        assert media_ref == audio_url
+        assert media_type == "audio"
+        assert strict is True
+        return SimpleNamespace(base64_data="YXVkaW8=", mime_type="audio/mpeg")
+
+    monkeypatch.setattr(
+        gemini_source,
+        "resolve_media_ref_to_base64_data",
+        fake_resolve_media_ref,
+    )
+    provider = ProviderGoogleGenAI.__new__(ProviderGoogleGenAI)
+
+    contents = await provider._prepare_conversation(
+        {
+            "messages": [
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": "[Audio]"},
+                        {"type": "audio_url", "audio_url": {"url": audio_url}},
+                    ],
+                },
+                {"role": "assistant", "content": "Received."},
+                {"role": "user", "content": "Reply in text."},
+            ]
+        }
+    )
+
+    assert contents[0].parts is not None
+    audio_part = contents[0].parts[1]
+    assert audio_part.inline_data is not None
+    assert audio_part.inline_data.mime_type == "audio/mpeg"
+    assert audio_part.inline_data.data == b"audio"
+    assert contents[-1].parts is not None
+    assert contents[-1].parts[-1].text == "Reply in text."
+
+
 def test_gemini_empty_output_raises_empty_model_output_error():
     llm_response = LLMResponse(role="assistant")
 
