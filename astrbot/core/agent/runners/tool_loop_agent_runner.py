@@ -30,6 +30,7 @@ from astrbot.core.agent.tool import FunctionTool, ToolSet
 from astrbot.core.agent.tool_image_cache import tool_image_cache
 from astrbot.core.agent_output_content import content_from_chain
 from astrbot.core.exceptions import EmptyModelOutputError
+from astrbot.core.message.components import Plain
 from astrbot.core.message.message_event_result import (
     MessageChain,
 )
@@ -1180,10 +1181,24 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                 ),
             )
         if llm_resp.result_chain:
-            yield _NativeFragment(
-                kind="llm_result", content=content_from_chain(llm_resp.result_chain)
+            # Providers that wrap the reply in result_chain (e.g. OpenAI's
+            # non-streaming path) need the same whitespace-only preamble skip
+            # as the completion_text branch below; chains carrying media or
+            # any non-Plain component stay untouched.
+            blank_text_chain = (
+                all(isinstance(comp, Plain) for comp in llm_resp.result_chain.chain)
+                and not llm_resp.result_chain.get_plain_text().strip()
             )
-        elif llm_resp.completion_text:
+            if not (llm_resp.tools_call_name and blank_text_chain):
+                yield _NativeFragment(
+                    kind="llm_result", content=content_from_chain(llm_resp.result_chain)
+                )
+        elif llm_resp.completion_text and (
+            not llm_resp.tools_call_name or llm_resp.completion_text.strip()
+        ):
+            # A whitespace-only preamble carries no information. When tool
+            # calls follow, skip it so no empty message reaches the respond
+            # stage; without tool calls keep the model's reply untouched.
             yield _NativeFragment(
                 kind="llm_result",
                 content=content_from_chain(
