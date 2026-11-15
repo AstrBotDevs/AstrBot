@@ -102,8 +102,6 @@ if receipt is not None:
 
 `follow_up()` 在原 runtime 和 conversation 中排队开始下一轮。`steer()` 向活跃 turn 追加输入：被拒绝时返回 `None`，接收时返回 `InputReceipt`，等待回执得到的布尔值表示输入是否已消费并保存。被拒绝的输入不会自动排队。目前 steer 中的图片、文件以文本引用传递。
 
-内置 runtime 在一批工具结果之后，将同一批 steer 输入合为一条独立的 `user` 消息，`content` 使用按到达顺序排列的文本片段列表，相邻输入之间插入一个换行并保留各条输入自身的空白，不改写工具结果。如果模型直接返回普通回复，已接收的 steer 会追加在该回复之后，像后续输入一样由当前执行继续处理，不另行排队创建 turn。停止、取消、错误和步数上限仍会结束执行，剩余未消费输入的回执返回 `False`。相同 UMO 和会话内允许不同发送者 steer，但权限、输出策略和插件范围仍须与当前执行一致。
-
 `run.session.state` 为 `idle`、`queued`、`running` 或 `closed`。快照包含 `ref`、`pending_turn_count` 和 `active_turn_id`，重新读取属性即可刷新。
 
 Core 根据 `source_event` 或当前活跃的同 UMO 事件解析权限。没有来源事件的后台调用使用 member 权限，来源事件与目标 UMO 不一致会报错。
