@@ -219,7 +219,7 @@ export default defineConfig({
                   {
                     text: "AI",
                     link: "/guides/ai",
-                    collapsed: false,
+                    collapsed: true,
                     items: [
                       { text: "模型", link: "/guides/ai/models" },
                       { text: "Agent", link: "/guides/ai/agent" },
@@ -511,7 +511,7 @@ export default defineConfig({
                   {
                     text: "AI",
                     link: "/guides/ai",
-                    collapsed: false,
+                    collapsed: true,
                     items: [
                       { text: "Models", link: "/guides/ai/models" },
                       { text: "Agents", link: "/guides/ai/agent" },
