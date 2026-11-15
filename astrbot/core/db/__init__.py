@@ -5,6 +5,7 @@ from contextlib import asynccontextmanager
 from dataclasses import dataclass
 
 from deprecated import deprecated
+from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from astrbot.core.db.po import (
@@ -13,7 +14,7 @@ from astrbot.core.db.po import (
     ChatUIProject,
     CommandConfig,
     CommandConflict,
-    ConversationV2,
+    ConversationRead,
     CronJob,
     Persona,
     PersonaFolder,
@@ -51,6 +52,9 @@ class BaseDatabase(abc.ABC):
             future=True,
             connect_args=connect_args,
         )
+        from astrbot.core.db.conversation import ConversationStore
+
+        self.conversation_store = ConversationStore(self)
         self.AsyncSessionLocal = async_sessionmaker(
             self.engine,
             class_=AsyncSession,
@@ -61,12 +65,24 @@ class BaseDatabase(abc.ABC):
         """初始化数据库连接"""
 
     @asynccontextmanager
-    async def get_db(self) -> T.AsyncGenerator[AsyncSession, None]:
-        """Get a database session."""
+    async def get_db(
+        self, *, consistent_read: bool = False
+    ) -> T.AsyncGenerator[AsyncSession, None]:
+        """Get a session, optionally preserving a multi-query read view.
+
+        Args:
+            consistent_read: Keep metadata, baseline and events in one database
+                snapshot while concurrent writers may reclaim old payloads.
+
+        Yields:
+            A session whose uncommitted transaction is rolled back on exit.
+        """
         if not self.inited:
             await self.initialize()
             self.inited = True
         async with self.AsyncSessionLocal() as session:
+            if consistent_read:
+                await session.execute(text("BEGIN"))
             yield session
 
     @deprecated(version="4.0.0", reason="Use get_platform_stats instead")
@@ -130,7 +146,7 @@ class BaseDatabase(abc.ABC):
         self,
         user_id: str | None = None,
         platform_id: str | None = None,
-    ) -> list[ConversationV2]:
+    ) -> list[ConversationRead]:
         """Get all conversations for a specific user and platform_id(optional).
 
         content is not included in the result.
@@ -138,7 +154,7 @@ class BaseDatabase(abc.ABC):
         ...
 
     @abc.abstractmethod
-    async def get_conversation_by_id(self, cid: str) -> ConversationV2:
+    async def get_conversation_by_id(self, cid: str) -> ConversationRead | None:
         """Get a specific conversation by its ID."""
         ...
 
@@ -147,7 +163,7 @@ class BaseDatabase(abc.ABC):
         self,
         page: int = 1,
         page_size: int = 20,
-    ) -> list[ConversationV2]:
+    ) -> list[ConversationRead]:
         """Get all conversations with pagination."""
         ...
 
@@ -160,7 +176,7 @@ class BaseDatabase(abc.ABC):
         search_query: str = "",
         include_history: bool = True,
         **kwargs,
-    ) -> tuple[list[ConversationV2], int]:
+    ) -> tuple[list[ConversationRead], int]:
         """Filter conversations by platform IDs and search text.
 
         Args:
@@ -193,7 +209,7 @@ class BaseDatabase(abc.ABC):
         cid: str | None = None,
         created_at: datetime.datetime | None = None,
         updated_at: datetime.datetime | None = None,
-    ) -> ConversationV2:
+    ) -> ConversationRead:
         """Create a new conversation."""
         ...
 
@@ -227,7 +243,7 @@ class BaseDatabase(abc.ABC):
         content: dict,
         sender_id: str | None = None,
         sender_name: str | None = None,
-        llm_checkpoint_id: str | None = None,
+        turn_id: str | None = None,
         max_messages: int | None = None,
     ) -> PlatformMessageHistory:
         """Insert a new platform message history record."""
@@ -238,7 +254,7 @@ class BaseDatabase(abc.ABC):
         self,
         message_id: int,
         content: dict | None = None,
-        llm_checkpoint_id: str | None = None,
+        turn_id: str | None = None,
     ) -> None:
         """Update a platform message history record."""
         ...
@@ -300,7 +316,7 @@ class BaseDatabase(abc.ABC):
         creator: str,
         parent_session_id: str,
         parent_message_id: int,
-        base_checkpoint_id: str,
+        base_event_id: str,
         selected_text: str,
     ) -> WebChatThread:
         """Create a WebChat side thread."""

@@ -49,6 +49,7 @@ The file content is a `Schema` that represents the configuration. The Schema is 
 - `obvious_hint`: Optional. Whether the configuration hint should be prominently displayed, like `token` in the image above.
 - `default`: Optional. The default value of the configuration. If the user hasn't configured it, the default value will be used. Default values: int is 0, float is 0.0, bool is False, string is "", object is {}, list is [].
 - `items`: Optional. If the configuration type is `object`, the `items` field needs to be added. The content of `items` is the sub-Schema of this configuration item. Theoretically, it can be nested infinitely, but excessive nesting is not recommended.
+- `collapsed`: Optional. Applies to `object` fields only. Every `object` group can be expanded or collapsed from its title in the plugin config page; `collapsed: true` makes the group start collapsed (only its title and hint are visible), while omitting it keeps the group expanded. See [Collapsible configuration groups](#collapsible-configuration-groups).
 - `invisible`: Optional. Whether the configuration is hidden. Default is `false`. If set to `true`, it will not be displayed in the management panel.
 - `secret`: Optional. Applies to `string` and string `list` fields. When set to `true`, the dashboard displays a password input and lets the user temporarily reveal its value. This only masks the value in the UI; it does not encrypt the value in the configuration file.
 - `options`: Optional. A list, such as `"options": ["chat", "agent", "workflow"]`. Provides dropdown list options.
@@ -82,6 +83,37 @@ Sensitive strings such as API keys, access tokens, and passwords should set `"se
 ```
 
 `secret` does not change the value or data type received by the plugin. It only masks the value in the dashboard; the original value is still stored in the plugin configuration file. Plugins should avoid logging, echoing, or otherwise exposing these values.
+
+### Collapsible configuration groups
+
+Every `object` group in the plugin config page can be collapsed from its title: click the title to expand or collapse it (focusing it and pressing Enter / Space works too). The fold state is remembered per group for the current page only: switching configs, reopening the dialog, or navigating inside the page keeps it, while a reload or a freshly opened page starts again from the schema default. Nested groups fold independently.
+
+Groups start **expanded** by default. For a group with many children, or one that belongs to "usually no need to touch" advanced settings, add `"collapsed": true` so it starts collapsed and only its title and hint stay visible:
+
+```json
+{
+  "advanced": {
+    "description": "Advanced settings",
+    "hint": "The defaults are usually fine.",
+    "type": "object",
+    "collapsed": true,
+    "items": {
+      "concurrency": {
+        "description": "Concurrency",
+        "type": "int",
+        "default": 4
+      },
+      "timeout": {
+        "description": "Timeout (seconds)",
+        "type": "int",
+        "default": 30
+      }
+    }
+  }
+}
+```
+
+Groups without `collapsed` are still collapsible, they just start expanded. Note that the outermost plugin config object cannot be folded; put `collapsed` on a nested group to see the effect.
 
 ### Configuration Internationalization (Optional)
 

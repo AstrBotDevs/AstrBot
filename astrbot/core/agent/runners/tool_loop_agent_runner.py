@@ -5,6 +5,7 @@ import time
 import traceback
 import typing as T
 import uuid
+from collections.abc import Awaitable, Callable
 from contextlib import aclosing, suppress
 from dataclasses import dataclass, field, replace
 from pathlib import Path
@@ -25,17 +26,21 @@ from tenacity import (
 )
 
 from astrbot import logger
-from astrbot.core.agent.message import ImageURLPart, TextPart, ThinkPart
+from astrbot.core.agent.event_stream import (
+    AgentEventStream,
+    RequestEventRecorder,
+    request_context_for_journal,
+)
+from astrbot.core.agent.message import (
+    ImageURLPart,
+    TextPart,
+    ThinkPart,
+    dump_messages,
+)
 from astrbot.core.agent.tool import FunctionTool, ToolSet
 from astrbot.core.agent.tool_image_cache import tool_image_cache
 from astrbot.core.agent_output_content import content_from_chain
 from astrbot.core.exceptions import EmptyModelOutputError
-from astrbot.core.message.message_event_result import (
-    MessageChain,
-)
-from astrbot.core.persona_error_reply import (
-    extract_persona_custom_error_message_from_event,
-)
 from astrbot.core.provider.entities import (
     LLMResponse,
     ProviderRequest,
@@ -46,20 +51,24 @@ from astrbot.core.provider.modalities import (
     sanitize_contexts_by_modalities,
 )
 from astrbot.core.provider.provider import Provider
+from astrbot.core.provider.request_observer import request_recorder_kwargs
 from astrbot.core.utils.async_generator import iterate_in_task
+from astrbot.core.utils.event_id import new_event_id
 
 from ..context.compressor import ContextCompressor
 from ..context.config import ContextConfig
 from ..context.manager import ContextManager
 from ..context.token_counter import EstimateTokenCounter, TokenCounter
-from ..event_stream import AgentEventStream
 from ..events import (
     JsonObject,
+    MessageCompleted,
+    ReasoningDelta,
     RequestFinished,
     RequestStarted,
     RunnerEventPayload,
     RuntimeErrorInfo,
     RuntimeTokenUsage,
+    TextDelta,
     ToolFinished,
     ToolProgress,
     ToolRejected,
@@ -72,10 +81,10 @@ from ..message import (
     ContentPart,
     Message,
     ToolCallMessageSegment,
-    bind_checkpoint_messages,
+    load_messages,
 )
-from ..output import OutputComponent, PlainOutput
-from ..response import AgentStats
+from ..output import OutputComponent, PlainOutput, ReasoningOutput
+from ..response import AgentResponse, AgentStats
 from ..run_context import ContextWrapper, TContext
 from ..tool_executor import BaseFunctionToolExecutor
 from .base import AgentState, BaseAgentRunner
@@ -84,14 +93,6 @@ if sys.version_info >= (3, 12):
     from typing import override
 else:
     from typing_extensions import override
-
-
-@dataclass(frozen=True, slots=True)
-class _NativeFragment:
-    """Private message assembly input; never leaves the native runner."""
-
-    kind: T.Literal["streaming_delta", "llm_result", "err", "aborted"]
-    content: tuple[OutputComponent, ...]
 
 
 @dataclass(slots=True)
@@ -194,11 +195,6 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         "Use a narrower window when reading large files."
     )
 
-    def _get_persona_custom_error_message(self) -> str | None:
-        """Read persona-level custom error message from event extras when available."""
-        event = getattr(self.run_context.context, "event", None)
-        return extract_persona_custom_error_message_from_event(event)
-
     async def _complete_with_assistant_response(self, llm_resp: LLMResponse) -> None:
         """Finalize the current step as a plain assistant response with no tool calls."""
         self.final_llm_resp = llm_resp
@@ -217,7 +213,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             parts.append(TextPart(text=llm_resp.completion_text))
         if len(parts) == 0:
             logger.warning("LLM returned empty assistant message with no tool calls.")
-        self.run_context.messages.append(Message(role="assistant", content=parts))
+        await self._append_context_messages([Message(role="assistant", content=parts)])
 
         try:
             await self.agent_hooks.on_llm_response(self.run_context, llm_resp)
@@ -281,11 +277,15 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         tool_result_overflow_dir: str | None = None,
         read_tool: FunctionTool | None = None,
         max_context_tokens: int | None = None,
+        conversation_event_sink: Callable[[AgentResponse], Awaitable[bool]]
+        | None = None,
         **kwargs: T.Any,
     ) -> None:
-        self._events = AgentEventStream[_NativeFragment | RunnerEventPayload]()
+        self._events = AgentEventStream[RunnerEventPayload | AgentResponse]()
         self._message_id = str(uuid.uuid4())
         self.req = request
+        self._conversation_event_sink = conversation_event_sink
+        self._context_initialized = False
         self.streaming = streaming
         self.enforce_max_turns = enforce_max_turns
         self.llm_compress_instruction = llm_compress_instruction
@@ -313,6 +313,9 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             llm_compress_provider=self.llm_compress_provider,
             custom_token_counter=self.custom_token_counter,
             custom_compressor=self.custom_compressor,
+            request_event_emitter=self._events.emit
+            if conversation_event_sink
+            else None,
         )
         self.request_context_manager = ContextManager(
             self.request_context_manager_config
@@ -370,7 +373,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             self.req.func_tool = light_set
 
         # append existing messages in the run context
-        messages = bind_checkpoint_messages(request.contexts or [])
+        messages = load_messages(request.contexts or [])
         if (
             request.prompt is not None
             or request.image_urls
@@ -562,19 +565,53 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             await asyncio.gather(abort_task, return_exceptions=True)
 
     async def _recorded_responses(
-        self, payload: dict[str, T.Any], *, streaming: bool
+        self,
+        payload: dict[str, T.Any],
+        *,
+        contexts: list[Message] | list[dict[str, T.Any]],
+        streaming: bool,
     ) -> T.AsyncGenerator[LLMResponse, None]:
         """Pair one provider invocation, including re-query and fallback attempts.
 
         Args:
             payload: Native provider arguments, never placed in public events.
+            contexts: Working messages before provider modality conversion.
             streaming: Whether this call produces chunks.
 
         Yields:
             Provider replies for normal model processing and hooks.
         """
-        request_id = str(uuid.uuid4())
+        request_id = new_event_id()
+        recorder = None
+        payload["contexts"] = self._sanitize_contexts_for_provider(contexts)
+        if self._events.active and self._conversation_event_sink is not None:
+            recorder = RequestEventRecorder(
+                self._events.emit,
+                {
+                    "provider_id": self.provider.provider_config.get("id", ""),
+                    "model": payload.get("model") or self.provider.get_model(),
+                    "attempt_scope": "provider_call",
+                    "input_context": request_context_for_journal(
+                        payload["contexts"],
+                        source_contexts=contexts,
+                        modalities=self.provider.provider_config.get("modalities"),
+                        extra_user_content_parts=payload.get(
+                            "extra_user_content_parts"
+                        ),
+                    ),
+                },
+                invocation_id=request_id,
+            )
+            await recorder.begin()
+        if self._events.active:
+            if completed := self._finish_message():
+                await self._events.emit(completed)
         self._message_id = str(uuid.uuid4())
+        self._message_parts.clear()
+        self._message_indices.clear()
+        self._message_content = None
+        self._message_closed = False
+        self._message_status = TurnStatus.COMPLETED
         started = time.monotonic()
         status = TurnStatus.FAILED
         final = None
@@ -595,6 +632,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             if settled:
                 return
             settled = True
+            self._message_status = status
             usage = final.usage if final is not None else None
             reported_error = error
             if final is not None and final.role == "err":
@@ -602,6 +640,12 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                     code="provider_error", message=final.completion_text
                 )
             if self._events.active:
+                if recorder:
+                    await recorder.finish(
+                        status.value,
+                        usage=usage,
+                        error_code=reported_error.code if reported_error else None,
+                    )
                 await self._events.emit(
                     RequestFinished(
                         request_id=request_id,
@@ -620,7 +664,10 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
 
         try:
             if streaming:
-                stream = self.provider.text_chat_stream(**payload)
+                stream = self.provider.text_chat_stream(
+                    **payload,
+                    **request_recorder_kwargs(self.provider.text_chat_stream, recorder),
+                )
                 try:
                     while True:
                         try:
@@ -642,7 +689,12 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                 finally:
                     await self._close_executor(stream)
             else:
-                response = await self._await_or_stop(self.provider.text_chat(**payload))
+                response = await self._await_or_stop(
+                    self.provider.text_chat(
+                        **payload,
+                        **request_recorder_kwargs(self.provider.text_chat, recorder),
+                    )
+                )
                 if response is not None:
                     final = response
                     status = (
@@ -669,7 +721,6 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
     ) -> T.AsyncGenerator[LLMResponse, None]:
         """Yields chunks *and* a final LLMResponse."""
         payload = {
-            "contexts": self._sanitize_contexts_for_provider(self.run_context.messages),
             "func_tool": self._func_tool_for_provider(),
             "session_id": self.req.session_id,
             "conversation_id": (
@@ -683,7 +734,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             # For primary provider we keep explicit model selection if provided.
             payload["model"] = self.req.model
         async for response in self._recorded_responses(
-            payload, streaming=self.streaming
+            payload, contexts=self.run_context.messages, streaming=self.streaming
         ):
             yield response
 
@@ -951,96 +1002,104 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             for tool_name in llm_resp.tools_call_name
         ]
 
+    async def _append_context_messages(self, messages: list[Message]) -> None:
+        """Append framework messages and stage only their new event payloads.
+
+        Args:
+            messages: New messages owned by the runner, in execution order.
+        """
+        self.run_context.messages.extend(messages)
+        if self._conversation_event_sink is not None:
+            response = AgentResponse(
+                "context.appended",
+                {"messages": dump_messages(messages, include_temporary=True)},
+            )
+            if self._events.active:
+                await self._events.emit(response)
+            else:
+                await self._conversation_event_sink(response)
+
+    def _context_response(
+        self, reason="legacy_replace", origin="unknown"
+    ) -> AgentResponse:
+        """Capture working context for the host's legacy mutation adapter.
+
+        Args:
+            reason: Why context may have changed, including compaction.
+            origin: Source of the mutation; custom or unobserved changes stay unknown.
+
+        Returns:
+            A runtime snapshot; the host stages immutable context events from it.
+        """
+        return AgentResponse(
+            "context.updated",
+            {
+                "messages": dump_messages(
+                    [
+                        m
+                        for i, m in enumerate(self.run_context.messages)
+                        if not (i == 0 and m.role == "system")
+                    ],
+                    include_temporary=True,
+                ),
+                "reason": reason,
+                "origin": origin,
+            },
+        )
+
+    def _finish_message(
+        self, status: TurnStatus | None = None
+    ) -> MessageCompleted | None:
+        """Close the current message once at a request, tool or step boundary.
+
+        Args:
+            status: Optional override for failure or user interruption.
+
+        Returns:
+            A complete message, or None when there is no open output to publish.
+        """
+        if self._message_closed or (
+            not self._message_parts and self._message_content is None
+        ):
+            return None
+        self._message_closed = True
+        return MessageCompleted(
+            message_id=self._message_id,
+            content=self._message_content
+            if self._message_content is not None
+            else tuple(self._message_parts),
+            status=status or self._message_status,
+        )
+
     @override
     async def step(self) -> T.AsyncGenerator[RunnerEventPayload, None]:
-        """Normalize native outputs and merge nested execution facts in order.
+        """Route durable records to the writer and publish native runtime events.
 
         Yields:
             Standard payloads after provider processing and existing hooks.
         """
-        from ..events import MessageCompleted, ReasoningDelta, TextDelta
-        from ..output import ReasoningOutput
-
-        message_id = str(uuid.uuid4())
-        parts: list[PlainOutput | ReasoningOutput] = []
-        complete_parts: list[OutputComponent] = []
-        indices: dict[str, int] = {}
-        has_snapshot = False
-        closed = False
-        message_status = TurnStatus.COMPLETED
-
-        def finish(status: TurnStatus | None = None) -> MessageCompleted | None:
-            nonlocal closed
-            if closed or not (parts or has_snapshot):
-                return None
-            closed = True
-            content = tuple(complete_parts) if has_snapshot else tuple(parts)
-            return MessageCompleted(
-                message_id=message_id, content=content, status=status or message_status
-            )
-
+        self._message_id = str(uuid.uuid4())
+        self._message_parts: list[PlainOutput | ReasoningOutput] = []
+        self._message_content: tuple[OutputComponent, ...] | None = None
+        self._message_indices: dict[str, int] = {}
+        self._message_closed = False
+        self._message_status = TurnStatus.COMPLETED
+        if self._conversation_event_sink is not None and not self._context_initialized:
+            await self._conversation_event_sink(self._context_response())
+            self._context_initialized = True
         async with aclosing(self._events.run(self._native_step())) as responses:
             async for response in responses:
-                if isinstance(response, RequestStarted):
-                    if completed := finish():
-                        yield completed
-                    message_id = self._message_id
-                    parts, complete_parts, indices = [], [], {}
-                    has_snapshot = closed = False
-                    message_status = TurnStatus.COMPLETED
+                if isinstance(response, AgentResponse):
+                    if self._conversation_event_sink is not None:
+                        await self._conversation_event_sink(response)
+                else:
                     yield response
-                elif isinstance(response, RequestFinished):
-                    message_status = response.status
-                    yield response
-                elif isinstance(response, ToolStarted):
-                    if completed := finish():
-                        yield completed
-                    yield response
-                elif not isinstance(response, _NativeFragment):
-                    yield response
-                elif response.kind == "streaming_delta":
-                    text = "".join(
-                        part.text or ""
-                        for part in response.content
-                        if isinstance(part, (PlainOutput, ReasoningOutput))
-                    )
-                    if not text or closed:
-                        continue
-                    reasoning = bool(
-                        response.content
-                        and isinstance(response.content[0], ReasoningOutput)
-                    )
-                    key = "reasoning" if reasoning else "plain"
-                    if key not in indices:
-                        indices[key] = len(parts)
-                        parts.append(
-                            ReasoningOutput(text="")
-                            if reasoning
-                            else PlainOutput(text="")
-                        )
-                    index = indices[key]
-                    previous = parts[index].text or ""
-                    parts[index] = (
-                        ReasoningOutput(text=previous + text)
-                        if reasoning
-                        else PlainOutput(text=previous + text)
-                    )
-                    cls = ReasoningDelta if reasoning else TextDelta
-                    yield cls(message_id=message_id, part_index=index, text=text)
-                elif response.kind == "llm_result":
-                    complete_parts.extend(response.content)
-                    has_snapshot = True
-                elif response.kind in ("err", "aborted"):
-                    if completed := finish(
-                        TurnStatus.FAILED
-                        if response.kind == "err"
-                        else TurnStatus.CANCELLED
-                    ):
-                        yield completed
-            if completed := finish():
+            if completed := self._finish_message():
                 yield completed
 
-    async def _native_step(self) -> T.AsyncGenerator[_NativeFragment, None]:
+    async def _native_step(
+        self,
+    ) -> T.AsyncGenerator[RunnerEventPayload | AgentResponse, None]:
         """Run one complete step and notify every execution exit."""
         if self._done_hook_called:
             return
@@ -1066,7 +1125,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             if not completed or self.done():
                 await self._finish_run()
 
-    async def _step(self) -> T.AsyncGenerator[_NativeFragment, None]:
+    async def _step(self) -> T.AsyncGenerator[RunnerEventPayload | AgentResponse, None]:
         """Process a single step of the agent.
         This method should return the result of the step.
         """
@@ -1083,6 +1142,8 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         # Process request-time context before sending it to the provider.
         token_usage = self.req.conversation.token_usage if self.req.conversation else 0
         self._simple_print_message_role("[BefCompact]", self.run_context.messages)
+        previous_messages = self.run_context.messages
+        context_revision = self.request_context_manager.revision
         processed_messages = await self._await_or_stop(
             self.request_context_manager.process(
                 self.run_context.messages,
@@ -1090,9 +1151,14 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             )
         )
         if processed_messages is None:
-            yield await self._finalize_aborted_step()
+            await self._finalize_aborted_step()
             return
         self.run_context.messages = processed_messages
+        if self._conversation_event_sink is not None and (
+            processed_messages is not previous_messages
+            or self.request_context_manager.revision != context_revision
+        ):
+            yield self._context_response(reason="compaction", origin="system")
         self._simple_print_message_role("[AftCompact]", self.run_context.messages)
 
         async for llm_response in self._iter_llm_responses_with_fallback():
@@ -1100,26 +1166,41 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                 if self.stats.time_to_first_token == 0:
                     self.stats.time_to_first_token = time.time() - self.stats.start_time
 
+                content = []
                 if llm_response.reasoning_content:
-                    yield _NativeFragment(
-                        kind="streaming_delta",
-                        content=content_from_chain(
-                            MessageChain(type="reasoning").message(
-                                llm_response.reasoning_content,
-                            )
-                        ),
-                    )
+                    content.append(ReasoningOutput(text=llm_response.reasoning_content))
                 if llm_response.result_chain:
-                    yield _NativeFragment(
-                        kind="streaming_delta",
-                        content=content_from_chain(llm_response.result_chain),
-                    )
+                    content.extend(content_from_chain(llm_response.result_chain))
                 elif llm_response.completion_text:
-                    yield _NativeFragment(
-                        kind="streaming_delta",
-                        content=content_from_chain(
-                            MessageChain().message(llm_response.completion_text)
-                        ),
+                    content.append(PlainOutput(text=llm_response.completion_text))
+                for reasoning in (True, False):
+                    text = "".join(
+                        part.text or ""
+                        for part in content
+                        if isinstance(
+                            part, ReasoningOutput if reasoning else PlainOutput
+                        )
+                    )
+                    if not text or self._message_closed:
+                        continue
+                    key = "reasoning" if reasoning else "plain"
+                    if key not in self._message_indices:
+                        self._message_indices[key] = len(self._message_parts)
+                        self._message_parts.append(
+                            ReasoningOutput(text="")
+                            if reasoning
+                            else PlainOutput(text="")
+                        )
+                    index = self._message_indices[key]
+                    accumulated = (self._message_parts[index].text or "") + text
+                    self._message_parts[index] = (
+                        ReasoningOutput(text=accumulated)
+                        if reasoning
+                        else PlainOutput(text=accumulated)
+                    )
+                    event_type = ReasoningDelta if reasoning else TextDelta
+                    yield event_type(
+                        message_id=self._message_id, part_index=index, text=text
                     )
                 if self._is_stop_requested():
                     break
@@ -1141,7 +1222,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             break  # got final response
 
         if self._is_stop_requested():
-            yield await self._finalize_aborted_step()
+            await self._finalize_aborted_step()
             return
 
         if not llm_resp_result:
@@ -1156,74 +1237,44 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             self.stats.end_time = time.time()
             self._transition_state(AgentState.ERROR)
             self._resolve_unconsumed_follow_ups()
-            custom_error_message = self._get_persona_custom_error_message()
-            error_text = custom_error_message or (
-                f"LLM 响应错误: {llm_resp.completion_text or '未知错误'}"
-            )
-            yield _NativeFragment(
-                kind="err",
-                content=content_from_chain(MessageChain().message(error_text)),
-            )
+            if completed := self._finish_message(TurnStatus.FAILED):
+                yield completed
             return
 
         if not llm_resp.tools_call_name:
             await self._complete_with_assistant_response(llm_resp)
 
-        # 返回 LLM 结果
+        content = []
         if llm_resp.reasoning_content:
-            yield _NativeFragment(
-                kind="llm_result",
-                content=content_from_chain(
-                    MessageChain(type="reasoning").message(
-                        llm_resp.reasoning_content,
-                    )
-                ),
-            )
+            content.append(ReasoningOutput(text=llm_resp.reasoning_content))
         if llm_resp.result_chain:
-            yield _NativeFragment(
-                kind="llm_result", content=content_from_chain(llm_resp.result_chain)
-            )
+            content.extend(content_from_chain(llm_resp.result_chain))
         elif llm_resp.completion_text:
-            yield _NativeFragment(
-                kind="llm_result",
-                content=content_from_chain(
-                    MessageChain().message(llm_resp.completion_text)
-                ),
-            )
+            content.append(PlainOutput(text=llm_resp.completion_text))
+        if content:
+            self._message_content = tuple(content)
 
         # 如果有工具调用，还需处理工具调用
         if llm_resp.tools_call_name:
             if self.tool_schema_mode == "skills_like":
                 requery_resp, _ = await self._resolve_tool_exec(llm_resp)
                 if self._is_stop_requested():
-                    yield await self._finalize_aborted_step()
+                    await self._finalize_aborted_step()
                     return
                 if not requery_resp.tools_call_name:
                     llm_resp = requery_resp
                     logger.warning(
                         "skills_like tool re-query returned no tool calls; fallback to assistant response."
                     )
+                    content = []
                     if llm_resp.reasoning_content:
-                        yield _NativeFragment(
-                            kind="llm_result",
-                            content=content_from_chain(
-                                MessageChain(type="reasoning").message(
-                                    llm_resp.reasoning_content,
-                                )
-                            ),
-                        )
+                        content.append(ReasoningOutput(text=llm_resp.reasoning_content))
                     if llm_resp.result_chain:
-                        yield _NativeFragment(
-                            kind="llm_result",
-                            content=content_from_chain(llm_resp.result_chain),
-                        )
+                        content.extend(content_from_chain(llm_resp.result_chain))
                     elif llm_resp.completion_text:
-                        yield _NativeFragment(
-                            kind="llm_result",
-                            content=content_from_chain(
-                                MessageChain().message(llm_resp.completion_text)
-                            ),
-                        )
+                        content.append(PlainOutput(text=llm_resp.completion_text))
+                    if content:
+                        self._message_content = tuple(content)
 
                     await self._complete_with_assistant_response(llm_resp)
                     return
@@ -1244,7 +1295,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                             # Collect cached image info
                             cached_images.append(result.cached_image)
             except _ToolExecutionInterrupted:
-                yield await self._finalize_aborted_step()
+                await self._finalize_aborted_step()
                 return
 
             # Keep budget state outside messages so compression cannot reset it.
@@ -1317,7 +1368,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                 tool_calls_result=tool_call_result_blocks,
             )
             # record the assistant message with tool calls
-            self.run_context.messages.extend(
+            await self._append_context_messages(
                 tool_calls_result.to_openai_messages_model()
             )
 
@@ -1351,8 +1402,8 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                                 )
                             )
                     if image_parts:
-                        self.run_context.messages.append(
-                            Message(role="user", content=image_parts)
+                        await self._append_context_messages(
+                            [Message(role="user", content=image_parts)]
                         )
                         logger.debug(
                             f"Appended {len(cached_images)} cached image(s) to context for LLM review"
@@ -1395,11 +1446,8 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             if self.req:
                 self.req.func_tool = None
             # 注入提示词
-            self.run_context.messages.append(
-                Message(
-                    role="user",
-                    content=self.MAX_STEPS_REACHED_PROMPT,
-                )
+            await self._append_context_messages(
+                [Message(role="user", content=self.MAX_STEPS_REACHED_PROMPT)]
             )
             # 再执行最后一步
             async with aclosing(self.step()) as responses:
@@ -1745,7 +1793,6 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                 requery_resp = None
                 async for recorded in self._recorded_responses(
                     {
-                        "contexts": self._sanitize_contexts_for_provider(contexts),
                         "func_tool": param_subset,
                         "model": self.req.model,
                         "session_id": self.req.session_id,
@@ -1754,6 +1801,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                         "abort_signal": self._abort_signal,
                         "request_max_retries": self.request_max_retries,
                     },
+                    contexts=contexts,
                     streaming=False,
                 ):
                     requery_resp = recorded
@@ -1778,9 +1826,6 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                     repair_resp = None
                     async for recorded in self._recorded_responses(
                         {
-                            "contexts": self._sanitize_contexts_for_provider(
-                                repair_contexts
-                            ),
                             "func_tool": param_subset,
                             "model": self.req.model,
                             "session_id": self.req.session_id,
@@ -1789,6 +1834,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                             "abort_signal": self._abort_signal,
                             "request_max_retries": self.request_max_retries,
                         },
+                        contexts=repair_contexts,
                         streaming=False,
                     ):
                         repair_resp = recorded
@@ -1814,10 +1860,10 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
     def get_final_llm_resp(self) -> LLMResponse | None:
         return self.final_llm_resp
 
-    async def _finalize_aborted_step(self) -> _NativeFragment:
+    async def _finalize_aborted_step(self) -> None:
         logger.info("Agent execution was requested to stop by user.")
 
-        self.run_context.messages.extend(
+        await self._append_context_messages(
             [
                 Message(
                     role="user",
@@ -1840,9 +1886,8 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         self.stats.end_time = time.time()
 
         self._resolve_unconsumed_follow_ups()
-        return _NativeFragment(
-            kind="aborted", content=content_from_chain(MessageChain(type="aborted"))
-        )
+        if completed := self._finish_message(TurnStatus.CANCELLED):
+            await self._events.emit(completed)
 
     async def _close_executor(self, executor: T.Any) -> None:
         close_executor = getattr(executor, "aclose", None)
@@ -1866,13 +1911,29 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         """
         from ..output import ExtensionOutput, ImageOutput, InlineMedia
 
-        execution_id = str(uuid.uuid4())
+        execution_id = new_event_id()
         content: list[OutputComponent] = []
         status = TurnStatus.COMPLETED
         error: RuntimeErrorInfo | None = None
         structured = None
         exit_code = None
+        raw_result = None
+        record = self._events.active and self._conversation_event_sink is not None
+        if record:
+            await self._events.emit(
+                AgentResponse(
+                    "tool.started",
+                    {
+                        "tool_call_id": call_id,
+                        "tool_name": tool.name,
+                        "arguments": arguments,
+                    },
+                    execution_id,
+                )
+            )
         if self._events.active:
+            if completed := self._finish_message():
+                await self._events.emit(completed)
             await self._events.emit(
                 ToolStarted(
                     execution_id=execution_id,
@@ -1889,6 +1950,8 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             )
             async for item in self._iter_tool_executor_results(executor):
                 if isinstance(item, CallToolResult):
+                    if record:
+                        raw_result = item.model_dump(mode="json", exclude_none=True)
                     progress = []
                     for block in item.content:
                         if isinstance(block, TextContent):
@@ -1941,6 +2004,13 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             if executor is not None:
                 await self._close_executor(executor)
             if self._events.active:
+                if record:
+                    payload = {"execution_id": execution_id, "status": status.value}
+                    if raw_result is not None:
+                        payload["result"] = raw_result
+                    if error is not None:
+                        payload["error"] = {"code": error.code}
+                    await self._events.emit(AgentResponse("tool.finished", payload))
                 await self._events.emit(
                     ToolFinished(
                         execution_id=execution_id,

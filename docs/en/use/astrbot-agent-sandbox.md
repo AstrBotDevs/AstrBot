@@ -63,7 +63,7 @@ The permission matrix applies these dependencies:
 - When **Execute code** is unchecked, **Allow network during execution** cannot be checked, because **network permissions only apply during code execution**.
 - When **File access scope** is **Disabled**, neither execution nor networking can be enabled, because **code execution and network access require file access**.
 
-Saving configuration succeeds even when Local isolation is unavailable, including selecting **Yes** for computer access on the welcome page. Tools check isolation availability when resolving access. If bubblewrap is missing, the startup probe fails (including timeout or container restrictions), or isolation is unsupported, **execution policies that require isolation fail closed for both members and administrators**:
+Saving configuration succeeds even when Local isolation is unavailable, including selecting **Yes** for computer access on the Overview page. Tools check isolation availability when resolving access. If bubblewrap is missing, the startup probe fails (including timeout or container restrictions), or isolation is unsupported, **execution policies that require isolation fail closed for both members and administrators**:
 
 - Code execution and execution network access are disabled. The saved file scope stays unchanged; workspace access never expands to the entire environment.
 - Policies that need no isolation, including workspace files without execution and entire-environment execution with networking, stay effective as configured. Explicitly disabled file access stays disabled.
@@ -108,14 +108,15 @@ If AstrBot runs in Docker on a Mac, follow [Docker users](#local-docker) below. 
 
 [bubblewrap](https://github.com/containers/bubblewrap) is a userspace sandboxing tool for Linux.
 
-Check whether bubblewrap is installed and can start:
+AstrBot uses bubblewrap's `--size` option to limit the size of the temporary filesystem `/tmp` inside the sandbox. This option requires bubblewrap **0.7.0 or later**. Check whether bubblewrap is installed, whether the version meets the requirement, and whether it can start:
 
 ```bash
 command -v bwrap
-bwrap --unshare-all --ro-bind / / --proc /proc --dev /dev /bin/sh -c 'echo "AstrBot is good to go!"'
+bwrap --version
+bwrap --unshare-all --ro-bind / / --dir /tmp --size 268435456 --tmpfs /tmp --proc /proc --dev /dev /bin/sh -c 'echo "AstrBot is good to go!"'
 ```
 
-If the command prints `AstrBot is good to go!`, bubblewrap is installed and passes this basic startup check.
+If the command prints `AstrBot is good to go!`, bubblewrap is installed, the version meets the requirement, and it passes this basic startup check.
 
 If bubblewrap is not installed, use your distribution's package manager:
 
@@ -139,6 +140,7 @@ sudo pacman -S bubblewrap
 If startup fails:
 
 - **`bwrap` not found**: check that it is installed in the environment running AstrBot and is on the process's startup `PATH`.
+- **`Unknown option --size` or similar errors**: the bubblewrap version is older than **0.7.0** and does not support the `--size` option that AstrBot uses; upgrade to 0.7.0 or later. Running a generic bwrap check without `--size` may pass even though bubblewrap is not usable by AstrBot.
 - **`Operation not permitted` or user namespace errors**: inspect user namespace limits, AppArmor, and other system security policies. Use `sysctl user.max_user_namespaces` to check the namespace limit and `sudo journalctl -k` for relevant kernel logs.
 - **AppArmor denial**: follow your distribution's instructions to permit user namespace creation for the actual runtime. Do not disable security policies across the entire machine merely to pass the check.
 - **Container deployment**: follow [Docker users](#local-docker). Installing `bwrap` on the host does not install it inside the container.

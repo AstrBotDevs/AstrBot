@@ -79,53 +79,39 @@ async def call_event_hook(
     event: AstrMessageEvent,
     hook_type: EventType,
     *args,
+    context_observer: T.Callable[[str], None] | None = None,
     **kwargs,
 ) -> bool:
-    """调用事件钩子函数
+    """Invoke plugin hooks and record changes to this execution's working context.
+
+    Args:
+        event: Message used to select eligible plugin handlers.
+        hook_type: Hook to dispatch.
+        *args: Positional arguments passed to plugin handlers.
+        context_observer: Host callback observing working history before and after hooks.
+        **kwargs: Keyword arguments passed to plugin handlers.
 
     Returns:
-        bool: 如果事件被终止，返回 True
-    #
-
+        Whether a plugin stopped event propagation.
     """
     handlers = star_handlers_registry.get_handlers_by_event_type(
         hook_type,
         plugins_name=event.plugins_name,
     )
-    for handler in handlers:
-        plugin = star_map.get(handler.handler_module_path)
-        plugin_name = plugin.name if plugin else handler.handler_module_path
-        plugin_display_name = plugin.display_name if plugin else None
-        handler_category = (
-            "llm_tool" if hook_type == EventType.OnCallingFuncToolEvent else "hook"
-        )
-        event.trace.record(
-            "handler_start",
-            kind="plugin_handler",
-            status="running",
-            plugin=plugin_name,
-            plugin_display_name=plugin_display_name or plugin_name,
-            handler=handler.handler_name,
-            handler_full_name=handler.handler_full_name,
-            handler_type=handler.event_type.name,
-            handler_category=handler_category,
-            hook=hook_type.name,
-        )
-        try:
-            assert inspect.iscoroutinefunction(handler.handler)
-            logger.debug(
-                f"hook({hook_type.name}) -> {plugin_name} - {handler.handler_name}",
-            )
-            await handler.handler(event, *args, **kwargs)
-        except BaseException as exc:
-            logger.error(
-                traceback.format_exc(),
-                extra={"plugin_name": plugin_name},
+    if handlers and context_observer is not None:
+        context_observer("unknown")
+    try:
+        for handler in handlers:
+            plugin = star_map.get(handler.handler_module_path)
+            plugin_name = plugin.name if plugin else handler.handler_module_path
+            plugin_display_name = plugin.display_name if plugin else None
+            handler_category = (
+                "llm_tool" if hook_type == EventType.OnCallingFuncToolEvent else "hook"
             )
             event.trace.record(
-                "handler_end",
+                "handler_start",
                 kind="plugin_handler",
-                status="error",
+                status="running",
                 plugin=plugin_name,
                 plugin_display_name=plugin_display_name or plugin_name,
                 handler=handler.handler_name,
@@ -134,26 +120,50 @@ async def call_event_hook(
                 handler_category=handler_category,
                 hook=hook_type.name,
             )
-            if not isinstance(exc, Exception):
-                raise
-        else:
-            event.trace.record(
-                "handler_end",
-                kind="plugin_handler",
-                status="success",
-                plugin=plugin_name,
-                plugin_display_name=plugin_display_name or plugin_name,
-                handler=handler.handler_name,
-                handler_full_name=handler.handler_full_name,
-                handler_type=handler.event_type.name,
-                handler_category=handler_category,
-                hook=hook_type.name,
-            )
+            try:
+                assert inspect.iscoroutinefunction(handler.handler)
+                logger.debug(
+                    f"hook({hook_type.name}) -> {plugin_name} - {handler.handler_name}",
+                )
+                await handler.handler(event, *args, **kwargs)
+            except BaseException as exc:
+                logger.error(traceback.format_exc(), extra={"plugin_name": plugin_name})
+                event.trace.record(
+                    "handler_end",
+                    kind="plugin_handler",
+                    status="error",
+                    plugin=plugin_name,
+                    plugin_display_name=plugin_display_name or plugin_name,
+                    handler=handler.handler_name,
+                    handler_full_name=handler.handler_full_name,
+                    handler_type=handler.event_type.name,
+                    handler_category=handler_category,
+                    hook=hook_type.name,
+                )
+                if not isinstance(exc, Exception):
+                    raise
+            else:
+                event.trace.record(
+                    "handler_end",
+                    kind="plugin_handler",
+                    status="success",
+                    plugin=plugin_name,
+                    plugin_display_name=plugin_display_name or plugin_name,
+                    handler=handler.handler_name,
+                    handler_full_name=handler.handler_full_name,
+                    handler_type=handler.event_type.name,
+                    handler_category=handler_category,
+                    hook=hook_type.name,
+                )
 
-        if event.is_stopped() and hook_type != EventType.OnAgentDoneEvent:
-            logger.info(
-                f"{plugin_name} - {handler.handler_name} stopped event propagation.",
-            )
-            return True
+            if event.is_stopped() and hook_type != EventType.OnAgentDoneEvent:
+                logger.info(
+                    f"{plugin_name} - {handler.handler_name} stopped event propagation.",
+                )
+                return True
 
-    return event.is_stopped()
+        return event.is_stopped()
+
+    finally:
+        if handlers and context_observer is not None:
+            context_observer("plugin")
