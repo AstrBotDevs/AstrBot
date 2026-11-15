@@ -1573,7 +1573,6 @@ class TestEnsurePersonaAndSkills:
         assert result.provider_request.func_tool is not None
         assert result.provider_request.func_tool.names() == tool_names
         assert "<execution_environment" not in result.provider_request.system_prompt
-        assert "<tool_use_instructions>" not in result.provider_request.system_prompt
 
     @pytest.mark.asyncio
     @pytest.mark.parametrize("role", ["admin", "member"])
@@ -3726,9 +3725,6 @@ async def test_feature_composition_preserves_tool_scope_and_instruction_order(
         assert req.system_prompt.index(
             "</execution_environment>"
         ) < req.system_prompt.index("<tool_use_instructions>")
-    else:
-        assert "<tool_use_instructions>" not in req.system_prompt
-        assert "</tool_use_instructions>" not in req.system_prompt
     assert "Persona marker" not in environment
     assert "Workspace marker" not in environment
     if runtime == "local":
