@@ -1,5 +1,7 @@
 # 处理消息事件
 
+> 本文示例中的公共导入路径适用于 AstrBot v4.30.0 及以上版本。
+
 事件监听器可以收到平台下发的消息内容，可以实现指令、指令组、事件监听等功能。
 
 事件监听器的注册器在 `astrbot.api.event.filter` 下，需要先导入。请务必导入，否则会和 python 的高阶函数 filter 冲突。
@@ -312,8 +314,6 @@ async def my_custom_hook_1(
 > 对于每轮都会变化、内容量中小的提示词，优先通过 `req.extra_user_content_parts` 追加。它会作为额外的用户消息内容块放在本轮用户输入之后，更适合承载"当前时间""角色好感度""本轮相关记忆片段"等动态上下文：
 >
 > ```python
-> # AstrBot v4.30.0 之前的导入方式：
-> # from astrbot.core.agent.message import TextPart
 > from astrbot.api.agents import TextPart
 >
 > @filter.on_llm_request()
@@ -369,9 +369,6 @@ async def on_llm_resp(
 
 ```python
 from astrbot.api.event import filter, AstrMessageEvent
-# AstrBot v4.30.0 之前的导入方式：
-# from astrbot.core.agent.run_context import ContextWrapper
-# from astrbot.core.astr_agent_context import AstrAgentContext
 from astrbot.api.agents import AstrAgentContext, ContextWrapper
 
 
@@ -394,8 +391,6 @@ async def on_agent_begin(
 
 ```python
 from astrbot.api.event import filter, AstrMessageEvent
-# AstrBot v4.30.0 之前的导入方式：
-# from astrbot.core.agent.tool import FunctionTool
 from astrbot.api import FunctionTool
 
 
@@ -423,8 +418,6 @@ async def on_using_llm_tool(
 from mcp.types import CallToolResult
 
 from astrbot.api.event import filter, AstrMessageEvent
-# AstrBot v4.30.0 之前的导入方式：
-# from astrbot.core.agent.tool import FunctionTool
 from astrbot.api import FunctionTool
 
 
@@ -443,16 +436,13 @@ async def on_llm_tool_respond(
 
 #### Agent 运行完成时
 
-内置工具循环在本轮执行退出时触发一次 `on_agent_done`，覆盖正常完成、模型错误、未处理异常、取消和步数耗尽。它不代表会话历史已经保存。可以读取 `run_context.run_end_reason`（`completed`、`error`、`cancelled` 或 `max_steps`）及 `run_context.run_error`（错误说明或 `None`）。进程被强制终止时无法执行清理钩子。
+内置 runner 在执行退出时调用一次 `on_agent_done`，包括错误、取消和步数耗尽。通过 `run_context.run_end_reason`（`completed`、`error`、`cancelled` 或 `max_steps`）和 `run_context.run_error` 读取结果。该 hook 不代表历史已保存。
 
-没有最终响应时，`resp` 可以是 `None`，使用前需要判断。用户停止执行时可能携带合成的中断提示响应。没有模型回复的收尾及合成的中断提示不会触发 `on_llm_response`；正常回复处理早于 `on_agent_done`。需要在发送前修改回复，请使用 `on_llm_response`。
+`resp` 可能为 `None` 或中断提示。需要在发送前修改模型回复，请使用 `on_llm_response`。
 
 ```python
 from astrbot.api.event import filter, AstrMessageEvent
 from astrbot.api.provider import LLMResponse
-# AstrBot v4.30.0 之前的导入方式：
-# from astrbot.core.agent.run_context import ContextWrapper
-# from astrbot.core.astr_agent_context import AstrAgentContext
 from astrbot.api.agents import AstrAgentContext, ContextWrapper
 
 
@@ -468,7 +458,7 @@ async def on_agent_done(
         print(resp.completion_text)
 ```
 
-> 这里不能使用 yield 发送消息。如需发送，请直接使用 `event.send()`。事件被停止不会阻止后续 `on_agent_done` 清理处理函数执行，插件启用状态及会话插件选择仍然有效。
+> 此处发送消息请使用 `event.send()`，不支持 `yield`。停止事件不会跳过后续清理处理函数。
 
 #### 发送消息前
 

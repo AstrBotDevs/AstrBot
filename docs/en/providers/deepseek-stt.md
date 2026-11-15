@@ -30,10 +30,8 @@ When a voice message arrives, AstrBot transcribes it and sends the resulting tex
 
 ## Audio Requirements and Limits
 
-- The DeepSeek API accepts 16-bit PCM WAV and Ogg Opus, detecting the format from the file contents.
-- WAV audio may use 8000, 16000, 22050, 24000, 32000, 44100, or 48000 Hz and one or two channels. For stereo audio, only the left channel is recognized.
-- AstrBot reuses compatible WAV files and converts other inputs, including SILK and AMR, to mono 16 kHz, 16-bit PCM WAV. SILK conversion uses the existing `silk-python` dependency; other conversions require ffmpeg.
-- Each uploaded file can be at most 8 MiB and 120 seconds long. AstrBot checks the actual upload before sending it and reports an error instead of silently truncating oversized audio.
-- The API does not support streaming recognition. If no speech is recognized, AstrBot does not invent replacement transcription text.
+- Uploads are limited to 8 MiB and 120 seconds. Oversized audio must be shortened before sending.
+- AstrBot converts unsupported audio to mono 16 kHz, 16-bit PCM WAV. Install ffmpeg for formats such as AMR; SILK conversion uses the bundled `silk-python` dependency.
+- Recognition is not streamed. For stereo WAV, only the left channel is recognized.
 
-Refer to the [official DeepSeek documentation](https://api-docs.deepseek.com/zh-cn/guides/asr/) for current API details and account concurrency limits.
+See the [DeepSeek ASR documentation](https://api-docs.deepseek.com/zh-cn/guides/asr/) for supported formats and account limits.

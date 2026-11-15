@@ -36,11 +36,7 @@ Using DeepSeek as an example, assuming you have registered and logged in to a De
 
 ## Provider Configuration in Narrow Windows
 
-The model configuration dialog on the Overview and Chat pages, and the Providers page, adapt to the actual width of the configuration panel. When space is limited, the provider list collapses into a dropdown at the top. Use it to switch providers. Search and action controls wrap, and narrow forms place inputs below their descriptions.
-
-The configuration area supports vertical and horizontal scrolling. Use its bottom horizontal scrollbar or swipe sideways on a trackpad to view content that still exceeds the available width. Click **Advanced Configuration** to expand or collapse those settings.
-
-The dialog header shows the selected provider's icon, name, and endpoint, with the save button on the right. On phone-sized panels, the save button displays only a disk icon. The selected provider has a highlighted border, and configured models appear in separate list cards to distinguish model actions from provider settings.
+In narrow panels, the provider list becomes a dropdown at the top. Use it to switch providers, expand **Advanced Configuration** for more settings, and click the disk icon to save. Scroll horizontally if a field extends beyond the panel.
 
 ![Provider configuration in a narrow window (example data)](../use/images/provider-dialog-narrow-en.jpg)
 

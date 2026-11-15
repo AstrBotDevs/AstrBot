@@ -1,6 +1,8 @@
 
 # 会话控制
 
+> 本文示例中的公共导入路径适用于 AstrBot v4.30.0 及以上版本。
+
 > 大于等于 v3.4.36
 
 为什么需要会话控制？考虑一个 成语接龙 插件，某个/群用户需要和机器人进行多次对话，而不是一次性的指令。这时候就需要会话控制。
@@ -22,8 +24,6 @@ AstrBot 提供了开箱即用的会话控制功能：
 
 ```py
 import astrbot.api.message_components as Comp
-# AstrBot v4.30.0 之前的导入方式：
-# from astrbot.core.utils.session_waiter import session_waiter, SessionController
 from astrbot.api.util import (
     session_waiter,
     SessionController,
@@ -107,8 +107,6 @@ async def handle_empty_mention(self, event: AstrMessageEvent):
 
 ```py
 import astrbot.api.message_components as Comp
-# AstrBot v4.30.0 之前的导入方式：
-# from astrbot.core.utils.session_waiter import session_waiter, SessionFilter, SessionController
 from astrbot.api.util import (
     session_waiter,
     SessionFilter,

@@ -1,5 +1,7 @@
 # AI
 
+> The public import paths in these examples require AstrBot v4.30.0 or later.
+
 AstrBot provides built-in support for multiple Large Language Model (LLM) providers and offers a unified interface, making it convenient for plugin developers to access various LLM services.
 
 You can use the LLM / Agent interfaces provided by AstrBot to implement your own intelligent agents.
@@ -110,9 +112,9 @@ Pass `provider_id="provider_id"` to use a specific configured decision provider;
 
 ### Using OpenAI Decisions
 
-Besides System One, a decision provider can use the OpenAI Decisions API (`POST /v1/decisions`). In the WebUI, open **Model Providers → Decision** and add the **OpenAI Decisions** template. Fill in the API key (`$ENV_NAME` references an environment variable), the endpoint (default `https://api.openai.com/v1`; `/decisions` is appended), and the model (the template defaults to `gpt-6-luna`). Timeout, total timeout, max concurrency, proxy, and custom headers work as they do for System One.
+In the WebUI, open **Model Providers → Decision** and add **OpenAI Decisions**. Set the API key, endpoint (default `https://api.openai.com/v1`), and model. The API key supports `$ENV_NAME` environment-variable references.
 
-It is an independent decision provider and does not affect chat models: once configured, the main agent never calls it automatically. Requests are sent only when a plugin calls `self.context.decision` explicitly or passes its `provider_id`. Plugin code does not change:
+Use the configured provider ID with the same decision interface:
 
 ```py
 answers = await self.context.decision.ask(
@@ -131,16 +133,7 @@ answers = await self.context.decision.ask(
 )
 ```
 
-Request mapping: boolean questions become `predicate`; choice questions become `choice`, with option IDs as `value` and descriptions as `description`; score questions become `score`, with levels labeled `"0"`, `"1"`, ... in order, matching the returned `legend`. The returned `score` keeps its fractional value, `probabilities` holds the full distribution, and `confidence` is separate from the selected option's probability. Answers are matched by question name, not by their order in the response.
-
-How `state` is sent:
-
-- `str` or omitted: sent as text input.
-- `dict`, or a `list` whose items are all `dict`: sent as `input_json` data. Keys such as `role`, `content`, or `image_url` stay plain data and are never treated as message history or images.
-- A `list` with other item types, such as a list of strings: serialized as JSON and sent as text input.
-- Unsupported types, `NaN`/`Infinity`, or values that are not JSON serializable: `ValueError` is raised before sending.
-
-The first version does not support image input, message or tool-call history, multimodal question instructions, prompt-cache controls, or `safety_identifier`. If the model refuses any question (`refusal`), the whole `ask()` call raises `DecisionError`; a refusal is never reported as false, a zero score, or an empty result. `yes_no(default=...)` keeps its fallback behavior.
+This provider is called through `self.context.decision`; configuring it does not make the main agent call it automatically. `state` accepts text or JSON-serializable dicts and lists. Message-like fields are treated as data, not conversation history or image input. Invalid state raises `ValueError`; a model refusal raises `DecisionError` for the whole call.
 
 ## Defining Tools
 
@@ -150,10 +143,6 @@ Tools enable large language models to invoke external capabilities.
 from pydantic import Field
 from pydantic.dataclasses import dataclass
 
-# Before AstrBot v4.30.0:
-# from astrbot.core.agent.run_context import ContextWrapper
-# from astrbot.core.agent.tool import FunctionTool, ToolExecResult
-# from astrbot.core.astr_agent_context import AstrAgentContext
 from astrbot.api import FunctionTool, ToolExecResult
 from astrbot.api.agents import AstrAgentContext, ContextWrapper
 
@@ -274,10 +263,6 @@ In the example below, we define a Main Agent responsible for delegating tasks to
 Define Tools:
 
 ```py
-# Before AstrBot v4.30.0:
-# from astrbot.core.agent.run_context import ContextWrapper
-# from astrbot.core.agent.tool import FunctionTool, ToolExecResult, ToolSet
-# from astrbot.core.astr_agent_context import AstrAgentContext
 from astrbot.api import FunctionTool, ToolExecResult, ToolSet, logger
 from astrbot.api.agents import AstrAgentContext, ContextWrapper
 from pydantic import Field
@@ -424,7 +409,7 @@ async def test(self, event: AstrMessageEvent):
 
 ## Running an Agent in an Existing Conversation
 
-Use `self.context.agent.run_turn()` for programmatic inputs that inherit the target conversation's persona, history, tools, skills and Agent hooks. Plugins do not need to construct events or runners. The built-in Agent runtime is currently supported.
+Use `self.context.agent.run_turn()` to submit programmatic inputs to a conversation. With the built-in runtime, turns use that conversation’s persona, history, tools, skills, and Agent hooks. Plugins do not need to construct events or runners.
 
 ```py
 from astrbot.api.agents import PlainInput
@@ -436,9 +421,11 @@ run = await self.context.agent.run_turn(
 result = await run.result()
 ```
 
-Submission returns after binding to a runtime turn, without waiting for model execution. Inputs in the same session execute serially and read fresh history when admitted. AstrBot sends replies through its normal output handling by default; do not send `result.text` again. `result()` waits for execution, history persistence and Core output handling. Cancelling a waiter leaves execution running; use `await run.cancel()` to stop the run.
+`run_turn()` submits a turn without waiting for completion. Turns in the same session execute serially. `await run.result()` waits for execution, history persistence, and output handling. AstrBot sends replies by default; do not send `result.text` again.
 
-The returned `AgentRun` exposes turn identity, output, cancellation, steering, and follow-up. Its `session` property gives a read-only status snapshot.
+Use `await run.cancel()` to stop execution. Cancelling a result waiter does not stop the turn.
+
+### Pass metadata to hooks
 
 Pass `metadata` to identify a plugin-triggered turn in existing hooks:
 
@@ -462,17 +449,11 @@ metadata = event.get_extra("agent_metadata", {})
 companion = metadata.get("private_companion", {})
 ```
 
-`metadata` is a dict of JSON-compatible values. Core deep-copies it into the wakeup event's `agent_metadata` extra before admission hooks run, so caller changes and other submissions do not affect it. Keys remain nested under `agent_metadata`; they do not overwrite framework extras or grant permissions. Core does not automatically add metadata to the model prompt or conversation history. Plugins should use their own namespace and explicitly inject any required model context in a hook.
+Use a plugin namespace and JSON-compatible values. Metadata is copied into `event.get_extra("agent_metadata")` before hooks run. It is not added to the model prompt or history; add model context explicitly through a hook if needed.
 
-Omitting `metadata` creates an empty dict. Metadata and other arbitrary extras are not copied from `source_event`. `run.follow_up()` starts a new turn with empty metadata; to supply metadata on a subsequent turn, call `run_turn()` with the target `session_id` explicitly.
+Metadata defaults to `{}` and is not inherited from `source_event` or by `follow_up()`. To pass metadata to another turn, call `run_turn()` with the target `session_id`.
 
-Core selects a registered implementation using the profile's `agent.runtime`. After `ctx.agent.register_runtime(name, runtime)`, an implementation can serve main turns or be called as a subagent by the built-in runtime. Unregistered names fail explicitly; existing Dify, Coze and other legacy paths retain their execution flow.
-
-`/stop` calls `turn.request_stop()` for submitted turns in the matching UMO. For a running turn, `AgentSession.request_stop_turn(turn)` returns `True` if the runtime accepts the request and will settle the turn, or `False` to fall back to `cancel_turn()` and local task cancellation. Queued turns are cancelled directly. `request_stop()` returns immediately, and `await turn.result()` waits for cleanup.
-
-Core supplies public `AgentInput`: the original `AstrMessageEvent`, permissions, optional plain/image/file content, authorized plugin tools/skills, and a streaming preference. Core matches and removes the AI trigger prefix before dispatch, passing the processed text in `content` without changing the original event. Platform inputs without a text override may retain `content=None`; source attachments remain available on the event. SDK inputs carry explicit content. Runtime configuration is passed through `open_session(..., options={"config": ...})` for the implementation to interpret. Core does not construct native `MainAgentInput`, `MainAgentBuildConfig`, or model requests.
-
-Reuse `AgentSession.run_turn()` when implementing a runtime. Core supplies admission through the scheduling argument `run_turn(input, admit=...)`, independently of `AgentInput`. It runs inside the session lock and the implementation's `_execution_scope()`, before `execute_turn()`. AI enablement, permissions and plugin contributions are refreshed after queued work; do not bypass admission by replacing scheduling. Additional locks belong to the runtime. Optional `active_turn(umo)` supports discovery for ordinary-message steering; its default is `None`, while the session still handles queued execution. The built-in runtime constructs `ProviderRequest`, resolves model configuration, and invokes existing model hooks in its own execution stage. External implementations need not import `astr_agent_runtime`.
+### Collect messages before sending
 
 Set `send_to_user=False` to collect prepared messages through `run.events()`, then process and send them from your plugin. Use this example inside an async plugin method:
 
@@ -508,7 +489,7 @@ The `output.ready` payload is an `OutputReady` instance:
 
 These events already include the final reply; do not send `result.text` again. To keep only the final reply, filter on `output.source == "reply"`. An `output.ready` event means content is prepared, not that the platform has received it.
 
-Multiple independent `events()` observers can watch or replay runtime events such as `output.ready`, `message.completed`, and tool calls. Reading events does not send messages. The SDK's terminal `turn.finished` event follows automatic output completion.
+### Continue or steer a turn
 
 ```py
 # Queue another turn in this exact conversation, inheriting the output policy.
@@ -524,7 +505,7 @@ if receipt is not None:
     consumed = await receipt
 ```
 
-Follow-ups retain the original runtime and conversation even if the profile runtime or the UMO's current selection changes. Steering returns `None` when rejected, or an `InputReceipt` when accepted. Awaiting it confirms whether input was actually consumed and persisted. Rejected steering never silently becomes a queued turn. Images and files in steering currently become text references.
+`follow_up()` queues a turn in the original runtime and conversation. `steer()` adds input to an active turn: it returns `None` if rejected, or an `InputReceipt` whose awaited boolean indicates whether the input was consumed and saved. Rejected input is not queued automatically. Steering images and files are currently passed as text references.
 
 `run.session.state` is `idle`, `queued`, `running`, or `closed`. The snapshot contains `ref`, `pending_turn_count`, and `active_turn_id`. Read the property again to refresh it.
 
@@ -532,37 +513,60 @@ Core resolves permissions from `source_event` or the current active same-UMO eve
 
 A tool must not wait for another queued turn in its own session: that turn is waiting for the tool's current turn to finish. Submit and return, or use steering as appropriate.
 
+## Runtime Events {#runtime-events}
+
+`run.events()` yields typed `RuntimeEvent` objects. Read `event.type` for the event name and `event.payload` for its data. Events can be replayed by independent readers; reading them does not send messages.
+
+```py
+from astrbot.api.agents import MessageCompleted, TextDelta
+
+async for event in run.events():
+    payload = event.payload
+    if isinstance(payload, TextDelta):
+        print(payload.text, end="")
+    elif isinstance(payload, MessageCompleted):
+        # Replace earlier deltas for this message_id with the complete content.
+        print(payload.message_id, payload.content)
+
+result = await run.result()
+print(result.status, result.text)
+```
+
+| Event | Use |
+| --- | --- |
+| `text.delta`, `reasoning.delta` | Display incremental content. |
+| `message.completed` | Replace a message's deltas with its complete snapshot, matched by `message_id`. |
+| `output.ready` | Collect prepared messages when `send_to_user=False`. |
+| `tool.started/progress/finished/rejected` | Track tool execution. |
+| `request.started/finished` | Track provider calls. |
+| `usage.updated` | Read cumulative usage; replace the previous snapshot rather than adding it. |
+| `turn.started/prepared/finished` | Track turn lifecycle. The SDK's `turn.finished` follows output handling. |
+
+`result.content` contains the final reply; `result.text` extracts its plain text. `result.usage` contains cumulative usage and `result.metrics.steps` the executed step count. Unknown usage counts are `None`, not zero; cached input tokens are included in input tokens.
+
+Migration: use `event.payload` instead of `event.data`, and `result.content` instead of `result.chain`. Replace `streaming_delta` / `llm_result` with `text.delta`, `reasoning.delta` / `message.completed`, and `agent_stats` with `usage.updated`. Read status, errors, and metrics from the final result.
+
+## Custom Agent Runtimes {#custom-agent-runtimes}
+
+Register an implementation with `ctx.agent.register_runtime(name, runtime)`, then select its name in the profile's `agent.runtime` or a specialized agent configuration. A registered runtime can serve main agents and subagents.
+
+Implement `AgentRuntime` to open or restore an `AgentSession`. Inputs provide the source event, permissions, authorized tools and skills, and optional `PlainInput`, `ImageInput`, or `FileInput` content. Runtime configuration arrives in `open_session(..., options={"config": ...})`.
+
+Reuse `AgentSession.run_turn()` and implement `execute_turn()` so queued work passes Core's admission checks before execution. Optional `active_turn(umo)` supports steering from ordinary messages. To handle `/stop` cooperatively, implement `request_stop_turn()` and return `True` only if the runtime will settle the turn; otherwise cancellation is used.
+
+Publish typed events for observed execution and return a `TurnResult`. Set the session's `runtime_name` to the registered name. Turn execution and history persistence must work without event subscribers.
+
 ## Conversation Manager
 
-Runtime history contains only model messages (`system`, `user`, `assistant`, and
-`tool`). Legacy `_checkpoint` markers are consumed during database migration or
-old-backup import. Platform history links use `turn_id` and `context_event_id`;
-`llm_checkpoint_id` is no longer accepted. Internal message conversion uses
-`load_messages` / `dump_messages`, preserving the existing `_no_save` semantics.
+Use `self.context.conversations` to create, read, update, switch, and delete conversations. `self.context.conversation_manager` remains a compatibility alias. `Conversation.history` is a JSON string containing model messages.
 
-In event storage, `_no_save` excludes content from future restored context; it does
-not prevent the raw content from being persisted. The original message and its
-markers are stored once. Recovery skips a whole message marked `_no_save=True`,
-or only the marked parts within a message. New events contain neither an additional
-filtered copy nor an `include_in_context` field. Existing exclusion events retain
-their legacy read behavior so historical messages are not duplicated.
-Core reads structured message lists directly from storage. The plugin-facing
-`Conversation.history` remains a JSON string. Full-history updates and running
-agent staging share the same reconciliation rules, retaining unchanged message
-IDs through reordering. Independent plugin writes do not modify a running
-agent's working messages; stale writes still fail with a revision conflict.
+`_no_save` excludes a message or content part from future model context, but does not prevent its raw content from being stored.
 
-Use `self.context.conversations` for conversation operations. It provides the existing
-`new_conversation`, `get_conversation`, selection, update, and deletion methods.
-`self.context.conversation_manager` remains a compatibility alias. The previous
-`event.conversation_events` and `get_conversation_events()` entry points have been
-removed; plugins use `conversations.append_message()` and
-`conversations.append_plugin_event()` instead of accessing a writer.
+For migration:
 
-The deprecated `update_conversation_title()` and
-`update_conversation_persona_id()` methods have been removed. Use
-`update_conversation(..., title=...)` or
-`update_conversation(..., persona_id=...)` instead.
+- Replace `event.conversation_events` and `get_conversation_events()` with `append_message()` or `append_plugin_event()`.
+- Replace `update_conversation_title()` and `update_conversation_persona_id()` with `update_conversation(..., title=...)` and `update_conversation(..., persona_id=...)`.
+- Replace platform history links using `llm_checkpoint_id` with `turn_id` and `context_event_id`.
 
 ### Appending Model Messages
 
@@ -577,7 +581,7 @@ message_id = await conversations.append_message(
 `content` accepts text or a list of AstrBot `ContentPart` objects:
 
 ```py
-from astrbot.core.agent.message import ImageURLPart, TextPart
+from astrbot.api.agents import ImageURLPart, TextPart
 
 await conversations.append_message(
     [
@@ -590,11 +594,7 @@ await conversations.append_message(
 )
 ```
 
-The host supplies `role="user"`;
-plugins do not submit a role or a complete message object. The message is persisted
-and appended to the stored conversation. It does not change a running agent's
-working context, including when called from a hook or tool. The call returns a
-string ID after the database transaction commits. An optional `message_id` can identify retries of the same submission.
+Messages are stored with `role="user"` and included in future context. They do not change a running agent's context. The returned string is the saved message ID; pass `message_id` to identify a retry of the same submission.
 
 ### Appending Plugin Events
 
@@ -606,47 +606,17 @@ event_id = await conversations.append_plugin_event(
 )
 ```
 
-This stores a custom event associated with the conversation, without changing
-working or future model context. Use a plugin-prefixed `event_type` to avoid name
-collisions; the host does not infer or enforce plugin identity from this name.
-`data` is a JSON-serializable object. The host supplies the internal event namespace,
-version, sequence, and creation time. The call returns the committed event ID;
-an optional `event_id` identifies retries of the same submission.
+Plugin events are stored with the conversation but do not enter model context. Use a plugin-prefixed `event_type` and a JSON-serializable dict for `data`. The returned string is the saved event ID; pass `event_id` to identify a retry of the same submission.
 
-Use [plugin KV storage](./storage.md) for mutable plugin state that does not need
-a conversation event history, for example `await self.put_kv_data(f"retrieval:{cid}", data)`.
-KV storage is isolated by plugin. Include `cid` in the key when state belongs to
-one conversation.
+For mutable state that does not need an event history, use [plugin KV storage](./storage.md). Include `cid` in the key for per-conversation state.
 
-Both append methods require an explicit keyword-only `cid` identifying an existing
-conversation. The host reads its UMO from storage. Missing or invalid conversations
-raise `ValueError`; omitting `cid` raises `TypeError`. These operations do not infer
-a target from the active message, selected conversation, or calling task. Neither
-method starts an agent run or schedules a follow-up.
+Both append methods require `cid` for an existing conversation and raise `ValueError` if it is invalid or missing from storage. Neither starts an agent turn.
 
-To modify the current execution, edit the `ProviderRequest.contexts` or runtime
-messages supplied to the relevant hook. The host records those changes through the
-writer owned by that execution. Hook signatures are unchanged; plugins do not
-receive the writer. Each execution has its own hooks instance, and background or
-cron executions do not inherit a conversation writer or plugin identity through
-`ContextVar`.
-
-Direct service calls such as `update_conversation()` and `add_message_pair()` are
-independent persistence operations, even inside a hook. They do not synchronize an
-active execution's working context. If an independent write changes the stored
-revision, the running execution's next write can raise `ConversationConflictError`
-instead of overwriting that change. Use hook inputs for in-run changes; do not
-retry side-effecting tools to resolve a revision conflict.
-
-Only working-context changes captured at the plugin hook boundary are attributed
-to plugins for baseline retention. Direct service calls keep unknown attribution
-and are conservatively retained.
+To change the current execution's context, edit the relevant hook's `ProviderRequest.contexts` or runtime messages. Direct conversation writes, including `update_conversation()` and `add_message_pair()`, do not update a running agent's context and can cause `ConversationConflictError` if its stored history changes concurrently.
 
 ### Getting the Current LLM Conversation History for a Session
 
 ```py
-# Before AstrBot v4.30.0:
-# from astrbot.core.conversation_mgr import Conversation
 from astrbot.api.provider import Conversation
 
 uid = event.unified_msg_origin
@@ -685,8 +655,6 @@ class Conversation:
 ### Quickly Adding LLM Records to a Conversation `add_message_pair`
 
 ```py
-# Before AstrBot v4.30.0:
-# from astrbot.core.agent.message import AssistantMessageSegment, UserMessageSegment, TextPart
 from astrbot.api.agents import (
     AssistantMessageSegment,
     UserMessageSegment,

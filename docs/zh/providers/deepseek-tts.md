@@ -32,7 +32,6 @@ AstrBot 可通过 [DeepSeek 语音合成接口](https://api-docs.deepseek.com/zh
 
 ## 文本限制与错误处理
 
-- 文本不能为空，单次最多 10,000 个计费字符：汉字算 2 个，其他字符算 1 个。AstrBot 不会静默截断超限文本。
-- 整个 JSON 请求体最大为 64 KiB。
-- 接口以流式二进制返回音频。如果响应为空、不是 WAV，或传输中途失败，本次合成会报错并清理未完成的临时文件。
-- 单次请求最多返回 30 分钟音频；账号并发限制及最新接口说明请以 [DeepSeek 官方文档](https://api-docs.deepseek.com/zh-cn/guides/tts/) 为准。
+文本不能为空，单次最多 10,000 个计费字符：汉字算 2 个，其他字符算 1 个。超限文本需要缩短后再发送。请求体最大为 64 KiB。
+
+音频时长及账号限制参见 [DeepSeek 语音合成文档](https://api-docs.deepseek.com/zh-cn/guides/tts/)。

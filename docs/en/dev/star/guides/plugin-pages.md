@@ -1,5 +1,7 @@
 # Plugin Views
 
+> The public import paths in these examples require AstrBot v4.30.0 or later.
+
 
 Plugin Views let a plugin ship its own pages inside the AstrBot WebUI. View files live under `views/` in the plugin directory (`pages/` is still accepted) and are loaded by the Dashboard in a restricted iframe. Scripts in a view talk to the Dashboard through the `window.AstrBotPluginView` bridge (alias `window.AstrBotPluginPage`), which the Dashboard forwards to the plugin's registered backend Web APIs.
 
@@ -207,8 +209,6 @@ Upload example:
 ```python
 from pathlib import Path
 
-# Before AstrBot v4.30.0:
-# from astrbot.core.utils.astrbot_path import get_astrbot_plugin_data_path
 from astrbot.api.util import get_astrbot_plugin_data_path
 from astrbot.api.web import PluginUploadFile, error_response, json_response, request
 
@@ -639,22 +639,22 @@ The server injects `data-theme` into returned HTML to reduce initial flashing. I
 
 ### Following user-selected colors
 
-`context.themeColors` exposes the effective `primary` and `secondary` colors as CSS color strings. The View decides how to apply them.
-
-Use `bridge.onContext(handler)` to receive the initial palette and updates after theme switches, color edits, or resets. Server-injected initial contexts and older AstrBot versions may omit this field; fall back to the View's default colors rather than relying only on the first `ready()` result.
+Subscribe with `bridge.onContext()` to apply the initial `primary` and `secondary` CSS colors and receive updates. Use defaults when `themeColors` is absent:
 
 ```js
 const bridge = window.AstrBotPluginView;
 
 await bridge.ready();
 const off = bridge.onContext((context) => {
-  const primary = context.themeColors?.primary ?? "#3c96ca";
-  const secondary = context.themeColors?.secondary ?? "#2f86bd";
-  // Apply the colors to your View.
+  const style = document.documentElement.style;
+  style.setProperty("--primary", context.themeColors?.primary ?? "#3c96ca");
+  style.setProperty("--secondary", context.themeColors?.secondary ?? "#2f86bd");
 });
 
 // Call off() when the View is disposed.
 ```
+
+Use `var(--primary)` and `var(--secondary)` in your styles.
 
 ## Static Asset Paths
 

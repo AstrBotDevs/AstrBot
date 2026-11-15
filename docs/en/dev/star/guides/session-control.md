@@ -1,6 +1,8 @@
 
 # Session Control
 
+> The public import paths in these examples require AstrBot v4.30.0 or later.
+
 > v3.4.36 and above
 
 Why do we need session control? Consider a Chinese idiom chain game plugin where a user or group needs to have multiple conversations with the bot rather than a one-time command. This is when session control becomes necessary.
@@ -22,8 +24,6 @@ Import:
 
 ```py
 import astrbot.api.message_components as Comp
-# Before AstrBot v4.30.0:
-# from astrbot.core.utils.session_waiter import session_waiter, SessionController
 from astrbot.api.util import (
     session_waiter,
     SessionController,
@@ -115,8 +115,6 @@ By default, the AstrBot session controller uses `sender_id` (the sender's ID) as
 
 ```py
 import astrbot.api.message_components as Comp
-# Before AstrBot v4.30.0:
-# from astrbot.core.utils.session_waiter import session_waiter, SessionFilter, SessionController
 from astrbot.api.util import (
     session_waiter,
     SessionFilter,

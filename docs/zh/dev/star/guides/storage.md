@@ -1,5 +1,7 @@
 # 插件存储
 
+> 本文示例中的公共导入路径适用于 AstrBot v4.30.0 及以上版本。
+
 ## 简单 KV 存储
 
 > [!TIP]
@@ -26,8 +28,6 @@ class Main(star.Star):
 
 ```py
 from pathlib import Path
-# AstrBot v4.30.0 之前的导入方式：
-# from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 from astrbot.api.util import get_astrbot_data_path
 
 plugin_data_path = (

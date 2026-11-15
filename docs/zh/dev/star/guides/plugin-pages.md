@@ -1,5 +1,7 @@
 # 插件可视化视图
 
+> 本文示例中的公共导入路径适用于 AstrBot v4.30.0 及以上版本。
+
 
 插件可视化视图允许插件在 AstrBot WebUI 中提供自己的页面。页面文件放在插件目录的 `views/` 下（兼容 `pages/`），由 Dashboard 以受限 iframe 的方式加载；页面里的脚本通过 `window.AstrBotPluginView` bridge（别名 `window.AstrBotPluginPage`）和 Dashboard 通信，再由 Dashboard 转发到插件注册的后端 Web API。
 
@@ -207,8 +209,6 @@ enabled = bool(payload.get("enabled"))
 ```python
 from pathlib import Path
 
-# AstrBot v4.30.0 之前的导入方式：
-# from astrbot.core.utils.astrbot_path import get_astrbot_plugin_data_path
 from astrbot.api.util import get_astrbot_plugin_data_path
 from astrbot.api.web import PluginUploadFile, error_response, json_response, request
 
@@ -639,22 +639,22 @@ body {
 
 ### 跟随用户配色
 
-`context.themeColors` 提供当前生效的 `primary`（主色）和 `secondary`（辅助色），值为 CSS 颜色字符串，由 View 自行应用到样式。
-
-通过 `bridge.onContext(handler)` 接收初始配色，以及主题切换、颜色修改和重置后的更新。服务端预注入的初始上下文和旧版 AstrBot 可能没有该字段；缺失时使用 View 的默认配色，不要仅依赖 `ready()` 的首次返回值。
+通过 `bridge.onContext()` 应用初始的 `primary` 和 `secondary` CSS 颜色，并接收后续更新。`themeColors` 缺失时使用默认值：
 
 ```js
 const bridge = window.AstrBotPluginView;
 
 await bridge.ready();
 const off = bridge.onContext((context) => {
-  const primary = context.themeColors?.primary ?? "#3c96ca";
-  const secondary = context.themeColors?.secondary ?? "#2f86bd";
-  // 将配色应用到视图样式。
+  const style = document.documentElement.style;
+  style.setProperty("--primary", context.themeColors?.primary ?? "#3c96ca");
+  style.setProperty("--secondary", context.themeColors?.secondary ?? "#2f86bd");
 });
 
-// 视图销毁时调用 off() 取消订阅。
+// Call off() when the View is disposed.
 ```
+
+在样式中使用 `var(--primary)` 和 `var(--secondary)` 引用配色。
 
 ## 静态资源路径
 

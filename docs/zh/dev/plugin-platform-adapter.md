@@ -4,6 +4,8 @@ outline: deep
 
 # 开发一个平台适配器
 
+> 本文示例中的公共导入路径适用于 AstrBot v4.30.0 及以上版本。
+
 AstrBot 支持以插件的形式接入平台适配器，你可以自行接入 AstrBot 没有的平台。如飞书、钉钉甚至是哔哩哔哩私信、Minecraft。
 
 我们以一个平台 `FakePlatform` 为例展开讲解。
@@ -52,8 +54,6 @@ class FakeClient:
 ```py
 import asyncio
 
-# AstrBot v4.30.0 之前的导入方式：
-# from astrbot.core.platform.astr_message_event import MessageSesion as MessageSession
 from astrbot.api.platform import (
     Platform,
     AstrBotMessage,

@@ -1,5 +1,7 @@
 # Handling Message Events
 
+> The public import paths in these examples require AstrBot v4.30.0 or later.
+
 Event listeners can receive message content delivered by the platform and implement features such as commands, command groups, and event listening.
 
 Event listener decorators are located in `astrbot.api.event.filter` and must be imported first. Please make sure to import it, otherwise it will conflict with Python's built-in `filter` higher-order function.
@@ -309,8 +311,6 @@ async def my_custom_hook_1(
 > For small or medium-sized dynamic prompts that change every round, prefer appending them through `req.extra_user_content_parts`. These parts are added after the current user input as extra user-message content, which is more suitable for dynamic context such as "current time", "character affinity", or "relevant memory snippets":
 >
 > ```python
-> # Before AstrBot v4.30.0:
-> # from astrbot.core.agent.message import TextPart
 > from astrbot.api.agents import TextPart
 >
 > @filter.on_llm_request()
@@ -368,9 +368,6 @@ When the Agent starts running, the `on_agent_begin` hook is triggered.
 
 ```python
 from astrbot.api.event import filter, AstrMessageEvent
-# Before AstrBot v4.30.0:
-# from astrbot.core.agent.run_context import ContextWrapper
-# from astrbot.core.astr_agent_context import AstrAgentContext
 from astrbot.api.agents import AstrAgentContext, ContextWrapper
 
 
@@ -393,8 +390,6 @@ You can obtain the `FunctionTool` object and tool call arguments.
 
 ```python
 from astrbot.api.event import filter, AstrMessageEvent
-# Before AstrBot v4.30.0:
-# from astrbot.core.agent.tool import FunctionTool
 from astrbot.api import FunctionTool
 
 
@@ -422,8 +417,6 @@ You can obtain the `FunctionTool` object, tool call arguments, and tool call res
 from mcp.types import CallToolResult
 
 from astrbot.api.event import filter, AstrMessageEvent
-# Before AstrBot v4.30.0:
-# from astrbot.core.agent.tool import FunctionTool
 from astrbot.api import FunctionTool
 
 
@@ -442,16 +435,13 @@ async def on_llm_tool_respond(
 
 #### On Agent Done
 
-The built-in tool-loop runner triggers `on_agent_done` once when a run exits, including normal completion, provider errors, unexpected exceptions, cancellation and step-budget exhaustion. It does not confirm that conversation history has been saved. Check `run_context.run_end_reason` (`completed`, `error`, `cancelled`, or `max_steps`) and `run_context.run_error` (an error description or `None`). Forced termination of the process cannot run cleanup hooks.
+The built-in runner calls `on_agent_done` once when execution exits, including errors, cancellation, and step-limit exhaustion. Read `run_context.run_end_reason` (`completed`, `error`, `cancelled`, or `max_steps`) and `run_context.run_error` for the outcome. This hook does not confirm history persistence.
 
-`resp` can be `None` if execution exits without a final response. Guard access to it. A user stop may supply a synthetic interruption response. `on_llm_response` is not dispatched for cleanup without a model reply or for a synthetic interruption; normal response handling precedes `on_agent_done`. To modify a reply before delivery, use `on_llm_response`.
+`resp` may be `None` or an interruption response. To modify a model reply before delivery, use `on_llm_response`.
 
 ```python
 from astrbot.api.event import filter, AstrMessageEvent
 from astrbot.api.provider import LLMResponse
-# Before AstrBot v4.30.0:
-# from astrbot.core.agent.run_context import ContextWrapper
-# from astrbot.core.astr_agent_context import AstrAgentContext
 from astrbot.api.agents import AstrAgentContext, ContextWrapper
 
 
@@ -467,7 +457,7 @@ async def on_agent_done(
         print(resp.completion_text)
 ```
 
-> You cannot use yield to send messages here. If needed, use `event.send()` directly. Stopping an event does not prevent the remaining `on_agent_done` cleanup handlers from running. Session plugin selection and activation filters still apply.
+> Use `event.send()` to send messages here; `yield` is not supported. Stopping the event does not skip the remaining cleanup handlers.
 
 #### Before Sending Message
 

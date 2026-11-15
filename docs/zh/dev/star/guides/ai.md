@@ -1,5 +1,7 @@
 # AI
 
+> 本文示例中的公共导入路径适用于 AstrBot v4.30.0 及以上版本。
+
 AstrBot 内置了对多种大语言模型（LLM）提供商的支持，并且提供了统一的接口，方便插件开发者调用各种 LLM 服务。
 
 您可以使用 AstrBot 提供的 LLM / Agent 接口来实现自己的智能体。
@@ -109,9 +111,9 @@ should_reply = await self.context.decision.yes_no(
 
 ### 使用 OpenAI Decisions
 
-除 System One 外，判断提供商也可以接入 OpenAI Decisions API（`POST /v1/decisions`）。在 WebUI「模型提供商」→「判断」中新增「OpenAI Decisions」模板，填写 API Key（支持 `$ENV_NAME` 引用环境变量）、接口地址（默认 `https://api.openai.com/v1`，自动补全 `/decisions`）和模型（模板默认 `gpt-6-luna`）。超时、总超时、最大并发、代理与自定义请求头的含义与 System One 相同。
+在 WebUI **模型提供商 → 判断** 中添加 **OpenAI Decisions**，填写 API Key、接口地址（默认 `https://api.openai.com/v1`）和模型。API Key 支持通过 `$ENV_NAME` 引用环境变量。
 
-它是独立的判断提供商，与聊天模型互不影响：配置后不会被主对话 Agent 自动调用，只有插件通过 `self.context.decision` 或 `provider_id` 显式请求时才会发送决策请求。插件代码无需改动：
+通过同一套判断接口指定提供商 ID：
 
 ```py
 answers = await self.context.decision.ask(
@@ -130,16 +132,7 @@ answers = await self.context.decision.ask(
 )
 ```
 
-请求映射：布尔题对应 `predicate`；选择题对应 `choice`，`criteria` 的选项 ID 作为 `value`、描述作为 `description`；评分题对应 `score`，等级按顺序以 `"0"`、`"1"`… 作为 `label`，与返回的 `legend` 一致。返回的 `score` 保留小数，`probabilities` 包含完整分布，`confidence` 与选中项概率相互独立。答案按问题名称匹配，与返回顺序无关。
-
-`state` 的处理：
-
-- `str` 或省略：作为文本输入。
-- `dict`，或元素全部为 `dict` 的 `list`：作为 `input_json` 数据发送。其中的 `role`、`content`、`image_url` 等键只是普通数据，不会被解释为消息历史或图片。
-- 包含其他类型元素的 `list`（如字符串列表）：序列化为 JSON 后作为文本输入发送。
-- 不支持的类型、含 `NaN`/`Infinity` 或无法 JSON 序列化的值：在发送前抛出 `ValueError`。
-
-首版不支持图片输入、消息/工具调用历史、问题内的多模态指令、提示缓存控制与 `safety_identifier`。模型对任一问题拒答（`refusal`）时，整批 `ask()` 抛出 `DecisionError`，不会当作否定、零分或空结果；`yes_no(default=...)` 的降级行为保持不变。
+该提供商通过 `self.context.decision` 调用，配置后不会被主 Agent 自动调用。`state` 接受文本或可 JSON 序列化的字典、列表；类似消息的字段仅作为数据，不会解释为对话历史或图片输入。无效的 `state` 会抛出 `ValueError`；模型拒答会使整次调用抛出 `DecisionError`。
 
 ## 定义 Tool
 
@@ -149,10 +142,6 @@ Tool 是大语言模型调用外部工具的能力。
 from pydantic import Field
 from pydantic.dataclasses import dataclass
 
-# AstrBot v4.30.0 之前的导入方式：
-# from astrbot.core.agent.run_context import ContextWrapper
-# from astrbot.core.agent.tool import FunctionTool, ToolExecResult
-# from astrbot.core.astr_agent_context import AstrAgentContext
 from astrbot.api import FunctionTool, ToolExecResult
 from astrbot.api.agents import AstrAgentContext, ContextWrapper
 
@@ -274,10 +263,6 @@ Multi-Agent（多智能体）系统将复杂应用分解为多个专业化智能
 from pydantic import Field
 from pydantic.dataclasses import dataclass
 
-# AstrBot v4.30.0 之前的导入方式：
-# from astrbot.core.agent.run_context import ContextWrapper
-# from astrbot.core.agent.tool import FunctionTool, ToolExecResult, ToolSet
-# from astrbot.core.astr_agent_context import AstrAgentContext
 from astrbot.api import FunctionTool, ToolExecResult, ToolSet, logger
 from astrbot.api.agents import AstrAgentContext, ContextWrapper
 
@@ -422,7 +407,7 @@ async def test(self, event: AstrMessageEvent):
 
 ## 在现有会话中运行 Agent
 
-通过 `self.context.agent.run_turn()` 提交程序触发的输入，可以沿用目标会话的人格、历史、工具、skills 和 Agent hooks，无需自行构造消息事件或 runner。目前支持内置 Agent runtime。
+通过 `self.context.agent.run_turn()` 向会话提交程序触发的输入。使用内置 runtime 时，会沿用该会话的人格、历史、工具、skills 和 Agent hooks，无需自行构造消息事件或 runner。
 
 ```py
 from astrbot.api.agents import PlainInput
@@ -434,9 +419,11 @@ run = await self.context.agent.run_turn(
 result = await run.result()
 ```
 
-`run_turn()` 在输入绑定到 runtime turn 后返回，不等待模型执行。同一 session 的输入串行排队，真正执行时读取最新历史。默认由 AstrBot 通过正常输出处理发送回复，插件无需再发送 `result.text`。`result()` 等待执行、历史保存和 Core 输出处理；取消一个等待者不会取消运行，停止运行请使用 `await run.cancel()`。
+`run_turn()` 提交后即返回，不等待执行完成。同一 session 的 turn 串行执行。`await run.result()` 等待执行、历史保存和输出处理完成。AstrBot 默认发送回复，插件无需再次发送 `result.text`。
 
-`run` 提供 turn ID、输出、取消、steer 和 follow-up 操作。`run.session` 返回只读状态快照。
+停止执行请使用 `await run.cancel()`。取消结果等待者不会停止 turn。
+
+### 向 hooks 传递 metadata
 
 可以通过 `metadata` 传入业务标记，让已有 hooks 识别插件触发的这一轮：
 
@@ -460,17 +447,11 @@ metadata = event.get_extra("agent_metadata", {})
 companion = metadata.get("private_companion", {})
 ```
 
-`metadata` 是由 JSON 兼容值组成的字典。Core 在准入 hooks 执行前，将它深拷贝到 wakeup event 的 `agent_metadata` extra 中，调用方后续修改或其他提交不会影响该快照。所有键都保留在 `agent_metadata` 下，不会覆盖框架 extras，也不会授予权限。Core 不会自动将 metadata 加入模型提示词或会话历史。建议插件使用自己的命名空间，并在 hook 中显式注入模型需要的上下文。
+请使用插件自己的命名空间和 JSON 兼容值。Metadata 会在 hooks 执行前复制到 `event.get_extra("agent_metadata")`，不会自动加入模型提示词或历史；需要传给模型的上下文应通过 hook 显式添加。
 
-省略 `metadata` 时创建空字典，不会从 `source_event` 复制 metadata 或其他任意 extras。`run.follow_up()` 的新一轮使用空 metadata；如果后续一轮需要 metadata，请显式指定目标 `session_id` 调用 `run_turn()`。
+Metadata 默认为 `{}`，不会从 `source_event` 或 `follow_up()` 继承。后续 turn 需要 metadata 时，请指定目标 `session_id` 调用 `run_turn()`。
 
-Core 按当前配置档的 `agent.runtime` 选择已注册实现；使用 `ctx.agent.register_runtime(name, runtime)` 注册后，该实现可用于主代理，也可由内置 runtime 作为子代理调用。未注册的名称明确报错；Dify、Coze 等现有第三方路径继续沿用原执行方式。
-
-`/stop` 按 UMO 向已提交的 turn 调用 `turn.request_stop()`。运行中的 turn 会调用 `AgentSession.request_stop_turn(turn)`。runtime 接受请求并负责执行收尾时返回 `True`，返回 `False` 则使用 `cancel_turn()` 和本地任务取消。排队中的 turn 直接取消。`request_stop()` 提交请求后立即返回，用 `await turn.result()` 等待收尾。
-
-Core 传入公共 `AgentInput`：原始 `AstrMessageEvent`、权限、可选的 `plain/image/file` 内容、授权后的插件 tools/skills，以及流式输出偏好。Core 在投递前完成额外唤醒前缀的匹配和剥离，通过 `content` 传入处理后的文本，不修改原始 event。无需覆盖文本的普通平台消息可保留 `content=None`；来源附件仍保留在 event 上。SDK 调用提供显式内容。配置通过 `open_session(..., options={"config": ...})` 交给 runtime 自行解释，Core 不构造内置 `MainAgentInput`、`MainAgentBuildConfig` 或模型请求。
-
-实现 runtime 时复用 `AgentSession.run_turn()`：Core 通过调度参数 `run_turn(input, admit=...)` 传入准入检查，与 `AgentInput` 分离。它在会话串行锁及实现提供的 `_execution_scope()` 内执行，再进入 `execute_turn()`。排队后会重新检查 AI 启用状态、权限和插件能力；不要通过重写调度绕过准入。额外的锁由 runtime 提供。可选的 `active_turn(umo)` 支持普通消息的活跃 turn 发现；未实现时返回 `None`，session 仍负责排队。内置 runtime 在自己的执行阶段构造 `ProviderRequest`、解析模型配置并调用现有模型 hooks；外部实现不需要导入 `astr_agent_runtime`。
+### 收集待发送消息
 
 设置 `send_to_user=False` 后，可以通过 `run.events()` 收集待发送消息，再由插件处理和发送。在插件的异步方法中使用：
 
@@ -506,7 +487,7 @@ if result.status == TurnStatus.COMPLETED:
 
 这些事件已包含最终回复，无需再次发送 `result.text`。只需要最终回复时，可筛选 `output.source == "reply"`。`output.ready` 表示内容就绪，不代表平台投递成功。
 
-`events()` 支持多个独立观察者和事后重放，提供 `output.ready`、`message.completed`、工具调用等 runtime 事件；读取事件本身不会发送消息。SDK 的最终 `turn.finished` 事件在自动输出处理结束后发布。
+### 继续对话与追加输入
 
 ```py
 # Queue another turn in this exact conversation, inheriting the output policy.
@@ -514,7 +495,7 @@ next_run = await run.follow_up(
     input_message=[PlainInput(text="再给出三条改进建议。")],
 )
 
-# Add input to an active turn at the native runner's safe boundary.
+# Submit steering while the current turn is still active.
 receipt = await run.steer(
     input_message=[PlainInput(text="补充：请重点说明安全隐患。")],
 )
@@ -522,7 +503,7 @@ if receipt is not None:
     consumed = await receipt
 ```
 
-`follow_up()` 固定提交给原 runtime 和 conversation，配置档切换 runtime 或 UMO 切换当前对话不会改变目标。`steer()` 无法接收时返回 `None`，已接收时返回 `InputReceipt`；等待回执得到的布尔值表示输入是否实际消费并保存，不会自动转成下一轮。目前 steer 中的图片、文件以文本引用传递。
+`follow_up()` 在原 runtime 和 conversation 中排队开始下一轮。`steer()` 向活跃 turn 追加输入：被拒绝时返回 `None`，接收时返回 `InputReceipt`，等待回执得到的布尔值表示输入是否已消费并保存。被拒绝的输入不会自动排队。目前 steer 中的图片、文件以文本引用传递。
 
 `run.session.state` 为 `idle`、`queued`、`running` 或 `closed`。快照包含 `ref`、`pending_turn_count` 和 `active_turn_id`，重新读取属性即可刷新。
 
@@ -530,31 +511,60 @@ Core 根据 `source_event` 或当前活跃的同 UMO 事件解析权限。没有
 
 不要在当前 turn 的工具中等待同 session 的排队 turn 完成，这会形成互相等待。可以提交后返回，或按目的使用 steer。
 
+## Runtime 事件 {#runtime-events}
+
+`run.events()` 产生有类型的 `RuntimeEvent` 对象，通过 `event.type` 读取事件名称、`event.payload` 读取数据。多个读者可独立重放事件，读取本身不会发送消息。
+
+```py
+from astrbot.api.agents import MessageCompleted, TextDelta
+
+async for event in run.events():
+    payload = event.payload
+    if isinstance(payload, TextDelta):
+        print(payload.text, end="")
+    elif isinstance(payload, MessageCompleted):
+        # Replace earlier deltas for this message_id with the complete content.
+        print(payload.message_id, payload.content)
+
+result = await run.result()
+print(result.status, result.text)
+```
+
+| 事件 | 用途 |
+| --- | --- |
+| `text.delta`、`reasoning.delta` | 展示增量内容。 |
+| `message.completed` | 按 `message_id` 用完整快照替换该消息的增量内容。 |
+| `output.ready` | 在 `send_to_user=False` 时收集待发送消息。 |
+| `tool.started/progress/finished/rejected` | 跟踪工具执行。 |
+| `request.started/finished` | 跟踪提供商调用。 |
+| `usage.updated` | 读取累计用量；替换上次快照，不要累加。 |
+| `turn.started/prepared/finished` | 跟踪 turn 生命周期。SDK 的 `turn.finished` 在输出处理后发布。 |
+
+`result.content` 包含最终回复，`result.text` 提取其中的纯文本。`result.usage` 提供累计用量，`result.metrics.steps` 提供执行步数。未知用量为 `None`，不等同于零；缓存命中 token 包含在输入 token 中。
+
+接口迁移：`event.data` 改为 `event.payload`，`result.chain` 改为 `result.content`。`streaming_delta` / `llm_result` 改用 `text.delta`、`reasoning.delta` / `message.completed`，`agent_stats` 改用 `usage.updated`。从最终结果读取状态、错误和执行指标。
+
+## 自定义 Agent runtime {#custom-agent-runtimes}
+
+通过 `ctx.agent.register_runtime(name, runtime)` 注册实现，在配置档的 `agent.runtime` 或专用 Agent 配置中选择该名称。注册的 runtime 可用于主代理和子代理。
+
+实现 `AgentRuntime` 来创建或恢复 `AgentSession`。输入包含来源事件、权限、授权后的工具与技能，以及可选的 `PlainInput`、`ImageInput` 或 `FileInput` 内容。运行配置通过 `open_session(..., options={"config": ...})` 传入。
+
+复用 `AgentSession.run_turn()`，实现 `execute_turn()`，使排队任务在执行前经过 Core 准入检查。可选的 `active_turn(umo)` 用于发现普通消息可追加输入的活跃 turn。若需协作式处理 `/stop`，实现 `request_stop_turn()`，仅在 runtime 负责收尾时返回 `True`，否则会使用取消机制。
+
+按实际执行情况发布类型化事件，返回 `TurnResult`，并将 session 的 `runtime_name` 设为注册名称。没有事件订阅者时，也必须正常执行和保存历史。
+
 ## 对话管理器
 
-运行时历史只包含模型消息（`system`、`user`、`assistant` 和 `tool`）。旧
-`_checkpoint` 标记在数据库迁移或旧备份导入时完成转换。平台历史关联使用
-`turn_id` 和 `context_event_id`，不再接受 `llm_checkpoint_id`。内部消息转换使用
-`load_messages` / `dump_messages`，保留原有的 `_no_save` 语义。
+通过 `self.context.conversations` 创建、读取、更新、切换和删除对话。`self.context.conversation_manager` 保留为兼容别名。`Conversation.history` 是包含模型消息的 JSON 字符串。
 
-在事件存储中，`_no_save` 表示不进入后续恢复的上下文，并不表示原文不落库。
-消息原文及标记只保存一份；恢复时，消息级 `_no_save=True` 会排除整条消息，
-内容片段级标记只排除对应片段。不会额外保存过滤后的副本，也不会在新事件中写入
-`include_in_context`。旧版本已有的排除事件仍按原规则读取，避免历史重复。
-核心直接读取结构化消息列表，插件接口的 `Conversation.history` 仍为 JSON 字符串。
-完整历史更新与 Agent 阶段暂存共用差异转换规则，重排时保留未变消息的 ID。
-插件的独立写入不修改正在运行的 Agent 工作消息；基于过期版本的写入仍会触发冲突。
+`_no_save` 会将消息或内容片段排除在后续模型上下文之外，但不会阻止原文保存。
 
-统一使用 `self.context.conversations` 操作对话，已有的 `new_conversation`、
-`get_conversation`、切换、更新和删除方法继续可用。
-`self.context.conversation_manager` 保留为兼容别名。原有的
-`event.conversation_events` 和 `get_conversation_events()` 入口已移除，
-插件通过 `conversations.append_message()` 和 `conversations.append_plugin_event()`
-写入，不再直接操作 writer。
+接口迁移：
 
-已移除过时的 `update_conversation_title()` 和 `update_conversation_persona_id()`。
-请分别改用 `update_conversation(..., title=...)` 和
-`update_conversation(..., persona_id=...)`。
+- 将 `event.conversation_events` 和 `get_conversation_events()` 替换为 `append_message()` 或 `append_plugin_event()`。
+- 将 `update_conversation_title()` 和 `update_conversation_persona_id()` 替换为 `update_conversation(..., title=...)` 和 `update_conversation(..., persona_id=...)`。
+- 平台历史关联中的 `llm_checkpoint_id` 改用 `turn_id` 和 `context_event_id`。
 
 ### 追加模型消息 `append_message`
 
@@ -569,7 +579,7 @@ message_id = await conversations.append_message(
 `content` 接受文本或 AstrBot 的 `ContentPart` 对象列表：
 
 ```py
-from astrbot.core.agent.message import ImageURLPart, TextPart
+from astrbot.api.agents import ImageURLPart, TextPart
 
 await conversations.append_message(
     [
@@ -582,10 +592,7 @@ await conversations.append_message(
 )
 ```
 
-Core 固定补上 `role="user"`，
-插件不需要提交角色或完整消息对象。消息会持久化并追加到对话上下文。
-即使在 hook 或工具内调用，也不会修改正在运行的 Agent 的工作上下文。
-接口在数据库事务提交后返回字符串 ID；可通过可选的 `message_id` 标识同一次提交的重试。
+消息以 `role="user"` 保存并进入后续上下文，不会修改正在运行的 Agent 的上下文。返回值是已保存的消息 ID；可传入 `message_id` 标识同一次提交的重试。
 
 ### 追加插件自定义事件 `append_plugin_event`
 
@@ -597,37 +604,17 @@ event_id = await conversations.append_plugin_event(
 )
 ```
 
-该接口保存关联当前对话的自定义事件，不改变本次或后续模型上下文。
-建议 `event_type` 使用插件名称前缀以避免重名；Core 不会自动推断或校验名称中的插件身份。
-`data` 为可 JSON 序列化的对象。
-内部事件命名空间、版本、序号和创建时间由 Core 填充。
-接口返回已保存的事件 ID；可通过可选的 `event_id` 标识同一次提交的重试。
+插件事件与对话一起保存，不会进入模型上下文。`event_type` 建议使用插件名称前缀，`data` 必须是可 JSON 序列化的字典。返回值是已保存的事件 ID；可传入 `event_id` 标识同一次提交的重试。
 
-插件自己的可变状态，如果不需要保留对话事件历史，继续使用
-[插件 KV 存储](./storage.md)，例如 `await self.put_kv_data(f"retrieval:{cid}", data)`。
-KV 按插件隔离；需要按对话区分时，由插件把 `cid` 放入 key。
+无需事件历史的可变状态可使用[插件 KV 存储](./storage.md)。按对话区分时，将 `cid` 放入 key。
 
-两个追加接口都必须显式传入关键字参数 `cid`，目标对话必须已存在，Core 从存储记录取得 UMO。
-无效或不存在的 CID 会抛出 `ValueError`，省略 `cid` 会抛出 `TypeError`。
-接口不会从活动消息、当前选中的对话或调用任务推断目标，也不会启动 Agent 或安排 follow-up。
+两个追加接口都必须传入已有对话的 `cid`，无效或不存在时抛出 `ValueError`。它们不会启动 Agent turn。
 
-修改当前执行的上下文，应修改相应 hook 收到的 `ProviderRequest.contexts` 或运行时消息列表。
-宿主通过本次执行拥有的 writer 记录这些修改。插件 hook 的签名不变，也不会收到 writer。
-每次执行创建自己的 hooks 实例，后台任务和 cron 不通过 `ContextVar` 继承对话 writer 或插件身份。
-
-直接调用 `update_conversation()`、`add_message_pair()` 等对话服务，即使发生在 hook 内，
-也是独立的持久化操作，不会同步当前执行的工作上下文。若独立写入改变了存储版本，
-当前执行的下一次写入可能抛出 `ConversationConflictError`，而不是覆盖新历史。
-本次执行的上下文修改应使用 hook 参数；不能通过重试有副作用的工具来解决版本冲突。
-
-只有在插件 hook 边界捕获的工作上下文修改才会标记为插件来源并应用相应的基线回收策略。
-对话服务直接写入的历史修改保留 unknown 归因，采用保守的保留策略。
+修改当前执行的上下文，请编辑相应 hook 的 `ProviderRequest.contexts` 或运行时消息列表。直接调用对话写入接口（包括 `update_conversation()` 和 `add_message_pair()`）不会更新正在运行的 Agent 上下文；并发修改已保存的历史可能触发 `ConversationConflictError`。
 
 ### 获取会话当前的 LLM 对话历史 `get_conversation`
 
 ```py
-# AstrBot v4.30.0 之前的导入方式：
-# from astrbot.core.conversation_mgr import Conversation
 from astrbot.api.provider import Conversation
 
 uid = event.unified_msg_origin
@@ -666,8 +653,6 @@ class Conversation:
 ### 快速添加 LLM 记录到对话 `add_message_pair`
 
 ```py
-# AstrBot v4.30.0 之前的导入方式：
-# from astrbot.core.agent.message import AssistantMessageSegment, UserMessageSegment, TextPart
 from astrbot.api.agents import (
     AssistantMessageSegment,
     UserMessageSegment,

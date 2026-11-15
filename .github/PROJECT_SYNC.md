@@ -1,131 +1,35 @@
 # GitHub Project synchronization
 
-## Behavior
+The `Sync GitHub Project` workflow updates Project status and release tracking from repository issues and pull requests. It does not edit or delete source issues or PRs. Manual dispatch and local runs preview changes by default.
 
-Each run builds a read-only plan first. Issue/PR events reconcile only their direct
-associations; six-hour schedule and manual dispatch run full scans. Manual dispatch
-and local runs preview by default; manual `apply` must be selected. Sync never edits
-or deletes source Issues/PRs.
+## Configure the integration
 
-- Required single-select `Status`: `Todo`, `In progress`, `Needs verification`,
-  `Done`, `Cancelled`, `Closed unmerged`. Required single-select `交付进度`:
-  `未关联实现`, `尚未合入`, `已合入待发布`, `已发布`. Required text fields:
-  `实现关联`, `发布版本`, `发布说明`.
-- Open issues start Todo. Linked active PRs mean In progress; merge alone means
-  Needs verification, not acceptance. Closed issues are Done unless GitHub close
-  reason is NOT_PLANNED (Cancelled). Closed unmerged PRs are not Done. Reopened
-  terminal items return to Todo. Preserve manually selected nonterminal status
-  without implementation. Optional labels `status:needs-info` and
-  `status:needs-verification` override inferred open-issue progress. `needs-info`
-  intentionally wins in Status even with a merged PR (Todo + 已合入待发布); the
-  fields represent acceptance and delivery separately.
-- Associate same-repository issues using closing references or standalone
-  `Ref(s)`, `Fix(es/ed)`, `Close(d)`, or `Resolve(s/d)` lines. Incidental mentions,
-  code fences, and cross-repository references do not establish a link. A reference
-  line containing `Fixes #12, and see #99 for context` links both same-repo issues;
-  keep unrelated numbers off reference lines to avoid unintended associations.
-- Delivery requires every associated implementation PR to be merged, every merge
-  commit to be reachable from the trusted default branch, and every such commit
-  to be contained in the earliest published stable release. Drafts/prereleases do
-  not count. Populate PR links and actual release tag/URL, never guess a version.
-- Issue/PR lifecycle events read only their subject and bounded linked issues/PRs,
-  including old/new body references and previously stored implementation links.
-  Fork-origin PR events are skipped to avoid spending an Actions run per fork event;
-  the scheduled reconciliation still observes their final repository-visible state.
-  They do not scan repository Issues, PRs, Project items, or releases. Six-hour
-  scheduled and manual runs do full reconciliation; changes discovered only by
-  broad push/release scans wait until the next scheduled or manual run.
-- Full scans include open issues/all PRs, tracked and linked closed issues, and
-  all items closed on or after Project creation. This durable boundary recovers
-  replaced/failed events without unrelated older closed history. For an older
-  Project, preview catch-up before writes. Skip archived items and draft issues.
-- Release version verification runs only during full scans. Event runs defer it to
-  the next full scan, while preserving an existing published result when its
-  implementation links are unchanged.
-- Validate the Project schema/options and calculate all changes before writing;
-  skip unchanged values and clear stale text. Paginate every GraphQL connection,
-  reject stalled cursors, and serialize runs. Apply mode prints the plan first;
-  on failure it reports confirmed, outcome-unknown and unattempted mutation counts,
-  with affected item/field, so partial writes can be reconciled. Apply uses four
-  workers across distinct Project items; mutations within each item stay ordered.
-  This is bounded concurrency, not a guarantee against GitHub rate limits.
-  The synchronization job has a 120-minute total execution budget, including
-  checkout, scanning and writes; advancing to another step does not reset it.
-- Full scans log phase/page and candidate progress to the Actions log. Stable
-  release membership is determined with one `git tag --contains` graph walk per
-  distinct merge commit instead of one `git merge-base` process per commit/tag
-  pair; missing fetched tags fail closed.
-- Local microbenchmark against the full checkout: 237 version tags and 20 sampled
-  tag commits (version order used as a proxy for publication order). Pairwise
-  `merge-base` checks ran 2,110 processes in 31.67 s; `tag --contains` ran 20 in
-  0.35 s (90x on this sample). This measures Git ancestry only, not GraphQL or
-  full-workflow wall time.
-- Privileged jobs run trusted default-branch code only, use full Git history/tags,
-  and never execute PR code. PR tests use no Project secret.
+1. Create these fields in the destination Projects v2 project:
 
-Run offline tests and checks:
+   | Field | Type | Required options |
+   | --- | --- | --- |
+   | `Status` | Single select | `Todo`, `In progress`, `Needs verification`, `Done`, `Cancelled`, `Closed unmerged` |
+   | `交付进度` | Single select | `未关联实现`, `尚未合入`, `已合入待发布`, `已发布` |
+   | `实现关联`, `发布版本`, `发布说明` | Text | — |
 
-```sh
-python -I tests/test_sync_github_project.py -v
-python -I tests/test_project_delivery.py -v
-python -I tests/test_project_events.py -v
-uv run ruff format --check scripts/sync_github_project.py tests/test_sync_github_project.py tests/test_project_delivery.py
-uv run ruff check scripts/sync_github_project.py
-```
+2. Under **Settings → Environments**, create `project-sync`. Choose **Selected branches and tags** and allow exactly the default branch (`master`), using a branch rule. Do not allow tags or wildcard branches. Use required reviewers where available and restrict changes to these rules. If environment protection is unavailable, leave synchronization disabled.
+3. After configuring protection, add the **environment secret** `ASTRBOT_PROJECT_ENV_TOKEN` with Project write and repository Issue/PR read access. For example, use a classic personal access token with `project` scope from an account that can edit the Project, subject to organization SSO and token policies. Do not store it as a repository or organization secret; remove any old `ASTRBOT_PROJECT_TOKEN` secret at those scopes.
+4. Set the repository Actions variables below. Setting `ASTRBOT_PROJECT_ID` enables the workflow.
 
-## Configuration
+   | Variable | Value |
+   | --- | --- |
+   | `ASTRBOT_PROJECT_ID` | Destination Project node ID (`PVT_...`) |
+   | `ASTRBOT_PROJECT_STATUS_OPEN` | Open-state label; defaults to `Todo` |
+   | `ASTRBOT_PROJECT_STATUS_DONE` | Closed/merged-state label; defaults to `Done` |
+   | `ASTRBOT_PROJECT_STATUS_MAP` | Optional JSON map from other canonical Status values to existing labels |
 
-Set these repository Actions variables:
-
-| Variable | Value |
-| --- | --- |
-| `ASTRBOT_PROJECT_ID` | Destination Projects v2 node ID (`PVT_...`); required to enable |
-| `ASTRBOT_PROJECT_STATUS_OPEN` | Open-state option name; default `Todo` |
-| `ASTRBOT_PROJECT_STATUS_DONE` | Closed/merged-state option name; default `Done` |
-| `ASTRBOT_PROJECT_STATUS_MAP` | Optional JSON object mapping remaining canonical Status values to existing option labels |
-
-Example map when an existing Project uses translated Status labels:
+For translated labels, a status map can be:
 
 ```json
 {"In progress":"进行中","Needs verification":"待验证","Cancelled":"已取消","Closed unmerged":"已关闭未合入"}
 ```
 
-Before enabling synchronization, create the `project-sync` GitHub Environment
-under repository Settings → Environments. Select **Selected branches and tags**
-and add exactly one **branch** rule for the default branch (`master` currently).
-Do not allow tags, wildcard branches, or all protected branches. Use required
-reviewers where available and limit who can change environment protection rules.
-The workflow's inline branch check is defense in depth, not the credential boundary.
-
-Only after those rules are configured, add the **environment secret**
-`ASTRBOT_PROJECT_ENV_TOKEN` with project write access and repository Issue/PR read
-access. Never define this secret at repository or organization scope; remove any
-old repository/organization `ASTRBOT_PROJECT_TOKEN` used for this integration.
-The workflow maps the environment secret to the script's `ASTRBOT_PROJECT_TOKEN`
-process variable; local runs continue using that process variable. No fallback to
-the old secret exists. YAML cannot create or enforce these server-side rules.
-If environment protection is unavailable, leave synchronization disabled.
-
-For example, use a classic personal access token with the `project` scope,
-owned by an account that can edit the destination project. Honor any organization
-SSO authorization and token restrictions. The repository `GITHUB_TOKEN` is not
-used for project mutations.
-The Project must contain all five fields and options listed above. Do not use this
-credential in ordinary pull request test jobs.
-
-Branch protection evaluates the triggering workflow ref, not the checked-out ref.
-Release events use tag refs, and PR-target events against non-default branches may
-therefore be rejected by this default-branch-only Environment. Do not add tag or
-branch exceptions to bypass that restriction: the next default-branch push,
-six-hour scheduled run, or default-branch manual dispatch reconciles their state.
-Test that a non-default dispatch is denied before using a live credential.
-
-Both workflows pin checkout/setup-python to full commit SHAs verified against
-their official repositories. Existing weekly Dependabot updates propose SHA
-changes for review; keep the immutable pins when updating Actions.
-
-To resolve an organization project's node ID, replace `PROJECT_NUMBER` with the
-number from its GitHub URL (not its node ID):
+To look up an organization Project's node ID, replace `PROJECT_NUMBER` with the number in its URL:
 
 ```sh
 gh auth refresh -s project
@@ -134,27 +38,53 @@ gh api graphql -f query='query($owner: String!, $number: Int!) {
 }' -f owner=AstrBotDevs -F number=PROJECT_NUMBER --jq '.data.organization.projectV2.id'
 ```
 
-Merge to the default branch, configure the fields and secret, then preview with
-manual dispatch before selecting `apply`. Verify an Issue→PR→merge→stable release
-path plus a fork PR. A mutation can partially apply; rerunning or waiting for the
-next schedule reconciles current state. Remove `ASTRBOT_PROJECT_ID` to disable.
+The workflow maps the environment secret to the script's `ASTRBOT_PROJECT_TOKEN` process variable. Local runs use that variable too. The repository `GITHUB_TOKEN` is not used for Project writes.
 
-## Boundaries
+## Preview and apply
 
-- Always: pass GraphQL variables separately, paginate connections, fail on API
-  errors, use timeouts, preview before manual writes, test without credentials.
-- Ask first: cross-repository links, legacy backfill, additional tracking fields,
-  changing automatic Status rules, creating credentials or a Project.
-- Never: commit secrets, check out PR head code in the privileged workflow,
-  modify issue/PR state, delete project items, commit or push without permission.
+After merging the workflow to the default branch, run it manually on that branch with `apply` unchecked. Review the plan, then run with `apply` selected. Verify an issue → PR → merge → stable release sequence and a fork PR.
 
-Unrelated items closed before Project creation are intentionally not imported. Coordinate any
-native Project automation that writes these same fields. GitHub Actions and live
-API validation require maintainer configuration after merge.
+Before using a live credential, verify that dispatch from a non-default branch is denied. Environment protection checks the triggering workflow ref, not the checked-out ref. Do not add branch exceptions for rejected PR-target events; the next scheduled or default-branch manual run reconciles them.
 
-## API reference
+Remove `ASTRBOT_PROJECT_ID` to disable synchronization. Coordinate any native Project automation that writes the same fields.
 
-GitHub's official "Using the API to manage Projects" documentation describes
-ProjectV2 field lookup, `addProjectV2ItemById` (including existing-item reuse),
-and `updateProjectV2ItemFieldValue`:
-https://docs.github.com/en/issues/planning-and-tracking-with-projects/automating-your-project/using-the-api-to-manage-projects
+## Synchronization rules
+
+| Situation | Result |
+| --- | --- |
+| Open issue without an implementation | `Todo`; preserve a manually selected nonterminal status |
+| Linked active PR | `In progress` |
+| Linked merged PR | `Needs verification`; merging does not imply acceptance |
+| Closed issue | `Done`, or `Cancelled` for `NOT_PLANNED` |
+| Closed unmerged PR | `Closed unmerged` |
+| Reopened terminal item | `Todo` |
+
+For open issues, `status:needs-info` and `status:needs-verification` override inferred progress. `needs-info` takes precedence even with a merged PR; acceptance status and delivery progress are separate fields.
+
+Issues are linked through closing references or standalone `Ref(s)`, `Fix(es/ed)`, `Close(d)`, or `Resolve(s/d)` lines. Keep unrelated issue numbers off those lines: `Fixes #12, and see #99 for context` links both. Incidental mentions, code fences, and cross-repository references do not establish links.
+
+A delivery is released only when all associated implementation PRs are merged, their commits are reachable from the default branch, and a published stable release contains all those commits. The earliest qualifying release supplies the version and URL; drafts and prereleases do not count.
+
+## Schedule and recovery
+
+- Issue and same-repository PR events reconcile the changed item and its linked items. Fork PR events are skipped; full scans include their repository-visible state.
+- Scheduled runs every six hours and manual runs perform full reconciliation, including release verification. Event runs preserve an existing release result while implementation links are unchanged.
+- Full scans include open issues, all PRs, tracked or linked closed issues, and items closed since Project creation. Archived items and draft issues are skipped. Preview catch-up before applying to an older Project.
+- Each run validates the schema and prints its plan before writing. Runs are serialized and have a 120-minute total timeout. API errors or missing fetched tags stop the run.
+- A failed apply reports confirmed, outcome-unknown, and unattempted writes. Rerun or wait for the next scheduled scan to reconcile partial changes. The Actions log shows scan progress.
+
+Privileged runs use default-branch code and full Git history and tags. Never check out PR code or expose the Project token in PR test jobs. Keep Actions pinned to immutable commit SHAs when updating them.
+
+## Local validation
+
+Run the offline checks without credentials:
+
+```sh
+python -I tests/test_sync_github_project.py -v
+python -I tests/test_project_delivery.py -v
+python -I tests/test_project_events.py -v
+uv run ruff format --check scripts/sync_github_project.py tests/test_sync_github_project.py tests/test_project_delivery.py tests/test_project_events.py
+uv run ruff check scripts/sync_github_project.py
+```
+
+See GitHub's [Projects API guide](https://docs.github.com/en/issues/planning-and-tracking-with-projects/automating-your-project/using-the-api-to-manage-projects) for field lookup and item mutations.
