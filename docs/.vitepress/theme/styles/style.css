@@ -160,6 +160,10 @@
   padding-left: 6px !important;
 }
 
+.VPSidebar .VPSidebarItem:not(.level-0):not(.collapsed) > .items {
+  padding-bottom: 8px;
+}
+
 .VPSidebar .VPSidebarItem > .item {
   align-items: center;
   margin: 1px 0;
