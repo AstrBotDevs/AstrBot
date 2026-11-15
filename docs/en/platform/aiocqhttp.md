@@ -14,9 +14,6 @@ Common OneBot v11 implementation projects are listed below:
 
 Please refer to each implementation project's deployment documentation.
 
-> [!WARNING]
-> NapCat is no longer maintained. Its repository no longer ships the program or deployment documentation, and the former one-click scripts, Docker images, and Kubernetes manifests are all unavailable. If you still need OneBot v11 on a personal QQ account, evaluate other OneBot v11 implementations for availability and safety yourself; AstrBot does not guarantee third-party implementations.
-
 ## 1. Configure OneBot v11
 
 1. Open AstrBot's WebUI
