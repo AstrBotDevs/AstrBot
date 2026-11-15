@@ -54,4 +54,4 @@ Existing global settings and expert configurations migrate automatically. Existi
 
 API clients should replace `/api/v1/subagents/config` and `/api/subagent/config` with `/api/v1/agent-configs` and `/api/v1/agent-configs/{config_id}`. Use `/api/v1/agent-runtimes` to list runtimes and their defaults. These endpoints require the `config` scope; see [OpenAPI scopes](../dev/openapi-scopes.md).
 
-For plugin integration, see [running an Agent](../dev/star/guides/ai.md#running-an-agent-in-an-existing-conversation) and [runtime events](../dev/star/guides/ai.md#runtime-events).
+For plugin integration, see [running an Agent](../dev/star/guides/ai/agents.md#run-session-agent) and [runtime events](../dev/star/guides/ai/agents.md#runtime-events).
