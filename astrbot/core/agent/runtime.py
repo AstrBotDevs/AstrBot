@@ -116,6 +116,8 @@ class AgentInput:
         streaming: Requested output mode, or None to use the runtime default.
         send_to_user: Allow automatic delivery and runtime-managed send tools.
             False retains prepared outputs as events for caller-owned delivery.
+        message_event_id: Existing message.appended identity assigned on receipt;
+            preserved when the same input is retried or scheduled as a follow-up.
     """
 
     event: AstrMessageEvent
@@ -125,10 +127,16 @@ class AgentInput:
     plugin_skills: list[SkillInfo] | None = None
     streaming: bool | None = None
     send_to_user: bool = True
+    message_event_id: str | None = None
 
 
 class InputReceipt:
-    """Cancellation-safe acknowledgment of input consumed at a durable boundary."""
+    """Cancellation-safe acknowledgment that a runtime owns an input durably.
+
+    Event-backed runtimes may acknowledge receipt before model consumption and
+    retain responsibility for scheduling it. Older runtimes acknowledge after
+    committing the consuming turn. True never asks the caller to resubmit.
+    """
 
     def __init__(self) -> None:
         self._future: asyncio.Future[bool] = asyncio.get_running_loop().create_future()
@@ -141,10 +149,10 @@ class InputReceipt:
         return self._future.done()
 
     def resolve(self, consumed: bool) -> None:
-        """Acknowledge consumption after persistence, or release input for retry.
+        """Acknowledge durable ownership, or release input for retry.
 
         Args:
-            consumed: Whether the owning runtime has committed this input.
+            consumed: Whether the runtime has durably taken responsibility for input.
         """
         if not self._future.done():
             self._future.set_result(consumed)
@@ -239,9 +247,7 @@ class AgentTurn:
             return
         if not self._execution_started:
             # Queued turns and admission checks have no runtime work to stop.
-            self._cancel_requested = True
-            if self._task is not None:
-                self._task.cancel()
+            self._stop_task = asyncio.create_task(self.cancel())
             return
 
         async def stop() -> None:
@@ -295,7 +301,7 @@ class AgentTurn:
             input: Additional input with independently resolved authorization.
 
         Returns:
-            A receipt confirming durable consumption, or None when not accepted.
+            A receipt confirming durable ownership, or None when not accepted.
         """
         if (
             self.done
@@ -506,7 +512,7 @@ class AgentSession(ABC):
             input: Additional authorized input.
 
         Returns:
-            A durable-consumption receipt, or None when steering is unsupported.
+            A durable-ownership receipt, or None when steering is unsupported.
         """
         return None
 

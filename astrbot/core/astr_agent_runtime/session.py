@@ -9,6 +9,8 @@ from typing import TYPE_CHECKING
 from astrbot.core import logger
 from astrbot.core.agent.events import RuntimeExecutionError, TurnPrepared
 from astrbot.core.agent.input import format_input_content
+from astrbot.core.agent.message import dump_messages
+from astrbot.core.agent.response import AgentResponse
 from astrbot.core.agent.runtime import (
     AgentInput,
     AgentSession,
@@ -149,6 +151,24 @@ class NativeAgentSession(AgentSession):
                 await writer.start_turn(
                     trigger, event_id=turn_id if isinstance(turn_id, str) else None
                 )
+            message_ids = runner._received_message_ids
+            if writer is not None and message_ids:
+                messages = runner.run_context.messages
+                await writer.consume(
+                    AgentResponse(
+                        "context.updated",
+                        {
+                            "messages": dump_messages(
+                                messages[1:]
+                                if messages and messages[0].role == "system"
+                                else messages,
+                                include_temporary=True,
+                            ),
+                            "message_event_ids": message_ids,
+                        },
+                    )
+                )
+                runner._context_initialized = True
             outcome = await execute_native_loop(runner, turn, config.max_steps)
             status = outcome.status
             return outcome

@@ -97,10 +97,12 @@ receipt = await run.steer(
     input_message=[PlainInput(text="Also focus on safety concerns.")],
 )
 if receipt is not None:
-    consumed = await receipt
+    accepted = await receipt
 ```
 
-`follow_up()` queues a turn in the original runtime and conversation. `steer()` adds input to an active turn: it returns `None` if rejected, or an `InputReceipt` whose awaited boolean indicates whether the input was consumed and saved. Rejected input is not queued automatically. Steering images and files are currently passed as text references.
+`follow_up()` queues a turn in the original runtime and conversation. `steer()` adds input to an active turn: it returns `None` if rejected, or an `InputReceipt`. Awaiting `True` confirms that the runtime durably owns the input, so the caller must not resubmit it; it does not mean the model has finished processing it. `False` means ownership was not accepted. Rejected input is not queued automatically. Steering images and files are currently passed as text references.
+
+Built-in main sessions save received input immediately and consume it after a complete tool batch or plain reply. Accepted steering left over at normal completion becomes a follow-up. After an unexpected exit, pending text is recovered on the next execution of the same conversation with matching permissions, plugin scope, and output policy. This does not start execution automatically at application startup, restore attachments, or migrate delegated-session history. Explicitly cancelled input is not recovered.
 
 `run.session.state` is `idle`, `queued`, `running`, or `closed`. The snapshot contains `ref`, `pending_turn_count`, and `active_turn_id`. Read the property again to refresh it.
 

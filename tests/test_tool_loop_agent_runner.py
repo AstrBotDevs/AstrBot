@@ -2261,7 +2261,7 @@ async def test_event_journal_records_requests_tools_and_final_context(
         runtime_events = await collect_events(runner.step_until_done(3))
         captured = [call.args[0] for call in sink.await_args_list]
         assert sum(event.type == "context.updated" for event in captured) == 1
-        assert sum(event.type == "context.appended" for event in captured) == 3
+        assert sum(event.type == "context.appended" for event in captured) == 4
         await writer.save_history(dump_messages(runner.run_context.messages))
         await writer.finish_turn("completed")
         events = await db.conversation_store.events(conv.conversation_id)

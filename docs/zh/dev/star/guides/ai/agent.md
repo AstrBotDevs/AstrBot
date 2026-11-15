@@ -97,10 +97,12 @@ receipt = await run.steer(
     input_message=[PlainInput(text="补充：请重点说明安全隐患。")],
 )
 if receipt is not None:
-    consumed = await receipt
+    accepted = await receipt
 ```
 
-`follow_up()` 在原 runtime 和 conversation 中排队开始下一轮。`steer()` 向活跃 turn 追加输入：被拒绝时返回 `None`，接收时返回 `InputReceipt`，等待回执得到的布尔值表示输入是否已消费并保存。被拒绝的输入不会自动排队。目前 steer 中的图片、文件以文本引用传递。
+`follow_up()` 在原 runtime 和 conversation 中排队开始下一轮。`steer()` 向活跃 turn 追加输入：被拒绝时返回 `None`，接收时返回 `InputReceipt`。等待回执得到 `True` 表示运行时已持久化接管输入，调用方不应重复提交，不代表模型已经处理完毕；`False` 表示未接管。被拒绝的输入不会自动排队。目前 steer 中的图片、文件以文本引用传递。
+
+内置主会话会立即保存收到的输入，在完整工具批次结束或纯文本回复后消费；已接收但本轮未消费的 steer 会在正常结束后转为 follow-up。异常退出后，未消费的文本会在同一会话下次执行时恢复，要求权限、插件范围和输出策略一致；这不包含启动后自动执行、附件恢复或子代理历史存储迁移。显式取消的输入不会恢复。
 
 `run.session.state` 为 `idle`、`queued`、`running` 或 `closed`。快照包含 `ref`、`pending_turn_count` 和 `active_turn_id`，重新读取属性即可刷新。
 

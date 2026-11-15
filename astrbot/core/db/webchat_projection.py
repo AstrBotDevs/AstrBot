@@ -31,7 +31,8 @@ async def project_webchat_event_links(
             and (
                 kind != "message.appended"
                 or (
-                    payload.get("include_in_context", True)
+                    "delivery" not in payload
+                    and payload.get("include_in_context", True)
                     and not payload["message"].get("_no_save")
                 )
             )

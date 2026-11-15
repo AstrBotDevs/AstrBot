@@ -112,6 +112,7 @@ class FollowUpTicket:
     seq: int
     text: str
     consumed: bool = False
+    message_event_id: str | None = None
     resolved: asyncio.Event = field(default_factory=asyncio.Event)
 
 
@@ -228,13 +229,9 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                             for index, ticket in enumerate(follow_ups)
                         ],
                     )
-                ]
+                ],
+                follow_ups=follow_ups,
             )
-            # Keep input arriving while the context sink was awaited for the next step.
-            del self._pending_follow_ups[: len(follow_ups)]
-            for ticket in follow_ups:
-                ticket.consumed = True
-                ticket.resolved.set()
             self.final_llm_resp = None
             return
 
@@ -365,6 +362,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         self._abort_signal = asyncio.Event()
         self._pending_follow_ups: list[FollowUpTicket] = []
         self._follow_up_seq = 0
+        self._received_message_ids: list[str] = []
         self._last_tool_name: str | None = None
         self._last_tool_args: dict[str, T.Any] | None = None
         self._same_tool_streak = 0
@@ -1045,19 +1043,33 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         self._pending_assistant_event = None
 
     async def _append_context_messages(
-        self, messages: list[Message], *, record_response: bool = False
+        self,
+        messages: list[Message],
+        *,
+        record_response: bool = False,
+        follow_ups: list[FollowUpTicket] | None = None,
     ) -> None:
         """Append framework messages and stage only their new event payloads.
 
         Args:
             messages: New messages owned by the runner, in execution order.
             record_response: Attach the pending model outcome to its assistant message.
+            follow_ups: Tickets consumed by this insertion, before awaiting storage.
         """
         self.run_context.messages.extend(messages)
+        if follow_ups:
+            del self._pending_follow_ups[: len(follow_ups)]
+            for ticket in follow_ups:
+                ticket.consumed = True
+                ticket.resolved.set()
         if self._conversation_event_sink is not None:
             data: dict[str, T.Any] = {
                 "messages": dump_messages(messages, include_temporary=True)
             }
+            if follow_ups and all(ticket.message_event_id for ticket in follow_ups):
+                data["message_event_ids"] = [
+                    ticket.message_event_id for ticket in follow_ups
+                ]
             event = self._pending_assistant_event if record_response else None
             if event is not None:
                 data["assistant"] = {
@@ -1336,6 +1348,26 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                     llm_resp.tools_call_args = requery_resp.tools_call_args
                     llm_resp.tools_call_ids = requery_resp.tools_call_ids
 
+            # Persist the assistant decision before any tool side effects.
+            parts = []
+            if llm_resp.reasoning_content is not None or llm_resp.reasoning_signature:
+                parts.append(
+                    ThinkPart(
+                        think=llm_resp.reasoning_content or "",
+                        encrypted=llm_resp.reasoning_signature,
+                    )
+                )
+            if llm_resp.completion_text:
+                parts.append(TextPart(text=llm_resp.completion_text))
+            if len(parts) == 0:
+                parts = None
+            tool_call_message = AssistantMessageSegment(
+                tool_calls=llm_resp.to_openai_tool_calls_model(), content=parts
+            )
+            await self._append_context_messages(
+                [tool_call_message], record_response=True
+            )
+
             tool_call_result_blocks = []
             cached_images = []  # Collect cached images for LLM visibility
             try:
@@ -1400,30 +1432,11 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                             TextPart(text=notice),
                         ]
 
-            # 将结果添加到上下文中
-            parts = []
-            if llm_resp.reasoning_content is not None or llm_resp.reasoning_signature:
-                parts.append(
-                    ThinkPart(
-                        think=llm_resp.reasoning_content or "",
-                        encrypted=llm_resp.reasoning_signature,
-                    )
-                )
-            if llm_resp.completion_text:
-                parts.append(TextPart(text=llm_resp.completion_text))
-            if len(parts) == 0:
-                parts = None
             tool_calls_result = ToolCallsResult(
-                tool_calls_info=AssistantMessageSegment(
-                    tool_calls=llm_resp.to_openai_tool_calls_model(),
-                    content=parts,
-                ),
+                tool_calls_info=tool_call_message,
                 tool_calls_result=tool_call_result_blocks,
             )
-            # record the assistant message with tool calls
-            await self._append_context_messages(
-                tool_calls_result.to_openai_messages_model(), record_response=True
-            )
+            await self._append_context_messages(tool_call_result_blocks)
 
             # If there are cached images and the model supports image input,
             # append a user message with images so LLM can see them
@@ -1476,13 +1489,9 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                                 for index, ticket in enumerate(follow_ups)
                             ],
                         )
-                    ]
+                    ],
+                    follow_ups=follow_ups,
                 )
-                # Preserve inputs arriving while the context sink was awaited.
-                del self._pending_follow_ups[: len(follow_ups)]
-                for ticket in follow_ups:
-                    ticket.consumed = True
-                    ticket.resolved.set()
 
     async def step_until_done(
         self, max_step: int
@@ -1935,6 +1944,27 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
 
     async def _finalize_aborted_step(self) -> None:
         logger.info("Agent execution was requested to stop by user.")
+
+        pending_calls = {}
+        for message in self.run_context.messages:
+            if message.role == "assistant":
+                pending_calls.update(
+                    (call["id"] if isinstance(call, dict) else call.id, call)
+                    for call in (message.tool_calls or [])
+                )
+            elif message.role == "tool":
+                pending_calls.pop(message.tool_call_id, None)
+        if pending_calls:
+            await self._append_context_messages(
+                [
+                    ToolCallMessageSegment(
+                        role="tool",
+                        tool_call_id=call_id,
+                        content="Execution was interrupted; the result is unavailable. Do not assume the operation did not take effect.",
+                    )
+                    for call_id in pending_calls
+                ]
+            )
 
         await self._append_context_messages(
             [

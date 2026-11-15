@@ -197,8 +197,9 @@ class AgentRun:
                 semantics and are represented by their references as text.
 
         Returns:
-            A durable-consumption receipt, or None when admission or steering
-            rejects it. Await the returned receipt to confirm persistence.
+            A durable-ownership receipt, or None when admission or steering
+            rejects it. True confirms persistence and runtime responsibility,
+            not completion of model processing.
         """
         if self._turn.done:
             return None

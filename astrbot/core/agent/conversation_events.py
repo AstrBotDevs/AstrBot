@@ -77,16 +77,47 @@ class ConversationEventWriter:
         Returns:
             Whether the response belongs to persistence rather than display.
         """
+        message_ids = response.data.get("message_event_ids", [])
+        if response.type in {"context.appended", "context.updated"} and message_ids:
+            # Receipt and execution order differ while tools run. A single
+            # checkpoint selects the safe context and acknowledges its inputs.
+            history = response.data["messages"]
+            if response.type == "context.appended":
+                history = [*self.get_messages(), *history]
+            entries, _ = reconcile_history(self._entries, history, turn_id=self.turn_id)
+            users = [entry for entry in entries if entry["message"]["role"] == "user"]
+            if users:
+                users[-1]["id"] = message_ids[0]
+            self._pending.append(
+                {
+                    "type": "context.rebased",
+                    "event_id": response.event_id or new_event_id(),
+                    "payload": {
+                        "reason": "snapshot",
+                        "origin": "system",
+                        "turn_id": self.turn_id,
+                        "messages": entries,
+                        "consumed_message_ids": message_ids,
+                    },
+                }
+            )
+            self._entries = entries
+            # Keep the checkpoint staged on failure so a later history flush
+            # cannot save the messages without their consumption progress.
+            await self.flush()
+            return True
         if response.type == "context.appended":
             self.stage_messages(
                 response.data["messages"], assistant=response.data.get("assistant")
             )
+            await self.flush()
         elif response.type == "context.updated":
             self.stage_history(
                 response.data["messages"],
                 reason=response.data.get("reason", "legacy_replace"),
                 origin=response.data.get("origin", "unknown"),
             )
+            await self.flush()
         elif response.type == "turn.started":
             await self.start_turn(
                 {"umo": self.umo, **response.data.get("trigger", {})},
@@ -112,6 +143,26 @@ class ConversationEventWriter:
         else:
             return False
         return True
+
+    async def flush(self) -> None:
+        """Commit staged events without rescanning the unchanged message history.
+
+        Raises:
+            ConversationPersistenceError: Storage did not acknowledge the batch.
+        """
+        async with self._lock:
+            try:
+                committed = await self.store.append(
+                    self.cid,
+                    list(self._pending),
+                    expected_leaf=self.leaf_event_id,
+                    link_display=self._link_display,
+                )
+            except (SQLAlchemyError, ValueError) as exc:
+                raise ConversationPersistenceError(
+                    "Conversation context was not acknowledged"
+                ) from exc
+            await self._acknowledge(committed)
 
     async def append(
         self,
@@ -204,7 +255,9 @@ class ConversationEventWriter:
             (
                 event
                 for event in result.events
-                if event.type in CONTEXT_TYPES and event.seq > self._context_seq
+                if event.type in CONTEXT_TYPES
+                and "delivery" not in (event.payload or {})
+                and event.seq > self._context_seq
             ),
             key=lambda event: event.seq,
         )
