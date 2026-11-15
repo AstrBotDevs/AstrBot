@@ -161,6 +161,7 @@
 }
 
 .VPSidebar .VPSidebarItem:not(.level-0):not(.collapsed) > .items {
+  padding-top: 4px;
   padding-bottom: 8px;
 }
 
