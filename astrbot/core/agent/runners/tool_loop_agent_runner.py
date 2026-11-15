@@ -189,9 +189,12 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
     )
 
     async def _complete_with_assistant_response(self, llm_resp: LLMResponse) -> None:
-        """Finalize the current step as a plain assistant response with no tool calls."""
+        """Record a plain reply and continue if accepted steering is still pending.
+
+        Args:
+            llm_resp: Assistant response without tool calls.
+        """
         self.final_llm_resp = llm_resp
-        self._transition_state(AgentState.DONE)
         self.stats.end_time = time.time()
 
         parts = []
@@ -212,6 +215,30 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             await self.agent_hooks.on_llm_response(self.run_context, llm_resp)
         except Exception as e:
             logger.error(f"Error in on_llm_response hook: {e}", exc_info=True)
+
+        if self._is_stop_requested():
+            await self._finalize_aborted_step()
+            return
+        if self._pending_follow_ups and self.run_context.run_end_reason != "max_steps":
+            # A plain reply is also a safe boundary for accepted user input.
+            follow_ups = list(self._pending_follow_ups)
+            await self._append_context_messages(
+                [
+                    Message(
+                        role="user",
+                        content=[TextPart(text=ticket.text) for ticket in follow_ups],
+                    )
+                ]
+            )
+            # Keep input arriving while the context sink was awaited for the next step.
+            del self._pending_follow_ups[: len(follow_ups)]
+            for ticket in follow_ups:
+                ticket.consumed = True
+                ticket.resolved.set()
+            self.final_llm_resp = None
+            return
+
+        self._transition_state(AgentState.DONE)
         self._resolve_unconsumed_follow_ups()
 
     async def _finish_run(self) -> None:
@@ -892,7 +919,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         *,
         message_text: str,
     ) -> FollowUpTicket | None:
-        """Queue user input after the next complete batch of tool results.
+        """Queue user input after the next tool batch or plain assistant reply.
 
         Args:
             message_text: Additional user input to append without modification.

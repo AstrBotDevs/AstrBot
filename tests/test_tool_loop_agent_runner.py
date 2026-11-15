@@ -1642,7 +1642,7 @@ async def test_steering_appends_user_messages_after_all_tool_results(
 
 
 @pytest.mark.asyncio
-async def test_follow_up_ticket_not_consumed_when_no_next_tool_call(
+async def test_follow_up_ticket_consumed_when_no_next_tool_call(
     runner, mock_provider, provider_request, mock_tool_executor, mock_hooks
 ):
     mock_provider.should_call_tools = False
@@ -1665,7 +1665,7 @@ async def test_follow_up_ticket_not_consumed_when_no_next_tool_call(
         pass
 
     assert ticket.resolved.is_set() is True
-    assert ticket.consumed is False
+    assert ticket.consumed is True
 
 
 @pytest.mark.asyncio
