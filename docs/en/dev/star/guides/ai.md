@@ -440,6 +440,32 @@ Submission returns after binding to a runtime turn, without waiting for model ex
 
 The returned `AgentRun` exposes turn identity, output, cancellation, steering, and follow-up. Its `session` property gives a read-only status snapshot.
 
+Pass `metadata` to identify a plugin-triggered turn in existing hooks:
+
+```py
+run = await self.context.agent.run_turn(
+    umo=event.unified_msg_origin,
+    input_message=[PlainInput(text="Check in with the user briefly.")],
+    metadata={
+        "private_companion": {
+            "kind": "proactive_message",
+            "attempt_id": "check-in-001",
+        }
+    },
+)
+```
+
+Inside an existing hook, read the metadata from that hook's wakeup event:
+
+```py
+metadata = event.get_extra("agent_metadata", {})
+companion = metadata.get("private_companion", {})
+```
+
+`metadata` is a dict of JSON-compatible values. Core deep-copies it into the wakeup event's `agent_metadata` extra before admission hooks run, so caller changes and other submissions do not affect it. Keys remain nested under `agent_metadata`; they do not overwrite framework extras or grant permissions. Core does not automatically add metadata to the model prompt or conversation history. Plugins should use their own namespace and explicitly inject any required model context in a hook.
+
+Omitting `metadata` creates an empty dict. Metadata and other arbitrary extras are not copied from `source_event`. `run.follow_up()` starts a new turn with empty metadata; to supply metadata on a subsequent turn, call `run_turn()` with the target `session_id` explicitly.
+
 Core selects a registered implementation using the profile's `agent.runtime`. After `ctx.agent.register_runtime(name, runtime)`, an implementation can serve main turns or be called as a subagent by the built-in runtime. Unregistered names fail explicitly; existing Dify, Coze and other legacy paths retain their execution flow.
 
 `/stop` calls `turn.request_stop()` for submitted turns in the matching UMO. For a running turn, `AgentSession.request_stop_turn(turn)` returns `True` if the runtime accepts the request and will settle the turn, or `False` to fall back to `cancel_turn()` and local task cancellation. Queued turns are cancelled directly. `request_stop()` returns immediately, and `await turn.result()` waits for cleanup.
