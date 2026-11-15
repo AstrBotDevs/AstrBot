@@ -19,7 +19,6 @@ from astrbot.core.agent.message import (
     ContentPart,
     ToolCall,
     ToolCallMessageSegment,
-    is_checkpoint_message,
 )
 from astrbot.core.agent.tool import ToolSet
 from astrbot.core.db.po import Conversation
@@ -251,8 +250,6 @@ class ProviderRequest:
         result_parts = []
 
         for ctx in self.contexts:
-            if is_checkpoint_message(ctx):
-                continue
             role = ctx.get("role", "unknown")
             content = ctx.get("content", "")
 

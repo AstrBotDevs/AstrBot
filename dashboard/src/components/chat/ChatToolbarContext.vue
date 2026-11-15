@@ -15,7 +15,9 @@ const title = computed(() => {
 <template>
   <div class="chat-toolbar-context">
     <ProviderModelMenu variant="header" />
-    <span v-if="title" class="chat-toolbar-context-title">{{ title }}</span>
+    <span v-if="title" class="chat-toolbar-context-title" :title="title">{{
+      title
+    }}</span>
   </div>
 </template>
 
@@ -28,7 +30,7 @@ const title = computed(() => {
   gap: 2px;
 }
 
-/* Slim the trigger down so the selector and title stack inside the 40px band. */
+/* Keep the selector compact enough to stack with the title on narrow screens. */
 .chat-toolbar-context :deep(.provider-select-menu) {
   height: 20px;
   display: flex;
@@ -43,7 +45,8 @@ const title = computed(() => {
   line-height: 20px;
 }
 
-.chat-toolbar-context :deep(.provider-trigger--header .provider-trigger-chevron) {
+.chat-toolbar-context
+  :deep(.provider-trigger--header .provider-trigger-chevron) {
   font-size: 16px;
 }
 
@@ -56,5 +59,34 @@ const title = computed(() => {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+@media (min-width: 960px) {
+  .chat-toolbar-context {
+    max-width: min(
+      300px,
+      calc((100vw - var(--astrbot-chat-sidebar-width, 0px)) * 0.3 - 32px)
+    );
+    flex-direction: row;
+    align-items: center;
+  }
+
+  /* Center over the chat pane, independently of the model and action widths. */
+  .chat-toolbar-context-title {
+    position: absolute;
+    top: 50%;
+    left: calc(50% + var(--astrbot-chat-sidebar-width, 0px) / 2);
+    width: max(
+      0px,
+      min(
+        calc((100% - var(--astrbot-chat-sidebar-width, 0px)) * 0.4),
+        calc(100% - var(--astrbot-chat-sidebar-width, 0px) - 440px)
+      )
+    );
+    max-width: none;
+    transform: translate(-50%, -50%);
+    font-size: 0.8125rem;
+    text-align: center;
+  }
 }
 </style>

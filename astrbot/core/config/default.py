@@ -103,6 +103,7 @@ DEFAULT_CONFIG = {
         "forward_threshold": 1500,
         "enable_id_white_list": True,
         "id_whitelist": [],
+        "id_blacklist": [],
         "id_whitelist_log": True,
         "wl_ignore_admin_on_group": True,
         "wl_ignore_admin_on_friend": True,
@@ -306,6 +307,7 @@ DEFAULT_CONFIG = {
     "timezone": "Asia/Shanghai",
     "callback_api_base": "",
     "default_kb_collection": "",  # 默认知识库名称, 已经过时
+    "disabled_plugins": [],
     "plugin_set": ["*"],  # "*" 表示使用所有可用的插件, 空列表表示不使用任何插件
     "kb_names": [],  # 默认知识库名称列表
     "kb_fusion_top_k": 20,  # 知识库检索融合阶段返回结果数量
@@ -1233,6 +1235,11 @@ CONFIG_METADATA_2 = {
                         "items": {"type": "string"},
                         "hint": "只处理填写的 ID 发来的消息事件，为空时不启用。可使用 /sid 指令获取在平台上的会话 ID(类似 abc:GroupMessage:123)。管理员可在 WebUI 的配置文件 -> 访问控制 -> 白名单中管理白名单。",
                     },
+                    "id_blacklist": {
+                        "type": "list",
+                        "_special": "umo",
+                        "items": {"type": "string"},
+                    },
                     "id_whitelist_log": {
                         "type": "bool",
                         "hint": "启用后，当一条消息没通过白名单时，会输出 INFO 级别的日志。",
@@ -1730,6 +1737,18 @@ CONFIG_METADATA_2 = {
                         "timeout": "20",
                         "proxy": "",
                     },
+                    "DeepSeek STT(API)": {
+                        "id": "deepseek_stt",
+                        "provider": "deepseek",
+                        "type": "deepseek_stt_api",
+                        "provider_type": "speech_to_text",
+                        "enable": False,
+                        "api_key": "",
+                        "api_base": "https://api.deepseek.com/v1",
+                        "timeout": "120",
+                        "proxy": "",
+                        "custom_headers": {},
+                    },
                     "Whisper(Local)": {
                         "provider": "openai",
                         "type": "openai_whisper_selfhost",
@@ -1760,6 +1779,20 @@ CONFIG_METADATA_2 = {
                         "openai-tts-voice": "alloy",
                         "timeout": "20",
                         "proxy": "",
+                    },
+                    "DeepSeek TTS(API)": {
+                        "id": "deepseek_tts",
+                        "type": "deepseek_tts_api",
+                        "provider": "deepseek",
+                        "provider_type": "text_to_speech",
+                        "enable": False,
+                        "api_key": "",
+                        "api_base": "https://api.deepseek.com/v1",
+                        "deepseek-tts-voice": "stella",
+                        "deepseek-tts-filter-markdown": True,
+                        "timeout": "20",
+                        "proxy": "",
+                        "custom_headers": {},
                     },
                     "MiMo TTS(API)": {
                         "id": "mimo_tts",
@@ -2153,6 +2186,21 @@ CONFIG_METADATA_2 = {
                         "model": "",
                         "timeout": 2,
                         "total_timeout": 5,
+                        "max_concurrency": 4,
+                        "proxy": "",
+                        "custom_headers": {},
+                    },
+                    "OpenAI Decisions": {
+                        "id": "openai_decision",
+                        "type": "openai_decision",
+                        "provider": "openai",
+                        "provider_type": "decision",
+                        "enable": True,
+                        "key": "",
+                        "api_base": "https://api.openai.com/v1",
+                        "model": "gpt-6-luna",
+                        "timeout": 5,
+                        "total_timeout": 10,
                         "max_concurrency": 4,
                         "proxy": "",
                         "custom_headers": {},
@@ -2878,7 +2926,7 @@ CONFIG_METADATA_2 = {
                     "total_timeout": {
                         "description": "总超时时间",
                         "type": "float",
-                        "hint": "单次决策请求的总超时时间（秒），包含等待并发名额、重试与退避；默认 5 秒。",
+                        "hint": "单次决策请求的总超时时间（秒），包含等待并发名额、重试与退避。",
                         "condition": {"type": "system_one_decision"},
                     },
                     "max_concurrency": {
@@ -2891,6 +2939,18 @@ CONFIG_METADATA_2 = {
                         "description": "voice",
                         "type": "string",
                         "hint": "OpenAI TTS 的声音。OpenAI 默认支持：'alloy', 'echo', 'fable', 'onyx', 'nova', 'shimmer'",
+                    },
+                    "deepseek-tts-voice": {
+                        "description": "音色",
+                        "type": "string",
+                        "hint": "DeepSeek TTS 音色，实际请求使用对应的 voice_id。",
+                        "options": ["stella", "tide"],
+                        "labels": ["海星（女声，默认）", "暗潮（男声）"],
+                    },
+                    "deepseek-tts-filter-markdown": {
+                        "description": "过滤 Markdown",
+                        "type": "bool",
+                        "hint": "朗读前移除 Markdown 格式，默认启用。",
                     },
                     "mimo-tts-voice": {
                         "description": "音色",
@@ -4624,6 +4684,19 @@ CONFIG_METADATA_3 = {
                     },
                 },
             },
+            "blacklist": {
+                "description": "黑名单",
+                "type": "object",
+                "items": {
+                    "platform_settings.id_blacklist": {
+                        "description": "黑名单 ID 列表",
+                        "type": "list",
+                        "_special": "umo",
+                        "items": {"type": "string"},
+                        "hint": "停止处理这些会话的消息。黑名单优先于白名单，管理员也不会豁免。空列表表示不拦截。",
+                    },
+                },
+            },
             "whitelist": {
                 "description": "白名单",
                 "type": "object",
@@ -4664,6 +4737,13 @@ CONFIG_METADATA_3 = {
                 "description": "插件",
                 "type": "object",
                 "items": {
+                    "disabled_plugins": {
+                        "description": "禁用的插件",
+                        "type": "list",
+                        "items": {"type": "string"},
+                        "_special": "select_plugin_set",
+                        "hint": "从可用插件中排除这些插件。空列表表示不额外禁用插件。",
+                    },
                     "plugin_set": {
                         "description": "可用插件",
                         "type": "bool",

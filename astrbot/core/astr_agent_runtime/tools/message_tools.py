@@ -23,6 +23,7 @@ from astrbot.core.astr_agent_runtime.tools.computer_tools.util import (
     workspace_root,
     workspace_root_for_context,
 )
+from astrbot.core.astr_agent_runtime.tools.output import prepare_tool_output
 from astrbot.core.astr_agent_runtime.tools.registry import builtin_tool
 from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.platform.message_session import MessageSession
@@ -337,6 +338,17 @@ class SendMessageToUserTool(FunctionTool[AstrAgentContext]):
                 return f"error: invalid session: {session}"
 
         message_chain = MessageChain(chain=components)
+        try:
+            send_to_user = prepare_tool_output(
+                context.context, message_chain, target_umo=str(target_session)
+            )
+        except (RuntimeError, ValueError) as exc:
+            return f"error: cannot submit message output: {exc}"
+        if not send_to_user:
+            return (
+                f"Message prepared for session {target_session} and handed to the "
+                "caller for delivery. It has not been sent. Do not submit it again."
+            )
         try:
             sent = await context.context.context.send_message(
                 target_session,

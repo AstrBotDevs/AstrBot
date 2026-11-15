@@ -1,4 +1,4 @@
-/* Auto-generated MDI subset – 266 icons */
+/* Auto-generated MDI subset – 270 icons */
 /* Do not edit manually. Run: pnpm run subset-icons */
 
 @font-face {
@@ -34,6 +34,10 @@
 
 .mdi-account-lock-outline::before {
   content: "\F115F";
+}
+
+.mdi-account-multiple-outline::before {
+  content: "\F000F";
 }
 
 .mdi-account-voice::before {
@@ -106,6 +110,10 @@
 
 .mdi-backup-restore::before {
   content: "\F006F";
+}
+
+.mdi-book-open-outline::before {
+  content: "\F0B63";
 }
 
 .mdi-book-open-page-variant::before {
@@ -420,10 +428,6 @@
   content: "\F0219";
 }
 
-.mdi-file-document-edit-outline::before {
-  content: "\F0DC9";
-}
-
 .mdi-file-document-multiple::before {
   content: "\F1517";
 }
@@ -532,8 +536,8 @@
   content: "\F02A4";
 }
 
-.mdi-hand-heart::before {
-  content: "\F10F1";
+.mdi-heart-outline::before {
+  content: "\F02D5";
 }
 
 .mdi-help-circle-outline::before {
@@ -606,6 +610,10 @@
 
 .mdi-layers-outline::before {
   content: "\F09FE";
+}
+
+.mdi-layers-triple-outline::before {
+  content: "\F0F59";
 }
 
 .mdi-lightbulb-outline::before {
@@ -876,6 +884,10 @@
   content: "\F167A";
 }
 
+.mdi-rocket-launch-outline::before {
+  content: "\F14DF";
+}
+
 .mdi-routes::before {
   content: "\F046A";
 }
@@ -918,6 +930,10 @@
 
 .mdi-shuffle-variant::before {
   content: "\F049F";
+}
+
+.mdi-sitemap-outline::before {
+  content: "\F199C";
 }
 
 .mdi-skip-next-circle-outline::before {

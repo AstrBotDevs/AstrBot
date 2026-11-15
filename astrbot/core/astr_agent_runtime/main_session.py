@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING
 
@@ -73,11 +72,11 @@ class MainAgentSession(NativeAgentSession):
         input = turn.input
         event = input.event
         context = self.runtime.context
-        conversation = await context.conversation_manager.get_conversation(
-            self.umo, self.id
-        )
-        if conversation is None:
+        manager = context.conversation_manager
+        loaded = await manager.db.conversation_store.read_for_execution(self.id)
+        if loaded is None:
             raise ValueError("The bound agent conversation no longer exists")
+        conversation, snapshot = loaded
         req = input.request if isinstance(input, MainAgentInput) else None
         explicit = req is not None or event.get_extra("provider_request") is not None
         # Portable attachments replace source media; a text override retains it.
@@ -115,8 +114,8 @@ class MainAgentSession(NativeAgentSession):
         # Explicit unbound SDK/plugin contexts keep their established semantics.
         # Ordinary turns always reload this session's history after execution admission.
         if not explicit or req.conversation is not None:
-            req.conversation = conversation
-            req.contexts = json.loads(conversation.history)
+            req.conversation = manager.to_legacy_conversation(conversation)
+            req.contexts = conversation.content or []
         if not explicit:
             event.set_extra("provider_request", req)
         collected = CollectedInput(
@@ -131,6 +130,7 @@ class MainAgentSession(NativeAgentSession):
             plugin_tools=input.plugin_tools,
             plugin_skills=input.plugin_skills,
             runtime=self.runtime,
+            conversation_snapshot=snapshot if req.conversation is not None else None,
         )
         if result is None:
             error = event.get_extra(LLM_ERROR_MESSAGE_EXTRA_KEY)
