@@ -1373,6 +1373,57 @@ class ConversationStore:
             )
         return entries
 
+    async def recovery_work(self, cid: str | None = None) -> list[dict]:
+        """Find unfinished main turns and unconsumed input without replaying history.
+
+        Args:
+            cid: Limit the lookup to one conversation when rechecking admission.
+
+        Returns:
+            Conversation identities, input event IDs, and optional unfinished turn IDs.
+        """
+        owner = "(SELECT id FROM conversations_v3 WHERE conversation_id=:cid)"
+        turn_filter = f"AND t.conversation_ref={owner}" if cid is not None else ""
+        input_filter = f"AND p.conversation_ref={owner}" if cid is not None else ""
+        async with self.db.get_db() as session:
+            turns = await session.execute(
+                # Unary + removes the column's TEXT affinity without changing
+                # its value, allowing SQLite to use the JSON expression index.
+                text(f"""SELECT c.conversation_id, c.umo, t.event_id AS turn_id,
+                        json_extract(t.payload, '$.trigger.input_event_id') AS input_event_id,
+                        t.seq
+                    FROM conversation_events AS t INDEXED BY ix_context_turn_started
+                    JOIN conversations_v3 AS c ON c.id=t.conversation_ref
+                    WHERE t.type='turn.started'
+                      {turn_filter}
+                      AND NOT EXISTS (
+                        SELECT 1 FROM conversation_events AS f
+                        WHERE f.conversation_ref=t.conversation_ref
+                          AND f.type='turn.finished'
+                          AND json_extract(f.payload, '$.turn_id')=+t.event_id)
+                    ORDER BY t.seq"""),
+                {"cid": cid},
+            )
+            pending = await session.execute(
+                text(f"""SELECT c.conversation_id, c.umo, NULL AS turn_id,
+                        p.event_id AS input_event_id, p.seq
+                    FROM conversation_events AS p INDEXED BY ix_input_received
+                    JOIN conversations_v3 AS c ON c.id=p.conversation_ref
+                    WHERE p.type='message.appended'
+                      AND json_type(p.payload, '$.delivery')='object'
+                      {input_filter}
+                      AND NOT EXISTS (
+                        SELECT 1 FROM conversation_events AS f
+                        WHERE f.conversation_ref=p.conversation_ref
+                          AND f.type IN ('message.consumed', 'message.discarded')
+                          AND CAST(json_extract(f.payload, '$.source_event_id') AS TEXT)=p.event_id)
+                    ORDER BY p.seq"""),
+                {"cid": cid},
+            )
+            return [dict(row) for row in turns.mappings()] + [
+                dict(row) for row in pending.mappings()
+            ]
+
     async def pending_messages(self, cid: str) -> list[ConversationEvent]:
         """Read accepted user messages without a committed consumption checkpoint.
 

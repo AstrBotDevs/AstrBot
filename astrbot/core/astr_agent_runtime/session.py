@@ -143,6 +143,8 @@ class NativeAgentSession(AgentSession):
         try:
             if writer is not None:
                 trigger = {"kind": "agent", "umo": self.umo}
+                if turn.input.message_event_id is not None:
+                    trigger["input_event_id"] = turn.input.message_event_id
                 if isinstance(event, AgentWakeupEvent):
                     trigger.update(kind=event.source)
                     if event.source_id is not None:

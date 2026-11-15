@@ -44,6 +44,46 @@ class AstrAgentRuntime(AgentRuntime):
         self._opening = asyncio.Lock()
         self._active_main: dict[str, AgentTurn] = {}
         self._closed = False
+        self.suspending = False
+        self.suspended_turns: set[AgentTurn] = set()
+        self._recovery_tasks: set[asyncio.Task] = set()
+        self._recovery_started = False
+
+    async def resume_pending(self) -> None:
+        """Schedule unfinished main conversations once host services are available."""
+        if self._recovery_started or self._closed or self.suspending:
+            return
+        self._recovery_started = True
+        work = await self.context.conversation_manager.db.conversation_store.recovery_work()
+        grouped: dict[str, list[dict]] = {}
+        for item in work:
+            grouped.setdefault(item["conversation_id"], []).append(item)
+        for cid, items in grouped.items():
+            if self._closed or self.suspending:
+                break
+            try:
+                session = await self.open_session(items[0]["umo"], session_id=cid)
+                if not isinstance(session, MainAgentSession):
+                    continue
+                task = asyncio.create_task(session.resume_pending(items))
+                self._recovery_tasks.add(task)
+                task.add_done_callback(self._recovery_tasks.discard)
+            except Exception:
+                logger.exception("Could not schedule conversation recovery: %s", cid)
+
+    def prepare_shutdown(self) -> None:
+        """Keep accepted main work durable while the host cancels its tasks."""
+        self.suspending = True
+        for session in self._sessions.values():
+            if isinstance(session, MainAgentSession):
+                self.suspended_turns.update(
+                    turn
+                    for turn in session._turns
+                    if not turn.done
+                    and not turn.cancellation_requested
+                    and turn._stop_task is None
+                    and not turn.input.event.is_stopped()
+                )
 
     def normalize_config(self, config: dict, *, delegated: bool = False) -> dict:
         """Validate native options and apply role-appropriate defaults.
@@ -282,7 +322,12 @@ class AstrAgentRuntime(AgentRuntime):
         """Stop all sessions before releasing the runtime's host services."""
         from .computer.computer_client import shutdown_local_booter
 
+        self.prepare_shutdown()
         self._closed = True
+        recovery_tasks = list(self._recovery_tasks)
+        for task in recovery_tasks:
+            task.cancel()
+        await asyncio.gather(*recovery_tasks, return_exceptions=True)
         async with self._opening:
             sessions = list(self._sessions.values())
         try:

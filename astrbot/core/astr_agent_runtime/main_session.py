@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 from collections.abc import Awaitable, Callable
 from copy import copy
 from dataclasses import dataclass, replace
@@ -21,11 +22,21 @@ from astrbot.core.agent.message import (
     dump_messages,
     merge_user_messages,
 )
-from astrbot.core.agent.runtime import AgentInput, AgentTurn, InputReceipt, TurnStatus
+from astrbot.core.agent.runtime import (
+    AgentInput,
+    AgentPermissions,
+    AgentRole,
+    AgentSessionRef,
+    AgentTurn,
+    InputReceipt,
+    TurnStatus,
+)
 from astrbot.core.agent_input import (
     CollectedInput,
     PreparedRequest,
+    admit_agent_input,
     append_system_reminders,
+    collect_plugin_capabilities,
     prepare_input_content,
 )
 from astrbot.core.astr_agent_runtime.main_agent.config import MainAgentBuildConfig
@@ -33,6 +44,8 @@ from astrbot.core.astr_agent_runtime.main_agent.request import collect_initial_r
 from astrbot.core.conversation_mgr import ConversationManager
 from astrbot.core.llm_error_messages import LLM_ERROR_MESSAGE_EXTRA_KEY
 from astrbot.core.message.components import Reply
+from astrbot.core.platform.agent_wakeup_event import AgentWakeupEvent
+from astrbot.core.platform.message_session import MessageSession
 from astrbot.core.utils.event_id import new_event_id
 
 from .session import NativeAgentSession
@@ -46,10 +59,18 @@ if TYPE_CHECKING:
 
 @dataclass
 class MainAgentInput(AgentInput):
-    """Native input with host preprocessing and per-turn settings."""
+    """Native input with host preprocessing and per-turn settings.
+
+    Args:
+        build_config: Optional execution settings for this input.
+        request: Optional caller-supplied native request.
+        resume_turn_id: Existing unfinished journal turn to resume, or None for
+            a new turn. Already consumed input is not appended again.
+    """
 
     build_config: MainAgentBuildConfig | None = None
     request: ProviderRequest | None = None
+    resume_turn_id: str | None = None
 
 
 class MainAgentSession(NativeAgentSession):
@@ -66,6 +87,168 @@ class MainAgentSession(NativeAgentSession):
         self._input_turns: dict[str, AgentTurn] = {}
         self._prepared_inputs: dict[str, PreparedRequest] = {}
 
+    async def resume_pending(self, work: list[dict]) -> None:
+        """Resume startup candidates without replaying interrupted tool calls.
+
+        Args:
+            work: Durable input and turn identities captured before startup admission.
+        """
+        from astrbot.core.agent_output import deliver_agent_turn
+        from astrbot.core.platform.astr_message_event import event_context
+        from astrbot.core.utils.active_event_registry import active_event_registry
+
+        context = self.runtime.context
+        store = context.conversation_manager.db.conversation_store
+        turn = None
+        try:
+            for item in work:
+                if self.closed or self.runtime.suspending:
+                    return
+                source_id = item["input_event_id"]
+                if source_id is None:
+                    logger.warning(
+                        "Cannot recover turn without input: %s", item["turn_id"]
+                    )
+                    continue
+                source = await store.received_messages(self.id, [source_id])
+                if not source:
+                    continue
+                delivery = source[0].payload["delivery"]
+                config = context.get_config(umo=self.umo)
+                if config.get("agent", {}).get("runtime", "astrbot") != "astrbot":
+                    return
+                target = MessageSession.from_str(self.umo)
+                platform = context.get_platform_inst(target.platform_id)
+                if platform is None:
+                    logger.warning(
+                        "Recovery platform is unavailable: %s", target.platform_id
+                    )
+                    return
+                event = AgentWakeupEvent(
+                    context=context,
+                    session=target,
+                    platform_meta=platform.meta(),
+                    prompt="",
+                    source="recovery",
+                    source_id=item["turn_id"] or source_id,
+                    role=delivery["role"],
+                    agent_session=AgentSessionRef("astrbot", self.id),
+                )
+                sender = delivery.get("sender", {})
+                event.message_obj.sender.user_id = sender.get("id", "astrbot")
+                event.message_obj.sender.nickname = sender.get("name", "System")
+                event.message_obj.self_id = sender.get("self_id", "")
+                event.message_obj.group_id = sender.get("group_id", "")
+                event.plugins_name = delivery["plugins"]
+                event.set_extra("turn_id", item["turn_id"] or new_event_id())
+                input = MainAgentInput(
+                    event=event,
+                    permissions=AgentPermissions(AgentRole(delivery["role"])),
+                    message_event_id=source_id,
+                    send_to_user=delivery["send_to_user"],
+                    streaming=False,
+                    resume_turn_id=item["turn_id"],
+                )
+
+                async def admit() -> bool:
+                    # Recheck after taking the execution lock: a normal turn may
+                    # already have consumed a queued input while recovery waited.
+                    if self.runtime.suspending:
+                        return False
+                    current = await store.recovery_work(self.id)
+                    if not any(
+                        row["turn_id"] == item["turn_id"]
+                        and row["input_event_id"] == source_id
+                        for row in current
+                    ):
+                        return False
+                    if not await admit_agent_input(context, input):
+                        return False
+                    if delivery["plugins"] is not None:
+                        enabled = event.plugins_name
+                        event.plugins_name = [
+                            name
+                            for name in delivery["plugins"]
+                            if enabled is None or name in enabled
+                        ]
+                        input.plugin_tools, input.plugin_skills = (
+                            collect_plugin_capabilities(context, event)
+                        )
+                    if item["turn_id"]:
+                        latest_turns = await store.events(
+                            self.id, event_type="turn.started", descending=True, limit=1
+                        )
+                        if latest_turns and latest_turns[0].seq > item["seq"]:
+                            # A later execution already adopted this context.
+                            # Retire the obsolete turn instead of running it again.
+                            await store.append(
+                                self.id,
+                                [
+                                    {
+                                        "type": "turn.finished",
+                                        "payload": {
+                                            "turn_id": item["turn_id"],
+                                            "status": "failed",
+                                            "reason": "superseded_after_interruption",
+                                        },
+                                    }
+                                ],
+                            )
+                            return False
+                        snapshot = await store.read(self.id)
+                        if snapshot.entries:
+                            last = snapshot.entries[-1]
+                            latest = await store.events(
+                                self.id, after_seq=snapshot.context_seq - 1, limit=1
+                            )
+                            if (
+                                latest
+                                and latest[0].payload.get("turn_id") == item["turn_id"]
+                                and latest[0].payload.get("status") == "completed"
+                                and last["message"]["role"] == "assistant"
+                                and not last["message"].get("tool_calls")
+                            ):
+                                # The answer was committed before shutdown; do
+                                # not request or deliver that answer a second time.
+                                await store.append(
+                                    self.id,
+                                    [
+                                        {
+                                            "type": "turn.finished",
+                                            "payload": {
+                                                "turn_id": item["turn_id"],
+                                                "status": "completed",
+                                            },
+                                        }
+                                    ],
+                                )
+                                return False
+                    return True
+
+                with event_context(event):
+                    turn = await super().run_turn(input, admit=admit)
+                    active_event_registry.register_agent_stop_callback(
+                        event, turn.request_stop
+                    )
+                    try:
+                        if input.send_to_user:
+                            await deliver_agent_turn(context, turn)
+                        outcome = await turn.result()
+                        if outcome.status != TurnStatus.COMPLETED:
+                            return
+                    finally:
+                        active_event_registry.unregister_agent_stop_callback(
+                            event, turn.request_stop
+                        )
+                turn = None
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            logger.exception("Could not resume conversation: %s", self.id)
+        finally:
+            if turn is not None and not turn.done:
+                await turn.cancel()
+
     async def _persist_input(
         self, input: AgentInput, *, steering: bool = False
     ) -> bool:
@@ -80,6 +263,11 @@ class MainAgentSession(NativeAgentSession):
         """
         manager = self.runtime.context.conversation_manager
         if not isinstance(manager, ConversationManager):
+            return False
+        request = input.request if isinstance(input, MainAgentInput) else None
+        request = request or input.event.get_extra("provider_request")
+        if not steering and request is not None and request.conversation is None:
+            # Caller-owned, unbound contexts have no durable main conversation.
             return False
         if input.message_event_id is None:
             input.message_event_id = new_event_id()
@@ -193,6 +381,12 @@ class MainAgentSession(NativeAgentSession):
                             "role": input.permissions.role.value,
                             "send_to_user": input.send_to_user,
                             "plugins": input.event.plugins_name,
+                            "sender": {
+                                "id": input.event.get_sender_id(),
+                                "name": input.event.get_sender_name(),
+                                "self_id": input.event.get_self_id(),
+                                "group_id": input.event.get_group_id(),
+                            },
                             "content": [part.model_dump() for part in input.content]
                             if input.content is not None
                             else None,
@@ -250,13 +444,21 @@ class MainAgentSession(NativeAgentSession):
         Returns:
             Scheduled turn, or the existing handle for a repeated submission.
         """
-        if self.closed or input.event.unified_msg_origin != self.umo:
+        if (
+            self.closed
+            or self.runtime.suspending
+            or input.event.unified_msg_origin != self.umo
+        ):
             raise ValueError("Agent session is closed or input belongs elsewhere")
         async with self._input_lock:
             existing = self._input_turns.get(input.message_event_id)
             if existing is not None:
                 return existing
             durable = await self._persist_input(input)
+            if self.runtime.suspending:
+                raise RuntimeError(
+                    "Agent runtime is shutting down; input remains queued"
+                )
             if durable:
                 pending = await self.runtime.context.conversation_manager.db.conversation_store.pending_messages(
                     self.id
@@ -296,7 +498,7 @@ class MainAgentSession(NativeAgentSession):
             self.runtime.context.conversation_manager, ConversationManager
         ):
             return super().steer_turn(turn, input)
-        if self._runner is None or self._runner.done():
+        if self.runtime.suspending or self._runner is None or self._runner.done():
             return None
         text = (
             format_input_content(input.content)
@@ -357,6 +559,14 @@ class MainAgentSession(NativeAgentSession):
         """
         if self._input_tasks:
             await asyncio.gather(*tuple(self._input_tasks))
+        if turn in self.runtime.suspended_turns:
+            # Host shutdown suspends durable work; an explicit user stop still
+            # goes through the normal cancellation and discard path below.
+            self._steering.clear()
+            self._runner = None
+            if self.runtime._active_main.get(self.umo) is turn:
+                self.runtime._active_main.pop(self.umo)
+            return
         pending = [
             self._accepted_inputs[ticket.message_event_id]
             for ticket, _ in self._steering
@@ -423,7 +633,10 @@ class MainAgentSession(NativeAgentSession):
         Args:
             turn: Exact execution whose accepted input must not be recovered.
         """
-        if turn.input.message_event_id is not None:
+        if (
+            turn.input.message_event_id is not None
+            and turn not in self.runtime.suspended_turns
+        ):
             await self._discard_inputs([turn.input.message_event_id])
         await super().cancel_turn(turn)
 
@@ -480,7 +693,19 @@ class MainAgentSession(NativeAgentSession):
             else []
         )
         prepared = self._prepared_inputs.pop(input.message_event_id, None)
-        if stored_inputs:
+        resuming = (
+            isinstance(input, MainAgentInput) and input.resume_turn_id is not None
+        )
+        continuing = resuming and not any(
+            item.event_id == input.message_event_id
+            for item in await manager.db.conversation_store.pending_messages(self.id)
+        )
+        if continuing:
+            req = ProviderRequest()
+            prepared = PreparedRequest(req)
+            collected = None
+            explicit = False
+        elif stored_inputs:
             req = prepared.request if prepared is not None else ProviderRequest()
             explicit = req.conversation is None and prepared is not None
             # Reconstruct the prepared user content from the receipt even after
@@ -566,7 +791,12 @@ class MainAgentSession(NativeAgentSession):
                         {
                             "role": "tool",
                             "tool_call_id": call_id,
-                            "content": "Execution was interrupted; the result is unavailable. Do not assume the operation did not take effect.",
+                            "content": json.dumps(
+                                {
+                                    "status": "interrupted",
+                                    "message": "Execution was interrupted; the result is unavailable. The operation may have taken effect. Do not automatically repeat it.",
+                                }
+                            ),
                         }
                         for call_id in outstanding
                     )
@@ -598,6 +828,8 @@ class MainAgentSession(NativeAgentSession):
             if error:
                 raise RuntimeError(str(error))
             return None
+        if resuming and result.conversation_events is not None:
+            result.conversation_events.turn_id = input.resume_turn_id
         if input.message_event_id and result.conversation_events is not None:
             pending = await manager.db.conversation_store.pending_messages(self.id)
             recovered = [
@@ -613,8 +845,8 @@ class MainAgentSession(NativeAgentSession):
                 and item.payload["delivery"]["plugins"] == event.plugins_name
             ]
             runner = result.agent_runner
-            # The prepared current input is last. Insert received, unconsumed
-            # text before it; attachment inputs retain their explicit retry path.
+            # Merge compatible pending text at this boundary. Inputs with
+            # attachments are recovered as their own turns at startup.
             recovered = [
                 item
                 for item in recovered
@@ -625,20 +857,33 @@ class MainAgentSession(NativeAgentSession):
             ]
             # All inputs adopted at this boundary form one user message. Its
             # sources and ordering are reproduced by consecutive consumption events.
-            current = runner.run_context.messages[-1]
-            runner.run_context.messages[-1] = Message.model_validate(
-                merge_user_messages(
-                    [
-                        *[item.payload["message"] for item in recovered],
-                        dump_messages([current], include_temporary=True)[0],
-                    ]
-                )
+            sources = sorted(
+                [*recovered, *([] if continuing else stored_inputs)],
+                key=lambda item: item.seq,
             )
-            runner._received_message_ids = [
-                *[item.event_id for item in recovered],
-                input.message_event_id,
-            ]
-            runner._received_messages = [
-                item.payload["message"] for item in [*recovered, *stored_inputs]
-            ]
+            if sources:
+                current = (
+                    None
+                    if continuing
+                    else dump_messages(
+                        [runner.run_context.messages[-1]], include_temporary=True
+                    )[0]
+                )
+                merged = Message.model_validate(
+                    merge_user_messages(
+                        [
+                            current
+                            if item.event_id == input.message_event_id
+                            and current is not None
+                            else item.payload["message"]
+                            for item in sources
+                        ]
+                    )
+                )
+                if continuing:
+                    runner.run_context.messages.append(merged)
+                else:
+                    runner.run_context.messages[-1] = merged
+            runner._received_message_ids = [item.event_id for item in sources]
+            runner._received_messages = [item.payload["message"] for item in sources]
         return result

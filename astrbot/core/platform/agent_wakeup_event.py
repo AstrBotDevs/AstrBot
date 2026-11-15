@@ -20,7 +20,7 @@ if TYPE_CHECKING:
     from astrbot.core.agent.runtime import AgentSessionRef
     from astrbot.core.star.context import Context
 
-WakeupSource = Literal["cron", "background_task", "plugin"]
+WakeupSource = Literal["cron", "background_task", "plugin", "recovery"]
 
 
 class AgentWakeupEvent(AstrMessageEvent):
@@ -56,7 +56,7 @@ class AgentWakeupEvent(AstrMessageEvent):
         Raises:
             ValueError: If the source or target platform identity is invalid.
         """
-        if source not in ("cron", "background_task", "plugin"):
+        if source not in ("cron", "background_task", "plugin", "recovery"):
             raise ValueError(f"Unsupported agent wakeup source: {source!r}")
         if platform_meta.id != session.platform_id:
             raise ValueError("Wakeup platform metadata must match the target session.")

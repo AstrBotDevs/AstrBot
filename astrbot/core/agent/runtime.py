@@ -542,6 +542,12 @@ class AgentSession(ABC):
 class AgentRuntime(ABC):
     """Host integration boundary; implementations own sessions and history."""
 
+    async def resume_pending(self) -> None:
+        """Schedule durable work after the host's services are ready."""
+
+    def prepare_shutdown(self) -> None:
+        """Distinguish host shutdown from explicit user cancellation."""
+
     def normalize_config(self, config: dict, *, delegated: bool = False) -> dict:
         """Validate runtime-owned configuration without interpreting its fields.
 
