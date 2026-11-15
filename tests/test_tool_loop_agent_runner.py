@@ -249,6 +249,7 @@ class MockAbortableStreamProvider(MockProvider):
             role="assistant",
             completion_text="partial ",
             is_chunk=True,
+            usage=TokenUsage(input_other=5, output=1),
         )
         if abort_signal and abort_signal.is_set():
             yield LLMResponse(
@@ -1370,6 +1371,7 @@ async def test_stop_signal_returns_aborted_and_discards_partial_message(
     runner, provider_request, mock_tool_executor, mock_hooks
 ):
     provider = MockAbortableStreamProvider()
+    sink = AsyncMock(return_value=True)
 
     await runner.reset(
         provider=provider,
@@ -1378,6 +1380,7 @@ async def test_stop_signal_returns_aborted_and_discards_partial_message(
         tool_executor=mock_tool_executor,
         agent_hooks=mock_hooks,
         streaming=True,
+        conversation_event_sink=sink,
     )
 
     step_iter = runner.step()
@@ -1415,6 +1418,13 @@ async def test_stop_signal_returns_aborted_and_discards_partial_message(
         for message in runner.run_context.messages
     )
 
+    cancelled = [call.args[0] for call in sink.await_args_list if call.args[0].type == "message.appended"]
+    assert len(cancelled) == 1
+    assert cancelled[0].data["status"] == "cancelled"
+    assert cancelled[0].data["usage"]["output_tokens"] == 1
+    assert cancelled[0].data["message"]["_no_save"] is True
+    assert cancelled[0].data["message"]["content"][0]["text"] == "partial "
+
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("streaming", [False, True])
@@ -1427,6 +1437,7 @@ async def test_stop_cancels_provider_before_first_response(
 ):
     """Stop must cancel blocked streaming and non-streaming Provider requests."""
     provider = MockBlockingProvider()
+    sink = AsyncMock(return_value=True)
     await runner.reset(
         provider=provider,
         request=provider_request,
@@ -1434,6 +1445,7 @@ async def test_stop_cancels_provider_before_first_response(
         tool_executor=mock_tool_executor,
         agent_hooks=mock_hooks,
         streaming=streaming,
+        conversation_event_sink=sink,
     )
 
     step_iter = runner.step()
@@ -1466,6 +1478,12 @@ async def test_stop_cancels_provider_before_first_response(
 
     with pytest.raises(StopAsyncIteration):
         await step_iter.__anext__()
+
+    cancelled = [call.args[0] for call in sink.await_args_list if call.args[0].type == "message.appended"]
+    assert len(cancelled) == 1
+    assert cancelled[0].data["status"] == "cancelled"
+    assert cancelled[0].data["message"]["_no_save"] is True
+    assert "usage" not in cancelled[0].data
 
 
 @pytest.mark.asyncio
@@ -2248,13 +2266,15 @@ async def test_event_journal_records_requests_tools_and_final_context(
         await writer.finish_turn("completed")
         events = await db.conversation_store.events(conv.conversation_id)
         types = [e.type for e in events]
-        assert types.count("request.started") == types.count("request.finished") == 2
+        assert "request.started" not in types and "request.finished" not in types
         assert types.count("tool.started") == types.count("tool.finished") == 1
         assert types[-1] == "turn.finished"
-        assert [e.payload["invocation_id"] for e in events if e.type == "request.started"] == [
+        assistant_events = [e for e in events if e.type == "message.appended" and "status" in e.payload]
+        assert [e.event_id for e in assistant_events] == [
             e.request_id for e in runtime_events if e.type == "request.started"
         ]
-        usage = [e.payload["usage"] for e in events if e.type == "request.finished"]
+        assert all(e.payload["status"] == "completed" for e in assistant_events)
+        usage = [e.payload["usage"] for e in assistant_events]
         assert sum(item["input_tokens"] for item in usage) == 330
         assert sum(item["cached_input_tokens"] for item in usage) == 30
         finished_tool = next(e for e in events if e.type == "tool.finished")
@@ -2276,7 +2296,7 @@ async def test_journal_failure_does_not_retry_a_model_or_fallback(
     from astrbot.core.agent.conversation_events import ConversationPersistenceError
 
     async def persist(response):
-        if response.type == "request.started":
+        if response.type == "context.appended":
             raise ConversationPersistenceError("unavailable")
         return True
 
@@ -2288,7 +2308,8 @@ async def test_journal_failure_does_not_retry_a_model_or_fallback(
     )
     with pytest.raises(ConversationPersistenceError):
         await collect_events(runner.step())
-    assert primary.call_count == fallback.call_count == 0
+    assert primary.call_count == 1
+    assert fallback.call_count == 0
 
 
 @pytest.mark.asyncio
@@ -2305,8 +2326,6 @@ async def test_tool_started_is_acknowledged_before_creating_executor(
 
     async def persist(response):
         seen.append(response.type)
-        if response.type == "request.started":
-            assert provider.call_count == 0
         if response.type == "tool.started":
             assert response.event_id
             raise ConversationPersistenceError("unavailable")
@@ -2320,7 +2339,7 @@ async def test_tool_started_is_acknowledged_before_creating_executor(
     with pytest.raises(ConversationPersistenceError):
         await collect_events(runner.step_until_done(3))
     executor.execute.assert_not_called()
-    assert seen.index("request.finished") < seen.index("tool.started")
+    assert "request.started" not in seen and "request.finished" not in seen
     assert not runner._events.active
 
 
@@ -2532,6 +2551,7 @@ async def test_lifecycle_cancellation_during_async_work(
 ):
     """Task cancellation propagates and still runs one awaited cleanup hook."""
     hooks = AsyncMock(spec=BaseAgentRunHooks)
+    sink = AsyncMock(return_value=True)
     started = asyncio.Event()
     cleanup = asyncio.Event()
 
@@ -2551,6 +2571,7 @@ async def test_lifecycle_cancellation_during_async_work(
         run_context=ContextWrapper(context=None),
         tool_executor=mock_tool_executor,
         agent_hooks=hooks,
+        conversation_event_sink=sink,
     )
 
     async def run():
@@ -2567,6 +2588,9 @@ async def test_lifecycle_cancellation_during_async_work(
     assert runner.run_context.run_end_reason == "cancelled"
     assert runner.done()
 
+    recorded = [call.args[0] for call in sink.await_args_list if call.args[0].type == "message.appended"]
+    assert len(recorded) == 1 and recorded[0].data["status"] == "cancelled"
+
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("main_bridge", [False, True])
@@ -2581,13 +2605,14 @@ async def test_lifecycle_budget_exit_and_final_request_failure(
 ):
     """Record budget exhaustion, but prefer errors if the final request fails."""
     hooks = AsyncMock(spec=BaseAgentRunHooks)
+    sink = AsyncMock(return_value=True)
     event = MagicMock()
     event.is_stopped.return_value = False
     event.get_extra.return_value = None
     event.get_platform_name.return_value = "test"
     if provider_error:
         mock_provider.text_chat = AsyncMock(
-            return_value=LLMResponse(role="err", completion_text="summary failed")
+            return_value=LLMResponse(role="err", completion_text="summary failed", usage=TokenUsage(output=3))
         )
     await runner.reset(
         provider=mock_provider,
@@ -2595,6 +2620,7 @@ async def test_lifecycle_budget_exit_and_final_request_failure(
         run_context=ContextWrapper(context=MockAgentContext(event)),
         tool_executor=mock_tool_executor,
         agent_hooks=hooks,
+        conversation_event_sink=sink,
     )
     responses = (
         run_agent(runner, max_step=0) if main_bridge else runner.step_until_done(0)
@@ -2608,6 +2634,13 @@ async def test_lifecycle_budget_exit_and_final_request_failure(
     assert runner.run_context.run_error == (
         "summary failed" if provider_error else None
     )
+
+    if provider_error:
+        failed = [call.args[0] for call in sink.await_args_list if call.args[0].type == "message.appended"]
+        assert len(failed) == 1
+        assert failed[0].data["status"] == "failed"
+        assert failed[0].data["usage"]["output_tokens"] == 3
+        assert failed[0].data["message"]["_no_save"] is True
 
 
 @pytest.mark.asyncio

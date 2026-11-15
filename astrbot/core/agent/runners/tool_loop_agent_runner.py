@@ -26,11 +26,7 @@ from tenacity import (
 )
 
 from astrbot import logger
-from astrbot.core.agent.event_stream import (
-    AgentEventStream,
-    RequestEventRecorder,
-    request_context_for_journal,
-)
+from astrbot.core.agent.event_stream import AgentEventStream
 from astrbot.core.agent.message import (
     ImageURLPart,
     TextPart,
@@ -40,7 +36,7 @@ from astrbot.core.agent.message import (
 from astrbot.core.agent.tool import FunctionTool, ToolSet
 from astrbot.core.agent.tool_image_cache import tool_image_cache
 from astrbot.core.agent_output_content import content_from_chain
-from astrbot.core.exceptions import EmptyModelOutputError
+from astrbot.core.exceptions import ConversationPersistenceError, EmptyModelOutputError
 from astrbot.core.provider.entities import (
     LLMResponse,
     ProviderRequest,
@@ -51,7 +47,6 @@ from astrbot.core.provider.modalities import (
     sanitize_contexts_by_modalities,
 )
 from astrbot.core.provider.provider import Provider
-from astrbot.core.provider.request_observer import request_recorder_kwargs
 from astrbot.core.utils.async_generator import iterate_in_task
 from astrbot.core.utils.event_id import new_event_id
 
@@ -209,7 +204,9 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             parts.append(TextPart(text=llm_resp.completion_text))
         if len(parts) == 0:
             logger.warning("LLM returned empty assistant message with no tool calls.")
-        await self._append_context_messages([Message(role="assistant", content=parts)])
+        await self._append_context_messages(
+            [Message(role="assistant", content=parts)], record_response=True
+        )
 
         try:
             await self.agent_hooks.on_llm_response(self.run_context, llm_resp)
@@ -248,6 +245,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         """Notify execution exit once, including failure and cancellation paths."""
         if self._done_hook_called:
             return
+        await self._flush_pending_response()
         self._done_hook_called = True
         if self._aborted:
             self.run_context.run_end_reason = "cancelled"
@@ -308,6 +306,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         self._message_id = str(uuid.uuid4())
         self.req = request
         self._conversation_event_sink = conversation_event_sink
+        self._pending_assistant_event: AgentResponse | None = None
         self._context_initialized = False
         self.streaming = streaming
         self.enforce_max_turns = enforce_max_turns
@@ -336,9 +335,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             llm_compress_provider=self.llm_compress_provider,
             custom_token_counter=self.custom_token_counter,
             custom_compressor=self.custom_compressor,
-            request_event_emitter=self._events.emit
-            if conversation_event_sink
-            else None,
+            request_event_emitter=conversation_event_sink,
         )
         self.request_context_manager = ContextManager(
             self.request_context_manager_config
@@ -605,27 +602,8 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             Provider replies for normal model processing and hooks.
         """
         request_id = new_event_id()
-        recorder = None
+        await self._flush_pending_response()
         payload["contexts"] = self._sanitize_contexts_for_provider(contexts)
-        if self._events.active and self._conversation_event_sink is not None:
-            recorder = RequestEventRecorder(
-                self._events.emit,
-                {
-                    "provider_id": self.provider.provider_config.get("id", ""),
-                    "model": payload.get("model") or self.provider.get_model(),
-                    "attempt_scope": "provider_call",
-                    "input_context": request_context_for_journal(
-                        payload["contexts"],
-                        source_contexts=contexts,
-                        modalities=self.provider.provider_config.get("modalities"),
-                        extra_user_content_parts=payload.get(
-                            "extra_user_content_parts"
-                        ),
-                    ),
-                },
-                invocation_id=request_id,
-            )
-            await recorder.begin()
         if self._events.active:
             if completed := self._finish_message():
                 await self._events.emit(completed)
@@ -638,16 +616,8 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         started = time.monotonic()
         status = TurnStatus.FAILED
         final = None
+        partial_usage = None
         error = None
-        if self._events.active:
-            await self._events.emit(
-                RequestStarted(
-                    request_id=request_id,
-                    provider_id=self.provider.provider_config.get("id"),
-                    model=payload.get("model") or self.provider.get_model(),
-                    streaming=streaming,
-                )
-            )
         settled = False
 
         async def settle() -> None:
@@ -656,19 +626,63 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                 return
             settled = True
             self._message_status = status
-            usage = final.usage if final is not None else None
+            usage = (
+                final.usage
+                if final is not None and final.usage is not None
+                else partial_usage
+            )
             reported_error = error
             if final is not None and final.role == "err":
                 reported_error = RuntimeErrorInfo(
                     code="provider_error", message=final.completion_text
                 )
+            if self._conversation_event_sink is not None:
+                parts = []
+                if final is not None:
+                    self._sanitize_malformed_tool_calls(final)
+                    if final.reasoning_content is not None or final.reasoning_signature:
+                        parts.append(
+                            ThinkPart(
+                                think=final.reasoning_content or "",
+                                encrypted=final.reasoning_signature,
+                            )
+                        )
+                    if final.completion_text:
+                        parts.append(TextPart(text=final.completion_text))
+                else:
+                    parts = [
+                        ThinkPart(think=part.text or "")
+                        if isinstance(part, ReasoningOutput)
+                        else TextPart(text=part.text or "")
+                        for part in self._message_parts
+                    ]
+                message = AssistantMessageSegment(
+                    content=parts or None,
+                    tool_calls=final.to_openai_tool_calls_model() if final else [],
+                )
+                data = {
+                    "message": message.model_dump(),
+                    "status": status.value,
+                    "provider_id": self.provider.provider_config.get("id", ""),
+                    "model": payload.get("model") or self.provider.get_model(),
+                }
+                if usage is not None:
+                    data["usage"] = {
+                        "input_tokens": usage.input,
+                        "cached_input_tokens": usage.input_cached,
+                        "output_tokens": usage.output,
+                    }
+                if reported_error is not None:
+                    data["error"] = {
+                        "code": reported_error.code,
+                        "message": reported_error.message,
+                    }
+                self._pending_assistant_event = AgentResponse(
+                    "message.appended", data, request_id
+                )
+                if status != TurnStatus.COMPLETED:
+                    await self._flush_pending_response()
             if self._events.active:
-                if recorder:
-                    await recorder.finish(
-                        status.value,
-                        usage=usage,
-                        error_code=reported_error.code if reported_error else None,
-                    )
                 await self._events.emit(
                     RequestFinished(
                         request_id=request_id,
@@ -686,11 +700,17 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                 )
 
         try:
-            if streaming:
-                stream = self.provider.text_chat_stream(
-                    **payload,
-                    **request_recorder_kwargs(self.provider.text_chat_stream, recorder),
+            if self._events.active:
+                await self._events.emit(
+                    RequestStarted(
+                        request_id=request_id,
+                        provider_id=self.provider.provider_config.get("id"),
+                        model=payload.get("model") or self.provider.get_model(),
+                        streaming=streaming,
+                    )
                 )
+            if streaming:
+                stream = self.provider.text_chat_stream(**payload)
                 try:
                     while True:
                         try:
@@ -700,6 +720,8 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                         if response is None:
                             status = TurnStatus.CANCELLED
                             break
+                        if response.usage is not None:
+                            partial_usage = response.usage
                         if not response.is_chunk:
                             final = response
                             status = (
@@ -712,12 +734,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                 finally:
                     await self._close_executor(stream)
             else:
-                response = await self._await_or_stop(
-                    self.provider.text_chat(
-                        **payload,
-                        **request_recorder_kwargs(self.provider.text_chat, recorder),
-                    )
-                )
+                response = await self._await_or_stop(self.provider.text_chat(**payload))
                 if response is not None:
                     final = response
                     status = (
@@ -853,6 +870,8 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                             raise
                     if self._is_stop_requested():
                         return
+            except ConversationPersistenceError:
+                raise
             except Exception as exc:  # noqa: BLE001
                 last_exception = exc
                 logger.warning(
@@ -1011,22 +1030,47 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             for tool_name in llm_resp.tools_call_name
         ]
 
-    async def _append_context_messages(self, messages: list[Message]) -> None:
+    async def _flush_pending_response(self) -> None:
+        """Save an unconsumed model response without adding it to future context."""
+        event = self._pending_assistant_event
+        if event is None:
+            return
+        event.data["message"]["_no_save"] = True
+        try:
+            await self._conversation_event_sink(event)
+        except Exception as exc:
+            raise ConversationPersistenceError(
+                "Assistant response was not acknowledged"
+            ) from exc
+        self._pending_assistant_event = None
+
+    async def _append_context_messages(
+        self, messages: list[Message], *, record_response: bool = False
+    ) -> None:
         """Append framework messages and stage only their new event payloads.
 
         Args:
             messages: New messages owned by the runner, in execution order.
+            record_response: Attach the pending model outcome to its assistant message.
         """
         self.run_context.messages.extend(messages)
         if self._conversation_event_sink is not None:
-            response = AgentResponse(
-                "context.appended",
-                {"messages": dump_messages(messages, include_temporary=True)},
-            )
-            if self._events.active:
-                await self._events.emit(response)
-            else:
-                await self._conversation_event_sink(response)
+            data: dict[str, T.Any] = {
+                "messages": dump_messages(messages, include_temporary=True)
+            }
+            event = self._pending_assistant_event if record_response else None
+            if event is not None:
+                data["assistant"] = {
+                    "event_id": event.event_id,
+                    "metadata": {
+                        key: value
+                        for key, value in event.data.items()
+                        if key != "message"
+                    },
+                }
+            await self._conversation_event_sink(AgentResponse("context.appended", data))
+            if event is not None:
+                self._pending_assistant_event = None
 
     def _context_response(
         self, reason="legacy_replace", origin="unknown"
@@ -1378,7 +1422,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             )
             # record the assistant message with tool calls
             await self._append_context_messages(
-                tool_calls_result.to_openai_messages_model()
+                tool_calls_result.to_openai_messages_model(), record_response=True
             )
 
             # If there are cached images and the model supports image input,

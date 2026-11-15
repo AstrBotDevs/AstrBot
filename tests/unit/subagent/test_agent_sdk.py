@@ -614,12 +614,8 @@ async def test_native_sessions_commit_whole_turn_after_execution(sdk, delegated)
             ] == [
                 "conversation.created",
                 "turn.started",
-                "request.started",
-                "request.finished",
                 "tool.started",
                 "tool.finished",
-                "request.started",
-                "request.finished",
                 "turn.finished",
             ]
             assert events[1].event_id == "webchat-turn"

@@ -18,28 +18,11 @@ from astrbot.core.db.conversation import (
     persistent_messages,
     reconcile_history,
 )
+from astrbot.core.exceptions import (
+    ConversationPersistenceError as ConversationPersistenceError,
+)
 from astrbot.core.sentinels import NOT_GIVEN
 from astrbot.core.utils.event_id import new_event_id
-
-
-class ConversationPersistenceError(RuntimeError):
-    """A journal write failed; provider or tool retries cannot repair it."""
-
-
-def _message_key(value):
-    """Make a JSON value hashable without encoding large message bodies.
-
-    Args:
-        value: A JSON-compatible value in a model message.
-
-    Returns:
-        A key that preserves JSON types and ignores object key order.
-    """
-    if isinstance(value, dict):
-        return frozenset((key, _message_key(item)) for key, item in value.items())
-    if isinstance(value, (list, tuple)):
-        return tuple(_message_key(item) for item in value)
-    return type(value), value
 
 
 class ConversationEventWriter:
@@ -95,7 +78,9 @@ class ConversationEventWriter:
             Whether the response belongs to persistence rather than display.
         """
         if response.type == "context.appended":
-            self.stage_messages(response.data["messages"])
+            self.stage_messages(
+                response.data["messages"], assistant=response.data.get("assistant")
+            )
         elif response.type == "context.updated":
             self.stage_history(
                 response.data["messages"],
@@ -111,8 +96,6 @@ class ConversationEventWriter:
             # The host settles the turn after its history-save hook has completed.
             self.turn_result = response
         elif response.type in {
-            "request.started",
-            "request.finished",
             "tool.started",
             "tool.finished",
             "message.appended",
@@ -120,7 +103,6 @@ class ConversationEventWriter:
         }:
             payload = dict(response.data)
             if response.type in {
-                "request.started",
                 "tool.started",
                 "message.appended",
                 "context.rebased",
@@ -157,19 +139,16 @@ class ConversationEventWriter:
         }
         async with self._lock:
             context_change = event_type in CONTEXT_TYPES
-            if event_type == "request.started":
-                payload.setdefault("context_leaf_event_id", self.leaf_event_id)
-                if "input_context" in payload:
-                    payload["context_leaf_event_id"] = self.leaf_event_id
-                    payload["input_context"] = self._encode_request_context(
-                        payload["input_context"]
-                    )
-            drafts = [*self._pending, draft] if context_change else [draft]
-            checks_context = context_change or event_type in {
-                "turn.started",
-                "request.started",
-                "tool.started",
-            }
+            drafts = (
+                [*self._pending, draft]
+                if context_change or event_type == "turn.finished"
+                else [draft]
+            )
+            checks_context = (
+                context_change
+                or event_type in {"turn.started", "tool.started"}
+                or (bool(self._pending) and event_type == "turn.finished")
+            )
             try:
                 committed = await self.store.append(
                     self.cid,
@@ -359,43 +338,6 @@ class ConversationEventWriter:
         self.turn_id = event.event_id
         return self.turn_id
 
-    def _encode_request_context(self, input_context: dict) -> dict:
-        """Reference unchanged messages in the committed context by position.
-
-        Args:
-            input_context: Provider-facing messages with temporary content filtered.
-
-        Returns:
-            The request input as ordered ranges and inline messages.
-        """
-        base_keys = [
-            _message_key(entry["message"]) for entry in self._committed_entries
-        ]
-        positions = {}
-        for index, key in enumerate(base_keys):
-            positions.setdefault(key, index)
-        segments = []
-        for message in input_context["contexts"]:
-            key = _message_key(message)
-            previous_range = segments[-1].get("base_range") if segments else None
-            if (
-                previous_range is not None
-                and previous_range[1] < len(base_keys)
-                and base_keys[previous_range[1]] == key
-            ):
-                previous_range[1] += 1
-                continue
-            position = positions.get(key)
-            if position is None:
-                segments.append({"message": message})
-            else:
-                segments.append({"base_range": [position, position + 1]})
-        return {
-            "segments": segments,
-            "extra_user_content_parts": input_context["extra_user_content_parts"],
-            "complete": input_context["complete"],
-        }
-
     async def finish_turn(self, status: str) -> None:
         """Record settlement without claiming recovery of external side effects.
 
@@ -414,16 +356,31 @@ class ConversationEventWriter:
             self._pending.clear()
             self._entries = self._committed_entries
 
-    def stage_messages(self, messages: list[dict]) -> None:
+    def stage_messages(
+        self, messages: list[dict], *, assistant: dict | None = None
+    ) -> None:
         """Stage a framework-owned append without comparing the previous history.
 
         Args:
             messages: Only new working messages, including temporary content.
+            assistant: Stable event ID and metadata for the first assistant message.
         """
         temporary = Counter()
         entries, drafts = reconcile_history(
             [], messages, turn_id=self.turn_id, temporary_counts=temporary
         )
+        if assistant is not None:
+            draft = next(
+                draft
+                for draft in drafts
+                if draft["payload"]["message"]["role"] == "assistant"
+            )
+            old_id = draft["event_id"]
+            draft["event_id"] = assistant["event_id"]
+            draft["payload"].update(assistant["metadata"])
+            for entry in entries:
+                if entry["id"] == old_id:
+                    entry["id"] = draft["event_id"]
         if entries:
             # Detach the list once when staging begins; message bodies stay shared
             # with the immutable committed projection until a replacement occurs.

@@ -31,8 +31,6 @@ EVENT_TYPES = CONTEXT_TYPES | {
     "conversation.updated",
     "turn.started",
     "turn.finished",
-    "request.started",
-    "request.finished",
     "tool.started",
     "tool.finished",
 }
@@ -864,6 +862,21 @@ class ConversationStore:
                 raise ValueError("Unsupported message role")
             if "include_in_context" in payload:
                 raise ValueError("Use message._no_save instead of include_in_context")
+            if "status" in payload and (
+                message["role"] != "assistant"
+                or payload["status"] not in {"completed", "failed", "cancelled"}
+            ):
+                raise ValueError("Invalid assistant response status")
+            if "usage" in payload and message["role"] != "assistant":
+                raise ValueError("Model usage belongs to an assistant response")
+            if "usage" in payload:
+                usage = payload["usage"]
+                if not isinstance(usage, dict) or any(
+                    type(value) is not int or value < 0 for value in usage.values()
+                ):
+                    raise ValueError("Token usage must contain nonnegative integers")
+                if usage.get("cached_input_tokens", 0) > usage.get("input_tokens", 0):
+                    raise ValueError("Cached input tokens are a subset of input tokens")
         elif kind == "context.rebased":
             if payload.get("origin", "unknown") not in {
                 "user",
@@ -896,7 +909,7 @@ class ConversationStore:
             for key, value in changes.items():
                 if value is not None and not isinstance(value, str):
                     raise ValueError("Metadata must be text or null")
-        elif kind in {"turn.finished", "request.finished", "tool.finished"}:
+        elif kind in {"turn.finished", "tool.finished"}:
             if payload.get("status") not in {
                 "completed",
                 "failed",
@@ -905,7 +918,6 @@ class ConversationStore:
                 raise ValueError("Invalid execution status")
             key = {
                 "turn.finished": "turn_id",
-                "request.finished": "request_id",
                 "tool.finished": "execution_id",
             }[kind]
             start = batch_events.get(payload.get(key, ""))
@@ -944,20 +956,12 @@ class ConversationStore:
                 or start.type != kind.replace("finished", "started")
             ):
                 raise ValueError("Missing matching execution start")
-            if kind == "request.finished" and "usage" in payload:
-                usage = payload["usage"]
-                if not isinstance(usage, dict) or any(
-                    type(value) is not int or value < 0 for value in usage.values()
-                ):
-                    raise ValueError("Token usage must contain nonnegative integers")
-                if usage.get("cached_input_tokens", 0) > usage.get("input_tokens", 0):
-                    raise ValueError("Cached input tokens are a subset of input tokens")
             # A start created in this batch cannot have a committed finish.
             # Earlier batch finishes remain visible even before rows are flushed.
             if duplicate or (kind, payload[key]) in batch_finishes:
                 raise ConversationConflictError("Execution already finished")
             batch_finishes.add((kind, payload[key]))
-        elif kind in {"request.started", "tool.started"}:
+        elif kind == "tool.started":
             turn = batch_events.get(payload.get("turn_id", ""))
             if turn is None:
                 turn = (
@@ -976,14 +980,6 @@ class ConversationStore:
                 or turn.type != "turn.started"
             ):
                 raise ValueError("Missing parent turn")
-            if (
-                kind == "request.started"
-                and "input_context" in payload
-                and payload.get("context_leaf_event_id") != leaf_event_id
-            ):
-                raise ConversationConflictError(
-                    "Request input is based on a different context"
-                )
             if kind == "tool.started" and (
                 not isinstance(payload.get("tool_name"), str)
                 or not isinstance(payload.get("tool_call_id"), str)
@@ -1230,7 +1226,7 @@ class ConversationStore:
             if link_display:
                 await project_webchat_event_links(session, committed)
             if has_plugin_baseline and any(
-                event.type in {"context.rebased", "turn.finished", "request.finished"}
+                event.type in {"context.rebased", "turn.finished"}
                 for event in committed
             ):
                 await self._prune_plugin_context(session, conv)
