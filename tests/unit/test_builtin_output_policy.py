@@ -9,6 +9,7 @@ import pytest
 
 from astrbot.core.agent.run_context import ContextWrapper
 from astrbot.core.astr_agent_runtime.tools.computer_tools import cua, fs, python
+from astrbot.core.utils.media_utils import file_uri_to_path
 
 
 @pytest.mark.asyncio
@@ -77,7 +78,7 @@ async def test_builtin_media_is_prepared_without_sending(kind, monkeypatch, tmp_
     if kind == "python":
         assert part.source.data == "cG5n"
     else:
-        path = part.source.path.removeprefix("file://")
+        path = file_uri_to_path(part.source.path)
         assert Path(path).read_bytes() == (
             b"png" if kind == "screenshot" else b"downloaded"
         )
