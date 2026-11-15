@@ -444,7 +444,7 @@ Core 根据 `source_event` 或当前活跃的同 UMO 事件解析权限。没有
 
 不要在当前 turn 的工具中等待同 session 的排队 turn 完成，这会形成互相等待。可以提交后返回，或按目的使用 steer。
 
-## Agent Runtime 事件 {#runtime-events}
+### Agent Runtime 事件 {#runtime-events}
 
 `run.events()` 产生有类型的 `RuntimeEvent` 对象，通过 `event.type` 读取事件名称、`event.payload` 读取数据。多个读者可独立重放事件，读取本身不会发送消息。
 
@@ -476,16 +476,6 @@ print(result.status, result.text)
 `result.content` 包含最终回复，`result.text` 提取其中的纯文本。`result.usage` 提供累计用量，`result.metrics.steps` 提供执行步数。未知用量为 `None`，不等同于零；缓存命中 token 包含在输入 token 中。
 
 接口迁移：`event.data` 改为 `event.payload`，`result.chain` 改为 `result.content`。`streaming_delta` / `llm_result` 改用 `text.delta`、`reasoning.delta` / `message.completed`，`agent_stats` 改用 `usage.updated`。从最终结果读取状态、错误和执行指标。
-
-## 自定义 Agent runtime {#custom-agent-runtimes}
-
-通过 `ctx.agent.register_runtime(name, runtime)` 注册实现，在配置档的 `agent.runtime` 或专用 Agent 配置中选择该名称。注册的 runtime 可用于主代理和子代理。
-
-实现 `AgentRuntime` 来创建或恢复 `AgentSession`。输入包含来源事件、权限、授权后的工具与技能，以及可选的 `PlainInput`、`ImageInput` 或 `FileInput` 内容。运行配置通过 `open_session(..., options={"config": ...})` 传入。
-
-复用 `AgentSession.run_turn()`，实现 `execute_turn()`，使排队任务在执行前经过 Core 准入检查。可选的 `active_turn(umo)` 用于发现普通消息可追加输入的活跃 turn。若需协作式处理 `/stop`，实现 `request_stop_turn()`，仅在 runtime 负责收尾时返回 `True`，否则会使用取消机制。
-
-按实际执行情况发布类型化事件，返回 `TurnResult`，并将 session 的 `runtime_name` 设为注册名称。没有事件订阅者时，也必须正常执行和保存历史。
 
 ## 对话管理器
 

@@ -444,7 +444,7 @@ Core resolves permissions from `source_event` or the current active same-UMO eve
 
 A tool must not wait for another queued turn in its own session: that turn is waiting for the tool's current turn to finish. Submit and return, or use steering as appropriate.
 
-## Agent Runtime Events {#runtime-events}
+### Agent Runtime Events {#runtime-events}
 
 `run.events()` yields typed `RuntimeEvent` objects. Read `event.type` for the event name and `event.payload` for its data. Events can be replayed by independent readers; reading them does not send messages.
 
@@ -476,16 +476,6 @@ print(result.status, result.text)
 `result.content` contains the final reply; `result.text` extracts its plain text. `result.usage` contains cumulative usage and `result.metrics.steps` the executed step count. Unknown usage counts are `None`, not zero; cached input tokens are included in input tokens.
 
 Migration: use `event.payload` instead of `event.data`, and `result.content` instead of `result.chain`. Replace `streaming_delta` / `llm_result` with `text.delta`, `reasoning.delta` / `message.completed`, and `agent_stats` with `usage.updated`. Read status, errors, and metrics from the final result.
-
-## Custom Agent Runtimes {#custom-agent-runtimes}
-
-Register an implementation with `ctx.agent.register_runtime(name, runtime)`, then select its name in the profile's `agent.runtime` or a specialized agent configuration. A registered runtime can serve main agents and subagents.
-
-Implement `AgentRuntime` to open or restore an `AgentSession`. Inputs provide the source event, permissions, authorized tools and skills, and optional `PlainInput`, `ImageInput`, or `FileInput` content. Runtime configuration arrives in `open_session(..., options={"config": ...})`.
-
-Reuse `AgentSession.run_turn()` and implement `execute_turn()` so queued work passes Core's admission checks before execution. Optional `active_turn(umo)` supports steering from ordinary messages. To handle `/stop` cooperatively, implement `request_stop_turn()` and return `True` only if the runtime will settle the turn; otherwise cancellation is used.
-
-Publish typed events for observed execution and return a `TurnResult`. Set the session's `runtime_name` to the registered name. Turn execution and history persistence must work without event subscribers.
 
 ## Conversation Manager
 

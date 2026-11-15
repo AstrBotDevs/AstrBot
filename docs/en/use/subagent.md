@@ -21,7 +21,7 @@ Open **Config → AI → Capabilities → Subagents** in the target profile and 
 
 The selected persona supplies the agent's instructions, tools, and skills, within the parent agent's authorized capabilities. Other execution settings, such as step limits and tool timeouts, follow the main agent when the session is created. Configuration changes apply to new sessions.
 
-To edit an agent, click its card. To delete one, remove any references from profiles or other agent configurations first. Configurations for unavailable runtimes remain saved but cannot start new sessions. Developers can [register another runtime](../dev/star/guides/ai.md#custom-agent-runtimes).
+To edit an agent, click its card. To delete one, remove any references from profiles or other agent configurations first. Configurations for unavailable runtimes remain saved but cannot start new sessions.
 
 ## Delegate and follow up
 
