@@ -474,27 +474,41 @@ Core supplies public `AgentInput`: the original `AstrMessageEvent`, permissions,
 
 Reuse `AgentSession.run_turn()` when implementing a runtime. Core supplies admission through the scheduling argument `run_turn(input, admit=...)`, independently of `AgentInput`. It runs inside the session lock and the implementation's `_execution_scope()`, before `execute_turn()`. AI enablement, permissions and plugin contributions are refreshed after queued work; do not bypass admission by replacing scheduling. Additional locks belong to the runtime. Optional `active_turn(umo)` supports discovery for ordinary-message steering; its default is `None`, while the session still handles queued execution. The built-in runtime constructs `ProviderRequest`, resolves model configuration, and invokes existing model hooks in its own execution stage. External implementations need not import `astr_agent_runtime`.
 
-Set `send_to_user=False` to handle the model reply yourself:
+Set `send_to_user=False` to collect prepared messages through `run.events()`, then process and send them from your plugin. Use this example inside an async plugin method:
 
 ```py
-from astrbot.api.event import MessageChain
+from astrbot.api.agents import PlainInput, TurnStatus, chain_from_content
 
 run = await self.context.agent.run_turn(
     umo=event.unified_msg_origin,
     input_message=[PlainInput(text="Summarize the video analysis.")],
     send_to_user=False,
 )
+outputs = []
+async for agent_event in run.events():
+    if agent_event.type == "output.ready":
+        outputs.append(agent_event.payload)
+
 result = await run.result()
-if result.text:
-    await self.context.send_message(
-        event.unified_msg_origin,
-        MessageChain().message(f"Video analysis: {result.text}"),
-    )
+if result.status == TurnStatus.COMPLETED:
+    # Review or transform the outputs before sending.
+    for output in outputs:
+        await self.context.send_message(
+            output.target_umo, chain_from_content(output.content)
+        )
 ```
 
-`send_to_user=False` skips Core's automatic output presentation, platform reply decoration and automatic TTS, while preserving execution history. Explicit tool or plugin calls to `event.send()`, `Context.send_message()` or `send_message_to_user` still send normally; the framework does not intercept them.
+The `output.ready` payload is an `OutputReady` instance:
 
-Multiple independent `events()` observers can watch or replay runtime events such as `message.completed` and tool calls without intercepting output or duplicating delivery. The SDK's terminal `turn.finished` event follows automatic output completion.
+| Field | Meaning |
+| --- | --- |
+| `target_umo` | Destination conversation. |
+| `source` | `tool` for a message prepared by a tool; `reply` for the final reply. |
+| `content` | An ordered `tuple[OutputComponent, ...]` containing text, images, audio, video, files, and other message components. |
+
+These events already include the final reply; do not send `result.text` again. To keep only the final reply, filter on `output.source == "reply"`. An `output.ready` event means content is prepared, not that the platform has received it.
+
+Multiple independent `events()` observers can watch or replay runtime events such as `output.ready`, `message.completed`, and tool calls. Reading events does not send messages. The SDK's terminal `turn.finished` event follows automatic output completion.
 
 ```py
 # Queue another turn in this exact conversation, inheriting the output policy.

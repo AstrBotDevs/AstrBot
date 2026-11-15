@@ -83,7 +83,7 @@ class AgentRun:
         Args:
             service: Core input and output integration services.
             event: Authorized source and target of this programmatic turn.
-            send_to_user: Whether Core presents runtime output to the platform.
+            send_to_user: Whether Core and runtime-managed tools deliver output.
             runtime_name: Registered runtime selected for this submission.
             options: New-session configuration, or None when restoring a session.
             content: Explicit portable input, retained for execution-time admission.
@@ -220,6 +220,7 @@ class AgentRun:
             )
             if input is None:
                 return None
+            input.send_to_user = self.send_to_user
             return self._turn.steer(input)
 
 
@@ -352,9 +353,10 @@ class AgentService:
         Args:
             umo: Target conversation source, including existing isolation.
             input_message: Portable plain, image and file content.
-            send_to_user: Automatically present runtime output to the target
-                conversation. Explicit tool and plugin sends are unaffected.
-                History is saved regardless of this setting.
+            send_to_user: Automatically present runtime output and allow native
+                send_message_to_user delivery. False exposes prepared messages
+                through output.ready events instead. Explicit plugin sends are
+                unaffected. History is saved regardless of this setting.
             source_event: Caller identity; defaults to the active same-UMO event.
             session_id: Bind an exact conversation, or select the current one.
             metadata: JSON-compatible plugin data, deep-copied into the wakeup
@@ -456,6 +458,7 @@ class AgentService:
                     permissions=AgentPermissions.from_event(event),
                     content=run._content,
                     streaming=False,
+                    send_to_user=run.send_to_user,
                 )
 
                 async def admit() -> bool:

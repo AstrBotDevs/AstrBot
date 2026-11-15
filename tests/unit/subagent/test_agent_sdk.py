@@ -93,6 +93,10 @@ async def test_output_observers_do_not_change_delivery_or_history(sdk, send_to_u
     assert result.text == "Done"
     assert sdk.platform_send.await_count == int(send_to_user)
     events = [event async for event in run.events()]
+    assert events[-2].type == "output.ready"
+    assert events[-2].payload.source == "reply"
+    assert events[-2].payload.content == result.content
+    assert [event async for event in run.events()] == events
     assert events[-1].type == "turn.finished"
     assert events[-1].payload.result == result
     history = json.loads(sdk.conversation.history)

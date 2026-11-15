@@ -472,27 +472,41 @@ Core 传入公共 `AgentInput`：原始 `AstrMessageEvent`、权限、可选的 
 
 实现 runtime 时复用 `AgentSession.run_turn()`：Core 通过调度参数 `run_turn(input, admit=...)` 传入准入检查，与 `AgentInput` 分离。它在会话串行锁及实现提供的 `_execution_scope()` 内执行，再进入 `execute_turn()`。排队后会重新检查 AI 启用状态、权限和插件能力；不要通过重写调度绕过准入。额外的锁由 runtime 提供。可选的 `active_turn(umo)` 支持普通消息的活跃 turn 发现；未实现时返回 `None`，session 仍负责排队。内置 runtime 在自己的执行阶段构造 `ProviderRequest`、解析模型配置并调用现有模型 hooks；外部实现不需要导入 `astr_agent_runtime`。
 
-如需自行处理模型回复，设置 `send_to_user=False`：
+设置 `send_to_user=False` 后，可以通过 `run.events()` 收集待发送消息，再由插件处理和发送。在插件的异步方法中使用：
 
 ```py
-from astrbot.api.event import MessageChain
+from astrbot.api.agents import PlainInput, TurnStatus, chain_from_content
 
 run = await self.context.agent.run_turn(
     umo=event.unified_msg_origin,
     input_message=[PlainInput(text="请生成视频分析摘要。")],
     send_to_user=False,
 )
+outputs = []
+async for agent_event in run.events():
+    if agent_event.type == "output.ready":
+        outputs.append(agent_event.payload)
+
 result = await run.result()
-if result.text:
-    await self.context.send_message(
-        event.unified_msg_origin,
-        MessageChain().message(f"视频分析结果：\n{result.text}"),
-    )
+if result.status == TurnStatus.COMPLETED:
+    # Review or transform the outputs before sending.
+    for output in outputs:
+        await self.context.send_message(
+            output.target_umo, chain_from_content(output.content)
+        )
 ```
 
-`send_to_user=False` 只跳过 Core 的自动输出呈现及平台回复装饰、自动 TTS，执行历史照常保存。工具或插件显式调用 `event.send()`、`Context.send_message()`、`send_message_to_user` 时仍然正常发送；框架不会拦截这些调用。
+`output.ready` 的 payload 类型为 `OutputReady`：
 
-`events()` 支持多个独立观察者和事后重放，提供 `message.completed`、工具调用等 runtime 事件；监听不会截走平台输出或重复发送。SDK 的最终 `turn.finished` 事件在自动输出处理结束后发布。
+| 字段 | 含义 |
+| --- | --- |
+| `target_umo` | 消息的目标会话。 |
+| `source` | `tool` 表示工具准备的消息；`reply` 表示最终回复。 |
+| `content` | 有序的 `tuple[OutputComponent, ...]`，包含文本、图片、音频、视频、文件等消息组件。 |
+
+这些事件已包含最终回复，无需再次发送 `result.text`。只需要最终回复时，可筛选 `output.source == "reply"`。`output.ready` 表示内容就绪，不代表平台投递成功。
+
+`events()` 支持多个独立观察者和事后重放，提供 `output.ready`、`message.completed`、工具调用等 runtime 事件；读取事件本身不会发送消息。SDK 的最终 `turn.finished` 事件在自动输出处理结束后发布。
 
 ```py
 # Queue another turn in this exact conversation, inheriting the output policy.
