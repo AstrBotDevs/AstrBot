@@ -5,7 +5,7 @@ from typing import TYPE_CHECKING
 
 from astrbot.core import logger
 from astrbot.core.agent.tool import ToolSet
-from astrbot.core.agent_input import CollectedInput
+from astrbot.core.agent_input import CollectedInput, PreparedRequest
 from astrbot.core.astr_agent_runtime.context import (
     AstrAgentContext,
 )
@@ -92,6 +92,7 @@ async def build_main_agent(
     provider: Provider | None = None,
     req: ProviderRequest | None = None,
     collected_input: CollectedInput | None = None,
+    prepared_input: PreparedRequest | None = None,
     plugin_tools: ToolSet | None = None,
     plugin_skills: list[SkillInfo] | None = None,
     runtime: "AstrAgentRuntime | None" = None,
@@ -106,6 +107,7 @@ async def build_main_agent(
         provider: Explicit model, or None to select the session's model.
         req: Explicit request, or None to collect input from the event.
         collected_input: Core-collected input and temporary media ownership.
+        prepared_input: Already-persisted input that must not be prepared again.
         plugin_tools: Core-authorized plugin tools, or None for legacy lookup.
         plugin_skills: Core-authorized plugin skills, or None for legacy lookup.
         runtime: Native session owner supplying internal agent services.
@@ -122,7 +124,7 @@ async def build_main_agent(
         if not event.get_extra(LLM_ERROR_MESSAGE_EXTRA_KEY):
             providers.set_llm_error_message(event, "noProvider")
         return None
-    prepared = await request.prepare_request(
+    prepared = prepared_input or await request.prepare_request(
         event, plugin_context, config, provider, req, collected_input
     )
     if prepared is None:

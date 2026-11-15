@@ -8,6 +8,7 @@ from copy import deepcopy
 
 from sqlalchemy.exc import SQLAlchemyError
 
+from astrbot.core.agent.message import merge_user_messages
 from astrbot.core.agent.response import AgentResponse
 from astrbot.core.db.conversation import (
     CONTEXT_TYPES,
@@ -18,6 +19,7 @@ from astrbot.core.db.conversation import (
     persistent_messages,
     reconcile_history,
 )
+from astrbot.core.db.po import ConversationEvent
 from astrbot.core.exceptions import (
     ConversationPersistenceError as ConversationPersistenceError,
 )
@@ -79,31 +81,45 @@ class ConversationEventWriter:
         """
         message_ids = response.data.get("message_event_ids", [])
         if response.type in {"context.appended", "context.updated"} and message_ids:
-            # Receipt and execution order differ while tools run. A single
-            # checkpoint selects the safe context and acknowledges its inputs.
-            history = response.data["messages"]
-            if response.type == "context.appended":
-                history = [*self.get_messages(), *history]
-            entries, _ = reconcile_history(self._entries, history, turn_id=self.turn_id)
-            users = [entry for entry in entries if entry["message"]["role"] == "user"]
-            if users:
-                users[-1]["id"] = message_ids[0]
-            self._pending.append(
+            # Receipt events hold prepared input; consecutive consumption events
+            # place one merged user message at this execution boundary.
+            if response.type == "context.updated":
+                self.stage_history(
+                    response.data["messages"][:-1],
+                    reason="legacy_replace",
+                    origin="system",
+                )
+            drafts = [
                 {
-                    "type": "context.rebased",
-                    "event_id": response.event_id or new_event_id(),
-                    "payload": {
-                        "reason": "snapshot",
-                        "origin": "system",
-                        "turn_id": self.turn_id,
-                        "messages": entries,
-                        "consumed_message_ids": message_ids,
-                    },
+                    "type": "message.consumed",
+                    "event_id": new_event_id(),
+                    "payload": {"source_event_id": source_id, "turn_id": self.turn_id},
                 }
+                for source_id in message_ids
+            ]
+            adopted = response.data["messages"][-1:]
+            received = response.data.get("received_messages")
+            messages = persistent_messages(
+                [merge_user_messages(received)] if received else adopted
             )
-            self._entries = entries
-            # Keep the checkpoint staged on failure so a later history flush
-            # cannot save the messages without their consumption progress.
+            entries = [
+                {"id": drafts[-1]["event_id"], "message": message}
+                for message in messages
+            ]
+            if self._entries is self._committed_entries:
+                self._entries = list(self._entries)
+            self._entries.extend(entries)
+            self._pending.extend(drafts)
+            # Only actual edits by request adaptation or hooks use the history
+            # replacement adapter. Ordinary input consumption adds no snapshot.
+            if messages != persistent_messages(adopted):
+                self.stage_history(
+                    [*self.get_messages()[:-1], *adopted],
+                    reason="legacy_replace",
+                    origin="system",
+                )
+            # Stage consumption and any edits before the first await, retaining
+            # both on failure so a history-save retry cannot lose progress.
             await self.flush()
             return True
         if response.type == "context.appended":
@@ -126,19 +142,9 @@ class ConversationEventWriter:
         elif response.type == "turn.finished":
             # The host settles the turn after its history-save hook has completed.
             self.turn_result = response
-        elif response.type in {
-            "tool.started",
-            "tool.finished",
-            "message.appended",
-            "context.rebased",
-        }:
+        elif response.type in {"message.appended", "context.rebased"}:
             payload = dict(response.data)
-            if response.type in {
-                "tool.started",
-                "message.appended",
-                "context.rebased",
-            }:
-                payload.setdefault("turn_id", self.turn_id)
+            payload.setdefault("turn_id", self.turn_id)
             await self.append(response.type, payload, event_id=response.event_id)
         else:
             return False
@@ -197,7 +203,7 @@ class ConversationEventWriter:
             )
             checks_context = (
                 context_change
-                or event_type in {"turn.started", "tool.started"}
+                or event_type == "turn.started"
                 or (bool(self._pending) and event_type == "turn.finished")
             )
             try:
@@ -218,7 +224,10 @@ class ConversationEventWriter:
             )
             previous_context_seq = self._context_seq
             await self._acknowledge(committed)
-            if context_change and acknowledged.seq > previous_context_seq:
+            if (
+                event_type in {"message.appended", "context.rebased"}
+                and acknowledged.seq > previous_context_seq
+            ):
                 # Direct appends bypass staging. Remember their raw temporary
                 # bodies too, so a later history save does not record them again.
                 messages = (
@@ -262,11 +271,6 @@ class ConversationEventWriter:
             key=lambda event: event.seq,
         )
         acknowledged_ids = {event.event_id for event in result.events}
-        remaining = [
-            draft
-            for draft in self._pending
-            if draft["event_id"] not in acknowledged_ids
-        ]
         replacement = None
         additions = []
         if context_events:
@@ -289,20 +293,21 @@ class ConversationEventWriter:
                 )
                 replacement = snapshot.entries
             else:
-                for event in context_events[rebase_index or 0 :]:
-                    if event.payload is None:
+                segment = context_events[rebase_index or 0 :]
+                if segment and segment[0].type == "context.rebased":
+                    if segment[0].payload is None:
                         raise ContextUnavailableError(
                             "Acknowledged context payload is unavailable"
                         )
-                    if event.type == "context.rebased":
-                        replacement = persistent_entries(event.payload["messages"])
-                    elif event.payload.get("include_in_context", True):
-                        effective = persistent_messages([event.payload["message"]])
-                        if effective:
-                            additions.append(
-                                {"id": event.event_id, "message": effective[0]}
-                            )
+                    replacement = persistent_entries(segment[0].payload["messages"])
+                    segment = segment[1:]
+                additions = await self.store.message_entries(segment)
 
+        remaining = [
+            draft
+            for draft in self._pending
+            if draft["event_id"] not in acknowledged_ids
+        ]
         # Prepare any still-staged projection before confirming the ACK. Staging
         # may have occurred while storage was awaited; only acknowledged drafts
         # are removed. This full reference copy is confined to pending work.
@@ -312,18 +317,20 @@ class ConversationEventWriter:
                 self._committed_entries if replacement is None else replacement
             )
             staged.extend(additions)
-            for draft in remaining:
-                payload = draft["payload"]
+            segment = []
+            for index, draft in enumerate(remaining):
                 if draft["type"] == "context.rebased":
-                    staged = persistent_entries(payload["messages"])
-                elif draft["type"] == "message.appended" and payload.get(
-                    "include_in_context", True
-                ):
-                    effective = persistent_messages([payload["message"]])
-                    if effective:
-                        staged.append(
-                            {"id": draft["event_id"], "message": effective[0]}
+                    staged = persistent_entries(draft["payload"]["messages"])
+                    segment = []
+                elif draft["type"] in {"message.appended", "message.consumed"}:
+                    segment.append(
+                        ConversationEvent(
+                            conversation_ref=self._conversation.id,
+                            seq=index + 1,
+                            **draft,
                         )
+                    )
+            staged.extend(await self.store.message_entries(segment))
 
         # No await or projection work follows: all committed state moves together.
         if context_events:

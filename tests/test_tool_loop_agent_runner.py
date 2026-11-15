@@ -2267,7 +2267,9 @@ async def test_event_journal_records_requests_tools_and_final_context(
         events = await db.conversation_store.events(conv.conversation_id)
         types = [e.type for e in events]
         assert "request.started" not in types and "request.finished" not in types
-        assert types.count("tool.started") == types.count("tool.finished") == 1
+        assert "tool.started" not in types and "tool.finished" not in types
+        runtime_types = [event.type for event in runtime_events]
+        assert runtime_types.count("tool.started") == runtime_types.count("tool.finished") == 1
         assert types[-1] == "turn.finished"
         assistant_events = [e for e in events if e.type == "message.appended" and "status" in e.payload]
         assert [e.event_id for e in assistant_events] == [
@@ -2277,9 +2279,11 @@ async def test_event_journal_records_requests_tools_and_final_context(
         usage = [e.payload["usage"] for e in assistant_events]
         assert sum(item["input_tokens"] for item in usage) == 330
         assert sum(item["cached_input_tokens"] for item in usage) == 30
-        finished_tool = next(e for e in events if e.type == "tool.finished")
-        assert finished_tool.payload["status"] == "completed"
-        assert finished_tool.payload["result"]["content"][0]["type"] == "text"
+        finished_tool = next(e for e in runtime_events if e.type == "tool.finished")
+        assert finished_tool.status == "completed"
+        tool_message = next(e.payload["message"] for e in events if e.type == "message.appended" and e.payload["message"]["role"] == "tool")
+        assert tool_message["tool_call_id"] == "call_varying_usage"
+        assert "工具执行结果" in str(tool_message["content"])
         history = (await db.conversation_store.read(conv.conversation_id)).messages
         assert [m["role"] for m in history] == ["user", "assistant", "tool", "user", "assistant"]
         assert ticket is not None and ticket.consumed
@@ -2313,7 +2317,7 @@ async def test_journal_failure_does_not_retry_a_model_or_fallback(
 
 
 @pytest.mark.asyncio
-async def test_tool_started_is_acknowledged_before_creating_executor(
+async def test_tool_call_message_is_acknowledged_before_creating_executor(
     runner, provider_request, mock_hooks
 ):
     from unittest.mock import Mock
@@ -2326,8 +2330,10 @@ async def test_tool_started_is_acknowledged_before_creating_executor(
 
     async def persist(response):
         seen.append(response.type)
-        if response.type == "tool.started":
-            assert response.event_id
+        if response.type == "context.appended" and any(
+            message.get("tool_calls") for message in response.data["messages"]
+        ):
+            assert response.data["assistant"]["event_id"]
             raise ConversationPersistenceError("unavailable")
         return True
 

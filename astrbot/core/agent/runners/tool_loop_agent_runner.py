@@ -32,6 +32,7 @@ from astrbot.core.agent.message import (
     TextPart,
     ThinkPart,
     dump_messages,
+    merge_user_messages,
 )
 from astrbot.core.agent.tool import FunctionTool, ToolSet
 from astrbot.core.agent.tool_image_cache import tool_image_cache
@@ -113,6 +114,7 @@ class FollowUpTicket:
     text: str
     consumed: bool = False
     message_event_id: str | None = None
+    message: dict | None = None
     resolved: asyncio.Event = field(default_factory=asyncio.Event)
 
 
@@ -222,12 +224,14 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             follow_ups = list(self._pending_follow_ups)
             await self._append_context_messages(
                 [
-                    Message(
-                        role="user",
-                        content=[
-                            TextPart(text=("\n" if index else "") + ticket.text)
-                            for index, ticket in enumerate(follow_ups)
-                        ],
+                    Message.model_validate(
+                        merge_user_messages(
+                            [
+                                ticket.message
+                                or {"role": "user", "content": ticket.text}
+                                for ticket in follow_ups
+                            ]
+                        )
                     )
                 ],
                 follow_ups=follow_ups,
@@ -363,6 +367,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         self._pending_follow_ups: list[FollowUpTicket] = []
         self._follow_up_seq = 0
         self._received_message_ids: list[str] = []
+        self._received_messages: list[dict] = []
         self._last_tool_name: str | None = None
         self._last_tool_args: dict[str, T.Any] | None = None
         self._same_tool_streak = 0
@@ -1070,6 +1075,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                 data["message_event_ids"] = [
                     ticket.message_event_id for ticket in follow_ups
                 ]
+                data["received_messages"] = [ticket.message for ticket in follow_ups]
             event = self._pending_assistant_event if record_response else None
             if event is not None:
                 data["assistant"] = {
@@ -1482,12 +1488,14 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                 follow_ups = list(self._pending_follow_ups)
                 await self._append_context_messages(
                     [
-                        Message(
-                            role="user",
-                            content=[
-                                TextPart(text=("\n" if index else "") + ticket.text)
-                                for index, ticket in enumerate(follow_ups)
-                            ],
+                        Message.model_validate(
+                            merge_user_messages(
+                                [
+                                    ticket.message
+                                    or {"role": "user", "content": ticket.text}
+                                    for ticket in follow_ups
+                                ]
+                            )
                         )
                     ],
                     follow_ups=follow_ups,
@@ -2002,7 +2010,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
     async def _recorded_tool_results(
         self, tool: FunctionTool[TContext], call_id: str, arguments: JsonObject
     ) -> T.AsyncGenerator[T.Any | CallToolResult, None]:
-        """Record the actual executor boundary after validation and plugin hooks.
+        """Publish runtime tool events after validation and plugin hooks.
 
         Args:
             tool: Resolved function tool.
@@ -2020,20 +2028,6 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         error: RuntimeErrorInfo | None = None
         structured = None
         exit_code = None
-        raw_result = None
-        record = self._events.active and self._conversation_event_sink is not None
-        if record:
-            await self._events.emit(
-                AgentResponse(
-                    "tool.started",
-                    {
-                        "tool_call_id": call_id,
-                        "tool_name": tool.name,
-                        "arguments": arguments,
-                    },
-                    execution_id,
-                )
-            )
         if self._events.active:
             if completed := self._finish_message():
                 await self._events.emit(completed)
@@ -2053,8 +2047,6 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             )
             async for item in self._iter_tool_executor_results(executor):
                 if isinstance(item, CallToolResult):
-                    if record:
-                        raw_result = item.model_dump(mode="json", exclude_none=True)
                     progress = []
                     for block in item.content:
                         if isinstance(block, TextContent):
@@ -2107,13 +2099,6 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             if executor is not None:
                 await self._close_executor(executor)
             if self._events.active:
-                if record:
-                    payload = {"execution_id": execution_id, "status": status.value}
-                    if raw_result is not None:
-                        payload["result"] = raw_result
-                    if error is not None:
-                        payload["error"] = {"code": error.code}
-                    await self._events.emit(AgentResponse("tool.finished", payload))
                 await self._events.emit(
                     ToolFinished(
                         execution_id=execution_id,

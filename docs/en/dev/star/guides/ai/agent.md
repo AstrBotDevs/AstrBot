@@ -102,7 +102,9 @@ if receipt is not None:
 
 `follow_up()` queues a turn in the original runtime and conversation. `steer()` adds input to an active turn: it returns `None` if rejected, or an `InputReceipt`. Awaiting `True` confirms that the runtime durably owns the input, so the caller must not resubmit it; it does not mean the model has finished processing it. `False` means ownership was not accepted. Rejected input is not queued automatically. Steering images and files are currently passed as text references.
 
-Built-in main sessions save received input immediately and consume it after a complete tool batch or plain reply. Accepted steering left over at normal completion becomes a follow-up. After an unexpected exit, pending text is recovered on the next execution of the same conversation with matching permissions, plugin scope, and output policy. This does not start execution automatically at application startup, restore attachments, or migrate delegated-session history. Explicitly cancelled input is not recovered.
+Built-in main sessions prepare and persist received input before acknowledging ownership, and consume it after a complete tool batch or plain reply. Accepted steering left over at normal completion becomes a follow-up. After an unexpected exit, pending text is recovered on the next execution of the same conversation with matching permissions, plugin scope, and output policy. This does not start execution automatically at application startup, restore attachments, or migrate delegated-session history. Explicitly cancelled input is not recovered.
+
+Received user input is stored once as `message.appended` with `delivery` metadata. Prepared content includes the sender/time reminders, so replay does not regenerate them. `message.consumed` carries only `source_event_id` and `turn_id`; its event sequence places the referenced input in model context. Consecutive consumption events in the same turn form one batch, merged with newline separators. Consumption is committed atomically and does not create a full-history snapshot. `message.discarded` excludes cancelled input from recovery. Existing snapshot-based consumption records remain readable.
 
 `run.session.state` is `idle`, `queued`, `running`, or `closed`. The snapshot contains `ref`, `pending_turn_count`, and `active_turn_id`. Read the property again to refresh it.
 
@@ -138,6 +140,8 @@ print(result.status, result.text)
 | `request.started/finished` | Track provider calls. |
 | `usage.updated` | Read cumulative usage; replace the previous snapshot rather than adding it. |
 | `turn.started/prepared/finished` | Track turn lifecycle. The SDK's `turn.finished` follows output handling. |
+
+`tool.started` and `tool.finished` are runtime-only events and are not persisted in the conversation event store. Tool calls and results are persisted through `message.appended`: an `assistant` message contains `tool_calls`, and a `tool` message contains the result linked by `tool_call_id`. Existing persisted tool lifecycle events remain readable.
 
 `result.content` contains the final reply; `result.text` extracts its plain text. `result.usage` contains cumulative usage and `result.metrics.steps` the executed step count. Unknown usage counts are `None`, not zero; cached input tokens are included in input tokens.
 

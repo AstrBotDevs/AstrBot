@@ -637,11 +637,15 @@ class AstrBotImporter:
             # recovery boundaries solely from the ordered rebase events.
             if "replay_from_event_id" in event and event["replay_from_event_id"] != (
                 baselines.get(owner)
-                if kind in {"message.appended", "context.rebased"}
+                if kind in {"message.appended", "message.consumed", "context.rebased"}
                 else None
             ):
                 raise ValueError("Invalid conversation recovery baseline in backup")
-            if kind in {"message.appended", "context.rebased"}:
+            if kind in {
+                "message.appended",
+                "message.consumed",
+                "context.rebased",
+            } and "delivery" not in (event.get("payload") or {}):
                 latest_context[owner] = event["event_id"]
 
         for conv in data.get("conversations_v3", []):

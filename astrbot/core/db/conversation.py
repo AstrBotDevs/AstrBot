@@ -14,6 +14,7 @@ from sqlalchemy.orm import aliased
 from sqlalchemy.orm.attributes import flag_modified
 from sqlmodel import col, delete, func, select, text, update
 
+from astrbot.core.agent.message import merge_user_messages
 from astrbot.core.db.po import (
     ConversationEvent,
     ConversationRead,
@@ -25,14 +26,13 @@ from astrbot.core.db.webchat_projection import project_webchat_event_links
 from astrbot.core.sentinels import NOT_GIVEN
 from astrbot.core.utils.event_id import new_event_id
 
-CONTEXT_TYPES = {"message.appended", "context.rebased"}
+CONTEXT_TYPES = {"message.appended", "message.consumed", "context.rebased"}
 EVENT_TYPES = CONTEXT_TYPES | {
     "conversation.created",
     "conversation.updated",
+    "message.discarded",
     "turn.started",
     "turn.finished",
-    "tool.started",
-    "tool.finished",
 }
 REBASE_REASONS = {"compaction", "reset", "legacy_replace", "migration", "snapshot"}
 EVENT_INSERT_BATCH_ROWS = 100
@@ -291,7 +291,7 @@ def conversation_revision_columns(owner=ConversationV3.id):
         select(ConversationEvent.event_id)
         .where(
             ConversationEvent.conversation_ref == owner,
-            text("type IN ('message.appended', 'context.rebased')"),
+            text("type IN ('message.appended', 'message.consumed', 'context.rebased')"),
             func.json_extract(ConversationEvent.payload, "$.delivery").is_(None),
         )
         .order_by(ConversationEvent.seq.desc())
@@ -525,24 +525,9 @@ class ConversationStore:
             )
             .order_by(ConversationEvent.seq)
         )
-        stream = await session.stream_scalars(query)
-        async for event in stream:
-            if (
-                event.type != "message.appended"
-                or event.version != 1
-                or event.payload is None
-            ):
-                raise ValueError("Invalid linear context segment")
-            effective = persistent_messages([event.payload["message"]])
-            # Older journals contain a separate raw copy marked as excluded.
-            # Keep ignoring it so upgrading cannot replay both stored copies.
-            if (
-                "delivery" not in event.payload
-                and event.payload.get("include_in_context", True)
-                and effective
-            ):
-                snapshot.entries.append({"id": event.event_id, "message": effective[0]})
-            snapshot.replay_count += 1
+        events = list(await session.scalars(query))
+        snapshot.entries.extend(await self.message_entries(events, session=session))
+        snapshot.replay_count += len(events)
         return snapshot
 
     async def get_context_availability(
@@ -899,6 +884,69 @@ class ConversationStore:
                     raise ValueError("Token usage must contain nonnegative integers")
                 if usage.get("cached_input_tokens", 0) > usage.get("input_tokens", 0):
                     raise ValueError("Cached input tokens are a subset of input tokens")
+        elif kind in {"message.consumed", "message.discarded"}:
+            source_id = payload.get("source_event_id")
+            if not isinstance(source_id, str):
+                raise ValueError("A consumption requires a received message identity")
+            source = batch_events.get(source_id)
+            if source is None:
+                source = await session.scalar(
+                    select(ConversationEvent).where(
+                        ConversationEvent.event_id == source_id
+                    )
+                )
+            if (
+                source is None
+                or source.conversation_ref != conv.id
+                or source.type != "message.appended"
+                or source.payload is None
+                or "delivery" not in source.payload
+                or source.payload["message"]["role"] != "user"
+            ):
+                raise ValueError("Missing received user message")
+            settled = await session.scalar(
+                select(ConversationEvent.event_id)
+                .where(
+                    ConversationEvent.conversation_ref == conv.id,
+                    text("type IN ('message.consumed', 'message.discarded')"),
+                    text(
+                        "CAST(json_extract(payload, '$.source_event_id') AS TEXT) = :source_id"
+                    ),
+                )
+                .params(source_id=source_id)
+            )
+            if settled is not None or ("message.settled", source_id) in batch_finishes:
+                raise ConversationConflictError("Received message already settled")
+            legacy_settled = await session.scalar(
+                text("""SELECT 1
+                FROM conversation_events AS progress INDEXED BY ix_input_legacy_progress,
+                     json_each(CASE progress.type WHEN 'context.rebased'
+                       THEN json_extract(progress.payload,'$.consumed_message_ids')
+                       ELSE json_extract(progress.payload,'$.discarded_message_ids') END) AS item
+                WHERE progress.conversation_ref=:owner AND progress.seq>:seq
+                  AND ((progress.type='context.rebased' AND json_type(progress.payload,'$.consumed_message_ids')='array')
+                    OR (progress.type='conversation.updated' AND json_type(progress.payload,'$.discarded_message_ids')='array'))
+                  AND item.value=:source_id LIMIT 1"""),
+                {"owner": conv.id, "seq": source.seq, "source_id": source_id},
+            )
+            if legacy_settled is not None:
+                raise ConversationConflictError("Received message already settled")
+            batch_finishes.add(("message.settled", source_id))
+            if kind == "message.consumed":
+                turn_id = payload.get("turn_id")
+                turn = batch_events.get(turn_id)
+                if turn is None:
+                    turn = await session.scalar(
+                        select(ConversationEvent).where(
+                            ConversationEvent.event_id == turn_id
+                        )
+                    )
+                if (
+                    turn is None
+                    or turn.conversation_ref != conv.id
+                    or turn.type != "turn.started"
+                ):
+                    raise ValueError("Missing consuming turn")
         elif kind == "context.rebased":
             if payload.get("origin", "unknown") not in {
                 "user",
@@ -931,17 +979,14 @@ class ConversationStore:
             for key, value in changes.items():
                 if value is not None and not isinstance(value, str):
                     raise ValueError("Metadata must be text or null")
-        elif kind in {"turn.finished", "tool.finished"}:
+        elif kind == "turn.finished":
             if payload.get("status") not in {
                 "completed",
                 "failed",
                 "cancelled",
             }:
                 raise ValueError("Invalid execution status")
-            key = {
-                "turn.finished": "turn_id",
-                "tool.finished": "execution_id",
-            }[kind]
+            key = "turn_id"
             start = batch_events.get(payload.get(key, ""))
             duplicate = False
             if start is None:
@@ -983,33 +1028,6 @@ class ConversationStore:
             if duplicate or (kind, payload[key]) in batch_finishes:
                 raise ConversationConflictError("Execution already finished")
             batch_finishes.add((kind, payload[key]))
-        elif kind == "tool.started":
-            turn = batch_events.get(payload.get("turn_id", ""))
-            if turn is None:
-                turn = (
-                    await session.execute(
-                        select(
-                            ConversationEvent.conversation_ref,
-                            ConversationEvent.type,
-                        ).where(
-                            ConversationEvent.event_id == payload.get("turn_id", "")
-                        )
-                    )
-                ).one_or_none()
-            if (
-                not turn
-                or turn.conversation_ref != conv.id
-                or turn.type != "turn.started"
-            ):
-                raise ValueError("Missing parent turn")
-            if kind == "tool.started" and (
-                not isinstance(payload.get("tool_name"), str)
-                or not isinstance(payload.get("tool_call_id"), str)
-                or not isinstance(payload.get("arguments"), dict)
-            ):
-                raise ValueError(
-                    "A tool execution requires a name, call ID and arguments"
-                )
 
     async def _prune_plugin_context(self, session, conv) -> None:
         """Reclaim superseded plugin bodies while retaining active execution baselines.
@@ -1255,6 +1273,120 @@ class ConversationStore:
             await session.commit()
             return ConversationAppendResult(committed)
 
+    async def received_messages(
+        self, cid: str, event_ids: list[str]
+    ) -> list[ConversationEvent]:
+        """Read owned input records in the caller's requested order.
+
+        Args:
+            cid: Owning conversation identity.
+            event_ids: Stable message identities, including retries.
+
+        Returns:
+            Existing received user events in the requested order.
+        """
+        if not event_ids:
+            return []
+        async with self.db.get_db() as session:
+            ids = func.json_each(json.dumps(event_ids)).table_valued("value")
+            rows = await session.scalars(
+                select(ConversationEvent)
+                .join(
+                    ConversationV3,
+                    ConversationV3.id == ConversationEvent.conversation_ref,
+                )
+                .where(
+                    ConversationV3.conversation_id == cid,
+                    col(ConversationEvent.event_id).in_(select(ids.c.value)),
+                    ConversationEvent.type == "message.appended",
+                )
+            )
+            by_id = {
+                row.event_id: row for row in rows if "delivery" in (row.payload or {})
+            }
+            return [by_id[event_id] for event_id in event_ids if event_id in by_id]
+
+    async def message_entries(
+        self, events: list[ConversationEvent], *, session=None
+    ) -> list[dict]:
+        """Project appended messages and consecutive consumption batches.
+
+        Args:
+            events: Ordered events after the latest rebase. A consumption batch
+                occupies consecutive sequence numbers within one turn.
+            session: Optional existing read transaction.
+
+        Returns:
+            Context entries with received messages resolved by indexed identity.
+
+        Raises:
+            ValueError: A consumption references an unavailable input.
+        """
+        from contextlib import nullcontext
+
+        consumed = [event for event in events if event.type == "message.consumed"]
+        sources = {}
+        if consumed:
+            ids = func.json_each(
+                json.dumps([event.payload["source_event_id"] for event in consumed])
+            ).table_valued("value")
+            async with (
+                self.db.get_db() if session is None else nullcontext(session) as reader
+            ):
+                rows = await reader.scalars(
+                    select(ConversationEvent).where(
+                        col(ConversationEvent.event_id).in_(select(ids.c.value))
+                    )
+                )
+                sources = {row.event_id: row for row in rows}
+        entries = []
+        previous = None
+        batches = []
+        batch = []
+        for event in events:
+            payload = event.payload
+            if event.version != 1 or payload is None:
+                raise ValueError("Unavailable context event")
+            if event.type == "message.consumed":
+                source = sources.get(payload["source_event_id"])
+                if (
+                    source is None
+                    or source.conversation_ref != event.conversation_ref
+                    or source.type != "message.appended"
+                    or source.payload is None
+                    or "delivery" not in source.payload
+                ):
+                    raise ValueError("Missing received message")
+                same_batch = (
+                    previous is not None
+                    and previous.type == event.type
+                    and previous.seq + 1 == event.seq
+                    and previous.payload["turn_id"] == payload["turn_id"]
+                )
+                if same_batch:
+                    batch.append(source.payload["message"])
+                    entries[-1]["id"] = event.event_id
+                else:
+                    batch = [source.payload["message"]]
+                    entry = {"id": event.event_id}
+                    entries.append(entry)
+                    batches.append((entry, batch))
+            elif event.type == "message.appended":
+                if "delivery" not in payload and payload.get(
+                    "include_in_context", True
+                ):
+                    messages = persistent_messages([payload["message"]])
+                    if messages:
+                        entries.append({"id": event.event_id, "message": messages[0]})
+            else:
+                raise ValueError("Invalid linear context segment")
+            previous = event
+        for entry, batch in batches:
+            entry["message"] = merge_user_messages(
+                persistent_messages(batch, detach=False)
+            )
+        return entries
+
     async def pending_messages(self, cid: str) -> list[ConversationEvent]:
         """Read accepted user messages without a committed consumption checkpoint.
 
@@ -1267,24 +1399,27 @@ class ConversationStore:
         """
         async with self.db.get_db() as session:
             rows = await session.execute(
-                text("""SELECT pending.* FROM conversation_events AS pending
+                text("""WITH legacy_settled AS MATERIALIZED (
+                    SELECT progress.conversation_ref, item.value AS source_id
+                    FROM conversation_events AS progress INDEXED BY ix_input_legacy_progress,
+                         json_each(CASE progress.type WHEN 'context.rebased'
+                           THEN json_extract(progress.payload,'$.consumed_message_ids')
+                           ELSE json_extract(progress.payload,'$.discarded_message_ids') END) AS item
+                    WHERE progress.conversation_ref=(SELECT id FROM conversations_v3 WHERE conversation_id=:cid)
+                      AND ((progress.type='context.rebased' AND json_type(progress.payload,'$.consumed_message_ids')='array')
+                        OR (progress.type='conversation.updated' AND json_type(progress.payload,'$.discarded_message_ids')='array'))
+                ) SELECT pending.* FROM conversation_events AS pending INDEXED BY ix_input_received
                     JOIN conversations_v3 AS conversation
                       ON conversation.id = pending.conversation_ref
                     WHERE conversation.conversation_id = :cid
                       AND pending.type = 'message.appended'
                       AND json_type(pending.payload, '$.delivery') = 'object'
                       AND NOT EXISTS (
-                        SELECT 1 FROM conversation_events AS progress,
-                          json_each(progress.payload, '$.consumed_message_ids') AS consumed
+                        SELECT 1 FROM conversation_events AS progress
                         WHERE progress.conversation_ref = pending.conversation_ref
-                          AND progress.seq > pending.seq
-                          AND consumed.value = pending.event_id)
-                      AND NOT EXISTS (
-                        SELECT 1 FROM conversation_events AS progress,
-                          json_each(progress.payload, '$.discarded_message_ids') AS discarded
-                        WHERE progress.conversation_ref = pending.conversation_ref
-                          AND progress.seq > pending.seq
-                          AND discarded.value = pending.event_id)
+                          AND progress.type IN ('message.consumed', 'message.discarded')
+                          AND CAST(json_extract(progress.payload, '$.source_event_id') AS TEXT) = pending.event_id)
+                      AND pending.event_id NOT IN (SELECT source_id FROM legacy_settled WHERE source_id IS NOT NULL)
                     ORDER BY pending.seq"""),
                 {"cid": cid},
             )

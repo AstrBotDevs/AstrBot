@@ -23,10 +23,10 @@ async def project_webchat_event_links(
         events: Validated events in append order.
     """
     links: dict[str, dict[str, str]] = {}
-    for event in events:
+    for index, event in enumerate(events):
         kind, payload = event.type, event.payload
         if (
-            kind in {"message.appended", "context.rebased"}
+            kind in {"message.appended", "message.consumed", "context.rebased"}
             and payload.get("turn_id")
             and (
                 kind != "message.appended"
@@ -38,21 +38,36 @@ async def project_webchat_event_links(
             )
         ):
             role = (
-                payload["message"].get("role")
-                if kind == "message.appended"
-                else next(
-                    (
-                        entry["message"].get("role")
-                        for entry in reversed(payload["messages"])
-                        if not entry["message"].get("_no_save")
-                    ),
-                    None,
+                "user"
+                if kind == "message.consumed"
+                else (
+                    payload["message"].get("role")
+                    if kind == "message.appended"
+                    else next(
+                        (
+                            entry["message"].get("role")
+                            for entry in reversed(payload["messages"])
+                            if not entry["message"].get("_no_save")
+                        ),
+                        None,
+                    )
                 )
             )
             if role in {"user", "assistant"}:
                 turn_links = links.setdefault(payload["turn_id"], {})
                 if role == "user":
-                    turn_links.setdefault("user", event.event_id)
+                    previous = events[index - 1] if index else None
+                    if (
+                        kind == "message.consumed"
+                        and previous is not None
+                        and previous.type == kind
+                        and previous.seq + 1 == event.seq
+                        and previous.payload.get("turn_id") == payload["turn_id"]
+                        and turn_links.get("user") == previous.event_id
+                    ):
+                        turn_links["user"] = event.event_id
+                    else:
+                        turn_links.setdefault("user", event.event_id)
                 else:
                     turn_links["bot"] = event.event_id
 

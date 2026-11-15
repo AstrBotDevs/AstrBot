@@ -165,6 +165,7 @@ class NativeAgentSession(AgentSession):
                                 include_temporary=True,
                             ),
                             "message_event_ids": message_ids,
+                            "received_messages": runner._received_messages,
                         },
                     )
                 )

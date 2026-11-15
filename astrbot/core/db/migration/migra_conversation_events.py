@@ -243,10 +243,33 @@ async def migrate_conversations(store: ConversationStore, *, session=None) -> No
                     await session.execute(
                         text(f"ALTER TABLE {table} DROP COLUMN {name}")
                     )
+        context_index = await session.scalar(
+            text(
+                "SELECT sql FROM sqlite_master WHERE name='ix_conversation_events_context_seq'"
+            )
+        )
+        if context_index and "message.consumed" not in context_index:
+            await session.execute(text("DROP INDEX ix_conversation_events_context_seq"))
+        await session.execute(
+            text("""CREATE INDEX IF NOT EXISTS ix_input_received
+            ON conversation_events(conversation_ref,seq,event_id)
+            WHERE type='message.appended' AND json_type(payload,'$.delivery')='object'""")
+        )
+        await session.execute(
+            text("""CREATE UNIQUE INDEX IF NOT EXISTS ix_input_settled
+            ON conversation_events(conversation_ref,CAST(json_extract(payload,'$.source_event_id') AS TEXT))
+            WHERE type IN ('message.consumed', 'message.discarded')""")
+        )
+        await session.execute(
+            text("""CREATE INDEX IF NOT EXISTS ix_input_legacy_progress
+            ON conversation_events(conversation_ref,seq)
+            WHERE (type='context.rebased' AND json_type(payload,'$.consumed_message_ids')='array')
+               OR (type='conversation.updated' AND json_type(payload,'$.discarded_message_ids')='array')""")
+        )
         await session.execute(
             text("""CREATE INDEX IF NOT EXISTS ix_conversation_events_context_seq
             ON conversation_events(conversation_ref,seq)
-            WHERE type IN ('message.appended', 'context.rebased')""")
+            WHERE type IN ('message.appended', 'message.consumed', 'context.rebased')""")
         )
         # Partial indexes contain only live plugin baselines and lifecycle
         # references, so cleanup need not inspect historical event payloads.
