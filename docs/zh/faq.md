@@ -195,14 +195,14 @@ astrbot password
 
 ### 我明明按照文档的步骤做了，为什么协议实现端连不上 AstrBot？
 
-1. 如果你两个**全都**是使用 Docker 部署，请尝试在终端运行（将 `napcat` 换成协议实现端的容器名）：
+1. 如果你两个**全都**是使用 Docker 部署，请尝试在终端运行：
 
 ```bash
 sudo docker network create newnet           # 创建新网络
 sudo docker network connect newnet astrbot
-sudo docker network connect newnet napcat   # 让两个容器连到一起
+sudo docker network connect newnet onebot11inst   # 让两个容器连到一起
 sudo docker restart astrbot
-sudo docker restart napcat                  # 重启容器
+sudo docker restart onebot11inst                  # 重启容器
 ```
 
 运行无报错则回到协议实现端的 WebUI，网络配置中，将你之前填写的 `ws://127.0.0.1:6199/ws` 修改为 `ws://astrbot:6199/ws`。
