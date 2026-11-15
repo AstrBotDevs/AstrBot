@@ -547,6 +547,7 @@ class DiscordPlatformAdapter(Platform):
         """收集所有指令并注册到Discord"""
         logger.info("[Discord] Collecting and registering slash commands...")
         registered_commands = []
+        registered_command_names: set[str] = set()
 
         for handler_md in star_handlers_registry:
             if not star_map[handler_md.handler_module_path].activated:
@@ -559,6 +560,11 @@ class DiscordPlatformAdapter(Platform):
                     continue
 
                 cmd_name, description, cmd_filter_instance = cmd_info
+
+                # Registry order follows handler priority, like text dispatch.
+                # Discord rejects the entire sync batch when names repeat.
+                if cmd_name in registered_command_names:
+                    continue
 
                 # 创建动态回调
                 callback = self._create_dynamic_callback(cmd_name)
@@ -582,6 +588,7 @@ class DiscordPlatformAdapter(Platform):
                     guild_ids=[self.guild_id] if self.guild_id else None,
                 )
                 self.client.add_application_command(slash_command)
+                registered_command_names.add(cmd_name)
                 registered_commands.append(cmd_name)
 
         if registered_commands:
