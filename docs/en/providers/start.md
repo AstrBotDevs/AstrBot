@@ -34,12 +34,6 @@ Using DeepSeek as an example, assuming you have registered and logged in to a De
 6. Click **Save and Fetch Models**, find the desired model, click `+`, and make sure it is enabled. If the model list cannot be fetched, click **Save Configuration**, then **Custom Model** and enter the model ID. Use **Test Model** beside the model to check connectivity.
 7. Open **Config**, select the profile to use, and go to **AI → Model**. Set **Chat Model** to the model you just added, then click **Save Configuration** at the bottom right. This setting is for AstrBot built-in AI.
 
-## Provider Configuration in Narrow Windows
-
-In narrow panels, the provider list becomes a dropdown at the top. Use it to switch providers, expand **Advanced Configuration** for more settings, and click the disk icon to save. Scroll horizontally if a field extends beyond the panel.
-
-![Provider configuration in a narrow window (example data)](../use/images/provider-dialog-narrow-en.jpg)
-
 ## Using Environment Variables to Load Keys
 
 > Introduced in v4.13.0.
