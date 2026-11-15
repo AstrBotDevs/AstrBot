@@ -166,7 +166,9 @@ async def runtime(monkeypatch):
         await runner.reset(
             provider=provider,
             request=prepared.request,
-            run_context=ContextWrapper(context=SimpleNamespace(event=event)),
+            run_context=ContextWrapper(
+                context=SimpleNamespace(event=event, send_to_user=True, _output_turn=None)
+            ),
             tool_executor=MagicMock(),
             agent_hooks=BaseAgentRunHooks(),
             streaming=config.streaming_response,

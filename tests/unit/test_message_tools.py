@@ -43,6 +43,8 @@ def _make_context(
     return SimpleNamespace(
         context=SimpleNamespace(
             event=event,
+            send_to_user=True,
+            _output_turn=None,
             context=SimpleNamespace(
                 get_config=lambda umo: cfg,
                 send_message=AsyncMock(),
