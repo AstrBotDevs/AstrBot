@@ -32,7 +32,6 @@ AstrBot will then use its existing voice-reply flow to synthesize and send WAV a
 
 ## Text Limits and Error Handling
 
-- Text must not be empty and is limited to 10,000 billable characters per request. Chinese characters count as 2; other characters count as 1. AstrBot does not silently truncate oversized text.
-- The complete JSON request body is limited to 64 KiB.
-- Audio is returned as a binary stream. An empty response, a non-WAV response, or an interrupted transfer fails the request and removes the incomplete temporary file.
-- A single request can return up to 30 minutes of audio. Refer to the [official DeepSeek documentation](https://api-docs.deepseek.com/zh-cn/guides/tts/) for current concurrency limits and API details.
+Text must not be empty and is limited to 10,000 billable characters per request: Chinese characters count as 2 and other characters as 1. Shorten text that exceeds the limit. The request body is limited to 64 KiB.
+
+See the [DeepSeek TTS documentation](https://api-docs.deepseek.com/zh-cn/guides/tts/) for audio duration and account limits.
