@@ -159,8 +159,7 @@ Supported types: `string`, `number`, `object`, `boolean`, `array`. Since v4.5.7,
 ## Invoking Agents
 
 > [!TIP]
-> Added in v4.5.7
-
+> Use this section and the Multi-Agent examples below to build an Agent workflow with models, prompts, context, and tools configured by your plugin. To trigger a task using an existing conversation’s persona, history, and tool configuration, see [Running an Agent in an Existing Conversation](#running-an-agent-in-an-existing-conversation).
 
 An Agent can be defined as a combination of system_prompt + tools + llm, enabling more sophisticated intelligent behavior.
 
@@ -181,10 +180,6 @@ llm_resp = await self.context.tool_loop_agent(
 `tool_loop_agent()` method automatically handles the loop of tool invocations and LLM requests until the model stops calling tools or the maximum number of steps is reached.
 
 ## Multi-Agent
-
-> [!TIP]
-> Added in v4.5.7
-
 
 Multi-Agent systems decompose complex applications into multiple specialized agents that collaborate to solve problems. Unlike relying on a single agent to handle every step, multi-agent architectures allow smaller, more focused agents to be composed into coordinated workflows. We implement multi-agent systems using the `agent-as-tool` pattern.
 

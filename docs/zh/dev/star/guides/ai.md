@@ -158,7 +158,7 @@ async def get_weather(
 ## 调用 Agent
 
 > [!TIP]
-> 在 v4.5.7 时加入
+> 本节及下文的 Multi-Agent 示例适用于由插件自行配置模型、提示词、上下文和工具，构建 Agent 执行流程。若要在已有会话中触发任务，并沿用会话的人格、历史和工具配置，请使用[在现有会话中运行 Agent](#在现有会话中运行-agent)的方式。
 
 Agent 可以被定义为 system_prompt + tools + llm 的结合体，可以实现更复杂的智能体行为。
 
@@ -179,9 +179,6 @@ llm_resp = await self.context.tool_loop_agent(
 `tool_loop_agent()` 方法会自动处理工具调用和大模型请求的循环，直到大模型不再调用工具或者达到最大步骤数为止。
 
 ## Multi-Agent
-
-> [!TIP]
-> 在 v4.5.7 时加入
 
 Multi-Agent（多智能体）系统将复杂应用分解为多个专业化智能体，它们协同解决问题。不同于依赖单个智能体处理每一步，多智能体架构允许将更小、更专注的智能体组合成协调的工作流程。我们使用 `agent-as-tool` 模式来实现多智能体系统。
 
