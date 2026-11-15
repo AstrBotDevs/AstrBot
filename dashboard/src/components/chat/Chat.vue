@@ -2202,7 +2202,7 @@ async function stopCurrentSession() {
   /* Side panels live inside .chat-main, which already starts below the 40px
      window toolbar. Keep them flush with the content area's top edge. */
   --chat-panel-top-offset: 0px;
-  --chat-session-active-bg: #efefef;
+  --chat-session-active-bg: rgba(var(--v-theme-on-surface), 0.05);
   --chat-page-bg: #fdfcfc;
   --chat-border: #f2f2f2;
   --chat-muted: rgba(var(--v-theme-on-surface), 0.62);

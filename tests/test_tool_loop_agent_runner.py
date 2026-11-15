@@ -1469,7 +1469,11 @@ async def test_stop_cancels_provider_before_first_response(
 
 
 @pytest.mark.asyncio
-async def test_stop_interrupts_pending_subagent_handoff(mock_hooks):
+async def test_stop_interrupts_pending_subagent_handoff(mock_hooks, monkeypatch):
+    monkeypatch.setattr(
+        "astrbot.core.astr_agent_runtime.tool_executor.AstrAgentContext",
+        SimpleNamespace,
+    )
     subagent_context = BlockingSubagentContext()
     event = MockEvent("webchat:FriendMessage:webchat!user!session", "user")
     handoff_tool = HandoffTool(

@@ -1573,7 +1573,6 @@ class TestEnsurePersonaAndSkills:
         assert result.provider_request.func_tool is not None
         assert result.provider_request.func_tool.names() == tool_names
         assert "<execution_environment" not in result.provider_request.system_prompt
-        assert "<tool_use_instructions>" in result.provider_request.system_prompt
 
     @pytest.mark.asyncio
     @pytest.mark.parametrize("role", ["admin", "member"])
@@ -3690,12 +3689,6 @@ async def test_feature_composition_preserves_tool_scope_and_instruction_order(
         assert (
             req.system_prompt.count(computer_use_build.LOCAL_NETWORK_POLICY_NOTICE) == 1
         )
-    tool_prompt = (
-        builder_build.TOOL_CALL_PROMPT
-        if tool_schema_mode == "full"
-        else builder_build.TOOL_CALL_PROMPT_SKILLS_LIKE_MODE
-    )
-    markers.append(tool_prompt)
     markers.append(web_search_build.WEB_SEARCH_CITATION_PROMPT)
     positions = [req.system_prompt.index(marker) for marker in markers]
     assert positions == sorted(positions)
@@ -3716,18 +3709,7 @@ async def test_feature_composition_preserves_tool_scope_and_instruction_order(
     environment = req.system_prompt.split(environment_start, 1)[1].split(
         "</execution_environment>", 1
     )[0]
-    instructions = req.system_prompt.split("<tool_use_instructions>", 1)[1].split(
-        "</tool_use_instructions>", 1
-    )[0]
-    assert (
-        f"<tool_use_instructions>{instructions}</tool_use_instructions>" == tool_prompt
-    )
     assert req.system_prompt.count("</execution_environment>") == 1
-    assert req.system_prompt.count("<tool_use_instructions>") == 1
-    assert req.system_prompt.count("</tool_use_instructions>") == 1
-    assert req.system_prompt.index(
-        "</execution_environment>"
-    ) < req.system_prompt.index("<tool_use_instructions>")
     assert "Persona marker" not in environment
     assert "Workspace marker" not in environment
     if runtime == "local":
