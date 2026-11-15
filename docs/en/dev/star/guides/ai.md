@@ -531,9 +531,7 @@ The `output.ready` payload is the public `OutputReady` type:
 
 These events already include the final reply; do not send `result.text` again. To keep only the final reply, filter on `output.source == "reply"`; this also discards images, files and other messages prepared through tools. Reasoning and ordinary intermediate tool-execution text are not published as `output.ready`. Media paths follow the framework's temporary-file lifecycle and are not permanent attachment addresses.
 
-`send_to_user=False` skips Core's automatic output presentation, platform reply decoration and automatic TTS. After authorization and media preparation, the built-in `send_message_to_user` only publishes an event and tells the model that delivery belongs to the caller and has not happened. It does not set sent flags. Execution history is still saved; withholding delivery does not roll back the turn. Explicit plugin calls to `event.send()` or `Context.send_message()` still send normally. This parameter does not intercept arbitrary plugin or external-tool side effects.
-
-Built-in CUA screenshots, sandbox file downloads, and WebChat Python image output also honor the turn policy. When the tool's own send option is enabled, caller-owned turns publish `output.ready` without sending or claiming delivery. Disabling that tool option produces no pending message; screenshots and Python images returned to the model are preserved. Caller-owned output without a live receiving turn fails explicitly instead of falling back to direct delivery.
+`send_to_user=False` skips Core's automatic output presentation, platform reply decoration and automatic TTS.
 
 Execution hooks, including model request and response hooks, still run. Collecting events does not run decoration or after-send hooks that belong to automatic presentation. Temporary content in the example is excluded from subsequent model context; the temporary marker does not mean the original content is never stored.
 
