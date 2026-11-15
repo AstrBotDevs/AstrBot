@@ -25,3 +25,6 @@ tests/
 .astrbot
 .astrbot-tmp
 astrbot.lock
+
+# Source artwork, not needed at runtime
+astrbot_Arts/
