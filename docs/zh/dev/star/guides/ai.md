@@ -479,15 +479,17 @@ print(result.status, result.text)
 
 ## 对话管理器
 
-通过 `self.context.conversations` 创建、读取、更新、切换和删除对话。`self.context.conversation_manager` 保留为兼容别名。`Conversation.history` 是包含模型消息的 JSON 字符串。
+通过 `self.context.conversations` 创建、读取、更新、切换和删除对话。`Conversation.history` 是包含模型消息的 JSON 字符串。
 
 `_no_save` 会将消息或内容片段排除在后续模型上下文之外，但不会阻止原文保存。
 
-接口迁移：
-
-- 将 `event.conversation_events` 和 `get_conversation_events()` 替换为 `append_message()` 或 `append_plugin_event()`。
-- 将 `update_conversation_title()` 和 `update_conversation_persona_id()` 替换为 `update_conversation(..., title=...)` 和 `update_conversation(..., persona_id=...)`。
-- 平台历史关联中的 `llm_checkpoint_id` 改用 `turn_id` 和 `context_event_id`。
+> [!TIP]
+> 从 v4.30.0 开始，对话管理接口有以下调整：
+>
+> - `self.context.conversation_manager` 保留为 `self.context.conversations` 的兼容别名。
+> - 将 `event.conversation_events` 和 `get_conversation_events()` 替换为 `append_message()` 或 `append_plugin_event()`。
+> - 将 `update_conversation_title()` 和 `update_conversation_persona_id()` 替换为 `update_conversation(..., title=...)` 和 `update_conversation(..., persona_id=...)`。
+> - 平台历史关联中的 `llm_checkpoint_id` 改用 `turn_id` 和 `context_event_id`。
 
 ### 追加模型消息 `append_message`
 

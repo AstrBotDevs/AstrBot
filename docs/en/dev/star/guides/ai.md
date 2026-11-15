@@ -479,15 +479,17 @@ Migration: use `event.payload` instead of `event.data`, and `result.content` ins
 
 ## Conversation Manager
 
-Use `self.context.conversations` to create, read, update, switch, and delete conversations. `self.context.conversation_manager` remains a compatibility alias. `Conversation.history` is a JSON string containing model messages.
+Use `self.context.conversations` to create, read, update, switch, and delete conversations. `Conversation.history` is a JSON string containing model messages.
 
 `_no_save` excludes a message or content part from future model context, but does not prevent its raw content from being stored.
 
-For migration:
-
-- Replace `event.conversation_events` and `get_conversation_events()` with `append_message()` or `append_plugin_event()`.
-- Replace `update_conversation_title()` and `update_conversation_persona_id()` with `update_conversation(..., title=...)` and `update_conversation(..., persona_id=...)`.
-- Replace platform history links using `llm_checkpoint_id` with `turn_id` and `context_event_id`.
+> [!TIP]
+> Starting with v4.30.0, the conversation API changes as follows:
+>
+> - `self.context.conversation_manager` remains a compatibility alias for `self.context.conversations`.
+> - Replace `event.conversation_events` and `get_conversation_events()` with `append_message()` or `append_plugin_event()`.
+> - Replace `update_conversation_title()` and `update_conversation_persona_id()` with `update_conversation(..., title=...)` and `update_conversation(..., persona_id=...)`.
+> - Replace platform history links using `llm_checkpoint_id` with `turn_id` and `context_event_id`.
 
 ### Appending Model Messages
 
