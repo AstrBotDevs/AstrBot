@@ -32,106 +32,36 @@ llm_resp = await self.context.llm_generate(
 
 ## Structured Decisions
 
-A Decision Provider handles low-latency structured choices, such as whether to reply, which message to answer, or which branch to execute. Configure one under **Providers → Decision** in the WebUI, then call it from a plugin through `self.context.decision`. It is independent of the chat model.
-
-One request can answer multiple questions. `state` is passed to the decision model as-is and must be a `str`, `list`, or `dict`:
+Use a decision provider to decide whether to reply or which action to take. Configure one under **Providers → Decision** in the WebUI, then call `self.context.decision`.
 
 ```py
-from astrbot.api.provider import (
-    DecisionBooleanQuestion,
-    DecisionChoiceAnswer,
-    DecisionChoiceQuestion,
-    DecisionScoreQuestion,
-)
-
-
-recent_messages = [
-    {"role": "user", "content": "I cannot log in; every request returns 500."},
-]
-
-answers = await self.context.decision.ask(
-    {
-        "should_reply": DecisionChoiceQuestion(
-            instructions="Should the assistant reply to this message?",
-            criteria={"reply": "Reply now", "ignore": "Stay silent"},
-        ),
-        "target": DecisionChoiceQuestion(
-            instructions="Which message should the reply focus on?",
-            criteria={"latest": "Latest message", "previous": "Previous message"},
-        ),
-        "needs_tool": DecisionBooleanQuestion(
-            "Does this request require a tool call?"
-        ),
-        "severity": DecisionScoreQuestion(
-            instructions="How severe is the reported problem?",
-            criteria=[
-                "No impact on normal use",
-                "Some features fail, but a workaround exists",
-                "Core features are unavailable with no workaround",
-            ],
-        ),
-    },
-    state={"messages": recent_messages},
-)
-
-should_reply = answers["should_reply"]
-if (
-    isinstance(should_reply, DecisionChoiceAnswer)
-    and should_reply.choice == "reply"
-    and should_reply.probability >= 0.7
-):
-    target = answers["target"]
-    # Use target.choice and answers["needs_tool"].probability in later logic
-```
-
-`DecisionChoiceQuestion.criteria` maps option IDs to descriptions and corresponds to `criteria` in the System One request. For choice questions, `choice` is the selected option ID, `probabilities` contains the full distribution, and `confidence` is the model confidence. For boolean questions, `probability` is the probability that the statement is true. Business rules such as proactive-reply thresholds remain the caller's responsibility.
-
-Results use three independent frozen dataclasses: `DecisionChoiceAnswer`, `DecisionBooleanAnswer`, and `DecisionScoreAnswer`. `DecisionAnswer` is their union type. After calling `ask()`, use `isinstance()` to identify the result type before accessing its fields. `choose()` returns `DecisionChoiceAnswer`, while `yes_no()` returns `bool`.
-
-`DecisionScoreQuestion.criteria` is a list of 2–10 string levels, ordered from lowest to highest and numbered from 0. `DecisionScoreAnswer.score` is a probability-weighted rating, possibly fractional, from `0` to `len(criteria) - 1`. Both `legend` and `probabilities` use string level numbers such as `"0"` as keys, mapping to descriptions and probabilities; `confidence` reports certainty. A score answer contains only these four fields. All three question types can be mixed in one `ask()` call.
-
-Use the convenience methods for a single question:
-
-```py
-choice = await self.context.decision.choose(
-    question="Which reply strategy should be used?",
-    criteria={"short": "A brief reply", "detailed": "A detailed reply"},
-    state=recent_messages,
-)
-
 should_reply = await self.context.decision.yes_no(
-    question="Should the assistant reply now?",
-    state=recent_messages,
+    question="Should the assistant reply to this message?",
+    state="I cannot log in; every request returns 500.",
     threshold=0.7,
 )
-```
 
-Pass `provider_id="provider_id"` to use a specific configured decision provider; otherwise the default one is used. `DecisionError` is raised for an unconfigured provider, timeout, connection failure, HTTP error, invalid JSON, or an answer outside the requested contract. Underlying details are written to the AstrBot log, so plugins can catch the exception and decide whether to skip or degrade this decision.
-
-### Using OpenAI Decisions
-
-In the WebUI, open **Model Providers → Decision** and add **OpenAI Decisions**. Set the API key, endpoint (default `https://api.openai.com/v1`), and model. The API key supports `$ENV_NAME` environment-variable references.
-
-Use the configured provider ID with the same decision interface:
-
-```py
-answers = await self.context.decision.ask(
-    {
-        "should_reply": DecisionChoiceQuestion(
-            instructions="Should the assistant reply to this message?",
-            criteria={"reply": "Reply now", "ignore": "Stay silent"},
-        ),
-        "severity": DecisionScoreQuestion(
-            instructions="How severe is the reported problem?",
-            criteria=["No impact", "Degraded", "Unavailable"],
-        ),
-    },
-    state={"messages": recent_messages},
-    provider_id="openai_decision",
+strategy = await self.context.decision.choose(
+    question="Which reply strategy should be used?",
+    criteria={"short": "A brief reply", "detailed": "A detailed reply"},
+    state="The user asks for step-by-step troubleshooting.",
 )
+print(strategy.choice)
 ```
 
-This provider is called through `self.context.decision`; configuring it does not make the main agent call it automatically. `state` accepts text or JSON-serializable dicts and lists. Message-like fields are treated as data, not conversation history or image input. Invalid state raises `ValueError`; a model refusal raises `DecisionError` for the whole call.
+`yes_no()` returns a `bool`: `True` when the affirmative probability meets `threshold`. `choose()` returns a `DecisionChoiceAnswer`; read `.choice` for the selected value.
+
+`state` supplies context as text, a list, or a dict. Calls use the current decision provider unless you pass `provider_id`.
+
+To answer multiple questions in one request, call `ask({name: question}, state=...)`. Answers use the same keys. Import these types from `astrbot.api.provider`:
+
+| Question type | Configuration | Answer type and main field |
+| --- | --- | --- |
+| `DecisionBooleanQuestion` | `instructions`: a statement to evaluate. | `DecisionBooleanAnswer.probability`: probability that the statement is true. |
+| `DecisionChoiceQuestion` | `instructions` and `criteria`: option IDs mapped to descriptions. | `DecisionChoiceAnswer.choice`: the selected option ID. |
+| `DecisionScoreQuestion` | `instructions` and `criteria`: 2–10 level descriptions, lowest to highest. | `DecisionScoreAnswer.score`: a possibly fractional rating from 0 to the number of levels minus 1. |
+
+An unavailable provider, failed request, or invalid response raises `DecisionError`. Pass `default=False` to `yes_no()` to return a fallback value for these errors.
 
 ## Defining Tools
 

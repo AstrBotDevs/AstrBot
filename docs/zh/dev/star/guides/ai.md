@@ -31,106 +31,36 @@ llm_resp = await self.context.llm_generate(
 
 ## 结构化判断
 
-判断提供商（Decision Provider）用于低延迟的结构化选择，例如是否回复、回复哪条消息或选择执行分支。先在 WebUI 的「模型提供商」→「判断」中配置提供商，插件通过 `self.context.decision` 调用，它与聊天模型互不影响。
-
-一次请求可以同时回答多个问题。`state` 会原样传给判断模型，类型为 `str | list | dict`：
+判断提供商用于是否回复、选择执行分支等任务。先在 WebUI **模型提供商 → 判断** 中配置提供商，再通过 `self.context.decision` 调用。
 
 ```py
-from astrbot.api.provider import (
-    DecisionBooleanQuestion,
-    DecisionChoiceAnswer,
-    DecisionChoiceQuestion,
-    DecisionScoreQuestion,
-)
-
-
-recent_messages = [
-    {"role": "user", "content": "I cannot log in; every request returns 500."},
-]
-
-answers = await self.context.decision.ask(
-    {
-        "should_reply": DecisionChoiceQuestion(
-            instructions="Should the assistant reply to this message?",
-            criteria={"reply": "Reply now", "ignore": "Stay silent"},
-        ),
-        "target": DecisionChoiceQuestion(
-            instructions="Which message should the reply focus on?",
-            criteria={"latest": "Latest message", "previous": "Previous message"},
-        ),
-        "needs_tool": DecisionBooleanQuestion(
-            "Does this request require a tool call?"
-        ),
-        "severity": DecisionScoreQuestion(
-            instructions="How severe is the reported problem?",
-            criteria=[
-                "No impact on normal use",
-                "Some features fail, but a workaround exists",
-                "Core features are unavailable with no workaround",
-            ],
-        ),
-    },
-    state={"messages": recent_messages},
-)
-
-should_reply = answers["should_reply"]
-if (
-    isinstance(should_reply, DecisionChoiceAnswer)
-    and should_reply.choice == "reply"
-    and should_reply.probability >= 0.7
-):
-    target = answers["target"]
-    # 使用 target.choice 和 answers["needs_tool"].probability 执行后续业务逻辑
-```
-
-`DecisionChoiceQuestion.criteria` 是选项 ID 到选项描述的映射，与 System One 请求中的 `criteria` 对应。选择类结果的 `choice` 是选项 ID，`probabilities` 包含完整概率分布，`confidence` 是模型置信度；布尔类结果使用 `probability` 表示陈述为真的概率。主动回复阈值等业务规则由调用方决定。
-
-返回结果按题型分别是 `DecisionChoiceAnswer`、`DecisionBooleanAnswer` 和 `DecisionScoreAnswer`，它们是三个独立的冻结数据类。`DecisionAnswer` 是这三个类的联合类型。调用 `ask()` 后，可使用 `isinstance()` 确认结果类型再读取对应字段；`choose()` 明确返回 `DecisionChoiceAnswer`，`yes_no()` 返回 `bool`。
-
-评分类 `DecisionScoreQuestion.criteria` 是由低到高排列的 2～10 个字符串等级，等级从 0 编号。`DecisionScoreAnswer.score` 是概率加权评分，可以为小数，范围是 `0` 到 `len(criteria) - 1`；`legend` 和 `probabilities` 分别以字符串等级编号（如 `"0"`）映射到描述和概率，`confidence` 表示置信度。评分结果仅包含这四个字段。三种题型可以通过同一次 `ask()` 调用混合提交。
-
-对于单个问题，可以使用以下快捷方法：
-
-```py
-choice = await self.context.decision.choose(
-    question="Which reply strategy should be used?",
-    criteria={"short": "A brief reply", "detailed": "A detailed reply"},
-    state=recent_messages,
-)
-
 should_reply = await self.context.decision.yes_no(
-    question="Should the assistant reply now?",
-    state=recent_messages,
+    question="Should the assistant reply to this message?",
+    state="I cannot log in; every request returns 500.",
     threshold=0.7,
 )
-```
 
-如需指定已配置的判断提供商，传入 `provider_id="provider_id"`；省略时使用默认判断提供商。提供商未配置、请求超时、连接失败、HTTP 错误、响应不是合法 JSON，或返回的选项与概率不符合请求契约时，统一抛出 `DecisionError`；底层异常详情会写入 AstrBot 日志。插件应捕获该异常并决定跳过本次判断或降级处理。
-
-### 使用 OpenAI Decisions
-
-在 WebUI **模型提供商 → 判断** 中添加 **OpenAI Decisions**，填写 API Key、接口地址（默认 `https://api.openai.com/v1`）和模型。API Key 支持通过 `$ENV_NAME` 引用环境变量。
-
-通过同一套判断接口指定提供商 ID：
-
-```py
-answers = await self.context.decision.ask(
-    {
-        "should_reply": DecisionChoiceQuestion(
-            instructions="Should the assistant reply to this message?",
-            criteria={"reply": "Reply now", "ignore": "Stay silent"},
-        ),
-        "severity": DecisionScoreQuestion(
-            instructions="How severe is the reported problem?",
-            criteria=["No impact", "Degraded", "Unavailable"],
-        ),
-    },
-    state={"messages": recent_messages},
-    provider_id="openai_decision",
+strategy = await self.context.decision.choose(
+    question="Which reply strategy should be used?",
+    criteria={"short": "A brief reply", "detailed": "A detailed reply"},
+    state="The user asks for step-by-step troubleshooting.",
 )
+print(strategy.choice)
 ```
 
-该提供商通过 `self.context.decision` 调用，配置后不会被主 Agent 自动调用。`state` 接受文本或可 JSON 序列化的字典、列表；类似消息的字段仅作为数据，不会解释为对话历史或图片输入。无效的 `state` 会抛出 `ValueError`；模型拒答会使整次调用抛出 `DecisionError`。
+`yes_no()` 返回 `bool`，当肯定概率达到 `threshold` 时为 `True`；`choose()` 返回 `DecisionChoiceAnswer`，通过 `.choice` 读取选项值。
+
+`state` 提供判断所需的上下文，支持文本、列表或字典。默认使用当前判断提供商，也可传入 `provider_id` 指定。
+
+需要一次回答多个问题时，调用 `ask({问题名: 问题对象}, state=...)`，结果按问题名返回。以下类型从 `astrbot.api.provider` 导入：
+
+| 问题类型 | 配置 | 返回类型及主要字段 |
+| --- | --- | --- |
+| `DecisionBooleanQuestion` | `instructions`：待判断的陈述。 | `DecisionBooleanAnswer.probability`：陈述为真的概率。 |
+| `DecisionChoiceQuestion` | `instructions` 和 `criteria`：选项 ID 到描述的映射。 | `DecisionChoiceAnswer.choice`：选中的选项 ID。 |
+| `DecisionScoreQuestion` | `instructions` 和 `criteria`：由低到高的 2～10 个等级描述。 | `DecisionScoreAnswer.score`：从 0 到等级数减 1 的评分，可为小数。 |
+
+提供商不可用、请求失败或返回结果无效时抛出 `DecisionError`。`yes_no()` 可通过 `default=False` 在这类错误发生时返回默认值。
 
 ## 定义 Tool
 
