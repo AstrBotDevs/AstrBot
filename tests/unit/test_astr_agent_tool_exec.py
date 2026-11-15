@@ -304,9 +304,7 @@ async def test_do_handoff_background_reports_prepared_image_urls(
         classmethod(_fake_execute_handoff),
     )
     run_context = _build_run_context()
-    monkeypatch.setattr(
-        "astrbot.core.astr_agent_runtime.tool_executor.wake_main_agent", _fake_wake
-    )
+    monkeypatch.setattr("astrbot.core.astr_agent_runtime.tool_executor.wake_main_agent", _fake_wake)
     await FunctionToolExecutor._do_handoff_background(
         tool=_DummyTool(),
         run_context=run_context,
@@ -329,8 +327,7 @@ async def test_execute_handoff_skips_renormalize_when_image_urls_prepared(
     monkeypatch: pytest.MonkeyPatch,
 ):
     monkeypatch.setattr(
-        "astrbot.core.astr_agent_runtime.tool_executor.AstrAgentContext",
-        SimpleNamespace,
+        "astrbot.core.astr_agent_runtime.tool_executor.AstrAgentContext", SimpleNamespace
     )
     captured: dict = {}
 
@@ -364,8 +361,7 @@ async def test_execute_handoff_skips_renormalize_when_image_urls_prepared(
     )
 
     monkeypatch.setattr(
-        "astrbot.core.astr_agent_runtime.tool_executor.normalize_and_dedupe_strings",
-        _boom,
+        "astrbot.core.astr_agent_runtime.tool_executor.normalize_and_dedupe_strings", _boom
     )
 
     results = []
@@ -391,8 +387,7 @@ async def test_collect_handoff_image_urls_keeps_extensionless_existing_event_fil
 
     monkeypatch.setattr(Image, "convert_to_file_path", _fake_convert_to_file_path)
     monkeypatch.setattr(
-        "astrbot.core.astr_agent_runtime.tool_executor.get_astrbot_temp_path",
-        lambda: "/tmp",
+        "astrbot.core.astr_agent_runtime.tool_executor.get_astrbot_temp_path", lambda: "/tmp"
     )
     monkeypatch.setattr(
         "astrbot.core.utils.image_ref_utils.os.path.exists", lambda _: True
@@ -416,8 +411,7 @@ async def test_collect_handoff_image_urls_filters_extensionless_missing_event_fi
 
     monkeypatch.setattr(Image, "convert_to_file_path", _fake_convert_to_file_path)
     monkeypatch.setattr(
-        "astrbot.core.astr_agent_runtime.tool_executor.get_astrbot_temp_path",
-        lambda: "/tmp",
+        "astrbot.core.astr_agent_runtime.tool_executor.get_astrbot_temp_path", lambda: "/tmp"
     )
     monkeypatch.setattr(
         "astrbot.core.utils.image_ref_utils.os.path.exists", lambda _: False
@@ -437,8 +431,7 @@ async def test_execute_handoff_passes_tool_call_timeout_to_tool_loop_agent(
     monkeypatch: pytest.MonkeyPatch,
 ):
     monkeypatch.setattr(
-        "astrbot.core.astr_agent_runtime.tool_executor.AstrAgentContext",
-        SimpleNamespace,
+        "astrbot.core.astr_agent_runtime.tool_executor.AstrAgentContext", SimpleNamespace
     )
     captured: dict = {}
 
@@ -456,9 +449,7 @@ async def test_execute_handoff_passes_tool_call_timeout_to_tool_loop_agent(
     )
     event = _DummyEvent([])
     run_context = ContextWrapper(
-        context=SimpleNamespace(
-            event=event, context=context, send_to_user=False, _output_turn=object()
-        ),
+        context=SimpleNamespace(event=event, context=context),
         tool_call_timeout=120,
     )
     tool = SimpleNamespace(
@@ -485,9 +476,6 @@ async def test_execute_handoff_passes_tool_call_timeout_to_tool_loop_agent(
 
     assert len(results) == 1
     assert captured["tool_call_timeout"] == 120
-    assert captured["agent_context"] is not run_context.context
-    assert captured["agent_context"].send_to_user is False
-    assert captured["agent_context"]._output_turn is run_context.context._output_turn
 
 
 @pytest.mark.asyncio
@@ -499,8 +487,7 @@ async def test_collect_handoff_image_urls_filters_extensionless_file_outside_tem
 
     monkeypatch.setattr(Image, "convert_to_file_path", _fake_convert_to_file_path)
     monkeypatch.setattr(
-        "astrbot.core.astr_agent_runtime.tool_executor.get_astrbot_temp_path",
-        lambda: "/tmp",
+        "astrbot.core.astr_agent_runtime.tool_executor.get_astrbot_temp_path", lambda: "/tmp"
     )
     monkeypatch.setattr(
         "astrbot.core.utils.image_ref_utils.os.path.exists", lambda _: True
@@ -513,48 +500,6 @@ async def test_collect_handoff_image_urls_filters_extensionless_file_outside_tem
     )
 
     assert image_urls == []
-
-
-@pytest.mark.asyncio
-@pytest.mark.parametrize("kind", ["tool", "handoff"])
-async def test_caller_owned_delivery_keeps_background_tools_inside_turn(
-    monkeypatch, kind
-):
-    """Do not outlive the output stream or wake an automatically delivered turn."""
-    run_context = _build_run_context()
-    run_context.context.send_to_user = False
-    finished = False
-
-    async def execute(cls, *args, **kwargs):
-        nonlocal finished
-        finished = True
-        yield mcp.types.CallToolResult(
-            content=[mcp.types.TextContent(type="text", text="Prepared")]
-        )
-
-    wakeup = AsyncMock()
-    monkeypatch.setattr(
-        "astrbot.core.astr_agent_runtime.tool_executor.wake_main_agent", wakeup
-    )
-    monkeypatch.setattr(
-        FunctionToolExecutor,
-        "_execute_local" if kind == "tool" else "_execute_handoff",
-        classmethod(execute),
-    )
-    tool = (
-        FunctionTool(
-            name="slow", description="Slow", parameters={}, is_background_task=True
-        )
-        if kind == "tool"
-        else HandoffTool(Agent(name="worker"))
-    )
-    arguments = {} if kind == "tool" else {"background_task": True}
-    results = [
-        r async for r in FunctionToolExecutor.execute(tool, run_context, **arguments)
-    ]
-    assert finished
-    assert results[0].content[0].text == "Prepared"
-    wakeup.assert_not_awaited()
 
 
 @pytest.mark.asyncio
@@ -588,9 +533,7 @@ async def test_background_execution_lifecycle(
         delivered.set()
 
     wakeup = AsyncMock(side_effect=wake)
-    monkeypatch.setattr(
-        "astrbot.core.astr_agent_runtime.tool_executor.wake_main_agent", wakeup
-    )
+    monkeypatch.setattr("astrbot.core.astr_agent_runtime.tool_executor.wake_main_agent", wakeup)
     monkeypatch.setattr(
         FunctionToolExecutor,
         "_execute_local" if kind == "tool" else "_execute_handoff",

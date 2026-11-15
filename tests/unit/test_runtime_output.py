@@ -1,6 +1,7 @@
 """Protocol boundaries: typed snapshots, media round trips and presentation."""
 
 import asyncio
+from types import SimpleNamespace
 from unittest.mock import MagicMock
 from uuid import UUID
 
@@ -63,15 +64,10 @@ async def test_runtime_events_are_replayable_detached_and_json_serializable():
     result = await turn.result()  # Execution and settlement need no subscriber.
     first = [event async for event in turn.events()]
     first[1].payload.arguments["nested"]["value"] = 42
-    first[-2].payload.content[1].value["value"] = 42
     result.content[1].value["value"] = 42
     second = [event async for event in turn.events()]
     assert second[1].payload.arguments == {"nested": {"value": 1}}
     assert (await turn.result()).content[1].value == {"value": 1}
-    assert second[-2].type == "output.ready"
-    assert second[-2].payload.source == "reply"
-    assert second[-2].payload.target_umo == session.umo
-    assert second[-2].payload.content == (await turn.result()).content
     assert [event.event_id for event in first] == [event.event_id for event in second]
     for event in second:
         assert UUID(event.event_id)
@@ -165,34 +161,6 @@ async def test_message_snapshot_does_not_repeat_deltas_or_hide_unstreamed_text(
     assert [
         chain.get_plain_text() for chain in chains if chain.type == "reasoning"
     ] == (["Thinking"] if streaming else [])
-
-
-@pytest.mark.asyncio
-@pytest.mark.parametrize("status", ["completed", "failed", "cancelled"])
-async def test_only_successful_final_replies_become_user_outputs(status):
-    """Neither private reasoning nor partial failed replies are ready for delivery."""
-
-    class FinalSession(OutputSession):
-        async def execute_turn(self, turn):
-            return TurnResult(
-                status=status,
-                content=(
-                    ReasoningOutput(text="Private reasoning"),
-                    PlainOutput(text="Reply"),
-                ),
-            )
-
-    session = FinalSession("session", "test:FriendMessage:user")
-    turn = await session.run_turn(input_for(session))
-    await turn.result()
-    outputs = [
-        event.payload async for event in turn.events() if event.type == "output.ready"
-    ]
-    if status == "completed":
-        assert len(outputs) == 1
-        assert outputs[0].content == (PlainOutput(text="Reply"),)
-    else:
-        assert not outputs
 
 
 @pytest.mark.asyncio

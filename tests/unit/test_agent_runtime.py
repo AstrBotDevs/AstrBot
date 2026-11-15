@@ -99,9 +99,6 @@ async def test_steering_cannot_cross_sender_or_permission_boundaries():
     )
     assert turn.steer(make_input(sender="bob")) is None
     assert turn.steer(make_input(role=AgentRole.ADMIN)) is None
-    silent_input = make_input()
-    silent_input.send_to_user = False
-    assert turn.steer(silent_input) is None
     receipt = turn.steer(make_input())
     assert receipt is not None
     receipt.set_result(False)

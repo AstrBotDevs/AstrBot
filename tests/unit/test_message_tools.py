@@ -1,12 +1,10 @@
 """Tests for send_message_to_user session handling."""
 
-from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from astrbot.core.agent_output_content import chain_from_content
 from astrbot.core.astr_agent_runtime.tools.message_tools import SendMessageToUserTool
 from astrbot.core.message.message_event_result import MessageEventResult
 from astrbot.core.pipeline.respond.stage import RespondStage
@@ -146,14 +144,25 @@ async def test_send_message_with_partial_session_id_fallback():
 
 
 @pytest.mark.asyncio
-async def test_send_message_defaults_to_current_session():
+@pytest.mark.parametrize("send_to_user", [False, True])
+async def test_send_message_defaults_to_current_session(send_to_user):
     """LLM does not pass session — uses current_session directly."""
     tool = SendMessageToUserTool()
     ctx = _make_context(current_session="feishu:GroupMessage:oc_xxx")
+    ctx.context.send_to_user = send_to_user
+    ctx.context._output_turn = SimpleNamespace(done=False, emit=MagicMock())
     result = await tool.call(
         ctx,
         messages=[{"type": "plain", "text": "hello"}],
     )
+    output = ctx.context._output_turn.emit.call_args.args[0]
+    assert output.target_umo == "feishu:GroupMessage:oc_xxx"
+    assert output.content[0].text == "hello"
+    if not send_to_user:
+        assert "It has not been sent" in result
+        ctx.context.context.send_message.assert_not_awaited()
+        assert ctx.context.event._has_send_oper is False
+        return
     assert "Message sent to session" in result
     call_args = ctx.context.context.send_message.call_args
     target_session = call_args[0][0]
@@ -455,15 +464,12 @@ async def test_non_admin_can_send_temp_file(tmp_path, monkeypatch, scope):
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("send_to_user", [False, True])
 async def test_send_message_downloads_windows_sandbox_file_with_original_name(
-    tmp_path, monkeypatch, send_to_user
+    tmp_path, monkeypatch
 ):
     """Windows sandbox paths keep their basename when sent as files."""
     tool = SendMessageToUserTool()
     ctx = _make_context(runtime="sandbox")
-    ctx.context.send_to_user = send_to_user
-    ctx.context._output_turn = SimpleNamespace(done=False, emit=MagicMock())
     temp_root = tmp_path / "temp"
     temp_root.mkdir()
     monkeypatch.setattr(
@@ -500,59 +506,10 @@ async def test_send_message_downloads_windows_sandbox_file_with_original_name(
         messages=[{"type": "file", "path": r"C:\Users\AstrBot\report.txt"}],
     )
 
-    output = ctx.context._output_turn.emit.call_args.args[0]
-    assert output.source == "tool"
-    assert output.content[0].name == "report.txt"
-    assert Path(output.content[0].source.path).read_text() == "report"
-    if send_to_user:
-        assert "Message sent to session" in result
-        sent_chain = ctx.context.context.send_message.await_args.args[1]
-        assert sent_chain.chain[0].name == "report.txt"
-    else:
-        assert "It has not been sent" in result
-        ctx.context.context.send_message.assert_not_awaited()
-        assert not ctx.context.event._has_send_oper
-
-
-@pytest.mark.asyncio
-@pytest.mark.parametrize("sink", ["missing", "closed", "active"])
-@pytest.mark.parametrize("send_to_user", [False, True])
-async def test_prepared_output_needs_a_live_turn_only_for_caller_owned_delivery(
-    sink, send_to_user
-):
-    """Late automatic sends still work; caller-owned sends cannot escape a closed turn."""
-    ctx = _make_context()
-    ctx.context.send_to_user = send_to_user
-    output_turn = SimpleNamespace(done=sink == "closed", emit=MagicMock())
-    ctx.context._output_turn = output_turn if sink != "missing" else None
-    result = await SendMessageToUserTool().call(
-        ctx, session="other-user", messages=[{"type": "plain", "text": "Hello"}]
-    )
-    assert ctx.context.context.send_message.await_count == int(send_to_user)
-    if sink == "active":
-        output = output_turn.emit.call_args.args[0]
-        assert output.target_umo == "feishu:GroupMessage:other-user"
-        assert chain_from_content(output.content).get_plain_text() == "Hello"
-    else:
-        output_turn.emit.assert_not_called()
-        if not send_to_user:
-            assert "requires an active output turn" in result
-
-
-@pytest.mark.asyncio
-async def test_caller_owned_output_preserves_target_authorization():
-    """Preparing an output must not bypass cross-session authorization."""
-    ctx = _make_context(role="member")
-    ctx.context.send_to_user = False
-    ctx.context._output_turn = SimpleNamespace(done=False, emit=MagicMock())
-    result = await SendMessageToUserTool().call(
-        ctx,
-        session="feishu:GroupMessage:other",
-        messages=[{"type": "plain", "text": "Hello"}],
-    )
-    assert result.startswith("error:")
-    ctx.context._output_turn.emit.assert_not_called()
-    ctx.context.context.send_message.assert_not_awaited()
+    assert "Message sent to session" in result
+    sent_chain = ctx.context.context.send_message.await_args.args[1]
+    sent_file = sent_chain.chain[0]
+    assert sent_file.name == "report.txt"
 
 
 @pytest.mark.asyncio

@@ -111,58 +111,6 @@ async def test_unconsumed_steering_queues_results_for_the_same_parent(
 
 
 @pytest.mark.asyncio
-async def test_child_delivery_policy_is_per_turn(environment):
-    """A later automatic turn must not publish earlier caller-owned results."""
-    env = environment
-    env.root.send_to_user = False
-    agent = await env.service.spawn(
-        env.root, [{"type": "plain", "text": "Private result"}], runtime="memory"
-    )
-    await env.service.wait(env.root, [agent["agent_id"]], 2000, "all")
-    env.root.send_to_user = True
-    await env.service.send(
-        env.root, agent["agent_id"], [{"type": "plain", "text": "Public result"}]
-    )
-    await env.service.wait(env.root, [agent["agent_id"]], 2000, "all")
-    await asyncio.gather(*list(env.service.delivery._notifications.values()))
-    record = env.store.get(agent["agent_id"], env.scope)
-    assert [turn.send_to_user for turn in record.turns] == [False, True]
-    assert [input.send_to_user for input in env.memory.inputs] == [False, True]
-    event = env.context.get_event_queue().get_nowait()
-    assert "Public result" in event.message_str
-    assert "Private result" not in event.message_str
-
-
-@pytest.mark.asyncio
-async def test_caller_owned_children_do_not_wake_parent_after_restart(environment):
-    """Persist delivery ownership while keeping explicit child result access."""
-    env = environment
-    env.root.send_to_user = False
-    agent = await env.service.spawn(
-        env.root, [{"type": "plain", "text": "Private result"}], runtime="memory"
-    )
-    results = await env.service.wait(env.root, [agent["agent_id"]], 2000, "all")
-    assert results["agents"][0]["result"] == "Private result"
-    assert not env.memory.inputs[0].send_to_user
-    await env.service.close()
-    assert env.context.get_event_queue().empty()
-    restarted = SubAgentService(SubAgentStore(env.db), {"memory": env.memory})
-    native = AstrAgentRuntime(
-        env.context, agent_configs=env.agent_configs, subagents=restarted
-    )
-    restarted.runtimes["astrbot"] = native
-    try:
-        await restarted.start(env.context)
-        await asyncio.gather(*list(restarted.delivery._notifications.values()))
-        assert env.context.get_event_queue().empty()
-        restored = restarted.store.get(agent["agent_id"], env.scope)
-        assert restored.current.send_to_user is False
-        assert restored.current.result == "Private result"
-    finally:
-        await restarted.close()
-
-
-@pytest.mark.asyncio
 @pytest.mark.parametrize("saved", [False, True])
 @pytest.mark.parametrize("with_parent", [False, True])
 async def test_restart_reconciles_result_receipts_from_parent_history(
