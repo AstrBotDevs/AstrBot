@@ -1,7 +1,5 @@
 # Plugin Views
 
-> The public import paths in these examples require AstrBot v4.30.0 or later.
-
 
 Plugin Views let a plugin ship its own pages inside the AstrBot WebUI. View files live under `views/` in the plugin directory (`pages/` is still accepted) and are loaded by the Dashboard in a restricted iframe. Scripts in a view talk to the Dashboard through the `window.AstrBotPluginView` bridge (alias `window.AstrBotPluginPage`), which the Dashboard forwards to the plugin's registered backend Web APIs.
 
@@ -209,6 +207,8 @@ Upload example:
 ```python
 from pathlib import Path
 
+# Before AstrBot v4.30.0:
+# from astrbot.core.utils.astrbot_path import get_astrbot_plugin_data_path
 from astrbot.api.util import get_astrbot_plugin_data_path
 from astrbot.api.web import PluginUploadFile, error_response, json_response, request
 

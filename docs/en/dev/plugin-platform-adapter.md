@@ -4,8 +4,6 @@ outline: deep
 
 # Developing a Platform Adapter
 
-> The public import paths in these examples require AstrBot v4.30.0 or later.
-
 AstrBot supports integrating platform adapters in plugin form, allowing you to connect platforms that AstrBot does not natively support — such as Lark, DingTalk, Bilibili private messages, or even Minecraft.
 
 We will use a platform called `FakePlatform` as an example.
@@ -54,6 +52,8 @@ Now create `fake_platform_adapter.py`:
 ```py
 import asyncio
 
+# Before AstrBot v4.30.0:
+# from astrbot.core.platform.message_session import MessageSesion as MessageSession
 from astrbot.api.platform import (
     Platform,
     AstrBotMessage,

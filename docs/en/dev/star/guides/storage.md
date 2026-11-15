@@ -1,7 +1,5 @@
 # Plugin Storage
 
-> The public import paths in these examples require AstrBot v4.30.0 or later.
-
 ## Simple KV Storage
 
 > [!TIP]
@@ -28,6 +26,8 @@ You can fetch the plugin data directory with:
 
 ```py
 from pathlib import Path
+# Before AstrBot v4.30.0:
+# from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 from astrbot.api.util import get_astrbot_data_path
 
 plugin_data_path = (

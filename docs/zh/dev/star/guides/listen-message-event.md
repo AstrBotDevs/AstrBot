@@ -1,7 +1,5 @@
 # 处理消息事件
 
-> 本文示例中的公共导入路径适用于 AstrBot v4.30.0 及以上版本。
-
 事件监听器可以收到平台下发的消息内容，可以实现指令、指令组、事件监听等功能。
 
 事件监听器的注册器在 `astrbot.api.event.filter` 下，需要先导入。请务必导入，否则会和 python 的高阶函数 filter 冲突。
@@ -314,6 +312,8 @@ async def my_custom_hook_1(
 > 对于每轮都会变化、内容量中小的提示词，优先通过 `req.extra_user_content_parts` 追加。它会作为额外的用户消息内容块放在本轮用户输入之后，更适合承载"当前时间""角色好感度""本轮相关记忆片段"等动态上下文：
 >
 > ```python
+> # AstrBot v4.30.0 之前的导入方式：
+> # from astrbot.core.agent.message import TextPart
 > from astrbot.api.agents import TextPart
 >
 > @filter.on_llm_request()
@@ -369,6 +369,9 @@ async def on_llm_resp(
 
 ```python
 from astrbot.api.event import filter, AstrMessageEvent
+# AstrBot v4.30.0 之前的导入方式：
+# from astrbot.core.agent.run_context import ContextWrapper
+# from astrbot.core.astr_agent_context import AstrAgentContext
 from astrbot.api.agents import AstrAgentContext, ContextWrapper
 
 
@@ -391,6 +394,8 @@ async def on_agent_begin(
 
 ```python
 from astrbot.api.event import filter, AstrMessageEvent
+# AstrBot v4.30.0 之前的导入方式：
+# from astrbot.core.agent.tool import FunctionTool
 from astrbot.api import FunctionTool
 
 
@@ -418,6 +423,8 @@ async def on_using_llm_tool(
 from mcp.types import CallToolResult
 
 from astrbot.api.event import filter, AstrMessageEvent
+# AstrBot v4.30.0 之前的导入方式：
+# from astrbot.core.agent.tool import FunctionTool
 from astrbot.api import FunctionTool
 
 
@@ -443,6 +450,9 @@ async def on_llm_tool_respond(
 ```python
 from astrbot.api.event import filter, AstrMessageEvent
 from astrbot.api.provider import LLMResponse
+# AstrBot v4.30.0 之前的导入方式：
+# from astrbot.core.agent.run_context import ContextWrapper
+# from astrbot.core.astr_agent_context import AstrAgentContext
 from astrbot.api.agents import AstrAgentContext, ContextWrapper
 
 

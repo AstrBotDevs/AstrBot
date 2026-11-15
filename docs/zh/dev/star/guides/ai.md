@@ -1,7 +1,5 @@
 # AI
 
-> 本文示例中的公共导入路径适用于 AstrBot v4.30.0 及以上版本。
-
 AstrBot 内置了对多种大语言模型（LLM）提供商的支持，并且提供了统一的接口，方便插件开发者调用各种 LLM 服务。
 
 您可以使用 AstrBot 提供的 LLM / Agent 接口来实现自己的智能体。
@@ -142,6 +140,10 @@ Tool 是大语言模型调用外部工具的能力。
 from pydantic import Field
 from pydantic.dataclasses import dataclass
 
+# AstrBot v4.30.0 之前的导入方式：
+# from astrbot.core.agent.run_context import ContextWrapper
+# from astrbot.core.agent.tool import FunctionTool, ToolExecResult
+# from astrbot.core.astr_agent_context import AstrAgentContext
 from astrbot.api import FunctionTool, ToolExecResult
 from astrbot.api.agents import AstrAgentContext, ContextWrapper
 
@@ -263,6 +265,10 @@ Multi-Agent（多智能体）系统将复杂应用分解为多个专业化智能
 from pydantic import Field
 from pydantic.dataclasses import dataclass
 
+# AstrBot v4.30.0 之前的导入方式：
+# from astrbot.core.agent.run_context import ContextWrapper
+# from astrbot.core.agent.tool import FunctionTool, ToolExecResult, ToolSet
+# from astrbot.core.astr_agent_context import AstrAgentContext
 from astrbot.api import FunctionTool, ToolExecResult, ToolSet, logger
 from astrbot.api.agents import AstrAgentContext, ContextWrapper
 
@@ -579,7 +585,7 @@ message_id = await conversations.append_message(
 `content` 接受文本或 AstrBot 的 `ContentPart` 对象列表：
 
 ```py
-from astrbot.api.agents import ImageURLPart, TextPart
+from astrbot.core.agent.message import ImageURLPart, TextPart
 
 await conversations.append_message(
     [
@@ -615,6 +621,8 @@ event_id = await conversations.append_plugin_event(
 ### 获取会话当前的 LLM 对话历史 `get_conversation`
 
 ```py
+# AstrBot v4.30.0 之前的导入方式：
+# from astrbot.core.conversation_mgr import Conversation
 from astrbot.api.provider import Conversation
 
 uid = event.unified_msg_origin
@@ -653,6 +661,8 @@ class Conversation:
 ### 快速添加 LLM 记录到对话 `add_message_pair`
 
 ```py
+# AstrBot v4.30.0 之前的导入方式：
+# from astrbot.core.agent.message import AssistantMessageSegment, UserMessageSegment, TextPart
 from astrbot.api.agents import (
     AssistantMessageSegment,
     UserMessageSegment,

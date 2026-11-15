@@ -1,7 +1,5 @@
 # 插件可视化视图
 
-> 本文示例中的公共导入路径适用于 AstrBot v4.30.0 及以上版本。
-
 
 插件可视化视图允许插件在 AstrBot WebUI 中提供自己的页面。页面文件放在插件目录的 `views/` 下（兼容 `pages/`），由 Dashboard 以受限 iframe 的方式加载；页面里的脚本通过 `window.AstrBotPluginView` bridge（别名 `window.AstrBotPluginPage`）和 Dashboard 通信，再由 Dashboard 转发到插件注册的后端 Web API。
 
@@ -209,6 +207,8 @@ enabled = bool(payload.get("enabled"))
 ```python
 from pathlib import Path
 
+# AstrBot v4.30.0 之前的导入方式：
+# from astrbot.core.utils.astrbot_path import get_astrbot_plugin_data_path
 from astrbot.api.util import get_astrbot_plugin_data_path
 from astrbot.api.web import PluginUploadFile, error_response, json_response, request
 

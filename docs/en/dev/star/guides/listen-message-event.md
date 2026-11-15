@@ -1,7 +1,5 @@
 # Handling Message Events
 
-> The public import paths in these examples require AstrBot v4.30.0 or later.
-
 Event listeners can receive message content delivered by the platform and implement features such as commands, command groups, and event listening.
 
 Event listener decorators are located in `astrbot.api.event.filter` and must be imported first. Please make sure to import it, otherwise it will conflict with Python's built-in `filter` higher-order function.
@@ -311,6 +309,8 @@ async def my_custom_hook_1(
 > For small or medium-sized dynamic prompts that change every round, prefer appending them through `req.extra_user_content_parts`. These parts are added after the current user input as extra user-message content, which is more suitable for dynamic context such as "current time", "character affinity", or "relevant memory snippets":
 >
 > ```python
+> # Before AstrBot v4.30.0:
+> # from astrbot.core.agent.message import TextPart
 > from astrbot.api.agents import TextPart
 >
 > @filter.on_llm_request()
@@ -368,6 +368,9 @@ When the Agent starts running, the `on_agent_begin` hook is triggered.
 
 ```python
 from astrbot.api.event import filter, AstrMessageEvent
+# Before AstrBot v4.30.0:
+# from astrbot.core.agent.run_context import ContextWrapper
+# from astrbot.core.astr_agent_context import AstrAgentContext
 from astrbot.api.agents import AstrAgentContext, ContextWrapper
 
 
@@ -390,6 +393,8 @@ You can obtain the `FunctionTool` object and tool call arguments.
 
 ```python
 from astrbot.api.event import filter, AstrMessageEvent
+# Before AstrBot v4.30.0:
+# from astrbot.core.agent.tool import FunctionTool
 from astrbot.api import FunctionTool
 
 
@@ -417,6 +422,8 @@ You can obtain the `FunctionTool` object, tool call arguments, and tool call res
 from mcp.types import CallToolResult
 
 from astrbot.api.event import filter, AstrMessageEvent
+# Before AstrBot v4.30.0:
+# from astrbot.core.agent.tool import FunctionTool
 from astrbot.api import FunctionTool
 
 
@@ -442,6 +449,9 @@ The built-in runner calls `on_agent_done` once when execution exits, including e
 ```python
 from astrbot.api.event import filter, AstrMessageEvent
 from astrbot.api.provider import LLMResponse
+# Before AstrBot v4.30.0:
+# from astrbot.core.agent.run_context import ContextWrapper
+# from astrbot.core.astr_agent_context import AstrAgentContext
 from astrbot.api.agents import AstrAgentContext, ContextWrapper
 
 

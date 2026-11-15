@@ -1,7 +1,5 @@
 # AI
 
-> The public import paths in these examples require AstrBot v4.30.0 or later.
-
 AstrBot provides built-in support for multiple Large Language Model (LLM) providers and offers a unified interface, making it convenient for plugin developers to access various LLM services.
 
 You can use the LLM / Agent interfaces provided by AstrBot to implement your own intelligent agents.
@@ -143,6 +141,10 @@ Tools enable large language models to invoke external capabilities.
 from pydantic import Field
 from pydantic.dataclasses import dataclass
 
+# Before AstrBot v4.30.0:
+# from astrbot.core.agent.run_context import ContextWrapper
+# from astrbot.core.agent.tool import FunctionTool, ToolExecResult
+# from astrbot.core.astr_agent_context import AstrAgentContext
 from astrbot.api import FunctionTool, ToolExecResult
 from astrbot.api.agents import AstrAgentContext, ContextWrapper
 
@@ -263,6 +265,10 @@ In the example below, we define a Main Agent responsible for delegating tasks to
 Define Tools:
 
 ```py
+# Before AstrBot v4.30.0:
+# from astrbot.core.agent.run_context import ContextWrapper
+# from astrbot.core.agent.tool import FunctionTool, ToolExecResult, ToolSet
+# from astrbot.core.astr_agent_context import AstrAgentContext
 from astrbot.api import FunctionTool, ToolExecResult, ToolSet, logger
 from astrbot.api.agents import AstrAgentContext, ContextWrapper
 from pydantic import Field
@@ -581,7 +587,7 @@ message_id = await conversations.append_message(
 `content` accepts text or a list of AstrBot `ContentPart` objects:
 
 ```py
-from astrbot.api.agents import ImageURLPart, TextPart
+from astrbot.core.agent.message import ImageURLPart, TextPart
 
 await conversations.append_message(
     [
@@ -617,6 +623,8 @@ To change the current execution's context, edit the relevant hook's `ProviderReq
 ### Getting the Current LLM Conversation History for a Session
 
 ```py
+# Before AstrBot v4.30.0:
+# from astrbot.core.conversation_mgr import Conversation
 from astrbot.api.provider import Conversation
 
 uid = event.unified_msg_origin
@@ -655,6 +663,8 @@ class Conversation:
 ### Quickly Adding LLM Records to a Conversation `add_message_pair`
 
 ```py
+# Before AstrBot v4.30.0:
+# from astrbot.core.agent.message import AssistantMessageSegment, UserMessageSegment, TextPart
 from astrbot.api.agents import (
     AssistantMessageSegment,
     UserMessageSegment,
