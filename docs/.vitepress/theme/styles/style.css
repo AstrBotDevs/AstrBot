@@ -155,17 +155,72 @@
   }
 }
 
-.VPSidebarItem.is-link > .item > .link {
-  margin: 2px -10px;
-  border-radius: 8px;
-  padding: 0 10px;
-  transition: none;
+.VPSidebar .VPSidebarItem > .items {
+  border-left: none !important;
+  padding-left: 6px !important;
 }
 
-.VPSidebarItem,
-.VPSidebarItem > .item,
-.VPSidebarItem > .item > .link {
-  border-bottom: none !important;
+.VPSidebar .VPSidebarItem > .item {
+  align-items: center;
+  margin: 1px 0;
+  border-radius: 8px;
+  padding: 0 8px;
+}
+
+.VPSidebar .VPSidebarItem > .item > .link {
+  min-width: 0;
+  border-radius: inherit;
+}
+
+.VPSidebar .VPSidebarItem > .item .text {
+  padding: 5px 0;
+  line-height: 22px;
+  font-weight: 400;
+  color: var(--vp-c-text-1) !important;
+}
+
+.VPSidebar .VPSidebarItem.level-0 {
+  padding-bottom: 16px;
+}
+
+.VPSidebar .VPSidebarItem.level-0.collapsed {
+  padding-bottom: 8px;
+}
+
+.VPSidebar .VPSidebarItem.level-0 > .item .text {
+  font-weight: 600;
+}
+
+.VPSidebar .VPSidebarItem.level-0 > .items {
+  padding-top: 3px;
+}
+
+.VPSidebar .VPSidebarItem > .item > .indicator {
+  display: none;
+}
+
+.VPSidebar .VPSidebarItem > .item > .caret {
+  align-self: center;
+  margin-right: 0;
+  width: 24px;
+  color: var(--vp-c-text-2);
+}
+
+.VPSidebar .VPSidebarItem > .item > .caret .caret-icon {
+  font-size: 14px;
+}
+
+.VPSidebar .VPSidebarItem.is-link > .item:hover,
+.VPSidebar .VPSidebarItem.collapsible > .item:hover,
+.VPSidebar .VPSidebarItem.is-active > .item {
+  background-color: var(--vp-c-default-soft);
+}
+
+.VPSidebar .VPSidebarItem > .item:focus-visible,
+.VPSidebar .VPSidebarItem > .item > .link:focus-visible,
+.VPSidebar .VPSidebarItem > .item > .caret:focus-visible {
+  outline: 2px solid var(--vp-c-brand-1);
+  outline-offset: 2px;
 }
 
 .VPSidebar .group + .group {
@@ -194,14 +249,6 @@
 
 .VPSidebar::-webkit-scrollbar-thumb:hover {
   background-color: var(--vp-c-text-3);
-}
-
-.VPSidebarItem.is-link > .item > .link:hover {
-  background-color: var(--vp-c-default-soft);
-}
-
-.VPSidebarItem.is-link.is-active > .item > .link {
-  background-color: var(--vp-c-brand-soft);
 }
 
 /**
