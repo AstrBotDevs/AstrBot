@@ -161,7 +161,7 @@ watch(open, value => {
 const groups = computed(() => {
   const sponsorKeys = ['MiraRouter', 'SSYCloud(胜算云)']
   const preferredKeys = [
-    'OpenAI Compatible', 'OpenAI Responses', 'Google Gemini', 'Anthropic',
+    'OpenAI Compatible', 'OpenAI Responses', 'Google Gemini', 'Google Vertex AI', 'Anthropic',
     'DeepSeek', 'DeepSeek Responses', 'Moonshot', 'Kimi Coding Plan',
     'MiniMax', 'MiniMax Token Plan', 'Zhipu', 'Xiaomi', 'Xiaomi Token Plan',
     'xAI', 'LongCat'
