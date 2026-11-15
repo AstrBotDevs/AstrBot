@@ -83,7 +83,14 @@ class ContextManager:
             return result
         except Exception as e:
             logger.error(f"Error during context processing: {e}", exc_info=True)
-            return messages
+            # The fallback hands back the history a stage failed on, which can
+            # carry the same broken pairing the normal exit repairs. Repair it
+            # here too, or the session keeps 400ing until it is reset (#10338).
+            try:
+                return self.truncator.fix_messages(messages)
+            except Exception:
+                logger.error("Tool pairing repair failed on the fallback path")
+                return messages
 
     async def _run_compression(
         self, messages: list[Message], prev_tokens: int

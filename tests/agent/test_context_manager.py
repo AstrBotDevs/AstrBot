@@ -425,6 +425,38 @@ class TestContextManager:
         assert [m.role for m in result] == ["user", "user"]
 
     @pytest.mark.asyncio
+    async def test_process_repairs_broken_tool_pairing_when_a_stage_raises(self):
+        """The fallback exit repairs pairing too, not just the normal one.
+
+        A stage that raises returns the original history, which is the same
+        broken state the normal exit repairs; sending it upstream 400s the
+        session exactly as before (#10338).
+        """
+        config = ContextConfig(max_context_tokens=100)
+        manager = ContextManager(config)
+        manager.token_counter = MagicMock()
+        manager.token_counter.count_tokens.side_effect = RuntimeError("counting failed")
+
+        messages = [
+            self.create_message("user", "call both tools"),
+            Message(
+                role="assistant",
+                tool_calls=[
+                    ToolCall(
+                        id=cid,
+                        function=ToolCall.FunctionBody(name="f", arguments="{}"),
+                    )
+                    for cid in ("c1", "c2")
+                ],
+            ),
+            Message(role="tool", content="r1", tool_call_id="c1"),
+            self.create_message("user", "continue"),
+        ]
+        result = await manager.process(messages)
+
+        assert [m.role for m in result] == ["user", "user"]
+
+    @pytest.mark.asyncio
     async def test_process_single_message(self):
         """Test processing a single message."""
         config = ContextConfig()
