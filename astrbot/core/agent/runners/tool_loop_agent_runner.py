@@ -929,8 +929,8 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         """
         if self.done() or self._is_stop_requested():
             return None
-        text = (message_text or "").strip()
-        if not text:
+        text = message_text or ""
+        if not text.strip():
             return None
         ticket = FollowUpTicket(seq=self._follow_up_seq, text=text)
         self._follow_up_seq += 1
