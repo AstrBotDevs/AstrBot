@@ -4,8 +4,6 @@ AstrBot provides built-in support for multiple Large Language Model (LLM) provid
 
 You can use the LLM / Agent interfaces provided by AstrBot to implement your own intelligent agents.
 
-Starting from version `v4.5.7`, we've made significant improvements to the way LLM providers are invoked. We recommend using the new approach, which is more concise and supports additional features. The legacy invocation method remains documented in the previous Chinese-only guide.
-
 ## Getting the Chat Model ID for the Current Session
 
 > [!TIP]
