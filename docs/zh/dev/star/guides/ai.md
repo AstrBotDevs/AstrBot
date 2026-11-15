@@ -472,27 +472,74 @@ Core 传入公共 `AgentInput`：原始 `AstrMessageEvent`、权限、可选的 
 
 实现 runtime 时复用 `AgentSession.run_turn()`：Core 通过调度参数 `run_turn(input, admit=...)` 传入准入检查，与 `AgentInput` 分离。它在会话串行锁及实现提供的 `_execution_scope()` 内执行，再进入 `execute_turn()`。排队后会重新检查 AI 启用状态、权限和插件能力；不要通过重写调度绕过准入。额外的锁由 runtime 提供。可选的 `active_turn(umo)` 支持普通消息的活跃 turn 发现；未实现时返回 `None`，session 仍负责排队。内置 runtime 在自己的执行阶段构造 `ProviderRequest`、解析模型配置并调用现有模型 hooks；外部实现不需要导入 `astr_agent_runtime`。
 
-如需自行处理模型回复，设置 `send_to_user=False`：
+如需由插件审核并发送消息，设置 `send_to_user=False`，收集 `output.ready`。下面的 `proactive()` 可以由插件现有的调度器调用；metadata 用于让 hook 识别本轮，并将动态上下文添加到临时的 user 内容中：
 
 ```py
-from astrbot.api.event import MessageChain
+from astrbot.api.agents import PlainInput, TextPart, TurnStatus, chain_from_content
+from astrbot.api.event import AstrMessageEvent, filter
+from astrbot.api.provider import ProviderRequest
+from astrbot.api.star import Star, register
 
-run = await self.context.agent.run_turn(
-    umo=event.unified_msg_origin,
-    input_message=[PlainInput(text="请生成视频分析摘要。")],
-    send_to_user=False,
-)
-result = await run.result()
-if result.text:
-    await self.context.send_message(
-        event.unified_msg_origin,
-        MessageChain().message(f"视频分析结果：\n{result.text}"),
-    )
+
+@register("companion_example", "author", "Proactive companion example", "1.0.0")
+class CompanionExample(Star):
+    @filter.on_llm_request()
+    async def add_context(self, event: AstrMessageEvent, req: ProviderRequest):
+        metadata = event.get_extra("agent_metadata", {})
+        if metadata.get("companion_example", {}).get("kind") != "proactive":
+            return
+        req.extra_user_content_parts.append(
+            TextPart(
+                text="这是你主动发起的关心，不是对方刚发来消息。结合已有对话自然表达，避免重复问候。"
+            ).mark_as_temp()
+        )
+
+    async def proactive(self, umo: str):
+        outputs = []
+        run = await self.context.agent.run_turn(
+            umo=umo,
+            input_message=[PlainInput(text="结合最近的对话，主动关心一下用户。")],
+            send_to_user=False,
+            metadata={"companion_example": {"kind": "proactive"}},
+        )
+        async for event in run.events():
+            if event.type == "output.ready":
+                outputs.append(event.payload)
+
+        result = await run.result()
+        if result.status != TurnStatus.COMPLETED:
+            return
+
+        # Apply the plugin's review policy here, before delivery.
+        for output in outputs:
+            sent = await self.context.send_message(
+                output.target_umo, chain_from_content(output.content)
+            )
+            if not sent:
+                break
 ```
 
-`send_to_user=False` 只跳过 Core 的自动输出呈现及平台回复装饰、自动 TTS，执行历史照常保存。工具或插件显式调用 `event.send()`、`Context.send_message()`、`send_message_to_user` 时仍然正常发送；框架不会拦截这些调用。
+`output.ready` 的 payload 是公开的 `OutputReady` 类型：
 
-`events()` 支持多个独立观察者和事后重放，提供 `message.completed`、工具调用等 runtime 事件；监听不会截走平台输出或重复发送。SDK 的最终 `turn.finished` 事件在自动输出处理结束后发布。
+| 字段 | 含义 |
+| --- | --- |
+| `target_umo` | 这条消息的目标会话，可能由发送工具指定为其他有权限访问的会话。 |
+| `source` | `tool` 表示内置发送工具准备的消息；`reply` 表示成功完成的 turn 的最终回复。 |
+| `content` | 有序的 `tuple[OutputComponent, ...]`，保留文本、图片、语音、视频、文件及平台扩展组件。媒体使用 `PathMedia`、`URLMedia` 或 `InlineMedia`；使用 `chain_from_content()` 转回 `MessageChain`。 |
+
+最终回复已包含在这些事件中，不要再发送一次 `result.text`。如果插件只需要最终回复，可筛选 `output.source == "reply"`；这样也会舍弃通过工具准备的图片、文件等消息。推理内容和普通的工具执行过程文本不会作为 `output.ready` 发布。媒体路径沿用框架的临时文件生命周期，不是永久附件地址。
+
+`send_to_user=False` 跳过 Core 的自动输出呈现、平台回复装饰和自动 TTS；内置 `send_message_to_user` 完成权限检查及媒体准备后只发布事件，向模型说明消息已交给调用方、尚未发送，也不设置已发送标记。执行历史照常保存，未发送不等于回滚本轮。显式插件调用 `event.send()`、`Context.send_message()` 仍然正常发送，此参数不拦截任意插件或外部工具的副作用。
+
+模型请求及响应等执行 hooks 仍然运行；只随自动呈现执行的结果装饰和发送后 hooks 不会因收集事件而执行。示例的临时内容不进入后续模型上下文，但临时标记不代表原文不落库。
+
+内置 handoff 和后台函数工具在 `False` 时于本轮内等待完成，避免输出晚于事件流关闭。子代理继承发送策略，其发送工具在父 turn 存续期间将准备好的消息交给父 turn；子代理结果不会另起自动发送的唤醒。需要这些结果时，主代理应在本轮通过子代理的等待/读取工具取得；父 turn 结束后不能继续向它追加输出。
+
+`send_to_user=True` 保持原有自动发送路径，也可以监听 `output.ready`。此事件仅表示内容已准备好，不是平台投递回执；即使执行成功，发送仍可能失败。调用方自行发送时，应根据实际发送结果更新主动联系次数、冷却等状态。
+
+`events()` 支持多个独立观察者和事后重放，提供 `output.ready`、`message.completed`、工具调用等 runtime 事件；监听不会截走平台输出或重复发送。SDK 的最终 `turn.finished` 事件在自动输出处理结束后发布。示例中的手动发送由插件执行；不要在重放同一批事件时再次执行发送循环。
+
+自定义 runtime 同样收到 `AgentInput.send_to_user`，需要让自己的发送工具遵守该策略，并使用 `turn.emit(OutputReady(...))` 发布准备好的工具消息。基类 `AgentSession` 已负责在成功结束前从 `TurnResult.content` 发布最终 `reply`，实现方无需重复发布。
 
 ```py
 # Queue another turn in this exact conversation, inheriting the output policy.

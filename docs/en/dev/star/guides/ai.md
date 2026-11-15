@@ -474,27 +474,74 @@ Core supplies public `AgentInput`: the original `AstrMessageEvent`, permissions,
 
 Reuse `AgentSession.run_turn()` when implementing a runtime. Core supplies admission through the scheduling argument `run_turn(input, admit=...)`, independently of `AgentInput`. It runs inside the session lock and the implementation's `_execution_scope()`, before `execute_turn()`. AI enablement, permissions and plugin contributions are refreshed after queued work; do not bypass admission by replacing scheduling. Additional locks belong to the runtime. Optional `active_turn(umo)` supports discovery for ordinary-message steering; its default is `None`, while the session still handles queued execution. The built-in runtime constructs `ProviderRequest`, resolves model configuration, and invokes existing model hooks in its own execution stage. External implementations need not import `astr_agent_runtime`.
 
-Set `send_to_user=False` to handle the model reply yourself:
+Set `send_to_user=False` and collect `output.ready` to review and deliver messages from your plugin. Your existing scheduler can call `proactive()` below. The hook uses metadata to identify the turn and appends dynamic context as temporary user content:
 
 ```py
-from astrbot.api.event import MessageChain
+from astrbot.api.agents import PlainInput, TextPart, TurnStatus, chain_from_content
+from astrbot.api.event import AstrMessageEvent, filter
+from astrbot.api.provider import ProviderRequest
+from astrbot.api.star import Star, register
 
-run = await self.context.agent.run_turn(
-    umo=event.unified_msg_origin,
-    input_message=[PlainInput(text="Summarize the video analysis.")],
-    send_to_user=False,
-)
-result = await run.result()
-if result.text:
-    await self.context.send_message(
-        event.unified_msg_origin,
-        MessageChain().message(f"Video analysis: {result.text}"),
-    )
+
+@register("companion_example", "author", "Proactive companion example", "1.0.0")
+class CompanionExample(Star):
+    @filter.on_llm_request()
+    async def add_context(self, event: AstrMessageEvent, req: ProviderRequest):
+        metadata = event.get_extra("agent_metadata", {})
+        if metadata.get("companion_example", {}).get("kind") != "proactive":
+            return
+        req.extra_user_content_parts.append(
+            TextPart(
+                text="You are initiating this check-in, not responding to a new message. Use the conversation naturally and avoid repeated greetings."
+            ).mark_as_temp()
+        )
+
+    async def proactive(self, umo: str):
+        outputs = []
+        run = await self.context.agent.run_turn(
+            umo=umo,
+            input_message=[PlainInput(text="Check in with the user based on recent conversations.")],
+            send_to_user=False,
+            metadata={"companion_example": {"kind": "proactive"}},
+        )
+        async for event in run.events():
+            if event.type == "output.ready":
+                outputs.append(event.payload)
+
+        result = await run.result()
+        if result.status != TurnStatus.COMPLETED:
+            return
+
+        # Apply the plugin's review policy here, before delivery.
+        for output in outputs:
+            sent = await self.context.send_message(
+                output.target_umo, chain_from_content(output.content)
+            )
+            if not sent:
+                break
 ```
 
-`send_to_user=False` skips Core's automatic output presentation, platform reply decoration and automatic TTS, while preserving execution history. Explicit tool or plugin calls to `event.send()`, `Context.send_message()` or `send_message_to_user` still send normally; the framework does not intercept them.
+The `output.ready` payload is the public `OutputReady` type:
 
-Multiple independent `events()` observers can watch or replay runtime events such as `message.completed` and tool calls without intercepting output or duplicating delivery. The SDK's terminal `turn.finished` event follows automatic output completion.
+| Field | Meaning |
+| --- | --- |
+| `target_umo` | Destination conversation. A send tool may select another authorized conversation. |
+| `source` | `tool` for a message prepared by the built-in send tool; `reply` for the final reply of a successfully completed turn. |
+| `content` | An ordered `tuple[OutputComponent, ...]` preserving text, images, audio, video, files and platform extensions. Media uses `PathMedia`, `URLMedia` or `InlineMedia`. Convert back to `MessageChain` with `chain_from_content()`. |
+
+These events already include the final reply; do not send `result.text` again. To keep only the final reply, filter on `output.source == "reply"`; this also discards images, files and other messages prepared through tools. Reasoning and ordinary intermediate tool-execution text are not published as `output.ready`. Media paths follow the framework's temporary-file lifecycle and are not permanent attachment addresses.
+
+`send_to_user=False` skips Core's automatic output presentation, platform reply decoration and automatic TTS. After authorization and media preparation, the built-in `send_message_to_user` only publishes an event and tells the model that delivery belongs to the caller and has not happened. It does not set sent flags. Execution history is still saved; withholding delivery does not roll back the turn. Explicit plugin calls to `event.send()` or `Context.send_message()` still send normally. This parameter does not intercept arbitrary plugin or external-tool side effects.
+
+Execution hooks, including model request and response hooks, still run. Collecting events does not run decoration or after-send hooks that belong to automatic presentation. Temporary content in the example is excluded from subsequent model context; the temporary marker does not mean the original content is never stored.
+
+With `False`, native handoffs and background function tools finish within the turn so their outputs do not arrive after its stream closes. Subagents inherit the delivery policy, and their send tools submit prepared messages to the parent turn while it is alive. Child results do not trigger an automatically delivered wakeup. The main agent should use subagent wait/read tools within the turn when it needs those results; outputs cannot be appended after the parent turn ends.
+
+`send_to_user=True` preserves the existing automatic delivery path while also exposing `output.ready`. This event means content is prepared, not that the platform accepted it. Successful execution does not guarantee successful delivery. When sending manually, update counters and cooldowns based on the actual send outcome.
+
+Multiple independent `events()` observers can watch or replay runtime events such as `output.ready`, `message.completed` and tool calls without intercepting output or duplicating delivery. The SDK's terminal `turn.finished` event follows automatic output completion. The example's manual send loop is plugin code; do not execute that loop again when replaying the same events.
+
+Custom runtimes also receive `AgentInput.send_to_user`. Their own send tools must honor it and publish prepared tool messages with `turn.emit(OutputReady(...))`. The `AgentSession` base class already publishes the final `reply` from `TurnResult.content` before successful completion; implementations should not publish it twice.
 
 ```py
 # Queue another turn in this exact conversation, inheriting the output policy.

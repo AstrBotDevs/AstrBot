@@ -11,8 +11,10 @@ from pydantic.dataclasses import dataclass
 
 import astrbot.core.message.components as Comp
 from astrbot.api import logger
+from astrbot.core.agent.events import OutputReady
 from astrbot.core.agent.run_context import ContextWrapper
 from astrbot.core.agent.tool import FunctionTool, ToolExecResult
+from astrbot.core.agent_output_content import content_from_chain
 from astrbot.core.astr_agent_runtime.computer.computer_client import get_booter
 from astrbot.core.astr_agent_runtime.context import AstrAgentContext
 from astrbot.core.astr_agent_runtime.tools.computer_tools.fs import _remote_basename
@@ -337,6 +339,28 @@ class SendMessageToUserTool(FunctionTool[AstrAgentContext]):
                 return f"error: invalid session: {session}"
 
         message_chain = MessageChain(chain=components)
+        output_turn = getattr(context.context, "_output_turn", None)
+        send_to_user = getattr(context.context, "send_to_user", True)
+        if output_turn is not None and output_turn.done:
+            output_turn = None
+        if output_turn is not None:
+            try:
+                output_turn.emit(
+                    OutputReady(
+                        target_umo=str(target_session),
+                        source="tool",
+                        content=content_from_chain(message_chain),
+                    )
+                )
+            except (RuntimeError, ValueError) as exc:
+                return f"error: cannot submit message output: {exc}"
+        if not send_to_user:
+            if output_turn is None:
+                return "error: caller-owned delivery requires an active output turn."
+            return (
+                f"Message prepared for session {target_session} and handed to the "
+                "caller for delivery. It has not been sent. Do not submit it again."
+            )
         try:
             sent = await context.context.context.send_message(
                 target_session,

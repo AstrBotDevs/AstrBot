@@ -183,6 +183,8 @@ async def begin_main_agent(
         agent_session=original.agent_session,
         _runtime=runtime,
         subagent_scope=scope,
+        send_to_user=original.send_to_user,
+        _output_turn=original._output_turn,
         delegable_tools=ToolSet(
             tools=[tool for tool in tools.tools if tool.name not in SUBAGENT_TOOL_NAMES]
         )

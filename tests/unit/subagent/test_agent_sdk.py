@@ -12,17 +12,17 @@ import pytest_asyncio
 from astrbot.api.agents import (
     FileInput,
     ImageInput,
+    OutputReady,
     PlainInput,
     SessionState,
+    TextPart,
     TurnStatus,
+    chain_from_content,
 )
-from astrbot.core.agent.run_context import ContextWrapper
 from astrbot.core.agent.tool import FunctionTool
 from astrbot.core.astr_agent_runtime import session as native_session
-from astrbot.core.astr_agent_runtime.context import AstrAgentContext
 from astrbot.core.astr_agent_runtime.tools.message_tools import SendMessageToUserTool
 from astrbot.core.config.default import DEFAULT_CONFIG
-from astrbot.core.message.components import Image
 from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.platform.astr_message_event import (
     current_message_event,
@@ -93,6 +93,11 @@ async def test_output_observers_do_not_change_delivery_or_history(sdk, send_to_u
     assert result.text == "Done"
     assert sdk.platform_send.await_count == int(send_to_user)
     events = [event async for event in run.events()]
+    assert events[-2].payload == OutputReady(
+        target_umo=sdk.event.unified_msg_origin,
+        source="reply",
+        content=result.content,
+    )
     assert events[-1].type == "turn.finished"
     assert events[-1].payload.result == result
     history = json.loads(sdk.conversation.history)
@@ -165,22 +170,12 @@ async def test_queued_input_rechecks_ai_admission(sdk):
 
 @pytest.mark.asyncio
 async def test_disabled_automatic_output_does_not_intercept_explicit_sends(sdk):
-    """Keep event, tool and Context sends explicit when automatic output is off."""
+    """Keep explicit plugin sends independent of the runtime delivery policy."""
 
     async def respond(**kwargs):
         from astrbot.core.platform.astr_message_event import current_message_event
 
         event = current_message_event.get()
-        wrapper = ContextWrapper(
-            context=AstrAgentContext(context=sdk.context, event=event)
-        )
-        await SendMessageToUserTool().call(
-            wrapper,
-            messages=[
-                {"type": "plain", "text": "Builtin message"},
-                {"type": "image", "url": "https://example.invalid/result.png"},
-            ],
-        )
         assert await sdk.context.send_message(
             event.unified_msg_origin, MessageChain().message("Explicit plugin message")
         )
@@ -195,10 +190,195 @@ async def test_disabled_automatic_output_does_not_intercept_explicit_sends(sdk):
     assert (await asyncio.wait_for(run.result(), 3)).status == TurnStatus.COMPLETED
     chains = [call.args[1] for call in sdk.platform_send.await_args_list]
     assert [chain.get_plain_text() for chain in chains] == [
-        "Builtin message",
         "Explicit plugin message",
     ]
-    assert isinstance(chains[0].chain[1], Image)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("send_to_user", [False, True])
+async def test_native_tool_outputs_follow_turn_policy_and_replay_without_sending(
+    sdk, monkeypatch, send_to_user
+):
+    """Collect actual tool media and the final reply without intermediate chatter."""
+    from astrbot.core.astr_agent_runtime.main_agent import builder
+
+    tool = SendMessageToUserTool()
+    sdk.manager.func_list.append(tool)
+    metadata = {"companion": {"kind": "proactive"}}
+    hook_events = []
+
+    async def hook(event, kind, *args, **kwargs):
+        if kind == EventType.OnLLMRequestEvent:
+            assert event.get_extra("agent_metadata") == metadata
+            hook_events.append(event)
+            args[0].extra_user_content_parts.append(
+                TextPart(text="Temporary companion context").mark_as_temp()
+            )
+        return False
+
+    monkeypatch.setattr(builder, "call_event_hook", hook)
+    sdk.provider.text_chat.side_effect = [
+        LLMResponse(
+            role="assistant",
+            completion_text="Preparing the media",
+            tools_call_name=[tool.name],
+            tools_call_ids=["send-call"],
+            tools_call_args=[
+                {
+                    "messages": [
+                        {"type": "plain", "text": "Tool message"},
+                        {"type": "image", "url": "https://example.invalid/image.png"},
+                        {"type": "record", "url": "https://example.invalid/audio.wav"},
+                        {"type": "video", "url": "https://example.invalid/video.mp4"},
+                        {"type": "file", "url": "https://example.invalid/report.pdf"},
+                        {"type": "mention_user", "mention_user_id": "user"},
+                    ],
+                }
+            ],
+        ),
+        LLMResponse(role="assistant", completion_text="Final reply"),
+    ]
+    run = await sdk.context.agent.run_turn(
+        umo=sdk.event.unified_msg_origin,
+        input_message=[PlainInput(text="Check in")],
+        send_to_user=send_to_user,
+        metadata=metadata,
+    )
+    result = await asyncio.wait_for(run.result(), 3)
+    assert result.status == TurnStatus.COMPLETED
+    assert hook_events
+    assert "Temporary companion context" in repr(sdk.provider.text_chat.call_args_list)
+    assert "Temporary companion context" not in sdk.conversation.history
+    events = [event async for event in run.events()]
+    outputs = [event.payload for event in events if event.type == "output.ready"]
+    assert [output.source for output in outputs] == ["tool", "reply"]
+    assert all(output.target_umo == sdk.event.unified_msg_origin for output in outputs)
+    assert [part.type for part in outputs[0].content] == [
+        "plain",
+        "image",
+        "audio",
+        "video",
+        "file",
+        "extension",
+    ]
+    assert outputs[0].content[1].source.url == "https://example.invalid/image.png"
+    assert outputs[0].content[4].name == "report.pdf"
+    assert chain_from_content(outputs[0].content).chain[-1].qq == "user"
+    assert outputs[1].content == result.content
+    assert events[-2].type == "output.ready"
+    sent_before = sdk.platform_send.await_count
+    assert [event async for event in run.events()] == events
+    assert sdk.platform_send.await_count == sent_before
+    if send_to_user:
+        assert sent_before >= 2
+        texts = [
+            call.args[1].get_plain_text() for call in sdk.platform_send.await_args_list
+        ]
+        assert texts.count("Tool message") == texts.count("Final reply") == 1
+    else:
+        sdk.platform_send.assert_not_awaited()
+        assert not hook_events[0]._has_send_oper
+        assert "It has not been sent" in sdk.conversation.history
+        for output in outputs:
+            assert await sdk.context.send_message(
+                output.target_umo, chain_from_content(output.content)
+            )
+        assert sdk.platform_send.await_count == 2
+
+
+@pytest.mark.asyncio
+async def test_handoff_send_tool_uses_parent_output_policy(sdk, monkeypatch):
+    """A nested SDK tool loop shares delivery ownership without sharing hook state."""
+    from astrbot.core.agent.agent import Agent
+    from astrbot.core.agent.handoff import HandoffTool
+    from astrbot.core.astr_agent_runtime.main_agent import builder
+
+    send_tool = SendMessageToUserTool()
+    handoff = HandoffTool(Agent(name="worker", tools=[send_tool]))
+
+    async def hook(event, kind, *args, **kwargs):
+        if kind == EventType.OnLLMRequestEvent:
+            args[0].func_tool.add_tool(handoff)
+        return False
+
+    monkeypatch.setattr(builder, "call_event_hook", hook)
+    sdk.provider.text_chat.side_effect = [
+        LLMResponse(
+            role="assistant",
+            tools_call_name=[handoff.name],
+            tools_call_ids=["handoff-call"],
+            tools_call_args=[{"input": "Prepare a message", "background_task": True}],
+        ),
+        LLMResponse(
+            role="assistant",
+            tools_call_name=[send_tool.name],
+            tools_call_ids=["worker-send"],
+            tools_call_args=[
+                {"messages": [{"type": "plain", "text": "Worker output"}]}
+            ],
+        ),
+        LLMResponse(role="assistant", completion_text="Worker result"),
+        LLMResponse(role="assistant", completion_text="Final reply"),
+    ]
+    run = await sdk.context.agent.run_turn(
+        umo=sdk.scope.umo,
+        input_message=[PlainInput(text="Prepare a message")],
+        send_to_user=False,
+    )
+    result = await asyncio.wait_for(run.result(), 3)
+    assert result.status == TurnStatus.COMPLETED
+    assert result.text == "Final reply"
+    outputs = [
+        event.payload async for event in run.events() if event.type == "output.ready"
+    ]
+    assert [output.content[0].text for output in outputs] == [
+        "Worker output",
+        "Final reply",
+    ]
+    sdk.platform_send.assert_not_awaited()
+    assert sdk.context.get_event_queue().empty()
+
+
+@pytest.mark.asyncio
+async def test_delegated_send_tool_retains_parent_output_owner(sdk):
+    """A child's send tool forwards prepared output without platform delivery."""
+    from astrbot.core.agent.runtime import AgentInput, AgentTurn
+    from astrbot.core.agent.tool import ToolSet
+
+    session = await sdk.native.open_session(
+        sdk.scope.umo, session_id=sdk.scope.conversation_id
+    )
+    owner = AgentTurn(
+        session,
+        AgentInput(
+            event=sdk.event, permissions=sdk.root.permissions, send_to_user=False
+        ),
+    )
+    sdk.root.send_to_user = False
+    sdk.root._output_turn = owner
+    tool = SendMessageToUserTool()
+    sdk.root.delegable_tools = ToolSet([tool])
+    sdk.provider.text_chat.side_effect = [
+        LLMResponse(
+            role="assistant",
+            tools_call_name=[tool.name],
+            tools_call_ids=["child-send"],
+            tools_call_args=[{"messages": [{"type": "plain", "text": "Child output"}]}],
+        ),
+        LLMResponse(role="assistant", completion_text="Child result"),
+    ]
+    agent = await sdk.service.spawn(
+        sdk.root, [{"type": "plain", "text": "Prepare a message"}]
+    )
+    result = await sdk.service.wait(sdk.root, [agent["agent_id"]], 2000, "all")
+    assert result["agents"][0]["result"] == "Child result"
+    assert len(owner._events) == 1
+    output = owner._events[0].payload
+    assert output.source == "tool"
+    assert output.content[0].text == "Child output"
+    assert output.target_umo == sdk.scope.umo
+    sdk.platform_send.assert_not_awaited()
+    assert sdk.context.get_event_queue().empty()
 
 
 @pytest.mark.asyncio
@@ -651,6 +831,7 @@ async def test_history_save_failure_is_not_reported_as_success(sdk):
     assert result.error.code == "history_save_failed"
     events = [event async for event in run.events()]
     terminal = [event for event in events if event.type == "turn.finished"]
+    assert not any(event.type == "output.ready" for event in events)
     assert len(terminal) == 1
     assert terminal[0].payload.result == result
 
