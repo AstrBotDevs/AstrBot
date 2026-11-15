@@ -8,6 +8,8 @@ from copy import deepcopy
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
+from pydantic import JsonValue
+
 from astrbot import logger
 from astrbot.core.agent.input import (
     FileInput,
@@ -343,6 +345,7 @@ class AgentService:
         send_to_user: bool = True,
         source_event: AstrMessageEvent | None = None,
         session_id: str | None = None,
+        metadata: dict[str, JsonValue] | None = None,
     ) -> AgentRun:
         """Submit a configured runtime turn without waiting for model execution.
 
@@ -354,6 +357,11 @@ class AgentService:
                 History is saved regardless of this setting.
             source_event: Caller identity; defaults to the active same-UMO event.
             session_id: Bind an exact conversation, or select the current one.
+            metadata: JSON-compatible plugin data, deep-copied into the wakeup
+                event's "agent_metadata" extra before admission hooks run.
+                Defaults to an empty dict; source-event metadata is not inherited.
+                This data does not grant permissions or automatically enter the
+                model prompt or conversation history.
 
         Returns:
             An SDK view of the runtime turn with independent output observation.
@@ -395,6 +403,9 @@ class AgentService:
         )
         content = tuple(input_message)
         event = self._make_event(umo, content, source_event)
+        event.set_extra(
+            "agent_metadata", deepcopy(metadata) if metadata is not None else {}
+        )
         run = AgentRun(self, event, send_to_user, runtime_name, options, content)
         self._runs.add(run)
         run._task = asyncio.create_task(self._execute(run, session_id))

@@ -438,6 +438,32 @@ result = await run.result()
 
 `run` 提供 turn ID、输出、取消、steer 和 follow-up 操作。`run.session` 返回只读状态快照。
 
+可以通过 `metadata` 传入业务标记，让已有 hooks 识别插件触发的这一轮：
+
+```py
+run = await self.context.agent.run_turn(
+    umo=event.unified_msg_origin,
+    input_message=[PlainInput(text="请简短地问候用户。")],
+    metadata={
+        "private_companion": {
+            "kind": "proactive_message",
+            "attempt_id": "check-in-001",
+        }
+    },
+)
+```
+
+在已有 hook 中，从该 hook 收到的 wakeup event 读取 metadata：
+
+```py
+metadata = event.get_extra("agent_metadata", {})
+companion = metadata.get("private_companion", {})
+```
+
+`metadata` 是由 JSON 兼容值组成的字典。Core 在准入 hooks 执行前，将它深拷贝到 wakeup event 的 `agent_metadata` extra 中，调用方后续修改或其他提交不会影响该快照。所有键都保留在 `agent_metadata` 下，不会覆盖框架 extras，也不会授予权限。Core 不会自动将 metadata 加入模型提示词或会话历史。建议插件使用自己的命名空间，并在 hook 中显式注入模型需要的上下文。
+
+省略 `metadata` 时创建空字典，不会从 `source_event` 复制 metadata 或其他任意 extras。`run.follow_up()` 的新一轮使用空 metadata；如果后续一轮需要 metadata，请显式指定目标 `session_id` 调用 `run_turn()`。
+
 Core 按当前配置档的 `agent.runtime` 选择已注册实现；使用 `ctx.agent.register_runtime(name, runtime)` 注册后，该实现可用于主代理，也可由内置 runtime 作为子代理调用。未注册的名称明确报错；Dify、Coze 等现有第三方路径继续沿用原执行方式。
 
 `/stop` 按 UMO 向已提交的 turn 调用 `turn.request_stop()`。运行中的 turn 会调用 `AgentSession.request_stop_turn(turn)`。runtime 接受请求并负责执行收尾时返回 `True`，返回 `False` 则使用 `cancel_turn()` 和本地任务取消。排队中的 turn 直接取消。`request_stop()` 提交请求后立即返回，用 `await turn.result()` 等待收尾。
