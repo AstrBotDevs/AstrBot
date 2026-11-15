@@ -29,8 +29,6 @@ class AgentResponse:
         "tool_call_result",
         "turn.started",
         "turn.finished",
-        "request.started",
-        "request.finished",
         "tool.started",
         "tool.finished",
         "context.updated",

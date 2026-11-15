@@ -180,14 +180,14 @@ async def test_lifecycle_batch_validates_unflushed_references_atomically(
     drafts = [
         {"event_id": "turn", "type": "turn.started", "payload": {}},
         {
-            "event_id": "request",
-            "type": "request.started",
-            "payload": {"turn_id": "turn"},
+            "event_id": "tool",
+            "type": "tool.started",
+            "payload": {"turn_id": "turn", "tool_name": "echo", "tool_call_id": "call", "arguments": {}},
         },
         {
             "event_id": "response",
-            "type": "request.finished",
-            "payload": {"request_id": "request", "status": "completed"},
+            "type": "tool.finished",
+            "payload": {"execution_id": "tool", "status": "completed"},
         },
         {
             "event_id": "done",
