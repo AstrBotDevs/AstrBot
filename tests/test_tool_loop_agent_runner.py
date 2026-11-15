@@ -1634,7 +1634,7 @@ async def test_steering_appends_user_messages_after_all_tool_results(
     assert [message.role for message in tail] == [
         "assistant", *(["tool"] * tool_count), "user",
     ]
-    assert tail[-1].content == [TextPart(text="follow up 1"), TextPart(text="follow up 2")]
+    assert tail[-1].content == [TextPart(text="follow up 1"), TextPart(text="\nfollow up 2")]
     assert ticket1.resolved.is_set() is True
     assert ticket2.resolved.is_set() is True
     assert ticket1.consumed is True

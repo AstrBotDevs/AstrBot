@@ -226,7 +226,10 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                 [
                     Message(
                         role="user",
-                        content=[TextPart(text=ticket.text) for ticket in follow_ups],
+                        content=[
+                            TextPart(text=("\n" if index else "") + ticket.text)
+                            for index, ticket in enumerate(follow_ups)
+                        ],
                     )
                 ]
             )
@@ -1425,7 +1428,8 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                         Message(
                             role="user",
                             content=[
-                                TextPart(text=ticket.text) for ticket in follow_ups
+                                TextPart(text=("\n" if index else "") + ticket.text)
+                                for index, ticket in enumerate(follow_ups)
                             ],
                         )
                     ]
