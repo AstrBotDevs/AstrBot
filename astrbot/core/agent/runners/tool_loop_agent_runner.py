@@ -136,13 +136,6 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
     EMPTY_OUTPUT_RETRY_WAIT_MAX_S = 4
     USER_INTERRUPTION_REQUEST = "Stop output."
     USER_INTERRUPTION_MESSAGE = "Output stopped."
-    FOLLOW_UP_NOTICE_TEMPLATE = (
-        "\n\n[SYSTEM NOTICE] User sent follow-up messages while tool execution "
-        "was in progress. Prioritize these follow-up instructions in your next "
-        "actions. In your very next action, briefly acknowledge to the user "
-        "that their follow-up message(s) were received before continuing.\n"
-        "{follow_up_lines}"
-    )
     MAX_STEPS_REACHED_PROMPT = (
         "[SYSTEM NOTICE: Agent step budget exhausted] "
         "Remaining steps: 0. Stop using tools; summarize results and unfinished work. "
@@ -196,9 +189,12 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
     )
 
     async def _complete_with_assistant_response(self, llm_resp: LLMResponse) -> None:
-        """Finalize the current step as a plain assistant response with no tool calls."""
+        """Record a plain reply and continue if accepted steering is still pending.
+
+        Args:
+            llm_resp: Assistant response without tool calls.
+        """
         self.final_llm_resp = llm_resp
-        self._transition_state(AgentState.DONE)
         self.stats.end_time = time.time()
 
         parts = []
@@ -219,6 +215,33 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             await self.agent_hooks.on_llm_response(self.run_context, llm_resp)
         except Exception as e:
             logger.error(f"Error in on_llm_response hook: {e}", exc_info=True)
+
+        if self._is_stop_requested():
+            await self._finalize_aborted_step()
+            return
+        if self._pending_follow_ups and self.run_context.run_end_reason != "max_steps":
+            # A plain reply is also a safe boundary for accepted user input.
+            follow_ups = list(self._pending_follow_ups)
+            await self._append_context_messages(
+                [
+                    Message(
+                        role="user",
+                        content=[
+                            TextPart(text=("\n" if index else "") + ticket.text)
+                            for index, ticket in enumerate(follow_ups)
+                        ],
+                    )
+                ]
+            )
+            # Keep input arriving while the context sink was awaited for the next step.
+            del self._pending_follow_ups[: len(follow_ups)]
+            for ticket in follow_ups:
+                ticket.consumed = True
+                ticket.resolved.set()
+            self.final_llm_resp = None
+            return
+
+        self._transition_state(AgentState.DONE)
         self._resolve_unconsumed_follow_ups()
 
     async def _finish_run(self) -> None:
@@ -899,11 +922,18 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         *,
         message_text: str,
     ) -> FollowUpTicket | None:
-        """Queue a follow-up message for the next tool result."""
+        """Queue user input after the next tool batch or plain assistant reply.
+
+        Args:
+            message_text: Additional user input to append without modification.
+
+        Returns:
+            A consumption ticket, or None if the input cannot be accepted.
+        """
         if self.done() or self._is_stop_requested():
             return None
-        text = (message_text or "").strip()
-        if not text:
+        text = message_text or ""
+        if not text.strip():
             return None
         ticket = FollowUpTicket(seq=self._follow_up_seq, text=text)
         self._follow_up_seq += 1
@@ -917,27 +947,6 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         self._pending_follow_ups = []
         for ticket in follow_ups:
             ticket.resolved.set()
-
-    def _consume_follow_up_notice(self) -> str:
-        if not self._pending_follow_ups:
-            return ""
-        follow_ups = self._pending_follow_ups
-        self._pending_follow_ups = []
-        for ticket in follow_ups:
-            ticket.consumed = True
-            ticket.resolved.set()
-        follow_up_lines = "\n".join(
-            f"{idx}. {ticket.text}" for idx, ticket in enumerate(follow_ups, start=1)
-        )
-        return self.FOLLOW_UP_NOTICE_TEMPLATE.format(
-            follow_up_lines=follow_up_lines,
-        )
-
-    def _merge_follow_up_notice(self, content: str) -> str:
-        notice = self._consume_follow_up_notice()
-        if not notice:
-            return content
-        return f"{content}{notice}"
 
     def _track_tool_call_streak(
         self,
@@ -1411,6 +1420,26 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
 
             self.req.append_tool_calls_result(tool_calls_result)
 
+            if tool_call_result_blocks and self._pending_follow_ups:
+                # Keep all tool replies together before adding new user input.
+                follow_ups = list(self._pending_follow_ups)
+                await self._append_context_messages(
+                    [
+                        Message(
+                            role="user",
+                            content=[
+                                TextPart(text=("\n" if index else "") + ticket.text)
+                                for index, ticket in enumerate(follow_ups)
+                            ],
+                        )
+                    ]
+                )
+                # Preserve inputs arriving while the context sink was awaited.
+                del self._pending_follow_ups[: len(follow_ups)]
+                for ticket in follow_ups:
+                    ticket.consumed = True
+                    ticket.resolved.set()
+
     async def step_until_done(
         self, max_step: int
     ) -> T.AsyncGenerator[RunnerEventPayload, None]:
@@ -1468,7 +1497,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                 ToolCallMessageSegment(
                     role="tool",
                     tool_call_id=tool_call_id,
-                    content=self._merge_follow_up_notice(content),
+                    content=content,
                 ),
             )
 
