@@ -6,19 +6,12 @@ You can use the LLM / Agent interfaces provided by AstrBot to implement your own
 
 ## Getting the Chat Model ID for the Current Session
 
-> [!TIP]
-> Added in v4.5.7
-
 ```py
 umo = event.unified_msg_origin
 provider_id = await self.context.get_current_chat_provider_id(umo=umo)
 ```
 
 ## Invoking Large Language Models
-
-> [!TIP]
-> Added in v4.5.7
-
 
 ```py
 llm_resp = await self.context.llm_generate(

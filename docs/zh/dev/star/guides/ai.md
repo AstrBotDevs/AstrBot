@@ -6,18 +6,12 @@ AstrBot 内置了对多种大语言模型（LLM）提供商的支持，并且提
 
 ## 获取当前会话使用的聊天模型 ID
 
-> [!TIP]
-> 在 v4.5.7 时加入
-
 ```py
 umo = event.unified_msg_origin
 provider_id = await self.context.get_current_chat_provider_id(umo=umo)
 ```
 
 ## 调用大模型
-
-> [!TIP]
-> 在 v4.5.7 时加入
 
 ```py
 llm_resp = await self.context.llm_generate(
