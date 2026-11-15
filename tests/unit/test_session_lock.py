@@ -178,7 +178,10 @@ class TestConcurrency:
             is_stopped=lambda: False,
         )
         runtime = AstrAgentRuntime(
-            SimpleNamespace(get_config=lambda **_: config),
+            SimpleNamespace(
+                get_config=lambda **_: config,
+                conversation_manager=None,
+            ),
             agent_configs=MagicMock(),
             subagents=MagicMock(),
         )
