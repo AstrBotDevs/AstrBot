@@ -1336,6 +1336,26 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                     llm_resp.tools_call_args = requery_resp.tools_call_args
                     llm_resp.tools_call_ids = requery_resp.tools_call_ids
 
+            # Persist the assistant decision before any tool side effects.
+            parts = []
+            if llm_resp.reasoning_content is not None or llm_resp.reasoning_signature:
+                parts.append(
+                    ThinkPart(
+                        think=llm_resp.reasoning_content or "",
+                        encrypted=llm_resp.reasoning_signature,
+                    )
+                )
+            if llm_resp.completion_text:
+                parts.append(TextPart(text=llm_resp.completion_text))
+            if len(parts) == 0:
+                parts = None
+            tool_call_message = AssistantMessageSegment(
+                tool_calls=llm_resp.to_openai_tool_calls_model(), content=parts
+            )
+            await self._append_context_messages(
+                [tool_call_message], record_response=True
+            )
+
             tool_call_result_blocks = []
             cached_images = []  # Collect cached images for LLM visibility
             try:
@@ -1400,30 +1420,11 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                             TextPart(text=notice),
                         ]
 
-            # 将结果添加到上下文中
-            parts = []
-            if llm_resp.reasoning_content is not None or llm_resp.reasoning_signature:
-                parts.append(
-                    ThinkPart(
-                        think=llm_resp.reasoning_content or "",
-                        encrypted=llm_resp.reasoning_signature,
-                    )
-                )
-            if llm_resp.completion_text:
-                parts.append(TextPart(text=llm_resp.completion_text))
-            if len(parts) == 0:
-                parts = None
             tool_calls_result = ToolCallsResult(
-                tool_calls_info=AssistantMessageSegment(
-                    tool_calls=llm_resp.to_openai_tool_calls_model(),
-                    content=parts,
-                ),
+                tool_calls_info=tool_call_message,
                 tool_calls_result=tool_call_result_blocks,
             )
-            # record the assistant message with tool calls
-            await self._append_context_messages(
-                tool_calls_result.to_openai_messages_model(), record_response=True
-            )
+            await self._append_context_messages(tool_call_result_blocks)
 
             # If there are cached images and the model supports image input,
             # append a user message with images so LLM can see them
@@ -1936,6 +1937,27 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
     async def _finalize_aborted_step(self) -> None:
         logger.info("Agent execution was requested to stop by user.")
 
+        pending_calls = {}
+        for message in self.run_context.messages:
+            if message.role == "assistant":
+                pending_calls.update(
+                    (call["id"] if isinstance(call, dict) else call.id, call)
+                    for call in (message.tool_calls or [])
+                )
+            elif message.role == "tool":
+                pending_calls.pop(message.tool_call_id, None)
+        if pending_calls:
+            await self._append_context_messages(
+                [
+                    ToolCallMessageSegment(
+                        role="tool",
+                        tool_call_id=call_id,
+                        content="Execution was interrupted; the result is unavailable. Do not assume the operation did not take effect.",
+                    )
+                    for call_id in pending_calls
+                ]
+            )
+
         await self._append_context_messages(
             [
                 Message(
@@ -1972,7 +1994,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
     async def _recorded_tool_results(
         self, tool: FunctionTool[TContext], call_id: str, arguments: JsonObject
     ) -> T.AsyncGenerator[T.Any | CallToolResult, None]:
-        """Record the actual executor boundary after validation and plugin hooks.
+        """Publish runtime tool events after validation and plugin hooks.
 
         Args:
             tool: Resolved function tool.
@@ -1990,20 +2012,6 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         error: RuntimeErrorInfo | None = None
         structured = None
         exit_code = None
-        raw_result = None
-        record = self._events.active and self._conversation_event_sink is not None
-        if record:
-            await self._events.emit(
-                AgentResponse(
-                    "tool.started",
-                    {
-                        "tool_call_id": call_id,
-                        "tool_name": tool.name,
-                        "arguments": arguments,
-                    },
-                    execution_id,
-                )
-            )
         if self._events.active:
             if completed := self._finish_message():
                 await self._events.emit(completed)
@@ -2023,8 +2031,6 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             )
             async for item in self._iter_tool_executor_results(executor):
                 if isinstance(item, CallToolResult):
-                    if record:
-                        raw_result = item.model_dump(mode="json", exclude_none=True)
                     progress = []
                     for block in item.content:
                         if isinstance(block, TextContent):
@@ -2077,13 +2083,6 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             if executor is not None:
                 await self._close_executor(executor)
             if self._events.active:
-                if record:
-                    payload = {"execution_id": execution_id, "status": status.value}
-                    if raw_result is not None:
-                        payload["result"] = raw_result
-                    if error is not None:
-                        payload["error"] = {"code": error.code}
-                    await self._events.emit(AgentResponse("tool.finished", payload))
                 await self._events.emit(
                     ToolFinished(
                         execution_id=execution_id,

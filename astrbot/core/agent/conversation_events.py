@@ -81,12 +81,14 @@ class ConversationEventWriter:
             self.stage_messages(
                 response.data["messages"], assistant=response.data.get("assistant")
             )
+            await self.flush()
         elif response.type == "context.updated":
             self.stage_history(
                 response.data["messages"],
                 reason=response.data.get("reason", "legacy_replace"),
                 origin=response.data.get("origin", "unknown"),
             )
+            await self.flush()
         elif response.type == "turn.started":
             await self.start_turn(
                 {"umo": self.umo, **response.data.get("trigger", {})},
@@ -95,23 +97,33 @@ class ConversationEventWriter:
         elif response.type == "turn.finished":
             # The host settles the turn after its history-save hook has completed.
             self.turn_result = response
-        elif response.type in {
-            "tool.started",
-            "tool.finished",
-            "message.appended",
-            "context.rebased",
-        }:
+        elif response.type in {"message.appended", "context.rebased"}:
             payload = dict(response.data)
-            if response.type in {
-                "tool.started",
-                "message.appended",
-                "context.rebased",
-            }:
-                payload.setdefault("turn_id", self.turn_id)
+            payload.setdefault("turn_id", self.turn_id)
             await self.append(response.type, payload, event_id=response.event_id)
         else:
             return False
         return True
+
+    async def flush(self) -> None:
+        """Commit staged events without rescanning the unchanged message history.
+
+        Raises:
+            ConversationPersistenceError: Storage did not acknowledge the batch.
+        """
+        async with self._lock:
+            try:
+                committed = await self.store.append(
+                    self.cid,
+                    list(self._pending),
+                    expected_leaf=self.leaf_event_id,
+                    link_display=self._link_display,
+                )
+            except (SQLAlchemyError, ValueError) as exc:
+                raise ConversationPersistenceError(
+                    "Conversation context was not acknowledged"
+                ) from exc
+            await self._acknowledge(committed)
 
     async def append(
         self,
@@ -146,7 +158,7 @@ class ConversationEventWriter:
             )
             checks_context = (
                 context_change
-                or event_type in {"turn.started", "tool.started"}
+                or event_type == "turn.started"
                 or (bool(self._pending) and event_type == "turn.finished")
             )
             try:
@@ -209,11 +221,6 @@ class ConversationEventWriter:
             key=lambda event: event.seq,
         )
         acknowledged_ids = {event.event_id for event in result.events}
-        remaining = [
-            draft
-            for draft in self._pending
-            if draft["event_id"] not in acknowledged_ids
-        ]
         replacement = None
         additions = []
         if context_events:
@@ -250,6 +257,11 @@ class ConversationEventWriter:
                                 {"id": event.event_id, "message": effective[0]}
                             )
 
+        remaining = [
+            draft
+            for draft in self._pending
+            if draft["event_id"] not in acknowledged_ids
+        ]
         # Prepare any still-staged projection before confirming the ACK. Staging
         # may have occurred while storage was awaited; only acknowledged drafts
         # are removed. This full reference copy is confined to pending work.
