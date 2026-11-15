@@ -917,20 +917,6 @@ class ConversationStore:
             )
             if settled is not None or ("message.settled", source_id) in batch_finishes:
                 raise ConversationConflictError("Received message already settled")
-            legacy_settled = await session.scalar(
-                text("""SELECT 1
-                FROM conversation_events AS progress INDEXED BY ix_input_legacy_progress,
-                     json_each(CASE progress.type WHEN 'context.rebased'
-                       THEN json_extract(progress.payload,'$.consumed_message_ids')
-                       ELSE json_extract(progress.payload,'$.discarded_message_ids') END) AS item
-                WHERE progress.conversation_ref=:owner AND progress.seq>:seq
-                  AND ((progress.type='context.rebased' AND json_type(progress.payload,'$.consumed_message_ids')='array')
-                    OR (progress.type='conversation.updated' AND json_type(progress.payload,'$.discarded_message_ids')='array'))
-                  AND item.value=:source_id LIMIT 1"""),
-                {"owner": conv.id, "seq": source.seq, "source_id": source_id},
-            )
-            if legacy_settled is not None:
-                raise ConversationConflictError("Received message already settled")
             batch_finishes.add(("message.settled", source_id))
             if kind == "message.consumed":
                 turn_id = payload.get("turn_id")
@@ -1399,16 +1385,7 @@ class ConversationStore:
         """
         async with self.db.get_db() as session:
             rows = await session.execute(
-                text("""WITH legacy_settled AS MATERIALIZED (
-                    SELECT progress.conversation_ref, item.value AS source_id
-                    FROM conversation_events AS progress INDEXED BY ix_input_legacy_progress,
-                         json_each(CASE progress.type WHEN 'context.rebased'
-                           THEN json_extract(progress.payload,'$.consumed_message_ids')
-                           ELSE json_extract(progress.payload,'$.discarded_message_ids') END) AS item
-                    WHERE progress.conversation_ref=(SELECT id FROM conversations_v3 WHERE conversation_id=:cid)
-                      AND ((progress.type='context.rebased' AND json_type(progress.payload,'$.consumed_message_ids')='array')
-                        OR (progress.type='conversation.updated' AND json_type(progress.payload,'$.discarded_message_ids')='array'))
-                ) SELECT pending.* FROM conversation_events AS pending INDEXED BY ix_input_received
+                text("""SELECT pending.* FROM conversation_events AS pending INDEXED BY ix_input_received
                     JOIN conversations_v3 AS conversation
                       ON conversation.id = pending.conversation_ref
                     WHERE conversation.conversation_id = :cid
@@ -1419,7 +1396,6 @@ class ConversationStore:
                         WHERE progress.conversation_ref = pending.conversation_ref
                           AND progress.type IN ('message.consumed', 'message.discarded')
                           AND CAST(json_extract(progress.payload, '$.source_event_id') AS TEXT) = pending.event_id)
-                      AND pending.event_id NOT IN (SELECT source_id FROM legacy_settled WHERE source_id IS NOT NULL)
                     ORDER BY pending.seq"""),
                 {"cid": cid},
             )

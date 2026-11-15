@@ -261,12 +261,6 @@ async def migrate_conversations(store: ConversationStore, *, session=None) -> No
             WHERE type IN ('message.consumed', 'message.discarded')""")
         )
         await session.execute(
-            text("""CREATE INDEX IF NOT EXISTS ix_input_legacy_progress
-            ON conversation_events(conversation_ref,seq)
-            WHERE (type='context.rebased' AND json_type(payload,'$.consumed_message_ids')='array')
-               OR (type='conversation.updated' AND json_type(payload,'$.discarded_message_ids')='array')""")
-        )
-        await session.execute(
             text("""CREATE INDEX IF NOT EXISTS ix_conversation_events_context_seq
             ON conversation_events(conversation_ref,seq)
             WHERE type IN ('message.appended', 'message.consumed', 'context.rebased')""")

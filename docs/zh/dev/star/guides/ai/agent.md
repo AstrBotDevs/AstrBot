@@ -104,7 +104,7 @@ if receipt is not None:
 
 内置主会话会在确认接管前准备并保存收到的输入，在完整工具批次结束或纯文本回复后消费；已接收但本轮未消费的 steer 会在正常结束后转为 follow-up。异常退出后，未消费的文本会在同一会话下次执行时恢复，要求权限、插件范围和输出策略一致；这不包含启动后自动执行、附件恢复或子代理历史存储迁移。显式取消的输入不会恢复。
 
-收到的 user 输入保存为带 `delivery` 元数据的 `message.appended`，其中包含已准备好的发送者、时间提醒，重放时不会重新生成。`message.consumed` 仅携带 `source_event_id` 和 `turn_id`，按消费事件的顺序将对应输入纳入模型上下文。同一 turn 中序号连续的消费事件构成一个批次，用换行分隔合并。消费批次原子提交，不再为普通输入生成全量历史 snapshot；`message.discarded` 将取消的输入排除出恢复队列。旧 snapshot 中的消费记录仍可读取。
+收到的 user 输入保存为带 `delivery` 元数据的 `message.appended`，其中包含已准备好的发送者、时间提醒，重放时不会重新生成。`message.consumed` 仅携带 `source_event_id` 和 `turn_id`，按消费事件的顺序将对应输入纳入模型上下文。同一 turn 中序号连续的消费事件构成一个批次，用换行分隔合并。消费批次原子提交，不再为普通输入生成全量历史 snapshot；`message.discarded` 将取消的输入排除出恢复队列。
 
 `run.session.state` 为 `idle`、`queued`、`running` 或 `closed`。快照包含 `ref`、`pending_turn_count` 和 `active_turn_id`，重新读取属性即可刷新。
 
