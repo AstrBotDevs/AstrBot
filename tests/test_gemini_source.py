@@ -300,7 +300,6 @@ async def _drain_gemini_stream(provider, monkeypatch, chunks):
         provider_name,
         request_factory,
         max_attempts=None,
-        request_event_recorder=None,
     ):
         return fake_stream()
 
@@ -370,7 +369,7 @@ async def test_gemini_stream_keeps_conversation_header_until_consumed(
         yield _gemini_stream_chunk(text="ok")
 
     async def fake_retry(
-        provider_name, request_factory, max_attempts=None, request_event_recorder=None
+        provider_name, request_factory, max_attempts=None
     ):
         return fake_stream()
 
