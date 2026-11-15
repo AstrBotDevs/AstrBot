@@ -14,7 +14,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")
 from astrbot.core.agent.agent import Agent
 from astrbot.core.agent.handoff import HandoffTool
 from astrbot.core.agent.hooks import BaseAgentRunHooks
-from astrbot.core.agent.message import ImageURLPart, Message, TextPart
+from astrbot.core.agent.message import ImageURLPart, Message, TextPart, ThinkPart
 from astrbot.core.agent.run_context import ContextWrapper
 from astrbot.core.agent.runners.tool_loop_agent_runner import ToolLoopAgentRunner
 from astrbot.core.agent.tool import FunctionTool, ToolSet
@@ -523,6 +523,92 @@ def provider_request(tool_set):
 def runner():
     """创建ToolLoopAgentRunner实例"""
     return ToolLoopAgentRunner()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("streaming", [False, True])
+@pytest.mark.parametrize("with_tool_call", [False, True], ids=["final", "tool-call"])
+@pytest.mark.parametrize(
+    ("reasoning_content", "reasoning_signature", "expected_thinking"),
+    [
+        (None, None, []),
+        ("", None, []),
+        ("", "", []),
+        ("Plan the next step.", None, [ThinkPart(think="Plan the next step.")]),
+        ("", "signature", [ThinkPart(think="", encrypted="signature")]),
+        (None, "signature", [ThinkPart(think="", encrypted="signature")]),
+    ],
+    ids=[
+        "absent",
+        "empty",
+        "empty-signature",
+        "text",
+        "signature-only",
+        "signature-no-text",
+    ],
+)
+async def test_runner_preserves_only_meaningful_thinking_parts(
+    runner,
+    mock_provider,
+    provider_request,
+    mock_tool_executor,
+    mock_hooks,
+    streaming,
+    with_tool_call,
+    reasoning_content,
+    reasoning_signature,
+    expected_thinking,
+):
+    """Drop empty unsigned thoughts without losing text or tool-call metadata."""
+    response = LLMResponse(
+        role="assistant",
+        completion_text="" if with_tool_call else "Answer",
+        reasoning_content=reasoning_content,
+        reasoning_signature=reasoning_signature,
+    )
+    responses = [response]
+    if with_tool_call:
+        response.tools_call_name = ["test_tool"]
+        response.tools_call_args = [{"query": "test"}]
+        response.tools_call_ids = ["call_thinking"]
+        responses.append(LLMResponse(role="assistant", completion_text="Done"))
+    mock_provider.text_chat = AsyncMock(side_effect=responses)
+
+    await runner.reset(
+        provider=mock_provider,
+        request=provider_request,
+        run_context=ContextWrapper(context=None),
+        tool_executor=mock_tool_executor,
+        agent_hooks=mock_hooks,
+        streaming=streaming,
+    )
+    async for _ in runner.step_until_done(3):
+        pass
+
+    assistant_messages = [
+        message
+        for message in runner.run_context.messages
+        if message.role == "assistant"
+    ]
+    message = assistant_messages[0]
+    expected_content = [*expected_thinking]
+    if with_tool_call:
+        assert len(assistant_messages) == 2
+        assert message.tool_calls[0].id == "call_thinking"
+        assert message.tool_calls[0].function.name == "test_tool"
+        assert message.content == (expected_content or None)
+        tool_message = next(
+            message for message in runner.run_context.messages if message.role == "tool"
+        )
+        assert tool_message.tool_call_id == "call_thinking"
+    else:
+        assert len(assistant_messages) == 1
+        expected_content.append(TextPart(text="Answer"))
+        assert message.content == expected_content
+    assert message.model_dump()["content"] == (
+        [part.model_dump() for part in expected_content] or None
+    )
+    assert runner.done()
 
 
 def _make_large_tool_result_text() -> str:
