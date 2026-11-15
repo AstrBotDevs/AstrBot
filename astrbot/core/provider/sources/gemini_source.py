@@ -3,6 +3,7 @@ import base64
 import json
 import logging
 import random
+import re
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from typing import Literal, cast
@@ -281,11 +282,14 @@ class ProviderGoogleGenAI(Provider):
             # Gemini 3+ models. The API requires opting into server-side tool
             # invocations for that combination, and AUTO mode is not supported
             # once the flag is enabled, so switch to VALIDATED mode.
-            # Match by substring (case-insensitively) because deployments may
-            # prefix model names, e.g. gateway aliases such as
-            # "gateway/gemini-3.8-flash-high".
-            combines_tools = has_builtin_tool and any(
-                marker in model_name.lower() for marker in ("gemini-3", "gemini-4")
+            # Parse the major generation anywhere in the model ID so gateway
+            # prefixes (e.g. "gateway/gemini-3.8-flash-high") and future
+            # generations are covered without maintaining a version list.
+            generation_match = re.search(r"gemini-(\d+)", model_name, re.IGNORECASE)
+            combines_tools = (
+                has_builtin_tool
+                and generation_match is not None
+                and int(generation_match.group(1)) >= 3
             )
             if tool_choice == "required":
                 mode = types.FunctionCallingConfigMode.ANY

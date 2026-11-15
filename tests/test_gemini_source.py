@@ -133,10 +133,11 @@ async def test_gemini_enables_server_side_tool_invocations_for_tool_combination(
         "gateway/gemini-3.8-flash-high",
         "Gateway/Gemini-3.8-Flash-High",
         "gemini-4-flash-preview",
+        "gemini-5-pro",
     ],
 )
 async def test_gemini_enables_tool_combination_for_aliased_and_future_models(model):
-    # Model names can carry gateway prefixes; Gemini 4 is supported as well.
+    # Model names can carry gateway prefixes; Gemini 4+ generations are supported as well.
     provider = _gemini_config_provider(model, {"gm_native_search": True})
 
     config = await provider._prepare_query_config(
