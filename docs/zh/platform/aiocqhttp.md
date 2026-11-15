@@ -14,9 +14,6 @@ AstrBot 支持接入所有适配了 OneBotv11 反向 Websockets（AstrBot 做服
 
 请参阅对应的协议实现端项目的部署文档。
 
-> [!WARNING]
-> NapCat 已停止维护，官方仓库不再提供程序与部署文档，原有一键脚本、Docker 镜像与 Kubernetes 清单均已失效。如仍需在 QQ 个人号上使用 OneBot v11，请自行评估其他 OneBot v11 实现端的可用性与安全性；AstrBot 不对第三方实现端的可用性作保证。
-
 ## 1. 配置 OneBot v11
 
 1. 进入 AstrBot 的 WebUI
