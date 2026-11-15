@@ -97,10 +97,14 @@ receipt = await run.steer(
     input_message=[PlainInput(text="Also focus on safety concerns.")],
 )
 if receipt is not None:
-    consumed = await receipt
+    accepted = await receipt
 ```
 
-`follow_up()` queues a turn in the original runtime and conversation. `steer()` adds input to an active turn: it returns `None` if rejected, or an `InputReceipt` whose awaited boolean indicates whether the input was consumed and saved. Rejected input is not queued automatically. Steering images and files are currently passed as text references.
+`follow_up()` queues a turn in the original runtime and conversation. `steer()` adds input to an active turn: it returns `None` if rejected, or an `InputReceipt`. Awaiting `True` confirms that the runtime durably owns the input, so the caller must not resubmit it; it does not mean the model has finished processing it. `False` means ownership was not accepted. Rejected input is not queued automatically. Steering images and files are currently passed as text references.
+
+Built-in main sessions prepare and persist received input before acknowledging ownership, and consume it after a complete tool batch or plain reply. Accepted steering left over at normal completion becomes a follow-up. At application startup, main sessions automatically resume unfinished turns and queued input using committed messages and the recorded caller and delivery policy. Shutdown suspends this work; explicit user cancellation remains terminal. Missing tool results are persisted as `interrupted` results before the next model request, and those tool calls are not automatically executed again. Already committed results are reused. Recovery requires the platform and model to be available, respects current plugin admission, and does not migrate delegated-session history. External file references must still be accessible.
+
+Received user input is stored once as `message.appended` with `delivery` metadata. Prepared content includes the sender/time reminders, so replay does not regenerate them. `message.consumed` carries only `source_event_id` and `turn_id`; its event sequence places the referenced input in model context. Consecutive consumption events in the same turn form one batch, merged with newline separators. Consumption is committed atomically and does not create a full-history snapshot. `message.discarded` excludes cancelled input from recovery.
 
 For event-backed main sessions, user and assistant messages are committed incrementally. Assistant tool calls are committed before tool execution, and tool results are stored as `message.appended`. `tool.started` and `tool.finished` remain runtime notifications and are not stored in the conversation journal. Missing tool results after an interrupted execution are represented as unknown results when preparing the next turn.
 
@@ -138,6 +142,8 @@ print(result.status, result.text)
 | `request.started/finished` | Track provider calls. |
 | `usage.updated` | Read cumulative usage; replace the previous snapshot rather than adding it. |
 | `turn.started/prepared/finished` | Track turn lifecycle. The SDK's `turn.finished` follows output handling. |
+
+`tool.started` and `tool.finished` are runtime-only events and are not persisted in the conversation event store. Tool calls and results are persisted through `message.appended`: an `assistant` message contains `tool_calls`, and a `tool` message contains the result linked by `tool_call_id`. Existing persisted tool lifecycle events remain readable.
 
 `result.content` contains the final reply; `result.text` extracts its plain text. `result.usage` contains cumulative usage and `result.metrics.steps` the executed step count. Unknown usage counts are `None`, not zero; cached input tokens are included in input tokens.
 

@@ -97,10 +97,14 @@ receipt = await run.steer(
     input_message=[PlainInput(text="补充：请重点说明安全隐患。")],
 )
 if receipt is not None:
-    consumed = await receipt
+    accepted = await receipt
 ```
 
-`follow_up()` 在原 runtime 和 conversation 中排队开始下一轮。`steer()` 向活跃 turn 追加输入：被拒绝时返回 `None`，接收时返回 `InputReceipt`，等待回执得到的布尔值表示输入是否已消费并保存。被拒绝的输入不会自动排队。目前 steer 中的图片、文件以文本引用传递。
+`follow_up()` 在原 runtime 和 conversation 中排队开始下一轮。`steer()` 向活跃 turn 追加输入：被拒绝时返回 `None`，接收时返回 `InputReceipt`。等待回执得到 `True` 表示运行时已持久化接管输入，调用方不应重复提交，不代表模型已经处理完毕；`False` 表示未接管。被拒绝的输入不会自动排队。目前 steer 中的图片、文件以文本引用传递。
+
+内置主会话会在确认接管前准备并保存收到的输入，在完整工具批次结束或纯文本回复后消费；已接收但本轮未消费的 steer 会在正常结束后转为 follow-up。程序启动时，主会话会根据已保存的消息、调用者身份及输出策略，自动续接未完成的轮次和排队输入。关闭程序会保留这些工作，用户明确取消的任务则不会恢复。缺失的工具结果会在再次请求模型前保存为 `interrupted`，不会自动重新执行这些工具调用；已有结果直接复用。恢复要求平台和模型可用，遵守当前插件准入规则，不涉及子代理历史存储迁移。外部文件引用仍需保持可访问。
+
+收到的 user 输入保存为带 `delivery` 元数据的 `message.appended`，其中包含已准备好的发送者、时间提醒，重放时不会重新生成。`message.consumed` 仅携带 `source_event_id` 和 `turn_id`，按消费事件的顺序将对应输入纳入模型上下文。同一 turn 中序号连续的消费事件构成一个批次，用换行分隔合并。消费批次原子提交，不再为普通输入生成全量历史 snapshot；`message.discarded` 将取消的输入排除出恢复队列。
 
 使用事件存储的主会话会增量保存用户和助手消息。助手的工具调用会在执行工具前持久化，工具结果保存在 `message.appended` 中；`tool.started` 和 `tool.finished` 仅作为运行时通知，不写入会话事件表。执行中断后缺失的工具结果，会在准备下一轮上下文时补为结果未知。
 
@@ -138,6 +142,8 @@ print(result.status, result.text)
 | `request.started/finished` | 跟踪提供商调用。 |
 | `usage.updated` | 读取累计用量；替换上次快照，不要累加。 |
 | `turn.started/prepared/finished` | 跟踪 turn 生命周期。SDK 的 `turn.finished` 在输出处理后发布。 |
+
+`tool.started` 和 `tool.finished` 仅作为运行时事件，不写入会话事件库。工具调用和结果通过 `message.appended` 持久化：`assistant` 消息包含 `tool_calls`，`tool` 消息包含结果，并通过 `tool_call_id` 关联调用。历史上已持久化的工具生命周期事件仍可读取。
 
 `result.content` 包含最终回复，`result.text` 提取其中的纯文本。`result.usage` 提供累计用量，`result.metrics.steps` 提供执行步数。未知用量为 `None`，不等同于零；缓存命中 token 包含在输入 token 中。
 

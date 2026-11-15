@@ -32,6 +32,7 @@ from astrbot.core.agent.message import (
     TextPart,
     ThinkPart,
     dump_messages,
+    merge_user_messages,
 )
 from astrbot.core.agent.tool import FunctionTool, ToolSet
 from astrbot.core.agent.tool_image_cache import tool_image_cache
@@ -112,6 +113,8 @@ class FollowUpTicket:
     seq: int
     text: str
     consumed: bool = False
+    message_event_id: str | None = None
+    message: dict | None = None
     resolved: asyncio.Event = field(default_factory=asyncio.Event)
 
 
@@ -221,20 +224,18 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             follow_ups = list(self._pending_follow_ups)
             await self._append_context_messages(
                 [
-                    Message(
-                        role="user",
-                        content=[
-                            TextPart(text=("\n" if index else "") + ticket.text)
-                            for index, ticket in enumerate(follow_ups)
-                        ],
+                    Message.model_validate(
+                        merge_user_messages(
+                            [
+                                ticket.message
+                                or {"role": "user", "content": ticket.text}
+                                for ticket in follow_ups
+                            ]
+                        )
                     )
-                ]
+                ],
+                follow_ups=follow_ups,
             )
-            # Keep input arriving while the context sink was awaited for the next step.
-            del self._pending_follow_ups[: len(follow_ups)]
-            for ticket in follow_ups:
-                ticket.consumed = True
-                ticket.resolved.set()
             self.final_llm_resp = None
             return
 
@@ -365,6 +366,8 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         self._abort_signal = asyncio.Event()
         self._pending_follow_ups: list[FollowUpTicket] = []
         self._follow_up_seq = 0
+        self._received_message_ids: list[str] = []
+        self._received_messages: list[dict] = []
         self._last_tool_name: str | None = None
         self._last_tool_args: dict[str, T.Any] | None = None
         self._same_tool_streak = 0
@@ -1045,19 +1048,34 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         self._pending_assistant_event = None
 
     async def _append_context_messages(
-        self, messages: list[Message], *, record_response: bool = False
+        self,
+        messages: list[Message],
+        *,
+        record_response: bool = False,
+        follow_ups: list[FollowUpTicket] | None = None,
     ) -> None:
         """Append framework messages and stage only their new event payloads.
 
         Args:
             messages: New messages owned by the runner, in execution order.
             record_response: Attach the pending model outcome to its assistant message.
+            follow_ups: Tickets consumed by this insertion, before awaiting storage.
         """
         self.run_context.messages.extend(messages)
+        if follow_ups:
+            del self._pending_follow_ups[: len(follow_ups)]
+            for ticket in follow_ups:
+                ticket.consumed = True
+                ticket.resolved.set()
         if self._conversation_event_sink is not None:
             data: dict[str, T.Any] = {
                 "messages": dump_messages(messages, include_temporary=True)
             }
+            if follow_ups and all(ticket.message_event_id for ticket in follow_ups):
+                data["message_event_ids"] = [
+                    ticket.message_event_id for ticket in follow_ups
+                ]
+                data["received_messages"] = [ticket.message for ticket in follow_ups]
             event = self._pending_assistant_event if record_response else None
             if event is not None:
                 data["assistant"] = {
@@ -1470,20 +1488,18 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                 follow_ups = list(self._pending_follow_ups)
                 await self._append_context_messages(
                     [
-                        Message(
-                            role="user",
-                            content=[
-                                TextPart(text=("\n" if index else "") + ticket.text)
-                                for index, ticket in enumerate(follow_ups)
-                            ],
+                        Message.model_validate(
+                            merge_user_messages(
+                                [
+                                    ticket.message
+                                    or {"role": "user", "content": ticket.text}
+                                    for ticket in follow_ups
+                                ]
+                            )
                         )
-                    ]
+                    ],
+                    follow_ups=follow_ups,
                 )
-                # Preserve inputs arriving while the context sink was awaited.
-                del self._pending_follow_ups[: len(follow_ups)]
-                for ticket in follow_ups:
-                    ticket.consumed = True
-                    ticket.resolved.set()
 
     async def step_until_done(
         self, max_step: int

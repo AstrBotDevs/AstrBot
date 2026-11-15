@@ -86,13 +86,19 @@ def _conversation_content_match(keyword: str):
     """
     return text("""EXISTS (
         WITH branch AS (
-            SELECT e.type, e.payload FROM conversation_events e
+            SELECT CASE WHEN e.type='message.consumed' THEN 'message.appended' ELSE e.type END AS type,
+                   CASE WHEN e.type='message.consumed' THEN source.payload ELSE e.payload END AS payload
+            FROM conversation_events e
+            LEFT JOIN conversation_events source ON source.conversation_ref=e.conversation_ref
+              AND source.event_id=CAST(json_extract(e.payload,'$.source_event_id') AS TEXT)
+              AND e.type='message.consumed'
             JOIN conversation_events tip ON tip.conversation_ref = conversations_v3.id
               AND tip.seq = (SELECT seq FROM conversation_events
                   WHERE conversation_ref = conversations_v3.id
-                    AND type IN ('message.appended', 'context.rebased')
+                    AND type IN ('message.appended', 'message.consumed', 'context.rebased')
                   ORDER BY seq DESC LIMIT 1)
             WHERE e.conversation_ref = conversations_v3.id
+              AND (e.type!='message.appended' OR json_type(e.payload,'$.delivery') IS NULL)
               AND e.seq <= tip.seq
               AND e.seq >= coalesce((SELECT seq FROM conversation_events
                   WHERE conversation_ref = conversations_v3.id AND type = 'context.rebased'

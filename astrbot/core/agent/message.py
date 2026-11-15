@@ -1,6 +1,7 @@
 # Inspired by MoonshotAI/kosong, credits to MoonshotAI/kosong authors for the original implementation.
 # License: Apache License 2.0
 
+from copy import deepcopy
 from typing import Any, ClassVar, Literal, TypeVar, cast
 
 from pydantic import (
@@ -13,6 +14,29 @@ from pydantic import (
 from pydantic_core import core_schema
 
 ContentPartT = TypeVar("ContentPartT", bound="ContentPart")
+
+
+def merge_user_messages(messages: list[dict]) -> dict:
+    """Combine one consumed input batch without changing its stored content.
+
+    Args:
+        messages: Prepared user messages in receipt order.
+
+    Returns:
+        One user message with newline separators between the inputs.
+    """
+    parts = []
+    for index, message in enumerate(messages):
+        content = deepcopy(message.get("content") or [])
+        if isinstance(content, str):
+            content = [{"type": "text", "text": content}]
+        if index:
+            if content and content[0].get("type") == "text":
+                content[0]["text"] = "\n" + content[0]["text"]
+            else:
+                content.insert(0, {"type": "text", "text": "\n"})
+        parts.extend(content)
+    return {"role": "user", "content": parts}
 
 
 class ContentPart(BaseModel):

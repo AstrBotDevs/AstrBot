@@ -8,6 +8,7 @@ from copy import deepcopy
 
 from sqlalchemy.exc import SQLAlchemyError
 
+from astrbot.core.agent.message import merge_user_messages
 from astrbot.core.agent.response import AgentResponse
 from astrbot.core.db.conversation import (
     CONTEXT_TYPES,
@@ -18,6 +19,7 @@ from astrbot.core.db.conversation import (
     persistent_messages,
     reconcile_history,
 )
+from astrbot.core.db.po import ConversationEvent
 from astrbot.core.exceptions import (
     ConversationPersistenceError as ConversationPersistenceError,
 )
@@ -77,6 +79,49 @@ class ConversationEventWriter:
         Returns:
             Whether the response belongs to persistence rather than display.
         """
+        message_ids = response.data.get("message_event_ids", [])
+        if response.type in {"context.appended", "context.updated"} and message_ids:
+            # Receipt events hold prepared input; consecutive consumption events
+            # place one merged user message at this execution boundary.
+            if response.type == "context.updated":
+                self.stage_history(
+                    response.data["messages"][:-1],
+                    reason="legacy_replace",
+                    origin="system",
+                )
+            drafts = [
+                {
+                    "type": "message.consumed",
+                    "event_id": new_event_id(),
+                    "payload": {"source_event_id": source_id, "turn_id": self.turn_id},
+                }
+                for source_id in message_ids
+            ]
+            adopted = response.data["messages"][-1:]
+            received = response.data.get("received_messages")
+            messages = persistent_messages(
+                [merge_user_messages(received)] if received else adopted
+            )
+            entries = [
+                {"id": drafts[-1]["event_id"], "message": message}
+                for message in messages
+            ]
+            if self._entries is self._committed_entries:
+                self._entries = list(self._entries)
+            self._entries.extend(entries)
+            self._pending.extend(drafts)
+            # Only actual edits by request adaptation or hooks use the history
+            # replacement adapter. Ordinary input consumption adds no snapshot.
+            if messages != persistent_messages(adopted):
+                self.stage_history(
+                    [*self.get_messages()[:-1], *adopted],
+                    reason="legacy_replace",
+                    origin="system",
+                )
+            # Stage consumption and any edits before the first await, retaining
+            # both on failure so a history-save retry cannot lose progress.
+            await self.flush()
+            return True
         if response.type == "context.appended":
             self.stage_messages(
                 response.data["messages"], assistant=response.data.get("assistant")
@@ -179,7 +224,10 @@ class ConversationEventWriter:
             )
             previous_context_seq = self._context_seq
             await self._acknowledge(committed)
-            if context_change and acknowledged.seq > previous_context_seq:
+            if (
+                event_type in {"message.appended", "context.rebased"}
+                and acknowledged.seq > previous_context_seq
+            ):
                 # Direct appends bypass staging. Remember their raw temporary
                 # bodies too, so a later history save does not record them again.
                 messages = (
@@ -216,7 +264,9 @@ class ConversationEventWriter:
             (
                 event
                 for event in result.events
-                if event.type in CONTEXT_TYPES and event.seq > self._context_seq
+                if event.type in CONTEXT_TYPES
+                and "delivery" not in (event.payload or {})
+                and event.seq > self._context_seq
             ),
             key=lambda event: event.seq,
         )
@@ -243,19 +293,15 @@ class ConversationEventWriter:
                 )
                 replacement = snapshot.entries
             else:
-                for event in context_events[rebase_index or 0 :]:
-                    if event.payload is None:
+                segment = context_events[rebase_index or 0 :]
+                if segment and segment[0].type == "context.rebased":
+                    if segment[0].payload is None:
                         raise ContextUnavailableError(
                             "Acknowledged context payload is unavailable"
                         )
-                    if event.type == "context.rebased":
-                        replacement = persistent_entries(event.payload["messages"])
-                    elif event.payload.get("include_in_context", True):
-                        effective = persistent_messages([event.payload["message"]])
-                        if effective:
-                            additions.append(
-                                {"id": event.event_id, "message": effective[0]}
-                            )
+                    replacement = persistent_entries(segment[0].payload["messages"])
+                    segment = segment[1:]
+                additions = await self.store.message_entries(segment)
 
         remaining = [
             draft
@@ -271,18 +317,20 @@ class ConversationEventWriter:
                 self._committed_entries if replacement is None else replacement
             )
             staged.extend(additions)
-            for draft in remaining:
-                payload = draft["payload"]
+            segment = []
+            for index, draft in enumerate(remaining):
                 if draft["type"] == "context.rebased":
-                    staged = persistent_entries(payload["messages"])
-                elif draft["type"] == "message.appended" and payload.get(
-                    "include_in_context", True
-                ):
-                    effective = persistent_messages([payload["message"]])
-                    if effective:
-                        staged.append(
-                            {"id": draft["event_id"], "message": effective[0]}
+                    staged = persistent_entries(draft["payload"]["messages"])
+                    segment = []
+                elif draft["type"] in {"message.appended", "message.consumed"}:
+                    segment.append(
+                        ConversationEvent(
+                            conversation_ref=self._conversation.id,
+                            seq=index + 1,
+                            **draft,
                         )
+                    )
+            staged.extend(await self.store.message_entries(segment))
 
         # No await or projection work follows: all committed state moves together.
         if context_events:

@@ -195,7 +195,9 @@ class ConversationEvent(SQLModel, table=True):
             "ix_conversation_events_context_seq",
             "conversation_ref",
             "seq",
-            sqlite_where=text("type IN ('message.appended', 'context.rebased')"),
+            sqlite_where=text(
+                "type IN ('message.appended', 'message.consumed', 'context.rebased')"
+            ),
         ),
     )
 

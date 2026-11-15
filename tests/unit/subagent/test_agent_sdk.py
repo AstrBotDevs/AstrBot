@@ -614,7 +614,7 @@ async def test_native_sessions_persist_at_supported_execution_boundaries(sdk, de
             assert (await turn.result()).text == "Done"
             events = await sdk.db.conversation_store.events(session.id)
             assert [
-                event.type for event in events if event.type not in {"message.appended", "context.rebased"}
+                event.type for event in events if event.type not in {"message.appended", "message.consumed", "context.rebased"}
             ] == [
                 "conversation.created",
                 "turn.started",

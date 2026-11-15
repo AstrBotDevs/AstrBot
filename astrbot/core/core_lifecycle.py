@@ -383,11 +383,16 @@ class AstrBotCoreLifecycle:
             except BaseException:
                 logger.error(traceback.format_exc())
 
+        for runtime in self.agent_runtimes.values():
+            await runtime.resume_pending()
+
         # 同时运行curr_tasks中的所有任务
         await asyncio.gather(*self.curr_tasks, return_exceptions=True)
 
     async def stop(self) -> None:
         """停止 AstrBot 核心生命周期管理类, 取消所有当前任务并终止各个管理器."""
+        for runtime in self.agent_runtimes.values():
+            runtime.prepare_shutdown()
         if self.temp_dir_cleaner:
             await self.temp_dir_cleaner.stop()
 
@@ -440,6 +445,8 @@ class AstrBotCoreLifecycle:
 
     async def restart(self) -> None:
         """重启 AstrBot 核心生命周期管理类, 终止各个管理器并重新加载平台实例"""
+        for runtime in self.agent_runtimes.values():
+            runtime.prepare_shutdown()
         context = getattr(self, "star_context", None)
         if isinstance(context, Context):
             await context.agent.close()
