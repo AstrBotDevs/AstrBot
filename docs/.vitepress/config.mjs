@@ -279,7 +279,6 @@ export default defineConfig({
             collapsed: false,
             items: [
               { text: "开源之夏 2025", link: "/ospp-2025" },
-              { text: "桐谷霁屿 x AstrBot 插件奖励活动", link: "/tonggujiyu-astrbot-plugin-reward-program" },
             ],
           },
         ],
