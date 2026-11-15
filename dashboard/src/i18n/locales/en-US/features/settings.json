@@ -2,6 +2,10 @@
   "page": {
     "title": "Settings"
   },
+  "chatNavigation": {
+    "title": "Show Chat in the sidebar",
+    "subtitle": "Move the top Chat switch above System in the sidebar. Open it to switch to chat sessions. Saved only in this browser."
+  },
   "sections": {
     "general": {
       "title": "General"

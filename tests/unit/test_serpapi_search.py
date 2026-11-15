@@ -6,8 +6,8 @@ from unittest.mock import AsyncMock, MagicMock
 import aiohttp
 import pytest
 
-from astrbot.core.tools import registry
-from astrbot.core.tools import web_search_tools as tools
+from astrbot.core.astr_agent_runtime.tools import registry
+from astrbot.core.astr_agent_runtime.tools import web_search_tools as tools
 
 
 def _response(status=200, data=None, reason=""):

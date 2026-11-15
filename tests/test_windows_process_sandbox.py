@@ -15,8 +15,10 @@ def native_sandbox():
     """Use real startup authorization only when explicitly requested."""
     if os.environ.get("ASTRBOT_TEST_WINDOWS_SANDBOX") != "1":
         pytest.skip("Set ASTRBOT_TEST_WINDOWS_SANDBOX=1 after runtime ACL preparation")
-    from astrbot.core.computer.process_sandbox.windows import AppContainerProcessSandbox
-    from astrbot.core.computer.process_sandbox.windows_setup import (
+    from astrbot.core.astr_agent_runtime.computer.process_sandbox.windows import (
+        AppContainerProcessSandbox,
+    )
+    from astrbot.core.astr_agent_runtime.computer.process_sandbox.windows_setup import (
         initialize_windows_sandbox,
     )
 
@@ -25,7 +27,9 @@ def native_sandbox():
 
 
 def test_windows_safe_file_handles(native_sandbox, tmp_path):
-    from astrbot.core.computer.local_file_security import open_file_in_allowed_roots
+    from astrbot.core.astr_agent_runtime.computer.local_file_security import (
+        open_file_in_allowed_roots,
+    )
 
     target = tmp_path / "nested" / "中文.txt"
     fd = open_file_in_allowed_roots(
@@ -52,7 +56,7 @@ def test_windows_safe_file_handles(native_sandbox, tmp_path):
 
 
 def test_native_python_runtime(native_sandbox, tmp_path):
-    from astrbot.core.computer.process_sandbox import SandboxSpec
+    from astrbot.core.astr_agent_runtime.computer.process_sandbox import SandboxSpec
 
     code = """
 from pathlib import Path
@@ -68,7 +72,7 @@ Path('result.txt').write_text('hello')
 
 
 def test_native_read_only_and_network_denied(native_sandbox, tmp_path):
-    from astrbot.core.computer.process_sandbox import SandboxSpec
+    from astrbot.core.astr_agent_runtime.computer.process_sandbox import SandboxSpec
 
     code = """
 import socket
@@ -99,7 +103,7 @@ else:
 
 
 def test_native_output_cap(native_sandbox, tmp_path):
-    from astrbot.core.computer.process_sandbox import SandboxSpec
+    from astrbot.core.astr_agent_runtime.computer.process_sandbox import SandboxSpec
 
     result = native_sandbox.run(
         [sys.executable, "-c", "print('a' * 1000000)"],
@@ -112,7 +116,10 @@ def test_native_output_cap(native_sandbox, tmp_path):
 
 
 def test_native_job_limits(native_sandbox, tmp_path):
-    from astrbot.core.computer.process_sandbox import SandboxLimits, SandboxSpec
+    from astrbot.core.astr_agent_runtime.computer.process_sandbox import (
+        SandboxLimits,
+        SandboxSpec,
+    )
 
     # A Windows venv launcher starts a second process. Use the base interpreter
     # to test a one-process ceiling without counting that launcher.
@@ -155,8 +162,10 @@ else:
 @pytest.mark.asyncio
 @pytest.mark.parametrize("legacy", [False, True])
 async def test_native_managed_shell(native_sandbox, tmp_path, monkeypatch, legacy):
-    from astrbot.core.computer.booters.local import LocalShellComponent
-    from astrbot.core.computer.process_sandbox import windows_setup
+    from astrbot.core.astr_agent_runtime.computer.booters.local import (
+        LocalShellComponent,
+    )
+    from astrbot.core.astr_agent_runtime.computer.process_sandbox import windows_setup
 
     if legacy:
         monkeypatch.setattr(
@@ -208,7 +217,7 @@ def test_native_async_sessions_leave_executor_available(native_sandbox, tmp_path
     import asyncio
     from concurrent.futures import ThreadPoolExecutor
 
-    from astrbot.core.computer.process_sandbox import SandboxSpec
+    from astrbot.core.astr_agent_runtime.computer.process_sandbox import SandboxSpec
 
     async def exercise():
         # Each old blocking process waiter alone could exhaust this executor.
@@ -280,7 +289,7 @@ async def test_native_close_after_cancelled_wait(native_sandbox, tmp_path):
 
     import psutil
 
-    from astrbot.core.computer.process_sandbox import SandboxSpec
+    from astrbot.core.astr_agent_runtime.computer.process_sandbox import SandboxSpec
 
     process = await native_sandbox.spawn_shell(
         "Start-Sleep -Seconds 60", SandboxSpec(tmp_path)
@@ -310,7 +319,9 @@ async def test_native_close_after_cancelled_wait(native_sandbox, tmp_path):
 async def test_native_managed_timeout(native_sandbox, tmp_path):
     import asyncio
 
-    from astrbot.core.computer.booters.local import LocalShellComponent
+    from astrbot.core.astr_agent_runtime.computer.booters.local import (
+        LocalShellComponent,
+    )
 
     component = LocalShellComponent()
     try:
@@ -343,7 +354,9 @@ async def test_native_managed_timeout(native_sandbox, tmp_path):
 
 @pytest.mark.asyncio
 async def test_native_file_search(native_sandbox, tmp_path):
-    from astrbot.core.computer.booters.local import LocalFileSystemComponent
+    from astrbot.core.astr_agent_runtime.computer.booters.local import (
+        LocalFileSystemComponent,
+    )
 
     (tmp_path / "example.txt").write_text("isolated search needle", encoding="utf-8")
     result = await LocalFileSystemComponent().search_files(
@@ -359,7 +372,10 @@ async def test_native_file_search(native_sandbox, tmp_path):
 def test_native_child_cleanup(native_sandbox, tmp_path):
     import psutil
 
-    from astrbot.core.computer.process_sandbox import SandboxSpec, SandboxTimeoutError
+    from astrbot.core.astr_agent_runtime.computer.process_sandbox import (
+        SandboxSpec,
+        SandboxTimeoutError,
+    )
 
     code = """
 import subprocess, sys, time
@@ -382,7 +398,10 @@ def test_native_failed_launch_releases_process_and_acl(
     import psutil
     import win32security
 
-    from astrbot.core.computer.process_sandbox import SandboxSpec, windows
+    from astrbot.core.astr_agent_runtime.computer.process_sandbox import (
+        SandboxSpec,
+        windows,
+    )
 
     acl = win32security.GetNamedSecurityInfo(
         str(tmp_path),
@@ -420,7 +439,7 @@ def test_native_concurrent_close(native_sandbox, tmp_path, monkeypatch):
     import psutil
     import win32security
 
-    from astrbot.core.computer.process_sandbox import SandboxSpec
+    from astrbot.core.astr_agent_runtime.computer.process_sandbox import SandboxSpec
 
     acl = win32security.GetNamedSecurityInfo(
         str(tmp_path), 1, win32security.DACL_SECURITY_INFORMATION
@@ -468,8 +487,10 @@ def test_native_concurrent_close(native_sandbox, tmp_path, monkeypatch):
 
 
 def test_native_external_roots_and_junction(native_sandbox, tmp_path):
-    from astrbot.core.computer.local_file_security import open_file_in_allowed_roots
-    from astrbot.core.computer.process_sandbox import SandboxSpec
+    from astrbot.core.astr_agent_runtime.computer.local_file_security import (
+        open_file_in_allowed_roots,
+    )
+    from astrbot.core.astr_agent_runtime.computer.process_sandbox import SandboxSpec
 
     workspace, readable, writable, secret = (
         tmp_path / name for name in ("work", "read", "write", "secret")
@@ -533,7 +554,7 @@ print('external boundaries enforced')
 
 
 def test_native_concurrent_identity_isolation(native_sandbox, tmp_path):
-    from astrbot.core.computer.process_sandbox import SandboxSpec
+    from astrbot.core.astr_agent_runtime.computer.process_sandbox import SandboxSpec
 
     first, second = tmp_path / "first", tmp_path / "second"
     first.mkdir()
@@ -564,7 +585,7 @@ else:
 def test_native_network_enabled(native_sandbox, tmp_path):
     import socket
 
-    from astrbot.core.computer.process_sandbox import SandboxSpec
+    from astrbot.core.astr_agent_runtime.computer.process_sandbox import SandboxSpec
 
     host = os.environ.get("ASTRBOT_TEST_NETWORK_HOST", "www.baidu.com")
     try:
@@ -584,7 +605,10 @@ def test_native_network_enabled(native_sandbox, tmp_path):
 
 
 def test_runtime_subdirectory_cannot_be_writable(native_sandbox, tmp_path, monkeypatch):
-    from astrbot.core.computer.process_sandbox import SandboxSpec, windows_setup
+    from astrbot.core.astr_agent_runtime.computer.process_sandbox import (
+        SandboxSpec,
+        windows_setup,
+    )
 
     monkeypatch.setattr(windows_setup, "runtime_paths", lambda: (tmp_path,))
     with pytest.raises(RuntimeError, match="inside a runtime"):
@@ -599,8 +623,13 @@ def test_conditional_runtime_acl_is_preserved(tmp_path, monkeypatch):
 
     import win32security
 
-    from astrbot.core.computer.process_sandbox import SandboxRunResult, windows
-    from astrbot.core.computer.process_sandbox import windows_setup as setup
+    from astrbot.core.astr_agent_runtime.computer.process_sandbox import (
+        SandboxRunResult,
+        windows,
+    )
+    from astrbot.core.astr_agent_runtime.computer.process_sandbox import (
+        windows_setup as setup,
+    )
 
     info = win32security.DACL_SECURITY_INFORMATION
     original = win32security.GetNamedSecurityInfo(
@@ -679,7 +708,10 @@ def test_conditional_runtime_acl_is_preserved(tmp_path, monkeypatch):
 def test_uac_cancellation_is_not_retried(tmp_path, monkeypatch):
     import pywintypes
 
-    from astrbot.core.computer.process_sandbox import windows, windows_setup
+    from astrbot.core.astr_agent_runtime.computer.process_sandbox import (
+        windows,
+        windows_setup,
+    )
 
     monkeypatch.setattr(windows_setup, "_attempted", False)
     monkeypatch.setattr(windows_setup, "_ready", False)

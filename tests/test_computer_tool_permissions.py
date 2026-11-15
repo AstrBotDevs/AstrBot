@@ -5,18 +5,20 @@ from unittest.mock import AsyncMock, Mock
 import pytest
 
 from astrbot.core.agent.run_context import ContextWrapper
-from astrbot.core.computer import process_sandbox
-from astrbot.core.computer.booters import local
-from astrbot.core.config import default as config_defaults
-from astrbot.core.tools.computer_tools import fs, python, shell, util
-from astrbot.core.tools.computer_tools.shipyard_neo.browser import BrowserExecTool
-from astrbot.core.tools.computer_tools.shipyard_neo.neo_skills import (
+from astrbot.core.astr_agent_runtime.computer import process_sandbox
+from astrbot.core.astr_agent_runtime.computer.booters import local
+from astrbot.core.astr_agent_runtime.tools.computer_tools import fs, python, shell, util
+from astrbot.core.astr_agent_runtime.tools.computer_tools.shipyard_neo.browser import (
+    BrowserExecTool,
+)
+from astrbot.core.astr_agent_runtime.tools.computer_tools.shipyard_neo.neo_skills import (
     GetExecutionHistoryTool,
 )
-from astrbot.core.tools.computer_tools.util import (
+from astrbot.core.astr_agent_runtime.tools.computer_tools.util import (
     check_local_execution_permission,
     get_local_permission_policy,
 )
+from astrbot.core.config import default as config_defaults
 
 
 @pytest.fixture(autouse=True)
@@ -554,7 +556,7 @@ async def test_browser_tool_allows_non_admin_when_admin_requirement_disabled(
         return SimpleNamespace(browser=_FakeBrowser())
 
     monkeypatch.setattr(
-        "astrbot.core.tools.computer_tools.shipyard_neo.browser.get_booter",
+        "astrbot.core.astr_agent_runtime.tools.computer_tools.shipyard_neo.browser.get_booter",
         _fake_get_booter,
     )
 
@@ -577,7 +579,7 @@ async def test_neo_skill_tool_allows_non_admin_when_admin_requirement_disabled(
         )
 
     monkeypatch.setattr(
-        "astrbot.core.tools.computer_tools.shipyard_neo.neo_skills.get_booter",
+        "astrbot.core.astr_agent_runtime.tools.computer_tools.shipyard_neo.neo_skills.get_booter",
         _fake_get_booter,
     )
 

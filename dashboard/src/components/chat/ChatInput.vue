@@ -923,7 +923,7 @@ function handleConfigChange(payload: {
   agentRunnerType: string;
 }) {
   const runnerType = (payload.agentRunnerType || "").toLowerCase();
-  const isInternal = runnerType === "internal" || runnerType === "local";
+  const isInternal = runnerType === "internal" || runnerType === "astrbot";
   providerSelectorAvailable.value = isInternal;
   // 配置切换后重新获取指令列表和唤醒词
   if (payload.configId && payload.configId !== currentConfigId.value) {

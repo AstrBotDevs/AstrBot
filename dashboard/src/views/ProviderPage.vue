@@ -406,20 +406,43 @@ const {
   showMessage
 })
 
+const decisionHintKeys = {
+  system_one_decision: 'decisionHints',
+  openai_decision: 'openaiDecisionHints'
+}
+
 const legacyConfigSchema = computed(() => {
   const schema = JSON.parse(JSON.stringify(configSchema.value || {}))
-  if (selectedLegacyProvider.value?.type !== 'system_one_decision') return schema
+  const providerType = selectedLegacyProvider.value?.type
+  const hintKey = decisionHintKeys[providerType]
+  if (!hintKey && !['deepseek_tts_api', 'deepseek_stt_api'].includes(providerType)) return schema
 
   const items = schema.provider?.items
   if (!items) return schema
-  if (items.key) {
-    items.key.type = 'string'
-    delete items.key.items
+  if (hintKey) {
+    if (items.key) {
+      items.key.type = 'string'
+      delete items.key.items
+    }
+    // The schema only shows these fields for System One; every decision type uses them.
+    for (const field of ['total_timeout', 'max_concurrency']) {
+      if (items[field]) delete items[field].condition
+    }
+    if (items.api_base) items.api_base.hint = tm(`providers.${hintKey}.apiBase`)
+    if (items.model && providerType === 'openai_decision') {
+      items.model.hint = tm('providers.openaiDecisionHints.model')
+    } else if (items.model) {
+      items.model.hint = tm('providers.decisionHints.model')
+    }
+    if (items.custom_headers) {
+      items.custom_headers.hint = tm('providers.decisionHints.customHeaders')
+    }
   }
-  if (items.api_base) items.api_base.hint = tm('providers.decisionHints.apiBase')
-  if (items.model) items.model.hint = tm('providers.decisionHints.model')
-  if (items.custom_headers) {
-    items.custom_headers.hint = tm('providers.decisionHints.customHeaders')
+  if (providerType === 'deepseek_tts_api' && items.api_base) {
+    items.api_base.hint = tm('providers.deepseekTtsHints.apiBase')
+  }
+  if (providerType === 'deepseek_stt_api' && items.api_base) {
+    items.api_base.hint = tm('providers.deepseekSttHints.apiBase')
   }
   return schema
 })
@@ -434,7 +457,7 @@ const loading = ref(false)
 const isLegacyProviderModified = ref(false)
 const legacyConfigSections = computed(() => {
   const config = newSelectedProviderConfig.value
-  if (config.type !== 'system_one_decision') return { basic: config, advanced: null }
+  if (!decisionHintKeys[config.type]) return { basic: config, advanced: null }
 
   const advancedFields = new Set([
     'timeout', 'total_timeout', 'max_concurrency',
@@ -762,7 +785,7 @@ async function testSingleProvider(provider) {
   align-items: center;
   background: transparent;
   border: 0;
-  border-radius: 8px;
+  border-radius: var(--astrbot-radius-control);
   color: rgba(var(--v-theme-on-surface), 0.58);
   cursor: pointer;
   display: inline-flex;
@@ -803,7 +826,7 @@ async function testSingleProvider(provider) {
 
 .provider-workbench {
   border: 1px solid var(--provider-border);
-  border-radius: 16px;
+  border-radius: var(--astrbot-radius-card);
   background: var(--provider-surface);
   display: grid;
   flex: 1;
@@ -979,10 +1002,6 @@ async function testSingleProvider(provider) {
 @media (max-width: 600px) {
   .provider-tabs-scroll {
     padding-inline: 4px;
-  }
-
-  .provider-workbench {
-    border-radius: 12px;
   }
 
   .provider-tab {

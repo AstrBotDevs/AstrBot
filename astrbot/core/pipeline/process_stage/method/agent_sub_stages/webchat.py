@@ -5,23 +5,21 @@ from __future__ import annotations
 from astrbot.core import logger
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from astrbot.core.provider import Provider
-from astrbot.core.provider.entities import ProviderRequest
 
 
 async def generate_conversation_title(
-    event: AstrMessageEvent, req: ProviderRequest, prov: Provider
+    event: AstrMessageEvent, user_prompt: str, prov: Provider
 ) -> None:
     """Generate a missing WebChat session title alongside an interactive run.
 
     Args:
         event: WebChat event identifying the platform session.
-        req: Prepared request containing the user's prompt.
+        user_prompt: Prepared text of the current user input.
         prov: Chat provider used to generate the title.
     """
     from astrbot.core import db_helper
 
     chatui_session_id = event.session_id.split("!")[-1]
-    user_prompt = req.prompt
     session = await db_helper.get_platform_session_by_id(chatui_session_id)
 
     if not user_prompt or not chatui_session_id or not session or session.display_name:

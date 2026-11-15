@@ -5,8 +5,8 @@ import pytest
 
 from astrbot.core.message.components import Image, Record
 from astrbot.core.message.message_event_result import MessageChain
-from astrbot.core.provider.entities import LLMResponse
 from astrbot.core.pipeline.process_stage.method.agent_sub_stages import third_party
+from astrbot.core.provider.entities import LLMResponse
 
 
 @pytest.mark.asyncio
@@ -63,7 +63,7 @@ async def test_third_party_runner_receives_inline_profile_config(
     monkeypatch.setattr(third_party.Metric, "upload", AsyncMock(return_value=None))
 
     config = {
-        "agent_runner": {"runner_type": runner_type, "config": inline_config},
+        "agent": {"runtime": runner_type, "config": inline_config},
         "provider_settings": {
             "streaming_response": False,
             "unsupported_streaming_strategy": "turn_off",
@@ -83,6 +83,11 @@ async def test_third_party_runner_receives_inline_profile_config(
         )
     )
     stage._resolve_persona_custom_error_message = AsyncMock(return_value=None)
+    inline_config = {**inline_config, "persona_id": "session-persona"}
+    stage.ctx.astrbot_config = {
+        **config,
+        "agent": {"runtime": runner_type, "config": inline_config},
+    }
     event = MagicMock()
     event.message_str = "hello"
     event.unified_msg_origin = "webchat:FriendMessage:test"
@@ -94,7 +99,9 @@ async def test_third_party_runner_receives_inline_profile_config(
 
     assert results == [None]
     assert runner.reset.await_args.kwargs["provider_config"] is inline_config
+    assert "persona_id" not in config["agent"]["config"]
     assert runner_factory_calls == [True]
+
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
@@ -151,7 +158,7 @@ async def test_third_party_skips_unavailable_attachment(
     monkeypatch.setattr(component, patch_method, unavailable)
 
     config = {
-        "agent_runner": {"runner_type": "dify", "config": {"dify_api_key": "k"}},
+        "agent": {"runtime": "dify", "config": {"dify_api_key": "k"}},
         "provider_settings": {
             "streaming_response": False,
             "unsupported_streaming_strategy": "turn_off",

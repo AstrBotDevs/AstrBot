@@ -144,5 +144,3 @@ def test_build_plug_list_local_version_equal_or_newer(monkeypatch, tmp_path):
     plugins_newer = build_plug_list(dir_newer)
     plugins_newer_by_name = {p["name"]: p for p in plugins_newer}
     assert plugins_newer_by_name["local-plugin"]["status"] == PluginStatus.INSTALLED
-
-
