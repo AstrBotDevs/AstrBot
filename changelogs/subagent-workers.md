@@ -9,4 +9,4 @@
 - Add `ctx.agent.run_turn()` for programmatic turns, metadata for hooks, follow-ups, steering, and caller-managed output through `send_to_user=False` and `output.ready`. Extensions can register an Agent runtime through `ctx.agent.register_runtime()`.
 - Export plugin-facing Agent types from `astrbot.api.agents`. Runtime consumers use `event.payload` instead of `event.data` and `result.content` instead of `result.chain`.
 
-See the [subagent setup guide](../docs/en/use/subagent.md) and [Agent API guide](../docs/en/dev/star/guides/ai/agents.md) for usage and migration details.
+See the [subagent setup guide](../docs/en/use/subagent.md) and [Agent API guide](../docs/en/dev/star/guides/ai/agent.md) for usage and migration details.

@@ -222,7 +222,7 @@ export default defineConfig({
                     collapsed: false,
                     items: [
                       { text: "模型", link: "/guides/ai/models" },
-                      { text: "Agent", link: "/guides/ai/agents" },
+                      { text: "Agent", link: "/guides/ai/agent" },
                       { text: "工具", link: "/guides/ai/tools" },
                       { text: "会话与对话", link: "/guides/ai/conversations" },
                       { text: "其他", link: "/guides/ai/other" },
@@ -515,7 +515,7 @@ export default defineConfig({
                     collapsed: false,
                     items: [
                       { text: "Models", link: "/guides/ai/models" },
-                      { text: "Agents", link: "/guides/ai/agents" },
+                      { text: "Agents", link: "/guides/ai/agent" },
                       { text: "Tools", link: "/guides/ai/tools" },
                       { text: "Sessions and Conversations", link: "/guides/ai/conversations" },
                       { text: "Other APIs", link: "/guides/ai/other" },

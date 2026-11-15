@@ -1,6 +1,6 @@
 # Models
 
-Call a model to generate a reply or make a structured decision. For tool execution or conversation history, see [Agents](./agents.md).
+Call a model to generate a reply or make a structured decision. For tool execution or conversation history, see [Agents](./agent.md).
 
 ## Chat Models {#chat-models}
 

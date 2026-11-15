@@ -54,4 +54,4 @@
 
 API 调用方应将 `/api/v1/subagents/config` 和 `/api/subagent/config` 替换为 `/api/v1/agent-configs` 与 `/api/v1/agent-configs/{config_id}`。使用 `/api/v1/agent-runtimes` 查询运行时及默认配置。这些接口需要 `config` 权限，参见 [OpenAPI 权限](../dev/openapi-scopes.md)。
 
-插件接入请参见[运行 Agent](../dev/star/guides/ai/agents.md#run-session-agent)和 [runtime 事件](../dev/star/guides/ai/agents.md#runtime-events)。
+插件接入请参见[运行 Agent](../dev/star/guides/ai/agent.md#run-session-agent)和 [runtime 事件](../dev/star/guides/ai/agent.md#runtime-events)。
