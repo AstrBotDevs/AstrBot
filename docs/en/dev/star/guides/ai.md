@@ -444,7 +444,7 @@ Core resolves permissions from `source_event` or the current active same-UMO eve
 
 A tool must not wait for another queued turn in its own session: that turn is waiting for the tool's current turn to finish. Submit and return, or use steering as appropriate.
 
-## Runtime Events {#runtime-events}
+## Agent Runtime Events {#runtime-events}
 
 `run.events()` yields typed `RuntimeEvent` objects. Read `event.type` for the event name and `event.payload` for its data. Events can be replayed by independent readers; reading them does not send messages.
 

@@ -444,7 +444,7 @@ Core 根据 `source_event` 或当前活跃的同 UMO 事件解析权限。没有
 
 不要在当前 turn 的工具中等待同 session 的排队 turn 完成，这会形成互相等待。可以提交后返回，或按目的使用 steer。
 
-## Runtime 事件 {#runtime-events}
+## Agent Runtime 事件 {#runtime-events}
 
 `run.events()` 产生有类型的 `RuntimeEvent` 对象，通过 `event.type` 读取事件名称、`event.payload` 读取数据。多个读者可独立重放事件，读取本身不会发送消息。
 
