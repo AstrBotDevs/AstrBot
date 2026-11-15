@@ -249,7 +249,7 @@ class PreProcessStage(Stage):
                         result = await stt_provider.get_text(audio_url=path)
                         if result:
                             suffix = " (referenced message)" if is_reply else ""
-                            logger.info(f"Speech-to-text{suffix} result: " + result)
+                            logger.info("Speech-to-text%s succeeded", suffix)
                             return Plain(result)
                         break
                     except FileNotFoundError:
@@ -259,7 +259,7 @@ class PreProcessStage(Stage):
                         )
                         await asyncio.sleep(0.5)
                         continue
-                    except BaseException as e:
+                    except Exception as e:
                         logger.error(traceback.format_exc())
                         suffix = " (referenced message)" if is_reply else ""
                         logger.error(f"Speech-to-text{suffix} failed: {e}")

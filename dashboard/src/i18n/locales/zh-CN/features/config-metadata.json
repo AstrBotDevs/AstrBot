@@ -1943,6 +1943,15 @@
         "description": "voice",
         "hint": "OpenAI TTS 的声音。OpenAI 默认支持：'alloy', 'echo', 'fable', 'onyx', 'nova', 'shimmer'"
       },
+      "deepseek-tts-voice": {
+        "description": "音色",
+        "hint": "DeepSeek TTS 音色，实际请求使用对应的 voice_id。",
+        "labels": ["海星（女声，默认）", "暗潮（男声）"]
+      },
+      "deepseek-tts-filter-markdown": {
+        "description": "过滤 Markdown",
+        "hint": "朗读前移除 Markdown 格式，默认启用。"
+      },
       "elevenlabs-tts-voice-id": {
         "description": "音色 ID",
         "hint": "ElevenLabs 音色 ID。可在 https://elevenlabs.io/app/voice-library 浏览并复制音色 ID。默认 'JBFqnCBsd6RMkjVDRZzb'（George）。"
