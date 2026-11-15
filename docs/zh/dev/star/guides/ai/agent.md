@@ -106,6 +106,8 @@ if receipt is not None:
 
 收到的 user 输入保存为带 `delivery` 元数据的 `message.appended`，其中包含已准备好的发送者、时间提醒，重放时不会重新生成。`message.consumed` 仅携带 `source_event_id` 和 `turn_id`，按消费事件的顺序将对应输入纳入模型上下文。同一 turn 中序号连续的消费事件构成一个批次，用换行分隔合并。消费批次原子提交，不再为普通输入生成全量历史 snapshot；`message.discarded` 将取消的输入排除出恢复队列。
 
+使用事件存储的主会话会增量保存用户和助手消息。助手的工具调用会在执行工具前持久化，工具结果保存在 `message.appended` 中；`tool.started` 和 `tool.finished` 仅作为运行时通知，不写入会话事件表。执行中断后缺失的工具结果，会在准备下一轮上下文时补为结果未知。
+
 `run.session.state` 为 `idle`、`queued`、`running` 或 `closed`。快照包含 `ref`、`pending_turn_count` 和 `active_turn_id`，重新读取属性即可刷新。
 
 Core 根据 `source_event` 或当前活跃的同 UMO 事件解析权限。没有来源事件的后台调用使用 member 权限，来源事件与目标 UMO 不一致会报错。

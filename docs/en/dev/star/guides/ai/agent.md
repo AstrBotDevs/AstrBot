@@ -106,6 +106,8 @@ Built-in main sessions prepare and persist received input before acknowledging o
 
 Received user input is stored once as `message.appended` with `delivery` metadata. Prepared content includes the sender/time reminders, so replay does not regenerate them. `message.consumed` carries only `source_event_id` and `turn_id`; its event sequence places the referenced input in model context. Consecutive consumption events in the same turn form one batch, merged with newline separators. Consumption is committed atomically and does not create a full-history snapshot. `message.discarded` excludes cancelled input from recovery.
 
+For event-backed main sessions, user and assistant messages are committed incrementally. Assistant tool calls are committed before tool execution, and tool results are stored as `message.appended`. `tool.started` and `tool.finished` remain runtime notifications and are not stored in the conversation journal. Missing tool results after an interrupted execution are represented as unknown results when preparing the next turn.
+
 `run.session.state` is `idle`, `queued`, `running`, or `closed`. The snapshot contains `ref`, `pending_turn_count`, and `active_turn_id`. Read the property again to refresh it.
 
 Core resolves permissions from `source_event` or the current active same-UMO event. Background calls without a source run as members. A source event from another UMO is rejected.
