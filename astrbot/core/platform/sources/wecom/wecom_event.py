@@ -16,7 +16,7 @@ from astrbot.api.message_components import (
     Record,
     Video,
 )
-from astrbot.api.platform import AstrBotMessage, PlatformMetadata
+from astrbot.api.platform import AstrBotMessage, MessageSendReceipt, PlatformMetadata
 from astrbot.core.platform.button_interaction import encode_button_callback
 from astrbot.core.utils.media_utils import convert_audio_to_amr
 
@@ -89,8 +89,16 @@ class WecomPlatformEvent(AstrMessageEvent):
 
         return result
 
-    async def send(self, message: MessageChain) -> None:
+    async def send(self, message: MessageChain) -> MessageSendReceipt | None:
         message_obj = self.message_obj
+        message_ids: list[str] = []
+        single_recipient = (
+            isinstance(message_obj.session_id, str)
+            and bool(message_obj.session_id)
+            and message_obj.session_id != "@all"
+            and "|" not in message_obj.session_id
+            and not any(char.isspace() for char in message_obj.session_id)
+        )
 
         is_wechat_kf = hasattr(self.client, "kf_message")
         if is_wechat_kf:
@@ -255,11 +263,35 @@ class WecomPlatformEvent(AstrMessageEvent):
                     # Split long text messages if needed
                     plain_chunks = await self.split_plain(comp.text)
                     for chunk in plain_chunks:
-                        self.client.message.send_text(
+                        result = self.client.message.send_text(
                             message_obj.self_id,
                             message_obj.session_id,
                             chunk,
                         )
+                        if single_recipient:
+                            if (
+                                not isinstance(result, dict)
+                                or type(result.get("errcode")) is not int
+                                or result["errcode"] != 0
+                            ):
+                                raise RuntimeError("WeCom did not accept the message")
+                            for key in ("invaliduser", "unlicenseduser"):
+                                rejected = result.get(key, "")
+                                if (
+                                    not isinstance(rejected, str)
+                                    or message_obj.session_id.lower()
+                                    in rejected.lower().split("|")
+                                ):
+                                    raise RuntimeError(
+                                        "WeCom did not accept the recipient"
+                                    )
+                            message_id = result.get("msgid")
+                            if message_id is not None:
+                                if not isinstance(message_id, str) or not message_id:
+                                    raise RuntimeError(
+                                        "WeCom message receipt is invalid"
+                                    )
+                                message_ids.append(message_id)
                         await asyncio.sleep(0.5)  # Avoid sending too fast
                 elif isinstance(comp, Image):
                     img_path = await comp.convert_to_file_path()
@@ -394,6 +426,15 @@ class WecomPlatformEvent(AstrMessageEvent):
                     logger.warning(f"还没实现这个消息类型的发送逻辑: {comp.type}。")
 
         await super().send(message)
+
+        if (
+            not is_wechat_kf
+            and single_recipient
+            and any(isinstance(part, Plain) and part.text for part in message.chain)
+            and all(isinstance(part, Plain) for part in message.chain)
+        ):
+            return MessageSendReceipt(message_ids=tuple(message_ids))
+        return None
 
     async def send_streaming(self, generator, use_fallback: bool = False):
         buffer = None
