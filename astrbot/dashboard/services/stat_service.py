@@ -671,43 +671,55 @@ class StatService:
             raise StatServiceError(f"Error: {exc!s}") from exc
 
     async def test_ghproxy_connection(self, proxy_url: str | None) -> dict:
-        """Probe both HTTP paths used by GitHub archive installations."""
+        """Probe both HTTP paths used by GitHub archive installations.
+
+        Args:
+            proxy_url: Mirror URL prefix, or None to connect to GitHub directly.
+
+        Returns:
+            A dict with the slower response time in milliseconds.
+
+        Raises:
+            StatServiceError: If either request fails or returns an HTML page.
+        """
         repository = GitHubRepository("AstrBotDevs", "AstrBot", "master")
         proxy = (proxy_url or "").strip().rstrip("/")
-
-        async def probe(
-            session: aiohttp.ClientSession,
-            label: str,
-            target: str,
-            *,
-            archive: bool = False,
-        ) -> float | str:
-            url = f"{proxy}/{target}" if proxy else target
-            headers = {"Range": "bytes=0-0"} if archive else None
-            start = time.monotonic()
-            try:
-                async with session.get(url, headers=headers) as response:
-                    if response.status != 200 and not (
-                        archive and response.status == 206
-                    ):
-                        return f"GitHub {label} probe failed (HTTP {response.status})"
-                    # Exit without reading either response body, especially the ZIP.
-                    return (time.monotonic() - start) * 1000
-            except (aiohttp.ClientError, asyncio.TimeoutError) as exc:
-                return f"GitHub {label} probe failed ({type(exc).__name__})"
-
+        prefix = f"{proxy}/" if proxy else ""
+        checks = (
+            ("raw file", repository.raw_file_url(".python-version"), None, {200}),
+            ("archive", repository.archive_url, {"Range": "bytes=0-0"}, {200, 206}),
+        )
         async with aiohttp.ClientSession(
             timeout=aiohttp.ClientTimeout(total=10), trust_env=True
         ) as session:
-            raw, archive = await asyncio.gather(
-                probe(session, "raw file", repository.raw_file_url(".python-version")),
-                probe(session, "archive", repository.archive_url, archive=True),
+            start = time.monotonic()
+            responses = await asyncio.gather(
+                *(
+                    session.get(prefix + url, headers=headers)
+                    for _, url, headers, _ in checks
+                ),
+                return_exceptions=True,
             )
-        if isinstance(raw, str):
-            raise StatServiceError(raw)
-        if isinstance(archive, str):
-            raise StatServiceError(archive)
-        return {"latency": round(max(raw, archive), 2)}
+            latency = (time.monotonic() - start) * 1000
+            for (label, _, _, statuses), response in zip(
+                checks, responses, strict=True
+            ):
+                if isinstance(response, (aiohttp.ClientError, asyncio.TimeoutError)):
+                    raise StatServiceError(
+                        f"GitHub {label} probe failed ({type(response).__name__})"
+                    ) from response
+                if isinstance(response, BaseException):
+                    raise response
+                if response.status not in statuses:
+                    raise StatServiceError(
+                        f"GitHub {label} probe failed (HTTP {response.status})"
+                    )
+                if response.content_type in {"text/html", "application/xhtml+xml"}:
+                    raise StatServiceError(
+                        f"GitHub {label} probe returned an HTML page"
+                    )
+            # Close the session without reading either response body.
+        return {"latency": round(latency, 2)}
 
     async def test_pypi_index_connection(self, index_url: str | None) -> dict:
         """Check whether a PyPI index (mirror) answers requests.

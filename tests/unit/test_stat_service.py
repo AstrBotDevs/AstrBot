@@ -34,15 +34,22 @@ def _make_service(db) -> StatService:
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
-    ("proxy_url", "raw_status", "archive_status", "error"),
+    ("proxy_url", "raw_status", "archive_status", "archive_type", "error"),
     [
-        (" https://mirror.example/ ", 200, 503, r"archive.*503"),
-        (None, 200, 206, None),
-        ("https://mirror.example", 404, 200, r"raw file.*404"),
+        (" https://mirror.example/ ", 200, 503, "text/html", r"archive.*503"),
+        (None, 200, 206, "application/zip", None),
+        (
+            "https://mirror.example",
+            404,
+            200,
+            "application/octet-stream",
+            r"raw file.*404",
+        ),
+        ("https://mirror.example", 200, 200, "text/html", r"archive.*HTML"),
     ],
 )
 async def test_ghproxy_requires_raw_file_and_archive(
-    monkeypatch, proxy_url, raw_status, archive_status, error
+    monkeypatch, proxy_url, raw_status, archive_status, archive_type, error
 ):
     raw_target = (
         "https://raw.githubusercontent.com/AstrBotDevs/AstrBot/master/.python-version"
@@ -54,19 +61,18 @@ async def test_ghproxy_requires_raw_file_and_archive(
     session = MagicMock()
     session.__aenter__.return_value = session
 
-    def get(url, **kwargs):
+    async def get(url, **kwargs):
         response = MagicMock()
         if url == prefix + archive_target:
             assert kwargs["headers"] == {"Range": "bytes=0-0"}
             response.status = archive_status
+            response.content_type = archive_type
         else:
             response.status = raw_status
-        response.text = AsyncMock(return_value="3.12")
-        request = MagicMock()
-        request.__aenter__.return_value = response
-        return request
+            response.content_type = "text/plain"
+        return response
 
-    session.get.side_effect = get
+    session.get = AsyncMock(side_effect=get)
     monkeypatch.setattr(stat_service.aiohttp, "ClientSession", lambda **kwargs: session)
     service = _make_service(MagicMock())
 
