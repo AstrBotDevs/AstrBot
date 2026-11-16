@@ -1289,6 +1289,38 @@ class PluginManager:
                                 metadata.star_cls,
                             )
 
+                    if not plugin_disabled and metadata.star_cls is not None:
+                        from astrbot.core.chatui import ViewSpec, resolve_view
+                        from astrbot.core.star.filter.ui_action import UIActionFilter
+
+                        view_names = set()
+                        action_filters = [
+                            item
+                            for handler in related_handlers
+                            for item in handler.event_filters
+                            if isinstance(item, UIActionFilter)
+                        ]
+                        for spec in getattr(metadata.star_cls, "chatui_views", []):
+                            if (
+                                not isinstance(spec, ViewSpec)
+                                or spec.name in view_names
+                            ):
+                                raise ValueError(
+                                    "ChatUI views must have unique ViewSpec declarations."
+                                )
+                            view_names.add(spec.name)
+                            resolve_view(
+                                metadata.module_path, spec.name, target=spec.target
+                            )
+                            for action in spec.actions:
+                                if not any(
+                                    item.action_id in (None, action)
+                                    for item in action_filters
+                                ):
+                                    raise ValueError(
+                                        f"No UI handler registered for {action}."
+                                    )
+
                     # Apply the same idempotent binding lifecycle to LLM tools.
                     for func_tool in llm_tools.func_list:
                         for ft in self._iter_concrete_llm_tools(func_tool):

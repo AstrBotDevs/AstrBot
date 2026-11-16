@@ -27,6 +27,8 @@ Use simple directory names for `view_name`, such as `settings` or `bridge-demo`.
 
 Users open views from the plugin detail page in the WebUI.
 
+Directory discovery still works without Python declarations. Plugins that also provide chat cards can explicitly register independent pages in `Star.chatui_views` with `chatui.ViewSpec(name="settings", entry=Path("views/settings/index.html"), target="plugin_page")`. Since `target` defaults to `chat_message`, independent page declarations must specify `plugin_page`. See [Interactive ChatUI cards](./chatui-views.md#choosing-the-host) for the target distinction. Independent pages continue to use the `AstrBotPluginView` bridge and plugin Web APIs described here.
+
 ## Development Flow
 
 1. Create `views/<view_name>/index.html` in the plugin directory.
@@ -614,6 +616,8 @@ AstrBot syncs the current theme to Plugin Views. The bridge SDK maintains a `dat
 - Light mode: `<html data-theme="light">`
 - Dark mode: `<html data-theme="dark">`
 
+The bridge also synchronizes CSS `color-scheme` to `light` or `dark`, keeping transparent iframe backgrounds consistent with the host theme.
+
 When **Follow System** is selected, the View still receives either `light` or `dark`.
 
 CSS variables are recommended:
@@ -639,22 +643,33 @@ The server injects `data-theme` into returned HTML to reduce initial flashing. I
 
 ### Following user-selected colors
 
-Subscribe with `bridge.onContext()` to apply the initial `primary` and `secondary` CSS colors and receive updates. Use defaults when `themeColors` is absent:
+Both targets use the same `AstrBotPluginView` bridge. It injects these CSS tokens on `<html>` and updates them on initialization, light/dark changes, and palette changes. No manual listener or CSS assignment is needed.
 
-```js
-const bridge = window.AstrBotPluginView;
+| CSS token | Purpose |
+| --- | --- |
+| `--astrbot-color-primary` | Primary |
+| `--astrbot-color-secondary` | Secondary |
+| `--astrbot-color-on-primary` | Text on primary |
+| `--astrbot-color-text` | Body text |
+| `--astrbot-color-text-secondary` | Secondary text |
+| `--astrbot-color-background` | Page background |
+| `--astrbot-color-surface` | Surface background |
+| `--astrbot-color-border` | Border |
+| `--astrbot-color-error` | Error |
 
-await bridge.ready();
-const off = bridge.onContext((context) => {
-  const style = document.documentElement.style;
-  style.setProperty("--primary", context.themeColors?.primary ?? "#3c96ca");
-  style.setProperty("--secondary", context.themeColors?.secondary ?? "#2f86bd");
-});
-
-// Call off() when the View is disposed.
+```css
+body {
+  color: var(--astrbot-color-text);
+  background: var(--astrbot-color-background);
+}
+button {
+  color: var(--astrbot-color-on-primary);
+  background: var(--astrbot-color-primary);
+  border: 1px solid var(--astrbot-color-border);
+}
 ```
 
-Use `var(--primary)` and `var(--secondary)` in your styles.
+The bridge only injects variables; it does not force a page background. Chat cards can keep `background: transparent`. Existing `themeColors.primary` / `secondary` remain available. Both targets use `bridge.onContext(({ isDark, themeColors, locale }) => { ... })` when additional JavaScript behavior is needed.
 
 ## Static Asset Paths
 

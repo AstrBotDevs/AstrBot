@@ -381,9 +381,7 @@
               v-model:edit-draft="messageEditDraft"
               :messages="activeMessages"
               :is-dark="isDark"
-              :is-streaming="
-                Boolean(currSessionId && isSessionRunning(currSessionId))
-              "
+              :is-message-streaming="isMessageStreaming"
               :enable-edit="
                 !Boolean(currSessionId && isSessionRunning(currSessionId))
               "
@@ -855,6 +853,7 @@ const {
   activeMessages,
   paginationBySession,
   isSessionRunning,
+  isMessageStreaming,
   isUserMessage,
   messageParts,
   loadSessionMessages,

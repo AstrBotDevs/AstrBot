@@ -215,6 +215,7 @@ export default defineConfig({
                   { text: "发送消息", link: "/guides/send-message" },
                   { text: "插件配置", link: "/guides/plugin-config" },
                   { text: "插件可视化视图", link: "/guides/plugin-pages" },
+                  { text: "ChatUI 交互卡片", link: "/guides/chatui-views" },
                   { text: "插件国际化", link: "/guides/plugin-i18n" },
                   {
                     text: "AI",
@@ -507,6 +508,7 @@ export default defineConfig({
                   { text: "Send Messages", link: "/guides/send-message" },
                   { text: "Plugin Configuration", link: "/guides/plugin-config" },
                   { text: "Plugin Views", link: "/guides/plugin-pages" },
+                  { text: "ChatUI Cards", link: "/guides/chatui-views" },
                   { text: "Plugin Internationalization", link: "/guides/plugin-i18n" },
                   {
                     text: "AI",

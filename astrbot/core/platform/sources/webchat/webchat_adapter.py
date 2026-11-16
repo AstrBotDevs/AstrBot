@@ -256,6 +256,17 @@ class WebChatAdapter(Platform):
         if isinstance(raw_message, tuple) and len(raw_message) >= 3:
             payload = raw_message[2]
             if isinstance(payload, dict):
+                # This object is supplied only by the authenticated view action route.
+                from astrbot.core.message.components import UIInteraction
+
+                interaction = payload.get("_ui_interaction")
+                if isinstance(interaction, UIInteraction):
+                    message.message = [interaction]
+                    message.message_str = ""
+                    message_event.message_str = ""
+                    message_event.set_extra(
+                        "ui_plugin_module", payload["_ui_plugin_module"]
+                    )
                 message_event.set_extra("locale", payload.get("locale"))
                 flags = resolve_webchat_request_flags(payload)
                 message_event.set_extra("flags", flags)

@@ -27,6 +27,8 @@ astrbot_plugin_view_demo/
 
 用户可以在 WebUI 的插件页点击插件卡片进入插件详情页，然后打开插件声明的可视化视图。
 
+页面继续支持目录自动发现，无须增加 Python 声明。如果插件同时提供聊天卡片，可以在 `Star.chatui_views` 中用 `chatui.ViewSpec(name="settings", entry=Path("views/settings/index.html"), target="plugin_page")` 显式声明独立页面。`target` 默认值是 `chat_message`，因此独立页面注册时必须明确设置 `plugin_page`。两种 target 的区别见 [ChatUI 交互卡片](./chatui-views.md#选择展示位置)；独立页面仍使用本文的 `AstrBotPluginView` bridge 和插件 Web API。
+
 ## 开发流程
 
 1. 在插件目录下创建 `views/<view_name>/index.html`。
@@ -614,6 +616,8 @@ AstrBot 会把当前主题同步给插件视图。bridge SDK 会维护 `<html>` 
 - 亮色模式：`<html data-theme="light">`
 - 暗色模式：`<html data-theme="dark">`
 
+bridge 同时将 CSS `color-scheme` 同步为 `light` 或 `dark`，让透明 iframe 的背景与宿主主题保持一致。
+
 选择“跟随系统”时，视图收到的值仍然是 `light` 或 `dark`。
 
 推荐使用 CSS 变量：
@@ -639,22 +643,33 @@ body {
 
 ### 跟随用户配色
 
-通过 `bridge.onContext()` 应用初始的 `primary` 和 `secondary` CSS 颜色，并接收后续更新。`themeColors` 缺失时使用默认值：
+两种 target 使用同一个 `AstrBotPluginView` bridge。它在 `<html>` 上注入以下 CSS tokens，并在初始化、切换深浅色或主题配色变化时自动更新，无须手动监听再赋值。
 
-```js
-const bridge = window.AstrBotPluginView;
+| CSS token | 用途 |
+| --- | --- |
+| `--astrbot-color-primary` | 主题色 |
+| `--astrbot-color-secondary` | 辅助色 |
+| `--astrbot-color-on-primary` | 主题色背景上的文字 |
+| `--astrbot-color-text` | 正文文字 |
+| `--astrbot-color-text-secondary` | 次要文字 |
+| `--astrbot-color-background` | 页面背景 |
+| `--astrbot-color-surface` | 表面背景 |
+| `--astrbot-color-border` | 边框 |
+| `--astrbot-color-error` | 错误提示 |
 
-await bridge.ready();
-const off = bridge.onContext((context) => {
-  const style = document.documentElement.style;
-  style.setProperty("--primary", context.themeColors?.primary ?? "#3c96ca");
-  style.setProperty("--secondary", context.themeColors?.secondary ?? "#2f86bd");
-});
-
-// Call off() when the View is disposed.
+```css
+body {
+  color: var(--astrbot-color-text);
+  background: var(--astrbot-color-background);
+}
+button {
+  color: var(--astrbot-color-on-primary);
+  background: var(--astrbot-color-primary);
+  border: 1px solid var(--astrbot-color-border);
+}
 ```
 
-在样式中使用 `var(--primary)` 和 `var(--secondary)` 引用配色。
+bridge 只注入变量，不强制设置页面背景；聊天卡片可继续使用 `background: transparent`。现有 `themeColors.primary` / `secondary` 仍保留。需要额外逻辑时，两种 target 都使用 `bridge.onContext(({ isDark, themeColors, locale }) => { ... })`。
 
 ## 静态资源路径
 

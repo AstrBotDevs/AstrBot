@@ -89,6 +89,18 @@ class StarRequestSubStage(Stage):
                     break
                 event.clear_result()  # 清除上一个 handler 的结果
             except Exception as e:
+                if event.get_ui_interaction() is not None:
+                    event.set_extra(
+                        "ui_action_error",
+                        {
+                            "code": "INVALID_INPUT"
+                            if type(e).__name__ == "ValidationError"
+                            else "ACTION_FAILED",
+                            "message": "Invalid action input."
+                            if type(e).__name__ == "ValidationError"
+                            else "The plugin action failed.",
+                        },
+                    )
                 traceback_text = traceback.format_exc()
                 plugin_name = md.name or handler.handler_module_path
                 # Keep handler failures on the plugin's side of the log filter.
