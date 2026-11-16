@@ -403,3 +403,10 @@ def pytest_runtest_setup(item):
             f"TEST_{required_platform.upper()}_ENABLED"
         ):
             pytest.skip(f"TEST_{required_platform.upper()}_ENABLED not set")
+
+
+@pytest_asyncio.fixture
+async def database(temp_db):
+    """Provide an initialized SQLite database for event-storage tests."""
+    await temp_db.initialize()
+    return temp_db
