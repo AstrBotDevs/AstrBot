@@ -47,16 +47,6 @@ if TYPE_CHECKING:
     from astrbot.core.astr_agent_runtime.runtime import AstrAgentRuntime
     from astrbot.core.db.conversation import ConversationSnapshot
 
-TOOL_CALL_PROMPT = (
-    "<tool_use_instructions>\n"
-    "When using tools: "
-    "never return an empty response; "
-    "briefly explain the purpose when starting a new type of task, but not before every tool call; "
-    "follow the tool schema exactly and do not invent parameters; "
-    "keep the conversation style consistent."
-    "\n</tool_use_instructions>"
-)
-
 TOOL_CALL_PROMPT_SKILLS_LIKE_MODE = (
     "<tool_use_instructions>\n"
     "You MUST NOT return an empty response, especially after invoking a tool."
@@ -195,13 +185,12 @@ async def build_main_agent(
         return None
 
     # Final instructions describe the assembled capabilities and output mode.
-    if req.func_tool and req.func_tool.tools:
-        tool_prompt = (
-            TOOL_CALL_PROMPT
-            if config.tool_schema_mode == "full"
-            else TOOL_CALL_PROMPT_SKILLS_LIKE_MODE
-        )
-        req.system_prompt += f"\n{tool_prompt}\n"
+    if (
+        req.func_tool
+        and req.func_tool.tools
+        and config.tool_schema_mode == "skills_like"
+    ):
+        req.system_prompt += f"\n{TOOL_CALL_PROMPT_SKILLS_LIKE_MODE}\n"
     if event.get_extra("action_type") == "live":
         req.system_prompt += f"\n{LIVE_MODE_SYSTEM_PROMPT}\n"
     req.system_prompt += search_instructions

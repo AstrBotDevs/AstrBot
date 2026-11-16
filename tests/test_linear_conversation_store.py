@@ -27,14 +27,7 @@ async def test_unfinished_executions_protect_only_their_required_baseline(databa
                 "type": "turn.started",
                 "payload": {"base_leaf_event_id": "message"},
             },
-            {
-                "event_id": "request",
-                "type": "request.started",
-                "payload": {
-                    "turn_id": "turn",
-                    "context_leaf_event_id": "message",
-                },
-            },
+
         ],
     )
     second = (
@@ -84,18 +77,6 @@ async def test_unfinished_executions_protect_only_their_required_baseline(databa
             {
                 "type": "turn.finished",
                 "payload": {"turn_id": "turn", "status": "completed"},
-            }
-        ],
-    )
-    assert (
-        await store.get_context_availability(conv.conversation_id, [protected.event_id])
-    )[protected.event_id] == "available"
-    await store.append(
-        conv.conversation_id,
-        [
-            {
-                "type": "request.finished",
-                "payload": {"request_id": "request", "status": "completed"},
             }
         ],
     )

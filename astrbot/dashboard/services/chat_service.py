@@ -879,6 +879,8 @@ class ChatService:
                         yield f"data: {json.dumps(user_saved_info, ensure_ascii=False)}\n\n"
 
                 while True:
+                    if subscriber not in run.subscribers and subscriber.empty():
+                        break
                     try:
                         item = await asyncio.wait_for(subscriber.get(), timeout=1)
                     except asyncio.TimeoutError:
@@ -1111,9 +1113,9 @@ class ChatService:
                     self.chat_runs_by_session.pop(run.session_id, None)
                     self.running_convs.pop(run.session_id, None)
             for subscriber in list(run.subscribers):
-                while not subscriber.empty():
-                    subscriber.get_nowait()
-                subscriber.put_nowait(None)
+                # Preserve final output; a full queue closes after it has drained.
+                if not subscriber.full():
+                    subscriber.put_nowait(None)
             run.subscribers.clear()
 
     async def build_chat_stream(
@@ -1234,6 +1236,10 @@ class ChatService:
                         "message": message_parts,
                         "selected_provider": selected_provider,
                         "selected_model": selected_model,
+                        "selected_stt_provider": post_data.get("selected_stt_provider"),
+                        "selected_tts_provider": post_data.get("selected_tts_provider"),
+                        "persona_prompt": post_data.get("persona_prompt"),
+                        "show_reasoning": post_data.get("show_reasoning"),
                         "flags": flags,
                         "locale": post_data.get("locale"),
                         "message_id": message_id,

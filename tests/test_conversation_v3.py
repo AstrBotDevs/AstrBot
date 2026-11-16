@@ -2,8 +2,6 @@
 
 import asyncio
 import json
-from base64 import urlsafe_b64decode
-from uuid import UUID
 
 import pytest
 from sqlalchemy import text
@@ -209,68 +207,27 @@ async def test_failed_migration_keeps_legacy_data_and_can_retry(tmp_path, monkey
 
 
 @pytest.mark.asyncio
-async def test_provider_retry_has_distinct_attempts(database):
-    from astrbot.core.agent.event_stream import RequestEventRecorder
-    from astrbot.core.provider.entities import TokenUsage
-    from astrbot.core.provider.sources.request_retry import retry_provider_request
-
+@pytest.mark.parametrize("status", ["completed", "failed", "cancelled"])
+async def test_assistant_usage_survives_rebase_without_entering_context(database, status):
     conv = await database.create_conversation("umo", "p")
-    writer = ConversationEventWriter(
-        database.conversation_store,
-        await database.conversation_store.read(conv.conversation_id),
-    )
+    store = database.conversation_store
+    writer = ConversationEventWriter(store, await store.read(conv.conversation_id))
     await writer.start_turn({"kind": "agent"})
-    input_context = {
-        "contexts": [{"role": "user", "content": "retry this request"}],
-        "extra_user_content_parts": [],
-        "complete": True,
-    }
-    recorder = RequestEventRecorder(
-        writer.consume,
-        {"turn_id": writer.turn_id, "input_context": input_context},
-        invocation_id="runtime-call",
-    )
-    await recorder.begin()
-    attempts = 0
-
-    class RetryableError(RuntimeError):
-        status_code = 429
-
-    async def invoke():
-        nonlocal attempts
-        attempts += 1
-        if attempts == 1:
-            raise RetryableError("rate limited")
-        return "answer"
-
-    assert (
-        await retry_provider_request(
-            "test", invoke, max_attempts=2, request_event_recorder=recorder
-        )
-        == "answer"
-    )
-    await recorder.finish("completed", usage=TokenUsage(input_other=10, output=3))
-    events = await database.conversation_store.events(conv.conversation_id)
-    for event in events:
-        assert len(event.event_id) == 22
-        assert set(event.event_id) <= set(
-            "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_"
-        )
-        assert UUID(bytes=urlsafe_b64decode(event.event_id + "==")).version == 4
-    starts = [e for e in events if e.type == "request.started"]
-    finishes = [e for e in events if e.type == "request.finished"]
-    assert len(starts) == len(finishes) == 2
-    assert [e.payload["invocation_id"] for e in starts] == [
-        "runtime-call",
-        "runtime-call",
-    ]
-    assert [e.payload["attempt"] for e in starts] == [1, 2]
-    assert [e.payload["request_id"] for e in finishes] == [e.event_id for e in starts]
-    assert [e.payload["status"] for e in finishes] == ["failed", "completed"]
-    for start in starts:
-        assert (
-            await database.conversation_store.read_request_context(
-                writer.cid, start.event_id
-            )
-            == input_context
-        )
+    message = {"role": "assistant", "content": "partial"}
+    if status != "completed":
+        message["_no_save"] = True
+    writer.stage_messages([message], assistant={
+        "event_id": "response",
+        "metadata": {"status": status, "usage": {"input_tokens": 10, "output_tokens": 3}},
+    })
+    await writer.finish_turn(status)
+    assert (await store.read(writer.cid)).messages == ([message] if status == "completed" else [])
+    await store.append(writer.cid, [], history=[{"role": "user", "content": "replacement"}], origin="plugin")
+    events = await store.events(writer.cid)
+    recorded = [e for e in events if e.payload and "usage" in e.payload]
+    assert len(recorded) == 1
+    assert recorded[0].event_id == "response"
+    assert recorded[0].payload["status"] == status
+    for kind in ("request.started", "request.finished"):
+        with pytest.raises(ValueError, match="Unknown event type"):
+            await store.append(writer.cid, [{"type": kind, "payload": {}}])

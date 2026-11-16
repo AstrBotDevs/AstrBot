@@ -17,6 +17,7 @@ from astrbot.core.astr_agent_runtime.context import AstrAgentContext
 from astrbot.core.astr_agent_runtime.tools.computer_tools.util import (
     check_admin_permission,
 )
+from astrbot.core.astr_agent_runtime.tools.output import prepare_tool_output
 from astrbot.core.astr_agent_runtime.tools.registry import builtin_tool
 from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
@@ -88,8 +89,13 @@ class CuaScreenshotTool(FunctionTool):
             result = await gui.screenshot(path)
             payload = {"success": True, **result, "path": path}
             if send_to_user:
-                await context.context.event.send(MessageChain().file_image(path))
-                payload["sent_to_user"] = True
+                message = MessageChain().file_image(path)
+                if prepare_tool_output(context.context, message):
+                    await context.context.event.send(message)
+                    payload["sent_to_user"] = True
+                else:
+                    payload["sent_to_user"] = False
+                    payload["delivery"] = "prepared_for_caller"
             image_data = payload.pop("base64", "")
             content: list[ContentBlock] = [
                 mcp.types.TextContent(type="text", text=_to_json(payload))
