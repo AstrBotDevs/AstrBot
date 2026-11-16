@@ -169,45 +169,16 @@
       hide-details
     ></v-text-field>
 
-    <div v-else-if="itemMeta?.type === 'int' || itemMeta?.type === 'float'" class="d-flex align-center gap-3">
-      <div v-if="itemMeta?.slider" style="flex: 3; display: flex; align-items: center; gap: 8px">
-        <span style="min-width: 5px; text-align: right;">
-          {{ itemMeta?.slider?.min ?? 0 }}
-        </span>
-
-        <v-slider :model-value="toNumber(numericTemp ?? modelValue)"
-          @update:model-value="val => { numericTemp = val; emitUpdate(toNumber(val)) }"
-          @end="numericTemp = null"
-          :min="itemMeta?.slider?.min ?? 0"
-          :max="itemMeta?.slider?.max ?? 100"
-          :step="itemMeta?.slider?.step ?? 1"
-          color="primary"
-          density="compact"
-          hide-details
-          style="flex: 1"></v-slider>
-
-        <span style="min-width: 5px; text-align: left;">
-          {{ itemMeta?.slider?.max ?? 100 }}
-        </span>
-      </div>
-
-      <v-text-field
-        :model-value="numericTemp ?? modelValue"
-        @update:model-value="val => (numericTemp = val)"
-        @blur="() => {
-          if (numericTemp != null) {
-            emitUpdate(itemMeta?.nullable && numericTemp === '' ? null : toNumber(numericTemp))
-          }
-          numericTemp = null
-        }"
-        density="compact"
-        variant="outlined"
-        class="config-field"
-        type="number"
-        hide-details
-        style="flex: 2"
-      ></v-text-field>
-    </div>
+    <ConfigNumberInput
+      v-else-if="['int', 'float', 'number'].includes(itemMeta?.type)"
+      :model-value="modelValue"
+      :slider="itemMeta?.slider"
+      :min="itemMeta?.min"
+      :max="itemMeta?.max"
+      :integer="itemMeta?.integer"
+      :placeholder="itemMeta?.placeholder"
+      @update:model-value="emitUpdate"
+    />
 
     <v-textarea
       v-else-if="itemMeta?.type === 'text'"
@@ -249,6 +220,7 @@
 
     <ObjectEditor
       v-else-if="itemMeta?.type === 'dict'"
+      :inline="itemMeta?.render_type === 'inline'"
       :model-value="modelValue"
       :item-meta="itemMeta"
       :plugin-name="pluginName"
@@ -256,7 +228,11 @@
       :config-key="configKey"
       @update:model-value="emitUpdate"
       class="config-field"
-    />
+    >
+      <template #after-template="slotProps">
+        <slot name="after-template" v-bind="slotProps" />
+      </template>
+    </ObjectEditor>
 
     <v-text-field
       v-else
@@ -290,10 +266,10 @@ import T2ITemplateEditor from './T2ITemplateEditor.vue'
 import DashboardTotpManager from './DashboardTotpManager.vue'
 import LocalPermissionMatrix from './LocalPermissionMatrix.vue'
 import { computed, ref } from 'vue'
+import ConfigNumberInput from './ConfigNumberInput.vue'
 import { useI18n, useModuleI18n } from '@/i18n/composables'
 import { usePluginI18n } from '@/utils/pluginI18n'
 
-const numericTemp = ref(null)
 const listSearchText = ref('')
 const secretVisible = ref(false)
 
@@ -338,7 +314,7 @@ const { getRaw } = useModuleI18n('features/config-metadata')
 const { configText } = usePluginI18n()
 
 async function emitUpdate(val) {
-  val = validateNumericConfig(props.itemMeta?.type, val)
+  val = props.itemMeta?.nullable && val === '' ? null : validateNumericConfig(props.itemMeta?.type, val)
   if (
     props.itemMeta?._special === 'agent_runtime'
     && props.configRoot?.agent
@@ -365,11 +341,6 @@ const secretToggleIcon = computed(() => {
   if (!props.itemMeta?.secret) return undefined
   return secretVisible.value ? 'mdi-eye-off-outline' : 'mdi-eye-outline'
 })
-
-function toNumber(val) {
-  const n = parseFloat(val)
-  return isNaN(n) ? 0 : n
-}
 
 function validateNumericConfig(modelType, rawValue) {
   if (modelType === 'int' || modelType === 'float') {
@@ -522,5 +493,6 @@ function getSelectItems(itemMeta) {
 
 :deep(.config-field input[type='number']) {
   -moz-appearance: textfield;
+  appearance: textfield;
 }
 </style>

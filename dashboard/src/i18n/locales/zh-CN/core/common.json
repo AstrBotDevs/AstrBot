@@ -158,8 +158,13 @@
     "noParams": "暂无参数",
     "presets": "预设",
     "newKeyLabel": "新键名",
+    "customBodyKeyPlaceholder": "自定义请求体键名",
+    "omitWhenEmpty": "Use default.",
+    "custom": "自定义",
     "valueTypeLabel": "值类型",
     "keyExists": "键名已存在",
+    "numberRequired": "数值不能为空",
+    "invalidNumber": "数值非法",
     "invalidJson": "JSON 格式错误",
     "placeholders": {
       "keyName": "键名",

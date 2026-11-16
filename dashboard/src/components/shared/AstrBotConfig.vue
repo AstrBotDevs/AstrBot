@@ -2,6 +2,8 @@
 import { LazyMonacoEditor as VueMonacoEditor } from '@/components/shared/LazyMonacoEditor';
 import { ref, computed, watch } from 'vue'
 import ConfigItemRenderer from './ConfigItemRenderer.vue'
+import ConfigFieldRow from './ConfigFieldRow.vue'
+import ConfigFieldDivider from './ConfigFieldDivider.vue'
 import ConfigDefaultReset from './ConfigDefaultReset.vue'
 import TemplateListEditor from './TemplateListEditor.vue'
 import { useI18n, useModuleI18n } from '@/i18n/composables'
@@ -63,6 +65,13 @@ const currentConfigPath = computed(() => props.pathPrefix || props.metadataKey)
 const filteredIterable = computed(() => {
   if (!props.iterable) return {}
   const { hint, ...rest } = props.iterable
+  for (const [itemKey, item] of Object.entries(props.metadata[props.metadataKey]?.items || {})) {
+    if (itemKey in rest && item.render_type === 'inline' && !item.invisible && shouldShowItem(item, itemKey)) {
+      for (const key of Object.values(item.inline_fields_after || {})) {
+        delete rest[key]
+      }
+    }
+  }
   return rest
 })
 
@@ -340,36 +349,68 @@ function toggleSection() {
 
         <!-- Regular Property -->
         <template v-else>
-          <v-row v-if="!metadata[metadataKey].items[key]?.invisible && shouldShowItem(metadata[metadataKey].items[key], key)" class="config-row">
-            <v-col cols="12" sm="6" class="property-info">
-              <v-list-item density="compact">
-                <v-list-item-title class="property-name">
-                  <span v-if="metadata[metadataKey].items[key]?.description">
-                    {{ resolveConfigText(getItemPath(key), 'description', metadata[metadataKey].items[key]?.description) }}
-                    <span v-if="metadata[metadataKey].items[key]?.show_key" class="property-key">({{ key }})</span>
-                  </span>
-                  <span v-else>{{ key }}</span>
-                </v-list-item-title>
+          <ConfigItemRenderer
+            v-if="metadata[metadataKey].items[key]?.render_type === 'inline' && !metadata[metadataKey].items[key]?.invisible && shouldShowItem(metadata[metadataKey].items[key], key)"
+            v-model="iterable[key]"
+            :item-meta="metadata[metadataKey].items[key]"
+            :plugin-name="pluginName"
+            :plugin-i18n="pluginI18n"
+            :config-key="getItemPath(key)"
+          >
+            <template #after-template="{ templateKey }">
+              <template v-for="fieldKey in [metadata[metadataKey].items[key]?.inline_fields_after?.[templateKey]]" :key="fieldKey">
+                <template v-if="fieldKey && fieldKey in iterable && !metadata[metadataKey].items[fieldKey]?.invisible && shouldShowItem(metadata[metadataKey].items[fieldKey], fieldKey)">
+                  <ConfigFieldRow>
+                    <template #title>{{ resolveConfigText(getItemPath(fieldKey), 'description', metadata[metadataKey].items[fieldKey]?.description) }}</template>
+                    <template #hint>{{ resolveConfigText(getItemPath(fieldKey), 'hint', getItemHint(fieldKey, metadata[metadataKey].items[fieldKey])) }}</template>
+                    <ConfigDefaultReset
+                      :model-value="iterable[fieldKey]"
+                      :item-meta="metadata[metadataKey].items[fieldKey]"
+                      :enabled="enableDefaultReset"
+                      @reset="iterable[fieldKey] = $event"
+                    >
+                      <ConfigItemRenderer
+                        v-model="iterable[fieldKey]"
+                        :item-meta="metadata[metadataKey].items[fieldKey]"
+                        :plugin-name="pluginName"
+                        :plugin-i18n="pluginI18n"
+                        :config-key="getItemPath(fieldKey)"
+                      />
+                    </ConfigDefaultReset>
+                  </ConfigFieldRow>
+                  <ConfigFieldDivider />
+                </template>
+              </template>
+            </template>
+          </ConfigItemRenderer>
+          <ConfigFieldRow
+            v-else-if="!metadata[metadataKey].items[key]?.invisible && shouldShowItem(metadata[metadataKey].items[key], key)"
+            :inline="metadata[metadataKey].items[key]?.type === 'bool'"
+          >
+            <template #title>
+              <span v-if="metadata[metadataKey].items[key]?.description">
+                {{ resolveConfigText(getItemPath(key), 'description', metadata[metadataKey].items[key]?.description) }}
+                <span v-if="metadata[metadataKey].items[key]?.show_key" class="property-key">({{ key }})</span>
+              </span>
+              <span v-else>{{ key }}</span>
+            </template>
 
-                <v-list-item-subtitle class="property-hint">
-                  <span :class="{ 'property-hint__content--linked': fieldLinks[key] }">
-                    <span v-if="metadata[metadataKey].items[key]?.obvious_hint && getItemHint(key, metadata[metadataKey].items[key])"
-                          class="important-hint">‼️</span>
-                    <span>{{ resolveConfigText(getItemPath(key), 'hint', getItemHint(key, metadata[metadataKey].items[key])) }}</span>
-                    <a
-                      v-if="fieldLinks[key]"
-                      class="property-link"
-                      :href="fieldLinks[key].href"
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      @click.stop
-                    >{{ fieldLinks[key].label }}</a>
-                  </span>
-                </v-list-item-subtitle>
-              </v-list-item>
-            </v-col>
-
-            <v-col cols="12" sm="6" class="config-input">
+            <template #hint>
+              <span :class="{ 'property-hint__content--linked': fieldLinks[key] }">
+                <span v-if="metadata[metadataKey].items[key]?.obvious_hint && getItemHint(key, metadata[metadataKey].items[key])"
+                      class="important-hint">‼️</span>
+                <span>{{ resolveConfigText(getItemPath(key), 'hint', getItemHint(key, metadata[metadataKey].items[key])) }}</span>
+                <a
+                  v-if="fieldLinks[key]"
+                  class="property-link"
+                  :href="fieldLinks[key].href"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  @click.stop
+                >{{ fieldLinks[key].label }}</a>
+              </span>
+            </template>
+            <template #default>
               <ConfigDefaultReset
                 :model-value="iterable[key]"
                 :item-meta="metadata[metadataKey].items[key]"
@@ -388,35 +429,29 @@ function toggleSection() {
                   @open-fullscreen="openEditorDialog(key, iterable, metadata[metadataKey].items[key]?.editor_theme, metadata[metadataKey].items[key]?.editor_language)"
                 />
               </ConfigDefaultReset>
-            </v-col>
-          </v-row>
+            </template>
+          </ConfigFieldRow>
 
-          <v-divider
+          <ConfigFieldDivider
             v-if="hasVisibleItemsAfter(filteredIterable, index) && !metadata[metadataKey].items[key]?.invisible && shouldShowItem(metadata[metadataKey].items[key], key)"
-            class="config-divider"
-          ></v-divider>
+           />
         </template>
       </div>
     </div>
 
     <!-- Simple Value Configuration -->
     <div v-else class="simple-config">
-      <v-row class="config-row">
-        <v-col cols="12" sm="7" class="property-info">
-          <v-list-item density="compact">
-            <v-list-item-title class="property-name">
-              {{ resolveConfigText(getItemPath(metadataKey), 'description', metadata[metadataKey]?.description) }}
-              <span v-if="metadata[metadataKey]?.show_key" class="property-key">({{ metadataKey }})</span>
-            </v-list-item-title>
+      <ConfigFieldRow :label-columns="7" :inline="metadata[metadataKey]?.type === 'bool'">
+        <template #title>
+          {{ resolveConfigText(getItemPath(metadataKey), 'description', metadata[metadataKey]?.description) }}
+          <span v-if="metadata[metadataKey]?.show_key" class="property-key">({{ metadataKey }})</span>
+        </template>
 
-            <v-list-item-subtitle class="property-hint">
-              <span v-if="metadata[metadataKey]?.obvious_hint && metadata[metadataKey]?.hint" class="important-hint">‼️</span>
-              {{ resolveConfigText(getItemPath(metadataKey), 'hint', metadata[metadataKey]?.hint) }}
-            </v-list-item-subtitle>
-          </v-list-item>
-        </v-col>
-
-        <v-col cols="12" sm="5" class="config-input">
+        <template #hint>
+          <span v-if="metadata[metadataKey]?.obvious_hint && metadata[metadataKey]?.hint" class="important-hint">‼️</span>
+          {{ resolveConfigText(getItemPath(metadataKey), 'hint', metadata[metadataKey]?.hint) }}
+        </template>
+        <template #default>
           <ConfigDefaultReset
             :model-value="iterable[metadataKey]"
             :item-meta="metadata[metadataKey]"
@@ -441,10 +476,10 @@ function toggleSection() {
               :config-key="getItemPath(metadataKey)"
             />
           </ConfigDefaultReset>
-        </v-col>
-      </v-row>
+        </template>
+      </ConfigFieldRow>
 
-      <v-divider class="my-2 config-divider"></v-divider>
+      <ConfigFieldDivider />
     </div>
   </v-card-text>
   </v-expand-transition>
@@ -597,26 +632,9 @@ function toggleSection() {
   overflow: hidden;
 }
 
-.config-row {
-  margin: 0;
-  align-items: center;
-  padding: 4px 8px;
-  border-radius: 4px;
-}
 
-.config-row:hover {
-  background-color: rgba(0, 0, 0, 0.03);
-}
 
-.property-info {
-  padding: 0;
-}
 
-.property-name {
-  font-size: 0.875rem;
-  font-weight: 600;
-  color: var(--v-theme-primaryText);
-}
 
 .property-link {
   color: rgb(var(--v-theme-primary));
@@ -630,11 +648,6 @@ function toggleSection() {
   text-decoration: underline;
 }
 
-.property-hint {
-  font-size: 0.75rem;
-  color: var(--v-theme-secondaryText);
-  margin-top: 2px;
-}
 
 .property-hint__content--linked {
   display: inline-flex;
@@ -648,17 +661,9 @@ function toggleSection() {
   justify-content: center;
 }
 
-.config-input {
-  padding: 4px 8px;
-}
 
 .config-field {
   margin-bottom: 0;
-}
-
-.config-divider {
-  border-color: rgba(0, 0, 0, 0.05);
-  margin: 0px 16px;
 }
 
 .editor-container {
@@ -685,25 +690,8 @@ function toggleSection() {
     padding-left: 8px;
   }
 
-  .config-row {
-    padding: 8px 0;
-  }
-
-  .property-info {
-    padding: 4px 4px;
-  }
-
-  .property-info :deep(.v-list-item) {
-    padding-inline: 0;
-  }
-
-  .type-indicator,
-  .config-input {
+  .type-indicator {
     padding: 4px;
-  }
-
-  .config-divider {
-    display: none;
   }
 }
 </style>
