@@ -1204,7 +1204,7 @@ defineExpose({
 
 .input-left-actions {
   grid-area: left;
-  margin-inline-start: -8px;
+  margin-inline-start: -6px;
   display: flex;
   align-items: center;
   flex: 0 0 auto !important;
