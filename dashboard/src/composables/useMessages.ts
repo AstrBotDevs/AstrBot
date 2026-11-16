@@ -327,6 +327,8 @@ export function useMessages(options: UseMessagesOptions) {
       attachThreads(records, payload.threads || []);
       await resolveRecordMedia(records);
       if (sessionLoadEpochs[sessionId] !== epoch) return;
+      // A completion refresh must not replace a new turn started during the fetch.
+      if (preserveLoadedPages && isSessionRunning(sessionId)) return;
       const previousPagination = paginationBySession[sessionId];
       if (preserveLoadedPages && previousPagination?.page > 1) {
         const refreshedById = new Map(
@@ -773,6 +775,13 @@ export function useMessages(options: UseMessagesOptions) {
     } finally {
       if (activeConnections[connection.messageId]?.abort === abort) {
         delete activeConnections[connection.messageId];
+        if (
+          !abort.signal.aborted &&
+          !connection.completed &&
+          !isSessionRunning(sessionId)
+        ) {
+          await loadSessionMessages(sessionId, true, false, true);
+        }
       }
       await options.onSessionsChanged?.();
     }
@@ -894,6 +903,13 @@ export function useMessages(options: UseMessagesOptions) {
       .finally(async () => {
         if (activeConnections[messageId]?.abort === abort) {
           delete activeConnections[messageId];
+          if (
+            !abort.signal.aborted &&
+            !connection.completed &&
+            !isSessionRunning(sessionId)
+          ) {
+            await loadSessionMessages(sessionId, true, false, true);
+          }
           await options.onSessionsChanged?.();
         }
       });
@@ -1337,6 +1353,7 @@ export function useMessages(options: UseMessagesOptions) {
       return;
     }
     if (msgType === "end") {
+      if (connection) connection.completed = true;
       markMessageStarted(botRecord);
       return;
     }

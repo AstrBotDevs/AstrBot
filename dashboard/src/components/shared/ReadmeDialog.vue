@@ -1,7 +1,7 @@
 <script setup>
 import { ref, watch, computed, onUnmounted } from "vue";
 import { useTheme } from "vuetify";
-import MarkdownIt from "markdown-it";
+import MarkdownIt from "markdown-it-ts";
 import DOMPurify from "dompurify";
 import { pluginApi, statsApi } from "@/api/v1";
 import { useI18n } from "@/i18n/composables";

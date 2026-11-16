@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from fastapi import APIRouter, Depends, Query, Request
+from fastapi import APIRouter, Depends, File, Form, Query, Request, UploadFile
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 
 from astrbot.dashboard.async_utils import run_maybe_async
@@ -106,6 +106,19 @@ async def _send_chat(
             "Connection": "keep-alive",
         },
     )
+
+
+@router.post("/chat/transcriptions")
+async def transcribe_chat_audio(
+    file: UploadFile = File(...),
+    provider_id: str = Form(default=""),
+    _username: str = Depends(require_dashboard_user),
+    service: ChatService = Depends(get_service),
+):
+    try:
+        return await _run(lambda: service.transcribe_audio(file, provider_id))
+    finally:
+        await file.close()
 
 
 @router.get("/chat/sessions/new")

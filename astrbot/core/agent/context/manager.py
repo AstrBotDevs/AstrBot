@@ -1,4 +1,5 @@
 from astrbot import logger
+from astrbot.core.exceptions import ConversationPersistenceError
 
 from ..message import Message
 from .compressor import LLMSummaryCompressor, TruncateByTurnsCompressor
@@ -84,6 +85,8 @@ class ContextManager:
                     result = await self._run_compression(result, total_tokens)
 
             return result
+        except ConversationPersistenceError:
+            raise
         except Exception as e:
             logger.error(f"Error during context processing: {e}", exc_info=True)
             return messages

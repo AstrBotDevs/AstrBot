@@ -1922,6 +1922,15 @@
         "description": "voice",
         "hint": "OpenAI TTS voice. OpenAI defaults: 'alloy', 'echo', 'fable', 'onyx', 'nova', 'shimmer'."
       },
+      "deepseek-tts-voice": {
+        "description": "Voice",
+        "hint": "DeepSeek TTS voice. The corresponding voice_id is sent to the API.",
+        "labels": ["Stella (female, default)", "Tide (male)"]
+      },
+      "deepseek-tts-filter-markdown": {
+        "description": "Filter Markdown",
+        "hint": "Remove Markdown formatting before synthesis. Enabled by default."
+      },
       "elevenlabs-tts-voice-id": {
         "description": "Voice ID",
         "hint": "ElevenLabs voice ID. Browse and copy voice IDs at https://elevenlabs.io/app/voice-library. Default 'JBFqnCBsd6RMkjVDRZzb' (George)."
