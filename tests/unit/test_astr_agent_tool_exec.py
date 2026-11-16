@@ -650,3 +650,84 @@ async def test_tool_specific_timeout_survives_permission_wrapper(monkeypatch):
     ]
     assert results[0].content[0].text == "done"
     assert waiting.await_args_list[0].kwargs["timeout"] == 65
+
+
+@pytest.mark.asyncio
+async def test_execute_with_args_forwards_executor_and_handler_reserved_names(
+    monkeypatch,
+):
+    from astrbot.core.astr_agent_runtime import tool_executor as executor
+
+    received: dict[str, object] = {}
+
+    async def handler(_event, **kwargs):
+        received.update(kwargs)
+        return "done"
+
+    tool = FunctionTool(
+        name="reserved_arguments",
+        description="Accept dynamic arguments.",
+        parameters={"type": "object", "additionalProperties": True},
+        handler=handler,
+        execution_timeout=65,
+    )
+    run_context = _build_run_context()
+    run_context.tool_call_timeout = 120
+    waiting = AsyncMock(wraps=asyncio.wait_for)
+    monkeypatch.setattr(executor.asyncio, "wait_for", waiting)
+    tool_args = {
+        "tool": "tool-value",
+        "run_context": "run-context-value",
+        "tool_call_timeout": 7,
+        "context": "context-value",
+        "handler": "handler-value",
+        "method_name": "method-name-value",
+    }
+
+    results = [
+        result
+        async for result in FunctionToolExecutor.execute_with_args(
+            tool, run_context, tool_args
+        )
+    ]
+
+    assert results[0].content[0].text == "done"
+    assert received == tool_args
+    assert tool_args["tool_call_timeout"] == 7
+    assert waiting.await_args_list[0].kwargs["timeout"] == 65
+
+
+@pytest.mark.asyncio
+async def test_background_tool_preserves_reserved_argument_names(monkeypatch):
+    registry = ActiveEventRegistry()
+    monkeypatch.setattr(
+        "astrbot.core.astr_agent_runtime.tool_executor.active_event_registry", registry
+    )
+    wakeup = AsyncMock()
+    monkeypatch.setattr("astrbot.core.astr_agent_runtime.tool_executor.wake_main_agent", wakeup)
+    context = _build_run_context()
+    event = context.context.event
+    registry.register(event)
+    received = {}
+
+    async def handler(_event, **kwargs):
+        received.update(kwargs)
+        return "done"
+
+    tool = FunctionTool(
+        name="background_quote",
+        description="Accept dynamic arguments.",
+        parameters={"type": "object", "additionalProperties": True},
+        handler=handler,
+        is_background_task=True,
+    )
+    arguments = {"tool": "t", "run_context": "r", "task_id": "id", "tool_call_timeout": 7, "handler": "h"}
+    try:
+        results = [result async for result in FunctionToolExecutor.execute_with_args(tool, context, arguments)]
+        task = next(iter(registry._background_tasks[event.unified_msg_origin]))
+        await asyncio.wait_for(task, timeout=5)
+        assert "task_id=" in results[0].content[0].text
+        assert received == arguments
+        assert wakeup.await_count == 1
+    finally:
+        registry.unregister(event)
