@@ -1735,7 +1735,7 @@
       },
       "dashscope_tts_websocket_url": {
         "description": "WebSocket Endpoint",
-        "hint": "Optional. Only used for SpeechSynthesizer calls with Qwen-Audio-TTS and CosyVoice. Leave blank to use the DashScope SDK default endpoint. Enter a complete WebSocket URL, such as wss://{WorkspaceId}.cn-beijing.maas.aliyuncs.com/api-ws/v1/inference, replacing {WorkspaceId} with your actual workspace ID."
+        "hint": "Optional. Fill in when using a Qwen-Audio-TTS model. Leave blank to use the DashScope SDK default endpoint. Enter a complete WebSocket URL, such as wss://{WorkspaceId}.cn-beijing.maas.aliyuncs.com/api-ws/v1/inference, replacing {WorkspaceId} with your actual workspace ID."
       },
       "gm_resp_image_modal": {
         "description": "Enable image modality",
