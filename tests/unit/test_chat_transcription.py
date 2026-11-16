@@ -13,7 +13,9 @@ from astrbot.dashboard.services.chat_service import ChatService, ChatServiceErro
 
 @pytest.fixture
 def transcription_service(monkeypatch, tmp_path):
-    monkeypatch.setattr(chat_service, "get_astrbot_temp_path", lambda: str(tmp_path))
+    monkeypatch.setattr(
+        chat_service, "get_astrbot_system_tmp_path", lambda: str(tmp_path)
+    )
     providers = [
         SimpleNamespace(
             meta=lambda: SimpleNamespace(id="first"),

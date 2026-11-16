@@ -27,7 +27,10 @@ from astrbot.core.platform.sources.webchat.request_flags import (
 )
 from astrbot.core.platform.sources.webchat.webchat_queue_mgr import webchat_queue_mgr
 from astrbot.core.utils.active_event_registry import active_event_registry
-from astrbot.core.utils.astrbot_path import get_astrbot_data_path, get_astrbot_temp_path
+from astrbot.core.utils.astrbot_path import (
+    get_astrbot_data_path,
+    get_astrbot_system_tmp_path,
+)
 from astrbot.core.utils.datetime_utils import generate_timestamp_id, to_utc_isoformat
 from astrbot.core.utils.event_id import new_event_id
 from astrbot.core.utils.media_utils import (
@@ -571,7 +574,7 @@ class ChatService:
         if not (file.content_type or "").startswith("audio/"):
             raise ChatServiceError("An audio recording is required")
 
-        temp_dir = Path(get_astrbot_temp_path())
+        temp_dir = Path(get_astrbot_system_tmp_path())
         temp_dir.mkdir(parents=True, exist_ok=True)
         recording_id = uuid.uuid4().hex
         source = temp_dir / f"transcription_{recording_id}.audio"
