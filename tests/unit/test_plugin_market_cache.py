@@ -209,6 +209,56 @@ async def test_redirected_primary_is_cached_as_mirror(tmp_path, monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_force_refresh_reuses_cache_when_md5_matches(tmp_path, monkeypatch):
+    fetch_md5 = AsyncMock(return_value="md5-1")
+    service, source = _make_service(tmp_path, monkeypatch, fetch_md5)
+    _save_cache(service, source, {"cached": {"name": "c"}}, "md5-1")
+    _forbid_downloads(monkeypatch)
+
+    data, message = await service.get_online_plugins(
+        custom_registry=None,
+        force_refresh=True,
+    )
+
+    assert data == {"cached": {"name": "c"}}
+    assert message is None
+    fetch_md5.assert_awaited_once_with(MD5_URL)
+
+
+@pytest.mark.asyncio
+async def test_force_refresh_downloads_when_md5_is_unavailable(tmp_path, monkeypatch):
+    fetch_md5 = AsyncMock(return_value=None)
+    service, source = _make_service(tmp_path, monkeypatch, fetch_md5)
+    _save_cache(service, source, {"cached": {"name": "c"}}, "md5-1")
+    payload = {"fresh": {"name": "f"}}
+    _install_session(monkeypatch, {PRIMARY: _FakeResponse(200, payload)})
+
+    data, _ = await service.get_online_plugins(
+        custom_registry=None,
+        force_refresh=True,
+    )
+
+    assert data == payload
+
+
+@pytest.mark.asyncio
+async def test_force_refresh_downloads_when_md5_changed(tmp_path, monkeypatch):
+    payload = {"fresh": {"name": "f"}}
+    fetch_md5 = AsyncMock(return_value=_payload_md5(payload))
+    service, source = _make_service(tmp_path, monkeypatch, fetch_md5)
+    _save_cache(service, source, {"cached": {"name": "c"}}, "md5-1")
+    _install_session(monkeypatch, {PRIMARY: _FakeResponse(200, payload)})
+
+    data, _ = await service.get_online_plugins(
+        custom_registry=None,
+        force_refresh=True,
+    )
+
+    assert data == payload
+    assert _read_cache(source)["md5"] == _payload_md5(payload)
+
+
+@pytest.mark.asyncio
 async def test_normal_load_serves_cache_when_md5_is_unavailable(tmp_path, monkeypatch):
     fetch_md5 = AsyncMock(return_value=None)
     service, source = _make_service(tmp_path, monkeypatch, fetch_md5)
@@ -276,6 +326,23 @@ async def test_mirror_cache_is_refreshed_when_primary_recovers(tmp_path, monkeyp
     assert data == payload
     assert _read_cache(source)["source_index"] == 0
     assert _read_cache(source)["md5"] == _payload_md5(payload)
+
+
+@pytest.mark.asyncio
+async def test_mirror_cache_refreshes_on_force(tmp_path, monkeypatch):
+    fetch_md5 = AsyncMock(return_value=None)
+    service, source = _make_service(tmp_path, monkeypatch, fetch_md5)
+    _save_cache(service, source, {"mirror": {}}, "", source_index=1)
+    payload = {"fresh": {"name": "f"}}
+    _install_session(monkeypatch, {PRIMARY: _FakeResponse(200, payload)})
+
+    data, _ = await service.get_online_plugins(
+        custom_registry=None,
+        force_refresh=True,
+    )
+
+    assert data == payload
+    assert _read_cache(source)["source_index"] == 0
 
 
 @pytest.mark.asyncio
@@ -386,6 +453,23 @@ async def test_market_download_failure_without_cache_raises(tmp_path, monkeypatc
             custom_registry=None,
             force_refresh=False,
         )
+
+
+@pytest.mark.asyncio
+async def test_force_refresh_downloads_when_cache_has_no_md5(tmp_path, monkeypatch):
+    payload = {"fresh": {"name": "f"}}
+    fetch_md5 = AsyncMock(return_value=_payload_md5(payload))
+    service, source = _make_service(tmp_path, monkeypatch, fetch_md5)
+    _save_cache(service, source, {"cached": {"name": "c"}}, "")
+    _install_session(monkeypatch, {PRIMARY: _FakeResponse(200, payload)})
+
+    data, _ = await service.get_online_plugins(
+        custom_registry=None,
+        force_refresh=True,
+    )
+
+    assert data == payload
+    assert _read_cache(source)["md5"] == _payload_md5(payload)
 
 
 @pytest.mark.asyncio

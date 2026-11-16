@@ -1012,10 +1012,10 @@ class PluginService:
         request_started = datetime.now().isoformat()
 
         entry = self.load_plugin_cache_entry(source.cache_file)
-        if (
-            not force_refresh
-            and entry is not None
-            and await self.is_cache_valid(source, entry=entry)
+        if entry is not None and await self.is_cache_valid(
+            source,
+            entry=entry,
+            require_verification=force_refresh,
         ):
             logger.debug(
                 "Using cached plugin marketplace data for %s.", source.cache_file
@@ -1174,12 +1174,15 @@ class PluginService:
         source: RegistrySource,
         *,
         entry: PluginMarketCacheSnapshot,
+        require_verification: bool,
     ) -> bool:
         """Return whether the cached marketplace payload can be served.
 
         Args:
             source: Registry URLs and cache location for this request.
             entry: Parsed cache file.
+            require_verification: Reject a cache that cannot be verified against
+                the primary MD5; set on an explicit refresh.
 
         Returns:
             True when the cached payload may be served without downloading.
@@ -1191,6 +1194,8 @@ class PluginService:
 
         if entry.source_index == 0:
             if not entry.md5:
+                if require_verification:
+                    return False
                 if await self.fetch_remote_md5(source.md5_url):
                     # The MD5 endpoint is reachable now, so download once to
                     # record a hash instead of leaving the cache unverifiable.
@@ -1199,6 +1204,11 @@ class PluginService:
 
             remote_md5 = await self.fetch_remote_md5(source.md5_url)
             if not remote_md5:
+                if require_verification:
+                    logger.info(
+                        "Cannot fetch remote MD5; downloading the registry again"
+                    )
+                    return False
                 logger.warning(
                     "Cannot fetch remote MD5, using cache without validation"
                 )
@@ -1211,6 +1221,9 @@ class PluginService:
             return is_valid
 
         # Mirror or redirected payload: never treated as verified primary data.
+        if require_verification:
+            return False
+        # Ordinary request: refresh from the primary registry once it is back.
         if await self.fetch_remote_md5(source.md5_url):
             return False
         return self.cache_is_fresh(entry)
@@ -1416,7 +1429,7 @@ class PluginService:
         registry_url = self.normalize_registry_url(payload.get("registry_url"))
         market_data, _ = await self.get_online_plugins(
             custom_registry=registry_url,
-            force_refresh=False,
+            force_refresh=True,
         )
         market_plugin = self.resolve_market_plugin_entry_by_id(
             market_data,
@@ -1489,7 +1502,7 @@ class PluginService:
         registry_url = self.normalize_registry_url(record.get("registry_url"))
         market_data, _ = await self.get_online_plugins(
             custom_registry=registry_url,
-            force_refresh=False,
+            force_refresh=True,
         )
         market_plugin = self.resolve_market_plugin_entry(market_data, record)
         if not market_plugin:
@@ -1585,7 +1598,7 @@ class PluginService:
         registry_url = self.normalize_registry_url(payload.get("registry_url"))
         market_data, _ = await self.get_online_plugins(
             custom_registry=registry_url,
-            force_refresh=False,
+            force_refresh=True,
         )
         market_plugin = self.resolve_market_plugin_entry_by_id(
             market_data,

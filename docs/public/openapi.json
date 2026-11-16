@@ -4083,6 +4083,7 @@
           {
             "name": "force_refresh",
             "in": "query",
+            "description": "Revalidate the cached marketplace data; the registry is downloaded again only when the remote MD5 changed, or when the cache cannot be verified against it (fallback data, or caches written before source tracking).",
             "schema": {
               "type": "boolean"
             }

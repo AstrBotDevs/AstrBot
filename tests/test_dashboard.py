@@ -2577,6 +2577,13 @@ async def test_plugins(
         custom_registry=None, force_refresh=False
     )
 
+    response = await test_client.get(
+        "/api/plugin/market_list?force_refresh=true",
+        headers=authenticated_header,
+    )
+    assert response.status_code == 200
+    assert get_online_plugins.await_args.kwargs["force_refresh"] is True
+
     # 使用 MockPluginBuilder 创建测试插件
     plugin_store_path = core_lifecycle_td.plugin_manager.plugin_store_path
     monkeypatch.syspath_prepend(str(Path(plugin_store_path).parent.parent))
