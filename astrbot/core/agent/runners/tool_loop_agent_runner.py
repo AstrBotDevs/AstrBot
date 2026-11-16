@@ -1318,17 +1318,22 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                     logger.warning(
                         "skills_like tool parameter generation failed; no tool was executed."
                     )
-                    self.run_context.messages.append(
-                        Message(
-                            role="user",
-                            content=(
-                                "Tool parameter generation failed for "
-                                f"{', '.join(llm_resp.tools_call_name)} after repeated empty "
-                                "model responses. No tool was executed. Decide whether "
-                                "to retry with complete parameters or explain the failure "
-                                "to the user."
-                            ),
-                        )
+                    # Route the notice through the runner's context sink so the
+                    # conversation record and the host event stream carry it,
+                    # like every other framework-injected message.
+                    await self._append_context_messages(
+                        [
+                            Message(
+                                role="user",
+                                content=(
+                                    "Tool parameter generation failed for "
+                                    f"{', '.join(llm_resp.tools_call_name)} after repeated empty "
+                                    "model responses. No tool was executed. Decide whether "
+                                    "to retry with complete parameters or explain the failure "
+                                    "to the user."
+                                ),
+                            )
+                        ]
                     )
                     return
                 if not requery_resp.tools_call_name:

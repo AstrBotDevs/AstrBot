@@ -1829,6 +1829,8 @@ def _tool_call_response(args: dict[str, Any], call_id: str) -> LLMResponse:
 
 async def _run_skills_like_requery(
     script: list[Any],
+    *,
+    conversation_event_sink: Any = None,
 ) -> tuple[_ScriptedSkillsLikeProvider, ToolLoopAgentRunner]:
     """Run one skills_like step and return its provider and runner."""
     _RecordingToolExecutor.reset()
@@ -1855,6 +1857,7 @@ async def _run_skills_like_requery(
         agent_hooks=MockHooks(),
         tool_schema_mode="skills_like",
         streaming=False,
+        conversation_event_sink=conversation_event_sink,
     )
 
     async for _ in runner.step():
@@ -1906,6 +1909,44 @@ async def test_skills_like_requery_reports_failure_without_executing_light_call(
     assert provider.text_chat_calls == 5
     assert runner.final_llm_resp.completion_text == "最终回复"
     assert _RecordingToolExecutor.calls == []
+
+
+@pytest.mark.asyncio
+async def test_skills_like_requery_failure_notice_reaches_conversation_sink():
+    """失败通知必须走 runner 的上下文 sink，而不只是落进 working messages。
+
+    直接 `run_context.messages.append(...)` 会让列表看起来是对的，但不会发出
+    `context.appended`，宿主侧的对话记录因此永远不知道 agent 被告知「没有执行任何工具」。
+    """
+    sink = AsyncMock(return_value=True)
+    provider, runner = await _run_skills_like_requery(
+        [
+            _tool_call_response({}, "call_1"),
+            EmptyModelOutputError("OpenAI completion has no usable output. 1"),
+            EmptyModelOutputError("OpenAI completion has no usable output. 2"),
+            EmptyModelOutputError("OpenAI completion has no usable output. 3"),
+        ],
+        conversation_event_sink=sink,
+    )
+
+    assert provider.text_chat_calls == 4
+    assert _RecordingToolExecutor.calls == []
+    assert "No tool was executed" in runner.run_context.messages[-1].content
+
+    appended = [
+        call.args[0]
+        for call in sink.await_args_list
+        if call.args and call.args[0].type == "context.appended"
+    ]
+    carried = [
+        message["content"]
+        for event in appended
+        for message in event.data["messages"]
+        if message["role"] == "user" and isinstance(message["content"], str)
+    ]
+    assert any("No tool was executed" in text for text in carried), (
+        "the notice must reach the host conversation record, not only the runner's list"
+    )
 
 
 @pytest.mark.asyncio
