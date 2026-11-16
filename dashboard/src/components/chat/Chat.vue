@@ -1567,14 +1567,16 @@ async function selectSession(sessionId: string, pushRoute = true) {
   selectedProjectId.value = null;
   currSessionId.value = sessionId;
   replyTarget.value = null;
+  // Enter the loading state before route navigation can render an empty chat.
+  const messagesReady = loadedSessions[sessionId]
+    ? Promise.resolve()
+    : loadSessionMessages(sessionId);
   if (pushRoute && route.path !== `${basePath()}/${sessionId}`) {
     await router.push(`${basePath()}/${sessionId}`);
     if (currSessionId.value !== sessionId) return;
   }
-  if (!loadedSessions[sessionId]) {
-    await loadSessionMessages(sessionId);
-    if (currSessionId.value !== sessionId) return;
-  }
+  await messagesReady;
+  if (currSessionId.value !== sessionId) return;
   const storedSelection = readSessionProviderSelection(sessionId);
   setProviderSelection(
     storedSelection?.providerId || "",
