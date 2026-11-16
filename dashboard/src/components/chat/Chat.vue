@@ -82,7 +82,7 @@
           :class="{ 'sidebar-workspace-btn--active': isProviderWorkspace }"
           type="button"
           :title="tm('actions.providerConfig')"
-          @click="openProviderWorkspace"
+          @click="openProviderWorkspace()"
         >
           <Box :size="18" class="sidebar-action-icon" />
         </button>
@@ -91,7 +91,7 @@
           class="new-chat-btn sidebar-provider-btn"
           :class="{ 'sidebar-workspace-btn--active': isProviderWorkspace }"
           variant="text"
-          @click="openProviderWorkspace"
+          @click="openProviderWorkspace()"
         >
           <Box :size="18" class="sidebar-action-icon mr-2" />
           <span>{{ tm("actions.providerConfig") }}</span>
@@ -228,6 +228,9 @@
       v-model:enable-reasoning="enableReasoning"
       v-model:send-shortcut="sendShortcut"
       v-model:transport-mode="transportMode"
+      v-model:stt-provider="selectedSttProvider"
+      :stt-providers="sttProviders"
+      @configure-stt="openProviderWorkspace('speech_to_text')"
     />
 
     <main
@@ -236,7 +239,6 @@
         'empty-chat': isEmptyChat,
         'has-side-panel':
           threadPanelOpen ||
-          reasoningPanelOpen ||
           refsSidebarOpen ||
           chatHeader.workspaceFilesOpen,
       }"
@@ -255,8 +257,15 @@
       </transition>
       <section v-if="isProviderWorkspace" class="provider-workspace-shell">
         <ProviderChatCompletionPanel
+          v-if="providerWorkspaceType === 'chat_completion'"
           class="provider-workspace-page"
           :show-border="false"
+        />
+        <ProviderPage
+          v-else
+          class="provider-workspace-page"
+          :default-tab="providerWorkspaceType"
+          embedded
         />
       </section>
 
@@ -277,6 +286,9 @@
             :staged-files="stagedNonImageFiles"
             :disabled="sending"
             :is-recording="isRecording"
+            :recording-mode="recordingMode"
+            :voice-busy="voiceBusy"
+            :audio-levels="audioLevels"
             :is-running="
               Boolean(currSessionId && isSessionRunning(currSessionId))
             "
@@ -299,6 +311,7 @@
             @cancel-active-upload="cancelActiveUpload"
             @start-recording="startRecording"
             @stop-recording="stopRecording"
+            @cancel-recording="cancelRecording"
             @paste-image="handlePaste"
             @file-select="handleFilesSelected"
             @clear-reply="replyTarget = null"
@@ -386,7 +399,6 @@
               @regenerate-with-model="handleRegenerateMessage"
               @select-bot-text="handleBotTextSelection"
               @open-thread="openThreadPanel"
-              @open-reasoning="openReasoningPanel"
               @open-refs="openRefsSidebar"
               @button-click="handleButtonClick"
             />
@@ -424,6 +436,9 @@
             :staged-files="stagedNonImageFiles"
             :disabled="sending"
             :is-recording="isRecording"
+            :recording-mode="recordingMode"
+            :voice-busy="voiceBusy"
+            :audio-levels="audioLevels"
             :is-running="
               Boolean(currSessionId && isSessionRunning(currSessionId))
             "
@@ -448,6 +463,7 @@
             @cancel-active-upload="cancelActiveUpload"
             @start-recording="startRecording"
             @stop-recording="stopRecording"
+            @cancel-recording="cancelRecording"
             @paste-image="handlePaste"
             @file-select="handleFilesSelected"
             @clear-reply="replyTarget = null"
@@ -541,11 +557,6 @@
       :get-provider-selection="getSelectedProviderSelection"
       @delete="deleteThread"
     />
-    <ReasoningSidebar
-      v-model="reasoningPanelOpen"
-      :parts="activeReasoningParts"
-      :is-dark="isDark"
-    />
     <RefsSidebar v-model="refsSidebarOpen" :refs="selectedRefs" />
     <WorkspaceFilesPanel
       :model-value="chatHeader.workspaceFilesOpen"
@@ -600,13 +611,11 @@ import ChatMessageList from "@/components/chat/ChatMessageList.vue";
 import ChatUILogo from "@/components/chat/ChatUILogo.vue";
 import type { RegenerateModelSelection } from "@/components/chat/RegenerateMenu.vue";
 import ChatLoadError from "@/components/chat/ChatLoadError.vue";
-import ReasoningSidebar from "@/components/chat/ReasoningSidebar.vue";
 import ThreadPanel from "@/components/chat/ThreadPanel.vue";
 import WorkspaceFilesPanel from "@/components/chat/WorkspaceFilesPanel.vue";
 import RefsSidebar from "@/components/chat/message_list_comps/RefsSidebar.vue";
 import { useSessions, type Session } from "@/composables/useSessions";
 import {
-  messageBlocks as buildMessageBlocks,
   useMessages,
   type ChatRecord,
   type ChatThread,
@@ -614,7 +623,7 @@ import {
   type TransportMode,
 } from "@/composables/useMessages";
 import { useMediaHandling } from "@/composables/useMediaHandling";
-import { useRecording } from "@/composables/useRecording";
+import { useChatVoice } from "@/composables/useChatVoice";
 import { useProjects } from "@/composables/useProjects";
 import { useDragUpload } from "@/composables/useDragUpload";
 import { useProviderModelSelection } from "@/composables/useProviderModelSelection";
@@ -622,6 +631,7 @@ import { useChatHeaderStore } from "@/stores/chatHeader";
 import { useHeaderContextStore } from "@/stores/headerContext";
 import { useMobileDrawerStore } from "@/stores/mobileDrawer";
 import { useCustomizerStore } from "@/stores/customizer";
+import ProviderPage from "@/views/ProviderPage.vue";
 import ProviderChatCompletionPanel from "@/components/provider/ProviderChatCompletionPanel.vue";
 import { useI18n, useModuleI18n } from "@/i18n/composables";
 import { askForConfirmation, useConfirmDialog } from "@/utils/confirmDialog";
@@ -760,11 +770,6 @@ let autoScrollFrame: number | null = null;
 const replyTarget = ref<ChatRecord | null>(null);
 const threadPanelOpen = ref(false);
 const activeThread = ref<ChatThread | null>(null);
-const reasoningPanelOpen = ref(false);
-const activeReasoningTarget = ref<{
-  message: ChatRecord;
-  blockIndex: number;
-} | null>(null);
 const deletingThread = ref(false);
 const refsSidebarOpen = ref(false);
 const selectedRefs = ref<Record<string, unknown> | null>(null);
@@ -791,10 +796,27 @@ let draftSaveTimer: number | null = null;
 let chatResizeObserver: ResizeObserver | null = null;
 let chatMutationObserver: MutationObserver | null = null;
 const {
+  mode: recordingMode,
+  busy: voiceBusy,
+  levels: audioLevels,
   isRecording,
-  startRecording: startRecorder,
-  stopRecording: stopRecorder,
-} = useRecording();
+  sttProviders,
+  selectedSttProvider,
+  loadProviders: loadSttProviders,
+  start: startRecording,
+  finish: stopRecording,
+  cancel: cancelRecording,
+} = useChatVoice({
+  draft,
+  stagedFiles,
+  contextKey: () =>
+    `${currSessionId.value}:${selectedProjectId.value}:${activeWorkspace.value}:${props.active}`,
+  send: sendCurrentMessage,
+  configureStt: () => { void openProviderWorkspace("speech_to_text"); },
+});
+watch(settingsOpen, (open) => {
+  if (open) void loadSttProviders();
+});
 const { smAndDown: isMobile } = useDisplay();
 
 const isSidebarCollapsed = computed(
@@ -802,6 +824,12 @@ const isSidebarCollapsed = computed(
 );
 const isProviderWorkspace = computed(
   () => activeWorkspace.value === "providers",
+);
+
+const providerWorkspaceType = computed(() =>
+  route.query.type === "speech_to_text" || route.query.type === "text_to_speech"
+    ? route.query.type
+    : "chat_completion",
 );
 
 async function backToNavigation() {
@@ -817,21 +845,6 @@ function toggleChatSidebar() {
   }
   customizer.SET_CHAT_SIDEBAR_COLLAPSED(!customizer.chatSidebarCollapsed);
 }
-
-const activeReasoningParts = computed<MessagePart[]>(() => {
-  if (!activeReasoningTarget.value) return [];
-  const blocks = buildMessageBlocks(
-    activeReasoningTarget.value.message.content || { type: "bot", message: [] },
-  );
-  const block = blocks[activeReasoningTarget.value.blockIndex];
-  return block?.kind === "thinking" ? block.parts : [];
-});
-
-watch(reasoningPanelOpen, (open) => {
-  if (!open) {
-    activeReasoningTarget.value = null;
-  }
-});
 
 const {
   loadingMessages,
@@ -1121,8 +1134,6 @@ watch(
     threadSelection.visible = false;
     threadPanelOpen.value = false;
     activeThread.value = null;
-    reasoningPanelOpen.value = false;
-    activeReasoningTarget.value = null;
     refsSidebarOpen.value = false;
     selectedRefs.value = null;
   },
@@ -1294,8 +1305,6 @@ function closeSecondaryPanels() {
   threadSelection.visible = false;
   threadPanelOpen.value = false;
   activeThread.value = null;
-  reasoningPanelOpen.value = false;
-  activeReasoningTarget.value = null;
   refsSidebarOpen.value = false;
   selectedRefs.value = null;
   chatHeader.SET_WORKSPACE_FILES_OPEN(false);
@@ -1305,13 +1314,11 @@ function showChatWorkspace() {
   activeWorkspace.value = "chat";
 }
 
-async function openProviderWorkspace() {
+async function openProviderWorkspace(type = "chat_completion") {
   closeSecondaryPanels();
+  settingsOpen.value = false;
   activeWorkspace.value = "providers";
-  const targetPath = `${basePath()}/models`;
-  if (route.path !== targetPath) {
-  await router.push(targetPath);
-  }
+  await router.push({ path: `${basePath()}/models`, query: { type } });
 }
 
 function sessionTitle(session: Session) {
@@ -1892,8 +1899,6 @@ async function createThreadFromSelection() {
 
 function openThreadPanel(thread: ChatThread) {
   chatHeader.SET_WORKSPACE_FILES_OPEN(false);
-  reasoningPanelOpen.value = false;
-  activeReasoningTarget.value = null;
   refsSidebarOpen.value = false;
   activeThread.value = thread;
   threadPanelOpen.value = true;
@@ -1903,24 +1908,9 @@ function openRefsSidebar(refs: unknown) {
   chatHeader.SET_WORKSPACE_FILES_OPEN(false);
   threadPanelOpen.value = false;
   activeThread.value = null;
-  reasoningPanelOpen.value = false;
-  activeReasoningTarget.value = null;
   selectedRefs.value =
     refs && typeof refs === "object" ? (refs as Record<string, unknown>) : null;
   refsSidebarOpen.value = true;
-}
-
-function openReasoningPanel(payload: {
-  message: ChatRecord;
-  blockIndex: number;
-}) {
-  chatHeader.SET_WORKSPACE_FILES_OPEN(false);
-  threadPanelOpen.value = false;
-  activeThread.value = null;
-  refsSidebarOpen.value = false;
-  selectedRefs.value = null;
-  activeReasoningTarget.value = payload;
-  reasoningPanelOpen.value = true;
 }
 
 async function loadEarlierWithAnchor() {
@@ -2006,28 +1996,6 @@ async function handleFilesSelected(files: FileList | File[]) {
     } else {
       await processAndUploadFile(file);
     }
-  }
-}
-
-async function startRecording() {
-  try {
-    await startRecorder();
-  } catch (error) {
-    console.error("Failed to start recording:", error);
-    toast.error(tm("voice.error"));
-  }
-}
-
-async function stopRecording() {
-  try {
-    const audioFile = await stopRecorder();
-    const uploaded = await processAndUploadFile(audioFile);
-    if (!uploaded) {
-      toast.error(tm("voice.error"));
-    }
-  } catch (error) {
-    console.error("Failed to stop recording:", error);
-    toast.error(tm("voice.error"));
   }
 }
 
@@ -2201,7 +2169,7 @@ async function stopCurrentSession() {
   /* Side panels live inside .chat-main, which already starts below the 40px
      window toolbar. Keep them flush with the content area's top edge. */
   --chat-panel-top-offset: 0px;
-  --chat-session-active-bg: #efefef;
+  --chat-session-active-bg: rgba(var(--v-theme-on-surface), 0.05);
   --chat-page-bg: #fdfcfc;
   --chat-border: #f2f2f2;
   --chat-muted: rgba(var(--v-theme-on-surface), 0.62);

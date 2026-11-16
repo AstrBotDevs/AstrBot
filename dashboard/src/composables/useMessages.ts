@@ -330,6 +330,8 @@ export function useMessages(options: UseMessagesOptions) {
       attachThreads(records, payload.threads || []);
       await resolveRecordMedia(records);
       if (sessionLoadEpochs[sessionId] !== epoch) return;
+      // A completion refresh must not replace a new turn started during the fetch.
+      if (preserveLoadedPages && isSessionRunning(sessionId)) return;
       const previousPagination = paginationBySession[sessionId];
       if (preserveLoadedPages && previousPagination?.page > 1) {
         const refreshedById = new Map(
@@ -733,6 +735,7 @@ export function useMessages(options: UseMessagesOptions) {
     };
     activeConnections[connection.messageId] = connection;
 
+    let requestAccepted = false;
     try {
       const response = await fetchWithAuth(
         chatApi.regenerateMessageUrl(sessionId, targetMessageId),
@@ -758,6 +761,7 @@ export function useMessages(options: UseMessagesOptions) {
         const payload = await response.json().catch(() => null);
         throw new Error(payload?.message || "Regenerate failed.");
       }
+      requestAccepted = true;
       // Replace the retried turn only after the backend accepts the request.
       if (targetIndex >= 0) {
         messagesBySession[sessionId] = records.slice(0, targetIndex + 1);
@@ -794,6 +798,14 @@ export function useMessages(options: UseMessagesOptions) {
     } finally {
       if (activeConnections[connection.messageId]?.abort === abort) {
         delete activeConnections[connection.messageId];
+        if (
+          requestAccepted &&
+          !abort.signal.aborted &&
+          !connection.completed &&
+          !isSessionRunning(sessionId)
+        ) {
+          await loadSessionMessages(sessionId, true, false, true);
+        }
       }
       await options.onSessionsChanged?.();
     }
@@ -918,6 +930,13 @@ export function useMessages(options: UseMessagesOptions) {
       .finally(async () => {
         if (activeConnections[messageId]?.abort === abort) {
           delete activeConnections[messageId];
+          if (
+            !abort.signal.aborted &&
+            !connection.completed &&
+            !isSessionRunning(sessionId)
+          ) {
+            await loadSessionMessages(sessionId, true, false, true);
+          }
           await options.onSessionsChanged?.();
         }
       });
@@ -1439,6 +1458,7 @@ export function useMessages(options: UseMessagesOptions) {
       return;
     }
     if (msgType === "end") {
+      if (connection) connection.completed = true;
       markMessageStarted(botRecord);
       return;
     }

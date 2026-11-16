@@ -45,6 +45,15 @@
     ]
   },
   "voice": {
+    "transcribing": "Диктовка…",
+    "transcribe": "Диктовка текста",
+    "sendAudio": "Записать и отправить аудио",
+    "cancel": "Отменить запись",
+    "finishTranscription": "Завершить и распознать",
+    "sttModel": "Модель распознавания речи",
+    "configure": "Настроить",
+    "noSttProvider": "Сначала настройте доступную модель распознавания речи",
+    "transcriptionFailed": "Не удалось распознать речь. Повторите попытку.",
     "start": "Начать запись",
     "stop": "Стоп",
     "recording": "Запись",
@@ -142,6 +151,12 @@
     "title": "Конфигурация"
   },
   "reasoning": {
+    "worked": "Время работы: {duration}",
+    "working": "В работе: {duration}",
+    "workCompleted": "Ход работы",
+    "durationHours": "{hours} ч {minutes} мин {seconds} с",
+    "durationMinutes": "{minutes} мин {seconds} с",
+    "durationSeconds": "{seconds} с",
     "enabled": "Рассуждения включены",
     "disabled": "Рассуждения выключены",
     "thinking": "Рассуждение",

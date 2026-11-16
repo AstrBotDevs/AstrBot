@@ -1450,6 +1450,27 @@ export type SendChatMessageResponse = (SuccessEnvelope);
 
 export type SendChatMessageError = unknown;
 
+export type TranscribeChatAudioData = {
+    body: {
+        file: (Blob | File);
+        /**
+         * STT provider ID; defaults to the first available provider.
+         */
+        provider_id?: string;
+    };
+};
+
+export type TranscribeChatAudioResponse = ({
+    status: 'ok' | 'error';
+    message?: string;
+    data?: {
+        text: string;
+        provider_id: string;
+    };
+});
+
+export type TranscribeChatAudioError = unknown;
+
 export type OpenChatWebSocketData = {
     query?: {
         api_key?: string;

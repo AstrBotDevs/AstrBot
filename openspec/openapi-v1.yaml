@@ -1166,6 +1166,50 @@ paths:
         "200":
           $ref: "#/components/responses/Ok"
 
+  /api/v1/chat/transcriptions:
+    post:
+      tags: [Chat]
+      summary: Transcribe an audio recording without sending a chat message
+      operationId: transcribeChatAudio
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file:
+                  type: string
+                  format: binary
+                provider_id:
+                  type: string
+                  description: STT provider ID; defaults to the first available provider.
+      responses:
+        "200":
+          description: Transcription result
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status]
+                properties:
+                  status:
+                    type: string
+                    enum: [ok, error]
+                  message:
+                    type: string
+                  data:
+                    type: object
+                    required: [text, provider_id]
+                    properties:
+                      text:
+                        type: string
+                      provider_id:
+                        type: string
+
   /api/v1/chat/ws:
     get:
       tags: [Chat]

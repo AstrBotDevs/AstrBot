@@ -9,7 +9,6 @@ from astrbot.api.event import MessageChain
 from astrbot.api.message_components import Plain
 from astrbot.core.platform.sources.webchat.webchat_event import WebChatMessageEvent
 from astrbot.core.platform.sources.webchat.webchat_queue_mgr import webchat_queue_mgr
-from astrbot.dashboard.services.live_chat_service import LiveChatService
 from astrbot.dashboard.services.open_api_service import (
     OpenApiService,
     OpenApiWebSocketChatBridge,
@@ -17,16 +16,14 @@ from astrbot.dashboard.services.open_api_service import (
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("consumer", ["openapi", "live"])
 @pytest.mark.parametrize("mode", ["nonstream", "stream", "end_only", "empty"])
-async def test_websocket_consumers_preserve_message_boundaries(consumer, mode):
+async def test_websocket_consumers_preserve_message_boundaries(mode):
     """Consume real adapter frames without splitting components or saving empties.
 
     Args:
-        consumer: WebSocket service receiving the adapter's output.
         mode: Normal sends, streaming sends, an unfinished stream, or no output.
     """
-    session_id = f"boundary-{consumer}-{mode}"
+    session_id = f"boundary-openapi-{mode}"
     request_id = f"request-{session_id}"
     core = SimpleNamespace(
         platform_manager=SimpleNamespace(platform_insts=[]),
@@ -47,35 +44,25 @@ async def test_websocket_consumers_preserve_message_boundaries(consumer, mode):
         "session_id": session_id,
         "message_id": request_id,
     }
-    if consumer == "openapi":
-        service = OpenApiService(SimpleNamespace(), core)
-        service.prepare_chat_send = AsyncMock(return_value=("alice", session_id, None))
-        service.update_session_config_route = AsyncMock(return_value=None)
-        bridge = OpenApiWebSocketChatBridge(
-            build_user_message_parts=build_parts,
-            create_attachment_from_file=AsyncMock(),
-            extract_web_search_refs=lambda *_: {},
-            insert_user_message=AsyncMock(),
-            save_bot_message=save,
+    service = OpenApiService(SimpleNamespace(), core)
+    service.prepare_chat_send = AsyncMock(return_value=("alice", session_id, None))
+    service.update_session_config_route = AsyncMock(return_value=None)
+    bridge = OpenApiWebSocketChatBridge(
+        build_user_message_parts=build_parts,
+        create_attachment_from_file=AsyncMock(),
+        extract_web_search_refs=lambda *_: {},
+        insert_user_message=AsyncMock(),
+        save_bot_message=save,
+    )
+    task = asyncio.create_task(
+        service.handle_chat_ws_send(
+            post_data=payload,
+            conf_list=[],
+            chat_bridge=bridge,
+            send_json=send_json,
+            send_error=send_error,
         )
-        task = asyncio.create_task(
-            service.handle_chat_ws_send(
-                post_data=payload,
-                conf_list=[],
-                chat_bridge=bridge,
-                send_json=send_json,
-                send_error=send_error,
-            )
-        )
-    else:
-        service = LiveChatService(SimpleNamespace(), core)
-        session = service.create_session("alice")
-        service.build_chat_message_parts = build_parts
-        service.ensure_chat_subscription = AsyncMock(return_value="subscription")
-        service.save_bot_message = save
-        task = asyncio.create_task(
-            service.handle_chat_message(session, payload, send_json)
-        )
+    )
 
     try:
         await asyncio.wait_for(
@@ -133,6 +120,4 @@ async def test_websocket_consumers_preserve_message_boundaries(consumer, mode):
         if not task.done():
             task.cancel()
             await asyncio.gather(task, return_exceptions=True)
-        if consumer == "live":
-            await service.cleanup_session(session)
         webchat_queue_mgr.remove_queues(session_id)

@@ -147,9 +147,17 @@
                 </div>
               </template>
 
-              <template v-else>
+              <MessageWork
+                v-else
+                :blocks="renderBlocks(msg)"
+                :is-user="isUserMessage(msg)"
+                :is-streaming="isMessageStreaming(msg, msgIndex)"
+                :stats="messageContent(msg).agentStats"
+                :created-at="msg.created_at"
+                v-slot="{ blocks, offset }"
+              >
                 <template
-                  v-for="(block, blockIndex) in renderBlocks(msg)"
+                  v-for="(block, blockIndex) in blocks"
                   :key="`${msgIndex}-block-${blockIndex}-${block.kind}`"
                 >
                   <ReasoningBlock
@@ -159,10 +167,8 @@
                     :initial-expanded="false"
                     :is-streaming="isMessageStreaming(msg, msgIndex)"
                     :has-non-reasoning-content="
-                      hasFollowingContentBlock(msg, blockIndex)
+                      hasFollowingContentBlock(msg, blockIndex + offset)
                     "
-                    :open-in-sidebar="variant === 'main'"
-                    @open="emit('openReasoning', { message: msg, blockIndex })"
                   />
 
                   <template v-else>
@@ -303,7 +309,7 @@
                             :is-dark="isDark"
                           >
                             <template #label>
-                              <v-icon size="16">mdi-code-json</v-icon>
+                              <CodeXml :size="16" aria-hidden="true" />
                               <span>{{ tool.name || "python" }}</span>
                               <span class="tool-call-inline-status">
                                 {{ toolCallStatusText(tool) }}
@@ -332,7 +338,7 @@
                     </template>
                   </template>
                 </template>
-              </template>
+              </MessageWork>
             </MessageContentTransition>
           </div>
 
@@ -518,13 +524,14 @@
 <script setup lang="ts">
 import MessageContentTransition from "@/components/chat/MessageContentTransition.vue";
 import { computed, nextTick, reactive, ref } from "vue";
-import { Copy, Info, SquarePen } from "@lucide/vue";
+import { Copy, Info, SquarePen, CodeXml } from "@lucide/vue";
 import axios from "axios";
 import { fileApi } from "@/api/v1";
 import RegenerateMenu, {
   type RegenerateModelSelection,
 } from "@/components/chat/RegenerateMenu.vue";
 import ThreadedMarkdownMessagePart from "@/components/chat/ThreadedMarkdownMessagePart.vue";
+import MessageWork from "@/components/chat/message_list_comps/MessageWork.vue";
 import ReasoningBlock from "@/components/chat/message_list_comps/ReasoningBlock.vue";
 import ToolCallCard from "@/components/chat/message_list_comps/ToolCallCard.vue";
 import ToolCallItem from "@/components/chat/message_list_comps/ToolCallItem.vue";
@@ -598,7 +605,6 @@ const emit = defineEmits<{
   ];
   selectBotText: [event: MouseEvent, message: ChatRecord];
   openThread: [thread: ChatThread];
-  openReasoning: [payload: { message: ChatRecord; blockIndex: number }];
   openRefs: [refs: unknown];
   buttonClick: [payload: { message: ChatRecord; callbackData: string }];
 }>();

@@ -27,14 +27,18 @@ from astrbot.core.platform.sources.webchat.request_flags import (
 )
 from astrbot.core.platform.sources.webchat.webchat_queue_mgr import webchat_queue_mgr
 from astrbot.core.utils.active_event_registry import active_event_registry
-from astrbot.core.utils.astrbot_path import get_astrbot_data_path
+from astrbot.core.utils.astrbot_path import (
+    get_astrbot_data_path,
+    get_astrbot_system_tmp_path,
+)
 from astrbot.core.utils.datetime_utils import generate_timestamp_id, to_utc_isoformat
 from astrbot.core.utils.event_id import new_event_id
 from astrbot.core.utils.media_utils import (
     MEDIA_MIME_EXTENSIONS,
+    convert_audio_to_wav,
     detect_image_mime_type_async,
 )
-from astrbot.core.utils.upload import UploadTooLargeError
+from astrbot.core.utils.upload import UploadTooLargeError, save_upload_stream
 from astrbot.dashboard.services.chunked_upload_service import (
     ChunkedUploadError,
     ChunkedUploadService,
@@ -545,6 +549,63 @@ class ChatService:
     ) -> tuple[str, str | None]:
         return await self.resolve_attachment_file(attachment_id)
 
+    async def transcribe_audio(self, file, provider_id: str = "") -> dict:
+        """Transcribe a temporary recording without creating a chat message.
+
+        Args:
+            file: Uploaded audio with an asynchronous read interface.
+            provider_id: Configured STT provider ID, or empty for the first provider.
+
+        Returns:
+            Recognized text and the provider ID used for transcription.
+
+        Raises:
+            ChatServiceError: If the provider, recording, or transcription is invalid.
+        """
+        providers = self.core_lifecycle.provider_manager.stt_provider_insts
+        provider = (
+            next((item for item in providers if item.meta().id == provider_id), None)
+            if provider_id
+            else next(iter(providers), None)
+        )
+        if provider is None:
+            raise ChatServiceError(
+                "No available STT provider"
+                if not provider_id
+                else "STT provider is unavailable"
+            )
+        if not (file.content_type or "").startswith("audio/"):
+            raise ChatServiceError("An audio recording is required")
+
+        temp_dir = Path(get_astrbot_system_tmp_path())
+        temp_dir.mkdir(parents=True, exist_ok=True)
+        recording_id = uuid.uuid4().hex
+        source = temp_dir / f"transcription_{recording_id}.audio"
+        wav = temp_dir / f"transcription_{recording_id}.wav"
+        try:
+            size = await save_upload_stream(file, source, max_bytes=25 * 1024 * 1024)
+            if not size:
+                raise ChatServiceError("Recording is empty")
+            await convert_audio_to_wav(
+                str(source), str(wav), sample_rate=16000, channels=1
+            )
+            text = await asyncio.wait_for(provider.get_text(str(wav)), timeout=120)
+            if not isinstance(text, str) or not text.strip():
+                raise ChatServiceError("No speech was recognized")
+            return {"text": text.strip(), "provider_id": provider.meta().id}
+        except UploadTooLargeError as exc:
+            raise ChatServiceError("Recording exceeds the 25 MB limit") from exc
+        except asyncio.TimeoutError as exc:
+            raise ChatServiceError("Audio transcription timed out") from exc
+        except ChatServiceError:
+            raise
+        except Exception as exc:
+            logger.exception("Audio transcription failed")
+            raise ChatServiceError("Audio transcription failed") from exc
+        finally:
+            source.unlink(missing_ok=True)
+            wav.unlink(missing_ok=True)
+
     async def save_uploaded_file(self, file) -> dict:
         if (file.content_length or 0) > MAX_UPLOAD_FILE_SIZE_BYTES:
             raise ChatServiceError(
@@ -884,6 +945,8 @@ class ChatService:
                         yield f"data: {json.dumps(user_saved_info, ensure_ascii=False)}\n\n"
 
                 while True:
+                    if subscriber not in run.subscribers and subscriber.empty():
+                        break
                     try:
                         item = await asyncio.wait_for(subscriber.get(), timeout=1)
                     except asyncio.TimeoutError:
@@ -1140,9 +1203,9 @@ class ChatService:
                     self.chat_runs_by_session.pop(run.session_id, None)
                     self.running_convs.pop(run.session_id, None)
             for subscriber in list(run.subscribers):
-                while not subscriber.empty():
-                    subscriber.get_nowait()
-                subscriber.put_nowait(None)
+                # Preserve final output; a full queue closes after it has drained.
+                if not subscriber.full():
+                    subscriber.put_nowait(None)
             run.subscribers.clear()
 
     async def build_chat_stream(
@@ -1263,6 +1326,10 @@ class ChatService:
                         "message": message_parts,
                         "selected_provider": selected_provider,
                         "selected_model": selected_model,
+                        "selected_stt_provider": post_data.get("selected_stt_provider"),
+                        "selected_tts_provider": post_data.get("selected_tts_provider"),
+                        "persona_prompt": post_data.get("persona_prompt"),
+                        "show_reasoning": post_data.get("show_reasoning"),
                         "flags": flags,
                         "locale": post_data.get("locale"),
                         "message_id": message_id,

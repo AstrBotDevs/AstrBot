@@ -1,5 +1,8 @@
 # 杂项
 
+> [!WARNING]
+> 本页介绍的接口未来可能随时被移除，不推荐在新插件中使用。
+
 ## 获取消息平台实例
 
 > v3.4.34 后
@@ -23,7 +26,7 @@ async def test_(self, event: AstrMessageEvent):
     # platform.get_client().api.call_action()
 ```
 
-## 调用 QQ 协议端 API
+## 调用 OneBot v11 协议端 API
 
 ```py
 @filter.command("helloworld")
@@ -42,12 +45,6 @@ async def helloworld(self, event: AstrMessageEvent):
         ret = await client.api.call_action("delete_msg", **payloads)  # 调用 协议端  API
         logger.info(f"delete_msg: {ret}")
 ```
-
-关于 CQHTTP API，请参考如下文档：
-
-Napcat API 文档：<https://napcat.apifox.cn/>
-
-Lagrange API 文档：<https://lagrange-onebot.apifox.cn/>
 
 ## 获取载入的所有插件
 

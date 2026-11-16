@@ -35,6 +35,12 @@
     "openaiDecisionHints": {
       "apiBase": "OpenAI API 基础地址，默认 https://api.openai.com/v1；自动补全 /decisions，已以 /decisions 结尾则按原样请求。",
       "model": "OpenAI Decisions 当前支持 gpt-6-luna。"
+    },
+    "deepseekTtsHints": {
+      "apiBase": "DeepSeek TTS API 基础地址，默认 https://api.deepseek.com/v1；自动补全 /tools/tts，请勿重复添加 /v1。"
+    },
+    "deepseekSttHints": {
+      "apiBase": "DeepSeek STT API 基础地址，默认 https://api.deepseek.com/v1；自动补全 /tools/asr，请勿重复添加 /v1。"
     }
   },
   "availability": {
