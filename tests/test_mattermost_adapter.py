@@ -314,7 +314,10 @@ async def test_mattermost_attachments_follow_preprocessing_cleanup_rules(
     stage = preprocess_stage.PreProcessStage()
     stage.config = {}
     stage.platform_settings = {}
-    stage.stt_settings = {"enable": False}
+    stage.plugin_manager = MagicMock()
+    stage.plugin_manager.context.get_config.return_value = {
+        "provider_stt_settings": {"enable": False}
+    }
 
     await stage.process(event)
     event.cleanup_temporary_local_files()

@@ -86,9 +86,14 @@ pre, code, .markdown pre, .markdown code, .release-notes pre, .release-notes cod
 }
 
 .v-overlay.v-menu {
+  .v-overlay__content {
+    border-radius: var(--astrbot-radius-menu);
+  }
+
   .v-overlay__content > .v-card,
   .v-overlay__content > .v-list {
     border: 0 !important;
+    border-radius: inherit !important;
     box-shadow: var(--astrbot-menu-shadow) !important;
   }
 
@@ -96,6 +101,48 @@ pre, code, .markdown pre, .markdown code, .release-notes pre, .release-notes cod
   .v-overlay__content .v-list {
     border: 0 !important;
   }
+}
+
+// Material dialog containers use extra-large corners; action buttons use full corners.
+.v-dialog {
+  --astrbot-dialog-radius: var(--astrbot-radius-dialog);
+  --astrbot-dialog-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
+
+  > .v-overlay__content {
+    > .v-card,
+    > .v-sheet,
+    > form > .v-card,
+    > form > .v-sheet {
+      border-radius: var(--astrbot-dialog-radius) !important;
+      border: 0 !important;
+      box-shadow: var(--astrbot-dialog-shadow) !important;
+
+      > .v-card-title,
+      > .v-card-item {
+        padding-top: 24px !important;
+      }
+
+      > .v-card-title,
+      > .v-card-item .v-card-title {
+        font-weight: 400 !important;
+      }
+
+      > .v-card-actions,
+      > .project-dialog-actions {
+        padding: 16px 24px 24px !important;
+      }
+    }
+  }
+
+  .v-card-actions .v-btn,
+  .dialog-action {
+    border-radius: var(--astrbot-radius-pill) !important;
+  }
+}
+
+.v-dialog--fullscreen {
+  --astrbot-dialog-radius: 0px;
+  --astrbot-dialog-shadow: none;
 }
 
 // Dark mode global overrides

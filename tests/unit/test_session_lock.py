@@ -18,7 +18,6 @@ from astrbot.core.astr_agent_runtime.main_session import (
     MainAgentInput,
     MainAgentSession,
 )
-from astrbot.core.star.session_llm_manager import SessionServiceManager
 from astrbot.core.utils.session_lock import SessionLockManager
 
 
@@ -158,16 +157,16 @@ class TestConcurrency:
 
     @pytest.mark.asyncio
     @pytest.mark.parametrize(
-        ("provider_enabled", "session_enabled"),
+        ("provider_enabled", "admission_enabled"),
         [(False, True), (True, False)],
     )
     async def test_waiting_llm_request_rechecks_enabled_status(
         self,
         monkeypatch,
         provider_enabled,
-        session_enabled,
+        admission_enabled,
     ):
-        """A queued request must honor LLM status changes made while waiting."""
+        """A queued request must recheck admission after acquiring the session lock."""
         session_id = "disabled-while-waiting"
         manager = SessionLockManager()
         config = {"provider_settings": {"enable": True}}
@@ -186,16 +185,9 @@ class TestConcurrency:
         session = MainAgentSession(runtime, "conversation", session_id)
         monkeypatch.setattr(native_session, "session_lock_manager", manager)
         monkeypatch.setattr(builder, "build_main_agent", build_main_agent)
-        monkeypatch.setattr(
-            SessionServiceManager,
-            "should_process_llm_request",
-            AsyncMock(return_value=session_enabled),
-        )
 
         async def admit():
-            return config["provider_settings"]["enable"] and (
-                await SessionServiceManager.should_process_llm_request(event)
-            )
+            return config["provider_settings"]["enable"] and admission_enabled
 
         input = MainAgentInput(
             event,

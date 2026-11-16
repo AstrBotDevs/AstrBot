@@ -1422,7 +1422,7 @@ function changePage(nextPage: number) {
 .workspace-card {
   background: var(--workspace-card);
   border: 0;
-  border-radius: 16px;
+  border-radius: var(--astrbot-radius-card);
   min-width: 0;
   overflow: hidden;
 }
@@ -1477,7 +1477,7 @@ function changePage(nextPage: number) {
 
 .filter-panel :deep(.v-field) {
   background: var(--workspace-surface);
-  border-radius: 10px;
+  border-radius: var(--astrbot-radius-control);
   box-shadow: none;
   font-size: 0.8rem;
 }

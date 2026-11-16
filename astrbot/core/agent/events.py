@@ -148,6 +148,15 @@ class MessageCompleted(OutputValue):
     status: TurnStatus = TurnStatus.COMPLETED
 
 
+class OutputReady(OutputValue):
+    """A prepared user-facing output, independent of platform delivery success."""
+
+    type: Literal["output.ready"] = "output.ready"
+    target_umo: str
+    source: Literal["tool", "reply"]
+    content: tuple[OutputComponent, ...]
+
+
 class RequestStarted(OutputValue):
     """One provider method invocation, not a hidden HTTP attempt."""
 
@@ -247,6 +256,7 @@ RuntimeEventPayload: TypeAlias = Annotated[
     | TextDelta
     | ReasoningDelta
     | MessageCompleted
+    | OutputReady
     | RequestStarted
     | RequestFinished
     | ToolStarted

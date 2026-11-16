@@ -184,7 +184,7 @@ class ConversationService:
         if not conversation:
             raise ConversationServiceError("对话不存在")
 
-        persona_id = payload.get("persona_id", conversation.persona_id)
+        persona_id = payload.get("persona_id")
 
         if title is not None or persona_id is not None:
             await self.conv_mgr.update_conversation(
@@ -284,11 +284,12 @@ class ConversationService:
                 if not conversation or conversation.user_id != user_id:
                     raise ConversationServiceError("对话不存在")
 
-                await self.conv_mgr.update_conversation(
+                writer = await self.conv_mgr.create_event_writer(
                     unified_msg_origin=user_id,
                     conversation_id=cid,
-                    history=history,
+                    expected_revision=conversation.revision,
                 )
+                await writer.save_history(history, origin="user")
         except SessionLockTimeoutError as exc:
             raise ConversationServiceError(
                 "Conversation is busy; please retry after the current reply finishes."
