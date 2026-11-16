@@ -4,6 +4,7 @@ import test from "node:test";
 import {
   LIMITED_SHIKI_SUPPORTED_LANGUAGES,
   createHighlighter,
+  loadShikiLanguages,
   normalizeLimitedShikiLanguage,
 } from "../src/utils/shikiLimitedBundle.js";
 
@@ -38,7 +39,7 @@ test("normalizes aliases for the expanded language set", () => {
 });
 
 test("highlights every expanded language with Shiki tokens", async () => {
-  const highlighter = await createHighlighter({ themes: ["github-light"] });
+  const highlighter = await createHighlighter();
   const samples = {
     c: "int main() { return 0; }",
     cpp: "std::vector<int> values;",
@@ -56,11 +57,31 @@ test("highlights every expanded language with Shiki tokens", async () => {
   };
 
   for (const [language, code] of Object.entries(samples)) {
+    await loadShikiLanguages(highlighter, [language]);
     assert.equal(highlighter.getLanguage(language)?.name, language, language);
     const html = highlighter.codeToHtml(code, {
       lang: language,
       theme: "github-light",
     });
     assert.match(html, /<span[^>]+style=/, language);
+  }
+});
+
+test("a requested language does not preload unrelated grammars", async () => {
+  const highlighter = await createHighlighter();
+  await loadShikiLanguages(highlighter, ["py", "unknown-language", "plaintext"]);
+  assert.equal(highlighter.getLanguage("python").name, "python");
+  assert.ok(!highlighter.getLoadedLanguages().includes("javascript"));
+});
+
+test("a Markdown preview retains embedded code highlighting", async () => {
+  const highlighter = await createHighlighter();
+  await loadShikiLanguages(highlighter, ["md"]);
+  const code = '```js\nconst value = "hello";\n```';
+
+  for (const theme of ["github-light", "github-dark"]) {
+    const html = highlighter.codeToHtml(code, { lang: "markdown", theme });
+    assert.match(html, /<span[^>]+>const<\/span>/);
+    assert.match(html, /<span[^>]+> "hello"<\/span>/);
   }
 });

@@ -150,7 +150,7 @@
                           :is-dark="isDark"
                         >
                           <template #label>
-                            <v-icon size="16">mdi-code-json</v-icon>
+                            <CodeXml :size="16" aria-hidden="true" />
                             <span>{{ tool.name || "python" }}</span>
                             <span class="tool-call-inline-status">
                               {{ toolCallStatusText(tool) }}
@@ -269,6 +269,7 @@
 </template>
 
 <script setup lang="ts">
+import { CodeXml } from "@lucide/vue";
 import MessageContentTransition from "@/components/chat/MessageContentTransition.vue";
 import { computed, nextTick, reactive, ref } from "vue";
 import axios from "axios";

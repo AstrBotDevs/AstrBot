@@ -407,6 +407,10 @@ class DelegatedAgentSession(NativeAgentSession):
             plugin_tools=request.plugin_tools,
             plugin_skills=request.plugin_skills,
             agent_session=AgentSessionRef("astrbot", self.id),
+            send_to_user=request.send_to_user,
+            _output_turn=caller.agent_context._output_turn
+            if not request.send_to_user
+            else None,
         )
         req = ProviderRequest(
             system_prompt=instructions.system_prompt,

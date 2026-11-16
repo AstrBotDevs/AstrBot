@@ -106,6 +106,9 @@ class NativeAgentSession(AgentSession):
             result.provider,
         )
         runner.run_context.context.permissions = turn.input.permissions
+        runner.run_context.context.send_to_user = turn.input.send_to_user
+        if runner.run_context.context._output_turn is None:
+            runner.run_context.context._output_turn = turn
         runner.run_context.context.agent_session = AgentSessionRef("astrbot", self.id)
         self._runner = runner
         runner.run_context.context._runtime = self.runtime
