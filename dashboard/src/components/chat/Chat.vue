@@ -6,7 +6,7 @@
   >
     <v-navigation-drawer
       class="chat-sidebar"
-      :class="{ collapsed: isSidebarCollapsed }"
+      :class="{ collapsed: isSidebarCollapsed, 'sidebar-page-navigation': sidebarNavigation }"
       :model-value="isMobile ? mobileDrawer.open : true"
       @update:model-value="isMobile && mobileDrawer.SET($event)"
       :permanent="!isMobile"
@@ -31,7 +31,7 @@
             <ChatUILogo class="chat-sidebar-brand-logo" />
             <span class="chat-sidebar-brand-copy">
               <span class="chat-sidebar-brand-name">AstrBot</span>
-              <span class="chat-sidebar-brand-mode">ChatUI</span>
+              <span v-if="!sidebarNavigation" class="chat-sidebar-brand-mode">ChatUI</span>
             </span>
           </div>
           <button
@@ -60,6 +60,21 @@
             <PanelLeft :size="20" class="sidebar-panel-toggle-icon" />
           </v-btn>
         </div>
+
+        <v-btn
+          v-if="sidebarNavigation"
+          class="new-chat-btn sidebar-back-btn"
+          :class="{ 'icon-only': isSidebarCollapsed }"
+          variant="text"
+          :icon="isSidebarCollapsed"
+          :aria-label="t('core.navigation.backToNavigation')"
+          @click="backToNavigation"
+        >
+          <ChevronLeft :size="20" :class="{ 'mr-2': !isSidebarCollapsed }" />
+          <span v-if="!isSidebarCollapsed">{{ t('core.navigation.backToNavigation') }}</span>
+          <v-tooltip v-if="isSidebarCollapsed" activator="parent" location="right"
+            :text="t('core.navigation.backToNavigation')" :open-delay="0" />
+        </v-btn>
 
         <button
           v-if="isSidebarCollapsed"
@@ -221,7 +236,6 @@
         'empty-chat': isEmptyChat,
         'has-side-panel':
           threadPanelOpen ||
-          reasoningPanelOpen ||
           refsSidebarOpen ||
           chatHeader.workspaceFilesOpen,
       }"
@@ -371,7 +385,6 @@
               @regenerate-with-model="handleRegenerateMessage"
               @select-bot-text="handleBotTextSelection"
               @open-thread="openThreadPanel"
-              @open-reasoning="openReasoningPanel"
               @open-refs="openRefsSidebar"
               @button-click="handleButtonClick"
             />
@@ -452,6 +465,27 @@
       <button
         class="thread-selection-button"
         type="button"
+        :disabled="threadSelection.message?.can_fork === false"
+        :title="
+          threadSelection.message?.can_fork === false
+            ? tm(
+                `history.${
+                  threadSelection.message?.fork_unavailable_reason ||
+                  'context_unavailable'
+                }`,
+              )
+            : tm('thread.askInThread')
+        "
+        :aria-label="
+          threadSelection.message?.can_fork === false
+            ? tm(
+                `history.${
+                  threadSelection.message?.fork_unavailable_reason ||
+                  'context_unavailable'
+                }`,
+              )
+            : tm('thread.askInThread')
+        "
         @click="createThreadFromSelection"
       >
         {{ tm("thread.askInThread") }}
@@ -505,11 +539,6 @@
       :get-provider-selection="getSelectedProviderSelection"
       @delete="deleteThread"
     />
-    <ReasoningSidebar
-      v-model="reasoningPanelOpen"
-      :parts="activeReasoningParts"
-      :is-dark="isDark"
-    />
     <RefsSidebar v-model="refsSidebarOpen" :refs="selectedRefs" />
     <WorkspaceFilesPanel
       :model-value="chatHeader.workspaceFilesOpen"
@@ -543,6 +572,7 @@ import { useDisplay } from "vuetify";
 import { isAxiosError } from "axios";
 import {
   ArrowDown,
+  ChevronLeft,
   Box,
   PanelLeft,
   Pencil,
@@ -563,13 +593,11 @@ import ChatMessageList from "@/components/chat/ChatMessageList.vue";
 import ChatUILogo from "@/components/chat/ChatUILogo.vue";
 import type { RegenerateModelSelection } from "@/components/chat/RegenerateMenu.vue";
 import ChatLoadError from "@/components/chat/ChatLoadError.vue";
-import ReasoningSidebar from "@/components/chat/ReasoningSidebar.vue";
 import ThreadPanel from "@/components/chat/ThreadPanel.vue";
 import WorkspaceFilesPanel from "@/components/chat/WorkspaceFilesPanel.vue";
 import RefsSidebar from "@/components/chat/message_list_comps/RefsSidebar.vue";
 import { useSessions, type Session } from "@/composables/useSessions";
 import {
-  messageBlocks as buildMessageBlocks,
   useMessages,
   type ChatRecord,
   type ChatThread,
@@ -621,6 +649,7 @@ watch(
 );
 onUnmounted(() => headerContext.SET_COMPONENT(null));
 const customizer = useCustomizerStore();
+const sidebarNavigation = computed(() => customizer.chatNavigationInSidebar && !props.chatboxMode);
 const { t } = useI18n();
 const { tm } = useModuleI18n("features/chat");
 const confirmDialog = useConfirmDialog();
@@ -722,11 +751,6 @@ let autoScrollFrame: number | null = null;
 const replyTarget = ref<ChatRecord | null>(null);
 const threadPanelOpen = ref(false);
 const activeThread = ref<ChatThread | null>(null);
-const reasoningPanelOpen = ref(false);
-const activeReasoningTarget = ref<{
-  message: ChatRecord;
-  blockIndex: number;
-} | null>(null);
 const deletingThread = ref(false);
 const refsSidebarOpen = ref(false);
 const selectedRefs = ref<Record<string, unknown> | null>(null);
@@ -766,6 +790,12 @@ const isProviderWorkspace = computed(
   () => activeWorkspace.value === "providers",
 );
 
+async function backToNavigation() {
+  const previousRoute = sessionStorage.getItem("astrbot:last_bot_route") || "/";
+  await router.push(previousRoute.startsWith("/chat") ? "/" : previousRoute);
+  if (isMobile.value) mobileDrawer.SET(true);
+}
+
 function toggleChatSidebar() {
   if (isMobile.value) {
     mobileDrawer.SET(false);
@@ -773,21 +803,6 @@ function toggleChatSidebar() {
   }
   customizer.SET_CHAT_SIDEBAR_COLLAPSED(!customizer.chatSidebarCollapsed);
 }
-
-const activeReasoningParts = computed<MessagePart[]>(() => {
-  if (!activeReasoningTarget.value) return [];
-  const blocks = buildMessageBlocks(
-    activeReasoningTarget.value.message.content || { type: "bot", message: [] },
-  );
-  const block = blocks[activeReasoningTarget.value.blockIndex];
-  return block?.kind === "thinking" ? block.parts : [];
-});
-
-watch(reasoningPanelOpen, (open) => {
-  if (!open) {
-    activeReasoningTarget.value = null;
-  }
-});
 
 const {
   loadingMessages,
@@ -1077,8 +1092,6 @@ watch(
     threadSelection.visible = false;
     threadPanelOpen.value = false;
     activeThread.value = null;
-    reasoningPanelOpen.value = false;
-    activeReasoningTarget.value = null;
     refsSidebarOpen.value = false;
     selectedRefs.value = null;
   },
@@ -1250,8 +1263,6 @@ function closeSecondaryPanels() {
   threadSelection.visible = false;
   threadPanelOpen.value = false;
   activeThread.value = null;
-  reasoningPanelOpen.value = false;
-  activeReasoningTarget.value = null;
   refsSidebarOpen.value = false;
   selectedRefs.value = null;
   chatHeader.SET_WORKSPACE_FILES_OPEN(false);
@@ -1695,6 +1706,7 @@ function scrollToMessage(messageId?: string | number) {
 }
 
 function openMessageEdit(message: ChatRecord) {
+  if (message.can_edit === false) return;
   messageEditDraft.value = plainTextFromMessage(message);
   editingMessage.value = message;
   nextTick(() => scrollToMessage(message.id));
@@ -1754,7 +1766,12 @@ async function handleRegenerateMessage(
   message: ChatRecord,
   selection?: RegenerateModelSelection,
 ) {
-  if (!currSessionId.value || isUserMessage(message)) return;
+  if (
+    !currSessionId.value ||
+    isUserMessage(message) ||
+    message.can_retry === false
+  )
+    return;
   message.threads = [];
   const effectiveSelection = selection ?? getSelectedProviderSelection();
   writeSessionProviderSelection(currSessionId.value, effectiveSelection);
@@ -1801,7 +1818,12 @@ function handleBotTextSelection(event: MouseEvent, message: ChatRecord) {
 
 async function createThreadFromSelection() {
   const message = threadSelection.message;
-  if (!currSessionId.value || !message?.id || !threadSelection.selectedText)
+  if (
+    !currSessionId.value ||
+    !message?.id ||
+    !threadSelection.selectedText ||
+    message.can_fork === false
+  )
     return;
   try {
     const response = await chatApi.createThread({
@@ -1838,8 +1860,6 @@ async function createThreadFromSelection() {
 
 function openThreadPanel(thread: ChatThread) {
   chatHeader.SET_WORKSPACE_FILES_OPEN(false);
-  reasoningPanelOpen.value = false;
-  activeReasoningTarget.value = null;
   refsSidebarOpen.value = false;
   activeThread.value = thread;
   threadPanelOpen.value = true;
@@ -1849,24 +1869,9 @@ function openRefsSidebar(refs: unknown) {
   chatHeader.SET_WORKSPACE_FILES_OPEN(false);
   threadPanelOpen.value = false;
   activeThread.value = null;
-  reasoningPanelOpen.value = false;
-  activeReasoningTarget.value = null;
   selectedRefs.value =
     refs && typeof refs === "object" ? (refs as Record<string, unknown>) : null;
   refsSidebarOpen.value = true;
-}
-
-function openReasoningPanel(payload: {
-  message: ChatRecord;
-  blockIndex: number;
-}) {
-  chatHeader.SET_WORKSPACE_FILES_OPEN(false);
-  threadPanelOpen.value = false;
-  activeThread.value = null;
-  refsSidebarOpen.value = false;
-  selectedRefs.value = null;
-  activeReasoningTarget.value = payload;
-  reasoningPanelOpen.value = true;
 }
 
 async function loadEarlierWithAnchor() {
@@ -2147,7 +2152,7 @@ async function stopCurrentSession() {
   /* Side panels live inside .chat-main, which already starts below the 40px
      window toolbar. Keep them flush with the content area's top edge. */
   --chat-panel-top-offset: 0px;
-  --chat-session-active-bg: #efefef;
+  --chat-session-active-bg: rgba(var(--v-theme-on-surface), 0.05);
   --chat-page-bg: #fdfcfc;
   --chat-border: #f2f2f2;
   --chat-muted: rgba(var(--v-theme-on-surface), 0.62);
@@ -2209,7 +2214,7 @@ async function stopCurrentSession() {
 /* The header draws across the whole width, above the full-height chat sidebar. */
 :global(.chat-sidebar .v-navigation-drawer__content) {
   /* Seat the brand's top edge at the content area's top edge, fully below the toolbar. */
-  padding-top: calc(var(--astrbot-toolbar-height, 40px) - 10px);
+  padding-top: calc(var(--astrbot-toolbar-height, 42px) - 10px);
   box-sizing: border-box;
 }
 
@@ -2220,7 +2225,7 @@ async function stopCurrentSession() {
 }
 
 :global(html:not([data-astrbot-desktop-platform='macos']) .chat-sidebar .chat-sidebar-brand) {
-  min-height: var(--astrbot-toolbar-height, 40px);
+  min-height: var(--astrbot-toolbar-height, 42px);
 }
 
 /* On macOS the chat sidebar stays transparent; the shared tint is painted behind it. */
@@ -2255,6 +2260,23 @@ async function stopCurrentSession() {
    drop it so the sub-header sits directly under the toolbar band. */
 :global(.chat-main) {
   padding-top: 0 !important;
+}
+
+.sidebar-page-navigation .sidebar-top > :not(.chat-sidebar-brand),
+.sidebar-page-navigation .sidebar-content {
+  animation: sidebar-page-forward 180ms ease-out;
+}
+
+@keyframes sidebar-page-forward {
+  from { opacity: 0; transform: translateX(16px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sidebar-page-navigation .sidebar-top > :not(.chat-sidebar-brand),
+  .sidebar-page-navigation .sidebar-content {
+    animation: none;
+  }
 }
 
 .sidebar-top {
@@ -2346,7 +2368,7 @@ async function stopCurrentSession() {
 
 .chat-sidebar-rail-btn {
   border: 0;
-  border-radius: 8px;
+  border-radius: var(--astrbot-radius-navigation);
   background: transparent;
   color: rgb(var(--v-theme-on-surface));
   cursor: pointer;
@@ -2408,7 +2430,7 @@ async function stopCurrentSession() {
 .new-chat-btn,
 .settings-btn {
   color: rgb(var(--v-theme-on-surface));
-  border-radius: 8px;
+  border-radius: var(--astrbot-radius-navigation);
 }
 
 .sidebar-action-icon {
@@ -2427,11 +2449,16 @@ async function stopCurrentSession() {
   min-height: 36px;
   height: 36px;
   justify-content: flex-start;
-  border-radius: 8px;
+  border-radius: var(--astrbot-radius-navigation);
   text-transform: none;
   letter-spacing: 0;
   font-size: 14px;
   font-weight: 500;
+}
+
+.sidebar-back-btn {
+  margin-top: 8px;
+  margin-bottom: 2px;
 }
 
 .sidebar-provider-btn {
@@ -2516,7 +2543,7 @@ async function stopCurrentSession() {
   width: 100%;
   min-height: 30px;
   border: 0;
-  border-radius: 8px;
+  border-radius: var(--astrbot-radius-navigation);
   background: transparent;
   color: inherit;
   display: flex;

@@ -142,6 +142,12 @@
     "title": "Конфигурация"
   },
   "reasoning": {
+    "worked": "Время работы: {duration}",
+    "working": "В работе: {duration}",
+    "workCompleted": "Ход работы",
+    "durationHours": "{hours} ч {minutes} мин {seconds} с",
+    "durationMinutes": "{minutes} мин {seconds} с",
+    "durationSeconds": "{seconds} с",
     "enabled": "Рассуждения включены",
     "disabled": "Рассуждения выключены",
     "thinking": "Рассуждение",
@@ -152,6 +158,12 @@
     "toolUsed": "Использование инструмента"
   },
   "history": {
+    "edit": "Изменить сообщение",
+    "context_pruned": "Исторический контекст очищен. Продолжение с этой точки недоступно.",
+    "context_unavailable": "Исторический контекст в этой точке недоступен.",
+    "inactive_message": "Это сообщение относится к заменённой версии беседы.",
+    "run_active": "Сначала остановите текущую генерацию.",
+    "unsupported_message": "Это действие недоступно для данного сообщения.",
     "loadFailed": "Не удалось загрузить сообщения",
     "loadEarlierFailed": "Не удалось загрузить предыдущие сообщения",
     "loading": "Загрузка предыдущих сообщений"

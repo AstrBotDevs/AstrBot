@@ -142,6 +142,12 @@
     "title": "Config"
   },
   "reasoning": {
+    "worked": "Ran for {duration}",
+    "working": "Running for {duration}",
+    "workCompleted": "Run details",
+    "durationHours": "{hours}h {minutes}m {seconds}s",
+    "durationMinutes": "{minutes}m {seconds}s",
+    "durationSeconds": "{seconds}s",
     "enabled": "Reasoning enabled",
     "disabled": "Reasoning disabled",
     "thinking": "Thinking Process",
@@ -152,6 +158,12 @@
     "toolUsed": "Using Tool"
   },
   "history": {
+    "edit": "Edit message",
+    "context_pruned": "Historical context has been cleared. Continuing from this point is unavailable.",
+    "context_unavailable": "Historical context is unavailable at this point.",
+    "inactive_message": "This message belongs to a replaced conversation version.",
+    "run_active": "Stop the current generation first.",
+    "unsupported_message": "This action is not supported for this message.",
     "loadFailed": "Could not load messages",
     "loadEarlierFailed": "Could not load earlier messages",
     "loading": "Loading earlier messages"

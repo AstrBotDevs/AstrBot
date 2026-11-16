@@ -639,22 +639,22 @@ The server injects `data-theme` into returned HTML to reduce initial flashing. I
 
 ### Following user-selected colors
 
-`context.themeColors` exposes the effective `primary` and `secondary` colors as CSS color strings. The View decides how to apply them.
-
-Use `bridge.onContext(handler)` to receive the initial palette and updates after theme switches, color edits, or resets. Server-injected initial contexts and older AstrBot versions may omit this field; fall back to the View's default colors rather than relying only on the first `ready()` result.
+Subscribe with `bridge.onContext()` to apply the initial `primary` and `secondary` CSS colors and receive updates. Use defaults when `themeColors` is absent:
 
 ```js
 const bridge = window.AstrBotPluginView;
 
 await bridge.ready();
 const off = bridge.onContext((context) => {
-  const primary = context.themeColors?.primary ?? "#3c96ca";
-  const secondary = context.themeColors?.secondary ?? "#2f86bd";
-  // Apply the colors to your View.
+  const style = document.documentElement.style;
+  style.setProperty("--primary", context.themeColors?.primary ?? "#3c96ca");
+  style.setProperty("--secondary", context.themeColors?.secondary ?? "#2f86bd");
 });
 
 // Call off() when the View is disposed.
 ```
+
+Use `var(--primary)` and `var(--secondary)` in your styles.
 
 ## Static Asset Paths
 
