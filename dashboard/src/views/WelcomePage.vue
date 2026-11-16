@@ -80,7 +80,7 @@
 
     <section v-if="showAnnouncement" class="overview-panel announcement-panel">
       <h2 class="text-h3 font-weight-bold mb-4">{{ tm('announcement.title') }}</h2>
-      <MarkdownRender :content="welcomeAnnouncement" :typewriter="false" class="welcome-announcement-markdown markdown-content" />
+      <MarkdownRender :content="welcomeAnnouncement" :is-dark="theme.global.current.value.dark" :typewriter="false" class="welcome-announcement-markdown markdown-content" />
     </section>
 
     <v-dialog v-model="showComputerAccessDialog" max-width="540">
@@ -128,6 +128,7 @@
 
 <script setup lang="ts">
 import { computed, ref, watch, onMounted, onUnmounted } from 'vue';
+import { useTheme } from 'vuetify';
 import axios from 'axios';
 import OverviewStatus from '@/components/overview/OverviewStatus.vue';
 import OverviewSystemStats from '@/components/overview/OverviewSystemStats.vue';
@@ -144,6 +145,7 @@ type StepState = 'pending' | 'completed' | 'skipped';
 type ComputerAccessRuntime = 'local' | 'none';
 
 const { tm } = useModuleI18n('features/welcome');
+const theme = useTheme();
 const { locale } = useI18n();
 const { success: showSuccess, error: showError } = useToast();
 

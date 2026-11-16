@@ -19,7 +19,7 @@ from astrbot.core.agent.message import (
     TextPart,
     ToolCall,
 )
-from astrbot.core.provider.entities import LLMResponse
+from astrbot.core.provider.entities import LLMResponse, TokenUsage
 from astrbot.core.provider.sources.request_retry import retry_provider_request
 
 
@@ -145,9 +145,10 @@ class TestContextManager:
 
         provider = MockProvider()
         provider.text_chat = AsyncMock(
-            return_value=LLMResponse(role="assistant", completion_text="  ")
+            return_value=LLMResponse(role="assistant", completion_text="  ", usage=TokenUsage(output=3))
         )
-        compressor = LLMSummaryCompressor(provider=provider, keep_recent_ratio=0.15)  # type: ignore[arg-type]
+        sink = AsyncMock()
+        compressor = LLMSummaryCompressor(provider=provider, keep_recent_ratio=0.15, request_event_emitter=sink)  # type: ignore[arg-type]
         messages = self.create_messages(6)
 
         with patch("astrbot.core.agent.context.compressor.logger") as mock_logger:
@@ -157,6 +158,13 @@ class TestContextManager:
         mock_logger.warning.assert_called_once_with(
             "LLM context compression returned an empty summary."
         )
+
+        recorded = sink.await_args.args[0]
+        assert recorded.type == "message.appended"
+        assert recorded.data["purpose"] == "compaction"
+        assert recorded.data["status"] == "completed"
+        assert recorded.data["message"]["_no_save"] is True
+        assert recorded.data["usage"]["output_tokens"] == 3
 
     @pytest.mark.asyncio
     async def test_llm_compressor_handles_textpart_content(self):
