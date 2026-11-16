@@ -4,12 +4,16 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 import pytest
+from aiohttp import ClientSession, web
+from aiohttp.test_utils import TestServer
 from botpy import ConnectionSession
 from botpy.errors import ForbiddenError
+from botpy.http import BotHttp
 
 from astrbot.api.platform import AstrBotMessage, MessageType, PlatformMetadata
 from astrbot.core.platform.sources.qqofficial.qqofficial_message_event import (
     QQOfficialMessageEvent,
+    _UserInfoRoute,
 )
 from astrbot.core.platform.sources.qqofficial.qqofficial_platform_adapter import (
     ManagedBotWebSocket,
@@ -167,6 +171,41 @@ async def test_qq_sender_profiles_on_inbound_events(
 
 
 @pytest.mark.asyncio
+async def test_user_info_lookup_decodes_json_with_charset_through_botpy(monkeypatch):
+    profile = {"username": "Profile Name", "allow_proactive_msg": False}
+
+    async def get_profile(_request):
+        return web.Response(
+            body=json.dumps(profile).encode("utf-8"),
+            headers={"Content-Type": "application/json; charset=utf-8"},
+        )
+
+    app = web.Application()
+    app.router.add_get("/v2/users/user-1/info", get_profile)
+    async with TestServer(app) as server, ClientSession() as session:
+        monkeypatch.setattr(_UserInfoRoute, "SCHEME", "http")
+        monkeypatch.setattr(_UserInfoRoute, "DOMAIN", f"{server.host}:{server.port}")
+        http = BotHttp(timeout=3)
+        http._session = session
+        http._token = SimpleNamespace(
+            app_id="123",
+            check_token=AsyncMock(),
+            get_string=lambda: "QQBot local-test",
+        )
+        message = AstrBotMessage()
+        message.type = MessageType.FRIEND_MESSAGE
+        event = QQOfficialMessageEvent(
+            "",
+            message,
+            PlatformMetadata(name="qq_official", description="test", id="qq-test"),
+            "user-1",
+            SimpleNamespace(api=SimpleNamespace(_http=http)),
+        )
+
+        assert await event.get_user_info("user-1") == profile
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize(
     ("user_openid", "response"),
     [
@@ -174,6 +213,8 @@ async def test_qq_sender_profiles_on_inbound_events(
         ("user-1", ForbiddenError("No friend relationship")),
         ("user-1", asyncio.TimeoutError()),
         ("user-1", "invalid response"),
+        ("user-1", "[]"),
+        ("user-1", '{"message": "invalid response"}'),
         ("user-1", {}),
         ("user-1", {"message": "invalid response"}),
         ("user-1", None),

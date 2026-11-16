@@ -1,6 +1,7 @@
 import asyncio
 import base64
 import copy
+import json
 import logging
 import os
 import random
@@ -180,6 +181,13 @@ class QQOfficialMessageEvent(AstrMessageEvent):
                 "[QQOfficial] User info request failed: %s", type(exc).__name__
             )
             return None
+
+        # qq-botpy returns text when the JSON content type includes a charset.
+        if isinstance(response, str):
+            try:
+                response = json.loads(response)
+            except json.JSONDecodeError:
+                return None
 
         if isinstance(response, dict) and any(
             field in response
