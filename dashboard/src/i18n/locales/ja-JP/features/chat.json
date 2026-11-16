@@ -45,6 +45,15 @@
     ]
   },
   "voice": {
+    "transcribing": "音声入力中…",
+    "transcribe": "音声で文字入力",
+    "sendAudio": "音声を録音して送信",
+    "cancel": "録音をキャンセル",
+    "finishTranscription": "録音を終了して文字起こし",
+    "sttModel": "文字起こしモデル",
+    "configure": "設定へ",
+    "noSttProvider": "先に利用可能な音声認識モデルを設定してください",
+    "transcriptionFailed": "文字起こしに失敗しました。もう一度お試しください。",
     "start": "録音を開始",
     "stop": "録音を停止",
     "recording": "新しい録音",

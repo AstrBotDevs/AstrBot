@@ -45,6 +45,15 @@
     ]
   },
   "voice": {
+    "transcribing": "语音转述中",
+    "transcribe": "语音转述",
+    "sendAudio": "录制并发送语音",
+    "cancel": "取消录音",
+    "finishTranscription": "结束并转写",
+    "sttModel": "语音转述模型",
+    "configure": "去配置",
+    "noSttProvider": "请先配置可用的语音转文字模型",
+    "transcriptionFailed": "语音转写失败，请重试",
     "start": "开始录音",
     "stop": "停止录音",
     "recording": "新录音",

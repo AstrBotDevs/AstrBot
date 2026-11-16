@@ -82,7 +82,7 @@
           :class="{ 'sidebar-workspace-btn--active': isProviderWorkspace }"
           type="button"
           :title="tm('actions.providerConfig')"
-          @click="openProviderWorkspace"
+          @click="openProviderWorkspace()"
         >
           <Box :size="18" class="sidebar-action-icon" />
         </button>
@@ -91,7 +91,7 @@
           class="new-chat-btn sidebar-provider-btn"
           :class="{ 'sidebar-workspace-btn--active': isProviderWorkspace }"
           variant="text"
-          @click="openProviderWorkspace"
+          @click="openProviderWorkspace()"
         >
           <Box :size="18" class="sidebar-action-icon mr-2" />
           <span>{{ tm("actions.providerConfig") }}</span>
@@ -228,6 +228,9 @@
       v-model:enable-reasoning="enableReasoning"
       v-model:send-shortcut="sendShortcut"
       v-model:transport-mode="transportMode"
+      v-model:stt-provider="selectedSttProvider"
+      :stt-providers="sttProviders"
+      @configure-stt="openProviderWorkspace('speech_to_text')"
     />
 
     <main
@@ -254,8 +257,15 @@
       </transition>
       <section v-if="isProviderWorkspace" class="provider-workspace-shell">
         <ProviderChatCompletionPanel
+          v-if="providerWorkspaceType === 'chat_completion'"
           class="provider-workspace-page"
           :show-border="false"
+        />
+        <ProviderPage
+          v-else
+          class="provider-workspace-page"
+          :default-tab="providerWorkspaceType"
+          embedded
         />
       </section>
 
@@ -276,6 +286,9 @@
             :staged-files="stagedNonImageFiles"
             :disabled="sending"
             :is-recording="isRecording"
+            :recording-mode="recordingMode"
+            :voice-busy="voiceBusy"
+            :audio-levels="audioLevels"
             :is-running="
               Boolean(currSessionId && isSessionRunning(currSessionId))
             "
@@ -298,6 +311,7 @@
             @cancel-active-upload="cancelActiveUpload"
             @start-recording="startRecording"
             @stop-recording="stopRecording"
+            @cancel-recording="cancelRecording"
             @paste-image="handlePaste"
             @file-select="handleFilesSelected"
             @clear-reply="replyTarget = null"
@@ -422,6 +436,9 @@
             :staged-files="stagedNonImageFiles"
             :disabled="sending"
             :is-recording="isRecording"
+            :recording-mode="recordingMode"
+            :voice-busy="voiceBusy"
+            :audio-levels="audioLevels"
             :is-running="
               Boolean(currSessionId && isSessionRunning(currSessionId))
             "
@@ -446,6 +463,7 @@
             @cancel-active-upload="cancelActiveUpload"
             @start-recording="startRecording"
             @stop-recording="stopRecording"
+            @cancel-recording="cancelRecording"
             @paste-image="handlePaste"
             @file-select="handleFilesSelected"
             @clear-reply="replyTarget = null"
@@ -605,7 +623,7 @@ import {
   type TransportMode,
 } from "@/composables/useMessages";
 import { useMediaHandling } from "@/composables/useMediaHandling";
-import { useRecording } from "@/composables/useRecording";
+import { useChatVoice } from "@/composables/useChatVoice";
 import { useProjects } from "@/composables/useProjects";
 import { useDragUpload } from "@/composables/useDragUpload";
 import { useProviderModelSelection } from "@/composables/useProviderModelSelection";
@@ -613,6 +631,7 @@ import { useChatHeaderStore } from "@/stores/chatHeader";
 import { useHeaderContextStore } from "@/stores/headerContext";
 import { useMobileDrawerStore } from "@/stores/mobileDrawer";
 import { useCustomizerStore } from "@/stores/customizer";
+import ProviderPage from "@/views/ProviderPage.vue";
 import ProviderChatCompletionPanel from "@/components/provider/ProviderChatCompletionPanel.vue";
 import { useI18n, useModuleI18n } from "@/i18n/composables";
 import { askForConfirmation, useConfirmDialog } from "@/utils/confirmDialog";
@@ -777,10 +796,27 @@ let draftSaveTimer: number | null = null;
 let chatResizeObserver: ResizeObserver | null = null;
 let chatMutationObserver: MutationObserver | null = null;
 const {
+  mode: recordingMode,
+  busy: voiceBusy,
+  levels: audioLevels,
   isRecording,
-  startRecording: startRecorder,
-  stopRecording: stopRecorder,
-} = useRecording();
+  sttProviders,
+  selectedSttProvider,
+  loadProviders: loadSttProviders,
+  start: startRecording,
+  finish: stopRecording,
+  cancel: cancelRecording,
+} = useChatVoice({
+  draft,
+  stagedFiles,
+  contextKey: () =>
+    `${currSessionId.value}:${selectedProjectId.value}:${activeWorkspace.value}:${props.active}`,
+  send: sendCurrentMessage,
+  configureStt: () => { void openProviderWorkspace("speech_to_text"); },
+});
+watch(settingsOpen, (open) => {
+  if (open) void loadSttProviders();
+});
 const { smAndDown: isMobile } = useDisplay();
 
 const isSidebarCollapsed = computed(
@@ -788,6 +824,12 @@ const isSidebarCollapsed = computed(
 );
 const isProviderWorkspace = computed(
   () => activeWorkspace.value === "providers",
+);
+
+const providerWorkspaceType = computed(() =>
+  route.query.type === "speech_to_text" || route.query.type === "text_to_speech"
+    ? route.query.type
+    : "chat_completion",
 );
 
 async function backToNavigation() {
@@ -1272,13 +1314,11 @@ function showChatWorkspace() {
   activeWorkspace.value = "chat";
 }
 
-async function openProviderWorkspace() {
+async function openProviderWorkspace(type = "chat_completion") {
   closeSecondaryPanels();
+  settingsOpen.value = false;
   activeWorkspace.value = "providers";
-  const targetPath = `${basePath()}/models`;
-  if (route.path !== targetPath) {
-  await router.push(targetPath);
-  }
+  await router.push({ path: `${basePath()}/models`, query: { type } });
 }
 
 function sessionTitle(session: Session) {
@@ -1957,28 +1997,6 @@ async function handleFilesSelected(files: FileList | File[]) {
     } else {
       await processAndUploadFile(file);
     }
-  }
-}
-
-async function startRecording() {
-  try {
-    await startRecorder();
-  } catch (error) {
-    console.error("Failed to start recording:", error);
-    toast.error(tm("voice.error"));
-  }
-}
-
-async function stopRecording() {
-  try {
-    const audioFile = await stopRecorder();
-    const uploaded = await processAndUploadFile(audioFile);
-    if (!uploaded) {
-      toast.error(tm("voice.error"));
-    }
-  } catch (error) {
-    console.error("Failed to stop recording:", error);
-    toast.error(tm("voice.error"));
   }
 }
 

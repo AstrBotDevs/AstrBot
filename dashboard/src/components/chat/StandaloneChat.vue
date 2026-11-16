@@ -181,7 +181,13 @@
         :staged-files="stagedNonImageFiles"
         :disabled="sending || initializing"
         show-settings
-        :is-recording="false"
+        :is-recording="isRecording"
+        :recording-mode="recordingMode"
+        :voice-busy="voiceBusy"
+        :audio-levels="audioLevels"
+        @start-recording="startRecording"
+        @stop-recording="stopRecording"
+        @cancel-recording="cancelRecording"
         :is-running="Boolean(currSessionId && isSessionRunning(currSessionId))"
         :session-id="currSessionId || null"
         :current-session="currentSession"
@@ -204,6 +210,9 @@
       v-model:enable-reasoning="enableReasoning"
       v-model:send-shortcut="sendShortcut"
       v-model:transport-mode="transportMode"
+      v-model:stt-provider="selectedSttProvider"
+      :stt-providers="sttProviders"
+      @configure-stt="settingsOpen = false; router.push('/chat/models?type=speech_to_text')"
     />
 
     <v-overlay
@@ -218,6 +227,7 @@
 </template>
 
 <script setup lang="ts">
+import { useRouter } from "vue-router";
 import { CodeXml } from "@lucide/vue";
 import MessageContentTransition from "@/components/chat/MessageContentTransition.vue";
 import {
@@ -231,6 +241,7 @@ import {
 } from "vue";
 import { chatApi, configRouteApi, fileApi } from "@/api/v1";
 import ChatSettingsDialog from "@/components/chat/ChatSettingsDialog.vue";
+import { useChatVoice } from "@/composables/useChatVoice";
 import ChatInput from "@/components/chat/ChatInput.vue";
 import { useDragUpload } from "@/composables/useDragUpload";
 import {
@@ -268,6 +279,7 @@ const props = withDefaults(defineProps<{ configId?: string | null }>(), {
 
 registerChatMarkdownComponents();
 
+const router = useRouter();
 const { tm } = useModuleI18n("features/chat");
 const customizer = useCustomizerStore();
 const currSessionId = ref("");
@@ -300,6 +312,30 @@ const {
   clearStaged,
   cleanupMediaCache,
 } = useMediaHandling();
+const {
+  mode: recordingMode,
+  busy: voiceBusy,
+  levels: audioLevels,
+  isRecording,
+  sttProviders,
+  selectedSttProvider,
+  loadProviders: loadSttProviders,
+  start: startRecording,
+  finish: stopRecording,
+  cancel: cancelRecording,
+} = useChatVoice({
+  draft,
+  stagedFiles,
+  contextKey: () => currSessionId.value,
+  send: sendCurrentMessage,
+  configureStt: () => {
+    settingsOpen.value = false;
+    void router.push("/chat/models?type=speech_to_text");
+  },
+});
+watch(settingsOpen, (open) => {
+  if (open) void loadSttProviders();
+});
 
 const { isDragging, dragEvents } = useDragUpload(handleFilesSelected);
 
