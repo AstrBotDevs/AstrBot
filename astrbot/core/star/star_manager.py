@@ -2064,7 +2064,9 @@ class PluginManager:
             # A failed filesystem preflight must not activate tools or persist enablement.
             self._clear_plugin_bytecode(plugin)
             inactivated_plugins: list = await sp.global_get("inactivated_plugins", [])
-            inactivated_llm_tools: list = await sp.global_get("inactivated_llm_tools", [])
+            inactivated_llm_tools: list = await sp.global_get(
+                "inactivated_llm_tools", []
+            )
             if plugin.module_path in inactivated_plugins:
                 inactivated_plugins.remove(plugin.module_path)
             await sp.global_put("inactivated_plugins", inactivated_plugins)
@@ -2072,7 +2074,9 @@ class PluginManager:
             for func_tool in self._iter_plugin_llm_tools(plugin.module_path):
                 func_tool.active = func_tool.name not in inactivated_llm_tools
 
-            success, error = await self._reload_locked(plugin_name, clear_bytecode=False)
+            success, error = await self._reload_locked(
+                plugin_name, clear_bytecode=False
+            )
             if not success:
                 raise Exception(error or f"插件 {plugin_name} 启用失败。")
             current_plugin = self.context.get_registered_star(plugin_name)
