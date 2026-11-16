@@ -40,15 +40,25 @@ class ProviderOpenRouter(ProviderOpenAIOfficial):
             return reasoning
 
         parts: list[str] = []
+        previous_type = None
         for detail in details:
             if not isinstance(detail, dict):
                 continue
-            if detail.get("type") == "reasoning.summary":
+            detail_type = detail.get("type")
+            if detail_type == "reasoning.summary":
                 text = detail.get("summary")
-            elif detail.get("type") == "reasoning.text":
+            elif detail_type == "reasoning.text":
                 text = detail.get("text")
             else:
                 continue
             if isinstance(text, str) and text:
+                if (
+                    parts
+                    and detail_type != previous_type
+                    and not parts[-1][-1].isspace()
+                    and not text[0].isspace()
+                ):
+                    parts.append("\n\n")
                 parts.append(text)
+                previous_type = detail_type
         return "".join(parts) if parts else reasoning
