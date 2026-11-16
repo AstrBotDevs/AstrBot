@@ -158,8 +158,13 @@
         "noParams": "Нет параметров",
         "presets": "Пресеты",
         "newKeyLabel": "Имя ключа",
+        "customBodyKeyPlaceholder": "Ключ тела запроса",
+        "omitWhenEmpty": "Use default.",
+        "custom": "Другое",
         "valueTypeLabel": "Тип значения",
         "keyExists": "Ключ уже существует",
+        "numberRequired": "Введите число",
+        "invalidNumber": "Недопустимое число",
         "invalidJson": "Некорректный формат JSON",
         "placeholders": {
             "keyName": "Ключ",

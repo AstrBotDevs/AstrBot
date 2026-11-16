@@ -423,13 +423,15 @@
         {{ providerEditDialogTitle }}
       </v-card-title>
       <v-card-text class="py-4 config-form">
-        <AstrBotConfig
-          v-if="providerEditData"
-          :iterable="providerEditData"
-          :metadata="providerModelConfigSchema"
-          metadata-key="provider"
-          :is-editing="true"
-        />
+        <v-form ref="providerEditForm" @submit.prevent="saveEditedProvider">
+          <AstrBotConfig
+            v-if="providerEditData"
+            :iterable="providerEditData"
+            :metadata="providerModelConfigSchema"
+            metadata-key="provider"
+            :is-editing="true"
+          />
+        </v-form>
       </v-card-text>
       <v-card-actions class="pa-4">
         <v-spacer />
@@ -535,6 +537,7 @@ const editingProviderId = ref("");
 const configSchema = ref<Record<string, any>>({});
 const selectedProviderSource = ref<any | null>(null);
 const {
+  providerEditForm,
   showProviderEditDialog,
   providerEditData,
   savingProviders,

@@ -1593,27 +1593,27 @@
         "template_schema": {
           "temperature": {
             "description": "Temperature",
-            "hint": "Controls randomness, typically 0-2. Higher is more random.",
+            "hint": "Controls output randomness, typically from 0 to 2. Higher values make low-probability tokens more likely to appear. Manual adjustment is not recommended.",
             "name": "Temperature"
           },
           "top_p": {
             "description": "Top-p sampling",
-            "hint": "Nucleus sampling parameter, usually 0-1. Controls probability mass considered.",
+            "hint": "Nucleus sampling parameter, typically from 0 to 1. Controls how the model filters out low-probability tokens. Manual adjustment is not recommended.",
             "name": "Top-p"
           },
           "max_tokens": {
-            "description": "Max tokens",
-            "hint": "Maximum number of generated tokens.",
+            "description": "Max output tokens",
+            "hint": "Maximum number of output tokens allowed, including reasoning tokens. Manual adjustment is not recommended.",
             "name": "Max Tokens"
           },
           "max_output_tokens": {
             "description": "Max output tokens",
-            "hint": "Maximum number of generated tokens.",
+            "hint": "Maximum number of output tokens allowed, including reasoning tokens. Manual adjustment is not recommended.",
             "name": "Max Output Tokens"
           },
           "reasoning_effort": {
             "description": "Reasoning effort",
-            "hint": "Controls the effort used by reasoning models. Supported values depend on the model.",
+            "hint": "Supported effort levels vary by model, and some options may have no effect.",
             "name": "Reasoning Effort"
           }
         }
@@ -2042,7 +2042,7 @@
       },
       "max_context_tokens": {
         "description": "Model context window size",
-        "hint": "Maximum context tokens. If 0, it auto-fills from model metadata (if available); you can also edit manually."
+        "hint": "Maximum number of context tokens allowed. Must not exceed the model's maximum context length. When set to 0 or left empty, model metadata is used first, then the fallback context window size (configurable in context compression settings)."
       },
       "dify_api_key": {
         "description": "API Key",

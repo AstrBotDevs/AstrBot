@@ -2390,35 +2390,29 @@ CONFIG_METADATA_2 = {
                         "items": {},
                         "hint": "用于在请求时添加额外的参数，如 temperature, top_p, max_tokens, reasoning_effort 等。",
                         "template_schema": {
-                            "temperature": {
-                                "name": "Temperature",
-                                "description": "温度参数",
-                                "hint": "控制输出的随机性，范围通常为 0-2。值越高越随机。",
-                                "type": "float",
-                                "default": 0.6,
-                                "slider": {"min": 0, "max": 2, "step": 0.1},
-                            },
-                            "top_p": {
-                                "name": "Top-p",
-                                "description": "Top-p 采样",
-                                "hint": "核采样参数，范围通常为 0-1。控制模型考虑的概率质量。",
-                                "type": "float",
-                                "default": 1.0,
-                                "slider": {"min": 0, "max": 1, "step": 0.01},
+                            "reasoning_effort": {
+                                "name": "Reasoning Effort",
+                                "description": "推理强度",
+                                "hint": "不同模型支持不同的推理强度，部分选项可能无效。",
+                                "type": "string",
                             },
                             "max_tokens": {
                                 "name": "Max Tokens",
                                 "description": "最大词元（Tokens）数",
-                                "hint": "生成的最大词元（Tokens）数。",
+                                "hint": "最大允许输出的 Token 数，包含推理 Token。不推荐手动设置。",
                                 "type": "int",
-                                "default": 8192,
                             },
-                            "reasoning_effort": {
-                                "name": "Reasoning Effort",
-                                "description": "推理强度",
-                                "hint": "控制推理模型的推理强度，支持的值取决于具体模型。",
-                                "type": "string",
-                                "default": "high",
+                            "temperature": {
+                                "name": "Temperature",
+                                "description": "温度参数",
+                                "hint": "控制输出的随机性，范围通常为 0-2，值越高越随机。不推荐手动设置。",
+                                "type": "float",
+                            },
+                            "top_p": {
+                                "name": "Top-p",
+                                "description": "Top-p 采样",
+                                "hint": "核采样参数，范围通常为 0-1，控制模型如何忽略长尾 Token。不推荐手动设置。",
+                                "type": "float",
                             },
                         },
                     },
@@ -3069,7 +3063,7 @@ CONFIG_METADATA_2 = {
                     "max_context_tokens": {
                         "description": "模型上下文窗口大小",
                         "type": "int",
-                        "hint": "模型最大上下文 Token 大小。如果为 0，则会自动从模型元数据填充（如有）",
+                        "hint": "最大允许的上下文 Token 数。需要小于或等于模型最长上下文。设为 0 或留空时先尝试使用模型元数据，再回退到上下文窗口兜底值（可在上下文压缩配置中修改）。",
                     },
                     "dify_api_key": {
                         "description": "API Key",
