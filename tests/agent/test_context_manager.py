@@ -765,6 +765,32 @@ class TestContextManager:
         assert result is messages
         assert provider.attempts == 1
 
+    @pytest.mark.asyncio
+    async def test_custom_compressor_receives_matching_history_and_token_count(self):
+        """Custom compression checks must see the current retained messages."""
+        from astrbot.core.agent.context.compressor import TruncateByTurnsCompressor
+
+        counter = EstimateTokenCounter()
+
+        class InspectingCompressor(TruncateByTurnsCompressor):
+            async def __call__(self, messages):
+                return messages
+
+            def should_compress(self, messages, current_tokens, max_tokens):
+                assert current_tokens == counter.count_tokens(messages)
+                return super().should_compress(messages, current_tokens, max_tokens)
+
+        messages = self._rounds_with_tool_chain("latest request")
+        before = [message.model_dump() for message in messages]
+        manager = ContextManager(
+            ContextConfig(max_context_tokens=100, custom_compressor=InspectingCompressor())
+        )
+
+        result = await manager.process(messages)
+
+        assert result == [messages[0], messages[-1]]
+        assert [message.model_dump() for message in messages] == before
+
     # ==================== Combined Truncation and Compression Tests ====================
 
     @pytest.mark.asyncio

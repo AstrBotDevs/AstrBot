@@ -146,21 +146,27 @@ class ContextManager:
         ]
         tokens = tokens_after_summary
         dropped_rounds = 0
-        # Only the built-in counter and compressors guarantee additive counts
-        # and read-only compression checks. Custom implementations still recount.
+        # Built-in estimates are additive and compression checks only use tokens.
+        # Custom implementations need updated messages and a full recount.
         incremental_tokens = type(self.token_counter) is EstimateTokenCounter and type(
             self.compressor
         ) in (TruncateByTurnsCompressor, LLMSummaryCompressor)
-        while len(rounds) > 1 and self.compressor.should_compress(
+        while len(rounds) - dropped_rounds > 1 and self.compressor.should_compress(
             messages, tokens, self.config.max_context_tokens
         ):
-            dropped_round = rounds.pop(0)
+            dropped_round = rounds[dropped_rounds]
             dropped_rounds += 1
-            messages = system_messages + [msg for rnd in rounds for msg in rnd]
             if incremental_tokens:
                 tokens -= self.token_counter.count_tokens(dropped_round)
             else:
+                messages = system_messages + [
+                    msg for rnd in rounds[dropped_rounds:] for msg in rnd
+                ]
                 tokens = self.token_counter.count_tokens(messages)
+        if incremental_tokens and dropped_rounds:
+            messages = system_messages + [
+                msg for rnd in rounds[dropped_rounds:] for msg in rnd
+            ]
         logger.info(f"Dropped {dropped_rounds} oldest round(s).")
 
         if self.compressor.should_compress(
