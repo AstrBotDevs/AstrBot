@@ -11,7 +11,6 @@ from tenacity import (
 )
 
 from astrbot import logger
-from astrbot.core.provider.request_observer import RequestAttemptObserver
 from astrbot.core.utils.config_number import coerce_int_config
 from astrbot.core.utils.network_utils import is_connection_error
 
@@ -119,7 +118,6 @@ async def retry_provider_request(
     *,
     retry_rate_limits: bool = True,
     max_attempts: int | None = None,
-    request_event_recorder: RequestAttemptObserver | None = None,
     log_error_details: bool = True,
 ) -> T:
     """Run a provider request with bounded retries.
@@ -129,7 +127,6 @@ async def retry_provider_request(
         request_factory: Callable that starts a request on each attempt.
         retry_rate_limits: Whether HTTP 429 responses can be retried.
         max_attempts: Maximum attempts, including the initial request.
-        request_event_recorder: Optional recorder for individual network attempts.
         log_error_details: Include exception messages in retry logs. Disable
             when messages may contain credentials or private request content.
 
@@ -148,15 +145,7 @@ async def retry_provider_request(
 
     async for attempt in retrying:
         with attempt:
-            recorder = request_event_recorder
-            if recorder:
-                await recorder.before_network_attempt()
-            try:
-                return await request_factory()
-            except Exception as exc:
-                if recorder:
-                    await recorder.finish("failed", error_code=type(exc).__name__)
-                raise
+            return await request_factory()
 
     raise RuntimeError("Provider request retry loop exited unexpectedly.")
 
@@ -168,7 +157,6 @@ async def retry_provider_request_context(
     *,
     retry_rate_limits: bool = True,
     max_attempts: int | None = None,
-    request_event_recorder: RequestAttemptObserver | None = None,
 ) -> AsyncIterator[T]:
     manager: AbstractAsyncContextManager[T] | None = None
 
@@ -182,7 +170,6 @@ async def retry_provider_request_context(
         _enter_context,
         retry_rate_limits=retry_rate_limits,
         max_attempts=max_attempts,
-        request_event_recorder=request_event_recorder,
     )
 
     if manager is None:

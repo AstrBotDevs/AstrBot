@@ -45,6 +45,15 @@
     ]
   },
   "voice": {
+    "transcribing": "Dictating…",
+    "transcribe": "Dictate text",
+    "sendAudio": "Record and send audio",
+    "cancel": "Cancel recording",
+    "finishTranscription": "Finish and transcribe",
+    "sttModel": "Transcription model",
+    "configure": "Configure",
+    "noSttProvider": "Configure an available speech-to-text model first",
+    "transcriptionFailed": "Transcription failed. Please try again.",
     "start": "Start Recording",
     "stop": "Stop Recording",
     "recording": "New Recording",
@@ -142,6 +151,12 @@
     "title": "Config"
   },
   "reasoning": {
+    "worked": "Ran for {duration}",
+    "working": "Running for {duration}",
+    "workCompleted": "Run details",
+    "durationHours": "{hours}h {minutes}m {seconds}s",
+    "durationMinutes": "{minutes}m {seconds}s",
+    "durationSeconds": "{seconds}s",
     "enabled": "Reasoning enabled",
     "disabled": "Reasoning disabled",
     "thinking": "Thinking Process",
