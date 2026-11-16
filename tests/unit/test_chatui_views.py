@@ -628,6 +628,22 @@ async def test_routes_check_owner_source_and_declared_actions(views):
         history.is_active = False
         assert (await client.get(url)).status_code == 404
 
+        for code, message in (
+            ("VIEW_UNAVAILABLE", "This view is unavailable."),
+            ("UNKNOWN", "The view request could not be completed."),
+        ):
+            service.get_chat_view = AsyncMock(
+                side_effect=ViewError(code, "Internal diagnostic: private/path")
+            )
+            for method, path, kwargs, status in (
+                ("GET", url, {}, 404),
+                ("POST", url + "/actions", {"json": payload}, 403),
+                ("GET", url + "/actions/click-1", {}, 403),
+            ):
+                response = await client.request(method, path, **kwargs)
+                assert response.status_code == status
+                assert response.json() == {"code": code, "message": message}
+
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("scenario", ["tool_reply", "view_only", "ack_only"])

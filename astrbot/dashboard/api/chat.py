@@ -44,6 +44,17 @@ def get_service(request: Request) -> ChatService:
 
 require_chat_scope = ScopeDependency("chat")
 
+# HTTP responses use fixed public text, never the exception's diagnostic message.
+VIEW_ERROR_MESSAGES = {
+    "FORBIDDEN": "This view is not accessible.",
+    "VIEW_UNAVAILABLE": "This view is unavailable.",
+    "ACTION_NOT_ALLOWED": "This action is not declared by the view.",
+    "INVALID_INPUT": "The view action input is invalid.",
+    "REVISION_CONFLICT": "The view has changed. Review it and try again.",
+    "ACTION_IN_PROGRESS": "Another action is still pending.",
+    "ACTION_OUTCOME_UNKNOWN": "The action has no recorded outcome yet.",
+}
+
 
 @router.get("/chat/views/{view_id}")
 async def get_chat_view(
@@ -88,7 +99,12 @@ async def get_chat_view(
         )
     except ViewError as exc:
         return JSONResponse(
-            {"code": exc.code, "message": str(exc)},
+            {
+                "code": exc.code,
+                "message": VIEW_ERROR_MESSAGES.get(
+                    exc.code, "The view request could not be completed."
+                ),
+            },
             status_code=403 if exc.code == "FORBIDDEN" else 404,
         )
 
@@ -159,7 +175,12 @@ async def run_chat_view_action(
             headers={"Cache-Control": "no-cache"},
         )
     except ViewError as exc:
-        response = {"code": exc.code, "message": str(exc)}
+        response = {
+            "code": exc.code,
+            "message": VIEW_ERROR_MESSAGES.get(
+                exc.code, "The view request could not be completed."
+            ),
+        }
         if exc.code == "REVISION_CONFLICT":
             current = await asyncio.to_thread(view_store.get, view_id)
             response["snapshot"] = {
@@ -207,7 +228,15 @@ async def get_chat_view_action(
             status_code=409,
         )
     except ViewError as exc:
-        return JSONResponse({"code": exc.code, "message": str(exc)}, status_code=403)
+        return JSONResponse(
+            {
+                "code": exc.code,
+                "message": VIEW_ERROR_MESSAGES.get(
+                    exc.code, "The view request could not be completed."
+                ),
+            },
+            status_code=403,
+        )
 
 
 async def _json_or_empty(request: Request) -> dict[str, Any]:
