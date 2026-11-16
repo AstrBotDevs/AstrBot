@@ -2740,3 +2740,78 @@ async def test_unknown_tool_is_rejected_without_claiming_execution(
     assert rejected[0].error.code == "tool_not_found"
     assert not any(event.type in ("tool.started", "tool.finished") for event in events)
     assert not mock_hooks.tool_start_called
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("schema", "arguments", "expected"),
+    [
+        (
+            {
+                "type": "object",
+                "additionalProperties": {"type": "integer", "minimum": 0},
+            },
+            {"paper": 12},
+            {"paper": 12},
+        ),
+        (
+            {
+                "type": "object",
+                "properties": {"fixed": {"type": "string"}},
+                "additionalProperties": {"type": "integer"},
+            },
+            {"fixed": "ok", "paper": 12},
+            {"fixed": "ok", "paper": 12},
+        ),
+        (
+            {
+                "type": "object",
+                "properties": {"fixed": {"type": "string"}},
+                "additionalProperties": False,
+            },
+            {"fixed": "ok", "extra": 12},
+            {"fixed": "ok"},
+        ),
+        (
+            {"type": "object", "additionalProperties": {"type": "integer"}},
+            {"paper": "invalid"},
+            {},
+        ),
+        ({"type": "object", "additionalProperties": {}}, {"paper": 12}, {"paper": 12}),
+        ({"type": "object", "additionalProperties": True}, {"paper": 12}, {"paper": 12}),
+    ],
+)
+async def test_inline_tool_receives_schema_valid_dynamic_arguments(
+    runner, mock_hooks, schema, arguments, expected
+):
+    received = []
+
+    class CapturingExecutor:
+        @classmethod
+        def execute(cls, tool, run_context, **tool_args):
+            async def generator():
+                from mcp.types import CallToolResult, TextContent
+
+                received.append(tool_args)
+                yield CallToolResult(content=[TextContent(type="text", text="ok")])
+
+            return generator()
+
+    tool = FunctionTool(
+        name="quote", description="Quote items.", parameters=schema, handler=AsyncMock()
+    )
+    provider = SingleToolThenFinalProvider(tool.name, arguments)
+    request = ProviderRequest(
+        prompt="quote", func_tool=ToolSet(tools=[tool]), contexts=[]
+    )
+    await runner.reset(
+        provider=provider,
+        request=request,
+        run_context=ContextWrapper(context=None),
+        tool_executor=CapturingExecutor,
+        agent_hooks=mock_hooks,
+        streaming=False,
+    )
+    async for _ in runner.step_until_done(3):
+        pass
+    assert received == [expected]

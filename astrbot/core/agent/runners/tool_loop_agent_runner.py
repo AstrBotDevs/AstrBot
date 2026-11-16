@@ -10,6 +10,7 @@ from contextlib import aclosing, suppress
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 
+import jsonschema
 from mcp.types import (
     BlobResourceContents,
     CallToolResult,
@@ -1632,6 +1633,21 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                             for k, v in func_tool_args.items()
                             if k in expected_params
                         }
+
+                    # Dynamic object schemas may accept keys outside properties.
+                    # Preserve them only when the complete input validates.
+                    schema = func_tool.parameters or {}
+                    if (
+                        "additionalProperties" in schema
+                        and schema["additionalProperties"] is not False
+                    ):
+                        try:
+                            if jsonschema.Draft202012Validator(schema).is_valid(
+                                func_tool_args
+                            ):
+                                valid_params = func_tool_args
+                        except Exception as exc:
+                            logger.warning(f"Could not validate tool arguments: {exc}")
 
                     # 记录被忽略的参数
                     ignored_params = set(func_tool_args.keys()) - set(
