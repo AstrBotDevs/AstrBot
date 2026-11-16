@@ -142,6 +142,12 @@
     "title": "配置文件"
   },
   "reasoning": {
+    "worked": "运行了 {duration}",
+    "working": "已运行 {duration}",
+    "workCompleted": "运行过程",
+    "durationHours": "{hours} 小时 {minutes} 分钟 {seconds} 秒",
+    "durationMinutes": "{minutes} 分钟 {seconds} 秒",
+    "durationSeconds": "{seconds} 秒",
     "enabled": "思考内容已开启",
     "disabled": "思考内容已关闭",
     "thinking": "思考过程",

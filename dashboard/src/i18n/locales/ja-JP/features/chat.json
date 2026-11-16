@@ -142,6 +142,12 @@
     "title": "設定"
   },
   "reasoning": {
+    "worked": "作業時間：{duration}",
+    "working": "作業中：{duration}",
+    "workCompleted": "作業の詳細",
+    "durationHours": "{hours}時間 {minutes}分 {seconds}秒",
+    "durationMinutes": "{minutes}分 {seconds}秒",
+    "durationSeconds": "{seconds}秒",
     "enabled": "思考内容の表示：オン",
     "disabled": "思考内容の表示：オフ",
     "thinking": "思考プロセス",
