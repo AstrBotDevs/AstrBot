@@ -166,6 +166,7 @@
                     :model-value="getTemplateValue(templateKey)"
                     @update:model-value="updateTemplateValue(templateKey, $event)"
                     type="number"
+                    :step="!pluginName && configKey.split('.').pop() === 'custom_extra_body' && ['temperature', 'top_p'].includes(templateKey) ? 0.05 : 1"
                     density="compact"
                     variant="outlined"
                     hide-details
