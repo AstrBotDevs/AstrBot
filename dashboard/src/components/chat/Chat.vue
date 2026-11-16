@@ -236,7 +236,6 @@
         'empty-chat': isEmptyChat,
         'has-side-panel':
           threadPanelOpen ||
-          reasoningPanelOpen ||
           refsSidebarOpen ||
           chatHeader.workspaceFilesOpen,
       }"
@@ -386,7 +385,6 @@
               @regenerate-with-model="handleRegenerateMessage"
               @select-bot-text="handleBotTextSelection"
               @open-thread="openThreadPanel"
-              @open-reasoning="openReasoningPanel"
               @open-refs="openRefsSidebar"
               @button-click="handleButtonClick"
             />
@@ -541,11 +539,6 @@
       :get-provider-selection="getSelectedProviderSelection"
       @delete="deleteThread"
     />
-    <ReasoningSidebar
-      v-model="reasoningPanelOpen"
-      :parts="activeReasoningParts"
-      :is-dark="isDark"
-    />
     <RefsSidebar v-model="refsSidebarOpen" :refs="selectedRefs" />
     <WorkspaceFilesPanel
       :model-value="chatHeader.workspaceFilesOpen"
@@ -600,13 +593,11 @@ import ChatMessageList from "@/components/chat/ChatMessageList.vue";
 import ChatUILogo from "@/components/chat/ChatUILogo.vue";
 import type { RegenerateModelSelection } from "@/components/chat/RegenerateMenu.vue";
 import ChatLoadError from "@/components/chat/ChatLoadError.vue";
-import ReasoningSidebar from "@/components/chat/ReasoningSidebar.vue";
 import ThreadPanel from "@/components/chat/ThreadPanel.vue";
 import WorkspaceFilesPanel from "@/components/chat/WorkspaceFilesPanel.vue";
 import RefsSidebar from "@/components/chat/message_list_comps/RefsSidebar.vue";
 import { useSessions, type Session } from "@/composables/useSessions";
 import {
-  messageBlocks as buildMessageBlocks,
   useMessages,
   type ChatRecord,
   type ChatThread,
@@ -760,11 +751,6 @@ let autoScrollFrame: number | null = null;
 const replyTarget = ref<ChatRecord | null>(null);
 const threadPanelOpen = ref(false);
 const activeThread = ref<ChatThread | null>(null);
-const reasoningPanelOpen = ref(false);
-const activeReasoningTarget = ref<{
-  message: ChatRecord;
-  blockIndex: number;
-} | null>(null);
 const deletingThread = ref(false);
 const refsSidebarOpen = ref(false);
 const selectedRefs = ref<Record<string, unknown> | null>(null);
@@ -817,21 +803,6 @@ function toggleChatSidebar() {
   }
   customizer.SET_CHAT_SIDEBAR_COLLAPSED(!customizer.chatSidebarCollapsed);
 }
-
-const activeReasoningParts = computed<MessagePart[]>(() => {
-  if (!activeReasoningTarget.value) return [];
-  const blocks = buildMessageBlocks(
-    activeReasoningTarget.value.message.content || { type: "bot", message: [] },
-  );
-  const block = blocks[activeReasoningTarget.value.blockIndex];
-  return block?.kind === "thinking" ? block.parts : [];
-});
-
-watch(reasoningPanelOpen, (open) => {
-  if (!open) {
-    activeReasoningTarget.value = null;
-  }
-});
 
 const {
   loadingMessages,
@@ -1121,8 +1092,6 @@ watch(
     threadSelection.visible = false;
     threadPanelOpen.value = false;
     activeThread.value = null;
-    reasoningPanelOpen.value = false;
-    activeReasoningTarget.value = null;
     refsSidebarOpen.value = false;
     selectedRefs.value = null;
   },
@@ -1294,8 +1263,6 @@ function closeSecondaryPanels() {
   threadSelection.visible = false;
   threadPanelOpen.value = false;
   activeThread.value = null;
-  reasoningPanelOpen.value = false;
-  activeReasoningTarget.value = null;
   refsSidebarOpen.value = false;
   selectedRefs.value = null;
   chatHeader.SET_WORKSPACE_FILES_OPEN(false);
@@ -1893,8 +1860,6 @@ async function createThreadFromSelection() {
 
 function openThreadPanel(thread: ChatThread) {
   chatHeader.SET_WORKSPACE_FILES_OPEN(false);
-  reasoningPanelOpen.value = false;
-  activeReasoningTarget.value = null;
   refsSidebarOpen.value = false;
   activeThread.value = thread;
   threadPanelOpen.value = true;
@@ -1904,24 +1869,9 @@ function openRefsSidebar(refs: unknown) {
   chatHeader.SET_WORKSPACE_FILES_OPEN(false);
   threadPanelOpen.value = false;
   activeThread.value = null;
-  reasoningPanelOpen.value = false;
-  activeReasoningTarget.value = null;
   selectedRefs.value =
     refs && typeof refs === "object" ? (refs as Record<string, unknown>) : null;
   refsSidebarOpen.value = true;
-}
-
-function openReasoningPanel(payload: {
-  message: ChatRecord;
-  blockIndex: number;
-}) {
-  chatHeader.SET_WORKSPACE_FILES_OPEN(false);
-  threadPanelOpen.value = false;
-  activeThread.value = null;
-  refsSidebarOpen.value = false;
-  selectedRefs.value = null;
-  activeReasoningTarget.value = payload;
-  reasoningPanelOpen.value = true;
 }
 
 async function loadEarlierWithAnchor() {

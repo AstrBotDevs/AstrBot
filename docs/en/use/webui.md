@@ -23,6 +23,7 @@ These paths use the current default sidebar with a fixed menu order. Extension i
 | System Settings → Appearance → Customize Sidebar | Removed; the sidebar uses the default menu layout |
 | Custom Rules / Session Management | Config → Manage session mappings; old links redirect automatically |
 | Future Tasks / SubAgents | Future Tasks remains under Extensions; subagents are under Config → AI → Capabilities → Subagents |
+| ChatUI thinking/tool summary → right sidebar | ChatUI → Ran for … → inline thinking/tool summary |
 
 Old log, trace, conversation, and statistics URLs still redirect to the corresponding tabs. Agent runners are now saved in each profile; they are no longer created as model providers. See [Agent Execution Mode](./agent-runner.md) for the setup steps.
 
@@ -93,6 +94,12 @@ ChatUI supports these common workflows:
 - Switch between streaming/normal response modes and SSE/WebSocket transport modes.
 
 To return to the model configured in the selected profile, open the model selector and choose **Default model** (**Follow the selected profile's default model**). This clears the override for the current conversation; other conversations retain their saved model choices. Logging out clears all saved ChatUI model choices in this browser.
+
+While generating, run details expand automatically so thinking/tool summaries and intermediate replies stay visible. The active thinking/tool group also expands, then collapses when the next assistant reply begins; a new group expands when it starts. The outer run details collapse when generation ends. Summary rows align to the same left edge without borders or timeline rails; each thought shows only its first line, with a thinking icon and an expand arrow. Select the first line or arrow to expand or collapse. The text remains in the same container, revealing more through a height transition without repeating the first line. The body and tool details align with the label text to the right of each icon. Thought rows use the same text size as tool rows, without extra section labels. Select **Ran for …** above a reply to expand the work preceding the final response directly in the message list. The final response stays visible. Intermediate replies appear in order; adjacent thinking and tool calls share a **Thought X times, used X tools** summary that expands their details. Select either summary again to collapse it. Elapsed time includes hours, minutes, and seconds, omitting leading zero units; older messages without timing metadata show **Run details**.
+
+Refreshing or closing ChatUI during a tool call does not stop the backend run. With either SSE or WebSocket selected, reopening the conversation restores the active run and continues receiving output; completed replies are loaded from history. This applies while the same backend process remains running.
+
+Previous entry → current entry: **Thinking/tool summary → right sidebar** is now **Ran for … → inline thinking/tool summary → downward expansion**.
 
 > [!NOTE]
 > To keep message delivery ordered, keep only one ChatUI page open for the same browser session. If you open chat in multiple tabs, the system may ask you to reconnect.
