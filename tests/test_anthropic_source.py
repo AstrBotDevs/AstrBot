@@ -1,11 +1,20 @@
 import json
 from types import SimpleNamespace
+from unittest.mock import AsyncMock
 
 import pytest
 from anthropic import BadRequestError
 from anthropic import _base_client as anthropic_base_client
-from anthropic.types import Message, MessageDeltaUsage, TextBlock, Usage
+from anthropic.types import (
+    Message,
+    MessageDeltaUsage,
+    TextBlock,
+    ThinkingBlock,
+    ToolUseBlock,
+    Usage,
+)
 
+from astrbot.core.agent.message import ThinkPart
 from astrbot.core.agent.tool import FunctionTool, ToolSet
 from astrbot.core.provider.entities import TokenUsage
 from astrbot.core.provider.sources.anthropic_source import ProviderAnthropic
@@ -434,6 +443,192 @@ async def test_anthropic_stream_keeps_tool_call_with_empty_input(
         assert response.tools_call_name == ["get_time"]
         assert response.tools_call_args == [expected_args]
         assert response.tools_call_ids == ["toolu_01"]
+
+
+def _thinking_tool_use_stream() -> bytes:
+    events = [
+        {
+            "type": "message_start",
+            "message": {
+                "id": "msg_1",
+                "type": "message",
+                "role": "assistant",
+                "model": "claude-test",
+                "content": [],
+                "stop_reason": None,
+                "stop_sequence": None,
+                "usage": {"input_tokens": 10, "output_tokens": 1},
+            },
+        },
+        *(
+            event
+            for index, (thinking, signature) in enumerate(
+                [("think-A", "sig-A"), ("think-B", "sig-B")]
+            )
+            for event in [
+                {
+                    "type": "content_block_start",
+                    "index": index,
+                    "content_block": {
+                        "type": "thinking",
+                        "thinking": "",
+                        "signature": "",
+                    },
+                },
+                {
+                    "type": "content_block_delta",
+                    "index": index,
+                    "delta": {"type": "thinking_delta", "thinking": thinking},
+                },
+                {
+                    "type": "content_block_delta",
+                    "index": index,
+                    "delta": {"type": "signature_delta", "signature": signature},
+                },
+                {"type": "content_block_stop", "index": index},
+            ]
+        ),
+        {
+            "type": "content_block_start",
+            "index": 2,
+            "content_block": {
+                "type": "tool_use",
+                "id": "toolu_01",
+                "name": "get_time",
+                "input": {},
+            },
+        },
+        {"type": "content_block_stop", "index": 2},
+        {
+            "type": "message_delta",
+            "delta": {"stop_reason": "tool_use", "stop_sequence": None},
+            "usage": {"output_tokens": 5},
+        },
+        {"type": "message_stop"},
+    ]
+    return "".join(
+        f"event: {event['type']}\ndata: {json.dumps(event)}\n\n" for event in events
+    ).encode()
+
+
+@pytest.mark.asyncio
+async def test_anthropic_stream_preserves_thinking_blocks_for_tool_replay(monkeypatch):
+    transport = sdk_httpx.MockTransport(
+        lambda request: sdk_httpx.Response(
+            200,
+            headers={"content-type": "text/event-stream"},
+            content=_thinking_tool_use_stream(),
+        )
+    )
+    monkeypatch.setattr(
+        ProviderAnthropic,
+        "_create_http_client",
+        lambda self, provider_config: sdk_httpx.AsyncClient(transport=transport),
+    )
+    provider = ProviderAnthropic(
+        {
+            "id": "test",
+            "type": "anthropic_chat_completion",
+            "key": ["sk-test"],
+            "model": "claude-test",
+            "api_base": "https://api.anthropic.test",
+        },
+        {},
+    )
+    payloads = {
+        "messages": [{"role": "user", "content": "what time is it?"}],
+        "model": "claude-test",
+    }
+
+    try:
+        responses = [r async for r in provider._query_stream(payloads, None)]
+    finally:
+        await provider.terminate()
+
+    final = responses[-1]
+    assert final.reasoning_parts == [
+        ThinkPart(think="think-A", encrypted="sig-A"),
+        ThinkPart(think="think-B", encrypted="sig-B"),
+    ]
+    assert final.reasoning_content == "think-Athink-B"
+    assert final.reasoning_signature == "sig-B"
+
+    assistant = {
+        "role": "assistant",
+        "content": [part.model_dump() for part in final.reasoning_parts],
+        "tool_calls": [
+            call.model_dump() for call in final.to_openai_tool_calls_model()
+        ],
+    }
+    _, replay = provider._prepare_payload(
+        [
+            {"role": "user", "content": "what time is it?"},
+            assistant,
+            {
+                "role": "tool",
+                "tool_call_id": "toolu_01",
+                "content": "12:00 UTC",
+            },
+        ]
+    )
+    assert replay[1]["content"] == [
+        {"type": "thinking", "thinking": "think-A", "signature": "sig-A"},
+        {"type": "thinking", "thinking": "think-B", "signature": "sig-B"},
+        {
+            "type": "tool_use",
+            "name": "get_time",
+            "input": {},
+            "id": "toolu_01",
+        },
+    ]
+
+
+@pytest.mark.asyncio
+async def test_anthropic_non_stream_preserves_each_thinking_block_verbatim():
+    provider = _provider()
+    provider.provider_config = {}
+    provider.thinking_config = {}
+    completion = Message(
+        id="msg_1",
+        content=[
+            ThinkingBlock(type="thinking", thinking=" think-A\n", signature="sig-A"),
+            ThinkingBlock(type="thinking", thinking="", signature="sig-B"),
+            ToolUseBlock(
+                type="tool_use", id="toolu_01", name="get_time", input={}
+            ),
+        ],
+        model="claude-test",
+        role="assistant",
+        stop_reason="tool_use",
+        stop_sequence=None,
+        type="message",
+        usage=Usage(input_tokens=1, output_tokens=1),
+    )
+    provider.client = SimpleNamespace(
+        messages=SimpleNamespace(create=AsyncMock(return_value=completion))
+    )
+
+    final = await provider._query({"model": "claude-test", "messages": []}, None)
+
+    assert final.reasoning_parts == [
+        ThinkPart(think=" think-A\n", encrypted="sig-A"),
+        ThinkPart(think="", encrypted="sig-B"),
+    ]
+    assert final.reasoning_content == " think-A\n"
+    assert final.reasoning_signature == "sig-B"
+
+    _, replay = provider._prepare_payload(
+        [
+            {
+                "role": "assistant",
+                "content": [part.model_dump() for part in final.reasoning_parts],
+            }
+        ]
+    )
+    assert replay[0]["content"] == [
+        {"type": "thinking", "thinking": " think-A\n", "signature": "sig-A"},
+        {"type": "thinking", "thinking": "", "signature": "sig-B"},
+    ]
 
 
 @pytest.mark.asyncio

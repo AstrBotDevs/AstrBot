@@ -17,6 +17,7 @@ from astrbot import logger
 from astrbot.core.agent.message import (
     AssistantMessageSegment,
     ContentPart,
+    ThinkPart,
     ToolCall,
     ToolCallMessageSegment,
 )
@@ -465,6 +466,8 @@ class LLMResponse:
     """The reasoning content extracted from the LLM, if any."""
     reasoning_signature: str | None = None
     """The signature of the reasoning content, if any."""
+    reasoning_parts: list[ThinkPart] = field(default_factory=list)
+    """Ordered reasoning parts with their original signatures, if any."""
 
     raw_completion: (
         ChatCompletion | Response | GenerateContentResponse | AnthropicMessage | None
@@ -501,6 +504,7 @@ class LLMResponse:
         is_chunk: bool = False,
         id: str | None = None,
         usage: TokenUsage | None = None,
+        reasoning_parts: list[ThinkPart] | None = None,
     ) -> None:
         """初始化 LLMResponse
 
@@ -511,6 +515,7 @@ class LLMResponse:
             tools_call_args (List[Dict[str, any]], optional): 工具调用参数. Defaults to None.
             tools_call_name (List[str], optional): 工具调用名称. Defaults to None.
             raw_completion (ChatCompletion, optional): 原始响应, OpenAI 格式. Defaults to None.
+            reasoning_parts: Ordered reasoning parts with their original signatures.
 
         """
         if tools_call_args is None:
@@ -531,6 +536,7 @@ class LLMResponse:
         self.tools_call_extra_content = tools_call_extra_content
         self.reasoning_content = reasoning_content
         self.reasoning_signature = reasoning_signature
+        self.reasoning_parts = reasoning_parts or []
         self.raw_completion = raw_completion
         self.is_chunk = is_chunk
 
