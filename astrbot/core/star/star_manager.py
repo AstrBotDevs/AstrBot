@@ -15,6 +15,8 @@ import traceback
 from collections.abc import Iterable
 from dataclasses import dataclass
 from enum import Enum, auto
+from importlib import invalidate_caches
+from importlib.util import cache_from_source
 from pathlib import Path
 from types import ModuleType
 
@@ -772,6 +774,28 @@ class PluginManager:
                     logger.debug(f"Removed module {module_name}")
                 except KeyError:
                     logger.warning(f"Module {module_name} is not loaded")
+            invalidate_caches()
+
+    def _clear_plugin_bytecode(self, metadata: StarMetadata) -> None:
+        """Reject unreadable bytecode before changing the live plugin registry."""
+        if not metadata.root_dir_name:
+            return
+        plugin_root = Path(
+            self.reserved_plugin_path if metadata.reserved else self.plugin_store_path,
+            metadata.root_dir_name,
+        ).resolve()
+        for name in self._get_plugin_related_modules(
+            metadata.root_dir_name, metadata.reserved
+        ):
+            source = getattr(sys.modules.get(name), "__file__", None)
+            if not source or Path(source).suffix != ".py":
+                continue
+            source_path = Path(source).resolve()
+            if source_path.is_relative_to(plugin_root):
+                # Timestamp-based bytecode can survive equal-size edits.
+                cached = Path(cache_from_source(str(source_path)))
+                if cached.resolve().is_relative_to(plugin_root):
+                    cached.unlink(missing_ok=True)
 
     def _cleanup_plugin_state(self, dir_name: str, is_reserved: bool = False) -> None:
         plugin_root_name = "astrbot.builtin_stars." if is_reserved else "data.plugins."
@@ -1029,49 +1053,77 @@ class PluginManager:
 
         """
         async with self._pm_lock:
-            specified_module_path = None
-            if specified_plugin_name:
-                for smd in star_registry:
-                    if smd.name == specified_plugin_name:
-                        specified_module_path = smd.module_path
-                        break
+            return await self._reload_locked(specified_plugin_name)
 
-            # 终止插件
-            if not specified_module_path:
-                # 重载所有插件
-                for smd in list(star_registry):
-                    try:
-                        await self._terminate_plugin(smd)
-                    except Exception as e:
-                        logger.warning(traceback.format_exc())
-                        logger.warning(
-                            f"Plugin {smd.name} did not terminate cleanly: {e!s}. "
-                            "The plugin may not work correctly.",
-                        )
-                    if smd.name and smd.module_path:
-                        await self._unbind_plugin(smd.name, smd.module_path)
+    async def _reload_locked(self, specified_plugin_name=None, *, clear_bytecode=True):
+        """Reload while the caller holds the plugin-management lock."""
+        specified_module_path = None
+        if specified_plugin_name is not None:
+            if (
+                not isinstance(specified_plugin_name, str)
+                or not specified_plugin_name.strip()
+            ):
+                return False, "A nonempty plugin name is required"
+            matches = [
+                smd for smd in star_registry if smd.name == specified_plugin_name
+            ]
+            if len(matches) != 1 or not matches[0].module_path:
+                return (
+                    False,
+                    "Plugin name does not identify exactly one loaded plugin",
+                )
+            specified_module_path = matches[0].module_path
+            if star_map.get(specified_module_path) is not matches[0]:
+                return False, "Plugin metadata is not registered"
 
-                star_handlers_registry.clear()
-                star_map.clear()
-                star_registry.clear()
-            else:
-                # 只重载指定插件
-                smd = star_map.get(specified_module_path)
-                if smd:
-                    try:
-                        await self._terminate_plugin(smd)
-                    except Exception as e:
-                        logger.warning(traceback.format_exc())
-                        logger.warning(
-                            f"Plugin {smd.name} did not terminate cleanly: {e!s}. "
-                            "The plugin may not work correctly.",
-                        )
-                    if smd.name and smd.activated:
-                        await self._unbind_plugin(smd.name, specified_module_path)
+        targets = (
+            [star_map[specified_module_path]]
+            if specified_module_path
+            else list(star_registry)
+        )
+        try:
+            if clear_bytecode:
+                for metadata in targets:
+                    self._clear_plugin_bytecode(metadata)
+        except (OSError, ValueError) as error:
+            return False, f"Cannot clear plugin bytecode before reload: {error}"
 
-            result = await self.load(specified_module_path)
+        # 终止插件
+        if not specified_module_path:
+            # 重载所有插件
+            for smd in list(star_registry):
+                try:
+                    await self._terminate_plugin(smd)
+                except Exception as e:
+                    logger.warning(traceback.format_exc())
+                    logger.warning(
+                        f"Plugin {smd.name} did not terminate cleanly: {e!s}. "
+                        "The plugin may not work correctly.",
+                    )
+                if smd.name and smd.module_path:
+                    await self._unbind_plugin(smd.name, smd.module_path)
 
-            return result
+            star_handlers_registry.clear()
+            star_map.clear()
+            star_registry.clear()
+        else:
+            # 只重载指定插件
+            smd = star_map.get(specified_module_path)
+            if smd:
+                try:
+                    await self._terminate_plugin(smd)
+                except Exception as e:
+                    logger.warning(traceback.format_exc())
+                    logger.warning(
+                        f"Plugin {smd.name} did not terminate cleanly: {e!s}. "
+                        "The plugin may not work correctly.",
+                    )
+                if smd.name:
+                    await self._unbind_plugin(smd.name, specified_module_path)
+
+        result = await self.load(specified_module_path)
+
+        return result
 
     async def load(
         self,
@@ -1829,16 +1881,18 @@ class PluginManager:
             plugin_module_path: 插件的完整模块路径
 
         """
-        plugin = None
-        del star_map[plugin_module_path]
+        plugin = star_map.pop(plugin_module_path, None)
         for i, p in enumerate(star_registry):
-            if p.name == plugin_name:
+            if p.name == plugin_name and p.module_path == plugin_module_path:
                 plugin = p
                 del star_registry[i]
                 break
-        for handler in star_handlers_registry.get_handlers_by_module_name(
-            plugin_module_path,
-        ):
+        module_prefix = ".".join(plugin_module_path.split(".")[:-1])
+        for handler in list(star_handlers_registry):
+            if not self._is_plugin_module_path(
+                handler.handler_module_path, module_prefix
+            ):
+                continue
             logger.info(
                 f"Removed handler {handler.handler_name} from plugin {plugin_name} "
                 f"({len(star_handlers_registry)})",
@@ -1848,7 +1902,7 @@ class PluginManager:
         for k in [
             k
             for k in star_handlers_registry.star_handlers_map
-            if k.startswith(plugin_module_path)
+            if self._is_plugin_module_path(k, module_prefix)
         ]:
             del star_handlers_registry.star_handlers_map[k]
 
@@ -1858,7 +1912,7 @@ class PluginManager:
             mp = func_tool.handler_module_path
             if (
                 mp
-                and mp.startswith(plugin_module_path)
+                and self._is_plugin_module_path(mp, module_prefix)
                 and not mp.endswith(("astrbot.builtin_stars", "data.plugins"))
             ):
                 to_remove.append(func_tool)
@@ -1867,7 +1921,6 @@ class PluginManager:
 
         # Unregister platform adapters registered by this plugin
         # module_path is like "data.plugins.my_plugin.main", extract prefix like "data.plugins.my_plugin"
-        module_prefix = ".".join(plugin_module_path.split(".")[:-1])
         if module_prefix:
             unregistered_adapters = unregister_platform_adapters_by_module(
                 module_prefix
@@ -2004,24 +2057,27 @@ class PluginManager:
                 logger.error(traceback.format_exc())
 
     async def turn_on_plugin(self, plugin_name: str) -> None:
-        plugin = self.context.get_registered_star(plugin_name)
-        if plugin is None:
-            raise Exception(f"插件 {plugin_name} 不存在。")
-        inactivated_plugins: list = await sp.global_get("inactivated_plugins", [])
-        inactivated_llm_tools: list = await sp.global_get("inactivated_llm_tools", [])
-        if plugin.module_path in inactivated_plugins:
-            inactivated_plugins.remove(plugin.module_path)
-        await sp.global_put("inactivated_plugins", inactivated_plugins)
+        async with self._pm_lock:
+            plugin = self.context.get_registered_star(plugin_name)
+            if plugin is None:
+                raise Exception(f"插件 {plugin_name} 不存在。")
+            # A failed filesystem preflight must not activate tools or persist enablement.
+            self._clear_plugin_bytecode(plugin)
+            inactivated_plugins: list = await sp.global_get("inactivated_plugins", [])
+            inactivated_llm_tools: list = await sp.global_get("inactivated_llm_tools", [])
+            if plugin.module_path in inactivated_plugins:
+                inactivated_plugins.remove(plugin.module_path)
+            await sp.global_put("inactivated_plugins", inactivated_plugins)
 
-        for func_tool in self._iter_plugin_llm_tools(plugin.module_path):
-            func_tool.active = func_tool.name not in inactivated_llm_tools
+            for func_tool in self._iter_plugin_llm_tools(plugin.module_path):
+                func_tool.active = func_tool.name not in inactivated_llm_tools
 
-        success, error = await self.reload(plugin_name)
-        if not success:
-            raise Exception(error or f"插件 {plugin_name} 启用失败。")
-        current_plugin = self.context.get_registered_star(plugin_name)
-        if current_plugin:
-            current_plugin.activated = True
+            success, error = await self._reload_locked(plugin_name, clear_bytecode=False)
+            if not success:
+                raise Exception(error or f"插件 {plugin_name} 启用失败。")
+            current_plugin = self.context.get_registered_star(plugin_name)
+            if current_plugin:
+                current_plugin.activated = True
 
     async def install_plugin_from_file(
         self, zip_file_path: str, ignore_version_check: bool = False

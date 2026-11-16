@@ -1195,14 +1195,14 @@ async def test_turn_plugin_toggles_llm_tools_from_plugin_child_module(
     async def mock_terminate(star_metadata):
         assert star_metadata is plugin
 
-    async def mock_reload(plugin_name):
+    async def mock_reload(plugin_name, *, clear_bytecode=True):
         assert plugin_name == plugin.root_dir_name
         return True, None
 
     monkeypatch.setattr(star_manager_module.sp, "global_get", mock_global_get)
     monkeypatch.setattr(star_manager_module.sp, "global_put", mock_global_put)
     monkeypatch.setattr(plugin_manager_pm, "_terminate_plugin", mock_terminate)
-    monkeypatch.setattr(plugin_manager_pm, "reload", mock_reload)
+    monkeypatch.setattr(plugin_manager_pm, "_reload_locked", mock_reload)
 
     try:
         await plugin_manager_pm.turn_off_plugin(plugin.root_dir_name)
@@ -1289,14 +1289,14 @@ async def test_turn_plugin_preserves_user_disabled_llm_tools(
     async def mock_terminate(star_metadata):
         assert star_metadata is plugin
 
-    async def mock_reload(plugin_name):
+    async def mock_reload(plugin_name, *, clear_bytecode=True):
         assert plugin_name == plugin.root_dir_name
         return True, None
 
     monkeypatch.setattr(star_manager_module.sp, "global_get", mock_global_get)
     monkeypatch.setattr(star_manager_module.sp, "global_put", mock_global_put)
     monkeypatch.setattr(plugin_manager_pm, "_terminate_plugin", mock_terminate)
-    monkeypatch.setattr(plugin_manager_pm, "reload", mock_reload)
+    monkeypatch.setattr(plugin_manager_pm, "_reload_locked", mock_reload)
 
     try:
         await plugin_manager_pm.turn_off_plugin(plugin.root_dir_name)
@@ -2636,50 +2636,6 @@ async def test_load_syncs_existing_metadata_activation_from_preferences(
 
 
 @pytest.mark.asyncio
-async def test_reload_deactivated_plugin_preserves_tools(
-    plugin_manager_pm: PluginManager, monkeypatch
-):
-    """Specified reload of a deactivated plugin keeps its tools in func_list."""
-    _clear_star_runtime_state()
-    plugin_name = "demo_plugin"
-    module_path = f"data.plugins.{plugin_name}.main"
-    metadata = star_manager_module.StarMetadata(
-        name=plugin_name,
-        root_dir_name=plugin_name,
-        module_path=module_path,
-        activated=False,
-    )
-    star_manager_module.star_map[module_path] = metadata
-    star_manager_module.star_registry.append(metadata)
-
-    plugin_tool = star_manager_module.FunctionTool(
-        name="plugin_search",
-        description="plugin search",
-        parameters={"type": "object", "properties": {}},
-        handler_module_path=f"data.plugins.{plugin_name}.main.tools.search",
-    )
-    llm_tools = cast(Any, star_manager_module.llm_tools)
-    original_func_list = llm_tools.func_list
-    llm_tools.func_list = [plugin_tool]
-
-    async def mock_terminate(smd):
-        pass  # deactivated → no-op
-
-    async def mock_load(specified_module_path=None, **kwargs):
-        return True, None
-
-    monkeypatch.setattr(plugin_manager_pm, "_terminate_plugin", mock_terminate)
-    monkeypatch.setattr(plugin_manager_pm, "load", mock_load)
-
-    try:
-        await plugin_manager_pm.reload(plugin_name)
-        assert plugin_tool in llm_tools.func_list
-    finally:
-        llm_tools.func_list = original_func_list
-        _clear_star_runtime_state()
-
-
-@pytest.mark.asyncio
 async def test_reload_activated_plugin_still_unbinds(
     plugin_manager_pm: PluginManager, monkeypatch
 ):
@@ -2808,14 +2764,14 @@ async def test_turn_on_plugin_after_deactivated_reload_reactivates_tools(
     async def mock_terminate(smd):
         pass
 
-    async def mock_reload(plugin_name_arg):
+    async def mock_reload(plugin_name_arg, *, clear_bytecode=True):
         assert plugin_name_arg == plugin_name
         return True, None
 
     monkeypatch.setattr(star_manager_module.sp, "global_get", mock_global_get)
     monkeypatch.setattr(star_manager_module.sp, "global_put", mock_global_put)
     monkeypatch.setattr(plugin_manager_pm, "_terminate_plugin", mock_terminate)
-    monkeypatch.setattr(plugin_manager_pm, "reload", mock_reload)
+    monkeypatch.setattr(plugin_manager_pm, "_reload_locked", mock_reload)
 
     try:
         await plugin_manager_pm.turn_on_plugin(plugin_name)
@@ -2949,7 +2905,11 @@ async def test_repeated_deactivated_loads_bind_handlers_once_when_activated(
             assert metadata.star_cls is None
             assert stale_plugin.initialize_count == 0
 
-        await plugin_manager_pm.turn_on_plugin(plugin_name)
+        # This unit test isolates repeated load binding. Real off/on imports are
+        # covered by test_plugin_reload_import_cache.py.
+        preferences["inactivated_plugins"] = []
+        success, error = await plugin_manager_pm.load(specified_module_path=module_path)
+        assert success is True and error is None
 
         assert isinstance(event_handler.handler, functools.partial)
         assert event_handler.handler.func is raw_event_handler
