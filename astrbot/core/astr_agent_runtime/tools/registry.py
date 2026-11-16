@@ -16,6 +16,7 @@ _BUILTIN_TOOL_MODULES = (
     "astrbot.core.astr_agent_runtime.tools.message_tools",
     "astrbot.core.astr_agent_runtime.tools.web_search_tools",
     "astrbot.core.astr_agent_runtime.tools.subagent",
+    "astrbot.core.astr_agent_runtime.tools.tts_tools",
 )
 
 _builtin_tool_classes_by_name: dict[str, type[FunctionTool]] = {}

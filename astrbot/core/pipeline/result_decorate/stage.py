@@ -272,12 +272,27 @@ class ResultDecorateStage(Stage):
                 )
             )
 
-            should_tts = (
-                bool(
-                    self.ctx.plugin_manager.context.get_config(
-                        umo=event.unified_msg_origin
-                    )["provider_tts_settings"]["enable"]
+            session_config = self.ctx.plugin_manager.context.get_config(
+                umo=event.unified_msg_origin
+            )
+            tts_settings = session_config["provider_tts_settings"]
+            tts_mode = str(tts_settings.get("mode", "always"))
+            if tts_mode not in ("always", "tool"):
+                logger.warning(
+                    "Unknown provider_tts_settings.mode %r; falling back to 'always'.",
+                    tts_mode,
                 )
+                tts_mode = "always"
+            # Third-party runtimes do not receive SendVoiceTool, so disabling
+            # automatic TTS would leave them with no way to send voice.
+            tool_only = (
+                tts_mode == "tool"
+                and str(session_config.get("agent", {}).get("runtime", "astrbot"))
+                == "astrbot"
+            )
+            should_tts = (
+                bool(tts_settings["enable"])
+                and not tool_only
                 and result.is_llm_result()
                 and random.random() <= self.tts_trigger_probability
                 and tts_provider

@@ -88,6 +88,7 @@ AstrBot 默认配置如下：
     },
     "provider_tts_settings": {
         "enable": False,
+        "mode": "always",
         "provider_id": "",
         "dual_output": False,
         "use_file_service": False,
@@ -411,6 +412,13 @@ Added in `v4.3.5`
 #### `provider_tts_settings.enable`
 
 是否启用文本转语音服务。默认为 `false`。
+
+#### `provider_tts_settings.mode`
+
+语音回复模式，默认为 `always`。
+
+- `always`：每条回复自动转语音（旧行为）。
+- `tool`：仅当模型调用 `send_voice` 工具时发送语音；模型可以按轮决定是否发语音。此模式下自动转语音关闭。
 
 #### `provider_tts_settings.provider_id`
 
