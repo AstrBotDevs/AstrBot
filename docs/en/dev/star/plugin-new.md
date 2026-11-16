@@ -9,6 +9,18 @@ Welcome to the AstrBot Plugin Development Guide! This section will guide you thr
 1. Some experience with Python programming.
 2. Some experience with Git and GitHub.
 
+Join our Ddeveloper-only QQ Group: `1039761811`.
+
+> [!IMPORTANT]
+> [Group Rules]
+> Welcome to the AstrBot Plugin and Project Development Group. This is a public forum. Please observe the following rules:
+> 1. Do not post prohibited content, especially sexual, political, or violent content.
+> 2. Communicate politely, be friendly, and respect others' opinions.
+> 3. Do not disparage other bot frameworks.
+> 4. No off-topic chatting in the group.
+> 5. Depending on the severity of a violation, administrators may issue a mute or warning. Repeat violations will result in removal from the group.
+> Thank you for your understanding and cooperation. Let's work together to maintain a positive community environment.
+
 ## Environment Setup
 
 ### Obtain the Plugin Template
