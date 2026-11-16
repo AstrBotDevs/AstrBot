@@ -41,8 +41,8 @@
             v-for="kb in knowledgeBaseList"
             :key="kb.kb_id"
             :value="kb.kb_name"
-            @click="selectKnowledgeBase(kb.kb_name)"
-            :active="isSelected(kb.kb_name)"
+            @click="selectKnowledgeBase(kb)"
+            :active="isSelected(kb)"
             rounded="md"
             class="ma-1">
             <template v-slot:prepend>
@@ -56,7 +56,7 @@
             </v-list-item-subtitle>
             
             <template v-slot:append>
-              <v-icon v-if="isSelected(kb.kb_name)" color="primary">
+              <v-icon v-if="isSelected(kb)" color="primary">
                 mdi-checkbox-marked
               </v-icon>
               <v-icon v-else color="grey-lighten-1">
@@ -156,17 +156,19 @@ async function loadKnowledgeBases() {
   }
 }
 
-function isSelected(kbName) {
-  return selectedKnowledgeBases.value.includes(kbName)
+function isSelected(kb) {
+  return selectedKnowledgeBases.value.includes(kb.kb_name) ||
+    selectedKnowledgeBases.value.includes(kb.kb_id)
 }
 
-function selectKnowledgeBase(kbName) {
-  // 多选模式：切换选中状态
-  const index = selectedKnowledgeBases.value.indexOf(kbName)
-  if (index > -1) {
-    selectedKnowledgeBases.value.splice(index, 1)
+function selectKnowledgeBase(kb) {
+  // Preserve stored IDs and recognize both representations when toggling.
+  if (isSelected(kb)) {
+    selectedKnowledgeBases.value = selectedKnowledgeBases.value.filter(
+      value => value !== kb.kb_name && value !== kb.kb_id
+    )
   } else {
-    selectedKnowledgeBases.value.push(kbName)
+    selectedKnowledgeBases.value.push(kb.kb_name)
   }
 }
 

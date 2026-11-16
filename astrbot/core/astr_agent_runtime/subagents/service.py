@@ -167,6 +167,7 @@ class SubAgentService:
             plugin_tools=caller.agent_context.plugin_tools,
             plugin_skills=caller.agent_context.plugin_skills,
             caller=caller,
+            send_to_user=caller.agent_context.send_to_user,
         )
         session = await self.runtimes[runtime].open_session(
             caller.scope.umo,
@@ -196,7 +197,14 @@ class SubAgentService:
                 conversation_id=conversation_id,
                 owner=caller.owner_metadata(),
                 parent=parent,
-                turns=[TaskRecord(1, messages, permissions=input.permissions)],
+                turns=[
+                    TaskRecord(
+                        1,
+                        messages,
+                        permissions=input.permissions,
+                        send_to_user=input.send_to_user,
+                    )
+                ],
                 next_turn_id=2,
             )
             try:
@@ -240,6 +248,7 @@ class SubAgentService:
                 messages,
                 permissions=caller.agent_context.permissions
                 or AgentPermissions.from_event(caller.event),
+                send_to_user=caller.agent_context.send_to_user,
             )
             agent.next_turn_id += 1
             agent.turns.append(turn)
@@ -247,7 +256,9 @@ class SubAgentService:
             await self.store.save(agent)
             self._task_callers[(agent.agent_id, turn.turn_id)] = caller
             handle = self._turn_handles.get(agent.agent_id)
-            if handle is not None:
+            if handle is not None and (
+                turn.send_to_user or handle.input.event is caller.event
+            ):
                 receipt = handle.steer(
                     DelegatedAgentInput(
                         event=caller.event,
@@ -256,6 +267,7 @@ class SubAgentService:
                         plugin_tools=caller.agent_context.plugin_tools,
                         plugin_skills=caller.agent_context.plugin_skills,
                         caller=caller,
+                        send_to_user=turn.send_to_user,
                         sequence=turn.turn_id,
                     )
                 )
@@ -522,6 +534,7 @@ class SubAgentService:
                     plugin_tools=caller.agent_context.plugin_tools,
                     plugin_skills=caller.agent_context.plugin_skills,
                     caller=caller,
+                    send_to_user=turn.send_to_user,
                     sequence=turn.turn_id,
                 )
             )

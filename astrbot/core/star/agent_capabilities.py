@@ -41,6 +41,8 @@ def filter_skills(
         plugin = plugin_by_root_dir.get(skill.plugin_name)
         if not plugin or not plugin.activated:
             continue
+        if not plugin.reserved and plugin.name in cfg.get("disabled_plugins", []):
+            continue
         if plugin.reserved or allowed_plugins is None:
             filtered.append(skill)
             continue

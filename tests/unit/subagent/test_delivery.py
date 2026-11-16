@@ -364,13 +364,15 @@ async def test_idle_result_runs_through_pipeline_once_and_commits_to_parent(
     from astrbot.core.event_bus import EventBus
     from astrbot.core.pipeline.context import PipelineContext
     from astrbot.core.pipeline.scheduler import PipelineScheduler
-    from astrbot.core.star.session_llm_manager import SessionServiceManager
 
     env = environment
     config = copy.deepcopy(DEFAULT_CONFIG)
     config["agent"]["config"]["subagents"] = env.config
     config["provider_settings"]["streaming_response"] = False
     env.context.get_config = lambda **_: config
+    env.context.astrbot_config_mgr = SimpleNamespace(
+        _create_message_config=lambda _: (copy.deepcopy(config), frozenset())
+    )
     env.context.send_message = AsyncMock(return_value=True)
     monkeypatch.setattr(
         env.context, "get_using_tts_provider_async", AsyncMock(return_value=None)
@@ -413,14 +415,6 @@ async def test_idle_result_runs_through_pipeline_once_and_commits_to_parent(
     monkeypatch.setattr(builder, "build_main_agent", build)
     monkeypatch.setattr(native_session, "record_agent_stats", AsyncMock())
     monkeypatch.setattr(native_session.Metric, "upload", AsyncMock())
-    monkeypatch.setattr(
-        SessionServiceManager,
-        "should_process_llm_request",
-        AsyncMock(return_value=True),
-    )
-    monkeypatch.setattr(
-        SessionServiceManager, "is_session_enabled", AsyncMock(return_value=True)
-    )
     scheduler = PipelineScheduler(
         PipelineContext(
             config,

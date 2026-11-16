@@ -62,6 +62,7 @@ async def test_legacy_agent_registration_executes_nested_tool(monkeypatch):
     manager = FunctionToolManager()
     monkeypatch.setattr(registration, "llm_tools", manager)
     monkeypatch.setattr(executor, "llm_tools", manager)
+    monkeypatch.setattr(executor, "AstrAgentContext", SimpleNamespace)
 
     @agent(name="legacy_expert", instruction="Use the nested lookup tool.")
     async def legacy_expert():
@@ -325,6 +326,9 @@ async def test_do_handoff_background_reports_prepared_image_urls(
 async def test_execute_handoff_skips_renormalize_when_image_urls_prepared(
     monkeypatch: pytest.MonkeyPatch,
 ):
+    monkeypatch.setattr(
+        "astrbot.core.astr_agent_runtime.tool_executor.AstrAgentContext", SimpleNamespace
+    )
     captured: dict = {}
 
     def _boom(_items):
@@ -426,6 +430,9 @@ async def test_collect_handoff_image_urls_filters_extensionless_missing_event_fi
 async def test_execute_handoff_passes_tool_call_timeout_to_tool_loop_agent(
     monkeypatch: pytest.MonkeyPatch,
 ):
+    monkeypatch.setattr(
+        "astrbot.core.astr_agent_runtime.tool_executor.AstrAgentContext", SimpleNamespace
+    )
     captured: dict = {}
 
     async def _fake_get_current_chat_provider_id(_umo):

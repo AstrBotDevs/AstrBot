@@ -99,8 +99,11 @@ class AgentResultDelivery:
         parents = {
             agent.parent
             for agent in self.store.list(scope)
+            # Caller-owned results stay available to wait/read without a wakeup.
             if any(
-                turn.finished and turn.delivery != DeliveryStage.COMMITTED
+                turn.send_to_user
+                and turn.finished
+                and turn.delivery != DeliveryStage.COMMITTED
                 for turn in agent.turns
             )
         }
@@ -161,7 +164,8 @@ class AgentResultDelivery:
                     for agent in self.store.list(scope)
                     if agent.parent == parent
                     for turn in agent.turns
-                    if turn.finished
+                    if turn.send_to_user
+                    and turn.finished
                     and turn.delivery == DeliveryStage.PENDING
                     and f"[subagent-result:{agent.agent_id}:{turn.turn_id}]"
                     not in attempted
