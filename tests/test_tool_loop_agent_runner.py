@@ -1950,6 +1950,50 @@ async def test_skills_like_requery_failure_notice_reaches_conversation_sink():
 
 
 @pytest.mark.asyncio
+async def test_skills_like_requery_failure_notice_follows_every_recorded_reply():
+    """每次已结算的模型回复都要进对话记录，且不可用回复排在框架通知之前。
+
+    非异常的「空回复」只是把 message.appended 暂存起来；不主动 flush 时，最后
+    那条回复会在通知之后才落盘——甚至整轮都不落盘，于是对话记录里只剩一条通知，
+    读者看不到它到底在解释什么。
+    """
+    sink = AsyncMock(return_value=True)
+    provider, runner = await _run_skills_like_requery(
+        [
+            _tool_call_response({}, "call_1"),
+            LLMResponse(role="assistant", completion_text=""),
+            LLMResponse(role="assistant", completion_text=""),
+        ],
+        conversation_event_sink=sink,
+    )
+
+    assert provider.text_chat_calls == 3
+    events = [call.args[0] for call in sink.await_args_list if call.args]
+    recorded = [event for event in events if event.type == "message.appended"]
+    assert len(recorded) == provider.text_chat_calls, (
+        "every settled reply must reach the transcript, including the unusable one"
+    )
+    assert recorded[-1].data["message"]["_no_save"] is True
+    assert "No tool was executed" in runner.run_context.messages[-1].content
+    notice_index = events.index(
+        next(
+            event
+            for event in events
+            if event.type == "context.appended"
+            and any(
+                isinstance(message["content"], str)
+                and "No tool was executed" in message["content"]
+                for message in event.data["messages"]
+                if message["role"] == "user"
+            )
+        )
+    )
+    assert notice_index > events.index(recorded[-1]), (
+        "the notice must not overtake the model reply it explains"
+    )
+
+
+@pytest.mark.asyncio
 async def test_skills_like_requery_reports_failure_after_empty_repair():
     """When repair attempts fail, the empty original light call must not run."""
     provider, runner = await _run_skills_like_requery(

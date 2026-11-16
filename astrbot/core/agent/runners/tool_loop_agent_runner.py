@@ -1318,6 +1318,10 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                     logger.warning(
                         "skills_like tool parameter generation failed; no tool was executed."
                     )
+                    # Record the unusable reply first so the transcript keeps
+                    # "model said nothing usable" ahead of the framework notice
+                    # (marked _no_save: it must not enter future context).
+                    await self._flush_pending_response()
                     # Route the notice through the runner's context sink so the
                     # conversation record and the host event stream carry it,
                     # like every other framework-injected message.
