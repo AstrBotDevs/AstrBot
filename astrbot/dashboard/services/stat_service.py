@@ -36,6 +36,7 @@ from astrbot.core.desktop_runtime import (
     is_desktop_managed_backend,
     is_desktop_session_auth_enabled,
 )
+from astrbot.core.repository import GitHubRepository
 from astrbot.core.umo_alias import build_umo_alias_map, serialize_umo_alias
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path, get_astrbot_path
 from astrbot.core.utils.auth_password import (
@@ -670,34 +671,43 @@ class StatService:
             raise StatServiceError(f"Error: {exc!s}") from exc
 
     async def test_ghproxy_connection(self, proxy_url: str | None) -> dict:
-        try:
-            target_url = "https://github.com/AstrBotDevs/AstrBot/raw/refs/heads/master/.python-version"
-            # An empty proxy_url means "no acceleration", so GitHub is tested directly.
-            normalized_proxy = (proxy_url or "").strip().rstrip("/")
-            test_url = (
-                f"{normalized_proxy}/{target_url}" if normalized_proxy else target_url
-            )
-            start_time = time.time()
+        """Probe both HTTP paths used by GitHub archive installations."""
+        repository = GitHubRepository("AstrBotDevs", "AstrBot", "master")
+        proxy = (proxy_url or "").strip().rstrip("/")
 
-            async with (
-                aiohttp.ClientSession() as session,
-                session.get(
-                    test_url,
-                    timeout=aiohttp.ClientTimeout(total=10),
-                ) as response,
-            ):
-                if response.status == 200:
-                    end_time = time.time()
-                    _ = await response.text()
-                    return {
-                        "latency": round((end_time - start_time) * 1000, 2),
-                    }
-                raise StatServiceError(f"Failed. Status code: {response.status}")
-        except StatServiceError:
-            raise
-        except Exception as exc:
-            logger.error(traceback.format_exc())
-            raise StatServiceError(f"Error: {exc!s}") from exc
+        async def probe(
+            session: aiohttp.ClientSession,
+            label: str,
+            target: str,
+            *,
+            archive: bool = False,
+        ) -> float | str:
+            url = f"{proxy}/{target}" if proxy else target
+            headers = {"Range": "bytes=0-0"} if archive else None
+            start = time.monotonic()
+            try:
+                async with session.get(url, headers=headers) as response:
+                    if response.status != 200 and not (
+                        archive and response.status == 206
+                    ):
+                        return f"GitHub {label} probe failed (HTTP {response.status})"
+                    # Exit without reading either response body, especially the ZIP.
+                    return (time.monotonic() - start) * 1000
+            except (aiohttp.ClientError, asyncio.TimeoutError) as exc:
+                return f"GitHub {label} probe failed ({type(exc).__name__})"
+
+        async with aiohttp.ClientSession(
+            timeout=aiohttp.ClientTimeout(total=10), trust_env=True
+        ) as session:
+            raw, archive = await asyncio.gather(
+                probe(session, "raw file", repository.raw_file_url(".python-version")),
+                probe(session, "archive", repository.archive_url, archive=True),
+            )
+        if isinstance(raw, str):
+            raise StatServiceError(raw)
+        if isinstance(archive, str):
+            raise StatServiceError(archive)
+        return {"latency": round(max(raw, archive), 2)}
 
     async def test_pypi_index_connection(self, index_url: str | None) -> dict:
         """Check whether a PyPI index (mirror) answers requests.
