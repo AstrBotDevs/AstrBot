@@ -14,16 +14,16 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 
 from astrbot.core.agent.run_context import ContextWrapper
-from astrbot.core.computer import process_sandbox
-from astrbot.core.computer.booters import local
-from astrbot.core.computer.process_sandbox import (
+from astrbot.core.astr_agent_runtime.computer import process_sandbox
+from astrbot.core.astr_agent_runtime.computer.booters import local
+from astrbot.core.astr_agent_runtime.computer.process_sandbox import (
     SandboxSpec,
     bubblewrap,
     create_process_sandbox,
     seatbelt,
     unix,
 )
-from astrbot.core.tools.computer_tools import fs, python, shell
+from astrbot.core.astr_agent_runtime.tools.computer_tools import fs, python, shell
 from astrbot.dashboard.services import stat_service
 
 requires_local_sandbox = pytest.mark.skipif(

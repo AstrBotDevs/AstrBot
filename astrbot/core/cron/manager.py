@@ -22,6 +22,22 @@ _CRONTAB_WEEKDAY_NAMES = ("sun", "mon", "tue", "wed", "thu", "fri", "sat")
 _CRONTAB_WEEKDAY_PATTERN = re.compile(r"^(?:(\*)|(\d+)(?:-(\d+))?)(?:/(\d+))?$")
 
 
+PROACTIVE_AGENT_CRON_WOKE_USER_PROMPT = (
+    "<system_reminder>\n"
+    "# CRON JOB CONTEXT\n"
+    "The following object describes the scheduled task that triggered you:\n"
+    "{cron_job}\n\n"
+    "You are now responding to a scheduled task. "
+    "Do not greet the user or ask questions unless strictly necessary. "
+    "Use the existing conversation and available tools to complete the task. "
+    "If contacting the user, explain why and refer to the task naturally. "
+    "Proceed according to your system instructions. "
+    "Output using same language as previous conversation. "
+    "After completing your task, summarize and output your actions and results."
+    "\n</system_reminder>"
+)
+
+
 def _normalize_crontab_day_of_week(day_of_week: str) -> str:
     """Normalize standard crontab weekdays for APScheduler.
 
@@ -447,10 +463,7 @@ class CronJobManager:
             "cron_payload": payload,
         }
 
-        from astrbot.core.astr_agent_wakeup import wake_main_agent
-        from astrbot.core.astr_main_agent_resources import (
-            PROACTIVE_AGENT_CRON_WOKE_USER_PROMPT,
-        )
+        from astrbot.core.agent_wakeup import wake_main_agent
 
         cfg = self.ctx.get_config(umo=umo)
         role = (

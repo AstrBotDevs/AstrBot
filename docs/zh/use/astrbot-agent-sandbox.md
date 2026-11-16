@@ -56,7 +56,7 @@ AstrBot 为 Agent 提供的文件工具包括 `astrbot_file_read_tool`, `astrbot
 | 普通成员 | 否 | 否 | 工作区 |
 | 管理员 | 是 | 是 | 整个环境 |
 
-这两组默认权限均不依赖本机进程隔离能力。已有配置中保存的权限保持不变。
+这两组默认权限均不依赖本机进程隔离能力。除 [Windows 升级迁移](#local-windows) 外，已有配置中保存的权限保持不变。
 
 已勾选的执行权限暂时无法生效时，复选框保留勾选并显示“未生效”；悬浮或点击“未生效”标签可查看原因。
 
@@ -100,14 +100,15 @@ Seatbelt 是 macOS 的内置沙箱机制。AstrBot 在 macOS 上使用 `/usr/bin
 
 [bubblewrap](https://github.com/containers/bubblewrap) 是 Linux 上的用户空间沙箱工具。
 
-检查是否安装 bubblewrap 并且可用：
+AstrBot 使用 bubblewrap 的 `--size` 参数限制沙盒内的临时文件系统 `/tmp` 的容量，该参数需要 bubblewrap **0.7.0 或更高版本**。请检查是否安装了 bubblewrap、版本是否满足要求，并且可用：
 
 ```bash
 command -v bwrap
-bwrap --unshare-all --ro-bind / / --proc /proc --dev /dev /bin/sh -c 'echo "AstrBot is good to go!"'
+bwrap --version
+bwrap --unshare-all --ro-bind / / --dir /tmp --size 268435456 --tmpfs /tmp --proc /proc --dev /dev /bin/sh -c 'echo "AstrBot is good to go!"'
 ```
 
-如果正常输出 `AstrBot is good to go!`，说明 bubblewrap 安装成功且可用。
+如果正常输出 `AstrBot is good to go!`，说明 bubblewrap 安装成功、版本满足要求且可用。
 
 如果没有安装 bubblewrap，可以按发行版安装：
 
@@ -131,6 +132,7 @@ sudo pacman -S bubblewrap
 如果启动失败：
 
 - **找不到 `bwrap`**：检查是否装在运行 AstrBot 的同一环境，以及进程启动时的 `PATH`。
+- **`Unknown option --size`**：将 bubblewrap 升级到 **0.7.0 或更高版本**，然后重新执行上述检查。
 - **`Operation not permitted` 或用户命名空间错误**：检查用户命名空间限制、AppArmor 和其他系统安全策略。可通过 `sysctl user.max_user_namespaces` 查看命名空间数量上限，通过 `sudo journalctl -k` 查看相关内核日志。
 - **AppArmor 拒绝**：按发行版要求为实际运行环境设置允许创建用户命名空间的策略。不要仅为通过检查而关闭整台机器的安全策略。
 - **容器部署**：继续阅读 [Docker 用户](#local-docker)，宿主机安装 `bwrap` 不能替代容器内安装。
@@ -154,11 +156,9 @@ Windows 10/11（含家庭版）支持本机隔离，可以在本机环境中让 
 3. 需要运行代码时，勾选“允许执行代码”；需要在执行时访问网络，再勾选“允许执行环境联网”。仅需读写文件时，保持执行选项关闭即可。
 4. 保存配置并重启 AstrBot。重启过程中如果出现系统授权提示，选择“是”完成准备。准备完成后，后续启动通常无需再次确认。
 
-设置完成后，就可以在聊天中让 AstrBot 创建文件、处理数据或运行代码。
-
 ![Windows 工作区模式（关闭联网）](/windows-sandbox/workspace-en.jpg)
 
-需要访问工作区以外的文件时，可以选择“整个环境”，AstrBot 将按当前运行账户的权限访问文件。在此范围下执行代码，联网项会显示带锁图标的“始终开启”标签；悬停、聚焦或点击标签可查看说明。要自行开关执行时的联网权限，请选择“工作区”。
+选择 **整个环境** 可按 AstrBot 运行账户的权限访问工作区外的文件，该范围下执行代码始终允许联网。如需控制执行时的联网权限，请选择 **工作区**。
 
 ![Windows 整个环境联网说明](/windows-sandbox/network-zh.png)
 
@@ -166,7 +166,7 @@ Windows 10/11（含家庭版）支持本机隔离，可以在本机环境中让 
 
 ![Windows 沙盒初始化提示](/windows-sandbox/setup-zh.jpg)
 
-从旧版 Windows 配置升级时，如果普通成员的文件访问、代码执行和联网均已关闭，文件访问会调整为“工作区”。如需继续关闭文件访问，请在升级后将其设为“关闭”并保存，后续重启会保留该设置。
+从旧版 Windows 配置升级时，如果普通成员的文件访问、代码执行和联网均已关闭，文件访问会一次性调整为“工作区”，包括手动关闭的配置。如需继续关闭文件访问，请在升级后将其设为“关闭”并保存，后续重启会保留该设置。
 
 ## 第三方沙箱环境 {#third-party-sandbox-environment}
 

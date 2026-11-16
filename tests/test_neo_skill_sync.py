@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from astrbot.core.skills.neo_skill_sync import NeoSkillSyncManager
+from astrbot.core.astr_agent_runtime.computer.neo_skill_sync import NeoSkillSyncManager
 
 
 class _FakeSkills:
@@ -56,11 +56,11 @@ def test_sync_release_writes_skill_and_map(monkeypatch, tmp_path: Path):
         calls["sandbox_sync"] += 1
 
     monkeypatch.setattr(
-        "astrbot.core.skills.neo_skill_sync.SkillManager.set_skill_active",
+        "astrbot.core.astr_agent_runtime.computer.neo_skill_sync.SkillManager.set_skill_active",
         _fake_set_skill_active,
     )
     monkeypatch.setattr(
-        "astrbot.core.skills.neo_skill_sync.sync_skills_to_active_sandboxes",
+        "astrbot.core.astr_agent_runtime.computer.neo_skill_sync.sync_skills_to_active_sandboxes",
         _fake_sync_sandboxes,
     )
 
@@ -112,11 +112,11 @@ def test_sync_release_rejects_non_stable(monkeypatch, tmp_path: Path):
         return
 
     monkeypatch.setattr(
-        "astrbot.core.skills.neo_skill_sync.sync_skills_to_active_sandboxes",
+        "astrbot.core.astr_agent_runtime.computer.neo_skill_sync.sync_skills_to_active_sandboxes",
         _fake_sync_sandboxes,
     )
     monkeypatch.setattr(
-        "astrbot.core.skills.neo_skill_sync.SkillManager.set_skill_active",
+        "astrbot.core.astr_agent_runtime.computer.neo_skill_sync.SkillManager.set_skill_active",
         lambda self, name, active: None,
     )
 

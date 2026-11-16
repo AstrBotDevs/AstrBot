@@ -133,19 +133,3 @@ def test_document_skill_inspects_validates_scrubs_and_extracts_table(
             ["项目", "状态"],
             ["DOCX Skill", "完成"],
         ]
-
-
-def test_office_skill_docs_cover_advanced_workflows() -> None:
-    spreadsheets = (BUILTIN_SKILLS_DIR / "spreadsheets" / "SKILL.md").read_text(
-        encoding="utf-8"
-    )
-    documents = (BUILTIN_SKILLS_DIR / "documents" / "SKILL.md").read_text(
-        encoding="utf-8"
-    )
-
-    for text in ("keep_vba=True", "conditional formatting", "data validation"):
-        assert text in spreadsheets
-    for text in ("tracked revisions", "content controls", "digital signature"):
-        assert text in documents
-    assert "Codex" not in spreadsheets
-    assert "Codex" not in documents

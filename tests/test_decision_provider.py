@@ -138,7 +138,7 @@ async def test_system_one_resolves_api_base(api_base, expected_url):
     assert captured["url"] == expected_url
 
 
-def test_system_one_templates_use_a_single_key_and_two_second_timeout():
+def test_system_one_templates_expose_required_defaults():
     templates = CONFIG_METADATA_2["provider_group"]["metadata"]["provider"][
         "config_template"
     ]
@@ -148,34 +148,11 @@ def test_system_one_templates_use_a_single_key_and_two_second_timeout():
         "Vercel System One",
         "Custom System One",
     ):
-        assert templates[name]["key"] == ""
-        assert templates[name]["timeout"] == 2
-
-
-def test_system_one_templates_expose_total_timeout():
-    templates = CONFIG_METADATA_2["provider_group"]["metadata"]["provider"][
-        "config_template"
-    ]
-    for name in (
-        "TypeSafe System One",
-        "OpenRouter System One",
-        "Vercel System One",
-        "Custom System One",
-    ):
-        assert templates[name]["total_timeout"] == 5
-
-
-def test_system_one_templates_expose_max_concurrency():
-    templates = CONFIG_METADATA_2["provider_group"]["metadata"]["provider"][
-        "config_template"
-    ]
-    for name in (
-        "TypeSafe System One",
-        "OpenRouter System One",
-        "Vercel System One",
-        "Custom System One",
-    ):
-        assert templates[name]["max_concurrency"] == 4
+        template = templates[name]
+        assert template["key"] == ""
+        assert template["timeout"] == 2
+        assert template["total_timeout"] == 5
+        assert template["max_concurrency"] == 4
 
 
 @pytest.mark.asyncio
@@ -654,7 +631,9 @@ async def test_provider_manager_ignores_unknown_provider_id():
     persona_manager.default_persona = ""
     manager = ProviderManager(acm, MagicMock(), persona_manager)
 
+    assert manager.inst_map == {}
     await manager.terminate_provider("missing")
+    assert manager.inst_map == {}
 
 
 @pytest.mark.asyncio

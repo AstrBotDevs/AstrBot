@@ -20,19 +20,16 @@ from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
 from astrbot.core.platform.sources.webchat.message_parts_helper import (
     build_webchat_message_parts,
     create_attachment_part_from_existing_file,
-    strip_message_parts_path_fields,
-    webchat_message_parts_have_content,
 )
 from astrbot.core.platform.sources.webchat.request_flags import (
     resolve_webchat_request_flags,
 )
 from astrbot.core.platform.sources.webchat.webchat_queue_mgr import webchat_queue_mgr
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path, get_astrbot_temp_path
-from astrbot.core.utils.datetime_utils import generate_timestamp_id, to_utc_isoformat
+from astrbot.core.utils.datetime_utils import generate_timestamp_id
 from astrbot.dashboard.services.chat_service import (
-    BotMessageAccumulator,
+    ChatService,
     build_bot_history_content,
-    collect_plain_text_from_message_parts,
 )
 
 SendJson = Callable[[dict], Awaitable[None]]
@@ -126,8 +123,10 @@ class LiveChatService:
         self,
         db: Any,
         core_lifecycle: AstrBotCoreLifecycle,
+        chat_service: ChatService,
     ) -> None:
         self.db = db
+        self.chat_service = chat_service
         self.core_lifecycle = core_lifecycle
         self.config = core_lifecycle.astrbot_config
         self.plugin_manager = core_lifecycle.plugin_manager
@@ -343,7 +342,7 @@ class LiveChatService:
         message_parts: list[dict],
         agent_stats: dict,
         refs: dict,
-        llm_checkpoint_id: str | None = None,
+        turn_id: str | None = None,
     ):
         new_his = build_bot_history_content(
             message_parts,
@@ -357,7 +356,7 @@ class LiveChatService:
             content=new_his,
             sender_id="bot",
             sender_name="bot",
-            llm_checkpoint_id=llm_checkpoint_id,
+            turn_id=turn_id,
         )
 
     async def send_chat_payload(
@@ -521,14 +520,6 @@ class LiveChatService:
 
         payload = message.get("message")
         session_id = message.get("session_id") or session.session_id
-        selected_provider = message.get("selected_provider")
-        selected_model = message.get("selected_model")
-        selected_stt_provider = message.get("selected_stt_provider")
-        selected_tts_provider = message.get("selected_tts_provider")
-        persona_prompt = message.get("persona_prompt")
-        show_reasoning = message.get("show_reasoning")
-        flags = resolve_webchat_request_flags(message)
-
         if not isinstance(payload, list):
             await self.send_chat_payload(
                 session,
@@ -543,277 +534,62 @@ class LiveChatService:
             )
             return
 
-        message_parts = await self.build_chat_message_parts(payload)
-        has_content = webchat_message_parts_have_content(message_parts)
-        if not has_content:
-            await self.send_chat_payload(
-                session,
-                {
-                    "ct": "chat",
-                    "t": "error",
-                    "data": "Message content is empty",
-                    "code": "INVALID_MESSAGE_FORMAT",
-                    **request_metadata,
-                },
-                send_json,
-            )
-            return
-
-        await self.ensure_chat_subscription(session, session_id, send_json)
-
-        back_queue = webchat_queue_mgr.get_or_create_back_queue(message_id, session_id)
-        llm_checkpoint_id = str(uuid.uuid4())
-
-        pending_bot_message_flusher = None
+        stream = None
         try:
-            chat_queue = webchat_queue_mgr.get_or_create_queue(session_id)
-            await chat_queue.put(
-                (
-                    session.username,
-                    session_id,
-                    {
-                        "message": message_parts,
-                        "selected_provider": selected_provider,
-                        "selected_model": selected_model,
-                        "selected_stt_provider": selected_stt_provider,
-                        "selected_tts_provider": selected_tts_provider,
-                        "persona_prompt": persona_prompt,
-                        "show_reasoning": show_reasoning,
-                        "flags": flags,
-                        "locale": message.get("locale"),
-                        "message_id": message_id,
-                        "llm_checkpoint_id": llm_checkpoint_id,
-                    },
-                ),
-            )
-
-            message_parts_for_storage = strip_message_parts_path_fields(message_parts)
-            saved_user_record = await self.platform_history_mgr.insert(
-                platform_id="webchat",
-                user_id=session_id,
-                content={"type": "user", "message": message_parts_for_storage},
-                sender_id=session.username,
-                sender_name=session.username,
-                llm_checkpoint_id=llm_checkpoint_id,
-            )
-            await self.send_chat_payload(
-                session,
+            await self.ensure_chat_subscription(session, session_id, send_json)
+            stream = await self.chat_service.build_chat_stream(
+                session.username,
                 {
-                    "ct": "chat",
-                    "type": "user_message_saved",
-                    "data": {
-                        "id": saved_user_record.id,
-                        "created_at": to_utc_isoformat(saved_user_record.created_at),
-                        "llm_checkpoint_id": llm_checkpoint_id,
+                    "session_id": session_id,
+                    "message": payload,
+                    "flags": resolve_webchat_request_flags(message),
+                    **{
+                        key: message.get(key)
+                        for key in (
+                            "selected_provider",
+                            "selected_model",
+                            "selected_stt_provider",
+                            "selected_tts_provider",
+                            "persona_prompt",
+                            "show_reasoning",
+                            "locale",
+                        )
                     },
-                    **request_metadata,
                 },
-                send_json,
             )
-
-            message_accumulator = BotMessageAccumulator()
-            agent_stats = {}
-            refs = {}
-
-            async def flush_pending_bot_message():
-                nonlocal message_accumulator, agent_stats, refs
-                if not (message_accumulator.has_content() or refs or agent_stats):
-                    return None
-
-                message_parts_to_save = message_accumulator.build_message_parts(
-                    include_pending_tool_calls=True
-                )
-                plain_text = collect_plain_text_from_message_parts(
-                    message_parts_to_save
-                )
-                try:
-                    extracted_refs = self.extract_web_search_refs(
-                        plain_text,
-                        message_parts_to_save,
-                    )
-                except Exception as exc:
-                    logger.exception(
-                        f"[Live Chat] Failed to extract web search refs: {exc}",
-                        exc_info=True,
-                    )
-                    extracted_refs = refs
-
-                saved_record = await self.save_bot_message(
-                    session_id,
-                    message_parts_to_save,
-                    agent_stats,
-                    extracted_refs,
-                    llm_checkpoint_id,
-                )
-                message_accumulator = BotMessageAccumulator()
-                agent_stats = {}
-                refs = {}
-                return saved_record
-
-            pending_bot_message_flusher = flush_pending_bot_message
-
-            async def send_attachment_saved_event(part: dict | None) -> None:
-                if not part or not part.get("attachment_id") or not part.get("type"):
-                    return
-
+            # The shared run owns persistence; this task only forwards its stream.
+            async for event in stream:
+                if message_id in session.interrupted_chat_requests:
+                    break
+                if not event.startswith("data: "):
+                    continue
+                outgoing = json.loads(event.removeprefix("data: "))
+                if outgoing.get("type") == "session_id":
+                    continue
                 await self.send_chat_payload(
                     session,
-                    {
-                        "ct": "chat",
-                        "type": "attachment_saved",
-                        "data": {
-                            "id": part["attachment_id"],
-                            "type": part["type"],
-                        },
-                        **request_metadata,
-                    },
+                    {**outgoing, "ct": "chat", "message_id": message_id},
                     send_json,
                 )
-
-            while True:
-                if message_id in session.interrupted_chat_requests:
-                    session.interrupted_chat_requests.discard(message_id)
-                    await flush_pending_bot_message()
-                    break
-
-                try:
-                    result = await asyncio.wait_for(back_queue.get(), timeout=1)
-                except asyncio.TimeoutError:
-                    continue
-
-                if not result:
-                    continue
-                if result.get("message_id") and result.get("message_id") != message_id:
-                    continue
-
-                result_text = result.get("data", "")
-                result_type = result.get("type")
-                streaming = result.get("streaming", False)
-                chain_type = result.get("chain_type")
-                if chain_type == "agent_stats":
-                    try:
-                        parsed_agent_stats = json.loads(result_text)
-                        agent_stats = parsed_agent_stats
-                        await self.send_chat_payload(
-                            session,
-                            {
-                                "ct": "chat",
-                                "type": "agent_stats",
-                                "data": parsed_agent_stats,
-                                **request_metadata,
-                            },
-                            send_json,
-                        )
-                    except Exception:
-                        pass
-                    continue
-
-                outgoing = {"ct": "chat", **result}
-                await self.send_chat_payload(session, outgoing, send_json)
-
-                if result_type == "plain":
-                    message_accumulator.add_plain(
-                        result_text,
-                        chain_type=chain_type,
-                        streaming=streaming,
-                    )
-                elif result_type == "image":
-                    filename = str(result_text).replace("[IMAGE]", "")
-                    part = await self.create_attachment_from_file(filename, "image")
-                    message_accumulator.add_part(part)
-                    await send_attachment_saved_event(part)
-                elif result_type == "record":
-                    filename = str(result_text).replace("[RECORD]", "")
-                    part = await self.create_attachment_from_file(filename, "record")
-                    message_accumulator.add_part(part)
-                    await send_attachment_saved_event(part)
-                elif result_type == "file":
-                    filename = str(result_text).replace("[FILE]", "", 1)
-                    display_name = None
-                    if "|" in filename:
-                        filename, display_name = filename.split("|", 1)
-                    part = await self.create_attachment_from_file(
-                        filename,
-                        "file",
-                        display_name=display_name,
-                    )
-                    message_accumulator.add_part(part)
-                    await send_attachment_saved_event(part)
-                elif result_type == "video":
-                    filename = str(result_text).replace("[VIDEO]", "", 1)
-                    display_name = None
-                    if "|" in filename:
-                        filename, display_name = filename.split("|", 1)
-                    part = await self.create_attachment_from_file(
-                        filename,
-                        "video",
-                        display_name=display_name,
-                    )
-                    message_accumulator.add_part(part)
-                    await send_attachment_saved_event(part)
-                elif result_type == "actionrow" and isinstance(result_text, dict):
-                    message_accumulator.add_part({"type": "actionrow", **result_text})
-
-                should_save = False
-                if result_type == "end":
-                    should_save = bool(
-                        message_accumulator.has_content() or refs or agent_stats
-                    )
-                elif (streaming and result_type == "complete") or not streaming:
-                    if chain_type not in (
-                        "tool_call",
-                        "tool_call_result",
-                        "agent_stats",
-                    ):
-                        should_save = True
-
-                if should_save:
-                    saved_record = await flush_pending_bot_message()
-                    if saved_record:
-                        await self.send_chat_payload(
-                            session,
-                            {
-                                "ct": "chat",
-                                "type": "message_saved",
-                                "data": {
-                                    "id": saved_record.id,
-                                    "created_at": to_utc_isoformat(
-                                        saved_record.created_at
-                                    ),
-                                    "llm_checkpoint_id": llm_checkpoint_id,
-                                },
-                                **request_metadata,
-                            },
-                            send_json,
-                        )
-
-                if result_type == "end":
-                    break
-
+        except WebSocketDisconnect:
+            pass
         except Exception as exc:
-            logger.error(f"[Live Chat] 处理 chat 消息失败: {exc}", exc_info=True)
+            logger.error(f"[Live Chat] Chat subscription failed: {exc}", exc_info=True)
             await self.send_chat_payload(
                 session,
                 {
                     "ct": "chat",
                     "t": "error",
-                    "data": f"处理失败: {str(exc)}",
+                    "data": f"Chat processing failed: {exc}",
                     "code": "PROCESSING_ERROR",
                     **request_metadata,
                 },
                 send_json,
             )
         finally:
-            try:
-                if pending_bot_message_flusher is not None:
-                    await pending_bot_message_flusher()
-            except Exception as exc:
-                logger.exception(
-                    f"[Live Chat] Failed to persist pending chat message: {exc}",
-                    exc_info=True,
-                )
+            if stream is not None:
+                await stream.aclose()
             session.interrupted_chat_requests.discard(message_id)
-            webchat_queue_mgr.remove_back_queue(message_id)
 
     async def build_chat_message_parts(self, message: list[dict]) -> list[dict]:
         return await build_webchat_message_parts(
