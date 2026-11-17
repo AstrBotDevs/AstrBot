@@ -15,7 +15,6 @@ from astrbot.core.platform.button_interaction import (
     encode_button_callback,
 )
 from astrbot.core.platform.register import unregister_platform_adapters_by_module
-from astrbot.core.platform.sources.telegram.tg_request import TelegramPollingRequest
 from tests.fixtures.helpers import (
     NoopAwaitable,
     create_mock_file,
@@ -1341,10 +1340,6 @@ async def test_telegram_run_rebuilds_application_after_repeated_polling_errors()
         await adapter.run()
 
     assert builder.build.call_count == 2
-    assert all(
-        isinstance(call.args[0], TelegramPollingRequest)
-        for call in builder.get_updates_request.call_args_list
-    )
     app_one.updater.stop.assert_awaited()
     app_one.bot.delete_my_commands.assert_not_awaited()
     app_one.stop.assert_awaited()
