@@ -270,13 +270,13 @@ async def _tavily_search(
                         f"Tavily web search failed: {reason}, status: {response.status}",
                     )
                     continue
-                raise Exception(
+                raise ValueError(
                     f"Tavily web search failed: {reason}, status: {response.status}",
                 )
 
     if last_error is not None:
         raise last_error
-    raise Exception("Tavily web search failed with all configured keys.")
+    raise ValueError("Tavily web search failed with all configured keys.")
 
 
 async def _tavily_extract(provider_settings: dict, payload: dict) -> list[dict]:
@@ -327,13 +327,13 @@ async def _tavily_extract(provider_settings: dict, payload: dict) -> list[dict]:
                         f"Tavily web search failed: {reason}, status: {response.status}",
                     )
                     continue
-                raise Exception(
+                raise ValueError(
                     f"Tavily web search failed: {reason}, status: {response.status}",
                 )
 
     if last_error is not None:
         raise last_error
-    raise Exception("Tavily web extract failed with all configured keys.")
+    raise ValueError("Tavily web extract failed with all configured keys.")
 
 
 async def _bocha_search(
@@ -393,13 +393,13 @@ async def _bocha_search(
                         f"BoCha web search failed: {reason}, status: {response.status}",
                     )
                     continue
-                raise Exception(
+                raise ValueError(
                     f"BoCha web search failed: {reason}, status: {response.status}",
                 )
 
     if last_error is not None:
         raise last_error
-    raise Exception("BoCha web search failed with all configured keys.")
+    raise ValueError("BoCha web search failed with all configured keys.")
 
 
 async def _brave_search(
@@ -467,13 +467,13 @@ async def _brave_search(
                         f"Brave web search failed: {reason}, status: {response.status}",
                     )
                     continue
-                raise Exception(
+                raise ValueError(
                     f"Brave web search failed: {reason}, status: {response.status}",
                 )
 
     if last_error is not None:
         raise last_error
-    raise Exception("Brave web search failed with all configured keys.")
+    raise ValueError("Brave web search failed with all configured keys.")
 
 
 async def _serpapi_request(
@@ -1084,13 +1084,13 @@ async def _firecrawl_search(
                         f"Firecrawl web search failed: {reason}, status: {response.status}",
                     )
                     continue
-                raise Exception(
+                raise ValueError(
                     f"Firecrawl web search failed: {reason}, status: {response.status}",
                 )
 
     if last_error is not None:
         raise last_error
-    raise Exception("Firecrawl web search failed with all configured keys.")
+    raise ValueError("Firecrawl web search failed with all configured keys.")
 
 
 async def _firecrawl_scrape(provider_settings: dict, payload: dict) -> dict:
@@ -1141,13 +1141,13 @@ async def _firecrawl_scrape(provider_settings: dict, payload: dict) -> dict:
                         f"Firecrawl web scraper failed: {reason}, status: {response.status}",
                     )
                     continue
-                raise Exception(
+                raise ValueError(
                     f"Firecrawl web scraper failed: {reason}, status: {response.status}",
                 )
 
     if last_error is not None:
         raise last_error
-    raise Exception("Firecrawl web scraper failed with all configured keys.")
+    raise ValueError("Firecrawl web scraper failed with all configured keys.")
 
 
 async def _baidu_search(
@@ -1171,7 +1171,7 @@ async def _baidu_search(
         ) as response:
             if response.status != 200:
                 reason = await response.text()
-                raise Exception(
+                raise RuntimeError(
                     f"Baidu AI Search failed: {reason}, status: {response.status}",
                 )
             data = await response.json()
@@ -1685,7 +1685,7 @@ async def _exa_search(
 
     if last_error is not None:
         raise last_error
-    raise Exception("Exa web search failed with all configured keys.")
+    raise ValueError("Exa web search failed with all configured keys.")
 
 
 async def _exa_get_contents(
@@ -1736,7 +1736,7 @@ async def _exa_get_contents(
 
     if last_error is not None:
         raise last_error
-    raise Exception("Exa get contents failed with all configured keys.")
+    raise ValueError("Exa get contents failed with all configured keys.")
 
 
 @builtin_tool(config=_EXA_WEB_SEARCH_TOOL_CONFIG)
@@ -1939,7 +1939,7 @@ async def _anysearch_search(
                     # with HTTP 200 and a non-zero code; surface the message to the LLM.
                     code = data.get("code")
                     if code not in (None, 0):
-                        raise Exception(
+                        raise ConnectionError(
                             f"AnySearch web search failed: {data.get('message') or code}"
                         )
                     body = data.get("data") or data
@@ -1981,13 +1981,13 @@ async def _anysearch_search(
                         f"AnySearch web search failed: {reason}, status: {response.status}",
                     )
                     continue
-                raise Exception(
+                raise ValueError(
                     f"AnySearch web search failed: {reason}, status: {response.status}",
                 )
 
     if last_error is not None:
         raise last_error
-    raise Exception("AnySearch web search failed with all configured keys.")
+    raise ValueError("AnySearch web search failed with all configured keys.")
 
 
 @builtin_tool(config=_ANYSEARCH_WEB_SEARCH_TOOL_CONFIG)
