@@ -29,6 +29,7 @@ def _context(
             event=SimpleNamespace(
                 unified_msg_origin=umo,
                 get_sender_id=lambda: sender_id,
+                get_extra=lambda key, default=None: default,
                 get_message_type=lambda: message_type,
                 is_admin=lambda: is_admin,
             ),
@@ -98,6 +99,7 @@ async def test_future_task_edit_requires_job_id():
             event=SimpleNamespace(
                 unified_msg_origin="test:private:session",
                 get_sender_id=lambda: "user-1",
+                get_extra=lambda key, default=None: default,
             ),
         )
     )
@@ -141,6 +143,7 @@ async def test_future_task_edit_updates_existing_job():
             event=SimpleNamespace(
                 unified_msg_origin="test:private:session",
                 get_sender_id=lambda: "user-1",
+                get_extra=lambda key, default=None: default,
             ),
         )
     )
@@ -507,6 +510,65 @@ async def test_future_task_create_persists_permission_ceiling(authorization):
     )
     payload = cron_mgr.add_active_job.await_args.kwargs["payload"]
     assert payload["allow_admin_role"] is (authorization == "admin")
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("mode", "stored"),
+    # "Don't ask again" is never stored on a task: only the narrowing is.
+    [("workspace", "workspace"), ("workspace_no_ask", "workspace"), ("full", None)],
+)
+async def test_future_task_keeps_the_narrowing_chatui_mode(mode, stored):
+    """A task created in a "workspace" ChatUI conversation keeps that narrowing."""
+    tool = FutureTaskTool()
+    cron_mgr = SimpleNamespace(
+        add_active_job=AsyncMock(
+            return_value=SimpleNamespace(job_id="job-1", name="t", next_run_time=None)
+        ),
+        get_next_run_time=MagicMock(return_value=None),
+    )
+    context = _context(cron_mgr)
+    context.context.event.get_extra = {"permission_mode": mode}.get
+
+    await tool.call(context, action="create", cron_expression="0 8 * * *", note="daily")
+
+    payload = cron_mgr.add_active_job.call_args.kwargs["payload"]
+    assert payload.get("permission_mode") == stored
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("action", ["create", "edit"])
+async def test_future_task_uses_live_workspace_mode(action):
+    from astrbot.core.astr_agent_runtime.permission_mode import (
+        set_conversation_permission_mode,
+    )
+
+    job = _job("job-1")
+    cron_mgr = SimpleNamespace(
+        add_active_job=AsyncMock(return_value=job),
+        update_job=AsyncMock(return_value=job),
+        get_next_run_time=MagicMock(return_value=None),
+        db=SimpleNamespace(get_cron_job=AsyncMock(return_value=job)),
+    )
+    context = _context(cron_mgr)
+    event = context.context.event
+    event.session_id = "webchat!user-1!live-cron"
+    event.get_platform_name = lambda: "webchat"
+    event.get_extra = {"permission_mode": "full"}.get
+    set_conversation_permission_mode(event.session_id, "workspace")
+    try:
+        await FutureTaskTool().call(
+            context,
+            action=action,
+            job_id="job-1",
+            cron_expression="0 8 * * *",
+            note="daily",
+        )
+        saved = cron_mgr.add_active_job if action == "create" else cron_mgr.update_job
+        # Without the live mode lookup, neither write path is narrowed.
+        assert saved.call_args.kwargs["payload"]["permission_mode"] == "workspace"
+    finally:
+        set_conversation_permission_mode(event.session_id, None)
 
 
 @pytest.mark.asyncio

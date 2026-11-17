@@ -18,6 +18,16 @@ from astrbot.core.astr_agent_runtime.tool_executor import (
 )
 
 
+def lifecycle_context(event=None):
+    event = event or SimpleNamespace()
+    event.unified_msg_origin = "test:FriendMessage:lifecycle"
+    return ContextWrapper(
+        context=SimpleNamespace(
+            event=event, context=SimpleNamespace(get_config=lambda **kwargs: {})
+        )
+    )
+
+
 @pytest.mark.asyncio
 @pytest.mark.parametrize("layer", ["handler_wrapper", "local", "execute", "runner"])
 @pytest.mark.parametrize("exit_mode", ["close", "exhaust", "error"])
@@ -49,7 +59,7 @@ async def test_real_handler_cleanup_and_output(layer, exit_mode):
     def handler(event):
         return handler_generator
 
-    run_context = ContextWrapper(context=SimpleNamespace(event=SimpleNamespace()))
+    run_context = lifecycle_context()
     tool = FunctionTool(
         name="cleanup_probe",
         description="controlled tool lifecycle probe",
@@ -112,7 +122,7 @@ async def test_local_result_compatibility(kind):
             yield None
 
     event = SimpleNamespace(get_result=lambda: None)
-    run_context = ContextWrapper(context=SimpleNamespace(event=event))
+    run_context = lifecycle_context(event)
     tool = FunctionTool(
         name="compatibility_probe",
         description="controlled compatibility probe",
@@ -145,7 +155,7 @@ async def test_real_handler_stop_cancel_timeout_wait_for_cleanup(mode):
             await asyncio.sleep(0)
             closed.append("closed")
 
-    run_context = ContextWrapper(context=SimpleNamespace(event=SimpleNamespace()))
+    run_context = lifecycle_context()
     tool = FunctionTool(
         name="blocked_probe",
         description="controlled blocking tool",
@@ -211,7 +221,7 @@ async def test_runner_repeated_cancel_waits_for_real_cleanup():
             await release.wait()
             closed.append("closed")
 
-    context = ContextWrapper(context=SimpleNamespace(event=SimpleNamespace()))
+    context = lifecycle_context()
     tool = FunctionTool(
         name="repeat_cancel_probe",
         description="controlled repeated cancellation",
@@ -251,7 +261,7 @@ async def test_runner_reports_real_handler_cleanup_error():
         finally:
             raise error
 
-    context = ContextWrapper(context=SimpleNamespace(event=SimpleNamespace()))
+    context = lifecycle_context()
     tool = FunctionTool(
         name="cleanup_error_probe",
         description="controlled cleanup failure",
@@ -287,8 +297,10 @@ async def test_background_real_generator_cancel_closes_before_return(monkeypatch
     async def wake(**kwargs):
         wakeups.append(kwargs)
 
-    monkeypatch.setattr("astrbot.core.astr_agent_runtime.tool_executor.wake_main_agent", wake)
-    context = ContextWrapper(context=SimpleNamespace(event=SimpleNamespace()))
+    monkeypatch.setattr(
+        "astrbot.core.astr_agent_runtime.tool_executor.wake_main_agent", wake
+    )
+    context = lifecycle_context()
     tool = FunctionTool(
         name="background_cleanup_probe",
         description="controlled background cleanup",

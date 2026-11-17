@@ -26,6 +26,10 @@ const names = new Set([
   "messageBlocks",
   "isThinkingPart",
   "isEmptyPlainPart",
+  "processToolStreamPayload",
+  "upsertToolCall",
+  "finishToolCall",
+  "parseJsonSafe",
 ]);
 const functions = [];
 function visit(node) {
@@ -41,6 +45,7 @@ for (const transport of ["sse", "websocket"]) {
     const context = vm.createContext({
       exports: {},
       messageContent: (record) => record.content,
+      approvalCardState: () => ({ open: false }),
     });
     vm.runInContext(ts.transpile(functions.join("\n")), context);
     const record = { content: { type: "bot", message: [], isLoading: true } };

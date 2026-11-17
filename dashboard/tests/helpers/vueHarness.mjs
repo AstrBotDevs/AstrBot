@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import vm from "node:vm";
 import { parse, compileScript, compileTemplate } from "vue/compiler-sfc";
@@ -29,7 +29,13 @@ export function loadSource(url, imports = {}, globals = {}, renderTemplate = fal
   vm.runInNewContext(output, {
     exports: module.exports,
     require: (name) =>
-      name in imports ? imports[name] : name === "vue" ? vue : require(name),
+      name in imports
+        ? imports[name]
+        : name === "vue"
+          ? vue
+          : name.startsWith("@/utils/")
+            ? loadUtility(name, imports, globals)
+            : require(name),
     console,
     setTimeout,
     clearTimeout,
@@ -39,6 +45,17 @@ export function loadSource(url, imports = {}, globals = {}, renderTemplate = fal
   });
   if (renderTemplate) module.exports.default.render = module.exports.render;
   return module.exports;
+}
+
+// Unstubbed `@/utils/*` imports are plain helpers: load them from source with
+// the caller's globals (for example its in-memory localStorage).
+function loadUtility(name, imports, globals) {
+  const base = new URL(`../../src/${name.slice(2)}`, import.meta.url);
+  const file = ["", ".ts", ".mjs", ".js"]
+    .map((ext) => new URL(base.href + ext))
+    .find((url) => existsSync(url) && !url.pathname.endsWith("/"));
+  if (!file) throw new Error(`Cannot find module '${name}'`);
+  return loadSource(file, imports, globals);
 }
 
 export function mountTemplate(component, props = {}, provides = {}) {
