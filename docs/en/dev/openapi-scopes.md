@@ -254,6 +254,9 @@ Manage plugins, plugin configuration, plugin sources, and marketplace data.
 | `POST` | `/api/v1/plugins/install/url` | — |
 | `GET` | `/api/v1/plugins/market` | — |
 | `GET` | `/api/v1/plugins/market/categories` | — |
+| `POST` | `/api/v1/plugins/market/entries` | — |
+| `GET` | `/api/v1/plugins/market/entry` | — |
+| `GET` | `/api/v1/plugins/market/random` | — |
 | `GET` | `/api/v1/plugins/page` | — |
 | `GET` | `/api/v1/plugins/page-bridge-sdk.js` | — |
 | `GET` | `/api/v1/plugins/pages` | — |

@@ -1388,12 +1388,45 @@ export const pluginApi = {
     page?: number;
     page_size?: number;
     category?: string;
-    sort?: 'recommended' | 'downloads' | 'updated' | 'name';
+    sort?: 'recommended' | 'downloads' | 'stars' | 'author' | 'updated' | 'name';
+    order?: 'asc' | 'desc';
     keyword?: string;
     force_refresh?: boolean;
     custom_registry?: string;
   }) {
     return typed<any>(openApiV1.listPluginMarket({ query: params }));
+  },
+  marketEntry(pluginId: string, customRegistry?: string) {
+    return typed<any>(
+      openApiV1.getPluginMarketEntry({
+        query: { plugin_id: pluginId, custom_registry: customRegistry },
+      }),
+    );
+  },
+  marketCategories(customRegistry?: string) {
+    return typed<any>(
+      openApiV1.listPluginMarketCategories({
+        query: { custom_registry: customRegistry },
+      }),
+    );
+  },
+  marketRandom(count = 3, customRegistry?: string) {
+    return typed<any>(
+      openApiV1.getPluginMarketRandom({
+        query: { count, custom_registry: customRegistry },
+      }),
+    );
+  },
+  marketEntries(
+    records: Array<{ market_plugin_id?: string; repo?: string; name?: string }>,
+    customRegistry?: string,
+  ) {
+    return typed<any>(
+      openApiV1.resolvePluginMarketEntries({
+        query: { custom_registry: customRegistry },
+        body: { records },
+      }),
+    );
   },
   sources() {
     return typed<any>(openApiV1.listPluginSources());

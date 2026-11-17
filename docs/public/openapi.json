@@ -4046,12 +4046,27 @@
         "summary": "List plugin marketplace entries",
         "operationId": "listPluginMarket",
         "x-astrbot-scope": "plugin",
+        "description": "Without `page` or `page_size` this returns the full registry mapping as before. With either parameter it returns a paginated object with `items`, `total`, `page`, `page_size`, `has_more`, and `meta`. The category, keyword, sort, and order filters apply in both shapes.\n\n**Required scope:** `plugin`",
         "parameters": [
           {
-            "$ref": "#/components/parameters/Page"
+            "name": "page",
+            "in": "query",
+            "description": "One-based page number. Only used when pagination is requested; omit both page and page_size to receive the full registry.",
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
           },
           {
-            "$ref": "#/components/parameters/PageSize"
+            "name": "page_size",
+            "in": "query",
+            "description": "Entries per page. Only used when pagination is requested; omit both page and page_size to receive the full registry.",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 9
+            }
           },
           {
             "name": "category",
@@ -4068,9 +4083,23 @@
               "enum": [
                 "recommended",
                 "downloads",
+                "stars",
+                "author",
                 "updated",
                 "name"
               ]
+            }
+          },
+          {
+            "name": "order",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "asc",
+                "desc"
+              ],
+              "default": "desc"
             }
           },
           {
@@ -4099,8 +4128,7 @@
           "200": {
             "$ref": "#/components/responses/Ok"
           }
-        },
-        "description": "**Required scope:** `plugin`"
+        }
       }
     },
     "/api/v1/plugins/market/categories": {
@@ -4111,6 +4139,118 @@
         "summary": "List plugin marketplace categories",
         "operationId": "listPluginMarketCategories",
         "x-astrbot-scope": "plugin",
+        "parameters": [
+          {
+            "name": "custom_registry",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          }
+        },
+        "description": "**Required scope:** `plugin`"
+      }
+    },
+    "/api/v1/plugins/market/entry": {
+      "get": {
+        "tags": [
+          "Plugins"
+        ],
+        "summary": "Get one plugin marketplace entry",
+        "operationId": "getPluginMarketEntry",
+        "x-astrbot-scope": "plugin",
+        "parameters": [
+          {
+            "name": "plugin_id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "custom_registry",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          }
+        },
+        "description": "**Required scope:** `plugin`"
+      }
+    },
+    "/api/v1/plugins/market/random": {
+      "get": {
+        "tags": [
+          "Plugins"
+        ],
+        "summary": "Sample plugin marketplace entries",
+        "operationId": "getPluginMarketRandom",
+        "x-astrbot-scope": "plugin",
+        "parameters": [
+          {
+            "name": "count",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 20,
+              "default": 3
+            }
+          },
+          {
+            "name": "custom_registry",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          }
+        },
+        "description": "**Required scope:** `plugin`"
+      }
+    },
+    "/api/v1/plugins/market/entries": {
+      "post": {
+        "tags": [
+          "Plugins"
+        ],
+        "summary": "Resolve several plugin marketplace entries",
+        "operationId": "resolvePluginMarketEntries",
+        "x-astrbot-scope": "plugin",
+        "parameters": [
+          {
+            "name": "custom_registry",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PluginMarketEntriesRequest"
+              }
+            }
+          }
+        },
         "responses": {
           "200": {
             "$ref": "#/components/responses/Ok"
@@ -7926,6 +8066,34 @@
         "properties": {
           "path": {
             "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "PluginMarketEntryLookup": {
+        "type": "object",
+        "properties": {
+          "market_plugin_id": {
+            "type": "string"
+          },
+          "repo": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": true
+      },
+      "PluginMarketEntriesRequest": {
+        "type": "object",
+        "properties": {
+          "records": {
+            "type": "array",
+            "maxItems": 500,
+            "items": {
+              "$ref": "#/components/schemas/PluginMarketEntryLookup"
+            }
           }
         },
         "additionalProperties": false

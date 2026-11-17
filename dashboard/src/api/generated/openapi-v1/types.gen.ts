@@ -541,6 +541,17 @@ export type PluginConfigFileDeleteRequest = {
     path: string;
 };
 
+export type PluginMarketEntriesRequest = {
+    records?: Array<PluginMarketEntryLookup>;
+};
+
+export type PluginMarketEntryLookup = {
+    market_plugin_id?: string;
+    repo?: string;
+    name?: string;
+    [key: string]: unknown | string;
+};
+
 export type PluginRepositoryInstallRequest = {
     /**
      * GitHub shorthand, HTTP(S), SSH, or SCP-style Git repository locator.
@@ -2313,9 +2324,16 @@ export type ListPluginMarketData = {
         custom_registry?: string;
         force_refresh?: boolean;
         keyword?: string;
+        order?: 'asc' | 'desc';
+        /**
+         * One-based page number. Only used when pagination is requested; omit both page and page_size to receive the full registry.
+         */
         page?: number;
+        /**
+         * Entries per page. Only used when pagination is requested; omit both page and page_size to receive the full registry.
+         */
         page_size?: number;
-        sort?: 'recommended' | 'downloads' | 'updated' | 'name';
+        sort?: 'recommended' | 'downloads' | 'stars' | 'author' | 'updated' | 'name';
     };
 };
 
@@ -2323,9 +2341,48 @@ export type ListPluginMarketResponse = (SuccessEnvelope);
 
 export type ListPluginMarketError = unknown;
 
+export type ListPluginMarketCategoriesData = {
+    query?: {
+        custom_registry?: string;
+    };
+};
+
 export type ListPluginMarketCategoriesResponse = (SuccessEnvelope);
 
 export type ListPluginMarketCategoriesError = unknown;
+
+export type GetPluginMarketEntryData = {
+    query: {
+        custom_registry?: string;
+        plugin_id: string;
+    };
+};
+
+export type GetPluginMarketEntryResponse = (SuccessEnvelope);
+
+export type GetPluginMarketEntryError = unknown;
+
+export type GetPluginMarketRandomData = {
+    query?: {
+        count?: number;
+        custom_registry?: string;
+    };
+};
+
+export type GetPluginMarketRandomResponse = (SuccessEnvelope);
+
+export type GetPluginMarketRandomError = unknown;
+
+export type ResolvePluginMarketEntriesData = {
+    body: PluginMarketEntriesRequest;
+    query?: {
+        custom_registry?: string;
+    };
+};
+
+export type ResolvePluginMarketEntriesResponse = (SuccessEnvelope);
+
+export type ResolvePluginMarketEntriesError = unknown;
 
 export type ListPluginSourcesResponse = (SuccessEnvelope);
 
