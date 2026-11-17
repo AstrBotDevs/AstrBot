@@ -71,6 +71,7 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
   const selectedProviderSource = ref<any | null>(null)
   const selectedProviderSourceOriginalId = ref<string | null>(null)
   const editableProviderSource = ref<any | null>(null)
+  const providerSourceForm = ref<{ validate: () => Promise<{ valid: boolean }> } | null>(null)
   const availableModels = ref<any[]>([])
   const modelMetadata = ref<Record<string, any>>({})
   const loadingSources = ref(true)
@@ -562,6 +563,7 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
 
   async function saveProviderSource() {
     if (!selectedProviderSource.value) return
+    if (providerSourceForm.value && !(await providerSourceForm.value.validate()).valid) return false
 
     savingSource.value = true
     const sourceBeingSaved = selectedProviderSource.value
@@ -853,6 +855,7 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
     selectProviderSource,
     addProviderSource,
     deleteProviderSource,
+    providerSourceForm,
     saveProviderSource,
     fetchAvailableModels,
     buildModelProviderConfig,

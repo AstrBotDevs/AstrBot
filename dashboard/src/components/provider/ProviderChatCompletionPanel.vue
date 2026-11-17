@@ -67,7 +67,7 @@
 
           <v-divider></v-divider>
 
-          <div class="provider-config-body">
+          <v-form ref="providerSourceForm" class="provider-config-body" @submit.prevent>
             <section class="provider-section config-form">
               <div class="provider-section-head">
                 <div class="provider-section-title">{{ tm('providers.settings') }}</div>
@@ -129,7 +129,7 @@
                 @add-model-provider="openModelAddDialog"
               />
             </section>
-          </div>
+          </v-form>
         </div>
 
         <div v-else class="provider-empty-state">
@@ -272,6 +272,7 @@ const {
   selectProviderSource,
   addProviderSource,
   deleteProviderSource,
+  providerSourceForm,
   saveProviderSource,
   fetchAvailableModels,
   buildModelProviderConfig,

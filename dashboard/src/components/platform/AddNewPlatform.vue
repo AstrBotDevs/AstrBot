@@ -20,6 +20,7 @@
         class="pa-4 ml-2"
         style="overflow-y: auto"
       >
+        <v-form ref="platformConfigForm" @submit.prevent>
         <div class="d-flex align-start" style="width: 100%">
           <div>
             <v-icon icon="mdi-numeric-1-circle" class="mr-3"></v-icon>
@@ -685,6 +686,7 @@
             </div>
           </div>
         </div>
+        </v-form>
       </v-card-text>
 
       <v-card-actions>
@@ -1238,7 +1240,8 @@ export default {
       this.configDrawerTargetId = targetId;
       this.showConfigDrawer = true;
     },
-    newPlatform() {
+    async newPlatform() {
+      if (this.$refs.platformConfigForm && !(await this.$refs.platformConfigForm.validate()).valid) return;
       this.loading = true;
       if (this.updatingMode) {
         if (this.updatingPlatformConfig.type === "aiocqhttp") {

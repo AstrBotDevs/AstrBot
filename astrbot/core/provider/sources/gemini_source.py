@@ -310,7 +310,7 @@ class ProviderGoogleGenAI(Provider):
         ]:
             # The thinkingBudget parameter, introduced with the Gemini 2.5 series
             thinking_budget = thinking_settings.get("budget")
-            if thinking_budget is not None:
+            if thinking_budget not in (None, ""):
                 thinking_config = types.ThinkingConfig(
                     thinking_budget=thinking_budget,
                 )

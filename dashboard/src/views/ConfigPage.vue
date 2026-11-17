@@ -56,14 +56,14 @@
     >
 
       <v-slide-y-transition mode="out-in">
-        <div v-if="(selectedConfigID || isSystemConfig) && fetched" :key="configContentKey" class="config-content" style="width: 100%;">
+        <v-form v-if="(selectedConfigID || isSystemConfig) && fetched" ref="configForm" :key="configContentKey" class="config-content" style="width: 100%;" @submit.prevent>
           <!-- 可视化编辑 -->
           <AstrBotCoreConfigWrapper
             :metadata="metadata"
             :config_data="config_data"
             :search-keyword="configSearchKeyword"
           />
-        </div>
+        </v-form>
       </v-slide-y-transition>
 
       <!-- 浮动按钮放在 transition 外部 -->
@@ -587,6 +587,9 @@ export default {
     },
     async updateConfig() {
       if (!this.fetched) return;
+      if (this.$refs.configForm && !(await this.$refs.configForm.validate()).valid) {
+        return { success: false };
+      }
 
       const postData = {
         config: JSON.parse(JSON.stringify(this.config_data)),
