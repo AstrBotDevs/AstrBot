@@ -2371,7 +2371,14 @@ async def _keenable_request(
         Exception: If the request fails after all configured keys are exhausted,
             or if a non-retryable HTTP error is returned.
     """
-    keys = provider_settings.get("websearch_keenable_key") or []
+    # Blank entries (an empty row saved in the WebUI) do not count as keys,
+    # so a list holding only those still uses the keyless endpoint.
+    keys = [
+        key.strip()
+        for key in provider_settings.get("websearch_keenable_key") or []
+        if isinstance(key, str) and key.strip()
+    ]
+    key_settings = {**provider_settings, "websearch_keenable_key": keys}
 
     last_error = None
     tried_keys: set[str] = set()
@@ -2380,7 +2387,7 @@ async def _keenable_request(
         url = f"{_KEENABLE_API_BASE}{path}"
         if keys:
             headers["X-API-Key"] = await _KEENABLE_KEY_ROTATOR.get(
-                provider_settings, tried_keys
+                key_settings, tried_keys
             )
         else:
             url += "/public"
@@ -2431,6 +2438,8 @@ async def _keenable_search(
 
 
 _KEENABLE_NAT64_PREFIX = ipaddress.IPv6Network("64:ff9b::/96")
+# Upper bound for the DNS lookup that guards extract fetches.
+_KEENABLE_EXTRACT_DNS_TIMEOUT_SECONDS = 5.0
 
 
 def _keenable_extract_ip_is_blocked(
@@ -2473,11 +2482,14 @@ def _keenable_extract_hostname_is_valid(hostname: str) -> bool:
         pass
     else:
         return True
-    if len(hostname.rstrip(".")) > 253:
+    # One trailing dot marks a fully qualified name; any other empty label
+    # ("a..example.com", ".example.com", "example.com..") is malformed.
+    name = hostname[:-1] if hostname.endswith(".") else hostname
+    if len(name) > 253 or any(not label for label in name.split(".")):
         return False
     try:
-        # Rejects empty labels ("example..com") and labels over 63 characters.
-        hostname.rstrip(".").encode("idna")
+        # Rejects labels over 63 characters and invalid internationalized names.
+        name.encode("idna")
     except UnicodeError:
         return False
     return True
@@ -2486,7 +2498,7 @@ def _keenable_extract_hostname_is_valid(hostname: str) -> bool:
 async def _keenable_extract_url_resolves_to_blocked(hostname: str) -> bool:
     """Return whether DNS resolution yields a blocked address for extract fetches.
 
-    A name that cannot be resolved fails closed, as if it were blocked.
+    A name that cannot be resolved in time fails closed, as if it were blocked.
     """
     try:
         ipaddress.ip_address(hostname)
@@ -2496,13 +2508,16 @@ async def _keenable_extract_url_resolves_to_blocked(hostname: str) -> bool:
         return False
 
     try:
-        addr_infos = await asyncio.to_thread(
-            socket.getaddrinfo,
-            hostname,
-            None,
-            type=socket.SOCK_STREAM,
+        addr_infos = await asyncio.wait_for(
+            asyncio.to_thread(
+                socket.getaddrinfo,
+                hostname,
+                None,
+                type=socket.SOCK_STREAM,
+            ),
+            timeout=_KEENABLE_EXTRACT_DNS_TIMEOUT_SECONDS,
         )
-    except (OSError, UnicodeError):
+    except (OSError, UnicodeError, asyncio.TimeoutError):
         return True
 
     for addr_info in addr_infos:

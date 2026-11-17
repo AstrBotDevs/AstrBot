@@ -1,5 +1,6 @@
 import json
 import socket
+import threading
 from types import SimpleNamespace
 
 import pytest
@@ -2207,9 +2208,49 @@ async def test_keenable_search_with_key_uses_authenticated_endpoint(monkeypatch)
     )
 
     assert results == []
+    assert len(session.calls) == 1
     call = session.calls[0]
+    assert call["method"] == "POST"
     assert call["url"] == "https://api.keenable.ai/v1/search"
+    assert call["json"] == {"query": "AstrBot"}
     assert call["headers"] == {"X-Keenable-Title": "astrbot", "X-API-Key": "key-1"}
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("keys", [[""], ["", "   "], ["\t"]])
+async def test_keenable_search_with_only_blank_keys_uses_public_endpoint(
+    monkeypatch, keys
+):
+    session = _install_keenable_session(
+        monkeypatch,
+        [_TavilyResponse(status=200, jsonData={"results": []})],
+    )
+
+    await tools._keenable_search({"websearch_keenable_key": keys}, {"query": "q"})
+
+    assert len(session.calls) == 1
+    call = session.calls[0]
+    assert call["url"] == "https://api.keenable.ai/v1/search/public"
+    assert call["headers"] == {"X-Keenable-Title": "astrbot"}
+
+
+@pytest.mark.asyncio
+async def test_keenable_search_skips_blank_keys_next_to_a_real_key(monkeypatch):
+    session = _install_keenable_session(
+        monkeypatch,
+        [_TavilyResponse(status=429, textData="rate limited")],
+    )
+
+    with pytest.raises(Exception, match="Keenable web search failed.*status: 429"):
+        await tools._keenable_search(
+            {"websearch_keenable_key": ["", " key-1 ", "  "]}, {"query": "q"}
+        )
+
+    # Only the real key is tried, once, and never an empty X-API-Key.
+    assert [call["url"] for call in session.calls] == [
+        "https://api.keenable.ai/v1/search"
+    ]
+    assert session.calls[0]["headers"]["X-API-Key"] == "key-1"
 
 
 @pytest.mark.asyncio
@@ -2559,6 +2600,8 @@ async def test_keenable_search_treats_null_key_setting_as_keyless(monkeypatch):
         "https://user@example.com/",
         # Malformed or overlong host names.
         "https://example..com/",
+        "https://a..example.com/",
+        "https://example.com../",
         "https://" + "a" * 64 + ".com/",
         "https://" + ".".join(["abcdefghi"] * 26) + ".com/",
     ],
@@ -2574,6 +2617,23 @@ async def test_keenable_extract_tool_rejects_invalid_urls(monkeypatch, url):
         " and no embedded credentials."
     )
     assert session.calls == []
+
+
+@pytest.mark.parametrize(
+    ("hostname", "valid"),
+    [
+        ("example.com", True),
+        ("example.com.", True),
+        ("sub.example.com", True),
+        ("a..example.com", False),
+        ("example..com", False),
+        (".example.com", False),
+        ("example.com..", False),
+        ("..", False),
+    ],
+)
+def test_keenable_extract_hostname_rejects_empty_labels(hostname, valid):
+    assert tools._keenable_extract_hostname_is_valid(hostname) is valid
 
 
 @pytest.mark.asyncio
@@ -2632,6 +2692,31 @@ async def test_keenable_extract_tool_rejects_dns_to_private_address(monkeypatch)
         _context_with_provider_settings({}),
         url="https://internal.example/page",
     )
+
+    assert result == "Error: url must resolve to a public internet address."
+    assert session.calls == []
+
+
+@pytest.mark.asyncio
+async def test_keenable_extract_tool_fails_closed_when_dns_stalls(monkeypatch):
+    session = _install_keenable_session(monkeypatch, [_TavilyResponse(status=200)])
+    tool = tools.KeenableExtractWebPageTool()
+    release = threading.Event()
+
+    def stalled_getaddrinfo(host, port, *args, **kwargs):
+        release.wait(5)
+        return [(socket.AF_INET, socket.SOCK_STREAM, 6, "", ("93.184.215.14", 0))]
+
+    monkeypatch.setattr(tools.socket, "getaddrinfo", stalled_getaddrinfo)
+    monkeypatch.setattr(tools, "_KEENABLE_EXTRACT_DNS_TIMEOUT_SECONDS", 0.05)
+
+    try:
+        result = await tool.call(
+            _context_with_provider_settings({}),
+            url="https://slow-dns.example/page",
+        )
+    finally:
+        release.set()
 
     assert result == "Error: url must resolve to a public internet address."
     assert session.calls == []
