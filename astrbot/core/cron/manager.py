@@ -34,7 +34,8 @@ PROACTIVE_AGENT_CRON_WOKE_USER_PROMPT = (
     "Proceed according to your system instructions. "
     "Output using same language as previous conversation. "
     "You can use `send_message_to_user` to send images, files, and other generated artifacts. "
-    "Use `send_message_to_user` for all user-facing messages, including any necessary summary. "
+    "Only messages sent through `send_message_to_user` are delivered to the user. "
+    "Use it for all user-facing messages, including any necessary summary. "
     'When finished, respond only with "Task complete".'
     "\n</system_reminder>"
 )
