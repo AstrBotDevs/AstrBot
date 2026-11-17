@@ -1920,11 +1920,11 @@
                 "description": "Настройки рассуждения (Thinking)",
                 "budget": {
                     "description": "Бюджет рассуждения",
-                    "hint": "Указывает модели количество токенов рассуждения. См. документацию Google."
+                    "hint": "Бюджет токенов рассуждения Gemini 2.5. Пустое поле использует значение модели по умолчанию."
                 },
                 "level": {
                     "description": "Уровень рассуждения",
-                    "hint": "Рекомендуется для моделей Gemini 3+. Позволяет контролировать процесс рассуждения."
+                    "hint": "См. https://ai.google.dev/gemini-api/docs/thinking#thinking-levels"
                 }
             },
             "anth_thinking_config": {

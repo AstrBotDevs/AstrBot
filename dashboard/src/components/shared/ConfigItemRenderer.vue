@@ -194,7 +194,12 @@
       <v-text-field
         :model-value="numericTemp ?? modelValue"
         @update:model-value="val => (numericTemp = val)"
-        @blur="() => { if (numericTemp != null) { emitUpdate(toNumber(numericTemp)) } numericTemp = null }"
+        @blur="() => {
+          if (numericTemp != null) {
+            emitUpdate(itemMeta?.nullable && numericTemp === '' ? null : toNumber(numericTemp))
+          }
+          numericTemp = null
+        }"
         density="compact"
         variant="outlined"
         class="config-field"

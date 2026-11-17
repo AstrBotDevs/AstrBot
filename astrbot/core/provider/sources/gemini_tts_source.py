@@ -11,6 +11,7 @@ from astrbot.core.utils.datetime_utils import generate_timestamp_id
 from ..entities import ProviderType
 from ..provider import TTSProvider
 from ..register import register_provider_adapter
+from .gemini_api_common import gemini_api_version
 
 
 @register_provider_adapter(
@@ -29,7 +30,9 @@ class ProviderGeminiTTSAPI(TTSProvider):
         api_base: str | None = provider_config.get("gemini_tts_api_base")
         timeout: int = int(provider_config.get("gemini_tts_timeout", 20))
         http_options = types.HttpOptions(
-            timeout=timeout * 1000, headers=self.request_headers
+            api_version=gemini_api_version(),
+            timeout=timeout * 1000,
+            headers=self.request_headers,
         )
 
         if api_base:
