@@ -1192,28 +1192,30 @@ async def test_quoted_element_id_still_builds_reply_without_reference():
     assert reply.message_str == "quoted text"
 
 
+@pytest.mark.parametrize(
+    "quoted_content",
+    [
+        "[附件1] 类型:图片 URL:https://multimedia.example.com/chart.png",
+        (
+            "=== 消息 1 ===\n"
+            "[消息类型] 引用消息\n"
+            "[附件1] 类型:图片 文件名:chart.png 尺寸:2117x287 大小:57.3KB "
+            "URL:https://multimedia.example.com/chart.png\n"
+            "\n"
+            "=== 消息 2 ===\n"
+            "[消息内容] the old message text"
+        ),
+    ],
+)
 @pytest.mark.asyncio
-async def test_quoted_images_flattened_into_text_are_recovered_as_images():
-    """QQ pre-renders quoted attachments into `content`, leaving `attachments` empty."""
+async def test_quoted_attachment_like_text_stays_literal(quoted_content: str):
+    """Text without structured attachment provenance must not become an image."""
     _, message = _dispatch_group_message(
         _make_group_payload(
             content="answer",
             message_type=103,
             message_reference={"message_id": "quoted-1"},
-            msg_elements=[
-                {
-                    "content": (
-                        "=== 消息 1 ===\n"
-                        "[消息类型] 引用消息\n"
-                        "[附件1] 类型:图片 文件名:chart.png 尺寸:2117x287 大小:57.3KB "
-                        "URL:https://multimedia.example.com/chart.png\n"
-                        "\n"
-                        "=== 消息 2 ===\n"
-                        "[消息内容] the old message text"
-                    ),
-                    "attachments": [],
-                }
-            ],
+            msg_elements=[{"content": quoted_content, "attachments": []}],
         )
     )
 
@@ -1225,12 +1227,11 @@ async def test_quoted_images_flattened_into_text_are_recovered_as_images():
     reply = abm.message[0]
     assert isinstance(reply, Reply)
     assert reply.id == "quoted-1"
-    images = [component for component in reply.chain if isinstance(component, Image)]
-    assert [component.file for component in images] == [
-        "https://multimedia.example.com/chart.png"
-    ]
-    plain_text = "".join(
-        component.text for component in reply.chain if isinstance(component, Plain)
+    assert reply.message_str == quoted_content
+    assert not any(isinstance(component, Image) for component in reply.chain)
+    assert (
+        "".join(
+            component.text for component in reply.chain if isinstance(component, Plain)
+        )
+        == quoted_content
     )
-    assert "the old message text" in plain_text
-    assert "URL:" not in plain_text
