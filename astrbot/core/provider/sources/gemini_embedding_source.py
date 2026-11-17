@@ -36,11 +36,10 @@ class GeminiEmbeddingProvider(EmbeddingProvider):
             logger.info(f"[Gemini Embedding] 使用代理: {proxy}")
 
         self.client = genai.Client(api_key=api_key, http_options=http_options).aio
-        # SDK versions may add or normalize the UA; restore the configured value.
-        self.client._api_client._http_options.headers.pop("user-agent", None)
-        self.client._api_client._http_options.headers["User-Agent"] = (
-            self.request_headers["User-Agent"]
-        )
+        # Keep only AstrBot's UA across SDK versions that merge header case variants.
+        headers = self.client._api_client._http_options.headers
+        headers["user-agent"] = self.request_headers["User-Agent"]
+        headers.pop("User-Agent", None)
 
         self.model = provider_config.get(
             "embedding_model",
