@@ -78,7 +78,10 @@ def unregister_platform_adapters_by_module(module_path_prefix: str) -> list[str]
     to_remove = []
 
     for pm in platform_registry:
-        if pm.module_path and pm.module_path.startswith(module_path_prefix):
+        if pm.module_path and (
+            pm.module_path == module_path_prefix
+            or pm.module_path.startswith(f"{module_path_prefix}.")
+        ):
             to_remove.append(pm)
             unregistered.append(pm.name)
 
