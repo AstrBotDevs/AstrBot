@@ -28,3 +28,14 @@
 - Move view declarations from `Star.chatui_views` to `metadata.yaml` under `views`. Keep default labels in metadata and override them with i18n `views.<name>` (legacy `pages.<name>` remains supported). Existing declarations without a target remain standalone `plugin_page` views.
 - `chat_workbench` + `launcher=True` → `chat_workbench_with_launcher`：同一视图既能由消息或工具打开，也能从工作台「＋」打开。只由插件打开的视图继续使用 `chat_workbench`。
 - Replace `chat_workbench` + `launcher=True` with `chat_workbench_with_launcher` for views that can open from messages/tools and from **+**. Keep `chat_workbench` for plugin-opened views without a launcher entry.
+
+### Model requests / 模型请求
+
+- OpenAI 兼容接口：只有报错明确表示模型不支持工具时，才去掉工具重试，同时去掉 `tool_choice`；警告中附带原始报错。其他和工具有关的错误（如工具参数结构不合法）不再被吞掉。
+- OpenAI-compatible APIs: Retry without tools only when the error says the model does not support tools, and drop `tool_choice` together with the tools. The warning includes the original error. Other tool-related errors, such as invalid tool schemas, are no longer hidden.
+- Anthropic：除系统提示外，对话末尾也设置缓存断点，工具循环的下一步和下一轮对话可以直接命中历史缓存。断点在清理消息之后设置，并计入工具定义（包括自定义请求体中的工具）上已有的断点，总数不超过 4 个。
+- Anthropic: Mark the end of the conversation as a cache breakpoint in addition to the system prompt, so the next tool-loop step and the next turn read the history from the cache. Breakpoints are placed after messages are sanitized and count existing markers on tool definitions, including tools from the custom request body, staying within the limit of four.
+- 上下文压缩按本次请求实际使用的模型查找上下文窗口；压缩前的用量以上一次请求上报的 Token 数为基准，加上之后新增消息的估算。
+- Context compression looks up the context window of the model actually used for the request. Usage before compression starts from the tokens reported for the previous request and adds an estimate for messages added since.
+- 当前模型不能接收音频且未开启语音识别时，模型会收到一条说明，提示用户开启语音识别或换用支持音频的模型，而不是只看到 `[Audio]`。
+- When the current model cannot receive audio and speech recognition is off, the model receives a note asking it to tell the user to enable speech recognition or switch to an audio-capable model, instead of a bare `[Audio]` placeholder.
