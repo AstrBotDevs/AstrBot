@@ -1045,10 +1045,14 @@ class ConversationStore:
         del serialized_drafts
         async with self.db.get_db() as session:
             await session.execute(text("BEGIN IMMEDIATE"))
-            metadata = (
+            event_ids = {draft["event_id"] for draft in drafts if draft.get("event_id")}
+            # Bind one JSON array so large batches stay within SQLite's parameter limit.
+            ids = func.json_each(json.dumps(list(event_ids))).table_valued("value")
+            metadata_rows = (
                 await session.execute(
                     select(
                         ConversationV3,
+                        ConversationEvent,
                         *conversation_revision_columns(),
                         text("""EXISTS (
                             SELECT 1 FROM conversation_events INDEXED BY ix_context_plugin_live
@@ -1057,23 +1061,22 @@ class ConversationStore:
                               AND json_extract(payload,'$.origin')='plugin'
                               AND payload IS NOT NULL
                         ) AS has_plugin_baseline"""),
-                    ).where(ConversationV3.conversation_id == cid)
-                )
-            ).one_or_none()
-            if metadata is None:
-                raise ValueError("Conversation not found")
-            conv, head_seq, leaf_event_id, has_plugin_baseline = metadata
-            event_ids = {draft["event_id"] for draft in drafts if draft.get("event_id")}
-            existing_by_id: dict[str, ConversationEvent] = {}
-            if event_ids:
-                # Bind one JSON array so large batches stay within SQLite's parameter limit.
-                ids = func.json_each(json.dumps(list(event_ids))).table_valued("value")
-                stored_events = await session.scalars(
-                    select(ConversationEvent).where(
-                        col(ConversationEvent.event_id).in_(select(ids.c.value))
                     )
+                    .outerjoin(
+                        ConversationEvent,
+                        col(ConversationEvent.event_id).in_(select(ids.c.value)),
+                    )
+                    .where(ConversationV3.conversation_id == cid)
                 )
-                existing_by_id = {event.event_id: event for event in stored_events}
+            ).all()
+            if not metadata_rows:
+                raise ValueError("Conversation not found")
+            conv, _, head_seq, leaf_event_id, has_plugin_baseline = metadata_rows[0]
+            existing_by_id = {
+                event.event_id: event
+                for _, event, *_ in metadata_rows
+                if event is not None
+            }
 
             existing = []
             for draft in drafts:
