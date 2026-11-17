@@ -574,3 +574,76 @@ async def test_save_uploaded_file_rejects_oversized_saved_file(
         await chat_service_instance.save_uploaded_file(FakeUpload())
 
     assert not list(Path(chat_service_instance.attachments_dir).iterdir())
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("queue_size", [6, 8])
+async def test_completed_chat_stream_preserves_pending_output(
+    chat_service_instance, monkeypatch, queue_size
+):
+    """Keep final output queued until the subscriber consumes it.
+
+    Args:
+        chat_service_instance: Chat service with isolated persistence.
+        monkeypatch: Fixture for setting the subscriber queue capacity.
+        queue_size: Capacity, including a case with no room for a close marker.
+    """
+    monkeypatch.setattr(chat_service, "CHAT_RUN_SUBSCRIBER_QUEUE_SIZE", queue_size)
+    service = chat_service_instance
+    session_id = "completed-buffer-session"
+    stream = await service.build_chat_stream(
+        "alice", {"message": "hello", "session_id": session_id}
+    )
+    run = next(iter(service.chat_runs.values()))
+    try:
+        await anext(stream)
+        await anext(stream)
+        payloads = [
+            {
+                "type": "plain",
+                "chain_type": "tool_call",
+                "data": json.dumps({"id": "tool-1", "name": "web_search", "ts": 1}),
+                "streaming": True,
+            },
+            {
+                "type": "plain",
+                "chain_type": "tool_call_result",
+                "data": json.dumps({"id": "tool-1", "result": "Found", "ts": 3}),
+                "streaming": True,
+            },
+            {"type": "plain", "data": "Final reply", "streaming": True},
+            {
+                "type": "plain",
+                "chain_type": "agent_stats",
+                "data": json.dumps({"start_time": 1, "end_time": 4}),
+                "streaming": True,
+            },
+            {"type": "end", "data": "", "streaming": False},
+        ]
+        for payload in payloads:
+            run.back_queue.put_nowait({**payload, "message_id": run.run_id})
+        await asyncio.wait_for(run.task, timeout=1)
+        received = []
+        while True:
+            try:
+                event = await asyncio.wait_for(anext(stream), timeout=1)
+            except StopAsyncIteration:
+                break
+            received.append(_decode_sse_event(event))
+        assert [event["type"] for event in received] == [
+            "plain",
+            "plain",
+            "plain",
+            "agent_stats",
+            "end",
+            "message_saved",
+        ]
+        assert json.loads(received[1]["data"])["result"] == "Found"
+        assert received[2]["data"] == "Final reply"
+        assert received[3]["data"] == {"start_time": 1, "end_time": 4}
+    finally:
+        await stream.aclose()
+        if run.task and not run.task.done():
+            run.task.cancel()
+            await asyncio.gather(run.task, return_exceptions=True)
+        chat_service.webchat_queue_mgr.remove_queues(session_id)

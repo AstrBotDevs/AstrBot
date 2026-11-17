@@ -35,7 +35,6 @@ html_renderer = HtmlRenderer(t2i_base_url)
 """**Deprecated**. For plugin developers, please use `self.context.html_renderer` instead."""
 logger = LogManager.GetLogger(log_name="astrbot")
 LogManager.configure_logger(logger, astrbot_config)
-LogManager.configure_trace_logger(astrbot_config)
 db_helper = SQLiteDatabase(DB_PATH)
 sp = SharedPreferences(db_helper=db_helper)
 file_token_service = FileTokenService()

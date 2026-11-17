@@ -45,6 +45,15 @@
     ]
   },
   "voice": {
+    "transcribing": "音声入力中…",
+    "transcribe": "音声で文字入力",
+    "sendAudio": "音声を録音して送信",
+    "cancel": "録音をキャンセル",
+    "finishTranscription": "録音を終了して文字起こし",
+    "sttModel": "文字起こしモデル",
+    "configure": "設定へ",
+    "noSttProvider": "先に利用可能な音声認識モデルを設定してください",
+    "transcriptionFailed": "文字起こしに失敗しました。もう一度お試しください。",
     "start": "録音を開始",
     "stop": "録音を停止",
     "recording": "新しい録音",
@@ -142,6 +151,12 @@
     "title": "設定"
   },
   "reasoning": {
+    "worked": "作業時間：{duration}",
+    "working": "作業中：{duration}",
+    "workCompleted": "作業の詳細",
+    "durationHours": "{hours}時間 {minutes}分 {seconds}秒",
+    "durationMinutes": "{minutes}分 {seconds}秒",
+    "durationSeconds": "{seconds}秒",
     "enabled": "思考内容の表示：オン",
     "disabled": "思考内容の表示：オフ",
     "thinking": "思考プロセス",
@@ -152,6 +167,12 @@
     "toolUsed": "ツールを使用"
   },
   "history": {
+    "edit": "メッセージを編集",
+    "context_pruned": "過去のコンテキストは削除されました。この位置から続行できません。",
+    "context_unavailable": "この位置のコンテキストは利用できません。",
+    "inactive_message": "このメッセージは置き換えられた会話に属しています。",
+    "run_active": "先に現在の生成を停止してください。",
+    "unsupported_message": "このメッセージでは操作できません。",
     "loadFailed": "メッセージを読み込めませんでした",
     "loadEarlierFailed": "以前のメッセージを読み込めませんでした",
     "loading": "以前のメッセージを読み込み中"
@@ -188,6 +209,7 @@
     "refresh": "ファイルツリーを再読み込み",
     "filter": "ファイルを絞り込み…",
     "clearFilter": "ファイルの絞り込みを解除",
+    "selectSession": "ワークスペースのファイルを表示する会話を選択してください",
     "empty": "ワークスペースにファイルがありません",
     "noMatches": "一致するファイルがありません",
     "loadFailed": "ワークスペースのファイルを読み込めませんでした",

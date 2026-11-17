@@ -43,20 +43,6 @@ docker pull soulter/shipyard-ship:latest
 配置和使用详见 [Agent 沙盒环境](/use/astrbot-agent-sandbox.md) 文档。
 :::
 
-::: details 和 NapCat 一起部署
-
-如果您想对接 NapCat，使用这种方式可以同时部署 AstrBot 和 NapCat。
-
-```bash
-mkdir astrbot
-cd astrbot
-wget https://raw.githubusercontent.com/NapNeko/NapCat-Docker/main/compose/astrbot.yml
-sudo docker compose -f astrbot.yml up -d
-```
-
-:::
-
-
 ## 通过 Docker 部署
 
 ```bash

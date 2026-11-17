@@ -1,13 +1,17 @@
 from collections.abc import AsyncGenerator
+from contextlib import aclosing
 from typing import cast
 
 from astrbot.core import logger
+from astrbot.core.config.runtime import MessageConfig, current_message_config
+from astrbot.core.log import log_context
 from astrbot.core.platform import AstrMessageEvent
+from astrbot.core.platform.astr_message_event import event_context
 from astrbot.core.platform.sources.webchat.webchat_event import WebChatMessageEvent
 from astrbot.core.platform.sources.wecom_ai_bot.wecomai_event import (
     WecomAIBotMessageEvent,
 )
-from astrbot.core.utils.active_event_registry import active_event_registry
+from astrbot.core.utils.trace import trace_execution
 
 from .bootstrap import ensure_builtin_stages_registered
 from .context import PipelineContext
@@ -51,23 +55,25 @@ class PipelineScheduler:
             if isinstance(coroutine, AsyncGenerator):
                 # 如果返回的是异步生成器, 实现洋葱模型的核心
                 agen = cast(AsyncGenerator[None], coroutine)
-                async for _ in agen:
-                    # 此处是前置处理完成后的暂停点(yield), 下面开始执行后续阶段
-                    if event.is_stopped():
-                        logger.debug(
-                            f"Stage {stage.__class__.__name__} stopped event propagation.",
-                        )
-                        break
+                # Close suspended stages here so their execution cleanup completes.
+                async with aclosing(agen):
+                    async for _ in agen:
+                        # 此处是前置处理完成后的暂停点(yield), 下面开始执行后续阶段
+                        if event.is_stopped():
+                            logger.debug(
+                                f"Stage {stage.__class__.__name__} stopped event propagation.",
+                            )
+                            break
 
-                    # 递归调用, 处理所有后续阶段
-                    await self._process_stages(event, i + 1)
+                        # 递归调用, 处理所有后续阶段
+                        await self._process_stages(event, i + 1)
 
-                    # 此处是后续所有阶段处理完毕后返回的点, 执行后置处理
-                    if event.is_stopped():
-                        logger.debug(
-                            f"Stage {stage.__class__.__name__} stopped event propagation.",
-                        )
-                        break
+                        # 此处是后续所有阶段处理完毕后返回的点, 执行后置处理
+                        if event.is_stopped():
+                            logger.debug(
+                                f"Stage {stage.__class__.__name__} stopped event propagation.",
+                            )
+                            break
             else:
                 # 如果返回的是普通协程(不含yield的async函数), 则不进入下一层(基线条件)
                 # 简单地等待它执行完成, 然后继续执行下一个阶段
@@ -86,15 +92,29 @@ class PipelineScheduler:
             event (AstrMessageEvent): 事件对象
 
         """
-        active_event_registry.register(event)
+        snapshot, override_paths = (
+            self.ctx.plugin_manager.context.astrbot_config_mgr._create_message_config(
+                event.unified_msg_origin
+            )
+        )
+        scope = MessageConfig(
+            event.unified_msg_origin, snapshot, self.ctx, override_paths
+        )
+        token = current_message_config.set(scope)
         try:
-            await self._process_stages(event)
+            with (
+                log_context(event.get_platform_id(), event.get_platform_name()),
+                event_context(event),
+                trace_execution(event.trace),
+            ):
+                await self._process_stages(event)
 
-            # 发送一个空消息, 以便于后续的处理
-            if isinstance(event, WebChatMessageEvent | WecomAIBotMessageEvent):
-                await event.send(None)
+                # Send the closing frame before the event is marked complete.
+                if isinstance(event, WebChatMessageEvent | WecomAIBotMessageEvent):
+                    await event.send(None)
 
-            logger.debug("pipeline execution completed.")
+                logger.debug("pipeline execution completed.")
         finally:
-            event.cleanup_temporary_local_files()
-            active_event_registry.unregister(event)
+            # Child tasks may outlive this scope; do not let them reuse stale values.
+            scope.active = False
+            current_message_config.reset(token)

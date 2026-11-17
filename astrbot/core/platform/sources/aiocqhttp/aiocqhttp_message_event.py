@@ -7,8 +7,10 @@ from aiocqhttp import CQHttp, Event
 from astrbot.api import logger
 from astrbot.api.event import AstrMessageEvent, MessageChain
 from astrbot.api.message_components import (
+    ActionRow,
     At,
     BaseMessageComponent,
+    Button,
     File,
     Image,
     Node,
@@ -82,6 +84,30 @@ class AiocqhttpMessageEvent(AstrMessageEvent):
                     continue
                 d = await AiocqhttpMessageEvent._from_segment_to_dict(segment)
                 ret.append(d)
+            elif isinstance(segment, ActionRow | Button):
+                # OneBot v11 has no portable button segment. Keep URL actions usable
+                # as plain links and make callback degradation explicit.
+                lines = []
+                if isinstance(segment, ActionRow):
+                    buttons = segment.buttons
+                    if segment.fallback_text and segment.fallback_text.strip():
+                        lines.append(segment.fallback_text.strip())
+                else:
+                    buttons = [segment]
+
+                for button in buttons:
+                    if isinstance(button.action, Button.UrlAction):
+                        lines.append(f"{button.label}: {button.action.url}")
+                    elif isinstance(button.action, Button.CallbackAction):
+                        lines.append(f"[Button unavailable] {button.label}")
+
+                if lines:
+                    ret.append(
+                        {
+                            "type": "text",
+                            "data": {"text": "\n".join(lines)},
+                        }
+                    )
             else:
                 d = await AiocqhttpMessageEvent._from_segment_to_dict(segment)
                 ret.append(d)
@@ -215,21 +241,37 @@ class AiocqhttpMessageEvent(AstrMessageEvent):
             await self.send(buffer)
             return await super().send_streaming(generator, use_fallback)
 
-        buffer = ""
-        pattern = re.compile(r"[^。？！~…]+[。？！~…]+")
+        text_parts: list[str] = []
+        leading_punctuation: list[str] = []
+        pattern = re.compile(r"[。？！~…]+")
 
         async for chain in generator:
             if isinstance(chain, MessageChain):
                 for comp in chain.chain:
                     if isinstance(comp, Plain):
-                        buffer += comp.text
-                        if any(p in buffer for p in "。？！~…"):
-                            buffer = await self.process_buffer(buffer, pattern)
+                        # Scan new text only; join unfinished fragments when sending.
+                        text = comp.text
+                        start = 0
+                        for match in pattern.finditer(text):
+                            if match.start() > start:
+                                text_parts.append(text[start : match.start()])
+                            if text_parts:
+                                sentence = ("".join(text_parts) + match.group()).strip()
+                                await self.send(MessageChain([Plain(sentence)]))
+                                await asyncio.sleep(1.5)  # Rate limit.
+                                text_parts.clear()
+                                leading_punctuation.clear()
+                            else:
+                                # Preserve unmatched prefixes until a sentence completes.
+                                leading_punctuation.append(match.group())
+                            start = match.end()
+                        if start < len(text):
+                            text_parts.append(text[start:])
                     else:
                         await self.send(MessageChain(chain=[comp]))
                         await asyncio.sleep(1.5)  # 限速
 
-        buffer = buffer.strip()
+        buffer = "".join(leading_punctuation + text_parts).strip()
         if buffer:
             await self.send(MessageChain([Plain(buffer)]))
         return await super().send_streaming(generator, use_fallback)

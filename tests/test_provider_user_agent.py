@@ -191,7 +191,9 @@ async def test_dashscope_sends_user_agent(model, custom_headers, provider_http_s
 
 
 @pytest.mark.asyncio
-async def test_edge_tts_synthesis_uses_astrbot_user_agent(monkeypatch, unused_tcp_port):
+async def test_edge_tts_synthesis_preserves_sdk_user_agent(
+    monkeypatch, unused_tcp_port
+):
     edge_tts = pytest.importorskip("edge_tts")
     from astrbot.core.provider.sources import edge_tts_source  # noqa: F401
 
@@ -218,6 +220,8 @@ async def test_edge_tts_synthesis_uses_astrbot_user_agent(monkeypatch, unused_tc
         with pytest.raises(edge_tts.exceptions.NoAudioReceived):
             async for _ in edge_tts.Communicate("hello", "en-US-AriaNeural").stream():
                 pass
-        assert requests[0].getall("User-Agent") == [DEFAULT_USER_AGENT]
+        assert requests[0].getall("User-Agent") == [
+            edge_tts.constants.BASE_HEADERS["User-Agent"]
+        ]
     finally:
         await runner.cleanup()

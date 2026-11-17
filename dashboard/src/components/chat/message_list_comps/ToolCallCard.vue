@@ -1,18 +1,22 @@
 <template>
   <div class="tool-call-card" :class="{ expanded: isExpanded }">
     <button class="tool-call-header" type="button" @click="toggleExpanded">
-      <v-icon size="16" class="tool-call-icon">{{ toolCallIcon }}</v-icon>
+      <component
+        :is="toolCallIcon"
+        :size="16"
+        class="tool-call-icon"
+        aria-hidden="true"
+      />
       <span class="tool-call-title">
         {{ tm("actions.toolCallUsed", { name: displayToolName }) }}
       </span>
       <span class="tool-call-duration">{{ toolCallDuration }}</span>
-      <v-icon
-        size="22"
+      <ChevronRight
+        :size="22"
         class="tool-call-expand-icon"
         :class="{ expanded: isExpanded }"
-      >
-        mdi-chevron-right
-      </v-icon>
+        aria-hidden="true"
+      />
     </button>
 
     <div v-if="isExpanded" class="tool-call-details">
@@ -42,6 +46,7 @@
 
 <script setup>
 import { computed, onMounted, onUnmounted, ref } from "vue";
+import { ChevronRight, CodeXml, Globe, Terminal, Wrench } from "@lucide/vue";
 import { useModuleI18n } from "@/i18n/composables";
 
 const props = defineProps({
@@ -76,15 +81,15 @@ const displayToolName = computed(() => props.toolCall.name || "tool");
 const toolCallIcon = computed(() => {
   const name = String(props.toolCall.name || "");
   if (name === "astrbot_execute_ipython" || name === "astrbot_execute_python") {
-    return "mdi-code-json";
+    return CodeXml;
   }
   if (name.includes("web_search") || name.includes("tavily")) {
-    return "mdi-web";
+    return Globe;
   }
   if (name === "astrbot_execute_shell") {
-    return "mdi-console-line";
+    return Terminal;
   }
-  return "mdi-wrench";
+  return Wrench;
 });
 
 const toolCallDuration = computed(() => {
@@ -173,7 +178,8 @@ onUnmounted(() => {
 }
 
 .tool-call-expand-icon {
-  color: currentcolor;
+  color: inherit;
+  opacity: 1;
   transition: transform 0.2s ease;
   flex-shrink: 0;
 }

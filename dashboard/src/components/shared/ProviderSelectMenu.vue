@@ -167,10 +167,18 @@
               @click="clearSelection"
             >
               <v-list-item-title class="provider-item-title">
-                {{ sharedTm("providerSelector.clearSelection") }}
+                {{
+                  variant === "config"
+                    ? sharedTm("providerSelector.clearSelection")
+                    : sharedTm("providerSelector.defaultModel")
+                }}
               </v-list-item-title>
               <v-list-item-subtitle class="provider-subtitle">
-                {{ sharedTm("providerSelector.clearSelectionSubtitle") }}
+                {{
+                  variant === "config"
+                    ? sharedTm("providerSelector.clearSelectionSubtitle")
+                    : sharedTm("providerSelector.defaultModelSubtitle")
+                }}
               </v-list-item-subtitle>
               <template #append>
                 <v-icon
@@ -417,7 +425,7 @@
       <v-card-title class="text-h3 pa-4 pb-0 pl-6">
         {{ providerEditDialogTitle }}
       </v-card-title>
-      <v-card-text class="py-4">
+      <v-card-text class="py-4 config-form">
         <AstrBotConfig
           v-if="providerEditData"
           :iterable="providerEditData"
@@ -1013,18 +1021,23 @@ defineExpose({ getCurrentSelection });
   opacity: 0.64;
 }
 
+.provider-menu-card,
+.provider-source-menu {
+  --astrbot-menu-shadow: 0 3px 10px rgba(0, 0, 0, 0.06);
+}
+
 .provider-menu-card {
   width: min(420px, calc(100vw - 24px));
   overflow: hidden;
   border: 1px solid rgba(var(--v-theme-on-surface), 0.09);
   border-radius: 14px !important;
   background: rgb(var(--v-theme-surface));
-  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.07) !important;
+  box-shadow: var(--astrbot-menu-shadow) !important;
 }
 
 :global(.v-overlay.v-menu .v-overlay__content > .provider-menu-card) {
   border: 1px solid rgba(var(--v-theme-on-surface), 0.09) !important;
-  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.07) !important;
+  box-shadow: var(--astrbot-menu-shadow) !important;
 }
 
 .provider-menu-body {
@@ -1119,6 +1132,9 @@ defineExpose({ getCurrentSelection });
 }
 
 .provider-menu-item {
+  /* Keep the selected fill from accumulating a second state overlay. */
+  --v-hover-opacity: 0;
+  --v-activated-opacity: 0;
   height: 54px;
   min-height: 54px !important;
   margin: 0 0 2px !important;
@@ -1145,8 +1161,12 @@ defineExpose({ getCurrentSelection });
 }
 
 .provider-menu-item.v-list-item--active {
-  background: rgba(var(--v-theme-primary), 0.08);
+  background: rgba(var(--v-theme-on-surface), 0.06);
   color: rgb(var(--v-theme-on-surface));
+}
+
+.provider-menu-item.v-list-item--active:hover {
+  background: rgba(var(--v-theme-on-surface), 0.09);
 }
 
 .provider-item-title {
@@ -1308,3 +1328,5 @@ defineExpose({ getCurrentSelection });
   }
 }
 </style>
+
+<style scoped src="@/styles/config-form.css"></style>

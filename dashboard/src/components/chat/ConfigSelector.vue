@@ -116,7 +116,7 @@ const loadingConfigs = ref(false);
 const dialog = ref(false);
 const tempSelectedConfig = ref('');
 const selectedConfigId = ref('default');
-const agentRunnerType = ref('local');
+const agentRunnerType = ref('astrbot');
 const saving = ref(false);
 const pendingSync = ref(false);
 const routingEntries = ref<Array<{ pattern: string; confId: string }>>([]);
@@ -229,12 +229,12 @@ async function getAgentRunnerType(confId: string): Promise<string> {
     try {
         const res = await configProfileApi.get(confId);
         const config = ((res.data.data as any).config || {}) as any;
-        const type = config?.agent_runner?.runner_type || 'local';
+        const type = config?.agent?.runtime || 'astrbot';
         configCache.value[confId] = type;
         return type;
     } catch (error) {
         console.error('获取配置文件详情失败', error);
-        return 'local';
+        return 'astrbot';
     }
 }
 

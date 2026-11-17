@@ -10,14 +10,17 @@ from slack_sdk.web.async_client import AsyncWebClient
 from astrbot.api import logger
 from astrbot.api.event import AstrMessageEvent, MessageChain
 from astrbot.api.message_components import (
+    ActionRow,
     At,
     BaseMessageComponent,
+    Button,
     File,
     Image,
     Plain,
     Record,
 )
 from astrbot.api.platform import Group, MessageMember
+from astrbot.core.platform.button_interaction import encode_button_callback
 from astrbot.core.utils.media_utils import MediaResolver, file_uri_to_path
 
 
@@ -110,6 +113,44 @@ class SlackMessageEvent(AstrMessageEvent):
                     "text": f"文件: <{file_url}|{segment.name or '文件'}>",
                 },
             }
+        if isinstance(segment, ActionRow):
+            elements = []
+            for button in segment.buttons:
+                if len(button.label) > 75:
+                    raise ValueError("Slack button labels cannot exceed 75 characters")
+                if len(button.id) > 255:
+                    raise ValueError("Slack button IDs cannot exceed 255 characters")
+
+                element = {
+                    "type": "button",
+                    "text": {"type": "plain_text", "text": button.label},
+                    "action_id": button.id,
+                }
+                if isinstance(button.action, Button.CallbackAction):
+                    value = encode_button_callback(
+                        button.id,
+                        button.action.data,
+                        expires_at=segment.action_expires_at,
+                    )
+                    if len(value.encode("utf-8")) > 2000:
+                        raise ValueError(
+                            "Slack callback payloads cannot exceed 2000 bytes"
+                        )
+                    element["value"] = value
+                elif isinstance(button.action, Button.UrlAction):
+                    element["url"] = button.action.url
+
+                if button.style.value in {"primary", "success"}:
+                    element["style"] = "primary"
+                elif button.style.value == "danger":
+                    element["style"] = "danger"
+                elements.append(element)
+
+            if len(elements) > 25:
+                raise ValueError(
+                    "Slack action rows cannot contain more than 25 buttons"
+                )
+            return {"type": "actions", "elements": elements}
 
     @staticmethod
     async def _parse_slack_blocks(
@@ -131,6 +172,7 @@ class SlackMessageEvent(AstrMessageEvent):
         """
         blocks = []
         text_content = ""
+        fallback_text = ""
         plain_texts = (plain_texts or set()) | {
             segment.text
             for segment in message_chain.chain
@@ -140,6 +182,7 @@ class SlackMessageEvent(AstrMessageEvent):
         for segment in message_chain.chain:
             if isinstance(segment, Plain):
                 text_content += segment.text
+                fallback_text += segment.text
             elif isinstance(segment, At):
                 text_content += f"<@{segment.qq}>"
             elif isinstance(segment, Record):
@@ -183,6 +226,10 @@ class SlackMessageEvent(AstrMessageEvent):
                 )
                 if block:
                     blocks.append(block)
+                if isinstance(segment, ActionRow):
+                    fallback_text += segment.fallback_text or " / ".join(
+                        button.label for button in segment.buttons
+                    )
 
         # 如果最后还有文本内容
         if text_content.strip():
@@ -190,6 +237,8 @@ class SlackMessageEvent(AstrMessageEvent):
                 {"type": "section", "text": {"type": "mrkdwn", "text": text_content}},
             )
 
+        if any(isinstance(segment, ActionRow) for segment in message_chain.chain):
+            return blocks, fallback_text
         return blocks, "" if blocks else text_content
 
     @staticmethod
@@ -250,6 +299,11 @@ class SlackMessageEvent(AstrMessageEvent):
                         parts.append(f" [文件: {segment.name}] ")
                     elif isinstance(segment, Image):
                         parts.append(" [图片] ")
+                    elif isinstance(segment, ActionRow):
+                        parts.append(
+                            segment.fallback_text
+                            or " / ".join(button.label for button in segment.buttons)
+                        )
                     elif (
                         isinstance(segment, Record) and segment.text not in plain_texts
                     ):

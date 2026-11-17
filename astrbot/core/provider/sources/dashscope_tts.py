@@ -36,6 +36,9 @@ class ProviderDashscopeTTSAPI(TTSProvider):
         super().__init__(provider_config, provider_settings)
         self.chosen_api_key: str = provider_config.get("api_key", "")
         self.voice: str = provider_config.get("dashscope_tts_voice", "loongstella")
+        self.websocket_url = (
+            provider_config.get("dashscope_tts_websocket_url") or ""
+        ).strip() or None
         self.set_model(provider_config["model"])
         self.timeout_ms = float(provider_config.get("timeout", 20)) * 1000
         dashscope.api_key = self.chosen_api_key
@@ -143,11 +146,18 @@ class ProviderDashscopeTTSAPI(TTSProvider):
     ) -> tuple[bytes | None, str]:
         synthesizer = SpeechSynthesizer(
             headers={
-                name.lower(): value for name, value in self.request_headers.items()
+                **{
+                    name.lower(): value
+                    for name, value in self.request_headers.items()
+                    if name.lower() != "authorization"
+                },
+                # Override the SDK's globally configured key for this instance.
+                "Authorization": f"Bearer {self.chosen_api_key}",
             },
             model=model,
             voice=self.voice,
             format=AudioFormat.WAV_24000HZ_MONO_16BIT,
+            url=self.websocket_url,
         )
         loop = asyncio.get_running_loop()
         audio_bytes = await loop.run_in_executor(
@@ -166,4 +176,9 @@ class ProviderDashscopeTTSAPI(TTSProvider):
 
     def _is_qwen_tts_model(self, model: str) -> bool:
         model_lower = model.lower()
-        return "tts" in model_lower and model_lower.startswith("qwen")
+        # Qwen-Audio-TTS uses SpeechSynthesizer rather than MultiModalConversation.
+        return (
+            "tts" in model_lower
+            and model_lower.startswith("qwen")
+            and not model_lower.startswith("qwen-audio-")
+        )
