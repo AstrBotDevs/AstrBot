@@ -292,7 +292,7 @@ class Record(BaseMessageComponent):
     def fromURL(url: str, **_):
         if url.startswith("http://") or url.startswith("https://"):
             return Record(file=url, **_)
-        raise Exception("not a valid url")
+        raise ValueError("not a valid url")
 
     @staticmethod
     def fromBase64(bs64_data: str, **_):
@@ -373,7 +373,7 @@ class Record(BaseMessageComponent):
         """
         file_source = await self._resolve_file_source()
         if not file_source:
-            raise Exception(f"not a valid file: {self.file}")
+            raise ValueError(f"not a valid file: {self.file}")
         return await MediaResolver(
             file_source,
             media_type="audio",
@@ -389,7 +389,7 @@ class Record(BaseMessageComponent):
         """
         file_source = await self._resolve_file_source()
         if not file_source:
-            raise Exception(f"not a valid file: {self.file}")
+            raise ValueError(f"not a valid file: {self.file}")
         return await MediaResolver(
             file_source,
             media_type="audio",
@@ -409,7 +409,7 @@ class Record(BaseMessageComponent):
         callback_host = astrbot_config.get("callback_api_base")
 
         if not callback_host:
-            raise Exception("未配置 callback_api_base，文件服务不可用")
+            raise ConnectionError("未配置 callback_api_base，文件服务不可用")
 
         file_path = await self.convert_to_file_path()
 
@@ -440,7 +440,7 @@ class Video(BaseMessageComponent):
     def fromURL(url: str, **_):
         if url.startswith("http://") or url.startswith("https://"):
             return Video(file=url, **_)
-        raise Exception("not a valid url")
+        raise ValueError("not a valid url")
 
     @staticmethod
     def fromBase64(base64_data: str, **_):
@@ -482,7 +482,7 @@ class Video(BaseMessageComponent):
         """
         file_source = await self._resolve_file_source()
         if not file_source:
-            raise Exception(f"not a valid file: {self.file}")
+            raise ValueError(f"not a valid file: {self.file}")
 
         if is_file_uri(file_source):
             return file_uri_to_path(file_source)
@@ -497,7 +497,7 @@ class Video(BaseMessageComponent):
                 return os.path.abspath(file_source)
         except OSError:
             pass
-        raise Exception(f"not a valid file: {file_source}")
+        raise ValueError(f"not a valid file: {file_source}")
 
     async def register_to_file_service(self) -> str:
         """将视频注册到文件服务。
@@ -512,7 +512,7 @@ class Video(BaseMessageComponent):
         callback_host = astrbot_config.get("callback_api_base")
 
         if not callback_host:
-            raise Exception("未配置 callback_api_base，文件服务不可用")
+            raise ConnectionError("未配置 callback_api_base，文件服务不可用")
 
         file_path = await self.convert_to_file_path()
 
@@ -648,7 +648,7 @@ class Image(BaseMessageComponent):
     def fromURL(url: str, **_):
         if url.startswith("http://") or url.startswith("https://"):
             return Image(file=url, **_)
-        raise Exception("not a valid url")
+        raise ValueError("not a valid url")
 
     @staticmethod
     def fromFileSystem(path, **_):
@@ -711,7 +711,7 @@ class Image(BaseMessageComponent):
         callback_host = astrbot_config.get("callback_api_base")
 
         if not callback_host:
-            raise Exception("未配置 callback_api_base，文件服务不可用")
+            raise ConnectionError("未配置 callback_api_base，文件服务不可用")
 
         file_path = await self.convert_to_file_path()
 
@@ -1026,7 +1026,7 @@ class File(BaseMessageComponent):
         callback_host = astrbot_config.get("callback_api_base")
 
         if not callback_host:
-            raise Exception("未配置 callback_api_base，文件服务不可用")
+            raise ConnectionError("未配置 callback_api_base，文件服务不可用")
 
         file_path = await self.get_file()
 
