@@ -59,6 +59,7 @@ class DiscordPlatformEvent(AstrMessageEvent):
         super().__init__(message_str, message_obj, platform_meta, session_id)
         self.client = client
         self.interaction_followup_webhook = interaction_followup_webhook
+        self._typing_task: asyncio.Task | None = None
 
     async def send(self, message: MessageChain) -> None:
         """发送消息到Discord平台"""
@@ -125,6 +126,34 @@ class DiscordPlatformEvent(AstrMessageEvent):
         buffer.squash_plain()
         await self.send(buffer)
         return await super().send_streaming(generator, use_fallback)
+
+    async def send_typing(self) -> None:
+        """在频道中显示“正在输入…”，直到 stop_typing() 被调用。"""
+        # 斜杠指令已经由 defer 显示“思考中”，无需额外处理
+        if self.interaction_followup_webhook:
+            return
+        if self._typing_task and not self._typing_task.done():
+            return
+        channel = await self._get_channel()
+        if not isinstance(channel, discord.abc.Messageable):
+            return
+        self._typing_task = asyncio.create_task(self._typing_loop(channel))
+
+    async def _typing_loop(self, channel: discord.abc.Messageable) -> None:
+        # Discord 的输入状态约 10 秒后失效，需要定期刷新
+        try:
+            while True:
+                await channel.trigger_typing()
+                await asyncio.sleep(8)
+        except asyncio.CancelledError:
+            raise
+        except Exception as e:
+            logger.debug(f"[Discord] 发送输入状态失败: {e}")
+
+    async def stop_typing(self) -> None:
+        task, self._typing_task = self._typing_task, None
+        if task and not task.done():
+            task.cancel()
 
     async def _get_channel(
         self,
