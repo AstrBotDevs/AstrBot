@@ -4,6 +4,7 @@ import inspect
 import json
 import random
 import re
+from collections import Counter
 from collections.abc import AsyncGenerator
 from contextlib import aclosing
 from typing import Any, Literal
@@ -453,12 +454,10 @@ class ProviderOpenAIOfficial(Provider):
 
     @staticmethod
     def _sanitize_assistant_messages(payloads: dict) -> None:
-        """在请求发送前过滤/规范化空的 assistant 消息。
+        """Normalize assistant messages and pair tool calls with their results.
 
-        严格 API（Moonshot、DeepSeek Reasoner 等）会在 assistant 消息同时缺少
-        ``content`` 和 ``tool_calls`` 时返回 400。把 ``""`` / ``None`` / ``[]``
-        都视作空内容：无 tool_calls 时整条过滤掉；有 tool_calls 时将 content
-        设为 ``None`` 以符合 OpenAI 规范。就地修改 ``payloads["messages"]``。
+        Args:
+            payloads: Request payload to update in place before sending.
         """
         messages = payloads.get("messages")
         if not isinstance(messages, list):
@@ -467,6 +466,7 @@ class ProviderOpenAIOfficial(Provider):
         def _is_empty(content: Any) -> bool:
             return content is None or content == "" or content == []
 
+        removed_assistant = object()
         cleaned: list[Any] = []
         for idx, msg in enumerate(messages):
             if not isinstance(msg, dict) or msg.get("role") != "assistant":
@@ -477,12 +477,36 @@ class ProviderOpenAIOfficial(Provider):
             tool_calls = msg.get("tool_calls")
             reasoning_content = msg.get("reasoning_content")
 
+            if tool_calls:
+                counts = Counter(
+                    tc["id"] for tc in tool_calls if isinstance(tc, dict) and "id" in tc
+                )
+                ambiguous_ids = {
+                    call_id for call_id, count in counts.items() if count > 1
+                }
+                if ambiguous_ids:
+                    # A repeated ID in the same batch cannot be reliably matched
+                    # to its result. Omit those calls and their results from this
+                    # request without changing the saved conversation.
+                    tool_calls = [
+                        tc
+                        for tc in tool_calls
+                        if not isinstance(tc, dict) or tc.get("id") not in ambiguous_ids
+                    ]
+                    if tool_calls:
+                        msg["tool_calls"] = tool_calls
+                    else:
+                        msg.pop("tool_calls", None)
+
             if _is_empty(content) and not tool_calls:
                 if not reasoning_content:
                     # 三者全空，真正的垃圾消息，丢弃
                     logger.debug(
                         f"过滤第 {idx} 条空 assistant 消息 (无 content | tool_calls | reasoning_content)"
                     )
+                    # Keep a boundary so a later tool result cannot be matched
+                    # to a call preceding this removed assistant message.
+                    cleaned.append(removed_assistant)
                     continue
                 else:
                     # ⭐ 有 reasoning_content 但没有 content 和 tool_calls
@@ -498,31 +522,73 @@ class ProviderOpenAIOfficial(Provider):
 
         # Drop orphaned or duplicate tool messages whose assistant(tool_calls)
         # was removed by context truncation / compression.
-        pending_tool_call_ids: set[str] = set()
+        reserved_tool_call_ids = {
+            tc["id"]
+            for msg in cleaned
+            if isinstance(msg, dict) and msg.get("role") == "assistant"
+            for tc in msg.get("tool_calls") or []
+            if isinstance(tc, dict) and "id" in tc
+        }
+        used_tool_call_ids: set[str] = set()
+        pending_tool_call_ids: dict[str, str] = {}
+        pending_assistant = None
         final: list = []
         removed_tool_messages = 0
-        for msg in cleaned:
+        for msg_index, msg in enumerate([*cleaned, removed_assistant]):
+            role = msg.get("role") if isinstance(msg, dict) else None
+            if role != "tool" and pending_tool_call_ids:
+                # An assistant tool call requires a corresponding tool result.
+                # Remove unanswered calls before the next message or end of input.
+                unanswered_ids = set(pending_tool_call_ids.values())
+                pending_assistant["tool_calls"] = [
+                    tc
+                    for tc in pending_assistant["tool_calls"]
+                    if not isinstance(tc, dict) or tc.get("id") not in unanswered_ids
+                ]
+                if not pending_assistant["tool_calls"]:
+                    pending_assistant.pop("tool_calls")
+                    if _is_empty(pending_assistant.get("content")):
+                        if pending_assistant.get("reasoning_content"):
+                            pending_assistant["content"] = ""
+                        else:
+                            final.pop()
+                pending_tool_call_ids = {}
+            if msg is removed_assistant:
+                continue
             if not isinstance(msg, dict):
                 final.append(msg)
-                pending_tool_call_ids = set()
+                pending_tool_call_ids = {}
                 continue
-            role = msg.get("role")
             if role == "assistant" and msg.get("tool_calls"):
-                pending_tool_call_ids = {
-                    tc["id"]
-                    for tc in msg["tool_calls"]
-                    if isinstance(tc, dict) and "id" in tc
-                }
+                pending_assistant = msg
+                pending_tool_call_ids = {}
+                for tc in msg["tool_calls"]:
+                    if not isinstance(tc, dict) or "id" not in tc:
+                        continue
+                    original_id = tc["id"]
+                    call_id = original_id
+                    if call_id in used_tool_call_ids:
+                        suffix = 0
+                        call_id = f"call_astrbot_{msg_index}_{suffix}"
+                        while (
+                            call_id in reserved_tool_call_ids
+                            or call_id in used_tool_call_ids
+                        ):
+                            suffix += 1
+                            call_id = f"call_astrbot_{msg_index}_{suffix}"
+                        tc["id"] = call_id
+                    used_tool_call_ids.add(call_id)
+                    pending_tool_call_ids[original_id] = call_id
                 final.append(msg)
             elif role == "tool":
                 tool_call_id = msg.get("tool_call_id")
                 if tool_call_id in pending_tool_call_ids:
+                    msg["tool_call_id"] = pending_tool_call_ids.pop(tool_call_id)
                     final.append(msg)
-                    pending_tool_call_ids.remove(tool_call_id)
                 else:
                     removed_tool_messages += 1
             else:
-                pending_tool_call_ids = set()
+                pending_tool_call_ids = {}
                 final.append(msg)
         if removed_tool_messages:
             logger.debug(

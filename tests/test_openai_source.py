@@ -1,5 +1,6 @@
 import base64
 import builtins
+import copy
 from contextlib import aclosing
 from io import BytesIO
 from pathlib import Path
@@ -1804,6 +1805,130 @@ async def test_query_stream_normalizes_tool_call_identity_and_index(monkeypatch)
         await provider.terminate()
 
 
+def test_sanitize_assistant_messages_renames_reused_ids_across_rounds():
+    def call(call_id):
+        return {
+            "id": call_id,
+            "type": "function",
+            "function": {"name": "search", "arguments": "{}"},
+        }
+
+    payloads = {
+        "messages": [
+            {"role": "assistant", "tool_calls": [call("search")]},
+            {"role": "tool", "tool_call_id": "search", "content": "first"},
+            {"role": "assistant", "tool_calls": [call("search")]},
+            {"role": "tool", "tool_call_id": "search", "content": "second"},
+            {"role": "assistant", "tool_calls": [call("call_astrbot_2_0")]},
+            {"role": "tool", "tool_call_id": "call_astrbot_2_0", "content": "third"},
+        ]
+    }
+
+    ProviderOpenAIOfficial._sanitize_assistant_messages(payloads)
+
+    messages = payloads["messages"]
+    first = messages[0]["tool_calls"][0]["id"]
+    second = messages[2]["tool_calls"][0]["id"]
+    third = messages[4]["tool_calls"][0]["id"]
+    assert (first, third) == ("search", "call_astrbot_2_0")
+    assert len({first, second, third}) == 3
+    assert [messages[i]["tool_call_id"] for i in (1, 3, 5)] == [
+        first,
+        second,
+        third,
+    ]
+    assert [messages[i]["content"] for i in (1, 3, 5)] == [
+        "first",
+        "second",
+        "third",
+    ]
+    sanitized = copy.deepcopy(payloads)
+    ProviderOpenAIOfficial._sanitize_assistant_messages(payloads)
+    assert payloads == sanitized
+
+
+def test_sanitize_assistant_messages_keeps_only_resolved_unambiguous_calls():
+    def call(call_id, argument):
+        return {
+            "id": call_id,
+            "type": "function",
+            "function": {"name": "search", "arguments": argument},
+        }
+
+    payloads = {
+        "messages": [
+            {"role": "user", "content": "hello"},
+            {
+                "role": "assistant",
+                "tool_calls": [
+                    call("duplicate", "first"),
+                    call("duplicate", "second"),
+                    call("unique", "third"),
+                    call("missing", "fourth"),
+                ],
+            },
+            {"role": "tool", "tool_call_id": "duplicate", "content": "ambiguous"},
+            {"role": "tool", "tool_call_id": "unique", "content": "known"},
+            {"role": "assistant", "content": "done"},
+        ]
+    }
+
+    ProviderOpenAIOfficial._sanitize_assistant_messages(payloads)
+
+    assert payloads["messages"] == [
+        {"role": "user", "content": "hello"},
+        {"role": "assistant", "content": None, "tool_calls": [call("unique", "third")]},
+        {"role": "tool", "tool_call_id": "unique", "content": "known"},
+        {"role": "assistant", "content": "done"},
+    ]
+
+
+def test_sanitize_assistant_messages_omits_empty_ambiguous_batch():
+    payloads = {
+        "messages": [
+            {"role": "user", "content": "hello"},
+            {
+                "role": "assistant",
+                "tool_calls": [
+                    {"id": "duplicate", "function": {"name": "first"}},
+                    {"id": "duplicate", "function": {"name": "second"}},
+                ],
+            },
+            {"role": "tool", "tool_call_id": "duplicate", "content": "ambiguous"},
+            {"role": "assistant", "content": "done"},
+        ]
+    }
+
+    ProviderOpenAIOfficial._sanitize_assistant_messages(payloads)
+
+    assert payloads["messages"] == [
+        {"role": "user", "content": "hello"},
+        {"role": "assistant", "content": "done"},
+    ]
+
+
+def test_sanitize_assistant_messages_does_not_match_results_across_removed_batch():
+    payloads = {
+        "messages": [
+            {"role": "user", "content": "hello"},
+            {"role": "assistant", "tool_calls": [{"id": "reused"}]},
+            {
+                "role": "assistant",
+                "tool_calls": [{"id": "reused"}, {"id": "reused"}],
+            },
+            {"role": "tool", "tool_call_id": "reused", "content": "ambiguous"},
+            {"role": "assistant", "content": "done"},
+        ]
+    }
+
+    ProviderOpenAIOfficial._sanitize_assistant_messages(payloads)
+
+    assert payloads["messages"] == [
+        {"role": "user", "content": "hello"},
+        {"role": "assistant", "content": "done"},
+    ]
+
+
 def test_sanitize_assistant_messages_removes_orphaned_tool_messages():
     payloads = {
         "messages": [
@@ -1935,17 +2060,6 @@ def test_sanitize_assistant_messages_resets_tool_ids_after_non_tool_message():
     ProviderOpenAIOfficial._sanitize_assistant_messages(payloads)
 
     assert payloads["messages"] == [
-        {
-            "role": "assistant",
-            "content": None,
-            "tool_calls": [
-                {
-                    "id": "call_00",
-                    "type": "function",
-                    "function": {"name": "search", "arguments": "{}"},
-                }
-            ],
-        },
         {"role": "user", "content": "new turn"},
     ]
 
@@ -2112,6 +2226,7 @@ async def test_query_converts_empty_content_to_none_with_tool_calls(monkeypatch)
                         }
                     ],
                 },
+                {"role": "tool", "tool_call_id": "call-123", "content": "result"},
                 {"role": "user", "content": "world"},
             ],
         }
@@ -2120,7 +2235,7 @@ async def test_query_converts_empty_content_to_none_with_tool_calls(monkeypatch)
 
         # The assistant message with tool_calls should be kept but content set to None
         messages = captured_kwargs["messages"]
-        assert len(messages) == 3
+        assert len(messages) == 4
         assert messages[1]["role"] == "assistant"
         assert messages[1]["content"] is None
         assert messages[1]["tool_calls"] is not None
@@ -2234,6 +2349,7 @@ async def test_query_keeps_assistant_message_with_tool_calls_and_none_content(
                         }
                     ],
                 },
+                {"role": "tool", "tool_call_id": "call-123", "content": "result"},
                 {"role": "user", "content": "world"},
             ],
         }
@@ -2242,7 +2358,7 @@ async def test_query_keeps_assistant_message_with_tool_calls_and_none_content(
 
         # The assistant message with tool_calls should be kept
         messages = captured_kwargs["messages"]
-        assert len(messages) == 3
+        assert len(messages) == 4
         assert messages[1]["role"] == "assistant"
         assert messages[1]["content"] is None
         assert messages[1]["tool_calls"] is not None
