@@ -37,7 +37,7 @@ class MockShipyardSandboxClient:
                     return await response.json()
                 else:
                     error_text = await response.text()
-                    raise Exception(
+                    raise ConnectionError(
                         f"Failed to exec operation: {response.status} {error_text}"
                     )
 
