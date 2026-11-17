@@ -519,7 +519,7 @@ class OpenApiService:
 
                 if should_save:
                     message_parts_to_save = message_accumulator.build_message_parts(
-                        include_pending_tool_calls=True
+                        final=msg_type == "end"
                     )
                     plain_text = collect_plain_text_from_message_parts(
                         message_parts_to_save

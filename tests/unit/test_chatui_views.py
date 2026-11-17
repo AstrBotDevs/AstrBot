@@ -768,8 +768,11 @@ async def test_views_and_control_events_do_not_split_saved_replies(scenario):
     if scenario == "ack_only":
         service.save_bot_message.assert_not_awaited()
         return
-    service.save_bot_message.assert_awaited_once()
-    saved = service.save_bot_message.await_args.args
+    # One record per turn: the first save inserts it, later saves update it.
+    calls = service.save_bot_message.await_args_list
+    assert calls
+    assert all(call.kwargs.get("record") is not None for call in calls[1:])
+    saved = calls[-1].args
     parts = saved[1]
     assert sum(part["type"] == "view" for part in parts) == 1
     if scenario == "tool_reply":
