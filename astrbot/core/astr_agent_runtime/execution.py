@@ -62,7 +62,8 @@ async def create_native_runner(
 
     max_context_tokens = provider.provider_config.get("max_context_tokens", 0)
     if max_context_tokens <= 0:
-        model_info = LLM_METADATAS.get(provider.get_model())
+        # Use the model selected for this request, not the provider's default.
+        model_info = LLM_METADATAS.get(request.model or provider.get_model())
         max_context_tokens = (
             model_info["limit"]["context"]
             if model_info
