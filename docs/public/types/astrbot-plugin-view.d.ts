@@ -51,17 +51,26 @@ export interface ViewSnapshot<TData = JsonObject> {
 
 export interface StandalonePageContext extends BaseContext {
   target: "plugin_page";
+  sessionId: null;
   view?: never;
 }
 
 export interface MessageViewContext<TData = JsonObject> extends BaseContext {
-  target: "chat_message";
+  target: "chat_message" | "chat_workbench";
   view: ViewSnapshot<TData>;
+  sessionId?: never;
+}
+
+export interface ResidentWorkbenchContext extends BaseContext {
+  target: "chat_workbench";
+  sessionId: string | null;
+  view?: never;
 }
 
 export type BridgeContext<TData = JsonObject> =
   | StandalonePageContext
-  | MessageViewContext<TData>;
+  | MessageViewContext<TData>
+  | ResidentWorkbenchContext;
 // #endregion context
 
 // #region sse
@@ -92,6 +101,10 @@ export interface DownloadResult {
   filename: string;
 }
 
+export interface ChatResult {
+  sessionId: string | null;
+}
+
 export interface UnsubscribeSSEResult {
   subscriptionId: string;
 }
@@ -115,6 +128,11 @@ export interface AstrBotPluginViewBridge<TViewData = JsonObject> {
       handler: (snapshot: ViewSnapshot<TViewData>) => void,
     ): Unsubscribe;
     action(actionId: string, data?: JsonValue): Promise<void>;
+  };
+
+  chat: {
+    fill(text: string): Promise<ChatResult>;
+    send(text: string): Promise<ChatResult>;
   };
 
   apiGet<TResult = unknown>(

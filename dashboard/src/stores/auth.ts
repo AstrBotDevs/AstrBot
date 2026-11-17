@@ -1,4 +1,6 @@
 import { defineStore } from 'pinia';
+import { useCustomizerStore } from '@/stores/customizer';
+import { chatPreferences } from '@/utils/chatPreferences';
 import { router } from '@/router';
 import {
   authApi,
@@ -23,6 +25,8 @@ export const useAuthStore = defineStore("auth", {
       this.username = data.username;
       localStorage.setItem('user', this.username);
       localStorage.setItem('token', data.token);
+      useProviderModelSelection();
+      useCustomizerStore().chatNavigationInSidebar = chatPreferences().global.navigationInSidebar === true;
       const passwordUpgradeRequired = !!data?.password_upgrade_required;
       const md5PwdHint = !!data?.md5_pwd_hint;
       const passwordWarning =
@@ -174,19 +178,14 @@ export const useAuthStore = defineStore("auth", {
     },
     logout() {
       this.username = '';
-      useProviderModelSelection().setSelection('');
+      useProviderModelSelection().resetSelection();
+      useCustomizerStore().chatNavigationInSidebar = false;
       try {
         localStorage.removeItem('user');
         localStorage.removeItem('token');
         localStorage.removeItem('change_pwd_hint');
         localStorage.removeItem('md5_pwd_hint');
         localStorage.removeItem('password_upgrade_required');
-        for (let index = localStorage.length - 1; index >= 0; index--) {
-          const key = localStorage.key(index);
-          if (key?.startsWith('chat.sessionProvider.')) {
-            localStorage.removeItem(key);
-          }
-        }
       } catch {
         // Storage availability must not prevent logout or the in-memory reset.
       }

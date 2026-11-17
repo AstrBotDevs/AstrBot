@@ -277,5 +277,21 @@
   "pluginView": {
     "loading": "正在加载视图…",
     "unavailable": "视图暂不可用，已显示文字结果。"
+  },
+  "workbench": {
+    "newTab": "新工作台",
+    "chooseView": "选择一个插件视图",
+    "empty": "还没有注册的工作台视图。启用提供此类视图的插件后，会显示在这里。",
+    "loadError": "无法加载工作台视图。",
+    "retry": "重试",
+
+    "title": "工作台",
+    "openView": "在工作台中打开",
+    "hide": "收起工作台",
+    "expand": "展开工作台",
+    "restore": "还原面板大小",
+    "resize": "调整工作台宽度",
+    "closeTab": "关闭 {title}",
+    "resize": "调整工作台宽度"
   }
 }

@@ -59,7 +59,10 @@
 
   function makeRequest(action, payload, transfer) {
     return new Promise((resolve, reject) => {
-      if (context?.target === "chat_message" && action !== "view:action") {
+      if (
+        (context?.target === "chat_message" || (context?.target === "chat_workbench" && context?.view)) &&
+        action !== "view:action"
+      ) {
         reject(
           Object.assign(
             new Error("This capability is unavailable in chat views."),
@@ -347,7 +350,10 @@
     },
     view: {
       subscribe(handler) {
-        if (context?.target !== "chat_message" || !context.view) {
+        if (
+          !["chat_message", "chat_workbench"].includes(context?.target) ||
+          !context.view
+        ) {
           throw Object.assign(
             new Error(
               "No chat view snapshot is available. Await bridge.ready() first.",
@@ -363,9 +369,12 @@
       },
       async action(actionId, data = null) {
         await readyPromise;
-        if (context?.target !== "chat_message" || !context.view) {
+        if (
+          !["chat_message", "chat_workbench"].includes(context?.target) ||
+          !context.view
+        ) {
           throw Object.assign(
-            new Error("View actions require a chat message."),
+            new Error("View actions require a ChatUI view."),
             { code: "UNSUPPORTED_CAPABILITY" },
           );
         }
@@ -392,6 +401,18 @@
         } finally {
           viewBusy = false;
         }
+      },
+    },
+    chat: {
+      async fill(text) {
+        await readyPromise;
+        if (context?.target !== "chat_workbench" || context.view) throw Object.assign(new Error("Chat control requires a workbench launcher view."), { code: "UNSUPPORTED_CAPABILITY" });
+        return makeRequest("chat:fill", { text, sessionId: context.sessionId || null });
+      },
+      async send(text) {
+        await readyPromise;
+        if (context?.target !== "chat_workbench" || context.view) throw Object.assign(new Error("Chat control requires a workbench launcher view."), { code: "UNSUPPORTED_CAPABILITY" });
+        return makeRequest("chat:send", { text, sessionId: context.sessionId || null });
       },
     },
     apiGet(endpoint, params) {

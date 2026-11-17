@@ -1,6 +1,6 @@
 # Backend Web APIs
 
-Standalone plugin pages call these endpoints through the Bridge. Message components use `@filter.ui_action`; see [Interactive message component](./chat-message.md).
+Standalone plugin pages and resident workbench pages call these endpoints through the Bridge. Message components and message-created workbench pages use `@filter.ui_action`; see [Interactive message component](./chat-message.md).
 
 Requests use the signed-in user's identity. Validate business permissions in the plugin. For session data, check ownership against `request.username`; a client-supplied `session_id` is not authorization.
 

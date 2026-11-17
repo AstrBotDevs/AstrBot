@@ -4,12 +4,13 @@
 
 ## 可用能力 {#capabilities}
 
-| 接口 | 独立页面 | 消息组件 |
-| --- | --- | --- |
-| `ready`、`getContext`、`onContext` | 支持 | 支持 |
-| 主题 CSS tokens、国际化 | 支持 | 支持 |
-| `view.subscribe`、`view.action` | — | 支持 |
-| `apiGet`、`apiPost`、上传下载、SSE | 支持 | — |
+| 接口 | 独立页面 | 消息组件 / 消息创建的工作台 | 常驻工作台 |
+| --- | --- | --- | --- |
+| `ready`、`getContext`、`onContext` | 支持 | 支持 | 支持 |
+| 主题 CSS tokens、国际化 | 支持 | 支持 | 支持 |
+| `view.subscribe`、`view.action` | — | 支持 | — |
+| `apiGet`、`apiPost`、上传下载、SSE | 支持 | — | 支持 |
+| `chat.fill`、`chat.send` | — | — | 支持 |
 
 未支持的操作返回 `UNSUPPORTED_CAPABILITY`。`AstrBotPluginPage` 是兼容别名，新代码使用 `AstrBotPluginView`。
 
@@ -64,10 +65,12 @@ const context = await bridge.ready();
 
 `target` 与 `view` 一起区分宿主：
 
-| 宿主 | `target` | `view` |
-| --- | --- | --- |
-| 独立页面 | `plugin_page` | 无 |
-| 消息组件 | `chat_message` | `ViewSnapshot` |
+| 宿主 | `target` | `view` | `sessionId` |
+| --- | --- | --- | --- |
+| 独立页面 | `plugin_page` | 无 | `null` |
+| 消息组件 | `chat_message` | `ViewSnapshot` | 无此字段 |
+| 消息创建的工作台 | `chat_workbench` | `ViewSnapshot` | 无此字段 |
+| 常驻工作台 | `chat_workbench` | 无 | 当前会话 ID，未打开会话时为 `null` |
 
 `view` 只有 `id`、`revision`、`data`，不包含 Python `UIInteraction.view` 的 `name`、`version`。视图注册名称读取 `context.pageName`。`i18n` 按 locale 分组，例如 `{ "zh-CN": { "views": { "counter": { "title": "计数器" } } } }`。`themeColors` 的额外键由宿主主题提供；页面配色优先使用下文列出的 CSS tokens。
 
@@ -308,17 +311,20 @@ window.addEventListener("beforeunload", () => {
 });
 ```
 
-## 消息视图交互
+## 消息视图与聊天操作
 
 ```ts
 view.subscribe(handler: (snapshot: ViewSnapshot<TViewData>) => void): Unsubscribe
 view.action(actionId: string, data?: JsonValue): Promise<void>
+chat.fill(text: string): Promise<ChatResult>
+chat.send(text: string): Promise<ChatResult>
 ```
 
 `view.subscribe()` 必须在 `ready()` 后调用。它立即传入当前快照的副本，后续收到相同或更高 revision 的快照时再次调用；取消函数只移除监听，不关闭 view。不要把每次通知都当作一次业务变更，也不要通过修改副本保存数据。
 
 `view.action()` 的 `data` 缺省为 `null`。成功返回 `undefined`，不返回新的快照；更新后的数据通过 `view.subscribe()` 或 `getContext().view` 读取。Promise 在回调执行和状态保存完成后结束，不等待后续模型生成。动作名必须在 `ViewSpec.actions` 中声明。
 
+`chat.fill()` 将文字追加到当前草稿并聚焦输入框，`chat.send()` 发到当前会话并保留原草稿与附件。两者成功都返回 `{ sessionId: string | null }`。`send` 要求已有会话且没有正在生成的回答，在发送请求被接受后完成，不等待回答。输入不能为空白，长度不能超过 100,000 个 UTF-16 码元。宿主条件与示例见[工作台页面](./workbench.md)。
 
 ## 返回值与错误类型 {#result-types}
 
@@ -331,7 +337,7 @@ view.action(actionId: string, data?: JsonValue): Promise<void>
 - `apiGet` / `download` 的 query 使用 Axios 序列化；`subscribeSSE` 则对每个参数调用 `String(value)`，不支持重复键或数组。SSE 可选参数应省略，不要传 `undefined` 或 `null`。
 - `apiPost` 不传 body 或传入 `null`、`false`、`0`、空字符串时，当前宿主会发送 `{}`；推荐使用 JSON 对象作为请求体。
 
-错误通常是 `Error`，`code` **不保证存在**。消息视图可返回 `UNSUPPORTED_CAPABILITY`、`ACTION_IN_PROGRESS`、`REVISION_CONFLICT` 等 code；插件 Web API 由宿主转发的错误只有 `message`，不能依赖 HTTP 状态码或后端附加字段。
+错误通常是 `Error`，`code` **不保证存在**。消息视图可返回 `UNSUPPORTED_CAPABILITY`、`ACTION_IN_PROGRESS`、`REVISION_CONFLICT` 等 code；插件 Web API 和聊天控制由宿主转发的错误只有 `message`，不能依赖 HTTP 状态码或后端附加字段。
 
 ```ts
 try {

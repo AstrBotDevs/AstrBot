@@ -44,5 +44,6 @@ The content is now organized under [Plugin views](./plugin-views/index.md):
 
 - [Standalone plugin page](./plugin-views/plugin-page.md)
 - [Interactive message component](./plugin-views/chat-message.md)
+- [Workbench page](./plugin-views/workbench.md)
 - [Shared Bridge API](./plugin-views/bridge.md)
 - [Backend Web APIs](./plugin-views/web-api.md)

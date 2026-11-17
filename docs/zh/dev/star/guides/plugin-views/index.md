@@ -6,19 +6,20 @@
 | --- | --- | --- | --- |
 | [独立插件页面](./plugin-page.md) | `plugin_page` | 设置、管理面板、日志 | WebUI 插件入口 |
 | [消息交互组件](./chat-message.md) | `chat_message` | 结果列表、选择器、确认表单 | 命令、消息处理器或工具返回 `event.view_result()` |
+| [工作台页面](./workbench.md) | `chat_workbench` | 文件预览、笔记、会话分析 | `event.view_result()` 或工作台「＋」入口 |
 
 ## 注册视图
 
 在插件的 `Star.chatui_views` 中声明 `chatui.ViewSpec`。`name` 在插件内唯一，入口为 `views/<name>/index.html`。在注册时指定 `target`，而不是在 `event.view_result()` 中指定。
 
-`target` 默认为 `chat_message`。`chat_message` 不会出现在独立插件页面列表中。未声明 `ViewSpec` 的 `views/` 子目录仍自动发现为独立页面。
+`target` 默认为 `chat_message`。`chat_message` 和 `chat_workbench` 不会出现在独立插件页面列表中。未声明 `ViewSpec` 的 `views/` 子目录仍自动发现为独立页面。
 
 如果只需要几个配置项，使用[插件配置](../plugin-config.md)即可。
 
 ## 选择交互方式
 
-- **消息组件**：使用 `bridge.view.action()` 调用 `@filter.ui_action`，通过 `event.view_result(data=...)` 更新视图数据。
-- **独立页面**：使用 `bridge.apiGet()`、`apiPost()` 等调用插件的[后端 Web API](./web-api.md)。
+- **消息组件、消息创建的工作台页面**：使用 `bridge.view.action()` 调用 `@filter.ui_action`，通过 `event.view_result(data=...)` 更新视图数据。
+- **独立页面、常驻工作台页面**：使用 `bridge.apiGet()`、`apiPost()` 等调用插件的[后端 Web API](./web-api.md)。
 
 所有界面共享[Bridge API](./bridge.md)中的初始化、主题和国际化接口。各宿主支持的操作见[能力表](./bridge.md#capabilities)。
 
@@ -27,7 +28,7 @@
 | 原入口 | 当前入口 |
 | --- | --- |
 | 插件可视化视图（`plugin-pages.md`） | 本节下的「独立插件页面」「共享 Bridge API」「后端 Web API」 |
-| ChatUI 交互卡片（`chatui-views.md`） | 本节下的「消息交互组件」 |
+| ChatUI 交互卡片（`chatui-views.md`） | 本节下的「消息交互组件」「工作台页面」 |
 
 旧链接保留跳转。
 :::

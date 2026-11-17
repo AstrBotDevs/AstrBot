@@ -4,12 +4,13 @@ All views use `window.AstrBotPluginView`. The host injects the SDK automatically
 
 ## Capabilities {#capabilities}
 
-| API | Standalone page | Message component |
-| --- | --- | --- |
-| `ready`, `getContext`, `onContext` | Supported | Supported |
-| Theme CSS tokens and localization | Supported | Supported |
-| `view.subscribe`, `view.action` | — | Supported |
-| `apiGet`, `apiPost`, upload, download, SSE | Supported | — |
+| API | Standalone page | Message component / message-created workbench | Resident workbench |
+| --- | --- | --- | --- |
+| `ready`, `getContext`, `onContext` | Supported | Supported | Supported |
+| Theme CSS tokens and localization | Supported | Supported | Supported |
+| `view.subscribe`, `view.action` | — | Supported | — |
+| `apiGet`, `apiPost`, file transfers, SSE | Supported | — | Supported |
+| `chat.fill`, `chat.send` | — | — | Supported |
 
 Unsupported operations return `UNSUPPORTED_CAPABILITY`. `AstrBotPluginPage` remains a compatibility alias; use `AstrBotPluginView` in new code.
 
@@ -64,10 +65,12 @@ const context = await bridge.ready();
 
 Use both `target` and `view` to identify the host:
 
-| Host | `target` | `view` |
-| --- | --- | --- |
-| Standalone page | `plugin_page` | Absent |
-| Message component | `chat_message` | `ViewSnapshot` |
+| Host | `target` | `view` | `sessionId` |
+| --- | --- | --- | --- |
+| Standalone page | `plugin_page` | Absent | `null` |
+| Message component | `chat_message` | `ViewSnapshot` | Absent |
+| Message-created workbench | `chat_workbench` | `ViewSnapshot` | Absent |
+| Resident workbench | `chat_workbench` | Absent | Active session ID, or `null` without a session |
 
 `view` contains only `id`, `revision`, and `data`, not the `name` or `version` fields of Python's `UIInteraction.view`. Read the registered view name from `context.pageName`. `i18n` is keyed by locale, for example `{ "en-US": { "views": { "counter": { "title": "Counter" } } } }`. Additional `themeColors` keys come from the host theme; prefer the CSS tokens listed below for styling.
 
@@ -308,17 +311,20 @@ window.addEventListener("beforeunload", () => {
 });
 ```
 
-## View actions
+## View actions and chat controls
 
 ```ts
 view.subscribe(handler: (snapshot: ViewSnapshot<TViewData>) => void): Unsubscribe
 view.action(actionId: string, data?: JsonValue): Promise<void>
+chat.fill(text: string): Promise<ChatResult>
+chat.send(text: string): Promise<ChatResult>
 ```
 
 Call `view.subscribe()` after `ready()`. It immediately supplies a copy of the current snapshot and runs again when a snapshot with the same or a higher revision arrives. Unsubscribing removes the listener without closing the view. Notifications do not necessarily indicate a business-data change; mutating the copy does not save data.
 
 The `data` argument of `view.action()` defaults to `null`. Success resolves to `undefined`, not a snapshot; read updated data through `view.subscribe()` or `getContext().view`. The promise settles after the callback and state commit, without waiting for subsequent model generation. Declare each action in `ViewSpec.actions`.
 
+`chat.fill()` appends to the draft and focuses the composer. `chat.send()` sends to the current session while preserving the draft and attachments. Both resolve to `{ sessionId: string | null }`. Sending requires an open session with no running reply, and resolves when the request is accepted rather than when the answer finishes. Text must not be blank or exceed 100,000 UTF-16 code units. See [Workbench page](./workbench.md) for host requirements and examples.
 
 ## Result and error types {#result-types}
 
@@ -331,7 +337,7 @@ The `data` argument of `view.action()` defaults to `null`. Success resolves to `
 - `apiGet` / `download` use Axios query serialization. `subscribeSSE` calls `String(value)` for each parameter and does not support repeated keys or arrays. Omit optional SSE parameters instead of passing `undefined` or `null`.
 - With an omitted body, `null`, `false`, `0`, or an empty string, the current `apiPost` host sends `{}`. Prefer JSON object request bodies.
 
-Failures are generally `Error` objects; `code` is **optional**. Message views can report codes such as `UNSUPPORTED_CAPABILITY`, `ACTION_IN_PROGRESS`, and `REVISION_CONFLICT`. Host-forwarded plugin Web API errors carry only a message, not an HTTP status or additional backend fields.
+Failures are generally `Error` objects; `code` is **optional**. Message views can report codes such as `UNSUPPORTED_CAPABILITY`, `ACTION_IN_PROGRESS`, and `REVISION_CONFLICT`. Host-forwarded plugin Web API and chat-control errors carry only a message, not an HTTP status or additional backend fields.
 
 ```ts
 try {

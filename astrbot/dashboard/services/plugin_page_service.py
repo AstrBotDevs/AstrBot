@@ -640,15 +640,30 @@ class PluginPageService:
         *,
         include_content_path: bool = False,
         asset_token: str = "",
+        target: str = "plugin_page",
     ) -> dict | None:
         plugin_name = plugin.name.strip() if isinstance(plugin.name, str) else ""
         if not plugin_name:
             return None
-        for spec in getattr(
-            plugin.star_cls or plugin.star_cls_type, "chatui_views", []
-        ):
-            if spec.name == view_name and spec.target == "chat_message":
+        declaration = next(
+            (
+                spec
+                for spec in getattr(
+                    plugin.star_cls or plugin.star_cls_type, "chatui_views", []
+                )
+                if spec.name == view_name
+            ),
+            None,
+        )
+        if target == "chat_workbench":
+            if (
+                not declaration
+                or declaration.target != target
+                or not declaration.launcher
+            ):
                 return None
+        elif target != "plugin_page" or (declaration and declaration.target != target):
+            return None
         try:
             page = await self.get_plugin_page(plugin, view_name)
             await self.resolve_plugin_page_file(plugin, page.name, "")
@@ -657,7 +672,9 @@ class PluginPageService:
 
         page_data = {
             "name": page.name,
-            "title": page.title,
+            "title": declaration.title or page.title if declaration else page.title,
+            "description": declaration.description if declaration else "",
+            "target": target,
             "i18n_key": f"pages.{page.name}",
         }
         if include_content_path and asset_token:
