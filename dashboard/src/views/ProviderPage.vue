@@ -413,27 +413,36 @@ const decisionHintKeys = {
 
 const legacyConfigSchema = computed(() => {
   const schema = JSON.parse(JSON.stringify(configSchema.value || {}))
-  const hintKey = decisionHintKeys[selectedLegacyProvider.value?.type]
-  if (!hintKey) return schema
+  const providerType = selectedLegacyProvider.value?.type
+  const hintKey = decisionHintKeys[providerType]
+  if (!hintKey && !['deepseek_tts_api', 'deepseek_stt_api'].includes(providerType)) return schema
 
   const items = schema.provider?.items
   if (!items) return schema
-  if (items.key) {
-    items.key.type = 'string'
-    delete items.key.items
+  if (hintKey) {
+    if (items.key) {
+      items.key.type = 'string'
+      delete items.key.items
+    }
+    // The schema only shows these fields for System One; every decision type uses them.
+    for (const field of ['total_timeout', 'max_concurrency']) {
+      if (items[field]) delete items[field].condition
+    }
+    if (items.api_base) items.api_base.hint = tm(`providers.${hintKey}.apiBase`)
+    if (items.model && providerType === 'openai_decision') {
+      items.model.hint = tm('providers.openaiDecisionHints.model')
+    } else if (items.model) {
+      items.model.hint = tm('providers.decisionHints.model')
+    }
+    if (items.custom_headers) {
+      items.custom_headers.hint = tm('providers.decisionHints.customHeaders')
+    }
   }
-  // The schema only shows these fields for System One; every decision type uses them.
-  for (const field of ['total_timeout', 'max_concurrency']) {
-    if (items[field]) delete items[field].condition
+  if (providerType === 'deepseek_tts_api' && items.api_base) {
+    items.api_base.hint = tm('providers.deepseekTtsHints.apiBase')
   }
-  if (items.api_base) items.api_base.hint = tm(`providers.${hintKey}.apiBase`)
-  if (items.model && selectedLegacyProvider.value?.type === 'openai_decision') {
-    items.model.hint = tm('providers.openaiDecisionHints.model')
-  } else if (items.model) {
-    items.model.hint = tm('providers.decisionHints.model')
-  }
-  if (items.custom_headers) {
-    items.custom_headers.hint = tm('providers.decisionHints.customHeaders')
+  if (providerType === 'deepseek_stt_api' && items.api_base) {
+    items.api_base.hint = tm('providers.deepseekSttHints.apiBase')
   }
   return schema
 })

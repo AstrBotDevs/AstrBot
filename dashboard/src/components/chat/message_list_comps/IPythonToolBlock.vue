@@ -24,7 +24,6 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue';
 import { useModuleI18n } from '@/i18n/composables';
-import { ensureShikiLanguages, escapeHtml, renderShikiCode } from '@/utils/shiki';
 
 const props = defineProps({
     toolCall: {
@@ -53,6 +52,7 @@ const { tm } = useModuleI18n('features/chat');
 const isExpanded = ref(props.initialExpanded);
 const shikiHighlighter = ref(null);
 const shikiReady = ref(false);
+let shiki;
 
 const code = computed(() => {
     try {
@@ -82,7 +82,7 @@ const highlightedCode = computed(() => {
         return '';
     }
     try {
-        return renderShikiCode(
+        return shiki.renderShikiCode(
             shikiHighlighter.value,
             code.value,
             'python',
@@ -90,7 +90,7 @@ const highlightedCode = computed(() => {
         );
     } catch (err) {
         console.error('Failed to highlight code:', err);
-        return `<pre><code>${escapeHtml(code.value)}</code></pre>`;
+        return `<pre><code>${shiki.escapeHtml(code.value)}</code></pre>`;
     }
 });
 
@@ -103,7 +103,8 @@ const displayExpanded = computed(() => {
 
 onMounted(async () => {
     try {
-        shikiHighlighter.value = await ensureShikiLanguages(['python']);
+        shiki = await import('@/utils/shiki');
+        shikiHighlighter.value = await shiki.ensureShikiLanguages(['python']);
         shikiReady.value = true;
     } catch (err) {
         console.error('Failed to initialize Shiki:', err);

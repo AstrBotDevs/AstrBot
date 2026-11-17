@@ -684,9 +684,9 @@ async def on_llm_tool_respond(
 
 ##### Agent 运行完成时
 
-内置工具循环在本轮执行退出时触发一次 `on_agent_done`，覆盖正常完成、模型错误、未处理异常、取消和步数耗尽。它不代表会话历史已经保存。可以读取 `run_context.run_end_reason`（`completed`、`error`、`cancelled` 或 `max_steps`）及 `run_context.run_error`（错误说明或 `None`）。进程被强制终止时无法执行清理钩子。
+内置 runner 在执行退出时调用一次 `on_agent_done`，包括错误、取消和步数耗尽。通过 `run_context.run_end_reason`（`completed`、`error`、`cancelled` 或 `max_steps`）和 `run_context.run_error` 读取结果。该 hook 不代表历史已保存。
 
-没有最终响应时，`resp` 可以是 `None`，使用前需要判断。用户停止执行时可能携带合成的中断提示响应。没有模型回复的收尾及合成的中断提示不会触发 `on_llm_response`；正常回复处理早于 `on_agent_done`。需要在发送前修改回复，请使用 `on_llm_response`。
+`resp` 可能为 `None` 或中断提示。需要在发送前修改模型回复，请使用 `on_llm_response`。
 
 ```python
 from astrbot.api.event import filter, AstrMessageEvent
@@ -709,7 +709,7 @@ async def on_agent_done(
         print(resp.completion_text)
 ```
 
-> 这里不能使用 yield 发送消息。如需发送，请直接使用 `event.send()`。事件被停止不会阻止后续 `on_agent_done` 清理处理函数执行，插件启用状态及会话插件选择仍然有效。
+> 此处发送消息请使用 `event.send()`，不支持 `yield`。停止事件不会跳过后续清理处理函数。
 
 ##### 发送消息前
 

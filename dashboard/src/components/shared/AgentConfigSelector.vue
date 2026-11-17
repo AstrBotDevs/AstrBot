@@ -40,10 +40,11 @@ const items = computed(() => {
   const result = records.value.map(item => ({
     config_id: item.config_id,
     label: `${item.name} · ${item.runtime}${item.enabled ? '' : ` · ${tm('status.disabled')}`}${availableRuntimes.value.includes(item.runtime) ? '' : ` · ${tm('status.unavailable')}`}`,
-    props: { disabled: !item.enabled || !availableRuntimes.value.includes(item.runtime) }
+    // Keep selected entries interactive so unavailable configurations can be removed.
+    props: { disabled: !props.modelValue?.includes(item.config_id) && (!item.enabled || !availableRuntimes.value.includes(item.runtime)) }
   }));
   for (const id of props.modelValue || []) {
-    if (!result.some(item => item.config_id === id)) result.push({ config_id: id, label: `${tm('status.missing')} · ${id}`, props: { disabled: true } });
+    if (!result.some(item => item.config_id === id)) result.push({ config_id: id, label: `${tm('status.missing')} · ${id}`, props: { disabled: false } });
   }
   return result;
 });

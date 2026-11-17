@@ -234,7 +234,8 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
         """
         if isinstance(tool, HandoffTool):
             is_bg = tool_args.pop("background_task", False)
-            if is_bg:
+            # Caller-owned outputs must settle before the turn's stream closes.
+            if is_bg and getattr(run_context.context, "send_to_user", True):
                 async with aclosing(
                     cls._execute_handoff_background(tool, run_context, **tool_args)
                 ) as results:
@@ -256,7 +257,9 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
                     yield r
             return
 
-        elif tool.is_background_task:
+        elif tool.is_background_task and getattr(
+            run_context.context, "send_to_user", True
+        ):
             event = run_context.context.event
             if active_event_registry.get_background_stop_signal(event).is_set():
                 return
@@ -484,6 +487,13 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
             max_steps=agent_max_step,
             tool_call_timeout=run_context.tool_call_timeout,
             stream=stream,
+            agent_context=AstrAgentContext(
+                context=ctx,
+                event=event,
+                permissions=getattr(run_context.context, "permissions", None),
+                send_to_user=getattr(run_context.context, "send_to_user", True),
+                _output_turn=getattr(run_context.context, "_output_turn", None),
+            ),
         )
         yield mcp.types.CallToolResult(
             content=[mcp.types.TextContent(type="text", text=llm_resp.completion_text)]

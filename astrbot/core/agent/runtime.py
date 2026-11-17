@@ -17,6 +17,7 @@ from astrbot.core.agent.input import InputComponent
 
 from .events import (
     AgentSessionRef,
+    OutputReady,
     RuntimeErrorInfo,
     RuntimeEvent,
     RuntimeEventPayload,
@@ -27,6 +28,7 @@ from .events import (
     TurnStatus,
     UsageUpdated,
 )
+from .output import ReasoningOutput
 
 if TYPE_CHECKING:
     from astrbot.core.agent.run_context import ContextWrapper
@@ -112,6 +114,8 @@ class AgentInput:
         plugin_tools: Authorized plugin tool contributions before runtime filtering.
         plugin_skills: Authorized plugin skill contributions before runtime filtering.
         streaming: Requested output mode, or None to use the runtime default.
+        send_to_user: Allow automatic delivery and runtime-managed send tools.
+            False retains prepared outputs as events for caller-owned delivery.
     """
 
     event: AstrMessageEvent
@@ -120,6 +124,7 @@ class AgentInput:
     plugin_tools: ToolSet | None = None
     plugin_skills: list[SkillInfo] | None = None
     streaming: bool | None = None
+    send_to_user: bool = True
 
 
 class InputReceipt:
@@ -303,6 +308,7 @@ class AgentTurn:
         if (
             input.event.unified_msg_origin != self.session.umo
             or input.permissions != original.permissions
+            or input.send_to_user != original.send_to_user
             or input.event.plugins_name != original.event.plugins_name
         ):
             return None
@@ -420,6 +426,18 @@ class AgentSession(ABC):
                             break
                 if self.active_turn is turn:
                     self.active_turn = None
+                if result.status == TurnStatus.COMPLETED:
+                    content = tuple(
+                        part
+                        for part in result.content
+                        if not isinstance(part, ReasoningOutput)
+                    )
+                    if content:
+                        turn.emit(
+                            OutputReady(
+                                target_umo=self.umo, source="reply", content=content
+                            )
+                        )
                 turn.emit(TurnFinished(result=result))
                 self._turns.discard(turn)
             return result

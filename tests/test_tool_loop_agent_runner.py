@@ -1469,7 +1469,11 @@ async def test_stop_cancels_provider_before_first_response(
 
 
 @pytest.mark.asyncio
-async def test_stop_interrupts_pending_subagent_handoff(mock_hooks):
+async def test_stop_interrupts_pending_subagent_handoff(mock_hooks, monkeypatch):
+    monkeypatch.setattr(
+        "astrbot.core.astr_agent_runtime.tool_executor.AstrAgentContext",
+        SimpleNamespace,
+    )
     subagent_context = BlockingSubagentContext()
     event = MockEvent("webchat:FriendMessage:webchat!user!session", "user")
     handoff_tool = HandoffTool(
@@ -1630,7 +1634,7 @@ async def test_steering_appends_user_messages_after_all_tool_results(
     assert [message.role for message in tail] == [
         "assistant", *(["tool"] * tool_count), "user",
     ]
-    assert tail[-1].content == [TextPart(text="follow up 1"), TextPart(text="follow up 2")]
+    assert tail[-1].content == [TextPart(text="follow up 1"), TextPart(text="\nfollow up 2")]
     assert ticket1.resolved.is_set() is True
     assert ticket2.resolved.is_set() is True
     assert ticket1.consumed is True
@@ -1638,8 +1642,9 @@ async def test_steering_appends_user_messages_after_all_tool_results(
 
 
 @pytest.mark.asyncio
-async def test_follow_up_ticket_not_consumed_when_no_next_tool_call(
-    runner, mock_provider, provider_request, mock_tool_executor, mock_hooks
+@pytest.mark.parametrize("streaming", [False, True])
+async def test_follow_up_ticket_consumed_when_no_next_tool_call(
+    runner, mock_provider, provider_request, mock_tool_executor, mock_hooks, streaming
 ):
     mock_provider.should_call_tools = False
     mock_event = MockEvent("test:FriendMessage:follow_up_no_tool", "u1")
@@ -1651,7 +1656,7 @@ async def test_follow_up_ticket_not_consumed_when_no_next_tool_call(
         run_context=run_context,
         tool_executor=mock_tool_executor,
         agent_hooks=mock_hooks,
-        streaming=False,
+        streaming=streaming,
     )
 
     ticket = runner.follow_up(message_text="follow up without tool")
@@ -1661,7 +1666,21 @@ async def test_follow_up_ticket_not_consumed_when_no_next_tool_call(
         pass
 
     assert ticket.resolved.is_set() is True
-    assert ticket.consumed is False
+    assert ticket.consumed is True
+
+    async def subsequent_tool():
+        await asyncio.sleep(0.01)
+        yield "foreground result"
+
+    detach = MagicMock(return_value=None)
+    results = [
+        result
+        async for result in runner._iter_tool_executor_results(
+            subsequent_tool(), detach=detach
+        )
+    ]
+    assert results == ["foreground result"]
+    detach.assert_not_called()
 
 
 @pytest.mark.asyncio
