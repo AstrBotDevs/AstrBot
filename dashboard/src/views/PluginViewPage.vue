@@ -234,10 +234,10 @@ const getBridgeErrorFields = (error) => {
   // while the GET/POST/upload paths attach the fields to the thrown error.
   // Read the response envelope first, then fall back to the top-level fields.
   const envelope = error?.response?.data;
-  const code = error?.code ?? envelope?.data?.code ?? envelope?.code;
-  const reason = error?.reason ?? envelope?.reason;
+  const code = envelope?.data?.code ?? envelope?.code ?? error?.code;
+  const reason = envelope?.reason ?? error?.reason;
   const confirmed =
-    error?.confirmed ?? envelope?.data?.confirmed ?? envelope?.confirmed;
+    envelope?.data?.confirmed ?? envelope?.confirmed ?? error?.confirmed;
   if (typeof code === "string" && code) {
     fields.errorCode = code;
   }
@@ -407,7 +407,7 @@ const handleBridgeRequest = async (message) => {
       });
       if (response.data?.status === "error") {
         const err = new Error(response.data.message || "Plugin GET request failed.");
-        err.code = response.data.data?.code ?? response.data.message;
+        err.code = response.data.data?.code;
         err.reason = response.data.reason;
         err.confirmed = response.data.data?.confirmed ?? response.data.confirmed;
         throw err;
@@ -423,7 +423,7 @@ const handleBridgeRequest = async (message) => {
       );
       if (response.data?.status === "error") {
         const err = new Error(response.data.message || "Plugin POST request failed.");
-        err.code = response.data.data?.code ?? response.data.message;
+        err.code = response.data.data?.code;
         err.reason = response.data.reason;
         err.confirmed = response.data.data?.confirmed ?? response.data.confirmed;
         throw err;
@@ -458,7 +458,7 @@ const handleBridgeRequest = async (message) => {
         const err = new Error(
           response.data.message || "Plugin upload request failed.",
         );
-        err.code = response.data.data?.code ?? response.data.message;
+        err.code = response.data.data?.code;
         err.reason = response.data.reason;
         err.confirmed = response.data.data?.confirmed ?? response.data.confirmed;
         throw err;

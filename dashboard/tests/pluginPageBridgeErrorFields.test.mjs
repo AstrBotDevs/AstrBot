@@ -1,66 +1,148 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 
-const makeError = (data) => {
-  const err = new Error(data.message || "request failed");
-  err.code = data.data?.code ?? data.message;
-  err.reason = data.reason;
-  err.confirmed = data.data?.confirmed ?? data.confirmed;
-  return err;
-};
+const source = readFileSync(
+  new URL("../src/views/PluginViewPage.vue", import.meta.url),
+  "utf8",
+);
 
-const extractErrorFields = (error) => {
-  const fields = {};
-  if (typeof error?.code === "string" && error.code) {
-    fields.errorCode = error.code;
-  }
-  if (typeof error?.reason === "string" && error.reason) {
-    fields.errorReason = error.reason;
-  }
-  if (typeof error?.confirmed === "boolean") {
-    fields.errorConfirmed = error.confirmed;
-  }
-  return Object.keys(fields).length > 0 ? fields : undefined;
-};
+const declarations = [
+  "sendBridgeResponse",
+  "getBridgeErrorMessage",
+  "getBridgeErrorFields",
+  "handleBridgeRequest",
+]
+  .map((name) => {
+    const start = source.indexOf(`const ${name} = `);
+    const end = source.indexOf("\n};", start);
+    assert.ok(
+      start >= 0 && end > start,
+      `Missing production declaration: ${name}`,
+    );
+    return source.slice(start, end + 3);
+  })
+  .join("\n");
 
-test("structured error fields survive the host-to-bridge round trip", () => {
-  const serverResponse = {
-    status: "error",
-    message: "life_command_invalid",
-    reason: "invalid UTF-8 life command",
-    data: { code: "life_command_invalid", confirmed: false },
+function loadHost(response, rejectedError) {
+  const responses = [];
+  const request = async () => {
+    if (rejectedError) {
+      throw rejectedError;
+    }
+    return { data: response };
   };
+  const host = new Function(
+    "axios",
+    "buildPluginApiPath",
+    "postToIframe",
+    "coerceBridgeUploadFile",
+    "FormData",
+    `${declarations}\nreturn { handleBridgeRequest, getBridgeErrorFields };`,
+  )(
+    { get: request, post: request },
+    (endpoint) => endpoint,
+    (payload) => responses.push(payload),
+    async () => "upload fixture",
+    class {
+      append() {}
+    },
+  );
+  return { ...host, responses };
+}
 
-  const err = makeError(serverResponse);
-  assert.equal(err.message, "life_command_invalid");
-  assert.equal(err.code, "life_command_invalid");
-  assert.equal(err.reason, "invalid UTF-8 life command");
-  assert.equal(err.confirmed, false);
-
-  const fields = extractErrorFields(err);
-  assert.deepEqual(fields, {
-    errorCode: "life_command_invalid",
-    errorReason: "invalid UTF-8 life command",
-    errorConfirmed: false,
+for (const action of ["api:get", "api:post", "files:upload"]) {
+  test(`${action} forwards explicit structured fields`, async () => {
+    const { handleBridgeRequest, responses } = loadHost({
+      status: "error",
+      message: "The command is invalid.",
+      reason: "invalid UTF-8 life command",
+      data: { code: "life_command_invalid", confirmed: false },
+    });
+    await handleBridgeRequest({
+      requestId: "request-1",
+      action,
+      endpoint: "fixture",
+    });
+    assert.deepEqual(responses, [
+      {
+        kind: "response",
+        requestId: "request-1",
+        ok: false,
+        error: "The command is invalid.",
+        errorCode: "life_command_invalid",
+        errorReason: "invalid UTF-8 life command",
+        errorConfirmed: false,
+      },
+    ]);
   });
+
+  test(`${action} does not turn a human-readable message into an error code`, async () => {
+    const { handleBridgeRequest, responses } = loadHost({
+      status: "error",
+      message: "Please select a provider before continuing.",
+    });
+    await handleBridgeRequest({
+      requestId: "request-2",
+      action,
+      endpoint: "fixture",
+    });
+    assert.equal(
+      responses[0].error,
+      "Please select a provider before continuing.",
+    );
+    assert.equal(Object.hasOwn(responses[0], "errorCode"), false);
+  });
+
+  test(`${action} prefers the rejected response's business code over the transport code`, async () => {
+    const error = Object.assign(
+      new Error("Request failed with status code 400"),
+      {
+        code: "ERR_BAD_REQUEST",
+        response: {
+          data: {
+            status: "error",
+            message: "The command is invalid.",
+            reason: "invalid UTF-8 life command",
+            data: { code: "life_command_invalid", confirmed: false },
+          },
+        },
+      },
+    );
+    const { handleBridgeRequest, responses } = loadHost(undefined, error);
+    await handleBridgeRequest({
+      requestId: "request-3",
+      action,
+      endpoint: "fixture",
+    });
+    assert.equal(responses[0].error, "The command is invalid.");
+    assert.equal(responses[0].errorCode, "life_command_invalid");
+    assert.equal(responses[0].errorReason, "invalid UTF-8 life command");
+    assert.equal(responses[0].errorConfirmed, false);
+  });
+}
+
+test("error without structured fields stays backward compatible", () => {
+  const { getBridgeErrorFields } = loadHost();
+  assert.equal(getBridgeErrorFields(new Error("plain failure")), undefined);
 });
 
-test("error without structured fields yields undefined so the bridge stays backward compatible", () => {
-  const err = new Error("plain failure");
-  const fields = extractErrorFields(err);
-  assert.equal(fields, undefined);
+test("partial top-level fields remain available without a response envelope", () => {
+  const { getBridgeErrorFields } = loadHost();
+  assert.deepEqual(
+    getBridgeErrorFields(
+      Object.assign(new Error("partial"), { code: "some_code" }),
+    ),
+    { errorCode: "some_code" },
+  );
 });
 
-test("partial structured fields are forwarded individually", () => {
-  const err = new Error("partial");
-  err.code = "some_code";
-  const fields = extractErrorFields(err);
-  assert.deepEqual(fields, { errorCode: "some_code" });
-});
-
-test("confirmed=false is forwarded because the type check is boolean not truthy", () => {
-  const err = new Error("x");
-  err.confirmed = false;
-  const fields = extractErrorFields(err);
-  assert.deepEqual(fields, { errorConfirmed: false });
+test("confirmed=false is preserved without a response envelope", () => {
+  const { getBridgeErrorFields } = loadHost();
+  assert.deepEqual(
+    getBridgeErrorFields(
+      Object.assign(new Error("partial"), { confirmed: false }),
+    ),
+    { errorConfirmed: false },
+  );
 });
