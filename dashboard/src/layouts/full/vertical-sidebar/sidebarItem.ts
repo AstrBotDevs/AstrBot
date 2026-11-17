@@ -5,16 +5,15 @@ import {
   Box,
   Clock3,
   Database,
-  Hand,
+  House,
   Heart,
-  PencilRuler,
   Puzzle,
   SlidersHorizontal,
-  Workflow,
 } from '@lucide/vue';
 
 export interface menu {
   header?: string;
+  value?: string;
   title?: string;
   icon?: string | Component;
   to?: string;
@@ -41,10 +40,6 @@ export interface menu {
 export const SYSTEM_GROUP_KEY = 'core.navigation.groups.system';
 export const EXTENSION_GROUP_KEY = 'core.navigation.groups.extension';
 
-// Kept for the legacy sidebar customization storage; the default layout no
-// longer uses a collapsible "more" group.
-export const MORE_GROUP_KEY = 'core.navigation.groups.more';
-
 // 注意：这个文件现在包含i18n键值而不是直接的文本
 // 在组件中使用时需要通过t()函数进行翻译
 // 所有键名都使用 core.navigation.* 格式
@@ -54,7 +49,7 @@ const sidebarItem: menu[] = [
   },
   {
     title: 'core.navigation.welcome',
-    icon: markRaw(Hand),
+    icon: markRaw(House),
     to: '/welcome',
   },
   {
@@ -83,11 +78,6 @@ const sidebarItem: menu[] = [
     to: '/data'
   },
   {
-    title: 'core.navigation.sessionManagement',
-    icon: markRaw(PencilRuler),
-    to: '/session-management'
-  },
-  {
     header: EXTENSION_GROUP_KEY,
     collapsible: true,
     groupToggle: true,
@@ -106,11 +96,6 @@ const sidebarItem: menu[] = [
     title: 'core.navigation.cron',
     icon: markRaw(Clock3),
     to: '/cron'
-  },
-  {
-    title: 'core.navigation.subagent',
-    icon: markRaw(Workflow),
-    to: '/subagent'
   },
 ];
 

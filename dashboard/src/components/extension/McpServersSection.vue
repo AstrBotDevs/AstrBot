@@ -429,7 +429,7 @@
 </template>
 
 <script>
-import { VueMonacoEditor } from '@guolao/vue-monaco-editor';
+import { LazyMonacoEditor as VueMonacoEditor } from '@/components/shared/LazyMonacoEditor';
 import { mcpApi } from '@/api/v1';
 import { useI18n, useModuleI18n } from '@/i18n/composables';
 import OutlinedActionListItem from '@/components/shared/OutlinedActionListItem.vue';

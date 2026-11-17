@@ -12,7 +12,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from sqlalchemy import select
+from sqlalchemy import select, text
 
 from astrbot.core import logger
 from astrbot.core.config.default import VERSION
@@ -165,6 +165,11 @@ class AstrBotExporter:
                         config_content = f.read()
                     zf.writestr("config/cmd_config.json", config_content)
                     self._add_checksum("config/cmd_config.json", config_content)
+                mcp_config_path = Path(get_astrbot_data_path()) / "mcp_server.json"
+                if mcp_config_path.is_file():
+                    mcp_content = mcp_config_path.read_bytes()
+                    zf.writestr("config/mcp_server.json", mcp_content)
+                    self._add_checksum("config/mcp_server.json", mcp_content)
                 if progress_callback:
                     await progress_callback("config", 100, 100, "配置文件导出完成")
 
@@ -208,6 +213,7 @@ class AstrBotExporter:
         export_data: dict[str, list[dict]] = {}
 
         async with self.main_db.get_db() as session:
+            await session.execute(text("BEGIN"))
             for table_name, model_class in MAIN_DB_MODELS.items():
                 try:
                     result = await session.execute(select(model_class))

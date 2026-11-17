@@ -24,7 +24,12 @@
           <div
             v-if="isUserMessage(msg) && userAttachmentParts(msg).length"
             class="sent-attachments"
-            :class="{ 'images-only': hasImageOnlyAttachments(msg) }"
+            :class="{
+              'images-only': hasImageOnlyAttachments(msg),
+              'has-media': userAttachmentParts(msg).some(
+                (part) => part.type === 'record' || part.type === 'video',
+              ),
+            }"
           >
             <template
               v-for="(part, attachmentIndex) in userAttachmentParts(msg)"
@@ -39,7 +44,13 @@
                 <img :src="partUrl(part)" :alt="part.filename || 'image'" />
               </button>
 
-              <div v-else class="sent-attachment-card sent-file-card">
+              <div
+                v-else
+                class="sent-attachment-card sent-file-card"
+                :class="{
+                  'sent-media-card': part.type === 'record' || part.type === 'video',
+                }"
+              >
                 <div
                   class="sent-attachment-icon"
                   :style="{
@@ -59,10 +70,10 @@
                   {{ attachmentName(part) }}
                 </span>
                 <v-btn
-                  v-if="part.type === 'file'"
                   icon="mdi-download"
                   size="x-small"
                   variant="text"
+                  :aria-label="tm('workspaceFiles.download')"
                   :loading="
                     downloadingFiles.has(
                       part.attachment_id ||
@@ -72,6 +83,20 @@
                     )
                   "
                   @click="downloadPart(part)"
+                />
+                <audio
+                  v-if="part.type === 'record'"
+                  class="audio-part"
+                  controls
+                  preload="metadata"
+                  :src="partUrl(part)"
+                />
+                <video
+                  v-else-if="part.type === 'video'"
+                  class="video-part"
+                  controls
+                  preload="metadata"
+                  :src="partUrl(part)"
                 />
               </div>
             </template>
@@ -122,9 +147,17 @@
                 </div>
               </template>
 
-              <template v-else>
+              <MessageWork
+                v-else
+                :blocks="renderBlocks(msg)"
+                :is-user="isUserMessage(msg)"
+                :is-streaming="isMessageStreaming(msg, msgIndex)"
+                :stats="messageContent(msg).agentStats"
+                :created-at="msg.created_at"
+                v-slot="{ blocks, offset }"
+              >
                 <template
-                  v-for="(block, blockIndex) in renderBlocks(msg)"
+                  v-for="(block, blockIndex) in blocks"
                   :key="`${msgIndex}-block-${blockIndex}-${block.kind}`"
                 >
                   <ReasoningBlock
@@ -134,10 +167,8 @@
                     :initial-expanded="false"
                     :is-streaming="isMessageStreaming(msg, msgIndex)"
                     :has-non-reasoning-content="
-                      hasFollowingContentBlock(msg, blockIndex)
+                      hasFollowingContentBlock(msg, blockIndex + offset)
                     "
-                    :open-in-sidebar="variant === 'main'"
-                    @open="emit('openReasoning', { message: msg, blockIndex })"
                   />
 
                   <template v-else>
@@ -201,6 +232,17 @@
                           :alt="part.filename || 'image'"
                         />
                       </button>
+
+                      <ButtonActionRow
+                        v-else-if="part.type === 'actionrow'"
+                        :part="part"
+                        @callback="
+                          emit('buttonClick', {
+                            message: msg,
+                            callbackData: $event,
+                          })
+                        "
+                      />
 
                       <audio
                         v-else-if="part.type === 'record'"
@@ -267,7 +309,7 @@
                             :is-dark="isDark"
                           >
                             <template #label>
-                              <v-icon size="16">mdi-code-json</v-icon>
+                              <CodeXml :size="16" aria-hidden="true" />
                               <span>{{ tool.name || "python" }}</span>
                               <span class="tool-call-inline-status">
                                 {{ toolCallStatusText(tool) }}
@@ -296,7 +338,7 @@
                     </template>
                   </template>
                 </template>
-              </template>
+              </MessageWork>
             </MessageContentTransition>
           </div>
 
@@ -304,17 +346,49 @@
             <span v-if="isUserMessage(msg) && msg.created_at">{{
               formatTime(msg.created_at)
             }}</span>
-            <v-btn
+            <span
               v-if="canEditMessage(msg, msgIndex)"
-              icon
-              size="x-small"
-              variant="text"
-              @click="emit('openEdit', msg)"
+              :title="
+                msg.can_edit === false
+                  ? tm(
+                      `history.${
+                        msg.edit_unavailable_reason || 'context_unavailable'
+                      }`,
+                    )
+                  : tm('history.edit')
+              "
             >
-              <SquarePen :size="14" :stroke-width="2" />
-            </v-btn>
+              <v-btn
+                icon
+                size="x-small"
+                variant="text"
+                :disabled="msg.can_edit === false"
+                :aria-label="
+                  msg.can_edit === false
+                    ? tm(
+                        `history.${
+                          msg.edit_unavailable_reason || 'context_unavailable'
+                        }`,
+                      )
+                    : tm('history.edit')
+                "
+                @click="emit('openEdit', msg)"
+              >
+                <SquarePen :size="14" :stroke-width="2" />
+              </v-btn>
+            </span>
             <RegenerateMenu
               v-if="canRegenerateMessage(msg, msgIndex)"
+              :disabled="msg.can_retry === false"
+              :unavailable-reason="
+                msg.can_retry === false
+                  ? tm(
+                      `history.${
+                        msg.retry_unavailable_reason || 'context_unavailable'
+                      }`,
+                    )
+                  : ''
+              "
               @retry="emit('regenerate', msg)"
               @retry-with-model="emit('regenerateWithModel', msg, $event)"
             />
@@ -450,19 +524,21 @@
 <script setup lang="ts">
 import MessageContentTransition from "@/components/chat/MessageContentTransition.vue";
 import { computed, nextTick, reactive, ref } from "vue";
-import { Copy, Info, SquarePen } from "@lucide/vue";
+import { Copy, Info, SquarePen, CodeXml } from "@lucide/vue";
 import axios from "axios";
 import { fileApi } from "@/api/v1";
 import RegenerateMenu, {
   type RegenerateModelSelection,
 } from "@/components/chat/RegenerateMenu.vue";
 import ThreadedMarkdownMessagePart from "@/components/chat/ThreadedMarkdownMessagePart.vue";
+import MessageWork from "@/components/chat/message_list_comps/MessageWork.vue";
 import ReasoningBlock from "@/components/chat/message_list_comps/ReasoningBlock.vue";
 import ToolCallCard from "@/components/chat/message_list_comps/ToolCallCard.vue";
 import ToolCallItem from "@/components/chat/message_list_comps/ToolCallItem.vue";
 import IPythonToolBlock from "@/components/chat/message_list_comps/IPythonToolBlock.vue";
 import RefsSidebar from "@/components/chat/message_list_comps/RefsSidebar.vue";
 import ActionRef from "@/components/chat/message_list_comps/ActionRef.vue";
+import ButtonActionRow from "@/components/chat/ButtonActionRow.vue";
 import MarkdownMessagePart from "@/components/chat/message_list_comps/MarkdownMessagePart.vue";
 import StyledMenu from "@/components/shared/StyledMenu.vue";
 import {
@@ -529,8 +605,8 @@ const emit = defineEmits<{
   ];
   selectBotText: [event: MouseEvent, message: ChatRecord];
   openThread: [thread: ChatThread];
-  openReasoning: [payload: { message: ChatRecord; blockIndex: number }];
   openRefs: [refs: unknown];
+  buttonClick: [payload: { message: ChatRecord; callbackData: string }];
 }>();
 
 registerChatMarkdownComponents();
@@ -607,37 +683,22 @@ function isEditingMessage(message: ChatRecord) {
   );
 }
 
-function canEditMessage(message: ChatRecord, messageIndex: number) {
+function canEditMessage(message: ChatRecord, _messageIndex: number) {
   return (
     props.enableEdit &&
     isUserMessage(message) &&
-    messageIndex === latestEditableUserIndex() &&
+    Boolean(message.turn_id) &&
     message.id != null &&
     !String(message.id).startsWith("local-")
   );
-}
-
-function latestEditableUserIndex() {
-  for (let index = props.messages.length - 1; index >= 0; index -= 1) {
-    const message = props.messages[index];
-    if (
-      isUserMessage(message) &&
-      message.id != null &&
-      !String(message.id).startsWith("local-")
-    ) {
-      return index;
-    }
-  }
-  return -1;
 }
 
 function canRegenerateMessage(message: ChatRecord, messageIndex: number) {
   return (
     props.enableRegenerate &&
     !isUserMessage(message) &&
-    messageIndex === props.messages.length - 1 &&
     !isMessageStreaming(message, messageIndex) &&
-    Boolean(message.llm_checkpoint_id)
+    Boolean(message.turn_id)
   );
 }
 
@@ -963,6 +1024,11 @@ function formatDuration(seconds: number) {
   scrollbar-width: thin;
 }
 
+.sent-attachments.has-media {
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
 .sent-attachment-card {
   --attachment-color: #607d8b;
   position: relative;
@@ -1027,6 +1093,22 @@ function formatDuration(seconds: number) {
   justify-content: center;
   gap: 1px;
   color: var(--attachment-color);
+}
+
+.sent-file-card.sent-media-card {
+  display: grid;
+  align-self: flex-start;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  width: 320px;
+  max-width: 100%;
+  height: auto;
+}
+
+.sent-media-card .audio-part,
+.sent-media-card .video-part {
+  grid-column: 1 / -1;
+  width: 100%;
+  margin-top: 0;
 }
 
 .sent-attachment-icon-symbol {

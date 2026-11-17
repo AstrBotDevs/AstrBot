@@ -1,58 +1,57 @@
-# Agent Handoff and SubAgent
+# Subagents {#agent-handsoff-and-subagent}
 
-SubAgent Orchestration is an advanced agent organization method provided by AstrBot. It allows you to decompose complex tasks into multiple specialized SubAgents, reducing the Main Agent's prompt length and improving task execution success rates.
+Subagents let the built-in AI delegate tasks to background agents with independent contexts while continuing the main conversation. No plugin installation is required.
 
-v4.14.0 introduced this feature, which is currently an **experimental feature** and not yet stable.
+## Enable subagents
 
-![](https://files.astrbot.app/docs/source/images/subagent/image.png)
+Open **Config → AI → Capabilities → Subagents** in the target profile and enable the capability. You can use generic subagents immediately. The default concurrency limit is 3, and the default timeout is 600 seconds, including queue time.
 
-## Motivation
+![Subagent capability settings](images/subagent-settings-en.png)
 
-In traditional architectures, all tools are directly mounted on the Main Agent. When there are many tools, several issues arise:
-1. **Prompt Bloat**: The Main Agent must include descriptions for all tools in its System Prompt, consuming excessive context.
-2. **Execution Errors**: With a large number of tools, the LLM may confuse tool purposes or generate incorrect parameters.
-3. **Complexity**: The Main Agent is overburdened with both conversation and the organization/invocation of numerous tools.
+## Configure a specialized agent
 
-With SubAgent Orchestration, the Main Agent can interact with users, use its own tools, and delegate tasks to specialized SubAgents.
+1. Click **Configure Specialized Agents**, then **Create Agent**.
+2. Select the AstrBot runtime and enter a name and description. The description helps the main agent decide when to delegate.
+3. Select a persona and chat model, or leave them empty to follow the main agent.
+4. Save, close the dialog, and select the agent under **Specialized Agent Configurations**.
 
-## How It Works
+![Subagent management](images/subagent-create-en.png)
 
-1. **Main Agent Delegation**: When SubAgent mode is enabled, the Main Agent gains delegation tools named `transfer_to_<subagent_name>` alongside its own tools. Enabling the option to deduplicate Main LLM tools hides tools that overlap with those of SubAgents.
-2. **Task Handoff**: When the Main Agent determines a task needs execution, it calls the corresponding delegation tool, passing the task description to the SubAgent.
-3. **SubAgent Execution**: The SubAgent receives the task, performs operations using its assigned tools, and returns the organized results to the Main Agent.
-4. **Feedback**: The Main Agent receives the results and continues the conversation with the user.
+![Create Agent form](images/subagent-edit-en.png)
 
-![](https://files.astrbot.app/docs/source/images/subagent/1.png)
+The selected persona supplies the agent's instructions, tools, and skills, within the parent agent's authorized capabilities. Other execution settings, such as step limits and tool timeouts, follow the main agent when the session is created. Configuration changes apply to new sessions.
 
-## Configuration
+To edit an agent, click its card. To delete one, remove any references from profiles or other agent configurations first. Configurations for unavailable runtimes remain saved but cannot start new sessions.
 
-In the AstrBot WebUI, expand **More Features** in the left navigation bar and click **SubAgents** (`/subagent`).
+## Delegate and follow up
 
-### 1. Enable SubAgent Mode
+Ask the main agent to delegate a task, for example: “Have a subagent review this report while we discuss the next steps.” The main agent uses these tools:
 
-Toggle "Enable SubAgent Orchestration" at the top of the page.
+| Tool | Purpose |
+| --- | --- |
+| `spawn_agent` | Start a background task. |
+| `list_agents` | Check task status. |
+| `wait_agent` | Wait for results. |
+| `get_agent_result` | Read a result. |
+| `send_message` | Add instructions to an existing agent. |
+| `cancel_agent` | Stop a task. |
 
-### 2. Create a SubAgent
+The configuration dialog manages saved agents; ask the main agent to check or stop running tasks. Subagents cannot create further subagents.
 
-Click the "Add SubAgent" button:
+Delegated input supports text, images, and file references. Images from the original user message are not forwarded automatically. Follow-up instructions retain the subagent's history; in the built-in runtime, follow-up images and files are passed as text references.
 
-- **Agent Name**: Used to generate the delegation tool name (e.g., `transfer_to_weather`). Use lowercase and underscores.
-- **Select Persona**: Choose a preset Persona, which defines the SubAgent's basic character, behavioral guidance, and the Tools collection it can use. You can create and manage Personas on the "Persona" page.
-- **Description for Main LLM**: This description tells the Main Agent what this SubAgent is good at, ensuring accurate delegation.
-- **Tools**: The SubAgent inherits its selected Persona’s tools. Edit the Persona’s tool selection on the **Persona** page.
-- **Provider Override (Optional)**: You can specify different model providers for specific SubAgents. For example, the Main Agent could use GPT-4o, while a simple query SubAgent uses GPT-4o-mini to save costs.
+## Restart and conversation behavior
 
-After configuring the agents, click `Save` on the page.
+Users in the same conversation share its subagents. Results return to the original parent conversation, even if you switch conversations. Deleted or stopped parents are not woken.
 
-## Best Practices
+After a restart, queued and unfinished tasks are marked interrupted and are not replayed automatically. Check their status, then ask the main agent to send new instructions to continue in the same subagent conversation.
 
-- **Single Responsibility**: Each SubAgent should handle one category of related tasks (e.g., search, file processing, smart home control).
-- **Clear Descriptions**: Descriptions for the Main Agent should be concise and highlight the SubAgent's core capabilities.
-- **Layered Management**: For extremely complex tasks, consider multi-level delegation if necessary.
+## Upgrade notes
 
-## Known Issues
+The previous **SubAgent Orchestration / Subagent Management** sidebar entry has moved to **Config → AI → Capabilities → Subagents → Configure Specialized Agents**. The `/subagent` URL remains accessible.
 
-SubAgent orchestration is currently an **experimental feature** and not yet stable.
+Existing global settings and expert configurations migrate automatically. Existing conversations and history are preserved.
 
-1. Skills of personas cannot be isolated at this time.
-2. SubAgent conversation histories are not currently saved.
+API clients should replace `/api/v1/subagents/config` and `/api/subagent/config` with `/api/v1/agent-configs` and `/api/v1/agent-configs/{config_id}`. Use `/api/v1/agent-runtimes` to list runtimes and their defaults. These endpoints require the `config` scope; see [OpenAPI scopes](../dev/openapi-scopes.md).
+
+For plugin integration, see [running an Agent](../dev/star/guides/ai/agent.md#run-session-agent) and [runtime events](../dev/star/guides/ai/agent.md#runtime-events).

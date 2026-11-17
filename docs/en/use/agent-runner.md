@@ -1,4 +1,4 @@
-# Agent Runner
+# Agent Execution Mode {#agent-runner}
 
 The Agent Runner is a component in AstrBot used to execute Agents.
 

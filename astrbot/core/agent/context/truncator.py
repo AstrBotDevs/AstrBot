@@ -124,7 +124,9 @@ class ContextTruncator:
         # ensuring that any remaining valid assistant(tool_calls) and its tools are included in the final list.
         flush_pending_if_valid()
 
-        return fixed_messages
+        # Preserve list identity on a no-op so the runner does not journal a
+        # full context replacement for every model request.
+        return messages if len(fixed_messages) == len(messages) else fixed_messages
 
     def truncate_by_turns(
         self,

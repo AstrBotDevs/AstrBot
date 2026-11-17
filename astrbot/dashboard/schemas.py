@@ -4,6 +4,17 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
+BotCleanupTarget = Literal[
+    "custom_rules",
+    "preferences",
+    "routing",
+    "cron_jobs",
+    "conversations",
+    "message_history",
+    "traces",
+    "stats",
+]
+
 
 class OpenModel(BaseModel):
     model_config = ConfigDict(extra="allow")
@@ -143,6 +154,7 @@ class ChatFlags(BaseModel):
 
 
 class ChatMessageRegenerateRequest(OpenModel):
+    locale: str | None = None
     selected_provider: str | None = None
     selected_model: str | None = None
     enable_streaming: bool | None = None
@@ -156,6 +168,7 @@ class ChatThreadCreateRequest(OpenModel):
 
 
 class ChatThreadMessageRequest(OpenModel):
+    locale: str | None = None
     message: Any
     selected_provider: str | None = None
     selected_model: str | None = None
@@ -190,11 +203,14 @@ class CommandPermissionRequest(BaseModel):
     permission: str
 
 
-class SubAgentConfigRequest(OpenModel):
-    main_enable: bool | None = None
-    enable: bool | None = None
-    remove_main_duplicate_tools: bool | None = None
-    agents: list[dict[str, Any]] | None = None
+class AgentConfigRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+    name: str = Field(min_length=1, max_length=128)
+    description: str = ""
+    enabled: bool = True
+    runtime: str = Field(min_length=1)
+    config: dict[str, Any] = Field(default_factory=dict)
 
 
 class TraceSettingsRequest(BaseModel):
@@ -202,14 +218,19 @@ class TraceSettingsRequest(BaseModel):
 
 
 class StorageCleanupRequest(BaseModel):
-    target: str = "all"
+    target: Literal["logs", "cache", "traces", "all"] = "all"
 
 
 class GhProxyTestRequest(BaseModel):
     proxy_url: str | None = None
 
 
+class PypiIndexTestRequest(BaseModel):
+    index_url: str | None = None
+
+
 class OpenApiChatRequest(OpenModel):
+    locale: str | None = None
     message: Any = None
     session_id: str | None = None
     conversation_id: str | None = None
@@ -542,6 +563,7 @@ class ProviderConfigRequest(OpenModel):
                 "tts": "text_to_speech",
                 "embedding": "embedding",
                 "rerank": "rerank",
+                "decision": "decision",
             }
             config["provider_type"] = capability_map.get(
                 self.capability, self.capability
@@ -639,6 +661,8 @@ class ConfigRouteUpsertRequest(BaseModel):
 
 
 class SessionRuleRequest(OpenModel):
+    profile_id: str | None = Field(None, min_length=1, max_length=255)
+    user_alias: str | None = Field(None, max_length=255)
     umo: str | None = None
     rule_key: str | None = None
     rule_value: Any = None
@@ -649,25 +673,11 @@ class UmoListRequest(OpenModel):
     umos: list[str] | None = None
     scope: Literal["all", "group", "private", "custom_group"] | None = None
     group_id: str | None = None
-    rule_key: str | None = None
-
-
-class BatchSessionProviderRequest(UmoListRequest):
-    provider_id: str | None = None
-    provider_type: (
-        Literal[
-            "chat_completion",
-            "speech_to_text",
-            "text_to_speech",
-        ]
-        | None
-    ) = None
-
-
-class BatchSessionServiceRequest(UmoListRequest):
-    session_enabled: bool | None = None
-    llm_enabled: bool | None = None
-    tts_enabled: bool | None = None
+    rule_key: str | None = Field(
+        None,
+        description="For rule deletion, config_binding clears both profile selection "
+        "and overrides; config_overrides or omission clears only overrides.",
+    )
 
 
 class SessionGroupRequest(OpenModel):

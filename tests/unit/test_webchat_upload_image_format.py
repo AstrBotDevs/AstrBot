@@ -43,11 +43,12 @@ async def test_webchat_upload_uses_detected_image_type(tmp_path):
 
     result = await service.save_uploaded_file(FakeUploadFile())
 
-    assert result["filename"].endswith(".jpg")
+    assert result["filename"] == "pasted.jpg"
     assert fake_db.inserted["mime_type"] == "image/jpeg"
     assert fake_db.inserted["type"] == "image"
-    assert (tmp_path / result["filename"]).exists()
-    assert not (tmp_path / "pasted.png").exists()
+    assert result["stored_filename"].endswith("_pasted.jpg")
+    assert (tmp_path / result["stored_filename"]).exists()
+    assert not list(tmp_path.glob("*.png"))
 
 
 @pytest.mark.parametrize(

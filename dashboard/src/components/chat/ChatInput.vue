@@ -32,7 +32,12 @@
             :key="'img-' + index"
             class="attachment-card image-preview"
           >
-            <img :src="img" class="preview-image" alt="attachment preview" />
+            <img
+              :src="img"
+              class="preview-image"
+              alt="attachment preview"
+              @click="openImagePreview(img)"
+            />
             <v-btn
               @click="$emit('removeImage', index)"
               class="remove-attachment-btn"
@@ -90,9 +95,14 @@
           >
             <div
               class="attachment-icon"
-              :style="{ '--attachment-color': activePresentation(active).color }"
+              :style="{
+                '--attachment-color': activePresentation(active).color,
+              }"
             >
-              <v-icon :icon="activePresentation(active).icon" size="24"></v-icon>
+              <v-icon
+                :icon="activePresentation(active).icon"
+                size="24"
+              ></v-icon>
               <span class="attachment-ext">{{
                 activePresentation(active).label
               }}</span>
@@ -170,8 +180,12 @@
             @compositioncancel="handleCompositionEnd"
             @blur="handleBlur"
             @paste="handlePaste"
-            :disabled="disabled"
-            :placeholder="props.placeholder || tm('input.placeholder')"
+            :disabled="disabled || !!recordingMode"
+            :placeholder="
+              recordingMode === 'transcribe'
+                ? tm('voice.transcribing')
+                : props.placeholder || tm('input.placeholder')
+            "
             class="chat-textarea"
             autocomplete="off"
             autocorrect="off"
@@ -191,8 +205,12 @@
                 v-bind="activatorProps"
                 icon
                 variant="text"
-                class="input-neutral-btn input-outline-control"
+                class="input-icon-btn"
+                :class="{
+                  'recording-upload-btn': !!recordingMode && !disabled,
+                }"
                 :aria-label="tm('input.upload')"
+                :disabled="disabled || !!recordingMode"
               >
                 <Plus :size="18" :stroke-width="1.75" />
               </v-btn>
@@ -235,7 +253,46 @@
               }}</v-list-item-title>
             </v-list-item>
           </StyledMenu>
+          <v-btn
+            v-if="recordingMode !== 'audio'"
+            icon
+            variant="text"
+            class="input-icon-btn"
+            :disabled="!recordingMode && (disabled || voiceBusy)"
+            :aria-label="
+              tm(
+                recordingMode === 'transcribe'
+                  ? 'voice.cancel'
+                  : 'voice.transcribe',
+              )
+            "
+            @click="
+              recordingMode === 'transcribe'
+                ? emit('cancelRecording')
+                : emit('startRecording', 'transcribe')
+            "
+          >
+            <X
+              v-if="recordingMode === 'transcribe'"
+              :size="18"
+              :stroke-width="1.75"
+            />
+            <Mic v-else :size="18" :stroke-width="1.75" />
+            <v-tooltip activator="parent" location="top">{{
+              tm(
+                recordingMode === "transcribe"
+                  ? "voice.cancel"
+                  : "voice.transcribe",
+              )
+            }}</v-tooltip>
+          </v-btn>
         </div>
+        <AudioWaveform
+          v-if="recordingMode"
+          class="composer-waveform"
+          :levels="audioLevels"
+          :active="isRecording"
+        />
         <div class="input-right-actions">
           <input
             type="file"
@@ -246,17 +303,25 @@
           />
           <!-- Provider/Model Selector Menu -->
           <ProviderModelMenu
-            v-if="props.showProviderSelector && providerSelectorAvailable"
+            v-if="
+              !recordingMode &&
+              props.showProviderSelector &&
+              providerSelectorAvailable
+            "
             ref="providerModelMenuRef"
           />
           <v-progress-circular
-            v-if="disabled && !mobile"
+            v-if="!recordingMode && disabled && !mobile"
             indeterminate
             size="16"
             class="mr-1"
             width="1.5"
           />
-          <v-tooltip v-if="tokenUsageVisible" location="top" max-width="320">
+          <v-tooltip
+            v-if="!recordingMode && tokenUsageVisible"
+            location="top"
+            max-width="320"
+          >
             <template #activator="{ props: tokenTooltipProps }">
               <span
                 v-bind="tokenTooltipProps"
@@ -274,22 +339,57 @@
             <span>{{ props.tokenUsage?.tooltip }}</span>
           </v-tooltip>
           <v-btn
-            @click="handleRecordClick"
+            v-if="recordingMode !== 'transcribe'"
+            @click="
+              recordingMode === 'audio'
+                ? emit('cancelRecording')
+                : emit('startRecording', 'audio')
+            "
             icon
             variant="text"
             class="record-btn input-icon-btn"
+            :disabled="!recordingMode && (disabled || voiceBusy)"
+            :aria-label="
+              tm(recordingMode === 'audio' ? 'voice.cancel' : 'voice.sendAudio')
+            "
           >
-            <CircleStop v-if="isRecording" :size="18" :stroke-width="1.75" />
-            <Mic v-else :size="18" :stroke-width="1.75" />
-            <v-tooltip activator="parent" location="top">
-              {{
-                isRecording ? tm("voice.speaking") : tm("voice.startRecording")
-              }}
-            </v-tooltip>
+            <X
+              v-if="recordingMode === 'audio'"
+              :size="18"
+              :stroke-width="1.75"
+            />
+            <AudioLines v-else :size="18" :stroke-width="1.75" />
+            <v-tooltip activator="parent" location="top">{{
+              tm(recordingMode === "audio" ? "voice.cancel" : "voice.sendAudio")
+            }}</v-tooltip>
+          </v-btn>
+          <v-btn
+            v-if="recordingMode"
+            icon
+            variant="flat"
+            color="primary"
+            class="send-btn input-action-btn"
+            :disabled="voiceBusy || !isRecording"
+            :loading="voiceBusy"
+            :aria-label="
+              tm(
+                recordingMode === 'transcribe'
+                  ? 'voice.finishTranscription'
+                  : 'input.send',
+              )
+            "
+            @click="emit('stopRecording')"
+          >
+            <Check
+              v-if="recordingMode === 'transcribe'"
+              :size="18"
+              :stroke-width="1.75"
+            />
+            <ArrowUp v-else :size="18" :stroke-width="1.75" />
           </v-btn>
           <v-btn
             icon
-            v-if="isRunning && !canSend"
+            v-else-if="isRunning && !canSend"
             @click="$emit('stop')"
             variant="flat"
             color="primary"
@@ -315,6 +415,20 @@
         </div>
       </div>
     </div>
+
+    <v-overlay
+      v-model="imagePreview.visible"
+      class="image-preview-overlay"
+      scrim="rgba(0, 0, 0, 0.86)"
+      @click="closeImagePreview"
+    >
+      <img
+        :src="imagePreview.url"
+        class="preview-image-large"
+        alt="preview"
+        @click.stop
+      />
+    </v-overlay>
   </div>
 </template>
 
@@ -322,13 +436,15 @@
 import {
   ref,
   computed,
+  reactive,
   watch,
   nextTick,
   onMounted,
   onBeforeUnmount,
 } from "vue";
 import { useDisplay } from "vuetify";
-import { ArrowUp, CircleStop, Mic, Plus, Square } from "@lucide/vue";
+import { ArrowUp, AudioLines, Check, Mic, Plus, Square, X } from "@lucide/vue";
+import AudioWaveform from "./AudioWaveform.vue";
 import { useI18n, useModuleI18n } from "@/i18n/composables";
 import { useCustomizerStore } from "@/stores/customizer";
 import { isComposingEnter } from "@/utils/imeInput.mjs";
@@ -340,7 +456,10 @@ import StyledMenu from "@/components/shared/StyledMenu.vue";
 import CommandSuggestion from "./CommandSuggestion.vue";
 import { attachmentPresentation } from "./attachmentPresentation";
 import type { Session } from "@/composables/useSessions";
-import type { FailedUploadView, ActiveUploadView } from "@/composables/useMediaHandling";
+import type {
+  FailedUploadView,
+  ActiveUploadView,
+} from "@/composables/useMediaHandling";
 import type { SuggestionCommand } from "./CommandSuggestion.vue";
 
 interface StagedFileInfo {
@@ -373,6 +492,9 @@ interface Props {
   disabled: boolean;
   showSettings?: boolean;
   isRecording: boolean;
+  recordingMode?: "transcribe" | "audio" | null;
+  voiceBusy?: boolean;
+  audioLevels?: number[];
   isRunning: boolean;
   sessionId?: string | null;
   currentSession?: Session | null;
@@ -396,6 +518,9 @@ const props = withDefaults(defineProps<Props>(), {
   showProviderSelector: true,
   showSettings: false,
   tokenUsage: null,
+  recordingMode: null,
+  voiceBusy: false,
+  audioLevels: () => [],
 });
 
 const emit = defineEmits<{
@@ -409,7 +534,8 @@ const emit = defineEmits<{
   retryFailedUpload: [index: number];
   discardFailedUpload: [index: number];
   cancelActiveUpload: [index: number];
-  startRecording: [];
+  startRecording: [mode: "transcribe" | "audio"];
+  cancelRecording: [];
   stopRecording: [];
   pasteImage: [event: ClipboardEvent];
   fileSelect: [files: FileList | File[]];
@@ -433,6 +559,21 @@ const isReplyClosing = ref(false);
 const isComposing = ref(false);
 const lastCompositionEndAt = ref<number | null>(null);
 const longPasteThreshold = 10_000;
+
+// 待发送图片的全屏预览状态
+const imagePreview = reactive({ visible: false, url: "" });
+
+/** 打开待发送图片的全屏预览 */
+function openImagePreview(url: string) {
+  imagePreview.url = url;
+  imagePreview.visible = true;
+}
+
+/** 关闭待发送图片的全屏预览 */
+function closeImagePreview() {
+  imagePreview.visible = false;
+  imagePreview.url = "";
+}
 
 // 命令提示相关状态
 const allCommands = ref<CommandItem[]>([]);
@@ -706,8 +847,8 @@ function handleKeyDown(e: KeyboardEvent) {
 
       ctrlKeyDown.value = true;
       ctrlKeyTimer.value = window.setTimeout(() => {
-        if (ctrlKeyDown.value && !props.isRecording) {
-          emit("startRecording");
+        if (ctrlKeyDown.value && !props.recordingMode && !props.disabled) {
+          emit("startRecording", "audio");
         }
       }, ctrlKeyLongPressThreshold);
     }
@@ -841,7 +982,7 @@ function handleKeyUp(e: KeyboardEvent) {
       ctrlKeyTimer.value = null;
     }
 
-    if (props.isRecording) {
+    if (props.isRecording && props.recordingMode === "audio") {
       emit("stopRecording");
     }
   }
@@ -875,20 +1016,12 @@ function handleFileSelect(event: Event) {
   target.value = "";
 }
 
-function handleRecordClick() {
-  if (props.isRecording) {
-    emit("stopRecording");
-  } else {
-    emit("startRecording");
-  }
-}
-
 function handleConfigChange(payload: {
   configId: string;
   agentRunnerType: string;
 }) {
   const runnerType = (payload.agentRunnerType || "").toLowerCase();
-  const isInternal = runnerType === "internal" || runnerType === "local";
+  const isInternal = runnerType === "internal" || runnerType === "astrbot";
   providerSelectorAvailable.value = isInternal;
   // 配置切换后重新获取指令列表和唤醒词
   if (payload.configId && payload.configId !== currentConfigId.value) {
@@ -936,25 +1069,7 @@ defineExpose({
   flex-shrink: 0;
 }
 
-.input-neutral-btn {
-  color: #000 !important;
-}
-
-.input-neutral-btn:hover {
-  background: #efefef;
-}
-
-.input-neutral-btn--tonal {
-  background: #efefef;
-  color: #4f4f4f !important;
-}
-
-.input-neutral-btn--tonal:hover {
-  background: #e7e7e7;
-}
-
 .input-action-btn,
-.input-outline-control,
 .input-icon-btn {
   width: 28px !important;
   height: 28px !important;
@@ -973,6 +1088,11 @@ defineExpose({
   background: transparent !important;
   color: rgb(var(--v-theme-on-surface)) !important;
   margin-right: 0;
+}
+
+/* Keep the recording controls aligned while the upload menu is locked. */
+.recording-upload-btn.v-btn--disabled {
+  opacity: 1;
 }
 
 .input-icon-btn:hover {
@@ -1002,40 +1122,6 @@ defineExpose({
 
 .token-usage-progress :deep(.v-progress-circular__overlay) {
   stroke: currentColor;
-}
-
-.input-outline-control {
-  border-radius: 50% !important;
-  border: 0 !important;
-  border-color: transparent !important;
-  background: transparent !important;
-  box-shadow: none !important;
-}
-
-.input-outline-control:hover,
-.input-outline-control:focus-visible {
-  border-color: transparent !important;
-  background: rgba(var(--v-theme-on-surface), 0.04) !important;
-}
-
-.input-area.is-dark .input-neutral-btn {
-  color: rgba(255, 255, 255, 0.78) !important;
-}
-
-.input-area.is-dark .input-neutral-btn:hover,
-.input-area.is-dark .input-neutral-btn--tonal {
-  background: rgba(255, 255, 255, 0.1);
-}
-
-.input-area.is-dark .input-outline-control {
-  border-color: transparent !important;
-  background: transparent !important;
-}
-
-.input-area.is-dark .input-outline-control:hover,
-.input-area.is-dark .input-outline-control:focus-visible {
-  border-color: transparent !important;
-  background: rgba(255, 255, 255, 0.06) !important;
 }
 
 .input-container {
@@ -1068,11 +1154,16 @@ defineExpose({
   width: 100%;
   display: grid;
   grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-rows: auto 28px;
   grid-template-areas:
     "field field field"
-    "left . right";
+    "left waveform right";
   align-items: center;
   gap: 4px 8px;
+}
+
+.composer-waveform {
+  grid-area: waveform;
 }
 
 .input-field-shell {
@@ -1113,7 +1204,7 @@ defineExpose({
 
 .input-left-actions {
   grid-area: left;
-  margin-inline-start: -8px;
+  margin-inline-start: -6px;
   display: flex;
   align-items: center;
   flex: 0 0 auto !important;
@@ -1285,6 +1376,20 @@ defineExpose({
   height: 100%;
   object-fit: cover;
   border-radius: 8px;
+  cursor: zoom-in;
+}
+
+.image-preview-overlay {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.preview-image-large {
+  max-width: min(92vw, 1200px);
+  max-height: 90vh;
+  object-fit: contain;
+  cursor: zoom-out;
 }
 
 .attachment-icon {

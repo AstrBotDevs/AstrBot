@@ -126,6 +126,56 @@ async def test_private_file_retries_failed_open_id_with_chat_id(private_chat):
 
 
 @pytest.mark.asyncio
+async def test_private_buttons_retry_open_id_with_chat_id(private_chat):
+    adapter, event, create, _ = private_chat
+    await adapter.convert_msg(event)
+    card_create = AsyncMock(
+        return_value=SimpleNamespace(
+            success=lambda: True, data=SimpleNamespace(card_id="card-1")
+        )
+    )
+    adapter.lark_api.cardkit = SimpleNamespace(
+        v1=SimpleNamespace(card=SimpleNamespace(acreate=card_create))
+    )
+    create.side_effect = [
+        SimpleNamespace(success=lambda: False, code=230101, msg="Unavailable"),
+        SimpleNamespace(success=lambda: True, code=0, msg="success"),
+    ]
+
+    await adapter.send_by_session(
+        MessageSession("lark-test", MessageType.FRIEND_MESSAGE, "ou_test_user"),
+        MessageChain(
+            [
+                Comp.ActionRow(
+                    buttons=[
+                        Comp.Button(
+                            id="approve",
+                            label="Approve",
+                            action=Comp.Button.CallbackAction(),
+                        )
+                    ]
+                )
+            ]
+        ),
+    )
+
+    first, fallback = [call.args[0] for call in create.await_args_list]
+    assert (first.receive_id_type, first.request_body.receive_id) == (
+        "open_id",
+        "ou_test_user",
+    )
+    assert (fallback.receive_id_type, fallback.request_body.receive_id) == (
+        "chat_id",
+        "oc_test_private",
+    )
+    assert (
+        first.request_body.msg_type == fallback.request_body.msg_type == "interactive"
+    )
+    assert first.request_body.uuid == fallback.request_body.uuid
+    card_create.assert_awaited_once()
+
+
+@pytest.mark.asyncio
 async def test_successful_open_id_send_does_not_use_fallback(private_chat):
     adapter, event, create, _ = private_chat
     await adapter.convert_msg(event)

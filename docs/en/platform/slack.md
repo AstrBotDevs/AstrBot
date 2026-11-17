@@ -4,16 +4,14 @@
 
 Navigate to the `Platforms` page, click `Add Adapter`, find Slack and click to enter the Slack configuration page.
 
-![image](https://files.astrbot.app/docs/source/images/slack/image-1.png)
-
-In the configuration dialog that appears, click `Enable`.
+![Select the Slack messaging platform](/slack/image-1.png?v=2)
 
 ## Create an App in Slack
 
 Slack supports two connection methods: `Webhook` and `Socket`. If you don't have a public server and your message volume is relatively small, we recommend using the `socket` method. If you have a public server (or have technical knowledge about setting up tunnels, such as Cloudflare Tunnel), you can choose the `webhook` method. The `socket` method is relatively simpler to deploy.
 
 1. Create a [Slack](https://slack.com/signin) account and a Workspace.
-2. Go to [Apps Management](https://api.slack.com/apps), click "Create New App" -> "From Scratch", enter the `App Name` and the workspace to add it to, then click "Create App".
+2. Go to [Apps Management](https://api.slack.com/apps), click "Create New App" -> "Blank app" -> "Continue". Enter the `App Name`, select the workspace to add it to, then click "Create".
 3. (Webhook only) Obtain the `Signing Secret`. In the Basic Information page on the left sidebar, find `Signing Secret` under App Credentials, click Show and copy it to the signing_secret field in the platform adapter configuration.
 
 ![image](https://files.astrbot.app/docs/source/images/slack/image.png)
@@ -37,9 +35,12 @@ Slack supports two connection methods: `Webhook` and `Socket`. If you don't have
    - im:history
    - im:read
    - im:write
+   - mpim:read
    - reactions:read
    - reactions:write
    - users:read
+
+   When subscribing to the `member_joined_channel` event, Slack automatically requires `mpim:read` to view basic information about group direct messages the bot has joined.
 
 6. In the OAuth & Permissions page on the left sidebar, click `Install to xxx` under OAuth Token (where xxx is your workspace name). Then copy the generated Bot User OAuth Token to the bot_token field in the platform adapter configuration.
 
@@ -84,6 +85,8 @@ After enabling, under Subscribe to bot events below, click Add Bot User Event an
 9. reaction_added
 10. reaction_removed
 11. team_join
+
+After adding the events, click `Save Changes` at the bottom of the page to save the subscriptions before testing below.
 
 ## Test the Connection
 

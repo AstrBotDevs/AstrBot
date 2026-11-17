@@ -28,9 +28,36 @@ Set dashboard.host in data/cmd_config.json to enable remote access.
 
 ### 管理面板的密码忘记了
 
-如果你忘记了 AstrBot 管理面板的密码，你可以直接使用CLI工具`astrbot password`来更改密码
+如果你忘记了 AstrBot 管理面板的密码，可以按照部署方式选择对应的方法重置。
 
-另外，你也可以在 `AstrBot/data/cmd_config.json` 配置文件中找到 `"dashboard"` 字段，如下：
+#### Docker 部署
+
+镜像内置了 AstrBot CLI，可以直接在容器内重置密码：
+
+```bash
+sudo docker exec -it astrbot astrbot password
+sudo docker restart astrbot # 修改后需要重启容器才能生效
+```
+
+其中第一个 `astrbot` 是容器名，如果你的容器名不同，请相应替换（可通过 `sudo docker ps` 查看容器名）。
+
+如需同时修改用户名，可以加 `--username` 参数：`sudo docker exec -it astrbot astrbot password --username <新用户名>`。
+
+#### uv / pip 软件包部署
+
+在 AstrBot 工作目录（即 `astrbot init` 初始化的目录）中执行：
+
+```bash
+astrbot password
+```
+
+如需同时修改用户名，可以加 `--username` 参数：`astrbot password --username <新用户名>`。
+
+然后重启 AstrBot 生效。
+
+#### 其他部署方式
+
+对于源码、面板类等没有可用 CLI 的部署方式，可以直接修改配置文件。在 `AstrBot/data/cmd_config.json` 配置文件中找到 `"dashboard"` 字段，如下：
 
 ```json
   "dashboard": {
@@ -90,8 +117,8 @@ Set dashboard.host in data/cmd_config.json to enable remote access.
 
 ### 如何让 AstrBot 控制我的 Mac / Windows / Linux 电脑？
 
-1. 在 AstrBot WebUI 的 `配置文件` 中选择机器人使用的配置文件，进入 `AI 配置 → 能力 → 使用电脑能力`，将 `运行环境` 设为 `local`。此处需要使用 AstrBot 内置 AI。
-2. 在同一配置文件的 `平台配置 → 基本 → 管理员 ID` 中添加你的用户 ID（可以通过 `/sid` 指令获取）。
+1. 在 AstrBot WebUI 的 `配置文件` 中选择机器人使用的配置文件，进入 `AI → 能力 → 使用电脑能力`，将 `运行环境` 设为 `local`。此处需要使用 AstrBot 内置 AI。
+2. 在同一配置文件的 `访问控制 → 管理员 → 管理员 ID` 中添加你的用户 ID（可以通过 `/sid` 指令获取）。
 3. 点击右下角的 `保存配置` 按钮。
 
 > [!TIP]
@@ -120,7 +147,7 @@ Set dashboard.host in data/cmd_config.json to enable remote access.
 
 ### 没有权限操作管理员指令
 
-1. `/name, /provider, /dashboard_update, /op, /deop, /persona, /llm, /plugin, /model, /groupnew` 等是默认的管理员指令。可以通过 `/sid` 指令得到用户的 ID，然后在 `配置文件` 中选择机器人使用的配置文件，在 `平台配置 → 基本 → 管理员 ID` 中添加该 ID，并点击右下角的 `保存配置`。
+1. `/name, /provider, /dashboard_update, /op, /deop, /persona, /llm, /plugin, /model, /groupnew` 等是默认的管理员指令。可以通过 `/sid` 指令得到用户的 ID，然后在 `配置文件` 中选择机器人使用的配置文件，在 `访问控制 → 管理员 → 管理员 ID` 中添加该 ID，并点击右下角的 `保存配置`。
 
 ### 本地渲染 Markdown 图片（t2i）时中文乱码
 
@@ -164,21 +191,21 @@ Set dashboard.host in data/cmd_config.json to enable remote access.
 如果发现插件作者没有填写 `requirements.txt` 文件，请在插件仓库提交 Issue，提醒作者补充。
 
 
-## OneBot v11 实现端 NapCat 连接相关
+## OneBot v11 实现端连接相关
 
-### 我明明按照文档的步骤做了，为什么 NapCat 连不上 Astrbot？
+### 我明明按照文档的步骤做了，为什么协议实现端连不上 AstrBot？
 
 1. 如果你两个**全都**是使用 Docker 部署，请尝试在终端运行：
 
 ```bash
-sudo docker network create newnet           # 创建新网络 
-sudo docker network connect newnet astrbot  
-sudo docker network connect newnet napcat   # 让两个容器连到一起
+sudo docker network create newnet           # 创建新网络
+sudo docker network connect newnet astrbot
+sudo docker network connect newnet onebot11inst   # 让两个容器连到一起
 sudo docker restart astrbot
-sudo docker restart napcat                  # 重启容器
+sudo docker restart onebot11inst                  # 重启容器
 ```
 
-运行无报错则回到 NapCat 的 WebUI，网络配置中，将你之前填写的 `ws://127.0.0.1:6199/ws` 修改为 `ws://astrbot:6199/ws`。
+运行无报错则回到协议实现端的 WebUI，网络配置中，将你之前填写的 `ws://127.0.0.1:6199/ws` 修改为 `ws://astrbot:6199/ws`。
 
-2. 如果只有 NapCat 是 Docker 部署，请将 NapCat 的 WebUI 网络配置中的 `ws://127.0.0.1:6199/ws` 修改为 `ws://宿主机IP:6199/ws`（宿主机 IP 请自行搜索如何查看）。
-3. 如果都不是 Docker 部署，则请将 NapCat 的 WebUI 网络配置中的 `ws://127.0.0.1:6199/ws` 修改为 `ws://localhost:6199/ws` 或 `ws://127.0.0.1:6199/ws`。
+2. 如果只有协议实现端是 Docker 部署，请将其 WebUI 网络配置中的 `ws://127.0.0.1:6199/ws` 修改为 `ws://宿主机IP:6199/ws`（宿主机 IP 请自行搜索如何查看）。
+3. 如果都不是 Docker 部署，则请将协议实现端 WebUI 网络配置中的 `ws://127.0.0.1:6199/ws` 修改为 `ws://localhost:6199/ws` 或 `ws://127.0.0.1:6199/ws`。

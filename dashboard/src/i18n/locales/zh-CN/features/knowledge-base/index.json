@@ -37,6 +37,7 @@
     "cancel": "取消",
     "submit": "创建",
     "nameRequired": "请输入知识库名称",
+    "embeddingModelRequired": "请选择嵌入模型",
     "nameChangeHint": "后续如修改知识库名称，需同步更新配置文件。",
     "embeddingLockedHint": "嵌入模型选择后无法修改，如需更换请创建新的知识库。"
   },
