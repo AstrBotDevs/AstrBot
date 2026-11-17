@@ -96,6 +96,7 @@ async def present_turn(
     turn: AgentTurn,
     *,
     streaming: bool,
+    emit_output: bool = True,
     stream_to_general: bool = False,
     show_tool_use: bool = True,
     show_tool_call_result: bool = False,
@@ -108,6 +109,9 @@ async def present_turn(
     Args:
         turn: A runtime execution that proceeds independently of this consumer.
         streaming: Whether this platform receives incremental output.
+        emit_output: Whether to present automatic replies and status messages.
+            False still consumes events and records traces; explicit tool sends
+            and runtime history persistence are unaffected.
         stream_to_general: Whether only complete messages should be displayed.
         show_tool_use: Whether non-WebChat platforms show tool activity.
         show_tool_call_result: Whether activity includes a short result excerpt.
@@ -128,11 +132,12 @@ async def present_turn(
     async for output in turn.events():
         payload = output.payload
         if isinstance(payload, TurnFinished):
-            if buffered.chain:
+            if emit_output and buffered.chain:
                 yield buffered
             result = payload.result
             if (
-                result.status == TurnStatus.COMPLETED
+                emit_output
+                and result.status == TurnStatus.COMPLETED
                 and result.content
                 and not completed
                 and not emitted
@@ -152,7 +157,7 @@ async def present_turn(
                 and not turn.cancellation_requested
             ):
                 event.set_extra("agent_user_aborted", True)
-            if result.status == TurnStatus.FAILED:
+            if emit_output and result.status == TurnStatus.FAILED:
                 text = extract_persona_custom_error_message_from_event(event) or (
                     f"LLM 响应错误: {result.error.message or '未知错误'}"
                     if result.error and result.error.code == "provider_error"
@@ -163,7 +168,8 @@ async def present_turn(
         if isinstance(payload, TurnPrepared):
             event.set_extra("_agent_chat_model", payload.model)
             if (
-                context is not None
+                emit_output
+                and context is not None
                 and event.get_platform_name() == "webchat"
                 and not isinstance(event, AgentWakeupEvent)
                 and payload.provider_id
@@ -181,7 +187,8 @@ async def present_turn(
                     )
         elif isinstance(payload, (TextDelta, ReasoningDelta)):
             if (
-                streaming
+                emit_output
+                and streaming
                 and not stream_to_general
                 and (not isinstance(payload, ReasoningDelta) or show_reasoning)
             ):
@@ -194,6 +201,8 @@ async def present_turn(
                     type="reasoning" if isinstance(payload, ReasoningDelta) else None
                 ).message(payload.text)
         elif isinstance(payload, MessageCompleted):
+            if not emit_output:
+                continue
             if payload.message_id in completed:
                 continue
             completed.add(payload.message_id)
@@ -235,6 +244,8 @@ async def present_turn(
                 "ts": output.created_at.timestamp(),
             }
             event.trace.record("agent_tool_call", tool_name=info)
+            if not emit_output:
+                continue
             if streaming and show_tool_use:
                 yield MessageChain(chain=[], type="break")
             if event.get_platform_name() == "webchat":
@@ -260,6 +271,8 @@ async def present_turn(
             if not text and payload.error:
                 text = payload.error.message
             event.trace.record("agent_tool_result", tool_result=text)
+            if not emit_output:
+                continue
             if event.get_platform_name() == "webchat":
                 await event.send(
                     MessageChain(
@@ -282,7 +295,9 @@ async def present_turn(
                     )
                 )
         elif (
-            isinstance(payload, UsageUpdated) and event.get_platform_name() == "webchat"
+            emit_output
+            and isinstance(payload, UsageUpdated)
+            and event.get_platform_name() == "webchat"
         ):
             tokens = payload.usage.tokens
             metrics = payload.metrics

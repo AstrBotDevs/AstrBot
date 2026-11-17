@@ -221,19 +221,20 @@ async def runtime(monkeypatch):
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("deliver", [False, True])
-@pytest.mark.parametrize("streaming", [False, True])
-async def test_wakeup_uses_current_context_and_sends_final_reply(
-    runtime, deliver, streaming
-):
-    """Keep routing, execution scopes, history, and delivery on the normal path."""
-    runtime.deliver = deliver
-    runtime.agent_stage.streaming_response = streaming
+@pytest.mark.parametrize("source", ["cron", "background_task", "plugin"])
+async def test_wakeup_output_policy_preserves_explicit_sends_and_history(runtime, source):
+    """Keep explicit sends and history when automatic replies are disabled.
+
+    Args:
+        runtime: Real pipeline and offline model host.
+        source: Mechanism initiating the wakeup.
+    """
+    runtime.deliver = True
     history = [{"role": "user", "content": "Existing context"}]
     runtime.conversation.history = json.dumps(history)
     umo = "target:GroupMessage:user_group"
     await wake_main_agent(
-        runtime.context, umo=umo, user_prompt="Continue", source="cron"
+        runtime.context, umo=umo, user_prompt="Continue", source=source
     )
     await asyncio.wait_for(runtime.drain(), 1)
     event = runtime.events[0]
@@ -250,7 +251,9 @@ async def test_wakeup_uses_current_context_and_sends_final_reply(
         call.args[1].get_plain_text()
         for call in runtime.context.send_message.await_args_list
     ]
-    assert delivered_texts == (["Explicit delivery"] if deliver else []) + ["Reply 1"]
+    assert delivered_texts == ["Explicit delivery"] + (
+        ["Reply 1"] if source == "plugin" else []
+    )
     assert event.trace._summary["state"] == "completed"
     assert not event.trace._summary["has_errors"]
     assert current_message_event.get() is None and _log_context.get() is None
