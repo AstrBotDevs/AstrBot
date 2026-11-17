@@ -227,7 +227,8 @@ class AzureTTSProvider(TTSProvider):
                     raise ValueError("无效的other[...]格式，应形如 other[{...}]")
                 json_str = match.group(1).strip()
                 otts_config = json.loads(json_str)
-                otts_config.setdefault("custom_headers", config.get("custom_headers"))
+                # Only static headers may reach the shared aiohttp client.
+                otts_config.setdefault("custom_headers", self.request_headers)
                 required = {"OTTS_SKEY", "OTTS_URL", "OTTS_AUTH_TIME"}
                 if missing := required - otts_config.keys():
                     raise ValueError(f"缺少OTTS参数: {', '.join(missing)}")

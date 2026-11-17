@@ -25,17 +25,20 @@ class ProviderMiniMaxTokenPlan(ProviderAnthropic):
     ) -> None:
         # Keep api_base fixed; Token Plan users do not need to configure it.
         provider_config["api_base"] = "https://api.minimaxi.com/anthropic"
-        # MiniMax Token Plan requires the Authorization: Bearer <token> header.
-        key = provider_config.get("key", "")
-        actual_key = key[0] if isinstance(key, list) else key
-        provider_config.setdefault("custom_headers", {})["Authorization"] = (
-            f"Bearer {actual_key}"
-        )
 
         super().__init__(
             provider_config,
             provider_settings,
+            use_api_key=False,
         )
+
+        # MiniMax Token Plan requires the Authorization: Bearer <token> header.
+        # It is added after the custom header split so the API key is never
+        # parsed or validated as a header template.
+        key = provider_config.get("key", "")
+        actual_key = key[0] if isinstance(key, list) else key
+        self.custom_headers["Authorization"] = f"Bearer {actual_key}"
+        self._init_api_key(provider_config)
 
         configured_model = provider_config.get("model", "MiniMax-M3")
         self.set_model(configured_model)

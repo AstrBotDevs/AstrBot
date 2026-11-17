@@ -308,6 +308,9 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         self._conversation_event_sink = conversation_event_sink
         self._pending_assistant_event: AgentResponse | None = None
         self._context_initialized = False
+        # Stable per-run ID shared by every request of this run, including tool
+        # rounds, fallback providers and retries.
+        self._request_id = uuid.uuid4().hex
         self.streaming = streaming
         self.enforce_max_turns = enforce_max_turns
         self.llm_compress_instruction = llm_compress_instruction
@@ -361,6 +364,9 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         self.run_context.run_end_reason = None
         self.run_context.run_error = None
         self._done_hook_called = False
+        # The UMO always comes from the event, never from ProviderRequest.session_id.
+        event = getattr(run_context.context, "event", None)
+        self._umo = getattr(event, "unified_msg_origin", "") or ""
         self._aborted = False
         self._abort_signal = asyncio.Event()
         self._pending_follow_ups: list[FollowUpTicket] = []
@@ -763,6 +769,8 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         payload = {
             "func_tool": self._func_tool_for_provider(),
             "session_id": self.req.session_id,
+            "umo": self._umo,
+            "request_id": self._request_id,
             "conversation_id": (
                 self.req.conversation.cid if self.req.conversation else None
             ),
@@ -1201,6 +1209,11 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             self.request_context_manager.process(
                 self.run_context.messages,
                 trusted_token_usage=token_usage,
+                request_id=self._request_id,
+                umo=self._umo,
+                conversation_id=(
+                    self.req.conversation.cid if self.req.conversation else None
+                ),
             )
         )
         if processed_messages is None:
@@ -1870,6 +1883,11 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                         "func_tool": param_subset,
                         "model": self.req.model,
                         "session_id": self.req.session_id,
+                        "umo": self._umo,
+                        "request_id": self._request_id,
+                        "conversation_id": (
+                            self.req.conversation.cid if self.req.conversation else None
+                        ),
                         "extra_user_content_parts": self.req.extra_user_content_parts,
                         # tool_choice="required",
                         "abort_signal": self._abort_signal,
@@ -1903,6 +1921,13 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                             "func_tool": param_subset,
                             "model": self.req.model,
                             "session_id": self.req.session_id,
+                            "umo": self._umo,
+                            "request_id": self._request_id,
+                            "conversation_id": (
+                                self.req.conversation.cid
+                                if self.req.conversation
+                                else None
+                            ),
                             "extra_user_content_parts": self.req.extra_user_content_parts,
                             # tool_choice="required",
                             "abort_signal": self._abort_signal,
