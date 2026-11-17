@@ -9,6 +9,7 @@ from astrbot.core.star.filter.platform_adapter_type import (
     PlatformAdapterType,
     PlatformAdapterTypeFilter,
 )
+from astrbot.core.star.filter.ui_action import UIActionFilter
 from astrbot.core.star.register import register_after_message_sent as after_message_sent
 from astrbot.core.star.register import (
     register_button_action as button_action,
@@ -42,10 +43,12 @@ from astrbot.core.star.register import (
     register_platform_adapter_type as platform_adapter_type,
 )
 from astrbot.core.star.register import register_regex as regex
+from astrbot.core.star.register import register_ui_action as ui_action
 
 __all__ = [
     "CustomFilter",
     "ButtonActionFilter",
+    "UIActionFilter",
     "EventMessageType",
     "EventMessageTypeFilter",
     "PermissionType",
@@ -54,6 +57,7 @@ __all__ = [
     "PlatformAdapterTypeFilter",
     "after_message_sent",
     "button_action",
+    "ui_action",
     "command",
     "command_group",
     "custom_filter",

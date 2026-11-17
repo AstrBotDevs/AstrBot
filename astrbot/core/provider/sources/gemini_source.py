@@ -20,10 +20,6 @@ from astrbot.core.exceptions import EmptyModelOutputError
 from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.provider.entities import LLMResponse, TokenUsage
 from astrbot.core.provider.func_tool_manager import ToolSet
-from astrbot.core.provider.request_observer import (
-    RequestAttemptObserver,
-    request_recorder_kwargs,
-)
 from astrbot.core.utils.media_utils import (
     describe_media_ref,
     resolve_media_ref_to_base64_data,
@@ -122,11 +118,10 @@ class ProviderGoogleGenAI(Provider):
             api_key=self.chosen_api_key,
             http_options=http_options,
         ).aio
-        # Restore our explicit UA after the SDK adds or normalizes its lower-case header.
-        self.client._api_client._http_options.headers.pop("user-agent", None)
-        self.client._api_client._http_options.headers["User-Agent"] = (
-            self.request_headers["User-Agent"]
-        )
+        # Keep only AstrBot's UA across SDK versions that merge header case variants.
+        headers = self.client._api_client._http_options.headers
+        headers["user-agent"] = self.request_headers["User-Agent"]
+        headers.pop("User-Agent", None)
 
     @asynccontextmanager
     async def _conversation_header(self, conversation_id: str | None):
@@ -408,11 +403,21 @@ class ProviderGoogleGenAI(Provider):
                 mime_type=image_data.mime_type,
             )
 
-        def process_audio_url(audio_url_dict: dict) -> types.Part:
+        async def process_audio_url(audio_url_dict: dict) -> types.Part:
             url = audio_url_dict["url"]
-            mime_type = url.split(":")[1].split(";")[0]
-            audio_bytes = base64.b64decode(url.split(",", 1)[1])
-            return types.Part.from_bytes(data=audio_bytes, mime_type=mime_type)
+            audio_data = await resolve_media_ref_to_base64_data(
+                url,
+                media_type="audio",
+                strict=True,
+            )
+            if audio_data is None:
+                raise ValueError(
+                    f"Failed to resolve Gemini history audio: {describe_media_ref(url)}"
+                )
+            return types.Part.from_bytes(
+                data=base64.b64decode(audio_data.base64_data),
+                mime_type=audio_data.mime_type,
+            )
 
         def append_or_extend(
             contents: list[types.Content],
@@ -437,8 +442,8 @@ class ProviderGoogleGenAI(Provider):
                             parts.append(types.Part.from_text(text=item["text"] or " "))
                         elif item["type"] == "image_url":
                             parts.append(await process_image_url(item["image_url"]))
-                        else:
-                            parts.append(process_audio_url(item["audio_url"]))
+                        elif item["type"] == "audio_url":
+                            parts.append(await process_audio_url(item["audio_url"]))
                 else:
                     parts = [create_text_part(content)]
                 append_or_extend(gemini_contents, parts, types.UserContent)
@@ -691,7 +696,6 @@ class ProviderGoogleGenAI(Provider):
         tools: ToolSet | None,
         *,
         request_max_retries: int | None = None,
-        request_event_recorder: RequestAttemptObserver | None = None,
         conversation_id: str | None = None,
     ) -> LLMResponse:
         """非流式请求 Gemini API"""
@@ -728,7 +732,6 @@ class ProviderGoogleGenAI(Provider):
                             config=config,
                         ),
                         max_attempts=request_max_retries,
-                        request_event_recorder=request_event_recorder,
                     )
                 logger.debug(f"genai result: {result}")
 
@@ -796,7 +799,6 @@ class ProviderGoogleGenAI(Provider):
         tools: ToolSet | None,
         *,
         request_max_retries: int | None = None,
-        request_event_recorder: RequestAttemptObserver | None = None,
         conversation_id: str | None = None,
     ) -> AsyncGenerator[LLMResponse, None]:
         """流式请求 Gemini API"""
@@ -825,7 +827,6 @@ class ProviderGoogleGenAI(Provider):
                             config=config,
                         ),
                         max_attempts=request_max_retries,
-                        request_event_recorder=request_event_recorder,
                     )
                 break
             except APIError as e:
@@ -963,7 +964,6 @@ class ProviderGoogleGenAI(Provider):
         extra_user_content_parts=None,
         tool_choice: Literal["auto", "required"] = "auto",
         request_max_retries: int | None = None,
-        request_event_recorder: RequestAttemptObserver | None = None,
         **kwargs,
     ) -> LLMResponse:
         conversation_id = kwargs.pop("conversation_id", None)
@@ -1013,7 +1013,6 @@ class ProviderGoogleGenAI(Provider):
                     payloads,
                     func_tool,
                     request_max_retries=request_max_retries,
-                    **request_recorder_kwargs(self._query, request_event_recorder),
                     **query_kwargs,
                 )
             except APIError as e:
@@ -1037,7 +1036,6 @@ class ProviderGoogleGenAI(Provider):
         extra_user_content_parts=None,
         tool_choice: Literal["auto", "required"] = "auto",
         request_max_retries: int | None = None,
-        request_event_recorder: RequestAttemptObserver | None = None,
         **kwargs,
     ) -> AsyncGenerator[LLMResponse, None]:
         conversation_id = kwargs.pop("conversation_id", None)
@@ -1087,9 +1085,6 @@ class ProviderGoogleGenAI(Provider):
                     payloads,
                     func_tool,
                     request_max_retries=request_max_retries,
-                    **request_recorder_kwargs(
-                        self._query_stream, request_event_recorder
-                    ),
                     **query_kwargs,
                 ):
                     yield response

@@ -1,7 +1,7 @@
 <template>
-  <div class="provider-page">
+  <div class="provider-page" :class="{ 'provider-page--embedded': embedded }">
     <v-container fluid class="pa-0">
-      <div class="provider-tabs-scroll">
+      <div v-if="!embedded" class="provider-tabs-scroll">
         <div
           class="provider-tabs"
           role="tablist"
@@ -339,6 +339,7 @@ import { useProviderModelConfigDialog } from '@/composables/useProviderModelConf
 import { useProviderSources } from '@/composables/useProviderSources'
 
 const props = defineProps({
+  embedded: { type: Boolean, default: false },
   defaultTab: {
     type: String,
     default: 'chat_completion'
@@ -761,6 +762,16 @@ async function testSingleProvider(provider) {
   flex: 1;
   flex-direction: column;
   min-height: 0;
+}
+
+.provider-page--embedded .provider-content {
+  max-width: none;
+  padding: 0;
+}
+
+.provider-page--embedded .provider-workbench {
+  border: 0;
+  border-radius: 0;
 }
 
 .provider-tabs-scroll {
