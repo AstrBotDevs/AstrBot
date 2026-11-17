@@ -332,7 +332,8 @@ class ProviderGoogleGenAI(Provider):
                     GEMINI_4_FALLBACK_THINKING_LEVELS,
                 )
 
-            elif model_name.startswith("gemini-3.7"):
+            # Workaround. Recommended to drop support after Gemini 4 Neon release.
+            elif model_name.startswith(("gemini-3.7", "gemini-3.8")):
                 allowed_levels = ("LOW", "MEDIUM", "HIGH")
             else:
                 allowed_levels = ("MINIMAL", "LOW", "MEDIUM", "HIGH")
