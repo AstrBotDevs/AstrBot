@@ -52,6 +52,190 @@ async def test_gemini_37_minimal_thinking_level_falls_back_to_medium():
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("model", "gm_thinking_config", "expected"),
+    [
+        # Gemini 4 and relay-decorated ids must use thinkingLevel, never budget.
+        (
+            "gemini-4-argon",
+            {"level": "HIGH"},
+            {"thinking_level": types.ThinkingLevel.HIGH},
+        ),
+        (
+            "［抗截断］gemini-4-argon",
+            {"budget": 0, "level": "HIGH"},
+            {"thinking_level": types.ThinkingLevel.HIGH},
+        ),
+        (
+            "［抗截断］gemini-4-argon",
+            {"level": "low"},
+            {"thinking_level": types.ThinkingLevel.LOW},
+        ),
+        # Gemini 3.7+ generations reject MINIMAL, so it falls back to MEDIUM.
+        (
+            "gemini-4.1-pro",
+            {"level": "MINIMAL"},
+            {"thinking_level": types.ThinkingLevel.MEDIUM},
+        ),
+        (
+            "gemini-3.8-flash",
+            {"level": "MINIMAL"},
+            {"thinking_level": types.ThinkingLevel.MEDIUM},
+        ),
+        (
+            "［抗截断］gemini-3.8-flash",
+            {},
+            {"thinking_level": types.ThinkingLevel.HIGH},
+        ),
+        # Gemini 3.0-3.6 still accept MINIMAL.
+        (
+            "gemini-3.1-pro",
+            {"level": "MINIMAL"},
+            {"thinking_level": types.ThinkingLevel.MINIMAL},
+        ),
+        (
+            "gemini-3.7-flash",
+            {"level": "MINIMAL"},
+            {"thinking_level": types.ThinkingLevel.MEDIUM},
+        ),
+        # Gemini 2.5 behavior is unchanged, including decorated ids.
+        (
+            "gemini-2.5-flash",
+            {"budget": 0},
+            {"thinking_budget": 0},
+        ),
+        (
+            "［抗截断］gemini-2.5-flash",
+            {"budget": 0},
+            {"thinking_budget": 0},
+        ),
+        # Dated and experimental 2.5 thinking variants stay covered.
+        (
+            "gemini-2.5-flash-preview-09-2025",
+            {"budget": 2048},
+            {"thinking_budget": 2048},
+        ),
+        (
+            "gemini-2.5-flash-lite-preview",
+            {"budget": 0},
+            {"thinking_budget": 0},
+        ),
+        (
+            "gemini-2.5-pro-preview-05-06",
+            {"budget": 1024},
+            {"thinking_budget": 1024},
+        ),
+        # Old and non-Gemini models keep sending no thinking config.
+        ("gemini-2.0-flash", {}, None),
+        ("gpt-4o", {}, None),
+    ],
+    ids=[
+        "gemini-4-argon-level",
+        "relay-gemini-4-argon-budget-and-level",
+        "relay-gemini-4-argon-lowercase-level",
+        "gemini-4.1-pro-minimal",
+        "gemini-3.8-flash-minimal",
+        "relay-gemini-3.8-flash-default",
+        "gemini-3.1-pro-minimal",
+        "gemini-3.7-flash-minimal",
+        "gemini-2.5-flash-budget",
+        "relay-gemini-2.5-flash-budget",
+        "gemini-2.5-flash-preview-09-2025-budget",
+        "gemini-2.5-flash-lite-preview-budget",
+        "gemini-2.5-pro-preview-05-06-budget",
+        "gemini-2.0-flash-none",
+        "gpt-4o-none",
+    ],
+)
+async def test_gemini_thinking_config_matrix(model, gm_thinking_config, expected):
+    provider = ProviderGoogleGenAI.__new__(ProviderGoogleGenAI)
+    provider.provider_config = {"gm_thinking_config": gm_thinking_config}
+    provider.provider_settings = {}
+    provider.model_name = model
+    provider.safety_settings = []
+
+    config = await provider._prepare_query_config({"model": model})
+
+    if expected is None:
+        assert config.thinking_config is None
+        return
+    assert config.thinking_config is not None
+    assert config.thinking_config.model_dump(exclude_none=True) == expected
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("model", "gm_thinking_config"),
+    [
+        # Gemini 2.5 image models reject any thinkingConfig with
+        # 400 INVALID_ARGUMENT ("Thinking is not enabled for this model"), so
+        # even the default budget of 0 must not be sent to them.
+        ("gemini-2.5-flash-image", {"budget": 0, "level": "HIGH"}),
+        ("gemini-2.5-flash-image", {"budget": 2048}),
+        ("gemini-2.5-flash-image-preview", {"budget": 0, "level": "HIGH"}),
+        ("gemini-2.5-flash-image-preview-09-2025", {"budget": 2048}),
+        ("gemini-2.5-flash-image-generation", {"budget": 0, "level": "HIGH"}),
+        ("gemini-2.5-pro-image", {"budget": 0, "level": "HIGH"}),
+        # Relay-decorated aliases of the image ids must be excluded as well.
+        ("［抗截断］gemini-2.5-flash-image", {"budget": 0, "level": "HIGH"}),
+        ("image-relay:gemini-2.5-flash-image", {"budget": 2048}),
+        # Other 2.5 modalities that reject thinkingConfig: TTS, native audio
+        # and computer use.
+        ("gemini-2.5-flash-preview-tts", {"budget": 0, "level": "HIGH"}),
+        ("gemini-2.5-pro-preview-tts", {"budget": 2048}),
+        ("gemini-2.5-flash-native-audio-preview-09-2025", {"budget": 0}),
+        ("gemini-2.5-computer-use-preview-10-2025", {"budget": 0, "level": "HIGH"}),
+        # Older image generation models keep sending nothing.
+        ("gemini-2.0-flash-exp-image-generation", {"budget": 0, "level": "HIGH"}),
+    ],
+    ids=[
+        "flash-image-default-budget",
+        "flash-image-positive-budget",
+        "flash-image-preview-default-budget",
+        "flash-image-preview-09-2025-positive-budget",
+        "flash-image-generation-default-budget",
+        "pro-image-default-budget",
+        "relay-flash-image-default-budget",
+        "image-relay-flash-image-positive-budget",
+        "flash-preview-tts-default-budget",
+        "pro-preview-tts-positive-budget",
+        "flash-native-audio-preview-budget",
+        "computer-use-preview-default-budget",
+        "gemini-2.0-image-generation-default-budget",
+    ],
+)
+async def test_gemini_25_non_thinking_models_get_no_thinking_config(
+    model, gm_thinking_config
+):
+    provider = ProviderGoogleGenAI.__new__(ProviderGoogleGenAI)
+    provider.provider_config = {"gm_thinking_config": gm_thinking_config}
+    provider.provider_settings = {}
+    provider.model_name = model
+    provider.safety_settings = []
+
+    config = await provider._prepare_query_config({"model": model})
+
+    assert config.thinking_config is None
+
+
+@pytest.mark.asyncio
+async def test_gemini_25_image_generation_request_gets_no_thinking_config():
+    model = "gemini-2.5-flash-image"
+    provider = ProviderGoogleGenAI.__new__(ProviderGoogleGenAI)
+    provider.provider_config = {"gm_thinking_config": {"budget": 0, "level": "HIGH"}}
+    provider.provider_settings = {}
+    provider.model_name = model
+    provider.safety_settings = []
+
+    config = await provider._prepare_query_config(
+        {"model": model}, modalities=["IMAGE"]
+    )
+
+    assert config.response_modalities == ["IMAGE"]
+    assert config.thinking_config is None
+
+
+@pytest.mark.asyncio
 async def test_gemini_prepare_conversation_removes_leading_model_content():
     provider = ProviderGoogleGenAI.__new__(ProviderGoogleGenAI)
 
