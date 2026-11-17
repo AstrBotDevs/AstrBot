@@ -1,45 +1,46 @@
 import { ref } from "vue";
 
-import { chatPreferences } from "@/utils/chatPreferences";
-import { getStoredDashboardUsername } from "@/utils/chatConfigBinding";
+const SELECTED_PROVIDER_KEY = "selectedProvider";
+const SELECTED_PROVIDER_MODEL_KEY = "selectedProviderModel";
 
 // Module-level state so every ProviderModelMenu instance (header, input)
 // shares the same selection.
 const selectedProviderId = ref("");
 const selectedModelName = ref("");
-let syncedUser = "";
+let syncedFromStorage = false;
 
 function syncFromStorage() {
-  const user = getStoredDashboardUsername();
-  if (syncedUser === user) return;
-  syncedUser = user;
-  const selection = chatPreferences().global.provider;
-  selectedProviderId.value = selection?.providerId || "";
-  selectedModelName.value = selection?.modelName || "";
+  if (syncedFromStorage || typeof window === "undefined") return;
+  syncedFromStorage = true;
+  try {
+    selectedProviderId.value =
+      localStorage.getItem(SELECTED_PROVIDER_KEY) || "";
+    selectedModelName.value = selectedProviderId.value
+      ? localStorage.getItem(SELECTED_PROVIDER_MODEL_KEY) || ""
+      : "";
+  } catch {
+    // Storage can be unavailable in restricted browser contexts.
+  }
 }
 
 export function useProviderModelSelection() {
   syncFromStorage();
 
-  function resetSelection() {
-    syncedUser = "";
-    selectedProviderId.value = "";
-    selectedModelName.value = "";
-  }
-
   function setSelection(providerId: string, modelName = "") {
     selectedProviderId.value = providerId;
     selectedModelName.value = providerId ? modelName : "";
-    chatPreferences((preferences) => {
-      if (providerId) preferences.global.provider = { providerId, modelName };
-      else delete preferences.global.provider;
-    });
+    try {
+      if (providerId) {
+        localStorage.setItem(SELECTED_PROVIDER_KEY, providerId);
+        localStorage.setItem(SELECTED_PROVIDER_MODEL_KEY, modelName);
+      } else {
+        localStorage.removeItem(SELECTED_PROVIDER_KEY);
+        localStorage.removeItem(SELECTED_PROVIDER_MODEL_KEY);
+      }
+    } catch {
+      // Selection persistence must not block the UI.
+    }
   }
 
-  return {
-    selectedProviderId,
-    selectedModelName,
-    setSelection,
-    resetSelection,
-  };
+  return { selectedProviderId, selectedModelName, setSelection };
 }

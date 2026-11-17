@@ -175,8 +175,6 @@ outline: deep
 | `GET` | `/api/v1/chat/views/{view_id}` | — |
 | `POST` | `/api/v1/chat/views/{view_id}/actions` | — |
 | `GET` | `/api/v1/chat/views/{view_id}/actions/{interaction_id}` | — |
-| `GET` | `/api/v1/chat/workbench/views` | — |
-| `GET` | `/api/v1/chat/workbench/views/{plugin_name}/{view_name}` | — |
 | `GET` | `/api/v1/chat/ws` | `chat:admin` |
 
 ## `data`

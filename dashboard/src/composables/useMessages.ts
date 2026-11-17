@@ -1413,7 +1413,6 @@ export function useMessages(options: UseMessagesOptions) {
       messageContent(botRecord).message.push({
         ...(data as Record<string, unknown>),
         type: msgType,
-        ...(msgType === "view" ? { workbenchLive: true } : {}),
       });
       return;
     }

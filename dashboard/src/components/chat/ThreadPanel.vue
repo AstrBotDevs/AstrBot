@@ -58,7 +58,7 @@
 <script setup lang="ts">
 import "@/components/chat/chatPanelTransition.css";
 import { nextTick, provide, ref, watch } from "vue";
-import { streamViewAction, viewActionKey, workbenchKey } from "@/utils/chatViews";
+import { streamViewAction, viewActionKey } from "@/utils/chatViews";
 import { chatApi } from "@/api/v1";
 import { fetchWithAuth } from "@/api/http";
 import {
@@ -94,8 +94,6 @@ const emit = defineEmits<{
 }>();
 
 const { tm } = useModuleI18n("features/chat");
-// Thread views stay within their own conversation and action handler.
-provide(workbenchKey, undefined);
 const { locale } = useI18n();
 const messages = ref<ChatRecord[]>([]);
 const draft = ref("");

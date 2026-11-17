@@ -119,12 +119,12 @@ const title = computed(() => {
   .chat-toolbar-context-title {
     position: absolute;
     top: 50%;
-    left: calc(50% + (var(--astrbot-chat-sidebar-width, 0px) - var(--astrbot-active-workbench-width, 0px)) / 2);
+    left: calc(50% + var(--astrbot-chat-sidebar-width, 0px) / 2);
     width: max(
       0px,
       min(
-        calc((100% - var(--astrbot-chat-sidebar-width, 0px) - var(--astrbot-active-workbench-width, 0px)) * 0.4),
-        calc(100% - var(--astrbot-chat-sidebar-width, 0px) - var(--astrbot-active-workbench-width, 0px) - 440px)
+        calc((100% - var(--astrbot-chat-sidebar-width, 0px)) * 0.4),
+        calc(100% - var(--astrbot-chat-sidebar-width, 0px) - 440px)
       )
     );
     max-width: none;

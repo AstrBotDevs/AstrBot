@@ -1,4 +1,4 @@
-import { chatPreferences } from "./chatPreferences";
+export const CHAT_SELECTED_CONFIG_STORAGE_KEY = 'chat.selectedConfigId';
 
 export type ChatMessageType = 'FriendMessage' | 'GroupMessage';
 
@@ -22,16 +22,27 @@ function getFromLocalStorage(key: string, fallback: string): string {
   }
 }
 
+function setToLocalStorage(key: string, value: string): void {
+  try {
+    if (typeof localStorage === 'undefined') {
+      return;
+    }
+    localStorage.setItem(key, value);
+  } catch {
+    // Ignore storage errors (e.g. private mode / restricted storage).
+  }
+}
+
 export function getStoredDashboardUsername(): string {
   return getFromLocalStorage('user', '').trim() || 'guest';
 }
 
 export function getStoredSelectedChatConfigId(): string {
-  return chatPreferences().global.configId?.trim() || 'default';
+  return getFromLocalStorage(CHAT_SELECTED_CONFIG_STORAGE_KEY, '').trim() || 'default';
 }
 
 export function setStoredSelectedChatConfigId(configId: string): void {
-  chatPreferences((preferences) => { preferences.global.configId = configId; });
+  setToLocalStorage(CHAT_SELECTED_CONFIG_STORAGE_KEY, configId);
 }
 
 export function buildWebchatUmoDetails(sessionId: string, isGroup = false): WebchatUmoDetails {

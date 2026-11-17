@@ -21,10 +21,7 @@ class ViewSpec(BaseModel):
     model_config = ConfigDict(extra="forbid")
     name: str = Field(pattern=r"^[a-zA-Z0-9_-]+$")
     entry: Path
-    target: Literal["chat_message", "chat_workbench", "plugin_page"] = "chat_message"
-    title: str = Field(default="", max_length=200)
-    description: str = Field(default="", max_length=500)
-    launcher: bool = False
+    target: Literal["chat_message", "plugin_page"] = "chat_message"
     version: int = Field(default=1, ge=1)
     actions: list[str] = Field(default_factory=list)
 
@@ -38,11 +35,9 @@ class ViewSpec(BaseModel):
         Raises:
             ValueError: If a plugin page declares chat interaction actions.
         """
-        if self.launcher and self.target != "chat_workbench":
-            raise ValueError("Only chat_workbench views can appear in the launcher.")
-        if (self.target == "plugin_page" or self.launcher) and self.actions:
+        if self.target == "plugin_page" and self.actions:
             raise ValueError(
-                "Standalone views use plugin Web APIs, not UI interaction actions."
+                "plugin_page views use plugin Web APIs, not UI interaction actions."
             )
         return self
 
@@ -54,7 +49,6 @@ class ViewResult(BaseModel):
     name: str | None = None
     data: dict[str, Any]
     text: str = ""
-    title: str = Field(default="", max_length=200)
 
     @model_validator(mode="after")
     def validate_operation(self):
@@ -70,8 +64,6 @@ class ViewResult(BaseModel):
             raise ValueError("Creating a view requires a name and fallback text.")
         if self.name is None and self.text:
             raise ValueError("A view update cannot replace the tool's text result.")
-        if self.name is None and self.title:
-            raise ValueError("A view update cannot replace its title.")
         return self
 
     @field_validator("data")
@@ -136,7 +128,7 @@ def resolve_view(
     name: str,
     version: int | None = None,
     *,
-    target: Literal["chat_message", "chat_workbench", "plugin_page"] | None = None,
+    target: Literal["chat_message", "plugin_page"] = "chat_message",
 ):
     """Resolve a currently enabled plugin's declared view and safe entry path.
 
@@ -144,7 +136,8 @@ def resolve_view(
         module: Owning plugin module recorded by the host.
         name: Plugin-local view name.
         version: Required contract version, if restoring an existing instance.
-        target: Exact host to validate, or None to accept either ChatUI host.
+        target: Host that must match the declaration. Chat instances require
+            chat_message; the plugin loader validates either declared target.
 
     Returns:
         The plugin metadata, validated declaration, and resolved entry path.
@@ -160,12 +153,9 @@ def resolve_view(
     for spec in getattr(plugin.star_cls, "chatui_views", []):
         if spec.name != name:
             continue
-        if spec.target not in (
-            (target,) if target else ("chat_message", "chat_workbench")
-        ):
+        if spec.target != target:
             raise ViewError(
-                "VIEW_UNAVAILABLE",
-                f"This view is not registered for {target or 'chat_message or chat_workbench'}.",
+                "VIEW_UNAVAILABLE", f"This view is not registered for {target}."
             )
         if version is not None and version != spec.version:
             break
@@ -196,22 +186,14 @@ async def emit_view(event, module: str, result: ViewResult) -> None:
     from astrbot.core.message.components import Json
     from astrbot.core.message.message_event_result import MessageChain
 
-    _, spec, _ = resolve_view(module, result.name)
+    resolve_view(module, result.name)
     if not event.platform_meta.support_ui_interaction:
         return
     record = await asyncio.to_thread(view_store.create, event, module, result)
     await event.send(
         MessageChain(
             chain=[
-                Json(
-                    {
-                        "id": record["id"],
-                        "name": record["name"],
-                        "text": result.text,
-                        "title": result.title or spec.name,
-                        "target": spec.target,
-                    }
-                )
+                Json({"id": record["id"], "name": record["name"], "text": result.text})
             ],
             type="chatui_view",
         )

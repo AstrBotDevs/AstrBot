@@ -264,18 +264,3 @@ Modify the `password` in the `dashboard` configuration in the data/cmd_config.js
 
 > [!TIP]
 > For more details, see [FAQ - Forgot Dashboard Password](/en/faq.md#forgot-dashboard-password).
-
-## ChatUI workbench
-
-The workbench button at the right of the ChatUI header opens a reading and visualization area. Click **+** in its tab bar to open **New workbench**, then choose a registered plugin view. A context-usage view can follow the active session; tools and plugin messages can also open file previews directly.
-
-Tabs sit in the main header. Drag the left divider to resize, expand for full-screen reading, or hide and reopen using the same header control. All tabs, including resident plugin views and New workbench, belong to their chat session. Switching sessions restores its tabs, selected view, and open/hidden state. This is a new entry point and does not replace standalone plugin pages in the extensions sidebar.
-
-See [Workbench page](../dev/star/guides/plugin-views/workbench.md) for plugin development.
-
-
-The workbench remembers open tabs, the active tab, visibility, and width. Closed tabs stay closed after a reload; use the compact entry in a chat message to reopen one. New tool results can still open new tabs, while loading older messages does not expand the workbench.
-
-![Compact workbench entries (sample files, Chinese interface)](images/chat-workbench-entry.jpg)
-
-ChatUI uses one `astrbot.chat.preferences` localStorage record, containing global and per-session preferences for each account. Model selections, configuration, speech recognition, expanded projects, drafts, and workbench layouts share this record. Existing scattered keys migrate automatically and are removed only after a successful write. Preferences apply to the current browser.

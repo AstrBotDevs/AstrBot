@@ -280,16 +280,13 @@ class AstrMessageEvent(abc.ABC):
             None,
         )
 
-    def view_result(
-        self, *, data: dict, name: str | None = None, text: str = "", title: str = ""
-    ):
+    def view_result(self, *, data: dict, name: str | None = None, text: str = ""):
         """Create a named card or update the current interaction's card.
 
         Args:
             data: JSON display data, fully replacing the previous snapshot.
             name: Registered view name for creation; omit to update a card.
             text: Model-visible text and fallback for a newly created card.
-            title: Display title for a new view, including its workbench tab.
 
         Returns:
             A ViewResult to yield from a handler or return from a tool.
@@ -303,7 +300,7 @@ class AstrMessageEvent(abc.ABC):
             raise ValueError("A view update requires a UI interaction and no text.")
         if name is not None and (not name or not text.strip()):
             raise ValueError("Creating a view requires a name and fallback text.")
-        return ViewResult(name=name, data=data, text=text, title=title)
+        return ViewResult(name=name, data=data, text=text)
 
     def get_message_type(self) -> MessageType:
         """获取消息类型。"""

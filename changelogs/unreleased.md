@@ -16,8 +16,8 @@
 
 ### Plugin view documentation / 插件视图文档
 
-- 插件可视化视图、ChatUI 交互卡片 → 可折叠的「插件可视化视图」章节，按独立插件页面、消息交互组件、工作台页面组织教程；共享 Bridge API 和后端 Web API 单独列出。旧文档链接及章节锚点跳转到对应新页面。
-- Plugin Views and ChatUI Cards → one collapsible Plugin Views section with standalone page, message component, and workbench tutorials, plus shared Bridge and backend Web API references. Previous document URLs and section anchors redirect to their new locations.
+- 插件可视化视图、ChatUI 交互卡片 → 可折叠的「插件可视化视图」章节，按独立插件页面、消息交互组件组织教程；共享 Bridge API 和后端 Web API 单独列出。旧文档链接及章节锚点跳转到对应新页面。
+- Plugin Views and ChatUI Cards → one collapsible Plugin Views section with standalone page and message component tutorials, plus shared Bridge and backend Web API references. Previous document URLs and section anchors redirect to their new locations.
 
-- 三类视图教程分别提供 Meme Manager 独立页面、阅读清单消息演示、上下文用量常驻工作台示例，并附实机截图及示例插件。
-- Add target-specific examples: Meme Manager for standalone pages, an interactive reading list for messages, and a resident context-usage workbench, with screenshots and example plugins.
+- 视图教程提供 Meme Manager 独立页面和阅读清单消息演示，并附实机截图及示例插件。
+- Add target-specific examples: Meme Manager for standalone pages, an interactive reading list for messages, with screenshots and example plugins.

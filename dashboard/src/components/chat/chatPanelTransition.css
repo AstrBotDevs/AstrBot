@@ -31,11 +31,3 @@
     transition: none;
   }
 }
-
-.chat-ui,
-.top-header {
-  --astrbot-workbench-width: min(
-    var(--astrbot-workbench-preferred-width, clamp(360px, 44vw, 780px)),
-    max(320px, calc(100vw - var(--astrbot-chat-sidebar-width, 0px) - 326px))
-  );
-}

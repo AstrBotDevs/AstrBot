@@ -44,6 +44,5 @@ onMounted(() => {
 
 - [独立插件页面](./plugin-views/plugin-page.md)
 - [消息交互组件](./plugin-views/chat-message.md)
-- [工作台页面](./plugin-views/workbench.md)
 - [共享 Bridge API](./plugin-views/bridge.md)
 - [后端 Web API](./plugin-views/web-api.md)

@@ -6,7 +6,6 @@ export const useChatHeaderStore = defineStore("chatHeader", {
     subtitle: "",
     projectId: "",
     workspaceFilesOpen: false,
-    workbenchWidth: null as number | null,
   }),
 
   actions: {

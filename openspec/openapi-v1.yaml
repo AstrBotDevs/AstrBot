@@ -5551,39 +5551,6 @@ paths:
         "200":
           description: Webhook accepted
 
-  /api/v1/chat/workbench/views:
-    get:
-      tags: [Chat]
-      summary: List registered workbench launcher views
-      operationId: listWorkbenchViews
-      x-astrbot-scope: chat
-      responses:
-        "200":
-          $ref: "#/components/responses/Ok"
-
-  /api/v1/chat/workbench/views/{plugin_name}/{view_name}:
-    get:
-      tags: [Chat]
-      summary: Get a registered workbench view entry
-      operationId: getWorkbenchView
-      x-astrbot-scope: chat
-      parameters:
-        - name: plugin_name
-          in: path
-          required: true
-          schema:
-            type: string
-        - name: view_name
-          in: path
-          required: true
-          schema:
-            type: string
-      responses:
-        "200":
-          $ref: "#/components/responses/Ok"
-        "404":
-          description: The view is unavailable or not registered for the launcher.
-
   /api/v1/chat/views/{view_id}:
     get:
       tags:

@@ -187,8 +187,7 @@ test("thread view callbacks keep the original message idle and do not scroll for
     (node) =>
       ts.isExpressionStatement(node) &&
       ts.isCallExpression(node.expression) &&
-      node.expression.expression.getText(ast) === "provide" &&
-      node.expression.arguments[0].getText(ast) === "viewActionKey",
+      node.expression.expression.getText(ast) === "provide",
   );
   const original = { id: "original", content: { agentStats: { duration: 3 } } };
   const messages = ref([original]);
