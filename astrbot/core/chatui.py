@@ -20,10 +20,18 @@ class ViewSpec(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
     name: str = Field(pattern=r"^[a-zA-Z0-9_-]+$")
-    entry: Path
-    target: Literal["chat_message", "plugin_page"] = "chat_message"
+    target: Literal[
+        "chat_message", "chat_workbench", "chat_workbench_with_launcher", "plugin_page"
+    ] = "plugin_page"
+    title: str = Field(default="", max_length=200)
+    description: str = Field(default="", max_length=500)
     version: int = Field(default=1, ge=1)
     actions: list[str] = Field(default_factory=list)
+
+    @property
+    def entry(self) -> Path:
+        """Return the conventional entry path relative to the plugin root."""
+        return Path("views") / self.name / "index.html"
 
     @model_validator(mode="after")
     def validate_target_actions(self):
@@ -37,7 +45,7 @@ class ViewSpec(BaseModel):
         """
         if self.target == "plugin_page" and self.actions:
             raise ValueError(
-                "plugin_page views use plugin Web APIs, not UI interaction actions."
+                "Standalone views use plugin Web APIs, not UI interaction actions."
             )
         return self
 
@@ -49,6 +57,7 @@ class ViewResult(BaseModel):
     name: str | None = None
     data: dict[str, Any]
     text: str = ""
+    title: str = Field(default="", max_length=200)
 
     @model_validator(mode="after")
     def validate_operation(self):
@@ -64,6 +73,8 @@ class ViewResult(BaseModel):
             raise ValueError("Creating a view requires a name and fallback text.")
         if self.name is None and self.text:
             raise ValueError("A view update cannot replace the tool's text result.")
+        if self.name is None and self.title:
+            raise ValueError("A view update cannot replace its title.")
         return self
 
     @field_validator("data")
@@ -128,7 +139,7 @@ def resolve_view(
     name: str,
     version: int | None = None,
     *,
-    target: Literal["chat_message", "plugin_page"] = "chat_message",
+    target: str | None = None,
 ):
     """Resolve a currently enabled plugin's declared view and safe entry path.
 
@@ -136,8 +147,7 @@ def resolve_view(
         module: Owning plugin module recorded by the host.
         name: Plugin-local view name.
         version: Required contract version, if restoring an existing instance.
-        target: Host that must match the declaration. Chat instances require
-            chat_message; the plugin loader validates either declared target.
+        target: Exact host to validate, or None to accept any ChatUI host.
 
     Returns:
         The plugin metadata, validated declaration, and resolved entry path.
@@ -150,21 +160,24 @@ def resolve_view(
     plugin = star_map.get(module)
     if not plugin or not plugin.activated or plugin.star_cls is None:
         raise ViewError("VIEW_UNAVAILABLE", "The view's plugin is unavailable.")
-    for spec in getattr(plugin.star_cls, "chatui_views", []):
+    for spec in plugin.views:
         if spec.name != name:
             continue
-        if spec.target != target:
+        if spec.target not in (
+            (target,)
+            if target
+            else ("chat_message", "chat_workbench", "chat_workbench_with_launcher")
+        ):
             raise ViewError(
-                "VIEW_UNAVAILABLE", f"This view is not registered for {target}."
+                "VIEW_UNAVAILABLE",
+                f"This view is not registered for {target or 'chat_message or chat_workbench'}.",
             )
         if version is not None and version != spec.version:
             break
-        if spec.entry != Path("views") / spec.name / "index.html":
-            raise ViewError(
-                "VIEW_UNAVAILABLE", "View entries must use views/<name>/index.html."
-            )
         root = Path(plugin.module.__file__).resolve().parent
         entry = (root / spec.entry).resolve()
+        if spec.target == "plugin_page" and not entry.is_file():
+            entry = (root / "pages" / spec.name / "index.html").resolve()
         if spec.entry.is_absolute() or not entry.is_relative_to(root):
             break
         if not entry.is_file():
@@ -186,14 +199,38 @@ async def emit_view(event, module: str, result: ViewResult) -> None:
     from astrbot.core.message.components import Json
     from astrbot.core.message.message_event_result import MessageChain
 
-    resolve_view(module, result.name)
+    plugin, spec, _ = resolve_view(module, result.name)
     if not event.platform_meta.support_ui_interaction:
         return
     record = await asyncio.to_thread(view_store.create, event, module, result)
     await event.send(
         MessageChain(
             chain=[
-                Json({"id": record["id"], "name": record["name"], "text": result.text})
+                Json(
+                    {
+                        "id": record["id"],
+                        "name": record["name"],
+                        "text": result.text,
+                        "title": result.title,
+                        "view_metadata": {
+                            "name": spec.name,
+                            "title": spec.title,
+                            "description": spec.description,
+                            "i18n": {
+                                locale: {
+                                    prefix: {spec.name: translations[prefix][spec.name]}
+                                    for prefix in ("views", "pages")
+                                    if isinstance(translations.get(prefix), dict)
+                                    and isinstance(
+                                        translations[prefix].get(spec.name), dict
+                                    )
+                                }
+                                for locale, translations in plugin.i18n.items()
+                            },
+                        },
+                        "target": spec.target,
+                    }
+                )
             ],
             type="chatui_view",
         )
@@ -243,7 +280,7 @@ class ViewStore:
         Returns:
             A serialized view snapshot.
         """
-        _, spec, _ = resolve_view(module, result.name)
+        plugin, spec, _ = resolve_view(module, result.name)
         raw = event.message_obj.raw_message
         owner, session_id, payload = raw
         record = {

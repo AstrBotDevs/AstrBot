@@ -21,6 +21,12 @@ export function buildChatRequestFlags(
 }
 
 export interface MessagePart {
+  view_metadata?: {
+    name: string;
+    title: string;
+    description: string;
+    i18n?: Record<string, unknown>;
+  };
   type: string;
   text?: string;
   think?: string;
@@ -1413,6 +1419,7 @@ export function useMessages(options: UseMessagesOptions) {
       messageContent(botRecord).message.push({
         ...(data as Record<string, unknown>),
         type: msgType,
+        ...(msgType === "view" ? { workbenchLive: true } : {}),
       });
       return;
     }

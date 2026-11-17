@@ -277,5 +277,21 @@
   "pluginView": {
     "loading": "Loading view…",
     "unavailable": "This view is unavailable. The text result is shown instead."
+  },
+  "workbench": {
+    "newTab": "New workbench",
+    "chooseView": "Choose a plugin view",
+    "empty": "No workbench views are registered. Enable a plugin that provides one.",
+    "loadError": "Could not load workbench views.",
+    "retry": "Retry",
+
+    "title": "Workbench",
+    "openView": "Open in workbench",
+    "hide": "Hide workbench",
+    "expand": "Expand workbench",
+    "restore": "Restore panel size",
+    "resize": "Resize workbench",
+    "closeTab": "Close {title}",
+    "resize": "Resize workbench"
   }
 }

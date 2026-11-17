@@ -1,6 +1,6 @@
 # 后端 Web API
 
-独立插件页面通过 Bridge 调用这些接口。消息组件使用 `@filter.ui_action`，见[消息交互组件](./chat-message.md)。
+独立插件页面和常驻工作台页面通过 Bridge 调用这些接口。消息组件与消息创建的工作台页面使用 `@filter.ui_action`，见[消息交互组件](./chat-message.md)。
 
 接口按当前登录用户鉴权。业务数据的归属和权限仍由插件校验；涉及会话时，根据 `request.username` 验证会话归属，不能只信任前端提交的 `session_id`。
 

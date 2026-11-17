@@ -1,12 +1,12 @@
 <template>
-  <div class="plugin-view-card">
+  <div class="plugin-view-card" :class="{ 'workbench-view': workbench }">
     <iframe
       v-if="srcdoc"
       ref="frame"
       :srcdoc="srcdoc"
-      :style="{ height: `${height}px` }"
+      :style="{ height: workbench ? '100%' : `${height}px` }"
       sandbox="allow-scripts"
-      :title="String(part.name || 'Plugin view')"
+      :title="viewTitle()"
     />
     <div v-else class="plugin-view-fallback">
       <p>{{ part.text }}</p>
@@ -21,10 +21,16 @@ import { inject, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { useTheme } from "vuetify";
 import { fetchWithAuth } from "@/api/http";
 import { useI18n, useModuleI18n } from "@/i18n/composables";
-import { viewActionKey } from "@/utils/chatViews";
+import { viewActionKey, type ViewActionHandler } from "@/utils/chatViews";
+import { resolvePluginViewText } from "@/utils/pluginI18n";
 import type { MessagePart } from "@/composables/useMessages";
 
-const props = defineProps<{ part: MessagePart; isDark?: boolean }>();
+const props = defineProps<{
+  part: MessagePart;
+  isDark?: boolean;
+  workbench?: boolean;
+  actionHandler?: ViewActionHandler;
+}>();
 const frame = ref<HTMLIFrameElement>();
 const srcdoc = ref("");
 const error = ref(false);
@@ -41,6 +47,17 @@ const session =
 let snapshot: { data: Record<string, unknown>; revision: number };
 let viewContext: Record<string, unknown> = {};
 let disposed = false;
+
+function viewTitle() {
+  return String(
+    props.part.title || resolvePluginViewText(
+      props.part.view_metadata?.i18n,
+      locale.value,
+      props.part.view_metadata || { name: props.part.name },
+      "title",
+    ) || "Plugin view",
+  );
+}
 
 function send(message: Record<string, unknown>) {
   frame.value?.contentWindow?.postMessage(
@@ -62,7 +79,8 @@ async function receive(event: MessageEvent) {
       kind: "context",
       context: {
         ...viewContext,
-        target: "chat_message",
+        pageTitle: viewTitle(),
+        target: viewContext.target || props.part.target || "chat_message",
         view: { id: String(props.part.id), ...snapshot },
         isDark: props.isDark ?? theme.global.current.value.dark,
         themeColors: { ...theme.global.current.value.colors },
@@ -79,8 +97,9 @@ async function receive(event: MessageEvent) {
           new Error("This capability is unavailable in chat views."),
           { code: "UNSUPPORTED_CAPABILITY" },
         );
-      if (!runAction) throw new Error("This chat cannot handle view actions.");
-      const receipt = await runAction(String(props.part.id), message.input);
+      const action = props.actionHandler || runAction;
+      if (!action) throw new Error("This chat cannot handle view actions.");
+      const receipt = await action(String(props.part.id), message.input);
       if (receipt.snapshot) snapshot = receipt.snapshot;
       send({
         kind: "response",
@@ -119,6 +138,7 @@ watch(
           isDark: props.isDark ?? theme.global.current.value.dark,
           themeColors: { ...theme.global.current.value.colors },
           locale: locale.value,
+          pageTitle: viewTitle(),
         },
       });
   },
@@ -139,8 +159,14 @@ onMounted(async () => {
     const { data } = await response.json();
     const bridgeSource = await bridgeResponse.text();
     if (disposed) return;
+    if (data.view_metadata) props.part.view_metadata = data.view_metadata;
     snapshot = { data: data.data, revision: data.revision };
-    viewContext = data.context || { pageName: props.part.name };
+    viewContext = {
+      ...data.context,
+      pageName: props.part.name,
+      pageTitle: props.part.title || data.context?.pageTitle || props.part.name,
+      target: data.target || props.part.target || "chat_message",
+    };
     const document = new DOMParser().parseFromString(data.html, "text/html");
     document.querySelectorAll("base").forEach((element) => element.remove());
     const base = document.createElement("base");
@@ -171,6 +197,11 @@ iframe {
   width: 100%;
   background: transparent;
   border: 0;
+}
+.plugin-view-card.workbench-view {
+  margin: 0;
+  height: 100%;
+  min-height: 0;
 }
 .plugin-view-fallback {
   padding: 12px;

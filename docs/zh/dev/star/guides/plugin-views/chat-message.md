@@ -29,14 +29,24 @@ astrbot_plugin_view_demo/
         └── app.js
 ```
 
-`metadata.yaml` 沿用现有插件格式。`main.py`：
+
+
+在 `metadata.yaml` 中添加：
+
+```yaml
+views:
+  - name: counter
+    target: chat_message
+    title: Counter
+    version: 1
+    actions: ["view_demo:increment"]
+```
+
+`main.py`：
 
 ```python
-from pathlib import Path
-
 from pydantic import BaseModel, ConfigDict, Field
 
-from astrbot.api import chatui
 from astrbot.api.event import AstrMessageEvent, filter
 from astrbot.api.star import Star
 
@@ -50,16 +60,6 @@ class IncrementInput(BaseModel):
 
 class ViewDemo(Star):
     """Demonstrate a card created directly from a command."""
-
-    chatui_views = [
-        chatui.ViewSpec(
-            name="counter",
-            entry=Path("views/counter/index.html"),
-            target="chat_message",
-            version=1,
-            actions=["view_demo:increment"],
-        ),
-    ]
 
     @filter.command("counter")
     async def counter(self, event: AstrMessageEvent):

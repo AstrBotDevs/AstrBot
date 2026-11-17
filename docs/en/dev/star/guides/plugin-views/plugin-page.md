@@ -28,16 +28,24 @@ Use simple directory names for `view_name`, such as `settings` or `bridge-demo`.
 
 Users open views from the plugin detail page in the WebUI.
 
-Undeclared directories can still be discovered as standalone pages. Explicit declarations must set `target="plugin_page"`; this target does not use `event.view_result()` or declare `actions`.
+Undeclared directories can still be discovered as standalone pages. The default target for metadata declarations is `plugin_page`; this target does not use `event.view_result()` or declare `actions`.
 
 ## Register the page and endpoint {#register-the-page}
 
 Plugin backend code should use `astrbot.api.web`. Avoid exposing raw FastAPI, Starlette, or Quart request objects as the public API for your plugin business logic.
 
-```python
-from pathlib import Path
+Add to `metadata.yaml`:
 
-from astrbot.api import chatui
+```yaml
+views:
+  - name: bridge-demo
+    target: plugin_page
+    title: Bridge Demo
+```
+
+`main.py`:
+
+```python
 from astrbot.api.star import Context, Star
 from astrbot.api.web import json_response, request
 
@@ -45,14 +53,6 @@ PLUGIN_NAME = "astrbot_plugin_view_demo"
 
 
 class MyPlugin(Star):
-    chatui_views = [
-        chatui.ViewSpec(
-            name="bridge-demo",
-            entry=Path("views/bridge-demo/index.html"),
-            target="plugin_page",
-        ),
-    ]
-
     def __init__(self, context: Context):
         super().__init__(context)
         context.register_web_api(

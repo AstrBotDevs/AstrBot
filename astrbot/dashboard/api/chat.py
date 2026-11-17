@@ -56,6 +56,75 @@ VIEW_ERROR_MESSAGES = {
 }
 
 
+@router.get("/chat/workbench/views")
+async def list_workbench_views(
+    request: Request,
+    _auth: AuthContext = Depends(require_chat_scope),
+):
+    """List enabled plugin views registered for the workbench launcher."""
+    pages = request.app.state.services.plugin_pages
+    views = []
+    for plugin in pages.plugin_manager.context.get_all_stars():
+        if not plugin.activated:
+            continue
+        for spec in plugin.views:
+            if spec.target != "chat_workbench_with_launcher":
+                continue
+            entry = await pages.serialize_plugin_page(
+                plugin, spec.name, target="chat_workbench_with_launcher"
+            )
+            if entry:
+                views.append(
+                    {
+                        **entry,
+                        "plugin_name": plugin.name,
+                        "display_name": plugin.display_name or plugin.name,
+                        "i18n": plugin.i18n or {},
+                    }
+                )
+    return ok(views)
+
+
+@router.get("/chat/workbench/views/{plugin_name}/{view_name}")
+async def get_workbench_view(
+    plugin_name: str,
+    view_name: str,
+    request: Request,
+    auth: AuthContext = Depends(require_chat_scope),
+):
+    """Return a launcher view's entry using the same scoped asset authentication."""
+    pages = request.app.state.services.plugin_pages
+    plugin = pages.get_plugin_metadata_by_name(plugin_name)
+    if not plugin or not plugin.activated:
+        return JSONResponse({"message": "This view is unavailable."}, status_code=404)
+    token = pages.issue_plugin_page_asset_token(
+        plugin_name=plugin.name,
+        view_name=view_name,
+        username=auth.username,
+        locale="en-US",
+    )
+    entry = await pages.serialize_plugin_page(
+        plugin,
+        view_name,
+        target="chat_workbench_with_launcher",
+        include_content_path=True,
+        asset_token=token or "",
+    )
+    if not entry or not token:
+        return JSONResponse({"message": "This view is unavailable."}, status_code=404)
+    return ok(
+        {
+            "page": entry,
+            "plugin": {
+                "name": plugin.name,
+                "display_name": plugin.display_name or plugin.name,
+                "activated": True,
+                "i18n": plugin.i18n or {},
+            },
+        }
+    )
+
+
 @router.get("/chat/views/{view_id}")
 async def get_chat_view(
     view_id: str,
@@ -80,7 +149,14 @@ async def get_chat_view(
         return ok(
             {
                 "id": view_id,
+                "view_metadata": {
+                    "name": spec.name,
+                    "title": spec.title,
+                    "description": spec.description,
+                    "i18n": plugin.i18n or {},
+                },
                 "name": spec.name,
+                "target": spec.target,
                 "data": record["data"],
                 "revision": record["revision"],
                 "text": record["text"],
@@ -88,7 +164,7 @@ async def get_chat_view(
                     "pluginName": plugin.name,
                     "displayName": plugin.display_name or plugin.name,
                     "pageName": spec.name,
-                    "pageTitle": spec.name,
+                    "pageTitle": spec.title or spec.name,
                     "i18n": plugin.i18n or {},
                 },
                 "html": await asyncio.to_thread(entry.read_text, encoding="utf-8"),

@@ -202,6 +202,7 @@ class PluginService:
                         ),
                     ),
                     "pages": [page["name"] for page in pages],
+                    "views": pages,
                 }
             )
         return payload, getattr(self.plugin_manager, "failed_plugin_info", None)
@@ -700,7 +701,7 @@ class PluginService:
                 "title": page["title"],
                 "page_name": page["name"],
                 "i18n_key": page["i18n_key"],
-                "description": "Plugin Page entry",
+                "description": page.get("description", ""),
                 "plugin_name": plugin.name,
                 "plugin_marketplace_name": (plugin.name or "").replace("_", "-"),
             }
