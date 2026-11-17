@@ -7,6 +7,21 @@
 - 「插件 → 管理行为 → 函数工具」现在只列出插件工具。Agent 运行时工具由配置文件的 AI 功能设置控制，MCP 工具可在「插件 → MCP」查看。
 - Extensions → Handlers → Function Tools now lists plugin tools. Configure Agent runtime tools in the profile's AI capability settings and view MCP tools under Extensions → MCP Servers.
 
+### ChatUI history / ChatUI 历史记录
+
+- 一轮回复只保存为一条历史记录：流式分段、工具调用和按钮卡片都更新同一条记录，刷新后不再拆成多个气泡（SSE 与 WebSocket 相同）。已拆开的旧记录不会合并。
+- Each assistant turn is saved as one history record. Streamed segments, tool calls and button cards update the same record, so a reply no longer splits into several bubbles after a reload (SSE and WebSocket alike). Records split before this change are not merged.
+- 工具调用在开始时就占好位置，结果到达后原地更新：中途保存不再把调用拆成两半，耗时正确，后面的按钮卡片也不会排到调用前面。
+- A tool call takes its place when it starts and is completed in place when its result arrives, so mid-turn saves no longer split it, its duration is correct, and a later button card stays after it.
+- 回复结束时仍未返回的工具调用标为「已中断，结果未知」（实时和刷新后一致），不再一直计时。
+- A tool call still without a result when the reply ends is marked **Interrupted, result unknown**, live and after a reload, instead of showing a running timer.
+- 同一轮里两段模型消息之间没有工具调用时，补一个段落分隔，避免文字连在一起；只作用于 WebChat，其他平台的输出不变。
+- When two model messages in one turn follow each other without a tool call in between, WebChat inserts a paragraph break so the text does not run together. Other platforms are unchanged.
+- 按钮回调的注册改为在后台线程写入数据库，不再阻塞事件循环（所有平台共用）；过期一天以上的回调从缓存和数据库中清理。
+- Button callback registration writes to the database on a background thread instead of blocking the event loop (shared by all platforms). Callbacks expired for over a day are removed from the cache and the database.
+- 分块上传的清理任务在没有事件循环时不再留下未等待的协程。
+- The chunked-upload cleanup task no longer leaves an unawaited coroutine when no event loop is running.
+
 ### Overview page / 总览页
 
 - 欢迎 → 总览：保留 `/welcome` 地址，显示每日用量对比、系统状态和机器人错误详情。
