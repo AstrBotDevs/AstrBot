@@ -163,7 +163,7 @@
     "custom": "Custom",
     "valueTypeLabel": "Value type",
     "keyExists": "Key already exists",
-    "numberRequired": "A number is required",
+    "requiredField": "This field is required",
     "invalidNumber": "Invalid number",
     "invalidJson": "Invalid JSON format",
     "placeholders": {

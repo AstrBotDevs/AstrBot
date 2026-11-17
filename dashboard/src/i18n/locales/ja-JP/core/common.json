@@ -163,7 +163,7 @@
     "custom": "カスタム",
     "valueTypeLabel": "値の型",
     "keyExists": "キーはすでに存在します",
-    "numberRequired": "数値を入力してください",
+    "requiredField": "この項目を入力してください",
     "invalidNumber": "無効な数値",
     "invalidJson": "JSON の形式が正しくありません",
     "placeholders": {

@@ -163,7 +163,7 @@
         "custom": "Другое",
         "valueTypeLabel": "Тип значения",
         "keyExists": "Ключ уже существует",
-        "numberRequired": "Введите число",
+        "requiredField": "Заполните это поле",
         "invalidNumber": "Недопустимое число",
         "invalidJson": "Некорректный формат JSON",
         "placeholders": {

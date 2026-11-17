@@ -17,11 +17,21 @@
     </template>
     <v-text-field
       :model-value="numericTemp ?? modelValue"
-      @update:model-value="updateValue"
-      @blur="numericTemp = null"
+      @input="event => { badInput = event.target.validity.badInput; updateValue(event.target.value) }"
+      @update:model-value="value => { if (value == null) updateValue(value) }"
+      @blur="() => { if (!badInput) numericTemp = null }"
+      @wheel="event => { if (event.target.matches('input[type=number]:focus:read-write')) event.preventDefault() }"
       :placeholder="placeholder"
       :aria-label="$attrs['aria-label']"
-      :rules="[value => !required || (value !== '' && value != null) || t('core.common.objectEditor.numberRequired'), value => value === '' || value == null || (Number.isFinite(Number(value)) && (!integer || Number.isInteger(Number(value))) && (min == null || Number(value) >= min) && (max == null || Number(value) <= max)) || t('core.common.objectEditor.invalidNumber')]"
+      :validation-value="badInput ? NaN : (numericTemp ?? modelValue)"
+      :rules="[value => (
+        value === '' || value == null
+          ? !required
+          : Number.isFinite(Number(value))
+            && (!integer || Number.isInteger(Number(value)))
+            && (min == null || Number(value) >= min)
+            && (max == null || Number(value) <= max)
+      ) || t('core.common.objectEditor.invalidNumber')]"
       type="number"
       density="compact"
       variant="outlined"
@@ -37,7 +47,7 @@
 import { ref } from 'vue'
 import { useI18n } from '@/i18n/composables'
 
-defineProps({
+const props = defineProps({
   modelValue: { type: [Number, String], default: '' },
   slider: { type: Object, default: null },
   min: { type: Number, default: undefined },
@@ -49,9 +59,13 @@ defineProps({
 const emit = defineEmits(['update:modelValue'])
 const { t } = useI18n()
 const numericTemp = ref(null)
+const badInput = ref(false)
 
 function updateValue(value) {
+  if (value == null) badInput.value = false
   numericTemp.value = value ?? ''
+  // Native number inputs expose incomplete expressions as an empty string.
+  if (badInput.value && !props.required) return
   const number = Number(numericTemp.value)
   emit('update:modelValue', numericTemp.value === '' ? '' : Number.isFinite(number) ? number : numericTemp.value)
 }
