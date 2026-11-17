@@ -633,6 +633,16 @@ class PluginLogLevelPayload(OpenModel):
     """Log level name (DEBUG/INFO/WARNING/ERROR/CRITICAL), or null to follow the global level."""
 
 
+class PluginMarketEntryLookup(OpenModel):
+    market_plugin_id: str | None = None
+    repo: str | None = None
+    name: str | None = None
+
+
+class PluginMarketEntriesRequest(BaseModel):
+    records: list[PluginMarketEntryLookup] = Field(default_factory=list, max_length=500)
+
+
 class PluginSourceRequest(OpenModel):
     id: str | None = None
     name: str | None = None

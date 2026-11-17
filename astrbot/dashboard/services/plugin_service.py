@@ -4,6 +4,8 @@ import asyncio
 import hashlib
 import json
 import os
+import random
+import re
 import ssl
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
@@ -1070,6 +1072,352 @@ class PluginService:
         )
 
     @staticmethod
+    def normalize_market_category(raw: object) -> str:
+        """Normalize a registry category the same way the dashboard does."""
+        text = str(raw or "").strip().lower()
+        if not text:
+            return "other"
+        return re.sub(r"[\s-]+", "_", text)
+
+    @classmethod
+    def iter_market_entries(cls, market_data: object):
+        """Yield ``(storage key, market id, entry)`` for a registry payload."""
+        if isinstance(market_data, dict):
+            for key, value in market_data.items():
+                if key == "$meta" or not isinstance(value, dict):
+                    continue
+                entry = value
+                if "/" not in str(key) and not str(value.get("name") or "").strip():
+                    entry = {**value, "name": str(key)}
+                yield key, cls.get_market_plugin_id(entry, str(key)), entry
+            return
+        if isinstance(market_data, list):
+            for value in market_data:
+                if not isinstance(value, dict):
+                    continue
+                yield None, cls.get_market_plugin_id(value), value
+
+    @staticmethod
+    def market_entry_matches(
+        entry: dict[str, Any],
+        *,
+        keyword: str,
+        category: str,
+    ) -> bool:
+        """Return whether a registry entry matches the market filters."""
+        if category and (
+            PluginService.normalize_market_category(entry.get("category")) != category
+        ):
+            return False
+        if not keyword:
+            return True
+        needle = keyword.casefold()
+        values = [
+            entry.get("name"),
+            entry.get("display_name"),
+            entry.get("desc"),
+            entry.get("author"),
+            entry.get("version"),
+            entry.get("astrbot_version"),
+        ]
+        for field in ("tags", "support_platforms"):
+            value = entry.get(field)
+            if isinstance(value, list):
+                values.extend(value)
+        return any(needle in str(value).casefold() for value in values if value)
+
+    @staticmethod
+    def sort_market_entries(entries: list, sort: str, order: str) -> list:
+        """Sort ``(index, key, market id, entry)`` tuples deterministically."""
+        entries = sorted(entries, key=lambda item: item[2].casefold())
+        if sort == "recommended":
+            entries.sort(key=lambda item: (0 if item[3].get("pinned") else 1, item[0]))
+            return entries
+
+        def market_int(entry: dict[str, Any], key: str) -> int:
+            try:
+                return int(entry.get(key) or 0)
+            except (TypeError, ValueError):
+                return 0
+
+        def primary(item) -> object:
+            entry = item[3]
+            if sort == "downloads":
+                return market_int(entry, "download_count")
+            if sort == "stars":
+                return market_int(entry, "stars")
+            if sort == "updated":
+                return str(entry.get("updated_at") or "")
+            if sort == "author":
+                return str(entry.get("author") or "").casefold()
+            return str(entry.get("display_name") or entry.get("name") or "").casefold()
+
+        entries.sort(key=primary, reverse=order == "desc")
+        return entries
+
+    @staticmethod
+    def _market_legacy_payload(market_data: object, ordered: list) -> object:
+        if isinstance(market_data, dict):
+            payload: dict[str, Any] = {}
+            meta = market_data.get("$meta")
+            if meta is not None:
+                payload["$meta"] = meta
+            for _index, key, _identifier, entry in ordered:
+                payload[key] = entry
+            return payload
+        return [entry for _index, _key, _identifier, entry in ordered]
+
+    async def get_market_query(
+        self,
+        *,
+        custom_registry: str | None,
+        force_refresh: bool,
+        page: int | None,
+        page_size: int | None,
+        sort: str,
+        order: str,
+        category: str | None,
+        keyword: str | None,
+    ) -> tuple[Any, str | None]:
+        """Return the marketplace, optionally paginated and filtered.
+
+        Args:
+            custom_registry: Optional custom registry URL.
+            force_refresh: Revalidate the cache before serving it.
+            page: One-based page number, or None for the legacy full payload.
+            page_size: Entries per page, or None for the legacy full payload.
+            sort: Sort key from :data:`MARKET_SORT_VALUES`.
+            order: ``asc`` or ``desc``; ignored by the default order.
+            category: Normalized category filter, or ``all``/None for no filter.
+            keyword: Case-insensitive substring matched against entry fields.
+
+        Returns:
+            The legacy registry payload, or a paginated object, plus the cache
+            fallback message when one applies.
+        """
+        market_data, message = await self.get_online_plugins(
+            custom_registry=custom_registry,
+            force_refresh=force_refresh,
+        )
+
+        category_filter = ""
+        if category and category.strip().lower() != "all":
+            category_filter = self.normalize_market_category(category)
+        needle = (keyword or "").strip()
+        if (
+            page is None
+            and page_size is None
+            and sort == "recommended"
+            and not category_filter
+            and not needle
+        ):
+            return market_data, message
+
+        entries = [
+            (index, key, identifier, entry)
+            for index, (key, identifier, entry) in enumerate(
+                self.iter_market_entries(market_data)
+            )
+            if self.market_entry_matches(
+                entry,
+                keyword=needle,
+                category=category_filter,
+            )
+        ]
+        ordered = self.sort_market_entries(entries, sort, order)
+
+        if page is None and page_size is None:
+            return self._market_legacy_payload(market_data, ordered), message
+
+        current_page = page or 1
+        size = page_size or 9
+        total = len(ordered)
+        start = (current_page - 1) * size
+        items = [
+            {**entry, "market_plugin_id": identifier}
+            for _index, _key, identifier, entry in ordered[start : start + size]
+        ]
+        data: dict[str, Any] = {
+            "items": items,
+            "total": total,
+            "page": current_page,
+            "page_size": size,
+            "has_more": start + len(items) < total,
+        }
+        meta = market_data.get("$meta") if isinstance(market_data, dict) else None
+        if meta is not None:
+            data["meta"] = meta
+        return data, message
+
+    async def get_market_categories(
+        self,
+        *,
+        custom_registry: str | None,
+    ) -> tuple[dict[str, Any], str | None]:
+        """Return category keys with their entry counts.
+
+        Args:
+            custom_registry: Optional custom registry URL.
+
+        Returns:
+            A payload with one ``{value, label, count}`` item per category and
+            the total entry count, plus the cache fallback message.
+        """
+        market_data, message = await self.get_online_plugins(
+            custom_registry=custom_registry,
+            force_refresh=False,
+        )
+        buckets: dict[str, dict[str, Any]] = {}
+        for _key, _identifier, entry in self.iter_market_entries(market_data):
+            value = self.normalize_market_category(entry.get("category"))
+            bucket = buckets.get(value)
+            if bucket is None:
+                bucket = {"value": value, "label": "", "count": 0}
+                buckets[value] = bucket
+            bucket["count"] += 1
+            if not bucket["label"]:
+                bucket["label"] = str(entry.get("category") or "").strip()
+        categories = sorted(
+            buckets.values(),
+            key=lambda item: (-item["count"], item["value"]),
+        )
+        return {
+            "categories": categories,
+            "total": sum(item["count"] for item in categories),
+        }, message
+
+    async def get_market_entry(
+        self,
+        *,
+        plugin_id: str,
+        custom_registry: str | None,
+    ) -> tuple[dict[str, Any], str | None]:
+        """Return one marketplace entry by market id, repo, or name.
+
+        Args:
+            plugin_id: Market id, repository URL, or plugin name.
+            custom_registry: Optional custom registry URL.
+
+        Returns:
+            The matching entry with its ``market_plugin_id``, plus the cache
+            fallback message.
+
+        Raises:
+            PluginServiceError: When no entry matches ``plugin_id``.
+        """
+        market_data, message = await self.get_online_plugins(
+            custom_registry=custom_registry,
+            force_refresh=False,
+        )
+        wanted = plugin_id.strip()
+        wanted_case = wanted.casefold()
+        wanted_repo = self.repo_identifier_from_url(wanted)
+        for _key, identifier, entry in self.iter_market_entries(market_data):
+            if identifier.casefold() == wanted_case:
+                return {**entry, "market_plugin_id": identifier}, message
+        for _key, identifier, entry in self.iter_market_entries(market_data):
+            repo_identifier = self.repo_identifier_from_url(entry.get("repo"))
+            if wanted_repo and repo_identifier.casefold() == wanted_repo.casefold():
+                return {**entry, "market_plugin_id": identifier}, message
+            names = {
+                str(entry.get("name") or "").strip().casefold(),
+                str(entry.get("display_name") or "").strip().casefold(),
+            }
+            if wanted_case in names:
+                return {**entry, "market_plugin_id": identifier}, message
+        raise PluginServiceError(
+            f"Plugin market entry not found: {plugin_id}",
+            public_message=f"插件市场中未找到插件：{plugin_id}",
+        )
+
+    async def get_market_random(
+        self,
+        *,
+        count: int,
+        custom_registry: str | None,
+    ) -> tuple[dict[str, Any], str | None]:
+        """Return a random sample of marketplace entries.
+
+        Args:
+            count: Number of entries to sample.
+            custom_registry: Optional custom registry URL.
+
+        Returns:
+            A payload with up to ``count`` entries, plus the cache fallback
+            message when one applies.
+        """
+        market_data, message = await self.get_online_plugins(
+            custom_registry=custom_registry,
+            force_refresh=False,
+        )
+        entries = list(self.iter_market_entries(market_data))
+        picked = random.sample(entries, min(count, len(entries)))
+        items = [
+            {**entry, "market_plugin_id": identifier}
+            for _key, identifier, entry in picked
+        ]
+        return {"items": items}, message
+
+    async def get_market_entries(
+        self,
+        *,
+        records: list[dict[str, Any]],
+        custom_registry: str | None,
+    ) -> tuple[dict[str, Any], str | None]:
+        """Resolve registry entries for several installed plugin records.
+
+        Args:
+            records: Installed plugin records with market id, repo, or name.
+            custom_registry: Optional custom registry URL.
+
+        Returns:
+            A payload with one entry or None per input record, in input order,
+            plus the cache fallback message when one applies.
+        """
+        market_data, message = await self.get_online_plugins(
+            custom_registry=custom_registry,
+            force_refresh=False,
+        )
+        by_id: dict[str, tuple[str, dict[str, Any]]] = {}
+        by_repo: dict[str, tuple[str, dict[str, Any]]] = {}
+        by_name: dict[str, tuple[str, dict[str, Any]]] = {}
+        for _key, identifier, entry in self.iter_market_entries(market_data):
+            by_id.setdefault(identifier.casefold(), (identifier, entry))
+            repo_identifier = self.repo_identifier_from_url(entry.get("repo"))
+            if repo_identifier:
+                by_repo.setdefault(repo_identifier.casefold(), (identifier, entry))
+            for name in (
+                entry.get("name"),
+                entry.get("display_name"),
+                entry.get("marketplace_name"),
+            ):
+                text = str(name or "").strip().casefold()
+                if text:
+                    by_name.setdefault(text, (identifier, entry))
+
+        items = []
+        for record in records:
+            match = None
+            identifier = str(record.get("market_plugin_id") or "").strip()
+            if identifier:
+                match = by_id.get(identifier.casefold())
+            if match is None:
+                repo_identifier = self.repo_identifier_from_url(record.get("repo"))
+                if repo_identifier:
+                    match = by_repo.get(repo_identifier.casefold())
+            if match is None:
+                for name in (record.get("name"), record.get("marketplace_name")):
+                    text = str(name or "").strip().casefold()
+                    if text and text in by_name:
+                        match = by_name[text]
+                        break
+            if match is None:
+                items.append(None)
+            else:
+                items.append({**match[1], "market_plugin_id": match[0]})
+        return {"items": items}, message
+
+    @staticmethod
     def build_registry_source(custom_url: str | None) -> RegistrySource:
         data_dir = get_astrbot_data_path()
         if custom_url:
@@ -1192,22 +1540,8 @@ class PluginService:
         Yields:
             Tuples of market identifier and plugin entry.
         """
-        if isinstance(market_data, dict):
-            for key, value in market_data.items():
-                if key == "$meta":
-                    continue
-                if isinstance(value, dict):
-                    entry = value
-                    if "/" not in str(key) and not str(value.get("name") or "").strip():
-                        entry = {**value, "name": str(key)}
-                    yield PluginService.get_market_plugin_id(entry, str(key)), entry
-            return
-        if isinstance(market_data, list):
-            for value in market_data:
-                if not isinstance(value, dict):
-                    continue
-                identifier = PluginService.get_market_plugin_id(value)
-                yield identifier, value
+        for _key, identifier, entry in PluginService.iter_market_entries(market_data):
+            yield identifier, entry
 
     def resolve_market_plugin_entry(
         self,

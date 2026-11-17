@@ -5396,3 +5396,211 @@ async def test_chat_transcription_requires_auth_and_passes_selected_provider(
     assert response.status_code == 200
     assert response.json()["data"] == {"text": "dictated words", "provider_id": "stt-2"}
     assert received == [(b"recording", "stt-2")]
+
+@pytest.mark.asyncio
+async def test_v1_market_paginated_query_forwarding(
+    asgi_app: FastAPI,
+    asgi_client: httpx.AsyncClient,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    service = asgi_app.state.services.plugins
+    captured: dict[str, object] = {}
+
+    async def fake_query(**kwargs):
+        captured.update(kwargs)
+        return {
+            "items": [{"market_plugin_id": "a/b", "name": "b"}],
+            "total": 1,
+            "page": 2,
+            "page_size": 9,
+            "has_more": False,
+        }, None
+
+    monkeypatch.setattr(service, "get_market_query", fake_query)
+
+    response = await asgi_client.get(
+        "/api/v1/plugins/market",
+        params={
+            "page": 2,
+            "page_size": 9,
+            "sort": "downloads",
+            "order": "asc",
+            "category": "tools",
+            "keyword": "tts",
+            "custom_registry": "https://example.com/registry.json",
+            "force_refresh": "true",
+        },
+        headers=_jwt_headers(),
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["status"] == "ok"
+    assert payload["data"]["total"] == 1
+    assert captured == {
+        "custom_registry": "https://example.com/registry.json",
+        "force_refresh": True,
+        "page": 2,
+        "page_size": 9,
+        "sort": "downloads",
+        "order": "asc",
+        "category": "tools",
+        "keyword": "tts",
+    }
+
+
+@pytest.mark.asyncio
+async def test_v1_market_rejects_invalid_page_size(
+    asgi_client: httpx.AsyncClient,
+):
+    response = await asgi_client.get(
+        "/api/v1/plugins/market",
+        params={"page": 1, "page_size": 101},
+        headers=_jwt_headers(),
+    )
+
+    assert response.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_v1_market_entry_route(
+    asgi_app: FastAPI,
+    asgi_client: httpx.AsyncClient,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    service = asgi_app.state.services.plugins
+    captured: dict[str, object] = {}
+
+    async def fake_entry(**kwargs):
+        captured.update(kwargs)
+        return {"market_plugin_id": "a/b", "name": "b"}, None
+
+    monkeypatch.setattr(service, "get_market_entry", fake_entry)
+
+    response = await asgi_client.get(
+        "/api/v1/plugins/market/entry",
+        params={"plugin_id": "a/b"},
+        headers=_jwt_headers(),
+    )
+
+    assert response.status_code == 200
+    assert response.json()["data"]["market_plugin_id"] == "a/b"
+    assert captured == {"plugin_id": "a/b", "custom_registry": None}
+
+
+@pytest.mark.asyncio
+async def test_v1_market_categories_route(
+    asgi_app: FastAPI,
+    asgi_client: httpx.AsyncClient,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    service = asgi_app.state.services.plugins
+    captured: dict[str, object] = {}
+
+    async def fake_categories(**kwargs):
+        captured.update(kwargs)
+        return {"categories": [{"value": "tools", "label": "tools", "count": 2}]}, None
+
+    monkeypatch.setattr(service, "get_market_categories", fake_categories)
+
+    response = await asgi_client.get(
+        "/api/v1/plugins/market/categories",
+        headers=_jwt_headers(),
+    )
+
+    assert response.status_code == 200
+    assert response.json()["data"]["categories"] == [
+        {"value": "tools", "label": "tools", "count": 2}
+    ]
+    assert captured == {"custom_registry": None}
+
+
+@pytest.mark.asyncio
+async def test_v1_market_entries_route_forwards_records(
+    asgi_app: FastAPI,
+    asgi_client: httpx.AsyncClient,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    service = asgi_app.state.services.plugins
+    captured: dict[str, object] = {}
+
+    async def fake_entries(**kwargs):
+        captured.update(kwargs)
+        return {"items": [{"market_plugin_id": "a/b"}]}, None
+
+    monkeypatch.setattr(service, "get_market_entries", fake_entries)
+
+    response = await asgi_client.post(
+        "/api/v1/plugins/market/entries",
+        json={"records": [{"market_plugin_id": "a/b", "repo": "https://x/y"}]},
+        headers=_jwt_headers(),
+    )
+
+    assert response.status_code == 200
+    assert response.json()["data"]["items"] == [{"market_plugin_id": "a/b"}]
+    assert captured == {
+        "records": [{"market_plugin_id": "a/b", "repo": "https://x/y"}],
+        "custom_registry": None,
+    }
+
+
+@pytest.mark.asyncio
+async def test_v1_market_without_pagination_matches_legacy_route(
+    asgi_app: FastAPI,
+    asgi_client: httpx.AsyncClient,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    service = asgi_app.state.services.plugins
+    registry = {"$meta": {"name": "test"}, "a/b": {"name": "b"}}
+
+    async def fake_online_plugins(**_kwargs):
+        return registry, None
+
+    monkeypatch.setattr(service, "get_online_plugins", fake_online_plugins)
+
+    v1 = await asgi_client.get("/api/v1/plugins/market", headers=_jwt_headers())
+    legacy = await asgi_client.get(
+        "/api/plugin/market_list", headers=_jwt_headers()
+    )
+
+    assert v1.status_code == 200
+    assert legacy.status_code == 200
+    assert v1.json()["data"] == legacy.json()["data"] == registry
+
+
+@pytest.mark.asyncio
+async def test_v1_market_entries_rejects_more_than_500_records(
+    asgi_client: httpx.AsyncClient,
+):
+    response = await asgi_client.post(
+        "/api/v1/plugins/market/entries",
+        json={"records": [{} for _ in range(501)]},
+        headers=_jwt_headers(),
+    )
+
+    assert response.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_v1_market_random_route_forwards_count(
+    asgi_app: FastAPI,
+    asgi_client: httpx.AsyncClient,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    service = asgi_app.state.services.plugins
+    captured: dict[str, object] = {}
+
+    async def fake_random(**kwargs):
+        captured.update(kwargs)
+        return {"items": []}, None
+
+    monkeypatch.setattr(service, "get_market_random", fake_random)
+
+    response = await asgi_client.get(
+        "/api/v1/plugins/market/random",
+        params={"count": 5},
+        headers=_jwt_headers(),
+    )
+
+    assert response.status_code == 200
+    assert captured == {"count": 5, "custom_registry": None}
