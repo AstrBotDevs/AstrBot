@@ -398,6 +398,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
 
         # append existing messages in the run context
         messages = load_messages(request.contexts or [])
+        new_user_message = False
         if (
             request.prompt is not None
             or request.image_urls
@@ -406,12 +407,25 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         ):
             m = await self._assemble_request_context_for_provider(request)
             messages.append(Message.model_validate(m))
+            new_user_message = True
         if request.system_prompt:
             messages.insert(
                 0,
                 Message(role="system", content=request.system_prompt),
             )
         self.run_context.messages = messages
+        # Provider-reported tokens of the last request (input + output) and the
+        # number of leading messages it covers; messages added after it are
+        # estimated on top. The stored conversation usage covers the history
+        # and system prompt, but not the new user message.
+        conversation_usage = (
+            request.conversation.token_usage if request.conversation else 0
+        )
+        self._usage_baseline: tuple[int, int] | None = (
+            (conversation_usage, len(messages) - int(new_user_message))
+            if conversation_usage
+            else None
+        )
 
         self.stats = AgentStats()
         self.stats.start_time = time.time()
@@ -1202,7 +1216,21 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         llm_resp_result = None
 
         # Process request-time context before sending it to the provider.
-        token_usage = self.req.conversation.token_usage if self.req.conversation else 0
+        # The last reported usage (input and output) covers the messages that
+        # existed then plus the reply; only messages added since (tool results,
+        # a new user message) are estimated on top. Without a usable report, 0
+        # lets the context manager estimate the whole context.
+        token_usage = 0
+        if self._usage_baseline:
+            tokens, count = self._usage_baseline
+            if count <= len(self.run_context.messages):
+                added = self.run_context.messages[count:]
+                if added and added[0].role == "assistant":
+                    # The reply to the measured request is already counted.
+                    added = added[1:]
+                token_usage = tokens + (
+                    self.request_context_manager.token_counter.count_tokens(added)
+                )
         self._simple_print_message_role("[BefCompact]", self.run_context.messages)
         previous_messages = self.run_context.messages
         context_revision = self.request_context_manager.revision
@@ -1215,6 +1243,11 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         if processed_messages is None:
             await self._finalize_aborted_step()
             return
+        if processed_messages is not previous_messages or (
+            self.request_context_manager.revision != context_revision
+        ):
+            # Compression rewrote the history; the reported usage no longer applies.
+            self._usage_baseline = None
         self.run_context.messages = processed_messages
         if self._conversation_event_sink is not None and (
             processed_messages is not previous_messages
@@ -1279,6 +1312,10 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                 self.stats.current_context_tokens = llm_response.usage.input
                 if self.req.conversation:
                     self.req.conversation.token_usage = llm_response.usage.total
+                self._usage_baseline = (
+                    llm_response.usage.total,
+                    len(self.run_context.messages),
+                )
             # Preserve legacy statistics for history and plugin readers.
             self.stats.end_time = time.time()
             break  # got final response

@@ -2874,3 +2874,113 @@ async def test_steering_detaches_running_tool_without_reexecution(
                     task.cancel()
                 await asyncio.gather(task, return_exceptions=True)
         registry.unregister(event)
+
+
+@pytest.mark.asyncio
+async def test_trusted_context_tokens_add_new_messages_to_reported_usage(
+    runner, mock_provider, mock_tool_executor, mock_hooks
+):
+    """Reported usage covers the history; newer messages are estimated on top."""
+    request = ProviderRequest(
+        prompt="new question " * 20,
+        system_prompt="system",
+        contexts=[
+            {"role": "user", "content": "old question"},
+            {"role": "assistant", "content": "old answer"},
+        ],
+        conversation=SimpleNamespace(token_usage=1000, cid="c1"),
+    )
+    await runner.reset(
+        provider=mock_provider,
+        request=request,
+        run_context=ContextWrapper(context=None),
+        tool_executor=mock_tool_executor,
+        agent_hooks=mock_hooks,
+        streaming=False,
+    )
+    manager = runner.request_context_manager
+    counter = manager.token_counter
+    seen = []
+    process = manager.process
+
+    async def recording_process(messages, trusted_token_usage=0):
+        seen.append(trusted_token_usage)
+        return await process(messages, trusted_token_usage=trusted_token_usage)
+
+    manager.process = recording_process
+    user_tokens = counter.count_tokens([runner.run_context.messages[-1]])
+    assert user_tokens > 0
+
+    # The stored usage covers the history; the new user message is estimated.
+    # A follow-up queued during the reply makes the run take a second step,
+    # where the new report covers everything so far and its reply is output.
+    mock_provider.text_chat = AsyncMock(
+        return_value=LLMResponse(
+            role="assistant",
+            completion_text="first reply",
+            usage=TokenUsage(input_other=1490, output=10),
+        )
+    )
+    assert runner.follow_up(message_text="and one more thing") is not None
+    async for _ in runner.step_until_done(3):
+        pass
+    follow_up = next(
+        message
+        for message in runner.run_context.messages
+        if message.role == "user" and "one more thing" in str(message.content)
+    )
+    assert seen[0] == 1000 + user_tokens
+    assert seen[1] == 1500 + counter.count_tokens([follow_up])
+
+    # Without a usable report the context manager estimates everything.
+    await runner.reset(
+        provider=mock_provider,
+        request=ProviderRequest(prompt="new"),
+        run_context=ContextWrapper(context=None),
+        tool_executor=mock_tool_executor,
+        agent_hooks=mock_hooks,
+    )
+    runner.request_context_manager.process = recording_process
+    await collect_events(runner.step())
+    assert seen[-1] == 0
+
+
+@pytest.mark.asyncio
+async def test_compaction_invalidates_reported_usage_before_next_provider_call(
+    runner, mock_provider, mock_tool_executor, mock_hooks
+):
+    """Usage reported for the old history must not be reused after compression."""
+    observed = []
+
+    async def reply(**kwargs):
+        observed.append((len(runner.run_context.messages), runner._usage_baseline))
+        return LLMResponse(
+            role="assistant",
+            completion_text="done",
+            usage=TokenUsage(input_other=10, output=2),
+        )
+
+    mock_provider.text_chat = reply
+    request = ProviderRequest(
+        prompt="next",
+        contexts=[
+            {"role": role, "content": "history " * 100}
+            for role in ("user", "assistant", "user", "assistant")
+        ],
+        conversation=SimpleNamespace(token_usage=4000, cid="c1"),
+    )
+    await runner.reset(
+        provider=mock_provider,
+        request=request,
+        run_context=ContextWrapper(context=None),
+        tool_executor=mock_tool_executor,
+        agent_hooks=mock_hooks,
+        max_context_tokens=100,
+        truncate_turns=1,
+    )
+    assert runner._usage_baseline == (4000, 4)
+    await collect_events(runner.step())
+    # The history was shortened before the request and the baseline dropped.
+    assert len(observed) == 1
+    assert observed[0][0] < 5
+    assert observed[0][1] is None
