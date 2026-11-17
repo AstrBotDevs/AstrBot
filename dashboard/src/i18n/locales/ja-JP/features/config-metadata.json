@@ -1920,11 +1920,11 @@
         "description": "思考設定",
         "budget": {
           "description": "思考予算",
-          "hint": "モデルの推論で使用する思考トークン数の上限を指定します。参照：https://ai.google.dev/gemini-api/docs/thinking#set-budget"
+          "hint": "Gemini 2.5の思考トークン予算を設定します。空欄の場合はモデルの既定値を使用します。参照 https://ai.google.dev/gemini-api/docs/thinking#set-budget"
         },
         "level": {
           "description": "思考レベル",
-          "hint": "Gemini 3 以降のモデルでの使用を推奨します。推論動作を制御できます。参照: https://ai.google.dev/gemini-api/docs/thinking#thinking-levels"
+          "hint": "参照 https://ai.google.dev/gemini-api/docs/thinking#thinking-levels"
         }
       },
       "anth_thinking_config": {
