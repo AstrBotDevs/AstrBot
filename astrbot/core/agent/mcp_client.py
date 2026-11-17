@@ -291,7 +291,7 @@ async def _quick_test_mcp_connection(config: dict) -> tuple[bool, str]:
         elif "type" in cfg:
             transport_type = cfg["type"]
         else:
-            raise Exception("MCP connection config missing transport or type field")
+            raise ConnectionError("MCP connection config missing transport or type field")
 
         async with aiohttp.ClientSession() as session:
             if transport_type == "streamable_http":
@@ -535,14 +535,14 @@ class MCPClient:
         if "url" in cfg:
             success, error_msg = await _quick_test_mcp_connection(cfg)
             if not success:
-                raise Exception(error_msg)
+                raise ConnectionError(error_msg)
 
             if "transport" in cfg:
                 transport_type = cfg["transport"]
             elif "type" in cfg:
                 transport_type = cfg["type"]
             else:
-                raise Exception("MCP connection config missing transport or type field")
+                raise ConnectionError("MCP connection config missing transport or type field")
 
             if transport_type != "streamable_http":
                 # SSE transport method
@@ -654,7 +654,7 @@ class MCPClient:
     async def list_tools_and_save(self) -> mcp.ListToolsResult:
         """List all tools from the server and save them to self.tools"""
         if not self.session:
-            raise Exception("MCP Client is not initialized")
+            raise ValueError("MCP Client is not initialized")
         response = await self.session.list_tools()
         self.tools = response.tools
         return response
@@ -692,7 +692,7 @@ class MCPClient:
                 return
 
             if not self._mcp_server_config or not self._server_name:
-                raise Exception("Cannot reconnect: missing connection configuration")
+                raise ConnectionError("Cannot reconnect: missing connection configuration")
 
             self._reconnecting = True
             try:
