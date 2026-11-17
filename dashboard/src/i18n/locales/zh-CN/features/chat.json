@@ -98,7 +98,8 @@
     "interrupted": "已中断，结果未知",
     "interruptedDetail": "执行被中断（停止、超时或出错），没有收到结果。这个操作可能已经生效，重试前请先检查。",
     "done": "已完成",
-    "running": "运行中"
+    "running": "运行中",
+    "awaitingApproval": "等待批准"
   },
   "thread": {
     "title": "分支",
@@ -315,5 +316,33 @@
     },
     "configureModels": "配置模型",
     "details": "查看详情"
+  },
+  "actionCard": {
+    "approved": "已允许",
+    "rejected": "未获批准",
+    "showDetails": "查看详情",
+    "hideDetails": "收起详情",
+    "chosen": "已选择：{label}",
+    "expired": "已过期"
+  },
+  "permissionMode": {
+    "title": "权限",
+    "workspace": {
+      "label": "工作区",
+      "description": "只能读写本对话的工作区，shell 和 python 在沙盒里运行，这些操作不再询问"
+    },
+    "workspace_no_ask": {
+      "label": "工作区 · 不再询问",
+      "description": "仍只能读写本对话的工作区；本对话不再询问。再次选择「工作区」恢复询问"
+    },
+    "ask": {
+      "label": "请求批准",
+      "description": "按配置的权限访问，审批名单里的工具每次都询问"
+    },
+    "full": {
+      "label": "完全访问",
+      "description": "按配置的权限访问，所有工具都不再询问"
+    },
+    "saveFailed": "无法应用权限模式：{error}"
   }
 }
