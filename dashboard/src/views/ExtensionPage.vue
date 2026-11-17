@@ -4,8 +4,10 @@ import ConsoleDisplayer from "@/components/shared/ConsoleDisplayer.vue";
 import ReadmeDialog from "@/components/shared/ReadmeDialog.vue";
 import ProxySelector from "@/components/shared/ProxySelector.vue";
 import UninstallConfirmDialog from "@/components/shared/UninstallConfirmDialog.vue";
+import { pluginApi } from "@/api/v1";
+import { normalizeMarketPluginEntry } from "@/stores/common";
 import { useExtensionPage } from "./extension/useExtensionPage";
-import { computed, defineAsyncComponent } from "vue";
+import { computed, defineAsyncComponent, ref, watch } from "vue";
 import defaultPluginIcon from "/favicon.svg";
 import { usePluginI18n } from "@/utils/pluginI18n";
 
@@ -95,19 +97,14 @@ const {
   refreshingMarket,
   sortBy,
   sortOrder,
-  randomPluginNames,
   normalizeStr,
   toPinyinText,
   toInitials,
   pluginHeaders,
   filteredExtensions,
   filteredPlugins,
-  filteredMarketPlugins,
   getMarketPluginKey,
-  sortedPlugins,
-  RANDOM_PLUGINS_COUNT,
   randomPlugins,
-  shufflePlugins,
   refreshRandomPlugins,
   displayItemsPerPage,
   totalPages,
@@ -213,6 +210,10 @@ const normalizeRepoUrl = (value) =>
     .toLowerCase()
     .replace(/\.git$/, "");
 
+const marketDetail = ref(null);
+const marketDetailLoading = ref(false);
+let marketDetailSerial = 0;
+
 const selectedMarketPlugin = computed(() => {
   const market = Array.isArray(pluginMarketData.value)
     ? pluginMarketData.value
@@ -226,7 +227,13 @@ const selectedMarketPlugin = computed(() => {
       null;
   const marketNameMatch =
     market.find((item) => item.name === selectedPluginId.value) || null;
-  const marketMatch = marketKeyMatch || marketNameMatch;
+  const detailMatch =
+    marketDetail.value &&
+    (getMarketPluginKey(marketDetail.value) === selectedPluginId.value ||
+      marketDetail.value.name === selectedPluginId.value)
+      ? marketDetail.value
+      : null;
+  const marketMatch = marketKeyMatch || marketNameMatch || detailMatch;
 
   if (selectedDetailTab.value === "market" || !installedPlugin) {
     return marketMatch;
@@ -235,10 +242,62 @@ const selectedMarketPlugin = computed(() => {
   const repo = normalizeRepoUrl(installedPlugin.repo);
   if (!repo) return null;
 
-  return (
-    market.find((item) => normalizeRepoUrl(item?.repo) === repo) || null
-  );
+  const marketRepoMatch =
+    market.find((item) => normalizeRepoUrl(item?.repo) === repo) || null;
+  if (marketRepoMatch) return marketRepoMatch;
+  if (detailMatch && normalizeRepoUrl(detailMatch.repo) === repo) {
+    return detailMatch;
+  }
+  return null;
 });
+
+const loadMarketDetail = async (pluginId) => {
+  const serial = ++marketDetailSerial;
+  marketDetailLoading.value = true;
+  marketDetail.value = null;
+  try {
+    const res = await pluginApi.marketEntry(
+      pluginId,
+      selectedSource.value || undefined,
+    );
+    if (serial !== marketDetailSerial) return;
+    const payload =
+      res.data?.status === "ok" && res.data.data && typeof res.data.data === "object"
+        ? res.data.data
+        : null;
+    marketDetail.value = payload
+      ? normalizeMarketPluginEntry(payload)
+      : null;
+  } catch (error) {
+    if (serial === marketDetailSerial) {
+      marketDetail.value = null;
+    }
+  } finally {
+    if (serial === marketDetailSerial) {
+      marketDetailLoading.value = false;
+    }
+  }
+};
+
+watch(selectedSource, () => {
+  if (selectedDetailTab.value !== "market" || !selectedPluginId.value) return;
+  void loadMarketDetail(selectedPluginId.value);
+});
+
+watch(
+  [selectedPluginId, selectedDetailTab],
+  ([pluginId, tab]) => {
+    if (tab !== "market" || !pluginId) return;
+    const inPage = pluginMarketData.value.some(
+      (item) =>
+        getMarketPluginKey(item) === pluginId || item.name === pluginId,
+    );
+    if (!inPage) {
+      void loadMarketDetail(pluginId);
+    }
+  },
+  { immediate: true },
+);
 
 const selectedDetailPlugin = computed(() => {
   if (selectedDetailTab.value === "market" && selectedMarketPlugin.value) {
@@ -308,7 +367,7 @@ const updateDialogPluginLogo = computed(() => {
     :state="pageState"
   />
 
-  <div v-else-if="selectedPluginId && loading_" class="pa-4">
+  <div v-else-if="selectedPluginId && (loading_ || marketDetailLoading)" class="pa-4">
     <v-progress-linear indeterminate color="primary" />
   </div>
 
