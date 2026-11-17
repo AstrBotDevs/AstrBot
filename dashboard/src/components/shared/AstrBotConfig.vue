@@ -65,7 +65,14 @@ const currentConfigPath = computed(() => props.pathPrefix || props.metadataKey)
 const filteredIterable = computed(() => {
   if (!props.iterable) return {}
   const { hint, ...rest } = props.iterable
-  for (const [itemKey, item] of Object.entries(props.metadata[props.metadataKey]?.items || {})) {
+  const items = Object.entries(props.metadata[props.metadataKey]?.items || {})
+  for (const [itemKey, item] of items) {
+    if (item.omit_when_empty && (itemKey in rest || shouldShowItem(item, itemKey))) {
+      delete rest[itemKey]
+      rest[itemKey] = props.iterable[itemKey]
+    }
+  }
+  for (const [itemKey, item] of items) {
     if (itemKey in rest && item.render_type === 'inline' && !item.invisible && shouldShowItem(item, itemKey)) {
       for (const key of Object.values(item.inline_fields_after || {})) {
         delete rest[key]

@@ -70,15 +70,12 @@
     </template>
     <template v-else-if="itemMeta?._special === 'get_embedding_dim'">
       <div class="d-flex align-center gap-2">
-        <v-text-field
+        <ConfigNumberInput
           :model-value="modelValue"
           @update:model-value="emitUpdate"
-          density="compact"
-          variant="outlined"
-          class="config-field"
-          type="number"
-          hide-details
-        ></v-text-field>
+          integer
+          required
+        />
         <v-btn
           color="primary"
           variant="tonal"
@@ -133,6 +130,7 @@
       @update:model-value="emitUpdate"
       :items="getSelectItems(itemMeta)"
       :disabled="itemMeta?.readonly"
+      :clearable="itemMeta?.omit_when_empty"
       density="compact"
       variant="outlined"
       class="config-field"
@@ -176,7 +174,8 @@
       :min="itemMeta?.min"
       :max="itemMeta?.max"
       :integer="itemMeta?.integer"
-      :placeholder="itemMeta?.placeholder"
+      :required="numericRequired"
+      :placeholder="itemMeta?.placeholder ?? (itemMeta?.omit_when_empty ? t('core.common.objectEditor.omitWhenEmpty') : undefined)"
       @update:model-value="emitUpdate"
     />
 
@@ -265,7 +264,7 @@ import PluginSetSelector from './PluginSetSelector.vue'
 import T2ITemplateEditor from './T2ITemplateEditor.vue'
 import DashboardTotpManager from './DashboardTotpManager.vue'
 import LocalPermissionMatrix from './LocalPermissionMatrix.vue'
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import ConfigNumberInput from './ConfigNumberInput.vue'
 import { useI18n, useModuleI18n } from '@/i18n/composables'
 import { usePluginI18n } from '@/utils/pluginI18n'
@@ -312,9 +311,25 @@ const emit = defineEmits(['update:modelValue', 'get-embedding-dim', 'open-fullsc
 const { t } = useI18n()
 const { getRaw } = useModuleI18n('features/config-metadata')
 const { configText } = usePluginI18n()
+const numericRequired = computed(() => !props.itemMeta?.omit_when_empty && props.itemMeta?.required !== false)
+
+watch(
+  () => props.itemMeta?.omit_when_empty && props.modelValue === '',
+  (empty) => { if (empty) emit('update:modelValue', undefined) },
+  { immediate: true }
+)
 
 async function emitUpdate(val) {
-  val = props.itemMeta?.nullable && val === '' ? null : validateNumericConfig(props.itemMeta?.type, val)
+  const type = props.itemMeta?.type
+  if (props.itemMeta?.omit_when_empty && (val === '' || val == null)) {
+    val = undefined
+  } else if (['int', 'float', 'number'].includes(type) && (val === '' || val == null)) {
+    // Keep an empty required field in the input draft, even if the form hides it later.
+    if (numericRequired.value) return
+    val = ''
+  } else {
+    val = validateNumericConfig(type, val)
+  }
   if (
     props.itemMeta?._special === 'agent_runtime'
     && props.configRoot?.agent
@@ -325,7 +340,6 @@ async function emitUpdate(val) {
     )
   }
   emit('update:modelValue', val)
-
 }
 
 const listSelectItems = computed(() =>

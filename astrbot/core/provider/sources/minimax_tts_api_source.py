@@ -54,9 +54,6 @@ class ProviderMiniMaxTTSAPI(TTSProvider):
                 self.timber_weight = default_timber_weight
 
         self.voice_setting: dict = {
-            "speed": provider_config.get("minimax-voice-speed", 1.0),
-            "vol": provider_config.get("minimax-voice-vol", 1.0),
-            "pitch": provider_config.get("minimax-voice-pitch", 0),
             "voice_id": ""
             if self.is_timber_weight
             else provider_config.get("minimax-voice-id", ""),
@@ -67,6 +64,10 @@ class ProviderMiniMaxTTSAPI(TTSProvider):
                 False,
             ),
         }
+        for field in ("speed", "vol", "pitch"):
+            value = provider_config.get(f"minimax-voice-{field}")
+            if value not in (None, ""):
+                self.voice_setting[field] = value
 
         if self.voice_setting["emotion"] == "auto":
             self.voice_setting.pop("emotion", None)

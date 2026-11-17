@@ -4,7 +4,7 @@
       <span>{{ slider.min ?? 0 }}</span>
       <v-slider
         :model-value="Number(modelValue) || 0"
-        @update:model-value="emit('update:modelValue', $event)"
+        @update:model-value="value => { badInput = false; numericTemp = null; emit('update:modelValue', value) }"
         :min="slider.min ?? 0"
         :max="slider.max ?? 100"
         :step="slider.step ?? 1"
@@ -19,7 +19,7 @@
       :model-value="numericTemp ?? modelValue"
       @input="event => { badInput = event.target.validity.badInput; updateValue(event.target.value) }"
       @update:model-value="value => { if (value == null) updateValue(value) }"
-      @blur="() => { if (!badInput) numericTemp = null }"
+      @blur="() => { if (!badInput && !(required && numericTemp === '')) numericTemp = null }"
       @wheel="event => { if (event.target.matches('input[type=number]:focus:read-write')) event.preventDefault() }"
       :placeholder="placeholder"
       :aria-label="$attrs['aria-label']"
@@ -44,7 +44,7 @@
 </template>
 
 <script setup>
-import { ref } from 'vue'
+import { ref, watch } from 'vue'
 import { useI18n } from '@/i18n/composables'
 
 const props = defineProps({
@@ -60,6 +60,13 @@ const emit = defineEmits(['update:modelValue'])
 const { t } = useI18n()
 const numericTemp = ref(null)
 const badInput = ref(false)
+
+watch(() => props.modelValue, (value) => {
+  if (value !== '' && value != null && (badInput.value || numericTemp.value === '')) {
+    badInput.value = false
+    numericTemp.value = null
+  }
+})
 
 function updateValue(value) {
   if (value == null) badInput.value = false

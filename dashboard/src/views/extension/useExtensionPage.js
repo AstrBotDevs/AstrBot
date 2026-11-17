@@ -93,6 +93,7 @@ export const useExtensionPage = (initialTab = "installed") => {
   const snack_show = ref(false);
   const snack_success = ref("success");
   const configDialog = ref(false);
+  const pluginConfigForm = ref(null);
   const extension_config = reactive({
     metadata: {},
     config: {},
@@ -1210,6 +1211,7 @@ export const useExtensionPage = (initialTab = "installed") => {
   };
 
   const updateConfig = async () => {
+    if (pluginConfigForm.value && !(await pluginConfigForm.value.validate()).valid) return;
     loadingDialog.title = tm("status.loading");
     loadingDialog.statusCode = 0;
     loadingDialog.result = "";
@@ -2539,6 +2541,7 @@ export const useExtensionPage = (initialTab = "installed") => {
     snack_show,
     snack_success,
     configDialog,
+    pluginConfigForm,
     extension_config,
     pluginMarketData,
     loadingDialog,

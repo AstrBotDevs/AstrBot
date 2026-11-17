@@ -49,6 +49,7 @@ export function useProviderModelConfigDialog(options: UseProviderModelConfigDial
     const modelName = providerEditData.value?.model?.toLowerCase().split('/').pop() || ''
 
     if (schema.provider.items.max_context_tokens) {
+      schema.provider.items.max_context_tokens.required = false
       schema.provider.items.max_context_tokens.placeholder = 'Use default.'
       schema.provider.items.max_context_tokens.min = 0
       schema.provider.items.max_context_tokens.integer = true
