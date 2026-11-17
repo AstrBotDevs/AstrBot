@@ -218,7 +218,7 @@ class DifyAgentRunner(BaseAgentRunner[TContext]):
                         break
                     elif chunk["event"] == "error":
                         logger.error(f"Dify 出现错误：{chunk}")
-                        raise Exception(
+                        raise RuntimeError(
                             f"Dify 出现错误 status: {chunk['status']} message: {chunk['message']}"
                         )
 
@@ -241,7 +241,7 @@ class DifyAgentRunner(BaseAgentRunner[TContext]):
                                 f"code: {chunk.get('code')}): "
                                 f"{chunk.get('message') or 'No error details provided.'}"
                             )
-                            raise Exception(
+                            raise RuntimeError(
                                 "Dify workflow execution failed. Please contact the administrator."
                             )
                         case "workflow_started":
@@ -276,20 +276,20 @@ class DifyAgentRunner(BaseAgentRunner[TContext]):
                                     f"Dify workflow failed (status: {status}): "
                                     f"{chunk['data'].get('error') or 'No error details provided.'}"
                                 )
-                                raise Exception(
+                                raise RuntimeError(
                                     "Dify workflow execution failed. Please contact the administrator."
                                 )
                             if self.workflow_output_key not in chunk["data"]["outputs"]:
-                                raise Exception(
+                                raise RuntimeError(
                                     f"Dify 工作流的输出不包含指定的键名：{self.workflow_output_key}"
                                 )
                             result = chunk
                 if not result:
-                    raise Exception(
+                    raise TypeError(
                         "Dify workflow stream ended without a successful workflow_finished event."
                     )
             case _:
-                raise Exception(f"未知的 Dify API 类型：{self.api_type}")
+                raise TypeError(f"未知的 Dify API 类型：{self.api_type}")
 
         if not result:
             logger.warning("Dify 请求结果为空，请查看 Debug 日志。")
