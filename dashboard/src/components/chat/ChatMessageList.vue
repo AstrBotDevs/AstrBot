@@ -405,10 +405,11 @@
               @retry-with-model="emit('regenerateWithModel', msg, $event)"
             />
             <v-btn
-              v-if="enableCopy && !isUserMessage(msg)"
+              v-if="enableCopy && (!isUserMessage(msg) || plainTextFromMessage(msg).trim())"
               icon
               size="x-small"
               variant="text"
+              :aria-label="tm('actions.copy')"
               @click="copyMessage(msg)"
             >
               <Copy :size="14" :stroke-width="2" />
