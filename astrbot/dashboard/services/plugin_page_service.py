@@ -191,12 +191,22 @@ class PluginPageService:
             or plugin.display_name
             or plugin.name
         )
-        page_title = (
-            # "views" is the preferred i18n key prefix; "pages" stays as an alias.
-            self.get_by_path(locale_data, f"views.{view_name}.title")
-            or self.get_by_path(locale_data, f"pages.{view_name}.title")
-            or view_name
+        declaration = next(
+            (view for view in plugin.views if view.name == view_name), None
         )
+        page_title = declaration.title if declaration else ""
+        for candidate in dict.fromkeys((resolved_locale, "zh-CN", "en-US")):
+            translations = plugin_i18n.get(candidate)
+            translated_title = ""
+            for prefix in ("views", "pages"):
+                value = self.get_by_path(translations, f"{prefix}.{view_name}.title")
+                if isinstance(value, str) and value.strip():
+                    translated_title = value.strip()
+                    break
+            if translated_title:
+                page_title = translated_title
+                break
+        page_title = page_title or view_name
 
         return {
             "pluginName": plugin.name,
@@ -646,21 +656,11 @@ class PluginPageService:
         if not plugin_name:
             return None
         declaration = next(
-            (
-                spec
-                for spec in getattr(
-                    plugin.star_cls or plugin.star_cls_type, "chatui_views", []
-                )
-                if spec.name == view_name
-            ),
+            (spec for spec in plugin.views if spec.name == view_name),
             None,
         )
-        if target == "chat_workbench":
-            if (
-                not declaration
-                or declaration.target != target
-                or not declaration.launcher
-            ):
+        if target == "chat_workbench_with_launcher":
+            if not declaration or declaration.target != target:
                 return None
         elif target != "plugin_page" or (declaration and declaration.target != target):
             return None
@@ -675,7 +675,7 @@ class PluginPageService:
             "title": declaration.title or page.title if declaration else page.title,
             "description": declaration.description if declaration else "",
             "target": target,
-            "i18n_key": f"pages.{page.name}",
+            "i18n_key": f"views.{page.name}",
         }
         if include_content_path and asset_token:
             page_data["content_path"] = (

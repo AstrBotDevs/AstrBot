@@ -77,6 +77,7 @@ for (const authorized of [true, false]) {
     });
     for (const path of [
       "../src/api/http.ts",
+      "../src/utils/pluginI18n.js",
       "../src/components/chat/message_list_comps/PluginViewCard.vue",
     ]) {
       let source = readFileSync(new URL(path, import.meta.url), "utf8");

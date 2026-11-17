@@ -33,6 +33,7 @@ export interface WorkbenchView {
   name: string;
   title: string;
   description: string;
+  i18n?: Record<string, unknown>;
 }
 
 export interface WorkbenchTab {

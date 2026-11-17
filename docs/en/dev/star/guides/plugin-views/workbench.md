@@ -15,22 +15,22 @@ Send a message, then click **Refresh** to see the latest request breakdown. Sour
 
 Register a `preview` view and return `event.view_result()` from a tool. Set the tab label with `title`; the message retains a reopening entry. Hosts without a workbench, such as thread panels, render the view inside the message.
 
-```python
-from pathlib import Path
+Add to `metadata.yaml`:
 
-from astrbot.api import chatui
+```yaml
+views:
+  - name: preview
+    target: chat_workbench
+    title: Preview
+```
+
+`main.py`:
+
+```python
 from astrbot.api.event import AstrMessageEvent, filter
 from astrbot.api.star import Star
 
 class PreviewPlugin(Star):
-    chatui_views = [
-        chatui.ViewSpec(
-            name="preview",
-            entry=Path("views/preview/index.html"),
-            target="chat_workbench",
-        ),
-    ]
-
     @filter.llm_tool(name="open_preview")
     async def open_preview(self, event: AstrMessageEvent):
         """Open a preview in the workbench.
@@ -74,22 +74,21 @@ After the tool runs, the workbench displays a **Notes** tab with the returned te
 
 ## Register a resident page
 
-A launcher view needs no message or tool call:
+Use `chat_workbench_with_launcher` in metadata to expose the view in **+** while still allowing plugins to open it through `event.view_result()`:
 
-```python
-chatui.ViewSpec(
-    name="context",
-    entry=Path("views/context/index.html"),
-    target="chat_workbench",
-    launcher=True,
-    title="Context usage",
-    description="Inspect the current session's capacity and sources.",
-)
+```yaml
+views:
+  - name: context
+    target: chat_workbench_with_launcher
+    title: Context usage
+    description: Inspect the current conversation context
 ```
 
-Add this declaration to `Star.chatui_views`, create its entry file, and reload the plugin. Open the workbench from the ChatUI header, click **+**, then select **Context usage**. Each registered view has one tab per session.
+Create the entry file and reload the plugin. Click **+** in the ChatUI workbench, then choose **Context usage**. A launcher-opened view has one tab per session.
 
-Launcher views reuse the standalone plugin page host and its authenticated plugin Web APIs, file transfers, and SSE bridge. They do not declare message `actions` or receive a `context.view` snapshot. `sessionId` identifies the active chat session, or is `null` when none is open. Switching sessions mounts the selected session's views with their own context:
+Capabilities depend on how the view opens. Message/tool-created instances receive `context.view` and can use `view.subscribe/action`; opening a view does not invoke an action, and previews do not need `actions`. Launcher-opened instances have no message snapshot and use plugin Web APIs, file transfers, and SSE, with the current `sessionId`. A shared page can check `context.view` to handle both modes.
+
+`sessionId` is `null` without an active session. Switching sessions restores that session's pages and context:
 
 ```javascript
 const bridge = window.AstrBotPluginView;
@@ -104,7 +103,7 @@ The plugin backend must validate session ownership against `request.username`; a
 
 ## Fill or send a chat message from a resident view
 
-These methods are available only to resident `chat_workbench` views without `context.view`. Bind them to user actions:
+These methods are available only to resident `chat_workbench_with_launcher` views without `context.view`. Bind them to user actions:
 
 ```javascript
 await bridge.chat.fill("Please revise this passage.");

@@ -2,10 +2,12 @@
 import { onMounted, ref } from "vue";
 import { ArrowUpRight, PanelsTopLeft } from "@lucide/vue";
 import { fetchWithAuth } from "@/api/http";
-import { useModuleI18n } from "@/i18n/composables";
+import { useI18n, useModuleI18n } from "@/i18n/composables";
+import { resolvePluginViewText } from "@/utils/pluginI18n";
 import type { WorkbenchView } from "@/utils/chatViews";
 
 defineEmits<{ open: [view: WorkbenchView] }>();
+const { locale } = useI18n();
 const { tm } = useModuleI18n("features/chat");
 const views = ref<WorkbenchView[]>([]);
 const loading = ref(true);
@@ -45,8 +47,8 @@ onMounted(load);
     >
       <PanelsTopLeft :size="20" :stroke-width="1.5" />
       <span class="view-copy">
-        <strong>{{ view.title }}</strong>
-        <span v-if="view.description">{{ view.description }}</span>
+        <strong>{{ resolvePluginViewText(view.i18n, locale, view, "title") }}</strong>
+        <span v-if="resolvePluginViewText(view.i18n, locale, view, 'description')">{{ resolvePluginViewText(view.i18n, locale, view, "description") }}</span>
         <small>{{ view.display_name }}</small>
       </span>
       <ArrowUpRight :size="16" />

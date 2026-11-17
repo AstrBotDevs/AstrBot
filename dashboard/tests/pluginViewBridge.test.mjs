@@ -89,7 +89,7 @@ function setupBridge(target = "chat_message") {
   };
 }
 
-for (const target of ["chat_message", "chat_workbench", "plugin_page"]) {
+for (const target of ["chat_message", "chat_workbench", "chat_workbench_with_launcher", "plugin_page"]) {
   test(`${target} shares context, automatic CSS tokens, and live theme updates`, async () => {
     const env = setupBridge(target);
     assert.equal(env.sent[0].kind, "ready");
@@ -276,7 +276,7 @@ test("chat views report growth and shrinkage without duplicate resize messages",
 
 test("launcher views receive session changes and use plugin APIs without a message snapshot", async () => {
   const harness = setupBridge("plugin_page");
-  harness.context.target = "chat_workbench";
+  harness.context.target = "chat_workbench_with_launcher";
   harness.context.sessionId = "session-one";
   harness.deliver({kind: "context", context: harness.context});
   await harness.bridge.ready();
@@ -289,4 +289,34 @@ test("launcher views receive session changes and use plugin APIs without a messa
   await assert.rejects(harness.bridge.view.action("run"), {code: "UNSUPPORTED_CAPABILITY"});
   harness.deliver({kind: "context", context: {sessionId: "session-two"}});
   assert.equal(harness.bridge.getContext().sessionId, "session-two");
+});
+
+
+test("with-launcher views use actions only when opened with a message snapshot", async () => {
+  const message = setupBridge("chat_workbench_with_launcher");
+  message.deliver({ kind: "context", context: message.context });
+  await message.bridge.ready();
+  const action = message.bridge.view.action("demo:increment", { amount: 1 });
+  await Promise.resolve();
+  const request = message.sent.at(-1);
+  assert.equal(request.action, "view:action");
+  message.deliver({ kind: "response", requestId: request.requestId, ok: true });
+  await action;
+  await assert.rejects(message.bridge.apiGet("usage"), { code: "UNSUPPORTED_CAPABILITY" });
+  await assert.rejects(message.bridge.chat.send("hello"), { code: "UNSUPPORTED_CAPABILITY" });
+
+  const resident = setupBridge("plugin_page");
+  resident.context.target = "chat_workbench_with_launcher";
+  resident.context.sessionId = "session-one";
+  resident.deliver({ kind: "context", context: resident.context });
+  await resident.bridge.ready();
+  for (const method of ["fill", "send"]) {
+    const result = resident.bridge.chat[method]("hello");
+    await Promise.resolve();
+    const request = resident.sent.at(-1);
+    assert.equal(request.action, `chat:${method}`);
+    assert.equal(request.sessionId, "session-one");
+    resident.deliver({ kind: "response", requestId: request.requestId, ok: true, data: {sessionId: "session-one"} });
+    assert.equal((await result).sessionId, "session-one");
+  }
 });

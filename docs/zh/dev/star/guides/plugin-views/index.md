@@ -1,18 +1,29 @@
 # 插件可视化视图
 
-在插件中提供 HTML 界面，并通过 Bridge 与 AstrBot 通信。根据界面的使用位置选择 `ViewSpec.target`：
+在插件中提供 HTML 界面，并通过 Bridge 与 AstrBot 通信。根据界面的使用位置选择 metadata 中的 `target`：
 
 | 界面 | `target` | 适用场景 | 打开方式 |
 | --- | --- | --- | --- |
 | [独立插件页面](./plugin-page.md) | `plugin_page` | 设置、管理面板、日志 | WebUI 插件入口 |
 | [消息交互组件](./chat-message.md) | `chat_message` | 结果列表、选择器、确认表单 | 命令、消息处理器或工具返回 `event.view_result()` |
-| [工作台页面](./workbench.md) | `chat_workbench` | 文件预览、笔记、会话分析 | `event.view_result()` 或工作台「＋」入口 |
+| [工作台页面](./workbench.md) | `chat_workbench` | 文件预览、笔记、会话分析 | `event.view_result()` |
+| [双入口工作台](./workbench.md#注册常驻页面) | `chat_workbench_with_launcher` | 笔记、会话分析 | `event.view_result()` 或工作台「＋」入口 |
 
 ## 注册视图
 
-在插件的 `Star.chatui_views` 中声明 `chatui.ViewSpec`。`name` 在插件内唯一，入口为 `views/<name>/index.html`。在注册时指定 `target`，而不是在 `event.view_result()` 中指定。
+在插件的 `metadata.yaml` 中通过 `views` 声明视图。`name` 在插件内唯一，入口固定为 `views/<name>/index.html`，无需声明 `entry`。Python 只负责创建视图、处理 action 或提供 Web API。
 
-`target` 默认为 `chat_message`。`chat_message` 和 `chat_workbench` 不会出现在独立插件页面列表中。未声明 `ViewSpec` 的 `views/` 子目录仍自动发现为独立页面。
+```yaml
+views:
+  - name: context_usage
+    target: chat_workbench_with_launcher
+    title: 上下文用量
+    description: 查看当前会话的 token 使用情况
+```
+
+`target` 默认是 `plugin_page`，保留旧页面声明的行为。消息组件填写 `chat_message`；只由插件打开的工作台填写 `chat_workbench`；同时允许从「＋」打开的工作台填写 `chat_workbench_with_launcher`。所有 ChatUI target 都不会出现在独立插件页面列表中，未声明的目录仍自动发现为独立页面。
+
+`title`、`description` 是默认文案；i18n 按字段覆盖，规则见[视图文案](./bridge.md#view-labels)。`version` 默认为 `1`；`actions` 声明消息实例允许调用的 action，默认为空。独立页面不声明 actions。
 
 如果只需要几个配置项，使用[插件配置](../plugin-config.md)即可。
 

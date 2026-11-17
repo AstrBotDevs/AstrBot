@@ -15,22 +15,22 @@
 
 注册 `preview` 视图，让工具返回 `event.view_result()`。`title` 是标签标题，消息中会保留重新打开的入口。线程面板没有工作台，会将视图显示在消息中。
 
-```python
-from pathlib import Path
+在 `metadata.yaml` 中添加：
 
-from astrbot.api import chatui
+```yaml
+views:
+  - name: preview
+    target: chat_workbench
+    title: Preview
+```
+
+`main.py`：
+
+```python
 from astrbot.api.event import AstrMessageEvent, filter
 from astrbot.api.star import Star
 
 class PreviewPlugin(Star):
-    chatui_views = [
-        chatui.ViewSpec(
-            name="preview",
-            entry=Path("views/preview/index.html"),
-            target="chat_workbench",
-        ),
-    ]
-
     @filter.llm_tool(name="open_preview")
     async def open_preview(self, event: AstrMessageEvent):
         """Open a preview in the workbench.
@@ -74,22 +74,21 @@ bridge.view.subscribe(({ data }) => {
 
 ## 注册常驻页面
 
-常驻视图不需要消息或工具调用。注册时增加 `launcher=True`：
+在 metadata 中使用 `chat_workbench_with_launcher`，视图便可以从「＋」入口打开，也仍然可以通过 `event.view_result()` 由插件主动打开：
 
-```python
-chatui.ViewSpec(
-    name="context",
-    entry=Path("views/context/index.html"),
-    target="chat_workbench",
-    launcher=True,
-    title="上下文用量",
-    description="查看当前会话的容量和来源分布。",
-)
+```yaml
+views:
+  - name: context
+    target: chat_workbench_with_launcher
+    title: 上下文用量
+    description: 查看当前会话的上下文分布
 ```
 
-将声明加入 `Star.chatui_views`，创建对应的入口文件后重载插件。在 ChatUI 顶部打开工作台，点击「＋」进入“新工作台”，选择 **上下文用量**。同一个注册视图在每个会话中只打开一个标签。
+创建入口文件后重载插件。在 ChatUI 工作台点击「＋」，选择 **上下文用量**。从入口打开的同一个视图在每个会话中只保留一个标签。
 
-常驻视图复用独立插件页面的 Web API、文件传输和 SSE bridge，不声明消息 `actions`，也没有 `context.view` 消息快照。`sessionId` 是当前打开的聊天会话 ID；未打开会话时为 `null`。切换会话时重新挂载对应会话的视图，并传入该会话的 context：
+交互能力取决于打开方式。消息或工具创建的实例带有 `context.view`，可以使用 `view.subscribe/action`；打开本身不触发 action，纯预览不需要声明 `actions`。从「＋」打开的实例没有消息快照，使用插件 Web API、文件传输和 SSE，并收到当前 `sessionId`。同一个页面可检查 `context.view`，分别处理这两种模式。
+
+`sessionId` 在未打开会话时为 `null`。切换会话会恢复对应会话的页面和 context：
 
 ```javascript
 const bridge = window.AstrBotPluginView;
@@ -100,11 +99,11 @@ bridge.onContext(({ sessionId }) => {
 });
 ```
 
-插件后端必须用 `request.username` 校验会话归属，不能把前端传入的 `sessionId` 当作授权。异步请求要避免旧会话的响应覆盖新会话。三个 target 继续共用主题 CSS tokens 和 `onContext()`。
+插件后端必须用 `request.username` 校验会话归属，不能把前端传入的 `sessionId` 当作授权。异步请求要避免旧会话的响应覆盖新会话。所有 target 继续共用主题 CSS tokens 和 `onContext()`。
 
 ## 从常驻视图填入或发送消息
 
-仅 `chat_workbench` 常驻视图（没有 `context.view`）提供以下接口，通常绑定到用户点击操作：
+仅 `chat_workbench_with_launcher` 常驻视图（没有 `context.view`）提供以下接口，通常绑定到用户点击操作：
 
 ```javascript
 await bridge.chat.fill("请帮我修改这段文字。");

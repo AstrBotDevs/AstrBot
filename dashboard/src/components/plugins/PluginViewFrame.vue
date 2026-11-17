@@ -18,6 +18,7 @@ const props = defineProps({
   target: { type: String, default: "plugin_page" },
   sessionId: { type: String, default: "" },
 });
+const emit = defineEmits(["metadata"]);
 const { tm } = useModuleI18n("features/extension");
 const {
   locale,
@@ -30,6 +31,11 @@ const loading = ref(true);
 const errorMessage = ref("");
 const plugin = ref(null);
 const page = ref(null);
+watch([plugin, page], () => {
+  if (plugin.value && page.value) emit("metadata", {
+    ...page.value, i18n: plugin.value.i18n || {},
+  });
+});
 const iframeSrc = ref("");
 const iframeRef = ref(null);
 const sseConnections = new Map();
@@ -390,7 +396,7 @@ const handleBridgeRequest = async (message) => {
     }
 
     if (action === "chat:fill" || action === "chat:send") {
-      if (props.target !== "chat_workbench" || !workbenchChat) throw new Error("Chat control is only available to workbench launcher views.");
+      if (props.target !== "chat_workbench_with_launcher" || !workbenchChat) throw new Error("Chat control is only available to workbench launcher views.");
       if (message.sessionId !== (props.sessionId || null)) throw new Error("The active session has changed.");
       const result = await workbenchChat({ mode: action === "chat:fill" ? "fill" : "send", text: message.text, sessionId: message.sessionId });
       sendBridgeResponse(requestId, true, result);
@@ -578,7 +584,7 @@ const loadPluginView = async () => {
   cleanupSSEConnections();
 
   try {
-    if (props.target === "chat_workbench") {
+    if (props.target === "chat_workbench_with_launcher") {
       const response = await fetchWithAuth(`/api/v1/chat/workbench/views/${encodeURIComponent(pluginName.value)}/${encodeURIComponent(pageName.value)}`);
       const result = await response.json();
       if (!response.ok) throw new Error(result.message || tm("messages.pluginViewNotFound"));

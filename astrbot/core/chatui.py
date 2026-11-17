@@ -20,13 +20,18 @@ class ViewSpec(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
     name: str = Field(pattern=r"^[a-zA-Z0-9_-]+$")
-    entry: Path
-    target: Literal["chat_message", "chat_workbench", "plugin_page"] = "chat_message"
+    target: Literal[
+        "chat_message", "chat_workbench", "chat_workbench_with_launcher", "plugin_page"
+    ] = "plugin_page"
     title: str = Field(default="", max_length=200)
     description: str = Field(default="", max_length=500)
-    launcher: bool = False
     version: int = Field(default=1, ge=1)
     actions: list[str] = Field(default_factory=list)
+
+    @property
+    def entry(self) -> Path:
+        """Return the conventional entry path relative to the plugin root."""
+        return Path("views") / self.name / "index.html"
 
     @model_validator(mode="after")
     def validate_target_actions(self):
@@ -38,9 +43,7 @@ class ViewSpec(BaseModel):
         Raises:
             ValueError: If a plugin page declares chat interaction actions.
         """
-        if self.launcher and self.target != "chat_workbench":
-            raise ValueError("Only chat_workbench views can appear in the launcher.")
-        if (self.target == "plugin_page" or self.launcher) and self.actions:
+        if self.target == "plugin_page" and self.actions:
             raise ValueError(
                 "Standalone views use plugin Web APIs, not UI interaction actions."
             )
@@ -136,7 +139,7 @@ def resolve_view(
     name: str,
     version: int | None = None,
     *,
-    target: Literal["chat_message", "chat_workbench", "plugin_page"] | None = None,
+    target: str | None = None,
 ):
     """Resolve a currently enabled plugin's declared view and safe entry path.
 
@@ -144,7 +147,7 @@ def resolve_view(
         module: Owning plugin module recorded by the host.
         name: Plugin-local view name.
         version: Required contract version, if restoring an existing instance.
-        target: Exact host to validate, or None to accept either ChatUI host.
+        target: Exact host to validate, or None to accept any ChatUI host.
 
     Returns:
         The plugin metadata, validated declaration, and resolved entry path.
@@ -157,11 +160,13 @@ def resolve_view(
     plugin = star_map.get(module)
     if not plugin or not plugin.activated or plugin.star_cls is None:
         raise ViewError("VIEW_UNAVAILABLE", "The view's plugin is unavailable.")
-    for spec in getattr(plugin.star_cls, "chatui_views", []):
+    for spec in plugin.views:
         if spec.name != name:
             continue
         if spec.target not in (
-            (target,) if target else ("chat_message", "chat_workbench")
+            (target,)
+            if target
+            else ("chat_message", "chat_workbench", "chat_workbench_with_launcher")
         ):
             raise ViewError(
                 "VIEW_UNAVAILABLE",
@@ -169,12 +174,10 @@ def resolve_view(
             )
         if version is not None and version != spec.version:
             break
-        if spec.entry != Path("views") / spec.name / "index.html":
-            raise ViewError(
-                "VIEW_UNAVAILABLE", "View entries must use views/<name>/index.html."
-            )
         root = Path(plugin.module.__file__).resolve().parent
         entry = (root / spec.entry).resolve()
+        if spec.target == "plugin_page" and not entry.is_file():
+            entry = (root / "pages" / spec.name / "index.html").resolve()
         if spec.entry.is_absolute() or not entry.is_relative_to(root):
             break
         if not entry.is_file():
@@ -196,7 +199,7 @@ async def emit_view(event, module: str, result: ViewResult) -> None:
     from astrbot.core.message.components import Json
     from astrbot.core.message.message_event_result import MessageChain
 
-    _, spec, _ = resolve_view(module, result.name)
+    plugin, spec, _ = resolve_view(module, result.name)
     if not event.platform_meta.support_ui_interaction:
         return
     record = await asyncio.to_thread(view_store.create, event, module, result)
@@ -208,7 +211,23 @@ async def emit_view(event, module: str, result: ViewResult) -> None:
                         "id": record["id"],
                         "name": record["name"],
                         "text": result.text,
-                        "title": result.title or spec.name,
+                        "title": result.title,
+                        "view_metadata": {
+                            "name": spec.name,
+                            "title": spec.title,
+                            "description": spec.description,
+                            "i18n": {
+                                locale: {
+                                    prefix: {spec.name: translations[prefix][spec.name]}
+                                    for prefix in ("views", "pages")
+                                    if isinstance(translations.get(prefix), dict)
+                                    and isinstance(
+                                        translations[prefix].get(spec.name), dict
+                                    )
+                                }
+                                for locale, translations in plugin.i18n.items()
+                            },
+                        },
                         "target": spec.target,
                     }
                 )
@@ -261,7 +280,7 @@ class ViewStore:
         Returns:
             A serialized view snapshot.
         """
-        _, spec, _ = resolve_view(module, result.name)
+        plugin, spec, _ = resolve_view(module, result.name)
         raw = event.message_obj.raw_message
         owner, session_id, payload = raw
         record = {

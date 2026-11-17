@@ -53,7 +53,7 @@
                   String(
                     tab.launcher
                       ? tm('workbench.newTab')
-                      : tab.part.title || tab.part.name,
+                      : tabTitle(tab),
                   )
                 "
                 @click="emit('select', String(tab.part.id))"
@@ -63,7 +63,7 @@
                 <span>{{
                   tab.launcher
                     ? tm("workbench.newTab")
-                    : tab.part.title || tab.part.name
+                    : tabTitle(tab)
                 }}</span>
               </button>
               <button
@@ -74,7 +74,7 @@
                     title: String(
                       tab.launcher
                         ? tm('workbench.newTab')
-                        : tab.part.title || tab.part.name,
+                        : tabTitle(tab),
                     ),
                   })
                 "
@@ -134,8 +134,9 @@
           v-else-if="tab.page"
           :plugin-id="tab.page.plugin_name"
           :view-name="tab.page.name"
-          target="chat_workbench"
+          target="chat_workbench_with_launcher"
           :session-id="sessionId"
+          @metadata="Object.assign(tab.page, $event)"
         />
         <PluginViewCard
           v-else
@@ -161,11 +162,22 @@ import {
   Plus,
   X,
 } from "@lucide/vue";
-import { useModuleI18n } from "@/i18n/composables";
+import { useI18n, useModuleI18n } from "@/i18n/composables";
+import { resolvePluginViewText } from "@/utils/pluginI18n";
 import type { WorkbenchTab, WorkbenchView } from "@/utils/chatViews";
 import WorkbenchLauncher from "./WorkbenchLauncher.vue";
 import PluginViewFrame from "@/components/plugins/PluginViewFrame.vue";
 import PluginViewCard from "./message_list_comps/PluginViewCard.vue";
+
+const { locale } = useI18n();
+function tabTitle(tab: WorkbenchTab) {
+  if (!tab.page && tab.part.title) return String(tab.part.title);
+  const metadata = tab.page || tab.part.view_metadata || {
+    name: tab.part.name,
+    i18n: undefined,
+  };
+  return resolvePluginViewText(metadata.i18n, locale.value, metadata, "title");
+}
 
 const props = withDefaults(
   defineProps<{

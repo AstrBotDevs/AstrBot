@@ -28,16 +28,24 @@ astrbot_plugin_view_demo/
 
 用户可以在 WebUI 的插件页点击插件卡片进入插件详情页，然后打开插件声明的可视化视图。
 
-未声明 `ViewSpec` 的目录仍可自动发现为独立页面。显式注册时必须设置 `target="plugin_page"`；这个 target 不使用 `event.view_result()`，也不声明 `actions`。
+未在 metadata 中声明的目录仍可自动发现为独立页面。声明中的 `target` 默认为 `plugin_page`；这个 target 不使用 `event.view_result()`，也不声明 `actions`。
 
 ## 注册页面与接口 {#注册页面}
 
 插件后端推荐使用 `astrbot.api.web`，不要把 FastAPI、Starlette 或 Quart 的原始请求对象作为插件公共 API 暴露给自己的业务代码。
 
-```python
-from pathlib import Path
+在 `metadata.yaml` 中添加：
 
-from astrbot.api import chatui
+```yaml
+views:
+  - name: bridge-demo
+    target: plugin_page
+    title: Bridge Demo
+```
+
+`main.py`：
+
+```python
 from astrbot.api.star import Context, Star
 from astrbot.api.web import json_response, request
 
@@ -45,14 +53,6 @@ PLUGIN_NAME = "astrbot_plugin_view_demo"
 
 
 class MyPlugin(Star):
-    chatui_views = [
-        chatui.ViewSpec(
-            name="bridge-demo",
-            entry=Path("views/bridge-demo/index.html"),
-            target="plugin_page",
-        ),
-    ]
-
     def __init__(self, context: Context):
         super().__init__(context)
         context.register_web_api(

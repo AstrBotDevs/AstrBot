@@ -60,7 +60,7 @@
   function makeRequest(action, payload, transfer) {
     return new Promise((resolve, reject) => {
       if (
-        (context?.target === "chat_message" || (context?.target === "chat_workbench" && context?.view)) &&
+        (context?.target === "chat_message" || (["chat_workbench", "chat_workbench_with_launcher"].includes(context?.target) && context?.view)) &&
         action !== "view:action"
       ) {
         reject(
@@ -351,7 +351,7 @@
     view: {
       subscribe(handler) {
         if (
-          !["chat_message", "chat_workbench"].includes(context?.target) ||
+          !["chat_message", "chat_workbench", "chat_workbench_with_launcher"].includes(context?.target) ||
           !context.view
         ) {
           throw Object.assign(
@@ -370,7 +370,7 @@
       async action(actionId, data = null) {
         await readyPromise;
         if (
-          !["chat_message", "chat_workbench"].includes(context?.target) ||
+          !["chat_message", "chat_workbench", "chat_workbench_with_launcher"].includes(context?.target) ||
           !context.view
         ) {
           throw Object.assign(
@@ -406,12 +406,12 @@
     chat: {
       async fill(text) {
         await readyPromise;
-        if (context?.target !== "chat_workbench" || context.view) throw Object.assign(new Error("Chat control requires a workbench launcher view."), { code: "UNSUPPORTED_CAPABILITY" });
+        if (context?.target !== "chat_workbench_with_launcher" || context.view) throw Object.assign(new Error("Chat control requires a workbench launcher view."), { code: "UNSUPPORTED_CAPABILITY" });
         return makeRequest("chat:fill", { text, sessionId: context.sessionId || null });
       },
       async send(text) {
         await readyPromise;
-        if (context?.target !== "chat_workbench" || context.view) throw Object.assign(new Error("Chat control requires a workbench launcher view."), { code: "UNSUPPORTED_CAPABILITY" });
+        if (context?.target !== "chat_workbench_with_launcher" || context.view) throw Object.assign(new Error("Chat control requires a workbench launcher view."), { code: "UNSUPPORTED_CAPABILITY" });
         return makeRequest("chat:send", { text, sessionId: context.sessionId || null });
       },
     },

@@ -41,22 +41,21 @@ from astrbot.dashboard.services.plugin_service import PluginService
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("with_pages", [False, True])
-@pytest.mark.parametrize("target", ["chat_message", "chat_workbench"])
+@pytest.mark.parametrize("target", ["chat_message", "chat_workbench", "chat_workbench_with_launcher"])
 async def test_sidebar_plugin_list_excludes_chat_views(
     views, tmp_path, with_pages, target
 ):
     _, _, plugin, _ = views
-    plugin.star_cls.chatui_views[0].target = target
+    plugin.views[0].target = target
     plugin.root_dir_name = tmp_path.name
     if with_pages:
         for name in ("settings", "legacy"):
             entry = tmp_path / "views" / name / "index.html"
             entry.parent.mkdir(parents=True)
             entry.write_text("<html></html>", encoding="utf-8")
-        plugin.star_cls.chatui_views.append(
+        plugin.views.append(
             chatui.ViewSpec(
                 name="settings",
-                entry=Path("views/settings/index.html"),
                 target="plugin_page",
             )
         )
@@ -80,24 +79,24 @@ async def test_sidebar_plugin_list_excludes_chat_views(
     assert (await pages.resolve_plugin_page_file(plugin, "results", "")).is_file()
 
 
-def test_view_targets_default_to_chat_and_validate_page_actions():
-    spec = chatui.ViewSpec(name="counter", entry=Path("views/counter/index.html"))
-    assert spec.target == "chat_message"
+def test_view_targets_default_to_legacy_page_and_validate_page_actions():
+    spec = chatui.ViewSpec(name="counter",)
+    assert spec.target == "plugin_page"
     with pytest.raises(ValueError):
-        chatui.ViewSpec(name="counter", entry=spec.entry, target="sidebar")
+        chatui.ViewSpec(name="counter", target="sidebar")
     with pytest.raises(ValueError, match="plugin Web APIs"):
         chatui.ViewSpec(
             name="counter",
-            entry=spec.entry,
             target="plugin_page",
             actions=["demo:increment"],
         )
 
 
 @pytest.mark.asyncio
-async def test_workbench_tool_result_emits_persistent_target_and_title(views):
+@pytest.mark.parametrize("target", ["chat_workbench", "chat_workbench_with_launcher"])
+async def test_workbench_tool_result_emits_persistent_target_and_title(views, target):
     store, event, plugin, _ = views
-    plugin.star_cls.chatui_views[0].target = "chat_workbench"
+    plugin.views[0].target = target
     result = event.view_result(
         name="results",
         title="Notes.md",
@@ -106,7 +105,7 @@ async def test_workbench_tool_result_emits_persistent_target_and_title(views):
     )
     await core_views.emit_view(event, __name__, result)
     part = event.send.await_args.args[0].chain[0].data
-    assert part["target"] == "chat_workbench"
+    assert part["target"] == target
     assert part["title"] == "Notes.md"
     assert store.get(part["id"])["data"] == {"url": "files/notes.md"}
     with pytest.raises(ValueError, match="title"):
@@ -120,10 +119,9 @@ async def test_view_targets_select_chat_or_independent_page_host(views, tmp_path
         entry = tmp_path / "views" / name / "index.html"
         entry.parent.mkdir(parents=True)
         entry.write_text(f"<html><body>{name}</body></html>", encoding="utf-8")
-    plugin.star_cls.chatui_views.append(
+    plugin.views.append(
         chatui.ViewSpec(
             name="settings",
-            entry=Path("views/settings/index.html"),
             target="plugin_page",
         )
     )
@@ -160,10 +158,9 @@ async def test_view_targets_select_chat_or_independent_page_host(views, tmp_path
 
 def test_changing_a_view_to_plugin_page_invalidates_existing_chat_instances(views):
     _, _, plugin, record = views
-    plugin.star_cls.chatui_views = [
+    plugin.views = [
         chatui.ViewSpec(
             name="results",
-            entry=Path("views/results/index.html"),
             target="plugin_page",
         )
     ]
@@ -186,13 +183,14 @@ def views(tmp_path, monkeypatch):
     entry.parent.mkdir(parents=True)
     entry.write_text("<html><body>Test view</body></html>", encoding="utf-8")
     spec = chatui.ViewSpec(
-        name="results", entry=Path("views/results/index.html"), actions=["demo:select"]
+        name="results", target="chat_message", actions=["demo:select"]
     )
     plugin = StarMetadata(
         name="demo",
         module_path=__name__,
         module=SimpleNamespace(__file__=str(tmp_path / "main.py")),
-        star_cls=SimpleNamespace(chatui_views=[spec]),
+        star_cls=SimpleNamespace(),
+        views=[spec],
     )
     monkeypatch.setitem(star_map, __name__, plugin)
     store = ViewStore(tmp_path / "views.db")
@@ -785,10 +783,8 @@ async def test_views_and_control_events_do_not_split_saved_replies(scenario):
 async def test_workbench_catalog_only_exposes_enabled_launcher_views(views, tmp_path):
     _, _, plugin, _ = views
     plugin.root_dir_name = tmp_path.name
-    spec = plugin.star_cls.chatui_views[0]
-    spec.target = "chat_workbench"
-    spec.launcher = True
-    spec.actions = []
+    spec = plugin.views[0]
+    spec.target = "chat_workbench_with_launcher"
     spec.title = "Context usage"
     spec.description = "Inspect the current session."
     manager = SimpleNamespace(
@@ -809,17 +805,59 @@ async def test_workbench_catalog_only_exposes_enabled_launcher_views(views, tmp_
         response = await client.get(path)
         assert response.status_code == 200
         assert "/_t/" in response.json()["data"]["page"]["content_path"]
-        spec.launcher = False
+        spec.target = "chat_workbench"
         assert (await client.get(path)).status_code == 404
         assert (await client.get("/api/v1/chat/workbench/views")).json()["data"] == []
-        spec.launcher = True
+        spec.target = "chat_workbench_with_launcher"
         plugin.activated = False
         assert (await client.get(path)).status_code == 404
         assert (await client.get("/api/v1/chat/workbench/views")).json()["data"] == []
 
 
-def test_workbench_launcher_requires_correct_target_and_web_api():
+def test_workbench_launcher_also_allows_message_actions():
+    spec = chatui.ViewSpec(
+        name="context", target="chat_workbench_with_launcher", actions=["demo:select"]
+    )
+    assert spec.actions == ["demo:select"]
+    assert spec.entry == Path("views/context/index.html")
     with pytest.raises(ValueError):
-        chatui.ViewSpec(name="context", entry=Path("views/context/index.html"), launcher=True)
-    with pytest.raises(ValueError):
-        chatui.ViewSpec(name="context", entry=Path("views/context/index.html"), target="chat_workbench", launcher=True, actions=["run"])
+        chatui.ViewSpec(name="context", target="chat_workbench", launcher=True)
+
+
+@pytest.mark.asyncio
+async def test_metadata_labels_reach_sidebar_and_initial_context(views, tmp_path):
+    _, _, plugin, _ = views
+    plugin.root_dir_name = tmp_path.name
+    spec = plugin.views[0]
+    spec.target = "plugin_page"
+    spec.actions = []
+    spec.title = "Default title"
+    spec.description = "Default description"
+    plugin.i18n = {"en-US": {"views": {"results": {"title": "Translated"}}, "pages": {"results": {"title": "Legacy"}}}}
+    manager = SimpleNamespace(plugin_store_path=tmp_path.parent, context=SimpleNamespace(get_all_stars=lambda: [plugin]))
+    pages = PluginPageService(manager, config={"dashboard": {"jwt_secret": "x" * 32}})
+    entry = await pages.serialize_plugin_page(plugin, "results")
+    assert entry["title"] == "Default title"
+    assert entry["description"] == "Default description"
+    token = pages.issue_plugin_page_asset_token(plugin_name=plugin.name, view_name="results", username="alice", locale="fr-FR")
+    context = pages.build_initial_context(asset_token=token, locale="fr-FR", theme="dark")
+    assert context["pageTitle"] == "Translated"
+    del plugin.i18n["en-US"]["views"]
+    assert pages.build_initial_context(asset_token=token, locale="fr-FR", theme=None)["pageTitle"] == "Legacy"
+    plugin.i18n = {}
+    assert pages.build_initial_context(asset_token=token, locale="fr-FR", theme=None)["pageTitle"] == "Default title"
+
+
+@pytest.mark.asyncio
+async def test_default_message_titles_keep_metadata_for_live_localization(views):
+    store, event, plugin, _ = views
+    spec = plugin.views[0]
+    spec.target = "chat_workbench_with_launcher"
+    spec.title = "Default title"
+    plugin.i18n = {"en-US": {"views": {"results": {"title": "Translated"}}, "metadata": {"secret": "Unrelated"}}}
+    await core_views.emit_view(event, __name__, event.view_result(name="results", data={}, text="Opened"))
+    part = event.send.await_args.args[0].chain[0].data
+    assert part["title"] == ""
+    assert part["view_metadata"]["title"] == "Default title"
+    assert part["view_metadata"]["i18n"]["en-US"] == {"views": {"results": {"title": "Translated"}}}
+    assert store.get(part["id"])["name"] == "results"

@@ -56,13 +56,13 @@ export interface StandalonePageContext extends BaseContext {
 }
 
 export interface MessageViewContext<TData = JsonObject> extends BaseContext {
-  target: "chat_message" | "chat_workbench";
+  target: "chat_message" | "chat_workbench" | "chat_workbench_with_launcher";
   view: ViewSnapshot<TData>;
   sessionId?: never;
 }
 
 export interface ResidentWorkbenchContext extends BaseContext {
-  target: "chat_workbench";
+  target: "chat_workbench_with_launcher";
   sessionId: string | null;
   view?: never;
 }

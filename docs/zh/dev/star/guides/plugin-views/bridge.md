@@ -69,8 +69,8 @@ const context = await bridge.ready();
 | --- | --- | --- | --- |
 | 独立页面 | `plugin_page` | 无 | `null` |
 | 消息组件 | `chat_message` | `ViewSnapshot` | 无此字段 |
-| 消息创建的工作台 | `chat_workbench` | `ViewSnapshot` | 无此字段 |
-| 常驻工作台 | `chat_workbench` | 无 | 当前会话 ID，未打开会话时为 `null` |
+| 消息创建的工作台 | `chat_workbench` / `chat_workbench_with_launcher` | `ViewSnapshot` | 无此字段 |
+| 常驻工作台 | `chat_workbench_with_launcher` | 无 | 当前会话 ID，未打开会话时为 `null` |
 
 `view` 只有 `id`、`revision`、`data`，不包含 Python `UIInteraction.view` 的 `name`、`version`。视图注册名称读取 `context.pageName`。`i18n` 按 locale 分组，例如 `{ "zh-CN": { "views": { "counter": { "title": "计数器" } } } }`。`themeColors` 的额外键由宿主主题提供；页面配色优先使用下文列出的 CSS tokens。
 
@@ -322,7 +322,7 @@ chat.send(text: string): Promise<ChatResult>
 
 `view.subscribe()` 必须在 `ready()` 后调用。它立即传入当前快照的副本，后续收到相同或更高 revision 的快照时再次调用；取消函数只移除监听，不关闭 view。不要把每次通知都当作一次业务变更，也不要通过修改副本保存数据。
 
-`view.action()` 的 `data` 缺省为 `null`。成功返回 `undefined`，不返回新的快照；更新后的数据通过 `view.subscribe()` 或 `getContext().view` 读取。Promise 在回调执行和状态保存完成后结束，不等待后续模型生成。动作名必须在 `ViewSpec.actions` 中声明。
+`view.action()` 的 `data` 缺省为 `null`。成功返回 `undefined`，不返回新的快照；更新后的数据通过 `view.subscribe()` 或 `getContext().view` 读取。Promise 在回调执行和状态保存完成后结束，不等待后续模型生成。动作名必须在 metadata 的 `views[].actions` 中声明。
 
 `chat.fill()` 将文字追加到当前草稿并聚焦输入框，`chat.send()` 发到当前会话并保留原草稿与附件。两者成功都返回 `{ sessionId: string | null }`。`send` 要求已有会话且没有正在生成的回答，在发送请求被接受后完成，不等待回答。输入不能为空白，长度不能超过 100,000 个 UTF-16 码元。宿主条件与示例见[工作台页面](./workbench.md)。
 
@@ -398,7 +398,7 @@ bridge 只注入变量，不强制设置页面背景；聊天卡片可继续使�
 
 ## 视图元数据与国际化
 
-视图的标题、描述等元数据写在插件目录的 `.astrbot-plugin/i18n/<locale>.json` 中，并按 `views.<view_name>` 组织。`views` 是 locale JSON 的顶层字段，与 `metadata`、`config` 并列；`<view_name>` 必须与 `views/` 下的目录名完全一致。
+视图的默认标题、描述在 `metadata.yaml` 的 `views` 中定义。翻译放在 `.astrbot-plugin/i18n/<locale>.json` 的 `views.<name>` 下；`views` 与 `metadata`、`config` 并列。
 
 例如 `bridge-demo` 视图的中文元数据位于：
 
@@ -498,3 +498,11 @@ allow-scripts allow-forms allow-downloads
 - 文件上传为空：`upload()` 字段名固定为 `file`，后端用 `(await request.files()).get("file")` 读取。
 - SSE 没消息：确认后端响应是 `text/event-stream`，每条消息以空行结尾，例如 `data: ...\n\n`。
 - SSE 401：不要在视图中直接 `new EventSource("/api/v1/...")`，原生 `EventSource` 不能携带 `Authorization` header；请通过 `bridge.subscribeSSE()` 调用。
+
+## 视图文案 {#view-labels}
+
+每个字段单独解析：先查当前语言，再查 `zh-CN`、`en-US`；每种语言优先 `views.<name>`，再兼容 `pages.<name>`。有效翻译覆盖 metadata 中的 `title` 或 `description`；没有翻译时使用 metadata。标题最终回退到 `name`，描述回退到空字符串。空白或非字符串翻译不会覆盖默认文案。
+
+旧 i18n 文件不必移动，原有 `pages` 翻译仍有效。可以把默认语言的文案移到 metadata，删除该语言的重复条目，并保留其他语言翻译。i18n 只覆盖展示文案，不改变 `target`、`actions` 或版本。
+
+独立页面入口、工作台入口和标签页共用这一规则。`event.view_result(title=...)` 是实例的动态标题（例如文件名），优先于静态标题。

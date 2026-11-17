@@ -3,7 +3,7 @@
 > [!NOTE]
 > Currently supported only in AstrBot ChatUI.
 
-Plugins can create HTML cards from commands, message handlers, UI callbacks, or local LLM tools. Creation is not limited to tool calls. Register each card with `Star.chatui_views`, then yield or return `event.view_result()`.
+Plugins can create HTML cards from commands, message handlers, UI callbacks, or local LLM tools. Creation is not limited to tool calls. Declare each card in `metadata.yaml`, then yield or return `event.view_result()`.
 
 <script setup>
 import ReadingViewDemo from "../../../../../.vitepress/theme/components/ReadingViewDemo.vue"
@@ -17,12 +17,22 @@ Download the [reading-list example plugin](/examples/astrbot_plugin_reading_view
 `filter.ui_action` currently handles **view actions only**. Existing buttons continue to use `filter.button_action` and `ButtonInteraction`.
 ## Register and create the component
 
-```python
-from pathlib import Path
+Add to `metadata.yaml`:
 
+```yaml
+views:
+  - name: counter
+    target: chat_message
+    title: Counter
+    version: 1
+    actions: ["view_demo:increment"]
+```
+
+`main.py`:
+
+```python
 from pydantic import BaseModel, ConfigDict, Field
 
-from astrbot.api import chatui
 from astrbot.api.event import AstrMessageEvent, filter
 from astrbot.api.star import Star
 
@@ -36,16 +46,6 @@ class IncrementInput(BaseModel):
 
 class ViewDemo(Star):
     """Create a card directly from a command."""
-
-    chatui_views = [
-        chatui.ViewSpec(
-            name="counter",
-            entry=Path("views/counter/index.html"),
-            target="chat_message",
-            version=1,
-            actions=["view_demo:increment"],
-        ),
-    ]
 
     @filter.command("counter")
     async def counter(self, event: AstrMessageEvent):

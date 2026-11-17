@@ -67,13 +67,11 @@ async def list_workbench_views(
     for plugin in pages.plugin_manager.context.get_all_stars():
         if not plugin.activated:
             continue
-        for spec in getattr(
-            plugin.star_cls or plugin.star_cls_type, "chatui_views", []
-        ):
-            if spec.target != "chat_workbench" or not spec.launcher:
+        for spec in plugin.views:
+            if spec.target != "chat_workbench_with_launcher":
                 continue
             entry = await pages.serialize_plugin_page(
-                plugin, spec.name, target="chat_workbench"
+                plugin, spec.name, target="chat_workbench_with_launcher"
             )
             if entry:
                 views.append(
@@ -81,6 +79,7 @@ async def list_workbench_views(
                         **entry,
                         "plugin_name": plugin.name,
                         "display_name": plugin.display_name or plugin.name,
+                        "i18n": plugin.i18n or {},
                     }
                 )
     return ok(views)
@@ -107,7 +106,7 @@ async def get_workbench_view(
     entry = await pages.serialize_plugin_page(
         plugin,
         view_name,
-        target="chat_workbench",
+        target="chat_workbench_with_launcher",
         include_content_path=True,
         asset_token=token or "",
     )
@@ -150,6 +149,12 @@ async def get_chat_view(
         return ok(
             {
                 "id": view_id,
+                "view_metadata": {
+                    "name": spec.name,
+                    "title": spec.title,
+                    "description": spec.description,
+                    "i18n": plugin.i18n or {},
+                },
                 "name": spec.name,
                 "target": spec.target,
                 "data": record["data"],
@@ -159,7 +164,7 @@ async def get_chat_view(
                     "pluginName": plugin.name,
                     "displayName": plugin.display_name or plugin.name,
                     "pageName": spec.name,
-                    "pageTitle": spec.name,
+                    "pageTitle": spec.title or spec.name,
                     "i18n": plugin.i18n or {},
                 },
                 "html": await asyncio.to_thread(entry.read_text, encoding="utf-8"),

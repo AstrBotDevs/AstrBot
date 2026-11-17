@@ -21,6 +21,12 @@ export function buildChatRequestFlags(
 }
 
 export interface MessagePart {
+  view_metadata?: {
+    name: string;
+    title: string;
+    description: string;
+    i18n?: Record<string, unknown>;
+  };
   type: string;
   text?: string;
   think?: string;

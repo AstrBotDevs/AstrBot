@@ -69,8 +69,8 @@ Use both `target` and `view` to identify the host:
 | --- | --- | --- | --- |
 | Standalone page | `plugin_page` | Absent | `null` |
 | Message component | `chat_message` | `ViewSnapshot` | Absent |
-| Message-created workbench | `chat_workbench` | `ViewSnapshot` | Absent |
-| Resident workbench | `chat_workbench` | Absent | Active session ID, or `null` without a session |
+| Message-created workbench | `chat_workbench` / `chat_workbench_with_launcher` | `ViewSnapshot` | Absent |
+| Resident workbench | `chat_workbench_with_launcher` | Absent | Active session ID, or `null` without a session |
 
 `view` contains only `id`, `revision`, and `data`, not the `name` or `version` fields of Python's `UIInteraction.view`. Read the registered view name from `context.pageName`. `i18n` is keyed by locale, for example `{ "en-US": { "views": { "counter": { "title": "Counter" } } } }`. Additional `themeColors` keys come from the host theme; prefer the CSS tokens listed below for styling.
 
@@ -322,7 +322,7 @@ chat.send(text: string): Promise<ChatResult>
 
 Call `view.subscribe()` after `ready()`. It immediately supplies a copy of the current snapshot and runs again when a snapshot with the same or a higher revision arrives. Unsubscribing removes the listener without closing the view. Notifications do not necessarily indicate a business-data change; mutating the copy does not save data.
 
-The `data` argument of `view.action()` defaults to `null`. Success resolves to `undefined`, not a snapshot; read updated data through `view.subscribe()` or `getContext().view`. The promise settles after the callback and state commit, without waiting for subsequent model generation. Declare each action in `ViewSpec.actions`.
+The `data` argument of `view.action()` defaults to `null`. Success resolves to `undefined`, not a snapshot; read updated data through `view.subscribe()` or `getContext().view`. The promise settles after the callback and state commit, without waiting for subsequent model generation. Declare each action in `views[].actions` in metadata.
 
 `chat.fill()` appends to the draft and focuses the composer. `chat.send()` sends to the current session while preserving the draft and attachments. Both resolve to `{ sessionId: string | null }`. Sending requires an open session with no running reply, and resolves when the request is accepted rather than when the answer finishes. Text must not be blank or exceed 100,000 UTF-16 code units. See [Workbench page](./workbench.md) for host requirements and examples.
 
@@ -398,7 +398,7 @@ The bridge only injects variables; it does not force a page background. Chat car
 
 ## View metadata and localization {#view-metadata-and-internationalization}
 
-Put View metadata such as the title and description in `.astrbot-plugin/i18n/<locale>.json` inside the plugin directory, nested under `views.<view_name>`. `views` is a top-level locale JSON field alongside `metadata` and `config`; `<view_name>` must exactly match the directory name under `views/`.
+Define default view titles and descriptions under `views` in `metadata.yaml`. Put translations in `.astrbot-plugin/i18n/<locale>.json` under `views.<name>`, alongside the top-level `metadata` and `config` keys.
 
 For example, localized metadata for the `bridge-demo` View is stored as follows:
 
@@ -498,3 +498,11 @@ Backend handlers must still validate input. Do not trust paths, filenames, forma
 - Upload is empty: `upload()` always uses the field name `file`; read it with `(await request.files()).get("file")`.
 - SSE has no messages: make sure the backend response is `text/event-stream` and each message ends with a blank line, such as `data: ...\n\n`.
 - SSE returns 401: do not call `new EventSource("/api/v1/...")` directly from the View. Native `EventSource` cannot send the `Authorization` header; call through `bridge.subscribeSSE()` instead.
+
+## View labels {#view-labels}
+
+Resolve each field independently: check the current locale, then `zh-CN`, then `en-US`. Within each locale, prefer `views.<name>` and fall back to the legacy `pages.<name>` key. A valid translation overrides the metadata `title` or `description`. Without a translation, use metadata; ultimately titles fall back to `name` and descriptions to an empty string. Blank or non-string translations do not override defaults.
+
+Existing i18n files do not need to move. Legacy `pages` translations remain valid. You may move default-language labels into metadata, remove duplicate entries for that locale, and keep translations for other languages. Translation files cannot change `target`, `actions`, or versions.
+
+Standalone page entries, workbench entries, and tabs share this resolution. An instance's `event.view_result(title=...)` overrides static labels for dynamic titles such as filenames.

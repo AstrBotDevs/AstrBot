@@ -6,7 +6,7 @@
       :srcdoc="srcdoc"
       :style="{ height: workbench ? '100%' : `${height}px` }"
       sandbox="allow-scripts"
-      :title="String(part.title || part.name || 'Plugin view')"
+      :title="viewTitle()"
     />
     <div v-else class="plugin-view-fallback">
       <p>{{ part.text }}</p>
@@ -22,6 +22,7 @@ import { useTheme } from "vuetify";
 import { fetchWithAuth } from "@/api/http";
 import { useI18n, useModuleI18n } from "@/i18n/composables";
 import { viewActionKey, type ViewActionHandler } from "@/utils/chatViews";
+import { resolvePluginViewText } from "@/utils/pluginI18n";
 import type { MessagePart } from "@/composables/useMessages";
 
 const props = defineProps<{
@@ -47,6 +48,17 @@ let snapshot: { data: Record<string, unknown>; revision: number };
 let viewContext: Record<string, unknown> = {};
 let disposed = false;
 
+function viewTitle() {
+  return String(
+    props.part.title || resolvePluginViewText(
+      props.part.view_metadata?.i18n,
+      locale.value,
+      props.part.view_metadata || { name: props.part.name },
+      "title",
+    ) || "Plugin view",
+  );
+}
+
 function send(message: Record<string, unknown>) {
   frame.value?.contentWindow?.postMessage(
     { channel: "astrbot-plugin-page", session, ...message },
@@ -67,6 +79,7 @@ async function receive(event: MessageEvent) {
       kind: "context",
       context: {
         ...viewContext,
+        pageTitle: viewTitle(),
         target: viewContext.target || props.part.target || "chat_message",
         view: { id: String(props.part.id), ...snapshot },
         isDark: props.isDark ?? theme.global.current.value.dark,
@@ -125,6 +138,7 @@ watch(
           isDark: props.isDark ?? theme.global.current.value.dark,
           themeColors: { ...theme.global.current.value.colors },
           locale: locale.value,
+          pageTitle: viewTitle(),
         },
       });
   },
@@ -145,6 +159,7 @@ onMounted(async () => {
     const { data } = await response.json();
     const bridgeSource = await bridgeResponse.text();
     if (disposed) return;
+    if (data.view_metadata) props.part.view_metadata = data.view_metadata;
     snapshot = { data: data.data, revision: data.revision };
     viewContext = {
       ...data.context,
