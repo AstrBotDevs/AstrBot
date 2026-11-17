@@ -3,18 +3,57 @@
 from __future__ import annotations
 
 from collections.abc import Awaitable, Callable
+from typing import TYPE_CHECKING
 
 from astrbot.core import db_helper, logger
 from astrbot.core.agent.message import (
-    CheckpointData,
-    CheckpointMessageSegment,
     Message,
-    dump_messages_with_checkpoints,
+    dump_messages,
 )
 from astrbot.core.agent.response import AgentStats
 from astrbot.core.astr_agent_runtime.runner import AgentRunner
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from astrbot.core.provider.entities import LLMResponse, ProviderRequest
+
+if TYPE_CHECKING:
+    from astrbot.core.agent.conversation_events import ConversationEventWriter
+
+
+class ConversationHistoryObserver:
+    """Adapt mutable host context to staged events at plugin boundaries."""
+
+    def __init__(
+        self, writer: ConversationEventWriter, request: ProviderRequest | None = None
+    ):
+        """Bind one execution's persistence and its legacy request context.
+
+        Args:
+            writer: Revision-bound event writer owned by the host.
+            request: Request used before a native runtime context is available.
+        """
+        self.writer = writer
+        self.request = request
+        self.runtime_context = None
+
+    def __call__(self, origin: str) -> None:
+        """Stage context changes without exposing host objects to persistence.
+
+        Args:
+            origin: Attribution for changes observed at this boundary.
+        """
+        if self.writer.closed:
+            return
+        if self.runtime_context is not None:
+            messages = self.runtime_context.messages
+            history = dump_messages(
+                messages[1:] if messages and messages[0].role == "system" else messages,
+                include_temporary=True,
+            )
+        elif self.request is not None and self.request.conversation is not None:
+            history = self.request.contexts
+        else:
+            return
+        self.writer.stage_history(history, origin=origin)
 
 
 async def save_agent_history(
@@ -25,7 +64,7 @@ async def save_agent_history(
     runner_stats: AgentStats | None,
     commit: Callable[[list[dict], int | None], Awaitable[None]],
     user_aborted: bool = False,
-    checkpoint_id: str | None = None,
+    writer: ConversationEventWriter | None = None,
 ) -> bool:
     """Commit native history after a settled or user-aborted execution.
 
@@ -36,7 +75,7 @@ async def save_agent_history(
         runner_stats: Execution statistics used for token accounting.
         commit: Storage writer for this session's canonical history.
         user_aborted: Whether partial output belongs to an explicit cancellation.
-        checkpoint_id: Optional checkpoint belonging to this conversation's input.
+        writer: Revision-bound writer for event-backed history.
 
     Returns:
         Whether history was successfully committed.
@@ -50,22 +89,23 @@ async def save_agent_history(
         if message.role == "system" and not skipped_initial_system:
             skipped_initial_system = True
             continue
-        if message.role in ["assistant", "user"] and message._no_save:
+        if (
+            writer is None
+            and message.role in ["assistant", "user"]
+            and message._no_save
+        ):
             continue
         messages_to_save.append(message)
 
-    checkpoint_id = checkpoint_id if isinstance(checkpoint_id, str) else ""
-    has_checkpoint = bool(checkpoint_id)
-    message_to_save = dump_messages_with_checkpoints(messages_to_save)
+    message_to_save = dump_messages(
+        messages_to_save, include_temporary=writer is not None
+    )
     if not user_aborted and (llm_response is None or llm_response.role != "assistant"):
-        if has_checkpoint:
-            message_to_save.append(
-                CheckpointMessageSegment(
-                    content=CheckpointData(id=checkpoint_id),
-                ).model_dump()
-            )
-        if has_checkpoint or (llm_response is None and req.tool_calls_result):
-            token_usage = None if has_checkpoint else req.conversation.token_usage
+        if writer is not None and writer.turn_id:
+            await writer.save_history(message_to_save)
+            return True
+        if llm_response is None and req.tool_calls_result:
+            token_usage = req.conversation.token_usage
             await commit(message_to_save, token_usage)
             return True
         return False
@@ -88,18 +128,14 @@ async def save_agent_history(
         logger.debug("The LLM response is empty; not saving a record.")
         return False
 
-    if isinstance(checkpoint_id, str) and checkpoint_id:
-        message_to_save.append(
-            CheckpointMessageSegment(
-                content=CheckpointData(id=checkpoint_id),
-            ).model_dump()
-        )
-
     token_usage = None
     if runner_stats:
         token_usage = llm_response.usage.total if llm_response.usage else None
 
-    await commit(message_to_save, token_usage)
+    if writer is None:
+        await commit(message_to_save, token_usage)
+    else:
+        await writer.save_history(message_to_save, token_usage=token_usage)
     return True
 
 

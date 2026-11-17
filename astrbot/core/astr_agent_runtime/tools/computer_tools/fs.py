@@ -51,6 +51,7 @@ from astrbot.core.astr_agent_runtime.computer.local_file_security import (
     open_file_in_allowed_roots,
 )
 from astrbot.core.astr_agent_runtime.context import AstrAgentContext
+from astrbot.core.astr_agent_runtime.tools.output import prepare_tool_output
 from astrbot.core.message.components import File, Image
 from astrbot.core.utils.astrbot_path import (
     get_astrbot_builtin_plugin_path,
@@ -1086,9 +1087,13 @@ class FileDownloadTool(FunctionTool):
                     else:
                         message_component = File(name=name, file=local_path)
                         sent_as = "file"
-                    await context.context.event.send(
-                        MessageChain(chain=[message_component])
-                    )
+                    message = MessageChain(chain=[message_component])
+                    if not prepare_tool_output(context.context, message):
+                        return (
+                            f"File downloaded successfully to {local_path} and prepared "
+                            f"as {sent_as} for caller delivery. It has not been sent."
+                        )
+                    await context.context.event.send(message)
                 except Exception as e:
                     logger.error(f"Error sending file message: {e}")
                     return (

@@ -41,6 +41,8 @@ def _make_context(
     return SimpleNamespace(
         context=SimpleNamespace(
             event=event,
+            send_to_user=True,
+            _output_turn=None,
             context=SimpleNamespace(
                 get_config=lambda umo: cfg,
                 send_message=AsyncMock(),
@@ -142,14 +144,25 @@ async def test_send_message_with_partial_session_id_fallback():
 
 
 @pytest.mark.asyncio
-async def test_send_message_defaults_to_current_session():
+@pytest.mark.parametrize("send_to_user", [False, True])
+async def test_send_message_defaults_to_current_session(send_to_user):
     """LLM does not pass session — uses current_session directly."""
     tool = SendMessageToUserTool()
     ctx = _make_context(current_session="feishu:GroupMessage:oc_xxx")
+    ctx.context.send_to_user = send_to_user
+    ctx.context._output_turn = SimpleNamespace(done=False, emit=MagicMock())
     result = await tool.call(
         ctx,
         messages=[{"type": "plain", "text": "hello"}],
     )
+    output = ctx.context._output_turn.emit.call_args.args[0]
+    assert output.target_umo == "feishu:GroupMessage:oc_xxx"
+    assert output.content[0].text == "hello"
+    if not send_to_user:
+        assert "It has not been sent" in result
+        ctx.context.context.send_message.assert_not_awaited()
+        assert ctx.context.event._has_send_oper is False
+        return
     assert "Message sent to session" in result
     call_args = ctx.context.context.send_message.call_args
     target_session = call_args[0][0]

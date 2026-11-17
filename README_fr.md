@@ -166,7 +166,9 @@ Connectez AstrBot à vos plateformes de chat préférées.
 | OpenAI Whisper | Services de reconnaissance vocale |
 | SenseVoice | Services de reconnaissance vocale |
 | Xiaomi MiMo Omni | Services de reconnaissance vocale |
+| [DeepSeek STT](https://api-docs.deepseek.com/zh-cn/guides/asr/) | Services de reconnaissance vocale |
 | OpenAI TTS | Services de synthèse vocale |
+| [DeepSeek TTS](https://api-docs.deepseek.com/zh-cn/guides/tts/) | Services de synthèse vocale |
 | Gemini TTS | Services de synthèse vocale |
 | GPT-Sovits-Inference | Services de synthèse vocale |
 | GPT-Sovits | Services de synthèse vocale |

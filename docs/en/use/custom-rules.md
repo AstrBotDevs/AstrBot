@@ -1,99 +1,88 @@
-# Custom Rules
+# Session Configuration Mappings (formerly Custom Rules)
 
-Custom rules let you make exceptions for **one specific session** without duplicating an entire configuration profile for every group or private chat. For example:
+Use **Config → Manage session mappings** to assign configuration profiles and customize settings for individual sessions. Whole-bot mappings are managed on the **Bots** page.
 
-- Give a work group a professional persona and a specific chat model while other sessions keep their defaults.
-- Let one group use plugin commands without automatic AI replies.
-- Disable voice replies or selected plugins in a private chat.
-- Choose specific knowledge bases for one session.
+| Previous entry | Current entry |
+| --- | --- |
+| Custom Rules / Session Management / More Features → Custom Rules | Config → Manage session mappings |
+| Former Session overrides tab | Config → Manage session mappings |
+| `/session-management` or `/config?scope=sessions` | Opens the mappings dialog on the Config page |
 
-These rules take priority over the corresponding settings in the session's profile. Settings without an override keep their normal behavior. Rules do not create models, personas, plugins, or knowledge bases; set up those resources on their own pages first.
+![Session configuration mappings](./images/custom-rules-edit-en.png)
 
-## Identify the Session (UMO)
+## Edit a session
 
-A UMO (Unified Message Origin) identifies a particular session on a platform instance. Custom rules belong to the **UMO**, not a user's display name or the title of the current conversation.
+1. Send `/sid` in the target chat to obtain its UMO (Unified Message Origin). For groups with per-member isolation, use the target member's UMO.
+2. Open **Config → Manage session mappings → Add mapping → Add sessions or groups** and select the targets.
+3. Choose **Configuration profile** to assign a base profile, or **Overrides** to customize individual settings.
+4. Choose **Save mapping** for a profile assignment or **Save changes** for overrides.
 
-Send `/sid` in the group or private chat you want to configure, then compare its UMO with the session shown in the WebUI. Similar names across platforms and chats can be confusing; checking the UMO helps you select the right source. See [Built-in Commands](./command.md) for command and wake-prefix details.
+To edit an existing mapping, click its profile or override count in the table. Saved changes apply to subsequent messages.
 
-> [!NOTE]
-> Per-member conversation isolation in groups affects how sessions are identified. Use the UMO returned for the actual target message. Creating a new conversation within a session does not remove that UMO's custom rules.
+![Edit mappings for multiple sessions](./images/custom-rules-batch-en.png)
 
-## Add Your First Rule
+## Inheritance
 
-1. Have a conversation with the bot in the target group or private chat so AstrBot records the source.
-2. Open **Custom Rules** in the WebUI sidebar.
-3. Click **Add Rule**, select the target under **Select Session**, and click **Next**. If the session already has rules, use its edit button in the list instead.
-4. Change the settings in **Edit Custom Rules**, for example the chat model under **Provider Configuration**.
-5. Click **Save beneath the section you changed**. Service, provider, persona, plugin, and knowledge base sections save separately. Save each changed section.
-6. Send a new message in the target session to check the result.
+Effective settings are the **assigned profile plus explicit session overrides**. Overrides belong to the UMO and do not change the shared profile.
 
-![Editing custom rules](./images/custom-rules-edit-en.png)
+- **Follow config routing** uses the first matching route, or the default profile if none matches. Explicitly selecting the default profile bypasses routing.
+- Switches offer **Follow profile / On / Off**. Explicitly enabling a capability overrides a disabled profile setting, but still requires a working model.
+- For models, personas, and other fields, choose **Set for this session** to override a value or **Follow profile** to remove the override.
+- Lists replace the profile list. **An empty list clears the setting; it does not restore inheritance.**
+- Changing profiles preserves explicit overrides. **Restore all inheritance**, followed by **Save changes**, clears field overrides while keeping the assigned profile, history, variables, aliases, and groups.
 
-Saved rules take effect without restarting AstrBot. The older **Session Management** and **More Features → Custom Rules** entry points now correspond to **Custom Rules** directly in the sidebar.
+You can override session status, wake prefixes, AI and voice settings, model selections, persona, knowledge bases and retrieval count, and plugin lists. System settings and model credentials are configured in the profile.
 
-## Available Settings
+An empty wake-prefix list disables prefix-based waking. Mentions and other wake mechanisms still work; the profile controls whether private messages require a prefix.
 
-| Section | Setting | Purpose |
+![Override editor](./images/custom-rules-overrides-en.png)
+
+## Groups and batch updates
+
+Use **Manage groups** to organize sessions. Applying a mapping to a group updates its current members; future members do not inherit it automatically.
+
+When editing multiple sessions, **Keep each session’s current setting** leaves a field unchanged. Only fields you edit apply to all targets. **Follow profile** removes that field's override from each session. Changing base profiles preserves individual overrides.
+
+## Remove mappings
+
+Removing a session mapping clears its profile assignment and overrides and restores routing. History, variables, aliases, and groups are preserved.
+
+On the **Bots** page, selecting **Follow config routing** keeps overrides. The trash button removes the entire mapping, including its exact-session route, after **Save Changes**. Use **Need custom settings for a session?** to open the override editor.
+
+![Existing overrides on the Bots page](./images/custom-rules-bot-overrides-en.png)
+
+When deleting a bot, select **Session mappings** to remove its profile assignments, overrides, and routing rules. Clear this option to preserve them. Shared configuration profiles are not deleted.
+
+![Session mappings cleanup when deleting a bot](./images/custom-rules-delete-en.png)
+
+## Commands use the same settings
+
+Administrators can use `/provider <index>`, `/provider tts <index>`, and `/provider stt <index>` to set model overrides. `/provider --inherit` restores all three model selections to the profile. Refresh the editor to see command changes.
+
+The built-in `/persona` command has been removed. Set the persona under **Config → Manage session mappings → Overrides → Persona**. Creating or switching conversation histories within the same UMO does not reset overrides.
+
+## Plugins and blocked sessions
+
+**Allowed plugins** (`plugin_set`) defines the allowed set; **Disabled plugins** (`disabled_plugins`) excludes plugins from it. Each list can inherit or override the profile independently. Globally disabled plugins remain disabled; reserved system plugins retain their availability.
+
+Use **Session status → Stopped** to stop AI and plugin responses for a session. **Enabled** removes matching blacklist entries from its override; other access controls still apply. **Follow profile** restores inheritance.
+
+The profile blacklist is under **Config → Access Control → Blacklist** and accepts UMOs or group IDs. It takes precedence over the whitelist, including for administrators and WebChat. Restore blocked sessions through the WebUI.
+
+## Migration
+
+Upgrade migration preserves route order, session settings, knowledge-base references, groups, aliases, selected conversations, and history. Existing forced-persona rules take precedence over the selected conversation's persona when creating the persona override.
+
+Legacy disabled AI/TTS flags become explicit **Off** values; enabled flags become **Follow profile**. Disabled sessions remain stopped. The unused session Rerank toggle is removed; knowledge-base reranking model settings are preserved.
+
+## Retired API migration
+
+The following session-status and batch-setting endpoints and their legacy aliases have been removed:
+
+| Removed endpoint | Removed legacy alias | Replacement |
 | --- | --- | --- |
-| Service Configuration | Enable Session | Turning this off stops processing messages from this source, including normal AI replies and plugin responses. Re-enable it from the WebUI. |
-| Service Configuration | Enable LLM | Turning this off stops normal AI conversation processing for the session. Plugin commands can still work; each plugin controls its own behavior. |
-| Service Configuration | Enable TTS | Controls whether the session can use synthesized speech output. A TTS model and the relevant profile settings must already be configured. |
-| Service Configuration | Custom Name | Adds a note to help identify the session without changing its UMO. |
-| Provider Configuration | Chat Provider, STT Provider, TTS Provider | Selects configured models for this session, or **Follow Config**. |
-| Persona Configuration | Select Persona | Forces a persona for this session. Leaving it empty removes the forced-persona rule. |
-| Plugin Configuration | Disabled Plugins | Disables selected plugins in this session without affecting other sessions. |
-| Knowledge Base Configuration | Select Knowledge Bases, Top K Results | Overrides the profile's knowledge base selection and number of retrieval results. |
+| `GET /api/v1/sessions` | `GET /api/session/list-all-with-status` | Use `GET /api/v1/sessions/active-umos` for known sessions, `GET /api/v1/sessions/rules` for mappings, and `GET /api/v1/sessions/overrides?umo=...` for one session’s explicit and inherited values |
+| `PATCH /api/v1/sessions/provider` | `POST /api/session/batch-update-provider` | Update the model configuration paths through `POST /api/v1/sessions/rules` |
+| `PATCH /api/v1/sessions/service` | `POST /api/session/batch-update-service` | Update the session-status, AI, or speech-output overrides through `POST /api/v1/sessions/rules` |
 
-Service switches control whether the session may use features already configured. Checking LLM or TTS does not enable a feature disabled in the profile or configure a model automatically.
-
-See [WebUI](./webui.md), [Plugins](./plugin.md), and [Knowledge Base](./knowledge-base.md) for the underlying persona, plugin, and knowledge base setup.
-
-## Rules Versus Configuration Profiles
-
-A **profile** configures a complete set of bot behavior, such as models, wake conditions, message processing, and tools. A **custom rule** changes selected settings for an individual session.
-
-For example, two groups may use the `default` profile while only group A needs a different chat model. Add a model rule for group A without affecting group B. If you later change the chat model in `default`, group A still uses its override until you remove the rule or select **Follow Config**.
-
-A rule cannot load a plugin that has been disabled globally. Enable it on the **Plugins** page first, then use custom rules to disable it in selected sessions.
-
-## Edit Rules and Restore Defaults
-
-Search for the session or its note in the list, then use the edit button. Each section has its own save button.
-
-- **Models:** Select **Follow Config** and save to remove that model override.
-- **Persona:** Clear the selection and save to remove the forced-persona rule and restore normal persona selection.
-- **Plugins:** Remove a plugin from the disabled list and save. Clearing the list removes the session's plugin-disable rule.
-- **Knowledge bases:** Clear the selection and save to remove the session-level rule and restore the profile's knowledge base settings. **This does not disable knowledge bases.**
-- **Entire session:** Use the delete button in the list and confirm to remove all custom rules for that UMO.
-
-Deleting rules does not delete models, plugins, knowledge bases, or chat history.
-
-## Batch Operations and Groups
-
-Use **Batch Operations** below the rules list to change multiple sessions:
-
-1. Select sessions in the list, or choose all sessions, all groups, all private chats, or a custom group under **Apply to**.
-2. Select the LLM or TTS status or chat model to change.
-3. Click **Apply Changes**, then check the target sessions.
-
-Only the selected settings are changed. Start with a few selected sessions before applying changes to a wider scope.
-
-**Group Management** lets you organize related sessions into a named group and use that group as a batch-operation scope. A group does not automatically make its members inherit shared rules; apply the batch changes after adding members.
-
-## Common Questions
-
-### My Session Is Missing from Add Rule
-
-Have a conversation with the bot in that session, then refresh the page or reopen **Add Rule**. Sessions with existing rules are excluded from the add list; edit them in the main list instead.
-
-### Why Does a Session Keep Its Old Model or Persona After I Change the Profile?
-
-Check for rules on that UMO. Session overrides still take priority. Select **Follow Config**, clear the forced persona, or remove the rule, then test again.
-
-### I Disabled the Session. Why Does a Command Not Re-enable It?
-
-Disabling session processing prevents its messages from reaching later processing stages. Re-enable the session in the WebUI instead of relying on commands sent in the disabled chat.
-
-### A Saved Change Has No Effect
-
-Check the target UMO, the save result for the section you edited, and the availability of the selected resource. Test with a new message; rules do not rewrite replies that have already been generated.
+Write requests use `rule_key: "config_overrides"` and a `rule_value` object containing the changed configuration paths and values. For batch operations, submit one request per target UMO; group members are available from `GET /api/v1/session-groups`. Removed endpoints do not redirect.
