@@ -7,6 +7,7 @@ from typing import Any, TypeVar, overload
 
 from apscheduler.schedulers.background import BackgroundScheduler
 from deprecated import deprecated
+from sqlmodel import delete
 
 from astrbot import logger
 from astrbot.core.db import BaseDatabase
@@ -91,6 +92,12 @@ class SharedPreferences:
                 ]
                 for cache_key in keys:
                     self._cache.pop(cache_key, None)
+            elif action == "replace_scope_key" and key is not None:
+                for cache_key in list(self._cache):
+                    if cache_key[0] == scope and cache_key[2] == key:
+                        self._cache.pop(cache_key)
+                for target_id, target_value in value.items():
+                    self._cache[(scope, target_id, key)] = deepcopy(target_value)
 
     def _schedule_write(self, operation: _WriteOperation) -> None:
         """Schedule a preference write on the owning event loop.
@@ -160,9 +167,34 @@ class SharedPreferences:
                     await self.db_helper.remove_preference(scope, scope_id, key)
                 elif action == "clear":
                     await self.db_helper.clear_preferences(scope, scope_id)
+                elif action == "replace_scope_key" and key is not None:
+                    async with self.db_helper.get_db() as session:
+                        async with session.begin():
+                            await session.execute(
+                                delete(Preference).where(
+                                    Preference.scope == scope, Preference.key == key
+                                )
+                            )
+                            session.add_all(
+                                [
+                                    Preference(
+                                        scope=scope,
+                                        scope_id=target_id,
+                                        key=key,
+                                        value={"val": target_value},
+                                    )
+                                    for target_id, target_value in value.items()
+                                ]
+                            )
                 else:
                     raise ValueError(f"Unknown preference write operation: {action}")
             except Exception as exc:
+                if action == "replace_scope_key":
+                    # Failed replacements must fall back to the committed rows.
+                    with self._cache_lock:
+                        for cache_key in list(self._cache):
+                            if cache_key[0] == scope and cache_key[2] == key:
+                                self._cache.pop(cache_key)
                 logger.error(
                     "Failed to persist shared preference operation %s for %s/%s: %s",
                     action,
@@ -380,6 +412,29 @@ class SharedPreferences:
 
     async def session_put(self, umo: str, key: str, value: Any) -> None:
         await self.put_async("umo", umo, key, value)
+
+    async def replace_scope_key(
+        self, scope: str, key: str, values: dict[str, Any]
+    ) -> None:
+        """Atomically replace all records for a key within one scope.
+
+        Args:
+            scope: Target resource type.
+            key: Preference key shared by the records.
+            values: Complete mapping of scope IDs to their new values.
+        """
+        await self.initialize()
+        completion = asyncio.get_running_loop().create_future()
+        operation: _WriteOperation = (
+            "replace_scope_key",
+            scope,
+            "",
+            key,
+            deepcopy(values),
+            completion,
+        )
+        self._submit_write(operation)
+        await completion
 
     async def global_put(self, key: str, value: Any) -> None:
         await self.put_async("global", "global", key, value)

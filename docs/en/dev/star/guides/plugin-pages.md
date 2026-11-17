@@ -207,7 +207,9 @@ Upload example:
 ```python
 from pathlib import Path
 
-from astrbot.core.utils.astrbot_path import get_astrbot_plugin_data_path
+# Before AstrBot v4.30.0:
+# from astrbot.core.utils.astrbot_path import get_astrbot_plugin_data_path
+from astrbot.api.util import get_astrbot_plugin_data_path
 from astrbot.api.web import PluginUploadFile, error_response, json_response, request
 
 
@@ -332,7 +334,11 @@ The context usually contains:
   "pageTitle": "Bridge Demo",
   "locale": "en-US",
   "i18n": {},
-  "isDark": false
+  "isDark": false,
+  "themeColors": {
+    "primary": "#3c96ca",
+    "secondary": "#2f86bd"
+  }
 }
 ```
 
@@ -630,6 +636,25 @@ body {
 ```
 
 The server injects `data-theme` into returned HTML to reduce initial flashing. If JavaScript needs to react to theme changes, read `bridge.getContext()?.isDark` and listen with `onContext()`.
+
+### Following user-selected colors
+
+Subscribe with `bridge.onContext()` to apply the initial `primary` and `secondary` CSS colors and receive updates. Use defaults when `themeColors` is absent:
+
+```js
+const bridge = window.AstrBotPluginView;
+
+await bridge.ready();
+const off = bridge.onContext((context) => {
+  const style = document.documentElement.style;
+  style.setProperty("--primary", context.themeColors?.primary ?? "#3c96ca");
+  style.setProperty("--secondary", context.themeColors?.secondary ?? "#2f86bd");
+});
+
+// Call off() when the View is disposed.
+```
+
+Use `var(--primary)` and `var(--secondary)` in your styles.
 
 ## Static Asset Paths
 

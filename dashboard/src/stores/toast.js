@@ -11,7 +11,8 @@ export const useToastStore = defineStore('toast', () => {
     timeout = 3000,
     closable = true,
     multiLine = false,
-    location = 'top center'
+    location = 'top center',
+    action = null
   }) {
     queue.value.push({
       message,
@@ -19,7 +20,8 @@ export const useToastStore = defineStore('toast', () => {
       timeout,
       closable,
       multiLine,
-      location
+      location,
+      action
     })
   }
 

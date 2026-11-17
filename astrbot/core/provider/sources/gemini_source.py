@@ -118,8 +118,10 @@ class ProviderGoogleGenAI(Provider):
             api_key=self.chosen_api_key,
             http_options=http_options,
         ).aio
-        # The SDK adds its own lower-case UA alongside our explicit header.
-        self.client._api_client._http_options.headers.pop("user-agent", None)
+        # Keep only AstrBot's UA across SDK versions that merge header case variants.
+        headers = self.client._api_client._http_options.headers
+        headers["user-agent"] = self.request_headers["User-Agent"]
+        headers.pop("User-Agent", None)
 
     @asynccontextmanager
     async def _conversation_header(self, conversation_id: str | None):
@@ -401,11 +403,21 @@ class ProviderGoogleGenAI(Provider):
                 mime_type=image_data.mime_type,
             )
 
-        def process_audio_url(audio_url_dict: dict) -> types.Part:
+        async def process_audio_url(audio_url_dict: dict) -> types.Part:
             url = audio_url_dict["url"]
-            mime_type = url.split(":")[1].split(";")[0]
-            audio_bytes = base64.b64decode(url.split(",", 1)[1])
-            return types.Part.from_bytes(data=audio_bytes, mime_type=mime_type)
+            audio_data = await resolve_media_ref_to_base64_data(
+                url,
+                media_type="audio",
+                strict=True,
+            )
+            if audio_data is None:
+                raise ValueError(
+                    f"Failed to resolve Gemini history audio: {describe_media_ref(url)}"
+                )
+            return types.Part.from_bytes(
+                data=base64.b64decode(audio_data.base64_data),
+                mime_type=audio_data.mime_type,
+            )
 
         def append_or_extend(
             contents: list[types.Content],
@@ -430,8 +442,8 @@ class ProviderGoogleGenAI(Provider):
                             parts.append(types.Part.from_text(text=item["text"] or " "))
                         elif item["type"] == "image_url":
                             parts.append(await process_image_url(item["image_url"]))
-                        else:
-                            parts.append(process_audio_url(item["audio_url"]))
+                        elif item["type"] == "audio_url":
+                            parts.append(await process_audio_url(item["audio_url"]))
                 else:
                     parts = [create_text_part(content)]
                 append_or_extend(gemini_contents, parts, types.UserContent)

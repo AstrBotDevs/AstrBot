@@ -683,7 +683,7 @@ class TestRunActiveAgentJob:
             session: Missing or blank target session value.
         """
         wake = AsyncMock()
-        monkeypatch.setattr("astrbot.core.astr_agent_wakeup.wake_main_agent", wake)
+        monkeypatch.setattr("astrbot.core.agent_wakeup.wake_main_agent", wake)
         cron_manager.ctx = mock_context
         sample_cron_job.payload = {"session": session}
         with pytest.raises(ValueError, match="has no target UMO"):
@@ -708,7 +708,7 @@ class TestRunActiveAgentJob:
             origin: Whether the task was created by an ordinary caller or the API.
         """
         wake = AsyncMock()
-        monkeypatch.setattr("astrbot.core.astr_agent_wakeup.wake_main_agent", wake)
+        monkeypatch.setattr("astrbot.core.agent_wakeup.wake_main_agent", wake)
         cron_manager.ctx = mock_context
         sample_cron_job.payload = {
             "session": "target:GroupMessage:group-id",
