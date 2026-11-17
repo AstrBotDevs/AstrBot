@@ -42,6 +42,7 @@ from astrbot.dashboard.async_utils import run_maybe_async
 from astrbot.dashboard.responses import ApiError
 from astrbot.dashboard.schemas import BotCleanupTarget
 from astrbot.dashboard.services.bot_cleanup_service import delete_bot_data
+from astrbot.dashboard.services.platform_service import REGISTRATION_HANDLERS
 
 PROTECTED_2FA_CONFIG_PATHS = (
     ("dashboard", "totp", "enable"),
@@ -1404,6 +1405,7 @@ class BotConfigService:
                     "schema": copy.deepcopy(platform.config_metadata or {}),
                     "support_streaming_message": platform.support_streaming_message,
                     "support_proactive_message": platform.support_proactive_message,
+                    "support_registration": platform.name in REGISTRATION_HANDLERS,
                 }
             )
         return {"bot_types": bot_types}
