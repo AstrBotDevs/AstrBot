@@ -1,5 +1,50 @@
 import { defineStore } from "pinia";
-import { pluginApi, statsApi } from "@/api/v1";
+import { statsApi } from "@/api/v1";
+
+export const normalizeMarketPluginEntry = (pluginData, fallbackName = "") => {
+  const data = pluginData && typeof pluginData === "object" ? pluginData : {};
+  const pluginAuthor = String(data.author || "").trim();
+  const pluginName = String(data.name || "").trim() || String(fallbackName || "").trim();
+  const displayPluginName = pluginName || fallbackName || "";
+  const marketPluginId =
+    String(data.market_plugin_id || "").trim() ||
+    (pluginAuthor && pluginName ? `${pluginAuthor}/${pluginName}` : "");
+  const parsedDownloadCount = Number(data.download_count);
+  const downloadCount =
+    data.download_count === undefined ||
+    data.download_count === null ||
+    data.download_count === "" ||
+    !Number.isFinite(parsedDownloadCount)
+      ? undefined
+      : Math.max(0, Math.trunc(parsedDownloadCount));
+
+  return {
+    ...data,
+    name: displayPluginName,
+    market_plugin_id: marketPluginId,
+    short_desc: data.short_desc ? data.short_desc : "",
+    installed: false,
+    version: data.version ? data.version : "未知",
+    tags: data.tags ? data.tags : [],
+    logo: data.logo ? data.logo : "",
+    pinned: data.pinned ? data.pinned : false,
+    stars: data.stars ? data.stars : 0,
+    download_count: downloadCount,
+    updated_at: data.updated_at ? data.updated_at : "",
+    download_url: data.download_url ? data.download_url : "",
+    display_name: data.display_name ? data.display_name : "",
+    i18n: data.i18n && typeof data.i18n === "object" ? data.i18n : {},
+    astrbot_version: data.astrbot_version ? data.astrbot_version : "",
+    category: data.category ? data.category : "",
+    support_platforms: Array.isArray(data.support_platforms)
+      ? data.support_platforms
+      : Array.isArray(data.support_platform)
+        ? data.support_platform
+        : Array.isArray(data.platform)
+          ? data.platform
+          : [],
+  };
+};
 
 export const useCommonStore = defineStore("common", {
   state: () => ({
@@ -35,111 +80,6 @@ export const useCommonStore = defineStore("common", {
       }
       this.fetchStartTime().catch(() => {});
       return this.startTime;
-    },
-    async getPluginCollections(force = false, customSource = null) {
-      // 获取插件市场数据
-      const sourceKey = String(customSource || "")
-        .trim()
-        .replace(/\/+$/, "");
-      if (!force) {
-        if (!sourceKey && this.pluginMarketData.length > 0) {
-          return Promise.resolve(this.pluginMarketData);
-        }
-        if (
-          sourceKey &&
-          Array.isArray(this.pluginMarketDataBySource[sourceKey])
-        ) {
-          return Promise.resolve(this.pluginMarketDataBySource[sourceKey]);
-        }
-      }
-
-      return pluginApi
-        .market({
-          force_refresh: force || undefined,
-          custom_registry: sourceKey || undefined,
-        })
-        .then((res) => {
-          let data = [];
-          if (res.data.data && typeof res.data.data === "object") {
-            for (let key in res.data.data) {
-              if (key === "$meta") {
-                continue;
-              }
-
-              const pluginData = res.data.data[key];
-              const fallbackPluginName = String(key || "").includes("/")
-                ? ""
-                : String(key || "").trim();
-              const pluginAuthor = String(pluginData?.author || "").trim();
-              const pluginName =
-                String(pluginData?.name || "").trim() || fallbackPluginName;
-              const displayPluginName = pluginName || key;
-              const marketPluginId =
-                String(pluginData?.market_plugin_id || "").trim() ||
-                (pluginAuthor && pluginName
-                  ? `${pluginAuthor}/${pluginName}`
-                  : "");
-              const parsedDownloadCount = Number(pluginData?.download_count);
-              const downloadCount =
-                pluginData?.download_count === undefined ||
-                pluginData?.download_count === null ||
-                pluginData?.download_count === "" ||
-                !Number.isFinite(parsedDownloadCount)
-                  ? undefined
-                  : Math.max(0, Math.trunc(parsedDownloadCount));
-
-              data.push({
-                ...pluginData,
-                name: displayPluginName, // 优先使用插件数据中的name字段，否则使用键名
-                market_plugin_id: marketPluginId,
-                desc: pluginData.desc,
-                short_desc: pluginData?.short_desc ? pluginData.short_desc : "",
-                author: pluginData.author,
-                repo: pluginData.repo,
-                installed: false,
-                version: pluginData?.version ? pluginData.version : "未知",
-                social_link: pluginData?.social_link,
-                tags: pluginData?.tags ? pluginData.tags : [],
-                logo: pluginData?.logo ? pluginData.logo : "",
-                pinned: pluginData?.pinned ? pluginData.pinned : false,
-                stars: pluginData?.stars ? pluginData.stars : 0,
-                download_count: downloadCount,
-                updated_at: pluginData?.updated_at ? pluginData.updated_at : "",
-                download_url: pluginData?.download_url
-                  ? pluginData.download_url
-                  : "",
-                display_name: pluginData?.display_name
-                  ? pluginData.display_name
-                  : "",
-                i18n:
-                  pluginData?.i18n && typeof pluginData.i18n === "object"
-                    ? pluginData.i18n
-                    : {},
-                astrbot_version: pluginData?.astrbot_version
-                  ? pluginData.astrbot_version
-                  : "",
-                category: pluginData?.category ? pluginData.category : "",
-                support_platforms: Array.isArray(pluginData?.support_platforms)
-                  ? pluginData.support_platforms
-                  : Array.isArray(pluginData?.support_platform)
-                  ? pluginData.support_platform
-                  : Array.isArray(pluginData?.platform)
-                  ? pluginData.platform
-                  : [],
-              });
-            }
-          }
-
-          if (sourceKey) {
-            this.pluginMarketDataBySource[sourceKey] = data;
-          } else {
-            this.pluginMarketData = data;
-          }
-          return data;
-        })
-        .catch((err) => {
-          return Promise.reject(err);
-        });
     },
   },
 });

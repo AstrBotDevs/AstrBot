@@ -1,7 +1,10 @@
 import { commandApi, pluginApi } from "@/api/v1";
 import { pluginSidebarState } from "@/composables/usePluginSidebarItems";
 import { useI18n, useModuleI18n } from "@/i18n/composables";
-import { useCommonStore } from "@/stores/common";
+import {
+  normalizeMarketPluginEntry,
+  useCommonStore,
+} from "@/stores/common";
 import { resolveErrorMessage } from "@/utils/errorUtils";
 import { getValidHashTab, replaceTabRoute } from "@/utils/hashRouteTabs.mjs";
 import { getPlatformDisplayName } from "@/utils/platformUtils";
@@ -211,20 +214,15 @@ export const useExtensionPage = (initialTab = "installed") => {
   const refreshingMarket = ref(false);
   const sortBy = ref("default"); // default, stars, downloads, author, updated
   const sortOrder = ref("desc"); // desc (降序) or asc (升序)
-  const randomPluginNames = ref([]);
+  const randomPlugins = ref([]);
   const marketCategoryFilter = ref("all");
+  const marketTotal = ref(0);
+  const marketCategories = ref([]);
+  const marketCategoryTotal = ref(0);
+  let marketRequestSerial = 0;
+  let suppressPageWatch = false;
 
   // 插件市场拼音搜索
-
-  const normalizeMarketCategory = (rawCategory) => {
-    const normalized = String(rawCategory || "")
-      .trim()
-      .toLowerCase();
-    if (!normalized) {
-      return "other";
-    }
-    return normalized.replace(/[\s-]+/g, "_");
-  };
 
   const getMarketCategoryLabel = (key, rawCategory = "") => {
     const fallbackMap = {
@@ -255,32 +253,10 @@ export const useExtensionPage = (initialTab = "installed") => {
       .join(" ");
   };
 
-  const marketCategoryMeta = computed(() => {
-    const categories = new Map();
-
-    for (const plugin of pluginMarketData.value) {
-      const categoryKey = normalizeMarketCategory(plugin?.category);
-      const categoryData = categories.get(categoryKey);
-      if (categoryData) {
-        categoryData.count += 1;
-        continue;
-      }
-      categories.set(categoryKey, {
-        count: 1,
-        rawLabel: String(plugin?.category || "").trim(),
-      });
-    }
-
-    return categories;
-  });
-
   const marketCategoryCounts = computed(() => {
-    const counts = { all: pluginMarketData.value.length };
-    for (const [
-      categoryKey,
-      categoryData,
-    ] of marketCategoryMeta.value.entries()) {
-      counts[categoryKey] = categoryData.count;
+    const counts = { all: marketCategoryTotal.value };
+    for (const category of marketCategories.value) {
+      counts[category.value] = category.count;
     }
     return counts;
   });
@@ -294,14 +270,11 @@ export const useExtensionPage = (initialTab = "installed") => {
       },
     ];
 
-    for (const [
-      categoryKey,
-      categoryData,
-    ] of marketCategoryMeta.value.entries()) {
+    for (const category of marketCategories.value) {
       items.push({
-        value: categoryKey,
-        label: getMarketCategoryLabel(categoryKey, categoryData.rawLabel),
-        count: categoryData.count,
+        value: category.value,
+        label: getMarketCategoryLabel(category.value, category.label),
+        count: category.count,
       });
     }
 
@@ -356,129 +329,104 @@ export const useExtensionPage = (initialTab = "installed") => {
     return sortInstalledPlugins(filtered);
   });
 
-  // 过滤后的插件市场数据（带搜索）
-  const filteredMarketPlugins = computed(() => {
-    const query = buildSearchQuery(debouncedMarketSearch.value);
-    const targetCategory = normalizeMarketCategory(marketCategoryFilter.value);
-    const shouldFilterByCategory = marketCategoryFilter.value !== "all";
-    if (!query) {
-      if (!shouldFilterByCategory) {
-        return pluginMarketData.value;
-      }
-      return pluginMarketData.value.filter(
-        (plugin) =>
-          normalizeMarketCategory(plugin?.category) === targetCategory,
-      );
-    }
-
-    return pluginMarketData.value.filter((plugin) => {
-      const matchesSearch = matchesPluginSearch(plugin, query);
-      const matchesCategory = shouldFilterByCategory
-        ? normalizeMarketCategory(plugin?.category) === targetCategory
-        : true;
-      return matchesSearch && matchesCategory;
-    });
-  });
-
-  // 所有插件列表，推荐插件排在前面
-  const sortedPlugins = computed(() => {
-    let plugins = [...filteredMarketPlugins.value];
-
-    // 根据排序选项排序
-    if (sortBy.value === "stars") {
-      // 按 star 数排序
-      plugins.sort((a, b) => {
-        const starsA = a.stars ?? 0;
-        const starsB = b.stars ?? 0;
-        return sortOrder.value === "desc" ? starsB - starsA : starsA - starsB;
-      });
-    } else if (sortBy.value === "downloads") {
-      // 按下载量排序
-      plugins.sort((a, b) => {
-        const downloadsA = a.download_count ?? 0;
-        const downloadsB = b.download_count ?? 0;
-        return sortOrder.value === "desc"
-          ? downloadsB - downloadsA
-          : downloadsA - downloadsB;
-      });
-    } else if (sortBy.value === "author") {
-      // 按作者名字典序排序
-      plugins.sort((a, b) => {
-        const authorA = (a.author ?? "").toLowerCase();
-        const authorB = (b.author ?? "").toLowerCase();
-        const result = authorA.localeCompare(authorB);
-        return sortOrder.value === "desc" ? -result : result;
-      });
-    } else if (sortBy.value === "updated") {
-      // 按更新时间排序
-      plugins.sort((a, b) => {
-        const dateA = a.updated_at ? new Date(a.updated_at).getTime() : 0;
-        const dateB = b.updated_at ? new Date(b.updated_at).getTime() : 0;
-        return sortOrder.value === "desc" ? dateB - dateA : dateA - dateB;
-      });
-    } else {
-      // default: 推荐插件排在前面
-      const pinned = plugins.filter((plugin) => plugin?.pinned);
-      const notPinned = plugins.filter((plugin) => !plugin?.pinned);
-      return [...pinned, ...notPinned];
-    }
-
-    return plugins;
-  });
-
-  const RANDOM_PLUGINS_COUNT = 3;
-
-  const randomPlugins = computed(() => {
-    const allPlugins = pluginMarketData.value;
-    if (allPlugins.length === 0) return [];
-
-    // Key by the unique market plugin key: metadata `name` is not unique and
-    // would collapse same-named plugins into one entry.
-    const pluginsByKey = new Map(
-      allPlugins.map((plugin) => [getMarketPluginKey(plugin), plugin]),
-    );
-    const selected = randomPluginNames.value
-      .map((key) => pluginsByKey.get(key))
-      .filter(Boolean);
-
-    if (selected.length > 0) {
-      return selected;
-    }
-
-    return allPlugins.slice(
-      0,
-      Math.min(RANDOM_PLUGINS_COUNT, allPlugins.length),
-    );
-  });
-
-  const shufflePlugins = (plugins) => {
-    const shuffled = [...plugins];
-    for (let i = shuffled.length - 1; i > 0; i -= 1) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
-    }
-    return shuffled;
-  };
-
-  const refreshRandomPlugins = () => {
-    const shuffled = shufflePlugins(pluginMarketData.value);
-    randomPluginNames.value = shuffled
-      .slice(0, Math.min(RANDOM_PLUGINS_COUNT, shuffled.length))
-      .map((plugin) => getMarketPluginKey(plugin));
-  };
-
-  // 分页计算属性
+  // The marketplace list is filtered, sorted, and paginated by the server;
+  // these names stay for the existing templates.
   const displayItemsPerPage = 9; // 固定每页显示9个卡片（3行）
 
-  const totalPages = computed(() => {
-    return Math.ceil(sortedPlugins.value.length / displayItemsPerPage);
-  });
+  const totalPages = computed(() =>
+    Math.max(1, Math.ceil(marketTotal.value / displayItemsPerPage)),
+  );
 
-  const paginatedPlugins = computed(() => {
-    const start = (currentPage.value - 1) * displayItemsPerPage;
-    const end = start + displayItemsPerPage;
-    return sortedPlugins.value.slice(start, end);
-  });
+  const paginatedPlugins = computed(() => pluginMarketData.value);
+
+  const marketSortValue = () =>
+    sortBy.value === "default" ? "recommended" : sortBy.value;
+
+  const loadMarketPage = async ({
+    force = false,
+    resetPage = false,
+    notify = true,
+  } = {}) => {
+    if (resetPage && currentPage.value !== 1) {
+      suppressPageWatch = true;
+      currentPage.value = 1;
+    }
+    const serial = ++marketRequestSerial;
+    try {
+      const res = await pluginApi.market({
+        page: currentPage.value,
+        page_size: displayItemsPerPage,
+        sort: marketSortValue(),
+        order: sortOrder.value,
+        category:
+          marketCategoryFilter.value === "all"
+            ? undefined
+            : marketCategoryFilter.value,
+        keyword: debouncedMarketSearch.value.trim() || undefined,
+        force_refresh: force || undefined,
+        custom_registry: selectedSource.value || undefined,
+      });
+      if (res.data?.status !== "ok") {
+        throw new Error(
+          res.data?.message || tm("messages.getMarketDataFailed"),
+        );
+      }
+      if (serial !== marketRequestSerial) return true;
+
+      const payload = res.data?.data || {};
+      pluginMarketData.value = Array.isArray(payload.items)
+        ? payload.items.map((item) => normalizeMarketPluginEntry(item))
+        : [];
+      marketTotal.value = Number(payload.total) || 0;
+      trimExtensionName();
+      checkAlreadyInstalled();
+      await annotateMarketVersionSupport();
+      return true;
+    } catch (err) {
+      if (serial === marketRequestSerial && notify) {
+        toast(tm("messages.getMarketDataFailed") + " " + err, "error");
+      }
+      return false;
+    }
+  };
+
+  const loadMarketCategories = async () => {
+    try {
+      const res = await pluginApi.marketCategories(
+        selectedSource.value || undefined,
+      );
+      if (res.data?.status !== "ok") {
+        throw new Error(res.data?.message || "market categories failed");
+      }
+      marketCategories.value = Array.isArray(res.data?.data?.categories)
+        ? res.data.data.categories
+        : [];
+      marketCategoryTotal.value = Number(res.data?.data?.total) || 0;
+    } catch (err) {
+      marketCategories.value = [];
+      console.debug("Failed to load plugin market categories:", err);
+    }
+  };
+
+  const refreshRandomPlugins = async () => {
+    try {
+      const res = await pluginApi.marketRandom(
+        3,
+        selectedSource.value || undefined,
+      );
+      if (res.data?.status !== "ok") {
+        throw new Error(res.data?.message || "market random failed");
+      }
+      randomPlugins.value = (res.data?.data?.items || []).map((item) =>
+        normalizeMarketPluginEntry(item),
+      );
+      applyInstalledFlags(randomPlugins.value);
+      await annotatePluginsVersionSupport(randomPlugins.value);
+    } catch (err) {
+      randomPlugins.value = [];
+      console.debug("Failed to load random plugins:", err);
+    }
+  };
 
   const updatableExtensions = computed(() => {
     const data = Array.isArray(extension_data?.data) ? extension_data.data : [];
@@ -525,9 +473,9 @@ export const useExtensionPage = (initialTab = "installed") => {
       const failRes = await pluginApi.failed();
       failedPluginsDict.value = failRes.data.data || {};
 
-      if (pluginMarketData.value.length > 0) {
-        await checkUpdate();
-      }
+      // Update flags are reactive; do not block the plugin list (or the
+      // marketplace page) on an unreachable custom registry.
+      void checkUpdate();
     } catch (err) {
       toast(err, "error");
     } finally {
@@ -752,25 +700,6 @@ export const useExtensionPage = (initialTab = "installed") => {
   const getUpdateDownloadUrl = (extension) =>
     String(findMarketPluginForExtension(extension)?.download_url || "").trim();
 
-  const buildMarketPluginLookup = (plugins) => {
-    const byIdentifier = new Map();
-    const byRepo = new Map();
-    const byName = new Map();
-
-    plugins.forEach((plugin) => {
-      const identifier = getMarketPluginId(plugin);
-      if (identifier) {
-        byIdentifier.set(identifier, plugin);
-      }
-      if (plugin.repo) {
-        byRepo.set(normalizeInstallUrl(plugin.repo).toLowerCase(), plugin);
-      }
-      byName.set(normalizeStr(plugin.name), plugin);
-    });
-
-    return { byIdentifier, byRepo, byName };
-  };
-
   const checkUpdate = async () => {
     const data = Array.isArray(extension_data?.data) ? extension_data.data : [];
     const sourcePlugins = new Map();
@@ -801,33 +730,39 @@ export const useExtensionPage = (initialTab = "installed") => {
 
     await Promise.all(
       [...sourcePlugins.entries()].map(async ([registryUrl, extensions]) => {
-        let marketPlugins = [];
+        const records = extensions.map((extension) => {
+          const source = extension.install_source || {};
+          return {
+            market_plugin_id:
+              String(source.market_plugin_id || "").trim() || undefined,
+            repo:
+              normalizeInstallUrl(extension.repo || source.repo) || undefined,
+            name:
+              String(
+                extension.marketplace_name || extension.name || "",
+              ).trim() || undefined,
+          };
+        });
+
+        let items = [];
         try {
-          marketPlugins =
-            registryUrl === normalizeRegistryUrl(selectedSource.value)
-              ? pluginMarketData.value
-              : await commonStore.getPluginCollections(
-                  false,
-                  registryUrl || null,
-                );
+          const res = await pluginApi.marketEntries(
+            records,
+            registryUrl || undefined,
+          );
+          if (res.data?.status !== "ok") {
+            return;
+          }
+          items = Array.isArray(res.data?.data?.items)
+            ? res.data.data.items
+            : [];
         } catch (error) {
-          console.warn("Failed to load plugin source for update check:", error);
+          console.warn("Failed to resolve the plugin source for updates:", error);
           return;
         }
 
-        const lookup = buildMarketPluginLookup(marketPlugins);
-        extensions.forEach((extension) => {
-          const source = extension.install_source || {};
-          const sourceIdentifier = String(source.market_plugin_id || "").trim();
-          const sourceRepo = normalizeInstallUrl(source.repo).toLowerCase();
-          const normalizedExtensionName = normalizeStr(
-            extension.marketplace_name,
-          );
-          const matchedPlugin =
-            (sourceIdentifier && lookup.byIdentifier.get(sourceIdentifier)) ||
-            (sourceRepo && lookup.byRepo.get(sourceRepo)) ||
-            lookup.byName.get(normalizedExtensionName);
-
+        extensions.forEach((extension, index) => {
+          const matchedPlugin = items[index];
           if (!matchedPlugin) {
             return;
           }
@@ -1528,10 +1463,13 @@ export const useExtensionPage = (initialTab = "installed") => {
     for (const source of sources) {
       let marketPlugins = [];
       try {
-        marketPlugins = await commonStore.getPluginCollections(
-          false,
-          source.url || null,
+        const res = await pluginApi.marketEntries(
+          [{ repo: extensionRepo }],
+          source.url || undefined,
         );
+        marketPlugins = (res.data?.data?.items || [])
+          .filter(Boolean)
+          .map((item) => normalizeMarketPluginEntry(item));
       } catch (error) {
         console.warn("Failed to load plugin source for binding:", error);
         continue;
@@ -1685,7 +1623,6 @@ export const useExtensionPage = (initialTab = "installed") => {
       closePluginSourceBindingDialog();
       await getExtensions();
       checkAlreadyInstalled();
-      await checkUpdate();
       await continuePendingUpdateAfterBinding(pendingUpdate);
     } catch (error) {
       const errorMsg =
@@ -1770,13 +1707,15 @@ export const useExtensionPage = (initialTab = "installed") => {
       const res = await pluginApi.market({
         custom_registry: normalizedRegistryUrl,
         force_refresh: true,
+        page: 1,
+        page_size: 1,
       });
       if (res.data.status !== "ok") {
         toast(res.data.message || tm("messages.sourceResolveFailed"), "error");
         return;
       }
 
-      const meta = res.data.data?.$meta;
+      const meta = res.data.data?.meta;
       sourceMarketMeta.value =
         meta && typeof meta === "object" && !Array.isArray(meta) ? meta : null;
 
@@ -1894,7 +1833,7 @@ export const useExtensionPage = (initialTab = "installed") => {
     });
   };
 
-  const checkAlreadyInstalled = () => {
+  const applyInstalledFlags = (plugins) => {
     const data = Array.isArray(extension_data?.data) ? extension_data.data : [];
     const currentRegistryUrl = normalizeRegistryUrl(selectedSource.value);
     const installedByIdentifier = new Map();
@@ -1922,8 +1861,7 @@ export const useExtensionPage = (initialTab = "installed") => {
       }
     });
 
-    for (let i = 0; i < pluginMarketData.value.length; i++) {
-      const plugin = pluginMarketData.value[i];
+    for (const plugin of plugins) {
       const pluginIdentifier = getMarketPluginId(plugin);
       const pluginRepo = normalizeInstallUrl(plugin.repo).toLowerCase();
       const matchedInstalled =
@@ -1947,17 +1885,10 @@ export const useExtensionPage = (initialTab = "installed") => {
 
       plugin.installed = !!matchedInstalled;
     }
+  };
 
-    let installed = [];
-    let notInstalled = [];
-    for (let i = 0; i < pluginMarketData.value.length; i++) {
-      if (pluginMarketData.value[i].installed) {
-        installed.push(pluginMarketData.value[i]);
-      } else {
-        notInstalled.push(pluginMarketData.value[i]);
-      }
-    }
-    pluginMarketData.value = notInstalled.concat(installed);
+  const checkAlreadyInstalled = () => {
+    applyInstalledFlags(pluginMarketData.value);
   };
 
   const normalizeAstrBotVersionSpec = (value) => String(value || "").trim();
@@ -2064,11 +1995,11 @@ export const useExtensionPage = (initialTab = "installed") => {
     return { checked: true, supported: true, message: "" };
   };
 
-  const annotateMarketVersionSupport = async () => {
+  const annotatePluginsVersionSupport = async (plugins) => {
     const currentVersion =
       commonStore.astrbotVersion ||
       (await commonStore.fetchAstrBotVersion().catch(() => ""));
-    pluginMarketData.value.forEach((plugin) => {
+    plugins.forEach((plugin) => {
       const result = checkAstrBotVersionSupport(
         plugin?.astrbot_version,
         currentVersion,
@@ -2078,6 +2009,9 @@ export const useExtensionPage = (initialTab = "installed") => {
       plugin.astrbot_support_message = result.message;
     });
   };
+
+  const annotateMarketVersionSupport = () =>
+    annotatePluginsVersionSupport(pluginMarketData.value);
 
   const showVersionSupportWarning = (message) => {
     versionSupportDialog.message = message;
@@ -2163,7 +2097,6 @@ export const useExtensionPage = (initialTab = "installed") => {
     selectedMarketInstallPlugin.value = null;
     await getExtensions();
     checkAlreadyInstalled();
-    await checkUpdate();
 
     viewReadme({
       name: resData.data.name,
@@ -2336,18 +2269,18 @@ export const useExtensionPage = (initialTab = "installed") => {
     refreshingMarket.value = true;
     loading_.value = true;
     try {
-      // 强制刷新插件市场数据
-      const data = await commonStore.getPluginCollections(
-        true,
-        selectedSource.value,
-      );
-      pluginMarketData.value = data;
-      trimExtensionName();
-      checkAlreadyInstalled();
-      await annotateMarketVersionSupport();
+      const loaded = await loadMarketPage({
+        force: true,
+        resetPage: true,
+        notify: false,
+      });
+      if (!loaded) {
+        toast(tm("messages.refreshFailed"), "error");
+        return;
+      }
+      await loadMarketCategories();
+      await refreshRandomPlugins();
       await checkUpdate();
-      refreshRandomPlugins();
-      currentPage.value = 1; // 重置到第一页
 
       toast(tm("messages.refreshSuccess"), "success");
     } catch (err) {
@@ -2379,16 +2312,9 @@ export const useExtensionPage = (initialTab = "installed") => {
 
       if (activeTab.value === "market") {
         await loadCustomSources();
-        const data = await commonStore.getPluginCollections(
-          false,
-          selectedSource.value,
-        );
-        pluginMarketData.value = data;
-        trimExtensionName();
-        checkAlreadyInstalled();
-        await annotateMarketVersionSupport();
-        await checkUpdate();
-        refreshRandomPlugins();
+        await loadMarketCategories();
+        await loadMarketPage({ resetPage: true });
+        await refreshRandomPlugins();
       }
     } catch (err) {
       toast(tm("messages.getMarketDataFailed") + " " + err, "error");
@@ -2400,16 +2326,6 @@ export const useExtensionPage = (initialTab = "installed") => {
       void (async () => {
         try {
           await loadCustomSources();
-          const data = await commonStore.getPluginCollections(
-            false,
-            selectedSource.value,
-          );
-          pluginMarketData.value = data;
-          trimExtensionName();
-          checkAlreadyInstalled();
-          await annotateMarketVersionSupport();
-          await checkUpdate();
-          refreshRandomPlugins();
         } catch (err) {
           console.debug("Failed to load plugin update metadata:", err);
         }
@@ -2442,8 +2358,6 @@ export const useExtensionPage = (initialTab = "installed") => {
 
     searchDebounceTimer = setTimeout(() => {
       debouncedMarketSearch.value = newVal;
-      // 搜索时重置到第一页
-      currentPage.value = 1;
     }, 300); // 300ms 防抖延迟
   });
 
@@ -2500,9 +2414,31 @@ export const useExtensionPage = (initialTab = "installed") => {
     void replaceTabRoute(router, route, newTab);
   });
 
+  watch(currentPage, () => {
+    if (suppressPageWatch) {
+      suppressPageWatch = false;
+      return;
+    }
+    if (activeTab.value === "market") {
+      void loadMarketPage();
+    }
+  });
+
   watch(marketCategoryFilter, () => {
     if (activeTab.value === "market") {
-      currentPage.value = 1;
+      void loadMarketPage({ resetPage: true });
+    }
+  });
+
+  watch([sortBy, sortOrder], () => {
+    if (activeTab.value === "market") {
+      void loadMarketPage({ resetPage: true });
+    }
+  });
+
+  watch(debouncedMarketSearch, () => {
+    if (activeTab.value === "market") {
+      void loadMarketPage({ resetPage: true });
     }
   });
 
@@ -2541,6 +2477,7 @@ export const useExtensionPage = (initialTab = "installed") => {
     configDialog,
     extension_config,
     pluginMarketData,
+    marketTotal,
     loadingDialog,
     curr_namespace,
     updatingAll,
@@ -2589,7 +2526,6 @@ export const useExtensionPage = (initialTab = "installed") => {
     refreshingMarket,
     sortBy,
     sortOrder,
-    randomPluginNames,
     normalizeStr,
     toPinyinText,
     getMarketPluginId,
@@ -2597,11 +2533,7 @@ export const useExtensionPage = (initialTab = "installed") => {
     toInitials,
     filteredExtensions,
     filteredPlugins,
-    filteredMarketPlugins,
-    sortedPlugins,
-    RANDOM_PLUGINS_COUNT,
     randomPlugins,
-    shufflePlugins,
     refreshRandomPlugins,
     displayItemsPerPage,
     totalPages,

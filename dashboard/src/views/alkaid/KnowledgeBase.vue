@@ -650,9 +650,9 @@ export default {
             this.pluginHasUpdate = false;
             try {
                 // 获取在线插件数据
-                const onlineResponse = await pluginApi.market();
+                const onlineResponse = await pluginApi.marketEntry('astrbot_plugin_knowledge_base');
                 if (onlineResponse.data.status === 'ok') {
-                    const knowledgeBasePlugin = onlineResponse.data.data['astrbot_plugin_knowledge_base'];
+                    const knowledgeBasePlugin = onlineResponse.data.data;
                     if (knowledgeBasePlugin) {
                         this.pluginLatestVersion = knowledgeBasePlugin.version || '未知';
 

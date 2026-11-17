@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import re
 from collections.abc import Callable
-from typing import Any
+from typing import Any, Literal
 from urllib.parse import quote
 
 import jwt
@@ -27,6 +27,7 @@ from astrbot.dashboard.schemas import (
     PluginEnabledRequest,
     PluginInstallRequest,
     PluginLogLevelPayload,
+    PluginMarketEntriesRequest,
     PluginSourceBindRequest,
     PluginSourceRequest,
     PluginUninstallRequest,
@@ -606,14 +607,29 @@ async def install_plugin_from_upload(
 
 @router.get("/plugins/market")
 async def list_plugin_market(
-    request: Request,
+    custom_registry: str | None = Query(default=None),
+    force_refresh: bool = Query(default=False),
+    page: int | None = Query(default=None, ge=1),
+    page_size: int | None = Query(default=None, ge=1, le=100),
+    sort: Literal[
+        "recommended", "downloads", "stars", "author", "updated", "name"
+    ] = Query(default="recommended"),
+    order: Literal["asc", "desc"] = Query(default="desc"),
+    category: str | None = Query(default=None),
+    keyword: str | None = Query(default=None),
     _auth: AuthContext = Depends(require_plugin_scope),
     service: PluginService = Depends(get_service),
 ):
     return await _run_service(
-        service.get_online_plugins_from_dashboard_query(
-            custom_registry=request.query_params.get("custom_registry"),
-            force_refresh=request.query_params.get("force_refresh", "false"),
+        service.get_market_query(
+            custom_registry=custom_registry,
+            force_refresh=force_refresh,
+            page=page,
+            page_size=page_size,
+            sort=sort,
+            order=order,
+            category=category,
+            keyword=keyword,
         ),
         log_label="/api/plugin/market_list",
     )
@@ -621,9 +637,62 @@ async def list_plugin_market(
 
 @router.get("/plugins/market/categories")
 async def list_plugin_market_categories(
+    custom_registry: str | None = Query(default=None),
     _auth: AuthContext = Depends(require_plugin_scope),
+    service: PluginService = Depends(get_service),
 ):
-    return ok({"categories": []})
+    return await _run_service(
+        service.get_market_categories(custom_registry=custom_registry),
+        log_label="/api/plugin/market_categories",
+    )
+
+
+@router.get("/plugins/market/random")
+async def get_plugin_market_random(
+    count: int = Query(default=3, ge=1, le=20),
+    custom_registry: str | None = Query(default=None),
+    _auth: AuthContext = Depends(require_plugin_scope),
+    service: PluginService = Depends(get_service),
+):
+    return await _run_service(
+        service.get_market_random(
+            count=count,
+            custom_registry=custom_registry,
+        ),
+        log_label="/api/plugin/market_random",
+    )
+
+
+@router.post("/plugins/market/entries")
+async def resolve_plugin_market_entries(
+    payload: PluginMarketEntriesRequest,
+    custom_registry: str | None = Query(default=None),
+    _auth: AuthContext = Depends(require_plugin_scope),
+    service: PluginService = Depends(get_service),
+):
+    return await _run_service(
+        service.get_market_entries(
+            records=[_model_dict(record) for record in payload.records],
+            custom_registry=custom_registry,
+        ),
+        log_label="/api/plugin/market_entries",
+    )
+
+
+@router.get("/plugins/market/entry")
+async def get_plugin_market_entry(
+    plugin_id: str = Query(min_length=1),
+    custom_registry: str | None = Query(default=None),
+    _auth: AuthContext = Depends(require_plugin_scope),
+    service: PluginService = Depends(get_service),
+):
+    return await _run_service(
+        service.get_market_entry(
+            plugin_id=plugin_id,
+            custom_registry=custom_registry,
+        ),
+        log_label="/api/plugin/market_entry",
+    )
 
 
 @router.get("/plugin-sources")
