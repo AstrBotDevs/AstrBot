@@ -274,10 +274,10 @@ class WecomPlatformAdapter(Platform):
         # 企业微信客服不支持主动发送
         if hasattr(self.client, "kf_message"):
             await super().send_by_session(session, message_chain)
-            raise Exception("企业微信客服模式不支持 send_by_session 主动发送。")
+            raise ConnectionError("企业微信客服模式不支持 send_by_session 主动发送。")
         if not self.agent_id:
             await super().send_by_session(session, message_chain)
-            raise Exception(
+            raise ConnectionError(
                 f"send_by_session 失败：无法为会话 {session.session_id} 推断 agent_id。",
             )
 
