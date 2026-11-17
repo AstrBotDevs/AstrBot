@@ -197,7 +197,7 @@ async def emit_view(event, module: str, result: ViewResult) -> None:
     from astrbot.core.message.message_event_result import MessageChain
 
     _, spec, _ = resolve_view(module, result.name)
-    if event.get_platform_name() != "webchat":
+    if not event.platform_meta.support_ui_interaction:
         return
     record = await asyncio.to_thread(view_store.create, event, module, result)
     await event.send(

@@ -209,7 +209,9 @@ def views(tmp_path, monkeypatch):
     event = WebChatMessageEvent(
         "show",
         message,
-        PlatformMetadata(name="webchat", id="webchat", description="test"),
+        PlatformMetadata(
+            name="webchat", id="webchat", description="test", support_ui_interaction=True
+        ),
         "webchat!alice!session-1",
     )
     event.send = AsyncMock()
@@ -331,19 +333,30 @@ async def test_ui_actions_only_reach_the_owning_plugin(views, monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_command_card_falls_back_to_text_on_other_platforms(views):
+@pytest.mark.parametrize("platform_name", ["webchat", "telegram"])
+@pytest.mark.parametrize("coroutine", [False, True])
+async def test_command_card_falls_back_without_view_capability(
+    views, platform_name, coroutine
+):
     """Use the existing response pipeline when no ChatUI renderer exists.
 
     Args:
         views: Isolated plugin and event.
+        platform_name: Name must not determine view support.
+        coroutine: Whether the handler returns instead of yielding.
     """
     _, event, _, _ = views
-    event.get_platform_name = lambda: "telegram"
+    event.platform_meta = PlatformMetadata(
+        name=platform_name, id=platform_name, description="test"
+    )
 
     async def handler(event):
         return event.view_result(name="results", data={"items": [1]}, text="One item")
 
-    async for _ in call_handler(event, handler):
+    async def yielding_handler(event):
+        yield await handler(event)
+
+    async for _ in call_handler(event, handler if coroutine else yielding_handler):
         pass
     assert event.get_result().chain[0].text == "One item"
     event.send.assert_not_called()
@@ -351,8 +364,12 @@ async def test_command_card_falls_back_to_text_on_other_platforms(views):
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("coroutine", [False, True])
-async def test_message_handlers_can_create_cards_without_tools(views, coroutine):
+@pytest.mark.parametrize("platform_name", ["webchat", "custom_chatui"])
+async def test_message_handlers_can_create_cards_without_tools(
+    views, coroutine, platform_name
+):
     store, event, _, _ = views
+    event.platform_meta.name = platform_name
 
     async def handler(event):
         """Create a card from an ordinary event.

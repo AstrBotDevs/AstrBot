@@ -56,7 +56,7 @@ async def call_handler(
                     await emit_view(
                         event, getattr(handler, "func", handler).__module__, ret
                     )
-                    if event.get_platform_name() != "webchat":
+                    if not event.platform_meta.support_ui_interaction:
                         event.set_result(event.plain_result(ret.text))
                     yield
                     continue
@@ -79,7 +79,7 @@ async def call_handler(
         ret = await ready_to_call
         if isinstance(ret, ViewResult) and ret.name is not None:
             await emit_view(event, getattr(handler, "func", handler).__module__, ret)
-            if event.get_platform_name() != "webchat":
+            if not event.platform_meta.support_ui_interaction:
                 event.set_result(event.plain_result(ret.text))
             yield
             return

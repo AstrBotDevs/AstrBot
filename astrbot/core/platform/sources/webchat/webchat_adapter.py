@@ -58,7 +58,7 @@ class QueueListener:
             await self.webchat_queue_mgr.clear_listener()
 
 
-@register_platform_adapter("webchat", "webchat")
+@register_platform_adapter("webchat", "webchat", support_ui_interaction=True)
 class WebChatAdapter(Platform):
     def __init__(
         self,
@@ -79,6 +79,7 @@ class WebChatAdapter(Platform):
             description="webchat",
             id="webchat",
             support_proactive_message=True,
+            support_ui_interaction=True,
         )
         self._shutdown_event = asyncio.Event()
         self._webchat_queue_mgr = webchat_queue_mgr

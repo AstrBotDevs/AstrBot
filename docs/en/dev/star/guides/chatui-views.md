@@ -95,7 +95,7 @@ Chat message and workbench views are excluded from the independent page list and
 
 Undeclared directories under `views/` (or the legacy `pages/`) continue to be discovered as independent pages. Existing `ViewSpec` declarations without `target` remain chat cards. See [plugin views](./plugin-pages.md) for independent page development.
 
-Providing `name` creates a new card, including from a UI callback. Omitting `name` replaces the current interaction's card data and requires a UI event. Creation requires nonempty `text` as a fallback. A local tool can directly `return event.view_result(name=..., data=..., text=...)`: the model receives `text`, while display `data` is not automatically added to its context. Other platforms use the text result without creating an iframe.
+Providing `name` creates a new card, including from a UI callback. Omitting `name` replaces the current interaction's card data and requires a UI event. Creation requires nonempty `text` as a fallback. A local tool can directly `return event.view_result(name=..., data=..., text=...)`: the model receives `text`, while display `data` is not automatically added to its context. View support is controlled by `event.platform_meta.support_ui_interaction`, not the platform name. It defaults to `False`; WebChat explicitly enables it. Platforms without this capability use the text fallback. Custom adapters must implement the ChatUI view event and delivery protocol before enabling this flag in both their registration and event metadata.
 
 ## Frontend
 

@@ -128,7 +128,7 @@ async def open_counter(self, event: AstrMessageEvent):
     )
 ```
 
-工具的 `text` 进入模型上下文，`data` 默认不进入。普通事件创建卡片时不会因此调用模型。非 ChatUI 平台按文字回复处理，不实例化 iframe。
+工具的 `text` 进入模型上下文，`data` 默认不进入。普通事件创建卡片时不会因此调用模型。是否支持视图由 `event.platform_meta.support_ui_interaction` 决定，不再判断平台名称。默认值为 `False`，WebChat 显式启用；未启用的平台按文字回复处理。自定义适配器须先实现 ChatUI 视图的事件与投递协议，再在注册参数和事件元数据中启用该标记。
 
 ## 前端
 
