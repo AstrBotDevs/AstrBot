@@ -271,7 +271,7 @@ The workbench button at the right of the ChatUI header opens a reading and visua
 
 Tabs sit in the main header. Drag the left divider to resize, expand for full-screen reading, or hide and reopen using the same header control. All tabs, including resident plugin views and New workbench, belong to their chat session. Switching sessions restores its tabs, selected view, and open/hidden state. This is a new entry point and does not replace standalone plugin pages in the extensions sidebar.
 
-See [ChatUI cards and workbench views](../dev/star/guides/chatui-views.md#workbench-and-launcher-views) for plugin development.
+See [Workbench page](../dev/star/guides/plugin-views/workbench.md) for plugin development.
 
 
 The workbench remembers open tabs, the active tab, visibility, and width. Closed tabs stay closed after a reload; use the compact entry in a chat message to reopen one. New tool results can still open new tabs, while loading older messages does not expand the workbench.
