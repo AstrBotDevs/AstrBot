@@ -1920,6 +1920,9 @@ class ChatService:
         if session.creator != username:
             raise ChatServiceError("Permission denied")
 
+        if self.running_convs.get(session_id, False):
+            raise ChatServiceError("Stop the active run before editing")
+
         umo = build_webchat_unified_msg_origin(session)
         try:
             async with session_lock_manager.acquire_lock(
@@ -2016,6 +2019,9 @@ class ChatService:
             raise ChatServiceError(f"Session {session_id} not found")
         if session.creator != username:
             raise ChatServiceError("Permission denied")
+
+        if self.running_convs.get(session_id, False):
+            raise ChatServiceError("Stop the active run before regenerating")
 
         umo = build_webchat_unified_msg_origin(session)
         try:

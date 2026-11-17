@@ -32,6 +32,8 @@ from astrbot.core.session_overrides import update_overrides
 from astrbot.core.utils.datetime_utils import to_utc_timestamp
 from astrbot.core.utils.session_lock import SessionLockManager
 
+CONVERSATION_DELETE_TIMEOUT = 10.0
+
 
 class ConversationManager:
     """负责管理会话与 LLM 的对话，某个会话当前正在用哪个对话。"""
@@ -334,6 +336,9 @@ class ConversationManager:
             on_current_deleted: Optional cleanup for the deleted selection. Runs with
                 selection changes locked and must not create, switch, or delete a
                 conversation for the same origin.
+
+        Raises:
+            asyncio.TimeoutError: The database deletion or its recovery read timed out.
         """
         async with self._selection_locks.acquire_lock(unified_msg_origin):
             curr_cid = await self.get_curr_conversation_id(unified_msg_origin)
@@ -341,22 +346,43 @@ class ConversationManager:
                 conversation_id = curr_cid
             if conversation_id:
                 deletion = asyncio.create_task(
-                    self.db.delete_conversation(cid=conversation_id)
+                    asyncio.wait_for(
+                        self.db.delete_conversation(cid=conversation_id),
+                        timeout=CONVERSATION_DELETE_TIMEOUT,
+                    )
                 )
                 try:
                     try:
                         await asyncio.shield(deletion)
                     except asyncio.CancelledError:
-                        # Settle the database operation before releasing selection.
-                        await deletion
+                        # Settle the bounded database operation before releasing selection.
+                        try:
+                            await deletion
+                        except asyncio.TimeoutError:
+                            pass
                         raise
                 finally:
-                    if (
-                        curr_cid == conversation_id
-                        and deletion.done()
+                    deleted = (
+                        deletion.done()
                         and not deletion.cancelled()
                         and deletion.exception() is None
+                    )
+                    if (
+                        not deleted
+                        and deletion.done()
+                        and not deletion.cancelled()
+                        and isinstance(deletion.exception(), asyncio.TimeoutError)
                     ):
+                        # A timeout may arrive after COMMIT but before the call returns.
+                        # Confirm the outcome before invalidating the selected context.
+                        deleted = (
+                            await asyncio.wait_for(
+                                self.db.get_conversation_by_id(cid=conversation_id),
+                                timeout=CONVERSATION_DELETE_TIMEOUT,
+                            )
+                            is None
+                        )
+                    if curr_cid == conversation_id and deleted:
                         self.session_conversations.pop(unified_msg_origin, None)
                         try:
                             await sp.session_remove(unified_msg_origin, "sel_conv_id")

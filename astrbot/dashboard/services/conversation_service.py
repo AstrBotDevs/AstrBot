@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import json
 import traceback
 from dataclasses import dataclass
@@ -206,7 +207,7 @@ class ConversationService:
 
         Raises:
             ConversationServiceError: If the conversation is missing, belongs to
-                another origin, or remains busy until the lock deadline.
+                another origin, or waiting for the lock or deletion times out.
         """
         payload = self._payload(data)
         if "conversations" in payload:
@@ -246,6 +247,10 @@ class ConversationService:
         except SessionLockTimeoutError as exc:
             raise ConversationServiceError(
                 "Conversation is busy; please retry after the current reply finishes."
+            ) from exc
+        except asyncio.TimeoutError as exc:
+            raise ConversationServiceError(
+                "Conversation deletion timed out; refresh the history and retry if needed."
             ) from exc
         return {"message": "对话删除成功"}
 
