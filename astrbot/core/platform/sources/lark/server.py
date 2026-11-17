@@ -150,27 +150,48 @@ class LarkWebhookServer:
             logger.error("[Lark Webhook] 请求体为空")
             return {"error": "Empty request body"}, 400
 
-        # 如果配置了 encrypt_key，进行签名验证
+        # Verify event signatures before decrypting when an Encrypt Key is configured.
+        # URL verification is excluded from Lark's event-signature requirements, but
+        # its encrypted body must still be decrypted to identify the challenge.
+        url_verification_decrypted = False
         if self.encrypt_key:
             timestamp = request.headers.get("X-Lark-Request-Timestamp", "")
             nonce = request.headers.get("X-Lark-Request-Nonce", "")
             signature = request.headers.get("X-Lark-Signature", "")
 
-            if timestamp and nonce and signature:
-                if not self.verify_signature(
-                    timestamp, nonce, self.encrypt_key, body, signature
-                ):
-                    logger.error("[Lark Webhook] 签名验证失败")
+            if not timestamp or not nonce or not signature:
+                if "encrypt" not in event_data:
+                    logger.error("[Lark Webhook] Missing signature headers")
                     return {"error": "Invalid signature"}, 401
+                try:
+                    event_data = self.decrypt_event(event_data["encrypt"])
+                except Exception as e:
+                    logger.error(f"[Lark Webhook] 解密事件失败: {e}")
+                    return {"error": "Decryption failed"}, 400
+                if event_data.get("type") != "url_verification":
+                    logger.error("[Lark Webhook] Missing signature headers")
+                    return {"error": "Invalid signature"}, 401
+                url_verification_decrypted = True
+            elif not self.verify_signature(
+                timestamp, nonce, self.encrypt_key, body, signature
+            ):
+                logger.error("[Lark Webhook] 签名验证失败")
+                return {"error": "Invalid signature"}, 401
 
-        # 检查是否是加密事件
-        if "encrypt" in event_data:
-            try:
-                event_data = self.decrypt_event(event_data["encrypt"])
-                logger.debug(f"[Lark Webhook] 解密后的事件: {event_data}")
-            except Exception as e:
-                logger.error(f"[Lark Webhook] 解密事件失败: {e}")
-                return {"error": "Decryption failed"}, 400
+        # An Encrypt Key requires encrypted events, including URL verification.
+        if not url_verification_decrypted:
+            if "encrypt" in event_data:
+                try:
+                    event_data = self.decrypt_event(event_data["encrypt"])
+                    logger.debug(f"[Lark Webhook] 解密后的事件: {event_data}")
+                except Exception as e:
+                    logger.error(f"[Lark Webhook] 解密事件失败: {e}")
+                    return {"error": "Decryption failed"}, 400
+            elif self.encrypt_key:
+                logger.error(
+                    "[Lark Webhook] Plaintext event rejected while encryption is configured"
+                )
+                return {"error": "Encrypted event required"}, 400
 
         # 验证 token
         if self.verification_token:
