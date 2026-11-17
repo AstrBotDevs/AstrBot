@@ -214,7 +214,17 @@ export default defineConfig({
                   { text: "接收消息事件", link: "/guides/listen-message-event" },
                   { text: "发送消息", link: "/guides/send-message" },
                   { text: "插件配置", link: "/guides/plugin-config" },
-                  { text: "插件可视化视图", link: "/guides/plugin-pages" },
+                  {
+                    text: "插件可视化视图",
+                    collapsed: true,
+                    items: [
+                      { text: "概览", link: "/guides/plugin-views/" },
+                      { text: "独立插件页面", link: "/guides/plugin-views/plugin-page" },
+                      { text: "消息交互组件", link: "/guides/plugin-views/chat-message" },
+                      { text: "共享 Bridge API", link: "/guides/plugin-views/bridge" },
+                      { text: "后端 Web API", link: "/guides/plugin-views/web-api" },
+                    ],
+                  },
                   { text: "插件国际化", link: "/guides/plugin-i18n" },
                   {
                     text: "AI",
@@ -506,7 +516,17 @@ export default defineConfig({
                   { text: "Listen to Message Events", link: "/guides/listen-message-event" },
                   { text: "Send Messages", link: "/guides/send-message" },
                   { text: "Plugin Configuration", link: "/guides/plugin-config" },
-                  { text: "Plugin Views", link: "/guides/plugin-pages" },
+                  {
+                    text: "Plugin Views",
+                    collapsed: true,
+                    items: [
+                      { text: "Overview", link: "/guides/plugin-views/" },
+                      { text: "Standalone plugin page", link: "/guides/plugin-views/plugin-page" },
+                      { text: "Interactive message component", link: "/guides/plugin-views/chat-message" },
+                      { text: "Shared Bridge API", link: "/guides/plugin-views/bridge" },
+                      { text: "Backend Web APIs", link: "/guides/plugin-views/web-api" },
+                    ],
+                  },
                   { text: "Plugin Internationalization", link: "/guides/plugin-i18n" },
                   {
                     text: "AI",

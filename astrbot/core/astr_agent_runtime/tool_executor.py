@@ -33,6 +33,7 @@ from astrbot.core.astr_agent_runtime.tools.computer_tools import (
     PythonTool,
     ShellSessionTool,
 )
+from astrbot.core.chatui import ViewResult, emit_view
 from astrbot.core.message.components import Image
 from astrbot.core.message.message_event_result import (
     MessageChain,
@@ -630,6 +631,18 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
                         timeout=effective_timeout,
                     )
                     if resp is not None:
+                        if isinstance(resp, ViewResult):
+                            if resp.name is None:
+                                raise ValueError(
+                                    "Tools must create named views, not update a UI action."
+                                )
+                            await emit_view(
+                                event,
+                                tool.handler_module_path
+                                or getattr(awaitable, "func", awaitable).__module__,
+                                resp,
+                            )
+                            resp = resp.text
                         if isinstance(resp, mcp.types.CallToolResult):
                             yield resp
                         else:

@@ -369,11 +369,9 @@ const sendIframeContext = () => {
       pageTitle: localizedPageTitle.value,
       locale: locale.value,
       i18n: toPostMessageData(plugin.value.i18n, {}),
+      target: "plugin_page",
       isDark: customizer.isDark,
-      themeColors: {
-        primary: theme.global.current.value.colors.primary,
-        secondary: theme.global.current.value.colors.secondary,
-      },
+      themeColors: { ...theme.global.current.value.colors },
     },
   });
 };
@@ -632,13 +630,13 @@ watch(locale, () => {
 });
 watch(
   [
-    () => customizer.uiTheme,
-    () => theme.global.current.value.colors.primary,
-    () => theme.global.current.value.colors.secondary,
+    () => customizer.isDark,
+    () => theme.global.current.value,
   ],
   () => {
     sendIframeContext();
   },
+  { deep: true },
 );
 </script>
 

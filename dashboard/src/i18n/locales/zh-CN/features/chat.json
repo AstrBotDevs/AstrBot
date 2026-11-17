@@ -273,5 +273,9 @@
     "exit": "退出",
     "partialFailure": "{total} 个对话中有 {failed} 个删除失败",
     "requestFailed": "删除对话失败，请重试。"
+  },
+  "pluginView": {
+    "loading": "正在加载视图…",
+    "unavailable": "视图暂不可用，已显示文字结果。"
   }
 }

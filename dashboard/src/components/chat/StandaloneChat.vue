@@ -117,6 +117,11 @@
                         </div>
                       </div>
 
+                      <PluginViewCard
+                        v-else-if="part.type === 'view'"
+                        :part="part"
+                        :is-dark="isDark"
+                      />
                       <div
                         v-else-if="part.type === 'tool_call'"
                         class="tool-call-block"
@@ -227,6 +232,7 @@
 </template>
 
 <script setup lang="ts">
+import PluginViewCard from "@/components/chat/message_list_comps/PluginViewCard.vue";
 import { useRouter } from "vue-router";
 import { CodeXml } from "@lucide/vue";
 import MessageContentTransition from "@/components/chat/MessageContentTransition.vue";

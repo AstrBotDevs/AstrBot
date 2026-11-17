@@ -296,6 +296,11 @@
                         />
                       </div>
 
+                      <PluginViewCard
+                        v-else-if="part.type === 'view'"
+                        :part="part"
+                        :is-dark="isDark"
+                      />
                       <div
                         v-else-if="part.type === 'tool_call'"
                         class="tool-call-block"
@@ -522,6 +527,7 @@
 </template>
 
 <script setup lang="ts">
+import PluginViewCard from "@/components/chat/message_list_comps/PluginViewCard.vue";
 import MessageContentTransition from "@/components/chat/MessageContentTransition.vue";
 import { computed, nextTick, reactive, ref } from "vue";
 import { Copy, Info, SquarePen, CodeXml } from "@lucide/vue";
@@ -567,7 +573,7 @@ const props = withDefaults(
   defineProps<{
     messages: ChatRecord[];
     isDark?: boolean;
-    isStreaming?: boolean;
+    isMessageStreaming?: (message: ChatRecord, index: number) => boolean;
     variant?: "main" | "thread";
     enableEdit?: boolean;
     enableRegenerate?: boolean;
@@ -580,7 +586,6 @@ const props = withDefaults(
   }>(),
   {
     isDark: false,
-    isStreaming: false,
     variant: "main",
     enableEdit: false,
     enableRegenerate: false,
@@ -668,11 +673,7 @@ function shouldShowMessageBubble(message: ChatRecord) {
 }
 
 function isMessageStreaming(message: ChatRecord, messageIndex: number) {
-  return (
-    props.isStreaming &&
-    !isUserMessage(message) &&
-    messageIndex === props.messages.length - 1
-  );
+  return props.isMessageStreaming?.(message, messageIndex) ?? false;
 }
 
 function isEditingMessage(message: ChatRecord) {

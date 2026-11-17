@@ -206,6 +206,7 @@ class PluginPageService:
             "locale": resolved_locale,
             "i18n": plugin_i18n,
             "isDark": theme == "dark",
+            "target": "plugin_page",
         }
 
     async def get_plugin_page_entry_config(
@@ -643,6 +644,11 @@ class PluginPageService:
         plugin_name = plugin.name.strip() if isinstance(plugin.name, str) else ""
         if not plugin_name:
             return None
+        for spec in getattr(
+            plugin.star_cls or plugin.star_cls_type, "chatui_views", []
+        ):
+            if spec.name == view_name and spec.target == "chat_message":
+                return None
         try:
             page = await self.get_plugin_page(plugin, view_name)
             await self.resolve_plugin_page_file(plugin, page.name, "")
