@@ -892,7 +892,7 @@ class FunctionToolManager:
         if "url" in config:
             success, error_msg = await _quick_test_mcp_connection(config)
             if not success:
-                raise Exception(error_msg)
+                raise ConnectionError(error_msg)
 
         mcp_client = MCPClient()
         try:
@@ -1228,14 +1228,14 @@ class FunctionToolManager:
                         else:
                             logger.warning("没有找到可用的 ModelScope MCP 服务器")
                     else:
-                        raise Exception(
+                        raise ConnectionError(
                             f"ModelScope API 请求失败: HTTP {response.status}",
                         )
 
         except aiohttp.ClientError as e:
-            raise Exception(f"网络连接错误: {e!s}")
+            raise ConnectionError(f"网络连接错误: {e!s}")
         except Exception as e:
-            raise Exception(f"同步 ModelScope MCP 服务器时发生错误: {e!s}")
+            raise ConnectionError(f"同步 ModelScope MCP 服务器时发生错误: {e!s}")
 
     def __str__(self) -> str:
         return str(self.func_list)
