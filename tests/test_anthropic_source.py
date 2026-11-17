@@ -541,3 +541,15 @@ async def test_query_concatenates_multiple_text_blocks():
     response = await provider._query({"model": "claude-test", "messages": []}, None)
 
     assert response.completion_text == "Let me search. The answer is 42."
+
+
+@pytest.mark.asyncio
+async def test_assemble_context_explains_unreceived_audio():
+    from astrbot.core.provider.modalities import AUDIO_NOT_RECEIVED_HINT
+
+    message = await _provider().assemble_context("what was said?", audio_urls=["a.wav"])
+
+    assert message["content"] == [
+        {"type": "text", "text": "what was said?"},
+        {"type": "text", "text": AUDIO_NOT_RECEIVED_HINT},
+    ]
