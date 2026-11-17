@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import base64
 import json
 import math
 from collections.abc import Mapping
@@ -17,6 +18,8 @@ from ..entities import (
     DecisionChoiceAnswer,
     DecisionChoiceQuestion,
     DecisionError,
+    DecisionInput,
+    DecisionMedia,
     DecisionQuestion,
     DecisionScoreAnswer,
     DecisionScoreQuestion,
@@ -34,6 +37,8 @@ _DEFAULT_MAX_CONCURRENCY = 4
 # Probabilities arrive as JSON floats; allow rounding drift when checking that
 # a distribution sums to one.
 _PROBABILITY_SUM_TOLERANCE = 1e-3
+# Decisions API schema limit for input_image.image_url.
+_MAX_IMAGE_URL_LENGTH = 1_073_741_824
 
 
 def _is_finite_number(value: Any) -> TypeGuard[float]:
@@ -46,6 +51,70 @@ def _is_finite_number(value: Any) -> TypeGuard[float]:
 
 def _is_unit_number(value: Any) -> TypeGuard[float]:
     return _is_finite_number(value) and 0 <= value <= 1
+
+
+def _input_parts(decision_input: DecisionInput) -> list[dict[str, Any]]:
+    """Convert explicit DecisionInput into OpenAI input_text and input_image parts.
+
+    Args:
+        decision_input: Ordered text strings and image media.
+
+    Returns:
+        OpenAI content parts in the original order.
+
+    Raises:
+        ValueError: The content is empty or holds media the API cannot express.
+    """
+    if not isinstance(decision_input.content, list) or not decision_input.content:
+        raise ValueError("DecisionInput requires a non-empty content list")
+    content: list[dict[str, Any]] = []
+    for part in decision_input.content:
+        if isinstance(part, str):
+            content.append({"type": "input_text", "text": part})
+            continue
+        if not isinstance(part, DecisionMedia):
+            raise ValueError("DecisionInput requires text or DecisionMedia")
+        if part.type != "image":
+            raise ValueError("OpenAI decision media supports images only")
+        # Decisions docs list no image formats; OpenAI validates the file.
+        if not isinstance(part.mime_type, str) or not part.mime_type.startswith(
+            "image/"
+        ):
+            raise ValueError("OpenAI decision images require an image/* MIME type")
+        # OpenAI image detail uses a different enum; never map or drop it.
+        if part.resolution is not None:
+            raise ValueError(
+                "OpenAI decision images do not support resolution; "
+                "image detail uses the API default"
+            )
+        if (part.data is None) == (part.uri is None):
+            raise ValueError("DecisionMedia requires exactly one of data or uri")
+        if part.data is not None:
+            if not isinstance(part.data, str) or not part.data:
+                raise ValueError("DecisionMedia data must be non-empty base64")
+            try:
+                base64.b64decode(part.data, validate=True)
+            except ValueError:
+                raise ValueError("DecisionMedia data must be valid base64") from None
+            image_url = f"data:{part.mime_type};base64,{part.data}"
+        else:
+            # The API pattern ^(data:|https?://) is case-sensitive.
+            try:
+                uri_host = (
+                    httpx.URL(part.uri).host
+                    if isinstance(part.uri, str)
+                    and part.uri.startswith(("http://", "https://"))
+                    else ""
+                )
+            except httpx.InvalidURL:
+                uri_host = ""
+            if not uri_host:
+                raise ValueError("OpenAI decision image uri must be an HTTP(S) URL")
+            image_url = part.uri
+        if len(image_url) > _MAX_IMAGE_URL_LENGTH:
+            raise ValueError("OpenAI decision image exceeds the 1 GiB URL limit")
+        content.append({"type": "input_image", "image_url": image_url})
+    return content
 
 
 @register_provider_adapter(
@@ -121,11 +190,13 @@ class OpenAIDecisionProvider(DecisionProvider):
         String state is sent as text input. Dict state, and list state made of
         objects, is sent as an ``input_json`` part so that keys such as
         ``role`` or ``image_url`` stay plain business data. Other lists are
-        serialized as JSON text input.
+        serialized as JSON text input. Explicit ``DecisionInput`` is sent as
+        one user message of ordered ``input_text`` and ``input_image`` parts.
 
         Args:
             questions: Question heads keyed by caller-defined identifiers.
-            state: Context evaluated by the model.
+            state: Shared text, business JSON, or explicit DecisionInput
+                content with text and images.
             request_max_retries: Number of retries after the initial request.
 
         Returns:
@@ -157,11 +228,21 @@ class OpenAIDecisionProvider(DecisionProvider):
                 raise ValueError(
                     f"question {head} has unsupported type {type(question).__name__}"
                 )
-            if not isinstance(question.instructions, str):
-                raise ValueError(f"question {head} instructions must be a string")
-            instructions = question.instructions.strip()
-            if not instructions:
-                raise ValueError(f"question {head} must not be empty")
+            if isinstance(question.instructions, DecisionInput):
+                instructions: Any = _input_parts(question.instructions)
+                if not any(
+                    part["type"] == "input_image" or part["text"].strip()
+                    for part in instructions
+                ):
+                    raise ValueError(f"question {head} must not be empty")
+            elif isinstance(question.instructions, str):
+                instructions = question.instructions.strip()
+                if not instructions:
+                    raise ValueError(f"question {head} must not be empty")
+            else:
+                raise ValueError(
+                    f"question {head} instructions must be a string or DecisionInput"
+                )
             if isinstance(question, DecisionChoiceQuestion):
                 if not isinstance(question.criteria, Mapping):
                     raise ValueError(f"question {head} criteria must be a mapping")
@@ -209,13 +290,20 @@ class OpenAIDecisionProvider(DecisionProvider):
                     {"type": "predicate", "name": name, "instructions": instructions}
                 )
 
-        if state is not None and not isinstance(state, (str, dict, list)):
+        if isinstance(state, DecisionInput):
+            content = _input_parts(state)
+        elif state is not None and not isinstance(state, (str, dict, list)):
             raise ValueError(
-                "OpenAI decision state must be a string, a dict, or a list"
+                "OpenAI decision state must be a string, a dict, a list, "
+                "or DecisionInput"
             )
         try:
-            if state is None or isinstance(state, str):
-                request_input: Any = state or ""
+            if isinstance(state, DecisionInput):
+                request_input: Any = [
+                    {"type": "message", "role": "user", "content": content}
+                ]
+            elif state is None or isinstance(state, str):
+                request_input = state or ""
             elif isinstance(state, dict) or all(
                 isinstance(item, dict) for item in state
             ):
