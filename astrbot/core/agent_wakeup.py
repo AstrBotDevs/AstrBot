@@ -8,6 +8,8 @@ from astrbot.core.platform.message_session import MessageSession
 from astrbot.core.star.context import Context
 
 if TYPE_CHECKING:
+    from mcp.types import CallToolResult
+
     from astrbot.core.agent.runtime import AgentSessionRef
 
 
@@ -21,6 +23,7 @@ async def wake_main_agent(
     role: str = "member",
     stop_signal: asyncio.Event | None = None,
     agent_session: "AgentSessionRef | None" = None,
+    tool_result: "tuple[str, CallToolResult] | None" = None,
 ) -> None:
     """Queue a triggered user turn without waiting for agent execution.
 
@@ -33,6 +36,7 @@ async def wake_main_agent(
         role: Initiating caller's resolved permission role.
         stop_signal: Optional cancellation signal shared with a background task.
         agent_session: Original runtime conversation when selection must not drift.
+        tool_result: Tool name and typed output, kept separate from trigger instructions.
 
     Raises:
         ValueError: If the source or target session is invalid,
@@ -55,6 +59,7 @@ async def wake_main_agent(
         source_id=source_id,
         role=role,
         agent_session=agent_session,
+        tool_result=tool_result,
     )
     if stop_signal is not None:
         event.set_extra("_background_stop_signal", stop_signal)

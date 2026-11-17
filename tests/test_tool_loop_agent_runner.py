@@ -2758,7 +2758,7 @@ async def test_unknown_tool_is_rejected_without_claiming_execution(
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("outcome", ["completed", "failed", "cancelled"])
+@pytest.mark.parametrize("outcome", ["completed", "failed", "partial_failure", "cancelled"])
 async def test_steering_detaches_running_tool_without_reexecution(
     runner, provider_request, mock_hooks, monkeypatch, outcome
 ):
@@ -2796,6 +2796,8 @@ async def test_steering_detaches_running_tool_without_reexecution(
                 if outcome == "failed":
                     raise RuntimeError("background failure")
                 yield CallToolResult(content=[TextContent(type="text", text="finished once")])
+                if outcome == "partial_failure":
+                    raise RuntimeError("failure after partial output")
             finally:
                 assert asyncio.current_task() is owner
                 closed.set()
@@ -2835,7 +2837,12 @@ async def test_steering_detaches_running_tool_without_reexecution(
             assert payload["agent_session"] == original_session
             assert payload["source_id"] == finished.execution_id
             assert payload["source"] == "background_task"
-            assert ("background failure" if outcome == "failed" else "finished once") in payload["user_prompt"]
+            name, result = payload["tool_result"]
+            assert name
+            assert ("background failure" if outcome == "failed" else "finished once") in result.content[0].text
+            assert result.isError == (outcome in ("failed", "partial_failure"))
+            if outcome == "partial_failure":
+                assert "failure after partial output" in result.content[1].text
     finally:
         release.set()
         for task in (foreground, background):

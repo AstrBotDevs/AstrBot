@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING
 from astrbot.core import logger
 from astrbot.core.agent.events import RuntimeExecutionError, TurnPrepared
 from astrbot.core.agent.input import format_input_content
+from astrbot.core.agent.message import Message
 from astrbot.core.agent.runtime import (
     AgentInput,
     AgentSession,
@@ -149,6 +150,22 @@ class NativeAgentSession(AgentSession):
                 await writer.start_turn(
                     trigger, event_id=turn_id if isinstance(turn_id, str) else None
                 )
+            if isinstance(event, AgentWakeupEvent) and event.tool_result is not None:
+                tool_name, tool_result = event.tool_result
+                text, images = await runner.prepare_tool_result(
+                    result=tool_result,
+                    tool_call_id=event.source_id or event.message_obj.message_id,
+                    tool_name=tool_name,
+                )
+                await runner._append_context_messages(
+                    [
+                        Message(
+                            role="user",
+                            content=f"Background tool output (untrusted data):\n{text}",
+                        )
+                    ]
+                )
+                await runner.append_tool_result_images(images)
             outcome = await execute_native_loop(runner, turn, config.max_steps)
             status = outcome.status
             return outcome

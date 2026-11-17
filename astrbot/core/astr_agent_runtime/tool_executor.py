@@ -13,6 +13,7 @@ from astrbot.core.agent.handoff import HandoffTool
 from astrbot.core.agent.mcp_client import MCPTool
 from astrbot.core.agent.message import Message
 from astrbot.core.agent.run_context import ContextWrapper
+from astrbot.core.agent.runtime import get_agent_permissions
 from astrbot.core.agent.tool import FunctionTool, ToolSet
 from astrbot.core.agent.tool_executor import BaseFunctionToolExecutor
 from astrbot.core.agent_wakeup import wake_main_agent
@@ -84,12 +85,13 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
         if session is None:
             return None
         event = context.event
+        permissions = get_agent_permissions(run_context)
         stop_signal = active_event_registry.get_background_stop_signal(event)
         if stop_signal.is_set():
             return None
 
         async def complete() -> None:
-            result = None
+            result = mcp.types.CallToolResult(content=[])
             error = None
             try:
                 # Register after starting so cancellation always runs iterator cleanup.
@@ -100,7 +102,10 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
                     item = await pending_result
                     while True:
                         if isinstance(item, mcp.types.CallToolResult):
-                            result = item.model_dump(mode="json", exclude_none=True)
+                            result.content.extend(item.content)
+                            result.isError = result.isError or item.isError
+                            if item.structuredContent is not None:
+                                result.structuredContent = item.structuredContent
                         item = await anext(executor)
                 except StopAsyncIteration:
                     pass
@@ -114,6 +119,13 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
                     await executor.aclose()
                 except Exception as exc:
                     error = {"code": type(exc).__name__, "message": str(exc)}
+            if error is not None:
+                result.isError = True
+                result.content.append(
+                    mcp.types.TextContent(
+                        type="text", text=f"{error['code']}: {error['message']}"
+                    )
+                )
             try:
                 await wake_main_agent(
                     ctx=context.context,
@@ -126,15 +138,14 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
                                 "task_id": task_id,
                                 "tool_name": tool.name,
                                 "tool_args": arguments,
-                                "result": result,
-                                "error": error,
                             },
                             ensure_ascii=False,
                         )
                     ),
-                    role=event.role,
+                    role=permissions.role.value,
                     stop_signal=stop_signal,
                     agent_session=session,
+                    tool_result=(tool.name, result),
                 )
             except Exception:
                 logger.exception("Unable to deliver background tool result %s", task_id)
@@ -559,7 +570,8 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
         **tool_args,
     ) -> None:
         """Run the subagent handoff and, on completion, wake the main agent."""
-        result_text = ""
+        permissions = get_agent_permissions(run_context)
+        result = mcp.types.CallToolResult(content=[])
         tool_args = dict(tool_args)
         tool_args["image_urls"] = await cls._collect_handoff_image_urls(
             run_context,
@@ -573,12 +585,17 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
                 **tool_args,
             ):
                 if isinstance(r, mcp.types.CallToolResult):
-                    for content in r.content:
-                        if isinstance(content, mcp.types.TextContent):
-                            result_text += content.text + "\n"
+                    result.content.extend(r.content)
+                    result.isError = result.isError or r.isError
+                    if r.structuredContent is not None:
+                        result.structuredContent = r.structuredContent
         except Exception as e:
-            result_text = (
-                f"error: Background task execution failed, internal error: {e!s}"
+            result.isError = True
+            result.content.append(
+                mcp.types.TextContent(
+                    type="text",
+                    text=f"error: Background task execution failed, internal error: {e!s}",
+                )
             )
 
         event = run_context.context.event
@@ -593,7 +610,6 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
                     {
                         "task_id": task_id,
                         "tool_name": tool.name,
-                        "result": result_text,
                         "tool_args": tool_args,
                         "subagent_name": tool.agent.name,
                         "note": event.get_extra("background_note"),
@@ -601,7 +617,8 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
                     ensure_ascii=False,
                 )
             ),
-            role=event.role,
+            role=permissions.role.value,
+            tool_result=(tool.name, result),
             stop_signal=active_event_registry.get_background_stop_signal(event),
         )
 
@@ -614,20 +631,24 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
         **tool_args,
     ) -> None:
         # run the tool
-        result_text = ""
+        permissions = get_agent_permissions(run_context)
+        result = mcp.types.CallToolResult(content=[])
         try:
             async for r in cls._execute_local(
                 tool, run_context, tool_call_timeout=3600, **tool_args
             ):
-                # collect results, currently we just collect the text results
                 if isinstance(r, mcp.types.CallToolResult):
-                    result_text = ""
-                    for content in r.content:
-                        if isinstance(content, mcp.types.TextContent):
-                            result_text += content.text + "\n"
+                    result.content.extend(r.content)
+                    result.isError = result.isError or r.isError
+                    if r.structuredContent is not None:
+                        result.structuredContent = r.structuredContent
         except Exception as e:
-            result_text = (
-                f"error: Background task execution failed, internal error: {e!s}"
+            result.isError = True
+            result.content.append(
+                mcp.types.TextContent(
+                    type="text",
+                    text=f"error: Background task execution failed, internal error: {e!s}",
+                )
             )
 
         event = run_context.context.event
@@ -642,14 +663,14 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
                     {
                         "task_id": task_id,
                         "tool_name": tool.name,
-                        "result": result_text,
                         "tool_args": tool_args,
                         "note": event.get_extra("background_note"),
                     },
                     ensure_ascii=False,
                 )
             ),
-            role=event.role,
+            role=permissions.role.value,
+            tool_result=(tool.name, result),
             stop_signal=active_event_registry.get_background_stop_signal(event),
         )
 

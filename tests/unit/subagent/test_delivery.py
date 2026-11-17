@@ -347,7 +347,10 @@ async def test_native_parent_receives_child_result_with_pending_tool(
         assert wakeup.source_id
         assert wakeup.source_id in env.conversation.history
         assert wakeup.agent_session == AgentSessionRef("astrbot", parent.id)
-        assert "The tool finished" in wakeup.message_str
+        assert wakeup.tool_result is not None
+        name, result = wakeup.tool_result
+        assert name == "wait_for_child"
+        assert "The tool finished" in result.content[0].text
     else:
         # Reading the child result suppresses steering, so the tool stays foreground.
         assert not turn.done
