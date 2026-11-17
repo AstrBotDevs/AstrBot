@@ -98,9 +98,9 @@ class GroupChatContext:
         else:
             provider = self.context.get_provider_by_id(image_caption_provider_id)
             if not provider:
-                raise Exception(f"没有找到 ID 为 {image_caption_provider_id} 的提供商")
+                raise TypeError(f"没有找到 ID 为 {image_caption_provider_id} 的提供商")
         if not isinstance(provider, Provider):
-            raise Exception(f"提供商类型错误({type(provider)})，无法获取图片描述")
+            raise ConnectionError(f"提供商类型错误({type(provider)})，无法获取图片描述")
         response = await provider.text_chat(
             prompt=image_caption_prompt,
             session_id=uuid.uuid4().hex,
@@ -208,7 +208,7 @@ class GroupChatContext:
                     try:
                         url = comp.url if comp.url else comp.file
                         if not url:
-                            raise Exception("图片 URL 为空")
+                            raise ConnectionError("图片 URL 为空")
                         caption = await self.get_image_caption(
                             url,
                             cfg["image_caption_provider_id"],
