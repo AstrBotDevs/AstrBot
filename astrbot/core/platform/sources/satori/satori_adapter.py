@@ -204,10 +204,10 @@ class SatoriPlatformAdapter(Platform):
 
     async def send_identify(self) -> None:
         if not self.ws:
-            raise Exception("WebSocket连接未建立")
+            raise ConnectionError("WebSocket连接未建立")
 
         if self._is_websocket_closed(self.ws):
-            raise Exception("WebSocket连接已关闭")
+            raise ConnectionError("WebSocket连接已关闭")
 
         identify_payload = {
             "op": 3,  # IDENTIFY
@@ -870,7 +870,7 @@ class SatoriPlatformAdapter(Platform):
         user_id: str | None = None,
     ) -> dict:
         if not self.session:
-            raise Exception("HTTP session 未初始化")
+            raise ConnectionError("HTTP session 未初始化")
 
         headers = {
             "Content-Type": "application/json",
