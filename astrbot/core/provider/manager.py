@@ -860,7 +860,7 @@ class ProviderManager:
                 case _:
                     # 未知供应商抛出异常，确保inst初始化
                     # Should be unreachable
-                    raise Exception(
+                    raise ValueError(
                         f"Unknown provider type: {provider_metadata.provider_type}"
                     )
 
@@ -870,7 +870,7 @@ class ProviderManager:
                 f"Failed to instantiate provider adapter {provider_config['type']}"
                 f"({provider_config['id']}): {e}",
             )
-            raise Exception(
+            raise TypeError(
                 f"Failed to instantiate provider adapter {provider_config['type']}"
                 f"({provider_config['id']}): {e}",
             )
