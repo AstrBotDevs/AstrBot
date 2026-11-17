@@ -4,7 +4,7 @@
   },
   "chatNavigation": {
     "title": "Show Chat in the sidebar",
-    "subtitle": "Move the top Chat switch above System in the sidebar. Open it to switch to chat sessions. Saved only in this browser."
+    "subtitle": "Move the top Chat entry above System in the sidebar. On desktop, opening Chat narrows navigation to an icon rail alongside chat sessions. Use the left arrow to return. Saved only in this browser."
   },
   "sections": {
     "general": {

@@ -80,6 +80,12 @@ To replace the TOTP secret, you can do so in the TOTP management window, where y
 
 AstrBot includes a built-in ChatUI for talking to configured models directly in your browser.
 
+With the sidebar chat entry enabled under **System Settings → Appearance**, selecting **Chat** on desktop smoothly narrows the main navigation: labels fade out while icons and the logo move into the left rail, with the chat sidebar alongside it. The Chat icon becomes a **left arrow (Back to navigation)**. Select it to return to the previous page and restore the previous navigation width, or select any rail icon to navigate directly. The system settings button at the bottom of the rail is hidden in this mode; chat settings remain in the chat sidebar. Reduced-motion preferences disable the animation; narrow screens keep a single drawer.
+
+Entry mapping: **Chat sidebar → Back to navigation** moves to **Left navigation rail → Left arrow**. Disabling this appearance option keeps the existing chat switcher.
+
+![Chat dual sidebars: navigation rail and conversation list (Chinese interface)](images/chat-dual-sidebar.jpg)
+
 ChatUI supports these common workflows:
 
 - The sidebar initially loads the 30 most recent conversations. Scroll near the bottom to automatically load older conversations, with a progress bar while loading. Automatic requests pause after a failure; select **Retry** to continue.
