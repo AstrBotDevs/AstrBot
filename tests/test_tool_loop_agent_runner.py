@@ -23,6 +23,7 @@ from astrbot.core.astr_agent_runtime.tool_executor import FunctionToolExecutor
 from astrbot.core.exceptions import EmptyModelOutputError
 from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.provider.entities import LLMResponse, ProviderRequest, TokenUsage
+from astrbot.core.provider.modalities import AUDIO_NOT_RECEIVED_HINT
 from astrbot.core.provider.provider import Provider
 
 
@@ -2984,3 +2985,24 @@ async def test_compaction_invalidates_reported_usage_before_next_provider_call(
     assert len(observed) == 1
     assert observed[0][0] < 5
     assert observed[0][1] is None
+
+
+@pytest.mark.asyncio
+async def test_unsupported_audio_is_explained_to_the_model(
+    runner, mock_hooks, mock_tool_executor
+):
+    """Audio a text-only model cannot receive is replaced by a fix-it hint."""
+    provider = CapturingProvider(modalities=["text"])
+
+    await runner.reset(
+        provider=provider,
+        request=ProviderRequest(prompt="what was said?", audio_urls=["voice.wav"]),
+        run_context=ContextWrapper(context=None),
+        tool_executor=mock_tool_executor,
+        agent_hooks=mock_hooks,
+        streaming=False,
+    )
+
+    content = runner.run_context.messages[-1].content
+    assert TextPart(text=AUDIO_NOT_RECEIVED_HINT) in content
+    assert TextPart(text="[Audio]") not in content

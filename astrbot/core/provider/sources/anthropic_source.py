@@ -28,6 +28,7 @@ from astrbot.core.utils.network_utils import (
 )
 
 from ..headers import build_conversation_headers, build_provider_headers
+from ..modalities import AUDIO_NOT_RECEIVED_HINT
 from ..register import register_provider_adapter
 from .request_retry import retry_provider_request, retry_provider_request_context
 
@@ -1044,8 +1045,9 @@ class ProviderAnthropic(Provider):
                 if image_dict:
                     content.append(image_dict)
         if audio_urls:
+            # The Anthropic Messages API has no audio input block.
             for _audio_path in audio_urls:
-                content.append({"type": "text", "text": "[Audio]"})
+                content.append({"type": "text", "text": AUDIO_NOT_RECEIVED_HINT})
 
         # 如果只有主文本且没有额外内容块和图片，返回简单格式以保持向后兼容
         if (

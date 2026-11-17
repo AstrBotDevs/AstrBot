@@ -44,6 +44,7 @@ from astrbot.core.provider.entities import (
     ToolCallsResult,
 )
 from astrbot.core.provider.modalities import (
+    AUDIO_NOT_RECEIVED_HINT,
     log_context_sanitize_stats,
     sanitize_contexts_by_modalities,
 )
@@ -467,7 +468,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                 content_blocks.append({"type": "text", "text": "[Image]"})
         if not supports_audio:
             for _ in request.audio_urls:
-                content_blocks.append({"type": "text", "text": "[Audio]"})
+                content_blocks.append({"type": "text", "text": AUDIO_NOT_RECEIVED_HINT})
 
         return {"role": "user", "content": content_blocks}
 
