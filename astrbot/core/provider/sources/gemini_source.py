@@ -118,8 +118,11 @@ class ProviderGoogleGenAI(Provider):
             api_key=self.chosen_api_key,
             http_options=http_options,
         ).aio
-        # The SDK adds its own lower-case UA alongside our explicit header.
+        # SDK versions may add or normalize the UA; restore the configured value.
         self.client._api_client._http_options.headers.pop("user-agent", None)
+        self.client._api_client._http_options.headers["User-Agent"] = (
+            self.request_headers["User-Agent"]
+        )
 
     @asynccontextmanager
     async def _conversation_header(self, conversation_id: str | None):
