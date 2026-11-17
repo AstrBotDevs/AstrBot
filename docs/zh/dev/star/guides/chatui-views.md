@@ -94,6 +94,7 @@ class ViewDemo(Star):
 | `target` | 展示位置 | 创建与交互 |
 | --- | --- | --- |
 | `chat_message`（默认） | 聊天消息正文 | `event.view_result()` 创建；`AstrBotPluginView.view` 与 `filter.ui_action` 交互 |
+| `chat_workbench` | ChatUI 右侧工作台 | 消息创建的标签，或设置 `launcher=True` 后从“新工作台”主动打开 |
 | `plugin_page` | 插件独立页面，沿用现有 WebUI 导航入口 | 页面通过 `window.AstrBotPluginView` 调用插件注册的 Web API |
 
 例如，在同一插件的 `chatui_views` 中增加一个独立页面：
@@ -106,7 +107,7 @@ chatui.ViewSpec(
 )
 ```
 
-`chat_message` 不会出现在独立页面列表或 WebUI 侧栏中；只提供聊天卡片的插件没有侧栏页面入口。`plugin_page` 不能通过 `event.view_result()` 创建聊天卡片，也不能声明聊天 `actions`。两种 target 复用同一份 `AstrBotPluginView` bridge、初始化接口和主题上下文。聊天卡片使用 `bridge.view` 能力；独立页面使用插件 Web API、上传下载和 SSE 能力。宿主分别校验可用操作。
+`chat_message` 和 `chat_workbench` 不会出现在独立页面列表或 WebUI 侧栏中；只提供聊天卡片的插件没有侧栏页面入口。`plugin_page` 不能通过 `event.view_result()` 创建聊天卡片，也不能声明聊天 `actions`。三种 target 复用同一份 `AstrBotPluginView` bridge、初始化接口和主题上下文。聊天卡片使用 `bridge.view` 能力；独立页面使用插件 Web API、上传下载和 SSE 能力。宿主分别校验可用操作。
 
 已有插件未声明 `ViewSpec` 的 `views/`（或兼容的 `pages/`）目录仍自动发现为独立页面。省略 `target` 的现有 `ViewSpec` 保持聊天卡片行为。独立页面的开发方式见[插件可视化视图](./plugin-pages.md)。
 
@@ -219,3 +220,51 @@ button { color: var(--astrbot-color-primary); border-color: var(--astrbot-color-
 - 删除会话会清理对应卡片与交互记录；删除或改写来源消息后，该卡片不再可操作。
 
 HTTP 接口使用 `chat` scope：`GET /api/v1/chat/views/{view_id}` 获取快照，`POST .../actions` 提交操作，`GET .../actions/{interaction_id}` 查询已接受操作。插件前端应使用 SDK，不自行构造登录请求。
+
+## 工作台与常驻视图
+
+`target="chat_workbench"` 将 iframe 放在 ChatUI 右侧，消息里保留重新打开的入口。创建时可以通过 `event.view_result(name="preview", title="notes.pdf", data={...}, text="已打开文档。")` 指定标签标题。消息创建的标签跟随所属会话；没有工作台的宿主（例如线程面板）仍以内联方式展示。
+
+常驻视图不需要消息或工具调用。注册时增加 `launcher=True`：
+
+```python
+chatui.ViewSpec(
+    name="context",
+    entry=Path("views/context/index.html"),
+    target="chat_workbench",
+    launcher=True,
+    title="上下文用量",
+    description="查看当前会话的容量和来源分布。",
+)
+```
+
+用户从 ChatUI header 右侧打开工作台，点击标签栏的「＋」，进入“新工作台”选择已启用插件的常驻视图。同一个注册视图只打开一个标签。常驻标签在当前 ChatUI 页面生命周期内跨会话保留；刷新页面后可再次从列表打开。
+
+常驻视图复用独立插件页面的 Web API、文件传输和 SSE bridge，不声明消息 `actions`，也没有 `context.view` 消息快照。`sessionId` 是当前打开的聊天会话 ID；未打开会话时为 `null`。切换会话会更新 context，不重载 iframe：
+
+```javascript
+const bridge = window.AstrBotPluginView;
+await bridge.ready();
+bridge.onContext(({ sessionId }) => {
+  // Fetch session-specific aggregates from your authenticated plugin API.
+  if (sessionId) bridge.apiGet("usage", { session_id: sessionId });
+});
+```
+
+插件后端必须用 `request.username` 校验会话归属，不能把前端传入的 `sessionId` 当作授权。异步请求要避免旧会话的响应覆盖新会话。三个 target 继续共用主题 CSS tokens 和 `onContext()`。
+
+标签和操作按钮位于主 header，内容区不重复显示标题栏。可拖动工作台左边界调整宽度，也可聚焦分隔线后用左右键调整。收起保留标签，展开和收起采用缓动动画并遵守减少动态效果设置；窄屏使用全屏面板。
+
+
+## 从常驻视图填入或发送消息
+
+仅 `chat_workbench` 常驻视图（没有 `context.view`）提供以下接口，通常绑定到用户点击操作：
+
+```javascript
+await bridge.chat.fill("请帮我修改这段文字。");
+await bridge.chat.send("请总结我选中的内容。");
+```
+
+`fill` 将文字追加到当前草稿并聚焦聊天框；`send` 直接发到当前会话，保留已有草稿与暂存附件。没有打开会话、会话已经切换或正在生成时，发送会被拒绝。Promise 在发送请求被接受时完成，不等待 bot 回复完成。
+
+如果插件允许 agent 编辑文档，应在插件后端记录用户提交时的选区和版本，让工具只接收选区 ID 与替换文字。不要依赖提示词要求 agent 保留全文。工具保存后可以通过插件 SSE 通知常驻视图重新读取，客户端仍需保护未保存的本地编辑。

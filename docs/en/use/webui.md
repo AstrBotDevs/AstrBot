@@ -264,3 +264,11 @@ Modify the `password` in the `dashboard` configuration in the data/cmd_config.js
 
 > [!TIP]
 > For more details, see [FAQ - Forgot Dashboard Password](/en/faq.md#forgot-dashboard-password).
+
+## ChatUI workbench
+
+The workbench button at the right of the ChatUI header opens a reading and visualization area. Click **+** in its tab bar to open **New workbench**, then choose a registered plugin view. A context-usage view can follow the active session; tools and plugin messages can also open file previews directly.
+
+Tabs sit in the main header. Drag the left divider to resize, expand for full-screen reading, or hide and reopen using the same header control. Message-created file tabs belong to their original session; launcher views stay open across sessions. This is a new entry point and does not replace standalone plugin pages in the extensions sidebar.
+
+See [ChatUI cards and workbench views](../dev/star/guides/chatui-views.md#workbench-and-launcher-views) for plugin development.

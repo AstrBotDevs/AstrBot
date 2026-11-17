@@ -41,8 +41,12 @@ from astrbot.dashboard.services.plugin_service import PluginService
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("with_pages", [False, True])
-async def test_sidebar_plugin_list_excludes_chat_views(views, tmp_path, with_pages):
+@pytest.mark.parametrize("target", ["chat_message", "chat_workbench"])
+async def test_sidebar_plugin_list_excludes_chat_views(
+    views, tmp_path, with_pages, target
+):
     _, _, plugin, _ = views
+    plugin.star_cls.chatui_views[0].target = target
     plugin.root_dir_name = tmp_path.name
     if with_pages:
         for name in ("settings", "legacy"):
@@ -88,6 +92,25 @@ def test_view_targets_default_to_chat_and_validate_page_actions():
             target="plugin_page",
             actions=["demo:increment"],
         )
+
+
+@pytest.mark.asyncio
+async def test_workbench_tool_result_emits_persistent_target_and_title(views):
+    store, event, plugin, _ = views
+    plugin.star_cls.chatui_views[0].target = "chat_workbench"
+    result = event.view_result(
+        name="results",
+        title="Notes.md",
+        data={"url": "files/notes.md"},
+        text="Opened Notes.md",
+    )
+    await core_views.emit_view(event, __name__, result)
+    part = event.send.await_args.args[0].chain[0].data
+    assert part["target"] == "chat_workbench"
+    assert part["title"] == "Notes.md"
+    assert store.get(part["id"])["data"] == {"url": "files/notes.md"}
+    with pytest.raises(ValueError, match="title"):
+        chatui.ViewResult(data={}, title="Cannot rename through an update")
 
 
 @pytest.mark.asyncio
@@ -739,3 +762,47 @@ async def test_views_and_control_events_do_not_split_saved_replies(scenario):
         assert parts[-1] == {"type": "plain", "text": "Your reading list is ready."}
         assert saved[2] == {"duration": 3}
     assert run.status == "completed"
+
+
+@pytest.mark.asyncio
+async def test_workbench_catalog_only_exposes_enabled_launcher_views(views, tmp_path):
+    _, _, plugin, _ = views
+    plugin.root_dir_name = tmp_path.name
+    spec = plugin.star_cls.chatui_views[0]
+    spec.target = "chat_workbench"
+    spec.launcher = True
+    spec.actions = []
+    spec.title = "Context usage"
+    spec.description = "Inspect the current session."
+    manager = SimpleNamespace(
+        plugin_store_path=tmp_path.parent,
+        context=SimpleNamespace(get_all_stars=lambda: [plugin]),
+    )
+    pages = PluginPageService(manager, config={"dashboard": {"jwt_secret": "workbench-unit-test-secret-long-enough"}})
+    app = FastAPI()
+    app.state.services = SimpleNamespace(plugin_pages=pages)
+    app.dependency_overrides[chat_routes.require_chat_scope] = lambda: AuthContext(username="alice", scopes=["chat"], via="jwt")
+    app.include_router(chat_routes.router, prefix="/api/v1")
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as client:
+        catalog = (await client.get("/api/v1/chat/workbench/views")).json()["data"]
+        assert len(catalog) == 1
+        assert catalog[0]["title"] == "Context usage"
+        assert await pages.serialize_plugin_pages(plugin) == []
+        path = f"/api/v1/chat/workbench/views/{plugin.name}/{spec.name}"
+        response = await client.get(path)
+        assert response.status_code == 200
+        assert "/_t/" in response.json()["data"]["page"]["content_path"]
+        spec.launcher = False
+        assert (await client.get(path)).status_code == 404
+        assert (await client.get("/api/v1/chat/workbench/views")).json()["data"] == []
+        spec.launcher = True
+        plugin.activated = False
+        assert (await client.get(path)).status_code == 404
+        assert (await client.get("/api/v1/chat/workbench/views")).json()["data"] == []
+
+
+def test_workbench_launcher_requires_correct_target_and_web_api():
+    with pytest.raises(ValueError):
+        chatui.ViewSpec(name="context", entry=Path("views/context/index.html"), launcher=True)
+    with pytest.raises(ValueError):
+        chatui.ViewSpec(name="context", entry=Path("views/context/index.html"), target="chat_workbench", launcher=True, actions=["run"])

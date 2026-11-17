@@ -78,6 +78,7 @@ Set `target` on the registered `ViewSpec`, rather than on `event.view_result()`:
 | `target` | Location | Creation and interaction |
 | --- | --- | --- |
 | `chat_message` (default) | Chat message body | Create with `event.view_result()`; use `AstrBotPluginView.view` and `filter.ui_action` |
+| `chat_workbench` | ChatUI right-hand workbench | Message-created tabs, or `launcher=True` views opened from **New workbench** |
 | `plugin_page` | Independent plugin page in the existing WebUI navigation | Use `window.AstrBotPluginView` to call registered plugin Web APIs |
 
 For example, add an independent page to the same plugin's `chatui_views`:
@@ -90,7 +91,7 @@ chatui.ViewSpec(
 )
 ```
 
-Chat message views are excluded from the independent page list and the WebUI sidebar. A plugin providing only chat message views has no sidebar page entry. Plugin pages cannot be created with `event.view_result()` or declare chat `actions`. Both targets share the same `AstrBotPluginView` bridge, initialization API, and theme context. Chat cards use `bridge.view`; independent pages use plugin Web APIs, file transfers, and SSE. Each host validates its supported operations.
+Chat message and workbench views are excluded from the independent page list and the WebUI sidebar. A plugin providing only chat message views has no sidebar page entry. Plugin pages cannot be created with `event.view_result()` or declare chat `actions`. All three targets share the same `AstrBotPluginView` bridge, initialization API, and theme context. Chat cards use `bridge.view`; independent pages use plugin Web APIs, file transfers, and SSE. Each host validates its supported operations.
 
 Undeclared directories under `views/` (or the legacy `pages/`) continue to be discovered as independent pages. Existing `ViewSpec` declarations without `target` remain chat cards. See [plugin views](./plugin-pages.md) for independent page development.
 
@@ -181,3 +182,51 @@ Handlers can also yield ordinary message results or explicitly request a model r
 - Session deletion removes its view records. Removed or edited-away source messages can no longer authorize a card.
 
 The `chat` scope covers `GET /api/v1/chat/views/{view_id}`, `POST .../actions`, and `GET .../actions/{interaction_id}`. Frontend plugins should use the SDK rather than manage authentication themselves.
+
+## Workbench and launcher views
+
+`target="chat_workbench"` renders the iframe beside the conversation, with a reopening entry in its message. Set the tab title with `event.view_result(name="preview", title="notes.pdf", data={...}, text="Document opened.")`. Message-created tabs belong to their session. Hosts without a workbench, such as thread panels, render these views inline.
+
+A launcher view needs no message or tool call:
+
+```python
+chatui.ViewSpec(
+    name="context",
+    entry=Path("views/context/index.html"),
+    target="chat_workbench",
+    launcher=True,
+    title="Context usage",
+    description="Inspect the current session's capacity and sources.",
+)
+```
+
+Open the workbench from the ChatUI header, then click **+** to open **New workbench** and select an enabled plugin view. Each registered view has one tab. Launcher tabs remain open across session switches for the current ChatUI page lifetime; reopen them from the catalog after a page refresh.
+
+Launcher views reuse the standalone plugin page host and its authenticated plugin Web APIs, file transfers, and SSE bridge. They do not declare message `actions` or receive a `context.view` snapshot. `sessionId` identifies the active chat session, or is `null` when none is open. Switching sessions updates context without reloading the iframe:
+
+```javascript
+const bridge = window.AstrBotPluginView;
+await bridge.ready();
+bridge.onContext(({ sessionId }) => {
+  // Fetch session-specific aggregates from your authenticated plugin API.
+  if (sessionId) bridge.apiGet("usage", { session_id: sessionId });
+});
+```
+
+The plugin backend must validate session ownership against `request.username`; a client-supplied session ID is not authorization. Guard asynchronous requests against stale responses after a session switch. All targets share theme CSS tokens and `onContext()`.
+
+Tabs and controls live in the main header. Drag the left divider to resize, or focus it and use the arrow keys. Hiding the panel keeps its tabs. Motion follows the reduced-motion preference; narrow screens use a full-screen panel.
+
+
+## Fill or send a chat message from a resident view
+
+These methods are available only to resident `chat_workbench` views without `context.view`. Bind them to user actions:
+
+```javascript
+await bridge.chat.fill("Please revise this passage.");
+await bridge.chat.send("Please summarize my selection.");
+```
+
+`fill` appends text to the current draft and focuses the composer. `send` sends directly to the current session while preserving the existing draft and staged attachments. Sending is rejected if there is no session, the session changed, or generation is already running. The promise settles when the send request is accepted, rather than after the bot finishes replying.
+
+For agent-assisted document editing, record the user's selection and revision in the plugin backend. Let the tool accept a selection ID and replacement text, and enforce the edit range in code. After saving, use plugin SSE to notify the resident view to reload the document while protecting unsaved local edits.

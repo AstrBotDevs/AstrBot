@@ -59,7 +59,7 @@ function setupBridge(target = "chat_message") {
       primaryText: "#111111",
       border: "#dddddd",
     },
-    ...(target === "chat_message"
+    ...(target !== "plugin_page"
       ? { view: { id: "reading", revision: 1, data: { count: 0 } } }
       : {}),
   };
@@ -77,7 +77,7 @@ function setupBridge(target = "chat_message") {
         origin,
         data: {
           channel: "astrbot-plugin-page",
-          ...(target === "chat_message" ? { session: "host-session" } : {}),
+          ...(target !== "plugin_page" ? { session: "host-session" } : {}),
           ...message,
         },
       });
@@ -89,7 +89,7 @@ function setupBridge(target = "chat_message") {
   };
 }
 
-for (const target of ["chat_message", "plugin_page"]) {
+for (const target of ["chat_message", "chat_workbench", "plugin_page"]) {
   test(`${target} shares context, automatic CSS tokens, and live theme updates`, async () => {
     const env = setupBridge(target);
     assert.equal(env.sent[0].kind, "ready");
@@ -99,7 +99,7 @@ for (const target of ["chat_message", "plugin_page"]) {
     env.deliver({ kind: "context", context: env.context });
     assert.equal((await ready).target, target);
     const revisions = [];
-    if (target === "chat_message") {
+    if (target !== "plugin_page") {
       env.bridge.view.subscribe((view) => revisions.push(view.revision));
     }
     assert.equal(env.attributes.get("data-theme"), "light");
@@ -141,7 +141,7 @@ for (const target of ["chat_message", "plugin_page"]) {
     env.deliver({ kind: "context", context: { isDark: false } });
     assert.equal(env.styles.get("color-scheme"), "light");
     assert.deepEqual(changes, [false, true, true]);
-    assert.deepEqual(revisions, target === "chat_message" ? [1] : []);
+    assert.deepEqual(revisions, target !== "plugin_page" ? [1] : []);
   });
 }
 
@@ -271,4 +271,22 @@ test("chat views report growth and shrinkage without duplicate resize messages",
       .map((message) => message.height),
     [418, 568, 208],
   );
+});
+
+
+test("launcher views receive session changes and use plugin APIs without a message snapshot", async () => {
+  const harness = setupBridge("plugin_page");
+  harness.context.target = "chat_workbench";
+  harness.context.sessionId = "session-one";
+  harness.deliver({kind: "context", context: harness.context});
+  await harness.bridge.ready();
+  assert.equal(harness.bridge.getContext().sessionId, "session-one");
+  const result = harness.bridge.apiGet("usage", {session_id: "session-one"});
+  const request = harness.sent.at(-1);
+  assert.equal(request.action, "api:get");
+  harness.deliver({kind: "response", requestId: request.requestId, ok: true, data: {count: 1}});
+  assert.equal((await result).count, 1);
+  await assert.rejects(harness.bridge.view.action("run"), {code: "UNSUPPORTED_CAPABILITY"});
+  harness.deliver({kind: "context", context: {sessionId: "session-two"}});
+  assert.equal(harness.bridge.getContext().sessionId, "session-two");
 });

@@ -296,7 +296,7 @@
                         />
                       </div>
 
-                      <PluginViewCard
+                      <PluginViewMessage
                         v-else-if="part.type === 'view'"
                         :part="part"
                         :is-dark="isDark"
@@ -527,7 +527,7 @@
 </template>
 
 <script setup lang="ts">
-import PluginViewCard from "@/components/chat/message_list_comps/PluginViewCard.vue";
+import PluginViewMessage from "@/components/chat/message_list_comps/PluginViewMessage.vue";
 import MessageContentTransition from "@/components/chat/MessageContentTransition.vue";
 import { computed, nextTick, reactive, ref } from "vue";
 import { Copy, Info, SquarePen, CodeXml } from "@lucide/vue";

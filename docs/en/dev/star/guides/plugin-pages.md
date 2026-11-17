@@ -643,7 +643,7 @@ The server injects `data-theme` into returned HTML to reduce initial flashing. I
 
 ### Following user-selected colors
 
-Both targets use the same `AstrBotPluginView` bridge. It injects these CSS tokens on `<html>` and updates them on initialization, light/dark changes, and palette changes. No manual listener or CSS assignment is needed.
+All targets use the same `AstrBotPluginView` bridge. It injects these CSS tokens on `<html>` and updates them on initialization, light/dark changes, and palette changes. No manual listener or CSS assignment is needed.
 
 | CSS token | Purpose |
 | --- | --- |
@@ -669,7 +669,7 @@ button {
 }
 ```
 
-The bridge only injects variables; it does not force a page background. Chat cards can keep `background: transparent`. Existing `themeColors.primary` / `secondary` remain available. Both targets use `bridge.onContext(({ isDark, themeColors, locale }) => { ... })` when additional JavaScript behavior is needed.
+The bridge only injects variables; it does not force a page background. Chat cards can keep `background: transparent`. Existing `themeColors.primary` / `secondary` remain available. All targets use `bridge.onContext(({ isDark, themeColors, locale }) => { ... })` when additional JavaScript behavior is needed.
 
 ## Static Asset Paths
 

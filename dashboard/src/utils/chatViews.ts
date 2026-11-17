@@ -1,4 +1,5 @@
 import type { InjectionKey } from "vue";
+import type { MessagePart } from "@/composables/useMessages";
 import { fetchWithAuth } from "@/api/http";
 
 export interface ViewActionInput {
@@ -13,9 +14,44 @@ export interface ViewReceipt {
   error?: { code: string; message: string } | null;
 }
 
-export const viewActionKey: InjectionKey<
-  (id: string, input: ViewActionInput) => Promise<ViewReceipt>
-> = Symbol("chat-view-action");
+export type ViewActionHandler = (
+  id: string,
+  input: ViewActionInput,
+) => Promise<ViewReceipt>;
+export const viewActionKey: InjectionKey<ViewActionHandler> =
+  Symbol("chat-view-action");
+
+export const workbenchChatKey: InjectionKey<(input: {
+  mode: "fill" | "send";
+  text: string;
+  sessionId: string | null;
+}) => Promise<{ sessionId: string | null }>> = Symbol("workbench-chat");
+
+export interface WorkbenchView {
+  plugin_name: string;
+  display_name: string;
+  name: string;
+  title: string;
+  description: string;
+}
+
+export interface WorkbenchTab {
+  page?: WorkbenchView;
+  launcher?: boolean;
+  part: MessagePart;
+  action?: ViewActionHandler;
+}
+
+export const workbenchKey: InjectionKey<
+  | {
+      open: (
+        part: MessagePart,
+        action?: ViewActionHandler,
+        automatic?: boolean,
+      ) => void;
+    }
+  | undefined
+> = Symbol("chat-workbench");
 
 /** Keep streaming chat output after the action receipt resolves the SDK call. */
 export function streamViewAction(

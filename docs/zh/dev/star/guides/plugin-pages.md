@@ -27,7 +27,7 @@ astrbot_plugin_view_demo/
 
 用户可以在 WebUI 的插件页点击插件卡片进入插件详情页，然后打开插件声明的可视化视图。
 
-页面继续支持目录自动发现，无须增加 Python 声明。如果插件同时提供聊天卡片，可以在 `Star.chatui_views` 中用 `chatui.ViewSpec(name="settings", entry=Path("views/settings/index.html"), target="plugin_page")` 显式声明独立页面。`target` 默认值是 `chat_message`，因此独立页面注册时必须明确设置 `plugin_page`。两种 target 的区别见 [ChatUI 交互卡片](./chatui-views.md#选择展示位置)；独立页面仍使用本文的 `AstrBotPluginView` bridge 和插件 Web API。
+页面继续支持目录自动发现，无须增加 Python 声明。如果插件同时提供聊天卡片，可以在 `Star.chatui_views` 中用 `chatui.ViewSpec(name="settings", entry=Path("views/settings/index.html"), target="plugin_page")` 显式声明独立页面。`target` 默认值是 `chat_message`，因此独立页面注册时必须明确设置 `plugin_page`。所有 target 的区别见 [ChatUI 交互卡片](./chatui-views.md#选择展示位置)；独立页面仍使用本文的 `AstrBotPluginView` bridge 和插件 Web API。
 
 ## 开发流程
 
@@ -643,7 +643,7 @@ body {
 
 ### 跟随用户配色
 
-两种 target 使用同一个 `AstrBotPluginView` bridge。它在 `<html>` 上注入以下 CSS tokens，并在初始化、切换深浅色或主题配色变化时自动更新，无须手动监听再赋值。
+所有 target 使用同一个 `AstrBotPluginView` bridge。它在 `<html>` 上注入以下 CSS tokens，并在初始化、切换深浅色或主题配色变化时自动更新，无须手动监听再赋值。
 
 | CSS token | 用途 |
 | --- | --- |
@@ -669,7 +669,7 @@ button {
 }
 ```
 
-bridge 只注入变量，不强制设置页面背景；聊天卡片可继续使用 `background: transparent`。现有 `themeColors.primary` / `secondary` 仍保留。需要额外逻辑时，两种 target 都使用 `bridge.onContext(({ isDark, themeColors, locale }) => { ... })`。
+bridge 只注入变量，不强制设置页面背景；聊天卡片可继续使用 `background: transparent`。现有 `themeColors.primary` / `secondary` 仍保留。需要额外逻辑时，所有 target 都使用 `bridge.onContext(({ isDark, themeColors, locale }) => { ... })`。
 
 ## 静态资源路径
 

@@ -4077,6 +4077,21 @@ export type ReceivePlatformWebhookResponse = (unknown);
 
 export type ReceivePlatformWebhookError = unknown;
 
+export type ListWorkbenchViewsResponse = (SuccessEnvelope);
+
+export type ListWorkbenchViewsError = unknown;
+
+export type GetWorkbenchViewData = {
+    path: {
+        plugin_name: string;
+        view_name: string;
+    };
+};
+
+export type GetWorkbenchViewResponse = (SuccessEnvelope);
+
+export type GetWorkbenchViewError = (unknown);
+
 export type GetChatViewApiV1ChatViewsViewIdGetData = {
     path: {
         view_id: string;
