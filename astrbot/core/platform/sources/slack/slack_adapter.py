@@ -438,7 +438,7 @@ class SlackAdapter(Platform):
                 logger.error(
                     f"Failed to download slack file: {resp.status} {await resp.text()}",
                 )
-                raise Exception(f"下载文件失败: {resp.status}")
+                raise ConnectionError(f"下载文件失败: {resp.status}")
 
     async def run(self) -> None:
         self.bot_self_id = await self.get_bot_user_id()
