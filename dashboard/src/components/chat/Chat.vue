@@ -613,6 +613,7 @@ import {
   provide,
   reactive,
   ref,
+  toRef,
   watch,
 } from "vue";
 import { useRoute, useRouter } from "vue-router";
@@ -645,6 +646,7 @@ import ChatLoadError from "@/components/chat/ChatLoadError.vue";
 import ThreadPanel from "@/components/chat/ThreadPanel.vue";
 import ChatWorkbench from "@/components/chat/ChatWorkbench.vue";
 import { workbenchChatKey } from "@/utils/chatViews";
+import { chatPreferences } from "@/utils/chatPreferences";
 import { useChatWorkbench } from "@/composables/useChatWorkbench";
 import WorkspaceFilesPanel from "@/components/chat/WorkspaceFilesPanel.vue";
 import RefsSidebar from "@/components/chat/message_list_comps/RefsSidebar.vue";
@@ -676,7 +678,7 @@ import {
   type ProviderMetadataSource,
 } from "@/utils/providerMetadata";
 import { useToast } from "@/utils/toast";
-import { readChatDraft, writeChatDraft } from "@/utils/chatDraftStorage.mjs";
+import { readChatDraft, writeChatDraft } from "@/utils/chatDraftStorage";
 
 const props = withDefaults(
   defineProps<{ chatboxMode?: boolean; active?: boolean }>(),
@@ -928,13 +930,13 @@ const activeSessionPagination = computed(() =>
 );
 
 const transportMode = ref<TransportMode>(
-  (localStorage.getItem("chat.transportMode") as TransportMode) === "websocket"
+  chatPreferences().global.transportMode === "websocket"
     ? "websocket"
     : "sse",
 );
 
 watch(transportMode, (mode) => {
-  localStorage.setItem("chat.transportMode", mode);
+  chatPreferences((preferences) => { preferences.global.transportMode = mode; });
 });
 
 watch(draft, (value) => {
@@ -1009,7 +1011,7 @@ const isEmptyChat = computed(
     !loadingMessages.value &&
     !activeMessages.value.length,
 );
-const { state: workbench, closeTab: closeWorkbenchTab, openPage: openWorkbenchPage } = useChatWorkbench(currSessionId);
+const { state: workbench, closeTab: closeWorkbenchTab, openPage: openWorkbenchPage } = useChatWorkbench(currSessionId, toRef(chatHeader, "workbenchWidth"));
 const workbenchVisible = computed(() =>
   Boolean(workbench.value?.open && !isProviderWorkspace.value && !selectedProject.value),
 );
@@ -1107,25 +1109,9 @@ const {
   setSelection: setProviderSelection,
 } = useProviderModelSelection();
 
-const SESSION_PROVIDER_STORAGE_PREFIX = "chat.sessionProvider.";
-
 function readSessionProviderSelection(sessionId: string) {
-  try {
-    const raw = localStorage.getItem(
-      SESSION_PROVIDER_STORAGE_PREFIX + sessionId,
-    );
-    if (!raw) return null;
-    const parsed = JSON.parse(raw);
-    if (parsed && typeof parsed.providerId === "string" && parsed.providerId) {
-      return {
-        providerId: parsed.providerId,
-        modelName: typeof parsed.modelName === "string" ? parsed.modelName : "",
-      };
-    }
-  } catch {
-    // Ignore corrupted entries.
-  }
-  return null;
+  const selection = chatPreferences().sessions[sessionId]?.provider;
+  return selection?.providerId ? selection : null;
 }
 
 function writeSessionProviderSelection(
@@ -1133,21 +1119,11 @@ function writeSessionProviderSelection(
   selection: { providerId?: string; modelName?: string } | null,
 ) {
   if (!sessionId) return;
-  try {
-    if (!selection?.providerId) {
-      localStorage.removeItem(SESSION_PROVIDER_STORAGE_PREFIX + sessionId);
-      return;
-    }
-    localStorage.setItem(
-      SESSION_PROVIDER_STORAGE_PREFIX + sessionId,
-      JSON.stringify({
-        providerId: selection.providerId,
-        modelName: selection.modelName || "",
-      }),
-    );
-  } catch {
-    // Session model persistence must not block chat flows.
-  }
+  chatPreferences((preferences) => {
+    const session = (preferences.sessions[sessionId] ||= {});
+    if (selection?.providerId) session.provider = { providerId: selection.providerId, modelName: selection.modelName || "" };
+    else delete session.provider;
+  });
 }
 
 // Remember the model picked by the user for the active session.
@@ -1373,7 +1349,7 @@ function sessionTitle(session: Session) {
 function syncSelectedTokenProvider() {
   if (typeof window === "undefined") return;
   selectedTokenProviderId.value =
-    localStorage.getItem("selectedProvider") || "";
+    chatPreferences().global.provider?.providerId || "";
 }
 
 async function loadTokenProviders() {

@@ -238,9 +238,9 @@ chatui.ViewSpec(
 )
 ```
 
-用户从 ChatUI header 右侧打开工作台，点击标签栏的「＋」，进入“新工作台”选择已启用插件的常驻视图。同一个注册视图只打开一个标签。常驻标签在当前 ChatUI 页面生命周期内跨会话保留；刷新页面后可再次从列表打开。
+用户从 ChatUI header 右侧打开工作台，点击标签栏的「＋」，进入“新工作台”选择已启用插件的常驻视图。每个会话中，同一个注册视图只打开一个标签。消息标签、常驻视图和“新工作台”都属于当前会话；切换会话时恢复各自的标签、选中项和展开/收起状态，刷新后从本地 preferences 恢复。关闭的标签不会因历史消息加载而重新打开。
 
-常驻视图复用独立插件页面的 Web API、文件传输和 SSE bridge，不声明消息 `actions`，也没有 `context.view` 消息快照。`sessionId` 是当前打开的聊天会话 ID；未打开会话时为 `null`。切换会话会更新 context，不重载 iframe：
+常驻视图复用独立插件页面的 Web API、文件传输和 SSE bridge，不声明消息 `actions`，也没有 `context.view` 消息快照。`sessionId` 是当前打开的聊天会话 ID；未打开会话时为 `null`。切换会话时重新挂载对应会话的视图，并传入该会话的 context：
 
 ```javascript
 const bridge = window.AstrBotPluginView;
@@ -268,3 +268,19 @@ await bridge.chat.send("请总结我选中的内容。");
 `fill` 将文字追加到当前草稿并聚焦聊天框；`send` 直接发到当前会话，保留已有草稿与暂存附件。没有打开会话、会话已经切换或正在生成时，发送会被拒绝。Promise 在发送请求被接受时完成，不等待 bot 回复完成。
 
 如果插件允许 agent 编辑文档，应在插件后端记录用户提交时的选区和版本，让工具只接收选区 ID 与替换文字。不要依赖提示词要求 agent 保留全文。工具保存后可以通过插件 SSE 通知常驻视图重新读取，客户端仍需保护未保存的本地编辑。
+
+
+### 本地偏好存储
+
+`astrbot.chat.preferences` 的结构为 `{version: 1, users: {[username]: {global, sessions: {[sessionId]: preferences}}}}`。工作台只保存引用和展示元数据；iframe 地址、鉴权 token、view 数据和交互回调不会落入 preferences，恢复时重新获取或绑定。
+
+| 原 key | 当前用户 preferences 中的位置 |
+| --- | --- |
+| `selectedProvider`、`selectedProviderModel` | `global.provider` |
+| `chat.sessionProvider.<id>` | `sessions[id].provider` |
+| `astrbot.chat.draft.<id>` | `sessions[id].draft` |
+| `astrbot.chat.draft.new` | `global.draft` |
+| `chat.selectedConfigId`、`chat.transportMode`、`chat.sttProvider` | `global.configId`、`global.transportMode`、`global.sttProvider` |
+| `chat.projectExpandedIds`、`chatNavigationInSidebar` | `global.expandedProjectIds`、`global.navigationInSidebar` |
+
+消息标签、常驻视图、“新工作台”、选中项、展开/收起状态和已关闭记录统一保存在 `sessions[id].workbench`。`global.workbench` 保存共用宽度及尚未打开会话时的工作台；旧版全局常驻标签仅保留在这个新对话工作台中。偏好数据不作为授权，恢复 view 仍经过后端鉴权。

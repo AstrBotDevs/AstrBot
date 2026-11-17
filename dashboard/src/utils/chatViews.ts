@@ -47,7 +47,7 @@ export const workbenchKey: InjectionKey<
       open: (
         part: MessagePart,
         action?: ViewActionHandler,
-        automatic?: boolean,
+        automatic?: "history" | "live",
       ) => void;
     }
   | undefined

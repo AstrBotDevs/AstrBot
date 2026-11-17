@@ -1391,7 +1391,8 @@ onMounted(async () => {
         </v-list-item-title>
       </v-list-item>
       </StyledMenu>
-      <div v-if="isChatPath" id="chat-workbench-header" />
+      <!-- Keep the Teleport destination mounted while ChatUI leaves or re-enters. -->
+      <div v-show="isChatPath" id="chat-workbench-header" />
       <!-- Custom caption buttons on Windows, where the native title bar is disabled. -->
       <div v-if="isWindowsDesktop" class="header-caption-btns">
         <v-btn

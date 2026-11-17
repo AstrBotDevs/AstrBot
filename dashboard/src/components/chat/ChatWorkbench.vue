@@ -38,7 +38,7 @@
           >
             <div
               v-for="tab in tabs"
-              :key="String(tab.part.id)"
+              :key="`${sessionId || ''}:${tab.part.id}`"
               class="workbench-tab"
               :class="{ active: String(tab.part.id) === activeId }"
             >
@@ -121,7 +121,7 @@
         v-for="tab in tabs"
         v-show="String(tab.part.id) === activeId"
         :id="`workbench-panel-${tab.part.id}`"
-        :key="String(tab.part.id)"
+        :key="`${sessionId || ''}:${tab.part.id}`"
         class="workbench-content"
         role="tabpanel"
         :aria-labelledby="`workbench-tab-${tab.part.id}`"

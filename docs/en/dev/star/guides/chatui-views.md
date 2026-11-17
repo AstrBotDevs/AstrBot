@@ -200,9 +200,9 @@ chatui.ViewSpec(
 )
 ```
 
-Open the workbench from the ChatUI header, then click **+** to open **New workbench** and select an enabled plugin view. Each registered view has one tab. Launcher tabs remain open across session switches for the current ChatUI page lifetime; reopen them from the catalog after a page refresh.
+Open the workbench from the ChatUI header, then click **+** to open **New workbench** and select an enabled plugin view. Each registered view has one tab per session. All tabs, including resident views and the launcher, belong to their chat session. Switching sessions restores that session's tabs, active selection, and open/hidden state; refreshing restores them from local preferences. Loading historical messages does not reopen closed tabs.
 
-Launcher views reuse the standalone plugin page host and its authenticated plugin Web APIs, file transfers, and SSE bridge. They do not declare message `actions` or receive a `context.view` snapshot. `sessionId` identifies the active chat session, or is `null` when none is open. Switching sessions updates context without reloading the iframe:
+Launcher views reuse the standalone plugin page host and its authenticated plugin Web APIs, file transfers, and SSE bridge. They do not declare message `actions` or receive a `context.view` snapshot. `sessionId` identifies the active chat session, or is `null` when none is open. Switching sessions mounts the selected session's views with their own context:
 
 ```javascript
 const bridge = window.AstrBotPluginView;
@@ -230,3 +230,19 @@ await bridge.chat.send("Please summarize my selection.");
 `fill` appends text to the current draft and focuses the composer. `send` sends directly to the current session while preserving the existing draft and staged attachments. Sending is rejected if there is no session, the session changed, or generation is already running. The promise settles when the send request is accepted, rather than after the bot finishes replying.
 
 For agent-assisted document editing, record the user's selection and revision in the plugin backend. Let the tool accept a selection ID and replacement text, and enforce the edit range in code. After saving, use plugin SSE to notify the resident view to reload the document while protecting unsaved local edits.
+
+
+### Local preference storage
+
+`astrbot.chat.preferences` stores `{version: 1, users: {[username]: {global, sessions: {[sessionId]: preferences}}}}`. Workbench layouts contain references and display metadata only; iframe URLs, access tokens, view payloads, and action callbacks are fetched or rebound after restoration.
+
+| Previous key | Location inside the current user's preferences |
+| --- | --- |
+| `selectedProvider`, `selectedProviderModel` | `global.provider` |
+| `chat.sessionProvider.<id>` | `sessions[id].provider` |
+| `astrbot.chat.draft.<id>` | `sessions[id].draft` |
+| `astrbot.chat.draft.new` | `global.draft` |
+| `chat.selectedConfigId`, `chat.transportMode`, `chat.sttProvider` | `global.configId`, `global.transportMode`, `global.sttProvider` |
+| `chat.projectExpandedIds`, `chatNavigationInSidebar` | `global.expandedProjectIds`, `global.navigationInSidebar` |
+
+All session tabs (message-backed views, resident views, and the launcher), active selection, open/hidden state, and dismissed IDs live in `sessions[id].workbench`. `global.workbench` stores shared width and the workspace shown before a chat session is opened. Legacy global resident tabs are retained only in that new-chat workspace. Storage is a UI preference, not authorization: restoring each view still uses authenticated backend endpoints.

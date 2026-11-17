@@ -5,19 +5,19 @@
     class="workbench-link"
     @click="workbench?.open(part, action)"
   >
-    <PanelRightOpen :size="19" :stroke-width="1.6" />
+    <PanelsTopLeft :size="17" :stroke-width="1.6" />
     <span class="workbench-link-copy">
       <strong>{{ part.title || part.name }}</strong>
       <span>{{ tm("workbench.openView") }}</span>
     </span>
-    <ArrowUpRight :size="16" :stroke-width="1.6" />
+    <ArrowUpRight :size="14" :stroke-width="1.6" />
   </button>
   <PluginViewCard v-else :part="part" :is-dark="isDark" />
 </template>
 
 <script setup lang="ts">
 import { computed, inject, onMounted } from "vue";
-import { ArrowUpRight, PanelRightOpen } from "@lucide/vue";
+import { ArrowUpRight, PanelsTopLeft } from "@lucide/vue";
 import type { MessagePart } from "@/composables/useMessages";
 import { viewActionKey, workbenchKey } from "@/utils/chatViews";
 import { useModuleI18n } from "@/i18n/composables";
@@ -31,7 +31,12 @@ const inWorkbench = computed(
   () => props.part.target === "chat_workbench" && workbench,
 );
 onMounted(() => {
-  if (inWorkbench.value) workbench?.open(props.part, action, true);
+  if (inWorkbench.value)
+    workbench?.open(
+      props.part,
+      action,
+      props.part.workbenchLive === true ? "live" : "history",
+    );
 });
 </script>
 
@@ -39,12 +44,13 @@ onMounted(() => {
 .workbench-link {
   display: inline-flex;
   align-items: center;
-  gap: 12px;
-  max-width: 100%;
-  margin: 12px 0;
-  padding: 12px 14px;
+  gap: 8px;
+  max-width: calc(100% - 8px);
+  margin: 8px 0;
+  margin-inline-end: 8px;
+  padding: 8px 10px;
   border: 1px solid rgba(var(--v-theme-on-surface), 0.14);
-  border-radius: 10px;
+  border-radius: var(--astrbot-radius-control);
   background: transparent;
   color: inherit;
   text-align: start;
@@ -59,18 +65,18 @@ onMounted(() => {
 }
 .workbench-link-copy {
   display: grid;
-  gap: 3px;
+  gap: 1px;
   min-width: 0;
 }
 .workbench-link-copy strong {
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 500;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 .workbench-link-copy span {
-  font-size: 12px;
+  font-size: 11px;
   opacity: 0.6;
 }
 </style>
