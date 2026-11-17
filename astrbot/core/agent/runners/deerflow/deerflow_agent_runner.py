@@ -389,7 +389,7 @@ class DeerFlowAgentRunner(BaseAgentRunner[TContext]):
         thread = await self.api_client.create_thread(timeout=min(30, self.timeout))
         thread_id = thread.get("thread_id", "")
         if not thread_id:
-            raise Exception(
+            raise ConnectionError(
                 f"DeerFlow create thread returned invalid payload: {thread}"
             )
 
@@ -740,7 +740,7 @@ class DeerFlowAgentRunner(BaseAgentRunner[TContext]):
                     continue
 
                 if event_type == "error":
-                    raise Exception(f"DeerFlow stream returned error event: {data}")
+                    raise ConnectionError(f"DeerFlow stream returned error event: {data}")
 
                 if event_type == "end":
                     break
