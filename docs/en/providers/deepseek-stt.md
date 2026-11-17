@@ -28,6 +28,8 @@ No model name or language parameter is required. The API detects the spoken lang
 
 When a voice message arrives, AstrBot transcribes it and sends the resulting text to the current chat model as the user's message.
 
+Without speech recognition, if the current chat model cannot receive audio directly (for example Anthropic Claude, or a model whose modalities do not include audio), the model receives a note instead of the audio and tells the user to enable speech recognition or switch to a model that accepts audio.
+
 ## Audio Requirements and Limits
 
 - Uploads are limited to 8 MiB and 120 seconds. Oversized audio must be shortened before sending.

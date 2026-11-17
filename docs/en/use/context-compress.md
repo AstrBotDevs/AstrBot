@@ -46,6 +46,8 @@ The default summary focuses on the user's goal, task progress, conclusions, usef
 
 AstrBot checks context **before every model request**, including follow-up requests after an Agent calls tools. The selected strategy is triggered when context usage exceeds approximately **82%** of the model's context window.
 
+Context usage starts from the token count the model reported for the previous request and adds an estimate for content added since, such as the new user message and tool results. After compression rewrites the history, AstrBot estimates the whole context again.
+
 AstrBot checks again after processing. If the context is still too long, it removes complete turns from the oldest first while keeping the latest turn. Tool calls and their results are handled together to avoid leaving incomplete call records.
 
 If the latest turn alone is too large, automatic compression may still be unable to fit the request into the model's window. Reduce the size of the input or tool output, or choose a model with a larger context window.
@@ -66,7 +68,7 @@ Compression depends on the actual chat model's context window. A value that is t
 
 See [Chat Models](../providers/llm.md) for model setup.
 
-When `max_context_tokens` is `0`, AstrBot tries to look up the model ID in its built-in [MODELS.DEV](https://models.dev/) metadata. If the model is unknown, it uses **Fallback context window size**, which defaults to `128000`. Setting the value to `0` therefore does not disable compression, nor does it guarantee recognition of custom model names.
+When `max_context_tokens` is `0`, AstrBot tries to look up the ID of the model actually used for the request (the newly selected model if you switched models in the conversation) in its built-in [MODELS.DEV](https://models.dev/) metadata. If the model is unknown, it uses **Fallback context window size**, which defaults to `128000`. Setting the value to `0` therefore does not disable compression, nor does it guarantee recognition of custom model names.
 
 For an unrecognized model, set an accurate `max_context_tokens` value instead of relying on the default fallback.
 
