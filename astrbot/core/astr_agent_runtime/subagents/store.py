@@ -60,6 +60,7 @@ class TaskRecord:
     finished_at: float | None = None
     completed_steps: int = 0
     delivery: DeliveryStage = DeliveryStage.PENDING
+    send_to_user: bool = True
 
     @property
     def finished(self) -> bool:

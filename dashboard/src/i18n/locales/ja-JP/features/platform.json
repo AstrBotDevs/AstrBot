@@ -16,21 +16,22 @@
     "configDescription": "ボットとメッセージプラットフォームの接続方法を設定します。",
     "routes": {
       "title": "会話設定",
-      "description": "会話ごとに異なる設定ファイルを使用できます。個別に紐付けられていない会話には、以下のデフォルト設定が適用されます。",
+      "description": "セッションの基本設定を選択し、既存の上書きを確認します。",
       "loadFailed": "会話設定を読み込めませんでした。接続設定は引き続き編集できますが、今回は会話設定を変更しません。",
       "defaultTitle": "このボットのデフォルト設定",
       "defaultDescription": "個別に設定されていないすべての会話に適用されます。",
       "systemDefault": "システムデフォルト設定（default）",
       "bindTitle": "特定の会話に使用する設定を選択",
       "bindDescription": "既存の会話を選択し、使用する設定ファイルを指定してください。",
+      "configureOverrides": "セッションごとに設定しますか？",
       "sessionLabel": "会話を選択",
       "configLabel": "設定ファイル",
       "bind": "紐付けを追加",
       "noSessions": "会話がありません。先に対応するメッセージプラットフォームでこのボットと一度会話してください。",
-      "boundTitle": "紐付け済みの会話",
+      "boundTitle": "設定済みのセッション",
       "boundCount": "{count} 件",
       "remove": "紐付けを解除",
-      "noBindings": "個別に紐付けられた会話はありません。すべての会話にデフォルト設定が適用されます。",
+      "noBindings": "セッション固有の設定はありません。",
       "advanced": "高度なルーティングルール",
       "advancedDescription": "UMO pattern を使用して複数の会話を一括で照合します。ルールは上から順に照合され、AstrBot の会話ソース形式に詳しいユーザー向けです。",
       "patternLabel": "UMO pattern",
@@ -38,13 +39,17 @@
       "addPattern": "ルールを追加",
       "patternRequired": "UMO pattern を入力してください",
       "patternInvalid": "形式は「プラットフォーム:メッセージタイプ:会話 ID」である必要があります",
+      "useSessionBinding": "特定のセッションには上のセッション設定セレクターを使用してください。",
       "patternPlatformMismatch": "ルールのプラットフォーム部分は現在のボット ID と一致する必要があります",
       "duplicatePattern": "重複する設定ルートがあります。確認してから再試行してください。",
       "sessionTypes": {
         "group": "グループチャット",
         "friend": "ダイレクトメッセージ",
         "other": "会話"
-      }
+      },
+      "followRouting": "設定ルーティングに従う",
+      "overrideCount": "{count} 件の上書き",
+      "deleteMapping": "マッピングを削除（上書き項目を含む）"
     }
   },
   "viewWebhook": "Webhook URL を表示",
@@ -263,9 +268,8 @@
     "hint": "選択したボットのデータは復元できません。",
     "failed": "削除が完了しませんでした。一部のデータは削除済みの可能性があります。再試行するかログを確認してください。",
     "options": {
-      "custom_rules": "カスタムルール",
+      "config_mappings": "セッション設定マッピング",
       "preferences": "設定",
-      "routing": "設定ルーティング",
       "cron_jobs": "未来のタスク",
       "conversations": "AI 会話データ",
       "message_history": "メッセージ履歴",
@@ -273,9 +277,8 @@
       "stats": "使用統計"
     },
     "descriptions": {
-      "custom_rules": "このボットの会話ごとのサービス、人格、モデル、プラグイン、ナレッジベースのルール。",
+      "config_mappings": "このボットの設定ファイルの割り当て、上書き項目、ルーティングルール（旧カスタムルール・設定ルーティング）。",
       "preferences": "このボットの各会話に保存された、選択中のモデルプロバイダーなどの設定情報。",
-      "routing": "このボット専用の設定ファイルの関連付けとルーティングルール。",
       "cron_jobs": "実行中のものを含む、このボットの会話に送信する未来のタスク。",
       "conversations": "AI の会話コンテキスト、タイトル、人格の関連付け、会話のトークン記録。",
       "message_history": "プラットフォームの送受信メッセージ、会話名、別名、送信者名。",

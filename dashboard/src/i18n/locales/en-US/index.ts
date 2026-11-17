@@ -8,7 +8,6 @@ import enUSShared from './core/shared.json';
 import enUSChat from './features/chat.json';
 import enUSExtension from './features/extension.json';
 import enUSConversation from './features/conversation.json';
-import enUSSessionManagement from './features/session-management.json';
 import enUSToolUse from './features/tool-use.json';
 import enUSProvider from './features/provider.json';
 import enUSPlatform from './features/platform.json';
@@ -50,7 +49,6 @@ export default {
       chat: enUSChat,
       extension: enUSExtension,
       conversation: enUSConversation,
-      'session-management': enUSSessionManagement,
       tooluse: enUSToolUse,
       provider: enUSProvider,
       platform: enUSPlatform,

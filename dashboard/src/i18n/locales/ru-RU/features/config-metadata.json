@@ -1253,6 +1253,15 @@
         }
     },
     "access_group": {
+    "blacklist": {
+      "description": "Blacklist",
+      "platform_settings": {
+        "id_blacklist": {
+          "description": "Blocked session IDs",
+          "hint": "Stop processing these sessions. Blacklist takes priority over whitelist, including administrators."
+        }
+      }
+    },
         "name": "Управление доступом",
         "admins": {
             "description": "Администраторы",
@@ -1867,6 +1876,10 @@
             "dashscope_tts_voice": {
                 "description": "Голос"
             },
+            "dashscope_tts_websocket_url": {
+                "description": "Адрес WebSocket API",
+                "hint": "Необязательно. Заполните при использовании модели Qwen-Audio-TTS. Оставьте пустым, чтобы использовать адрес DashScope SDK по умолчанию. Укажите полный URL WebSocket, например wss://{WorkspaceId}.cn-beijing.maas.aliyuncs.com/api-ws/v1/inference, заменив {WorkspaceId} фактическим ID рабочего пространства."
+            },
             "gm_resp_image_modal": {
                 "description": "Включить визуальную модальность",
                 "hint": "Если включено, ответы могут содержать изображения. Требует поддержки моделью. Совет: для генерации изображений отключите 'Распознавание участников'."
@@ -2016,6 +2029,15 @@
             "openai-tts-voice": {
                 "description": "API Base URL",
                 "hint": "Голоса OpenAI TTS: alloy, echo и др."
+            },
+            "deepseek-tts-voice": {
+                "description": "Голос",
+                "hint": "Голос DeepSeek TTS. В API отправляется соответствующий voice_id.",
+                "labels": ["Stella (женский, по умолчанию)", "Tide (мужской)"]
+            },
+            "deepseek-tts-filter-markdown": {
+                "description": "Фильтровать Markdown",
+                "hint": "Удалять разметку Markdown перед синтезом. Включено по умолчанию."
             },
             "elevenlabs-tts-voice-id": {
                 "description": "ID голоса",
