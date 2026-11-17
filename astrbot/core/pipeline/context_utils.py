@@ -3,6 +3,7 @@ import traceback
 import typing as T
 
 from astrbot import logger
+from astrbot.core.chatui import ViewResult, emit_view
 from astrbot.core.message.message_event_result import CommandResult, MessageEventResult
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from astrbot.core.star.star import star_map
@@ -51,6 +52,14 @@ async def call_handler(
                 # 这里逐步执行异步生成器, 对于每个 yield 返回的 ret, 执行下面的代码
                 # 返回值只能是 MessageEventResult 或者 None（无返回值）
                 _has_yielded = True
+                if isinstance(ret, ViewResult) and ret.name is not None:
+                    await emit_view(
+                        event, getattr(handler, "func", handler).__module__, ret
+                    )
+                    if not event.platform_meta.support_ui_interaction:
+                        event.set_result(event.plain_result(ret.text))
+                    yield
+                    continue
                 if isinstance(ret, MessageEventResult | CommandResult):
                     # 如果返回值是 MessageEventResult, 设置结果并继续
                     event.set_result(ret)
@@ -68,6 +77,12 @@ async def call_handler(
     elif inspect.iscoroutine(ready_to_call):
         # 如果只是一个协程, 直接执行
         ret = await ready_to_call
+        if isinstance(ret, ViewResult) and ret.name is not None:
+            await emit_view(event, getattr(handler, "func", handler).__module__, ret)
+            if not event.platform_meta.support_ui_interaction:
+                event.set_result(event.plain_result(ret.text))
+            yield
+            return
         if isinstance(ret, MessageEventResult | CommandResult):
             event.set_result(ret)
             yield

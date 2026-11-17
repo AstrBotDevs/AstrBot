@@ -158,7 +158,7 @@ async def test_native_running_followup_is_text_and_does_not_create_another_promp
 
 
 @pytest.mark.asyncio
-async def test_native_followup_at_final_response_queues_against_same_history(
+async def test_native_followup_at_final_response_continues_against_same_history(
     environment,
 ):
     env = environment
@@ -185,7 +185,7 @@ async def test_native_followup_at_final_response_queues_against_same_history(
     assert "Initial" in str(calls[1]["contexts"])
     assert "[image] later.png" in str(calls[1]["contexts"])
     record = env.store.get(agent["agent_id"], env.scope)
-    assert len(record.turns) == 2
+    assert len(record.turns) == 1
     assert all(turn.state == AgentState.COMPLETED for turn in record.turns)
 
 

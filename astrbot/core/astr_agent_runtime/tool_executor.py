@@ -33,6 +33,7 @@ from astrbot.core.astr_agent_runtime.tools.computer_tools import (
     PythonTool,
     ShellSessionTool,
 )
+from astrbot.core.chatui import ViewResult, emit_view
 from astrbot.core.message.components import Image
 from astrbot.core.message.message_event_result import (
     MessageChain,
@@ -51,6 +52,9 @@ BACKGROUND_TASK_RESULT_WOKE_USER_PROMPT = (
     "Do not greet the user, ask unnecessary questions, or send a message if no meaningful action is required. "
     "If contacting the user, explain why and refer to the task naturally. "
     "You can use `send_message_to_user` to send images, files, and other generated artifacts. "
+    "Only messages sent through `send_message_to_user` are delivered to the user. "
+    "Use it for all user-facing messages, including any necessary summary. "
+    'When finished, respond only with "Task complete". '
     "Output in the same language as the previous conversation.\n\n"
     "# BACKGROUND TASK CONTEXT\n"
     "The following object describes the background task that completed:\n"
@@ -627,6 +631,18 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
                         timeout=effective_timeout,
                     )
                     if resp is not None:
+                        if isinstance(resp, ViewResult):
+                            if resp.name is None:
+                                raise ValueError(
+                                    "Tools must create named views, not update a UI action."
+                                )
+                            await emit_view(
+                                event,
+                                tool.handler_module_path
+                                or getattr(awaitable, "func", awaitable).__module__,
+                                resp,
+                            )
+                            resp = resp.text
                         if isinstance(resp, mcp.types.CallToolResult):
                             yield resp
                         else:
