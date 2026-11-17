@@ -234,9 +234,8 @@ class ProviderGoogleGenAI(Provider):
             ValueError: Custom parameters are not an object or contain unsupported
                 fields, or the SDK rejects their values.
         """
-        model_name = cast(str, payloads.get("model", self.get_model())).removeprefix(
-            "models/"
-        )
+        model = cast(str, payloads.get("model", self.get_model()))
+        model_name = model.rsplit("/", 1)[-1].lower()
         is_gemini_4 = model_name.startswith("gemini-4")
         if not modalities or is_gemini_4:
             modalities = ["TEXT"]
@@ -318,10 +317,13 @@ class ProviderGoogleGenAI(Provider):
         # TODO: Drop legacy models support.
         # We have too much fragile legacy workaround here.
         elif is_gemini_4 or model_name.startswith(("gemini-3-", "gemini-3.")):
-            thinking_level = thinking_settings.get("level")
+            thinking_level = (
+                extra_body.get("reasoning_effort")
+                if is_gemini_4
+                else thinking_settings.get("level")
+            )
 
             if is_gemini_4:
-                thinking_level = extra_body.get("reasoning_effort", thinking_level)
                 allowed_levels = next(
                     (
                         levels
