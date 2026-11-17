@@ -8,6 +8,10 @@ from typing import Any
 from fastapi import APIRouter, Depends, File, Form, Query, Request, UploadFile
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 
+from astrbot.core.astr_agent_runtime.permission_mode import (
+    conversation_key,
+    set_conversation_permission_mode,
+)
 from astrbot.core.chatui import ViewActionRequest, ViewError, view_store
 from astrbot.core.message.components import UIInteraction, ViewContext
 from astrbot.dashboard.async_utils import run_maybe_async
@@ -15,6 +19,7 @@ from astrbot.dashboard.responses import error, ok
 from astrbot.dashboard.schemas import (
     ChatMessagePatchRequest,
     ChatMessageRegenerateRequest,
+    ChatPermissionModeRequest,
     ChatSessionBatchDeleteRequest,
     ChatSessionPatchRequest,
     ChatThreadCreateRequest,
@@ -456,6 +461,40 @@ async def update_chat_session(
             payload.display_name,
         )
     )
+
+
+@router.put("/chat/sessions/{session_id}/permission-mode")
+async def set_chat_permission_mode(
+    session_id: str,
+    payload: ChatPermissionModeRequest,
+    auth: AuthContext = Depends(require_chat_scope),
+    service: ChatService = Depends(get_service),
+):
+    """Apply a ChatUI permission mode change to work already running.
+
+    Sub-agents and later tool calls of a running turn read the mode at each
+    call, so the change takes effect from their next tool call.
+
+    Args:
+        session_id: The caller's own WebChat conversation ID.
+        payload: The newly selected mode.
+        auth: Authenticated dashboard user.
+        service: Session storage used to verify ownership.
+
+    Returns:
+        OK, or 403 if the conversation is not the caller's WebChat session.
+    """
+    session = await service.db.get_platform_session_by_id(session_id)
+    if (
+        session is None
+        or session.creator != auth.username
+        or session.platform_id != "webchat"
+    ):
+        return JSONResponse(error("Session unavailable"), status_code=403)
+    set_conversation_permission_mode(
+        conversation_key(auth.username, session_id), payload.mode
+    )
+    return ok({"mode": payload.mode})
 
 
 @router.delete("/chat/sessions/{session_id}")

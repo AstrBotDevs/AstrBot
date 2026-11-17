@@ -4,6 +4,7 @@ import asyncio
 import json
 import os
 import re
+import time
 import uuid
 from collections.abc import AsyncIterator
 from copy import deepcopy
@@ -12,6 +13,10 @@ from pathlib import Path, PurePosixPath
 from typing import Any
 
 from astrbot.core import logger, sp
+from astrbot.core.astr_agent_runtime.permission_mode import (
+    conversation_key,
+    set_conversation_permission_mode,
+)
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
 from astrbot.core.db import BaseDatabase
 from astrbot.core.db.conversation import ContextUnavailableError
@@ -23,6 +28,7 @@ from astrbot.core.platform.sources.webchat.message_parts_helper import (
     webchat_message_parts_have_content,
 )
 from astrbot.core.platform.sources.webchat.request_flags import (
+    resolve_webchat_chat_options,
     resolve_webchat_request_flags,
 )
 from astrbot.core.platform.sources.webchat.webchat_queue_mgr import webchat_queue_mgr
@@ -113,6 +119,12 @@ def normalize_reasoning_message_parts(
         if not isinstance(part, dict):
             continue
         copied = dict(part)
+        if copied.get("type") == "actionrow" and isinstance(
+            copied.get("expires_at"), (int, float)
+        ):
+            # The client anchors the deadline on its own clock (see
+            # webchat_event): send the time left, not only the server time.
+            copied["expires_in"] = max(0, copied["expires_at"] - time.time())
         if copied.get("type") == "reasoning":
             copied = {"type": "think", "think": copied.get("text", "")}
         parts.append(copied)
@@ -195,6 +207,18 @@ class BotMessageAccumulator:
         if chain_type == "tool_call_result":
             self._flush_pending_text()
             self._store_tool_call_result(result_text)
+            return
+
+        if chain_type == "approval_result":
+            # Record the backend's decision on the approval card it belongs to.
+            result = self._parse_json_object(result_text) or {}
+            for part in self.parts:
+                if (
+                    part.get("type") == "actionrow"
+                    and part.get("tool_call_id")
+                    and part.get("tool_call_id") == result.get("tool_call_id")
+                ):
+                    part["outcome"] = result.get("outcome")
             return
 
         if chain_type == "reasoning":
@@ -426,8 +450,19 @@ def serialize_history_entry(history) -> dict:
         Dict with all model fields plus created_at/updated_at serialized as
         UTC-aware ISO strings (e.g. ``2026-07-06T04:00:00+00:00``).
     """
+    serialized = history.model_dump()
+    content = serialized.get("content")
+    parts = content.get("message") if isinstance(content, dict) else None
+    for part in parts if isinstance(parts, list) else []:
+        # Time left on a button deadline, recomputed whenever history is served.
+        if (
+            isinstance(part, dict)
+            and part.get("type") == "actionrow"
+            and isinstance(part.get("expires_at"), (int, float))
+        ):
+            part["expires_in"] = max(0, part["expires_at"] - time.time())
     return {
-        **history.model_dump(),
+        **serialized,
         "created_at": to_utc_isoformat(history.created_at),
         "updated_at": to_utc_isoformat(history.updated_at),
     }
@@ -890,6 +925,7 @@ class ChatService:
             )
             webchat_queue_mgr.remove_queues(thread_id)
             self.running_convs.pop(thread_id, None)
+            set_conversation_permission_mode(conversation_key(creator, thread_id), None)
 
     async def save_bot_message(
         self,
@@ -1336,6 +1372,7 @@ class ChatService:
         session_id = post_data.get("session_id", post_data.get("conversation_id"))
         selected_provider = post_data.get("selected_provider")
         selected_model = post_data.get("selected_model")
+        chat_options = resolve_webchat_chat_options(post_data)
         flags = resolve_webchat_request_flags(post_data)
         platform_history_id = post_data.get("_platform_history_id") or "webchat"
         thread_selected_text = post_data.get("_thread_selected_text")
@@ -1440,6 +1477,7 @@ class ChatService:
                         "message": message_parts,
                         "selected_provider": selected_provider,
                         "selected_model": selected_model,
+                        **chat_options,
                         "selected_stt_provider": post_data.get("selected_stt_provider"),
                         "selected_tts_provider": post_data.get("selected_tts_provider"),
                         "persona_prompt": post_data.get("persona_prompt"),
@@ -1536,6 +1574,9 @@ class ChatService:
 
         if session.platform_id == "webchat":
             webchat_queue_mgr.remove_queues(session_id)
+            set_conversation_permission_mode(
+                conversation_key(username, session_id), None
+            )
 
         await self.db.delete_platform_session(session_id)
         await asyncio.to_thread(view_store.delete_session, session_id)
@@ -1992,6 +2033,7 @@ class ChatService:
             "locale": data.get("locale"),
             "selected_provider": data.get("selected_provider"),
             "selected_model": data.get("selected_model"),
+            **resolve_webchat_chat_options(data),
             "_platform_history_id": "webchat_thread",
             "_thread_selected_text": thread.selected_text,
             "_skip_user_history": is_button_interaction,
@@ -2170,6 +2212,7 @@ class ChatService:
             "locale": data.get("locale"),
             "selected_provider": data.get("selected_provider"),
             "selected_model": data.get("selected_model"),
+            **resolve_webchat_chat_options(data),
             "_skip_user_history": True,
             "_turn_id": replacement.turn_id,
         }

@@ -714,6 +714,7 @@ class LocalShellComponent(ShellComponent):
         requester_is_admin: bool,
         session_id: str,
         chars: str,
+        require_sandboxed: bool = False,
     ) -> dict[str, Any]:
         """Write text to the stdin pipe of a managed shell session.
 
@@ -723,6 +724,9 @@ class LocalShellComponent(ShellComponent):
             requester_is_admin: Whether the requester is an administrator.
             session_id: Managed shell session identifier.
             chars: Text to write verbatim.
+            require_sandboxed: The requester's current policy needs process
+                isolation, so a session started without it (e.g. before the
+                conversation was narrowed) must not take input.
 
         Returns:
             Current process status after the write.
@@ -742,6 +746,12 @@ class LocalShellComponent(ShellComponent):
             or session.process.stdin is None
         ):
             raise ValueError(f"Shell session {session_id} is not accepting input.")
+        if require_sandboxed and not session.sandboxed:
+            raise ValueError(
+                f"Shell session {session_id} was started with wider access than "
+                "this conversation now allows, so it does not accept input. "
+                "Start a new shell session."
+            )
         session.process.stdin.write(chars.encode("utf-8"))
         await session.process.stdin.drain()
         return {
