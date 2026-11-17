@@ -49,13 +49,13 @@ class DashscopeAgentRunner(BaseAgentRunner[TContext]):
 
         self.api_key = provider_config.get("dashscope_api_key", "")
         if not self.api_key:
-            raise Exception("阿里云百炼 API Key 不能为空。")
+            raise ConnectionError("阿里云百炼 API Key 不能为空。")
         self.app_id = provider_config.get("dashscope_app_id", "")
         if not self.app_id:
-            raise Exception("阿里云百炼 APP ID 不能为空。")
+            raise ConnectionError("阿里云百炼 APP ID 不能为空。")
         self.dashscope_app_type = provider_config.get("dashscope_app_type", "")
         if not self.dashscope_app_type:
-            raise Exception("阿里云百炼 APP 类型不能为空。")
+            raise TypeError("阿里云百炼 APP 类型不能为空。")
 
         self.variables: dict = provider_config.get("variables", {}) or {}
         self.rag_options: dict = provider_config.get("rag_options", {})
