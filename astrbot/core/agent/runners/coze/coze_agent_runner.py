@@ -45,16 +45,16 @@ class CozeAgentRunner(BaseAgentRunner[TContext]):
 
         self.api_key = provider_config.get("coze_api_key", "")
         if not self.api_key:
-            raise Exception("Coze API Key 不能为空。")
+            raise ConnectionError("Coze API Key 不能为空。")
         self.bot_id = provider_config.get("bot_id", "")
         if not self.bot_id:
-            raise Exception("Coze Bot ID 不能为空。")
+            raise ConnectionError("Coze Bot ID 不能为空。")
         self.api_base: str = provider_config.get("coze_api_base", "https://api.coze.cn")
 
         if not isinstance(self.api_base, str) or not self.api_base.startswith(
             ("http://", "https://"),
         ):
-            raise Exception(
+            raise ConnectionError(
                 "Coze API Base URL 格式不正确，必须以 http:// 或 https:// 开头。",
             )
 
@@ -309,10 +309,10 @@ class CozeAgentRunner(BaseAgentRunner[TContext]):
                 error_msg = error_data.get("msg", "未知错误")
                 error_code = error_data.get("code", "UNKNOWN")
                 logger.error(f"Coze 出现错误: {error_code} - {error_msg}")
-                raise Exception(f"Coze 出现错误: {error_code} - {error_msg}")
+                raise RuntimeError(f"Coze 出现错误: {error_code} - {error_msg}")
 
         if not chat_completed:
-            raise Exception("Coze response stream ended before the chat completed")
+            raise RuntimeError("Coze response stream ended before the chat completed")
 
         if not message_started and not accumulated_content:
             logger.warning("Coze 未返回任何内容")
@@ -376,7 +376,7 @@ class CozeAgentRunner(BaseAgentRunner[TContext]):
 
         except Exception as e:
             logger.error("处理图片失败 %s: %s", describe_media_ref(image_url), e)
-            raise Exception(f"处理图片失败: {e!s}") from e
+            raise ConnectionError(f"处理图片失败: {e!s}") from e
 
     @override
     def done(self) -> bool:
