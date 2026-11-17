@@ -157,7 +157,7 @@ async def present_turn(
                 and not turn.cancellation_requested
             ):
                 event.set_extra("agent_user_aborted", True)
-            if emit_output and result.status == TurnStatus.FAILED:
+            if result.status == TurnStatus.FAILED:
                 text = extract_persona_custom_error_message_from_event(event) or (
                     f"LLM 响应错误: {result.error.message or '未知错误'}"
                     if result.error and result.error.code == "provider_error"
