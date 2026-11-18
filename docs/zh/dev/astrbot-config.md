@@ -450,7 +450,7 @@ Added in `v4.3.5`
 | --- | --- | --- |
 | `provider_id` | 空 | 从**判断模型提供商**选择已启用图像能力的模型；留空则直接转述 |
 | `prompt` | `Is it CSAM?` | 对每张图片提出的是非问题 |
-| `threshold` | `0.2` | 置信阈值。模型对所选答案的最低置信度，范围为0到1。低于阈值时使用占位内容 |
+| `threshold` | `0.2` | 最低置信度要求，范围为0到1 |
 | `invert` | `false` | 关闭时只转述回答为`false`的图片，开启时只转述回答为`true`的图片。两种情况都要求置信度达到或高于阈值 |
 | `placeholder` | `Image description withheld due to inappropriate content.` | 拒绝或判断失败时写入上下文的文本，不会再调用转述模型 |
 

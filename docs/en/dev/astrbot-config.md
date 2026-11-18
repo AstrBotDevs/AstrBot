@@ -450,7 +450,7 @@ Under **Auto-understand Images**:
 | --- | --- | --- |
 | `provider_id` | Empty | Select an enabled model with image input under **Decision Model Provider**. Leave empty to caption without checking. |
 | `prompt` | `Is it CSAM?` | The yes or no question asked about each image. |
-| `threshold` | `0.2` | Confidence Threshold. Minimum confidence in the selected answer, from 0 to 1. A lower confidence always uses the placeholder. |
+| `threshold` | `0.2` | Minimum required confidence, from 0 to 1. |
 | `invert` | `false` | When off, caption only a `false` answer. When on, caption only a `true` answer. In both cases confidence must meet or exceed the threshold. |
 | `placeholder` | `Image description withheld due to inappropriate content.` | Text recorded instead of a caption if the decision rejects the image or fails. The caption model is not called. |
 

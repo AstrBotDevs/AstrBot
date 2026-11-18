@@ -1281,7 +1281,7 @@
           },
           "threshold": {
             "description": "Confidence Threshold",
-            "hint": "Minimum confidence in the selected answer, from 0 to 1. Lower confidence uses the placeholder."
+            "hint": "Minimum required confidence, from 0 to 1."
           },
           "prompt": {
             "description": "Decision Prompt",
