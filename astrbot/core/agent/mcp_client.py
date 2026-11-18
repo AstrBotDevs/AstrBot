@@ -411,8 +411,7 @@ class MCPClient:
 
         self._mcp_server_config: dict | None = None
         self._server_name: str | None = None
-        self._reconnect_lock = asyncio.Lock()  # Lock for thread-safe reconnection
-        self._reconnecting: bool = False
+        self._reconnect_lock = asyncio.Lock()
 
     async def _run_connection(
         self,
@@ -671,30 +670,27 @@ class MCPClient:
         task.cancel()
         self._old_connection_tasks.append(task)
 
-    async def _reconnect(self) -> None:
-        """Reconnect to the MCP server using the stored configuration.
+    async def _ensure_session(
+        self, failed_session: mcp.ClientSession | None = None
+    ) -> mcp.ClientSession:
+        """Get a session, waiting for any concurrent reconnect to finish.
 
-        Cancels the current _connection_task (which owns the exit_stack and all
-        anyio cancel scopes) and starts a fresh one.  Because each connection
-        task enters and exits its own anyio cancel scope, there is no
-        cross-task cancel-scope violation and no GC finalizer surprise.
+        Args:
+            failed_session: Session that raised ClosedResourceError, if any.
 
-        Uses asyncio.Lock to ensure thread-safe reconnection in concurrent environments.
+        Returns:
+            The current session or its initialized replacement.
 
         Raises:
-            Exception: raised when reconnection fails
+            Exception: If reconnection or tool discovery fails.
         """
         async with self._reconnect_lock:
-            if self._reconnecting:
-                logger.debug(
-                    f"MCP Client {self._server_name} is already reconnecting, skipping"
-                )
-                return
+            if self.session is not None and self.session is not failed_session:
+                return self.session
 
             if not self._mcp_server_config or not self._server_name:
                 raise Exception("Cannot reconnect: missing connection configuration")
 
-            self._reconnecting = True
             try:
                 logger.info(
                     f"Attempting to reconnect to MCP server {self._server_name}..."
@@ -711,18 +707,25 @@ class MCPClient:
 
                 # Reconnect — this creates a new _connection_task.
                 await self.connect_to_server(self._mcp_server_config, self._server_name)
+                if self.session is None:
+                    raise ValueError(
+                        "MCP session is not available for MCP function tools."
+                    )
                 await self.list_tools_and_save()
 
                 logger.info(
                     f"Successfully reconnected to MCP server {self._server_name}"
                 )
-            except Exception as e:
+                return self.session
+            except (Exception, asyncio.CancelledError) as e:
+                self.session = None
+                if self._connection_task is not None:
+                    self._cancel_connection_task(self._connection_task)
+                    self._connection_task = None
                 logger.error(
                     f"Failed to reconnect to MCP server {self._server_name}: {e}"
                 )
                 raise
-            finally:
-                self._reconnecting = False
 
     async def call_tool_with_reconnect(
         self,
@@ -753,13 +756,10 @@ class MCPClient:
             reraise=True,
         )
         async def _call_with_retry():
-            if not self.session:
-                await self._reconnect()
-            if not self.session:
-                raise ValueError("MCP session is not available for MCP function tools.")
+            session = await self._ensure_session()
 
             try:
-                return await self.session.call_tool(
+                return await session.call_tool(
                     name=tool_name,
                     arguments=arguments,
                     read_timeout_seconds=read_timeout_seconds,
@@ -768,8 +768,7 @@ class MCPClient:
                 logger.warning(
                     f"MCP tool {tool_name} call failed (ClosedResourceError), attempting to reconnect..."
                 )
-                # Attempt to reconnect
-                await self._reconnect()
+                await self._ensure_session(failed_session=session)
                 # Reraise the exception to trigger tenacity retry
                 raise
 

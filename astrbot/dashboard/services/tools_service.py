@@ -79,9 +79,7 @@ class ToolsService:
                         server_info[key] = value
 
                 runtime = self.tool_mgr.mcp_server_runtime_view.get(name)
-                server_info["connected"] = (
-                    runtime is not None and runtime.client.session is not None
-                )
+                server_info["connected"] = runtime is not None
                 if runtime is None:
                     server_info["tools"] = []
                 else:
