@@ -1,41 +1,73 @@
 <template>
   <div v-if="timelineEntries.length" class="reasoning-timeline">
     <div
-      v-for="(entry, entryIndex) in timelineEntries"
+      v-for="entry in timelineEntries"
       :key="entry.key"
       class="reasoning-timeline-item"
     >
-      <div class="reasoning-timeline-rail" aria-hidden="true">
-        <span class="reasoning-timeline-dot"></span>
-        <span
-          v-if="entryIndex < timelineEntries.length - 1"
-          class="reasoning-timeline-line"
-        ></span>
-      </div>
-
       <div class="reasoning-step">
-        <div class="reasoning-step-meta">
-          <span class="reasoning-step-title">{{ entry.title }}</span>
+        <div v-if="entry.kind === 'think'" class="thought-item">
+          <MessageCircleMore
+            :size="16"
+            class="thought-icon"
+            aria-hidden="true"
+          />
+          <div
+            class="thought-copy"
+            :class="{ 'is-expanded': expandedThoughts[entry.key] }"
+          >
+            <button
+              type="button"
+              class="thought-first-line-toggle"
+              :aria-label="entry.preview"
+              :aria-expanded="Boolean(expandedThoughts[entry.key])"
+              @click="
+                expandedThoughts[entry.key] = !expandedThoughts[entry.key]
+              "
+            ></button>
+            <div class="thought-clip">
+              <MarkdownRender
+                :content="entry.think"
+                class="chat-markdown reasoning-text markdown-content"
+                :aria-hidden="!expandedThoughts[entry.key]"
+                :inert="expandedThoughts[entry.key] ? undefined : ''"
+                :final="!isStreaming"
+                :smooth-streaming="isStreaming ? 'auto' : false"
+                :fade="false"
+                :typewriter="false"
+                :is-dark="isDark"
+                :node-virtual="false"
+                :max-live-nodes="
+                  isStreaming ? MARKDOWN_RENDER_MAX_LIVE_NODES : 0
+                "
+                :style="{
+                  ...CHAT_MARKDOWN_HEADING_STYLE,
+                  '--ms-text-body': '13.5px',
+                  '--ms-leading-body': '22px',
+                }"
+              />
+            </div>
+          </div>
+          <button
+            type="button"
+            class="thought-toggle"
+            :aria-label="tm('reasoning.think')"
+            :aria-expanded="Boolean(expandedThoughts[entry.key])"
+            @click="expandedThoughts[entry.key] = !expandedThoughts[entry.key]"
+          >
+            <ChevronRight
+              :size="22"
+              class="process-chevron"
+              :class="{ 'is-expanded': expandedThoughts[entry.key] }"
+              aria-hidden="true"
+            />
+          </button>
         </div>
-
-        <MarkdownRender
-          v-if="entry.kind === 'think'"
-          :content="entry.think || ''"
-          class="chat-markdown reasoning-text markdown-content"
-          :final="!isStreaming"
-          :smooth-streaming="isStreaming ? 'auto' : false"
-          :fade="false"
-          :typewriter="false"
-          :is-dark="isDark"
-          :node-virtual="false"
-          :max-live-nodes="isStreaming ? MARKDOWN_RENDER_MAX_LIVE_NODES : 0"
-          :style="CHAT_MARKDOWN_HEADING_STYLE"
-        />
 
         <div v-else-if="entry.tool" class="reasoning-tool-call-block">
           <ToolCallItem v-if="isIPythonToolCall(entry.tool)" :is-dark="isDark">
             <template #label>
-              <v-icon size="16">mdi-code-json</v-icon>
+              <CodeXml :size="16" aria-hidden="true" />
               <span>{{ entry.tool.name || "python" }}</span>
               <span class="tool-call-inline-status">
                 {{ toolCallStatusText(entry.tool) }}
@@ -58,7 +90,9 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from "vue";
+import { computed, reactive } from "vue";
+import { MessageCircleMore, ChevronRight, CodeXml } from "@lucide/vue";
+import "@/components/chat/message_list_comps/processCollapse.css";
 import { MarkdownRender } from "markstream-vue";
 import {
   CHAT_MARKDOWN_HEADING_STYLE,
@@ -78,6 +112,7 @@ const props = defineProps<{
 }>();
 
 const { tm } = useModuleI18n("features/chat");
+const expandedThoughts = reactive<Record<string, boolean>>({});
 
 type NormalizedToolCall = Record<string, unknown>;
 
@@ -85,13 +120,12 @@ type TimelineEntry =
   | {
       key: string;
       kind: "think";
-      title: string;
+      preview: string;
       think: string;
     }
   | {
       key: string;
       kind: "tool_call";
-      title: string;
       tool: NormalizedToolCall;
     };
 
@@ -113,7 +147,7 @@ const timelineEntries = computed<TimelineEntry[]>(() => {
       entries.push({
         key: `think-${partIndex}`,
         kind: "think",
-        title: tm("reasoning.think"),
+        preview: think.trim().split(/\r?\n/, 1)[0],
         think,
       });
       return;
@@ -128,7 +162,6 @@ const timelineEntries = computed<TimelineEntry[]>(() => {
           tool.id || tool.name || `${partIndex}-${toolIndex}`,
         )}`,
         kind: "tool_call",
-        title: tm("reasoning.toolUsed"),
         tool: normalizedTool,
       });
     });
@@ -175,44 +208,15 @@ function parseJsonSafe(value: unknown) {
   display: flex;
   flex-direction: column;
   gap: 0;
-  padding-top: 4px;
+  padding-top: 0;
 }
 
 .reasoning-timeline-item {
-  display: grid;
-  grid-template-columns: 10px minmax(0, 1fr);
-  column-gap: 10px;
-  align-items: flex-start;
-  padding-bottom: 10px;
+  padding-bottom: 2px;
 }
 
 .reasoning-timeline-item:last-child {
   padding-bottom: 0;
-}
-
-.reasoning-timeline-rail {
-  position: relative;
-  display: flex;
-  justify-content: center;
-  min-height: 100%;
-  padding-top: 6px;
-}
-
-.reasoning-timeline-dot {
-  width: 6px;
-  height: 6px;
-  border-radius: 999px;
-  background: rgba(var(--v-theme-on-surface), 0.18);
-}
-
-.reasoning-timeline-line {
-  position: absolute;
-  top: 15px;
-  bottom: -10px;
-  left: 50%;
-  width: 1px;
-  transform: translateX(-50%);
-  background: rgba(var(--v-theme-on-surface), 0.12);
 }
 
 .reasoning-step {
@@ -221,25 +225,71 @@ function parseJsonSafe(value: unknown) {
   line-height: 1.62;
 }
 
-.reasoning-step-meta {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-wrap: wrap;
-  margin-bottom: 8px;
-  color: rgba(var(--v-theme-on-surface), 0.54);
-  font-size: 12px;
-  line-height: 1.35;
+.thought-item {
+  display: grid;
+  width: fit-content;
+  max-width: 100%;
+  grid-template-columns: 16px minmax(0, 1fr) 22px;
+  align-items: start;
+  column-gap: 8px;
+  margin: 2px 0;
+  font-size: 13.5px;
+  line-height: 1.56;
+  color: rgba(var(--v-theme-on-surface), 0.7);
 }
 
-.reasoning-step-title {
-  color: rgba(var(--v-theme-on-surface), 0.76);
-  font-weight: 600;
-  font-size: 12px;
+.thought-icon {
+  margin-top: 3px;
+}
+
+.thought-copy {
+  position: relative;
+  min-width: 0;
+  display: grid;
+  grid-template-rows: minmax(22px, 0fr);
+  transition: grid-template-rows 360ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.thought-copy.is-expanded {
+  grid-template-rows: minmax(22px, 1fr);
+}
+
+.thought-first-line-toggle {
+  position: absolute;
+  inset: 0 0 auto;
+  z-index: 1;
+  height: 22px;
+  border: 0;
+  padding: 0;
+  background: transparent;
+  cursor: pointer;
+}
+
+.thought-clip {
+  min-height: 0;
+  overflow: hidden;
+}
+
+.thought-toggle {
+  border: 0;
+  padding: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+.thought-toggle {
+  display: flex;
+}
+
+.thought-first-line-toggle:focus-visible,
+.thought-toggle:focus-visible {
+  outline: 2px solid rgb(var(--v-theme-primary));
+  outline-offset: 2px;
 }
 
 .reasoning-tool-call-block {
-  margin-top: 4px;
   font-style: normal;
 }
 
@@ -248,6 +298,15 @@ function parseJsonSafe(value: unknown) {
   line-height: inherit;
   color: rgba(var(--v-theme-on-surface), 0.72);
   font-style: normal;
+}
+
+/* Remove Markdown's leading paragraph margin so the first line centers on the icons. */
+.reasoning-text :deep(.node-slot:first-child > .node-content > :first-child) {
+  margin-top: 0;
+}
+
+.reasoning-step :deep(.tool-call-card) {
+  margin: 2px 0;
 }
 
 .reasoning-step :deep(.tool-call-card),
@@ -272,5 +331,23 @@ function parseJsonSafe(value: unknown) {
 .tool-call-inline-status {
   margin-left: 4px;
   color: rgba(var(--v-theme-on-surface), 0.48);
+}
+/* Align details with the label text to the right of each leading icon. */
+.reasoning-step :deep(.tool-call-details),
+.reasoning-step :deep(.tool-call-inline-details) {
+  padding-left: 24px;
+  padding-right: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+.reasoning-step :deep(.tool-call-inline-details) {
+  padding-left: 24px;
+}
+@media (prefers-reduced-motion: reduce) {
+  .thought-copy {
+    position: relative;
+    transition: none;
+  }
 }
 </style>

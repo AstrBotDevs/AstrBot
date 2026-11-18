@@ -221,7 +221,9 @@ class TestAstrBotConfigLoad:
             ),
         }
         persisted = json.loads(config_path.read_text(encoding="utf-8-sig"))
-        assert persisted["config_version"] == max(config_version, 5)
+        assert persisted["config_version"] == max(
+            config_version, DEFAULT_CONFIG["config_version"]
+        )
         assert persisted["provider_settings"]["computer_use_local_permissions"] == {
             "member": expected,
             "admin": disabled,

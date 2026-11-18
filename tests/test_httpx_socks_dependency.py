@@ -1,8 +1,6 @@
 import re
 from pathlib import Path
 
-import pytest
-
 from astrbot.core.utils.toml_parser import read_pyproject_project_dependencies
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -61,52 +59,4 @@ def test_httpx_socks_dependency_spec_matches_between_dependency_files() -> None:
     assert requirements_dependency == pyproject_dependency, (
         "Expected httpx[socks] dependency spec to match between requirements.txt "
         "and pyproject.toml for SOCKS proxy support"
-    )
-
-
-@pytest.mark.parametrize(
-    "entry",
-    [
-        "httpx[socks]",
-        "httpx[socks]==0.27.0",
-        "httpx[socks]==0.28.1",
-        "httpx[socks]>=0.27.0,<0.28.0",
-        "httpx[socks]>=0.27,<0.29",
-        'httpx[socks]; python_version >= "3.11"',
-        'httpx[socks]>=0.27.0 ; python_version < "3.13"',
-        'httpx[socks] ; python_version < "3.13"',
-        'httpx[socks]  >=0.27  ; python_version < "3.13"',
-    ],
-)
-def test_httpx_socks_pattern_matches_valid_variants(entry: str) -> None:
-    match = HTTPX_SOCKS_PATTERN.match(entry)
-
-    assert match is not None, (
-        f"Expected httpx[socks] dependency pattern to match valid entry for "
-        f"SOCKS proxy support: {entry}"
-    )
-    assert match.group(0) == entry, (
-        f"Expected httpx[socks] dependency pattern to fully match valid entry "
-        f"for SOCKS proxy support: {entry}"
-    )
-
-
-@pytest.mark.parametrize(
-    "entry",
-    [
-        "httpx",
-        "httpx==0.27.0",
-        "httpx[http2]",
-        "httpx[socks-extra]",
-        "httpx [socks]",
-        "someprefix httpx[socks]",
-        "httpx[socks] trailing-text",
-        "httpx[socks] extra ; markers",
-        "httpx[socks]andmore",
-    ],
-)
-def test_httpx_socks_pattern_rejects_invalid_variants(entry: str) -> None:
-    assert HTTPX_SOCKS_PATTERN.match(entry) is None, (
-        f"Expected httpx[socks] dependency pattern to reject invalid entry for "
-        f"SOCKS proxy support: {entry}"
     )

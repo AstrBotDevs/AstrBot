@@ -25,12 +25,6 @@ AstrBot 是一个开源的一站式 Agentic 个人和群聊助手，可在 QQ、
 - 连接 IM 平台：按照说明将 AstrBot 连接到您喜欢的 IM 平台，如 Discord、Telegram、Slack 等。
 - 配置 AI 模型：AstrBot 支持各种 AI 模型。请参阅 [连接模型服务](/providers/start)
 
-## 它是如何实现的？
-
-下面的拓扑图基本简述了 AstrBot 的架构。
-
-![Architecture](https://files.astrbot.app/docs/source/images/what-is-astrbot/image.png)
-
 ## 说明
 
 - AstrBot 是一个非盈利项目，由全世界热心开源贡献者维护，并受 [AGPL-v3](https://www.chinasona.org/gnu/agpl-3.0-cn.html) 开源许可证保护。如果您对 AstrBot 进行了修改并将其用于提供具有商业盈利性质的网络服务，您必须开源所做的修改。详细联系 [community@astrbot.app](mailto:community@astrbot.app)。

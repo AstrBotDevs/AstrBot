@@ -6,8 +6,11 @@ from unittest.mock import ANY, AsyncMock, MagicMock
 import pytest
 
 from astrbot.core.agent.run_context import ContextWrapper
-from astrbot.core.computer.booters.local import LocalPythonComponent
-from astrbot.core.tools.computer_tools.python import LocalPythonTool, PythonTool
+from astrbot.core.astr_agent_runtime.computer.booters.local import LocalPythonComponent
+from astrbot.core.astr_agent_runtime.tools.computer_tools.python import (
+    LocalPythonTool,
+    PythonTool,
+)
 
 
 def test_python_tool_description_contains_os():
@@ -46,10 +49,10 @@ async def test_local_python_tool_rejects_nonlocal_runtime(
     get_local_booter = MagicMock()
     workspace_root = AsyncMock()
     monkeypatch.setattr(
-        "astrbot.core.tools.computer_tools.python.get_local_booter", get_local_booter
+        "astrbot.core.astr_agent_runtime.tools.computer_tools.python.get_local_booter", get_local_booter
     )
     monkeypatch.setattr(
-        "astrbot.core.tools.computer_tools.python.workspace_root_for_context",
+        "astrbot.core.astr_agent_runtime.tools.computer_tools.python.workspace_root_for_context",
         workspace_root,
     )
     context = ContextWrapper(
@@ -86,7 +89,7 @@ async def test_local_python_tool_uses_session_workspace(tmp_path, monkeypatch):
     local_python = LocalPythonComponent()
     local_python.exec = python_exec
     monkeypatch.setattr(
-        "astrbot.core.tools.computer_tools.python.get_local_booter",
+        "astrbot.core.astr_agent_runtime.tools.computer_tools.python.get_local_booter",
         lambda: SimpleNamespace(python=local_python),
     )
 
@@ -94,7 +97,7 @@ async def test_local_python_tool_uses_session_workspace(tmp_path, monkeypatch):
         return tmp_path / context.context.event.unified_msg_origin.replace(":", "_")
 
     monkeypatch.setattr(
-        "astrbot.core.tools.computer_tools.python.workspace_root_for_context",
+        "astrbot.core.astr_agent_runtime.tools.computer_tools.python.workspace_root_for_context",
         fake_workspace_root_for_context,
     )
 
@@ -142,7 +145,9 @@ async def test_local_python_uses_sandbox_backend(
     role,
 ):
     """Preserve Python output and errors without repeating the network policy."""
-    from astrbot.core.tools.computer_tools import util as computer_util
+    from astrbot.core.astr_agent_runtime.tools.computer_tools import (
+        util as computer_util,
+    )
 
     python_exec = AsyncMock(
         return_value={
@@ -155,14 +160,14 @@ async def test_local_python_uses_sandbox_backend(
     local_python = LocalPythonComponent()
     local_python.exec = python_exec
     monkeypatch.setattr(
-        "astrbot.core.tools.computer_tools.python.get_local_booter",
+        "astrbot.core.astr_agent_runtime.tools.computer_tools.python.get_local_booter",
         lambda: SimpleNamespace(python=local_python),
     )
     monkeypatch.setattr(
         computer_util, "get_process_sandbox_status", lambda: {"status": "detected"}
     )
     monkeypatch.setattr(
-        "astrbot.core.tools.computer_tools.python.workspace_root_for_context",
+        "astrbot.core.astr_agent_runtime.tools.computer_tools.python.workspace_root_for_context",
         AsyncMock(return_value=tmp_path),
     )
 
@@ -213,13 +218,15 @@ async def test_local_python_uses_sandbox_backend(
 @pytest.mark.asyncio
 async def test_local_member_python_is_denied_without_supported_sandbox(monkeypatch):
     """Local member Python execution should fail without a sandbox backend."""
-    from astrbot.core.tools.computer_tools import util as computer_util
+    from astrbot.core.astr_agent_runtime.tools.computer_tools import (
+        util as computer_util,
+    )
 
     monkeypatch.setattr(
         computer_util, "get_process_sandbox_status", lambda: {"status": "unsupported"}
     )
     monkeypatch.setattr(
-        "astrbot.core.tools.computer_tools.python.get_local_booter",
+        "astrbot.core.astr_agent_runtime.tools.computer_tools.python.get_local_booter",
         lambda: pytest.fail("Local Python must not start without an OS sandbox"),
     )
     event = SimpleNamespace(

@@ -9,7 +9,6 @@ import pytest
 from astrbot.core.pipeline.waking_check.stage import WakingCheckStage
 from astrbot.core.pipeline.waking_check.umo_auto_name import UmoAutoNameRecorder
 from astrbot.core.platform.message_type import MessageType
-from astrbot.core.star.session_plugin_manager import SessionPluginManager
 
 
 def make_group_event(group_id: str, group_name: str | None, message: str = "/hello"):
@@ -24,6 +23,7 @@ def make_group_event(group_id: str, group_name: str | None, message: str = "/hel
         Mocked group message event.
     """
     event = MagicMock()
+    event.event_kind = "message"
     event.unified_msg_origin = f"test-platform:GroupMessage:{group_id}"
     event.message_obj = SimpleNamespace(
         type=MessageType.GROUP_MESSAGE,
@@ -67,6 +67,9 @@ async def make_stage(db_helper: MagicMock) -> WakingCheckStage:
             db_helper=db_helper,
         )
     )
+    stage.ctx.plugin_manager = SimpleNamespace(
+        context=SimpleNamespace(get_config=lambda **_: stage.ctx.astrbot_config)
+    )
     return stage
 
 
@@ -85,11 +88,6 @@ async def test_waking_stage_records_only_awakened_events(monkeypatch):
     async def return_handlers(_event, handlers):
         return handlers
 
-    monkeypatch.setattr(
-        SessionPluginManager,
-        "filter_handlers_by_session",
-        return_handlers,
-    )
 
     ignored_event = make_group_event("group-1", "Engineering", "hello")
     await stage.process(ignored_event)
@@ -285,7 +283,8 @@ async def test_sender_cache_is_bounded_and_skips_missing_ids():
     db_helper.upsert_umo_sender = AsyncMock()
     recorder = UmoAutoNameRecorder(db_helper, "test-conf-id")
     with patch(
-        "astrbot.core.pipeline.waking_check.umo_auto_name.MAX_UMO_AUTO_NAME_CACHE_SIZE", 2
+        "astrbot.core.pipeline.waking_check.umo_auto_name.MAX_UMO_AUTO_NAME_CACHE_SIZE",
+        2,
     ):
         for sender_id in ("sender-1", "sender-2", "sender-3", None):
             event = make_group_event("group-1", None)
@@ -295,4 +294,19 @@ async def test_sender_cache_is_bounded_and_skips_missing_ids():
     assert len(recorder._sender_cache) == 2
     assert db_helper.upsert_umo_sender.await_count == 2
     assert not recorder._sender_pending
+    db_helper.upsert_umo_auto_name.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_wakeup_does_not_overwrite_session_or_sender_names():
+    """Synthetic input carries no new platform display metadata."""
+    db_helper = MagicMock()
+    db_helper.upsert_umo_sender = AsyncMock()
+    db_helper.upsert_umo_auto_name = AsyncMock()
+    recorder = UmoAutoNameRecorder(db_helper, "test-conf-id")
+    event = make_group_event("group-1", "System")
+    event.event_kind = "agent_wakeup"
+    recorder.schedule(event)
+    assert recorder._writer_task is None
+    db_helper.upsert_umo_sender.assert_not_awaited()
     db_helper.upsert_umo_auto_name.assert_not_awaited()

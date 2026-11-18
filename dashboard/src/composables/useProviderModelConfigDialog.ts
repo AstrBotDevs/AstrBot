@@ -40,6 +40,15 @@ const GEMINI_EXTRA_BODY_TEMPLATE = {
   }
 }
 
+// Fallback only. Avoid actually depending on this.
+const GEMINI_4_DEFAULT_REASONING_LEVELS = ['auto', 'low', 'medium', 'high', 'xhigh']
+
+const GEMINI_4_REASONING_LEVELS = {
+  'gemini-4-carbon': ['auto', 'low', 'medium', 'high'],
+  'gemini-4-argon': ['auto', 'low', 'medium', 'high'],
+  'gemini-4-hydrogen': ['auto', 'low', 'medium', 'high', 'xhigh']
+}
+
 export function useProviderModelConfigDialog(options: UseProviderModelConfigDialogOptions) {
   const {
     selectedProviderSource,
@@ -64,9 +73,23 @@ export function useProviderModelConfigDialog(options: UseProviderModelConfigDial
 
     const schema = JSON.parse(JSON.stringify(configSchema.value))
     const hiddenKeys = ['id', 'model']
+    const modelName = providerEditData.value?.model?.toLowerCase().split('/').pop() || ''
+    const extraBodySchema = schema.provider.items.custom_extra_body
 
     if (selectedProviderSource.value?.type === 'googlegenai_chat_completion') {
-      schema.provider.items.custom_extra_body.template_schema = GEMINI_EXTRA_BODY_TEMPLATE
+      extraBodySchema.template_schema = { ...GEMINI_EXTRA_BODY_TEMPLATE }
+      if (modelName.startsWith('gemini-4')) {
+        const modelLevels = Object.entries(GEMINI_4_REASONING_LEVELS).find(([modelId]) =>
+          modelName === modelId || modelName.startsWith(`${modelId}-`)
+        )?.[1]
+        extraBodySchema.template_schema.reasoning_effort = {
+          name: 'Reasoning Effort',
+          type: 'string',
+          options: modelLevels ?? GEMINI_4_DEFAULT_REASONING_LEVELS
+        }
+      }
+    } else if (modelName.startsWith('gemini-')) {
+      delete extraBodySchema.template_schema?.reasoning_effort?.default
     }
 
     for (const key of hiddenKeys) {
@@ -89,6 +112,9 @@ export function useProviderModelConfigDialog(options: UseProviderModelConfigDial
     const editableProvider = JSON.parse(JSON.stringify(provider))
     if (editableProvider.provider_source_id) {
       delete editableProvider.reasoning
+    }
+    if (selectedProviderSource.value?.type === 'googlegenai_chat_completion') {
+      editableProvider.custom_extra_body ??= {}
     }
     providerEditData.value = editableProvider
     providerEditOriginalId.value = provider.id
