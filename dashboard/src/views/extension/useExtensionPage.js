@@ -314,33 +314,25 @@ export const useExtensionPage = (initialTab = "installed") => {
     return data;
   });
 
-  const compareInstalledPluginNames = (left, right) =>
-    normalizeStr(left?.name ?? "").localeCompare(
-      normalizeStr(right?.name ?? ""),
-      undefined,
-      {
-        sensitivity: "base",
-      },
-    );
-
-  const compareInstalledFallback = (left, right) => {
-    const reservedDiff =
-      Number(!!left.plugin?.reserved) - Number(!!right.plugin?.reserved);
-    if (reservedDiff !== 0) {
-      return reservedDiff;
-    }
-
-    const nameCompare = compareInstalledPluginNames(left.plugin, right.plugin);
-    return nameCompare !== 0 ? nameCompare : left.index - right.index;
-  };
-
   const sortInstalledPlugins = (plugins) => {
+    let collator;
     return plugins
       .map((plugin, index) => ({
         plugin,
         index,
       }))
-      .sort(compareInstalledFallback)
+      .sort((left, right) => {
+        const reservedDiff =
+          Number(!!left.plugin?.reserved) - Number(!!right.plugin?.reserved);
+        if (reservedDiff !== 0) return reservedDiff;
+
+        collator ??= new Intl.Collator(undefined, { sensitivity: "base" });
+        const nameCompare = collator.compare(
+          normalizeStr(left.plugin?.name ?? ""),
+          normalizeStr(right.plugin?.name ?? ""),
+        );
+        return nameCompare || left.index - right.index;
+      })
       .map((item) => item.plugin);
   };
 

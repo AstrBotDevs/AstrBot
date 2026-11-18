@@ -154,7 +154,7 @@
                 :is-streaming="isMessageStreaming(msg, msgIndex)"
                 :stats="messageContent(msg).agentStats"
                 :created-at="msg.created_at"
-                v-slot="{ blocks, offset }"
+                v-slot="{ blocks, offset, lastContentIndex }"
               >
                 <template
                   v-for="(block, blockIndex) in blocks"
@@ -166,9 +166,7 @@
                     :is-dark="isDark"
                     :initial-expanded="false"
                     :is-streaming="isMessageStreaming(msg, msgIndex)"
-                    :has-non-reasoning-content="
-                      hasFollowingContentBlock(msg, blockIndex + offset)
-                    "
+                    :has-non-reasoning-content="blockIndex + offset < lastContentIndex"
                   />
 
                   <template v-else>
@@ -720,12 +718,6 @@ function renderBlocks(message: ChatRecord): MessageDisplayBlock[] {
     return parts.length ? [{ kind: "content", parts }] : [];
   }
   return buildMessageBlocks(messageContent(message));
-}
-
-function hasFollowingContentBlock(message: ChatRecord, blockIndex: number) {
-  return renderBlocks(message)
-    .slice(blockIndex + 1)
-    .some((block) => block.kind === "content");
 }
 
 function handleMouseUp(event: MouseEvent, message: ChatRecord) {

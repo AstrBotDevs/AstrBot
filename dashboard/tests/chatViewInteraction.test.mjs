@@ -254,7 +254,12 @@ test("views remain outside collapsed work before and after restoring tool histor
     ts.ScriptTarget.Latest,
     true,
   );
-  const names = new Set(["workBlocks", "processBlocks", "finalBlocks"]);
+  const names = new Set([
+    "workBlocks",
+    "processBlocks",
+    "finalBlocks",
+    "lastContentIndex",
+  ]);
   const declarations = ast.statements.filter(
     (node) =>
       ts.isVariableStatement(node) &&
@@ -279,7 +284,7 @@ test("views remain outside collapsed work before and after restoring tool histor
   vm.runInContext(
     ts.transpile(
       declarations.map((node) => node.getText(ast)).join("\n") +
-        "\nexports.process = processBlocks; exports.final = finalBlocks;",
+        "\nObject.assign(exports, { process: processBlocks, final: finalBlocks, lastContentIndex });",
       { target: ts.ScriptTarget.ES2022 },
     ),
     context,
@@ -290,6 +295,7 @@ test("views remain outside collapsed work before and after restoring tool histor
   assert.equal(context.exports.process.value.length, 1);
   assert.equal(context.exports.process.value[0].parts.length, 2);
   assert.equal(context.exports.final.value[0].parts[0].id, "reading");
+  assert.equal(context.exports.lastContentIndex.value, 1);
   assert.equal(JSON.stringify(props.blocks), original);
   props.blocks.push({
     kind: "content",
@@ -302,6 +308,7 @@ test("views remain outside collapsed work before and after restoring tool histor
     },
   ]);
   props.blocks = JSON.parse(JSON.stringify(props.blocks));
+  assert.equal(context.exports.lastContentIndex.value, 3);
   assert.equal(context.exports.final.value[0].parts[0].id, "reading");
   assert.ok(
     context.exports.process.value.every((block) =>
@@ -311,4 +318,7 @@ test("views remain outside collapsed work before and after restoring tool histor
   props.isUser = true;
   assert.equal(context.exports.process.value.length, 0);
   assert.equal(context.exports.final.value.length, props.blocks.length);
+  props.isUser = false;
+  props.blocks = [thinking];
+  assert.equal(context.exports.lastContentIndex.value, -1);
 });

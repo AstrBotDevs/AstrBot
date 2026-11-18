@@ -27,12 +27,20 @@
     >
       <div class="process-collapse-inner">
         <div v-if="visited" class="message-work-content">
-          <slot :blocks="processBlocks" :offset="0" />
+          <slot
+            :blocks="processBlocks"
+            :offset="0"
+            :last-content-index="lastContentIndex"
+          />
         </div>
       </div>
     </div>
   </div>
-  <slot :blocks="finalBlocks" :offset="processBlocks.length" />
+  <slot
+    :blocks="finalBlocks"
+    :offset="processBlocks.length"
+    :last-content-index="lastContentIndex"
+  />
 </template>
 
 <script setup lang="ts">
@@ -85,6 +93,14 @@ const workBlocks = computed(() => {
 });
 const processBlocks = computed(() => workBlocks.value.process);
 const finalBlocks = computed(() => workBlocks.value.response);
+// Moving interactive views into the response can merge displayed process blocks.
+// Reasoning indicators use the position of content in the original message.
+const lastContentIndex = computed(() => {
+  for (let index = props.blocks.length - 1; index >= 0; index--) {
+    if (props.blocks[index].kind === "content") return index;
+  }
+  return -1;
+});
 
 watch(
   () => props.isStreaming,
