@@ -20,6 +20,20 @@ def _provider() -> ProviderAnthropic:
     return ProviderAnthropic.__new__(ProviderAnthropic)
 
 
+@pytest.mark.parametrize("keys", [None, [], [""], [" \t\n"]])
+def test_anthropic_rejects_missing_key_before_creating_client(monkeypatch, keys):
+    def unexpected_client(**kwargs):
+        pytest.fail("The SDK client must not be created without an API key")
+
+    monkeypatch.setattr(
+        "astrbot.core.provider.sources.anthropic_source.AsyncAnthropic",
+        unexpected_client,
+    )
+    config = {} if keys is None else {"key": keys}
+    with pytest.raises(ValueError, match="Anthropic API Key is required"):
+        ProviderAnthropic(config, {})
+
+
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
     ("custom_headers", "expected_key"),
@@ -502,6 +516,10 @@ async def test_malformed_custom_tools_reach_api_validation(
 
     assert len(captured) == 2
     assert captured[0] == captured[1]
+
+    # !Important! Claude requests must include max_tokens.
+    assert captured[0]["max_tokens"] == 64*1024
+
     assert captured[0]["tools"][0]["name"] == "get_time"
     assert captured[0]["tools"][1:] == custom_tools
     assert provider.provider_config["custom_extra_body"]["tools"] == custom_tools
