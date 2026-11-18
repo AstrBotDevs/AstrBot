@@ -65,6 +65,7 @@ class WhitelistCheckStage(Stage):
                 logger.info(
                     f"Session ID {event.unified_msg_origin} is not in the session "
                     "allowlist, so event propagation was stopped. Add this session "
-                    "ID to the allowlist in the configuration file.",
+                    "ID in WebUI: Config -> Access Control -> Whitelist -> "
+                    "Whitelist ID List, using the profile assigned to this bot.",
                 )
             event.stop_event()

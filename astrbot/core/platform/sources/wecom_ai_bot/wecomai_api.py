@@ -308,6 +308,40 @@ class WecomAIBotStreamMessageBuilder:
         return json.dumps(plain, ensure_ascii=False)
 
     @staticmethod
+    def make_stream_with_template_card(
+        stream_id: str,
+        content: str,
+        msg_items: list,
+        template_card: dict[str, Any],
+        finish: bool = False,
+    ) -> str:
+        """Build a stream response containing one template card.
+
+        Args:
+            stream_id: Stream identifier returned by AstrBot.
+            content: Accumulated Markdown content.
+            msg_items: Optional image message items.
+            template_card: WeCom template-card payload.
+            finish: Whether this is the final stream response.
+
+        Returns:
+            JSON-encoded stream-with-card response.
+        """
+        stream: dict[str, Any] = {"id": stream_id, "finish": finish}
+        if content:
+            stream["content"] = content
+        if msg_items:
+            stream["msg_item"] = msg_items
+        return json.dumps(
+            {
+                "msgtype": "stream_with_template_card",
+                "stream": stream,
+                "template_card": template_card,
+            },
+            ensure_ascii=False,
+        )
+
+    @staticmethod
     def make_text(content: str) -> str:
         """构建文本消息
 

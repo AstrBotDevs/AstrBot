@@ -9,7 +9,6 @@ AstrBot supports all client implementations that implement OneBot v11 reverse We
 
 Common OneBot v11 implementation projects are listed below:
 
-- [NapCat](https://github.com/NapNeko/NapCatQQ)
 - [OneDisc](https://github.com/ITCraftDevelopmentTeam/OneDisc)
 - [Tele-KiraLink](https://github.com/Echomirix/Tele-KiraLink)
 
@@ -18,8 +17,8 @@ Please refer to each implementation project's deployment documentation.
 ## 1. Configure OneBot v11
 
 1. Open AstrBot's WebUI
-2. Click `Bots` in the left sidebar
-3. In the right panel, click `+ Create Bot`
+2. Click `Platforms` in the left sidebar
+3. Click `Add Adapter` above the bot list
 4. Select `OneBot v11`
 
 Fill in the form:
@@ -28,7 +27,7 @@ Fill in the form:
 - Enable (`enable`): check it.
 - Reverse WebSocket host: fill your machine IP, usually `0.0.0.0`.
 - Reverse WebSocket port: choose any port, default is `6199`.
-- Reverse WebSocket token: fill this only when NapCat network configuration has a token set.
+- Reverse WebSocket token: fill this only when the protocol implementation enables a token in its network configuration.
 
 Click `Save`.
 
@@ -43,5 +42,5 @@ Notes:
 
 ## 3. Verify
 
-Go to `Data` -> `Logs` in the AstrBot WebUI. If a blue log appears saying `aiocqhttp(OneBot v11) adapter connected.`, the connection is successful.
+Go to `Data & Logs` -> `Logs` in the AstrBot WebUI. If a blue log appears saying `aiocqhttp(OneBot v11) adapter connected.`, the connection is successful.
 If after a few seconds you see `aiocqhttp adapter has been closed`, it means the connection timed out (failed). Please double-check your configuration.

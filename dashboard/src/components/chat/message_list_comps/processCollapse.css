@@ -1,0 +1,65 @@
+.process-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  max-width: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: rgba(var(--v-theme-on-surface), 0.62);
+  font: inherit;
+  font-size: 0.9375rem;
+  line-height: 1.75;
+  text-align: left;
+  cursor: pointer;
+}
+
+.process-toggle:hover {
+  color: rgba(var(--v-theme-on-surface), 0.88);
+}
+
+.process-toggle:focus-visible {
+  outline: 2px solid rgb(var(--v-theme-primary));
+  outline-offset: 4px;
+  border-radius: 4px;
+}
+
+.process-chevron {
+  color: inherit;
+  opacity: 1;
+  flex-shrink: 0;
+  transition: transform 320ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.process-chevron.is-expanded {
+  transform: rotate(90deg);
+}
+
+.process-collapse {
+  display: grid;
+  grid-template-rows: 0fr;
+  opacity: 0;
+  visibility: hidden;
+  transition:
+    grid-template-rows 360ms cubic-bezier(0.22, 1, 0.36, 1),
+    opacity 220ms ease,
+    visibility 360ms;
+}
+
+.process-collapse.is-expanded {
+  grid-template-rows: 1fr;
+  opacity: 1;
+  visibility: visible;
+}
+
+.process-collapse-inner {
+  min-height: 0;
+  overflow: hidden;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .process-collapse,
+  .process-chevron {
+    transition: none;
+  }
+}

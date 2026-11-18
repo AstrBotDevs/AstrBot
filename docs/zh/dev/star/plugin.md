@@ -50,7 +50,7 @@ git clone 插件仓库地址
 
 AstrBot 采用在运行时注入插件的机制。因此，在调试插件时，需要启动 AstrBot 本体。
 
-插件的代码修改后，可以在 AstrBot WebUI 的插件管理处找到自己的插件，点击 `管理`，点击 `重载插件` 即可。
+插件的代码修改后，在 AstrBot WebUI 的 `插件` 页找到自己的插件，点击插件卡片上的刷新图标（`重载插件`）。如果插件加载失败，可在同一页面的 `加载失败插件` 列表中点击对应插件的 `重载` 按钮。
 
 ### 插件依赖管理
 
@@ -188,7 +188,7 @@ async def on_message(self, event: AstrMessageEvent):
 | QQ 个人号(aiocqhttp) | ✅  | ✅    | ✅    | ✅     | ✅    | ✅    | ✅       |
 | Telegram             | ✅  | ✅    | ✅    | ✅     | ✅    | ✅    | ✅       |
 | QQ 官方接口          | ❌  | ✅    | ✅    | ❌     | ❌    | ❌    | ❌       |
-| 飞书                 | ✅  | ✅    | ✅    | ❌     | ❌    | ✅    | ✅       |
+| 飞书                 | ✅  | ✅    | ✅    | ✅     | ✅    | ✅    | ✅       |
 | 企业微信             | ❌  | ✅    | ✅    | ✅     | ❌    | ❌    | ❌       |
 | 钉钉                 | ❌  | ✅    | ✅    | ❌     | ❌    | ❌    | ❌       |
 
@@ -266,7 +266,7 @@ your_plugin/
     SKILL.md
 ```
 
-这种情况下 Skill 名称会使用插件目录名。插件提供的 Skill 由插件管理，在 WebUI 的 Skills 页面中作为只读来源展示；可以启用或禁用，但不能从本地 Skills 页面删除或编辑。插件卸载或更新后，对应 Skill 会随插件文件变化。
+这种情况下 Skill 名称会使用插件目录名。插件提供的 Skill 由插件管理，在 WebUI 的 `插件 → 技能` 页面中作为只读来源展示；可以启用或禁用，但不能从本地 Skills 页面删除或编辑。插件卸载或更新后，对应 Skill 会随插件文件变化。
 
 ### 声明支持平台（Optional）
 
@@ -551,7 +551,9 @@ async def my_custom_hook_1(
 > 对于每轮都会变化、内容量中小的提示词，优先通过 `req.extra_user_content_parts` 追加。它会作为额外的用户消息内容块放在本轮用户输入之后，更适合承载"当前时间""角色好感度""本轮相关记忆片段"等动态上下文：
 >
 > ```python
-> from astrbot.core.agent.message import TextPart
+> # AstrBot v4.30.0 之前的导入方式：
+> # from astrbot.core.agent.message import TextPart
+> from astrbot.api.agents import TextPart
 >
 > @filter.on_llm_request()
 > async def add_dynamic_prompt(self, event: AstrMessageEvent, req: ProviderRequest):
@@ -608,8 +610,10 @@ async def on_llm_resp(
 
 ```python
 from astrbot.api.event import filter, AstrMessageEvent
-from astrbot.core.agent.run_context import ContextWrapper
-from astrbot.core.astr_agent_context import AstrAgentContext
+# AstrBot v4.30.0 之前的导入方式：
+# from astrbot.core.agent.run_context import ContextWrapper
+# from astrbot.core.astr_agent_context import AstrAgentContext
+from astrbot.api.agents import AstrAgentContext, ContextWrapper
 
 
 @filter.on_agent_begin()
@@ -631,7 +635,9 @@ async def on_agent_begin(
 
 ```python
 from astrbot.api.event import filter, AstrMessageEvent
-from astrbot.core.agent.tool import FunctionTool
+# AstrBot v4.30.0 之前的导入方式：
+# from astrbot.core.agent.tool import FunctionTool
+from astrbot.api import FunctionTool
 
 
 @filter.on_using_llm_tool()
@@ -658,7 +664,9 @@ async def on_using_llm_tool(
 from mcp.types import CallToolResult
 
 from astrbot.api.event import filter, AstrMessageEvent
-from astrbot.core.agent.tool import FunctionTool
+# AstrBot v4.30.0 之前的导入方式：
+# from astrbot.core.agent.tool import FunctionTool
+from astrbot.api import FunctionTool
 
 
 @filter.on_llm_tool_respond()
@@ -676,17 +684,17 @@ async def on_llm_tool_respond(
 
 ##### Agent 运行完成时
 
-> 适用于 AstrBot 版本 > v4.23.1
+内置 runner 在执行退出时调用一次 `on_agent_done`，包括错误、取消和步数耗尽。通过 `run_context.run_end_reason`（`completed`、`error`、`cancelled` 或 `max_steps`）和 `run_context.run_error` 读取结果。该 hook 不代表历史已保存。
 
-在 Agent 运行完成后，会触发 `on_agent_done` 钩子。这个钩子会在 `on_llm_response` 之后触发。
-
-可以获取到 `LLMResponse` 对象，可以对其进行修改。
+`resp` 可能为 `None` 或中断提示。需要在发送前修改模型回复，请使用 `on_llm_response`。
 
 ```python
 from astrbot.api.event import filter, AstrMessageEvent
 from astrbot.api.provider import LLMResponse
-from astrbot.core.agent.run_context import ContextWrapper
-from astrbot.core.astr_agent_context import AstrAgentContext
+# AstrBot v4.30.0 之前的导入方式：
+# from astrbot.core.agent.run_context import ContextWrapper
+# from astrbot.core.astr_agent_context import AstrAgentContext
+from astrbot.api.agents import AstrAgentContext, ContextWrapper
 
 
 @filter.on_agent_done()
@@ -694,12 +702,14 @@ async def on_agent_done(
     self,
     event: AstrMessageEvent,
     run_context: ContextWrapper[AstrAgentContext],
-    resp: LLMResponse,
-):  # 请注意有四个参数
-    print(resp)
+    resp: LLMResponse | None,
+):
+    print(run_context.run_end_reason, run_context.run_error)
+    if resp is not None:
+        print(resp.completion_text)
 ```
 
-> 这里不能使用 yield 来发送消息。如需发送，请直接使用 `event.send()` 方法。
+> 此处发送消息请使用 `event.send()`，不支持 `yield`。停止事件不会跳过后续清理处理函数。
 
 ##### 发送消息前
 
@@ -1122,7 +1132,9 @@ AstrBot 提供了开箱即用的会话控制功能：
 
 ```py
 import astrbot.api.message_components as Comp
-from astrbot.core.utils.session_waiter import (
+# AstrBot v4.30.0 之前的导入方式：
+# from astrbot.core.utils.session_waiter import session_waiter, SessionController
+from astrbot.api.util import (
     session_waiter,
     SessionController,
 )
@@ -1205,7 +1217,9 @@ async def handle_empty_mention(self, event: AstrMessageEvent):
 
 ```py
 import astrbot.api.message_components as Comp
-from astrbot.core.utils.session_waiter import (
+# AstrBot v4.30.0 之前的导入方式：
+# from astrbot.core.utils.session_waiter import session_waiter, SessionFilter, SessionController
+from astrbot.api.util import (
     session_waiter,
     SessionFilter,
     SessionController,
@@ -1531,7 +1545,9 @@ async def get_weather(
 **获取会话当前的 LLM 对话历史**
 
 ```py
-from astrbot.core.conversation_mgr import Conversation
+# AstrBot v4.30.0 之前的导入方式：
+# from astrbot.core.conversation_mgr import Conversation
+from astrbot.api.provider import Conversation
 
 uid = event.unified_msg_origin
 conv_mgr = self.context.conversation_manager

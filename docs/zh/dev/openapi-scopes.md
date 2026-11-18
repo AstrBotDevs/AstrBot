@@ -106,6 +106,12 @@ outline: deep
 
 | 方法 | 接口 | 条件性敏感子权限 |
 | --- | --- | --- |
+| `GET` | `/api/v1/agent-configs` | — |
+| `POST` | `/api/v1/agent-configs` | — |
+| `GET` | `/api/v1/agent-configs/{config_id}` | — |
+| `PUT` | `/api/v1/agent-configs/{config_id}` | — |
+| `DELETE` | `/api/v1/agent-configs/{config_id}` | — |
+| `GET` | `/api/v1/agent-runtimes` | — |
 | `POST` | `/api/v1/bot-types/{bot_type}/registration` | — |
 | `GET` | `/api/v1/config-profiles` | — |
 | `POST` | `/api/v1/config-profiles` | `config:edit_admin` |
@@ -118,9 +124,6 @@ outline: deep
 | `PUT` | `/api/v1/config-routes` | — |
 | `PUT` | `/api/v1/config-routes/{umo}` | — |
 | `DELETE` | `/api/v1/config-routes/{umo}` | — |
-| `GET` | `/api/v1/subagents/available-tools` | — |
-| `GET` | `/api/v1/subagents/config` | — |
-| `PUT` | `/api/v1/subagents/config` | — |
 | `GET` | `/api/v1/system-config` | — |
 | `PUT` | `/api/v1/system-config` | `config:edit_admin` |
 | `GET` | `/api/v1/system-config/runtime` | — |
@@ -169,6 +172,11 @@ outline: deep
 | `GET` | `/api/v1/chat/threads/{thread_id}` | — |
 | `DELETE` | `/api/v1/chat/threads/{thread_id}` | — |
 | `POST` | `/api/v1/chat/threads/{thread_id}/messages` | — |
+| `GET` | `/api/v1/chat/views/{view_id}` | — |
+| `POST` | `/api/v1/chat/views/{view_id}/actions` | — |
+| `GET` | `/api/v1/chat/views/{view_id}/actions/{interaction_id}` | — |
+| `GET` | `/api/v1/chat/workbench/views` | — |
+| `GET` | `/api/v1/chat/workbench/views/{plugin_name}/{view_name}` | — |
 | `GET` | `/api/v1/chat/ws` | `chat:admin` |
 
 ## `data`
@@ -189,13 +197,12 @@ outline: deep
 | `POST` | `/api/v1/session-groups` | — |
 | `PUT` | `/api/v1/session-groups/{group_id}` | — |
 | `DELETE` | `/api/v1/session-groups/{group_id}` | — |
-| `GET` | `/api/v1/sessions` | — |
 | `GET` | `/api/v1/sessions/active-umos` | — |
-| `PATCH` | `/api/v1/sessions/provider` | — |
+| `GET` | `/api/v1/sessions/overrides` | — |
 | `GET` | `/api/v1/sessions/rules` | — |
 | `POST` | `/api/v1/sessions/rules` | — |
 | `POST` | `/api/v1/sessions/rules/delete` | — |
-| `PATCH` | `/api/v1/sessions/service` | — |
+| `GET` | `/api/v1/sessions/senders` | — |
 
 ## `file`
 
@@ -207,6 +214,11 @@ outline: deep
 | `POST` | `/api/v1/file` | — |
 | `POST` | `/api/v1/files` | — |
 | `GET` | `/api/v1/files/content` | — |
+| `POST` | `/api/v1/files/upload/abort` | — |
+| `POST` | `/api/v1/files/upload/chunk` | — |
+| `POST` | `/api/v1/files/upload/complete` | — |
+| `POST` | `/api/v1/files/upload/init` | — |
+| `POST` | `/api/v1/files/upload/status` | — |
 | `GET` | `/api/v1/files/{attachment_id}` | — |
 | `DELETE` | `/api/v1/files/{attachment_id}` | — |
 | `GET` | `/api/v1/files/{attachment_id}/content` | — |
@@ -249,13 +261,14 @@ outline: deep
 | `GET` | `/api/v1/plugins/market/categories` | — |
 | `GET` | `/api/v1/plugins/page` | — |
 | `GET` | `/api/v1/plugins/page-bridge-sdk.js` | — |
-| `GET` | `/api/v1/plugins/page/assets` | — |
 | `GET` | `/api/v1/plugins/pages` | — |
 | `GET` | `/api/v1/plugins/readme` | — |
 | `POST` | `/api/v1/plugins/reload` | — |
 | `POST` | `/api/v1/plugins/update` | — |
 | `POST` | `/api/v1/plugins/validate/repo` | — |
 | `POST` | `/api/v1/plugins/version-support/check` | — |
+| `GET` | `/api/v1/plugins/view` | — |
+| `GET` | `/api/v1/plugins/views` | — |
 | `GET` | `/api/v1/plugins/{plugin_id}` | — |
 | `DELETE` | `/api/v1/plugins/{plugin_id}` | — |
 | `GET` | `/api/v1/plugins/{plugin_id}/changelog` | — |
@@ -268,12 +281,13 @@ outline: deep
 | `PATCH` | `/api/v1/plugins/{plugin_id}/enabled` | — |
 | `PUT` | `/api/v1/plugins/{plugin_id}/log-level` | — |
 | `GET` | `/api/v1/plugins/{plugin_id}/pages` | — |
-| `GET` | `/api/v1/plugins/{plugin_id}/pages/{page_name}` | — |
-| `GET` | `/api/v1/plugins/{plugin_id}/pages/{page_name}/assets/{asset_path}` | — |
+| `GET` | `/api/v1/plugins/{plugin_id}/pages/{view_name}` | — |
 | `GET` | `/api/v1/plugins/{plugin_id}/readme` | — |
 | `POST` | `/api/v1/plugins/{plugin_id}/reload` | — |
 | `POST` | `/api/v1/plugins/{plugin_id}/source` | — |
 | `POST` | `/api/v1/plugins/{plugin_id}/update` | — |
+| `GET` | `/api/v1/plugins/{plugin_id}/views` | — |
+| `GET` | `/api/v1/plugins/{plugin_id}/views/{view_name}` | — |
 
 ## `mcp`
 

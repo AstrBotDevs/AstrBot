@@ -11,6 +11,7 @@ from astrbot.core.utils.datetime_utils import generate_timestamp_id
 from ..entities import ProviderType
 from ..provider import TTSProvider
 from ..register import register_provider_adapter
+from .gemini_api_common import gemini_api_version
 
 
 @register_provider_adapter(
@@ -28,7 +29,11 @@ class ProviderGeminiTTSAPI(TTSProvider):
         api_key: str = provider_config.get("gemini_tts_api_key", "")
         api_base: str | None = provider_config.get("gemini_tts_api_base")
         timeout: int = int(provider_config.get("gemini_tts_timeout", 20))
-        http_options = types.HttpOptions(timeout=timeout * 1000)
+        http_options = types.HttpOptions(
+            api_version=gemini_api_version(),
+            timeout=timeout * 1000,
+            headers=self.request_headers,
+        )
 
         if api_base:
             api_base = api_base.removesuffix("/")
@@ -39,9 +44,13 @@ class ProviderGeminiTTSAPI(TTSProvider):
             logger.info(f"[Gemini TTS] 使用代理: {proxy}")
 
         self.client = genai.Client(api_key=api_key, http_options=http_options).aio
+        # Keep only AstrBot's UA across SDK versions that merge header case variants.
+        headers = self.client._api_client._http_options.headers
+        headers["user-agent"] = self.request_headers["User-Agent"]
+        headers.pop("User-Agent", None)
         self.model: str = provider_config.get(
             "gemini_tts_model",
-            "gemini-2.5-flash-preview-tts",
+            "gemini-3.8-flash-tts",
         )
         self.prefix: str | None = provider_config.get(
             "gemini_tts_prefix",

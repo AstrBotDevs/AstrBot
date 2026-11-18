@@ -51,18 +51,28 @@
                   :placeholder="t('core.common.objectEditor.placeholders.stringValue')"
                 ></v-text-field>
                 <div v-else-if="pair.type === 'number' || pair.type === 'float' || pair.type === 'int'" class="d-flex align-center gap-2 flex-grow-1">
-                  <v-slider
-                    v-if="pair.slider"
-                    :model-value="Number(pair.value) || 0"
-                    @update:model-value="pair.value = $event"
-                    :min="pair.slider.min"
-                    :max="pair.slider.max"
-                    :step="pair.slider.step"
-                    color="primary"
-                    density="compact"
-                    hide-details
-                    class="flex-grow-1"
-                  ></v-slider>
+                  <template v-if="pair.slider">
+                    <span style="min-width: 5px; text-align: right;">
+                      {{ pair.slider.min }}
+                    </span>
+
+                    <v-slider
+                      :model-value="Number(pair.value) || 0"
+                      @update:model-value="pair.value = $event"
+                      :min="pair.slider.min"
+                      :max="pair.slider.max"
+                      :step="pair.slider.step"
+                      color="primary"
+                      density="compact"
+                      hide-details
+                      class="flex-grow-1"
+                    ></v-slider>
+
+                    <span style="min-width: 5px; text-align: left;">
+                      {{ pair.slider.max }}
+                    </span>
+                  </template>
+                  
                   <v-text-field
                     v-model.number="pair.value"
                     type="number"
@@ -119,8 +129,18 @@
                 </div>
               </v-col>
               <v-col cols="7" class="pl-2 d-flex align-center justify-end">
+                <v-select
+                  v-if="template.options"
+                  :model-value="getTemplateValue(templateKey) ?? null"
+                  :items="template.options"
+                  :aria-label="getTemplateTitle(template, templateKey)"
+                  @update:model-value="updateTemplateValue(templateKey, $event)"
+                  density="compact"
+                  variant="outlined"
+                  hide-details
+                ></v-select>
                 <v-text-field
-                  v-if="template.type === 'string'"
+                  v-else-if="template.type === 'string'"
                   :model-value="getTemplateValue(templateKey)"
                   @update:model-value="updateTemplateValue(templateKey, $event)"
                   density="compact"
@@ -129,18 +149,29 @@
                   :placeholder="t('core.common.objectEditor.placeholders.stringValue')"
                 ></v-text-field>
                 <div v-else-if="template.type === 'number' || template.type === 'float' || template.type === 'int'" class="d-flex align-center ga-4 flex-grow-1">
-                  <v-slider
-                    v-if="template.slider"
-                    :model-value="Number(getTemplateValue(templateKey)) || 0"
-                    @update:model-value="updateTemplateValue(templateKey, $event)"
-                    :min="template.slider.min"
-                    :max="template.slider.max"
-                    :step="template.slider.step"
-                    color="primary"
-                    density="compact"
-                    hide-details
-                    class="flex-grow-1"
-                  ></v-slider>
+                  <template v-if="template.slider">
+                    <span style="min-width: 5px; text-align: right;">
+                      {{ template.slider.min }}
+                    </span>
+
+                    <v-slider
+                      :model-value="Number(getTemplateValue(templateKey)) || 0"
+                      @update:model-value="updateTemplateValue(templateKey, $event)"
+                      :min="template.slider.min"
+                      :max="template.slider.max"
+                      :step="template.slider.step"
+                      color="primary"
+                      density="compact"
+                      hide-details
+                      class="flex-grow-1"
+                    ></v-slider>
+
+                    <span style="min-width: 5px; text-align: left;">
+                      {{ template.slider.max }}
+                    </span>
+                  </template>
+                  
+
                   <v-text-field
                     :model-value="getTemplateValue(templateKey)"
                     @update:model-value="updateTemplateValue(templateKey, $event)"

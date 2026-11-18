@@ -1,5 +1,6 @@
 import {
   createHighlighter,
+  loadShikiLanguages,
   normalizeLimitedShikiLanguage,
 } from "./shikiLimitedBundle";
 
@@ -23,19 +24,17 @@ export function escapeHtml(value = "") {
     .replaceAll("'", "&#39;");
 }
 
-export async function getShikiHighlighter() {
+async function getShikiHighlighter() {
   if (!highlighterPromise) {
-    highlighterPromise = createHighlighter({
-      themes: Object.values(SHIKI_THEMES),
-    });
+    highlighterPromise = createHighlighter();
   }
 
   return highlighterPromise;
 }
 
-export async function ensureShikiLanguages() {
+export async function ensureShikiLanguages(languages) {
   const highlighter = await getShikiHighlighter();
-
+  await loadShikiLanguages(highlighter, languages);
   return highlighter;
 }
 

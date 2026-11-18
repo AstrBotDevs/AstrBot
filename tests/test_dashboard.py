@@ -10,8 +10,8 @@ import zipfile
 from datetime import datetime
 from pathlib import Path
 from types import SimpleNamespace
-from unittest.mock import MagicMock
-from urllib.parse import parse_qs, urlsplit, urlunsplit
+from unittest.mock import AsyncMock, MagicMock, call
+from urllib.parse import parse_qs, urlsplit
 
 import jwt
 import pyotp
@@ -44,6 +44,7 @@ from astrbot.dashboard.password_state import (
     set_password_storage_upgraded,
 )
 from astrbot.dashboard.server import AstrBotDashboard
+from astrbot.dashboard.services import auth_service
 from astrbot.dashboard.services.auth_service import DASHBOARD_JWT_COOKIE_NAME
 from astrbot.dashboard.services.plugin_page_service import PluginPageService
 from astrbot.dashboard.services.plugin_service import PluginService
@@ -125,11 +126,6 @@ def test_skills_service_marks_inactive_plugin_skills(monkeypatch):
 
 def _removed_md5_hint_alias_key() -> str:
     return "le" + "gacy_pwd_hint"
-
-
-def _strip_query(url: str) -> str:
-    parsed = urlsplit(url)
-    return urlunsplit(("", "", parsed.path, "", parsed.fragment))
 
 
 def _assert_cookie_samesite_strict(cookie_header: str) -> None:
@@ -262,12 +258,13 @@ window.renderTabs = renderTabs;
 
 
 @pytest_asyncio.fixture(scope="module")
-async def core_lifecycle_td(tmp_path_factory):
+async def core_lifecycle_td(tmp_path_factory, dashboard_test_config):
     """Creates and initializes a core lifecycle instance with a temporary database."""
     tmp_db_path = tmp_path_factory.mktemp("data") / "test_data_v3.db"
     db = SQLiteDatabase(str(tmp_db_path))
     log_broker = LogBroker()
     core_lifecycle = AstrBotCoreLifecycle(log_broker, db)
+    core_lifecycle.astrbot_config = dashboard_test_config
     await core_lifecycle.initialize()
     generated_password = getattr(
         core_lifecycle.astrbot_config,
@@ -343,8 +340,15 @@ def test_dashboard_uses_bundled_dist_when_data_dist_is_stale(
     bundled_dist = tmp_path / "bundled-dist"
     user_dist.mkdir(parents=True)
     bundled_dist.mkdir()
-    (bundled_dist / "index.html").write_text("bundled", encoding="utf-8")
+    (bundled_dist / "index.html").write_text(
+        '<script type="module" src="/assets/app.js"></script>',
+        encoding="utf-8",
+    )
     (bundled_dist / "assets").mkdir()
+    (bundled_dist / "assets" / "app.js").write_text(
+        "export {};",
+        encoding="utf-8",
+    )
     (bundled_dist / "assets" / "version").write_text(
         f"v{VERSION}",
         encoding="utf-8",
@@ -465,11 +469,27 @@ async def authenticated_header(
     return {"Authorization": f"Bearer {token}"}
 
 
+@pytest.fixture
+def failed_login_sleep(monkeypatch: pytest.MonkeyPatch) -> AsyncMock:
+    """Record failed login delays inside the auth service.
+
+    Args:
+        monkeypatch: Restores the auth module's asyncio binding after the test.
+
+    Returns:
+        The mock awaited by the failed login branch.
+    """
+    sleep = AsyncMock(return_value=None)
+    monkeypatch.setattr(auth_service, "asyncio", SimpleNamespace(sleep=sleep))
+    return sleep
+
+
 @pytest.mark.asyncio
 async def test_auth_login(
     app: FastAPIAppAdapter,
     core_lifecycle_td: AstrBotCoreLifecycle,
     monkeypatch: pytest.MonkeyPatch,
+    failed_login_sleep: AsyncMock,
 ):
     """Tests the login functionality with both wrong and correct credentials."""
     monkeypatch.setitem(app.config, "DASHBOARD_JWT_COOKIE_SECURE", False)
@@ -481,6 +501,8 @@ async def test_auth_login(
     )
     data = await response.get_json()
     assert data["status"] == "error"
+    failed_login_sleep.assert_awaited_once_with(3)
+    failed_login_sleep.reset_mock()
 
     response = await test_client.post(
         "/api/auth/login",
@@ -491,6 +513,7 @@ async def test_auth_login(
     )
     data = await response.get_json()
     assert data["status"] == "ok" and "token" in data["data"]
+    failed_login_sleep.assert_not_awaited()
     set_cookie_headers = response.headers.getlist("Set-Cookie")
     jwt_cookie_header = next(
         (value for value in set_cookie_headers if DASHBOARD_JWT_COOKIE_NAME in value),
@@ -522,9 +545,10 @@ async def test_desktop_session_issues_jwt_without_password(
 
     assert response.status_code == 200
     assert data["status"] == "ok"
-    assert data["data"]["username"] == core_lifecycle_td.astrbot_config[
-        "dashboard"
-    ]["username"]
+    assert (
+        data["data"]["username"]
+        == core_lifecycle_td.astrbot_config["dashboard"]["username"]
+    )
     token = data["data"]["token"]
     payload = jwt.decode(
         token,
@@ -649,6 +673,7 @@ async def test_auth_rate_limit_uses_same_bucket_across_paths(
     app: FastAPIAppAdapter,
     core_lifecycle_td: AstrBotCoreLifecycle,
     monkeypatch: pytest.MonkeyPatch,
+    failed_login_sleep: AsyncMock,
 ):
     """Same client IP shares a rate-limit bucket across different auth endpoints."""
     monkeypatch.setenv("ASTRBOT_TEST_MODE", "false")
@@ -675,6 +700,7 @@ async def test_auth_rate_limit_uses_same_bucket_across_paths(
         assert r2.status_code == 429, (
             "second request from same IP should be rate limited"
         )
+        failed_login_sleep.assert_awaited_once_with(3)
     finally:
         cfg["auth_rate_limit"] = rl_original
         cfg["trust_proxy_headers"] = tp_original
@@ -685,6 +711,7 @@ async def test_auth_rate_limit_separates_different_client_ips(
     app: FastAPIAppAdapter,
     core_lifecycle_td: AstrBotCoreLifecycle,
     monkeypatch: pytest.MonkeyPatch,
+    failed_login_sleep: AsyncMock,
 ):
     """Different client IPs have independent rate-limit buckets."""
     monkeypatch.setenv("ASTRBOT_TEST_MODE", "false")
@@ -723,6 +750,7 @@ async def test_auth_rate_limit_separates_different_client_ips(
             headers={"X-Forwarded-For": "198.51.100.11"},
         )
         assert r_c.status_code != 429, "different IP has its own bucket"
+        assert failed_login_sleep.await_args_list == [call(3), call(3)]
     finally:
         cfg["auth_rate_limit"] = rl_original
         cfg["trust_proxy_headers"] = tp_original
@@ -733,6 +761,7 @@ async def test_auth_rate_limit_applies_to_v1_login(
     app: FastAPIAppAdapter,
     core_lifecycle_td: AstrBotCoreLifecycle,
     monkeypatch: pytest.MonkeyPatch,
+    failed_login_sleep: AsyncMock,
 ):
     """The v1 login endpoint uses the same token-bucket limiter as legacy login."""
     monkeypatch.setenv("ASTRBOT_TEST_MODE", "false")
@@ -763,6 +792,7 @@ async def test_auth_rate_limit_applies_to_v1_login(
             headers=headers,
         )
         assert second.status_code == 429, "v1 login should be rate limited"
+        failed_login_sleep.assert_awaited_once_with(3)
     finally:
         cfg["auth_rate_limit"] = rl_original
         cfg["trust_proxy_headers"] = tp_original
@@ -773,6 +803,7 @@ async def test_auth_rate_limit_ignores_proxy_headers_by_default(
     app: FastAPIAppAdapter,
     core_lifecycle_td: AstrBotCoreLifecycle,
     monkeypatch: pytest.MonkeyPatch,
+    failed_login_sleep: AsyncMock,
 ):
     """When trust_proxy_headers is False, all proxy-spoofed IPs fall back to the connection IP."""
     monkeypatch.setenv("ASTRBOT_TEST_MODE", "false")
@@ -804,6 +835,7 @@ async def test_auth_rate_limit_ignores_proxy_headers_by_default(
         assert r2.status_code == 429, (
             "same connection IP, same bucket despite proxy headers"
         )
+        failed_login_sleep.assert_awaited_once_with(3)
     finally:
         cfg["auth_rate_limit"] = rl_original
         cfg["trust_proxy_headers"] = tp_original
@@ -1135,7 +1167,7 @@ async def test_config_save_accepts_totp_code_for_protected_totp_changes(
             json={"conf_id": "default", "config": post_config},
         )
         data = await response.get_json()
-        assert data["status"] == "ok"
+        assert data["status"] == "ok", data
         assert core_lifecycle_td.astrbot_config["dashboard"]["totp"] == {
             "enable": False,
             "secret": "",
@@ -1319,6 +1351,7 @@ async def test_md5_dashboard_password_keeps_md5_auth_until_edit(
 async def test_md5_login_failure_includes_upgrade_faq_hint(
     app: FastAPIAppAdapter,
     core_lifecycle_td: AstrBotCoreLifecycle,
+    failed_login_sleep: AsyncMock,
 ):
     original_dashboard_config = copy.deepcopy(
         core_lifecycle_td.astrbot_config["dashboard"]
@@ -1347,6 +1380,7 @@ async def test_md5_login_failure_includes_upgrade_faq_hint(
 
         assert data["status"] == "error"
         assert data["message"].startswith("Incorrect username or password.")
+        failed_login_sleep.assert_awaited_once_with(3)
         assert "用户名或密码错误" in data["message"]
         assert "https://docs.astrbot.app/en/faq.html" in data["message"]
         assert "https://docs.astrbot.app/faq.html" in data["message"]
@@ -1842,18 +1876,18 @@ async def test_plugin_web_api_supports_dynamic_route(
     assert calls == ["example"]
 
 
-def test_plugin_page_content_path_escapes_plugin_name():
+def test_plugin_page_view_content_path_escapes_plugin_name():
     assert (
-        PluginPageService.build_plugin_page_content_path(
-            "plugin with space", "main page"
+        PluginPageService.build_plugin_page_view_content_path(
+            "plugin with space", "main page", "token"
         )
-        == "/api/plugin/page/content/plugin%20with%20space/main%20page/"
+        == "/api/v1/plugins/plugin%20with%20space/views/main%20page/_t/token/"
     )
     assert (
-        PluginPageService.build_plugin_page_content_path(
-            "plugin with space", "main page", "assets/main file.js"
+        PluginPageService.build_plugin_page_view_content_path(
+            "plugin with space", "main page", "token", "assets/main file.js"
         )
-        == "/api/plugin/page/content/plugin%20with%20space/main%20page/assets/main%20file.js"
+        == "/api/v1/plugins/plugin%20with%20space/views/main%20page/_t/token/assets/main%20file.js"
     )
 
 
@@ -1905,8 +1939,8 @@ async def test_plugin_detail_includes_scanned_page_component(
             "name": PLUGIN_PAGE_DEMO_PAGE_NAME,
             "title": PLUGIN_PAGE_DEMO_PAGE_NAME,
             "page_name": PLUGIN_PAGE_DEMO_PAGE_NAME,
-            "i18n_key": f"pages.{PLUGIN_PAGE_DEMO_PAGE_NAME}",
-            "description": "Plugin Page entry",
+            "i18n_key": f"views.{PLUGIN_PAGE_DEMO_PAGE_NAME}",
+            "description": "",
             "plugin_name": PLUGIN_PAGE_DEMO_NAME,
             "plugin_marketplace_name": PLUGIN_PAGE_DEMO_NAME.replace("_", "-"),
         }
@@ -1932,29 +1966,89 @@ async def test_plugin_page_entry_returns_signed_content_path(
     assert data["status"] == "ok"
     assert data["data"]["name"] == PLUGIN_PAGE_DEMO_PAGE_NAME
     assert data["data"]["title"] == PLUGIN_PAGE_DEMO_PAGE_NAME
-    assert data["data"]["i18n_key"] == f"pages.{PLUGIN_PAGE_DEMO_PAGE_NAME}"
+    assert data["data"]["i18n_key"] == f"views.{PLUGIN_PAGE_DEMO_PAGE_NAME}"
     assert data["data"]["content_path"].startswith(
-        f"/api/plugin/page/content/{PLUGIN_PAGE_DEMO_NAME}/{PLUGIN_PAGE_DEMO_PAGE_NAME}/"
+        f"/api/v1/plugins/{PLUGIN_PAGE_DEMO_NAME}/views/{PLUGIN_PAGE_DEMO_PAGE_NAME}/_t/"
     )
     assert "asset_token=" in data["data"]["content_path"]
 
 
 @pytest.mark.asyncio
-async def test_plugin_page_content_requires_auth(
+async def test_plugin_page_view_token_path_serves_raw_assets(
     app: FastAPIAppAdapter,
+    authenticated_header: dict,
     registered_plugin_page: StarMetadata,
 ):
+    """Path-token view URLs serve assets without content rewriting."""
     test_client = app.test_client()
-    response = await test_client.get(
-        f"/api/plugin/page/content/{PLUGIN_PAGE_DEMO_NAME}/{PLUGIN_PAGE_DEMO_PAGE_NAME}/"
+    entry_response = await test_client.get(
+        (
+            f"/api/plugin/page/entry?name={PLUGIN_PAGE_DEMO_NAME}"
+            f"&page={PLUGIN_PAGE_DEMO_PAGE_NAME}"
+        ),
+        headers=authenticated_header,
     )
-    assert response.status_code == 401
-    data = await response.get_json()
-    assert data["status"] == "error"
+    assert entry_response.status_code == 200
+    content_path = (await entry_response.get_json())["data"]["content_path"]
+
+    # The signed entry document is fetchable anonymously via its path token.
+    anonymous_client = app.test_client()
+    html_response = await anonymous_client.get(content_path)
+    assert html_response.status_code == 200
+    html_text = (await html_response.get_data()).decode("utf-8")
+    assert "Single plugin Page with internal navigation" in html_text
+    # Bridge SDK is still injected and carries the token for its own fetch.
+    bridge_sdk_url = re.search(
+        r'src="([^"]+/bridge-sdk\.js[^"]*)"',
+        html_text,
+    )
+    assert bridge_sdk_url is not None
+    assert "asset_token=" in bridge_sdk_url.group(1)
+    # Relative asset URLs are NOT rewritten on the path-token route.
+    app_js_url = re.search(
+        r'src="([^"]*app\.js[^"]*)"',
+        html_text,
+    )
+    assert app_js_url is not None
+    assert "/api/plugin/page/content/" not in app_js_url.group(1)
+
+    # A relative asset resolves under the path-token prefix and is served raw.
+    asset_response = await anonymous_client.get(urlsplit(content_path).path + "app.js")
+    assert asset_response.status_code == 200
+
+    # A token scoped to another plugin is rejected.
+    other_path = urlsplit(content_path).path.replace(
+        f"/plugins/{PLUGIN_PAGE_DEMO_NAME}/",
+        "/plugins/another_plugin/",
+    )
+    other_response = await anonymous_client.get(other_path)
+    assert other_response.status_code == 401
+
+    # No token at all is rejected.
+    no_token_response = await anonymous_client.get(
+        f"/api/v1/plugins/{PLUGIN_PAGE_DEMO_NAME}/views/"
+        f"{PLUGIN_PAGE_DEMO_PAGE_NAME}/_t//app.js"
+    )
+    assert no_token_response.status_code in (401, 404)
 
 
 @pytest.mark.asyncio
-async def test_plugin_page_content_supports_cookie_auth(
+async def test_plugin_page_legacy_content_route_is_removed(
+    app: FastAPIAppAdapter,
+    authenticated_header: dict,
+    registered_plugin_page: StarMetadata,
+):
+    """The query-token content route was replaced by path-token view URLs."""
+    test_client = app.test_client()
+    response = await test_client.get(
+        f"/api/plugin/page/content/{PLUGIN_PAGE_DEMO_NAME}/{PLUGIN_PAGE_DEMO_PAGE_NAME}/",
+        headers=authenticated_header,
+    )
+    assert response.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_plugin_page_view_supports_cookie_auth(
     app: FastAPIAppAdapter,
     core_lifecycle_td: AstrBotCoreLifecycle,
     registered_plugin_page: StarMetadata,
@@ -1969,38 +2063,39 @@ async def test_plugin_page_content_supports_cookie_auth(
     )
     assert login_response.status_code == 200
 
-    response = await test_client.get(
-        f"/api/plugin/page/content/{PLUGIN_PAGE_DEMO_NAME}/{PLUGIN_PAGE_DEMO_PAGE_NAME}/"
+    entry_response = await test_client.get(
+        (
+            f"/api/plugin/page/entry?name={PLUGIN_PAGE_DEMO_NAME}"
+            f"&page={PLUGIN_PAGE_DEMO_PAGE_NAME}"
+        ),
     )
+    assert entry_response.status_code == 200
+    content_path = (await entry_response.get_json())["data"]["content_path"]
+
+    response = await test_client.get(content_path)
     assert response.status_code == 200
     content = (await response.get_data()).decode("utf-8")
     assert "Single plugin Page with internal navigation" in content
     assert response.headers["X-Frame-Options"] == "SAMEORIGIN"
     assert response.headers["Cache-Control"] == "no-store"
     assert "frame-ancestors 'self'" in response.headers["Content-Security-Policy"]
-    assert "asset_token=" in content
 
-    asset_url_match = re.search(
-        r'src="([^"]+/app\.js[^"]*)"',
-        content,
-    )
+    # Relative asset URLs stay untouched and resolve under the token path.
+    asset_url_match = re.search(r'src="([^"]*app\.js[^"]*)"', content)
     assert asset_url_match is not None
-    asset_response = await test_client.get(asset_url_match.group(1))
+    asset_response = await test_client.get(
+        urlsplit(content_path).path + asset_url_match.group(1)
+    )
     assert asset_response.status_code == 200
     asset_content = (await asset_response.get_data()).decode("utf-8")
     assert "renderTabs" in asset_content
     assert 'from "react"' in asset_content
-    assert (
-        f"/api/plugin/page/content/{PLUGIN_PAGE_DEMO_NAME}/{PLUGIN_PAGE_DEMO_PAGE_NAME}/shared/common.js"
-        in asset_content
-    )
-    assert "asset_token=" in asset_content
+    assert "shared/common.js" in asset_content
+    assert "/api/plugin/page/content/" not in asset_content
 
-    bridge_url_match = re.search(
-        r'src="([^"]+/bridge-sdk\.js[^"]*)"',
-        content,
-    )
+    bridge_url_match = re.search(r'src="([^"]+/bridge-sdk\.js[^"]*)"', content)
     assert bridge_url_match is not None
+    assert "asset_token=" in bridge_url_match.group(1)
     bridge_response = await test_client.get(bridge_url_match.group(1))
     assert bridge_response.status_code == 200
     bridge_content = (await bridge_response.get_data()).decode("utf-8")
@@ -2008,75 +2103,56 @@ async def test_plugin_page_content_supports_cookie_auth(
 
 
 @pytest.mark.asyncio
-async def test_plugin_page_content_issues_scoped_asset_token(
+async def test_plugin_page_view_issues_scoped_asset_token(
     app: FastAPIAppAdapter,
     authenticated_header: dict,
     registered_plugin_page: StarMetadata,
 ):
-    authorized_client = app.test_client()
-    response = await authorized_client.get(
-        f"/api/plugin/page/content/{PLUGIN_PAGE_DEMO_NAME}/{PLUGIN_PAGE_DEMO_PAGE_NAME}/",
+    test_client = app.test_client()
+    entry_response = await test_client.get(
+        (
+            f"/api/plugin/page/entry?name={PLUGIN_PAGE_DEMO_NAME}"
+            f"&page={PLUGIN_PAGE_DEMO_PAGE_NAME}"
+        ),
         headers=authenticated_header,
     )
-    assert response.status_code == 200
-    html_text = (await response.get_data()).decode("utf-8")
+    assert entry_response.status_code == 200
+    content_path = (await entry_response.get_json())["data"]["content_path"]
+    asset_token = parse_qs(urlsplit(content_path).query).get("asset_token", [""])[0]
+    assert asset_token
 
-    app_js_url = re.search(
-        r'src="([^"]+/app\.js[^"]*)"',
-        html_text,
-    )
+    html_response = await test_client.get(content_path)
+    assert html_response.status_code == 200
+    html_text = (await html_response.get_data()).decode("utf-8")
     bridge_sdk_url = re.search(
         r'src="([^"]+/bridge-sdk\.js[^"]*)"',
         html_text,
     )
-    css_url = re.search(
-        r'href="([^"]+/base\.css[^"]*)"',
-        html_text,
-    )
-    assert app_js_url is not None
     assert bridge_sdk_url is not None
-    assert css_url is not None
-    assert "asset_token=" in app_js_url.group(1)
     assert "asset_token=" in bridge_sdk_url.group(1)
-    assert "asset_token=" in css_url.group(1)
-
-    query = parse_qs(urlsplit(app_js_url.group(1)).query)
-    asset_token = query.get("asset_token", [""])[0]
-    assert asset_token
 
     anonymous_client = app.test_client()
-    app_js_response = await anonymous_client.get(app_js_url.group(1))
-    assert app_js_response.status_code == 200
     bridge_response = await anonymous_client.get(bridge_sdk_url.group(1))
     assert bridge_response.status_code == 200
     bridge_js = (await bridge_response.get_data()).decode("utf-8")
-    assert "window.AstrBotPluginPage?.__setInitialContext" in bridge_js
+    assert "window.AstrBotPluginView?.__setInitialContext" in bridge_js
+    assert "window.AstrBotPluginPage = window.AstrBotPluginView;" in bridge_js
     assert '"locale": "zh-CN"' in bridge_js
     assert '"displayName": "插件页面演示"' in bridge_js
     assert '"pageTitle": "Bridge 演示页"' in bridge_js
-    css_response = await anonymous_client.get(css_url.group(1))
-    assert css_response.status_code == 200
 
+    # A stale dashboard cookie does not block a valid view token.
     stale_cookie_response = await anonymous_client.get(
-        app_js_url.group(1),
+        bridge_sdk_url.group(1),
         headers={"Cookie": f"{DASHBOARD_JWT_COOKIE_NAME}=stale.dashboard.token"},
     )
     assert stale_cookie_response.status_code == 200
 
+    # Scoped view tokens are rejected outside plugin view paths.
     out_of_scope_response = await anonymous_client.get(
         f"/api/plugin/get?asset_token={asset_token}"
     )
     assert out_of_scope_response.status_code == 401
-
-    cross_plugin_response = await anonymous_client.get(
-        f"/api/plugin/page/content/another_plugin/{PLUGIN_PAGE_DEMO_PAGE_NAME}/app.js?asset_token={asset_token}"
-    )
-    assert cross_plugin_response.status_code == 401
-
-    cross_page_response = await anonymous_client.get(
-        f"/api/plugin/page/content/{PLUGIN_PAGE_DEMO_NAME}/another-page/app.js?asset_token={asset_token}"
-    )
-    assert cross_page_response.status_code == 401
 
 
 @pytest.mark.asyncio
@@ -2087,10 +2163,16 @@ async def test_plugin_page_bridge_sdk_includes_is_dark_when_theme_param_provided
 ):
     """Bridge SDK initial context should include isDark based on ?theme= query param."""
     authorized_client = app.test_client()
-    response = await authorized_client.get(
-        f"/api/plugin/page/content/{PLUGIN_PAGE_DEMO_NAME}/{PLUGIN_PAGE_DEMO_PAGE_NAME}/",
+    entry_response = await authorized_client.get(
+        (
+            f"/api/plugin/page/entry?name={PLUGIN_PAGE_DEMO_NAME}"
+            f"&page={PLUGIN_PAGE_DEMO_PAGE_NAME}"
+        ),
         headers=authenticated_header,
     )
+    assert entry_response.status_code == 200
+    content_path = (await entry_response.get_json())["data"]["content_path"]
+    response = await authorized_client.get(content_path)
     assert response.status_code == 200
     html_text = (await response.get_data()).decode("utf-8")
     bridge_sdk_url = re.search(
@@ -2131,61 +2213,45 @@ async def test_plugin_page_bridge_sdk_includes_is_dark_when_theme_param_provided
 
 
 @pytest.mark.asyncio
-async def test_plugin_page_content_propagates_theme_in_rewritten_urls(
+async def test_plugin_page_view_propagates_theme(
     app: FastAPIAppAdapter,
     authenticated_header: dict,
     registered_plugin_page: StarMetadata,
 ):
-    """Theme query param should be propagated through rewritten asset and bridge URLs."""
+    """The theme query param reaches the view HTML and the bridge SDK URL."""
     test_client = app.test_client()
-    response = await test_client.get(
-        f"/api/plugin/page/content/{PLUGIN_PAGE_DEMO_NAME}/{PLUGIN_PAGE_DEMO_PAGE_NAME}/"
-        "?asset_token=&theme=dark",
+    entry_response = await test_client.get(
+        (
+            f"/api/plugin/page/entry?name={PLUGIN_PAGE_DEMO_NAME}"
+            f"&page={PLUGIN_PAGE_DEMO_PAGE_NAME}"
+        ),
         headers=authenticated_header,
     )
-    assert response.status_code == 200
-    html_text = (await response.get_data()).decode("utf-8")
+    assert entry_response.status_code == 200
+    content_path = (await entry_response.get_json())["data"]["content_path"]
 
-    # Verify theme=dark appears in bridge SDK URL in rewritten HTML
-    bridge_sdk_url_match = re.search(
+    # theme=dark -> data-theme and color-scheme on <html>, theme on bridge URL
+    dark_response = await test_client.get(content_path + "&theme=dark")
+    assert dark_response.status_code == 200
+    dark_html = (await dark_response.get_data()).decode("utf-8")
+    assert 'data-theme="dark"' in dark_html
+    assert '<meta name="color-scheme" content="dark">' in dark_html
+    bridge_sdk_url = re.search(
         r'src="([^"]+/bridge-sdk\.js[^"]*)"',
-        html_text,
+        dark_html,
     )
-    assert bridge_sdk_url_match is not None
-    bridge_query = parse_qs(urlsplit(bridge_sdk_url_match.group(1)).query)
-    assert bridge_query.get("theme") == ["dark"]
+    assert bridge_sdk_url is not None
+    assert parse_qs(urlsplit(bridge_sdk_url.group(1)).query).get("theme") == ["dark"]
 
-    # Verify theme=dark appears in CSS asset URL in rewritten HTML
-    css_url_match = re.search(
-        r'href="([^"]+/base\.css[^"]*)"',
-        html_text,
-    )
-    assert css_url_match is not None
-    css_query = parse_qs(urlsplit(css_url_match.group(1)).query)
-    assert css_query.get("theme") == ["dark"]
-
-    # Verify data-theme is injected on <html> tag to prevent flash
-    assert 'data-theme="dark"' in html_text
-    # Verify color-scheme meta tag is injected for browser-level default styles
-    assert '<meta name="color-scheme" content="dark">' in html_text
-
-    # theme=light → data-theme="light" on <html> and color-scheme meta
-    light_response = await test_client.get(
-        f"/api/plugin/page/content/{PLUGIN_PAGE_DEMO_NAME}/{PLUGIN_PAGE_DEMO_PAGE_NAME}/"
-        "?asset_token=&theme=light",
-        headers=authenticated_header,
-    )
+    # theme=light -> data-theme="light" and matching color-scheme meta
+    light_response = await test_client.get(content_path + "&theme=light")
     assert light_response.status_code == 200
     light_html = (await light_response.get_data()).decode("utf-8")
     assert 'data-theme="light"' in light_html
     assert '<meta name="color-scheme" content="light">' in light_html
 
-    # no theme param → no data-theme or color-scheme meta on <html>
-    no_theme_response = await test_client.get(
-        f"/api/plugin/page/content/{PLUGIN_PAGE_DEMO_NAME}/{PLUGIN_PAGE_DEMO_PAGE_NAME}/"
-        "?asset_token=",
-        headers=authenticated_header,
-    )
+    # no theme param -> no data-theme or color-scheme meta on <html>
+    no_theme_response = await test_client.get(content_path)
     assert no_theme_response.status_code == 200
     no_theme_html = (await no_theme_response.get_data()).decode("utf-8")
     assert "data-theme=" not in no_theme_html
@@ -2193,48 +2259,25 @@ async def test_plugin_page_content_propagates_theme_in_rewritten_urls(
 
 
 @pytest.mark.asyncio
-async def test_plugin_page_assets_require_dashboard_auth(
-    app: FastAPIAppAdapter,
-    authenticated_header: dict,
-    registered_plugin_page: StarMetadata,
-):
-    authorized_client = app.test_client()
-    response = await authorized_client.get(
-        f"/api/plugin/page/content/{PLUGIN_PAGE_DEMO_NAME}/{PLUGIN_PAGE_DEMO_PAGE_NAME}/",
-        headers=authenticated_header,
-    )
-    assert response.status_code == 200
-    html_text = (await response.get_data()).decode("utf-8")
-
-    app_js_url = re.search(
-        r'src="([^"]+/app\.js[^"]*)"',
-        html_text,
-    )
-    bridge_sdk_url = re.search(
-        r'src="([^"]+/bridge-sdk\.js[^"]*)"',
-        html_text,
-    )
-    assert app_js_url is not None
-    assert bridge_sdk_url is not None
-
-    anonymous_client = app.test_client()
-    app_js_response = await anonymous_client.get(_strip_query(app_js_url.group(1)))
-    assert app_js_response.status_code == 401
-    bridge_response = await anonymous_client.get(_strip_query(bridge_sdk_url.group(1)))
-    assert bridge_response.status_code == 401
-
-
-@pytest.mark.asyncio
-async def test_plugin_page_content_blocks_path_traversal(
+async def test_plugin_page_view_blocks_path_traversal(
     app: FastAPIAppAdapter,
     authenticated_header: dict,
     registered_plugin_page: StarMetadata,
 ):
     test_client = app.test_client()
-    response = await test_client.get(
-        f"/api/plugin/page/content/{PLUGIN_PAGE_DEMO_NAME}/{PLUGIN_PAGE_DEMO_PAGE_NAME}/..%2Fmain.py",
+    entry_response = await test_client.get(
+        (
+            f"/api/plugin/page/entry?name={PLUGIN_PAGE_DEMO_NAME}"
+            f"&page={PLUGIN_PAGE_DEMO_PAGE_NAME}"
+        ),
         headers=authenticated_header,
     )
+    assert entry_response.status_code == 200
+    content_path = urlsplit(
+        (await entry_response.get_json())["data"]["content_path"]
+    ).path
+
+    response = await test_client.get(f"{content_path}..%2Fmain.py")
     assert response.status_code == 404
 
 
@@ -2254,13 +2297,12 @@ async def test_logout_clears_cookie_for_plugin_page(
     )
     assert response.status_code == 200
 
-    response = await test_client.get(
-        f"/api/plugin/page/content/{PLUGIN_PAGE_DEMO_NAME}/{PLUGIN_PAGE_DEMO_PAGE_NAME}/"
+    entry_url = (
+        f"/api/plugin/page/entry?name={PLUGIN_PAGE_DEMO_NAME}"
+        f"&page={PLUGIN_PAGE_DEMO_PAGE_NAME}"
     )
+    response = await test_client.get(entry_url)
     assert response.status_code == 200
-    html_text = (await response.get_data()).decode("utf-8")
-    asset_url_match = re.search(r'src="([^"]+/app\.js[^"]*)"', html_text)
-    assert asset_url_match is not None
 
     logout_response = await test_client.post("/api/auth/logout")
     assert logout_response.status_code == 200
@@ -2277,12 +2319,10 @@ async def test_logout_clears_cookie_for_plugin_page(
     assert "Max-Age=0" in clear_cookie_header
     _assert_cookie_samesite_strict(clear_cookie_header)
 
-    response = await test_client.get(
-        f"/api/plugin/page/content/{PLUGIN_PAGE_DEMO_NAME}/{PLUGIN_PAGE_DEMO_PAGE_NAME}/"
-    )
+    response = await test_client.get(entry_url)
     assert response.status_code == 401
-    asset_response = await test_client.get(_strip_query(asset_url_match.group(1)))
-    assert asset_response.status_code == 401
+    bridge_response = await test_client.get("/api/plugin/page/bridge-sdk.js")
+    assert bridge_response.status_code == 401
 
 
 @pytest.mark.asyncio
@@ -2349,52 +2389,23 @@ async def test_dashboard_ssl_missing_cert_and_key_falls_back_to_http(
 
 
 @pytest.mark.asyncio
-async def test_subagent_config_accepts_default_persona(
-    app: FastAPIAppAdapter,
-    authenticated_header: dict,
-    core_lifecycle_td: AstrBotCoreLifecycle,
+async def test_agent_config_accepts_default_persona(
+    app: FastAPIAppAdapter, authenticated_header: dict,
 ):
     test_client = app.test_client()
-    old_cfg = copy.deepcopy(
-        core_lifecycle_td.astrbot_config.get("subagent_orchestrator", {})
+    response = await test_client.post(
+        "/api/v1/agent-configs",
+        json={"name": "planner", "runtime": "astrbot", "config": {"persona": {"persona_id": "default"}}},
+        headers=authenticated_header,
     )
-    payload = {
-        "main_enable": True,
-        "remove_main_duplicate_tools": True,
-        "agents": [
-            {
-                "name": "planner",
-                "persona_id": "default",
-                "public_description": "planner",
-                "system_prompt": "",
-                "enabled": True,
-            }
-        ],
-    }
-
+    assert response.status_code == 200
+    saved = (await response.get_json())["data"]
     try:
-        response = await test_client.post(
-            "/api/subagent/config",
-            json=payload,
-            headers=authenticated_header,
-        )
+        response = await test_client.get(f"/api/v1/agent-configs/{saved['config_id']}", headers=authenticated_header)
         assert response.status_code == 200
-        data = await response.get_json()
-        assert data["status"] == "ok"
-
-        get_response = await test_client.get(
-            "/api/subagent/config", headers=authenticated_header
-        )
-        assert get_response.status_code == 200
-        get_data = await get_response.get_json()
-        assert get_data["status"] == "ok"
-        assert get_data["data"]["agents"][0]["persona_id"] == "default"
+        assert (await response.get_json())["data"]["config"]["persona"]["persona_id"] == "default"
     finally:
-        await test_client.post(
-            "/api/subagent/config",
-            json=old_cfg,
-            headers=authenticated_header,
-        )
+        await test_client.delete(f"/api/v1/agent-configs/{saved['config_id']}", headers=authenticated_header)
 
 
 @pytest.mark.asyncio
@@ -2552,7 +2563,7 @@ async def test_plugins(
     core_lifecycle_td: AstrBotCoreLifecycle,
     monkeypatch,
 ):
-    """测试插件 API 端点，使用 Mock 避免真实网络调用。"""
+    """Test plugin endpoints with mocked marketplace and repository operations."""
     test_client = app.test_client()
 
     # 已经安装的插件
@@ -2569,7 +2580,15 @@ async def test_plugins(
         assert isinstance(installed_at, str)
         datetime.fromisoformat(installed_at)
 
-    # 插件市场
+    # Keep marketplace requests independent of external services and local caches.
+    market_plugins = {
+        "test/market-plugin": {
+            "name": "market-plugin",
+            "repo": "https://github.com/test/market-plugin",
+        }
+    }
+    get_online_plugins = AsyncMock(return_value=(market_plugins, None))
+    monkeypatch.setattr(PluginService, "get_online_plugins", get_online_plugins)
     response = await test_client.get(
         "/api/plugin/market_list",
         headers=authenticated_header,
@@ -2577,9 +2596,14 @@ async def test_plugins(
     assert response.status_code == 200
     data = await response.get_json()
     assert data["status"] == "ok"
+    assert data["data"] == market_plugins
+    get_online_plugins.assert_awaited_once_with(
+        custom_registry=None, force_refresh=False
+    )
 
     # 使用 MockPluginBuilder 创建测试插件
     plugin_store_path = core_lifecycle_td.plugin_manager.plugin_store_path
+    monkeypatch.syspath_prepend(str(Path(plugin_store_path).parent.parent))
     builder = MockPluginBuilder(plugin_store_path)
 
     # 定义测试插件
@@ -3218,6 +3242,183 @@ def test_extract_dashboard_rejects_zip_path_traversal(tmp_path: Path):
         _extract_package(archive_path, extract_path)
 
     assert not (tmp_path / "evil.txt").exists()
+
+
+def test_extract_dashboard_replaces_dist_only_after_validation(tmp_path: Path):
+    from astrbot.core.dashboard_assets import _extract_package
+
+    archive_path = tmp_path / "dashboard.zip"
+    extract_path = tmp_path / "data"
+    old_dist = extract_path / "dist"
+    (old_dist / "assets").mkdir(parents=True)
+    (old_dist / "index.html").write_text("old", encoding="utf-8")
+    (old_dist / "assets" / "old.js").write_text("old", encoding="utf-8")
+    with zipfile.ZipFile(archive_path, "w") as archive:
+        archive.writestr(
+            "dist/index.html",
+            '<script type="module" src="/assets/new.js"></script>',
+        )
+        archive.writestr("dist/assets/new.js", "export {};")
+        archive.writestr("dist/assets/version", "v9.9.9")
+
+    _extract_package(archive_path, extract_path, expected_version="v9.9.9")
+
+    assert "new.js" in (old_dist / "index.html").read_text(encoding="utf-8")
+    assert (old_dist / "assets" / "new.js").is_file()
+    assert not (old_dist / "assets" / "old.js").exists()
+
+
+@pytest.mark.parametrize(
+    ("index_html", "version", "error"),
+    [
+        (
+            '<script type="module" src="/assets/missing.js"></script>',
+            "v9.9.9",
+            "incomplete",
+        ),
+        (
+            '<script type="module" src="/assets/new.js"></script>',
+            "v9.9.8",
+            "does not match",
+        ),
+    ],
+)
+def test_extract_dashboard_keeps_existing_dist_when_validation_fails(
+    tmp_path: Path,
+    index_html: str,
+    version: str,
+    error: str,
+):
+    from astrbot.core.dashboard_assets import _extract_package
+
+    archive_path = tmp_path / "dashboard.zip"
+    extract_path = tmp_path / "data"
+    old_dist = extract_path / "dist"
+    old_dist.mkdir(parents=True)
+    (old_dist / "index.html").write_text("old", encoding="utf-8")
+    with zipfile.ZipFile(archive_path, "w") as archive:
+        archive.writestr("dist/index.html", index_html)
+        if "new.js" in index_html:
+            archive.writestr("dist/assets/new.js", "export {};")
+        archive.writestr("dist/assets/version", version)
+
+    with pytest.raises(RuntimeError, match=error):
+        _extract_package(archive_path, extract_path, expected_version="v9.9.9")
+
+    assert (old_dist / "index.html").read_text(encoding="utf-8") == "old"
+
+
+def test_extract_dashboard_rolls_back_when_replacement_fails(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+):
+    from astrbot.core.dashboard_assets import _extract_package
+
+    archive_path = tmp_path / "dashboard.zip"
+    extract_path = tmp_path / "data"
+    old_dist = extract_path / "dist"
+    old_dist.mkdir(parents=True)
+    (old_dist / "index.html").write_text("old", encoding="utf-8")
+    with zipfile.ZipFile(archive_path, "w") as archive:
+        archive.writestr(
+            "dist/index.html",
+            '<script type="module" src="/assets/new.js"></script>',
+        )
+        archive.writestr("dist/assets/new.js", "export {};")
+        archive.writestr("dist/assets/version", "v9.9.9")
+
+    original_replace = Path.replace
+
+    def fail_staged_replace(path: Path, target: Path):
+        if path.name == "dist" and path.parent.name.startswith(".dashboard-stage-"):
+            raise OSError("simulated replacement failure")
+        return original_replace(path, target)
+
+    monkeypatch.setattr(Path, "replace", fail_staged_replace)
+
+    with pytest.raises(OSError, match="simulated replacement failure"):
+        _extract_package(archive_path, extract_path, expected_version="v9.9.9")
+
+    assert (old_dist / "index.html").read_text(encoding="utf-8") == "old"
+
+
+def test_extract_dashboard_preserves_backup_when_rollback_fails(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+):
+    from astrbot.core.dashboard_assets import _extract_package
+
+    archive_path = tmp_path / "dashboard.zip"
+    extract_path = tmp_path / "data"
+    old_dist = extract_path / "dist"
+    old_dist.mkdir(parents=True)
+    (old_dist / "index.html").write_text("old", encoding="utf-8")
+    with zipfile.ZipFile(archive_path, "w") as archive:
+        archive.writestr(
+            "dist/index.html",
+            '<script type="module" src="/assets/new.js"></script>',
+        )
+        archive.writestr("dist/assets/new.js", "export {};")
+        archive.writestr("dist/assets/version", "v9.9.9")
+
+    original_replace = Path.replace
+
+    def fail_replacement_and_rollback(path: Path, target: Path):
+        if path.name == "dist" and path.parent.name.startswith(".dashboard-stage-"):
+            raise OSError("simulated replacement failure")
+        if path.name == "previous-dist":
+            raise OSError("simulated rollback failure")
+        return original_replace(path, target)
+
+    monkeypatch.setattr(Path, "replace", fail_replacement_and_rollback)
+
+    with pytest.raises(RuntimeError, match="must be restored from"):
+        _extract_package(archive_path, extract_path, expected_version="v9.9.9")
+
+    staging_dirs = list(extract_path.glob(".dashboard-stage-*"))
+    assert len(staging_dirs) == 1
+    preserved_backup = staging_dirs[0] / "previous-dist" / "index.html"
+    assert preserved_backup.read_text(encoding="utf-8") == "old"
+
+
+def test_extract_dashboard_preserves_backup_when_target_reappears(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+):
+    from astrbot.core.dashboard_assets import _extract_package
+
+    archive_path = tmp_path / "dashboard.zip"
+    extract_path = tmp_path / "data"
+    target_dist = extract_path / "dist"
+    target_dist.mkdir(parents=True)
+    (target_dist / "index.html").write_text("old", encoding="utf-8")
+    with zipfile.ZipFile(archive_path, "w") as archive:
+        archive.writestr(
+            "dist/index.html",
+            '<script type="module" src="/assets/new.js"></script>',
+        )
+        archive.writestr("dist/assets/new.js", "export {};")
+        archive.writestr("dist/assets/version", "v9.9.9")
+
+    original_replace = Path.replace
+
+    def recreate_target_before_failure(path: Path, target: Path):
+        if path.name == "dist" and path.parent.name.startswith(".dashboard-stage-"):
+            target.mkdir(parents=True)
+            (target / "index.html").write_text("concurrent", encoding="utf-8")
+            raise OSError("simulated replacement failure")
+        return original_replace(path, target)
+
+    monkeypatch.setattr(Path, "replace", recreate_target_before_failure)
+
+    with pytest.raises(RuntimeError, match="must be restored from"):
+        _extract_package(archive_path, extract_path, expected_version="v9.9.9")
+
+    staging_dirs = list(extract_path.glob(".dashboard-stage-*"))
+    assert len(staging_dirs) == 1
+    preserved_backup = staging_dirs[0] / "previous-dist" / "index.html"
+    assert preserved_backup.read_text(encoding="utf-8") == "old"
+    assert (target_dist / "index.html").read_text(encoding="utf-8") == "concurrent"
 
 
 @pytest.mark.asyncio

@@ -7,6 +7,7 @@ from astrbot import logger
 from ..entities import ProviderType
 from ..provider import EmbeddingProvider
 from ..register import register_provider_adapter
+from .gemini_api_common import gemini_api_version
 
 
 @register_provider_adapter(
@@ -24,7 +25,11 @@ class GeminiEmbeddingProvider(EmbeddingProvider):
         api_base: str = provider_config["embedding_api_base"]
         timeout: int = int(provider_config.get("timeout", 20))
 
-        http_options = types.HttpOptions(timeout=timeout * 1000)
+        http_options = types.HttpOptions(
+            api_version=gemini_api_version(),
+            timeout=timeout * 1000,
+            headers=self.request_headers,
+        )
         if api_base:
             api_base = api_base.removesuffix("/")
             http_options.base_url = api_base
@@ -34,10 +39,14 @@ class GeminiEmbeddingProvider(EmbeddingProvider):
             logger.info(f"[Gemini Embedding] 使用代理: {proxy}")
 
         self.client = genai.Client(api_key=api_key, http_options=http_options).aio
+        # Keep only AstrBot's UA across SDK versions that merge header case variants.
+        headers = self.client._api_client._http_options.headers
+        headers["user-agent"] = self.request_headers["User-Agent"]
+        headers.pop("User-Agent", None)
 
         self.model = provider_config.get(
             "embedding_model",
-            "gemini-embedding-exp-03-07",
+            "gemini-embedding-001",
         )
 
     async def get_embedding(self, text: str) -> list[float]:

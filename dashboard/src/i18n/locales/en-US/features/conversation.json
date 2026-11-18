@@ -147,7 +147,24 @@
       "empty": "This conversation has no messages",
       "copyUmo": "Copy UMO",
       "rawData": "Raw data",
-      "copyRawData": "Copy raw data"
+      "copyRawData": "Copy raw data",
+      "messageCount": "{count} messages",
+      "markdown": "Render Markdown",
+      "fontSize": "Text size",
+      "smallerText": "Decrease text size",
+      "largerText": "Increase text size",
+      "structuredData": "Structured content",
+      "toolCall": "Tool call",
+      "reasoning": "Reasoning",
+      "image": "Message image",
+      "roles": {
+        "user": "User",
+        "assistant": "Assistant",
+        "system": "System",
+        "developer": "Developer",
+        "tool": "Tool result",
+        "function": "Function result"
+      }
     },
     "actions": {
       "editTitle": "Edit title",
