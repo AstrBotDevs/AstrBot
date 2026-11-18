@@ -17,7 +17,6 @@ from astrbot.core.exceptions import EmptyModelOutputError
 from astrbot.core.provider.entities import LLMResponse
 from astrbot.core.provider.sources.groq_source import ProviderGroq
 from astrbot.core.provider.sources.openai_source import ProviderOpenAIOfficial
-from astrbot.core.provider.sources.openrouter_source import ProviderOpenRouter
 from astrbot.core.utils.media_utils import ResolvedMediaData, file_uri_to_path
 
 
