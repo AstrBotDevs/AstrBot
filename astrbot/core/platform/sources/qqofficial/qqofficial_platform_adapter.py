@@ -992,7 +992,9 @@ class QQOfficialPlatformAdapter(Platform):
             if isinstance(message, botpy.message.GroupMessage):
                 abm.sender = MessageMember(
                     message.author.member_openid,
-                    getattr(message.author, "username", "") or "",
+                    getattr(message.author, "member_nickname", "")
+                    or getattr(message.author, "username", "")
+                    or "",
                 )
                 raw_data = getattr(message, "raw_data", {})
                 group_name = getattr(message, "group_name", None)

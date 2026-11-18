@@ -52,14 +52,14 @@ AVATAR_URL = "https://thirdqq.qlogo.cn/bqqthird?key=avatar-key&s=640"
                 "member_nickname": "Group Name",
                 "avatar": AVATAR_URL,
             },
-            "Personal Name",
+            "Group Name",
             "Group Name",
             AVATAR_URL,
         ),
         (
             "GROUP_AT_MESSAGE_CREATE",
             {"member_nickname": "Group Name", "avatar": AVATAR_URL},
-            "",
+            "Group Name",
             "Group Name",
             AVATAR_URL,
         ),
@@ -194,6 +194,7 @@ async def test_user_info_lookup_decodes_json_with_charset_through_botpy(monkeypa
         )
         message = AstrBotMessage()
         message.type = MessageType.FRIEND_MESSAGE
+        message.raw_message = None
         event = QQOfficialMessageEvent(
             "",
             message,
@@ -228,6 +229,7 @@ async def test_user_info_lookup_returns_none_when_unavailable(user_openid, respo
         request.return_value = response
     message = AstrBotMessage()
     message.type = MessageType.FRIEND_MESSAGE
+    message.raw_message = None
     event = QQOfficialMessageEvent(
         "",
         message,
