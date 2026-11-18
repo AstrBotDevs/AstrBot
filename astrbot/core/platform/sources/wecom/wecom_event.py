@@ -274,9 +274,8 @@ class WecomPlatformEvent(AstrMessageEvent):
                         if single_recipient and isinstance(result, dict):
                             for key in ("invaliduser", "unlicenseduser"):
                                 rejected = result.get(key, "")
-                                if (
-                                    not isinstance(rejected, str)
-                                    or message_obj.session_id.lower()
+                                if isinstance(rejected, str) and (
+                                    message_obj.session_id.lower()
                                     in rejected.lower().split("|")
                                 ):
                                     raise RuntimeError(

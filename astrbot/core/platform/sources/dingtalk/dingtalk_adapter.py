@@ -631,17 +631,15 @@ class DingtalkPlatformAdapter(Platform):
                 result = await resp.json()
                 if not isinstance(result, dict):
                     return None
+                # BatchSendOTOResponseBody carries three rejection lists. The doc's
+                # field table omits filteredStaffIdList, but the SDK model has it.
                 for key in (
                     "filteredStaffIdList",
                     "flowControlledStaffIdList",
                     "invalidStaffIdList",
                 ):
-                    rejected = result.get(key, [])
-                    if (
-                        not isinstance(rejected, list)
-                        or any(not isinstance(value, str) for value in rejected)
-                        or staff_id in rejected
-                    ):
+                    rejected = result.get(key)
+                    if isinstance(rejected, list) and staff_id in rejected:
                         raise RuntimeError("DingTalk did not accept the recipient")
         # The message is already sent; a missing tracking key only costs the receipt.
         query_key = result.get("processQueryKey")
