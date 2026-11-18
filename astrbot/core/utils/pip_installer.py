@@ -12,6 +12,7 @@ import re
 import shlex
 import sys
 import threading
+import weakref
 from collections import deque
 from collections.abc import Mapping
 from dataclasses import dataclass
@@ -38,6 +39,9 @@ logger = logging.getLogger("astrbot")
 _DISTLIB_FINDER_PATCH_ATTEMPTED = False
 _SITE_PACKAGES_IMPORT_LOCK = threading.RLock()
 _PIP_IN_PROCESS_ENV_LOCK = threading.RLock()
+_PIP_INSTALL_LOCKS: weakref.WeakKeyDictionary[
+    asyncio.AbstractEventLoop, asyncio.Lock
+] = weakref.WeakKeyDictionary()
 _WINDOWS_UNC_PATH_PREFIXES = ("\\\\?\\UNC\\", "\\??\\UNC\\")
 _WINDOWS_EXTENDED_PATH_PREFIXES = ("\\\\?\\", "\\??\\")
 _PIP_FAILURE_PATTERNS = {
@@ -1105,23 +1109,6 @@ class PipInstaller:
         )
         importlib.invalidate_caches()
 
-    @staticmethod
-    def _raise_if_pip_conflict(result_code: int, output_lines: list[str]) -> None:
-        if result_code != 0:
-            conflict = _classify_pip_failure(output_lines)
-            if conflict:
-                raise conflict
-
-    @staticmethod
-    def _build_subprocess_env() -> dict[str, str]:
-        env = os.environ.copy()
-        if "PYTHONIOENCODING" not in {key.upper() for key in env}:
-            env["PYTHONIOENCODING"] = "utf-8"
-        env_updates = _build_packaged_windows_runtime_build_env(base_env=env)
-        if env_updates:
-            env.update(env_updates)
-        return env
-
     async def _run_pip_in_subprocess(self, args: list[str]) -> int:
         """Run ``pip`` in an isolated child process so ``pip`` memory is reclaimed.
 
@@ -1134,6 +1121,25 @@ class PipInstaller:
         Raises:
             DependencyConflictError: If pip output indicates a dependency conflict.
         """
+        env = os.environ.copy()
+        for key in [k for k in env if k.upper() == "PYTHONIOENCODING"]:
+            env.pop(key, None)
+        env["PYTHONIOENCODING"] = "utf-8"
+
+        existing_pythonpath = ""
+        for key in [k for k in env if k.upper() == "PYTHONPATH"]:
+            existing_pythonpath = env.pop(key, "") or existing_pythonpath
+        pythonpath_entries = [
+            *(p for p in existing_pythonpath.split(os.pathsep) if p),
+            *(p for p in sys.path if p and os.path.isdir(p)),
+        ]
+        if pythonpath_entries:
+            env["PYTHONPATH"] = os.pathsep.join(dict.fromkeys(pythonpath_entries))
+
+        env_updates = _build_packaged_windows_runtime_build_env(base_env=env)
+        if env_updates:
+            env.update(env_updates)
+
         stream = _StreamingLogWriter(logger.info, max_lines=_MAX_PIP_OUTPUT_LINES)
         decoder = codecs.getincrementaldecoder("utf-8")(errors="replace")
         proc = await asyncio.create_subprocess_exec(
@@ -1145,7 +1151,7 @@ class PipInstaller:
             stdin=asyncio.subprocess.DEVNULL,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.STDOUT,
-            env=self._build_subprocess_env(),
+            env=env,
         )
         try:
             if proc.stdout is not None:
@@ -1175,7 +1181,11 @@ class PipInstaller:
                         proc.kill()
             raise
 
-        self._raise_if_pip_conflict(result_code, stream.lines)
+        if result_code != 0:
+            conflict = _classify_pip_failure(stream.lines)
+            if conflict:
+                raise conflict
+
         return result_code
 
     async def _run_pip_in_process(self, args: list[str]) -> int:
@@ -1192,17 +1202,22 @@ class PipInstaller:
         finally:
             _cleanup_added_root_handlers(original_handlers)
 
-        self._raise_if_pip_conflict(result_code, output_lines)
+        if result_code != 0:
+            conflict = _classify_pip_failure(output_lines)
+            if conflict:
+                raise conflict
+
         return result_code
 
-    async def _run_pip(self, args: list[str]) -> int:
-        """Execute pip via subprocess normally, or in-process for frozen builds."""
-        if is_frozen_runtime():
-            return await self._run_pip_in_process(args)
-        return await self._run_pip_in_subprocess(args)
-
     async def _run_pip_with_classification(self, args: list[str]) -> None:
-        result_code = await self._run_pip(args)
+        loop = asyncio.get_running_loop()
+        install_lock = _PIP_INSTALL_LOCKS.setdefault(loop, asyncio.Lock())
+        async with install_lock:
+            result_code = (
+                await self._run_pip_in_process(args)
+                if is_frozen_runtime()
+                else await self._run_pip_in_subprocess(args)
+            )
         if result_code != 0:
             raise PipInstallError(
                 f"Installation failed with error code {result_code}",
