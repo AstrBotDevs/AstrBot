@@ -71,6 +71,8 @@ async def test_background_wakeup_preserves_effective_permissions(
     run_context = _build_run_context()
     context = run_context.context
     event = context.event
+    event.message_obj.group = SimpleNamespace(group_id="group-id")
+    event.plugins_name = ["allowed_plugin"]
     event.role = "admin"
     if authorization == "restricted_key":
         event.set_extra("_api_key_allow_admin_role", False)
@@ -133,7 +135,8 @@ async def test_background_wakeup_preserves_effective_permissions(
     assert AgentPermissions.from_event(wakeup).role == expected
     assert wakeup.get_sender_id() == "alice"
     assert wakeup.get_sender_name() == "Alice"
-    assert wakeup.message_obj.sender is not event.message_obj.sender
+    assert wakeup.get_group_id() == "group-id"
+    assert wakeup.plugins_name == ["allowed_plugin"]
     name, result = wakeup.tool_result
     assert name == _DummyTool().name
     assert [block.type for block in result.content] == ["text", "image", "text"]

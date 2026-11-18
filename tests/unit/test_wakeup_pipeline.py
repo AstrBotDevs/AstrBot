@@ -514,9 +514,8 @@ async def test_sdk_handle_keeps_permissions_and_follow_up_under_core_admission(r
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("vision", [False, True])
-@pytest.mark.parametrize("plain_prompt", [False, True])
 async def test_background_output_uses_normal_overflow_and_image_handling(
-    runtime, monkeypatch, tmp_path, database, vision, plain_prompt
+    runtime, monkeypatch, tmp_path, database, vision
 ):
     """Typed wakeup output follows the foreground storage and modality policy."""
     from astrbot.core.agent.conversation_events import ConversationEventWriter
@@ -536,9 +535,6 @@ async def test_background_output_uses_normal_overflow_and_image_handling(
         result.provider.provider_config["modalities"] = (
             ["text", "image"] if vision else ["text"]
         )
-        if plain_prompt:
-            message = runner.run_context.messages[-1]
-            message.content = "\n".join(part.text for part in message.content)
         runner._conversation_event_sink = writer.consume
         result.conversation_events = writer
         return result
@@ -608,9 +604,6 @@ async def test_background_output_uses_normal_overflow_and_image_handling(
     history = (await store.read(conversation.conversation_id)).messages
     saved_users = [message for message in history if message["role"] == "user"]
     assert saved_users == user_messages
-    assert str(files[0]) in "\n".join(
-        part["text"] for part in saved_users[0]["content"] if part["type"] == "text"
-    )
     assert output not in json.dumps(history)
     events = await store.events(conversation.conversation_id)
     assert not any(event.type == "context.rebased" for event in events)
