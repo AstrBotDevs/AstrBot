@@ -1610,28 +1610,8 @@
       },
       "custom_extra_body": {
         "description": "自定义请求体参数",
-        "hint": "用于在请求时添加额外的参数，如 temperature, top_p, max_tokens, reasoning_effort 等。",
+        "hint": "用于在请求时添加提供商支持的额外参数。",
         "template_schema": {
-          "temperature": {
-            "description": "温度参数",
-            "hint": "控制输出的随机性，范围通常为 0-2，值越高越容易输出长尾 Token。不推荐手动设置。",
-            "name": "Temperature"
-          },
-          "top_p": {
-            "description": "Top-p 采样",
-            "hint": "核采样参数，范围通常为 0-1，控制模型如何忽略长尾 Token。不推荐手动设置。",
-            "name": "Top-p"
-          },
-          "max_tokens": {
-            "description": "最大输出 Tokens 数",
-            "hint": "最大允许输出的 Token 数，包含推理 Token。不推荐手动设置。",
-            "name": "Max Tokens"
-          },
-          "max_output_tokens": {
-            "description": "最大输出 Tokens 数",
-            "hint": "最大允许输出的 Token 数，包含推理 Token。不推荐手动设置。",
-            "name": "Max Output Tokens"
-          },
           "reasoning_effort": {
             "description": "推理强度",
             "hint": "不同模型支持的推理强度不同，部分选项可能无效。",

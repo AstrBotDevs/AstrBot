@@ -1693,28 +1693,8 @@
       },
       "custom_extra_body": {
         "description": "カスタムリクエストボディパラメーター",
-        "hint": "リクエストに temperature、top_p、max_tokens、reasoning_effort などの追加パラメーターを含めるために使用します。",
+        "hint": "プロバイダーがサポートする追加パラメーターをリクエストに含めます。",
         "template_schema": {
-          "temperature": {
-            "description": "Temperature パラメーター",
-            "hint": "出力のランダム性を制御します。通常の範囲は 0～2 で、値が高いほど出現確率の低いトークンが出力されやすくなります。手動での設定は推奨しません。",
-            "name": "Temperature"
-          },
-          "top_p": {
-            "description": "Top-p サンプリング",
-            "hint": "Nucleus サンプリングのパラメーターです。通常の範囲は 0～1 で、モデルが出現確率の低いトークンをどのように除外するかを制御します。手動での設定は推奨しません。",
-            "name": "Top-p"
-          },
-          "max_tokens": {
-            "description": "最大出力トークン数",
-            "hint": "推論トークンを含む、出力可能なトークン数の上限です。手動での設定は推奨しません。",
-            "name": "Max Tokens"
-          },
-          "max_output_tokens": {
-            "description": "最大出力トークン数",
-            "hint": "推論トークンを含む、出力可能なトークン数の上限です。手動での設定は推奨しません。",
-            "name": "Max Output Tokens"
-          },
           "reasoning_effort": {
             "description": "推論強度",
             "hint": "対応する推論強度はモデルによって異なり、一部のオプションは効果がない場合があります。",

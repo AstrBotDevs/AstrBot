@@ -354,49 +354,20 @@ class ProviderGoogleGenAI(Provider):
                         model_name,
                     )
 
-        parameter_aliases = {
-            "temperature": ("temperature",),
-            "max_output_tokens": ("max_output_tokens", "max_tokens", "maxOutputTokens"),
-            "top_p": ("top_p", "topP"),
-            "top_k": ("top_k", "topK"),
-            "frequency_penalty": ("frequency_penalty", "frequencyPenalty"),
-            "presence_penalty": ("presence_penalty", "presencePenalty"),
-            "stop_sequences": ("stop_sequences", "stop", "stopSequences"),
-            "response_logprobs": ("response_logprobs", "responseLogprobs"),
-            "logprobs": ("logprobs",),
-            "seed": ("seed",),
-        }
-        supported_keys = {
-            key for aliases in parameter_aliases.values() for key in aliases
+        sdk_fields = types.GenerateContentConfig.model_fields
+        generation_config = extra_body | {
+            key: value for key, value in payloads.items() if key in sdk_fields
         }
         if is_gemini_4:
-            supported_keys.add("reasoning_effort")
-        unsupported_keys = extra_body.keys() - supported_keys
-        if unsupported_keys:
-            raise ValueError(
-                "Unsupported Gemini custom_extra_body parameters: "
-                + ", ".join(sorted(unsupported_keys))
-            )
+            generation_config.pop("reasoning_effort", None)
 
-        generation_config = {}
-        for field, aliases in parameter_aliases.items():
-            # Gemini 4 ignores these sampling controls and may reject invalid values.
-            # Needs refactor.
-            if is_gemini_4 and field in {"temperature", "top_p", "top_k"}:
-                continue
-            # Request parameters take precedence over model settings. Within
-            # either source, prefer SDK snake_case, then OpenAI, then camelCase.
-            for source in (payloads, extra_body):
-                for alias in aliases:
-                    if alias in source:
-                        generation_config[field] = source[alias]
-                        break
-                else:
-                    continue
-                break
-
-        return types.GenerateContentConfig(
-            **generation_config,
+        # The adapter owns transport settings and expects a parsed SDK response.
+        generation_config.update(
+            {
+                key: None
+                for key in ("http_options", "should_return_http_response")
+                if key in sdk_fields
+            },
             system_instruction=system_instruction,
             response_modalities=modalities,
             tools=cast(types.ToolListUnion | None, tool_list),
@@ -407,6 +378,7 @@ class ProviderGoogleGenAI(Provider):
                 disable=True,
             ),
         )
+        return types.GenerateContentConfig(**generation_config)
 
     async def _prepare_conversation(self, payloads: dict) -> list[types.Content]:
         """准备 Gemini SDK 的 Content 列表"""

@@ -58,43 +58,27 @@ export function useProviderModelConfigDialog(options: UseProviderModelConfigDial
     const extraBody = schema.provider.items.custom_extra_body
     if (extraBody?.template_schema) {
       extraBody.render_type = 'inline'
-      for (const [key, constraints] of Object.entries({
-        max_tokens: { min: 1, integer: true },
-        temperature: { min: 0, max: 2 },
-        top_p: { min: 0, max: 1 }
-      })) {
-        if (extraBody.template_schema?.[key]) {
-          Object.assign(extraBody.template_schema[key], constraints)
-        }
-      }
       if (selectedProviderSource.value?.type === 'googlegenai_chat_completion') {
-        // Gemini uses its SDK parameter name and supports reasoning effort on Gemini 4.
-        const { max_tokens, temperature, top_p, reasoning_effort } = extraBody.template_schema
-        extraBody.template_schema = {
-          max_output_tokens: { ...max_tokens, name: 'Max Output Tokens' },
-          temperature,
-          top_p
-        }
+        const { reasoning_effort } = extraBody.template_schema
+        extraBody.template_schema = {}
         if (modelName.startsWith('gemini-4')) {
           const modelLevels = Object.entries(GEMINI_4_REASONING_LEVELS).find(([modelId]) =>
             modelName === modelId || modelName.startsWith(`${modelId}-`)
           )?.[1]
-          extraBody.template_schema = {
-            reasoning_effort: {
-              ...reasoning_effort,
-              name: 'Reasoning Effort',
-              type: 'string',
-              options: modelLevels ?? GEMINI_4_DEFAULT_REASONING_LEVELS
-            },
-            ...extraBody.template_schema
+          extraBody.template_schema.reasoning_effort = {
+            ...reasoning_effort,
+            name: 'Reasoning Effort',
+            type: 'string',
+            options: modelLevels ?? GEMINI_4_DEFAULT_REASONING_LEVELS
           }
-          extraBody.inline_fields_after = { reasoning_effort: 'max_context_tokens' }
         }
-      } else if (extraBody.template_schema?.reasoning_effort) {
+      } else if (extraBody.template_schema.reasoning_effort) {
         if (modelName.startsWith('gemini-')) {
           delete extraBody.template_schema.reasoning_effort.default
         }
         extraBody.template_schema.reasoning_effort.render_type = 'reasoning_effort'
+      }
+      if (extraBody.template_schema.reasoning_effort) {
         extraBody.inline_fields_after = { reasoning_effort: 'max_context_tokens' }
       }
     }
