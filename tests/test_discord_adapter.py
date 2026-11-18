@@ -212,6 +212,153 @@ async def test_discord_filters_self_messages(allow_bot_messages, author_id, is_b
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("followup", [False, True], ids=["channel", "webhook"])
+@pytest.mark.parametrize(
+    ("message", "expected"),
+    [
+        (MessageChain().message("A" * 2000 + "B" * 500), ["A" * 2000, "B" * 500]),
+        (
+            MessageChain().message("A" * 1999 + "||secret||"),
+            ["A" * 1999, "||secret||"],
+        ),
+        (
+            MessageChain().message("||" + "B" * 4000 + "||tail"),
+            ["||" + "B" * 1996 + "||"] * 2 + ["||" + "B" * 8 + "||tail"],
+        ),
+        (
+            MessageChain().message("A" * 1998).at("user", "123456789012345678"),
+            ["A" * 1998, "<@123456789012345678>"],
+        ),
+        (
+            MessageChain().message("A" * 1998).at_all(),
+            ["A" * 1998, "@everyone"],
+        ),
+        (
+            MessageChain().message("||" + "A" * 1994).at("user", "123").message("||"),
+            ["||" + "A" * 1994 + "||", "||<@123>||"],
+        ),
+        (
+            MessageChain().message("A" * 2000 + " " * 2000 + "last line"),
+            ["A" * 2000, "last line"],
+        ),
+        (MessageChain().message(" " * 2001), []),
+        (
+            MessageChain().message(r"\|| `a || b` ".ljust(1995) + "||hidden||"),
+            [r"\|| `a || b` ".ljust(1995), "||hidden||"],
+        ),
+        (
+            MessageChain().message("A" * 1998 + "<#123456789012345678>"),
+            ["A" * 1998, "<#123456789012345678>"],
+        ),
+        (
+            MessageChain().message("A" * 1998 + "<:smile:123456789012345678>"),
+            ["A" * 1998, "<:smile:123456789012345678>"],
+        ),
+        (
+            MessageChain().message("A" * 1998 + "<a:wave:123456789012345678>"),
+            ["A" * 1998, "<a:wave:123456789012345678>"],
+        ),
+        (
+            MessageChain().message("A" * 1998 + "```py\n<@123>\n```"),
+            ["A" * 1998, "```py\n<@123>\n```"],
+        ),
+        (
+            MessageChain().message("```py\n" + "X" * 1990 + "\n<@123>\n```"),
+            ["```py\n" + "X" * 1990 + "\n```", "```py\n<@123>\n```"],
+        ),
+        (
+            MessageChain().message(
+                "||" + "X" * 1990 + " `foo before || after` secret||"
+            ),
+            ["||" + "X" * 1990 + " ||", "||`foo before || after` secret||"],
+        ),
+        (
+            MessageChain().message("||`" + "X" * 1994 + "literal || pipes` end||"),
+            ["||`" + "X" * 1994 + "`||", "||`literal || pipes` end||"],
+        ),
+        (
+            MessageChain().message("||``" + "X" * 1991 + "`literal || pipes`` tail||"),
+            ["||``" + "X" * 1990 + "``||", "||``X`literal || pipes`` tail||"],
+        ),
+    ],
+    ids=[
+        "plain",
+        "short-spoiler",
+        "long-spoiler",
+        "user-mention",
+        "everyone",
+        "mention-in-spoiler",
+        "blank-middle",
+        "all-blank",
+        "literal-pipes",
+        "channel-reference",
+        "custom-emoji",
+        "animated-emoji",
+        "move-code-block",
+        "split-code-block",
+        "move-inline-code-in-spoiler",
+        "split-inline-code-in-spoiler",
+        "literal-backtick-at-inline-code-boundary",
+    ],
+)
+async def test_discord_splits_long_message_without_losing_content(
+    monkeypatch, message, expected, followup
+):
+    """Check the payload of each Discord send at the message length boundary.
+
+    Args:
+        monkeypatch: Fixture for isolating the base event send.
+        message: Outgoing message chain.
+        expected: Expected content of each Discord message, in delivery order.
+        followup: Whether to send through an interaction webhook.
+    """
+    channel = MagicMock(spec=discord_platform_event.discord.abc.Messageable)
+    channel.send = AsyncMock()
+    event = DiscordPlatformEvent.__new__(DiscordPlatformEvent)
+    event.interaction_followup_webhook = (
+        AsyncMock(spec=discord.Webhook) if followup else None
+    )
+    event._get_channel = AsyncMock(return_value=channel)
+    monkeypatch.setattr(discord_platform_event.AstrMessageEvent, "send", AsyncMock())
+
+    await event.send(message)
+
+    sender = event.interaction_followup_webhook.send if followup else channel.send
+    contents = [call.kwargs["content"] for call in sender.await_args_list]
+    assert contents == expected
+    assert all(len(content) <= 2000 for content in contents)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("caption", ["", "caption" * 300], ids=["blank", "long"])
+async def test_discord_keeps_media_and_reply_after_blank_chunk(monkeypatch, caption):
+    """Check that skipping blank chunks preserves the first send's metadata.
+
+    Args:
+        monkeypatch: Fixture for isolating the base event send.
+        caption: Text following a full chunk of whitespace.
+    """
+    channel = MagicMock(spec=discord.abc.Messageable)
+    event = DiscordPlatformEvent.__new__(DiscordPlatformEvent)
+    event.client = MagicMock()
+    event.interaction_followup_webhook = None
+    event._get_channel = AsyncMock(return_value=channel)
+    monkeypatch.setattr(discord_platform_event.AstrMessageEvent, "send", AsyncMock())
+    image_url = "https://example.com/photo.png"
+    message = MessageChain(
+        chain=[Reply(id=123), Image.fromURL(image_url), Plain(" " * 2000 + caption)]
+    )
+
+    await event.send(message)
+
+    first, *rest = [call.kwargs for call in channel.send.await_args_list]
+    assert first["reference"] is event.client.get_message.return_value
+    assert [embed.image.url for embed in first["embeds"]] == [image_url]
+    assert first.get("content") == (caption[:2000] or None)
+    assert rest == ([{"content": caption[2000:]}] if caption else [])
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize("component_type", ["video", "video_url", "file"])
 @pytest.mark.parametrize("with_text", [False, True])
 async def test_discord_sends_video_attachment(

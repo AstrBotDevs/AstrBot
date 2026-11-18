@@ -1,4 +1,5 @@
 import asyncio
+import re
 from collections.abc import AsyncGenerator
 from io import BytesIO
 from pathlib import Path
@@ -37,6 +38,13 @@ from astrbot.core.utils.media_utils import (
 from .client import DiscordBotClient
 from .components import DiscordEmbed, DiscordView, action_rows_to_discord_view
 
+_DISCORD_MARKUP = re.compile(
+    r"\\.|(?<!`)(?P<ticks>`{1,3})(?!`)(?P<code>.*?)(?<!`)(?P=ticks)(?!`)"
+    r"|(?P<spoiler>\|\|)|<(?:@[!&]?|#|a?:[A-Za-z0-9_]{1,32}:)[0-9]{1,20}>"
+    r"|@everyone|@here",
+    re.DOTALL,
+)
+
 
 # 自定义Discord视图组件（兼容旧版本）
 class DiscordViewComponent(BaseMessageComponent):
@@ -47,6 +55,8 @@ class DiscordViewComponent(BaseMessageComponent):
 
 
 class DiscordPlatformEvent(AstrMessageEvent):
+    MAX_MESSAGE_LENGTH = 2000
+
     def __init__(
         self,
         message_str: str,
@@ -59,6 +69,100 @@ class DiscordPlatformEvent(AstrMessageEvent):
         super().__init__(message_str, message_obj, platform_meta, session_id)
         self.client = client
         self.interaction_followup_webhook = interaction_followup_webhook
+
+    @classmethod
+    def _split_content(cls, content: str, limit: int = MAX_MESSAGE_LENGTH) -> list[str]:
+        """Split text without separating Discord markup from its content.
+
+        Args:
+            content: Rendered content of the outgoing message chain.
+            limit: Available characters, excluding any enclosing spoiler markers.
+
+        Returns:
+            Message-sized chunks in delivery order.
+        """
+        if len(content) <= limit:
+            return [content]
+
+        tokens = list(_DISCORD_MARKUP.finditer(content))
+        # Code spans are opaque tokens, so literal pipes in code cannot close a spoiler.
+        delimiters = (token.start() for token in tokens if token["spoiler"])
+        spoiler_ends = dict(zip(delimiters, delimiters))
+        parts: list[tuple[str, bool]] = []
+        start = 0
+        for token in tokens:
+            if token.start() < start:
+                continue
+            if token.start() > start:
+                parts.append((content[start : token.start()], False))
+            start = token.end()
+            if token.start() in spoiler_ends:
+                end = spoiler_ends[token.start()]
+                for piece in cls._split_content(content[start:end], limit - 4):
+                    parts.append(("||" + piece + "||", True))
+                start = end + 2
+            elif token["ticks"] and len(token[0]) > limit:
+                for piece in cls._split_code(token["code"], token["ticks"], limit):
+                    parts.append((piece, True))
+            else:
+                parts.append((token[0], True))
+        parts.append((content[start:], False))
+
+        chunks = [""]
+        for text, atomic in parts:
+            room = limit - len(chunks[-1])
+            if atomic and len(text) > room:
+                chunks.append(text)
+            else:
+                chunks[-1] += text[:room]
+                chunks.extend(
+                    text[i : i + limit] for i in range(room, len(text), limit)
+                )
+        return chunks
+
+    @staticmethod
+    def _split_code(body: str, ticks: str, limit: int) -> list[str]:
+        """Render independently delimited pieces of an oversized code span.
+
+        Args:
+            body: Text between the original backticks, including any language tag.
+            ticks: Opening and closing backtick delimiter.
+            limit: Maximum size including repeated delimiters and language tag.
+
+        Returns:
+            Code messages with balanced delimiters.
+        """
+        block = ticks == "```"
+        opening = ticks
+        if block:
+            language = re.match(r"[\w.+#-]{0,64}\r?\n", body)
+            opening += language[0] if language else "\n"
+            if language:
+                body = body[language.end() :]
+
+        capacity = limit - len(opening) - len(ticks)
+        chunks = []
+        start = 0
+        while start < len(body):
+            stop = min(start + capacity, len(body))
+            if block:
+                # Prefer a complete line; a long line needs room for the fence newline.
+                newline = body.rfind("\n", start, stop)
+                if stop < len(body) and newline >= start:
+                    stop = newline + 1
+                elif stop - start == capacity and body[stop - 1] != "\n":
+                    stop -= 1
+            elif body[start] == "`" or body[stop - 1] == "`":
+                # Leave room to separate literal backticks from the inline delimiter.
+                stop = min(stop, start + capacity - 2)
+            piece = body[start:stop]
+            if block and not piece.endswith("\n"):
+                piece += "\n"
+            elif not block and (piece.startswith("`") or piece.endswith("`")):
+                piece = " " + piece + " "
+            chunks.append(opening + piece + ticks)
+            start = stop
+        return chunks
 
     async def send(self, message: MessageChain) -> None:
         """发送消息到Discord平台"""
@@ -75,18 +179,19 @@ class DiscordPlatformEvent(AstrMessageEvent):
             logger.error(f"[Discord] 解析消息链时失败: {e}", exc_info=True)
             return
 
-        kwargs = {}
-        if content:
-            kwargs["content"] = content
+        extra_kwargs = {}
         if files:
-            kwargs["files"] = files
+            extra_kwargs["files"] = files
         if view:
-            kwargs["view"] = view
+            extra_kwargs["view"] = view
         if embeds:
-            kwargs["embeds"] = embeds
+            extra_kwargs["embeds"] = embeds
         if reference_message_id and not self.interaction_followup_webhook:
-            kwargs["reference"] = self.client.get_message(int(reference_message_id))
-        if not kwargs:
+            extra_kwargs["reference"] = self.client.get_message(
+                int(reference_message_id)
+            )
+        chunks = [chunk for chunk in self._split_content(content) if chunk.strip()]
+        if not chunks and not (files or view or embeds):
             logger.debug("[Discord] 尝试发送空消息，已忽略。")
             return
 
@@ -94,7 +199,7 @@ class DiscordPlatformEvent(AstrMessageEvent):
         try:
             # -- 斜杠指令/交互上下文 --
             if self.interaction_followup_webhook:
-                await self.interaction_followup_webhook.send(**kwargs)
+                sender = self.interaction_followup_webhook.send
 
             # -- 常规消息上下文 --
             else:
@@ -104,7 +209,13 @@ class DiscordPlatformEvent(AstrMessageEvent):
                 if not isinstance(channel, discord.abc.Messageable):
                     logger.error(f"[Discord] 频道 {channel.id} 不是可发送消息的类型")
                     return
-                await channel.send(**kwargs)
+                sender = channel.send
+
+            for index, chunk in enumerate(chunks or [""]):
+                kwargs = dict(extra_kwargs) if index == 0 else {}
+                if chunk:
+                    kwargs["content"] = chunk
+                await sender(**kwargs)
 
         except Exception as e:
             logger.error(f"[Discord] 发送消息时发生未知错误: {e}", exc_info=True)
@@ -447,9 +558,6 @@ class DiscordPlatformEvent(AstrMessageEvent):
             view = action_rows_to_discord_view(action_rows)
 
         content = "".join(content_parts)
-        if len(content) > 2000:
-            logger.warning("[Discord] 消息内容超过2000字符，将被截断。")
-            content = content[:2000]
         return content, files, view, embeds, reference_message_id
 
     async def react(self, emoji: str) -> None:
