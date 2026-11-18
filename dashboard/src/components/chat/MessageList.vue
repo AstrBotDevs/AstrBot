@@ -137,7 +137,12 @@
                       />
                     </div>
 
-                    <div
+                    <PluginViewMessage
+                        v-else-if="part.type === 'view'"
+                        :part="part"
+                        :is-dark="isDark"
+                      />
+                      <div
                       v-else-if="part.type === 'tool_call'"
                       class="tool-call-block"
                     >
@@ -269,6 +274,7 @@
 </template>
 
 <script setup lang="ts">
+import PluginViewMessage from "@/components/chat/message_list_comps/PluginViewMessage.vue";
 import { CodeXml } from "@lucide/vue";
 import MessageContentTransition from "@/components/chat/MessageContentTransition.vue";
 import { computed, nextTick, reactive, ref } from "vue";

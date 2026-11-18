@@ -24,12 +24,14 @@ from .star_handler import (
     register_permission_type,
     register_platform_adapter_type,
     register_regex,
+    register_ui_action,
 )
 
 __all__ = [
     "register_after_message_sent",
     "register_agent",
     "register_button_action",
+    "register_ui_action",
     "register_command",
     "register_command_group",
     "register_custom_filter",

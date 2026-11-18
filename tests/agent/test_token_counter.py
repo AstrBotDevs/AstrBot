@@ -1,5 +1,7 @@
 """Tests for EstimateTokenCounter multimodal support."""
 
+import pytest
+
 from astrbot.core.agent.context.token_counter import (
     AUDIO_TOKEN_ESTIMATE,
     IMAGE_TOKEN_ESTIMATE,
@@ -21,6 +23,33 @@ def _msg(role: str, content) -> Message:
 
 
 class TestTextCounting:
+    @pytest.mark.parametrize(
+        ("text", "expected"),
+        [
+            ("", 0),
+            ("abc", 0),
+            ("abcd", 1),
+            ("".join(chr(value) for value in range(128)), 38),
+            ("\u4dff\u4e00\u9fff\ua000" * 10, 18),
+            ("\U00020000" * 10, 3),
+            ("éΩあ" * 10, 9),
+            ("👨‍👩‍👧‍👦", 14),
+            (
+                "\u200c\u200d\u200e\u25ff\u2600\u27bf\u27c0"
+                "\ufdff\ufe00\ufe0f\ufe10\U0001efff\U0001f000\U0001faff\U0001fb00",
+                16,
+            ),
+        ],
+    )
+    def test_text_estimate_preserves_character_boundaries(self, text, expected):
+        """Keep existing character weights, Unicode ranges and integer rounding."""
+        assert counter.count_tokens([_msg("user", text)]) == expected
+
+    def test_text_parts_are_rounded_independently(self):
+        assert counter.count_tokens(
+            [_msg("user", [TextPart(text="ab"), TextPart(text="cd")])]
+        ) == 0
+
     def test_plain_string(self):
         tokens = counter.count_tokens([_msg("user", "hello world")])
         assert tokens > 0

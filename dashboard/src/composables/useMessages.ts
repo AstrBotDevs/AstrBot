@@ -1,8 +1,10 @@
-import { computed, onBeforeUnmount, reactive, ref, type Ref } from "vue";
+import { computed, onBeforeUnmount, provide, reactive, ref, type Ref } from "vue";
 import { useI18n } from "@/i18n/composables";
 import { chatApi, fileApi } from "@/api/v1";
 import { fetchWithAuth } from "@/api/http";
 import type { Session } from "@/composables/useSessions";
+
+import { streamViewAction, viewActionKey } from "@/utils/chatViews";
 
 export type TransportMode = "sse" | "websocket";
 
@@ -19,6 +21,12 @@ export function buildChatRequestFlags(
 }
 
 export interface MessagePart {
+  view_metadata?: {
+    name: string;
+    title: string;
+    description: string;
+    i18n?: Record<string, unknown>;
+  };
   type: string;
   text?: string;
   think?: string;
@@ -180,6 +188,36 @@ export function useMessages(options: UseMessagesOptions) {
     {},
   );
   const activeConnections = reactive<Record<string, ActiveConnection>>({});
+
+  provide(viewActionKey, (viewId, input) => {
+    const sessionId = options.currentSessionId.value;
+    const messageId = input.interaction_id;
+    const botRecord = reactive<ChatRecord>({
+      id: `local-view-${messageId}`,
+      created_at: new Date().toISOString(),
+      content: { type: "bot", message: [], reasoning: "", isLoading: true },
+    });
+    const connection: ActiveConnection = {
+      sessionId, messageId, transport: "sse", botRecord, botVisible: false,
+    };
+    let messageSaved = false;
+    return streamViewAction(viewId, input, (payload) => {
+      if (payload.type === "run_started") {
+        connection.runId = payload.data?.run_id;
+        return;
+      }
+      if (payload.type === "message_saved") messageSaved = true;
+      processStreamPayload(botRecord, payload, undefined, connection);
+      if (connection.botVisible) {
+        activeConnections[messageId] = connection;
+        options.onStreamUpdate?.(sessionId);
+      }
+    }, () => {
+      delete activeConnections[messageId];
+      if (messageSaved) void options.onSessionsChanged?.();
+    });
+  });
+
   const chatWebSockets: Record<string, WebSocket> = {};
   const closingChatWebSockets = new WeakSet<WebSocket>();
   const deferredBotAnchors = new WeakMap<ChatRecord, ChatRecord>();
@@ -1274,7 +1312,7 @@ export function useMessages(options: UseMessagesOptions) {
 
     if (
       connection?.messageSaved &&
-      ["plain", "image", "record", "file", "video", "actionrow"].includes(msgType) &&
+      ["plain", "image", "record", "file", "video", "actionrow", "view"].includes(msgType) &&
       chainType !== "agent_stats" &&
       (msgType !== "plain" || payloadText(data))
     ) {
@@ -1486,11 +1524,12 @@ export function useMessages(options: UseMessagesOptions) {
       return;
     }
 
-    if (msgType === "actionrow" && data && typeof data === "object") {
+    if ((msgType === "actionrow" || msgType === "view") && data && typeof data === "object") {
       markMessageStarted(botRecord);
       messageContent(botRecord).message.push({
-        type: "actionrow",
         ...(data as Record<string, unknown>),
+        type: msgType,
+        ...(msgType === "view" ? { workbenchLive: true } : {}),
       });
       return;
     }

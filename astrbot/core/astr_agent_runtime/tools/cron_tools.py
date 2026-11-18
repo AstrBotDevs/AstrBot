@@ -8,6 +8,7 @@ from pydantic.dataclasses import dataclass
 
 from astrbot import logger
 from astrbot.core.agent.run_context import ContextWrapper
+from astrbot.core.agent.runtime import get_agent_permissions
 from astrbot.core.agent.tool import FunctionTool, ToolExecResult
 from astrbot.core.astr_agent_runtime.context import AstrAgentContext
 from astrbot.core.astr_agent_runtime.tools.registry import builtin_tool
@@ -135,6 +136,7 @@ class FutureTaskTool(FunctionTool[AstrAgentContext]):
                 "sender_id": context.context.event.get_sender_id(),
                 "note": note,
                 "origin": "tool",
+                "allow_admin_role": get_agent_permissions(context).is_admin,
             }
 
             tz_name = str(

@@ -63,6 +63,7 @@ for (const outcome of ["segmented", "empty", "error"]) {
       crypto: { randomUUID: () => "button-run" },
       props: { thread: { thread_id: "thread" } },
       sending: { value: false },
+      activeBotRecord: { value: null },
       messages: { value: records },
       scrollToBottom() {},
       console: { error() {} },
@@ -308,6 +309,7 @@ for (const handler of ["sse", "thread"]) {
         reactive,
         messagesBySession: { session: records },
         messages: { value: records },
+        activeBotRecord: { value: null },
         activeConnections: { run: connection },
       });
       vm.runInContext(compiledFunctions, context);
@@ -362,6 +364,7 @@ for (const handler of ["sse", "thread"]) {
         reactive,
         messagesBySession: { session: records },
         messages: { value: records },
+        activeBotRecord: { value: null },
         activeConnections: { run: connection },
         resolvePartMedia: async () => {},
       });
@@ -444,6 +447,7 @@ for (const handler of ["sse", "thread"]) {
         reactive: (value) => value,
         messagesBySession: { session: records },
         messages: { value: records },
+        activeBotRecord: { value: null },
         activeConnections: { run: connection },
         resolveRecordMedia: async () => {},
       });

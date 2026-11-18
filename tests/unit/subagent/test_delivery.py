@@ -235,7 +235,7 @@ async def test_deleted_or_stopped_parents_are_not_woken(environment, reason):
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("read_result", [False, True])
-async def test_native_parent_waits_for_child_without_blocking_delivery(
+async def test_native_parent_receives_child_result_with_pending_tool(
     environment, monkeypatch, read_result
 ):
     from astrbot.core.agent.run_context import ContextWrapper
@@ -334,10 +334,28 @@ async def test_native_parent_waits_for_child_without_blocking_delivery(
     await asyncio.wait_for(child_done.wait(), 2)
     if not read_result:
         await asyncio.wait_for(offered.wait(), 2)
-        assert "Child answer" not in str(parent._runner.run_context.messages)
-    assert not turn.done
-    release.set()
-    assert (await asyncio.wait_for(turn.result(), 2)).text == "Finished parent"
+        # Child delivery steers the parent while its tool continues in the background.
+        try:
+            assert (await asyncio.wait_for(turn.result(), 2)).text == "Finished parent"
+            assert not release.is_set()
+            assert "Child answer" in env.conversation.history
+            assert env.context.get_event_queue().empty()
+        finally:
+            release.set()
+        wakeup = await asyncio.wait_for(env.context.get_event_queue().get(), 2)
+        assert wakeup.source == "background_task"
+        assert wakeup.source_id
+        assert wakeup.source_id in env.conversation.history
+        assert wakeup.agent_session == AgentSessionRef("astrbot", parent.id)
+        assert wakeup.tool_result is not None
+        name, result = wakeup.tool_result
+        assert name == "wait_for_child"
+        assert "The tool finished" in result.content[0].text
+    else:
+        # Reading the child result suppresses steering, so the tool stays foreground.
+        assert not turn.done
+        release.set()
+        assert (await asyncio.wait_for(turn.result(), 2)).text == "Finished parent"
     await asyncio.wait_for(
         asyncio.gather(*list(env.service.delivery._notifications.values())), 2
     )

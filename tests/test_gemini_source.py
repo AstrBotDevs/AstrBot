@@ -35,19 +35,58 @@ async def test_gemini_thinking_level_is_serialized_on_every_request():
 
 
 @pytest.mark.asyncio
-async def test_gemini_37_minimal_thinking_level_falls_back_to_medium():
-    model = "gemini-3.7-flash"
+@pytest.mark.parametrize(
+    ("model", "provider_config"),
+    [
+        ("gemini-4-argon", {}),
+        ("gemini-4-argon", {"gm_thinking_config": {"level": "HIGH"}}),
+        (
+            "gemini-4-argon",
+            {
+                "gm_thinking_config": {"level": "HIGH"},
+                "custom_extra_body": {"reasoning_effort": "auto"},
+            },
+        ),
+        ("gemini-4-argon", {"custom_extra_body": {"reasoning_effort": "xhigh"}}),
+        ("gemini-3.8-flash", {"gm_thinking_config": {"level": "MINIMAL"}}),
+    ],
+)
+async def test_gemini_omits_unset_or_unsupported_thinking_config(model, provider_config):
     provider = ProviderGoogleGenAI.__new__(ProviderGoogleGenAI)
-    provider.provider_config = {"gm_thinking_config": {"level": "MINIMAL"}}
+    provider.provider_config = provider_config
     provider.provider_settings = {}
-    provider.model_name = model
+    provider.model_name = "gemini-2.5-flash"
     provider.safety_settings = []
 
     config = await provider._prepare_query_config({"model": model})
 
-    assert config.thinking_config is not None
-    assert config.thinking_config.model_dump(exclude_none=True) == {
-        "thinking_level": types.ThinkingLevel.MEDIUM,
+    assert "thinking_config" not in config.model_dump(exclude_none=True)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "model",
+    [
+        "gemini-4-carbon",
+        "models/gemini-4-carbon",
+        "publishers/google/models/gemini-4-carbon",
+        "projects/example/locations/global/publishers/google/models/Gemini-4-Carbon",
+    ],
+)
+async def test_gemini_4_serializes_explicit_reasoning_effort(model):
+    provider = ProviderGoogleGenAI.__new__(ProviderGoogleGenAI)
+    provider.provider_config = {
+        "gm_thinking_config": {"level": "HIGH"},
+        "custom_extra_body": {"reasoning_effort": "low"},
+    }
+    provider.provider_settings = {}
+    provider.model_name = model
+    provider.safety_settings = []
+
+    config = await provider._prepare_query_config({})
+
+    assert config.model_dump(exclude_none=True)["thinking_config"] == {
+        "thinking_level": types.ThinkingLevel.LOW,
     }
 
 
@@ -410,9 +449,7 @@ async def test_gemini_stream_keeps_conversation_header_until_consumed(
         observed_headers.append(headers.get("x-astrbot-conversation-id"))
         yield _gemini_stream_chunk(text="ok")
 
-    async def fake_retry(
-        provider_name, request_factory, max_attempts=None
-    ):
+    async def fake_retry(provider_name, request_factory, max_attempts=None):
         return fake_stream()
 
     monkeypatch.setattr(gemini_source, "retry_provider_request", fake_retry)

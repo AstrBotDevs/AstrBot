@@ -75,8 +75,13 @@ class WebChatMessageEvent(AstrMessageEvent):
                 accepted = await webchat_queue_mgr.put_back_queue(
                     request_id,
                     {
-                        "type": "plain",
-                        "data": json.dumps(comp.data, ensure_ascii=False),
+                        "type": {
+                            "chatui_view": "view",
+                            "ui_action_result": "ui_action_result",
+                        }.get(message.type, "plain"),
+                        "data": comp.data
+                        if message.type in {"chatui_view", "ui_action_result"}
+                        else json.dumps(comp.data, ensure_ascii=False),
                         "streaming": streaming,
                         "chain_type": message.type,
                         "message_id": message_id,
@@ -187,7 +192,14 @@ class WebChatMessageEvent(AstrMessageEvent):
         if emit_complete or (
             not streaming
             and message.type
-            not in ("reasoning", "tool_call", "tool_call_result", "agent_stats")
+            not in (
+                "reasoning",
+                "tool_call",
+                "tool_call_result",
+                "agent_stats",
+                "chatui_view",
+                "ui_action_result",
+            )
         ):
             # A non-streaming send is one message, even with multiple components.
             await webchat_queue_mgr.put_back_queue(
