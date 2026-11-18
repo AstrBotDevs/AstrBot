@@ -953,7 +953,14 @@ class TestApplyFileExtract:
         closed = False
 
         class _FakeResponse:
-            def __init__(self, *, json_data=None, text: str = "") -> None:
+            def __init__(
+                self,
+                *,
+                status_code: int = 200,
+                json_data=None,
+                text: str = "",
+            ) -> None:
+                self.status_code = status_code
                 self._json_data = json_data
                 self.text = text
 
@@ -973,14 +980,14 @@ class TestApplyFileExtract:
 
             async def post(self, url: str, *, data=None, files=None, timeout=None):
                 assert data == {"purpose": "file-extract"}
-                assert timeout == 60.0
+                assert timeout == 600.0
                 filename, handle = files["file"]
                 assert filename == "notes.txt"
                 captured_requests.append(("POST", url, handle.read()))
                 return _FakeResponse(json_data={"id": "file-123"})
 
             async def get(self, url: str, *, timeout=None):
-                assert timeout == 60.0
+                assert timeout == 600.0
                 captured_requests.append(("GET", url, None))
                 return _FakeResponse(text="extracted text")
 
@@ -1032,6 +1039,64 @@ class TestApplyFileExtract:
 
         with pytest.raises(httpx.HTTPStatusError):
             await file_extract.extract_file_moonshotai(str(sample_file), "bad-key")
+
+    @pytest.mark.asyncio
+    async def test_extract_file_moonshotai_retries_transient_failures(
+        self, monkeypatch, tmp_path: Path
+    ):
+        """Transient transport and 429/5xx responses retry with fresh file reads."""
+        import httpx
+
+        from astrbot.core.utils import file_extract
+
+        sample_file = tmp_path / "retry.txt"
+        sample_file.write_text("retry payload", encoding="utf-8")
+
+        post_bodies: list[bytes] = []
+        get_attempts = 0
+        sleeps: list[float] = []
+
+        async def _fake_sleep(delay: float) -> None:
+            sleeps.append(delay)
+
+        class _RetryClient:
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, exc_type, exc_val, exc_tb):
+                return None
+
+            async def post(self, url: str, *, data=None, files=None, timeout=None):
+                del data, timeout
+                _, handle = files["file"]
+                post_bodies.append(handle.read())
+                request = httpx.Request("POST", url)
+                if len(post_bodies) == 1:
+                    raise httpx.ConnectError("temporary reset", request=request)
+                if len(post_bodies) == 2:
+                    return httpx.Response(503, request=request)
+                return httpx.Response(200, json={"id": "file-retry"}, request=request)
+
+            async def get(self, url: str, *, timeout=None):
+                del timeout
+                nonlocal get_attempts
+                get_attempts += 1
+                request = httpx.Request("GET", url)
+                if get_attempts == 1:
+                    return httpx.Response(429, request=request)
+                return httpx.Response(200, text="recovered content", request=request)
+
+        monkeypatch.setattr(file_extract.asyncio, "sleep", _fake_sleep)
+        monkeypatch.setattr(
+            file_extract, "create_proxy_client", lambda *a, **kw: _RetryClient()
+        )
+
+        result = await file_extract.extract_file_moonshotai(str(sample_file), "msh-key")
+
+        assert result == "recovered content"
+        assert post_bodies == [b"retry payload", b"retry payload", b"retry payload"]
+        assert get_attempts == 2
+        assert sleeps == [0.5, 1.0, 0.5]
 
     def test_entities_and_file_extract_do_not_eagerly_import_llm_sdks(self):
         """Importing provider entities and file_extract should not load heavy SDKs."""
