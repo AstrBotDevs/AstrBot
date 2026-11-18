@@ -1816,11 +1816,11 @@
         "description": "Thinking Config",
         "budget": {
           "description": "Thinking Budget",
-          "hint": "Guides the model on the specific number of thinking tokens to use for reasoning. See: https://ai.google.dev/gemini-api/docs/thinking#set-budget"
+          "hint": "Thinking token budget for Gemini 2.5. Leave blank to use the model default. See https://ai.google.dev/gemini-api/docs/thinking#set-budget"
         },
         "level": {
           "description": "Thinking Level",
-          "hint": "Recommended for Gemini 3 models and onwards, lets you control reasoning behavior.See: https://ai.google.dev/gemini-api/docs/thinking#thinking-levels"
+          "hint": "See https://ai.google.dev/gemini-api/docs/thinking#thinking-levels"
         }
       },
       "anth_thinking_config": {

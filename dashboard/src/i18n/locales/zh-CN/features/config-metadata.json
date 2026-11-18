@@ -1837,11 +1837,11 @@
         "description": "思考配置",
         "budget": {
           "description": "思考预算",
-          "hint": "用于指定模型推理时使用的思考 token 数量上限。参见: https://ai.google.dev/gemini-api/docs/thinking#set-budget"
+          "hint": "设置Gemini 2.5的推理词元预算。留空时使用模型默认值。参见 https://ai.google.dev/gemini-api/docs/thinking#set-budget"
         },
         "level": {
           "description": "思考级别",
-          "hint": "推荐用于 Gemini 3 及以上模型，可控制推理行为。参见: https://ai.google.dev/gemini-api/docs/thinking#thinking-levels"
+          "hint": "参见 https://ai.google.dev/gemini-api/docs/thinking#thinking-levels"
         }
       },
       "anth_thinking_config": {
