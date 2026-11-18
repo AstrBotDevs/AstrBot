@@ -1,12 +1,14 @@
 import asyncio
 import base64
 import copy
+import json
 import logging
 import os
 import random
 import re
 from pathlib import Path
-from typing import cast
+from typing import Any, cast
+from urllib.parse import quote
 
 import aiofiles
 import botpy
@@ -106,6 +108,11 @@ _QQOFFICIAL_SEND_API_ERRORS = (
 )
 
 
+class _UserInfoRoute(Route):
+    # Scope the current production API domain to the new user lookup.
+    DOMAIN = "api.bot.qq.com"
+
+
 class QQOfficialMessageEvent(AstrMessageEvent):
     MARKDOWN_NOT_ALLOWED_ERROR = "不允许发送原生 markdown"
     IMAGE_FILE_TYPE = 1
@@ -134,6 +141,66 @@ class QQOfficialMessageEvent(AstrMessageEvent):
         super().__init__(message_str, message_obj, platform_meta, session_id)
         self.bot = bot
         self.send_buffer = None
+        source = getattr(message_obj, "raw_message", None)
+        if isinstance(source, (botpy.message.C2CMessage, botpy.message.GroupMessage)):
+            avatar = getattr(source.author, "avatar", None)
+            if isinstance(avatar, str) and avatar.strip():
+                self.set_extra("sender_avatar", avatar)
+
+    def get_sender_group_nickname(self) -> str | None:
+        """Get the sender's nickname in the current QQ group.
+
+        Returns:
+            The nickname supplied by the group event, or None if unavailable.
+        """
+        source = getattr(self.message_obj, "raw_message", None)
+        if isinstance(source, botpy.message.GroupMessage):
+            nickname = getattr(source.author, "member_nickname", None)
+            if isinstance(nickname, str) and nickname.strip():
+                return nickname
+        return None
+
+    async def get_user_info(self, user_openid: str) -> dict[str, Any] | None:
+        """Fetch the basic profile of a QQ user on demand.
+
+        Args:
+            user_openid: The user's QQ OpenID in a C2C conversation.
+
+        Returns:
+            The profile payload, or None if the profile is unavailable.
+        """
+        if not user_openid.strip():
+            return None
+
+        route = _UserInfoRoute(
+            "GET",
+            "/v2/users/{user_openid}/info",
+            user_openid=quote(user_openid, safe=""),
+        )
+        try:
+            response = await asyncio.wait_for(
+                self.bot.api._http.request(route),
+                timeout=3,
+            )
+        except Exception as exc:
+            logger.debug(
+                "[QQOfficial] User info request failed: %s", type(exc).__name__
+            )
+            return None
+
+        # qq-botpy returns text when the JSON content type includes a charset.
+        if isinstance(response, str):
+            try:
+                response = json.loads(response)
+            except json.JSONDecodeError:
+                return None
+
+        if isinstance(response, dict) and any(
+            field in response
+            for field in ("username", "avatar", "allow_proactive_msg", "union_openid")
+        ):
+            return response
+        return None
 
     async def get_group(self, group_id: str | None = None, **kwargs) -> Group | None:
         """Get QQ group or guild-channel information for this event.
