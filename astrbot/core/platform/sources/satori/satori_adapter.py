@@ -30,6 +30,7 @@ from astrbot.api.platform import (
 )
 from astrbot.core.platform.astr_message_event import MessageSession
 from astrbot.core.platform.button_interaction import decode_button_callback
+from astrbot.core.platform.proxy import create_platform_client_session
 from astrbot.core.utils.config_number import coerce_int_config
 from astrbot.core.utils.media_utils import MediaResolver
 
@@ -122,7 +123,10 @@ class SatoriPlatformAdapter(Platform):
 
     async def run(self) -> None:
         self.running = True
-        self.session = ClientSession(timeout=ClientTimeout(total=30))
+        self.session = create_platform_client_session(
+            self.proxy_url,
+            timeout=ClientTimeout(total=30),
+        )
 
         retry_count = 0
         max_retries = 10
@@ -167,6 +171,7 @@ class SatoriPlatformAdapter(Platform):
                 self.endpoint,
                 additional_headers={},
                 max_size=10 * 1024 * 1024,  # 10MB
+                **({"proxy": self.proxy_url} if self.proxy_url else {}),
             )
 
             self.ws = websocket

@@ -923,6 +923,34 @@ CONFIG_METADATA_2 = {
                         "type": "bool",
                         "hint": "是否启用该适配器。未启用的适配器对应的消息平台将不会接收到消息。",
                     },
+                    "proxy": {
+                        "description": "代理设置",
+                        "type": "object",
+                        "hint": "适配器专用代理。关闭时不覆盖全局代理设置；是否实际生效取决于适配器使用的网络客户端。",
+                        "items": {
+                            "mode": {
+                                "description": "代理模式",
+                                "type": "string",
+                                "options": ["none", "custom"],
+                                "labels": ["不使用代理", "使用代理"],
+                                "render_type": "radio",
+                                "layout": "cards",
+                            },
+                            "type": {
+                                "description": "代理类型",
+                                "type": "string",
+                                "options": ["http", "https", "socks5"],
+                                "labels": ["HTTP", "HTTPS", "SOCKS5"],
+                                "condition": {"mode": "custom"},
+                            },
+                            "address": {
+                                "description": "代理地址",
+                                "type": "string",
+                                "hint": "填写主机:端口，例如 127.0.0.1:7890。启用代理时必填。",
+                                "condition": {"mode": "custom"},
+                            },
+                        },
+                    },
                     "appid": {
                         "description": "appid",
                         "type": "string",
@@ -3399,6 +3427,20 @@ CONFIG_METADATA_2 = {
         },
     },
 }
+
+
+for _platform_template in CONFIG_METADATA_2["platform_group"]["metadata"]["platform"][
+    "config_template"
+].values():
+    if isinstance(_platform_template, dict):
+        _platform_template.setdefault(
+            "proxy",
+            {
+                "mode": "none",
+                "type": "http",
+                "address": "",
+            },
+        )
 
 
 """

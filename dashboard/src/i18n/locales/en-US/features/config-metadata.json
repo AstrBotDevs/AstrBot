@@ -592,6 +592,22 @@
     "name": "Platforms & Messages",
     "platform": {
       "description": "Message Platform Adapters",
+      "proxy": {
+        "description": "Proxy Settings",
+        "hint": "Disabling the adapter proxy does not override the global proxy settings.",
+        "mode": {
+          "description": "Proxy Mode",
+          "labels": ["Do not use proxy", "Use proxy"]
+        },
+        "type": {
+          "description": "Proxy Type",
+          "labels": ["HTTP", "HTTPS", "SOCKS5"]
+        },
+        "address": {
+          "description": "Proxy Address",
+          "hint": "Enter host:port, for example 127.0.0.1:7890. Required when proxy is enabled."
+        }
+      },
       "app_id": {
         "description": "Application ID",
         "hint": "The application ID from the messaging platform's developer console."

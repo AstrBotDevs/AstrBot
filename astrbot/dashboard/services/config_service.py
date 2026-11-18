@@ -333,6 +333,17 @@ def validate_config(
             **schema["misc_config_group"]["metadata"],
         }
         validate(data, meta_all)
+        for index, platform in enumerate(data.get("platform", [])):
+            if not isinstance(platform, dict):
+                continue
+            proxy = platform.get("proxy")
+            if not isinstance(proxy, dict) or proxy.get("mode") != "custom":
+                continue
+            address = proxy.get("address")
+            if not isinstance(address, str) or not address.strip():
+                errors.append(
+                    f"平台配置 platform[{index}].proxy.address: 使用代理时不能为空"
+                )
         provider_settings = data.get("provider_settings", {})
         defaults = get_local_permission_defaults(runtime.get("os") if runtime else None)
         permissions = (
@@ -974,6 +985,17 @@ class ConfigDisplayService:
 
         if logo_registration_tasks:
             await asyncio.gather(*logo_registration_tasks, return_exceptions=True)
+
+        for platform_template in platform_default_tmpl.values():
+            if isinstance(platform_template, dict):
+                platform_template.setdefault(
+                    "proxy",
+                    {
+                        "mode": "none",
+                        "type": "http",
+                        "address": "",
+                    },
+                )
 
         provider_default_tmpl = metadata["provider_group"]["metadata"]["provider"][
             "config_template"

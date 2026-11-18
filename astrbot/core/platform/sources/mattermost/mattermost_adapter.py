@@ -74,6 +74,7 @@ class MattermostPlatformAdapter(Platform):
             self.base_url,
             self.bot_token,
             action_callback_url=action_callback_url,
+            proxy_url=self.proxy_url,
         )
         self.metadata = PlatformMetadata(
             name="mattermost",

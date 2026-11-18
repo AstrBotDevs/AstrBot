@@ -9,6 +9,7 @@ from urllib.parse import unquote
 import aiohttp
 
 from astrbot.api import logger
+from astrbot.core.platform.proxy import create_platform_client_session
 
 
 class LineAPIClient:
@@ -18,15 +19,20 @@ class LineAPIClient:
         channel_access_token: str,
         channel_secret: str,
         timeout_seconds: int = 30,
+        proxy_url: str | None = None,
     ) -> None:
         self.channel_access_token = channel_access_token.strip()
         self.channel_secret = channel_secret.strip()
         self.timeout = aiohttp.ClientTimeout(total=timeout_seconds)
+        self.proxy_url = proxy_url
         self._session: aiohttp.ClientSession | None = None
 
     async def _get_session(self) -> aiohttp.ClientSession:
         if self._session is None or self._session.closed:
-            self._session = aiohttp.ClientSession(timeout=self.timeout)
+            self._session = create_platform_client_session(
+                self.proxy_url,
+                timeout=self.timeout,
+            )
         return self._session
 
     async def close(self) -> None:

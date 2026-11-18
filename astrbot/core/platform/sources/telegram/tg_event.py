@@ -12,7 +12,7 @@ from telegram import (
     ReactionTypeEmoji,
 )
 from telegram.constants import ChatAction
-from telegram.error import BadRequest
+from telegram.error import BadRequest, NetworkError
 from telegram.ext import ExtBot
 
 from astrbot import logger
@@ -201,6 +201,11 @@ class TelegramPlatformEvent(AstrMessageEvent):
             if message_thread_id:
                 payload["message_thread_id"] = message_thread_id
             await client.send_chat_action(**payload)
+        except NetworkError as e:
+            logger.debug(
+                "[Telegram] Chat action unavailable (%s); continuing without it.",
+                type(e).__name__,
+            )
         except Exception as e:
             logger.warning(f"[Telegram] 发送 chat action 失败: {e}")
 

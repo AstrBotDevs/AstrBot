@@ -50,6 +50,31 @@ class Platform(abc.ABC):
         self._started_at: datetime | None = None
 
     @property
+    def proxy_url(self) -> str | None:
+        """Return the adapter-specific proxy URL when one is configured.
+
+        An unset or disabled adapter proxy returns ``None`` so the underlying
+        client can retain its existing environment-proxy behavior.
+
+        Returns:
+            A normalized proxy URL, or None when the adapter proxy is disabled.
+        """
+        proxy = self.config.get("proxy")
+        if not isinstance(proxy, dict) or proxy.get("mode") != "custom":
+            return None
+
+        address = str(proxy.get("address", "")).strip()
+        if not address:
+            return None
+        if "://" in address:
+            return address
+
+        proxy_type = str(proxy.get("type", "http")).strip().lower()
+        if proxy_type not in {"http", "https", "socks5"}:
+            proxy_type = "http"
+        return f"{proxy_type}://{address}"
+
+    @property
     def status(self) -> PlatformStatus:
         """获取平台运行状态"""
         return self._status
