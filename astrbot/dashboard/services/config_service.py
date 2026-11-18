@@ -1405,10 +1405,12 @@ class BotConfigService:
                     "schema": copy.deepcopy(platform.config_metadata or {}),
                     "support_streaming_message": platform.support_streaming_message,
                     "support_proactive_message": platform.support_proactive_message,
-                    "support_registration": platform.name in REGISTRATION_HANDLERS,
                 }
             )
-        return {"bot_types": bot_types}
+        return {
+            "bot_types": bot_types,
+            "registration_types": list(REGISTRATION_HANDLERS),
+        }
 
     def list_bots(
         self, *, enabled: bool | None = None, type_: str | None = None

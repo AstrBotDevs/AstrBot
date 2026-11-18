@@ -7,12 +7,16 @@ from unittest.mock import AsyncMock
 
 import pytest
 import pytest_asyncio
+
 from astrbot.api.event import MessageChain
 from astrbot.api.message_components import ActionRow, At, Button, Plain
 from astrbot.api.platform import MessageSendReceipt
 from astrbot.core.platform.sources.wecom_ai_bot.wecomai_adapter import WecomAIBotAdapter
 from astrbot.dashboard.services.config_service import BotConfigService
-from astrbot.dashboard.services.platform_service import PlatformService
+from astrbot.dashboard.services.platform_service import (
+    REGISTRATION_HANDLERS,
+    PlatformService,
+)
 
 
 @pytest_asyncio.fixture
@@ -116,13 +120,8 @@ async def test_public_registration_and_metadata_share_the_actual_dispatch(monkey
     )
     core = SimpleNamespace(platform_manager=None, astrbot_config={"platform": []})
     service = PlatformService(core)
-    types = BotConfigService(core).list_bot_types()["bot_types"]
-    assert (
-        next(row for row in types if row["type"] == "wecom_ai_bot")[
-            "support_registration"
-        ]
-        is True
-    )
+    types = BotConfigService(core).list_bot_types()["registration_types"]
+    assert "wecom_ai_bot" in types
     started = await service.handle_platform_registration(
         "wecom_ai_bot", {"action": "start"}
     )
@@ -138,6 +137,27 @@ async def test_public_registration_and_metadata_share_the_actual_dispatch(monkey
     }
     assert all(options["allow_redirects"] is False for _, options in calls)
     assert calls[1][1]["params"] == {"scode": "example-code"}
+
+
+def test_registration_catalog_is_available_without_loaded_adapters(monkeypatch):
+    monkeypatch.setattr(
+        "astrbot.dashboard.services.config_service.platform_registry", []
+    )
+    core = SimpleNamespace(platform_manager=None, astrbot_config={"platform": []})
+    config = BotConfigService(core)
+    metadata = config.list_bot_types()
+    assert metadata["bot_types"] == []
+    assert {"weixin_oc", "dingtalk", "wecom_ai_bot"} <= set(
+        metadata["registration_types"]
+    )
+    assert all(
+        callable(getattr(PlatformService, REGISTRATION_HANDLERS[kind]))
+        for kind in metadata["registration_types"]
+    )
+    for kind in list(REGISTRATION_HANDLERS):
+        monkeypatch.delitem(REGISTRATION_HANDLERS, kind)
+    assert config.list_bot_types() == {"bot_types": [], "registration_types": []}
+    assert core.astrbot_config["platform"] == []
 
 
 @pytest.mark.asyncio
