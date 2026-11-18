@@ -3,11 +3,15 @@ from __future__ import annotations
 import copy
 import json
 import logging
+import os
 import platform
+import tempfile
 import traceback
 from pathlib import Path
 from typing import Any
+from uuid import NAMESPACE_URL, uuid5
 
+from astrbot.core.config.agent import normalize_agent
 from astrbot.core.config.agent_runner import (
     AGENT_RUNNER_TYPES,
     THIRD_PARTY_AGENT_RUNNER_TYPES,
@@ -311,8 +315,42 @@ def migrate_config_on_load(config: dict[str, Any], config_path: Path) -> bool:
 
     Returns:
         Whether the configuration changed.
+
+    Raises:
+        ValueError: If legacy or staged subagent configuration is not an object.
+        OSError: If migration input cannot be safely persisted or read.
     """
     changed = False
+    pending_path = config_path.with_suffix(".subagents-migration.json")
+    legacy_subagents = config.get("subagent_orchestrator")
+    if legacy_subagents is not None and not isinstance(legacy_subagents, dict):
+        raise ValueError("Legacy subagent configuration must be an object")
+    if isinstance(legacy_subagents, dict) and not pending_path.exists():
+        # Configuration loads precede database initialization. Persist the source
+        # before cleanup so a failed database import can resume after restart.
+        pending_temp = None
+        try:
+            with tempfile.NamedTemporaryFile(
+                mode="w",
+                encoding="utf-8",
+                dir=config_path.parent,
+                prefix=f".{pending_path.name}.",
+                suffix=".tmp",
+                delete=False,
+            ) as pending_file:
+                pending_temp = Path(pending_file.name)
+                json.dump(legacy_subagents, pending_file, ensure_ascii=False)
+                pending_file.flush()
+                os.fsync(pending_file.fileno())
+            pending_temp.replace(pending_path)
+        finally:
+            if pending_temp is not None:
+                pending_temp.unlink(missing_ok=True)
+    if pending_path.exists():
+        with pending_path.open(encoding="utf-8") as pending_file:
+            legacy_subagents = json.load(pending_file)
+        if not isinstance(legacy_subagents, dict):
+            raise ValueError("Pending subagent migration must contain an object")
     legacy = config.get("log_file")
     legacy = legacy if isinstance(legacy, dict) else {}
     old_keys = ("trace_log_enable", "trace_log_path", "trace_log_max_mb")
@@ -355,7 +393,52 @@ def migrate_config_on_load(config: dict[str, Any], config_path: Path) -> bool:
                 resolved_path,
                 exc,
             )
-    changed = _migrate_agent_runner_config(config, fallback_config) or changed
+        default_pending_path = default_path.with_suffix(".subagents-migration.json")
+        if default_pending_path.exists():
+            with default_pending_path.open(encoding="utf-8") as pending_file:
+                legacy_subagents = json.load(pending_file)
+            if not isinstance(legacy_subagents, dict):
+                raise ValueError("Pending subagent migration must contain an object")
+        elif isinstance(fallback_config, dict):
+            legacy_subagents = fallback_config.get("subagent_orchestrator", {})
+    if "agent" not in config:
+        changed = _migrate_agent_runner_config(config, fallback_config) or changed
+        previous = config.pop("agent_runner")
+        runtime = previous["runner_type"]
+        config["agent"] = {
+            "runtime": "astrbot" if runtime == "local" else runtime,
+            "config": previous["config"],
+        }
+        changed = True
+    elif "agent_runner" in config:
+        config.pop("agent_runner")
+        changed = True
+    agent = config["agent"]
+    if agent.get("runtime") == "astrbot" and "subagents" not in agent.get("config", {}):
+        # Legacy workers always used the default profile's global configuration.
+        legacy_agents = legacy_subagents or {}
+        agent.setdefault("config", {})["subagents"] = {
+            "enabled": legacy_agents.get(
+                "main_enable", legacy_agents.get("enable", False)
+            ),
+            "config_ids": [
+                str(uuid5(NAMESPACE_URL, "astrbot:agent-config:" + item["name"]))
+                for item in legacy_agents.get("agents", [])
+                if isinstance(item, dict)
+                and item.get("name")
+                and item.get("enabled", True)
+            ],
+            "max_concurrent_agents": legacy_agents.get("max_concurrent_agents", 3),
+            "task_timeout": legacy_agents.get("task_timeout", 600),
+        }
+        changed = True
+    if "subagent_orchestrator" in config:
+        config.pop("subagent_orchestrator")
+        changed = True
+    normalized = normalize_agent(agent)
+    if normalized != agent:
+        config["agent"] = normalized
+        changed = True
     config_version = config.get("config_version")
     if not isinstance(config_version, int) or config_version < 5:
         provider_settings = config.get("provider_settings", {})
@@ -377,6 +460,9 @@ def migrate_config_on_load(config: dict[str, Any], config_path: Path) -> bool:
                 "code execution and execution network access remain disabled."
             )
         config["config_version"] = 5
+        changed = True
+    if config.get("config_version", 0) < 6:
+        config["config_version"] = 6
         changed = True
     return changed
 
@@ -404,12 +490,12 @@ def finalize_config_migrations(configs: list[dict[str, Any]]) -> bool:
             isinstance(provider, dict)
             and (
                 provider.get("provider_type") == "agent_runner"
-                or effective_provider_map.get(provider.get("id"), {}).get(
+                or effective_provider_map.get(provider.get("id") or "", {}).get(
                     "provider_type"
                 )
                 == "agent_runner"
                 or _get_provider_runner_type(
-                    effective_provider_map.get(provider.get("id"), provider)
+                    effective_provider_map.get(provider.get("id") or "", provider)
                 )
                 is not None
             )
@@ -496,10 +582,13 @@ async def migra(
         acm: Initialized AstrBot configuration manager.
     """
     from astrbot.core.db.migration.migra_45_to_46 import migrate_45_to_46
+    from astrbot.core.db.migration.migra_agent_configs import migrate_agent_configs
     from astrbot.core.db.migration.migra_token_usage import migrate_token_usage
     from astrbot.core.db.migration.migra_webchat_session import (
         migrate_webchat_session,
     )
+
+    await migrate_agent_configs(db, list(acm.confs.values()))
 
     try:
         await migrate_45_to_46(astrbot_config_mgr, umop_config_router)

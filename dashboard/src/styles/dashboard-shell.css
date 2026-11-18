@@ -83,7 +83,7 @@
 
 .dashboard-card {
   border: 1px solid var(--dashboard-border);
-  border-radius: 16px;
+  border-radius: var(--astrbot-radius-card);
   background: var(--dashboard-surface);
 }
 
@@ -247,7 +247,7 @@
 
 .dashboard-dialog-card {
   border: 1px solid var(--dashboard-border);
-  border-radius: 18px;
+  border-radius: var(--astrbot-radius-dialog);
 }
 
 @media (max-width: 1280px) {

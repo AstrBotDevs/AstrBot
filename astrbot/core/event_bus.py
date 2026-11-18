@@ -58,11 +58,9 @@ class EventBus:
             if event.get_platform_id() in self.stopped_platforms:
                 event.trace.record("pipeline_end", status="cancelled")
                 continue
-            conf_info = self.astrbot_config_mgr.get_conf_info(event.unified_msg_origin)
+            original_umo = event.unified_msg_origin
+            conf_info = self.astrbot_config_mgr.get_conf_info(original_umo)
             conf_id = conf_info["id"]
-            conf_name = conf_info.get("name") or conf_id
-            with event.trace.context():
-                self._print_event(event, conf_name)
             scheduler = self.pipeline_scheduler_mapping.get(conf_id)
             if not scheduler:
                 logger.error(
@@ -70,6 +68,22 @@ class EventBus:
                 )
                 continue
             self._apply_session_isolation(event, scheduler.ctx.astrbot_config)
+            if event.unified_msg_origin != original_umo:
+                # Isolation changes the routing key. Match the scheduler to the
+                # same final UMO used by providers and other configuration readers.
+                conf_info = self.astrbot_config_mgr.get_conf_info(
+                    event.unified_msg_origin
+                )
+                conf_id = conf_info["id"]
+                scheduler = self.pipeline_scheduler_mapping.get(conf_id)
+                if not scheduler:
+                    logger.error(
+                        f"PipelineScheduler not found for id: {conf_id}, event ignored."
+                    )
+                    continue
+            conf_name = conf_info.get("name") or conf_id
+            with event.trace.context():
+                self._print_event(event, conf_name)
             task = asyncio.create_task(scheduler.execute(event))
             self._pending_tasks[task] = event
             task.add_done_callback(self._on_task_done)

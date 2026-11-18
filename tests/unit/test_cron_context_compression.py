@@ -2,7 +2,7 @@
 
 from dataclasses import replace
 
-from astrbot.core.astr_main_agent import MainAgentBuildConfig
+from astrbot.core.astr_agent_runtime.main_agent import MainAgentBuildConfig
 from astrbot.core.config.agent_runner import (
     resolve_context_compression_config,
 )

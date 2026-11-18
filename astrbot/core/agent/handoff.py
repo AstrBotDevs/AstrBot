@@ -16,7 +16,7 @@ class HandoffTool(FunctionTool, Generic[TContext]):
         **kwargs,
     ) -> None:
         # Avoid passing duplicate `description` to the FunctionTool dataclass.
-        # Some call sites (e.g. SubAgentOrchestrator) pass `description` via kwargs
+        # Some SDK callers pass `description` via kwargs
         # to override what the main agent sees, while we also compute a default
         # description here.
         # `tool_description` is the public description shown to the main LLM.
