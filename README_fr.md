@@ -151,6 +151,7 @@ Connectez AstrBot à vos plateformes de chat préférées.
 | Ollama (Auto-hébergé) | Services LLM |
 | LM Studio (Auto-hébergé) | Services LLM |
 | [MiraRouter](https://mirarouter.com/) | Services LLM (Passerelle API, prend en charge tous les modèles) |
+| [ShengSuanYun](https://www.shengsuanyun.com/?from=CH_T70U2X9L) | Services LLM |
 | [AIHubMix](https://aihubmix.com/?aff=4bfH) | Services LLM (Passerelle API, prend en charge tous les modèles) |
 | [CompShare](https://www.compshare.cn/?ytag=GPU_YY-gh_astrbot&referral_code=FV7DcGowN4hB5UuXKgpE74) | Services LLM |
 | [302.AI](https://share.302.ai/rr1M3l) | Services LLM |
@@ -165,7 +166,9 @@ Connectez AstrBot à vos plateformes de chat préférées.
 | OpenAI Whisper | Services de reconnaissance vocale |
 | SenseVoice | Services de reconnaissance vocale |
 | Xiaomi MiMo Omni | Services de reconnaissance vocale |
+| [DeepSeek STT](https://api-docs.deepseek.com/zh-cn/guides/asr/) | Services de reconnaissance vocale |
 | OpenAI TTS | Services de synthèse vocale |
+| [DeepSeek TTS](https://api-docs.deepseek.com/zh-cn/guides/tts/) | Services de synthèse vocale |
 | Gemini TTS | Services de synthèse vocale |
 | GPT-Sovits-Inference | Services de synthèse vocale |
 | GPT-Sovits | Services de synthèse vocale |

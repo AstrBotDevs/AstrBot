@@ -10,6 +10,7 @@ import pytest
 from astrbot.core.message.components import (
     At,
     AtAll,
+    ButtonInteraction,
     Face,
     Forward,
     Image,
@@ -237,7 +238,8 @@ async def test_response_trace_omits_sending_owner(
     await stage.process(event)
 
     sent = [
-        record for record in event.trace.record.call_args_list
+        record
+        for record in event.trace.record.call_args_list
         if record.args[0] == "response_sent"
     ]
     assert len(sent) == 1
@@ -270,14 +272,17 @@ async def test_public_context_send_records_only_successful_delivery(
         if outcome == "failure":
             with pytest.raises(RuntimeError, match="send failed"):
                 await Context.send_message(
-                    context, "target:FriendMessage:other", MessageChain([Plain("Hello")])
+                    context,
+                    "target:FriendMessage:other",
+                    MessageChain([Plain("Hello")]),
                 )
         else:
             assert await Context.send_message(
                 context, "target:FriendMessage:other", MessageChain([Plain("Hello")])
             ) is (outcome == "success")
     deliveries = [
-        call for call in event.trace.record.call_args_list
+        call
+        for call in event.trace.record.call_args_list
         if call.args[0] == "response_sent"
     ]
     assert len(deliveries) == (1 if outcome == "success" else 0)
@@ -297,11 +302,14 @@ async def test_public_context_send_skips_unscoped_and_stream_chunk_records(
     event = astr_message_event
     event.trace = MagicMock()
     context = SimpleNamespace(
-        platform_manager=SimpleNamespace(platform_insts=[
-            SimpleNamespace(
-                meta=lambda: SimpleNamespace(id="target"), send_by_session=AsyncMock()
-            )
-        ]),
+        platform_manager=SimpleNamespace(
+            platform_insts=[
+                SimpleNamespace(
+                    meta=lambda: SimpleNamespace(id="target"),
+                    send_by_session=AsyncMock(),
+                )
+            ]
+        ),
         get_config=lambda **kwargs: {},
     )
     if scoped:
@@ -309,7 +317,9 @@ async def test_public_context_send_skips_unscoped_and_stream_chunk_records(
             token = streaming_response_event.set(event)
             try:
                 await Context.send_message(
-                    context, "target:FriendMessage:other", MessageChain([Plain("Chunk")])
+                    context,
+                    "target:FriendMessage:other",
+                    MessageChain([Plain("Chunk")]),
                 )
             finally:
                 streaming_response_event.reset(token)
@@ -318,26 +328,28 @@ async def test_public_context_send_skips_unscoped_and_stream_chunk_records(
             context, "target:FriendMessage:other", MessageChain([Plain("Hello")])
         )
     assert all(
-        call.args[0] != "response_sent"
-        for call in event.trace.record.call_args_list
+        call.args[0] != "response_sent" for call in event.trace.record.call_args_list
     )
 
 
 @pytest.mark.asyncio
 async def test_nested_event_forwarding_records_delivery_once(monkeypatch):
     """Record nested public sends only once without duplicating event metrics."""
-    from astrbot.core.cron.events import CronMessageEvent
+    from astrbot.core.platform.agent_wakeup_event import AgentWakeupEvent
     from astrbot.core.platform.message_session import MessageSession
 
     monkeypatch.setattr(
         "astrbot.core.platform.astr_message_event.Metric.upload", AsyncMock()
     )
     context = SimpleNamespace(
-        platform_manager=SimpleNamespace(platform_insts=[
-            SimpleNamespace(
-                meta=lambda: SimpleNamespace(id="target"), send_by_session=AsyncMock()
-            )
-        ]),
+        platform_manager=SimpleNamespace(
+            platform_insts=[
+                SimpleNamespace(
+                    meta=lambda: SimpleNamespace(id="target"),
+                    send_by_session=AsyncMock(),
+                )
+            ]
+        ),
         get_config=lambda **kwargs: {},
     )
 
@@ -346,16 +358,21 @@ async def test_nested_event_forwarding_records_delivery_once(monkeypatch):
         return await Context.send_message(context, session, chain)
 
     context.send_message = send_message
-    event = CronMessageEvent(
+    event = AgentWakeupEvent(
         context=context,
         session=MessageSession.from_str("target:FriendMessage:user"),
-        message="Scheduled",
+        platform_meta=PlatformMetadata(
+            id="target", name="test-platform", description="Test"
+        ),
+        prompt="Scheduled",
+        source="cron",
     )
     event.trace = MagicMock()
     with event_context(event):
         await event.send(MessageChain([Plain("Hello")]))
     deliveries = [
-        call for call in event.trace.record.call_args_list
+        call
+        for call in event.trace.record.call_args_list
         if call.args[0] == "response_sent"
     ]
     assert len(deliveries) == 1
@@ -418,6 +435,18 @@ class TestAstrMessageEventInit:
         assert astr_message_event.trace is not None
         assert astr_message_event.span is not None
         assert astr_message_event.trace == astr_message_event.span
+
+    def test_button_interaction_accessors(self, astr_message_event):
+        interaction = ButtonInteraction(
+            action_id="approve",
+            data={"request_id": "req-1"},
+            interaction_id="interaction-1",
+            source_message_id="message-1",
+        )
+        astr_message_event.message_obj.message.append(interaction)
+
+        assert astr_message_event.is_button_interaction()
+        assert astr_message_event.get_button_interaction() == interaction
 
 
 class TestUnifiedMsgOrigin:

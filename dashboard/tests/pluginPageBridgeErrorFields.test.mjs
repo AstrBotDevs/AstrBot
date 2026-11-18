@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 
 const source = readFileSync(
-  new URL("../src/views/PluginViewPage.vue", import.meta.url),
+  new URL("../src/components/plugins/PluginViewFrame.vue", import.meta.url),
   "utf8",
 );
 

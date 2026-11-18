@@ -1152,6 +1152,11 @@ export const useExtensionPage = (initialTab = "installed") => {
     curr_namespace.value = extension_name;
     currentConfigPlugin.value = extension_name;
     configDialog.value = true;
+    // Drop the previous plugin's schema immediately: the dialog keeps rendering the old
+    // metadata while the request is in flight, which would let the user toggle groups of
+    // one plugin under another plugin's namespace.
+    extension_config.metadata = {};
+    extension_config.config = {};
     extension_config.log_level = null;
     try {
       const res = await pluginApi.config(extension_name);

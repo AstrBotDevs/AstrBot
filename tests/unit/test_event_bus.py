@@ -288,7 +288,13 @@ class TestEventBusDispatch:
         ("slack", MessageType.GROUP_MESSAGE, True, "group", "alice_group"),
         ("dingtalk", MessageType.GROUP_MESSAGE, True, "group", "alice"),
         ("qq_official", MessageType.GROUP_MESSAGE, True, "group", "alice_group"),
-        ("qq_official_webhook", MessageType.GROUP_MESSAGE, True, "group", "alice_group"),
+        (
+            "qq_official_webhook",
+            MessageType.GROUP_MESSAGE,
+            True,
+            "group",
+            "alice_group",
+        ),
         ("lark", MessageType.GROUP_MESSAGE, True, "group", "alice%group"),
         ("misskey", MessageType.GROUP_MESSAGE, True, "group", "group_alice"),
         ("matrix", MessageType.GROUP_MESSAGE, True, "group", "alice_group"),
@@ -333,6 +339,12 @@ async def test_session_isolation_precedes_registration(
     ctx = SimpleNamespace(
         astrbot_config=config,
         astrbot_config_id="test-conf-id",
+        plugin_manager=SimpleNamespace(
+            context=SimpleNamespace(
+                get_config=lambda **_: config,
+                astrbot_config_mgr=SimpleNamespace(_create_message_config=lambda _: (config, frozenset())),
+            )
+        ),
         db_helper=None,
     )
     scheduler = PipelineScheduler(ctx)
@@ -344,7 +356,9 @@ async def test_session_isolation_precedes_registration(
         lambda *_args, **_kwargs: [],
     )
     registry = ActiveEventRegistry()
-    monkeypatch.setattr("astrbot.core.platform.astr_message_event.active_event_registry", registry)
+    monkeypatch.setattr(
+        "astrbot.core.platform.astr_message_event.active_event_registry", registry
+    )
     started = asyncio.Event()
     release = asyncio.Event()
 
@@ -383,7 +397,7 @@ async def test_session_isolation_precedes_registration(
         Returns:
             The selected configuration profile metadata.
         """
-        assert umo == original_umo == event.unified_msg_origin
+        assert umo == event.unified_msg_origin
         return {"id": "test-conf-id"}
 
     mock_config_manager.get_conf_info.side_effect = select_config
@@ -411,7 +425,6 @@ async def test_session_isolation_precedes_registration(
         else:
             assert result == [None]
         assert registry._events == {}
-        mock_config_manager.get_conf_info.assert_called_once_with(original_umo)
     finally:
         release.set()
         dispatch.cancel()

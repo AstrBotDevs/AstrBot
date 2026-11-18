@@ -14,6 +14,7 @@ from typing import Any, BinaryIO
 from urllib.parse import quote, quote_plus
 
 from astrbot import __version__
+from astrbot.core.log import LogManager
 from astrbot.core.utils.astrbot_path import get_astrbot_path
 
 REDACTED = "[REDACTED]"
@@ -412,6 +413,7 @@ def collect_diagnostics(
         "architecture": platform.machine(),
         "deployment": "docker" if Path("/.dockerenv").exists() else "unknown",
         "started_at": getattr(core, "start_time", None),
+        "console_logging": LogManager.get_console_status(),
         "collection_errors": errors,
     }
     redactor.collect(sections)

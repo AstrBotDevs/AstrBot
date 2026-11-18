@@ -106,6 +106,50 @@ async def test_system_one_decisions_share_one_request_and_parse_all_heads():
 
 
 @pytest.mark.asyncio
+async def test_system_one_connection_test_accepts_endpoint_requiring_noul_criteria():
+    def handler(request: httpx.Request) -> httpx.Response:
+        question = json.loads(request.content)["questions"]["test"]
+        if set(question.get("criteria", {})) != {"true", "false"}:
+            return httpx.Response(400, json={"error": "Missing boolean criteria"})
+        return httpx.Response(
+            200, json={"answers": {"test": {"type": "noul", "noul": 0.9}}}
+        )
+
+    provider = _provider(handler)
+    try:
+        await provider.test()
+    finally:
+        await provider.terminate()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "criteria",
+    [
+        {"true": "", "false": ""},
+        {"false": "The user did not ask to cancel."},
+    ],
+)
+async def test_system_one_sends_caller_supplied_noul_criteria(criteria):
+    def handler(request: httpx.Request) -> httpx.Response:
+        question = json.loads(request.content)["questions"]["cancel"]
+        assert question["criteria"] == criteria
+        return httpx.Response(
+            200, json={"answers": {"cancel": {"type": "noul", "noul": 0.8}}}
+        )
+
+    provider = _provider(handler)
+    try:
+        answers = await provider.ask(
+            {"cancel": DecisionBooleanQuestion("Cancel?", criteria=criteria)}
+        )
+    finally:
+        await provider.terminate()
+
+    assert answers["cancel"] == DecisionBooleanAnswer(probability=0.8)
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize(
     ("api_base", "expected_url"),
     [
@@ -138,7 +182,7 @@ async def test_system_one_resolves_api_base(api_base, expected_url):
     assert captured["url"] == expected_url
 
 
-def test_system_one_templates_use_a_single_key_and_two_second_timeout():
+def test_system_one_templates_expose_required_defaults():
     templates = CONFIG_METADATA_2["provider_group"]["metadata"]["provider"][
         "config_template"
     ]
@@ -148,34 +192,11 @@ def test_system_one_templates_use_a_single_key_and_two_second_timeout():
         "Vercel System One",
         "Custom System One",
     ):
-        assert templates[name]["key"] == ""
-        assert templates[name]["timeout"] == 2
-
-
-def test_system_one_templates_expose_total_timeout():
-    templates = CONFIG_METADATA_2["provider_group"]["metadata"]["provider"][
-        "config_template"
-    ]
-    for name in (
-        "TypeSafe System One",
-        "OpenRouter System One",
-        "Vercel System One",
-        "Custom System One",
-    ):
-        assert templates[name]["total_timeout"] == 5
-
-
-def test_system_one_templates_expose_max_concurrency():
-    templates = CONFIG_METADATA_2["provider_group"]["metadata"]["provider"][
-        "config_template"
-    ]
-    for name in (
-        "TypeSafe System One",
-        "OpenRouter System One",
-        "Vercel System One",
-        "Custom System One",
-    ):
-        assert templates[name]["max_concurrency"] == 4
+        template = templates[name]
+        assert template["key"] == ""
+        assert template["timeout"] == 2
+        assert template["total_timeout"] == 5
+        assert template["max_concurrency"] == 4
 
 
 @pytest.mark.asyncio
@@ -654,7 +675,9 @@ async def test_provider_manager_ignores_unknown_provider_id():
     persona_manager.default_persona = ""
     manager = ProviderManager(acm, MagicMock(), persona_manager)
 
+    assert manager.inst_map == {}
     await manager.terminate_provider("missing")
+    assert manager.inst_map == {}
 
 
 @pytest.mark.asyncio

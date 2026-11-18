@@ -4,6 +4,10 @@
   const pendingRequests = new Map();
   const sseHandlers = new Map();
   const contextHandlers = new Set();
+  const viewHandlers = new Set();
+  let viewBusy = false;
+  let sizeObserver;
+  let bridgeSession;
   let requestCounter = 0;
   let subscriptionCounter = 0;
   let context = null;
@@ -44,6 +48,7 @@
     window.parent.postMessage(
       {
         channel: CHANNEL,
+        ...(bridgeSession ? { session: bridgeSession } : {}),
         kind,
         ...(payload || {}),
       },
@@ -54,18 +59,37 @@
 
   function makeRequest(action, payload, transfer) {
     return new Promise((resolve, reject) => {
+      if (
+        (context?.target === "chat_message" || (["chat_workbench", "chat_workbench_with_launcher"].includes(context?.target) && context?.view)) &&
+        action !== "view:action"
+      ) {
+        reject(
+          Object.assign(
+            new Error("This capability is unavailable in chat views."),
+            {
+              code: "UNSUPPORTED_CAPABILITY",
+            },
+          ),
+        );
+        return;
+      }
       requestCounter += 1;
       const requestId = `plugin_req_${requestCounter}`;
       pendingRequests.set(requestId, { resolve, reject });
-      send(
-        "request",
-        {
-          requestId,
-          action,
-          ...(payload || {}),
-        },
-        transfer,
-      );
+      try {
+        send(
+          "request",
+          {
+            requestId,
+            action,
+            ...(payload || {}),
+          },
+          transfer,
+        );
+      } catch (error) {
+        pendingRequests.delete(requestId);
+        reject(error);
+      }
     });
   }
 
@@ -126,15 +150,63 @@
     if (!nextContext || typeof nextContext !== "object") {
       return;
     }
+    const previousView = context?.view;
+    const viewChanged =
+      nextContext.view &&
+      (!previousView || nextContext.view.revision >= previousView.revision);
     context = {
       ...(context || {}),
       ...nextContext,
+      ...(nextContext.view
+        ? {
+            view: viewChanged
+              ? structuredClone(nextContext.view)
+              : previousView,
+          }
+        : {}),
     };
     if (typeof nextContext.isDark === "boolean") {
       document.documentElement.setAttribute(
         "data-theme",
         nextContext.isDark ? "dark" : "light",
       );
+    }
+    const colors = context.themeColors || {};
+    const dark = context.isDark === true;
+    // Match the host scheme so transparent iframes do not get an opaque canvas.
+    document.documentElement.style.setProperty(
+      "color-scheme",
+      dark ? "dark" : "light",
+    );
+    const tokens = {
+      primary: colors.primary || (dark ? "#5ba4d4" : "#3c96ca"),
+      secondary: colors.secondary || (dark ? "#4a95c4" : "#2f86bd"),
+      "on-primary": colors["on-primary"] || "#ffffff",
+      text:
+        colors.primaryText ||
+        colors["on-surface"] ||
+        (dark ? "#e8eaed" : "#1b1c1d"),
+      "text-secondary":
+        colors.secondaryText || (dark ? "#ffffffdd" : "#000000aa"),
+      background: colors.background || (dark ? "#1a1a1a" : "#ffffff"),
+      surface: colors.surface || (dark ? "#242424" : "#ffffff"),
+      border: colors.border || (dark ? "#333333ee" : "#d0d0d0"),
+      error: colors.error || (dark ? "#ff4d4f" : "#f44336"),
+    };
+    for (const [name, value] of Object.entries(tokens)) {
+      document.documentElement.style.setProperty(
+        `--astrbot-color-${name}`,
+        value,
+      );
+    }
+    if (viewChanged) {
+      for (const handler of viewHandlers) {
+        try {
+          handler(structuredClone(context.view));
+        } catch (error) {
+          console.error("Plugin view subscriber failed:", error);
+        }
+      }
     }
     if (resolveReady) {
       resolveReady(context);
@@ -150,16 +222,15 @@
     if (!isAllowedParentOrigin(event.origin)) {
       return;
     }
-    if (!parentOrigin) {
-      parentOrigin = event.origin;
-    }
-
     const message = event.data;
     if (!message || message.channel !== CHANNEL) {
       return;
     }
+    if (bridgeSession && message.session !== bridgeSession) return;
+    if (!parentOrigin) parentOrigin = event.origin;
 
     if (message.kind === "context") {
+      if (!bridgeSession && message.session) bridgeSession = message.session;
       applyContext(message.context);
       return;
     }
@@ -170,20 +241,31 @@
         return;
       }
       pendingRequests.delete(message.requestId);
+      if (message.snapshot) applyContext({ view: message.snapshot });
       if (message.ok) {
         pending.resolve(message.data);
       } else {
-        const err = new Error(message.error || "Plugin bridge request failed.");
+        const legacyFields = {};
         if (typeof message.errorCode === "string" && message.errorCode) {
-          err.code = message.errorCode;
+          legacyFields.code = message.errorCode;
         }
         if (typeof message.errorReason === "string" && message.errorReason) {
-          err.reason = message.errorReason;
+          legacyFields.reason = message.errorReason;
         }
         if (typeof message.errorConfirmed === "boolean") {
-          err.confirmed = message.errorConfirmed;
+          legacyFields.confirmed = message.errorConfirmed;
         }
-        pending.reject(err);
+        pending.reject(
+          Object.assign(
+            new Error(
+              message.error?.message ||
+                message.error ||
+                "Plugin bridge request failed.",
+            ),
+            legacyFields,
+            typeof message.error === "object" ? message.error : {},
+          ),
+        );
       }
       return;
     }
@@ -206,15 +288,49 @@
       if (message.state === "open" && handlers?.onOpen) {
         handlers.onOpen();
       }
-      if (message.state === "error" && handlers?.onError) {
-        handlers.onError();
+      if (message.state === "closed" || message.state === "error") {
+        sseHandlers.delete(message.subscriptionId);
+        if (message.state === "closed" && handlers?.onClose) {
+          handlers.onClose();
+        } else if (message.state === "error" && handlers?.onError) {
+          handlers.onError();
+        }
       }
     }
   });
 
   window.AstrBotPluginView = {
-    ready() {
-      return readyPromise;
+    async ready() {
+      await readyPromise;
+      if (
+        context?.target === "chat_message" &&
+        window.ResizeObserver &&
+        !sizeObserver
+      ) {
+        if (document.readyState === "loading") {
+          await new Promise((resolve) =>
+            document.addEventListener("DOMContentLoaded", resolve, {
+              once: true,
+            }),
+          );
+        }
+        if (!sizeObserver) {
+          let previousHeight;
+          sizeObserver = new window.ResizeObserver(() => {
+            const margins = window.getComputedStyle(document.body);
+            const height = Math.ceil(
+              document.body.getBoundingClientRect().height +
+                parseFloat(margins.marginTop) +
+                parseFloat(margins.marginBottom),
+            );
+            if (height === previousHeight) return;
+            previousHeight = height;
+            send("resize", { height });
+          });
+          sizeObserver.observe(document.body);
+        }
+      }
+      return context;
     },
     getContext() {
       return context;
@@ -242,6 +358,73 @@
     },
     __setInitialContext(nextContext) {
       applyContext(nextContext);
+    },
+    view: {
+      subscribe(handler) {
+        if (
+          !["chat_message", "chat_workbench", "chat_workbench_with_launcher"].includes(context?.target) ||
+          !context.view
+        ) {
+          throw Object.assign(
+            new Error(
+              "No chat view snapshot is available. Await bridge.ready() first.",
+            ),
+            {
+              code: "UNSUPPORTED_CAPABILITY",
+            },
+          );
+        }
+        viewHandlers.add(handler);
+        handler(structuredClone(context.view));
+        return () => viewHandlers.delete(handler);
+      },
+      async action(actionId, data = null) {
+        await readyPromise;
+        if (
+          !["chat_message", "chat_workbench", "chat_workbench_with_launcher"].includes(context?.target) ||
+          !context.view
+        ) {
+          throw Object.assign(
+            new Error("View actions require a ChatUI view."),
+            { code: "UNSUPPORTED_CAPABILITY" },
+          );
+        }
+        if (viewBusy) {
+          throw Object.assign(new Error("An action is already pending."), {
+            code: "ACTION_IN_PROGRESS",
+          });
+        }
+        viewBusy = true;
+        try {
+          const id =
+            crypto.randomUUID?.() ||
+            Array.from(crypto.getRandomValues(new Uint8Array(16)), (byte) =>
+              byte.toString(16).padStart(2, "0"),
+            ).join("");
+          await makeRequest("view:action", {
+            input: {
+              action_id: actionId,
+              interaction_id: id,
+              expected_revision: context.view.revision,
+              data,
+            },
+          });
+        } finally {
+          viewBusy = false;
+        }
+      },
+    },
+    chat: {
+      async fill(text) {
+        await readyPromise;
+        if (context?.target !== "chat_workbench_with_launcher" || context.view) throw Object.assign(new Error("Chat control requires a workbench launcher view."), { code: "UNSUPPORTED_CAPABILITY" });
+        return makeRequest("chat:fill", { text, sessionId: context.sessionId || null });
+      },
+      async send(text) {
+        await readyPromise;
+        if (context?.target !== "chat_workbench_with_launcher" || context.view) throw Object.assign(new Error("Chat control requires a workbench launcher view."), { code: "UNSUPPORTED_CAPABILITY" });
+        return makeRequest("chat:send", { text, sessionId: context.sessionId || null });
+      },
     },
     apiGet(endpoint, params) {
       return makeRequest("api:get", { endpoint, params });
