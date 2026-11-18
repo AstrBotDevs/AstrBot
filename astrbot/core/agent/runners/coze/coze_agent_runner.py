@@ -13,7 +13,6 @@ from astrbot.core.provider.entities import (
 from astrbot.core.utils.media_utils import MediaResolver, describe_media_ref
 
 from ...hooks import BaseAgentRunHooks
-from ...message import is_checkpoint_message
 from ...response import AgentResponseData
 from ...run_context import ContextWrapper, TContext
 from ..base import AgentResponse, AgentState, BaseAgentRunner
@@ -149,8 +148,6 @@ class CozeAgentRunner(BaseAgentRunner[TContext]):
         # 处理历史上下文
         if not self.auto_save_history and contexts:
             for ctx in contexts:
-                if is_checkpoint_message(ctx):
-                    continue
                 if isinstance(ctx, dict) and "role" in ctx and "content" in ctx:
                     # 处理上下文中的图片
                     content = ctx["content"]
@@ -326,6 +323,13 @@ class CozeAgentRunner(BaseAgentRunner[TContext]):
         self.final_llm_resp = LLMResponse(role="assistant", result_chain=chain)
         self._transition_state(AgentState.DONE)
 
+        if self.final_llm_resp.role == "assistant":
+            try:
+                await self.agent_hooks.on_llm_response(
+                    self.run_context, self.final_llm_resp
+                )
+            except Exception as e:
+                logger.error(f"Error in on_llm_response hook: {e}", exc_info=True)
         try:
             await self.agent_hooks.on_agent_done(self.run_context, self.final_llm_resp)
         except Exception as e:

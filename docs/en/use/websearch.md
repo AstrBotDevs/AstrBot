@@ -31,7 +31,7 @@ AstrBot supports nine providers. Configure one to start; you do not need an acco
 
 | Provider | Get a key | Capabilities available in AstrBot |
 | --- | --- | --- |
-| <span id="serpapi">[SerpApi](./websearch/serpapi.md)</span> | [SerpApi API key](https://serpapi.com/manage-api-key) | Google web search, Images Light, Finance, and Scholar |
+| <span id="serpapi">[SerpApi](./websearch/serpapi.md)</span> | [SerpApi API key](https://serpapi.com/manage-api-key) | Google web search, News, Images Light, Finance, and Scholar |
 | <span id="deepseek">[DeepSeek Search API](./websearch/deepseek.md)</span> | [DeepSeek Platform](https://platform.deepseek.com/api_keys) / [Search Docs](https://api-docs.deepseek.com/guides/search) | Web search and page content extraction from a URL |
 | <span id="tavily">Tavily</span> | [Tavily dashboard](https://app.tavily.com/home) | Web search and page content extraction from a URL |
 | <span id="bocha">Bocha</span> | [BoCha](https://bochaai.com/) | Web search |

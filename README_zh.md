@@ -153,6 +153,7 @@ uv tool upgrade astrbot --python 3.12
 | Ollama (本地部署) | LLM |
 | LM Studio (本地部署) | LLM |
 | [MiraRouter](https://mirarouter.com/) | LLM (API 网关, 支持所有模型) |
+| [胜算云](https://www.shengsuanyun.com/?from=CH_T70U2X9L) | LLM |
 | [AIHubMix](https://aihubmix.com/?aff=4bfH) | LLM (API 网关, 支持所有模型) |
 | [优云智算](https://www.compshare.cn/?ytag=GPU_YY-gh_astrbot&referral_code=FV7DcGowN4hB5UuXKgpE74) | LLM (API 网关, 支持所有模型) |
 | [302.AI](https://share.302.ai/rr1M3l) | LLM (API 网关, 支持所有模型)|
@@ -167,7 +168,9 @@ uv tool upgrade astrbot --python 3.12
 | OpenAI Whisper | 语音转文本 |
 | SenseVoice | 语音转文本 |
 | Xiaomi MiMo Omni | 语音转文本 |
+| [DeepSeek STT](https://api-docs.deepseek.com/zh-cn/guides/asr/) | 语音转文本 |
 | OpenAI TTS | 文本转语音 |
+| [DeepSeek TTS](https://api-docs.deepseek.com/zh-cn/guides/tts/) | 文本转语音 |
 | Gemini TTS | 文本转语音 |
 | GPT-Sovits-Inference | 文本转语音 |
 | GPT-Sovits | 文本转语音 |
@@ -212,7 +215,7 @@ pre-commit install
 特别感谢所有 Contributors 和插件开发者对 AstrBot 的贡献 ❤️
 
 <a href="https://github.com/AstrBotDevs/AstrBot/graphs/contributors">
-  <img src="https://contrib.rocks/image?repo=AstrBotDevs/AstrBot&max=300&columns=15" />
+  <img src="https://contrib.rocks/image?repo=AstrBotDevs/AstrBot&max=500&columns=17" />
 </a>
 
 开源伙伴 ❤️

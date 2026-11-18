@@ -44,7 +44,7 @@ class UmoAutoNameRecorder:
         Args:
             event: Awakened event containing the UMO and display metadata.
         """
-        if self.db_helper is None:
+        if self.db_helper is None or event.event_kind != "message":
             return
 
         umo = event.unified_msg_origin

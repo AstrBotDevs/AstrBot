@@ -1,7 +1,7 @@
 <template>
-  <div class="provider-page">
+  <div class="provider-page" :class="{ 'provider-page--embedded': embedded }">
     <v-container fluid class="pa-0">
-      <div class="provider-tabs-scroll">
+      <div v-if="!embedded" class="provider-tabs-scroll">
         <div
           class="provider-tabs"
           role="tablist"
@@ -214,12 +214,33 @@
                     <div class="provider-section-title">{{ tm('providers.settings') }}</div>
                   </div>
                   <AstrBotConfig
-                    :iterable="newSelectedProviderConfig"
-                    :metadata="configSchema"
+                    :iterable="legacyConfigSections.basic"
+                    :metadata="legacyConfigSchema"
                     metadataKey="provider"
                     :is-editing="updatingMode"
                   />
                 </section>
+
+                <v-divider v-if="legacyConfigSections.advanced"></v-divider>
+
+                <details
+                  v-if="legacyConfigSections.advanced"
+                  :key="selectedLegacyProvider.id"
+                  class="provider-section provider-section--advanced config-form"
+                >
+                  <summary class="provider-section-head provider-section-title">
+                    {{ tm('providerSources.advancedConfig') }}
+                    <v-icon class="provider-section-chevron" size="20">mdi-chevron-right</v-icon>
+                  </summary>
+                  <div class="provider-section-content">
+                    <AstrBotConfig
+                      :iterable="legacyConfigSections.advanced"
+                      :metadata="legacyConfigSchema"
+                      metadataKey="provider"
+                      :is-editing="updatingMode"
+                    />
+                  </div>
+                </details>
               </div>
             </div>
 
@@ -318,6 +339,7 @@ import { useProviderModelConfigDialog } from '@/composables/useProviderModelConf
 import { useProviderSources } from '@/composables/useProviderSources'
 
 const props = defineProps({
+  embedded: { type: Boolean, default: false },
   defaultTab: {
     type: String,
     default: 'chat_completion'
@@ -385,6 +407,47 @@ const {
   showMessage
 })
 
+const decisionHintKeys = {
+  system_one_decision: 'decisionHints',
+  openai_decision: 'openaiDecisionHints'
+}
+
+const legacyConfigSchema = computed(() => {
+  const schema = JSON.parse(JSON.stringify(configSchema.value || {}))
+  const providerType = selectedLegacyProvider.value?.type
+  const hintKey = decisionHintKeys[providerType]
+  if (!hintKey && !['deepseek_tts_api', 'deepseek_stt_api'].includes(providerType)) return schema
+
+  const items = schema.provider?.items
+  if (!items) return schema
+  if (hintKey) {
+    if (items.key) {
+      items.key.type = 'string'
+      delete items.key.items
+    }
+    // The schema only shows these fields for System One; every decision type uses them.
+    for (const field of ['total_timeout', 'max_concurrency']) {
+      if (items[field]) delete items[field].condition
+    }
+    if (items.api_base) items.api_base.hint = tm(`providers.${hintKey}.apiBase`)
+    if (items.model && providerType === 'openai_decision') {
+      items.model.hint = tm('providers.openaiDecisionHints.model')
+    } else if (items.model) {
+      items.model.hint = tm('providers.decisionHints.model')
+    }
+    if (items.custom_headers) {
+      items.custom_headers.hint = tm('providers.decisionHints.customHeaders')
+    }
+  }
+  if (providerType === 'deepseek_tts_api' && items.api_base) {
+    items.api_base.hint = tm('providers.deepseekTtsHints.apiBase')
+  }
+  if (providerType === 'deepseek_stt_api' && items.api_base) {
+    items.api_base.hint = tm('providers.deepseekSttHints.apiBase')
+  }
+  return schema
+})
+
 const unsavedLegacyProviderMarker = Symbol('unsavedLegacyProvider')
 const legacyProviderDrafts = ref([])
 const selectedLegacyProvider = ref(null)
@@ -393,6 +456,31 @@ const newProviderOriginalId = ref('')
 const updatingMode = ref(false)
 const loading = ref(false)
 const isLegacyProviderModified = ref(false)
+const legacyConfigSections = computed(() => {
+  const config = newSelectedProviderConfig.value
+  if (!decisionHintKeys[config.type]) return { basic: config, advanced: null }
+
+  const advancedFields = new Set([
+    'timeout', 'total_timeout', 'max_concurrency',
+    'proxy', 'custom_headers'
+  ])
+  const basic = {}
+  const advanced = {}
+  for (const key of Object.keys(config)) {
+    const property = {
+      get() {
+        return config[key]
+      },
+      set(value) {
+        config[key] = value
+      }
+    }
+    // Keep hidden fields accessible to schema conditions in both sections.
+    Object.defineProperty(basic, key, { ...property, enumerable: !advancedFields.has(key) })
+    Object.defineProperty(advanced, key, { ...property, enumerable: advancedFields.has(key) })
+  }
+  return { basic, advanced }
+})
 const showManualModelDialog = ref(false)
 let suppressLegacyProviderWatch = false
 
@@ -566,6 +654,9 @@ function selectLegacyProvider(provider) {
   if (defaultConfig) {
     mergeConfigWithOrder(newSelectedProviderConfig.value, provider, defaultConfig)
   }
+  if (provider.type === 'system_one_decision') {
+    delete newSelectedProviderConfig.value.probability_tolerance
+  }
 
   updatingMode.value = !provider[unsavedLegacyProviderMarker]
   isLegacyProviderModified.value = Boolean(provider[unsavedLegacyProviderMarker])
@@ -673,6 +764,16 @@ async function testSingleProvider(provider) {
   min-height: 0;
 }
 
+.provider-page--embedded .provider-content {
+  max-width: none;
+  padding: 0;
+}
+
+.provider-page--embedded .provider-workbench {
+  border: 0;
+  border-radius: 0;
+}
+
 .provider-tabs-scroll {
   flex: 0 0 auto;
   overflow-x: auto;
@@ -695,7 +796,7 @@ async function testSingleProvider(provider) {
   align-items: center;
   background: transparent;
   border: 0;
-  border-radius: 8px;
+  border-radius: var(--astrbot-radius-control);
   color: rgba(var(--v-theme-on-surface), 0.58);
   cursor: pointer;
   display: inline-flex;
@@ -724,6 +825,7 @@ async function testSingleProvider(provider) {
 }
 
 .provider-content {
+  container: provider-workbench / inline-size;
   display: flex;
   flex: 1;
   margin: 0 auto;
@@ -735,7 +837,7 @@ async function testSingleProvider(provider) {
 
 .provider-workbench {
   border: 1px solid var(--provider-border);
-  border-radius: 16px;
+  border-radius: var(--astrbot-radius-card);
   background: var(--provider-surface);
   display: grid;
   flex: 1;
@@ -758,19 +860,22 @@ async function testSingleProvider(provider) {
 
 .provider-workbench__main {
   display: flex;
+  overflow: auto;
 }
 
 .provider-config-shell {
+  container: provider-config / inline-size;
   flex: 1;
   min-height: 0;
+  min-width: 0;
   display: flex;
   flex-direction: column;
-  overflow: hidden;
 }
 
 .provider-config-header {
   background: var(--provider-surface);
   display: flex;
+  flex-wrap: wrap;
   flex: 0 0 auto;
   justify-content: space-between;
   align-items: flex-start;
@@ -812,7 +917,7 @@ async function testSingleProvider(provider) {
   flex: 1;
   min-height: 0;
   overscroll-behavior: contain;
-  overflow-y: auto;
+  overflow: auto;
   scrollbar-gutter: stable;
 }
 
@@ -874,9 +979,9 @@ async function testSingleProvider(provider) {
   color: rgba(var(--v-theme-on-surface), 0.56);
 }
 
-@media (max-width: 960px) {
+@container provider-workbench (max-width: 960px) {
   .provider-workbench {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
     grid-template-rows: auto 1px minmax(0, 1fr);
   }
 
@@ -908,10 +1013,6 @@ async function testSingleProvider(provider) {
 @media (max-width: 600px) {
   .provider-tabs-scroll {
     padding-inline: 4px;
-  }
-
-  .provider-workbench {
-    border-radius: 12px;
   }
 
   .provider-tab {

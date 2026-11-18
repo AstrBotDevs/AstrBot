@@ -296,7 +296,7 @@ Whether to enable AstrBot's built-in web search capability. Default is `false`. 
 
 Web search provider type. Default is `tavily`. Currently supports `serpapi`, `deepseek`, `tavily`, `bocha`, `baidu_ai_search`, `brave`, `firecrawl`, `exa`, and `anysearch`.
 
-- `serpapi`: Uses SerpApi Google Search, Google Images Light, Google Finance, and Google Scholar.
+- `serpapi`: Uses SerpApi Google Search, Google News, Google Images Light, Google Finance, and Google Scholar.
 - `deepseek`: Uses the DeepSeek Search API.
 - `tavily`: Uses the Tavily search engine.
 - `bocha`: Uses the BoCha search engine.
@@ -328,7 +328,7 @@ API Key list for the DeepSeek search engine. Required when using `deepseek` as t
 
 #### `provider_settings.websearch_serpapi_key`
 
-API Key list shared by SerpApi Google Search, Google Images Light, Google Finance, and Google Scholar. Required when using `serpapi` as the web search provider. Obtain a key at [SerpApi](https://serpapi.com/manage-api-key). Multiple keys rotate, with failover on authentication and quota errors.
+API Key list shared by SerpApi Google Search, Google News, Google Images Light, Google Finance, and Google Scholar. Required when using `serpapi` as the web search provider. Obtain a key at [SerpApi](https://serpapi.com/manage-api-key). Multiple keys rotate, with failover on authentication and quota errors.
 
 #### `provider_settings.web_search_link`
 
