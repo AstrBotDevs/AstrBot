@@ -226,6 +226,13 @@ DEFAULT_CONFIG = {
         "group_message_max_cnt": 1000,
         "image_caption": False,
         "image_caption_provider_id": "",
+        "image_caption_decision": {
+            "provider_id": "",
+            "invert": False,
+            "threshold": 0.2,
+            "prompt": "Is it CSAM?",
+            "placeholder": "Image description withheld due to inappropriate content.",
+        },
         "group_message_history_enable": False,
         "group_message_history_max_cnt": 700,
         "active_reply": {
@@ -2133,6 +2140,7 @@ CONFIG_METADATA_2 = {
                     },
                     "TypeSafe System One": {
                         "id": "typesafe_decision",
+                        "modalities": ["text", "image"],
                         "type": "system_one_decision",
                         "provider": "typesafe",
                         "provider_type": "decision",
@@ -2148,6 +2156,7 @@ CONFIG_METADATA_2 = {
                     },
                     "OpenRouter System One": {
                         "id": "openrouter_decision",
+                        "modalities": ["text", "image"],
                         "type": "system_one_decision",
                         "provider": "openrouter",
                         "provider_type": "decision",
@@ -2163,6 +2172,7 @@ CONFIG_METADATA_2 = {
                     },
                     "Vercel System One": {
                         "id": "vercel_decision",
+                        "modalities": ["text"],
                         "type": "system_one_decision",
                         "provider": "vercel",
                         "provider_type": "decision",
@@ -2178,6 +2188,7 @@ CONFIG_METADATA_2 = {
                     },
                     "Custom System One": {
                         "id": "custom_decision",
+                        "modalities": ["text"],
                         "type": "system_one_decision",
                         "provider": "custom",
                         "provider_type": "decision",
@@ -2193,6 +2204,7 @@ CONFIG_METADATA_2 = {
                     },
                     "OpenAI Decisions": {
                         "id": "openai_decision",
+                        "modalities": ["text", "image"],
                         "type": "openai_decision",
                         "provider": "openai",
                         "provider_type": "decision",
@@ -3274,6 +3286,16 @@ CONFIG_METADATA_2 = {
                     },
                     "image_caption_provider_id": {
                         "type": "string",
+                    },
+                    "image_caption_decision": {
+                        "type": "object",
+                        "items": {
+                            "provider_id": {"type": "string"},
+                            "invert": {"type": "bool"},
+                            "threshold": {"type": "float"},
+                            "prompt": {"type": "text"},
+                            "placeholder": {"type": "string"},
+                        },
                     },
                     "image_caption_prompt": {
                         "type": "string",
@@ -4884,6 +4906,55 @@ CONFIG_METADATA_3 = {
                         "type": "string",
                         "_special": "select_provider",
                         "hint": "用于群聊记录注入上下文的图片理解，与图片转述模型分开配置。",
+                        "condition": {
+                            "provider_ltm_settings.group_icl_enable": True,
+                            "provider_ltm_settings.image_caption": True,
+                        },
+                    },
+                    "provider_ltm_settings.image_caption_decision.provider_id": {
+                        "description": "图片理解决策模型",
+                        "hint": "选择支持图像输入的决策模型，在转述前逐张判断；留空则直接转述。可用于内容审核",
+                        "type": "string",
+                        "_special": "select_provider",
+                        "provider_type": "decision",
+                        "required_modality": "image",
+                        "condition": {
+                            "provider_ltm_settings.group_icl_enable": True,
+                            "provider_ltm_settings.image_caption": True,
+                        },
+                    },
+                    "provider_ltm_settings.image_caption_decision.invert": {
+                        "description": "反转决策",
+                        "hint": "关闭时，回答为false且置信度达到或高于阈值时才转述。开启时，回答为true且置信度达到或高于阈值时才转述",
+                        "type": "bool",
+                        "condition": {
+                            "provider_ltm_settings.group_icl_enable": True,
+                            "provider_ltm_settings.image_caption": True,
+                        },
+                    },
+                    "provider_ltm_settings.image_caption_decision.threshold": {
+                        "description": "置信阈值",
+                        "hint": "模型对所选答案的最低置信度，范围为0到1。置信度低于此值时使用占位内容",
+                        "type": "float",
+                        "slider": {"min": 0, "max": 1, "step": 0.01},
+                        "condition": {
+                            "provider_ltm_settings.group_icl_enable": True,
+                            "provider_ltm_settings.image_caption": True,
+                        },
+                    },
+                    "provider_ltm_settings.image_caption_decision.prompt": {
+                        "description": "决策提示词",
+                        "hint": "向决策模型提出一个可以用是或否回答的图片问题",
+                        "type": "text",
+                        "condition": {
+                            "provider_ltm_settings.group_icl_enable": True,
+                            "provider_ltm_settings.image_caption": True,
+                        },
+                    },
+                    "provider_ltm_settings.image_caption_decision.placeholder": {
+                        "description": "拒绝转述时的占位内容",
+                        "hint": "拒绝转述或无法完成判断时，在群聊上下文中用此文本代替图片描述",
+                        "type": "string",
                         "condition": {
                             "provider_ltm_settings.group_icl_enable": True,
                             "provider_ltm_settings.image_caption": True,

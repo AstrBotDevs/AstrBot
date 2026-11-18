@@ -17,7 +17,8 @@
       />
     </template>
     <template v-else-if="itemMeta?._special === 'select_provider'">
-      <ProviderSelector :model-value="modelValue" @update:model-value="emitUpdate" :provider-type="'chat_completion'" />
+      <ProviderSelector :model-value="modelValue" @update:model-value="emitUpdate" :provider-type="itemMeta.provider_type || 'chat_completion'"
+        :required-modality="itemMeta.required_modality" />
     </template>
     <template v-else-if="itemMeta?._special === 'select_provider_stt'">
       <ProviderSelector :model-value="modelValue" @update:model-value="emitUpdate" :provider-type="'speech_to_text'" />

@@ -135,6 +135,45 @@ class ResolvedMediaData:
     mime_type: str
     format: str | None = None
 
+    @classmethod
+    def from_decision_image(cls, path: Path) -> "ResolvedMediaData":
+        """Prepare one bounded still image usable by both decision and caption models.
+
+        Args:
+            path: Materialized group image, including animated images.
+
+        Returns:
+            A PNG or JPEG preview within the System One image dimension limits.
+
+        Raises:
+            ValueError: The file exceeds the model input size limit.
+            OSError: The image cannot be read or decoded.
+        """
+        if path.stat().st_size > MODEL_IMAGE_MAX_INPUT_BYTES:
+            raise ValueError("Decision image exceeds the model input size limit")
+        data, _ = _prepare_model_image_sync(path.read_bytes(), 1568)
+        with PILImage.open(io.BytesIO(data)) as preview:
+            if preview.format is None:
+                raise OSError("Cannot determine the decision image preview format")
+            mime = PILImage.MIME[preview.format]
+            if min(preview.size) < 280:
+                size = (max(280, preview.width), max(280, preview.height))
+                with (
+                    PILImage.new("RGBA", size, "white") as padded,
+                    io.BytesIO() as output,
+                ):
+                    padded.paste(
+                        preview,
+                        (
+                            (size[0] - preview.width) // 2,
+                            (size[1] - preview.height) // 2,
+                        ),
+                    )
+                    padded.save(output, format="PNG")
+                    data = output.getvalue()
+                    mime = "image/png"
+        return cls(base64.b64encode(data).decode("ascii"), mime)
+
     def to_bytes(self) -> bytes:
         """Decode the base64 payload, accepting missing padding."""
         return _decode_base64_payload(

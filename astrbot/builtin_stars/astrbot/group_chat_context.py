@@ -25,6 +25,7 @@ from astrbot.api.platform import MessageType
 from astrbot.api.provider import Provider, ProviderRequest
 from astrbot.core.agent.message import TextPart
 from astrbot.core.astrbot_config_mgr import AstrBotConfigManager
+from astrbot.core.utils.media_utils import MediaResolver, ResolvedMediaData
 
 """
 Group chat context awareness.
@@ -80,6 +81,7 @@ class GroupChatContext:
             "image_caption": image_caption,
             "image_caption_prompt": image_caption_prompt,
             "image_caption_provider_id": image_caption_provider_id,
+            "image_caption_decision": group_context_cfg.get("image_caption_decision"),
             "enable_active_reply": enable_active_reply,
             "ar_method": ar_method,
             "ar_possibility": ar_possibility,
@@ -92,7 +94,48 @@ class GroupChatContext:
         image_url: str,
         image_caption_provider_id: str,
         image_caption_prompt: str,
+        decision_settings: dict | None = None,
     ) -> str:
+        """Describe the image, or return the placeholder if its decision rejects it.
+
+        Args:
+            image_url: Platform image reference to evaluate and describe.
+            image_caption_provider_id: Caption provider ID.
+            image_caption_prompt: Instructions for the caption provider.
+            decision_settings: Optional group profile settings for the decision provider.
+
+        Returns:
+            The caption or the configured rejection placeholder.
+        """
+        if decision_settings and (
+            decision_provider_id := decision_settings.get("provider_id")
+        ):
+            try:
+                async with MediaResolver(
+                    image_url, media_type="image"
+                ).as_path() as source:
+                    image = await asyncio.to_thread(
+                        ResolvedMediaData.from_decision_image, source.path
+                    )
+                should_caption = await self.context.decision.matches(
+                    decision_settings["prompt"],
+                    expected_answer=decision_settings["invert"],
+                    state=image,
+                    confidence_threshold=decision_settings["threshold"],
+                    provider_id=decision_provider_id,
+                )
+                if not should_caption:
+                    return decision_settings["placeholder"]
+                image_url = image.to_data_url()
+            except Exception as exc:
+                logger.warning(
+                    "Image caption decision failed for %s (%s); withholding caption",
+                    decision_provider_id,
+                    type(exc).__name__,
+                )
+                return decision_settings["placeholder"]
+        if not image_url:
+            raise ValueError("Missing image reference")
         if not image_caption_provider_id:
             provider = await self.context.get_using_provider_async()
         else:
@@ -206,13 +249,11 @@ class GroupChatContext:
             elif isinstance(comp, Image):
                 if cfg["image_caption"]:
                     try:
-                        url = comp.url if comp.url else comp.file
-                        if not url:
-                            raise Exception("图片 URL 为空")
                         caption = await self.get_image_caption(
-                            url,
+                            comp.url or comp.file or "",
                             cfg["image_caption_provider_id"],
                             cfg["image_caption_prompt"],
+                            cfg.get("image_caption_decision"),
                         )
                         parts.append(f" [Image: {caption}]")
                     except Exception as e:

@@ -306,7 +306,7 @@
                       </template>
                       <span>{{ providerTm("models.testButton") }}</span>
                     </v-tooltip>
-                    <v-tooltip v-if="variant === 'config'" location="top">
+                    <v-tooltip v-if="variant === 'config' && providerType !== 'decision'" location="top">
                       <template #activator="{ props: editTooltipProps }">
                         <v-btn
                           v-bind="editTooltipProps"
@@ -373,6 +373,7 @@
     <v-tooltip
       v-if="
         variant === 'config' &&
+        providerType !== 'decision' &&
         !multiple &&
         typeof modelValue === 'string' &&
         modelValue
@@ -491,6 +492,7 @@ const props = withDefaults(
     modelValue?: string | string[];
     fallbackModel?: string;
     providerType?: string;
+    requiredModality?: string;
     variant?: "config" | "input" | "header";
     allowEmpty?: boolean;
     multiple?: boolean;
@@ -699,7 +701,10 @@ async function loadProviderConfigs(force = false) {
       >;
       providerConfigs.value = (
         (response.data.data || []) as unknown as ProviderConfig[]
-      ).filter((provider) => provider.enable !== false);
+      ).filter((provider) =>
+        provider.enable !== false &&
+        (!props.requiredModality || provider.modalities?.includes(props.requiredModality)),
+      );
       providersLoaded.value = true;
       if (
         selectedSourceId.value &&

@@ -1291,6 +1291,28 @@
           "description": "群聊图片转述模型",
           "hint": "用于群聊记录注入上下文的图片理解，与图片转述模型分开配置。"
         },
+        "image_caption_decision": {
+          "provider_id": {
+            "description": "图片理解决策模型",
+            "hint": "选择支持图像输入的决策模型，在转述前逐张判断；留空则直接转述"
+          },
+          "invert": {
+            "description": "反转决策",
+            "hint": "关闭时，回答为false且置信度达到或高于阈值时才转述。开启时，回答为true且置信度达到或高于阈值时才转述"
+          },
+          "threshold": {
+            "description": "置信阈值",
+            "hint": "模型对所选答案的最低置信度，范围为0到1。置信度低于此值时使用占位内容"
+          },
+          "prompt": {
+            "description": "决策提示词",
+            "hint": "向决策模型提出一个可以用是或否回答的图片问题"
+          },
+          "placeholder": {
+            "description": "拒绝转述时的占位内容",
+            "hint": "拒绝转述或无法完成判断时，在群聊上下文中用此文本代替图片描述"
+          }
+        },
         "group_message_history_enable": {
           "description": "持久化群聊消息记录",
           "hint": "将群内的所有消息都持久化保存，并允许模型通过工具来查询群内消息。"
