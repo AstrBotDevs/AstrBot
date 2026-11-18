@@ -1583,17 +1583,12 @@ class ChatService:
         return await self.new_session(username, platform_id or "webchat")
 
     async def get_sessions(self, username: str, platform_id: str | None) -> list[dict]:
-        sessions, _ = await self.db.get_platform_sessions_by_creator_paginated(
-            creator=username,
-            platform_id=platform_id,
-            page=1,
-            page_size=100,
-            exclude_project_sessions=True,
+        sessions = await self.db.get_recent_standalone_platform_sessions(
+            username, platform_id, limit=100
         )
 
         sessions_data = []
-        for item in sessions:
-            session = item["session"]
+        for session in sessions:
             sessions_data.append(
                 {
                     "session_id": session.session_id,

@@ -953,20 +953,23 @@ class SQLiteDatabase(BaseDatabase):
                 session.add(new_history)
                 await session.flush()
                 if max_messages is not None:
-                    keep_ids = (
+                    # The first ID beyond the retention limit bounds all expired rows.
+                    newest_expired_id = (
                         select(PlatformMessageHistory.id)
                         .where(
                             col(PlatformMessageHistory.platform_id) == platform_id,
                             col(PlatformMessageHistory.user_id) == user_id,
                         )
                         .order_by(desc(PlatformMessageHistory.id))
-                        .limit(max(1, int(max_messages)))
+                        .offset(max(1, int(max_messages)))
+                        .limit(1)
+                        .scalar_subquery()
                     )
                     await session.execute(
                         delete(PlatformMessageHistory).where(
                             col(PlatformMessageHistory.platform_id) == platform_id,
                             col(PlatformMessageHistory.user_id) == user_id,
-                            col(PlatformMessageHistory.id).not_in(keep_ids),
+                            col(PlatformMessageHistory.id) <= newest_expired_id,
                         )
                     )
                 return new_history
@@ -2289,7 +2292,9 @@ class SQLiteDatabase(BaseDatabase):
         if exclude_project_sessions:
             query = query.where(col(ChatUIProject.project_id).is_(None))
 
-        return query
+        return query.order_by(
+            desc(PlatformSession.updated_at), desc(PlatformSession.session_id)
+        )
 
     @staticmethod
     def _rows_to_session_dicts(rows: T.Sequence[Row[tuple]]) -> list[dict]:
@@ -2330,21 +2335,27 @@ class SQLiteDatabase(BaseDatabase):
             )
 
             total_result = await session.execute(
-                select(func.count()).select_from(base_query.subquery())
+                select(func.count()).select_from(base_query.order_by(None).subquery())
             )
             total = int(total_result.scalar_one() or 0)
 
-            result_query = (
-                base_query.order_by(
-                    desc(PlatformSession.updated_at), desc(PlatformSession.session_id)
-                )
-                .offset(offset)
-                .limit(page_size)
-            )
+            result_query = base_query.offset(offset).limit(page_size)
             result = await session.execute(result_query)
 
             sessions_with_projects = self._rows_to_session_dicts(result.all())
             return sessions_with_projects, total
+
+    async def get_recent_standalone_platform_sessions(
+        self, creator: str, platform_id: str | None, limit: int
+    ) -> list[PlatformSession]:
+        async with self.get_db() as session:
+            query = self._build_platform_sessions_query(
+                creator, platform_id, exclude_project_sessions=True
+            )
+            result = await session.scalars(
+                query.with_only_columns(PlatformSession).limit(limit)
+            )
+            return list(result)
 
     async def update_platform_session(
         self,

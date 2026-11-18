@@ -98,8 +98,7 @@ async def test_dashboard_session_pages_reach_older_sessions_and_preserve_scope(
             )
             assert empty.json()["data"]["sessions"] == []
             legacy = await client.get("/api/v1/chat/sessions?platform_id=webchat")
-            assert isinstance(legacy.json()["data"], list)
-            assert len(legacy.json()["data"]) == 100
+            assert [item["session_id"] for item in legacy.json()["data"]] == ids[:100]
             size_only = await client.get("/api/v1/chat/sessions?page_size=2")
             assert len(size_only.json()["data"]["sessions"]) == 2
             assert size_only.json()["data"]["page"] == 1
