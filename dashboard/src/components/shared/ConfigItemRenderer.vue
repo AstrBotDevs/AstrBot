@@ -115,7 +115,7 @@
       :model-value="modelValue"
       @update:model-value="emitUpdate"
       :class="{ 'config-radio-group--cards': itemMeta?.layout === 'cards' }"
-      inline
+      :inline="itemMeta?.layout !== 'cards'"
       hide-details
       density="compact"
     >
@@ -557,7 +557,10 @@ function getSelectItems(itemMeta) {
 }
 
 .config-radio-group--cards :deep(.v-selection-control) {
+  width: 100%;
+  min-width: 0;
   min-height: 44px;
+  margin: 0;
   padding: 8px 10px;
   border: 1px solid rgba(var(--v-theme-on-surface), 0.14);
   border-radius: 7px;
@@ -575,6 +578,7 @@ function getSelectItems(itemMeta) {
 }
 
 .config-radio-group--cards :deep(.v-label) {
+  min-width: 0;
   font-size: 0.88rem;
   font-weight: 500;
 }
