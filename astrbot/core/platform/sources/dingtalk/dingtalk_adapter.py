@@ -569,7 +569,7 @@ class DingtalkPlatformAdapter(Platform):
         robot_code: str,
         msg_key: str,
         msg_param: dict,
-    ) -> MessageSendReceipt:
+    ) -> MessageSendReceipt | None:
         access_token = await self.get_access_token()
         if not access_token:
             raise RuntimeError("DingTalk access token is unavailable")
@@ -592,13 +592,13 @@ class DingtalkPlatformAdapter(Platform):
             ) as resp:
                 resp.raise_for_status()
                 result = await resp.json()
-                if (
-                    not isinstance(result, dict)
-                    or not isinstance(result.get("processQueryKey"), str)
-                    or not result["processQueryKey"]
-                ):
-                    raise RuntimeError("DingTalk did not accept the message")
-        return MessageSendReceipt(tracking_keys=(result["processQueryKey"],))
+        # The message is already sent; a missing tracking key only costs the receipt.
+        query_key = result.get("processQueryKey") if isinstance(result, dict) else None
+        return (
+            MessageSendReceipt(tracking_keys=(query_key,))
+            if isinstance(query_key, str) and query_key
+            else None
+        )
 
     async def _send_private_message(
         self,
@@ -606,7 +606,7 @@ class DingtalkPlatformAdapter(Platform):
         robot_code: str,
         msg_key: str,
         msg_param: dict,
-    ) -> MessageSendReceipt:
+    ) -> MessageSendReceipt | None:
         access_token = await self.get_access_token()
         if not access_token:
             raise RuntimeError("DingTalk access token is unavailable")
@@ -629,12 +629,8 @@ class DingtalkPlatformAdapter(Platform):
             ) as resp:
                 resp.raise_for_status()
                 result = await resp.json()
-                if (
-                    not isinstance(result, dict)
-                    or not isinstance(result.get("processQueryKey"), str)
-                    or not result["processQueryKey"]
-                ):
-                    raise RuntimeError("DingTalk did not accept the message")
+                if not isinstance(result, dict):
+                    return None
                 for key in (
                     "filteredStaffIdList",
                     "flowControlledStaffIdList",
@@ -647,7 +643,13 @@ class DingtalkPlatformAdapter(Platform):
                         or staff_id in rejected
                     ):
                         raise RuntimeError("DingTalk did not accept the recipient")
-        return MessageSendReceipt(tracking_keys=(result["processQueryKey"],))
+        # The message is already sent; a missing tracking key only costs the receipt.
+        query_key = result.get("processQueryKey")
+        return (
+            MessageSendReceipt(tracking_keys=(query_key,))
+            if isinstance(query_key, str) and query_key
+            else None
+        )
 
     async def _send_button_card(
         self,

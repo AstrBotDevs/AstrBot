@@ -97,7 +97,6 @@ class WecomPlatformEvent(AstrMessageEvent):
             and bool(message_obj.session_id)
             and message_obj.session_id != "@all"
             and "|" not in message_obj.session_id
-            and not any(char.isspace() for char in message_obj.session_id)
         )
 
         is_wechat_kf = hasattr(self.client, "kf_message")
@@ -268,13 +267,9 @@ class WecomPlatformEvent(AstrMessageEvent):
                             message_obj.session_id,
                             chunk,
                         )
-                        if single_recipient:
-                            if (
-                                not isinstance(result, dict)
-                                or type(result.get("errcode")) is not int
-                                or result["errcode"] != 0
-                            ):
-                                raise RuntimeError("WeCom did not accept the message")
+                        # wechatpy normalizes errcode to int and raises on non-zero,
+                        # so only recipient lists and the message ID remain here.
+                        if single_recipient and isinstance(result, dict):
                             for key in ("invaliduser", "unlicenseduser"):
                                 rejected = result.get(key, "")
                                 if (
@@ -285,12 +280,9 @@ class WecomPlatformEvent(AstrMessageEvent):
                                     raise RuntimeError(
                                         "WeCom did not accept the recipient"
                                     )
+                            # A malformed id only costs the receipt, never the sent message.
                             message_id = result.get("msgid")
-                            if message_id is not None:
-                                if not isinstance(message_id, str) or not message_id:
-                                    raise RuntimeError(
-                                        "WeCom message receipt is invalid"
-                                    )
+                            if isinstance(message_id, str) and message_id:
                                 message_ids.append(message_id)
                         await asyncio.sleep(0.5)  # Avoid sending too fast
                 elif isinstance(comp, Image):
