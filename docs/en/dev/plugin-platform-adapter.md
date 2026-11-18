@@ -52,12 +52,16 @@ Now create `fake_platform_adapter.py`:
 ```py
 import asyncio
 
+# Before AstrBot v4.30.0:
+# from astrbot.core.platform.message_session import MessageSesion as MessageSession
 from astrbot.api.platform import (
     Platform,
     AstrBotMessage,
     MessageMember,
+    MessageSession,
     PlatformMetadata,
     MessageType,
+    register_platform_adapter,
 )
 from astrbot.api.event import MessageChain
 from astrbot.api.message_components import (
@@ -65,8 +69,6 @@ from astrbot.api.message_components import (
     Image,
     Record,
 )  # Message chain components, import as needed
-from astrbot.core.platform.message_session import MessageSesion
-from astrbot.api.platform import register_platform_adapter
 from astrbot import logger
 from .client import FakeClient
 from .fake_platform_event import FakePlatformEvent
@@ -87,7 +89,7 @@ class FakePlatformAdapter(Platform):
         self.settings = platform_settings  # platform_settings: platform settings
 
     async def send_by_session(
-        self, session: MessageSesion, message_chain: MessageChain
+        self, session: MessageSession, message_chain: MessageChain
     ):
         # Must be implemented
         await super().send_by_session(session, message_chain)

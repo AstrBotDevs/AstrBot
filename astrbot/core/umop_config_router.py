@@ -1,5 +1,8 @@
+import asyncio
 import fnmatch
 
+from astrbot.core.config_bindings import BINDING_KEY
+from astrbot.core.db.migration.migra_config_bindings import migrate_config_bindings
 from astrbot.core.utils.shared_preferences import SharedPreferences
 
 
@@ -10,20 +13,19 @@ class UmopConfigRouter:
         self.umop_to_conf_id: dict[str, str] = {}
         """UMOP 到配置文件 ID 的映射"""
         self.sp = sp
+        self._routing_lock = asyncio.Lock()
 
     async def initialize(self) -> None:
+        await migrate_config_bindings(self.sp)
         await self._load_routing_table()
 
     async def _load_routing_table(self) -> None:
         """加载路由表"""
-        # 从 SharedPreferences 中加载 umop_to_conf_id 映射
-        sp_data = await self.sp.get_async(
-            key="umop_config_routing",
-            default={},
-            scope="global",
-            scope_id="global",
-        )
-        self.umop_to_conf_id = sp_data
+        records = await self.sp.range_get_async("umop", key=BINDING_KEY)
+        records.sort(key=lambda record: record.value["val"].get("order", 0))
+        self.umop_to_conf_id = {
+            record.scope_id: record.value["val"]["profile_id"] for record in records
+        }
 
     @staticmethod
     def _split_umo(umo: str) -> tuple[str, str, str] | None:
@@ -77,8 +79,8 @@ class UmopConfigRouter:
                     "umop keys must be strings in the format [platform_id]:[message_type]:[session_id], with optional wildcards * or empty for all",
                 )
 
-        self.umop_to_conf_id = new_routing
-        await self.sp.global_put("umop_config_routing", self.umop_to_conf_id)
+        async with self._routing_lock:
+            await self._persist_routing(new_routing)
 
     async def update_route(self, umo: str, conf_id: str) -> None:
         """更新一条路由
@@ -96,8 +98,8 @@ class UmopConfigRouter:
                 "umop must be a string in the format [platform_id]:[message_type]:[session_id], with optional wildcards * or empty for all",
             )
 
-        self.umop_to_conf_id[umo] = conf_id
-        await self.sp.global_put("umop_config_routing", self.umop_to_conf_id)
+        async with self._routing_lock:
+            await self._persist_routing({**self.umop_to_conf_id, umo: conf_id})
 
     async def delete_route(self, umo: str) -> None:
         """删除一条路由
@@ -114,6 +116,28 @@ class UmopConfigRouter:
                 "umop must be a string in the format [platform_id]:[message_type]:[session_id], with optional wildcards * or empty for all",
             )
 
-        if umo in self.umop_to_conf_id:
-            del self.umop_to_conf_id[umo]
-            await self.sp.global_put("umop_config_routing", self.umop_to_conf_id)
+        async with self._routing_lock:
+            if umo in self.umop_to_conf_id:
+                await self._persist_routing(
+                    {
+                        pattern: profile_id
+                        for pattern, profile_id in self.umop_to_conf_id.items()
+                        if pattern != umo
+                    }
+                )
+
+    async def _persist_routing(self, new_routing: dict[str, str]) -> None:
+        """Persist ordered binding records while the routing lock is held.
+
+        Args:
+            new_routing: Complete ordered pattern-to-profile mapping.
+        """
+        await self.sp.replace_scope_key(
+            "umop",
+            BINDING_KEY,
+            {
+                pattern: {"profile_id": profile_id, "overrides": {}, "order": position}
+                for position, (pattern, profile_id) in enumerate(new_routing.items())
+            },
+        )
+        self.umop_to_conf_id = dict(new_routing)

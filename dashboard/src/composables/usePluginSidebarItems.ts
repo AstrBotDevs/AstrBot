@@ -1,6 +1,7 @@
 import { reactive, shallowRef, onMounted, watch } from "vue";
 import { pluginApi } from "@/api/v1";
 import { useI18n } from "@/i18n/composables";
+import { resolvePluginI18n, resolvePluginViewText } from "@/utils/pluginI18n";
 import type { menu } from "@/layouts/full/vertical-sidebar/sidebarItem";
 
 const DEFAULT_ICON = "mdi-puzzle";
@@ -14,9 +15,11 @@ interface PluginEntry {
   version?: string;
   activated: boolean;
   pages: string[];
+  views?: { name: string; title?: string; description?: string }[];
   i18n?: Record<
     string,
     {
+      metadata?: { display_name?: unknown };
       views?: Record<string, { title?: unknown }>;
       pages?: Record<string, { title?: unknown }>;
     }
@@ -38,7 +41,7 @@ function buildPluginItems(plugins: PluginEntry[], locale: string): menu | null {
   if (activeWithPages.length === 0) return null;
 
   const children: menu[] = activeWithPages.map((p) => {
-    return buildPageItem(p, p.pages[0], locale, false);
+    return buildPageItem(p, p.pages[0], locale);
   });
 
   return {
@@ -52,21 +55,19 @@ function buildPageItem(
   p: PluginEntry,
   page: string,
   locale: string,
-  grouped: boolean,
 ): menu {
-  const displayName = p.display_name || p.name || "Unknown Plugin";
-  const localeData = p.i18n?.[locale];
-  const localizedTitle =
-    localeData && typeof localeData === "object"
-      ? (localeData.views?.[page]?.title ?? localeData.pages?.[page]?.title)
-      : undefined;
+  const displayName =
+    [
+      resolvePluginI18n(p.i18n, locale, "metadata.display_name"),
+      p.display_name,
+      p.name,
+    ]
+      .find((value) => typeof value === "string" && value.trim())
+      ?.trim() || "Unknown Plugin";
   return {
-    title:
-      typeof localizedTitle === "string" && localizedTitle.trim()
-        ? localizedTitle.trim()
-        : grouped
-          ? page
-          : displayName,
+    title: resolvePluginViewText(
+      p.i18n, locale, p.views?.find((view) => view.name === page) || { name: page }, "title",
+    ),
     icon: DEFAULT_ICON,
     to: `/plugin-view/${encodeURIComponent(p.name)}/${encodeURIComponent(page)}`,
     isRawTitle: true,
@@ -83,13 +84,20 @@ function buildPluginGroups(plugins: PluginEntry[], locale: string): menu[] {
   return plugins
     .filter((p) => p.activated && Array.isArray(p.pages) && p.pages.length > 0)
     .map((p) => {
-      const displayName = p.display_name || p.name || "Unknown Plugin";
+      const displayName =
+        [
+          resolvePluginI18n(p.i18n, locale, "metadata.display_name"),
+          p.display_name,
+          p.name,
+        ]
+          .find((value) => typeof value === "string" && value.trim())
+          ?.trim() || "Unknown Plugin";
       return {
         value: `plugin:${p.name}`,
         title: displayName,
         icon: GROUP_ICON,
         isRawTitle: true,
-        children: p.pages.map((page) => buildPageItem(p, page, locale, true)),
+        children: p.pages.map((page) => buildPageItem(p, page, locale)),
       };
     });
 }

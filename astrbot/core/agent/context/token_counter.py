@@ -83,6 +83,9 @@ class EstimateTokenCounter:
         return total
 
     def _estimate_tokens(self, text: str) -> int:
+        if text.isascii():
+            return int(len(text) * 0.3)
+
         chinese_count = len([c for c in text if "\u4e00" <= c <= "\u9fff"])
         emoji_count = len(EMOJI_PATTERN.findall(text))
         other_count = len(text) - chinese_count - emoji_count

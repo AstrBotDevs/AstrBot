@@ -1,4 +1,5 @@
 from astrbot import logger
+from astrbot.core.exceptions import ConversationPersistenceError
 
 from ..message import Message
 from .compressor import LLMSummaryCompressor, TruncateByTurnsCompressor
@@ -25,6 +26,7 @@ class ContextManager:
             config: The context configuration.
         """
         self.config = config
+        self.revision = 0
 
         self.token_counter = config.custom_token_counter or EstimateTokenCounter()
         self.truncator = ContextTruncator()
@@ -37,6 +39,7 @@ class ContextManager:
                 keep_recent_ratio=config.llm_compress_keep_recent_ratio,
                 instruction_text=config.llm_compress_instruction,
                 token_counter=self.token_counter,
+                request_event_emitter=config.request_event_emitter,
             )
         else:
             self.compressor = TruncateByTurnsCompressor(
@@ -65,6 +68,9 @@ class ContextManager:
                     drop_turns=self.config.truncate_turns,
                 )
 
+            if result is not messages:
+                self.revision += 1
+
             # 2. 基于 token 的压缩
             if self.config.max_context_tokens > 0:
                 total_tokens = self.token_counter.count_tokens(
@@ -74,9 +80,13 @@ class ContextManager:
                 if self.compressor.should_compress(
                     result, total_tokens, self.config.max_context_tokens
                 ):
+                    # Custom compressors may mutate the existing list in place.
+                    self.revision += 1
                     result = await self._run_compression(result, total_tokens)
 
             return result
+        except ConversationPersistenceError:
+            raise
         except Exception as e:
             logger.error(f"Error during context processing: {e}", exc_info=True)
             return messages
@@ -141,8 +151,7 @@ class ContextManager:
             "Context still exceeds max tokens after compression, dropping the oldest rounds..."
         )
         # Drop whole rounds, oldest first, so that tool calls stay with their
-        # results, and recount after each one. The latest round is the current
-        # request and is always kept.
+        # results. Always keep the latest round, which is the current request.
         first_non_system = next(
             (i for i, msg in enumerate(messages) if msg.role != "system"),
             len(messages),
@@ -154,13 +163,27 @@ class ContextManager:
         ]
         tokens = tokens_after_summary
         dropped_rounds = 0
-        while len(rounds) > 1 and self.compressor.should_compress(
+        # Built-in estimates are additive and compression checks only use tokens.
+        # Custom implementations need updated messages and a full recount.
+        incremental_tokens = type(self.token_counter) is EstimateTokenCounter and type(
+            self.compressor
+        ) in (TruncateByTurnsCompressor, LLMSummaryCompressor)
+        while len(rounds) - dropped_rounds > 1 and self.compressor.should_compress(
             messages, tokens, self.config.max_context_tokens
         ):
-            rounds.pop(0)
+            dropped_round = rounds[dropped_rounds]
             dropped_rounds += 1
-            messages = system_messages + [msg for rnd in rounds for msg in rnd]
-            tokens = self.token_counter.count_tokens(messages)
+            if incremental_tokens:
+                tokens -= self.token_counter.count_tokens(dropped_round)
+            else:
+                messages = system_messages + [
+                    msg for rnd in rounds[dropped_rounds:] for msg in rnd
+                ]
+                tokens = self.token_counter.count_tokens(messages)
+        if incremental_tokens and dropped_rounds:
+            messages = system_messages + [
+                msg for rnd in rounds[dropped_rounds:] for msg in rnd
+            ]
         logger.info(f"Dropped {dropped_rounds} oldest round(s).")
 
         if self.compressor.should_compress(

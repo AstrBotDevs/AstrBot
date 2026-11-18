@@ -5,7 +5,7 @@ import zipfile
 
 import pytest
 
-from astrbot.core.knowledge_base.parsers.epub_parser import EpubParser
+from astrbot.core.knowledge_base.parsers.epub_parser import EpubParser, _strip_links
 from astrbot.core.knowledge_base.parsers.markitdown_parser import MarkitdownParser
 from astrbot.core.knowledge_base.parsers.util import select_parser
 
@@ -132,6 +132,7 @@ def _make_epub_bytes_with_generic_content() -> bytes:
   <body>
     <h1>First</h1>
     Lead text
+    <p>页内链接：需要<a href="#backup">离线备份</a>才能继续。</p>
     <p>Piura<a href="text00000.html#filepos0000045863">*5</a>, continued.</p>
     <img src="Image00000.jpg" alt="" />
     <div>Inside div</div>
@@ -209,6 +210,7 @@ async def test_epub_parser_preserves_generic_container_text():
     assert "**Title:**" not in result.text
     assert "# First" in result.text
     assert "Lead text" in result.text
+    assert "页内链接：需要离线备份才能继续。" in result.text
     assert r"Piura\*5, continued." in result.text
     assert "filepos" not in result.text
     assert r"[\*5]" not in result.text
@@ -218,3 +220,11 @@ async def test_epub_parser_preserves_generic_container_text():
     assert "Inside div" in result.text
     assert "Inside section" in result.text
     assert "| Cell A | Cell B |" in result.text
+
+
+@pytest.mark.parametrize(
+    "link",
+    ["[1](#ref1)", "[footnote](#footnote-1)"],
+)
+def test_epub_link_cleanup_removes_footnotes(link):
+    assert _strip_links(f"Before {link} after") == "Before  after"

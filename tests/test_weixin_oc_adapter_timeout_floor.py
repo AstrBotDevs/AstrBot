@@ -13,6 +13,8 @@ stalled ``getupdates`` connection forever, which is exactly the case its
 
 import asyncio
 
+import pytest
+
 from astrbot.core.platform.sources.weixin_oc.weixin_oc_adapter import (
     WeixinOCAdapter,
 )
@@ -30,30 +32,22 @@ def _adapter(**overrides) -> WeixinOCAdapter:
     return WeixinOCAdapter(config, {"settings": {}}, asyncio.Queue())
 
 
-def test_cleared_api_timeout_falls_back_to_a_positive_floor():
-    adapter = _adapter(weixin_oc_api_timeout_ms=0)
-    assert adapter.api_timeout_ms == MINIMUM_TIMEOUT_MS
-    # the value that actually reaches aiohttp.ClientTimeout(total=...)
-    assert adapter.client.api_timeout_ms == MINIMUM_TIMEOUT_MS
+@pytest.mark.parametrize(
+    ("config_key", "value", "attr"),
+    [
+        ("weixin_oc_api_timeout_ms", 0, "api_timeout_ms"),
+        ("weixin_oc_long_poll_timeout_ms", 0, "long_poll_timeout_ms"),
+        ("weixin_oc_api_timeout_ms", -1, "api_timeout_ms"),
+        ("weixin_oc_long_poll_timeout_ms", -35_000, "long_poll_timeout_ms"),
+        ("weixin_oc_api_timeout_ms", 200, "api_timeout_ms"),
+    ],
+)
+def test_timeouts_below_the_floor_are_clamped(config_key, value, attr):
+    adapter = _adapter(**{config_key: value})
 
-
-def test_cleared_long_poll_timeout_falls_back_to_a_positive_floor():
-    adapter = _adapter(weixin_oc_long_poll_timeout_ms=0)
-    assert adapter.long_poll_timeout_ms == MINIMUM_TIMEOUT_MS
-
-
-def test_negative_timeouts_are_clamped_like_the_login_flow():
-    adapter = _adapter(
-        weixin_oc_api_timeout_ms=-1,
-        weixin_oc_long_poll_timeout_ms=-35_000,
-    )
-    assert adapter.api_timeout_ms == MINIMUM_TIMEOUT_MS
-    assert adapter.long_poll_timeout_ms == MINIMUM_TIMEOUT_MS
-
-
-def test_config_value_below_the_floor_still_clamped():
-    adapter = _adapter(weixin_oc_api_timeout_ms=200)
-    assert adapter.api_timeout_ms == MINIMUM_TIMEOUT_MS
+    assert getattr(adapter, attr) == MINIMUM_TIMEOUT_MS
+    if attr == "api_timeout_ms":
+        assert adapter.client.api_timeout_ms == MINIMUM_TIMEOUT_MS
 
 
 def test_a_tuned_value_is_kept():

@@ -16,7 +16,9 @@ import certifi
 
 from astrbot.api import sp
 from astrbot.core import DEMO_MODE, file_token_service, logger
-from astrbot.core.computer.computer_client import sync_skills_to_active_sandboxes
+from astrbot.core.astr_agent_runtime.computer.computer_client import (
+    sync_skills_to_active_sandboxes,
+)
 from astrbot.core.repository import (
     GitUnavailableError,
     normalize_repository_url,
@@ -53,7 +55,6 @@ PLUGIN_COMPONENT_TYPE_ORDER = {
 
 LogoTokenResolver = Callable[[str], Awaitable[str | None]]
 InstalledAtResolver = Callable[[StarMetadata], str | None]
-PluginPagesResolver = Callable[[StarMetadata], Awaitable[list]]
 PluginPagesSerializer = Callable[[StarMetadata], Awaitable[list[dict]]]
 
 
@@ -170,7 +171,7 @@ class PluginService:
         plugin_name: str | None,
         logo_token_resolver: LogoTokenResolver,
         installed_at_resolver: InstalledAtResolver,
-        discover_pages: PluginPagesResolver,
+        serialize_pages: PluginPagesSerializer,
     ) -> tuple[list[dict], str | None]:
         plugins = [
             plugin
@@ -181,7 +182,7 @@ class PluginService:
 
         async def process_plugin(plugin: StarMetadata):
             logo_url = await self.resolve_plugin_logo_url(plugin, logo_token_resolver)
-            pages = await discover_pages(plugin)
+            pages = await serialize_pages(plugin)
             return plugin, logo_url, pages
 
         results = await asyncio.gather(*(process_plugin(plugin) for plugin in plugins))
@@ -200,7 +201,8 @@ class PluginService:
                             install_sources,
                         ),
                     ),
-                    "pages": [page.name for page in pages],
+                    "pages": [page["name"] for page in pages],
+                    "views": pages,
                 }
             )
         return payload, getattr(self.plugin_manager, "failed_plugin_info", None)
@@ -211,13 +213,13 @@ class PluginService:
         plugin_name: str | None,
         logo_token_resolver: LogoTokenResolver,
         installed_at_resolver: InstalledAtResolver,
-        discover_pages: PluginPagesResolver,
+        serialize_pages: PluginPagesSerializer,
     ) -> tuple[list[dict], str | None]:
         return await self.list_plugins(
             plugin_name=plugin_name,
             logo_token_resolver=logo_token_resolver,
             installed_at_resolver=installed_at_resolver,
-            discover_pages=discover_pages,
+            serialize_pages=serialize_pages,
         )
 
     async def get_plugin_detail(
@@ -699,7 +701,7 @@ class PluginService:
                 "title": page["title"],
                 "page_name": page["name"],
                 "i18n_key": page["i18n_key"],
-                "description": "Plugin Page entry",
+                "description": page.get("description", ""),
                 "plugin_name": plugin.name,
                 "plugin_marketplace_name": (plugin.name or "").replace("_", "-"),
             }
@@ -864,6 +866,10 @@ class PluginService:
                 fallback_desc,
             ),
         }
+        handler_md = getattr(command_filter, "handler_md", None)
+        if handler_md:
+            component["handler_full_name"] = handler_md.handler_full_name
+            component["handler_name"] = handler_md.handler_name
         return self._wrap_command_component(parts[:-1], component)
 
     def _build_command_group_component(
@@ -907,10 +913,15 @@ class PluginService:
                 component["subcommands"] = subcommands
             return component
 
-        return {
+        component = {
             "name": command_filter.command_name,
             "description": self._get_command_description(command_filter),
         }
+        handler_md = getattr(command_filter, "handler_md", None)
+        if handler_md:
+            component["handler_full_name"] = handler_md.handler_full_name
+            component["handler_name"] = handler_md.handler_name
+        return component
 
     @staticmethod
     def _wrap_command_component(parent_names: list[str], component: dict) -> dict:

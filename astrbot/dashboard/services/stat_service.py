@@ -4,22 +4,25 @@ import ast
 import asyncio
 import platform
 import re
-import shutil
-import tempfile
 import threading
 import time
 import traceback
 from collections import defaultdict
 from datetime import datetime, timedelta, timezone
 from functools import cmp_to_key
+from html.parser import HTMLParser
 from pathlib import Path
+from urllib.parse import urljoin, urlparse
 
 import aiohttp
 import psutil
+from packaging.version import InvalidVersion, Version
 from sqlmodel import col, func, select
 
 from astrbot.core import DEMO_MODE, logger
-from astrbot.core.computer.process_sandbox import SandboxSpec, create_process_sandbox
+from astrbot.core.astr_agent_runtime.computer.process_sandbox import (
+    get_process_sandbox_status,
+)
 from astrbot.core.config import VERSION
 from astrbot.core.config.astrbot_config import AstrBotConfig
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
@@ -34,7 +37,7 @@ from astrbot.core.desktop_runtime import (
     is_desktop_session_auth_enabled,
 )
 from astrbot.core.umo_alias import build_umo_alias_map, serialize_umo_alias
-from astrbot.core.utils.astrbot_path import get_astrbot_path, get_astrbot_temp_path
+from astrbot.core.utils.astrbot_path import get_astrbot_data_path, get_astrbot_path
 from astrbot.core.utils.auth_password import (
     is_default_dashboard_password,
     is_md5_dashboard_password,
@@ -52,6 +55,22 @@ class StatServiceError(Exception):
     pass
 
 
+# Speed tests download real payloads, so these budgets stop a single click
+# from pulling tens of megabytes.
+_SPEED_SAMPLE_SECONDS = 6.0
+_SPEED_SAMPLE_MAX_BYTES = 4 * 1024 * 1024
+# The simple index page of one package lists every release ever published, so
+# it can grow without bound on a misbehaving or hostile mirror.
+_PACKAGE_PAGE_MAX_BYTES = 8 * 1024 * 1024
+_PIP_USER_AGENT = "pip/24.3.1"
+# A real repository asset the dashboard downloads (the t2i runtime bundle),
+# large enough to produce a meaningful throughput number.
+_GITHUB_SPEED_TARGET_URL = (
+    "https://github.com/AstrBotDevs/AstrBot/raw/refs/heads/master/"
+    "astrbot/core/utils/t2i/template/shiki_runtime.iife.js"
+)
+
+
 class StatService:
     def __init__(
         self,
@@ -67,50 +86,10 @@ class StatService:
         self.dashboard_static_folder = dashboard_static_folder
         self.storage_cleaner = StorageCleaner(config)
 
-        # Probe sandbox startup once; restart AstrBot to refresh this snapshot.
-        system = platform.system().lower()
-        sandbox = {"backend": None, "status": "unsupported"}
-        if system == "linux":
-            sandbox = {
-                "backend": "bubblewrap",
-                "status": "detected" if shutil.which("bwrap") else "missing",
-            }
-        elif system == "darwin":
-            sandbox = {
-                "backend": "seatbelt",
-                "status": (
-                    "detected"
-                    if shutil.which("sandbox-exec", path="/usr/bin")
-                    == "/usr/bin/sandbox-exec"
-                    else "missing"
-                ),
-            }
-        if sandbox["status"] == "detected":
-            try:
-                temp_root = Path(get_astrbot_temp_path())
-                temp_root.mkdir(parents=True, exist_ok=True)
-                with tempfile.TemporaryDirectory(
-                    prefix="sandbox-probe-", dir=temp_root
-                ) as workspace:
-                    result = create_process_sandbox().run(
-                        ["/bin/sh", "-c", ":"],
-                        SandboxSpec(workspace=Path(workspace)),
-                        timeout=5,
-                        output_limit=1024,
-                    )
-                if result.returncode != 0:
-                    raise RuntimeError(
-                        result.stderr.decode("utf-8", errors="replace").strip()
-                        or f"Sandbox probe exited with code {result.returncode}."
-                    )
-            except (OSError, RuntimeError) as exc:
-                sandbox.update(
-                    status="unavailable", error=str(exc)[:1024] or type(exc).__name__
-                )
         self.runtime = {
-            "os": system,
+            "os": platform.system().lower(),
             "arch": platform.machine(),
-            "sandbox": sandbox,
+            "sandbox": get_process_sandbox_status().copy(),
         }
 
     async def restart_core(self) -> None:
@@ -267,88 +246,215 @@ class StatService:
             logger.error("清理存储失败", exc_info=True)
             raise StatServiceError("清理存储失败，请查看后端日志了解详情。") from exc
 
-    async def get_stat(self, offset_sec: int) -> dict:
-        try:
-            now = int(time.time())
-            start_time = now - offset_sec
+    async def _get_daily_usage(self) -> dict:
+        """Aggregate today's usage and the previous calendar day's usage.
 
-            async with self.db_helper.get_db() as session:
-                window_start = datetime.now() - timedelta(seconds=offset_sec)
-                result = await session.execute(
-                    select(PlatformStat)
-                    .where(PlatformStat.timestamp >= window_start)
-                    .order_by(col(PlatformStat.timestamp)),
-                )
-                # Convert to (epoch_seconds, count, platform_id) tuples once.
-                rows = [
-                    (int(r.timestamp.timestamp()), r.count, r.platform_id)
-                    for r in result.scalars().all()
-                ]
-                total_messages = (
+        Returns:
+            Daily token and platform message totals, plus distinct sessions with
+            internal model activity, using the server's local calendar dates.
+        """
+        today = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+        result = {}
+        async with self.db_helper.get_db() as session:
+            for label, start in (
+                ("today", today),
+                ("yesterday", today - timedelta(days=1)),
+            ):
+                end = start + timedelta(days=1)
+                # Platform counters use local timestamps; provider records use UTC.
+                start_utc = start.astimezone(timezone.utc).replace(tzinfo=None)
+                end_utc = end.astimezone(timezone.utc).replace(tzinfo=None)
+                messages = (
                     await session.execute(
-                        select(func.coalesce(func.sum(PlatformStat.count), 0)),
+                        select(func.coalesce(func.sum(PlatformStat.count), 0)).where(
+                            # Legacy counters omit fractional seconds at midnight.
+                            func.date(PlatformStat.timestamp) == start.date(),
+                        )
                     )
                 ).scalar_one()
-
-            # Bucket message counts into hourly slots for the time series chart.
-            message_time_based_stats = []
-            idx = 0
-            for bucket_end in range(start_time, now, 3600):
-                cnt = 0
-                while idx < len(rows) and rows[idx][0] < bucket_end:
-                    cnt += rows[idx][1]
-                    idx += 1
-                message_time_based_stats.append([bucket_end, cnt])
-
-            # Aggregate per-platform message counts within the window.
-            per_platform: dict[str, int] = defaultdict(int)
-            for _, count, platform_id in rows:
-                per_platform[platform_id] += count
-            platform_stats = [
-                {
-                    "name": platform_id,
-                    "count": count,
-                    "timestamp": int(window_start.timestamp()),
+                tokens, active_sessions = (
+                    await session.execute(
+                        select(
+                            func.coalesce(
+                                func.sum(
+                                    ProviderStat.token_input_other
+                                    + ProviderStat.token_input_cached
+                                    + ProviderStat.token_output
+                                ),
+                                0,
+                            ),
+                            func.count(
+                                func.distinct(func.nullif(ProviderStat.umo, ""))
+                            ),
+                        ).where(
+                            ProviderStat.agent_type == "internal",
+                            ProviderStat.created_at >= start_utc,
+                            ProviderStat.created_at < end_utc,
+                        )
+                    )
+                ).one()
+                result[label] = {
+                    "tokens": tokens,
+                    "messages": messages,
+                    "active_sessions": active_sessions,
                 }
-                for platform_id, count in per_platform.items()
-            ]
+        return result
 
-            process_cpu = await asyncio.to_thread(psutil.Process().cpu_percent, 0.5)
-            cpu_percent = process_cpu / (psutil.cpu_count() or 1)
-            thread_count = threading.active_count()
+    async def get_stat(self, offset_sec: int, sections: str | None = None) -> dict:
+        """Return only the requested categories of usage and runtime statistics.
 
-            plugins = self.core_lifecycle.star_context.get_all_stars()
-            plugin_info = []
-            for plugin in plugins:
-                info = {
-                    "name": getattr(plugin, "name", plugin.__class__.__name__),
-                    "version": getattr(plugin, "version", "1.0.0"),
-                    "is_enabled": True,
-                }
-                plugin_info.append(info)
+        Args:
+            offset_sec: Rolling window in seconds for message trends and rankings.
+                Daily usage always follows server-local calendar dates.
+            sections: Comma-separated messages, daily_usage, process, system, or
+                instances. Omit to collect all categories.
 
-            running_time = self.get_running_time_components(
-                int(time.time()) - self.core_lifecycle.start_time,
+        Returns:
+            Statistics in the existing response shape, omitting unrequested fields.
+
+        Raises:
+            StatServiceError: If sections are invalid or statistics cannot be collected.
+        """
+        available_sections = {
+            "messages",
+            "daily_usage",
+            "process",
+            "system",
+            "instances",
+        }
+        requested = (
+            available_sections
+            if sections is None
+            else {section.strip() for section in sections.split(",")}
+        )
+        if not requested <= available_sections:
+            raise StatServiceError(
+                "sections must be a comma-separated list of: "
+                "messages, daily_usage, process, system, instances"
             )
 
-            return {
-                "platform": platform_stats,
-                "message_count": total_messages,
-                "platform_count": len(
-                    self.core_lifecycle.platform_manager.get_insts(),
-                ),
-                "plugin_count": len(plugins),
-                "plugins": plugin_info,
-                "message_time_series": message_time_based_stats,
-                "running": running_time,
-                "memory": {
-                    "process": psutil.Process().memory_info().rss >> 20,
-                    "system": psutil.virtual_memory().total >> 20,
-                },
-                "cpu_percent": round(cpu_percent, 1),
-                "thread_count": thread_count,
-                "start_time": self.core_lifecycle.start_time,
-            }
+        try:
+            result = {}
+            if "messages" in requested:
+                now = int(time.time())
+                start_time = now - offset_sec
+                async with self.db_helper.get_db() as session:
+                    window_start = datetime.now() - timedelta(seconds=offset_sec)
+                    platform_result = await session.execute(
+                        select(PlatformStat)
+                        .where(PlatformStat.timestamp >= window_start)
+                        .order_by(col(PlatformStat.timestamp)),
+                    )
+                    # Convert to (epoch_seconds, count, platform_id) tuples once.
+                    rows = [
+                        (int(r.timestamp.timestamp()), r.count, r.platform_id)
+                        for r in platform_result.scalars().all()
+                    ]
+                    total_messages = (
+                        await session.execute(
+                            select(func.coalesce(func.sum(PlatformStat.count), 0)),
+                        )
+                    ).scalar_one()
+
+                # Bucket message counts into hourly slots for the time series chart.
+                message_time_based_stats = []
+                idx = 0
+                for bucket_end in range(start_time, now, 3600):
+                    cnt = 0
+                    while idx < len(rows) and rows[idx][0] < bucket_end:
+                        cnt += rows[idx][1]
+                        idx += 1
+                    message_time_based_stats.append([bucket_end, cnt])
+
+                per_platform: dict[str, int] = defaultdict(int)
+                for _, count, platform_id in rows:
+                    per_platform[platform_id] += count
+                result.update(
+                    {
+                        "message_count": total_messages,
+                        "message_time_series": message_time_based_stats,
+                        "platform": [
+                            {
+                                "name": platform_id,
+                                "count": count,
+                                "timestamp": int(window_start.timestamp()),
+                            }
+                            for platform_id, count in per_platform.items()
+                        ],
+                    }
+                )
+
+            if "daily_usage" in requested:
+                result["daily_usage"] = await self._get_daily_usage()
+
+            if requested & {"process", "system"}:
+                memory = psutil.virtual_memory()
+                uptime_seconds = max(
+                    0, int(time.time()) - self.core_lifecycle.start_time
+                )
+
+            if "process" in requested:
+                process = psutil.Process()
+                process_cpu = await asyncio.to_thread(process.cpu_percent, 0.5)
+                cpu_percent = process_cpu / (psutil.cpu_count() or 1)
+                result.update(
+                    {
+                        "running": self.get_running_time_components(uptime_seconds),
+                        "start_time": self.core_lifecycle.start_time,
+                        "cpu_percent": round(cpu_percent, 1),
+                        "memory": {
+                            "process": process.memory_info().rss >> 20,
+                            "system": memory.total >> 20,
+                        },
+                        "thread_count": threading.active_count(),
+                    }
+                )
+
+            if "system" in requested:
+                try:
+                    # psutil's Windows extension requires a string rather than a Path.
+                    disk = await asyncio.to_thread(
+                        psutil.disk_usage, str(Path(get_astrbot_data_path()))
+                    )
+                    disk_usage = {
+                        "used": disk.used,
+                        "total": disk.total,
+                        "percent": disk.percent,
+                    }
+                except OSError:
+                    disk_usage = None
+                result["system"] = {
+                    "uptime_seconds": uptime_seconds,
+                    "cpu_percent": await asyncio.to_thread(psutil.cpu_percent, 0.1),
+                    "memory": {
+                        "used": memory.total - memory.available,
+                        "total": memory.total,
+                        "percent": memory.percent,
+                    },
+                    "disk": disk_usage,
+                }
+
+            if "instances" in requested:
+                plugins = self.core_lifecycle.star_context.get_all_stars()
+                result.update(
+                    {
+                        "platform_count": len(
+                            self.core_lifecycle.platform_manager.get_insts()
+                        ),
+                        "plugin_count": len(plugins),
+                        "plugins": [
+                            {
+                                "name": getattr(
+                                    plugin, "name", plugin.__class__.__name__
+                                ),
+                                "version": getattr(plugin, "version", "1.0.0"),
+                                "is_enabled": True,
+                            }
+                            for plugin in plugins
+                        ],
+                    }
+                )
+            return result
         except Exception as exc:
             logger.error(traceback.format_exc())
             raise StatServiceError(str(exc)) from exc
@@ -565,11 +671,12 @@ class StatService:
 
     async def test_ghproxy_connection(self, proxy_url: str | None) -> dict:
         try:
-            if not proxy_url:
-                raise StatServiceError("proxy_url is required")
-
-            proxy_url = proxy_url.rstrip("/")
-            test_url = f"{proxy_url}/https://github.com/AstrBotDevs/AstrBot/raw/refs/heads/master/.python-version"
+            target_url = "https://github.com/AstrBotDevs/AstrBot/raw/refs/heads/master/.python-version"
+            # An empty proxy_url means "no acceleration", so GitHub is tested directly.
+            normalized_proxy = (proxy_url or "").strip().rstrip("/")
+            test_url = (
+                f"{normalized_proxy}/{target_url}" if normalized_proxy else target_url
+            )
             start_time = time.time()
 
             async with (
@@ -586,6 +693,245 @@ class StatService:
                         "latency": round((end_time - start_time) * 1000, 2),
                     }
                 raise StatServiceError(f"Failed. Status code: {response.status}")
+        except StatServiceError:
+            raise
+        except Exception as exc:
+            logger.error(traceback.format_exc())
+            raise StatServiceError(f"Error: {exc!s}") from exc
+
+    async def test_pypi_index_connection(self, index_url: str | None) -> dict:
+        """Check whether a PyPI index (mirror) answers requests.
+
+        Only the response headers are awaited: a simple index page can be very
+        large, so the body is never downloaded.
+
+        Args:
+            index_url: Base URL of the PyPI index, e.g.
+                ``https://mirrors.aliyun.com/pypi/simple/``.
+
+        Returns:
+            A dict with the round trip latency in milliseconds.
+
+        Raises:
+            StatServiceError: If the URL is missing, malformed, or unreachable.
+        """
+        try:
+            normalized_url = (index_url or "").strip().rstrip("/")
+            if not normalized_url:
+                raise StatServiceError("index_url is required")
+
+            parsed = urlparse(normalized_url)
+            if parsed.scheme not in ("http", "https") or not parsed.netloc:
+                raise StatServiceError("index_url must be a valid http(s) URL")
+
+            start_time = time.time()
+            async with (
+                aiohttp.ClientSession() as session,
+                session.get(
+                    f"{normalized_url}/",
+                    # Some mirrors reject non-pip user agents, so mimic pip itself.
+                    headers={"User-Agent": _PIP_USER_AGENT},
+                    timeout=aiohttp.ClientTimeout(total=10),
+                ) as response,
+            ):
+                if response.status == 200:
+                    end_time = time.time()
+                    return {
+                        "latency": round((end_time - start_time) * 1000, 2),
+                    }
+                raise StatServiceError(f"Failed. Status code: {response.status}")
+        except StatServiceError:
+            raise
+        except Exception as exc:
+            logger.error(traceback.format_exc())
+            raise StatServiceError(f"Error: {exc!s}") from exc
+
+    async def measure_pypi_index_speed(self, index_url: str | None) -> dict:
+        """Download a real wheel from a PyPI index and report the throughput.
+
+        The speed test pulls an actual package file, so the result reflects what
+        ``pip install`` would experience instead of a bare round trip. Only the
+        first few megabytes and seconds are sampled so slow mirrors answer fast.
+
+        The package listing page is streamed with a hard byte budget, so a
+        misbehaving mirror cannot push an unbounded page into memory.
+
+        Args:
+            index_url: Base URL of the PyPI index, e.g.
+                ``https://mirrors.aliyun.com/pypi/simple/``.
+
+        Returns:
+            A dict with the throughput in MB/s, the sampled byte count, and the
+            elapsed seconds.
+
+        Raises:
+            StatServiceError: If the URL is missing, malformed, or unreachable.
+        """
+        try:
+            normalized_url = (index_url or "").strip().rstrip("/")
+            if not normalized_url:
+                raise StatServiceError("index_url is required")
+
+            parsed = urlparse(normalized_url)
+            if parsed.scheme not in ("http", "https") or not parsed.netloc:
+                raise StatServiceError("index_url must be a valid http(s) URL")
+
+            async with aiohttp.ClientSession() as session:
+                # pip ships a single platform independent wheel and every mirror
+                # serves the same file, which keeps the numbers comparable.
+                package_page_url = f"{normalized_url}/pip/"
+                async with session.get(
+                    package_page_url,
+                    headers={"User-Agent": _PIP_USER_AGENT},
+                    timeout=aiohttp.ClientTimeout(total=15),
+                ) as response:
+                    if response.status != 200:
+                        raise StatServiceError(
+                            f"Failed. Status code: {response.status}"
+                        )
+                    # Stream the page and reject it as soon as it exceeds the
+                    # budget, so an oversized or endless response cannot be
+                    # buffered into memory first.
+                    page_bytes = bytearray()
+                    async for chunk in response.content.iter_chunked(65536):
+                        page_bytes += chunk
+                        if len(page_bytes) > _PACKAGE_PAGE_MAX_BYTES:
+                            raise StatServiceError(
+                                "Package page from this index is too large "
+                                f"(over {_PACKAGE_PAGE_MAX_BYTES // 1048576} MB)"
+                            )
+                    page = page_bytes.decode(
+                        response.charset or "utf-8", errors="replace"
+                    )
+
+                class _AnchorHrefParser(HTMLParser):
+                    """Collect ``href`` values of anchor tags from a simple index.
+
+                    A real parser is used instead of a regex so that valid markup
+                    with single quotes, unquoted values, or uppercase ``HREF``
+                    is handled; tag and attribute names arrive lowercased.
+                    """
+
+                    def __init__(self) -> None:
+                        super().__init__(convert_charrefs=True)
+                        self.hrefs: list[str] = []
+
+                    def handle_starttag(
+                        self, tag: str, attrs: list[tuple[str, str | None]]
+                    ) -> None:
+                        if tag != "a":
+                            return
+                        for name, value in attrs:
+                            if name == "href" and value:
+                                self.hrefs.append(value)
+
+                anchor_parser = _AnchorHrefParser()
+                anchor_parser.feed(page)
+                anchor_parser.close()
+
+                wheels: list[tuple[Version, str]] = []
+                for href in anchor_parser.hrefs:
+                    # Simple indexes append a "#sha256=..." fragment.
+                    href = href.split("#", 1)[0]
+                    file_name = href.rsplit("/", 1)[-1]
+                    suffix = "-py3-none-any.whl"
+                    if not (
+                        file_name.startswith("pip-") and file_name.endswith(suffix)
+                    ):
+                        continue
+                    try:
+                        version = Version(file_name[len("pip-") : -len(suffix)])
+                    except InvalidVersion:
+                        continue
+                    wheels.append((version, urljoin(package_page_url, href)))
+
+                if not wheels:
+                    raise StatServiceError("No pip wheel found on this index")
+                wheels.sort(key=lambda wheel: wheel[0])
+                wheel_url = wheels[-1][1]
+
+                start_time = time.time()
+                received = 0
+                async with session.get(
+                    wheel_url,
+                    headers={"User-Agent": _PIP_USER_AGENT},
+                    timeout=aiohttp.ClientTimeout(total=_SPEED_SAMPLE_SECONDS + 5),
+                ) as response:
+                    if response.status != 200:
+                        raise StatServiceError(
+                            f"Failed. Status code: {response.status}"
+                        )
+                    async for chunk in response.content.iter_chunked(65536):
+                        received += len(chunk)
+                        if (
+                            received >= _SPEED_SAMPLE_MAX_BYTES
+                            or time.time() - start_time > _SPEED_SAMPLE_SECONDS
+                        ):
+                            break
+
+            duration = time.time() - start_time
+            if not received or duration <= 0:
+                raise StatServiceError("No data received")
+            return {
+                "speed": round(received / 1048576 / duration, 2),
+                "bytes": received,
+                "duration": round(duration, 2),
+            }
+        except StatServiceError:
+            raise
+        except Exception as exc:
+            logger.error(traceback.format_exc())
+            raise StatServiceError(f"Error: {exc!s}") from exc
+
+    async def measure_ghproxy_speed(self, proxy_url: str | None) -> dict:
+        """Download a repository file through a GitHub proxy and report throughput.
+
+        Args:
+            proxy_url: Proxy prefix such as ``https://gh-proxy.com``; an empty
+                value measures the direct route.
+
+        Returns:
+            A dict with the throughput in MB/s, the sampled byte count, and the
+            elapsed seconds.
+
+        Raises:
+            StatServiceError: If the download fails.
+        """
+        try:
+            normalized_proxy = (proxy_url or "").strip().rstrip("/")
+            test_url = (
+                f"{normalized_proxy}/{_GITHUB_SPEED_TARGET_URL}"
+                if normalized_proxy
+                else _GITHUB_SPEED_TARGET_URL
+            )
+
+            start_time = time.time()
+            received = 0
+            async with (
+                aiohttp.ClientSession() as session,
+                session.get(
+                    test_url,
+                    timeout=aiohttp.ClientTimeout(total=_SPEED_SAMPLE_SECONDS + 5),
+                ) as response,
+            ):
+                if response.status != 200:
+                    raise StatServiceError(f"Failed. Status code: {response.status}")
+                async for chunk in response.content.iter_chunked(65536):
+                    received += len(chunk)
+                    if (
+                        received >= _SPEED_SAMPLE_MAX_BYTES
+                        or time.time() - start_time > _SPEED_SAMPLE_SECONDS
+                    ):
+                        break
+
+            duration = time.time() - start_time
+            if not received or duration <= 0:
+                raise StatServiceError("No data received")
+            return {
+                "speed": round(received / 1048576 / duration, 2),
+                "bytes": received,
+                "duration": round(duration, 2),
+            }
         except StatServiceError:
             raise
         except Exception as exc:

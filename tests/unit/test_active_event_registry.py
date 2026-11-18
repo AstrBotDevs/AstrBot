@@ -1,16 +1,10 @@
 import asyncio
-from types import SimpleNamespace
 from unittest.mock import Mock
 
 import pytest
 
-from astrbot.core.pipeline.process_stage.follow_up import (
-    register_active_runner,
-    unregister_active_runner,
-)
 from astrbot.core.utils.active_event_registry import (
     ActiveEventRegistry,
-    active_event_registry,
 )
 
 
@@ -39,18 +33,24 @@ class StubEvent:
 
 
 def test_request_agent_stop_invokes_registered_callback() -> None:
-    """Agent stop requests immediately invoke the active execution callback."""
+    """An event can own several executions with independent callbacks."""
     registry = ActiveEventRegistry()
     event = StubEvent("webchat:FriendMessage:webchat!alice!session")
-    callback = Mock()
+    callback, other = Mock(), Mock()
     registry.register(event)
     registry.register_agent_stop_callback(event, callback)
+    registry.register_agent_stop_callback(event, other)
 
     stopped_count = registry.request_agent_stop_all(event.unified_msg_origin)
 
     assert stopped_count == 1
     assert event.extras["agent_stop_requested"] is True
     callback.assert_called_once_with()
+    other.assert_called_once_with()
+    registry.unregister_agent_stop_callback(event, callback)
+    registry.request_agent_stop_all(event.unified_msg_origin)
+    callback.assert_called_once_with()
+    assert other.call_count == 2
 
 
 def test_unregister_removes_agent_stop_callback() -> None:
@@ -66,28 +66,6 @@ def test_unregister_removes_agent_stop_callback() -> None:
 
     assert stopped_count == 0
     callback.assert_not_called()
-
-
-def test_active_runner_wires_immediate_stop_callback() -> None:
-    """Active Runner registration connects registry stop to Runner cancellation."""
-    event = StubEvent("webchat:FriendMessage:webchat!alice!runner-session")
-    runner = SimpleNamespace(
-        run_context=SimpleNamespace(context=SimpleNamespace(event=event)),
-        request_stop=Mock(),
-    )
-    active_event_registry.register(event)
-    register_active_runner(event.unified_msg_origin, runner)
-
-    try:
-        stopped_count = active_event_registry.request_agent_stop_all(
-            event.unified_msg_origin
-        )
-
-        assert stopped_count == 1
-        runner.request_stop.assert_called_once_with()
-    finally:
-        unregister_active_runner(event.unified_msg_origin, runner)
-        active_event_registry.unregister(event)
 
 
 @pytest.mark.asyncio

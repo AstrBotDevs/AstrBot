@@ -172,7 +172,7 @@ const isVuetifyIcon = computed(() => typeof props.item?.icon === 'string');
                 type="button"
                 class="nav-item-plugin-info"
                 :aria-label="t('core.navigation.pluginViewType')"
-                @click.stop
+                @click.stop.prevent
               >
                 <CircleHelp :size="18" />
               </button>

@@ -3,6 +3,20 @@
   --ms-leading-body: 1.7;
 }
 
+/*
+ * Disable deferred rendering for chat messages. markstream's default
+ * `content-visibility: auto` estimates off-screen messages as 800x600 and
+ * replaces that estimate with the real height on first paint, which makes
+ * Firefox jump while scrolling back through history. The message list owns
+ * its scroll position, so the virtualization saving is not worth the jump.
+ */
+.chat-markdown.markstream-vue.markdown-renderer:not(.virtualized):not(
+    .virtual-scroll-coordinated
+  ) {
+  content-visibility: visible;
+  contain-intrinsic-size: auto;
+}
+
 @media (min-width: 761px) {
   .chat-markdown.markstream-vue {
     --ms-text-body: 0.9375rem;
