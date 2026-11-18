@@ -826,9 +826,11 @@ class DingtalkPlatformAdapter(Platform):
         message_chain: MessageChain,
         at_str: str = "",
     ) -> MessageSendReceipt | None:
-        receipts: list[MessageSendReceipt | None] = []
+        receipts: list[MessageSendReceipt] = []
+        complete = True
 
         async def send_message(msg_key: str, msg_param: dict) -> None:
+            nonlocal complete
             if target_type == "group":
                 receipt = await self._send_group_message(
                     open_conversation_id=target_id,
@@ -843,7 +845,10 @@ class DingtalkPlatformAdapter(Platform):
                     msg_key=msg_key,
                     msg_param=msg_param,
                 )
-            receipts.append(receipt)
+            if receipt is None:
+                complete = False
+            else:
+                receipts.append(receipt)
 
         action_rows = [
             segment for segment in message_chain.chain if isinstance(segment, ActionRow)
@@ -996,16 +1001,13 @@ class DingtalkPlatformAdapter(Platform):
                     continue
 
         if (
-            receipts
+            complete
+            and receipts
             and all(isinstance(part, Plain) for part in message_chain.chain)
-            and all(isinstance(receipt, MessageSendReceipt) for receipt in receipts)
         ):
             return MessageSendReceipt(
                 tracking_keys=tuple(
-                    key
-                    for receipt in receipts
-                    if isinstance(receipt, MessageSendReceipt)
-                    for key in receipt.tracking_keys
+                    key for receipt in receipts for key in receipt.tracking_keys
                 )
             )
         return None

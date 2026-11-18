@@ -98,6 +98,8 @@ class WecomPlatformEvent(AstrMessageEvent):
             and message_obj.session_id != "@all"
             and "|" not in message_obj.session_id
         )
+        # Only a text-only chain can produce an acceptance receipt.
+        text_only = all(isinstance(part, Plain) for part in message.chain)
 
         is_wechat_kf = hasattr(self.client, "kf_message")
         if is_wechat_kf:
@@ -420,10 +422,10 @@ class WecomPlatformEvent(AstrMessageEvent):
         await super().send(message)
 
         if (
-            not is_wechat_kf
+            text_only
             and single_recipient
-            and any(isinstance(part, Plain) and part.text for part in message.chain)
-            and all(isinstance(part, Plain) for part in message.chain)
+            and not is_wechat_kf
+            and any(part.text for part in message.chain)
         ):
             return MessageSendReceipt(message_ids=tuple(message_ids))
         return None
