@@ -55,10 +55,8 @@ BACKGROUND_TASK_RESULT_WOKE_USER_PROMPT = (
     "You can use `send_message_to_user` to send images, files, and other generated artifacts. "
     "Only messages sent through `send_message_to_user` are delivered to the user. "
     "Use it for all user-facing messages, including any necessary summary. "
-    'When finished, respond only with "Task complete". '
-    "Output in the same language as the previous conversation.\n\n"
+    'When finished, respond only with "Task complete".\n\n'
     "# BACKGROUND TASK CONTEXT\n"
-    "The following object describes the background task that completed:\n"
     "{background_task_result}"
     "\n</system_reminder>"
 )
