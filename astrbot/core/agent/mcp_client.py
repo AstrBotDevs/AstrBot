@@ -754,6 +754,8 @@ class MCPClient:
         )
         async def _call_with_retry():
             if not self.session:
+                await self._reconnect()
+            if not self.session:
                 raise ValueError("MCP session is not available for MCP function tools.")
 
             try:
