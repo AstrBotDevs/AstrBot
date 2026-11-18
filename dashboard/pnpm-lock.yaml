@@ -116,8 +116,8 @@ importers:
         specifier: 0.60.0
         version: 0.60.0(typescript@5.1.6)
       '@mdi/font':
-        specifier: 7.2.96
-        version: 7.2.96
+        specifier: 7.4.47
+        version: 7.4.47
       '@rushstack/eslint-patch':
         specifier: 1.3.3
         version: 1.3.3
@@ -506,8 +506,8 @@ packages:
     peerDependencies:
       vue: '>=3.0.1'
 
-  '@mdi/font@7.2.96':
-    resolution: {integrity: sha512-e//lmkmpFUMZKhmCY9zdjRe4zNXfbOIJnn6xveHbaV2kSw5aJ5dLXUxcRt1Gxfi7ZYpFLUWlkG2MGSFAiqAu7w==}
+  '@mdi/font@7.4.47':
+    resolution: {integrity: sha512-43MtGpd585SNzHZPcYowu/84Vz2a2g31TvPMTm9uTiCSWzaheQySUcSyUH/46fPnuPQWof2yd0pGBtzee/IQWw==}
 
   '@mermaid-js/parser@0.6.3':
     resolution: {integrity: sha512-lnjOhe7zyHjc+If7yT4zoedx2vo4sHaTmtkl1+or8BRTnCtDmcTpAjpzDSfCZrshM5bCoz0GyidzadJAH1xobA==}
@@ -3537,7 +3537,7 @@ snapshots:
     dependencies:
       vue: 3.3.4
 
-  '@mdi/font@7.2.96': {}
+  '@mdi/font@7.4.47': {}
 
   '@mermaid-js/parser@0.6.3':
     dependencies:
