@@ -5366,3 +5366,33 @@ async def test_session_binding_distinguishes_follow_from_omitted_profile(asgi_cl
         assert response.status_code == 200
         assert response.json()["status"] == "ok"
         assert update.await_args.args[0] == {**payload, **selection}
+
+
+@pytest.mark.asyncio
+async def test_chat_transcription_requires_auth_and_passes_selected_provider(
+    asgi_client, asgi_app
+):
+    service = asgi_app.state.services.chat
+    received = []
+
+    async def transcribe(file, provider_id):
+        received.append((await file.read(), provider_id))
+        return {"text": "dictated words", "provider_id": provider_id}
+
+    service.transcribe_audio = transcribe
+    response = await asgi_client.post(
+        "/api/v1/chat/transcriptions",
+        files={"file": ("voice.webm", b"recording", "audio/webm")},
+        data={"provider_id": "stt-2"},
+    )
+    assert response.status_code == 401
+    assert received == []
+    response = await asgi_client.post(
+        "/api/v1/chat/transcriptions",
+        headers=_jwt_headers(),
+        files={"file": ("voice.webm", b"recording", "audio/webm")},
+        data={"provider_id": "stt-2"},
+    )
+    assert response.status_code == 200
+    assert response.json()["data"] == {"text": "dictated words", "provider_id": "stt-2"}
+    assert received == [(b"recording", "stt-2")]

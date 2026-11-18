@@ -72,6 +72,7 @@ class InternalAgentSubStage(Stage):
         consumed = activated = typing = False
         turn = None
         is_wakeup = isinstance(event, AgentWakeupEvent)
+        emit_output = not (is_wakeup and event.source in ("cron", "background_task"))
         target = event.agent_session if isinstance(event, AgentWakeupEvent) else None
         try:
             agent_config = self.ctx.astrbot_config.get("agent", {})
@@ -164,6 +165,7 @@ class InternalAgentSubStage(Stage):
             chains = present_turn(
                 turn,
                 streaming=streaming,
+                emit_output=emit_output,
                 stream_to_general=stream_to_general,
                 show_tool_use=self.show_tool_use,
                 show_tool_call_result=self.show_tool_call_result,
@@ -172,14 +174,14 @@ class InternalAgentSubStage(Stage):
                 context=self.ctx.plugin_manager.context,
             )
             live = event.get_extra("action_type") == "live"
-            if live:
+            if live and emit_output:
                 provider = (
                     await self.ctx.plugin_manager.context.get_using_tts_provider_async(
                         event.unified_msg_origin
                     )
                 )
                 chains = stream_speech(chains, provider, event=event)
-            if live or streaming and not stream_to_general:
+            if emit_output and (live or streaming and not stream_to_general):
                 event.set_result(
                     MessageEventResult()
                     .set_result_content_type(ResultContentType.STREAMING_RESULT)

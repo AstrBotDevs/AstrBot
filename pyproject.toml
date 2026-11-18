@@ -1,6 +1,6 @@
 [project]
 name = "AstrBot"
-version = "4.29.4"
+version = "4.30.0-beta.1"
 description = "Easy-to-use multi-platform LLM chatbot and development framework"
 readme = "README.md"
 license = { text = "AGPL-3.0-or-later" }
@@ -26,7 +26,7 @@ dependencies = [
   "faiss-cpu>=1.14.3",
   "fastapi>=0.124.0",
   "filelock>=3.18.0",
-  "google-genai>=1.56.0",
+  "google-genai>=1.56.0", # bump to >=3.4.0 at some point
   "httpx[socks]>=0.28.1",
   "lark-oapi>=1.4.15",
   "mcp>=1.8.0,<2",

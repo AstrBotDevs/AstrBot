@@ -11,8 +11,12 @@
       <v-icon v-if="toastIcon" :icon="toastIcon" size="24" />
       <span>{{ toastStore.current.message }}</span>
     </div>
-    <template #actions v-if="toastStore.current.closable">
-      <v-btn icon="mdi-close" variant="text" size="small" aria-label="Close notification" @click="snackbarShow = false" />
+    <template #actions v-if="toastStore.current.closable || toastStore.current.action">
+      <v-btn v-if="toastStore.current.action" variant="text"
+        @click="toastStore.current.action.onClick(); snackbarShow = false">
+        {{ toastStore.current.action.label }}
+      </v-btn>
+      <v-btn v-if="toastStore.current.closable" icon="mdi-close" variant="text" size="small" aria-label="Close notification" @click="snackbarShow = false" />
     </template>
   </v-snackbar>
 </template>
