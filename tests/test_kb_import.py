@@ -8,6 +8,7 @@ from astrbot.core import LogBroker
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
 from astrbot.core.db.sqlite import SQLiteDatabase
 from astrbot.core.exceptions import KnowledgeBaseUploadError
+from astrbot.core.knowledge_base.chunking.markdown import MarkdownChunker
 from astrbot.core.knowledge_base.kb_helper import KBHelper
 from astrbot.core.knowledge_base.models import KBDocument
 from astrbot.core.utils.auth_password import (
@@ -347,3 +348,17 @@ async def test_list_documents_total_comes_from_count_documents():
 
     assert result["total"] == 42
     kb_helper.count_documents.assert_awaited_once_with(search="foo")
+
+
+@pytest.mark.asyncio
+async def test_markdown_headings_between_fenced_code_blocks():
+    sections = [
+        "# First\ntext",
+        "## Example\n````py\n# inside\n```\n# still inside\n````",
+        "## More\n~~~\n## also inside\n~~~\n```\n# another block\n```",
+        "# Last\n```\n# unclosed",
+    ]
+    chunks = await MarkdownChunker(include_heading_context=False).chunk(
+        "\n".join(sections)
+    )
+    assert chunks == sections
