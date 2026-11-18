@@ -110,23 +110,18 @@
       ></v-checkbox>
     </div>
 
-    <v-radio-group
-      v-else-if="itemMeta?.options && itemMeta?.render_type === 'radio'"
+    <v-switch
+      v-else-if="itemMeta?.options?.length >= 2 && itemMeta?.render_type === 'switch'"
       :model-value="modelValue"
+      :true-value="itemMeta.options[1]"
+      :false-value="itemMeta.options[0]"
       @update:model-value="emitUpdate"
-      :class="{ 'config-radio-group--cards': itemMeta?.layout === 'cards' }"
-      :inline="itemMeta?.layout !== 'cards'"
+      :label="getLabel(itemMeta, modelValue === itemMeta.options[1] ? 1 : 0, modelValue)"
+      color="primary"
+      inset
       hide-details
       density="compact"
-    >
-      <v-radio
-        v-for="(option, optionIndex) in itemMeta.options"
-        :key="optionIndex"
-        :label="getLabel(itemMeta, optionIndex, option)"
-        :value="option"
-        color="primary"
-      ></v-radio>
-    </v-radio-group>
+    ></v-switch>
 
     <v-autocomplete
       v-else-if="itemMeta?.type === 'list' && itemMeta?.options"
@@ -543,50 +538,6 @@ function getSelectItems(itemMeta) {
 
 .config-checkbox :deep(.v-label) {
   font-size: 0.9rem;
-}
-
-.config-radio-group--cards {
-  margin: 0;
-}
-
-.config-radio-group--cards :deep(.v-selection-control-group) {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 8px;
-  width: 100%;
-}
-
-.config-radio-group--cards :deep(.v-selection-control) {
-  width: 100%;
-  min-width: 0;
-  min-height: 44px;
-  margin: 0;
-  padding: 8px 10px;
-  border: 1px solid rgba(var(--v-theme-on-surface), 0.14);
-  border-radius: 7px;
-  background: rgba(var(--v-theme-surface), 0.28);
-  transition: border-color 150ms ease, background-color 150ms ease;
-}
-
-.config-radio-group--cards :deep(.v-selection-control:hover) {
-  border-color: rgba(var(--v-theme-primary), 0.55);
-}
-
-.config-radio-group--cards :deep(.v-selection-control--dirty) {
-  border-color: rgba(var(--v-theme-primary), 0.75);
-  background: rgba(var(--v-theme-primary), 0.1);
-}
-
-.config-radio-group--cards :deep(.v-label) {
-  min-width: 0;
-  font-size: 0.88rem;
-  font-weight: 500;
-}
-
-@media (max-width: 600px) {
-  .config-radio-group--cards :deep(.v-selection-control-group) {
-    grid-template-columns: 1fr;
-  }
 }
 
 :deep(.v-field__input) {
