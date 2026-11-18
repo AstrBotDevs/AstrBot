@@ -280,10 +280,7 @@ async def test_query_flattens_tools_and_enforces_stateless_body(monkeypatch):
             },
         }
     ]
-    assert captured["extra_body"] == {
-        "max_output_tokens": 321,
-        "reasoning": {"effort": "low"},
-    }
+    assert captured["extra_body"] == {"reasoning": {"effort": "low"}}
     assert result.role == "tool"
     assert result.tools_call_name == ["weather"]
     assert result.tools_call_args == [{"city": "SZ"}]
