@@ -1631,6 +1631,8 @@ async def test_screenshot_tool_returns_image_and_sends_file(monkeypatch, tmp_pat
             sent_messages.append(message)
 
     class FakeAstrContext:
+        send_to_user = True
+        _output_turn = None
         event = FakeEvent()
         context = FakeContext(
             {
@@ -1707,6 +1709,8 @@ async def test_screenshot_tool_normalizes_supported_screenshot_shapes(
             sent_messages.append(message)
 
     class FakeAstrContext:
+        send_to_user = True
+        _output_turn = None
         event = FakeEvent()
         context = FakeContext(
             {

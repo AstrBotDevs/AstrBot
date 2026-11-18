@@ -790,24 +790,25 @@ async def test_result_decorate_segments_qqofficial_ws_plain_result():
     stage.reply_with_mention = False
     stage.reply_with_quote = False
     stage.forward_threshold = 1000
+    config = {
+        "provider_tts_settings": {
+            "enable": False,
+            "use_file_service": False,
+            "dual_output": False,
+        },
+        "callback_api_base": "",
+        "t2i": False,
+    }
+    context = SimpleNamespace(
+        get_config=lambda **_: config,
+        get_using_tts_provider_async=AsyncMock(return_value=None),
+    )
     setattr(
         stage,
         "ctx",
         SimpleNamespace(
-            plugin_manager=SimpleNamespace(
-                context=SimpleNamespace(
-                    get_using_tts_provider_async=AsyncMock(return_value=None)
-                )
-            ),
-            astrbot_config={
-                "provider_tts_settings": {
-                    "enable": False,
-                    "use_file_service": False,
-                    "dual_output": False,
-                },
-                "callback_api_base": "",
-                "t2i": False,
-            },
+            plugin_manager=SimpleNamespace(context=context),
+            astrbot_config=config,
         ),
     )
     result = MessageEventResult(

@@ -166,7 +166,9 @@ uv tool upgrade astrbot --python 3.12
 | OpenAI Whisper | Сервисы распознавания речи |
 | SenseVoice | Сервисы распознавания речи |
 | Xiaomi MiMo Omni | Сервисы распознавания речи |
+| [DeepSeek STT](https://api-docs.deepseek.com/zh-cn/guides/asr/) | Сервисы распознавания речи |
 | OpenAI TTS | Сервисы синтеза речи |
+| [DeepSeek TTS](https://api-docs.deepseek.com/zh-cn/guides/tts/) | Сервисы синтеза речи |
 | Gemini TTS | Сервисы синтеза речи |
 | GPT-Sovits-Inference | Сервисы синтеза речи |
 | GPT-Sovits | Сервисы синтеза речи |

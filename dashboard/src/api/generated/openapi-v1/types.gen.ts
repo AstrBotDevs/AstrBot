@@ -42,19 +42,6 @@ export type BackupUploadSessionRequest = {
     upload_id: string;
 };
 
-export type BatchSessionProviderRequest = UmoListRequest & {
-    provider_id: string;
-    provider_type: 'chat_completion' | 'speech_to_text' | 'text_to_speech';
-};
-
-export type provider_type = 'chat_completion' | 'speech_to_text' | 'text_to_speech';
-
-export type BatchSessionServiceRequest = UmoListRequest & {
-    session_enabled?: boolean;
-    llm_enabled?: boolean;
-    tts_enabled?: boolean;
-};
-
 export type BotCleanupTarget = 'custom_rules' | 'preferences' | 'routing' | 'cron_jobs' | 'conversations' | 'message_history' | 'traces' | 'stats';
 
 export type BotConfigRequest = {
@@ -177,9 +164,9 @@ export type ChatRequest = {
      */
     _skip_user_history?: boolean;
     /**
-     * Internal WebUI checkpoint override.
+     * Internal WebUI turn ID override.
      */
-    _llm_checkpoint_id?: string;
+    _turn_id?: string;
     /**
      * Internal WebUI platform history override.
      */
@@ -334,6 +321,10 @@ export type FileUploadRequest = {
 
 export type GhproxyTestRequest = {
     proxy_url: string;
+};
+
+export type HTTPValidationError = {
+    detail?: Array<ValidationError>;
 };
 
 export type ImMessageRequest = {
@@ -688,6 +679,11 @@ export type SessionGroupRequest = {
 };
 
 export type SessionRuleRequest = {
+    /**
+     * Explicit base profile; null follows routing; omitted preserves selection.
+     */
+    profile_id?: (string) | null;
+    user_alias?: string;
     umo: string;
     rule_key: string;
     rule_value?: DynamicConfig;
@@ -709,6 +705,34 @@ export type SkillPatchRequest = {
 export type SkillUploadRequest = {
     file: (Blob | File);
     overwrite?: boolean;
+};
+
+export type StatsDailyUsage = {
+    tokens: number;
+    messages: number;
+    active_sessions: number;
+};
+
+export type StatsResourceUsage = {
+    /**
+     * Used bytes.
+     */
+    used: number;
+    /**
+     * Total bytes.
+     */
+    total: number;
+    percent: number;
+};
+
+export type StatsSystemResources = {
+    uptime_seconds: number;
+    cpu_percent: number;
+    memory: StatsResourceUsage;
+    /**
+     * Usage of the filesystem containing the AstrBot data directory, or null if unavailable.
+     */
+    disk: ((StatsResourceUsage) | null);
 };
 
 export type StorageCleanupRequest = {
@@ -756,6 +780,9 @@ export type UmoListRequest = {
     umos?: Array<(string)>;
     scope?: 'all' | 'group' | 'private' | 'custom_group';
     group_id?: string;
+    /**
+     * For rule deletion, config_binding clears both profile selection and overrides; config_overrides or omission clears only overrides.
+     */
     rule_key?: string;
 };
 
@@ -773,6 +800,26 @@ export type UpdateRequest = {
     proxy?: string;
     reboot?: boolean;
     progress_id?: string;
+};
+
+export type ValidationError = {
+    loc: Array<(string | number)>;
+    msg: string;
+    type: string;
+    input?: unknown;
+    ctx?: {
+        [key: string]: unknown;
+    };
+};
+
+/**
+ * Untrusted input submitted by a view through the authenticated host.
+ */
+export type ViewActionRequest = {
+    action_id: string;
+    interaction_id: string;
+    expected_revision: number;
+    data?: unknown;
 };
 
 export type LoginData = {
@@ -1426,6 +1473,27 @@ export type SendChatMessageData = {
 export type SendChatMessageResponse = (SuccessEnvelope);
 
 export type SendChatMessageError = unknown;
+
+export type TranscribeChatAudioData = {
+    body: {
+        file: (Blob | File);
+        /**
+         * STT provider ID; defaults to the first available provider.
+         */
+        provider_id?: string;
+    };
+};
+
+export type TranscribeChatAudioResponse = ({
+    status: 'ok' | 'error';
+    message?: string;
+    data?: {
+        text: string;
+        provider_id: string;
+    };
+});
+
+export type TranscribeChatAudioError = unknown;
 
 export type OpenChatWebSocketData = {
     query?: {
@@ -3239,20 +3307,6 @@ export type ReorderPersonaItemsResponse = (SuccessEnvelope);
 
 export type ReorderPersonaItemsError = unknown;
 
-export type ListSessionsData = {
-    query?: {
-        message_type?: 'all' | 'group' | 'private';
-        page?: number;
-        page_size?: number;
-        platform?: string;
-        search?: string;
-    };
-};
-
-export type ListSessionsResponse = (SuccessEnvelope);
-
-export type ListSessionsError = unknown;
-
 export type ListActiveUmosData = {
     query?: {
         /**
@@ -3282,6 +3336,20 @@ export type ListSessionSendersResponse = (SuccessEnvelope);
 
 export type ListSessionSendersError = unknown;
 
+export type GetSessionOverridesData = {
+    query: {
+        /**
+         * Preview a base profile without saving; empty string follows routing.
+         */
+        profile_id?: string;
+        umo: string;
+    };
+};
+
+export type GetSessionOverridesResponse = (SuccessEnvelope);
+
+export type GetSessionOverridesError = unknown;
+
 export type ListSessionRulesData = {
     query?: {
         page?: number;
@@ -3309,22 +3377,6 @@ export type DeleteSessionRulesData = {
 export type DeleteSessionRulesResponse = (SuccessEnvelope);
 
 export type DeleteSessionRulesError = unknown;
-
-export type BatchUpdateSessionProviderData = {
-    body: BatchSessionProviderRequest;
-};
-
-export type BatchUpdateSessionProviderResponse = (SuccessEnvelope);
-
-export type BatchUpdateSessionProviderError = unknown;
-
-export type BatchUpdateSessionServiceData = {
-    body: BatchSessionServiceRequest;
-};
-
-export type BatchUpdateSessionServiceResponse = (SuccessEnvelope);
-
-export type BatchUpdateSessionServiceError = unknown;
 
 export type ListSessionGroupsResponse = (SuccessEnvelope);
 
@@ -3484,12 +3536,25 @@ export type ExportConversationsError = unknown;
 export type GetStatsData = {
     query?: {
         offset_sec?: number;
+        /**
+         * Comma-separated categories. messages returns message_count, message_time_series and platform; daily_usage returns daily_usage; process returns cpu_percent, memory, running, start_time and thread_count; system returns system; instances returns platform_count, plugin_count and plugins. Whitespace and duplicate categories are accepted. Omit for all categories. Empty or unknown categories return HTTP 400.
+         */
+        sections?: string;
     };
 };
 
-export type GetStatsResponse = (SuccessEnvelope);
+export type GetStatsResponse = ((SuccessEnvelope & {
+    data?: {
+        daily_usage?: {
+            today: StatsDailyUsage;
+            yesterday: StatsDailyUsage;
+        };
+        system?: StatsSystemResources;
+        [key: string]: unknown | StatsSystemResources;
+    };
+}));
 
-export type GetStatsError = unknown;
+export type GetStatsError = (unknown);
 
 export type GetProviderTokenStatsData = {
     query?: {
@@ -4011,3 +4076,50 @@ export type ReceivePlatformWebhookData = {
 export type ReceivePlatformWebhookResponse = (unknown);
 
 export type ReceivePlatformWebhookError = unknown;
+
+export type ListWorkbenchViewsResponse = (SuccessEnvelope);
+
+export type ListWorkbenchViewsError = unknown;
+
+export type GetWorkbenchViewData = {
+    path: {
+        plugin_name: string;
+        view_name: string;
+    };
+};
+
+export type GetWorkbenchViewResponse = (SuccessEnvelope);
+
+export type GetWorkbenchViewError = (unknown);
+
+export type GetChatViewApiV1ChatViewsViewIdGetData = {
+    path: {
+        view_id: string;
+    };
+};
+
+export type GetChatViewApiV1ChatViewsViewIdGetResponse = (unknown);
+
+export type GetChatViewApiV1ChatViewsViewIdGetError = (HTTPValidationError);
+
+export type RunChatViewActionApiV1ChatViewsViewIdActionsPostData = {
+    body: ViewActionRequest;
+    path: {
+        view_id: string;
+    };
+};
+
+export type RunChatViewActionApiV1ChatViewsViewIdActionsPostResponse = (unknown);
+
+export type RunChatViewActionApiV1ChatViewsViewIdActionsPostError = (HTTPValidationError);
+
+export type GetChatViewActionApiV1ChatViewsViewIdActionsInteractionIdGetData = {
+    path: {
+        interaction_id: string;
+        view_id: string;
+    };
+};
+
+export type GetChatViewActionApiV1ChatViewsViewIdActionsInteractionIdGetResponse = (unknown);
+
+export type GetChatViewActionApiV1ChatViewsViewIdActionsInteractionIdGetError = (HTTPValidationError);

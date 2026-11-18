@@ -8,7 +8,6 @@ import jaJPShared from './core/shared.json';
 import jaJPChat from './features/chat.json';
 import jaJPExtension from './features/extension.json';
 import jaJPConversation from './features/conversation.json';
-import jaJPSessionManagement from './features/session-management.json';
 import jaJPToolUse from './features/tool-use.json';
 import jaJPProvider from './features/provider.json';
 import jaJPPlatform from './features/platform.json';
@@ -50,7 +49,6 @@ export default {
       chat: jaJPChat,
       extension: jaJPExtension,
       conversation: jaJPConversation,
-      'session-management': jaJPSessionManagement,
       tooluse: jaJPToolUse,
       provider: jaJPProvider,
       platform: jaJPPlatform,

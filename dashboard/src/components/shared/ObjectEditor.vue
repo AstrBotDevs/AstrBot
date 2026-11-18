@@ -129,8 +129,18 @@
                 </div>
               </v-col>
               <v-col cols="7" class="pl-2 d-flex align-center justify-end">
+                <v-select
+                  v-if="template.options"
+                  :model-value="getTemplateValue(templateKey) ?? null"
+                  :items="template.options"
+                  :aria-label="getTemplateTitle(template, templateKey)"
+                  @update:model-value="updateTemplateValue(templateKey, $event)"
+                  density="compact"
+                  variant="outlined"
+                  hide-details
+                ></v-select>
                 <v-text-field
-                  v-if="template.type === 'string'"
+                  v-else-if="template.type === 'string'"
                   :model-value="getTemplateValue(templateKey)"
                   @update:model-value="updateTemplateValue(templateKey, $event)"
                   density="compact"

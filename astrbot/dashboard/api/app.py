@@ -109,6 +109,7 @@ def create_dashboard_asgi_app(
         core_lifecycle.astrbot_config,
         dashboard_static_folder=static_folder,
     )
+    chat_service = ChatService(db, core_lifecycle)
     app.state.services = SimpleNamespace(
         config_profiles=ConfigProfileService(core_lifecycle, db, runtime=stats.runtime),
         config_display=ConfigDisplayService(core_lifecycle),
@@ -117,14 +118,14 @@ def create_dashboard_asgi_app(
         api_keys=ApiKeyService(db),
         auth=AuthService(db, core_lifecycle.astrbot_config),
         backups=BackupService(db, core_lifecycle),
-        chat=ChatService(db, core_lifecycle),
+        chat=chat_service,
         chat_projects=ChatUIProjectService(db),
         commands=CommandService(core_lifecycle.astrbot_config, core_lifecycle),
         conversations=ConversationService(db, core_lifecycle),
         cron=CronService(core_lifecycle),
         files=FileService(),
         knowledge_bases=KnowledgeBaseService(core_lifecycle),
-        live_chat=LiveChatService(db, core_lifecycle),
+        live_chat=LiveChatService(db, core_lifecycle, chat_service),
         logs=LogService(
             log_broker,
             core_lifecycle.astrbot_config,

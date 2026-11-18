@@ -56,14 +56,14 @@ New installations use the same default permissions on Windows, Linux, and macOS:
 | Member | No | No | Workspace |
 | Administrator | Yes | Yes | Entire environment |
 
-These defaults do not require Local process isolation. Existing saved permissions are preserved, with one upgrade exception: on Windows, an older member policy with execution disabled, execution networking disabled, and file access disabled is migrated once to workspace file access. The old default and a manually disabled policy have identical saved values, so both matching policies are migrated. This applies to the global configuration and configuration profiles. Disabling member file access again after the upgrade is respected on subsequent restarts; administrator and other member policies are unchanged.
+These defaults do not require Local process isolation. Existing saved permissions are preserved, except for the [Windows upgrade migration](#local-windows).
 
 The permission matrix applies these dependencies:
 
 - When **Execute code** is unchecked, **Allow network during execution** cannot be checked, because **network permissions only apply during code execution**.
 - When **File access scope** is **Disabled**, neither execution nor networking can be enabled, because **code execution and network access require file access**.
 
-Saving configuration succeeds even when Local isolation is unavailable, including selecting **Yes** for computer access on the welcome page. Tools check isolation availability when resolving access. If bubblewrap is missing, the startup probe fails (including timeout or container restrictions), or isolation is unsupported, **execution policies that require isolation fail closed for both members and administrators**:
+Saving configuration succeeds even when Local isolation is unavailable, including selecting **Yes** for computer access on the Overview page. Tools check isolation availability when resolving access. If bubblewrap is missing, the startup probe fails (including timeout or container restrictions), or isolation is unsupported, **execution policies that require isolation fail closed for both members and administrators**:
 
 - Code execution and execution network access are disabled. The saved file scope stays unchanged; workspace access never expands to the entire environment.
 - Policies that need no isolation, including workspace files without execution and entire-environment execution with networking, stay effective as configured. Explicitly disabled file access stays disabled.
@@ -108,14 +108,15 @@ If AstrBot runs in Docker on a Mac, follow [Docker users](#local-docker) below. 
 
 [bubblewrap](https://github.com/containers/bubblewrap) is a userspace sandboxing tool for Linux.
 
-Check whether bubblewrap is installed and can start:
+AstrBot uses bubblewrap's `--size` option to limit the size of the temporary filesystem `/tmp` inside the sandbox. This option requires bubblewrap **0.7.0 or later**. Check whether bubblewrap is installed, whether the version meets the requirement, and whether it can start:
 
 ```bash
 command -v bwrap
-bwrap --unshare-all --ro-bind / / --proc /proc --dev /dev /bin/sh -c 'echo "AstrBot is good to go!"'
+bwrap --version
+bwrap --unshare-all --ro-bind / / --dir /tmp --size 268435456 --tmpfs /tmp --proc /proc --dev /dev /bin/sh -c 'echo "AstrBot is good to go!"'
 ```
 
-If the command prints `AstrBot is good to go!`, bubblewrap is installed and passes this basic startup check.
+If the command prints `AstrBot is good to go!`, bubblewrap is installed, the version meets the requirement, and it passes this basic startup check.
 
 If bubblewrap is not installed, use your distribution's package manager:
 
@@ -139,6 +140,7 @@ sudo pacman -S bubblewrap
 If startup fails:
 
 - **`bwrap` not found**: check that it is installed in the environment running AstrBot and is on the process's startup `PATH`.
+- **`Unknown option --size`**: upgrade bubblewrap to **0.7.0 or later**, then repeat the check above.
 - **`Operation not permitted` or user namespace errors**: inspect user namespace limits, AppArmor, and other system security policies. Use `sysctl user.max_user_namespaces` to check the namespace limit and `sudo journalctl -k` for relevant kernel logs.
 - **AppArmor denial**: follow your distribution's instructions to permit user namespace creation for the actual runtime. Do not disable security policies across the entire machine merely to pass the check.
 - **Container deployment**: follow [Docker users](#local-docker). Installing `bwrap` on the host does not install it inside the container.
@@ -155,26 +157,24 @@ Installing bwrap is only one part of the setup. Enabling local isolation inside 
 
 ### Windows users {#local-windows}
 
-Windows supports workspace-scoped file reading, writing, and editing through native file handles using Python standard-library modules. File operations reject symbolic links, directory junctions, and multiply linked files. Ordinary members can use workspace file tools without an execution sandbox.
-
-On Windows 10/11, including Home editions, AstrBot supports local isolation for code execution.
+Windows 10/11, including Home editions, supports local isolation for file access and code execution.
 
 1. Open **Config → AI → Capabilities → Agent Computer Use** and set **Computer Use Runtime** to **Local machine**.
 2. Under **Local Permission Policies**, select **Workspace** for the role that needs computer access.
 3. Check **Allow code execution** to let that role run code. Check **Allow execution network access** if the code needs network access. Leave execution unchecked if only file access is needed.
 4. Save the configuration and restart AstrBot. If Windows asks for permission during startup, select **Yes** to complete setup. Later startups usually need no further confirmation.
 
-Once setup is complete, you can ask AstrBot in chat to create files, process data, or run code.
-
 ![Windows workspace with networking disabled](/windows-sandbox/workspace-en.jpg)
 
-To access files outside the workspace, select **Entire environment**. AstrBot will access files using the permissions of the account running it. Code execution with this scope shows an **Always on** networking badge with a lock icon. Hover over, focus, or select the badge for an explanation. Choose **Workspace** to turn execution networking on or off yourself.
+Select **Entire environment** to access files outside the workspace with the AstrBot account’s permissions. Execution networking is always enabled in this scope. Select **Workspace** to control execution network access.
 
 ![Windows entire-environment networking explanation](/windows-sandbox/network-en.png)
 
 If you see a sandbox setup message or an **Inactive** badge, select the badge or expand **View diagnostic details** to see the cause. If you previously declined the Windows permission prompt, restart AstrBot and approve it to complete setup.
 
 ![Windows sandbox initialization prompt](/windows-sandbox/setup-zh.jpg)
+
+On upgrade, a Windows member policy with file access, execution, and networking all disabled is migrated once to **Workspace** file access. This includes manually disabled policies. To keep file access disabled, select **Disabled** and save after upgrading; later restarts preserve that choice.
 
 ## Third-party sandbox environment {#third-party-sandbox-environment}
 
