@@ -23,8 +23,6 @@ class MattermostMessageEvent(AstrMessageEvent):
     ) -> None:
         super().__init__(message_str, message_obj, platform_meta, session_id)
         self.client = client
-        for path in getattr(message_obj, "temporary_file_paths", []):
-            self.track_temporary_local_file(path)
 
     async def send(self, message: MessageChain) -> None:
         await self.client.send_message_chain(self.get_session_id(), message)

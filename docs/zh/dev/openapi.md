@@ -8,7 +8,7 @@ outline: deep
 
 ## 快速开始
 
-1. 在 WebUI - 设置中创建 API Key。
+1. 在 WebUI 的 `设置 → OpenAPI` 中点击 `创建 API Key`。
 2. 在请求头中携带 API Key：
 
 ```http

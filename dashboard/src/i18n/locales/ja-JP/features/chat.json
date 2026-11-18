@@ -1,6 +1,18 @@
 {
   "title": "チャットしよう！",
   "subtitle": "AI アシスタントと会話",
+  "settings": {
+    "general": "一般",
+    "chat": "チャット",
+    "appearance": "外観",
+    "light": "ライト",
+    "dark": "ダーク",
+    "system": "システムに合わせる",
+    "streaming": "ストリーミング出力",
+    "streamingHint": "生成中の回答を順次表示します。ChatUI にのみ適用されます。",
+    "reasoning": "思考内容を表示",
+    "reasoningHint": "モデルが返した思考過程を表示します。ChatUI にのみ適用されます。"
+  },
   "input": {
     "placeholder": "何でも聞いてください",
     "projectPlaceholder": "次に何をしますか？",
@@ -18,9 +30,30 @@
     "assistant": "アシスタント",
     "system": "システム",
     "error": "エラーメッセージ",
-    "loading": "考え中…"
+    "loading": "考え中…",
+    "loadingVariants": [
+      "(｡•̀ᴗ-)✧ 考え中...",
+      "(・_・ヾ じっくり検討中...",
+      "(๑•̀ㅂ•́)و 思考を整理中...",
+      "(｡･ω･｡) ひらめきを探し中...",
+      "( •̀ ω •́ )✧ しっかり分析中...",
+      "(つ•̀ω•́)つ 言葉を選び中...",
+      "(・・。)ゞ 手がかりを整理中...",
+      "(ง •_•)ง 解決策を模索中...",
+      "( ˘ω˘ ) 可能性を検討中...",
+      "(ﾉ◕ヮ◕)ﾉ 答えを準備中..."
+    ]
   },
   "voice": {
+    "transcribing": "音声入力中…",
+    "transcribe": "音声で文字入力",
+    "sendAudio": "音声を録音して送信",
+    "cancel": "録音をキャンセル",
+    "finishTranscription": "録音を終了して文字起こし",
+    "sttModel": "文字起こしモデル",
+    "configure": "設定へ",
+    "noSttProvider": "先に利用可能な音声認識モデルを設定してください",
+    "transcriptionFailed": "文字起こしに失敗しました。もう一度お試しください。",
     "start": "録音を開始",
     "stop": "録音を停止",
     "recording": "新しい録音",
@@ -38,6 +71,7 @@
     "examples": "質問例"
   },
   "actions": {
+    "scrollToBottom": "一番下へ移動",
     "copy": "コピー",
     "regenerate": "再生成",
     "retry": "再試行",
@@ -74,6 +108,8 @@
     "placeholder": "この内容についてさらに質問…"
   },
   "conversation": {
+    "loading": "会話を読み込み中",
+    "loadFailed": "会話を読み込めませんでした",
     "title": "会話",
     "newConversation": "新しい会話",
     "noHistory": "会話履歴がありません",
@@ -115,12 +151,31 @@
     "title": "設定"
   },
   "reasoning": {
+    "worked": "作業時間：{duration}",
+    "working": "作業中：{duration}",
+    "workCompleted": "作業の詳細",
+    "durationHours": "{hours}時間 {minutes}分 {seconds}秒",
+    "durationMinutes": "{minutes}分 {seconds}秒",
+    "durationSeconds": "{seconds}秒",
+    "enabled": "思考内容の表示：オン",
+    "disabled": "思考内容の表示：オフ",
     "thinking": "思考プロセス",
     "summarySeparator": "、",
     "thinkSummary": "思考 {count} 回",
     "toolSummary": "ツール使用 {count} 回",
     "think": "思考",
     "toolUsed": "ツールを使用"
+  },
+  "history": {
+    "edit": "メッセージを編集",
+    "context_pruned": "過去のコンテキストは削除されました。この位置から続行できません。",
+    "context_unavailable": "この位置のコンテキストは利用できません。",
+    "inactive_message": "このメッセージは置き換えられた会話に属しています。",
+    "run_active": "先に現在の生成を停止してください。",
+    "unsupported_message": "このメッセージでは操作できません。",
+    "loadFailed": "メッセージを読み込めませんでした",
+    "loadEarlierFailed": "以前のメッセージを読み込めませんでした",
+    "loading": "以前のメッセージを読み込み中"
   },
   "reply": {
     "replyTo": "引用",
@@ -133,12 +188,14 @@
     "name": "プロジェクト名",
     "emoji": "アイコン（Emoji）",
     "description": "プロジェクトの説明（任意）",
+    "moreSettings": "その他の設定",
     "workspace": {
       "type": "ワークスペース",
       "session": "セッションごとに分離",
       "project": "プロジェクト共有ワークスペース",
       "custom": "カスタムパス",
-      "path": "ワークスペースのパス"
+      "path": "ワークスペースのパス",
+      "selectPath": "フォルダーを選択"
     },
     "loadingSessions": "会話を読み込み中…",
     "noSessions": "このプロジェクトには会話がありません",
@@ -152,6 +209,7 @@
     "refresh": "ファイルツリーを再読み込み",
     "filter": "ファイルを絞り込み…",
     "clearFilter": "ファイルの絞り込みを解除",
+    "selectSession": "ワークスペースのファイルを表示する会話を選択してください",
     "empty": "ワークスペースにファイルがありません",
     "noMatches": "一致するファイルがありません",
     "loadFailed": "ワークスペースのファイルを読み込めませんでした",
@@ -215,5 +273,25 @@
     "exit": "終了",
     "partialFailure": "{total} 件の会話のうち {failed} 件を削除できませんでした",
     "requestFailed": "会話の削除に失敗しました。もう一度お試しください。"
+  },
+  "pluginView": {
+    "loading": "ビューを読み込み中…",
+    "unavailable": "このビューは利用できません。代わりにテキストの結果を表示します。"
+  },
+  "workbench": {
+    "newTab": "新しいワークベンチ",
+    "chooseView": "プラグインビューを選択",
+    "empty": "ワークベンチビューが登録されていません。対応するプラグインを有効にしてください。",
+    "loadError": "ビューを読み込めませんでした。",
+    "retry": "再試行",
+
+    "title": "ワークベンチ",
+    "openView": "ワークベンチで開く",
+    "hide": "ワークベンチを閉じる",
+    "expand": "ワークベンチを拡大",
+    "restore": "パネルサイズを戻す",
+    "resize": "ワークベンチの幅を調整",
+    "closeTab": "{title} を閉じる",
+    "resize": "ワークベンチの幅を調整"
   }
 }

@@ -29,7 +29,10 @@ def chat_service_instance(monkeypatch, tmp_path):
     )
     db = Mock()
     db.get_platform_session_by_id = AsyncMock(
-        return_value=SimpleNamespace(session_id="existing-session")
+        return_value=SimpleNamespace(
+            session_id="existing-session",
+            creator="alice",
+        )
     )
     db.create_platform_session = AsyncMock()
     service = ChatService(db, core_lifecycle)
@@ -85,6 +88,28 @@ def _decode_sse_event(event: str) -> dict:
         Decoded event payload.
     """
     return json.loads(event.removeprefix("data: ").strip())
+
+
+@pytest.mark.asyncio
+async def test_chat_stream_rejects_session_owned_by_another_user(
+    chat_service_instance,
+):
+    service = chat_service_instance
+    service.db.get_platform_session_by_id.return_value = SimpleNamespace(
+        session_id="alice-session",
+        creator="alice",
+    )
+
+    with pytest.raises(ChatServiceError, match="Permission denied"):
+        await service.build_chat_stream(
+            "bob",
+            {"message": "canary", "session_id": "alice-session"},
+        )
+
+    service.db.create_platform_session.assert_not_awaited()
+    history_mgr = service.core_lifecycle.platform_message_history_manager
+    history_mgr.insert.assert_not_awaited()
+    assert not service.chat_runs
 
 
 @pytest.mark.asyncio
@@ -448,6 +473,7 @@ async def test_chat_stream_forwards_normalized_request_flags(chat_service_instan
             "enable_inline_genui": True,
             "enable_default_system_prompt": False,
             "enable_streaming": False,
+            "enable_reasoning": True,
         }
         assert "enable_streaming" not in payload
     finally:
@@ -501,6 +527,120 @@ async def test_chat_stream_forwards_follow_up_status_by_default(
             },
         )
         await asyncio.wait_for(run.task, timeout=1)
+    finally:
+        await stream.aclose()
+        if run.task and not run.task.done():
+            run.task.cancel()
+            await asyncio.gather(run.task, return_exceptions=True)
+        chat_service.webchat_queue_mgr.remove_queues(session_id)
+
+
+@pytest.mark.asyncio
+async def test_save_uploaded_file_rejects_oversized_content_length(
+    chat_service_instance,
+):
+    class FakeUpload:
+        filename = "big.bin"
+        content_type = "application/octet-stream"
+        content_length = chat_service.MAX_UPLOAD_FILE_SIZE_BYTES + 1
+
+    with pytest.raises(ChatServiceError, match="File too large"):
+        await chat_service_instance.save_uploaded_file(FakeUpload())
+
+
+@pytest.mark.asyncio
+async def test_save_uploaded_file_rejects_oversized_saved_file(
+    chat_service_instance,
+):
+    from pathlib import Path
+
+    class FakeUpload:
+        filename = "big.bin"
+        content_type = "application/octet-stream"
+        content_length = None
+
+        async def save(self, path, *, max_bytes=None):
+            saved = Path(path)
+            saved.write_bytes(b"x")
+            with saved.open("rb+") as f:
+                f.truncate(chat_service.MAX_UPLOAD_FILE_SIZE_BYTES + 1)
+            # Mirror save_upload_stream: enforce the cap mid-write and
+            # remove the partial file on overflow.
+            if max_bytes is not None and saved.stat().st_size > max_bytes:
+                saved.unlink()
+                raise chat_service.UploadTooLargeError(max_bytes)
+
+    with pytest.raises(ChatServiceError, match="File too large"):
+        await chat_service_instance.save_uploaded_file(FakeUpload())
+
+    assert not list(Path(chat_service_instance.attachments_dir).iterdir())
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("queue_size", [6, 8])
+async def test_completed_chat_stream_preserves_pending_output(
+    chat_service_instance, monkeypatch, queue_size
+):
+    """Keep final output queued until the subscriber consumes it.
+
+    Args:
+        chat_service_instance: Chat service with isolated persistence.
+        monkeypatch: Fixture for setting the subscriber queue capacity.
+        queue_size: Capacity, including a case with no room for a close marker.
+    """
+    monkeypatch.setattr(chat_service, "CHAT_RUN_SUBSCRIBER_QUEUE_SIZE", queue_size)
+    service = chat_service_instance
+    session_id = "completed-buffer-session"
+    stream = await service.build_chat_stream(
+        "alice", {"message": "hello", "session_id": session_id}
+    )
+    run = next(iter(service.chat_runs.values()))
+    try:
+        await anext(stream)
+        await anext(stream)
+        payloads = [
+            {
+                "type": "plain",
+                "chain_type": "tool_call",
+                "data": json.dumps({"id": "tool-1", "name": "web_search", "ts": 1}),
+                "streaming": True,
+            },
+            {
+                "type": "plain",
+                "chain_type": "tool_call_result",
+                "data": json.dumps({"id": "tool-1", "result": "Found", "ts": 3}),
+                "streaming": True,
+            },
+            {"type": "plain", "data": "Final reply", "streaming": True},
+            {
+                "type": "plain",
+                "chain_type": "agent_stats",
+                "data": json.dumps({"start_time": 1, "end_time": 4}),
+                "streaming": True,
+            },
+            {"type": "end", "data": "", "streaming": False},
+        ]
+        for payload in payloads:
+            run.back_queue.put_nowait({**payload, "message_id": run.run_id})
+        await asyncio.wait_for(run.task, timeout=1)
+        received = []
+        while True:
+            try:
+                event = await asyncio.wait_for(anext(stream), timeout=1)
+            except StopAsyncIteration:
+                break
+            received.append(_decode_sse_event(event))
+        assert [event["type"] for event in received] == [
+            "plain",
+            "plain",
+            "plain",
+            "agent_stats",
+            "end",
+            "message_saved",
+        ]
+        assert json.loads(received[1]["data"])["result"] == "Found"
+        assert received[2]["data"] == "Final reply"
+        assert received[3]["data"] == {"start_time": 1, "end_time": 4}
     finally:
         await stream.aclose()
         if run.task and not run.task.done():

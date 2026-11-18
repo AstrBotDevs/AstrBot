@@ -3,6 +3,8 @@ import { providerApi } from '@/api/v1'
 import { getProviderIcon, isMonochromeProviderIcon } from '@/utils/providerUtils'
 import { askForConfirmation as askForConfirmationDialog, useConfirmDialog } from '@/utils/confirmDialog'
 import { normalizeTextInput } from '@/utils/inputValue'
+import { sponsorCatalog, loadSponsorCatalog } from '@/utils/sponsorCatalog'
+import { useI18n } from '@/i18n/composables'
 
 export interface UseProviderSourcesOptions {
   defaultTab?: string
@@ -15,6 +17,9 @@ interface ProviderSourceType {
   label: string
   icon: string
   isMonochrome: boolean
+  isSponsor?: boolean
+  subtitle?: string
+  website_url?: string
 }
 
 interface ProviderIconSource {
@@ -40,11 +45,16 @@ export function resolveDefaultTab(value?: string) {
     return 'rerank'
   }
 
+  if (normalized.includes('decision')) {
+    return 'decision'
+  }
+
   return 'chat_completion'
 }
 
 export function useProviderSources(options: UseProviderSourcesOptions) {
   const { tm, showMessage } = options
+  const { locale } = useI18n()
 
   const confirmDialog = useConfirmDialog()
 
@@ -81,6 +91,7 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
     { value: 'chat_completion', label: tm('providers.tabs.chatCompletion'), icon: 'mdi-message-text' },
     { value: 'speech_to_text', label: tm('providers.tabs.speechToText'), icon: 'mdi-microphone-message' },
     { value: 'text_to_speech', label: tm('providers.tabs.textToSpeech'), icon: 'mdi-volume-high' },
+    { value: 'decision', label: tm('providers.tabs.decision'), icon: 'mdi-scale-balance' },
     { value: 'embedding', label: tm('providers.tabs.embedding'), icon: 'mdi-code-json' },
     { value: 'rerank', label: tm('providers.tabs.rerank'), icon: 'mdi-compare-vertical' }
   ])
@@ -92,18 +103,46 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
     }
 
     const types: ProviderSourceType[] = []
+    const builtInSponsors = ['MiraRouter', 'SSYCloud(胜算云)']
+    if (selectedProviderType.value === 'chat_completion' && sponsorCatalog.value) {
+      for (const sponsor of sponsorCatalog.value.sponsors) {
+        if (providerTemplates.value[sponsor.template]?.provider_type !== 'chat_completion') continue
+        const translation = sponsor.i18n?.[locale.value]
+        types.push({
+          value: `sponsor:${sponsor.id}`,
+          label: translation?.title || sponsor.title,
+          icon: sponsor.logo,
+          website_url: sponsor.website_url,
+          subtitle: translation?.subtitle || sponsor.subtitle,
+          isMonochrome: false,
+          isSponsor: true
+        })
+      }
+    }
     for (const [templateName, template] of Object.entries(providerTemplates.value)) {
+      if (templateName === 'AIHubMix') continue
+      if (sponsorCatalog.value && builtInSponsors.includes(templateName)) continue
       if (template.provider_type === selectedProviderType.value) {
         types.push({
           value: templateName,
           label: templateName,
           icon: getProviderIcon(template.provider),
-          isMonochrome: isMonochromeProviderIcon(template.provider)
+          isMonochrome: isMonochromeProviderIcon(template.provider),
+          isSponsor: builtInSponsors.includes(templateName)
         })
       }
     }
 
     return types
+  })
+
+  const selectedSponsor = computed(() => {
+    const source = selectedProviderSource.value
+    if (!source?.api_base) return undefined
+    return sponsorCatalog.value?.sponsors.find(sponsor =>
+      sponsor.api_base.replace(/\/+$/, '') === source.api_base.replace(/\/+$/, '') &&
+      providerTemplates.value[sponsor.template]?.type === source.type
+    )
   })
 
   const filteredProviderSources = computed(() => {
@@ -160,10 +199,17 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
   const mergedModelEntries = computed(() => {
     const configuredEntries = (sourceProviders.value || []).map((provider: any) => {
       const metadata = getModelMetadata(provider.model)
+      let displayMetadata = metadata || buildMetadataFromProvider(provider)
+      if (provider.max_context_tokens > 0) {
+        displayMetadata = {
+          ...displayMetadata,
+          limit: { ...displayMetadata?.limit, context: provider.max_context_tokens }
+        }
+      }
       return {
         type: 'configured',
         provider,
-        metadata: metadata || buildMetadataFromProvider(provider),
+        metadata: displayMetadata,
         hasModelMetadata: Boolean(metadata)
       }
     })
@@ -316,7 +362,9 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
 
   function getModelMetadata(modelName?: string) {
     if (!modelName) return null
-    return modelMetadata.value?.[modelName] || null
+    // Schema refreshes only include configured models; retain fetched candidate metadata.
+    const availableModel = availableModels.value.find((item) => item?.name === modelName)
+    return availableModel?.metadata || modelMetadata.value?.[modelName] || null
   }
 
   function supportsImageInput(meta: any) {
@@ -369,7 +417,9 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
       dashscope_tts: 'text_to_speech',
       azure_tts: 'text_to_speech',
       minimax_tts_api: 'text_to_speech',
-      volcengine_tts: 'text_to_speech'
+      volcengine_tts: 'text_to_speech',
+      system_one_decision: 'decision',
+      openai_decision: 'decision'
     }
     return oldVersionProviderTypeMapping[provider.type]
   }
@@ -390,7 +440,6 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
       suppressSourceWatch = false
     })
     availableModels.value = []
-    modelMetadata.value = {}
     isSourceModified.value = false
   }
 
@@ -455,7 +504,13 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
   }
 
   function addProviderSource(templateKey: string) {
-    const template = providerTemplates.value[templateKey]
+    const sponsor = templateKey.startsWith('sponsor:')
+      ? sponsorCatalog.value?.sponsors.find(item => `sponsor:${item.id}` === templateKey)
+      : null
+    const baseTemplate = providerTemplates.value[sponsor?.template || templateKey]
+    const template = sponsor && baseTemplate
+      ? { ...baseTemplate, id: sponsor.id, api_base: sponsor.api_base }
+      : baseTemplate
     if (!template) {
       showMessage('未找到对应的模板配置', 'error')
       return
@@ -568,7 +623,7 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
       const response = await providerApi.sourceModels(sourceId)
       if (response.data.status === 'ok') {
         const metadataMap = (response.data.data.model_metadata || {}) as Record<string, any>
-        modelMetadata.value = metadataMap
+        modelMetadata.value = { ...modelMetadata.value, ...metadataMap }
         availableModels.value = (response.data.data.models || []).map((model: string) => ({
           name: model,
           metadata: metadataMap?.[model] || null
@@ -580,7 +635,6 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
         throw new Error(response.data.message || tm('models.fetchError'))
       }
     } catch (error: any) {
-      modelMetadata.value = {}
       showMessage(error.response?.data?.message || error.message || tm('models.fetchError'), 'error')
     } finally {
       loadingModels.value = false
@@ -741,6 +795,7 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
   }
 
   onMounted(async () => {
+    void loadSponsorCatalog()
     await loadProviderTemplate()
   })
 
@@ -770,6 +825,7 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
     // computed
     providerTypes,
     availableSourceTypes,
+    selectedSponsor,
     displayedProviderSources,
     sourceProviders,
     mergedModelEntries,

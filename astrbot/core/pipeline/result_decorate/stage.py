@@ -6,11 +6,10 @@ from collections.abc import AsyncGenerator
 
 from astrbot.core import file_token_service, html_renderer, logger
 from astrbot.core.message.components import At, Image, Json, Node, Plain, Record, Reply
-from astrbot.core.message.message_event_result import ResultContentType
+from astrbot.core.message.message_event_result import MessageChain, ResultContentType
 from astrbot.core.pipeline.content_safety_check.stage import ContentSafetyCheckStage
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from astrbot.core.platform.message_type import MessageType
-from astrbot.core.star.session_llm_manager import SessionServiceManager
 from astrbot.core.star.star import star_map
 from astrbot.core.star.star_handler import EventType, star_handlers_registry
 
@@ -123,6 +122,84 @@ class ResultDecorateStage(Stage):
                 result.append(seg)
         return result if result else [text]
 
+    async def _send_streaming_tts(self, event: AstrMessageEvent) -> None:
+        """Send voice for a streamed reply after its text has been delivered.
+
+        Streaming replies bypass the TTS block in ``process``. By the time the
+        final result arrives the text is already on the platform, so only the
+        Record is sent here; ``dual_output`` must not append the text again.
+        """
+        if event.is_stopped():
+            return
+
+        tts_cfg = self.ctx.plugin_manager.context.get_config(
+            umo=event.unified_msg_origin,
+        ).get("provider_tts_settings", {})
+        if not tts_cfg.get("enable"):
+            return
+
+        try:
+            tts_provider = (
+                await self.ctx.plugin_manager.context.get_using_tts_provider_async(
+                    event.unified_msg_origin,
+                )
+            )
+        except Exception:
+            logger.warning(
+                "Failed to resolve TTS provider for %s",
+                event.unified_msg_origin,
+                exc_info=True,
+            )
+            return
+        if not tts_provider:
+            logger.warning(
+                f"Session {event.unified_msg_origin} has no text-to-speech "
+                "provider configured.",
+            )
+            return
+
+        result = event.get_result()
+        if result is None or not result.chain:
+            return
+
+        use_file_service = tts_cfg.get("use_file_service")
+        callback_api_base = self.ctx.astrbot_config.get("callback_api_base")
+
+        for comp in result.chain:
+            if not isinstance(comp, Plain) or len(comp.text) <= 1:
+                continue
+            try:
+                logger.info(f"TTS request: {comp.text}")
+                audio_path = await tts_provider.get_audio(comp.text)
+                logger.info(f"TTS result: {audio_path}")
+                if not audio_path:
+                    logger.error(
+                        "Failed to convert the streamed message segment to speech "
+                        f"because no TTS audio file was found: {comp.text}",
+                    )
+                    continue
+
+                url = None
+                if use_file_service and callback_api_base:
+                    token = await file_token_service.register_file(audio_path)
+                    url = f"{callback_api_base}/api/file/{token}"
+                    logger.debug(f"Registered: {url}")
+
+                await event.send(
+                    MessageChain(
+                        [
+                            Record(
+                                file=url or audio_path,
+                                url=url or audio_path,
+                                text=comp.text,
+                            ),
+                        ],
+                    ),
+                )
+            except Exception:
+                logger.error(traceback.format_exc())
+                logger.error("TTS failed for streamed reply; only text was sent.")
+
     async def process(
         self,
         event: AstrMessageEvent,
@@ -190,6 +267,8 @@ class ResultDecorateStage(Stage):
 
         # 流式输出不执行下面的逻辑
         if is_stream:
+            if event.get_extra("tts_stream_dual", False):
+                await self._send_streaming_tts(event)
             return
 
         # 需要再获取一次。插件可能直接对 chain 进行了替换。
@@ -273,11 +352,6 @@ class ResultDecorateStage(Stage):
                 )
             )
 
-            # When an agent sub-stage already rolled the TTS dice for a reply
-            # that would otherwise stream ("tts_forced" is set), the roll has
-            # been consumed and the voice conversion below must not be rolled
-            # again. For ordinary non-streaming results the probability
-            # configured in provider_tts_settings applies as usual.
             tts_trigger_probability = (
                 1.0
                 if event.get_extra("tts_forced", False)
@@ -285,9 +359,12 @@ class ResultDecorateStage(Stage):
             )
 
             should_tts = (
-                bool(self.ctx.astrbot_config["provider_tts_settings"]["enable"])
+                bool(
+                    self.ctx.plugin_manager.context.get_config(
+                        umo=event.unified_msg_origin
+                    )["provider_tts_settings"]["enable"]
+                )
                 and result.is_llm_result()
-                and await SessionServiceManager.should_process_tts_request(event)
                 and random.random() <= tts_trigger_probability
                 and tts_provider
             )
@@ -297,9 +374,13 @@ class ResultDecorateStage(Stage):
                     "provider configured.",
                 )
 
+            show_reasoning = self.show_reasoning
+            if (enable_reasoning := event.get_extra("enable_reasoning")) is not None:
+                show_reasoning = bool(enable_reasoning)
+
             if (
                 not should_tts
-                and self.show_reasoning
+                and show_reasoning
                 and event.get_extra("_llm_reasoning_content")
             ):
                 # inject reasoning content to chain
@@ -391,6 +472,8 @@ class ResultDecorateStage(Stage):
                             return_url=True,
                             use_network=self.t2i_use_network,
                             template_name=self.t2i_active_template,
+                            endpoint=self.ctx.astrbot_config.get("t2i_endpoint")
+                            or None,
                         )
                     except BaseException:
                         logger.error(

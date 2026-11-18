@@ -3,14 +3,10 @@
  * 国际化类型定义，从JSON文件自动推断，确保类型安全且自动同步
  */
 
-// 直接导入已经组织好的翻译数据
-import { translations } from './translations';
-
-// 导出翻译数据常量，供类型推断使用
-export const translationData = translations;
-
 // 从实际的翻译数据推断完整的翻译结构类型
-export type TranslationSchema = typeof translations[keyof typeof translations];
+import type { Locale, Translations } from './translations';
+
+export type TranslationSchema = Translations;
 
 // TypeScript 助手：递归提取嵌套键路径
 type NestedKeyOf<T> = T extends object 
@@ -24,8 +20,8 @@ type NestedKeyOf<T> = T extends object
 // 自动推断的翻译键联合类型 - 包含所有有效的点分隔键路径
 export type TranslationKey = NestedKeyOf<TranslationSchema>;
 
-// 语言环境类型 - 从实际的翻译数据键推断
-export type Locale = keyof typeof translations;
+// 语言环境类型 - 从可用语言加载器推断
+export type { Locale } from './translations';
 
 // 翻译函数类型
 export type TranslationFunction = {

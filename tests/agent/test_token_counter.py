@@ -1,5 +1,7 @@
 """Tests for EstimateTokenCounter multimodal support."""
 
+import pytest
+
 from astrbot.core.agent.context.token_counter import (
     AUDIO_TOKEN_ESTIMATE,
     IMAGE_TOKEN_ESTIMATE,
@@ -21,6 +23,33 @@ def _msg(role: str, content) -> Message:
 
 
 class TestTextCounting:
+    @pytest.mark.parametrize(
+        ("text", "expected"),
+        [
+            ("", 0),
+            ("abc", 0),
+            ("abcd", 1),
+            ("".join(chr(value) for value in range(128)), 38),
+            ("\u4dff\u4e00\u9fff\ua000" * 10, 18),
+            ("\U00020000" * 10, 3),
+            ("éΩあ" * 10, 9),
+            ("👨‍👩‍👧‍👦", 14),
+            (
+                "\u200c\u200d\u200e\u25ff\u2600\u27bf\u27c0"
+                "\ufdff\ufe00\ufe0f\ufe10\U0001efff\U0001f000\U0001faff\U0001fb00",
+                16,
+            ),
+        ],
+    )
+    def test_text_estimate_preserves_character_boundaries(self, text, expected):
+        """Keep existing character weights, Unicode ranges and integer rounding."""
+        assert counter.count_tokens([_msg("user", text)]) == expected
+
+    def test_text_parts_are_rounded_independently(self):
+        assert counter.count_tokens(
+            [_msg("user", [TextPart(text="ab"), TextPart(text="cd")])]
+        ) == 0
+
     def test_plain_string(self):
         tokens = counter.count_tokens([_msg("user", "hello world")])
         assert tokens > 0
@@ -100,6 +129,31 @@ class TestMultimodalCounting:
         )
         tokens = counter.count_tokens([msg])
         assert tokens == IMAGE_TOKEN_ESTIMATE * 3
+
+
+class TestEmojiCounting:
+    def test_emoji_costs_more_than_ascii(self):
+        """一个 emoji 的 token 开销远高于一个 ASCII 字符。"""
+        emoji = counter.count_tokens([_msg("user", "🔥" * 1000)])
+        ascii_text = counter.count_tokens([_msg("user", "a" * 1000)])
+        assert emoji > ascii_text * 5
+
+    def test_emoji_estimate_close_to_real_usage(self):
+        """50000 个 🔥 的真实 prompt_tokens 实测为 150082。"""
+        tokens = counter.count_tokens([_msg("user", "🔥" * 50_000)])
+        assert 100_000 <= tokens <= 170_000
+
+    def test_flag_and_zwj_sequences_counted(self):
+        """国旗与 ZWJ 组合的 token 开销同样高于普通字符。"""
+        flags = counter.count_tokens([_msg("user", "🇨🇳" * 500)])
+        family = counter.count_tokens([_msg("user", "👨‍👩‍👧‍👦" * 500)])
+        assert flags > counter.count_tokens([_msg("user", "ab" * 500)]) * 5
+        assert family > counter.count_tokens([_msg("user", "abcdefg" * 500)]) * 2
+
+    def test_plain_text_estimate_unchanged(self):
+        """纯文本与中文的估算值不受 emoji 分支影响。"""
+        assert counter.count_tokens([_msg("user", "a" * 100)]) == 30
+        assert counter.count_tokens([_msg("user", "你" * 100)]) == 60
 
 
 class TestTrustedUsage:

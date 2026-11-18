@@ -37,6 +37,7 @@
     "cancel": "キャンセル",
     "submit": "作成",
     "nameRequired": "ナレッジベース名を入力してください",
+    "embeddingModelRequired": "埋め込みモデルを選択してください",
     "nameChangeHint": "後からナレッジベース名を変更する場合は、設定ファイル側も更新してください。",
     "embeddingLockedHint": "埋め込みモデルは選択後に変更できません。別のモデルを使用する場合は、新しいナレッジベースを作成してください。"
   },

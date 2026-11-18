@@ -88,6 +88,9 @@
       "hasNewVersion": "A new version is available. Click confirm to upgrade.",
       "isLatest": "Already on the latest version",
       "installing": "Downloading and installing update. The app will restart automatically...",
+      "downloading": "Downloading update…",
+      "verifying": "Download complete. Verifying update…",
+      "applying": "Installing update. The app will restart automatically…",
       "checkFailed": "Failed to check updates. Please try again later.",
       "installFailed": "Upgrade failed. Please try again later."
     },

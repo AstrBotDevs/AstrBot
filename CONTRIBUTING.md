@@ -35,6 +35,14 @@
 
 #### 代码规范
 
+##### WebUI 与文档同步
+
+- 修改菜单入口、页面结构或界面术语时，在同一个 PR 中更新 `docs/zh` 和 `docs/en` 的相关操作说明、链接与截图。没有对应英文页面时无需为此翻译整篇文档，但应检查已有英文说明。
+- 按当前默认侧边栏、实际按钮文案和完整操作流程核对文档。重点检查配置文件、模型提供商、机器人、插件和系统设置；仅通过链接检查不能证明入口说明仍然正确。
+- 入口改名、移动或合并时，在对应文档和 `changelogs/` 中写明「旧入口 → 新入口」，并同步维护 [WebUI 入口对照](docs/zh/use/webui.md#菜单与旧入口对照)。截图若仍展示旧结构，应更新或移除，并用可独立完成操作的文字步骤替代。
+- 将布局重设计与新增功能尽量拆成独立 PR。新增功能优先沿用现有页面结构；确需调整已有入口时，在 PR 中说明原因和受影响的流程，避免连续、无关的页面重排。
+- 提交前运行 `cd docs && pnpm run docs:build`，并按更新后的步骤核对相关 WebUI 页面。在 PR 中写明核对的页面和验证结果。
+
 ##### Core
 
 我们使用 Ruff 作为代码格式化和静态分析工具。在提交代码之前，请运行以下命令以确保代码符合规范：
@@ -105,6 +113,14 @@ We use the `fix/` prefix for bug fixes and the `feat/` prefix for new features. 
 - Use semantic prefixes like `fix: `, `feat: `, `docs: `, `style: `, `refactor: `, `test: `, `chore: ` in the title, followed by a brief description of the changes, e.g., `fix: correct login page typo`.
 
 #### Code Style
+
+##### Keep WebUI and documentation in sync
+
+- When changing navigation, page structure, or UI labels, update the affected instructions, links, and screenshots in `docs/zh` and `docs/en` in the same PR. Check existing English instructions; translating an entire missing English page is not required.
+- Verify the default sidebar, actual button labels, and complete workflows. Pay particular attention to profiles, providers, platforms, extensions, and system settings. Passing link checks does not establish that navigation instructions are correct.
+- For renamed, moved, or merged entry points, include an **old entry → new entry** mapping in the relevant docs and `changelogs/`, and maintain the [WebUI navigation reference](docs/en/use/webui.md#navigation-and-previous-entry-points). Replace or remove screenshots showing outdated layouts, with text instructions sufficient to complete the task on their own.
+- Keep layout redesigns and feature additions in separate PRs where practical. Prefer the existing page structure for new features. Explain necessary navigation changes and affected workflows in the PR to avoid repeated, unrelated rearrangements.
+- Before submitting, run `cd docs && pnpm run docs:build` and check the affected WebUI pages against the updated steps. Include the checked pages and validation results in the PR.
 
 ##### Core
 

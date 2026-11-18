@@ -4,7 +4,7 @@ import sys
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any, cast
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
@@ -18,10 +18,25 @@ from astrbot.core.agent.message import ImageURLPart, Message, TextPart
 from astrbot.core.agent.run_context import ContextWrapper
 from astrbot.core.agent.runners.tool_loop_agent_runner import ToolLoopAgentRunner
 from astrbot.core.agent.tool import FunctionTool, ToolSet
-from astrbot.core.astr_agent_tool_exec import FunctionToolExecutor
+from astrbot.core.astr_agent_runtime.runner import run_agent
+from astrbot.core.astr_agent_runtime.tool_executor import FunctionToolExecutor
 from astrbot.core.exceptions import EmptyModelOutputError
+from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.provider.entities import LLMResponse, ProviderRequest, TokenUsage
 from astrbot.core.provider.provider import Provider
+
+
+async def next_event(iterator, kind):
+    """Consume diagnostics until the requested standard fact is observed."""
+    async for event in iterator:
+        if event.type == kind:
+            return event
+    raise AssertionError(f"Missing event: {kind}")
+
+
+async def collect_events(iterator):
+    """Drain a step so execution, cancellation and hooks all settle."""
+    return [event async for event in iterator]
 
 
 class MockProvider(Provider):
@@ -234,6 +249,7 @@ class MockAbortableStreamProvider(MockProvider):
             role="assistant",
             completion_text="partial ",
             is_chunk=True,
+            usage=TokenUsage(input_other=5, output=1),
         )
         if abort_signal and abort_signal.is_set():
             yield LLMResponse(
@@ -396,6 +412,7 @@ class MockHooks(BaseAgentRunHooks):
     def __init__(self):
         self.agent_begin_called = False
         self.agent_done_called = False
+        self.llm_response_called = False
         self.tool_start_called = False
         self.tool_end_called = False
 
@@ -410,6 +427,9 @@ class MockHooks(BaseAgentRunHooks):
 
     async def on_agent_done(self, run_context, llm_response):
         self.agent_done_called = True
+
+    async def on_llm_response(self, run_context, llm_response):
+        self.llm_response_called = True
 
 
 class ClearingAgentBeginHooks(MockHooks):
@@ -547,7 +567,7 @@ async def test_max_step_limit_functionality(
     assert runner.req.func_tool is None, "达到最大步数后工具应该被禁用"
 
     # 验证有最终响应
-    final_responses = [r for r in responses if r.type == "llm_result"]
+    final_responses = [r for r in responses if r.type == "message.completed"]
     assert len(final_responses) > 0, "应该有最终的LLM响应"
 
     # 验证最后一条消息是assistant的最终回答
@@ -711,37 +731,17 @@ async def test_stats_emit_update_after_each_completed_llm_request(
     )
 
     responses = [response async for response in runner.step_until_done(3)]
-    stats_responses = [
-        response for response in responses if response.type == "agent_stats"
+    requests = [
+        response for response in responses if response.type == "request.finished"
     ]
-
     assert provider.call_count == 2
-    assert len(stats_responses) == 2
-    assert [response.data["chain"].type for response in stats_responses] == [
-        "agent_stats",
-        "agent_stats",
-    ]
-    stats_snapshots = [
-        response.data["chain"].chain[0].data for response in stats_responses
-    ]
-    assert [snapshot["current_context_tokens"] for snapshot in stats_snapshots] == [
-        110,
-        220,
-    ]
-    assert stats_snapshots[0]["token_usage"]["input_other"] == 100
-    assert stats_snapshots[0]["token_usage"]["input_cached"] == 10
-    assert stats_snapshots[1]["token_usage"]["input_other"] == 300
-    assert stats_snapshots[1]["token_usage"]["input_cached"] == 30
-
-    # Emitted events keep their own snapshots even if live stats mutate later.
+    assert len(requests) == 2
+    assert [event.usage.input_tokens for event in requests] == [110, 220]
+    assert [event.usage.cached_input_tokens for event in requests] == [10, 20]
     runner.stats.token_usage.input_other = 999
-    assert stats_snapshots[0]["token_usage"]["input_other"] == 100
-    assert stats_snapshots[1]["token_usage"]["input_other"] == 300
-
-    assert responses.index(stats_responses[0]) < next(
-        index
-        for index, response in enumerate(responses)
-        if response.type == "tool_call"
+    assert requests[0].usage.input_tokens == 110
+    assert responses.index(requests[0]) < next(
+        index for index, event in enumerate(responses) if event.type == "tool.started"
     )
 
 
@@ -805,7 +805,7 @@ async def test_max_step_with_streaming(
     assert runner.done(), "代理应该在达到最大步数后完成"
 
     # 验证有流式响应
-    streaming_responses = [r for r in responses if r.type == "streaming_delta"]
+    streaming_responses = [r for r in responses if r.type == "text.delta"]
     assert len(streaming_responses) > 0, "应该有流式响应"
 
     # 验证工具被禁用
@@ -838,15 +838,11 @@ async def test_empty_messages_after_on_agent_begin_skip_provider(
     assert runner.done()
     assert not runner.was_aborted()
     assert runner.run_context.messages == []
-    assert responses[-1].type == "err"
+    assert responses == []
     final_response = runner.get_final_llm_resp()
     assert final_response is not None
     assert final_response.role == "err"
     assert final_response.completion_text == "No messages remain for the LLM request."
-    assert (
-        responses[-1].data["chain"].get_plain_text()
-        == "LLM 响应错误: No messages remain for the LLM request."
-    )
 
 
 @pytest.mark.asyncio
@@ -869,7 +865,7 @@ async def test_empty_request_after_on_llm_request_skip_provider(
     assert runner.done()
     assert not runner.was_aborted()
     assert runner.run_context.messages == []
-    assert responses[-1].type == "err"
+    assert responses == []
     final_response = runner.get_final_llm_resp()
     assert final_response is not None
     assert final_response.role == "err"
@@ -1369,11 +1365,13 @@ async def test_empty_output_retries_exhausted_then_uses_fallback_provider(
     assert fallback_provider.call_count == 1
 
 
+
 @pytest.mark.asyncio
 async def test_stop_signal_returns_aborted_and_discards_partial_message(
     runner, provider_request, mock_tool_executor, mock_hooks
 ):
     provider = MockAbortableStreamProvider()
+    sink = AsyncMock(return_value=True)
 
     await runner.reset(
         provider=provider,
@@ -1382,11 +1380,12 @@ async def test_stop_signal_returns_aborted_and_discards_partial_message(
         tool_executor=mock_tool_executor,
         agent_hooks=mock_hooks,
         streaming=True,
+        conversation_event_sink=sink,
     )
 
     step_iter = runner.step()
-    first_resp = await step_iter.__anext__()
-    assert first_resp.type == "streaming_delta"
+    first_resp = await next_event(step_iter, "text.delta")
+    assert first_resp.type == "text.delta"
 
     runner.request_stop()
 
@@ -1394,7 +1393,10 @@ async def test_stop_signal_returns_aborted_and_discards_partial_message(
     async for response in step_iter:
         rest_responses.append(response)
 
-    assert any(resp.type == "aborted" for resp in rest_responses)
+    assert any(
+        resp.type == "message.completed" and resp.status == "cancelled"
+        for resp in rest_responses
+    )
     assert runner.was_aborted() is True
 
     final_resp = runner.get_final_llm_resp()
@@ -1416,6 +1418,13 @@ async def test_stop_signal_returns_aborted_and_discards_partial_message(
         for message in runner.run_context.messages
     )
 
+    cancelled = [call.args[0] for call in sink.await_args_list if call.args[0].type == "message.appended"]
+    assert len(cancelled) == 1
+    assert cancelled[0].data["status"] == "cancelled"
+    assert cancelled[0].data["usage"]["output_tokens"] == 1
+    assert cancelled[0].data["message"]["_no_save"] is True
+    assert cancelled[0].data["message"]["content"][0]["text"] == "partial "
+
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("streaming", [False, True])
@@ -1428,6 +1437,7 @@ async def test_stop_cancels_provider_before_first_response(
 ):
     """Stop must cancel blocked streaming and non-streaming Provider requests."""
     provider = MockBlockingProvider()
+    sink = AsyncMock(return_value=True)
     await runner.reset(
         provider=provider,
         request=provider_request,
@@ -1435,16 +1445,20 @@ async def test_stop_cancels_provider_before_first_response(
         tool_executor=mock_tool_executor,
         agent_hooks=mock_hooks,
         streaming=streaming,
+        conversation_event_sink=sink,
     )
 
     step_iter = runner.step()
-    pending_response = asyncio.create_task(anext(step_iter))
+    pending_response = asyncio.create_task(collect_events(step_iter))
     await asyncio.wait_for(provider.started.wait(), timeout=1)
 
     runner.request_stop()
 
     response = await asyncio.wait_for(pending_response, timeout=1)
-    assert response.type == "aborted"
+    assert any(
+        event.type == "request.finished" and event.status == "cancelled"
+        for event in response
+    )
     await asyncio.wait_for(provider.cancelled.wait(), timeout=1)
     assert runner.was_aborted() is True
     assert runner.done() is True
@@ -1465,9 +1479,19 @@ async def test_stop_cancels_provider_before_first_response(
     with pytest.raises(StopAsyncIteration):
         await step_iter.__anext__()
 
+    cancelled = [call.args[0] for call in sink.await_args_list if call.args[0].type == "message.appended"]
+    assert len(cancelled) == 1
+    assert cancelled[0].data["status"] == "cancelled"
+    assert cancelled[0].data["message"]["_no_save"] is True
+    assert "usage" not in cancelled[0].data
+
 
 @pytest.mark.asyncio
-async def test_stop_interrupts_pending_subagent_handoff(mock_hooks):
+async def test_stop_interrupts_pending_subagent_handoff(mock_hooks, monkeypatch):
+    monkeypatch.setattr(
+        "astrbot.core.astr_agent_runtime.tool_executor.AstrAgentContext",
+        SimpleNamespace,
+    )
     subagent_context = BlockingSubagentContext()
     event = MockEvent("webchat:FriendMessage:webchat!user!session", "user")
     handoff_tool = HandoffTool(
@@ -1494,21 +1518,22 @@ async def test_stop_interrupts_pending_subagent_handoff(mock_hooks):
     )
 
     step_iter = runner.step()
-    first_resp = await step_iter.__anext__()
-    if first_resp.type == "agent_stats":
-        first_resp = await step_iter.__anext__()
-    assert first_resp.type == "tool_call"
+    first_resp = await next_event(step_iter, "tool.started")
+    assert first_resp.type == "tool.started"
     assert provider.abort_signal is not None
     assert provider.abort_signal.is_set() is False
 
-    pending_resp = asyncio.create_task(step_iter.__anext__())
+    pending_resp = asyncio.create_task(collect_events(step_iter))
     await asyncio.wait_for(subagent_context.started.wait(), timeout=5)
 
     runner.request_stop()
     assert provider.abort_signal.is_set() is True
 
     aborted_resp = await asyncio.wait_for(pending_resp, timeout=1)
-    assert aborted_resp.type == "aborted"
+    assert any(
+        event.type == "tool.finished" and event.status == "cancelled"
+        for event in aborted_resp
+    )
     assert runner.was_aborted() is True
     assert subagent_context.cancelled is True
     final_resp = runner.get_final_llm_resp()
@@ -1553,21 +1578,22 @@ async def test_stop_interrupts_pending_regular_tool(mock_hooks):
     )
 
     step_iter = runner.step()
-    first_resp = await step_iter.__anext__()
-    if first_resp.type == "agent_stats":
-        first_resp = await step_iter.__anext__()
-    assert first_resp.type == "tool_call"
+    first_resp = await next_event(step_iter, "tool.started")
+    assert first_resp.type == "tool.started"
     assert provider.abort_signal is not None
     assert provider.abort_signal.is_set() is False
 
-    pending_resp = asyncio.create_task(step_iter.__anext__())
+    pending_resp = asyncio.create_task(collect_events(step_iter))
     await asyncio.wait_for(tool_state.started.wait(), timeout=5)
 
     runner.request_stop()
     assert provider.abort_signal.is_set() is True
 
     aborted_resp = await asyncio.wait_for(pending_resp, timeout=5)
-    assert aborted_resp.type == "aborted"
+    assert any(
+        event.type == "tool.finished" and event.status == "cancelled"
+        for event in aborted_resp
+    )
     assert runner.was_aborted() is True
     assert tool_state.cancelled is True
     final_resp = runner.get_final_llm_resp()
@@ -1583,8 +1609,9 @@ async def test_stop_interrupts_pending_regular_tool(mock_hooks):
 
 
 @pytest.mark.asyncio
-async def test_tool_result_injects_follow_up_notice(
-    runner, mock_provider, provider_request, mock_tool_executor, mock_hooks
+@pytest.mark.parametrize("tool_count", [1, 2])
+async def test_steering_appends_user_messages_after_all_tool_results(
+    runner, mock_provider, provider_request, mock_tool_executor, mock_hooks, tool_count
 ):
     mock_event = MockEvent("test:FriendMessage:follow_up", "u1")
     run_context = ContextWrapper(context=MockAgentContext(mock_event))
@@ -1598,6 +1625,12 @@ async def test_tool_result_injects_follow_up_notice(
         streaming=False,
     )
 
+    mock_provider.text_chat = AsyncMock(return_value=LLMResponse(
+        role="assistant",
+        tools_call_name=["test_tool"] * tool_count,
+        tools_call_args=[{"query": "test"}] * tool_count,
+        tools_call_ids=[f"call_{index}" for index in range(tool_count)],
+    ))
     ticket1 = runner.follow_up(
         message_text="follow up 1",
     )
@@ -1613,12 +1646,13 @@ async def test_tool_result_injects_follow_up_notice(
     assert provider_request.tool_calls_result is not None
     assert isinstance(provider_request.tool_calls_result, list)
     assert provider_request.tool_calls_result
-    tool_result = str(
-        provider_request.tool_calls_result[0].tool_calls_result[0].content
-    )
-    assert "SYSTEM NOTICE" in tool_result
-    assert "1. follow up 1" in tool_result
-    assert "2. follow up 2" in tool_result
+    results = provider_request.tool_calls_result[0].tool_calls_result
+    assert [result.content for result in results] == ["工具执行结果"] * tool_count
+    tail = runner.run_context.messages[-(tool_count + 2):]
+    assert [message.role for message in tail] == [
+        "assistant", *(["tool"] * tool_count), "user",
+    ]
+    assert tail[-1].content == [TextPart(text="follow up 1"), TextPart(text="\nfollow up 2")]
     assert ticket1.resolved.is_set() is True
     assert ticket2.resolved.is_set() is True
     assert ticket1.consumed is True
@@ -1626,8 +1660,9 @@ async def test_tool_result_injects_follow_up_notice(
 
 
 @pytest.mark.asyncio
-async def test_follow_up_ticket_not_consumed_when_no_next_tool_call(
-    runner, mock_provider, provider_request, mock_tool_executor, mock_hooks
+@pytest.mark.parametrize("streaming", [False, True])
+async def test_follow_up_ticket_consumed_when_no_next_tool_call(
+    runner, mock_provider, provider_request, mock_tool_executor, mock_hooks, streaming
 ):
     mock_provider.should_call_tools = False
     mock_event = MockEvent("test:FriendMessage:follow_up_no_tool", "u1")
@@ -1639,7 +1674,7 @@ async def test_follow_up_ticket_not_consumed_when_no_next_tool_call(
         run_context=run_context,
         tool_executor=mock_tool_executor,
         agent_hooks=mock_hooks,
-        streaming=False,
+        streaming=streaming,
     )
 
     ticket = runner.follow_up(message_text="follow up without tool")
@@ -1649,11 +1684,26 @@ async def test_follow_up_ticket_not_consumed_when_no_next_tool_call(
         pass
 
     assert ticket.resolved.is_set() is True
-    assert ticket.consumed is False
+    assert ticket.consumed is True
+
+    async def subsequent_tool():
+        await asyncio.sleep(0.01)
+        yield "foreground result"
+
+    detach = MagicMock(return_value=None)
+    results = [
+        result
+        async for result in runner._iter_tool_executor_results(
+            subsequent_tool(), detach=detach
+        )
+    ]
+    assert results == ["foreground result"]
+    detach.assert_not_called()
 
 
 @pytest.mark.asyncio
-async def test_skills_like_requery_passes_extra_user_content_parts():
+@pytest.mark.parametrize("streaming", [False, True])
+async def test_skills_like_requery_passes_extra_user_content_parts(streaming):
     """skills-like 模式 re-query 时应传递 extra_user_content_parts（如 image_caption）"""
     from astrbot.core.agent.message import TextPart
 
@@ -1719,6 +1769,7 @@ async def test_skills_like_requery_passes_extra_user_content_parts():
         tool_executor=cast(Any, MockToolExecutor()),
         agent_hooks=MockHooks(),
         tool_schema_mode="skills_like",
+        streaming=streaming,
     )
 
     async for _ in runner.step():
@@ -1731,6 +1782,132 @@ async def test_skills_like_requery_passes_extra_user_content_parts():
     parts = captured_kwargs["extra_user_content_parts"]
     assert len(parts) == 1
     assert parts[0].text == "<image_caption>一张猫的照片</image_caption>"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("streaming", "stream_to_general", "show_reasoning"),
+    [
+        (True, False, False),
+        (True, False, True),
+        (True, True, True),
+        (False, False, True),
+    ],
+)
+@pytest.mark.parametrize("use_result_chain", [False, True])
+async def test_skills_like_requery_reply_reaches_stream_bridge_once(
+    runner,
+    provider_request,
+    mock_tool_executor,
+    mock_hooks,
+    streaming,
+    stream_to_general,
+    show_reasoning,
+    use_result_chain,
+):
+    """Deliver a non-streaming re-query reply through the real runner and bridge."""
+    final_text = "The search is complete: two pushes."
+    reasoning = "The existing tool result is sufficient."
+
+    class RequeryReplyProvider(MockProvider):
+        async def text_chat(self, **kwargs) -> LLMResponse:
+            self.call_count += 1
+            if self.call_count == 1:
+                return LLMResponse(
+                    role="assistant",
+                    completion_text="Let me check.",
+                    tools_call_name=["test_tool"],
+                    tools_call_args=[{}],
+                    tools_call_ids=["select_tool"],
+                )
+            assert self.call_count == 2
+            return LLMResponse(
+                role="assistant",
+                completion_text=None if use_result_chain else final_text,
+                result_chain=MessageChain().message(final_text)
+                if use_result_chain
+                else None,
+                reasoning_content=reasoning,
+            )
+
+    provider = RequeryReplyProvider()
+    event = MagicMock()
+    event.is_stopped.return_value = False
+    event.get_extra.return_value = None
+    event.get_platform_name.return_value = "lark"
+    await runner.reset(
+        provider=provider,
+        request=provider_request,
+        run_context=ContextWrapper(context=MockAgentContext(event)),
+        tool_executor=mock_tool_executor,
+        agent_hooks=mock_hooks,
+        streaming=streaming,
+        tool_schema_mode="skills_like",
+    )
+    original_step = runner.step
+    final_events = []
+    hooks_at_emission = []
+
+    async def recorded_step():
+        async for response in original_step():
+            if response.type == "message.completed" and any(
+                getattr(part, "text", None) == final_text for part in response.content
+            ):
+                final_events.append(response)
+                hooks_at_emission.append(mock_hooks.llm_response_called)
+            yield response
+
+    runner.step = recorded_step
+    chains = [
+        chain
+        async for chain in run_agent(
+            runner,
+            stream_to_general=stream_to_general,
+            show_reasoning=show_reasoning,
+        )
+    ]
+    assert sum(chain.get_plain_text() == final_text for chain in chains) == 1
+    assert sum(chain.get_plain_text() == "Let me check." for chain in chains) == 1
+    assert sum(chain.get_plain_text() == reasoning for chain in chains) == int(
+        streaming and not stream_to_general and show_reasoning
+    )
+    assert len(final_events) == 1
+    assert hooks_at_emission == [True]
+    assert runner.done()
+    assert runner.get_final_llm_resp().completion_text == final_text
+    assert runner.run_context.messages[-1].content[-1].text == final_text
+    assert not mock_hooks.tool_start_called
+    assert provider.call_count == 2
+
+
+@pytest.mark.asyncio
+async def test_normal_streaming_reply_is_not_duplicated_by_stream_bridge(
+    runner,
+    mock_provider,
+    provider_request,
+    mock_tool_executor,
+    mock_hooks,
+):
+    mock_provider.should_call_tools = False
+    event = MagicMock()
+    event.is_stopped.return_value = False
+    event.get_extra.return_value = None
+    event.get_platform_name.return_value = "lark"
+    await runner.reset(
+        provider=mock_provider,
+        request=provider_request,
+        run_context=ContextWrapper(context=MockAgentContext(event)),
+        tool_executor=mock_tool_executor,
+        agent_hooks=mock_hooks,
+        streaming=True,
+        tool_schema_mode="skills_like",
+    )
+
+    chains = [chain async for chain in run_agent(runner)]
+
+    assert [chain.get_plain_text() for chain in chains] == ["这是我的最终回答"]
+    assert mock_provider.call_count == 1
+    assert runner.done()
 
 
 def test_skills_like_requery_preserves_existing_context_prefix():
@@ -1823,7 +2000,7 @@ async def test_large_tool_result_is_spilled_to_file_and_replaced_with_read_notic
     )
     assert str(overflow_files[0]) in tool_message_content
 
-    llm_results = [resp for resp in responses if resp.type == "llm_result"]
+    llm_results = [resp for resp in responses if resp.type == "message.completed"]
     assert llm_results
 
 
@@ -1966,52 +2143,6 @@ async def test_follow_up_rejected_after_stop_before_tool_call(
 
 
 @pytest.mark.asyncio
-async def test_follow_up_merged_into_tool_result_before_stop(
-    runner, mock_provider, provider_request, mock_tool_executor, mock_hooks
-):
-    """Test that follow-ups queued before stop are merged into tool results."""
-
-    mock_event = MockEvent("test:FriendMessage:merge_before_stop", "u1")
-    run_context = ContextWrapper(context=MockAgentContext(mock_event))
-
-    await runner.reset(
-        provider=mock_provider,
-        request=provider_request,
-        run_context=run_context,
-        tool_executor=mock_tool_executor,
-        agent_hooks=mock_hooks,
-        streaming=False,
-    )
-
-    # Queue follow-ups before stop
-    ticket1 = runner.follow_up(message_text="follow up 1 before stop")
-    ticket2 = runner.follow_up(message_text="follow up 2 before stop")
-    assert ticket1 is not None
-    assert ticket2 is not None
-
-    # Run the agent step (should execute tool and merge follow-ups)
-    async for _ in runner.step():
-        pass
-
-    # Verify follow-ups were merged into tool result
-    assert provider_request.tool_calls_result is not None
-    assert isinstance(provider_request.tool_calls_result, list)
-    assert provider_request.tool_calls_result
-    tool_result = str(
-        provider_request.tool_calls_result[0].tool_calls_result[0].content
-    )
-
-    # Should contain the follow-up notice
-    assert "SYSTEM NOTICE" in tool_result
-    assert "follow up 1 before stop" in tool_result
-    assert "follow up 2 before stop" in tool_result
-
-    # Tickets should be marked as consumed
-    assert ticket1.consumed is True
-    assert ticket2.consumed is True
-
-
-@pytest.mark.asyncio
 async def test_follow_up_rejected_and_runner_stops_without_execution(
     runner, mock_provider, provider_request, mock_tool_executor, mock_hooks
 ):
@@ -2043,7 +2174,7 @@ async def test_follow_up_rejected_and_runner_stops_without_execution(
     # Run the agent step - should stop immediately without executing tools
     async for response in runner.step():
         # Should yield an aborted response
-        if response.type == "aborted":
+        if response.type == "message.completed" and response.status == "cancelled":
             break
 
     # Verify runner stopped gracefully
@@ -2062,20 +2193,10 @@ async def test_follow_up_rejected_and_runner_stops_without_execution(
 
 
 @pytest.mark.asyncio
-async def test_follow_up_after_stop_not_merged_into_tool_result(
+async def test_follow_up_after_stop_not_added_to_context(
     runner, mock_provider, provider_request, mock_tool_executor, mock_hooks
 ):
-    """Regression test for issue #6626: verify post-stop follow-ups are not injected into tool results.
-
-    This test simulates the race condition where:
-    1. Runner is active and executing tools
-    2. A follow-up is queued (should be included in tool result)
-    3. Stop is requested
-    4. Another follow-up is attempted (should be rejected)
-    5. Tool execution completes and merges follow-ups into result
-
-    The key assertion is that only pre-stop follow-ups are merged into the tool result.
-    """
+    """Reject new steering after stop without losing unresolved input tickets."""
 
     mock_event = MockEvent("test:FriendMessage:regression_6626", "u1")
     run_context = ContextWrapper(context=MockAgentContext(mock_event))
@@ -2089,7 +2210,7 @@ async def test_follow_up_after_stop_not_merged_into_tool_result(
         streaming=False,
     )
 
-    # Add a follow-up before stop (should be included in tool result)
+    # Queue input before requesting stop.
     ticket_before = runner.follow_up(message_text="valid before stop")
     assert ticket_before is not None
     assert ticket_before in runner._pending_follow_ups
@@ -2106,36 +2227,646 @@ async def test_follow_up_after_stop_not_merged_into_tool_result(
     assert len(runner._pending_follow_ups) == 1
     assert runner._pending_follow_ups[0].text == "valid before stop"
 
-    # Run the agent step - this will execute tool and merge follow-ups into result
+    # Let the step settle pending input after stop.
     async for response in runner.step():
         # The runner should execute tools and then stop
         pass
 
-    # Verify tool result was created with follow-up merged
-    # Note: When stop is requested, the tool may or may not execute depending on timing.
-    # The key assertion is that IF tool_calls_result exists, it only contains pre-stop follow-ups.
-    if provider_request.tool_calls_result is not None:
-        assert isinstance(provider_request.tool_calls_result, list)
-        assert provider_request.tool_calls_result
-        tool_result = str(
-            provider_request.tool_calls_result[0].tool_calls_result[0].content
-        )
-
-        # Should contain the pre-stop follow-up
-        assert "valid before stop" in tool_result
-
-        # Should NOT contain the post-stop follow-up
-        assert "invalid after stop" not in tool_result
-        assert "after stop" not in tool_result or "after stop" in "valid before stop"
-
-        # Ticket should be marked as consumed (merged into tool result)
-        assert ticket_before.consumed is True
-    else:
-        # If tool execution was aborted by stop, the ticket should still be resolved
-        # but not consumed (since there was no tool call to merge into)
-        assert ticket_before.resolved.is_set()
+    assert all(
+        message.content != [TextPart(text="invalid after stop")]
+        for message in runner.run_context.messages
+    )
+    assert ticket_before.resolved.is_set()
+    assert ticket_before.consumed == any(
+        message.role == "user" and message.content == [TextPart(text="valid before stop")]
+        for message in runner.run_context.messages
+    )
 
 
 if __name__ == "__main__":
     # 运行测试
     pytest.main([__file__, "-v"])
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("streaming", [False, True])
+async def test_event_journal_records_requests_tools_and_final_context(
+    tmp_path, runner, provider_request, mock_tool_executor, mock_hooks, streaming
+):
+    from astrbot.core.agent.conversation_events import ConversationEventWriter
+    from astrbot.core.agent.message import dump_messages
+    from astrbot.core.db.sqlite import SQLiteDatabase
+
+    db = SQLiteDatabase(str(tmp_path / "runner_events.db"))
+    await db.initialize()
+    try:
+        conv = await db.create_conversation("umo", "p")
+        writer = ConversationEventWriter(db.conversation_store, await db.conversation_store.read(conv.conversation_id))
+        provider = VaryingUsageProvider()
+        sink = AsyncMock(wraps=writer.consume)
+        await runner.reset(
+            provider=provider, request=provider_request,
+            run_context=ContextWrapper(context=None),
+            tool_executor=mock_tool_executor, agent_hooks=mock_hooks,
+            streaming=streaming,
+            conversation_event_sink=sink,
+        )
+        await writer.start_turn({"kind": "agent"})
+        ticket = runner.follow_up(message_text="steering input")
+        runtime_events = await collect_events(runner.step_until_done(3))
+        captured = [call.args[0] for call in sink.await_args_list]
+        assert sum(event.type == "context.updated" for event in captured) == 1
+        assert sum(event.type == "context.appended" for event in captured) == 4
+        await writer.save_history(dump_messages(runner.run_context.messages))
+        await writer.finish_turn("completed")
+        events = await db.conversation_store.events(conv.conversation_id)
+        types = [e.type for e in events]
+        assert "request.started" not in types and "request.finished" not in types
+        assert "tool.started" not in types and "tool.finished" not in types
+        runtime_types = [event.type for event in runtime_events]
+        assert runtime_types.count("tool.started") == runtime_types.count("tool.finished") == 1
+        assert types[-1] == "turn.finished"
+        assistant_events = [e for e in events if e.type == "message.appended" and "status" in e.payload]
+        assert [e.event_id for e in assistant_events] == [
+            e.request_id for e in runtime_events if e.type == "request.started"
+        ]
+        assert all(e.payload["status"] == "completed" for e in assistant_events)
+        usage = [e.payload["usage"] for e in assistant_events]
+        assert sum(item["input_tokens"] for item in usage) == 330
+        assert sum(item["cached_input_tokens"] for item in usage) == 30
+        finished_tool = next(e for e in runtime_events if e.type == "tool.finished")
+        assert finished_tool.status == "completed"
+        tool_message = next(e.payload["message"] for e in events if e.type == "message.appended" and e.payload["message"]["role"] == "tool")
+        assert tool_message["tool_call_id"] == "call_varying_usage"
+        assert "工具执行结果" in str(tool_message["content"])
+        history = (await db.conversation_store.read(conv.conversation_id)).messages
+        assert [m["role"] for m in history] == ["user", "assistant", "tool", "user", "assistant"]
+        assert ticket is not None and ticket.consumed
+        assert history[-2]["content"] == [{"type": "text", "text": "steering input"}]
+        assert history[-1]["content"] == [{"type": "text", "text": "final"}]
+    finally:
+        await db.engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_journal_failure_does_not_retry_a_model_or_fallback(
+    runner, provider_request, mock_tool_executor, mock_hooks
+):
+    from astrbot.core.agent.conversation_events import ConversationPersistenceError
+
+    async def persist(response):
+        if response.type == "context.appended":
+            raise ConversationPersistenceError("unavailable")
+        return True
+
+    primary, fallback = MockProvider(), MockProvider()
+    await runner.reset(
+        provider=primary, fallback_providers=[fallback], request=provider_request,
+        run_context=ContextWrapper(context=None), tool_executor=mock_tool_executor,
+        agent_hooks=mock_hooks, streaming=False, conversation_event_sink=persist,
+    )
+    with pytest.raises(ConversationPersistenceError):
+        await collect_events(runner.step())
+    assert primary.call_count == 1
+    assert fallback.call_count == 0
+
+
+@pytest.mark.asyncio
+async def test_tool_call_message_is_acknowledged_before_creating_executor(
+    runner, provider_request, mock_hooks
+):
+    from unittest.mock import Mock
+
+    from astrbot.core.agent.conversation_events import ConversationPersistenceError
+
+    provider = VaryingUsageProvider()
+    executor = SimpleNamespace(execute=Mock(side_effect=AssertionError("must not run")))
+    seen = []
+
+    async def persist(response):
+        seen.append(response.type)
+        if response.type == "context.appended" and any(
+            message.get("tool_calls") for message in response.data["messages"]
+        ):
+            assert response.data["assistant"]["event_id"]
+            raise ConversationPersistenceError("unavailable")
+        return True
+
+    await runner.reset(
+        provider=provider, request=provider_request,
+        run_context=ContextWrapper(context=None), tool_executor=executor,
+        agent_hooks=mock_hooks, streaming=False, conversation_event_sink=persist,
+    )
+    with pytest.raises(ConversationPersistenceError):
+        await collect_events(runner.step_until_done(3))
+    executor.execute.assert_not_called()
+    assert "request.started" not in seen and "request.finished" not in seen
+    assert not runner._events.active
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("entrypoint", ["sdk", "chat"])
+@pytest.mark.parametrize("streaming", [False, True])
+async def test_step_notices_reach_model_once_per_threshold(
+    runner,
+    mock_provider,
+    provider_request,
+    mock_tool_executor,
+    mock_hooks,
+    entrypoint,
+    streaming,
+    monkeypatch,
+):
+    snapshots = []
+    original_chat = mock_provider.text_chat
+    mock_provider.max_calls_before_normal_response = 1000
+
+    async def chat_with_two_tools(**kwargs):
+        snapshots.append([message.model_dump() for message in kwargs["contexts"]])
+        response = await original_chat(**kwargs)
+        if response.tools_call_name:
+            response.tools_call_name *= 2
+            response.tools_call_args *= 2
+            response.tools_call_ids = [
+                f"call_{mock_provider.call_count}_a",
+                f"call_{mock_provider.call_count}_b",
+            ]
+        return response
+
+    monkeypatch.setattr(mock_provider, "text_chat", chat_with_two_tools)
+    event = MagicMock()
+    event.is_stopped.return_value = False
+    event.get_extra.return_value = None
+    event.get_platform_name.return_value = "test"
+    event.get_platform_id.return_value = "test"
+    event.send = AsyncMock()
+    await runner.reset(
+        provider=mock_provider,
+        request=provider_request,
+        run_context=ContextWrapper(context=SimpleNamespace(event=event)),
+        tool_executor=mock_tool_executor,
+        agent_hooks=mock_hooks,
+        streaming=streaming,
+    )
+
+    # Simulate compaction that drops old notices while retaining the latest tool round.
+    async def replace_context(messages, **kwargs):
+        return [messages[0], *messages[-3:]] if len(messages) > 4 else list(messages)
+
+    runner.request_context_manager.process = AsyncMock(side_effect=replace_context)
+    if entrypoint == "sdk":
+        responses = runner.step_until_done(128)
+    else:
+        # Bootstrap the public API first, as the application does, to avoid import cycles.
+        import astrbot.api  # noqa: F401
+        from astrbot.core.astr_agent_runtime.runner import run_agent
+
+        responses = run_agent(runner, max_step=128)
+    async for _ in responses:
+        pass
+
+    assert mock_provider.call_count == 129
+    assert runner.req.func_tool is None
+    assert runner.done()
+    tools = [
+        m for result in runner.req.tool_calls_result for m in result.tool_calls_result
+    ]
+    assert len(tools) == 256
+    for percent, step, remaining in [(80, 103, 25), (90, 116, 12), (95, 122, 6)]:
+        marker = f"[SYSTEM NOTICE: Agent step budget {percent}%]"
+        matches = [m for m in tools if marker in str(m.content)]
+        assert len(matches) == 1
+        assert matches[0].tool_call_id == f"call_{step}_b"
+        assert f"Remaining steps: {remaining}." in str(matches[0].content)
+        assert not any(marker in str(m) for m in snapshots[step - 1])
+        assert any(marker in str(m) for m in snapshots[step])
+    assert "Remaining steps: 0." in str(tools[-1].content)
+    assert "tool-call round limit in AstrBot WebUI" in str(tools[-1].content)
+    assert any(
+        "tool-call round limit in AstrBot WebUI" in str(m) for m in snapshots[-1]
+    )
+    assert runner.request_context_manager.process.await_count == 129
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("max_steps", [1, 15, 16])
+async def test_small_step_budgets_and_reset(
+    runner,
+    mock_provider,
+    provider_request,
+    mock_tool_executor,
+    mock_hooks,
+    max_steps,
+):
+    mock_provider.max_calls_before_normal_response = 1000
+    await runner.reset(
+        provider=mock_provider,
+        request=provider_request,
+        run_context=ContextWrapper(context=None),
+        tool_executor=mock_tool_executor,
+        agent_hooks=mock_hooks,
+    )
+    async for _ in runner.step_until_done(max_steps):
+        pass
+    tools = [m for m in runner.run_context.messages if m.role == "tool"]
+    for percent in (80, 90, 95):
+        assert sum(
+            f"[SYSTEM NOTICE: Agent step budget {percent}%]" in str(m.content)
+            for m in tools
+        ) == (1 if max_steps >= 16 else 0)
+    assert "tool-call round limit in AstrBot WebUI" in str(tools[-1].content)
+    assert mock_provider.call_count == max_steps + 1
+    assert runner._step_budget_notified
+    await runner.reset(
+        provider=mock_provider,
+        request=provider_request,
+        run_context=ContextWrapper(context=None),
+        tool_executor=mock_tool_executor,
+        agent_hooks=mock_hooks,
+    )
+    assert runner._step_budget_used == 0
+    assert runner._step_budget_notified == set()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("exit_kind", ["provider_error", "exception", "stop"])
+async def test_lifecycle_terminal_paths_notify_once(
+    runner, mock_provider, provider_request, mock_tool_executor, exit_kind
+):
+    """Errors and user stops notify completion without a fake response event."""
+    hooks = AsyncMock(spec=BaseAgentRunHooks)
+    await runner.reset(
+        provider=mock_provider,
+        request=provider_request,
+        run_context=ContextWrapper(context=None),
+        tool_executor=mock_tool_executor,
+        agent_hooks=hooks,
+    )
+    if exit_kind == "provider_error":
+        mock_provider.text_chat = AsyncMock(
+            return_value=LLMResponse(role="err", completion_text="provider unavailable")
+        )
+    elif exit_kind == "exception":
+        runner.request_context_manager.process = AsyncMock(
+            side_effect=RuntimeError("history save failed")
+        )
+    else:
+        runner.request_stop()
+
+    if exit_kind == "exception":
+        with pytest.raises(RuntimeError, match="history save failed"):
+            async for _ in runner.step_until_done(3):
+                pass
+        assert runner.run_context.run_error == "RuntimeError: history save failed"
+        hooks.on_agent_done.assert_awaited_once_with(runner.run_context, None)
+    else:
+        async for _ in runner.step_until_done(3):
+            pass
+        hooks.on_agent_done.assert_awaited_once_with(
+            runner.run_context, runner.get_final_llm_resp()
+        )
+        if exit_kind == "provider_error":
+            assert runner.run_context.run_error == "provider unavailable"
+    assert runner.run_context.run_end_reason == (
+        "cancelled" if exit_kind == "stop" else "error"
+    )
+    hooks.on_llm_response.assert_not_awaited()
+    assert runner.done()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("consumer", ["step", "turn", "main"])
+async def test_lifecycle_closing_response_consumer_finalizes_immediately(
+    runner, mock_provider, provider_request, mock_tool_executor, consumer
+):
+    """Closing a response stream releases ownership without GC or another loop tick."""
+    hooks = AsyncMock(spec=BaseAgentRunHooks)
+    event = MagicMock()
+    event.is_stopped.return_value = False
+    event.get_extra.return_value = None
+    event.get_platform_name.return_value = "test"
+    await runner.reset(
+        provider=mock_provider,
+        request=provider_request,
+        run_context=ContextWrapper(context=MockAgentContext(event)),
+        tool_executor=mock_tool_executor,
+        agent_hooks=hooks,
+    )
+    responses = (
+        runner.step()
+        if consumer == "step"
+        else runner.step_until_done(4)
+        if consumer == "turn"
+        else run_agent(runner, show_tool_use=False)
+    )
+    await anext(responses)
+    await responses.aclose()
+    hooks.on_agent_done.assert_awaited_once()
+    assert runner.run_context.run_end_reason == "cancelled"
+    assert runner.done()
+
+
+@pytest.mark.asyncio
+async def test_lifecycle_cancellation_during_async_work(
+    runner, mock_provider, provider_request, mock_tool_executor
+):
+    """Task cancellation propagates and still runs one awaited cleanup hook."""
+    hooks = AsyncMock(spec=BaseAgentRunHooks)
+    sink = AsyncMock(return_value=True)
+    started = asyncio.Event()
+    cleanup = asyncio.Event()
+
+    async def block(*args, **kwargs):
+        started.set()
+        await asyncio.Future()
+
+    async def done(context, response):
+        await asyncio.sleep(0)
+        cleanup.set()
+
+    hooks.on_agent_done.side_effect = done
+    mock_provider.text_chat = block
+    await runner.reset(
+        provider=mock_provider,
+        request=provider_request,
+        run_context=ContextWrapper(context=None),
+        tool_executor=mock_tool_executor,
+        agent_hooks=hooks,
+        conversation_event_sink=sink,
+    )
+
+    async def run():
+        async for _ in runner.step_until_done(4):
+            pass
+
+    task = asyncio.create_task(run())
+    await asyncio.wait_for(started.wait(), 2)
+    task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await asyncio.wait_for(task, 2)
+    assert cleanup.is_set()
+    hooks.on_agent_done.assert_awaited_once()
+    assert runner.run_context.run_end_reason == "cancelled"
+    assert runner.done()
+
+    recorded = [call.args[0] for call in sink.await_args_list if call.args[0].type == "message.appended"]
+    assert len(recorded) == 1 and recorded[0].data["status"] == "cancelled"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("main_bridge", [False, True])
+@pytest.mark.parametrize("provider_error", [False, True])
+async def test_lifecycle_budget_exit_and_final_request_failure(
+    runner,
+    mock_provider,
+    provider_request,
+    mock_tool_executor,
+    main_bridge,
+    provider_error,
+):
+    """Record budget exhaustion, but prefer errors if the final request fails."""
+    hooks = AsyncMock(spec=BaseAgentRunHooks)
+    sink = AsyncMock(return_value=True)
+    event = MagicMock()
+    event.is_stopped.return_value = False
+    event.get_extra.return_value = None
+    event.get_platform_name.return_value = "test"
+    if provider_error:
+        mock_provider.text_chat = AsyncMock(
+            return_value=LLMResponse(role="err", completion_text="summary failed", usage=TokenUsage(output=3))
+        )
+    await runner.reset(
+        provider=mock_provider,
+        request=provider_request,
+        run_context=ContextWrapper(context=MockAgentContext(event)),
+        tool_executor=mock_tool_executor,
+        agent_hooks=hooks,
+        conversation_event_sink=sink,
+    )
+    responses = (
+        run_agent(runner, max_step=0) if main_bridge else runner.step_until_done(0)
+    )
+    async for _ in responses:
+        pass
+    hooks.on_agent_done.assert_awaited_once()
+    assert runner.run_context.run_end_reason == (
+        "error" if provider_error else "max_steps"
+    )
+    assert runner.run_context.run_error == (
+        "summary failed" if provider_error else None
+    )
+
+    if provider_error:
+        failed = [call.args[0] for call in sink.await_args_list if call.args[0].type == "message.appended"]
+        assert len(failed) == 1
+        assert failed[0].data["status"] == "failed"
+        assert failed[0].data["usage"]["output_tokens"] == 3
+        assert failed[0].data["message"]["_no_save"] is True
+
+
+@pytest.mark.asyncio
+async def test_lifecycle_main_cancel_between_complete_steps(
+    runner, mock_provider, provider_request, mock_tool_executor, monkeypatch
+):
+    """Cancellation while joining a stop watcher must also release the run."""
+    hooks = AsyncMock(spec=BaseAgentRunHooks)
+    cleanup_started = asyncio.Event()
+
+    async def watcher(*args):
+        try:
+            await asyncio.Future()
+        finally:
+            cleanup_started.set()
+            await asyncio.Future()
+
+    monkeypatch.setattr(
+        "astrbot.core.astr_agent_runtime.runner._watch_agent_stop_signal", watcher
+    )
+    event = MagicMock()
+    event.is_stopped.return_value = False
+    event.get_extra.return_value = None
+    event.get_platform_name.return_value = "test"
+    await runner.reset(
+        provider=mock_provider,
+        request=provider_request,
+        run_context=ContextWrapper(context=MockAgentContext(event)),
+        tool_executor=mock_tool_executor,
+        agent_hooks=hooks,
+    )
+
+    async def run():
+        async for _ in run_agent(runner, show_tool_use=False):
+            pass
+
+    task = asyncio.create_task(run())
+    await asyncio.wait_for(cleanup_started.wait(), 2)
+    assert not runner.done()
+    task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await asyncio.wait_for(task, 2)
+    hooks.on_agent_done.assert_awaited_once_with(runner.run_context, None)
+    assert runner.run_context.run_end_reason == "cancelled"
+
+
+@pytest.mark.asyncio
+async def test_context_token_limit_is_isolated_per_run(
+    mock_provider, mock_tool_executor, mock_hooks
+):
+    """A session override must not leak through a shared provider to another run."""
+    mock_provider.provider_config["max_context_tokens"] = 32000
+    limited, default = ToolLoopAgentRunner(), ToolLoopAgentRunner()
+    common = {
+        "provider": mock_provider,
+        "tool_executor": mock_tool_executor,
+        "agent_hooks": mock_hooks,
+    }
+    await limited.reset(
+        **common,
+        request=ProviderRequest(prompt="limited"),
+        run_context=ContextWrapper(context=None),
+        max_context_tokens=4096,
+    )
+    await default.reset(
+        **common,
+        request=ProviderRequest(prompt="default"),
+        run_context=ContextWrapper(context=None),
+    )
+    assert limited.request_context_manager_config.max_context_tokens == 4096
+    assert default.request_context_manager_config.max_context_tokens == 32000
+    assert mock_provider.provider_config["max_context_tokens"] == 32000
+
+
+@pytest.mark.asyncio
+async def test_unknown_tool_is_rejected_without_claiming_execution(
+    runner, provider_request, mock_tool_executor, mock_hooks
+):
+    """A model call to an unavailable tool never reports an executor start."""
+    await runner.reset(
+        provider=MockToolCallProvider("missing", {}),
+        request=provider_request,
+        run_context=ContextWrapper(context=None),
+        tool_executor=mock_tool_executor,
+        agent_hooks=mock_hooks,
+    )
+    events = [event async for event in runner.step()]
+    rejected = [event for event in events if event.type == "tool.rejected"]
+    assert len(rejected) == 1
+    assert rejected[0].name == "missing"
+    assert rejected[0].error.code == "tool_not_found"
+    assert not any(event.type in ("tool.started", "tool.finished") for event in events)
+    assert not mock_hooks.tool_start_called
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("outcome", ["completed", "failed", "partial_failure", "cancelled"])
+async def test_steering_detaches_running_tool_without_reexecution(
+    runner, provider_request, mock_hooks, monkeypatch, outcome
+):
+    from astrbot.core.agent.runtime import AgentSessionRef
+    from astrbot.core.utils.active_event_registry import ActiveEventRegistry
+    from mcp.types import CallToolResult, TextContent
+
+    registry = ActiveEventRegistry()
+    monkeypatch.setattr(
+        "astrbot.core.astr_agent_runtime.tool_executor.active_event_registry", registry
+    )
+    wakeup = AsyncMock()
+    monkeypatch.setattr(
+        "astrbot.core.astr_agent_runtime.tool_executor.wake_main_agent", wakeup
+    )
+    event = MockEvent("test:GroupMessage:steering", "alice")
+    extras = {}
+    event.get_extra = extras.get
+    event.set_extra = extras.__setitem__
+    event.role = "member"
+    registry.register(event)
+    original_session = AgentSessionRef("astrbot", "original-conversation")
+    context = SimpleNamespace(event=event, context=object(), agent_session=original_session)
+    started, release, closed = (asyncio.Event() for _ in range(3))
+    calls = []
+
+    class SlowExecutor(FunctionToolExecutor):
+        @classmethod
+        async def execute(cls, tool, run_context, **arguments):
+            owner = asyncio.current_task()
+            calls.append(arguments)
+            try:
+                started.set()
+                await release.wait()
+                if outcome == "failed":
+                    raise RuntimeError("background failure")
+                yield CallToolResult(content=[TextContent(type="text", text="finished once")])
+                if outcome == "partial_failure":
+                    raise RuntimeError("failure after partial output")
+            finally:
+                assert asyncio.current_task() is owner
+                closed.set()
+
+    provider = VaryingUsageProvider()
+    original_text_chat = provider.text_chat
+    requests = []
+
+    async def capture_request(**kwargs):
+        requests.append([message.model_dump() for message in kwargs["contexts"]])
+        return await original_text_chat(**kwargs)
+
+    provider.text_chat = AsyncMock(side_effect=capture_request)
+    await runner.reset(
+        provider=provider, request=provider_request,
+        run_context=ContextWrapper(context=context), tool_executor=SlowExecutor,
+        agent_hooks=mock_hooks, streaming=False,
+    )
+    foreground = asyncio.create_task(collect_events(runner.step_until_done(3)))
+    background = None
+    try:
+        await asyncio.wait_for(started.wait(), 1)
+        ticket = runner.follow_up(message_text="answer this first")
+        events = await asyncio.wait_for(foreground, 1)
+        assert ticket is not None and ticket.consumed
+        assert not closed.is_set()
+        background = next(iter(registry._background_tasks[event.unified_msg_origin]))
+        finished = next(event for event in events if event.type == "tool.finished")
+        assert finished.structured_result["status"] == "running"
+        assert finished.structured_result["background_task_id"] == finished.execution_id
+        assert runner.run_context.messages[-2].content == [TextPart(text="answer this first")]
+        # One initial request starts the tool, then one request receives both inputs.
+        assert provider.text_chat.await_count == 2
+        request_messages = requests[1]
+        assert request_messages[-2]["role"] == "tool"
+        assert "Tool continues in background." in request_messages[-2]["content"]
+        assert finished.execution_id in request_messages[-2]["content"]
+        assert request_messages[-1] == {
+            "role": "user", "content": [{"type": "text", "text": "answer this first"}],
+        }
+        wakeup.assert_not_awaited()
+        context.agent_session = AgentSessionRef("astrbot", "new-selection")
+        registry.unregister(event)
+        if outcome == "cancelled":
+            registry.request_agent_stop_all(event.unified_msg_origin)
+        release.set()
+        await asyncio.wait_for(asyncio.gather(background, return_exceptions=True), 1)
+        assert closed.is_set() and len(calls) == 1
+        assert not registry._background_tasks
+        if outcome == "cancelled":
+            assert background.cancelled()
+            wakeup.assert_not_awaited()
+        else:
+            wakeup.assert_awaited_once()
+            payload = wakeup.call_args.kwargs
+            assert payload["agent_session"] == original_session
+            assert payload["source_id"] == finished.execution_id
+            assert payload["source"] == "background_task"
+            name, result = payload["tool_result"]
+            assert name
+            assert ("background failure" if outcome == "failed" else "finished once") in result.content[0].text
+            assert result.isError == (outcome in ("failed", "partial_failure"))
+            if outcome == "partial_failure":
+                assert "failure after partial output" in result.content[1].text
+    finally:
+        release.set()
+        for task in (foreground, background):
+            if task is not None:
+                if not task.done():
+                    task.cancel()
+                await asyncio.gather(task, return_exceptions=True)
+        registry.unregister(event)

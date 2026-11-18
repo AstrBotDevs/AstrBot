@@ -147,7 +147,24 @@
       "empty": "この会話にはまだメッセージがありません",
       "copyUmo": "UMO をコピー",
       "rawData": "生データ",
-      "copyRawData": "生データをコピー"
+      "copyRawData": "生データをコピー",
+      "messageCount": "{count} 件のメッセージ",
+      "markdown": "Markdown を表示",
+      "fontSize": "文字サイズ",
+      "smallerText": "文字を小さくする",
+      "largerText": "文字を大きくする",
+      "structuredData": "構造化コンテンツ",
+      "toolCall": "ツール呼び出し",
+      "reasoning": "思考過程",
+      "image": "メッセージ画像",
+      "roles": {
+        "user": "ユーザー",
+        "assistant": "アシスタント",
+        "system": "システム",
+        "developer": "開発者",
+        "tool": "ツール結果",
+        "function": "関数結果"
+      }
     },
     "actions": {
       "editTitle": "タイトルを編集",

@@ -89,6 +89,26 @@ class AstrBotConfig(dict):
         config_migrated = False
         if default_config is DEFAULT_CONFIG:
             config_migrated = migrate_config_on_load(conf, Path(config_path))
+        provider_settings = conf.get("provider_settings")
+        default_provider_settings = default_config.get("provider_settings")
+        if (
+            isinstance(provider_settings, dict)
+            and isinstance(default_provider_settings, dict)
+            and "computer_use_local_permissions" in default_provider_settings
+            and "computer_use_local_permissions" not in provider_settings
+        ):
+            # Preserve legacy execution grants when migrating to role policies.
+            permissions = copy.deepcopy(
+                default_provider_settings["computer_use_local_permissions"]
+            )
+            permissions["member"]["allow_execution"] = permissions["member"][
+                "filesystem_scope"
+            ] != "none" and not provider_settings.get(
+                "computer_use_require_admin", True
+            )
+            permissions["admin"]["filesystem_scope"] = "host"
+            provider_settings["computer_use_local_permissions"] = permissions
+            config_migrated = True
         # 检查配置完整性，并插入
         has_new = self.check_config_integrity(default_config, conf, schema=schema)
         has_new |= config_migrated
@@ -197,17 +217,17 @@ class AstrBotConfig(dict):
                 # 配置项不存在，插入默认值
                 path_ = path + "." + key if path else key
                 logger.info("Config key missing; added default.")
-                new_conf[key] = value
+                new_conf[key] = copy.deepcopy(value)
                 has_new = True
             elif conf[key] is None:
                 # 配置项为 None，使用默认值
-                new_conf[key] = value
+                new_conf[key] = copy.deepcopy(value)
                 has_new = True
             elif isinstance(value, dict):
                 # 递归检查子配置项
                 if not isinstance(conf[key], dict):
                     # 类型不匹配，使用默认值
-                    new_conf[key] = value
+                    new_conf[key] = copy.deepcopy(value)
                     has_new = True
                 elif (
                     isinstance(child_schema, dict)
@@ -216,7 +236,7 @@ class AstrBotConfig(dict):
                     # Free-form mapping declared as "type": "dict": user-added
                     # keys are data instead of stale entries, keep them as-is.
                     new_conf[key] = conf[key]
-                elif (path + "." + key if path else key) == "agent_runner.config":
+                elif (path + "." + key if path else key) == "agent.config":
                     # Runner config is normalized according to runner_type when saved.
                     new_conf[key] = conf[key]
                 else:

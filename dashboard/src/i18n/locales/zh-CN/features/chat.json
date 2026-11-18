@@ -1,6 +1,18 @@
 {
   "title": "聊天吧!",
   "subtitle": "与AI助手进行对话",
+  "settings": {
+    "general": "通用",
+    "chat": "聊天",
+    "appearance": "外观",
+    "light": "浅色",
+    "dark": "深色",
+    "system": "跟随系统",
+    "streaming": "流式输出",
+    "streamingHint": "回复生成时逐步显示内容，仅影响 ChatUI。",
+    "reasoning": "显示思考内容",
+    "reasoningHint": "显示模型返回的思考过程，仅影响 ChatUI。"
+  },
   "input": {
     "placeholder": "想问什么都可以",
     "projectPlaceholder": "接下来做点什么？",
@@ -18,9 +30,30 @@
     "assistant": "助手",
     "system": "系统",
     "error": "错误消息",
-    "loading": "思考中..."
+    "loading": "思考中...",
+    "loadingVariants": [
+      "(｡•̀ᴗ-)✧ 思考中...",
+      "(・_・ヾ 琢磨中...",
+      "(๑•̀ㅂ•́)و 整理思路中...",
+      "(｡･ω･｡) 寻找灵感中...",
+      "( •̀ ω •́ )✧ 认真分析中...",
+      "(つ•̀ω•́)つ 组织语言中...",
+      "(・・。)ゞ 捋捋头绪中...",
+      "(ง •_•)ง 努力想办法中...",
+      "( ˘ω˘ ) 脑内推演中...",
+      "(ﾉ◕ヮ◕)ﾉ 酝酿答案中..."
+    ]
   },
   "voice": {
+    "transcribing": "语音转述中",
+    "transcribe": "语音转述",
+    "sendAudio": "录制并发送语音",
+    "cancel": "取消录音",
+    "finishTranscription": "结束并转写",
+    "sttModel": "语音转述模型",
+    "configure": "去配置",
+    "noSttProvider": "请先配置可用的语音转文字模型",
+    "transcriptionFailed": "语音转写失败，请重试",
     "start": "开始录音",
     "stop": "停止录音",
     "recording": "新录音",
@@ -38,6 +71,7 @@
     "examples": "示例问题"
   },
   "actions": {
+    "scrollToBottom": "回到底部",
     "copy": "复制",
     "regenerate": "重新生成",
     "retry": "重试",
@@ -74,6 +108,8 @@
     "placeholder": "继续追问这段内容..."
   },
   "conversation": {
+    "loading": "正在加载会话",
+    "loadFailed": "会话列表加载失败",
     "title": "对话",
     "newConversation": "新的聊天",
     "noHistory": "暂无对话历史",
@@ -115,12 +151,31 @@
     "title": "配置文件"
   },
   "reasoning": {
+    "worked": "运行了 {duration}",
+    "working": "已运行 {duration}",
+    "workCompleted": "运行过程",
+    "durationHours": "{hours} 小时 {minutes} 分钟 {seconds} 秒",
+    "durationMinutes": "{minutes} 分钟 {seconds} 秒",
+    "durationSeconds": "{seconds} 秒",
+    "enabled": "思考内容已开启",
+    "disabled": "思考内容已关闭",
     "thinking": "思考过程",
     "summarySeparator": "，",
     "thinkSummary": "思考了 {count} 次",
     "toolSummary": "使用了 {count} 次工具",
     "think": "思考",
     "toolUsed": "使用工具"
+  },
+  "history": {
+    "edit": "编辑消息",
+    "context_pruned": "此处的历史上下文已清理，无法从原位置继续。",
+    "context_unavailable": "此处的历史上下文不可用。",
+    "inactive_message": "此消息属于已替换的对话版本。",
+    "run_active": "请先停止当前生成。",
+    "unsupported_message": "此消息不支持该操作。",
+    "loadFailed": "历史消息加载失败",
+    "loadEarlierFailed": "更早的消息加载失败",
+    "loading": "正在加载更早的消息"
   },
   "reply": {
     "replyTo": "引用",
@@ -133,12 +188,14 @@
     "name": "项目名称",
     "emoji": "图标 (Emoji)",
     "description": "项目描述（可选）",
+    "moreSettings": "更多设置",
     "workspace": {
       "type": "工作区",
       "session": "按会话分开",
       "project": "项目共享工作区",
       "custom": "自定义路径",
-      "path": "工作区路径"
+      "path": "工作区路径",
+      "selectPath": "选择文件夹"
     },
     "loadingSessions": "加载对话中...",
     "noSessions": "该项目暂无对话",
@@ -152,6 +209,7 @@
     "refresh": "刷新文件树",
     "filter": "筛选文件...",
     "clearFilter": "清除文件筛选",
+    "selectSession": "请先选择一个会话以浏览其工作区文件",
     "empty": "工作区暂无文件",
     "noMatches": "没有匹配的文件",
     "loadFailed": "加载工作区文件失败",
@@ -215,5 +273,25 @@
     "exit": "退出",
     "partialFailure": "{total} 个对话中有 {failed} 个删除失败",
     "requestFailed": "删除对话失败，请重试。"
+  },
+  "pluginView": {
+    "loading": "正在加载视图…",
+    "unavailable": "视图暂不可用，已显示文字结果。"
+  },
+  "workbench": {
+    "newTab": "新工作台",
+    "chooseView": "选择一个插件视图",
+    "empty": "还没有注册的工作台视图。启用提供此类视图的插件后，会显示在这里。",
+    "loadError": "无法加载工作台视图。",
+    "retry": "重试",
+
+    "title": "工作台",
+    "openView": "在工作台中打开",
+    "hide": "收起工作台",
+    "expand": "展开工作台",
+    "restore": "还原面板大小",
+    "resize": "调整工作台宽度",
+    "closeTab": "关闭 {title}",
+    "resize": "调整工作台宽度"
   }
 }

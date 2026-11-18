@@ -4,6 +4,7 @@ import json
 import logging
 import random
 from collections.abc import AsyncGenerator
+from contextlib import asynccontextmanager
 from typing import Literal, cast
 
 import httpx
@@ -25,8 +26,18 @@ from astrbot.core.utils.media_utils import (
 )
 from astrbot.core.utils.network_utils import is_connection_error, log_connection_failure
 
+from ..headers import build_conversation_headers
 from ..register import register_provider_adapter
+from .gemini_api_common import gemini_api_version
 from .request_retry import retry_provider_request
+
+GEMINI_4_FALLBACK_THINKING_LEVELS = ("LOW", "MEDIUM", "HIGH", "XHIGH")
+
+GEMINI_4_THINKING_LEVELS = {
+    "gemini-4-carbon": ("LOW", "MEDIUM", "HIGH"),
+    "gemini-4-argon": ("LOW", "MEDIUM", "HIGH"),
+    "gemini-4-hydrogen": ("LOW", "MEDIUM", "HIGH", "XHIGH"),
+}
 
 
 class SuppressNonTextPartsWarning(logging.Filter):
@@ -77,6 +88,7 @@ class ProviderGoogleGenAI(Provider):
 
         self._http_client: httpx.AsyncClient | None = None
         self._stale_http_clients: list[httpx.AsyncClient] = []
+        self._request_lock = asyncio.Lock()
         self._init_client()
         self.set_model(provider_config.get("model", "unknown"))
         self._init_safety_settings()
@@ -85,6 +97,8 @@ class ProviderGoogleGenAI(Provider):
         """初始化Gemini客户端"""
         proxy = self.provider_config.get("proxy", "")
         http_options = types.HttpOptions(
+            api_version=gemini_api_version(),
+            headers=self.request_headers,
             base_url=self.api_base,
             timeout=self.timeout * 1000,  # 毫秒
         )
@@ -114,6 +128,45 @@ class ProviderGoogleGenAI(Provider):
             api_key=self.chosen_api_key,
             http_options=http_options,
         ).aio
+        # Keep only AstrBot's UA across SDK versions that merge header case variants.
+        headers = self.client._api_client._http_options.headers
+        headers["user-agent"] = self.request_headers["User-Agent"]
+        headers.pop("User-Agent", None)
+
+    @asynccontextmanager
+    async def _conversation_header(self, conversation_id: str | None):
+        """Temporarily attach a conversation ID to a Gemini HTTP request.
+
+        Args:
+            conversation_id: AstrBot conversation ID to associate with the request.
+
+        Yields:
+            Control while the request is using the temporary header.
+        """
+        http_options = getattr(getattr(self, "client", None), "_api_client", None)
+        http_options = getattr(http_options, "_http_options", None)
+        headers = getattr(http_options, "headers", None)
+        conversation_headers = build_conversation_headers(conversation_id)
+        if not isinstance(headers, dict) or not conversation_headers:
+            yield
+            return
+
+        request_lock = getattr(self, "_request_lock", None)
+        if request_lock is None:
+            request_lock = asyncio.Lock()
+            self._request_lock = request_lock
+        header_name, header_value = next(iter(conversation_headers.items()))
+        missing = object()
+        async with request_lock:
+            previous_value = headers.get(header_name, missing)
+            headers[header_name] = header_value
+            try:
+                yield
+            finally:
+                if previous_value is missing:
+                    headers.pop(header_name, None)
+                else:
+                    headers[header_name] = previous_value
 
     def _init_safety_settings(self) -> None:
         """初始化安全设置"""
@@ -164,10 +217,27 @@ class ProviderGoogleGenAI(Provider):
         tool_choice: Literal["auto", "required"] = "auto",
         system_instruction: str | None = None,
         modalities: list[str] | None = None,
-        temperature: float = 0.7,
     ) -> types.GenerateContentConfig:
-        """准备查询配置"""
-        if not modalities:
+        """Build the shared generation config for regular and streaming requests.
+
+        Args:
+            payloads: Request messages, model, and optional generation parameters.
+            tools: Function tools available to the model.
+            tool_choice: Whether function calling is automatic or required.
+            system_instruction: System prompt for the request.
+            modalities: Requested response modalities.
+
+        Returns:
+            SDK config with explicit generation parameters and adapter settings.
+
+        Raises:
+            ValueError: Custom parameters are not an object or contain unsupported
+                fields, or the SDK rejects their values.
+        """
+        model = cast(str, payloads.get("model", self.get_model()))
+        model_name = model.rsplit("/", 1)[-1].lower()
+        is_gemini_4 = model_name.startswith("gemini-4")
+        if not modalities or is_gemini_4:
             modalities = ["TEXT"]
 
         # 流式输出不支持图片模态
@@ -181,7 +251,6 @@ class ProviderGoogleGenAI(Provider):
             modalities = ["TEXT"]
 
         tool_list: list[types.Tool] | None = []
-        model_name = cast(str, payloads.get("model", self.get_model()))
         native_coderunner = self.provider_config.get("gm_native_coderunner", False)
         native_search = self.provider_config.get("gm_native_search", False)
         url_context = self.provider_config.get("gm_url_context", False)
@@ -221,8 +290,14 @@ class ProviderGoogleGenAI(Provider):
                 )
             )
 
-        # oper thinking config
+        extra_body = self.provider_config.get("custom_extra_body")
+        if extra_body is None:
+            extra_body = {}
+        if not isinstance(extra_body, dict):
+            raise ValueError("Gemini custom_extra_body must be a JSON object.")
+
         thinking_config = None
+        thinking_settings = self.provider_config.get("gm_thinking_config") or {}
         if model_name in [
             "gemini-2.5-pro",
             "gemini-2.5-pro-preview",
@@ -234,56 +309,94 @@ class ProviderGoogleGenAI(Provider):
             "gemini-live-2.5-flash-preview-native-audio-09-2025",
         ]:
             # The thinkingBudget parameter, introduced with the Gemini 2.5 series
-            thinking_budget = self.provider_config.get("gm_thinking_config", {}).get(
-                "budget", 0
-            )
+            thinking_budget = thinking_settings.get("budget")
             if thinking_budget is not None:
                 thinking_config = types.ThinkingConfig(
                     thinking_budget=thinking_budget,
                 )
-        elif any(model_name.startswith(p) for p in ("gemini-3-", "gemini-3.")):
-            # The thinkingLevel parameter, recommended for Gemini 3 models and onwards.
-            # Use prefix match so new variants (3.1, 3-flash-lite-preview, etc.) are
-            # covered without needing to keep an exhaustive list up to date.
-            # Gemini 2.5 series models don't support thinkingLevel; use thinkingBudget instead.
-            thinking_level = self.provider_config.get("gm_thinking_config", {}).get(
-                "level", "HIGH"
+        # TODO: Drop legacy models support.
+        # We have too much fragile legacy workaround here.
+        elif is_gemini_4 or model_name.startswith(("gemini-3-", "gemini-3.")):
+            thinking_level = (
+                extra_body.get("reasoning_effort")
+                if is_gemini_4
+                else thinking_settings.get("level")
             )
-            if thinking_level and isinstance(thinking_level, str):
-                thinking_level = thinking_level.upper()
-                allowed_levels = {"MINIMAL", "LOW", "MEDIUM", "HIGH"}
-                fallback_level = "HIGH"
-                if model_name.startswith("gemini-3.7"):
-                    allowed_levels = {"LOW", "MEDIUM", "HIGH"}
-                    fallback_level = "MEDIUM"
-                if thinking_level not in allowed_levels:
-                    logger.warning(
-                        "Invalid thinking level %s for %s, using %s",
-                        thinking_level,
-                        model_name,
-                        fallback_level,
-                    )
-                    thinking_level = fallback_level
-                thinking_config = types.ThinkingConfig(
-                    thinking_level=types.ThinkingLevel(thinking_level)
+
+            if is_gemini_4:
+                allowed_levels = next(
+                    (
+                        levels
+                        for model_id, levels in GEMINI_4_THINKING_LEVELS.items()
+                        if model_name == model_id
+                        or model_name.startswith(f"{model_id}-")
+                    ),
+                    GEMINI_4_FALLBACK_THINKING_LEVELS,
                 )
 
+            # Workaround. Recommended to drop support after Gemini 4 Neon release.
+            elif model_name.startswith(("gemini-3.7", "gemini-3.8")):
+                allowed_levels = ("LOW", "MEDIUM", "HIGH")
+            else:
+                allowed_levels = ("MINIMAL", "LOW", "MEDIUM", "HIGH")
+            if isinstance(thinking_level, str) and (
+                thinking_level := thinking_level.strip().upper()
+            ) not in {"", "AUTO"}:
+                if thinking_level in allowed_levels:
+                    thinking_config = types.ThinkingConfig(
+                        thinking_level=types.ThinkingLevel(thinking_level)
+                    )
+                else:
+                    logger.warning(
+                        "Invalid thinking level %s for %s, using model default",
+                        thinking_level,
+                        model_name,
+                    )
+
+        parameter_aliases = {
+            "temperature": ("temperature",),
+            "max_output_tokens": ("max_output_tokens", "max_tokens", "maxOutputTokens"),
+            "top_p": ("top_p", "topP"),
+            "top_k": ("top_k", "topK"),
+            "frequency_penalty": ("frequency_penalty", "frequencyPenalty"),
+            "presence_penalty": ("presence_penalty", "presencePenalty"),
+            "stop_sequences": ("stop_sequences", "stop", "stopSequences"),
+            "response_logprobs": ("response_logprobs", "responseLogprobs"),
+            "logprobs": ("logprobs",),
+            "seed": ("seed",),
+        }
+        supported_keys = {
+            key for aliases in parameter_aliases.values() for key in aliases
+        }
+        if is_gemini_4:
+            supported_keys.add("reasoning_effort")
+        unsupported_keys = extra_body.keys() - supported_keys
+        if unsupported_keys:
+            raise ValueError(
+                "Unsupported Gemini custom_extra_body parameters: "
+                + ", ".join(sorted(unsupported_keys))
+            )
+
+        generation_config = {}
+        for field, aliases in parameter_aliases.items():
+            # Gemini 4 ignores these sampling controls and may reject invalid values.
+            # Needs refactor.
+            if is_gemini_4 and field in {"temperature", "top_p", "top_k"}:
+                continue
+            # Request parameters take precedence over model settings. Within
+            # either source, prefer SDK snake_case, then OpenAI, then camelCase.
+            for source in (payloads, extra_body):
+                for alias in aliases:
+                    if alias in source:
+                        generation_config[field] = source[alias]
+                        break
+                else:
+                    continue
+                break
+
         return types.GenerateContentConfig(
+            **generation_config,
             system_instruction=system_instruction,
-            temperature=temperature,
-            max_output_tokens=payloads.get("max_tokens")
-            or payloads.get("maxOutputTokens"),
-            top_p=payloads.get("top_p") or payloads.get("topP"),
-            top_k=payloads.get("top_k") or payloads.get("topK"),
-            frequency_penalty=payloads.get("frequency_penalty")
-            or payloads.get("frequencyPenalty"),
-            presence_penalty=payloads.get("presence_penalty")
-            or payloads.get("presencePenalty"),
-            stop_sequences=payloads.get("stop") or payloads.get("stopSequences"),
-            response_logprobs=payloads.get("response_logprobs")
-            or payloads.get("responseLogprobs"),
-            logprobs=payloads.get("logprobs"),
-            seed=payloads.get("seed"),
             response_modalities=modalities,
             tools=cast(types.ToolListUnion | None, tool_list),
             tool_config=tool_config,
@@ -319,11 +432,21 @@ class ProviderGoogleGenAI(Provider):
                 mime_type=image_data.mime_type,
             )
 
-        def process_audio_url(audio_url_dict: dict) -> types.Part:
+        async def process_audio_url(audio_url_dict: dict) -> types.Part:
             url = audio_url_dict["url"]
-            mime_type = url.split(":")[1].split(";")[0]
-            audio_bytes = base64.b64decode(url.split(",", 1)[1])
-            return types.Part.from_bytes(data=audio_bytes, mime_type=mime_type)
+            audio_data = await resolve_media_ref_to_base64_data(
+                url,
+                media_type="audio",
+                strict=True,
+            )
+            if audio_data is None:
+                raise ValueError(
+                    f"Failed to resolve Gemini history audio: {describe_media_ref(url)}"
+                )
+            return types.Part.from_bytes(
+                data=base64.b64decode(audio_data.base64_data),
+                mime_type=audio_data.mime_type,
+            )
 
         def append_or_extend(
             contents: list[types.Content],
@@ -348,8 +471,8 @@ class ProviderGoogleGenAI(Provider):
                             parts.append(types.Part.from_text(text=item["text"] or " "))
                         elif item["type"] == "image_url":
                             parts.append(await process_image_url(item["image_url"]))
-                        else:
-                            parts.append(process_audio_url(item["audio_url"]))
+                        elif item["type"] == "audio_url":
+                            parts.append(await process_audio_url(item["audio_url"]))
                 else:
                     parts = [create_text_part(content)]
                 append_or_extend(gemini_contents, parts, types.UserContent)
@@ -602,6 +725,7 @@ class ProviderGoogleGenAI(Provider):
         tools: ToolSet | None,
         *,
         request_max_retries: int | None = None,
+        conversation_id: str | None = None,
     ) -> LLMResponse:
         """非流式请求 Gemini API"""
         system_instruction = next(
@@ -616,7 +740,7 @@ class ProviderGoogleGenAI(Provider):
             modalities.append("IMAGE")
 
         conversation = await self._prepare_conversation(payloads)
-        temperature = payloads.get("temperature", 0.7)
+        recitation_retries = 0
 
         result: types.GenerateContentResponse | None = None
         while True:
@@ -627,17 +751,17 @@ class ProviderGoogleGenAI(Provider):
                     payloads.get("tool_choice", "auto"),
                     system_instruction,
                     modalities,
-                    temperature,
                 )
-                result = await retry_provider_request(
-                    "Gemini",
-                    lambda: self.client.models.generate_content(
-                        model=model,
-                        contents=cast(types.ContentListUnion, conversation),
-                        config=config,
-                    ),
-                    max_attempts=request_max_retries,
-                )
+                async with self._conversation_header(conversation_id):
+                    result = await retry_provider_request(
+                        "Gemini",
+                        lambda: self.client.models.generate_content(
+                            model=model,
+                            contents=cast(types.ContentListUnion, conversation),
+                            config=config,
+                        ),
+                        max_attempts=request_max_retries,
+                    )
                 logger.debug(f"genai result: {result}")
 
                 if not result.candidates:
@@ -647,13 +771,14 @@ class ProviderGoogleGenAI(Provider):
                     raise Exception("Gemini request failed: candidates is empty.")
 
                 if result.candidates[0].finish_reason == types.FinishReason.RECITATION:
-                    if temperature > 2:
+                    if recitation_retries >= 2:
                         raise Exception(
-                            "Temperature exceeded the maximum value of 2, but Gemini recitation still occurred."
+                            "Gemini recitation still occurred after 2 retries."
                         )
-                    temperature += 0.2
+                    recitation_retries += 1
                     logger.warning(
-                        f"Gemini recitation detected; increasing temperature to {temperature:.1f} and retrying...",
+                        "Gemini recitation detected; retrying with unchanged generation parameters (%s/2).",
+                        recitation_retries,
                     )
                     continue
 
@@ -703,6 +828,7 @@ class ProviderGoogleGenAI(Provider):
         tools: ToolSet | None,
         *,
         request_max_retries: int | None = None,
+        conversation_id: str | None = None,
     ) -> AsyncGenerator[LLMResponse, None]:
         """流式请求 Gemini API"""
         system_instruction = next(
@@ -721,15 +847,16 @@ class ProviderGoogleGenAI(Provider):
                     payloads.get("tool_choice", "auto"),
                     system_instruction,
                 )
-                result = await retry_provider_request(
-                    "Gemini",
-                    lambda: self.client.models.generate_content_stream(
-                        model=model,
-                        contents=cast(types.ContentListUnion, conversation),
-                        config=config,
-                    ),
-                    max_attempts=request_max_retries,
-                )
+                async with self._conversation_header(conversation_id):
+                    result = await retry_provider_request(
+                        "Gemini",
+                        lambda: self.client.models.generate_content_stream(
+                            model=model,
+                            contents=cast(types.ContentListUnion, conversation),
+                            config=config,
+                        ),
+                        max_attempts=request_max_retries,
+                    )
                 break
             except APIError as e:
                 if e.message is None:
@@ -753,61 +880,82 @@ class ProviderGoogleGenAI(Provider):
         accumulated_reasoning = ""
         final_response = None
 
-        async for chunk in result:
-            llm_response = LLMResponse("assistant", is_chunk=True)
+        async with self._conversation_header(conversation_id):
+            async for chunk in result:
+                llm_response = LLMResponse("assistant", is_chunk=True)
 
-            if not chunk.candidates:
-                logger.warning(f"Gemini stream chunk has empty candidates: {chunk}")
-                continue
-            if not chunk.candidates[0].content:
-                logger.warning(f"Gemini stream chunk has empty content: {chunk}")
-                continue
+                if not chunk.candidates:
+                    logger.warning(f"Gemini stream chunk has empty candidates: {chunk}")
+                    continue
+                if not chunk.candidates[0].content:
+                    logger.warning(f"Gemini stream chunk has empty content: {chunk}")
+                    continue
 
-            if chunk.candidates[0].content.parts and any(
-                part.function_call for part in chunk.candidates[0].content.parts
-            ):
-                llm_response = LLMResponse("assistant", is_chunk=False)
-                llm_response.raw_completion = chunk
-                llm_response.result_chain = self._process_content_parts(
-                    chunk.candidates[0],
-                    llm_response,
-                    validate_output=False,
-                )
-                llm_response.id = chunk.response_id
-                if chunk.usage_metadata:
-                    llm_response.usage = self._extract_usage(chunk.usage_metadata)
-                yield llm_response
-                return
-
-            _f = False
-
-            # 提取 reasoning content
-            reasoning = self._extract_reasoning_content(chunk.candidates[0])
-            if reasoning:
-                _f = True
-                accumulated_reasoning += reasoning
-                llm_response.reasoning_content = reasoning
-            if chunk.text:
-                _f = True
-                accumulated_text += chunk.text
-                llm_response.result_chain = MessageChain(chain=[Comp.Plain(chunk.text)])
-            if _f:
-                yield llm_response
-
-            if chunk.candidates[0].finish_reason:
-                # Process the final chunk for potential tool calls or other content
-                if chunk.candidates[0].content.parts:
-                    final_response = LLMResponse("assistant", is_chunk=False)
-                    final_response.raw_completion = chunk
-                    final_response.result_chain = self._process_content_parts(
+                if chunk.candidates[0].content.parts and any(
+                    part.function_call for part in chunk.candidates[0].content.parts
+                ):
+                    llm_response = LLMResponse("assistant", is_chunk=False)
+                    llm_response.raw_completion = chunk
+                    llm_response.result_chain = self._process_content_parts(
                         chunk.candidates[0],
-                        final_response,
+                        llm_response,
                         validate_output=False,
                     )
-                    final_response.id = chunk.response_id
+                    # This response replaces the whole turn in conversation
+                    # history, so keep the narration and reasoning that were
+                    # already streamed before the tool call. Dropping them made
+                    # the user-visible text missing from history.
+                    if accumulated_text or accumulated_reasoning:
+                        parts = list(llm_response.result_chain.chain or [])
+                        if accumulated_text:
+                            parts.insert(0, Comp.Plain(accumulated_text))
+                            llm_response.result_chain = MessageChain(chain=parts)
+                        if accumulated_reasoning:
+                            # _process_content_parts already stored the reasoning
+                            # that came with the tool-call chunk itself, so append
+                            # to it instead of overwriting that part.
+                            llm_response.reasoning_content = accumulated_reasoning + (
+                                llm_response.reasoning_content or ""
+                            )
+                    llm_response.id = chunk.response_id
                     if chunk.usage_metadata:
-                        final_response.usage = self._extract_usage(chunk.usage_metadata)
-                break
+                        llm_response.usage = self._extract_usage(chunk.usage_metadata)
+                    yield llm_response
+                    return
+
+                _f = False
+
+                # 提取 reasoning content
+                reasoning = self._extract_reasoning_content(chunk.candidates[0])
+                if reasoning:
+                    _f = True
+                    accumulated_reasoning += reasoning
+                    llm_response.reasoning_content = reasoning
+                if chunk.text:
+                    _f = True
+                    accumulated_text += chunk.text
+                    llm_response.result_chain = MessageChain(
+                        chain=[Comp.Plain(chunk.text)]
+                    )
+                if _f:
+                    yield llm_response
+
+                if chunk.candidates[0].finish_reason:
+                    # Process the final chunk for potential tool calls or other content
+                    if chunk.candidates[0].content.parts:
+                        final_response = LLMResponse("assistant", is_chunk=False)
+                        final_response.raw_completion = chunk
+                        final_response.result_chain = self._process_content_parts(
+                            chunk.candidates[0],
+                            final_response,
+                            validate_output=False,
+                        )
+                        final_response.id = chunk.response_id
+                        if chunk.usage_metadata:
+                            final_response.usage = self._extract_usage(
+                                chunk.usage_metadata
+                            )
+                    break
 
         # Yield final complete response with accumulated text
         if not final_response:
@@ -847,6 +995,7 @@ class ProviderGoogleGenAI(Provider):
         request_max_retries: int | None = None,
         **kwargs,
     ) -> LLMResponse:
+        conversation_id = kwargs.pop("conversation_id", None)
         if contexts is None:
             contexts = []
         new_record = None
@@ -886,10 +1035,14 @@ class ProviderGoogleGenAI(Provider):
 
         for _ in range(retry):
             try:
+                query_kwargs = {}
+                if conversation_id:
+                    query_kwargs["conversation_id"] = conversation_id
                 return await self._query(
                     payloads,
                     func_tool,
                     request_max_retries=request_max_retries,
+                    **query_kwargs,
                 )
             except APIError as e:
                 if await self._handle_api_error(e, keys):
@@ -914,6 +1067,7 @@ class ProviderGoogleGenAI(Provider):
         request_max_retries: int | None = None,
         **kwargs,
     ) -> AsyncGenerator[LLMResponse, None]:
+        conversation_id = kwargs.pop("conversation_id", None)
         if contexts is None:
             contexts = []
         new_record = None
@@ -953,10 +1107,14 @@ class ProviderGoogleGenAI(Provider):
 
         for _ in range(retry):
             try:
+                query_kwargs = {}
+                if conversation_id:
+                    query_kwargs["conversation_id"] = conversation_id
                 async for response in self._query_stream(
                     payloads,
                     func_tool,
                     request_max_retries=request_max_retries,
+                    **query_kwargs,
                 ):
                     yield response
                 break

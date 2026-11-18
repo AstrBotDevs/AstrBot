@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { commandPermissionOptions, commandPermissions } from '../permissions';
 import { computed } from 'vue';
 import { useModuleI18n } from '@/i18n/composables';
 import { normalizeTextInput } from '@/utils/inputValue';
@@ -41,11 +42,13 @@ const typeItems = [
   { title: tm('type.subCommand'), value: 'sub_command' }
 ];
 
-const permissionItems = [
+const permissionItems = computed(() => [
   { title: tm('filters.all'), value: 'all' },
-  { title: tm('permission.everyone'), value: 'everyone' },
-  { title: tm('permission.admin'), value: 'admin' }
-];
+  ...commandPermissionOptions.map(permission => ({
+    title: tm(commandPermissions[permission].label),
+    value: permission === 'member' ? 'everyone' : permission,
+  })),
+]);
 
 const statusItems = [
   { title: tm('filters.all'), value: 'all' },
@@ -107,7 +110,7 @@ const statusItems = [
 
   <!-- 搜索栏 + 统计信息行 -->
   <div class="mb-4 d-flex flex-wrap align-center ga-4">
-    <div style="min-width: 200px; max-width: 350px; flex: 1; border: 1px solid #B9B9B9; border-radius: 16px;">
+    <div style="min-width: 200px; max-width: 350px; flex: 1; border: 1px solid #B9B9B9; border-radius: var(--astrbot-radius-control);">
       <v-text-field
         :model-value="searchQuery"
         @update:model-value="emit('update:searchQuery', normalizeTextInput($event))"

@@ -133,6 +133,7 @@
 </template>
 
 <script setup lang="ts">
+import { chatPreferences } from "@/utils/chatPreferences";
 import { ref, watch } from "vue";
 import {
   ChevronDown,
@@ -217,20 +218,14 @@ watch(
 );
 
 function readExpandedProjectIds() {
-  try {
-    const raw = localStorage.getItem("chat.projectExpandedIds");
-    const parsed = raw ? JSON.parse(raw) : [];
-    return new Set(Array.isArray(parsed) ? parsed.filter(Boolean) : []);
-  } catch {
-    return new Set<string>();
-  }
+  const ids = chatPreferences().global.expandedProjectIds;
+  return new Set<string>(Array.isArray(ids) ? ids.filter((id) => typeof id === "string") : []);
 }
 
 function persistExpandedProjectIds() {
-  localStorage.setItem(
-    "chat.projectExpandedIds",
-    JSON.stringify([...expandedProjectIds.value]),
-  );
+  chatPreferences((preferences) => {
+    preferences.global.expandedProjectIds = [...expandedProjectIds.value];
+  });
 }
 
 function isProjectExpanded(projectId: string) {
@@ -336,7 +331,7 @@ async function handleDeleteSession(projectId: string, session: ProjectSession) {
   width: 100%;
   min-height: 30px;
   border: 0;
-  border-radius: 8px;
+  border-radius: var(--astrbot-radius-navigation);
   background: transparent;
   color: inherit;
   display: flex;
@@ -350,10 +345,14 @@ async function handleDeleteSession(projectId: string, session: ProjectSession) {
 }
 
 .project-row:hover,
-.project-row.active,
-.project-session-row:hover,
-.project-session-row.active {
+.project-session-row:hover {
   background: var(--chat-session-active-bg);
+}
+
+/* Active session stays clearly highlighted (subtle in light mode otherwise). */
+.project-row.active,
+.project-session-row.active {
+  background: rgba(var(--v-theme-primary), 0.22);
 }
 
 .project-emoji {

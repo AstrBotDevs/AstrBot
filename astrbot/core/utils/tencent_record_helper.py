@@ -13,12 +13,18 @@ from astrbot.core import logger
 _PYSILK_SUPPORTED_RATES = frozenset({8000, 12000, 16000, 24000, 32000, 48000})
 
 
-async def tencent_silk_to_wav(silk_path: str, output_path: str) -> str:
-    """Decode a Tencent Silk file to 24 kHz mono PCM WAV.
+async def tencent_silk_to_wav(
+    silk_path: str,
+    output_path: str,
+    *,
+    sample_rate: int = 24000,
+) -> str:
+    """Decode a Tencent Silk file to mono 16-bit PCM WAV.
 
     Args:
         silk_path: Input Tencent Silk file path.
         output_path: Output WAV file path.
+        sample_rate: Output sample rate in Hz, supported by the SILK decoder.
 
     Returns:
         The output WAV file path.
@@ -30,19 +36,22 @@ async def tencent_silk_to_wav(silk_path: str, output_path: str) -> str:
     """
     import pysilk
 
+    if sample_rate not in _PYSILK_SUPPORTED_RATES:
+        raise ValueError(f"Unsupported SILK output sample rate: {sample_rate}")
+
     with open(silk_path, "rb") as f:
         input_data = f.read()
-        # QQ/Tencent voice payloads may include a leading 0x02 marker before SILK.
-        if input_data.startswith(b"\x02"):
+        # QQ/Tencent voice payloads may include a 0x02 or 0x03 marker before SILK.
+        if input_data.startswith((b"\x02#!SILK_V3", b"\x03#!SILK_V3")):
             input_data = input_data[1:]
         input_io = BytesIO(input_data)
         output_io = BytesIO()
-        pysilk.decode(input_io, output_io, 24000)
+        pysilk.decode(input_io, output_io, sample_rate)
         output_io.seek(0)
         with wave.open(output_path, "wb") as wav:
             wav.setnchannels(1)
             wav.setsampwidth(2)
-            wav.setframerate(24000)
+            wav.setframerate(sample_rate)
             wav.writeframes(output_io.read())
 
     return output_path
