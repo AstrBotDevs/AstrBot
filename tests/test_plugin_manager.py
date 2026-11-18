@@ -1009,7 +1009,12 @@ async def test_upload_update_reloads_runtime_and_preserves_activation(
         )
         assert success, error
         old_plugin = star_manager_module.star_map[module_path]
-        assert old_plugin.star_cls_type.marker == "old"
+        if disabled:
+            assert old_plugin.version == "1.0.0"
+            assert old_plugin.star_cls_type is None
+            assert old_plugin.module is None
+        else:
+            assert old_plugin.star_cls_type.marker == "old"
 
         metadata["version"] = "2.0.0"
         metadata["astrbot_version"] = ">=999.0"
@@ -1047,18 +1052,31 @@ async def test_upload_update_reloads_runtime_and_preserves_activation(
         assert current_plugin is not old_plugin
         assert current_plugin.activated is (not disabled)
         assert (current_plugin.star_cls is None) is disabled
-        assert current_plugin.star_cls_type.marker == (
-            "old" if initialization_fails and not disabled else "new"
-        )
-        assert len(star_manager_module.star_registry) == 1
-        assert (
-            len(
-                star_manager_module.star_handlers_registry.get_handlers_by_module_name(
-                    module_path
+        if disabled:
+            assert current_plugin.version == "2.0.0"
+            assert current_plugin.star_cls_type is None
+            assert current_plugin.module is None
+            assert (
+                len(
+                    star_manager_module.star_handlers_registry.get_handlers_by_module_name(
+                        module_path
+                    )
                 )
+                == 0
             )
-            == 1
-        )
+        else:
+            assert current_plugin.star_cls_type.marker == (
+                "old" if initialization_fails else "new"
+            )
+            assert (
+                len(
+                    star_manager_module.star_handlers_registry.get_handlers_by_module_name(
+                        module_path
+                    )
+                )
+                == 1
+            )
+        assert len(star_manager_module.star_registry) == 1
         assert plugin_manager_pm.failed_plugin_dict == {}
         assert plugin_manager_pm.failed_plugin_info == ""
     finally:
@@ -3011,3 +3029,733 @@ def test_metadata_rejects_invalid_views(tmp_path, views):
     path.write_text(yaml.safe_dump(raw))
     with pytest.raises(ValueError):
         PluginManager._load_plugin_metadata(str(tmp_path))
+
+
+@pytest.mark.asyncio
+async def test_disabled_plugin_with_metadata_skips_import_and_loads_on_enable(
+    plugin_manager_pm: PluginManager, tmp_path: Path, monkeypatch
+):
+    """Disabled plugins with metadata.yaml skip module import until enabled."""
+    _clear_star_runtime_state()
+    plugin_dir_name = "lazy_disabled_plugin"
+    module_path = f"data.plugins.{plugin_dir_name}.main"
+    plugin_root = tmp_path / "plugins" / plugin_dir_name
+    plugin_root.mkdir(parents=True)
+    (plugin_root / "metadata.yaml").write_text(
+        yaml.safe_dump(
+            {
+                "name": "lazy_disabled",
+                "author": "AstrBot Team",
+                "desc": "Skipped while disabled",
+                "version": "1.2.3",
+                "repo": "https://github.com/AstrBotDevs/lazy_disabled",
+                "display_name": "Lazy Disabled",
+                "support_platforms": ["aiocqhttp"],
+            },
+            sort_keys=False,
+        ),
+        encoding="utf-8",
+    )
+    (plugin_root / "_conf_schema.json").write_text(
+        json.dumps({"token": {"type": "string", "default": "abc"}}),
+        encoding="utf-8",
+    )
+    (plugin_root / "logo.png").write_bytes(b"png")
+
+    config_dir = tmp_path / "plugin_config"
+    config_dir.mkdir(parents=True)
+
+    plugin_manager_pm.plugin_store_path = str(tmp_path / "plugins")
+    plugin_manager_pm.plugin_config_path = str(config_dir)
+    monkeypatch.setattr(
+        plugin_manager_pm.context, "stars", star_manager_module.star_registry
+    )
+
+    preferences = {
+        "inactivated_plugins": [module_path],
+        "inactivated_llm_tools": [],
+        "alter_cmd": {},
+    }
+
+    async def mock_global_get(key, default=None):
+        return preferences.get(key, default)
+
+    async def mock_global_put(key, value):
+        preferences[key] = value
+
+    import_calls: list[str] = []
+
+    class EnabledStar:
+        def __init__(self, context, config=None):
+            self.context = context
+            self.config = config
+            self.initialized = False
+
+        async def initialize(self):
+            self.initialized = True
+
+    async def mock_import(
+        path,
+        module_str,
+        root_dir_name,
+        requirements_path,
+        *,
+        reserved=False,
+    ):
+        del module_str, root_dir_name, requirements_path, reserved
+        import_calls.append(path)
+        star_manager_module.star_map[path].star_cls_type = cast(Any, EnabledStar)
+        return ModuleType(path)
+
+    monkeypatch.setattr(star_manager_module.sp, "global_get", mock_global_get)
+    monkeypatch.setattr(star_manager_module.sp, "global_put", mock_global_put)
+    monkeypatch.setattr(
+        plugin_manager_pm,
+        "_get_plugin_modules",
+        lambda: [{"pname": plugin_dir_name, "module": "main"}],
+    )
+    monkeypatch.setattr(
+        plugin_manager_pm,
+        "_import_plugin_with_dependency_recovery",
+        mock_import,
+    )
+    monkeypatch.setattr(
+        star_manager_module,
+        "sync_command_configs",
+        AsyncMock(return_value=None),
+    )
+
+    try:
+        success, error = await plugin_manager_pm.load(
+            specified_module_path=module_path,
+        )
+        assert success is True
+        assert error is None
+        assert import_calls == []
+
+        md = star_manager_module.star_map[module_path]
+        assert len(star_manager_module.star_registry) == 1
+        assert md.name == "lazy_disabled"
+        assert md.author == "AstrBot Team"
+        assert md.desc == "Skipped while disabled"
+        assert md.version == "1.2.3"
+        assert md.display_name == "Lazy Disabled"
+        assert md.support_platforms == ["aiocqhttp"]
+        assert md.activated is False
+        assert md.module is None
+        assert md.star_cls is None
+        assert md.star_cls_type is None
+        assert md.root_dir_name == plugin_dir_name
+        assert md.logo_path == str(plugin_root / "logo.png")
+        assert md.config is not None
+        assert md.config["token"] == "abc"
+
+        # Enabling later imports and initializes the plugin in-place without duplicates.
+        await plugin_manager_pm.turn_on_plugin("lazy_disabled")
+        assert import_calls == [module_path]
+        assert len(star_manager_module.star_registry) == 1
+        assert star_manager_module.star_map[module_path] is md
+        assert md.activated is True
+        assert md.module is not None
+        assert md.star_cls is not None
+        assert md.star_cls.initialized is True
+    finally:
+        _clear_star_runtime_state()
+
+
+@pytest.mark.asyncio
+async def test_disabled_legacy_plugin_with_metadata_enables_without_duplicate(
+    plugin_manager_pm: PluginManager, tmp_path: Path, monkeypatch
+):
+    """Disabled legacy plugins (without Star inheritance) still enable cleanly."""
+    _clear_star_runtime_state()
+    plugin_dir_name = "legacy_disabled_plugin"
+    module_path = f"data.plugins.{plugin_dir_name}.main"
+    plugin_root = tmp_path / "plugins" / plugin_dir_name
+    plugin_root.mkdir(parents=True)
+    (plugin_root / "metadata.yaml").write_text(
+        yaml.safe_dump(
+            {
+                "name": "legacy_disabled",
+                "author": "AstrBot Team",
+                "desc": "Legacy plugin",
+                "version": "1.0.0",
+            },
+            sort_keys=False,
+        ),
+        encoding="utf-8",
+    )
+
+    plugin_manager_pm.plugin_store_path = str(tmp_path / "plugins")
+    monkeypatch.setattr(
+        plugin_manager_pm.context, "stars", star_manager_module.star_registry
+    )
+    preferences = {
+        "inactivated_plugins": [module_path],
+        "inactivated_llm_tools": [],
+        "alter_cmd": {},
+    }
+
+    async def mock_global_get(key, default=None):
+        return preferences.get(key, default)
+
+    async def mock_global_put(key, value):
+        preferences[key] = value
+
+    class Main:
+        def __init__(self, context):
+            self.context = context
+
+    Main.__module__ = module_path
+    mod = ModuleType(module_path)
+    setattr(mod, "Main", Main)
+
+    monkeypatch.setattr(star_manager_module.sp, "global_get", mock_global_get)
+    monkeypatch.setattr(star_manager_module.sp, "global_put", mock_global_put)
+    monkeypatch.setattr(
+        plugin_manager_pm,
+        "_get_plugin_modules",
+        lambda: [{"pname": plugin_dir_name, "module": "main"}],
+    )
+    monkeypatch.setattr(
+        plugin_manager_pm,
+        "_import_plugin_with_dependency_recovery",
+        AsyncMock(return_value=mod),
+    )
+    monkeypatch.setattr(
+        star_manager_module,
+        "sync_command_configs",
+        AsyncMock(return_value=None),
+    )
+
+    try:
+        success, error = await plugin_manager_pm.load(
+            specified_module_path=module_path,
+        )
+        assert success is True
+        assert error is None
+        md = star_manager_module.star_map[module_path]
+        assert md.activated is False
+
+        await plugin_manager_pm.turn_on_plugin("legacy_disabled")
+        assert len(star_manager_module.star_registry) == 1
+        assert star_manager_module.star_map[module_path] is md
+        assert md.activated is True
+        assert isinstance(md.star_cls, Main)
+        assert md.module is mod
+    finally:
+        _clear_star_runtime_state()
+
+
+@pytest.mark.asyncio
+async def test_disabled_plugin_without_metadata_falls_back_to_import(
+    plugin_manager_pm: PluginManager, tmp_path: Path, monkeypatch
+):
+    """Disabled plugins lacking metadata.yaml fall back to module import."""
+    _clear_star_runtime_state()
+    plugin_dir_name = "no_yaml_disabled"
+    module_path = f"data.plugins.{plugin_dir_name}.main"
+    plugin_root = tmp_path / "plugins" / plugin_dir_name
+    plugin_root.mkdir(parents=True)
+
+    plugin_manager_pm.plugin_store_path = str(tmp_path / "plugins")
+    monkeypatch.setattr(
+        plugin_manager_pm.context, "stars", star_manager_module.star_registry
+    )
+    preferences = {
+        "inactivated_plugins": [module_path],
+        "inactivated_llm_tools": [],
+        "alter_cmd": {},
+    }
+
+    async def mock_global_get(key, default=None):
+        return preferences.get(key, default)
+
+    class LegacyNoYamlPlugin:
+        pass
+
+    import_calls: list[str] = []
+
+    async def mock_import(
+        path,
+        module_str,
+        root_dir_name,
+        requirements_path,
+        *,
+        reserved=False,
+    ):
+        del module_str, root_dir_name, requirements_path, reserved
+        import_calls.append(path)
+        star_manager_module.star_map[path] = star_manager_module.StarMetadata(
+            name="no_yaml",
+            author="AstrBot Team",
+            desc="Fallback",
+            version="0.1.0",
+            module_path=path,
+            star_cls_type=cast(Any, LegacyNoYamlPlugin),
+        )
+        star_manager_module.star_registry.append(star_manager_module.star_map[path])
+        return ModuleType(path)
+
+    monkeypatch.setattr(star_manager_module.sp, "global_get", mock_global_get)
+    monkeypatch.setattr(
+        plugin_manager_pm,
+        "_get_plugin_modules",
+        lambda: [{"pname": plugin_dir_name, "module": "main"}],
+    )
+    monkeypatch.setattr(
+        plugin_manager_pm,
+        "_import_plugin_with_dependency_recovery",
+        mock_import,
+    )
+    monkeypatch.setattr(
+        star_manager_module,
+        "sync_command_configs",
+        AsyncMock(return_value=None),
+    )
+
+    try:
+        success, error = await plugin_manager_pm.load(
+            specified_module_path=module_path,
+        )
+        assert success is True
+        assert error is None
+        assert import_calls == [module_path]
+        assert star_manager_module.star_map[module_path].activated is False
+        assert star_manager_module.star_map[module_path].star_cls is None
+    finally:
+        _clear_star_runtime_state()
+
+
+@pytest.mark.asyncio
+async def test_disabled_plugin_incompatible_version_records_failure_without_import(
+    plugin_manager_pm: PluginManager, tmp_path: Path, monkeypatch
+):
+    """Incompatible disabled plugins fail version check without importing."""
+    _clear_star_runtime_state()
+    plugin_dir_name = "bad_ver_disabled"
+    module_path = f"data.plugins.{plugin_dir_name}.main"
+    plugin_root = tmp_path / "plugins" / plugin_dir_name
+    plugin_root.mkdir(parents=True)
+    (plugin_root / "metadata.yaml").write_text(
+        yaml.safe_dump(
+            {
+                "name": "bad_ver",
+                "author": "AstrBot Team",
+                "desc": "Incompatible",
+                "version": "1.0.0",
+                "astrbot_version": ">=99.0.0",
+            },
+            sort_keys=False,
+        ),
+        encoding="utf-8",
+    )
+
+    plugin_manager_pm.plugin_store_path = str(tmp_path / "plugins")
+    monkeypatch.setattr(
+        plugin_manager_pm.context, "stars", star_manager_module.star_registry
+    )
+    preferences = {
+        "inactivated_plugins": [module_path],
+        "inactivated_llm_tools": [],
+        "alter_cmd": {},
+    }
+
+    async def mock_global_get(key, default=None):
+        return preferences.get(key, default)
+
+    import_mock = AsyncMock()
+    monkeypatch.setattr(star_manager_module.sp, "global_get", mock_global_get)
+    monkeypatch.setattr(
+        plugin_manager_pm,
+        "_get_plugin_modules",
+        lambda: [{"pname": plugin_dir_name, "module": "main"}],
+    )
+    monkeypatch.setattr(
+        plugin_manager_pm,
+        "_import_plugin_with_dependency_recovery",
+        import_mock,
+    )
+    monkeypatch.setattr(
+        star_manager_module,
+        "sync_command_configs",
+        AsyncMock(return_value=None),
+    )
+
+    try:
+        success, _ = await plugin_manager_pm.load(
+            specified_module_path=module_path,
+        )
+        assert success is False
+        assert import_mock.await_count == 0
+        assert plugin_dir_name in plugin_manager_pm.failed_plugin_dict
+        assert module_path not in star_manager_module.star_map
+    finally:
+        plugin_manager_pm.failed_plugin_dict.clear()
+        _clear_star_runtime_state()
+
+
+@pytest.mark.asyncio
+async def test_reloading_disabled_metadata_placeholder_skips_import_and_load_hook(
+    plugin_manager_pm: PluginManager, tmp_path: Path, monkeypatch
+):
+    """Reloading a disabled metadata placeholder keeps it unimported without firing load hooks."""
+    _clear_star_runtime_state()
+    plugin_dir_name = "disabled_placeholder"
+    module_path = f"data.plugins.{plugin_dir_name}.main"
+    plugin_root = tmp_path / "plugins" / plugin_dir_name
+    plugin_root.mkdir(parents=True)
+    (plugin_root / "metadata.yaml").write_text(
+        yaml.safe_dump(
+            {
+                "name": "disabled_placeholder",
+                "author": "AstrBot Team",
+                "desc": "Disabled plugin",
+                "version": "1.0.0",
+            },
+            sort_keys=False,
+        ),
+        encoding="utf-8",
+    )
+
+    load_hook_calls: list[str] = []
+
+    async def on_plugin_loaded(metadata):
+        load_hook_calls.append(metadata.name)
+
+    star_manager_module.star_handlers_registry.append(
+        StarHandlerMetadata(
+            event_type=EventType.OnPluginLoadedEvent,
+            handler_full_name="tests.hook_plugin_on_loaded",
+            handler_name="on_plugin_loaded",
+            handler_module_path="tests.hook_plugin",
+            handler=on_plugin_loaded,
+            event_filters=[],
+        )
+    )
+
+    plugin_manager_pm.plugin_store_path = str(tmp_path / "plugins")
+    monkeypatch.setattr(
+        plugin_manager_pm.context, "stars", star_manager_module.star_registry
+    )
+    preferences = {
+        "inactivated_plugins": [module_path],
+        "inactivated_llm_tools": [],
+        "alter_cmd": {},
+    }
+
+    async def mock_global_get(key, default=None):
+        return preferences.get(key, default)
+
+    import_mock = AsyncMock()
+    monkeypatch.setattr(star_manager_module.sp, "global_get", mock_global_get)
+    monkeypatch.setattr(
+        star_manager_module.sp, "global_put", AsyncMock(return_value=None)
+    )
+    monkeypatch.setattr(
+        plugin_manager_pm,
+        "_get_plugin_modules",
+        lambda: [{"pname": plugin_dir_name, "module": "main"}],
+    )
+    monkeypatch.setattr(
+        plugin_manager_pm,
+        "_import_plugin_with_dependency_recovery",
+        import_mock,
+    )
+    monkeypatch.setattr(
+        star_manager_module,
+        "sync_command_configs",
+        AsyncMock(return_value=None),
+    )
+
+    try:
+        success, error = await plugin_manager_pm.load(
+            specified_module_path=module_path,
+        )
+        assert success is True
+        assert error is None
+        first_md = star_manager_module.star_map[module_path]
+        assert first_md.module is None
+        assert first_md.activated is False
+        assert load_hook_calls == []
+
+        (plugin_root / "metadata.yaml").write_text(
+            yaml.safe_dump(
+                {
+                    "name": "disabled_placeholder",
+                    "author": "AstrBot Team",
+                    "desc": "Updated disabled description",
+                    "version": "1.0.1",
+                },
+                sort_keys=False,
+            ),
+            encoding="utf-8",
+        )
+        success, error = await plugin_manager_pm.load(
+            specified_module_path=module_path,
+        )
+        assert success is True
+        assert error is None
+        assert import_mock.await_count == 0
+        assert load_hook_calls == []
+        assert len(star_manager_module.star_registry) == 1
+        assert star_manager_module.star_map[module_path] is first_md
+        assert first_md.version == "1.0.1"
+        assert first_md.desc == "Updated disabled description"
+    finally:
+        _clear_star_runtime_state()
+
+
+@pytest.mark.asyncio
+async def test_sync_command_configs_preserves_disabled_unimported_plugin_configs(
+    monkeypatch,
+):
+    """sync_command_configs keeps disabled metadata-only plugin configs while pruning stale ones."""
+    from types import SimpleNamespace
+
+    from astrbot.core.star import command_management
+
+    _clear_star_runtime_state()
+    disabled_module = "data.plugins.disabled_cmd.main"
+    removed_module = "data.plugins.uninstalled_cmd.main"
+    star_manager_module.star_map[disabled_module] = star_manager_module.StarMetadata(
+        name="disabled_cmd",
+        module_path=disabled_module,
+        activated=False,
+        module=None,
+    )
+
+    deleted_keys: list[str] = []
+
+    async def mock_delete_command_configs(keys):
+        deleted_keys.extend(keys)
+
+    monkeypatch.setattr(command_management, "star_map", star_manager_module.star_map)
+    monkeypatch.setattr(
+        command_management,
+        "star_handlers_registry",
+        star_manager_module.star_handlers_registry,
+    )
+    monkeypatch.setattr(
+        command_management.db_helper,
+        "get_command_configs",
+        AsyncMock(
+            return_value=[
+                SimpleNamespace(
+                    handler_full_name=f"{disabled_module}_ping",
+                    module_path=disabled_module,
+                ),
+                SimpleNamespace(
+                    handler_full_name=f"{removed_module}_old",
+                    module_path=removed_module,
+                ),
+            ]
+        ),
+    )
+    monkeypatch.setattr(
+        command_management.db_helper,
+        "delete_command_configs",
+        mock_delete_command_configs,
+    )
+
+    try:
+        await command_management.sync_command_configs()
+        assert deleted_keys == [f"{removed_module}_old"]
+    finally:
+        _clear_star_runtime_state()
+
+
+@pytest.mark.asyncio
+async def test_disabled_plugin_malformed_metadata_falls_back_to_import(
+    plugin_manager_pm: PluginManager, tmp_path: Path, monkeypatch
+):
+    """Malformed metadata.yaml on a disabled plugin falls back to module import."""
+    _clear_star_runtime_state()
+    plugin_dir_name = "malformed_yaml_disabled"
+    module_path = f"data.plugins.{plugin_dir_name}.main"
+    plugin_root = tmp_path / "plugins" / plugin_dir_name
+    plugin_root.mkdir(parents=True)
+    (plugin_root / "metadata.yaml").write_text(": [unclosed", encoding="utf-8")
+
+    plugin_manager_pm.plugin_store_path = str(tmp_path / "plugins")
+    monkeypatch.setattr(
+        plugin_manager_pm.context, "stars", star_manager_module.star_registry
+    )
+    preferences = {
+        "inactivated_plugins": [module_path],
+        "inactivated_llm_tools": [],
+        "alter_cmd": {},
+    }
+
+    async def mock_global_get(key, default=None):
+        return preferences.get(key, default)
+
+    class FallbackPlugin:
+        pass
+
+    import_calls: list[str] = []
+
+    async def mock_import(
+        path,
+        module_str,
+        root_dir_name,
+        requirements_path,
+        *,
+        reserved=False,
+    ):
+        del module_str, root_dir_name, requirements_path, reserved
+        import_calls.append(path)
+        star_manager_module.star_map[path] = star_manager_module.StarMetadata(
+            name="malformed_yaml_disabled",
+            author="AstrBot Team",
+            desc="Fallback",
+            version="0.1.0",
+            module_path=path,
+            star_cls_type=cast(Any, FallbackPlugin),
+        )
+        star_manager_module.star_registry.append(star_manager_module.star_map[path])
+        return ModuleType(path)
+
+    monkeypatch.setattr(star_manager_module.sp, "global_get", mock_global_get)
+    monkeypatch.setattr(
+        plugin_manager_pm,
+        "_get_plugin_modules",
+        lambda: [{"pname": plugin_dir_name, "module": "main"}],
+    )
+    monkeypatch.setattr(
+        plugin_manager_pm,
+        "_import_plugin_with_dependency_recovery",
+        mock_import,
+    )
+    monkeypatch.setattr(
+        star_manager_module,
+        "sync_command_configs",
+        AsyncMock(return_value=None),
+    )
+
+    try:
+        success, error = await plugin_manager_pm.load(
+            specified_module_path=module_path,
+        )
+        assert success is True
+        assert error is None
+        assert import_calls == [module_path]
+        assert star_manager_module.star_map[module_path].activated is False
+    finally:
+        _clear_star_runtime_state()
+
+
+@pytest.mark.asyncio
+async def test_legacy_tool_migration_waits_for_unimported_disabled_plugins(
+    plugin_manager_pm: PluginManager, monkeypatch
+):
+    """Legacy tool migration does not mark itself done while disabled plugins are unimported."""
+    _clear_star_runtime_state()
+    disabled_module = "data.plugins.unimported_disabled.main"
+    disabled_md = star_manager_module.StarMetadata(
+        name="unimported_disabled",
+        module_path=disabled_module,
+        activated=False,
+        module=None,
+    )
+    star_manager_module.star_registry.append(disabled_md)
+    star_manager_module.star_map[disabled_module] = disabled_md
+
+    saved: dict[str, Any] = {}
+
+    async def mock_global_get(key, default=None):
+        return saved.get(key, default)
+
+    async def mock_global_put(key, value):
+        saved[key] = value
+
+    monkeypatch.setattr(star_manager_module.sp, "global_get", mock_global_get)
+    monkeypatch.setattr(star_manager_module.sp, "global_put", mock_global_put)
+
+    try:
+        result = await plugin_manager_pm._migrate_legacy_plugin_tool_inactivation_state(
+            [],
+            [disabled_module],
+        )
+        assert result == []
+        assert star_manager_module.PLUGIN_TOOL_STATE_MIGRATION_KEY not in saved
+
+        disabled_md.module = ModuleType(disabled_module)
+        result = await plugin_manager_pm._migrate_legacy_plugin_tool_inactivation_state(
+            [],
+            [disabled_module],
+        )
+        assert result == []
+        assert saved[star_manager_module.PLUGIN_TOOL_STATE_MIGRATION_KEY] is True
+    finally:
+        _clear_star_runtime_state()
+
+
+@pytest.mark.asyncio
+async def test_concurrent_turn_on_and_turn_off_serialize_activation_state(
+    plugin_manager_pm: PluginManager, monkeypatch
+):
+    """Concurrent turn_on_plugin and turn_off_plugin calls serialize under _pm_lock."""
+    _clear_star_runtime_state()
+    module_path = "data.plugins.concurrent_plugin.main"
+    md = star_manager_module.StarMetadata(
+        name="concurrent_plugin",
+        module_path=module_path,
+        activated=False,
+        module=None,
+    )
+    star_manager_module.star_registry.append(md)
+    star_manager_module.star_map[module_path] = md
+    monkeypatch.setattr(
+        plugin_manager_pm.context, "stars", star_manager_module.star_registry
+    )
+
+    preferences: dict[str, Any] = {
+        "inactivated_plugins": [module_path],
+        "inactivated_llm_tools": [],
+    }
+    reload_started = asyncio.Event()
+    allow_reload_finish = asyncio.Event()
+
+    async def mock_global_get(key, default=None):
+        val = preferences.get(key, default)
+        return list(val) if isinstance(val, list) else val
+
+    async def mock_global_put(key, value):
+        preferences[key] = list(value) if isinstance(value, list) else value
+
+    async def slow_reload(specified_plugin_name=None):
+        del specified_plugin_name
+        reload_started.set()
+        await allow_reload_finish.wait()
+        md.module = ModuleType(module_path)
+        md.activated = True
+        return True, None
+
+    monkeypatch.setattr(star_manager_module.sp, "global_get", mock_global_get)
+    monkeypatch.setattr(star_manager_module.sp, "global_put", mock_global_put)
+    monkeypatch.setattr(plugin_manager_pm, "_reload_unlocked", slow_reload)
+    monkeypatch.setattr(
+        plugin_manager_pm, "_terminate_plugin", AsyncMock(return_value=None)
+    )
+
+    try:
+        turn_on_task = asyncio.create_task(
+            plugin_manager_pm.turn_on_plugin("concurrent_plugin")
+        )
+        await reload_started.wait()
+        turn_off_task = asyncio.create_task(
+            plugin_manager_pm.turn_off_plugin("concurrent_plugin")
+        )
+        await asyncio.sleep(0)
+        assert not turn_off_task.done()
+
+        allow_reload_finish.set()
+        await asyncio.gather(turn_on_task, turn_off_task)
+
+        assert module_path in preferences["inactivated_plugins"]
+        assert md.activated is False
+    finally:
+        _clear_star_runtime_state()
+
+
