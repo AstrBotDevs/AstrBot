@@ -374,10 +374,16 @@ class AstrMessageEvent(abc.ABC):
         self,
         generator: AsyncGenerator[MessageChain, None],
         use_fallback: bool = False,
-    ) -> None:
-        """发送流式消息到消息平台，使用异步生成器。
-        目前仅支持: telegram，qq official 私聊。
-        Fallback仅支持 aiocqhttp。
+    ) -> MessageSendReceipt | None:
+        """Send a stream of message chains to the platform.
+
+        Args:
+            generator: Stream of message chains to deliver.
+            use_fallback: Whether to use the platform's fallback strategy.
+
+        Returns:
+            An optional API acceptance receipt for the complete stream. None
+            means the adapter does not expose a confirmed result, not failure.
         """
         asyncio.create_task(
             Metric.upload(msg_event_tick=1, adapter_name=self.platform_meta.name),

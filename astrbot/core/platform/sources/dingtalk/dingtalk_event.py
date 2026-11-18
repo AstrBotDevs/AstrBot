@@ -42,7 +42,9 @@ class DingtalkMessageEvent(AstrMessageEvent):
         await super().send(message)
         return receipt
 
-    async def send_streaming(self, generator, use_fallback: bool = False):
+    async def send_streaming(
+        self, generator, use_fallback: bool = False
+    ) -> MessageSendReceipt | None:
         # 钉钉统一回退为缓冲发送：最终发送仍使用新的 HTTP 消息接口。
         buffer = None
         async for chain in generator:
@@ -53,5 +55,6 @@ class DingtalkMessageEvent(AstrMessageEvent):
         if not buffer:
             return None
         buffer.squash_plain()
-        await self.send(buffer)
-        return await super().send_streaming(generator, use_fallback)
+        receipt = await self.send(buffer)
+        await super().send_streaming(generator, use_fallback)
+        return receipt

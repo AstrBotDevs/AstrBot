@@ -429,7 +429,9 @@ class WecomPlatformEvent(AstrMessageEvent):
             return MessageSendReceipt(message_ids=tuple(message_ids))
         return None
 
-    async def send_streaming(self, generator, use_fallback: bool = False):
+    async def send_streaming(
+        self, generator, use_fallback: bool = False
+    ) -> MessageSendReceipt | None:
         buffer = None
         async for chain in generator:
             if not buffer:
@@ -439,5 +441,6 @@ class WecomPlatformEvent(AstrMessageEvent):
         if not buffer:
             return None
         buffer.squash_plain()
-        await self.send(buffer)
-        return await super().send_streaming(generator, use_fallback)
+        receipt = await self.send(buffer)
+        await super().send_streaming(generator, use_fallback)
+        return receipt

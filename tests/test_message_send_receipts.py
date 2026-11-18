@@ -187,6 +187,42 @@ async def test_unconfirmed_content_does_not_get_receipt(platform_sender, parts):
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("platform_sender", ["dingtalk", "wecom"], indirect=True)
+async def test_buffered_stream_returns_single_send_receipt(platform_sender):
+    async def chunks():
+        yield MessageChain([Plain("Hello ")])
+        yield MessageChain([Plain("world")])
+
+    receipt = await platform_sender.event.send_streaming(chunks())
+
+    expected = (
+        MessageSendReceipt(tracking_keys=("tracking-1",))
+        if platform_sender.name == "dingtalk"
+        else MessageSendReceipt(message_ids=("message-1",))
+    )
+    assert receipt == expected
+    assert len(platform_sender.sent) == 1
+    payload = platform_sender.sent[0][1]
+    content = (
+        json.loads(payload["msgParam"])["text"]
+        if platform_sender.name == "dingtalk"
+        else payload["text"]["content"]
+    )
+    assert content == "Hello world"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("platform_sender", ["dingtalk", "wecom"], indirect=True)
+async def test_empty_stream_has_no_receipt_or_request(platform_sender):
+    async def empty():
+        if False:
+            yield MessageChain()
+
+    assert await platform_sender.event.send_streaming(empty()) is None
+    assert platform_sender.sent == []
+
+
+@pytest.mark.asyncio
 async def test_context_preserves_unknown_legacy_results():
     platform = SimpleNamespace(
         meta=lambda: PlatformMetadata("legacy", "Legacy", "platform"),
