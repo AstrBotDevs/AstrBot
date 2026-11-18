@@ -1,5 +1,5 @@
 import asyncio
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, patch
 
 import pytest
 import pytest_asyncio
@@ -31,12 +31,7 @@ async def core_lifecycle_td(tmp_path_factory, dashboard_test_config):
     core_lifecycle.astrbot_config = dashboard_test_config
     await core_lifecycle.initialize()
 
-    # Mock kb_manager and kb_helper
-    kb_manager = MagicMock()
     kb_helper = AsyncMock(spec=KBHelper)
-
-    # Configure get_kb to be an async mock that returns kb_helper
-    kb_manager.get_kb = AsyncMock(return_value=kb_helper)
 
     # Mock upload_document return value
     mock_doc = KBDocument(
@@ -51,8 +46,6 @@ async def core_lifecycle_td(tmp_path_factory, dashboard_test_config):
     )
     kb_helper.upload_document.return_value = mock_doc
 
-    # kb_manager.get_kb.return_value = kb_helper # Removed this line as it's handled above
-    core_lifecycle.kb_manager = kb_manager
     generated_password = getattr(
         core_lifecycle.astrbot_config,
         "_generated_dashboard_password",
@@ -73,14 +66,10 @@ async def core_lifecycle_td(tmp_path_factory, dashboard_test_config):
     )
 
     try:
-        yield core_lifecycle
+        with patch.object(core_lifecycle.kb_manager, "get_kb", return_value=kb_helper):
+            yield core_lifecycle
     finally:
-        try:
-            _stop_res = core_lifecycle.stop()
-            if asyncio.iscoroutine(_stop_res):
-                await _stop_res
-        except Exception:
-            pass
+        await core_lifecycle.stop()
 
 
 @pytest.fixture(scope="module")

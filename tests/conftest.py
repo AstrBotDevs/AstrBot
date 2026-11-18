@@ -4,6 +4,7 @@ AstrBot 测试配置
 提供共享的 pytest fixtures 和测试工具。
 """
 
+import asyncio
 import copy
 import json
 import os
@@ -108,6 +109,12 @@ def pytest_configure(config):
     config.addinivalue_line("markers", "db: 数据库相关测试")
     config.addinivalue_line("markers", "tier_c: C-tier tests (optional / non-blocking)")
     config.addinivalue_line("markers", "tier_d: D-tier tests (extended / integration)")
+
+
+def pytest_sessionfinish():
+    """Release pooled connections before Windows removes the isolated data root."""
+    if core := sys.modules.get("astrbot.core"):
+        asyncio.run(core.db_helper.engine.dispose())
 
 
 # ============================================================
