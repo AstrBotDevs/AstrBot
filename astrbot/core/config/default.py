@@ -933,8 +933,7 @@ CONFIG_METADATA_2 = {
                                 "type": "string",
                                 "options": ["none", "custom"],
                                 "labels": ["不使用代理", "使用代理"],
-                                "render_type": "radio",
-                                "layout": "cards",
+                                "render_type": "switch",
                             },
                             "type": {
                                 "description": "代理类型",
