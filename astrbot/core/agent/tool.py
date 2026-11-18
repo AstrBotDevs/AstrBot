@@ -3,9 +3,11 @@ import json
 from collections.abc import AsyncGenerator, Awaitable, Callable
 from typing import Any, Generic
 
-import jsonschema
 import mcp
 from deprecated import deprecated
+from jsonschema import Draft202012Validator
+from jsonschema.exceptions import best_match
+from jsonschema.validators import validator_for
 from pydantic import Field, model_validator
 from pydantic.dataclasses import dataclass
 
@@ -32,9 +34,14 @@ class ToolSchema:
 
     @model_validator(mode="after")
     def validate_parameters(self) -> "ToolSchema":
-        jsonschema.validate(
-            self.parameters, jsonschema.Draft202012Validator.META_SCHEMA
-        )
+        meta_schema = Draft202012Validator.META_SCHEMA
+        validator_cls = validator_for(meta_schema)
+        # The bundled validator's own meta-schema needs no self-check per tool.
+        if validator_cls is not Draft202012Validator:
+            validator_cls.check_schema(meta_schema)
+        error = best_match(validator_cls(meta_schema).iter_errors(self.parameters))
+        if error is not None:
+            raise error
         return self
 
 
