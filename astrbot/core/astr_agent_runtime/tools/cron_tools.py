@@ -62,8 +62,8 @@ class FutureTaskTool(FunctionTool[AstrAgentContext]):
         "Use action='list' to inspect existing tasks. "
         "Use action='delete' to remove a task by job_id. "
         "Group members can list all tasks in the current group, including their creators. "
-        "Only task creators can edit tasks. Group members can delete only their own tasks, "
-        "while AstrBot admins can also delete other members' tasks in the current group."
+        "Regular members can edit or delete their own tasks. "
+        "AstrBot admins can edit or delete any task in the current group."
     )
     parameters: dict = Field(
         default_factory=lambda: {
@@ -199,11 +199,11 @@ class FutureTaskTool(FunctionTool[AstrAgentContext]):
         event = context.context.event
         current_umo = event.unified_msg_origin
         current_sender_id = str(event.get_sender_id())
-        if action == "edit":
+        if action in ("edit", "delete"):
             job_id = kwargs.get("job_id")
             if not job_id:
-                return "error: job_id is required when action=edit."
-            if not any(
+                return f"error: job_id is required when action={action}."
+            if action == "edit" and not any(
                 key in kwargs
                 for key in ("name", "note", "run_once", "cron_expression", "run_at")
             ):
@@ -212,15 +212,22 @@ class FutureTaskTool(FunctionTool[AstrAgentContext]):
             job = await cron_mgr.db.get_cron_job(str(job_id))
             if not job:
                 return f"error: cron job {job_id} not found."
-            if not _job_belongs_to_current_sender(job, current_umo, current_sender_id):
-                same_session = _extract_job_session(job) == current_umo
+            same_session = _extract_job_session(job) == current_umo
+            can_manage = _job_belongs_to_current_sender(
+                job, current_umo, current_sender_id
+            ) or (
+                same_session
+                and event.get_message_type() == MessageType.GROUP_MESSAGE
+                and event.is_admin()
+            )
+            if not can_manage:
                 if same_session and not _extract_job_sender(job):
                     # Dashboard / legacy rows have a session but no member as
                     # their creator, so blaming another member would be wrong.
                     return (
                         f"error: cron job {job_id} has no chat member as its creator "
                         "(it was created outside this chat, e.g. from the dashboard), "
-                        "so you cannot edit it here."
+                        f"so you cannot {action} it here."
                     )
                 if (
                     same_session
@@ -228,13 +235,18 @@ class FutureTaskTool(FunctionTool[AstrAgentContext]):
                 ):
                     return (
                         f"error: cron job {job_id} was created by another member of "
-                        "this group chat, so you cannot edit it. Only the member who "
-                        "created it can edit it; tell the user to ask that member."
+                        f"this group chat, so you cannot {action} it. Only the member who "
+                        f"created it or an AstrBot admin can {action} it; tell the user "
+                        "to ask that member."
                     )
                 return (
                     f"error: cron job {job_id} was not created by you, so you cannot "
-                    "edit it. Only whoever created it can edit it."
+                    f"{action} it. Only whoever created it can {action} it."
                 )
+
+            if action == "delete":
+                await cron_mgr.delete_job(str(job_id))
+                return f"Deleted cron job {job_id}."
 
             payload = dict(job.payload) if isinstance(job.payload, dict) else {}
 
@@ -293,47 +305,6 @@ class FutureTaskTool(FunctionTool[AstrAgentContext]):
             if not job:
                 return f"error: cron job {job_id} not found."
             return f"Updated future task {job.job_id} ({job.name})."
-
-        if action == "delete":
-            job_id = kwargs.get("job_id")
-            if not job_id:
-                return "error: job_id is required when action=delete."
-            job = await cron_mgr.db.get_cron_job(str(job_id))
-            if not job:
-                return f"error: cron job {job_id} not found."
-            same_session = _extract_job_session(job) == current_umo
-            can_delete = _job_belongs_to_current_sender(
-                job, current_umo, current_sender_id
-            ) or (
-                same_session
-                and event.get_message_type() == MessageType.GROUP_MESSAGE
-                and event.is_admin()
-            )
-            if not can_delete:
-                if same_session and not _extract_job_sender(job):
-                    # Dashboard / legacy rows have a session but no member as
-                    # their creator, so blaming another member would be wrong.
-                    return (
-                        f"error: cron job {job_id} has no chat member as its creator "
-                        "(it was created outside this chat, e.g. from the dashboard), "
-                        "so you cannot delete it here."
-                    )
-                if (
-                    same_session
-                    and event.get_message_type() == MessageType.GROUP_MESSAGE
-                ):
-                    return (
-                        f"error: cron job {job_id} was created by another member of "
-                        "this group chat, so you cannot delete it. Only the member who "
-                        "created it or an AstrBot admin can delete it; tell the user "
-                        "to ask that member."
-                    )
-                return (
-                    f"error: cron job {job_id} was not created by you, so you cannot "
-                    "delete it. Only whoever created it can delete it."
-                )
-            await cron_mgr.delete_job(str(job_id))
-            return f"Deleted cron job {job_id}."
 
         if action == "list":
             all_jobs = await cron_mgr.list_jobs()
