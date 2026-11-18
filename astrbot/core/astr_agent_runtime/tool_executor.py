@@ -50,7 +50,7 @@ BACKGROUND_TASK_RESULT_WOKE_USER_PROMPT = (
     "<system_reminder>\n"
     "A background task you initiated has completed. "
     "Use the existing conversation to decide what to do next. "
-    "Do not greet the user, ask unnecessary questions, or send a message if no meaningful action is required. "
+    "Do not send a message if no meaningful action is required. "
     "If contacting the user, explain why and refer to the task naturally. "
     "You can use `send_message_to_user` to send images, files, and other generated artifacts. "
     "Only messages sent through `send_message_to_user` are delivered to the user. "
