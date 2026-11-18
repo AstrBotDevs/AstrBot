@@ -70,10 +70,10 @@ A delivery is released only when all associated implementation PRs are merged, t
 - Issue and same-repository PR events reconcile the changed item and its linked items. Fork PR events are skipped; full scans include their repository-visible state.
 - Scheduled runs every six hours and manual runs perform full reconciliation, including release verification. Event runs preserve an existing release result while implementation links are unchanged.
 - Full scans include open issues, all PRs, tracked or linked closed issues, and items closed since Project creation. Archived items and draft issues are skipped. Preview catch-up before applying to an older Project.
-- Each run validates the schema and prints its plan before writing. Runs are serialized and have a 120-minute total timeout. API errors or missing fetched tags stop the run.
+- Each run validates the schema and prints its plan before writing. Runs are serialized and have a 10-minute total timeout. API errors or missing fetched tags stop the run.
 - A failed apply reports confirmed, outcome-unknown, and unattempted writes. Rerun or wait for the next scheduled scan to reconcile partial changes. The Actions log shows scan progress.
 
-Privileged runs use default-branch code and full Git history and tags. Never check out PR code or expose the Project token in PR test jobs. Keep Actions pinned to immutable commit SHAs when updating them.
+Privileged runs use default-branch code and full Git history and tags. Never check out PR code or expose the Project token in PR test jobs. Both workflows reference Actions by version tag.
 
 ## Local validation
 
