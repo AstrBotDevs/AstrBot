@@ -283,7 +283,7 @@ async def test_group_message_create_handler_maps_group_session_and_scene():
     remembered_ids: list[tuple[str, str]] = []
 
     class PlatformStub:
-        def remember_session_scene(self, session_id: str, scene: str) -> None:
+        async def remember_session_scene(self, session_id: str, scene: str) -> None:
             remembered_scenes.append((session_id, scene))
 
         def remember_session_message_id(self, session_id: str, message_id: str) -> None:
@@ -407,6 +407,10 @@ async def test_group_name_is_cached_before_event_creation(
     use_webhook, handler_name, monkeypatch
 ):
     """Enrich both QQ transports before creating and committing inbound events."""
+    monkeypatch.setattr(
+        "astrbot.core.platform.sources.qqofficial.qqofficial_platform_adapter.sp",
+        SimpleNamespace(put_async=AsyncMock()),
+    )
     adapter_class = (
         QQOfficialWebhookPlatformAdapter if use_webhook else QQOfficialPlatformAdapter
     )
