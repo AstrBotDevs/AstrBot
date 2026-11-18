@@ -37,6 +37,10 @@ from .request_retry import retry_provider_request, retry_provider_request_contex
     "Anthropic Claude API 提供商适配器",
 )
 class ProviderAnthropic(Provider):
+	# !Important! Claude requests must include max_tokens.
+    _DEFAULT_MAX_TOKENS = (
+        65536  # TODO: Latest Claude models all supports 128k max output
+    )
     _PROMPT_CACHE_CONTROL = {"type": "ephemeral"}
 
     @staticmethod
@@ -112,6 +116,10 @@ class ProviderAnthropic(Provider):
         self.chosen_api_key: str = ""
         self.api_keys: list = super().get_keys()
         self.chosen_api_key = self.api_keys[0] if len(self.api_keys) > 0 else ""
+        if not self.chosen_api_key.strip():
+            raise ValueError(
+                "Anthropic API Key is required. Configure and save it first."
+            )
         # SDK 2.x uses Bearer auth; compatible endpoints may require X-Api-Key.
         default_headers = {"X-Api-Key": self.chosen_api_key}
         for name, value in (self.custom_headers or {}).items():
@@ -551,8 +559,7 @@ class ProviderAnthropic(Provider):
             payloads["tools"] = list(merged.values())
             extra_body = {k: v for k, v in extra_body.items() if k != "tools"}
 
-        if "max_tokens" not in payloads:
-            payloads["max_tokens"] = 65536
+        payloads.setdefault("max_tokens", self._DEFAULT_MAX_TOKENS)
         self._apply_explicit_prompt_cache_breakpoints(payloads)
         self._apply_thinking_config(payloads)
         self._sanitize_assistant_messages(payloads)
@@ -675,8 +682,7 @@ class ProviderAnthropic(Provider):
         reasoning_content = ""
         reasoning_signature = ""
 
-        if "max_tokens" not in payloads:
-            payloads["max_tokens"] = 65536
+        payloads.setdefault("max_tokens", self._DEFAULT_MAX_TOKENS)
         self._apply_explicit_prompt_cache_breakpoints(payloads)
         self._apply_thinking_config(payloads)
         self._sanitize_assistant_messages(payloads)

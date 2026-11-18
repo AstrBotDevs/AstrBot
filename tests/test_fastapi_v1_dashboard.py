@@ -2489,11 +2489,12 @@ async def test_v1_safe_provider_routes_accept_slash_ids(
     assert get_response.json()["data"]["provider"]["id"] == provider_id
     assert schema_response.status_code == 200
     config_schema = schema_response.json()["data"]["config_schema"]
-    reasoning_effort_preset = config_schema["provider"]["items"]["custom_extra_body"][
+    presets = config_schema["provider"]["items"]["custom_extra_body"][
         "template_schema"
-    ]["reasoning_effort"]
-    assert reasoning_effort_preset["type"] == "string"
-    assert reasoning_effort_preset["default"] == "high"
+    ]
+    assert set(presets) == {"reasoning_effort"}
+    assert presets["reasoning_effort"]["type"] == "string"
+    assert "default" not in presets["reasoning_effort"]
     assert path_test_response.status_code == 200
     assert path_test_response.json()["data"]["status"] == "available"
     assert safe_test_response.status_code == 200

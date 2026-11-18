@@ -213,7 +213,6 @@ async def test_query_flattens_tools_and_enforces_stateless_body(monkeypatch):
     provider = _make_provider(
         {
             "custom_extra_body": {
-                "max_tokens": 321,
                 "reasoning_effort": "low",
                 "previous_response_id": "resp_previous",
                 "conversation": "conv_1",

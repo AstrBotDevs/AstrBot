@@ -2361,31 +2361,13 @@ CONFIG_METADATA_2 = {
                         "description": "自定义请求体参数",
                         "type": "dict",
                         "items": {},
-                        "hint": "用于在请求时添加额外的参数，如 temperature, top_p, max_tokens, reasoning_effort 等。",
+                        "hint": "用于在请求时添加提供商支持的额外参数。",
                         "template_schema": {
                             "reasoning_effort": {
                                 "name": "Reasoning Effort",
                                 "description": "推理强度",
                                 "hint": "不同模型支持不同的推理强度，部分选项可能无效。",
                                 "type": "string",
-                            },
-                            "max_tokens": {
-                                "name": "Max Tokens",
-                                "description": "最大词元（Tokens）数",
-                                "hint": "最大允许输出的 Token 数，包含推理 Token。不推荐手动设置。",
-                                "type": "int",
-                            },
-                            "temperature": {
-                                "name": "Temperature",
-                                "description": "温度参数",
-                                "hint": "控制输出的随机性，范围通常为 0-2，值越高越随机。不推荐手动设置。",
-                                "type": "float",
-                            },
-                            "top_p": {
-                                "name": "Top-p",
-                                "description": "Top-p 采样",
-                                "hint": "核采样参数，范围通常为 0-1，控制模型如何忽略长尾 Token。不推荐手动设置。",
-                                "type": "float",
                             },
                         },
                     },

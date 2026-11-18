@@ -177,7 +177,7 @@
           </div>
         </div>
 
-        <div v-if="localKeyValuePairs.length === 0 && !hasTemplateSchema" class="text-center py-8">
+        <div v-if="!inline && localKeyValuePairs.length === 0 && !hasTemplateSchema" class="text-center py-8">
           <v-icon size="64" color="grey-lighten-1">mdi-code-json</v-icon>
           <p class="text-grey mt-4">{{ t('core.common.objectEditor.noParams') }}</p>
         </div>
