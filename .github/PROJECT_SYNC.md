@@ -80,10 +80,9 @@ Privileged runs use default-branch code and full Git history and tags. Never che
 Run the offline checks without credentials:
 
 ```sh
-python -I tests/test_sync_github_project.py -v
-python -I tests/test_project_delivery.py -v
-python -I tests/test_project_events.py -v
-uv run ruff format --check scripts/sync_github_project.py tests/test_sync_github_project.py tests/test_project_delivery.py tests/test_project_events.py
+uv run --no-project python -I tests/test_sync_github_project.py -v
+uv run --no-project python -I tests/test_project_events.py -v
+uv run ruff format --check scripts/sync_github_project.py tests/test_sync_github_project.py tests/test_project_events.py
 uv run ruff check scripts/sync_github_project.py
 ```
 
