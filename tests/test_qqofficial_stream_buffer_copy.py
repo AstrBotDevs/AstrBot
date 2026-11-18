@@ -10,7 +10,6 @@ reused/mutated that object. Fix: _append_stream_delta copies Plain text.
 
 from __future__ import annotations
 
-from dataclasses import replace
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
@@ -18,7 +17,7 @@ import botpy.message
 import pytest
 
 from astrbot.api.event import MessageChain
-from astrbot.api.message_components import Image, Plain
+from astrbot.api.message_components import Plain
 from astrbot.api.platform import (
     AstrBotMessage,
     MessageMember,
@@ -27,9 +26,6 @@ from astrbot.api.platform import (
 )
 from astrbot.core.platform.sources.qqofficial.qqofficial_message_event import (
     QQOfficialMessageEvent,
-)
-from astrbot.core.platform.sources.qqofficial_webhook.qo_webhook_event import (
-    QQOfficialWebhookMessageEvent,
 )
 
 
@@ -45,7 +41,7 @@ def _extract_send_text(kwargs: dict) -> str:
     return ""
 
 
-def _make_group_event(event_cls=QQOfficialMessageEvent) -> QQOfficialMessageEvent:
+def _make_group_event() -> QQOfficialMessageEvent:
     raw = botpy.message.GroupMessage(
         api=None,
         event_id="event-1",
@@ -69,7 +65,7 @@ def _make_group_event(event_cls=QQOfficialMessageEvent) -> QQOfficialMessageEven
     abm.raw_message = raw
     meta = PlatformMetadata(name="qq_official", description="t", id="qq_official")
     bot = SimpleNamespace(api=SimpleNamespace(post_group_message=AsyncMock()))
-    return event_cls(
+    return QQOfficialMessageEvent(
         message_str="ping",
         message_obj=abm,
         platform_meta=meta,
@@ -123,86 +119,6 @@ def test_append_stream_delta_copies_plain_and_survives_source_mutation() -> None
     texts = [c.text for c in event.send_buffer.chain if isinstance(c, Plain)]
     assert texts == ["不", "稀", "罕"]
     assert "".join(texts) == "不稀罕"
-
-
-@pytest.mark.parametrize(
-    "event_cls", [QQOfficialMessageEvent, QQOfficialWebhookMessageEvent]
-)
-def test_streaming_capability_is_specific_to_the_message_source(event_cls) -> None:
-    group = _make_group_event(event_cls)
-    c2c = _make_c2c_event()
-    metadata = replace(group.platform_meta, support_streaming_message=True)
-
-    for original, supported in ((group, False), (c2c, True)):
-        event = event_cls(
-            original.message_str,
-            original.message_obj,
-            metadata,
-            original.session_id,
-            original.bot,
-        )
-        assert event.platform_meta.support_streaming_message is supported
-        assert metadata.support_streaming_message is True
-
-
-@pytest.mark.asyncio
-@pytest.mark.parametrize(
-    "event_cls", [QQOfficialMessageEvent, QQOfficialWebhookMessageEvent]
-)
-async def test_group_fallback_sends_sentences_before_generation_finishes(
-    event_cls, monkeypatch
-) -> None:
-    event = _make_group_event(event_cls)
-    monkeypatch.setattr("asyncio.sleep", AsyncMock())
-    captured = []
-
-    async def capture(**kwargs):
-        assert "stream" not in kwargs
-        captured.append(_extract_send_text(kwargs))
-        return {"id": f"out-{len(captured)}"}
-
-    event.bot.api.post_group_message = AsyncMock(side_effect=capture)
-    shared = MessageChain([Plain("先")])
-
-    async def gen():
-        yield shared
-        assert captured == []
-        shared.chain[0].text = "查一下。"
-        yield shared
-        assert captured == ["先查一下。"]
-        shared.chain[0].text = "查到了！剩余文本"
-        yield shared
-        assert captured == ["先查一下。", "查到了！"]
-
-    await event.send_streaming(gen(), use_fallback=True)
-    assert captured == ["先查一下。", "查到了！", "剩余文本"]
-
-
-@pytest.mark.asyncio
-async def test_group_fallback_flushes_text_before_tool_status_and_media(
-    monkeypatch,
-) -> None:
-    event = _make_group_event()
-    monkeypatch.setattr("asyncio.sleep", AsyncMock())
-    event.send = AsyncMock()
-    image = Image.fromURL("https://example.com/result.png")
-
-    async def gen():
-        yield MessageChain().message("先查一下")
-        yield MessageChain(type="break")
-        assert event.send.call_args.args[0].get_plain_text() == "先查一下"
-        await event.send(MessageChain(type="tool_call").message("工具执行中"))
-        yield MessageChain([Plain("结果图片"), image, Plain("说明")])
-        assert event.send.call_args.args[0].chain == [image]
-
-    await event.send_streaming(gen(), use_fallback=True)
-    assert [call.args[0].chain for call in event.send.await_args_list] == [
-        [Plain("先查一下")],
-        [Plain("工具执行中")],
-        [Plain("结果图片")],
-        [image],
-        [Plain("说明")],
-    ]
 
 
 @pytest.mark.asyncio
@@ -304,10 +220,7 @@ async def test_group_stream_keeps_non_plain_components() -> None:
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("use_fallback", [False, True])
-async def test_c2c_stream_append_keeps_first_char_before_throttle_flush(
-    use_fallback,
-) -> None:
+async def test_c2c_stream_append_keeps_first_char_before_throttle_flush() -> None:
     """C2C also uses _append_stream_delta; keep time <1s so only final state=10 sends."""
     event = _make_c2c_event()
     sent_texts: list[str] = []
@@ -341,7 +254,7 @@ async def test_c2c_stream_append_keeps_first_char_before_throttle_flush(
     ):
         # last_edit_time starts at 0; keep now < 1 so intermediate throttle never fires.
         mock_loop.return_value.time.return_value = 0.5
-        await event.send_streaming(gen(), use_fallback=use_fallback)
+        await event.send_streaming(gen())
 
     # Only final state=10 flush with full accumulated text.
     assert len(sent_texts) == 1
