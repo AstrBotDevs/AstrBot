@@ -514,11 +514,17 @@ async def test_sdk_handle_keeps_permissions_and_follow_up_under_core_admission(r
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("vision", [False, True])
+@pytest.mark.parametrize("plain_prompt", [False, True])
 async def test_background_output_uses_normal_overflow_and_image_handling(
-    runtime, monkeypatch, tmp_path, vision
+    runtime, monkeypatch, tmp_path, database, vision, plain_prompt
 ):
     """Typed wakeup output follows the foreground storage and modality policy."""
+    from astrbot.core.agent.conversation_events import ConversationEventWriter
+
     original = native_builder.build_main_agent
+    store = database.conversation_store
+    conversation = await store.create(umo="target:FriendMessage:alice", platform_id="target")
+    writer = ConversationEventWriter(store, await store.read(conversation.conversation_id))
 
     async def build(**kwargs):
         result = await original(**kwargs)
@@ -530,6 +536,11 @@ async def test_background_output_uses_normal_overflow_and_image_handling(
         result.provider.provider_config["modalities"] = (
             ["text", "image"] if vision else ["text"]
         )
+        if plain_prompt:
+            message = runner.run_context.messages[-1]
+            message.content = "\n".join(part.text for part in message.content)
+        runner._conversation_event_sink = writer.consume
+        result.conversation_events = writer
         return result
 
     monkeypatch.setattr(native_builder, "build_main_agent", build)
@@ -570,6 +581,9 @@ async def test_background_output_uses_normal_overflow_and_image_handling(
     assert image_data not in saved
     assert len(list((tmp_path / "images").glob("*.png"))) == 2
     contexts = runtime.requests[0]
+    user_messages = [message for message in contexts if message["role"] == "user"]
+    assert len(user_messages) == 1
+    assert "A background task completed." in user_messages[0]["content"][0]["text"]
     text_parts, image_parts = [], []
     for message in contexts:
         content = message.get("content", "")
@@ -591,10 +605,16 @@ async def test_background_output_uses_normal_overflow_and_image_handling(
         assert all(
             part["image_url"]["url"].endswith(image_data) for part in image_parts
         )
-    history = json.loads(runtime.conversation.history)
-    assert any(
-        isinstance(message.get("content"), str)
-        and str(files[0]) in message["content"]
-        for message in history
+    history = (await store.read(conversation.conversation_id)).messages
+    saved_users = [message for message in history if message["role"] == "user"]
+    assert saved_users == user_messages
+    assert str(files[0]) in "\n".join(
+        part["text"] for part in saved_users[0]["content"] if part["type"] == "text"
     )
     assert output not in json.dumps(history)
+    events = await store.events(conversation.conversation_id)
+    assert not any(event.type == "context.rebased" for event in events)
+    assert sum(
+        event.type == "message.appended" and event.payload["message"]["role"] == "user"
+        for event in events
+    ) == 1

@@ -1577,11 +1577,17 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             )
         return inline_result, cached_images
 
-    async def append_tool_result_images(self, cached_images: list[CachedImage]) -> None:
+    async def append_tool_result_images(
+        self,
+        cached_images: list[CachedImage],
+        *,
+        content: list[ContentPart] | None = None,
+    ) -> None:
         """Append cached tool images when the current model supports vision.
 
         Args:
             cached_images: Images produced by the shared tool result preparation.
+            content: Prepared input to extend before persistence; otherwise append a message.
         """
         # If there are cached images and the model supports image input,
         # append a user message with images so LLM can see them
@@ -1613,9 +1619,12 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                             )
                         )
                 if image_parts:
-                    await self._append_context_messages(
-                        [Message(role="user", content=image_parts)]
-                    )
+                    if content is not None:
+                        content.extend(image_parts)
+                    else:
+                        await self._append_context_messages(
+                            [Message(role="user", content=image_parts)]
+                        )
                     logger.debug(
                         f"Appended {len(cached_images)} cached image(s) to context for LLM review"
                     )

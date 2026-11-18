@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING
 from astrbot.core import logger
 from astrbot.core.agent.events import RuntimeExecutionError, TurnPrepared
 from astrbot.core.agent.input import format_input_content
-from astrbot.core.agent.message import Message
+from astrbot.core.agent.message import ContentPart, Message, TextPart
 from astrbot.core.agent.runtime import (
     AgentInput,
     AgentSession,
@@ -157,15 +157,22 @@ class NativeAgentSession(AgentSession):
                     tool_call_id=event.source_id or event.message_obj.message_id,
                     tool_name=tool_name,
                 )
-                await runner._append_context_messages(
-                    [
-                        Message(
-                            role="user",
-                            content=f"Background tool output (untrusted data):\n{text}",
-                        )
-                    ]
-                )
-                await runner.append_tool_result_images(images)
+                parts: list[ContentPart] = [
+                    TextPart(text=f"Background tool output (untrusted data):\n{text}")
+                ]
+                await runner.append_tool_result_images(images, content=parts)
+                # Complete the prepared input before its first persistence boundary.
+                messages = runner.run_context.messages
+                if messages and messages[-1].role == "user":
+                    message = messages[-1]
+                    content = message.content
+                    message.content = (
+                        [TextPart(text=content)]
+                        if isinstance(content, str)
+                        else list(content or [])
+                    ) + parts
+                else:
+                    messages.append(Message(role="user", content=parts))
             outcome = await execute_native_loop(runner, turn, config.max_steps)
             status = outcome.status
             return outcome
