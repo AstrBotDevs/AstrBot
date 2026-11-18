@@ -102,6 +102,10 @@ if receipt is not None:
 
 `follow_up()` queues a turn in the original runtime and conversation. `steer()` adds input to an active turn: it returns `None` if rejected, or an `InputReceipt` whose awaited boolean indicates whether the input was consumed and saved. Rejected input is not queued automatically. Steering images and files are currently passed as text references.
 
+When steering arrives while a tool result is pending, the built-in executor moves the running tool to the background without executing it again. The foreground receives a handoff result containing the task ID and proceeds with steering. Completion or failure triggers a wakeup in the original runtime conversation. Stopping the session cancels these background tools too; executors without handoff support keep waiting for the tool result.
+
+For event-backed main sessions, user and assistant messages are committed incrementally. Assistant tool calls are committed before tool execution, and tool results are stored as `message.appended`. `tool.started` and `tool.finished` remain runtime notifications and are not stored in the conversation journal. Missing tool results after an interrupted execution are represented as unknown results when preparing the next turn.
+
 `run.session.state` is `idle`, `queued`, `running`, or `closed`. The snapshot contains `ref`, `pending_turn_count`, and `active_turn_id`. Read the property again to refresh it.
 
 Core resolves permissions from `source_event` or the current active same-UMO event. Background calls without a source run as members. A source event from another UMO is rejected.

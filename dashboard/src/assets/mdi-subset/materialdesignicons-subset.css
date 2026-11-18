@@ -228,6 +228,10 @@
   content: "\F0765";
 }
 
+.mdi-circle-off-outline::before {
+  content: "\F10D3";
+}
+
 .mdi-circle-outline::before {
   content: "\F0766";
 }
@@ -1086,10 +1090,6 @@
 
 .mdi-white-balance-sunny::before {
   content: "\F05A8";
-}
-
-.mdi-wrench::before {
-  content: "\F05B7";
 }
 
 .mdi-wrench-outline::before {
