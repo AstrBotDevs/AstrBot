@@ -154,6 +154,15 @@ class SystemOneDecisionProvider(DecisionProvider):
                     "type": "noul",
                     "instructions": instructions,
                 }
+                if question.criteria is not None:
+                    if not isinstance(question.criteria, Mapping) or any(
+                        key not in {"true", "false"} or not isinstance(description, str)
+                        for key, description in question.criteria.items()
+                    ):
+                        raise ValueError(
+                            f"question {head} criteria must map true or false to strings"
+                        )
+                    payload_questions[head]["criteria"] = dict(question.criteria)
 
         async def _post() -> Any:
             response = await self.client.post(

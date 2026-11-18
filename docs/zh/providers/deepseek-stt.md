@@ -30,10 +30,8 @@ AstrBot 可通过 [DeepSeek 语音识别接口](https://api-docs.deepseek.com/zh
 
 ## 音频要求与限制
 
-- DeepSeek 接口支持 16 位 PCM WAV 和 Ogg Opus，并根据文件实际内容判断格式。
-- WAV 支持 8000、16000、22050、24000、32000、44100、48000 Hz，以及单声道或双声道；双声道仅识别左声道。
-- AstrBot 会复用已有 WAV，或将 SILK、AMR 等其他输入转换为 16 kHz、单声道、16 位 PCM WAV。转换 SILK 需要现有的 `silk-python` 依赖，其他格式转换需要 ffmpeg。
-- 单个上传文件最大为 8 MiB，音频最长为 120 秒。AstrBot 会在发送请求前检查实际上传文件，超限时报错，不会静默截断音频。
-- 接口不支持流式识别。未识别到语音时，AstrBot 不会生成虚假的转写内容。
+- 上传文件最大为 8 MiB，音频最长为 120 秒。超限音频需要缩短后再发送。
+- AstrBot 会将不兼容的音频转换为 16 kHz、单声道、16 位 PCM WAV。AMR 等格式需要安装 ffmpeg；SILK 转换使用随 AstrBot 安装的 `silk-python` 依赖。
+- 不支持流式识别；双声道 WAV 仅识别左声道。
 
-最新接口说明与账号并发限制请以 [DeepSeek 官方文档](https://api-docs.deepseek.com/zh-cn/guides/asr/) 为准。
+支持的格式及账号限制参见 [DeepSeek 语音识别文档](https://api-docs.deepseek.com/zh-cn/guides/asr/)。

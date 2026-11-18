@@ -307,8 +307,6 @@ class AgentTurn:
         original = self.input
         if (
             input.event.unified_msg_origin != self.session.umo
-            or not input.event.get_sender_id()
-            or input.event.get_sender_id() != original.event.get_sender_id()
             or input.permissions != original.permissions
             or input.send_to_user != original.send_to_user
             or input.event.plugins_name != original.event.plugins_name

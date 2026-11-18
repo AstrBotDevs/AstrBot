@@ -548,8 +548,8 @@ async def test_portable_media_uses_the_normal_input_preprocessor(sdk, tmp_path):
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("delegated", [False, True])
-async def test_native_sessions_commit_whole_turn_after_execution(sdk, delegated):
-    """Main and child histories remain unchanged until a complete turn settles."""
+async def test_native_sessions_persist_at_supported_execution_boundaries(sdk, delegated):
+    """Event-backed main sessions commit messages before the next model request."""
     from astrbot.core.agent.tool import FunctionTool, ToolSet
     from astrbot.core.astr_agent_runtime.main_session import MainAgentInput
     from astrbot.core.conversation_mgr import ConversationManager
@@ -604,25 +604,23 @@ async def test_native_sessions_commit_whole_turn_after_execution(sdk, delegated)
         )
     try:
         await asyncio.wait_for(entered.wait(), 3)
-        assert await session.history() == []
+        history_before_reply = await session.history()
+        if delegated:
+            assert history_before_reply == []
+        else:
+            assert [message["role"] for message in history_before_reply] == ["user", "assistant", "tool"]
         release.set()
         if turn is not None:
             assert (await turn.result()).text == "Done"
             events = await sdk.db.conversation_store.events(session.id)
             assert [
-                event.type for event in events if event.type != "message.appended"
+                event.type for event in events if event.type not in {"message.appended", "context.rebased"}
             ] == [
                 "conversation.created",
                 "turn.started",
-                "request.started",
-                "request.finished",
-                "tool.started",
-                "tool.finished",
-                "request.started",
-                "request.finished",
                 "turn.finished",
             ]
-            assert events[1].event_id == "webchat-turn"
+            assert next(event for event in events if event.type == "turn.started").event_id == "webchat-turn"
             assert events[-1].payload == {
                 "turn_id": "webchat-turn",
                 "status": "completed",

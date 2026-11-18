@@ -8,11 +8,19 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 import pytest_asyncio
+from mcp.types import (
+    BlobResourceContents,
+    CallToolResult,
+    EmbeddedResource,
+    ImageContent,
+    TextContent,
+)
 from opentelemetry.trace import format_trace_id, get_current_span
 
 from astrbot.core.agent.hooks import BaseAgentRunHooks
 from astrbot.core.agent.run_context import ContextWrapper
 from astrbot.core.agent.runtime import AgentSessionRef
+from astrbot.core.agent.tool_image_cache import tool_image_cache
 from astrbot.core.agent_wakeup import wake_main_agent
 from astrbot.core.astr_agent_runtime import AstrAgentRuntime
 from astrbot.core.astr_agent_runtime import session as native_session
@@ -221,19 +229,20 @@ async def runtime(monkeypatch):
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("deliver", [False, True])
-@pytest.mark.parametrize("streaming", [False, True])
-async def test_wakeup_uses_current_context_and_sends_final_reply(
-    runtime, deliver, streaming
-):
-    """Keep routing, execution scopes, history, and delivery on the normal path."""
-    runtime.deliver = deliver
-    runtime.agent_stage.streaming_response = streaming
+@pytest.mark.parametrize("source", ["cron", "background_task", "plugin"])
+async def test_wakeup_output_policy_preserves_explicit_sends_and_history(runtime, source):
+    """Keep explicit sends and history when automatic replies are disabled.
+
+    Args:
+        runtime: Real pipeline and offline model host.
+        source: Mechanism initiating the wakeup.
+    """
+    runtime.deliver = True
     history = [{"role": "user", "content": "Existing context"}]
     runtime.conversation.history = json.dumps(history)
     umo = "target:GroupMessage:user_group"
     await wake_main_agent(
-        runtime.context, umo=umo, user_prompt="Continue", source="cron"
+        runtime.context, umo=umo, user_prompt="Continue", source=source
     )
     await asyncio.wait_for(runtime.drain(), 1)
     event = runtime.events[0]
@@ -250,7 +259,9 @@ async def test_wakeup_uses_current_context_and_sends_final_reply(
         call.args[1].get_plain_text()
         for call in runtime.context.send_message.await_args_list
     ]
-    assert delivered_texts == (["Explicit delivery"] if deliver else []) + ["Reply 1"]
+    assert delivered_texts == ["Explicit delivery"] + (
+        ["Reply 1"] if source == "plugin" else []
+    )
     assert event.trace._summary["state"] == "completed"
     assert not event.trace._summary["has_errors"]
     assert current_message_event.get() is None and _log_context.get() is None
@@ -403,15 +414,13 @@ async def test_targeted_wakeup_queues_on_its_parent_after_conversation_switch(ru
     runtime.context.conversation_manager.get_conversation.side_effect = (
         lambda source, cid: conversations.get(cid)
     )
-    event = AgentWakeupEvent(
-        context=runtime.context,
-        session=runtime.events[0].session,
-        platform_meta=runtime.events[0].platform_meta,
-        prompt="Child result",
-        source="plugin",
+    await wake_main_agent(
+        runtime.context,
+        umo=umo,
+        user_prompt="Child result",
+        source="background_task",
         agent_session=AgentSessionRef("astrbot", "conversation"),
     )
-    await runtime.context.get_event_queue().put(event)
     runtime.gate.set()
     await asyncio.wait_for(runtime.drain(), 1)
     parent.steer.assert_not_called()
@@ -501,3 +510,104 @@ async def test_sdk_handle_keeps_permissions_and_follow_up_under_core_admission(r
     assert follow_up.session.ref == run.session.ref
     assert (await asyncio.wait_for(follow_up.result(), 1)).reason == "skipped"
     assert len(runtime.requests) == 1
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("vision", [False, True])
+async def test_background_output_uses_normal_overflow_and_image_handling(
+    runtime, monkeypatch, tmp_path, database, vision
+):
+    """Typed wakeup output follows the foreground storage and modality policy."""
+    from astrbot.core.agent.conversation_events import ConversationEventWriter
+
+    original = native_builder.build_main_agent
+    store = database.conversation_store
+    conversation = await store.create(umo="target:FriendMessage:alice", platform_id="target")
+    writer = ConversationEventWriter(store, await store.read(conversation.conversation_id))
+
+    async def build(**kwargs):
+        result = await original(**kwargs)
+        runner = result.agent_runner
+        runner.tool_result_overflow_dir = str(tmp_path)
+        runner.read_tool = SimpleNamespace(name="astrbot_file_read_tool")
+        runner.TOOL_RESULT_MAX_ESTIMATED_TOKENS = 100
+        runner.TOOL_RESULT_PREVIEW_MAX_ESTIMATED_TOKENS = 20
+        result.provider.provider_config["modalities"] = (
+            ["text", "image"] if vision else ["text"]
+        )
+        runner._conversation_event_sink = writer.consume
+        result.conversation_events = writer
+        return result
+
+    monkeypatch.setattr(native_builder, "build_main_agent", build)
+    monkeypatch.setattr(tool_image_cache, "_cache_dir", str(tmp_path / "images"))
+    image_data = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII="
+    output = "large background output " * 1000
+    await wake_main_agent(
+        runtime.context,
+        umo="target:FriendMessage:alice",
+        user_prompt="A background task completed. Review its output.",
+        source="background_task",
+        source_id="background-test",
+        tool_result=(
+            "slow_tool",
+            CallToolResult(
+                content=[
+                    TextContent(type="text", text=output),
+                    ImageContent(type="image", data=image_data, mimeType="image/png"),
+                    EmbeddedResource(
+                        type="resource",
+                        resource=BlobResourceContents(
+                            uri="file:///result.png",
+                            blob=image_data,
+                            mimeType="image/png",
+                        ),
+                    ),
+                ]
+            ),
+        ),
+    )
+    await asyncio.wait_for(runtime.drain(), 3)
+    assert len(runtime.requests) == 1
+    files = list(tmp_path.glob("background-test_*.txt"))
+    assert len(files) == 1
+    saved = files[0].read_text(encoding="utf-8")
+    assert saved.startswith(output)
+    assert "Image returned and cached at path=" in saved
+    assert image_data not in saved
+    assert len(list((tmp_path / "images").glob("*.png"))) == 2
+    contexts = runtime.requests[0]
+    user_messages = [message for message in contexts if message["role"] == "user"]
+    assert len(user_messages) == 1
+    assert "A background task completed." in user_messages[0]["content"][0]["text"]
+    text_parts, image_parts = [], []
+    for message in contexts:
+        content = message.get("content", "")
+        if isinstance(content, str):
+            text_parts.append(content)
+        else:
+            for part in content or []:
+                if part.get("type") == "text":
+                    text_parts.append(part["text"])
+                elif part.get("type") == "image_url":
+                    image_parts.append(part)
+    text = "\n".join(text_parts)
+    assert str(files[0]) in text
+    assert "Use `astrbot_file_read_tool` to inspect it." in text
+    assert output not in text
+    assert image_data not in text
+    assert len(image_parts) == (2 if vision else 0)
+    if vision:
+        assert all(
+            part["image_url"]["url"].endswith(image_data) for part in image_parts
+        )
+    history = (await store.read(conversation.conversation_id)).messages
+    saved_users = [message for message in history if message["role"] == "user"]
+    assert saved_users == user_messages
+    assert output not in json.dumps(history)
+    events = await store.events(conversation.conversation_id)
+    assert not any(event.type == "context.rebased" for event in events)
+    assert sum(
+        event.type == "message.appended" and event.payload["message"]["role"] == "user"
+        for event in events
+    ) == 1
