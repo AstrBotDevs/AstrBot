@@ -1258,7 +1258,7 @@
       "platform_settings": {
         "id_blacklist": {
           "description": "Blocked session IDs",
-          "hint": "Stop processing these sessions. Blacklist takes priority over whitelist, including administrators."
+          "hint": "Stop processing these sessions. Group IDs and platform sender IDs such as Lark user_id/union_id are also accepted. Blacklist takes priority over whitelist, including administrators."
         }
       }
     },

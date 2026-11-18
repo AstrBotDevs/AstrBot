@@ -1,8 +1,9 @@
 from types import SimpleNamespace
-from unittest.mock import MagicMock
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
+from astrbot.core.pipeline.session_status_check.stage import SessionStatusCheckStage
 from astrbot.core.pipeline.whitelist_check.stage import WhitelistCheckStage
 from astrbot.core.platform.message_type import MessageType
 
@@ -152,3 +153,29 @@ async def test_whitelist_still_allows_umo_and_group_entries():
     await group_stage.process(group_event)
 
     group_event.stop_event.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_blacklist_blocks_sender_alias():
+    """Blacklist entries match sender aliases, not only session and group IDs."""
+    context = SimpleNamespace(
+        get_config=lambda umo: {"platform_settings": {"id_blacklist": ["emp-123"]}},
+        conversation_manager=SimpleNamespace(
+            get_curr_conversation_id=AsyncMock(return_value="cid")
+        ),
+    )
+    stage = SessionStatusCheckStage()
+    await stage.initialize(
+        SimpleNamespace(plugin_manager=SimpleNamespace(context=context))
+    )
+    blocked = _event(umo="lark:FriendMessage:ou_sender", aliases=["emp-123"])
+
+    await stage.process(blocked)
+
+    blocked.stop_event.assert_called_once()
+
+    allowed = _event(umo="lark:FriendMessage:ou_sender", aliases=["emp-999"])
+
+    await stage.process(allowed)
+
+    allowed.stop_event.assert_not_called()

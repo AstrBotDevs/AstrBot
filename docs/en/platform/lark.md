@@ -124,7 +124,7 @@ Enable `contact:contact.base:readonly` and `contact:user.base:readonly` so priva
 Enable `contact:user.employee_id:readonly` (Get user ID) so message events include the sender's `user_id`. Without this scope, `user_id` is empty in events and only `open_id` is available.
 
 > [!TIP]
-> `open_id` is app-scoped and changes if the app is rebuilt, `user_id` is tenant-scoped and stable (commonly the employee number in enterprise tenants), and `union_id` is developer-account-scoped. After enabling the scope and releasing an app version, you can enter `user_id` or `union_id` directly under `Access Control -> Whitelist -> Whitelist ID List` and `Access Control -> Administrators -> Administrator IDs` in the WebUI. In group chats, whitelisting a member's `user_id` admits that member without whitelisting the entire group.
+> `open_id` is app-scoped and changes if the app is rebuilt, `user_id` is tenant-scoped and stable (commonly the employee number in enterprise tenants), and `union_id` is developer-account-scoped. After enabling the scope and releasing an app version, you can enter `user_id` or `union_id` directly under `Access Control -> Whitelist -> Whitelist ID List`, `Access Control -> Blacklist -> Blacklist ID List`, and `Access Control -> Administrators -> Administrator IDs` in the WebUI. In group chats, whitelisting a member's `user_id` admits only that member instead of the entire group; blacklisting it blocks only that member instead of disabling the group.
 >
 > `/sid` still reports the UID and session ID based on `open_id`; `user_id` and `union_id` can be found in the user details in the Lark admin console.
 
