@@ -22,12 +22,13 @@ _TEST_DASHBOARD_PASSWORD = "AstrbotTest123"
 
 
 @pytest_asyncio.fixture(scope="module")
-async def core_lifecycle_td(tmp_path_factory):
+async def core_lifecycle_td(tmp_path_factory, dashboard_test_config):
     """Creates and initializes a core lifecycle instance with a temporary database."""
     tmp_db_path = tmp_path_factory.mktemp("data") / "test_data_kb.db"
     db = SQLiteDatabase(str(tmp_db_path))
     log_broker = LogBroker()
     core_lifecycle = AstrBotCoreLifecycle(log_broker, db)
+    core_lifecycle.astrbot_config = dashboard_test_config
     await core_lifecycle.initialize()
 
     # Mock kb_manager and kb_helper
