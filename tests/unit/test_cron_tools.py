@@ -191,8 +191,8 @@ async def test_future_task_edit_rejects_same_umo_different_sender():
 
     assert result == (
         "error: cron job job-1 was created by another member of this group chat, "
-        "so you cannot edit it. Only the member who created it can edit it; tell "
-        "the user to ask that member."
+        "so you cannot edit it. Only the member who created it or an AstrBot "
+        "admin can edit it; tell the user to ask that member."
     )
     cron_mgr.update_job.assert_not_awaited()
 
@@ -265,13 +265,20 @@ async def test_future_task_admin_cannot_delete_job_from_another_session():
 
 
 @pytest.mark.asyncio
-async def test_future_task_admin_cannot_edit_other_members_group_job():
-    """Admin overrides only cover listing and deleting, not editing."""
+@pytest.mark.parametrize("creator", [{"sender_id": "user-2"}, {}])
+async def test_future_task_admin_can_edit_group_job_without_changing_creator(creator):
+    """Admin edits preserve the recorded creator, including its absence.
+
+    Args:
+        creator: Creator fields stored in the original job payload.
+    """
     tool = FutureTaskTool()
-    existing_job = _job("job-1", sender_id="user-2")
+    existing_job = _raw_job(
+        "job-1", payload={"session": "test:group:shared", **creator}
+    )
     cron_mgr = SimpleNamespace(
         db=SimpleNamespace(get_cron_job=AsyncMock(return_value=existing_job)),
-        update_job=AsyncMock(),
+        update_job=AsyncMock(return_value=existing_job),
     )
 
     result = await tool.call(
@@ -281,12 +288,14 @@ async def test_future_task_admin_cannot_edit_other_members_group_job():
         note="admin note",
     )
 
-    assert result == (
-        "error: cron job job-1 was created by another member of this group chat, "
-        "so you cannot edit it. Only the member who created it can edit it; tell "
-        "the user to ask that member."
+    assert result == "Updated future task job-1 (name-job-1)."
+    cron_mgr.update_job.assert_awaited_once_with(
+        "job-1",
+        description="admin note",
+        run_once=False,
+        cron_expression="0 8 * * *",
+        payload={"session": "test:group:shared", **creator, "note": "admin note"},
     )
-    cron_mgr.update_job.assert_not_awaited()
 
 
 @pytest.mark.asyncio
