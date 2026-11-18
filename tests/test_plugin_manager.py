@@ -158,7 +158,10 @@ def test_load_plugin_metadata_includes_views(tmp_path: Path):
     loaded_metadata = PluginManager._load_plugin_metadata(str(plugin_path))
 
     assert loaded_metadata is not None
-    assert loaded_metadata.views == [{"name": "dashboard", "title": "Dashboard"}]
+    assert len(loaded_metadata.views) == 1
+    assert loaded_metadata.views[0].name == "dashboard"
+    assert loaded_metadata.views[0].title == "Dashboard"
+    assert loaded_metadata.views[0].target == "plugin_page"
 
 
 def test_load_plugin_metadata_pages_alias_maps_to_views(tmp_path: Path):
@@ -173,7 +176,10 @@ def test_load_plugin_metadata_pages_alias_maps_to_views(tmp_path: Path):
     loaded_metadata = PluginManager._load_plugin_metadata(str(plugin_path))
 
     assert loaded_metadata is not None
-    assert loaded_metadata.views == [{"name": "dashboard", "title": "Dashboard"}]
+    assert len(loaded_metadata.views) == 1
+    assert loaded_metadata.views[0].name == "dashboard"
+    assert loaded_metadata.views[0].title == "Dashboard"
+    assert loaded_metadata.views[0].target == "plugin_page"
 
 
 def test_load_plugin_metadata_accepts_yml_suffix(tmp_path: Path):
@@ -2980,3 +2986,28 @@ async def test_repeated_deactivated_loads_bind_handlers_once_when_activated(
         llm_tools.func_list = original_func_list
         cast(Any, plugin_manager_pm.context).stars.remove(metadata)
         _clear_star_runtime_state()
+
+
+@pytest.mark.parametrize("target", ["chat_message", "chat_workbench", "chat_workbench_with_launcher"])
+def test_metadata_registers_chat_views(tmp_path, target):
+    _write_local_test_plugin(tmp_path, TEST_PLUGIN_REPO)
+    path = tmp_path / "metadata.yaml"
+    raw = yaml.safe_load(path.read_text())
+    raw["views"] = [{"name": "counter", "target": target, "title": "Counter", "description": "Count items", "actions": ["demo:increment"]}]
+    path.write_text(yaml.safe_dump(raw))
+    spec = PluginManager._load_plugin_metadata(str(tmp_path)).views[0]
+    assert spec.target == target
+    assert spec.entry == Path("views/counter/index.html")
+    assert spec.description == "Count items"
+    assert spec.actions == ["demo:increment"]
+
+
+@pytest.mark.parametrize("views", [None, {}, [{"name": "../escape"}], [{"name": "a", "target": "invalid"}], [{"name": "a"}, {"name": "a"}], [{"name": "a", "target": "plugin_page", "actions": ["run"]}]])
+def test_metadata_rejects_invalid_views(tmp_path, views):
+    _write_local_test_plugin(tmp_path, TEST_PLUGIN_REPO)
+    path = tmp_path / "metadata.yaml"
+    raw = yaml.safe_load(path.read_text())
+    raw["views"] = views
+    path.write_text(yaml.safe_dump(raw))
+    with pytest.raises(ValueError):
+        PluginManager._load_plugin_metadata(str(tmp_path))

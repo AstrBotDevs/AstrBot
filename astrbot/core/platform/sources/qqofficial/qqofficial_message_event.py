@@ -5,6 +5,7 @@ import json
 import logging
 import os
 import random
+import re
 from pathlib import Path
 from typing import Any, cast
 from urllib.parse import quote
@@ -132,6 +133,11 @@ class QQOfficialMessageEvent(AstrMessageEvent):
         session_id: str,
         bot: Client,
     ) -> None:
+        # Streaming support depends on the message source, not just the adapter.
+        platform_meta = copy.copy(platform_meta)
+        platform_meta.support_streaming_message = isinstance(
+            message_obj.raw_message, botpy.message.C2CMessage
+        )
         super().__init__(message_str, message_obj, platform_meta, session_id)
         self.bot = bot
         self.send_buffer = None
@@ -319,7 +325,12 @@ class QQOfficialMessageEvent(AstrMessageEvent):
         return ""
 
     async def send_streaming(self, generator, use_fallback: bool = False):
-        """流式输出仅支持消息列表私聊（C2C），其他消息源退化为普通发送"""
+        """Stream C2C replies or deliver ordinary messages for other sources.
+
+        Args:
+            generator: Message chains produced by the running agent.
+            use_fallback: Whether non-C2C replies are sent at sentence boundaries.
+        """
         # 先标记事件层“已执行发送操作”，避免异常路径遗漏
         await super().send_streaming(generator, use_fallback)
         # QQ C2C 流式协议：开始/中间分片使用 state=1，结束分片使用 state=10
@@ -331,6 +342,31 @@ class QQOfficialMessageEvent(AstrMessageEvent):
             self.message_obj.raw_message
         )  # 提前获取，避免 generator 为空时 NameError
         try:
+            if use_fallback and not isinstance(source, botpy.message.C2CMessage):
+                buffer = ""
+                pattern = re.compile(r"[^。？！~…]+[。？！~…]+")
+                async for chain in generator:
+                    if chain.type == "break":
+                        if buffer.strip():
+                            await self.send(MessageChain([Plain(buffer)]))
+                        buffer = ""
+                        continue
+                    for comp in chain.chain:
+                        if isinstance(comp, Plain):
+                            buffer += comp.text
+                            if any(mark in comp.text for mark in "。？！~…"):
+                                buffer = await self.process_buffer(buffer, pattern)
+                        else:
+                            # Flush preceding text before media to preserve output order.
+                            if buffer.strip():
+                                await self.send(MessageChain([Plain(buffer)]))
+                                buffer = ""
+                            await self.send(chain.derive([comp]))
+                            await asyncio.sleep(1.5)
+                if buffer.strip():
+                    await self.send(MessageChain([Plain(buffer)]))
+                return None
+
             async for chain in generator:
                 source = self.message_obj.raw_message
 
