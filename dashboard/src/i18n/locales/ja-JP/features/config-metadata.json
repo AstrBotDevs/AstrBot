@@ -697,6 +697,22 @@
     "name": "プラットフォームとメッセージ",
     "platform": {
       "description": "メッセージプラットフォームアダプター",
+      "proxy": {
+        "description": "プロキシ設定",
+        "hint": "アダプターのプロキシを無効にしても、グローバルプロキシ設定は上書きされません。",
+        "mode": {
+          "description": "プロキシモード",
+          "labels": ["プロキシを使用しない", "プロキシを使用"]
+        },
+        "type": {
+          "description": "プロキシ種別",
+          "labels": ["HTTP", "HTTPS", "SOCKS5"]
+        },
+        "address": {
+          "description": "プロキシアドレス",
+          "hint": "127.0.0.1:7890 のように host:port 形式で入力してください。プロキシ使用時は必須です。"
+        }
+      },
       "app_id": {
         "description": "アプリケーション ID",
         "hint": "メッセージプラットフォームの開発者コンソールで発行されたアプリケーション ID です。"

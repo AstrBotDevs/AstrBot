@@ -110,6 +110,24 @@
       ></v-checkbox>
     </div>
 
+    <v-radio-group
+      v-else-if="itemMeta?.options && itemMeta?.render_type === 'radio'"
+      :model-value="modelValue"
+      @update:model-value="emitUpdate"
+      :class="{ 'config-radio-group--cards': itemMeta?.layout === 'cards' }"
+      inline
+      hide-details
+      density="compact"
+    >
+      <v-radio
+        v-for="(option, optionIndex) in itemMeta.options"
+        :key="optionIndex"
+        :label="getLabel(itemMeta, optionIndex, option)"
+        :value="option"
+        color="primary"
+      ></v-radio>
+    </v-radio-group>
+
     <v-autocomplete
       v-else-if="itemMeta?.type === 'list' && itemMeta?.options"
       :model-value="modelValue"
@@ -158,7 +176,8 @@
     <v-text-field
       v-else-if="itemMeta?.type === 'string'"
       :model-value="modelValue"
-      @update:model-value="emitUpdate"
+      @update:model-value="emitStringUpdate"
+      @keydown="handleStringKeydown"
       :type="stringInputType"
       :append-inner-icon="secretToggleIcon"
       :autocomplete="itemMeta?.secret ? 'new-password' : undefined"
@@ -352,6 +371,21 @@ async function emitUpdate(val) {
 
 }
 
+const isProxyAddress = computed(() => /(^|\.)proxy\.address$/.test(props.configKey))
+
+function emitStringUpdate(value) {
+  const normalizedValue = isProxyAddress.value
+    ? String(value ?? '').replace(/\s+/g, '')
+    : value
+  emitUpdate(normalizedValue)
+}
+
+function handleStringKeydown(event) {
+  if (isProxyAddress.value && event.key === ' ') {
+    event.preventDefault()
+  }
+}
+
 const listSelectItems = computed(() =>
   props.itemMeta?.type === 'list' && props.itemMeta?.options
     ? getSelectItems(props.itemMeta)
@@ -509,6 +543,46 @@ function getSelectItems(itemMeta) {
 
 .config-checkbox :deep(.v-label) {
   font-size: 0.9rem;
+}
+
+.config-radio-group--cards {
+  margin: 0;
+}
+
+.config-radio-group--cards :deep(.v-selection-control-group) {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  width: 100%;
+}
+
+.config-radio-group--cards :deep(.v-selection-control) {
+  min-height: 44px;
+  padding: 8px 10px;
+  border: 1px solid rgba(var(--v-theme-on-surface), 0.14);
+  border-radius: 7px;
+  background: rgba(var(--v-theme-surface), 0.28);
+  transition: border-color 150ms ease, background-color 150ms ease;
+}
+
+.config-radio-group--cards :deep(.v-selection-control:hover) {
+  border-color: rgba(var(--v-theme-primary), 0.55);
+}
+
+.config-radio-group--cards :deep(.v-selection-control--dirty) {
+  border-color: rgba(var(--v-theme-primary), 0.75);
+  background: rgba(var(--v-theme-primary), 0.1);
+}
+
+.config-radio-group--cards :deep(.v-label) {
+  font-size: 0.88rem;
+  font-weight: 500;
+}
+
+@media (max-width: 600px) {
+  .config-radio-group--cards :deep(.v-selection-control-group) {
+    grid-template-columns: 1fr;
+  }
 }
 
 :deep(.v-field__input) {

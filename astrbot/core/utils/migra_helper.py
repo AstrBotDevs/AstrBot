@@ -464,6 +464,16 @@ def migrate_config_on_load(config: dict[str, Any], config_path: Path) -> bool:
     if config.get("config_version", 0) < 6:
         config["config_version"] = 6
         changed = True
+    platforms = config.get("platform")
+    if isinstance(platforms, list):
+        for platform_config in platforms:
+            if isinstance(platform_config, dict) and "proxy" not in platform_config:
+                platform_config["proxy"] = {
+                    "mode": "none",
+                    "type": "http",
+                    "address": "",
+                }
+                changed = True
     return changed
 
 

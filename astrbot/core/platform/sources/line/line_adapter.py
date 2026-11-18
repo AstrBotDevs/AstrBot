@@ -116,6 +116,7 @@ class LinePlatformAdapter(Platform):
         self.line_api = LineAPIClient(
             channel_access_token=channel_access_token,
             channel_secret=channel_secret,
+            proxy_url=self.proxy_url,
         )
 
     async def send_by_session(

@@ -151,6 +151,7 @@ class MisskeyPlatformAdapter(Platform):
             download_timeout=self.download_timeout,
             chunk_size=self.download_chunk_size,
             max_download_bytes=self.max_download_bytes,
+            proxy_url=self.proxy_url,
         )
         self._running = True
 

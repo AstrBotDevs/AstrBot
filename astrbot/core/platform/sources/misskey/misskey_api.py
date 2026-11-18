@@ -14,6 +14,7 @@ except ImportError as e:
     ) from e
 
 from astrbot.api import logger
+from astrbot.core.platform.proxy import create_platform_client_session
 
 from .misskey_utils import FileIDExtractor
 
@@ -43,9 +44,15 @@ class WebSocketError(APIError):
 
 
 class StreamingClient:
-    def __init__(self, instance_url: str, access_token: str) -> None:
+    def __init__(
+        self,
+        instance_url: str,
+        access_token: str,
+        proxy_url: str | None = None,
+    ) -> None:
         self.instance_url = instance_url.rstrip("/")
         self.access_token = access_token
+        self.proxy_url = proxy_url
         self.websocket: Any | None = None
         self.is_connected = False
         self.message_handlers: dict[str, Callable] = {}
@@ -66,6 +73,7 @@ class StreamingClient:
                 ws_url,
                 ping_interval=30,
                 ping_timeout=10,
+                **({"proxy": self.proxy_url} if self.proxy_url else {}),
             )
             self.is_connected = True
             self._running = True
@@ -334,9 +342,11 @@ class MisskeyAPI:
         download_timeout: int = 15,
         chunk_size: int = 64 * 1024,
         max_download_bytes: int | None = None,
+        proxy_url: str | None = None,
     ) -> None:
         self.instance_url = instance_url.rstrip("/")
         self.access_token = access_token
+        self.proxy_url = proxy_url
         self._session: aiohttp.ClientSession | None = None
         self.streaming: StreamingClient | None = None
         # download options
@@ -365,14 +375,21 @@ class MisskeyAPI:
 
     def get_streaming_client(self) -> StreamingClient:
         if not self.streaming:
-            self.streaming = StreamingClient(self.instance_url, self.access_token)
+            self.streaming = StreamingClient(
+                self.instance_url,
+                self.access_token,
+                self.proxy_url,
+            )
         return self.streaming
 
     @property
     def session(self) -> aiohttp.ClientSession:
         if self._session is None or self._session.closed:
             headers = {"Authorization": f"Bearer {self.access_token}"}
-            self._session = aiohttp.ClientSession(headers=headers)
+            self._session = create_platform_client_session(
+                self.proxy_url,
+                headers=headers,
+            )
         return self._session
 
     def _handle_response_status(self, status: int, endpoint: str) -> NoReturn:
@@ -668,7 +685,10 @@ class MisskeyAPI:
     ) -> bytes | None:
         """使用临时会话下载文件"""
         connector = aiohttp.TCPConnector(ssl=ssl_verify)
-        async with aiohttp.ClientSession(connector=connector) as temp_session:
+        async with create_platform_client_session(
+            self.proxy_url,
+            connector=connector,
+        ) as temp_session:
             async with temp_session.get(
                 url,
                 timeout=aiohttp.ClientTimeout(total=15),

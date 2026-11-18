@@ -613,6 +613,22 @@
     "name": "平台与消息",
     "platform": {
       "description": "消息平台适配器",
+      "proxy": {
+        "description": "代理设置",
+        "hint": "关闭适配器专用代理不会覆盖全局代理设置。",
+        "mode": {
+          "description": "代理模式",
+          "labels": ["不使用代理", "使用代理"]
+        },
+        "type": {
+          "description": "代理类型",
+          "labels": ["HTTP", "HTTPS", "SOCKS5"]
+        },
+        "address": {
+          "description": "代理地址",
+          "hint": "填写主机:端口，例如 127.0.0.1:7890。启用代理时必填。"
+        }
+      },
       "app_id": {
         "description": "应用 ID",
         "hint": "消息平台开放平台中的应用 ID。"
