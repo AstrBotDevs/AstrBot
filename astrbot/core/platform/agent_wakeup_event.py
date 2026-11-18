@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import copy
 import uuid
 from collections.abc import AsyncGenerator
 from typing import TYPE_CHECKING, Literal
@@ -43,6 +44,7 @@ class AgentWakeupEvent(AstrMessageEvent):
         role: str = "member",
         agent_session: AgentSessionRef | None = None,
         tool_result: tuple[str, CallToolResult] | None = None,
+        source_event: AstrMessageEvent | None = None,
     ) -> None:
         """Create a wakeup without changing the target session's identity.
 
@@ -56,6 +58,7 @@ class AgentWakeupEvent(AstrMessageEvent):
             role: Caller permission role already resolved by the framework.
             agent_session: Explicit runtime conversation, independent of UMO selection.
             tool_result: Tool name and typed output to prepare in the receiving runner.
+            source_event: Original caller identity and restrictions for background work.
 
         Raises:
             ValueError: If the source or target platform identity is invalid.
@@ -75,6 +78,10 @@ class AgentWakeupEvent(AstrMessageEvent):
         message.session_id = session.session_id
         message.message_id = uuid.uuid4().hex
         message.sender = MessageMember(user_id="astrbot", nickname="System")
+        if source_event is not None:
+            message.sender = copy.copy(source_event.message_obj.sender)
+            message.self_id = source_event.message_obj.self_id
+            message.group = copy.copy(source_event.message_obj.group)
         message.message = [Plain(prompt)]
         message.message_str = prompt
         message.raw_message = prompt
@@ -92,6 +99,12 @@ class AgentWakeupEvent(AstrMessageEvent):
         self.session = session
         self.context_obj = context
         self.role = role
+        if source_event is not None:
+            self.plugins_name = copy.copy(source_event.plugins_name)
+            self.set_extra(
+                "_api_key_allow_admin_role",
+                source_event.get_extra("_api_key_allow_admin_role"),
+            )
         self.is_at_or_wake_command = True
         self.is_wake = True
         # The supplied UMO is already the final target, including any isolation.

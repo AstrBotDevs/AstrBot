@@ -592,5 +592,9 @@ async def test_background_output_uses_normal_overflow_and_image_handling(
             part["image_url"]["url"].endswith(image_data) for part in image_parts
         )
     history = json.loads(runtime.conversation.history)
-    assert str(files[0]) in json.dumps(history)
+    assert any(
+        isinstance(message.get("content"), str)
+        and str(files[0]) in message["content"]
+        for message in history
+    )
     assert output not in json.dumps(history)

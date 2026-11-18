@@ -1059,6 +1059,9 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             messages: New messages owned by the runner, in execution order.
             record_response: Attach the pending model outcome to its assistant message.
         """
+        if self._conversation_event_sink is not None and not self._context_initialized:
+            await self._conversation_event_sink(self._context_response())
+            self._context_initialized = True
         self.run_context.messages.extend(messages)
         if self._conversation_event_sink is not None:
             data: dict[str, T.Any] = {

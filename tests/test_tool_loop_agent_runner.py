@@ -2802,8 +2802,17 @@ async def test_steering_detaches_running_tool_without_reexecution(
                 assert asyncio.current_task() is owner
                 closed.set()
 
+    provider = VaryingUsageProvider()
+    original_text_chat = provider.text_chat
+    requests = []
+
+    async def capture_request(**kwargs):
+        requests.append([message.model_dump() for message in kwargs["contexts"]])
+        return await original_text_chat(**kwargs)
+
+    provider.text_chat = AsyncMock(side_effect=capture_request)
     await runner.reset(
-        provider=VaryingUsageProvider(), request=provider_request,
+        provider=provider, request=provider_request,
         run_context=ContextWrapper(context=context), tool_executor=SlowExecutor,
         agent_hooks=mock_hooks, streaming=False,
     )
@@ -2820,6 +2829,16 @@ async def test_steering_detaches_running_tool_without_reexecution(
         assert finished.structured_result["status"] == "running"
         assert finished.structured_result["background_task_id"] == finished.execution_id
         assert runner.run_context.messages[-2].content == [TextPart(text="answer this first")]
+        # One initial request starts the tool, then one request receives both inputs.
+        assert provider.text_chat.await_count == 2
+        request_messages = requests[1]
+        assert request_messages[-2]["role"] == "tool"
+        assert "Tool continues in background." in request_messages[-2]["content"]
+        assert finished.execution_id in request_messages[-2]["content"]
+        assert request_messages[-1] == {
+            "role": "user", "content": [{"type": "text", "text": "answer this first"}],
+        }
+        wakeup.assert_not_awaited()
         context.agent_session = AgentSessionRef("astrbot", "new-selection")
         registry.unregister(event)
         if outcome == "cancelled":
@@ -2851,3 +2870,53 @@ async def test_steering_detaches_running_tool_without_reexecution(
                     task.cancel()
                 await asyncio.gather(task, return_exceptions=True)
         registry.unregister(event)
+
+
+@pytest.mark.asyncio
+async def test_output_appended_before_first_step_does_not_rebase_context(
+    database, runner, mock_provider, mock_tool_executor, mock_hooks
+):
+    """Persist the prepared wakeup input before appending its tool output."""
+    from astrbot.core.agent.conversation_events import ConversationEventWriter
+    from astrbot.core.agent.message import dump_messages
+
+    initial = [
+        {"role": "user", "content": "Previous request"},
+        {"role": "assistant", "content": "Previous reply"},
+    ]
+    store = database.conversation_store
+    conv = await store.create(umo="owner", platform_id="p", content=initial)
+    snapshot = await store.read(conv.conversation_id)
+    writer = ConversationEventWriter(store, snapshot)
+    mock_provider.should_call_tools = False
+    await runner.reset(
+        provider=mock_provider,
+        request=ProviderRequest(prompt="Background task completed", contexts=initial),
+        run_context=ContextWrapper(context=None),
+        tool_executor=mock_tool_executor,
+        agent_hooks=mock_hooks,
+        streaming=False,
+        conversation_event_sink=writer.consume,
+    )
+    await writer.start_turn({"kind": "background_task"})
+    await runner._append_context_messages(
+        [Message(role="user", content="Background tool output: partial result")]
+    )
+    await collect_events(runner.step_until_done(1))
+    await writer.save_history(dump_messages(runner.run_context.messages))
+    await writer.finish_turn("completed")
+    events = await store.events(conv.conversation_id)
+    current = [event for event in events if event.seq > snapshot.revision.head_seq]
+    assert not any(event.type == "context.rebased" for event in current)
+    messages = [
+        event.payload["message"]
+        for event in current
+        if event.type == "message.appended"
+    ]
+    assert len(messages) == 3
+    assert "Background task completed" in str(messages[0]["content"])
+    assert messages[1]["content"] == "Background tool output: partial result"
+    assert messages[2]["role"] == "assistant"
+    assert (await store.read(conv.conversation_id)).messages == dump_messages(
+        runner.run_context.messages
+    )

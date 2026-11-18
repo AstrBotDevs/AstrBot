@@ -28,7 +28,13 @@ from astrbot.core.utils.active_event_registry import (
 class _DummyEvent:
     def __init__(self, message_components: list[object] | None = None) -> None:
         self.unified_msg_origin = "webchat:FriendMessage:webchat!user!session"
-        self.message_obj = SimpleNamespace(message=message_components or [])
+        self.message_obj = SimpleNamespace(
+            message=message_components or [],
+            sender=SimpleNamespace(user_id="alice", nickname="Alice"),
+            self_id="bot",
+            group=None,
+        )
+        self.plugins_name = None
         self.role = "member"
         self.extras: dict[str, object] = {}
 
@@ -125,6 +131,9 @@ async def test_background_wakeup_preserves_effective_permissions(
     wakeup = await asyncio.wait_for(queue.get(), timeout=1)
     expected = AgentRole.ADMIN if authorization == "admin" else AgentRole.MEMBER
     assert AgentPermissions.from_event(wakeup).role == expected
+    assert wakeup.get_sender_id() == "alice"
+    assert wakeup.get_sender_name() == "Alice"
+    assert wakeup.message_obj.sender is not event.message_obj.sender
     name, result = wakeup.tool_result
     assert name == _DummyTool().name
     assert [block.type for block in result.content] == ["text", "image", "text"]

@@ -146,6 +146,7 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
                     stop_signal=stop_signal,
                     agent_session=session,
                     tool_result=(tool.name, result),
+                    source_event=event,
                 )
             except Exception:
                 logger.exception("Unable to deliver background tool result %s", task_id)
@@ -619,6 +620,7 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
             ),
             role=permissions.role.value,
             tool_result=(tool.name, result),
+            source_event=event,
             stop_signal=active_event_registry.get_background_stop_signal(event),
         )
 
@@ -671,6 +673,7 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
             ),
             role=permissions.role.value,
             tool_result=(tool.name, result),
+            source_event=event,
             stop_signal=active_event_registry.get_background_stop_signal(event),
         )
 
