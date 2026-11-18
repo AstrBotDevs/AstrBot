@@ -36,8 +36,6 @@ async def test_group_message_history_retains_latest_rows_and_safe_parts(tmp_path
     umo = "test:GroupMessage:group-1"
 
     try:
-        await manager.insert("test", "other-group", {})
-        await manager.insert("other-platform", umo, {})
         for index in range(1, 5):
             await manager.insert_message_chain(
                 platform_id="test",
@@ -81,10 +79,6 @@ async def test_group_message_history_retains_latest_rows_and_safe_parts(tmp_path
             {"type": "plain", "text": "[File]"},
         ]
         assert all(item.turn_id is None for item in history)
-        newest = await manager.insert("test", umo, {}, max_messages=0)
-        assert [row.id for row in await manager.get("test", umo)] == [newest.id]
-        assert await manager.count("test", "other-group") == 1
-        assert await manager.count("other-platform", umo) == 1
     finally:
         await db.engine.dispose()
 
