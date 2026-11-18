@@ -58,20 +58,33 @@ const liveStart = ref<number | null>(null);
 const liveEnd = ref<number | null>(null);
 let timer: ReturnType<typeof setInterval> | undefined;
 
-// Only a trailing content block can be the final response. Earlier replies stay in order.
-const processBlocks = computed(() =>
-  props.isUser
-    ? []
-    : props.blocks.slice(
-        0,
-        props.blocks[props.blocks.length - 1]?.kind === "content"
-          ? -1
-          : undefined,
-      ),
-);
-const finalBlocks = computed(() =>
-  props.blocks.slice(processBlocks.value.length),
-);
+const workBlocks = computed(() => {
+  if (props.isUser) return { process: [], response: props.blocks };
+  const boundary =
+    props.blocks.length -
+    (props.blocks[props.blocks.length - 1]?.kind === "content" ? 1 : 0);
+  const process: MessageDisplayBlock[] = [];
+  const response: MessageDisplayBlock = { kind: "content", parts: [] };
+  for (const [index, block] of props.blocks.entries()) {
+    if (index >= boundary) {
+      response.parts.push(...block.parts);
+      continue;
+    }
+    // Interactive views remain visible even when more tool output follows them.
+    const parts = block.parts.filter((part) => {
+      if (part.type !== "view") return true;
+      response.parts.push(part);
+      return false;
+    });
+    if (!parts.length) continue;
+    const previous = process[process.length - 1];
+    if (previous?.kind === block.kind) previous.parts.push(...parts);
+    else process.push({ kind: block.kind, parts });
+  }
+  return { process, response: response.parts.length ? [response] : [] };
+});
+const processBlocks = computed(() => workBlocks.value.process);
+const finalBlocks = computed(() => workBlocks.value.response);
 
 watch(
   () => props.isStreaming,

@@ -459,6 +459,66 @@ class ChatRunState:
 
 
 class ChatService:
+    async def get_chat_view(self, username: str, view_id: str):
+        """Authorize a live view against its source message and session config.
+
+        Args:
+            username: Authenticated user.
+            view_id: Requested card instance.
+
+        Returns:
+            The persisted record, owning plugin, declaration, and entry path.
+
+        Raises:
+            ViewError: If the source or plugin is no longer accessible.
+        """
+        from astrbot.core.chatui import ViewError, resolve_view, view_store
+
+        record = await asyncio.to_thread(view_store.get, view_id)
+        if record["owner"] != username:
+            raise ViewError("FORBIDDEN", "This view is not accessible.")
+        if record["platform"] == "webchat_thread":
+            session = await self.db.get_webchat_thread_by_id(record["session_id"])
+            umo = build_thread_unified_msg_origin(username, record["session_id"])
+        else:
+            session = await self.db.get_platform_session_by_id(record["session_id"])
+            umo = build_webchat_unified_msg_origin(session) if session else ""
+        if not session or session.creator != username:
+            raise ViewError(
+                "VIEW_UNAVAILABLE", "The source conversation is unavailable."
+            )
+        if record["message_id"]:
+            message = await self.db.get_platform_message_history_by_id(
+                int(record["message_id"])
+            )
+            if (
+                not message
+                or not message.is_active
+                or message.user_id != record["session_id"]
+            ):
+                raise ViewError(
+                    "VIEW_UNAVAILABLE", "The source message is unavailable."
+                )
+            if not any(
+                part.get("type") == "view" and part.get("id") == view_id
+                for part in message.content.get("message", [])
+            ):
+                raise ViewError("VIEW_UNAVAILABLE", "The source card was removed.")
+        elif record["run_id"] not in self.chat_runs:
+            raise ViewError("VIEW_UNAVAILABLE", "The source message is unavailable.")
+        plugin, spec, entry = resolve_view(
+            record["module"], record["name"], record["version"]
+        )
+        config = self.core_lifecycle.plugin_manager.context.get_config(umo=umo)
+        enabled = config.get("plugin_set", ["*"])
+        if plugin.name in config.get("disabled_plugins", []) or (
+            "*" not in enabled and plugin.name not in enabled
+        ):
+            raise ViewError(
+                "FORBIDDEN", "This plugin is unavailable in this conversation."
+            )
+        return record, plugin, spec, entry
+
     def __init__(
         self,
         db: BaseDatabase,
@@ -797,7 +857,10 @@ class ChatService:
             raise ChatServiceError(str(exc)) from exc
 
     async def delete_threads_by_ids(self, thread_ids: list[str], creator: str) -> None:
+        from astrbot.core.chatui import view_store
+
         for thread_id in thread_ids:
+            await asyncio.to_thread(view_store.delete_session, thread_id)
             unified_msg_origin = build_thread_unified_msg_origin(creator, thread_id)
             active_event_registry.request_agent_stop_all(unified_msg_origin)
             tasks = []
@@ -826,7 +889,7 @@ class ChatService:
         turn_id: str | None = None,
         platform_history_id: str = "webchat",
     ):
-        return await self.platform_history_mgr.insert(
+        record = await self.platform_history_mgr.insert(
             platform_id=platform_history_id,
             user_id=webchat_conv_id,
             content=build_bot_history_content(
@@ -838,6 +901,15 @@ class ChatService:
             sender_name="bot",
             turn_id=turn_id,
         )
+        from astrbot.core.chatui import view_store
+
+        if record:
+            for part in message_parts:
+                if part.get("type") == "view":
+                    await asyncio.to_thread(
+                        view_store.bind_message, part["id"], str(record.id)
+                    )
+        return record
 
     def get_active_chat_runs(self, username: str, session_id: str) -> list[dict]:
         """Return resumable runs owned by a user in one chat session.
@@ -1108,8 +1180,10 @@ class ChatService:
                                 "type": part["type"],
                             },
                         }
-                elif msg_type == "actionrow" and isinstance(result_text, dict):
-                    part = {"type": "actionrow", **result_text}
+                elif msg_type in {"actionrow", "view"} and isinstance(
+                    result_text, dict
+                ):
+                    part = {**result_text, "type": msg_type}
                     for accumulator in (pending_accumulator, display_accumulator):
                         accumulator.add_part(part)
 
@@ -1128,7 +1202,9 @@ class ChatService:
                         or pending_refs
                         or pending_agent_stats
                     )
-                elif (streaming and msg_type == "complete") or not streaming:
+                elif msg_type not in {"view", "ui_action_result", "run_started"} and (
+                    (streaming and msg_type == "complete") or not streaming
+                ):
                     if chain_type not in ("tool_call", "tool_call_result"):
                         should_save = True
 
@@ -1201,6 +1277,9 @@ class ChatService:
         self,
         username: str,
         post_data: dict,
+        *,
+        ui_interaction=None,
+        ui_plugin_module: str | None = None,
     ) -> AsyncIterator[str]:
         if "message" not in post_data and "files" not in post_data:
             raise ChatServiceError("Missing key: message or files")
@@ -1324,6 +1403,9 @@ class ChatService:
                         "message_id": message_id,
                         "turn_id": turn_id,
                         "thread_selected_text": thread_selected_text,
+                        "_platform_history_id": platform_history_id,
+                        "_ui_interaction": ui_interaction,
+                        "_ui_plugin_module": ui_plugin_module,
                         "_api_key_allow_admin_role": post_data.get(
                             "_api_key_allow_admin_role"
                         ),
@@ -1360,6 +1442,8 @@ class ChatService:
         return await self.stop_session(username, session_id)
 
     async def delete_session_internal(self, session, username: str) -> None:
+        from astrbot.core.chatui import view_store
+
         session_id = session.session_id
         message_type = "GroupMessage" if session.is_group else "FriendMessage"
         unified_msg_origin = (
@@ -1408,6 +1492,7 @@ class ChatService:
             webchat_queue_mgr.remove_queues(session_id)
 
         await self.db.delete_platform_session(session_id)
+        await asyncio.to_thread(view_store.delete_session, session_id)
 
     async def delete_webchat_session(self, username: str, session_id: str) -> None:
         session = await self.db.get_platform_session_by_id(session_id)

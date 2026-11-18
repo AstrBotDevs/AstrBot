@@ -117,6 +117,11 @@
                         </div>
                       </div>
 
+                      <PluginViewMessage
+                        v-else-if="part.type === 'view'"
+                        :part="part"
+                        :is-dark="isDark"
+                      />
                       <div
                         v-else-if="part.type === 'tool_call'"
                         class="tool-call-block"
@@ -227,6 +232,8 @@
 </template>
 
 <script setup lang="ts">
+import { chatPreferences } from "@/utils/chatPreferences";
+import PluginViewMessage from "@/components/chat/message_list_comps/PluginViewMessage.vue";
 import { useRouter } from "vue-router";
 import { CodeXml } from "@lucide/vue";
 import MessageContentTransition from "@/components/chat/MessageContentTransition.vue";
@@ -369,13 +376,13 @@ function handleButtonClick(message: ChatRecord, callbackData: string) {
 }
 
 const transportMode = ref<TransportMode>(
-  (localStorage.getItem("chat.transportMode") as TransportMode) === "websocket"
+  chatPreferences().global.transportMode === "websocket"
     ? "websocket"
     : "sse",
 );
 
 watch(transportMode, (mode) => {
-  localStorage.setItem("chat.transportMode", mode);
+  chatPreferences((preferences) => { preferences.global.transportMode = mode; });
 });
 
 onMounted(async () => {

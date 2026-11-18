@@ -6,6 +6,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
+from astrbot.core.agent.runtime import AgentPermissions, AgentRole
 from astrbot.core.astr_agent_runtime.tools.cron_tools import FutureTaskTool
 from astrbot.core.platform.message_type import MessageType
 
@@ -475,6 +476,28 @@ async def test_future_task_create_passes_config_timezone_to_scheduler():
     assert call_kwargs["timezone"] == "Asia/Shanghai"
     cron_mgr.get_next_run_time.assert_called_once_with("job-1")
     assert "2026-01-01 08:00:00+08:00" in result
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("authorization", ["restricted_key", "runtime_member", "admin"])
+async def test_future_task_create_persists_permission_ceiling(authorization):
+    """Scheduled tasks retain effective permissions across later execution."""
+    cron_mgr = SimpleNamespace(
+        add_active_job=AsyncMock(return_value=_job("job-1")),
+        get_next_run_time=lambda _: None,
+    )
+    context = _context(cron_mgr, sender_id="admin")
+    context.context.event.role = "admin"
+    context.context.event.get_extra = lambda _: (
+        False if authorization == "restricted_key" else None
+    )
+    if authorization == "runtime_member":
+        context.context.permissions = AgentPermissions(AgentRole.MEMBER)
+    await FutureTaskTool().call(
+        context, action="create", cron_expression="0 8 * * *", note="daily reminder"
+    )
+    payload = cron_mgr.add_active_job.await_args.kwargs["payload"]
+    assert payload["allow_admin_role"] is (authorization == "admin")
 
 
 @pytest.mark.asyncio
