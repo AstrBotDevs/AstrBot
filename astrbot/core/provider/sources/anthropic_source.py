@@ -37,7 +37,7 @@ from .request_retry import retry_provider_request, retry_provider_request_contex
     "Anthropic Claude API 提供商适配器",
 )
 class ProviderAnthropic(Provider):
-	# !Important! Claude requests must include max_tokens.
+    # !Important! Claude requests must include max_tokens.
     _DEFAULT_MAX_TOKENS = (
         65536  # TODO: Latest Claude models all supports 128k max output
     )
