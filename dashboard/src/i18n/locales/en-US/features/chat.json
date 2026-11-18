@@ -45,6 +45,15 @@
     ]
   },
   "voice": {
+    "transcribing": "Dictating…",
+    "transcribe": "Dictate text",
+    "sendAudio": "Record and send audio",
+    "cancel": "Cancel recording",
+    "finishTranscription": "Finish and transcribe",
+    "sttModel": "Transcription model",
+    "configure": "Configure",
+    "noSttProvider": "Configure an available speech-to-text model first",
+    "transcriptionFailed": "Transcription failed. Please try again.",
     "start": "Start Recording",
     "stop": "Stop Recording",
     "recording": "New Recording",
@@ -142,6 +151,12 @@
     "title": "Config"
   },
   "reasoning": {
+    "worked": "Ran for {duration}",
+    "working": "Running for {duration}",
+    "workCompleted": "Run details",
+    "durationHours": "{hours}h {minutes}m {seconds}s",
+    "durationMinutes": "{minutes}m {seconds}s",
+    "durationSeconds": "{seconds}s",
     "enabled": "Reasoning enabled",
     "disabled": "Reasoning disabled",
     "thinking": "Thinking Process",
@@ -152,6 +167,12 @@
     "toolUsed": "Using Tool"
   },
   "history": {
+    "edit": "Edit message",
+    "context_pruned": "Historical context has been cleared. Continuing from this point is unavailable.",
+    "context_unavailable": "Historical context is unavailable at this point.",
+    "inactive_message": "This message belongs to a replaced conversation version.",
+    "run_active": "Stop the current generation first.",
+    "unsupported_message": "This action is not supported for this message.",
     "loadFailed": "Could not load messages",
     "loadEarlierFailed": "Could not load earlier messages",
     "loading": "Loading earlier messages"
@@ -252,5 +273,25 @@
     "exit": "Exit",
     "partialFailure": "{failed} of {total} conversations failed to delete",
     "requestFailed": "Failed to delete conversations. Please try again."
+  },
+  "pluginView": {
+    "loading": "Loading view…",
+    "unavailable": "This view is unavailable. The text result is shown instead."
+  },
+  "workbench": {
+    "newTab": "New workbench",
+    "chooseView": "Choose a plugin view",
+    "empty": "No workbench views are registered. Enable a plugin that provides one.",
+    "loadError": "Could not load workbench views.",
+    "retry": "Retry",
+
+    "title": "Workbench",
+    "openView": "Open in workbench",
+    "hide": "Hide workbench",
+    "expand": "Expand workbench",
+    "restore": "Restore panel size",
+    "resize": "Resize workbench",
+    "closeTab": "Close {title}",
+    "resize": "Resize workbench"
   }
 }

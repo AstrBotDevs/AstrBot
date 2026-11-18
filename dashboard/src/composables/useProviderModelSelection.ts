@@ -1,46 +1,45 @@
 import { ref } from "vue";
 
-const SELECTED_PROVIDER_KEY = "selectedProvider";
-const SELECTED_PROVIDER_MODEL_KEY = "selectedProviderModel";
+import { chatPreferences } from "@/utils/chatPreferences";
+import { getStoredDashboardUsername } from "@/utils/chatConfigBinding";
 
 // Module-level state so every ProviderModelMenu instance (header, input)
 // shares the same selection.
 const selectedProviderId = ref("");
 const selectedModelName = ref("");
-let syncedFromStorage = false;
+let syncedUser = "";
 
 function syncFromStorage() {
-  if (syncedFromStorage || typeof window === "undefined") return;
-  syncedFromStorage = true;
-  try {
-    selectedProviderId.value =
-      localStorage.getItem(SELECTED_PROVIDER_KEY) || "";
-    selectedModelName.value = selectedProviderId.value
-      ? localStorage.getItem(SELECTED_PROVIDER_MODEL_KEY) || ""
-      : "";
-  } catch {
-    // Storage can be unavailable in restricted browser contexts.
-  }
+  const user = getStoredDashboardUsername();
+  if (syncedUser === user) return;
+  syncedUser = user;
+  const selection = chatPreferences().global.provider;
+  selectedProviderId.value = selection?.providerId || "";
+  selectedModelName.value = selection?.modelName || "";
 }
 
 export function useProviderModelSelection() {
   syncFromStorage();
 
+  function resetSelection() {
+    syncedUser = "";
+    selectedProviderId.value = "";
+    selectedModelName.value = "";
+  }
+
   function setSelection(providerId: string, modelName = "") {
     selectedProviderId.value = providerId;
     selectedModelName.value = providerId ? modelName : "";
-    try {
-      if (providerId) {
-        localStorage.setItem(SELECTED_PROVIDER_KEY, providerId);
-        localStorage.setItem(SELECTED_PROVIDER_MODEL_KEY, modelName);
-      } else {
-        localStorage.removeItem(SELECTED_PROVIDER_KEY);
-        localStorage.removeItem(SELECTED_PROVIDER_MODEL_KEY);
-      }
-    } catch {
-      // Selection persistence must not block the UI.
-    }
+    chatPreferences((preferences) => {
+      if (providerId) preferences.global.provider = { providerId, modelName };
+      else delete preferences.global.provider;
+    });
   }
 
-  return { selectedProviderId, selectedModelName, setSelection };
+  return {
+    selectedProviderId,
+    selectedModelName,
+    setSelection,
+    resetSelection,
+  };
 }

@@ -1,21 +1,21 @@
 {
   "greeting": {
-    "morning": "上午好，欢迎使用 AstrBot",
-    "afternoon": "下午好，欢迎使用 AstrBot",
-    "evening": "晚上好，欢迎使用 AstrBot",
+    "morning": "上午好",
+    "afternoon": "下午好",
+    "evening": "晚上好",
     "newYear": "新年快乐！"
   },
-  "subtitle": "可以先完成基础引导，平台和对话提供商都支持稍后再配置。",
+  "subtitle": "欢迎使用 AstrBot，看看今日的运行情况，并继续完善配置。",
   "announcement": {
     "title": "公告"
   },
   "onboard": {
     "title": "快速引导",
-    "subtitle": "欢迎页可直接完成初始化。",
+    "subtitle": "完成基础配置，立即开始使用 AstrBot。",
     "step1Title": "配置 AI 模型",
     "step1Desc": "为 AstrBot 配置 AI 模型。",
     "step2Title": "配置平台机器人",
-    "step2Desc": "将 AstrBot 连接到 QQ、飞书、企业微信、Telegram 等 IM 平台。",
+    "step2Desc": "将 AstrBot 连接到 QQ、飞书、微信等 IM 平台。",
     "step3Title": "允许 Agent 使用电脑",
     "step3Desc": "设置 Agent 是否可以访问和使用当前电脑。",
     "step3HelpTitle": "允许 Agent 使用电脑",
@@ -38,7 +38,9 @@
     "computerAccessUpdateFailed": "更新 Agent 电脑访问权限失败",
     "computerAccessAllowed": "已允许 Agent 访问和使用电脑",
     "computerAccessDenied": "已禁止 Agent 访问和使用电脑",
-    "step3HelpItem3": "如需更多细化权限与能力配置，可前往 配置文件 -> AI -> 能力 -> 使用电脑能力 继续设置。"
+    "step3HelpItem3": "如需更多细化权限与能力配置，可前往 配置文件 -> AI -> 能力 -> 使用电脑能力 继续设置。",
+    "progress": "{count} / 3 已完成",
+    "learnMore": "了解权限范围"
   },
   "resources": {
     "title": "相关资源",
@@ -46,6 +48,42 @@
     "docsTitle": "文档",
     "docsDesc": "查阅 AstrBot 的官方文档。",
     "afdianTitle": "爱发电",
-    "afdianDesc": "通过爱发电支持 AstrBot 团队。"
+    "afdianDesc": "通过爱发电支持 AstrBot 团队。",
+    "subtitle": "文档、社区与生态资源，帮助你更好地使用 AstrBot。"
+  },
+  "metrics": {
+    "title": "今日运行情况",
+    "tokens": "今日 Token 使用量",
+    "messages": "今日消息量",
+    "active_sessions": "活跃会话",
+    "vsYesterday": "较昨日",
+    "newActivity": "新增",
+    "loadFailed": "统计数据加载失败，已显示的数据可能不是最新的。"
+  },
+  "health": {
+    "title": "机器人运行状态",
+    "healthy": "运行正常",
+    "issues": "{count} 个问题",
+    "checking": "正在检查",
+    "unavailable": "状态不可用",
+    "loadFailed": "无法读取最新机器人状态，请稍后重试。",
+    "description": "每个有错误记录的机器人计为一个问题；下方显示最近一次错误，重启机器人或清除错误记录后重新检查。",
+    "noIssues": "当前机器人没有报告错误。",
+    "errorCount": "{count} 次错误",
+    "noDetails": "暂无错误详情",
+    "traceback": "错误堆栈",
+    "manageBots": "管理机器人",
+    "refresh": "刷新"
+  },
+  "system": {
+    "title": "系统状态",
+    "uptime": "运行时长",
+    "cpu": "CPU",
+    "memory": "内存",
+    "disk": "磁盘",
+    "daysHours": "{days} 天 {hours} 小时",
+    "hoursMinutes": "{hours} 小时 {minutes} 分钟",
+    "scope": "运行时长为 AstrBot 进程运行时间；CPU 和内存为服务器用量，磁盘为 AstrBot 数据目录所在分区的用量。",
+    "unavailable": "暂时无法获取资源用量，请刷新页面重试。"
   }
 }

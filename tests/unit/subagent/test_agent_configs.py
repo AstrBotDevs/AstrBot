@@ -77,6 +77,13 @@ async def test_profile_selection_is_enforced_in_prompt_and_spawn(environment):
     tool_schema = request.func_tool.openai_schema()
     assert chosen.config_id in request.system_prompt
     assert other.config_id not in request.system_prompt
+    registered = env.runtimes.pop("memory")
+    unavailable = ProviderRequest(conversation=env.conversation)
+    assert await apply_subagents(
+        unavailable, env.context, env.event, runtime=env.native
+    )
+    assert chosen.config_id not in unavailable.system_prompt
+    env.runtimes["memory"] = registered
     with pytest.raises(ValueError, match="not selected"):
         await env.native.spawn_agent(
             env.root, [{"type": "plain", "text": "Task"}], config_id=other.config_id

@@ -117,7 +117,7 @@ watch(
 
 .data-tab {
   align-items: center;
-  border-radius: 8px;
+  border-radius: var(--astrbot-radius-control);
   color: rgba(var(--v-theme-on-surface), 0.58);
   display: inline-flex;
   font-size: 0.8125rem;
