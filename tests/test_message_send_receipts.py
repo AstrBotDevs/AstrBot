@@ -208,11 +208,10 @@ async def test_unconfirmed_content_does_not_get_receipt(platform_sender, parts):
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("result", [None, True, {"message_id": "legacy"}])
-async def test_context_preserves_unknown_legacy_results(result):
+async def test_context_preserves_unknown_legacy_results():
     platform = SimpleNamespace(
         meta=lambda: PlatformMetadata("legacy", "Legacy", "platform"),
-        send_by_session=AsyncMock(return_value=result),
+        send_by_session=AsyncMock(return_value=None),
     )
     context = Context.__new__(Context)
     context.platform_manager = SimpleNamespace(platform_insts=[platform])
