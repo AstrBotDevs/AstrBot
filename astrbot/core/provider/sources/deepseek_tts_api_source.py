@@ -6,6 +6,7 @@ from pathlib import Path
 import httpx
 
 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
+from astrbot.core.utils.network_utils import create_proxy_client
 
 from ..entities import ProviderType
 from ..provider import TTSProvider
@@ -40,9 +41,10 @@ class ProviderDeepSeekTTSAPI(TTSProvider):
         timeout = provider_config.get("timeout", 20)
         if isinstance(timeout, str):
             timeout = timeout.strip()
-        self.client = httpx.AsyncClient(
+        self.client = create_proxy_client(
+            "DeepSeek TTS",
+            provider_config.get("proxy") or None,
             timeout=float(timeout) if timeout else None,
-            proxy=provider_config.get("proxy") or None,
             follow_redirects=True,
         )
 

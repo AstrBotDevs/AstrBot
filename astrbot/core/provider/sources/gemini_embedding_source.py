@@ -1,13 +1,10 @@
-from google import genai
 from google.genai import types
 from google.genai.errors import APIError
-
-from astrbot import logger
 
 from ..entities import ProviderType
 from ..provider import EmbeddingProvider
 from ..register import register_provider_adapter
-from .gemini_api_common import gemini_api_version
+from .gemini_api_common import close_httpx_client, create_genai_async_client
 
 
 @register_provider_adapter(
@@ -24,25 +21,16 @@ class GeminiEmbeddingProvider(EmbeddingProvider):
         api_key: str = provider_config["embedding_api_key"]
         api_base: str = provider_config["embedding_api_base"]
         timeout: int = int(provider_config.get("timeout", 20))
-
-        http_options = types.HttpOptions(
-            api_version=gemini_api_version(),
-            timeout=timeout * 1000,
-            headers=self.request_headers,
-        )
-        if api_base:
-            api_base = api_base.removesuffix("/")
-            http_options.base_url = api_base
         proxy = provider_config.get("proxy", "")
-        if proxy:
-            http_options.async_client_args = {"proxy": proxy}
-            logger.info(f"[Gemini Embedding] 使用代理: {proxy}")
 
-        self.client = genai.Client(api_key=api_key, http_options=http_options).aio
-        # Keep only AstrBot's UA across SDK versions that merge header case variants.
-        headers = self.client._api_client._http_options.headers
-        headers["user-agent"] = self.request_headers["User-Agent"]
-        headers.pop("User-Agent", None)
+        self.client, self._http_client = create_genai_async_client(
+            provider_label="Gemini Embedding",
+            api_key=api_key,
+            request_headers=self.request_headers,
+            api_base=api_base,
+            timeout=timeout,
+            proxy=proxy,
+        )
 
         self.model = provider_config.get(
             "embedding_model",
@@ -95,3 +83,8 @@ class GeminiEmbeddingProvider(EmbeddingProvider):
     async def terminate(self):
         if self.client:
             await self.client.aclose()
+        await close_httpx_client(
+            getattr(self, "_http_client", None),
+            label="Gemini Embedding",
+        )
+        self._http_client = None

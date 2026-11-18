@@ -1,11 +1,10 @@
 import os
 
-import httpx
 from openai import NOT_GIVEN, AsyncOpenAI
 
-from astrbot import logger
 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
 from astrbot.core.utils.datetime_utils import generate_timestamp_id
+from astrbot.core.utils.network_utils import create_openai_http_client
 
 from ..entities import ProviderType
 from ..provider import TTSProvider
@@ -32,10 +31,7 @@ class ProviderOpenAITTSAPI(TTSProvider):
             timeout = int(timeout)
 
         proxy = provider_config.get("proxy", "")
-        http_client = None
-        if proxy:
-            logger.info(f"[OpenAI TTS] 使用代理: {proxy}")
-            http_client = httpx.AsyncClient(proxy=proxy)
+        http_client = create_openai_http_client("OpenAI TTS", proxy or None)
         self.client = AsyncOpenAI(
             default_headers=self.request_headers,
             api_key=self.chosen_api_key,

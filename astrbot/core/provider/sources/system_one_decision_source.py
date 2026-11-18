@@ -9,7 +9,10 @@ from typing import Any
 import httpx
 
 from astrbot import logger
-from astrbot.core.utils.network_utils import log_connection_failure
+from astrbot.core.utils.network_utils import (
+    create_proxy_client,
+    log_connection_failure,
+)
 
 from ..entities import (
     DecisionAnswer,
@@ -84,11 +87,12 @@ class SystemOneDecisionProvider(DecisionProvider):
         if self.max_concurrency <= 0:
             raise ValueError("max_concurrency must be greater than 0")
         self.request_semaphore = asyncio.Semaphore(self.max_concurrency)
-        self.client = httpx.AsyncClient(
-            timeout=self.timeout,
-            proxy=self.proxy,
-            transport=transport,
+        self.client = create_proxy_client(
+            "System One",
+            self.proxy,
             headers=headers,
+            timeout=self.timeout,
+            transport=transport,
         )
         self.set_model(self.model)
 

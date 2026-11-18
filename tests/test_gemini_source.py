@@ -492,3 +492,46 @@ async def test_gemini_stream_keeps_reasoning_from_tool_call_chunk(monkeypatch):
 
     final = responses[-1]
     assert final.reasoning_content == "weighing optionsdeciding to call"
+
+
+@pytest.mark.asyncio
+async def test_gemini_providers_reuse_shared_ssl_context_and_sync_client(monkeypatch):
+    """Multiple Gemini providers share one SSLContext and sync httpx placeholder."""
+    import ssl
+
+    from astrbot.core.provider.sources import gemini_api_common
+    from astrbot.core.utils import http_ssl
+
+    shared_ctx = http_ssl.build_ssl_context_with_certifi()
+    gemini_api_common._get_shared_sync_httpx_client()
+
+    ssl_calls: list[tuple] = []
+    orig_create_default_context = ssl.create_default_context
+
+    def fail_on_new_ssl_context(*args, **kwargs):
+        ssl_calls.append((args, kwargs))
+        return orig_create_default_context(*args, **kwargs)
+
+    monkeypatch.setattr(ssl, "create_default_context", fail_on_new_ssl_context)
+
+    p1 = ProviderGoogleGenAI({"key": ["k1"], "model": "gemini-3.7-flash"}, {})
+    p2 = ProviderGoogleGenAI({"key": ["k2"], "model": "gemini-3.7-flash"}, {})
+    try:
+        assert ssl_calls == []
+        assert p1._http_client is not None
+        assert p2._http_client is not None
+        assert p1._http_client is not p2._http_client
+        assert (
+            p1.client._api_client._httpx_client
+            is p2.client._api_client._httpx_client
+        )
+        assert (
+            p1.client._api_client._httpx_client
+            is gemini_api_common._get_shared_sync_httpx_client()
+        )
+        assert p1.client._api_client._websocket_ssl_ctx.get("ssl") is shared_ctx
+        assert p2.client._api_client._websocket_ssl_ctx.get("ssl") is shared_ctx
+    finally:
+        await p1.terminate()
+        await p2.terminate()
+        assert not gemini_api_common._get_shared_sync_httpx_client().is_closed
