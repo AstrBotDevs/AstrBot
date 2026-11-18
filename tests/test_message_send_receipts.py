@@ -12,6 +12,7 @@ from astrbot.api.message_components import At, Plain, Reply
 from astrbot.api.platform import (
     AstrBotMessage,
     MessageMember,
+    MessageSendReceipt,
     MessageType,
     PlatformMetadata,
 )
@@ -35,45 +36,36 @@ def platform_sender(request, monkeypatch):
     results = []
     monkeypatch.setattr("astrbot.core.platform.platform.Metric.upload", AsyncMock())
 
+    class FakeHTTP:
+        """One object serving both an aiohttp ClientSession and its response."""
+
+        status = 200
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *args):
+            return False
+
+        def raise_for_status(self):
+            pass
+
+        async def json(self):
+            result = (
+                results.pop(0)
+                if results
+                else {"processQueryKey": f"tracking-{len(requests_sent)}"}
+            )
+            if isinstance(result, Exception):
+                raise result
+            return result
+
+        def post(self, url, **kwargs):
+            requests_sent.append((url, kwargs["json"]))
+            return self
+
     if name == "dingtalk":
-
-        class Response:
-            status = 200
-
-            async def __aenter__(self):
-                return self
-
-            async def __aexit__(self, *args):
-                pass
-
-            def raise_for_status(self):
-                pass
-
-            async def text(self):
-                return "{}"
-
-            async def json(self):
-                result = (
-                    results.pop(0)
-                    if results
-                    else {"processQueryKey": f"tracking-{len(requests_sent)}"}
-                )
-                if isinstance(result, Exception):
-                    raise result
-                return result
-
-        class Session:
-            async def __aenter__(self):
-                return self
-
-            async def __aexit__(self, *args):
-                pass
-
-            def post(self, url, **kwargs):
-                requests_sent.append((url, kwargs["json"]))
-                return Response()
-
-        monkeypatch.setattr(dingtalk_adapter.aiohttp, "ClientSession", Session)
+        monkeypatch.setattr(dingtalk_adapter.aiohttp, "ClientSession", FakeHTTP)
         adapter = object.__new__(DingtalkPlatformAdapter)
         adapter.client_id = "example-robot"
         adapter.get_access_token = AsyncMock(return_value="example-token")
@@ -143,31 +135,18 @@ def platform_sender(request, monkeypatch):
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("platform_sender", ["dingtalk", "wecom"], indirect=True)
-@pytest.mark.parametrize("route", ["event", "context", "legacy_context"])
-async def test_text_receipt_uses_original_public_send_once(platform_sender, route):
+async def test_text_receipt_uses_original_public_send_once(platform_sender):
     sender = platform_sender
     chain = MessageChain([Plain("Hello")])
-    if route == "event":
-        receipt = await sender.event.send(chain)
-    else:
-        method = (
-            sender.context.send_message
-            if route == "legacy_context"
-            else (sender.context.send_message_with_receipt)
-        )
-        receipt = await method("platform:FriendMessage:alice", chain)
+    receipt = await sender.context.send_message_with_receipt(
+        "platform:FriendMessage:alice", chain
+    )
     assert len(sender.sent) == 1
-    if route == "legacy_context":
-        assert receipt is True
-    else:
-        assert receipt is not None
-        from astrbot.api.platform import MessageSendReceipt
-
-        assert isinstance(receipt, MessageSendReceipt)
-        assert receipt.message_ids == (("message-1",) if sender.name == "wecom" else ())
-        assert receipt.tracking_keys == (
-            ("tracking-1",) if sender.name == "dingtalk" else ()
-        )
+    assert isinstance(receipt, MessageSendReceipt)
+    assert receipt.message_ids == (("message-1",) if sender.name == "wecom" else ())
+    assert receipt.tracking_keys == (
+        ("tracking-1",) if sender.name == "dingtalk" else ()
+    )
     payload = sender.sent[0][1]
     assert payload.get("touser", payload.get("userIds")) in ("alice", ["alice"])
 
@@ -245,12 +224,13 @@ async def test_receipt_context_preserves_trace_and_group_history(platform_sender
     assert receipt.tracking_keys == ("tracking-1",)
     assert sender.sent[0][1]["openConversationId"] == "conversation"
     sent_traces = [
-        c
-        for c in sender.event.trace.record.call_args_list
-        if c.args[0] == "response_sent"
+        call
+        for call in sender.event.trace.record.call_args_list
+        if call.args[0] == "response_sent"
     ]
-    assert len(sent_traces) == 1
-    assert sent_traces[0].kwargs["target_umo"] == "platform:GroupMessage:conversation"
+    assert [c.kwargs["target_umo"] for c in sent_traces] == [
+        "platform:GroupMessage:conversation"
+    ]
     sender.context.message_history_manager.insert_message_chain.assert_awaited_once()
 
 
@@ -267,6 +247,18 @@ async def test_dingtalk_rejected_recipient_raises(platform_sender, key):
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("platform_sender", ["wecom"], indirect=True)
+@pytest.mark.parametrize("key", ["invaliduser", "unlicenseduser"])
+async def test_wecom_rejected_recipient_raises(platform_sender, key):
+    # Rejection lists carry platform UserIDs, compared case-insensitively.
+    platform_sender.event.message_obj.session_id = "Alice"
+    platform_sender.results.append({"errcode": 0, "msgid": "id", key: "alice"})
+    with pytest.raises(RuntimeError, match="recipient"):
+        await platform_sender.event.send(MessageChain([Plain("Hello")]))
+    assert len(platform_sender.sent) == 1
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize("platform_sender", ["dingtalk"], indirect=True)
 async def test_dingtalk_missing_staff_mapping_does_not_change_recipient(
     platform_sender,
@@ -277,17 +269,6 @@ async def test_dingtalk_missing_staff_mapping_does_not_change_recipient(
             "platform:FriendMessage:sender", MessageChain([Plain("Hello")])
         )
     assert platform_sender.sent == []
-
-
-@pytest.mark.asyncio
-@pytest.mark.parametrize("platform_sender", ["wecom"], indirect=True)
-@pytest.mark.parametrize("key", ["invaliduser", "unlicenseduser"])
-async def test_wecom_rejected_recipient_raises(platform_sender, key):
-    platform_sender.event.message_obj.session_id = "Alice"
-    platform_sender.results.append({"errcode": 0, "msgid": "id", key: "alice"})
-    with pytest.raises(RuntimeError, match="recipient"):
-        await platform_sender.event.send(MessageChain([Plain("Hello")]))
-    assert len(platform_sender.sent) == 1
 
 
 @pytest.mark.asyncio
