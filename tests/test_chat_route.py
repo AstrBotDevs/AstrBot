@@ -1,5 +1,6 @@
 import asyncio
 import json
+from copy import deepcopy
 from datetime import UTC, datetime
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock
@@ -235,6 +236,13 @@ async def test_resumed_stream_starts_with_full_snapshot(chat_service_instance):
         )
         next_event = _decode_sse_event(await asyncio.wait_for(anext(resumed_stream), 1))
         assert next_event["data"] == " and after refresh"
+        latest = service.get_active_chat_runs("alice", session_id)[0]
+        assert latest["content"]["message"] == [
+            {"type": "plain", "text": "before refresh and after refresh"}
+        ]
+        assert active_runs[0]["content"]["message"] == [
+            {"type": "plain", "text": "before refresh"}
+        ]
         await resumed_stream.aclose()
 
         for payload in (
@@ -407,6 +415,54 @@ async def test_resume_during_attachment_save_does_not_skip_attachment(
             run.task.cancel()
             await asyncio.gather(run.task, return_exceptions=True)
         chat_service.webchat_queue_mgr.remove_queues(session_id)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("kind", ["actionrow", "view", "file"])
+async def test_shared_parts_are_frozen_at_publication(chat_service_instance, kind):
+    service = chat_service_instance
+    stream = await service.build_chat_stream(
+        "alice", {"message": "hello", "session_id": "shared-part"}
+    )
+    run = next(iter(service.chat_runs.values()))
+    label = {"text": "original"}
+    if kind == "file":
+        part = {"type": "file", "filename": "original", "attachment_id": "file-1"}
+        service.create_attachment_from_file = AsyncMock(return_value=part)
+        data = "[FILE]original"
+    else:
+        data = {"buttons": [label]} if kind == "actionrow" else {"state": label}
+        part = {**data, "type": kind}
+    original = deepcopy(part)
+    try:
+        await anext(stream)  # Session ID.
+        await anext(stream)  # Saved user message.
+        run.back_queue.put_nowait({"type": kind, "data": data, "streaming": True})
+        assert _decode_sse_event(await anext(stream))["type"] == kind
+        if kind == "file":
+            assert _decode_sse_event(await anext(stream))["type"] == "attachment_saved"
+            part["filename"] = "updated"
+        else:
+            label["text"] = "updated"
+
+        active = service.get_active_chat_runs("alice", run.session_id)[0]
+        assert active["content"]["message"] == [original]
+        resumed = await service.build_chat_run_stream("alice", run.run_id)
+        try:
+            run.back_queue.put_nowait({"type": "plain", "data": "next", "streaming": True})
+            assert _decode_sse_event(await anext(stream))["type"] == "plain"
+            assert _decode_sse_event(await anext(resumed))["data"] == active
+            assert _decode_sse_event(await anext(resumed))["type"] == "plain"
+            assert service.get_active_chat_runs("alice", run.session_id)[0]["content"][
+                "message"
+            ] == [part, {"type": "plain", "text": "next"}]
+        finally:
+            await resumed.aclose()
+    finally:
+        run.back_queue.put_nowait({"type": "end"})
+        await asyncio.wait_for(run.task, timeout=1)
+        await stream.aclose()
+        chat_service.webchat_queue_mgr.remove_queues(run.session_id)
 
 
 @pytest.mark.asyncio
