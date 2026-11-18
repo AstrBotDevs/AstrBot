@@ -44,6 +44,8 @@ IMAGE_COMPRESS_DEFAULT_OPTIMIZE = True
 IMAGE_COMPRESS_DEFAULT_MIN_FILE_SIZE_MB = 1.0
 # Model image inputs larger than this are skipped before decoding.
 MODEL_IMAGE_MAX_INPUT_BYTES = 64 * 1024 * 1024
+# A four-byte-per-pixel frame at this limit occupies 64 MiB.
+MODEL_IMAGE_MAX_INPUT_PIXELS = 4096 * 4096
 
 MEDIA_MIME_EXTENSIONS = {
     "audio/wav": ".wav",
@@ -146,7 +148,7 @@ class ResolvedMediaData:
             A PNG or JPEG preview within the System One image dimension limits.
 
         Raises:
-            ValueError: The file exceeds the model input size limit.
+            ValueError: The file exceeds the model input byte or pixel limit.
             OSError: The image cannot be read or decoded.
         """
         if path.stat().st_size > MODEL_IMAGE_MAX_INPUT_BYTES:
@@ -1190,6 +1192,11 @@ def _encode_image_frame_bytes(
             prepared.close()
 
 
+def _check_model_image_pixels(image: PILImage.Image) -> None:
+    if image.width * image.height > MODEL_IMAGE_MAX_INPUT_PIXELS:
+        raise ValueError("Image exceeds the model input pixel limit")
+
+
 def _prepare_model_image_sync(source_bytes: bytes, max_size: int) -> tuple[bytes, bool]:
     """Prepare a preview using a single opened source image.
 
@@ -1201,6 +1208,7 @@ def _prepare_model_image_sync(source_bytes: bytes, max_size: int) -> tuple[bytes
         Encoded image bytes and whether they represent an animation montage.
     """
     with PILImage.open(io.BytesIO(source_bytes)) as image:
+        _check_model_image_pixels(image)
         if getattr(image, "n_frames", 1) > 1:
             return _extract_animation_montage_sync(image, max_size), True
         if (
@@ -1251,6 +1259,7 @@ def _extract_animation_montage_sync(image: PILImage.Image, max_size: int) -> byt
         )
     ]
     image.seek(first_frame)
+    _check_model_image_pixels(image)
     with ImageOps.exif_transpose(image) as oriented:
         display_size = oriented.size
     # Floor the per-cell scale so the montage never exceeds max_size.
@@ -1270,7 +1279,13 @@ def _extract_animation_montage_sync(image: PILImage.Image, max_size: int) -> byt
     )
     try:
         for out_index, frame_index in enumerate(frame_indices):
+            # GIF seeks decode intervening frames, whose dimensions can change.
+            if image.format == "GIF":
+                for index in range(image.tell() + 1, frame_index):
+                    image.seek(index)
+                    _check_model_image_pixels(image)
             image.seek(frame_index)
+            _check_model_image_pixels(image)
             with (
                 ImageOps.exif_transpose(image) as oriented,
                 oriented.convert("RGBA") as frame,
