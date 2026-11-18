@@ -808,6 +808,11 @@ export const backupApi = {
 };
 
 export const chatApi = {
+  transcribeAudio(file: File, providerId: string, signal?: AbortSignal) {
+    return typed<{ text: string; provider_id: string }>(
+      openApiV1.transcribeChatAudio({ body: { file, provider_id: providerId }, signal }),
+    );
+  },
   send(payload: ChatRequest) {
     return typed<any>(openApiV1.sendChatMessage({ body: payload }));
   },
@@ -984,9 +989,9 @@ export const chatApi = {
 };
 
 export const fileApi = {
-  upload(formData: FormData) {
+  upload(formData: FormData, signal?: AbortSignal) {
     return typed<any>(
-      openApiV1.uploadFile({ body: generatedFormData(formData) }),
+      openApiV1.uploadFile({ body: generatedFormData(formData), signal }),
     );
   },
   initUpload(payload: ChatUploadInitRequest) {

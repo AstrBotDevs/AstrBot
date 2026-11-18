@@ -183,7 +183,7 @@ The export dialog offers `Last hour`, `Last 12 hours`, `Last day`, `Last 3 days`
 
 In the diagnostic bundle, cached logs are stored in `logs/astrbot.in-memory.log`, cached traces in `traces/history.in-memory.jsonl`, and persisted trace history in `traces/history.jsonl`. The `webui_version` field in `environment.json` records the version declared by the WebUI assets being served, or `null` when unavailable.
 
-Open `Filters` next to the search box to filter by level, source (System/Plugin), individual plugin, and bot platform, or exclude user-chat logs. Combine these conditions with `Search logs`. The plugin dropdown lists only plugins that appear in the current logs, not every installed plugin, so installed plugins that have not logged anything are absent. Framework logs about a plugin, such as plugin loading or handler failures, are tagged with that plugin's name, so a plugin that fails to load remains selectable while its failure logs are in the current window. Plugin menus prefer display names and show plugin IDs as subtitles; `System` replaces the former Core source label.
+Use `Filters` beside the search box to filter by level, source, plugin, or bot platform, or exclude user-chat logs. Filters work with text search. The plugin list includes plugins named in the current logs, including loading failures; entries show display names and plugin IDs.
 
 The toolbar contains search, fullscreen, font-size controls, and `Install Pip packages`. The default font size is 12px, adjustable from 8–16px in 2px steps. The former auto-scroll switch is replaced by bottom-following behavior: new logs follow when you are at the bottom, without interrupting reading older entries. Top-row filters move into the `Filters` sidebar; closing it preserves selections. Logs remain in memory, without new file-reading or database persistence.
 
@@ -265,4 +265,17 @@ Modify the `password` in the `dashboard` configuration in the data/cmd_config.js
 > [!TIP]
 > For more details, see [FAQ - Forgot Dashboard Password](/en/faq.md#forgot-dashboard-password).
 
-Subagent management is removed from the sidebar and opened through `Configuration → AI → Capabilities → Subagents → Configure Specialized Agents`; it opens in a dialog, while the previous `/subagent` URL remains accessible. Enabling subagents immediately allows generic workers. Configuring and selecting specialized agents is optional.
+## ChatUI workbench
+
+The workbench button at the right of the ChatUI header opens a reading and visualization area. Click **+** in its tab bar to open **New workbench**, then choose a registered plugin view. A context-usage view can follow the active session; tools and plugin messages can also open file previews directly.
+
+Tabs sit in the main header. Drag the left divider to resize, expand for full-screen reading, or hide and reopen using the same header control. All tabs, including resident plugin views and New workbench, belong to their chat session. Switching sessions restores its tabs, selected view, and open/hidden state. This is a new entry point and does not replace standalone plugin pages in the extensions sidebar.
+
+See [Workbench page](../dev/star/guides/plugin-views/workbench.md) for plugin development.
+
+
+The workbench remembers open tabs, the active tab, visibility, and width. Closed tabs stay closed after a reload; use the compact entry in a chat message to reopen one. New tool results can still open new tabs, while loading older messages does not expand the workbench.
+
+![Compact workbench entries (sample files, Chinese interface)](images/chat-workbench-entry.jpg)
+
+ChatUI uses one `astrbot.chat.preferences` localStorage record, containing global and per-session preferences for each account. Model selections, configuration, speech recognition, expanded projects, drafts, and workbench layouts share this record. Existing scattered keys migrate automatically and are removed only after a successful write. Preferences apply to the current browser.

@@ -90,16 +90,21 @@ async def test_close_cancels_active_and_queued_turns_without_deleting_history():
 
 
 @pytest.mark.asyncio
-async def test_steering_cannot_cross_sender_or_permission_boundaries():
+async def test_steering_allows_other_senders_within_session_permissions():
     session = RecordingSession()
     turn = await session.run_turn(make_input())
     await session.entered.get()
     session.steer_turn = lambda target, input: (
         asyncio.get_running_loop().create_future()
     )
-    assert turn.steer(make_input(sender="bob")) is None
     assert turn.steer(make_input(role=AgentRole.ADMIN)) is None
-    receipt = turn.steer(make_input())
+    other_session = make_input(sender="bob")
+    other_session.event.unified_msg_origin = "test:GroupMessage:other"
+    assert turn.steer(other_session) is None
+    other_plugins = make_input(sender="bob")
+    other_plugins.event.plugins_name = ["other_plugin"]
+    assert turn.steer(other_plugins) is None
+    receipt = turn.steer(make_input(sender="bob"))
     assert receipt is not None
     receipt.set_result(False)
     session.release.set()

@@ -65,7 +65,9 @@ def _make_sandbox_context(
         unified_msg_origin=umo,
         send=AsyncMock(),
     )
-    astr_ctx = SimpleNamespace(context=config_holder, event=event)
+    astr_ctx = SimpleNamespace(
+        context=config_holder, event=event, send_to_user=True, _output_turn=None
+    )
     return ContextWrapper(context=astr_ctx)
 
 

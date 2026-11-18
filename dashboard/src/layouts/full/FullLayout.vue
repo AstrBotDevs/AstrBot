@@ -1,16 +1,17 @@
 <script setup lang="ts">
 import { RouterView, useRoute } from "vue-router";
-import { ref, onMounted, computed, watch } from "vue";
+import { ref, onMounted, computed, defineAsyncComponent, watch } from "vue";
 import VerticalSidebarVue from "./vertical-sidebar/VerticalSidebar.vue";
 import VerticalHeaderVue from "./vertical-header/VerticalHeader.vue";
-import ReadmeDialog from "@/components/shared/ReadmeDialog.vue";
-import Chat from "@/components/chat/Chat.vue";
 import { useCustomizerStore } from "@/stores/customizer";
 import { useRouterLoadingStore } from "@/stores/routerLoading";
 import { useCommonStore } from "@/stores/common";
 import { useMobileDrawerStore } from "@/stores/mobileDrawer";
 import { statsApi } from "@/api/v1";
 import { useI18n } from "@/i18n/composables";
+
+const Chat = defineAsyncComponent(() => import("@/components/chat/Chat.vue"));
+const ReadmeDialog = defineAsyncComponent(() => import("@/components/shared/ReadmeDialog.vue"));
 
 const FIRST_NOTICE_SEEN_KEY = "astrbot:first_notice_seen:v1";
 
@@ -43,6 +44,7 @@ const shouldMountChat = ref(isCurrentChatRoute.value);
 
 const showSidebar = computed(() => !isCurrentChatRoute.value);
 
+const hasFirstNotice = ref(false);
 const showFirstNoticeDialog = ref(false);
 
 watch(isCurrentChatRoute, (isChatRoute) => {
@@ -73,6 +75,7 @@ const maybeShowFirstNotice = async () => {
 
     const content = response.data?.data?.content;
     if (typeof content === "string" && content.trim().length > 0) {
+      hasFirstNotice.value = true;
       showFirstNoticeDialog.value = true;
       return;
     }
@@ -163,6 +166,7 @@ onMounted(() => {
       </v-main>
 
       <ReadmeDialog
+        v-if="hasFirstNotice"
         :show="showFirstNoticeDialog"
         mode="first-notice"
         @update:show="onFirstNoticeDialogUpdate"

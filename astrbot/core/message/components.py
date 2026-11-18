@@ -71,6 +71,7 @@ class ComponentType(str, Enum):
     ActionRow = "ActionRow"  # a row of interactive controls
     Button = "Button"  # an interactive button
     ButtonInteraction = "ButtonInteraction"  # an inbound button click
+    UIInteraction = "UIInteraction"  # an inbound plugin view action
 
     # IM-specific Segment Types
     Face = "Face"  # Emoji segment for Tencent QQ platform
@@ -257,6 +258,28 @@ class ButtonInteraction(BaseMessageComponent):
     source_message_id: str | None = None
     # Retain the opaque token for expiry validation before plugin dispatch.
     callback_data: str | None = None
+
+
+class ViewContext(BaseModel):
+    """Persisted snapshot of the card that initiated an interaction."""
+
+    id: str
+    name: str
+    version: int
+    revision: int
+    data: dict[str, Any]
+
+
+class UIInteraction(BaseMessageComponent):
+    """Authenticated user input from a plugin-owned chat view."""
+
+    type: ComponentType = ComponentType.UIInteraction
+    action_id: str
+    interaction_id: str
+    data: JSONValue | None = None
+    source: Literal["view"] = "view"
+    source_message_id: str | None = None
+    view: ViewContext
 
 
 class Face(BaseMessageComponent):
