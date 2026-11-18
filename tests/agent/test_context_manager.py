@@ -823,6 +823,28 @@ class TestContextManager:
         assert result == [messages[0], *messages[3:]]
 
     @pytest.mark.asyncio
+    async def test_recount_fallback_preserves_reported_usage_excess(self):
+        """Recounting a shortened history must retain the trusted-count excess."""
+
+        class ReportedCharTokenCounter(CharTokenCounter):
+            def count_tokens(self, messages, reported_token_usage=0):
+                return reported_token_usage or super().count_tokens(messages)
+
+        config = ContextConfig(
+            max_context_tokens=1100,
+            llm_compress_provider=FailingProvider(),  # type: ignore[arg-type]
+            custom_token_counter=ReportedCharTokenCounter(),
+        )
+        manager = ContextManager(config)
+        messages = self._rounds_with_tool_chain("f" * 20)
+
+        result = await manager.process(messages, reported_token_usage=2000)
+
+        # Dropping only the first round would leave an estimate below the
+        # trigger, but the provider's actual usage is still over the limit.
+        assert result == [messages[0], messages[-1]]
+
+    @pytest.mark.asyncio
     async def test_custom_compressor_receives_matching_history_and_token_count(self):
         """Custom compression checks must see the current retained messages."""
         from astrbot.core.agent.context.compressor import TruncateByTurnsCompressor

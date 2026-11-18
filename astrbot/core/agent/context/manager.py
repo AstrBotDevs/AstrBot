@@ -164,10 +164,16 @@ class ContextManager:
         tokens = tokens_after_summary
         dropped_rounds = 0
         # Built-in estimates are additive and compression checks only use tokens.
-        # Custom implementations need updated messages and a full recount.
+        # Custom implementations need updated messages and a full recount, but
+        # that recount must retain any excess carried by reported API usage.
         incremental_tokens = type(self.token_counter) is EstimateTokenCounter and type(
             self.compressor
         ) in (TruncateByTurnsCompressor, LLMSummaryCompressor)
+        recount_excess = (
+            0
+            if incremental_tokens
+            else max(0, tokens - self.token_counter.count_tokens(messages))
+        )
         while len(rounds) - dropped_rounds > 1 and self.compressor.should_compress(
             messages, tokens, self.config.max_context_tokens
         ):
@@ -179,7 +185,7 @@ class ContextManager:
                 messages = system_messages + [
                     msg for rnd in rounds[dropped_rounds:] for msg in rnd
                 ]
-                tokens = self.token_counter.count_tokens(messages)
+                tokens = self.token_counter.count_tokens(messages) + recount_excess
         if incremental_tokens and dropped_rounds:
             messages = system_messages + [
                 msg for rnd in rounds[dropped_rounds:] for msg in rnd
