@@ -7,6 +7,7 @@ import httpx
 
 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
 from astrbot.core.utils.media_utils import MediaResolver, ensure_wav
+from astrbot.core.utils.network_utils import create_proxy_client
 
 from ..entities import ProviderType
 from ..provider import STTProvider
@@ -48,11 +49,12 @@ class ProviderDeepSeekSTTAPI(STTProvider):
             for key, value in self.request_headers.items()
             if key.lower() not in {"authorization", "content-type"}
         }
-        self.client = httpx.AsyncClient(
-            timeout=float(timeout) if timeout else None,
-            proxy=provider_config.get("proxy") or None,
-            follow_redirects=True,
+        self.client = create_proxy_client(
+            "DeepSeek STT",
+            provider_config.get("proxy") or None,
             headers=request_headers,
+            timeout=float(timeout) if timeout else None,
+            follow_redirects=True,
         )
 
     async def get_text(self, audio_url: str) -> str:

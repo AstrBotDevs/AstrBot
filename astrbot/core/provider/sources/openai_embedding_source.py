@@ -1,10 +1,10 @@
 import re
 from urllib.parse import urlparse
 
-import httpx
 from openai import AsyncOpenAI
 
 from astrbot import logger
+from astrbot.core.utils.network_utils import create_openai_http_client
 
 from ..entities import ProviderType
 from ..provider import EmbeddingProvider
@@ -30,10 +30,10 @@ class OpenAIEmbeddingProvider(EmbeddingProvider):
         self.provider_settings = provider_settings
         proxy = provider_config.get("proxy", "")
         provider_id = provider_config.get("id", "unknown_id")
-        http_client = None
-        if proxy:
-            logger.info(f"[OpenAI Embedding] {provider_id} Using proxy: {proxy}")
-            http_client = httpx.AsyncClient(proxy=proxy)
+        http_client = create_openai_http_client(
+            f"OpenAI Embedding] [{provider_id}" if provider_id else "OpenAI Embedding",
+            proxy or None,
+        )
         api_base = _normalize_api_base(
             provider_config.get("embedding_api_base", "https://api.openai.com/v1")
         )
