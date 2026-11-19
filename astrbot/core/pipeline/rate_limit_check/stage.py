@@ -13,11 +13,7 @@ from ..stage import Stage, register_stage
 
 @register_stage
 class RateLimitStage(Stage):
-    """检查是否需要限制消息发送的限流器。
-
-    使用 Fixed Window 算法。
-    如果触发限流，将 stall 流水线，直到下一个时间窗口来临时自动唤醒。
-    """
+    """Limit admitted messages and bound per-session rate-limit waiters."""
 
     def __init__(self) -> None:
         # 存储每个会话的请求时间队列
@@ -27,6 +23,8 @@ class RateLimitStage(Stage):
         # 限流参数
         self.rate_limit_count: int = 0
         self.rate_limit_time: timedelta = timedelta(0)
+        self.max_pending = 1
+        self._pending_events: dict[str, int] = {}
 
     async def initialize(self, ctx: PipelineContext) -> None:
         """初始化限流器，根据配置设置限流参数。"""
@@ -39,57 +37,81 @@ class RateLimitStage(Stage):
         self.rl_strategy = ctx.astrbot_config["platform_settings"]["rate_limit"][
             "strategy"
         ]  # stall or discard
+        self.max_pending = max(
+            0,
+            int(
+                ctx.astrbot_config["platform_settings"]["rate_limit"].get(
+                    "max_pending", 1
+                )
+            ),
+        )
 
     async def process(
         self,
         event: AstrMessageEvent,
     ) -> None | AsyncGenerator[None, None]:
-        """检查并处理限流逻辑。如果触发限流，流水线会 stall 并在窗口期后自动恢复。
+        """Admit immediately, discard, or join a bounded per-session wait.
 
         Args:
-            event (AstrMessageEvent): 当前消息事件。
-            ctx (PipelineContext): 流水线上下文。
+            event: Incoming message event.
 
         Returns:
-            MessageEventResult: 继续或停止事件处理的结果。
-
+            None after admission or after stopping an excess event.
         """
         if self.rate_limit_count <= 0:
             return
 
         umo = event.unified_msg_origin
 
-        async with self.locks[umo]:  # 确保同一会话不会并发修改队列
-            now = datetime.now()
-            # 检查并处理限流，可能需要多次检查直到满足条件
-            while True:
-                timestamps = self.event_timestamps[umo]
-                self._remove_expired_timestamps(timestamps, now)
+        now = datetime.now()
+        timestamps = self.event_timestamps[umo]
+        self._remove_expired_timestamps(timestamps, now)
+        pending = self._pending_events.get(umo, 0)
 
-                if self.rate_limit_count <= 0:
-                    break
-                if len(timestamps) < self.rate_limit_count:
-                    timestamps.append(now)
-                    break
-                next_window_time = timestamps[0] + self.rate_limit_time
-                stall_duration = (next_window_time - now).total_seconds() + 0.3
+        # No await separates checking and reserving capacity in this event loop.
+        # Do not let new arrivals overtake existing stall waiters.
+        if not pending and len(timestamps) < self.rate_limit_count:
+            timestamps.append(now)
+            return
 
-                match self.rl_strategy:
-                    case RateLimitStrategy.STALL.value:
-                        logger.info(
-                            f"Session {umo} was rate-limited. Processing will "
-                            f"pause for {stall_duration:.2f} seconds according to the "
-                            "rate-limit policy.",
-                        )
-                        await asyncio.sleep(stall_duration)
-                        now = datetime.now()
-                    case RateLimitStrategy.DISCARD.value:
-                        logger.info(
-                            f"Session {umo} was rate-limited. This request was "
-                            "discarded according to the rate-limit policy; the limit "
-                            f"resets in {stall_duration:.2f} seconds.",
-                        )
-                        return event.stop_event()
+        if (
+            self.rl_strategy == RateLimitStrategy.DISCARD.value
+            or pending >= self.max_pending
+        ):
+            logger.info(
+                f"Session {umo} was rate-limited. This request was discarded "
+                "without waiting for rate-limit capacity."
+            )
+            return event.stop_event()
+
+        # Reserve before acquiring the lock: lock waiters must count too.
+        self._pending_events[umo] = pending + 1
+        try:
+            async with self.locks[umo]:
+                now = datetime.now()
+                while True:
+                    timestamps = self.event_timestamps[umo]
+                    self._remove_expired_timestamps(timestamps, now)
+                    if self.rate_limit_count <= 0:
+                        break
+                    if len(timestamps) < self.rate_limit_count:
+                        timestamps.append(now)
+                        break
+                    next_window_time = timestamps[0] + self.rate_limit_time
+                    stall_duration = (next_window_time - now).total_seconds() + 0.3
+                    logger.info(
+                        f"Session {umo} was rate-limited. Processing will "
+                        f"pause for {stall_duration:.2f} seconds according to the "
+                        "rate-limit policy."
+                    )
+                    await asyncio.sleep(stall_duration)
+                    now = datetime.now()
+        finally:
+            remaining = self._pending_events[umo] - 1
+            if remaining:
+                self._pending_events[umo] = remaining
+            else:
+                del self._pending_events[umo]
 
     def _remove_expired_timestamps(
         self,
