@@ -115,16 +115,35 @@ async def download_image_by_url(
     post: bool = False,
     post_data: dict | None = None,
     path: str | None = None,
+    timeout: float = 30.0,
 ) -> str:
-    """下载图片, 返回 path"""
+    """Download an image and return its local path.
+
+    Args:
+        url: Image URL.
+        post: Whether to send the request with POST.
+        post_data: JSON payload for the POST request.
+        path: Save path. When None, the image is written to a temp file.
+        timeout: Total download timeout in seconds.
+
+    Returns:
+        The image file path.
+
+    Raises:
+        aiohttp.ClientConnectorSSLError: When TLS certificate verification fails.
+        aiohttp.ClientConnectorCertificateError: When the server certificate is invalid.
+    """
+    ssl_context = ssl.create_default_context(
+        cafile=certifi.where(),
+    )  # 使用 certifi 提供的 CA 证书
+    connector = aiohttp.TCPConnector(ssl=ssl_context)  # 使用 certifi 的根证书
+    client_timeout = aiohttp.ClientTimeout(total=timeout)
+
     try:
-        ssl_context = ssl.create_default_context(
-            cafile=certifi.where(),
-        )  # 使用 certifi 提供的 CA 证书
-        connector = aiohttp.TCPConnector(ssl=ssl_context)  # 使用 certifi 的根证书
         async with aiohttp.ClientSession(
             trust_env=True,
             connector=connector,
+            timeout=client_timeout,
         ) as session:
             if post:
                 async with session.post(url, json=post_data) as resp:
@@ -140,34 +159,18 @@ async def download_image_by_url(
                     with open(path, "wb") as f:
                         f.write(await resp.read())
                     return path
-    except (aiohttp.ClientConnectorSSLError, aiohttp.ClientConnectorCertificateError):
-        # 关闭SSL验证（仅在证书验证失败时作为fallback）
-        logger.warning(
+    except aiohttp.ClientConnectorSSLError:
+        logger.error(
             f"SSL certificate verification failed for {_safe_url_for_log(url)}. "
-            "Disabling SSL verification (CERT_NONE) as a fallback. "
-            "This is insecure and exposes the application to man-in-the-middle attacks. "
-            "Please investigate and resolve certificate issues."
+            "Please check the server's SSL certificate configuration."
         )
-        ssl_context = ssl.create_default_context()
-        ssl_context.check_hostname = False
-        ssl_context.verify_mode = ssl.CERT_NONE
-        async with aiohttp.ClientSession() as session:
-            if post:
-                async with session.post(url, json=post_data, ssl=ssl_context) as resp:
-                    if not path:
-                        return save_temp_img(await resp.read())
-                    with open(path, "wb") as f:
-                        f.write(await resp.read())
-                    return path
-            else:
-                async with session.get(url, ssl=ssl_context) as resp:
-                    if not path:
-                        return save_temp_img(await resp.read())
-                    with open(path, "wb") as f:
-                        f.write(await resp.read())
-                    return path
-    except Exception as e:
-        raise e
+        raise
+    except aiohttp.ClientConnectorCertificateError:
+        logger.error(
+            f"SSL certificate error for {_safe_url_for_log(url)}. "
+            "Certificate may be expired or invalid."
+        )
+        raise
 
 
 async def _emit_download_progress(progress_callback, payload: dict) -> None:
@@ -278,7 +281,7 @@ async def download_file(
     path: str,
     show_progress: bool = False,
     progress_callback=None,
-    allow_insecure_ssl_fallback: bool = True,
+    allow_insecure_ssl_fallback: bool = False,
 ) -> None:
     """Download a remote file to a local path.
 
@@ -287,18 +290,25 @@ async def download_file(
         path: Local destination path.
         show_progress: Whether to print progress to stdout.
         progress_callback: Optional callback for progress payloads.
-        allow_insecure_ssl_fallback: Whether certificate failures may retry with
-            TLS certificate verification disabled.
+        allow_insecure_ssl_fallback: Deprecated parameter, ignored. SSL verification
+            is always enforced.
 
     Returns:
         None.
     """
+    if allow_insecure_ssl_fallback is not False:
+        logger.warning(
+            "Parameter 'allow_insecure_ssl_fallback' is deprecated and ignored. "
+            "SSL certificate verification is always enforced for security. "
+            "Please remove this parameter from your code."
+        )
+
+    ssl_context = ssl.create_default_context(
+        cafile=certifi.where(),
+    )  # 使用 certifi 提供的 CA 证书
+    connector = aiohttp.TCPConnector(ssl=ssl_context)
 
     try:
-        ssl_context = ssl.create_default_context(
-            cafile=certifi.where(),
-        )  # 使用 certifi 提供的 CA 证书
-        connector = aiohttp.TCPConnector(ssl=ssl_context)
         async with aiohttp.ClientSession(
             trust_env=True,
             connector=connector,
@@ -313,35 +323,19 @@ async def download_file(
                         show_progress,
                         progress_callback,
                     )
-    except (aiohttp.ClientConnectorSSLError, aiohttp.ClientConnectorCertificateError):
-        if not allow_insecure_ssl_fallback:
-            raise
-        # 关闭SSL验证（仅在证书验证失败时作为fallback）
-        logger.warning(
+    except aiohttp.ClientConnectorSSLError:
+        logger.error(
             f"SSL certificate verification failed for {_safe_url_for_log(url)}. "
-            "Falling back to unverified connection (CERT_NONE). "
+            "Please check the server's SSL certificate configuration."
         )
-        logger.warning(
-            f"SSL certificate verification failed for {_safe_url_for_log(url)}. "
-            "Falling back to unverified connection (CERT_NONE). "
-            "This is insecure and exposes the application to man-in-the-middle attacks. "
-            "Please investigate certificate issues with the remote server."
+        raise
+    except aiohttp.ClientConnectorCertificateError:
+        logger.error(
+            f"SSL certificate error for {_safe_url_for_log(url)}. "
+            "Certificate may be expired or invalid."
         )
-        ssl_context = ssl.create_default_context()
-        ssl_context.check_hostname = False
-        ssl_context.verify_mode = ssl.CERT_NONE
-        async with aiohttp.ClientSession() as session:
-            async with session.get(url, ssl=ssl_context, timeout=120) as resp:
-                _raise_for_download_status(resp, url)
-                with open(path, "wb") as f:
-                    await _download_response_to_file(
-                        resp,
-                        f,
-                        url,
-                        show_progress,
-                        progress_callback,
-                        show_downloading_label=False,
-                    )
+        raise
+
     if show_progress:
         print()
 

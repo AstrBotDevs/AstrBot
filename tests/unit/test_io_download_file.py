@@ -56,26 +56,51 @@ def _patch_download_sessions(monkeypatch, responses: list[_FakeResponse | Except
 
 
 @pytest.mark.asyncio
+async def test_download_file_rejects_non_200_response(monkeypatch, tmp_path):
+    target_path = tmp_path / "missing.bin"
+    _patch_download_session(
+        monkeypatch,
+        _FakeResponse(status=404, chunks=[b"not found"]),
+    )
+
+    with pytest.raises(io.DownloadFileHTTPError, match="HTTP status code: 404"):
+        await io.download_file("https://example.test/missing", str(target_path))
+
+    assert not target_path.exists()
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize("ssl_fallback", [False, True])
-async def test_download_file_rejects_non_200_response(
-    monkeypatch, tmp_path, ssl_fallback
+async def test_download_file_raises_ssl_error_immediately(
+    monkeypatch,
+    tmp_path,
+    ssl_fallback,
 ):
+    """Test that SSL errors are raised immediately without fallback retry.
+
+    This test validates the fix for Issue #9446 - SSL verification should not
+    be downgraded when certificate validation fails. The deprecated
+    ``allow_insecure_ssl_fallback`` flag is ignored, so even ``True`` must not
+    trigger an unverified retry.
+    """
+
     class FakeSSLError(Exception):
         pass
 
     target_path = tmp_path / "missing.bin"
-    response = _FakeResponse(status=404, chunks=[b"not found"])
-    if ssl_fallback:
-        _patch_download_sessions(monkeypatch, [FakeSSLError(), response])
-        monkeypatch.setattr(io.aiohttp, "ClientConnectorSSLError", FakeSSLError)
-        monkeypatch.setattr(
-            io.aiohttp, "ClientConnectorCertificateError", FakeSSLError
-        )
-    else:
-        _patch_download_session(monkeypatch, response)
+    _patch_download_session(
+        monkeypatch,
+        FakeSSLError(),
+    )
+    monkeypatch.setattr(io.aiohttp, "ClientConnectorSSLError", FakeSSLError)
+    monkeypatch.setattr(io.aiohttp, "ClientConnectorCertificateError", FakeSSLError)
 
-    with pytest.raises(io.DownloadFileHTTPError, match="HTTP status code: 404"):
-        await io.download_file("https://example.test/missing", str(target_path))
+    with pytest.raises(FakeSSLError):
+        await io.download_file(
+            "https://example.test/missing",
+            str(target_path),
+            allow_insecure_ssl_fallback=ssl_fallback,
+        )
 
     assert not target_path.exists()
 
