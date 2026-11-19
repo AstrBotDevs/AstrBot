@@ -13,7 +13,7 @@ import pytest
 from astrbot.core import agent_input as core_input
 from astrbot.core import llm_error_messages as agent_errors
 from astrbot.core.agent.mcp_client import MCPTool
-from astrbot.core.agent.message import Message, dump_messages
+from astrbot.core.agent.message import Message, TextPart, dump_messages
 from astrbot.core.agent.runners.base import AgentState
 from astrbot.core.agent.tool import FunctionTool, ToolSet
 from astrbot.core.agent_wakeup import wake_main_agent
@@ -33,8 +33,7 @@ from astrbot.core.astr_agent_runtime.main_agent import web_search as web_search_
 from astrbot.core.astr_agent_runtime.main_agent import workspace as workspace_build
 from astrbot.core.config.agent_runner import resolve_context_compression_config
 from astrbot.core.conversation_mgr import Conversation
-from astrbot.core.message.components import File, Image, Plain, Record, Reply, Video
-from astrbot.core.message.mention_projection import SELF_MENTION_SPANS
+from astrbot.core.message.components import At, File, Image, Plain, Record, Reply, Video
 from astrbot.core.pipeline.process_stage.method.agent_sub_stages import (
     webchat as webchat_build,
 )
@@ -441,10 +440,7 @@ async def test_provider_manager_async_selection_uses_effective_config():
     manager.inst_map = {"preferred": preferred_provider}
     manager.acm = MagicMock()
     manager.acm.get_conf.return_value = {
-        "agent": {
-            "runtime": "astrbot",
-            "config": {"model": {"provider_id": "preferred"}},
-        }
+        "agent": {"runtime": "astrbot", "config": {"model": {"provider_id": "preferred"}}}
     }
 
     result = await manager.get_using_provider_async(
@@ -473,7 +469,9 @@ class TestGetSessionConv:
         conv_mgr.get_curr_conversation_id.assert_called_once_with(
             mock_event.unified_msg_origin
         )
-        conv_mgr.db.get_conversation_by_id.assert_called_once_with("existing-conv-id")
+        conv_mgr.db.get_conversation_by_id.assert_called_once_with(
+            "existing-conv-id"
+        )
 
     @pytest.mark.asyncio
     async def test_get_session_conv_create_new(self, mock_event, mock_context):
@@ -3772,9 +3770,7 @@ async def test_wakeup_collects_current_conversation_without_an_explicit_request(
     from astrbot.core.platform.message_session import MessageSession
 
     history = [{"role": "user", "content": "Existing context"}]
-    conversation = SimpleNamespace(
-        cid="conversation", history=json.dumps(history), content=history
-    )
+    conversation = SimpleNamespace(cid="conversation", history=json.dumps(history), content=history)
     manager = SimpleNamespace(
         get_curr_conversation_id=AsyncMock(return_value="conversation"),
         db=SimpleNamespace(get_conversation_by_id=AsyncMock(return_value=conversation)),
@@ -3807,73 +3803,59 @@ async def test_wakeup_collects_current_conversation_without_an_explicit_request(
     manager.db.get_conversation_by_id.assert_awaited_once_with("conversation")
 
 
-def _bind_self_mention(event):
-    store = {SELF_MENTION_SPANS: [(0, 0, "清漪")]}
-    event.get_extra.side_effect = lambda key, default=None: store.get(key, default)
-    event.set_extra.side_effect = store.__setitem__
-
-
-@pytest.mark.asyncio
-async def test_prepare_request_projects_self_mention_after_wake_prefix(
-    mock_event, mock_context, mock_provider
-):
-    event = mock_event
-    event.message_str = "/llm 今天吃啥"
-    event.message_obj.message = [Plain(text="今天吃啥")]
-    _bind_self_mention(event)
-    _setup_conversation_for_build(mock_context.conversation_manager)
-
-    prepared = await request_build.prepare_request(
-        event,
-        mock_context,
-        ama.MainAgentBuildConfig(
-            tool_call_timeout=60,
-            provider_wake_prefix="/llm ",
-            provider_settings={"prompt_prefix": "PREFIX {{prompt}}"},
+@pytest.mark.parametrize(
+    ("message_str", "has_prefix_text", "file_extract_enabled", "expected_prompt"),
+    [
+        pytest.param(
+            "",
+            False,
+            True,
+            "总结一下文件里面讲了什么？",
+            id="plain-file-default",
         ),
-        mock_provider,
-        None,
-    )
-
-    assert prepared is not None
-    assert prepared.request.prompt == "PREFIX @清漪（you） 今天吃啥"
-    assert event.message_str == "/llm 今天吃啥"
-
-
+        pytest.param(
+            "/llm",
+            True,
+            True,
+            "总结一下文件里面讲了什么？",
+            id="prefix-file-default-kept",
+        ),
+        pytest.param(
+            "/llm",
+            True,
+            False,
+            "<attachment>",
+            id="prefix-attachment-placeholder-kept",
+        ),
+    ],
+)
 @pytest.mark.asyncio
-async def test_prepare_request_projects_self_mention_with_image(
-    mock_event, mock_context, mock_provider, valid_image_path
+async def test_file_default_prompt_survives_ordered_mention_display(
+    mock_event,
+    mock_context,
+    mock_provider,
+    message_str,
+    has_prefix_text,
+    file_extract_enabled,
+    expected_prompt,
 ):
-    event = mock_event
-    event.message_str = ""
-    event.message_obj.message = [Image.fromFileSystem(valid_image_path)]
-    _bind_self_mention(event)
-    _setup_conversation_for_build(mock_context.conversation_manager)
-
-    prepared = await request_build.prepare_request(
-        event,
-        mock_context,
-        ama.MainAgentBuildConfig(tool_call_timeout=60),
-        mock_provider,
-        None,
-    )
-
-    assert prepared is not None
-    assert prepared.request.prompt == "@清漪（you）"
-    assert prepared.request.image_urls
-
-
-@pytest.mark.asyncio
-async def test_file_default_prompt_keeps_self_mention(
-    mock_event, mock_context, mock_provider, sample_config
-):
-    event = mock_event
-    event.message_str = ""
+    mock_event.message_str = message_str
     file = MagicMock(spec=File)
     file.name = "notes.txt"
     file.get_file = AsyncMock(return_value="/tmp/notes.txt")
-    event.message_obj.message = [file]
-    _bind_self_mention(event)
+    chain = [At(qq="bot-1", name="清漪")]
+    extras = {}
+    if has_prefix_text:
+        chain.append(Plain(text="/llm"))
+        extras["_consumed_provider_prefix"] = "/llm"
+    chain.append(file)
+    mock_event.message_obj.message = chain
+    mock_event.message_obj.ordered_mentions = True
+    mock_event.message_obj._self_mention_position_unknown = False
+    mock_event.get_self_id.return_value = "bot-1"
+    store = dict(extras)
+    mock_event.get_extra.side_effect = lambda key, default=None: store.get(key, default)
+    mock_event.set_extra.side_effect = store.__setitem__
     _setup_conversation_for_build(mock_context.conversation_manager)
 
     with patch.object(
@@ -3882,12 +3864,32 @@ async def test_file_default_prompt_keeps_self_mention(
         AsyncMock(return_value="file content"),
     ):
         prepared = await request_build.prepare_request(
-            event,
+            mock_event,
             mock_context,
-            sample_config,
+            ama.MainAgentBuildConfig(
+                tool_call_timeout=60,
+                provider_wake_prefix="/llm" if has_prefix_text else "",
+                file_extract_enabled=file_extract_enabled,
+                file_extract_prov="moonshotai",
+                file_extract_msh_api_key="test-api-key",
+            ),
             mock_provider,
             None,
         )
 
     assert prepared is not None
-    assert prepared.request.prompt == "@清漪（you） 总结一下文件里面讲了什么？"
+    # @ 展示不抢掉文件默认总结提示或附件占位符，原有请求判空顺序未被绕过
+    assert prepared.request.prompt == expected_prompt
+    reminders = [
+        part
+        for part in prepared.request.extra_user_content_parts
+        if isinstance(part, TextPart) and part.text.startswith("<system_reminder>@")
+    ]
+    assert [part.text for part in reminders] == [
+        "<system_reminder>@清漪 refers to you (Your ID: bot-1).</system_reminder>"
+    ]
+    assert reminders[0]._no_save is True
+    saved = dump_messages(
+        [Message.model_validate(await prepared.request.assemble_context())]
+    )
+    assert "@清漪" in [part["text"] for part in saved[0]["content"]]

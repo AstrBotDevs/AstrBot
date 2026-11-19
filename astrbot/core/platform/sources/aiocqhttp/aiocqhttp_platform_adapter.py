@@ -20,7 +20,6 @@ from astrbot.api.platform import (
     Platform,
     PlatformMetadata,
 )
-from astrbot.core.message.mention_projection import self_mention_label
 from astrbot.core.platform.astr_message_event import MessageSesion
 
 from ...register import register_platform_adapter
@@ -241,7 +240,6 @@ class AiocqhttpAdapter(Platform):
 
         # 按消息段类型类型适配
         routing_params = {"self_id": event.self_id} if event.self_id else {}
-        self_mention_spans: list[tuple[int, int, str]] = []
         for t, m_group in itertools.groupby(event.message, key=lambda x: x["type"]):
             a = None
             if t == "text":
@@ -376,44 +374,21 @@ class AiocqhttpAdapter(Platform):
                                 )
                             is_at_self = str(m["data"]["qq"]) in {abm.self_id, "all"}
 
-                            at_component = At(
-                                qq=m["data"]["qq"],
-                                name=nickname,
+                            abm.message.append(
+                                At(
+                                    qq=m["data"]["qq"],
+                                    name=nickname,
+                                ),
                             )
-                            abm.message.append(at_component)
 
-                            if is_at_self:
-                                position = len(message_str) + len("".join(at_parts))
-                                end = position
-                                if not first_at_self_processed:
-                                    # 第一个@是机器人，不添加到message_str
-                                    first_at_self_processed = True
-                                else:
-                                    at_text = f" @{nickname}({m['data']['qq']}) "
-                                    at_parts.append(at_text)
-                                    end += len(at_text)
-                                self_mention_spans.append(
-                                    (
-                                        position,
-                                        end,
-                                        self_mention_label(at_component),
-                                    ),
-                                )
+                            if is_at_self and not first_at_self_processed:
+                                # 第一个@是机器人，不添加到message_str
+                                first_at_self_processed = True
                             else:
-                                # @其他用户，添加到message_str
+                                # 非第一个@机器人或@其他用户，添加到message_str
                                 at_parts.append(f" @{nickname}({m['data']['qq']}) ")
                         else:
-                            at_component = At(qq=str(m["data"]["qq"]), name="")
-                            abm.message.append(at_component)
-                            if str(m["data"]["qq"]) == abm.self_id:
-                                position = len(message_str) + len("".join(at_parts))
-                                self_mention_spans.append(
-                                    (
-                                        position,
-                                        position,
-                                        self_mention_label(at_component),
-                                    ),
-                                )
+                            abm.message.append(At(qq=str(m["data"]["qq"]), name=""))
                     except ActionFailed as e:
                         logger.error(f"获取 @ 用户信息失败: {e}，此消息段将被忽略。")
                     except BaseException as e:
@@ -445,12 +420,9 @@ class AiocqhttpAdapter(Platform):
 
         abm.timestamp = int(time.time())
         abm.message_str = message_str
-        if self_mention_spans:
-            text_end = len(message_str.rstrip())
-            abm._self_mention_spans = [
-                (min(start, text_end), min(end, text_end), label)
-                for start, end, label in self_mention_spans
-            ]
+        # Group chains keep true Plain/At positions for the agent input
+        # boundary; private chats have no mention ambiguity to resolve.
+        abm.ordered_mentions = abm.type == MessageType.GROUP_MESSAGE
         abm.raw_message = event
 
         return abm

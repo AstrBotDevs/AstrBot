@@ -63,10 +63,16 @@ class AstrBotMessage:
     message_str: str  # 最直观的纯文本消息字符串
     raw_message: object
     timestamp: int  # 消息时间戳
+    ordered_mentions: bool  # 顶层 Plain/At 是否保留真实 mention 位置
+    _self_mention_position_unknown: bool  # 唤醒兜底 At 是否没有真实位置
+    _self_mention_identity_confirmed: bool  # 位置未知但身份已确认的兜底 At
 
     def __init__(self) -> None:
         self.timestamp = int(time.time())
         self.group = None
+        self.ordered_mentions = False
+        self._self_mention_position_unknown = False
+        self._self_mention_identity_confirmed = False
 
     def __str__(self) -> str:
         return str(self.__dict__)

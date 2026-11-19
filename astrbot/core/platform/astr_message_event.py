@@ -27,13 +27,6 @@ from astrbot.core.message.components import (
     Reply,
     UIInteraction,
 )
-from astrbot.core.message.mention_projection import (
-    SELF_MENTION_SPANS,
-    SELF_MENTION_UNKNOWN_POSITION,
-    is_self_mention,
-    render_self_mention,
-    self_mention_label,
-)
 from astrbot.core.message.message_event_result import MessageChain, MessageEventResult
 from astrbot.core.platform.message_type import MessageType
 from astrbot.core.provider.entities import ProviderRequest
@@ -120,10 +113,6 @@ class AstrMessageEvent(abc.ABC):
         self.is_at_or_wake_command = False
         """是否是 At 机器人或者带有唤醒词或者是私聊(插件注册的事件监听器会让 is_wake 设为 True, 但是不会让这个属性置为 True)"""
         self._extras: dict[str, Any] = {}
-        if spans := getattr(message_obj, "_self_mention_spans", None):
-            self._extras[SELF_MENTION_SPANS] = list(spans)
-        if getattr(message_obj, "_self_mention_position_unknown", False):
-            self._extras[SELF_MENTION_UNKNOWN_POSITION] = True
         self._force_stopped: bool = False
         """独立的停止标志，不依赖 _result，不会被 clear_result() 重置"""
         message_type = getattr(message_obj, "type", None)
@@ -222,11 +211,7 @@ class AstrMessageEvent(abc.ABC):
         """获取消息字符串。"""
         return self.message_str
 
-    def _outline_chain(
-        self,
-        chain: list[BaseMessageComponent] | None,
-        mark_self_mention: bool = False,
-    ) -> str:
+    def _outline_chain(self, chain: list[BaseMessageComponent] | None) -> str:
         if not chain:
             return ""
 
@@ -241,10 +226,7 @@ class AstrMessageEvent(abc.ABC):
             elif isinstance(i, AtAll):
                 parts.append("[At:全体成员]")
             elif isinstance(i, At):
-                if mark_self_mention and is_self_mention(i, self.get_self_id()):
-                    parts.append(render_self_mention(self_mention_label(i)).strip())
-                else:
-                    parts.append(f"[At:{i.qq}]")
+                parts.append(f"[At:{i.qq}]")
             elif isinstance(i, Forward):
                 # 转发消息
                 parts.append("[转发消息]")
@@ -258,19 +240,12 @@ class AstrMessageEvent(abc.ABC):
                 parts.append(f"[{i.type}]")
         return " ".join(parts)
 
-    def get_message_outline(self, mark_self_mention: bool = False) -> str:
+    def get_message_outline(self) -> str:
         """获取消息概要。
 
         除了文本消息外，其他消息类型会被转换为对应的占位符。如图片消息会被转换为 [图片]。
-
-        Args:
-            mark_self_mention: Render top-level mentions of the bot as an inline
-                self reference instead of an ``[At:id]`` placeholder.
         """
-        return self._outline_chain(
-            getattr(self.message_obj, "message", None),
-            mark_self_mention=mark_self_mention,
-        )
+        return self._outline_chain(getattr(self.message_obj, "message", None))
 
     def get_messages(self) -> list[BaseMessageComponent]:
         """获取消息链。"""
