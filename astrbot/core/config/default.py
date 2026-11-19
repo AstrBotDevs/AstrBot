@@ -1646,6 +1646,18 @@ CONFIG_METADATA_2 = {
                         "proxy": "",
                         "custom_headers": {},
                     },
+                    "WorldRouter": {
+                        "id": "worldrouter",
+                        "provider": "worldrouter",
+                        "type": "openai_chat_completion",
+                        "provider_type": "chat_completion",
+                        "enable": True,
+                        "key": [],
+                        "api_base": "https://inference-api.worldrouter.ai/v1",
+                        "timeout": 120,
+                        "proxy": "",
+                        "custom_headers": {},
+                    },
                     "SiliconFlow": {
                         "id": "siliconflow",
                         "provider": "siliconflow",
