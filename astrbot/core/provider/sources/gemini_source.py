@@ -3,6 +3,7 @@ import base64
 import json
 import logging
 import random
+import uuid
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from typing import Literal, cast
@@ -461,6 +462,7 @@ class ProviderGoogleGenAI(Provider):
                 contents.append(content_cls(parts=part))
 
         gemini_contents: list[types.Content] = []
+        tool_call_names: dict[str, str] = {}
         for message in payloads["messages"]:
             role, content = message["role"], message.get("content")
 
@@ -479,6 +481,12 @@ class ProviderGoogleGenAI(Provider):
                 append_or_extend(gemini_contents, parts, types.UserContent)
 
             elif role == "assistant":
+                # Tool responses belong to the most recent assistant tool-call batch.
+                tool_call_names = {
+                    tool["id"]: tool["function"]["name"]
+                    for tool in message.get("tool_calls") or []
+                    if tool.get("id")
+                }
                 parts = []
                 if isinstance(content, str):
                     parts.append(types.Part.from_text(text=content))
@@ -527,10 +535,13 @@ class ProviderGoogleGenAI(Provider):
 
                 if "tool_calls" in message:
                     for tool in message["tool_calls"]:
-                        part = types.Part.from_function_call(
+                        tool_call_id = tool.get("id")
+                        function_call = types.FunctionCall(
+                            id=tool_call_id,
                             name=tool["function"]["name"],
                             args=json.loads(tool["function"]["arguments"]),
                         )
+                        part = types.Part(function_call=function_call)
                         # we should set thought_signature back to part if exists
                         # for more info about thought_signature, see:
                         # https://ai.google.dev/gemini-api/docs/thought-signatures
@@ -550,14 +561,21 @@ class ProviderGoogleGenAI(Provider):
                 append_or_extend(gemini_contents, parts, types.ModelContent)
 
             elif role == "tool":
-                func_name = message.get("name", message["tool_call_id"])
-                part = types.Part.from_function_response(
+                tool_call_id = message.get("tool_call_id")
+                func_name = (
+                    tool_call_names.get(tool_call_id)
+                    or message.get("name")
+                    or tool_call_id
+                )
+                function_response = types.FunctionResponse(
+                    id=tool_call_id,
                     name=func_name,
                     response={
                         "name": func_name,
                         "content": message["content"],
                     },
                 )
+                part = types.Part(function_response=function_response)
 
                 parts = [part]
                 append_or_extend(gemini_contents, parts, types.UserContent)
@@ -616,6 +634,8 @@ class ProviderGoogleGenAI(Provider):
         candidate: types.Candidate,
         llm_response: LLMResponse,
         *,
+        response_id: str | None = None,
+        tool_call_scope: str | None = None,
         validate_output: bool = True,
     ) -> MessageChain:
         """处理内容部分并构建消息链"""
@@ -673,6 +693,13 @@ class ProviderGoogleGenAI(Provider):
             for part in result_parts
         ):
             chain.append(Comp.Plain("这是图片"))
+        response_scope = (
+            tool_call_scope
+            or response_id
+            or llm_response.id
+            or f"gemini_response_{uuid.uuid4().hex}"
+        )
+        tool_call_index = 0
         for part in result_parts:
             # Skip thinking parts — their text is already captured via
             # _extract_reasoning_content above.  Including them here would
@@ -689,9 +716,11 @@ class ProviderGoogleGenAI(Provider):
                 llm_response.role = "tool"
                 llm_response.tools_call_name.append(part.function_call.name)
                 llm_response.tools_call_args.append(part.function_call.args)
-                # function_call.id might be None, use name as fallback
-                tool_call_id = part.function_call.id or part.function_call.name
+                tool_call_id = part.function_call.id
+                if not tool_call_id:
+                    tool_call_id = f"gemini_call_{response_scope}_{tool_call_index}"
                 llm_response.tools_call_ids.append(tool_call_id)
+                tool_call_index += 1
                 # extra_content
                 if part.thought_signature:
                     ts_bs64 = base64.b64encode(part.thought_signature).decode("utf-8")
@@ -727,6 +756,7 @@ class ProviderGoogleGenAI(Provider):
         *,
         request_max_retries: int | None = None,
         conversation_id: str | None = None,
+        tool_call_scope: str | None = None,
     ) -> LLMResponse:
         """非流式请求 Gemini API"""
         system_instruction = next(
@@ -814,11 +844,13 @@ class ProviderGoogleGenAI(Provider):
 
         llm_response = LLMResponse("assistant")
         llm_response.raw_completion = result
+        llm_response.id = result.response_id
         llm_response.result_chain = self._process_content_parts(
             result.candidates[0],
             llm_response,
+            response_id=result.response_id,
+            tool_call_scope=tool_call_scope or f"gemini_response_{uuid.uuid4().hex}",
         )
-        llm_response.id = result.response_id
         if result.usage_metadata:
             llm_response.usage = self._extract_usage(result.usage_metadata)
         return llm_response
@@ -830,6 +862,7 @@ class ProviderGoogleGenAI(Provider):
         *,
         request_max_retries: int | None = None,
         conversation_id: str | None = None,
+        tool_call_scope: str | None = None,
     ) -> AsyncGenerator[LLMResponse, None]:
         """流式请求 Gemini API"""
         system_instruction = next(
@@ -876,106 +909,68 @@ class ProviderGoogleGenAI(Provider):
                     raise
                 continue
 
-        # Accumulate the complete response text for the final response
-        accumulated_text = ""
-        accumulated_reasoning = ""
-        final_response = None
+        # Assemble the complete call batch before exposing an executable response.
+        accumulated_parts: list[types.Part] = []
+        final_chunk = None
+        final_candidate = None
+        response_id = None
+        usage = None
+        tool_call_scope = tool_call_scope or f"gemini_stream_{uuid.uuid4().hex}"
 
         async with self._conversation_header(conversation_id):
             async for chunk in result:
+                final_chunk = chunk
+                response_id = chunk.response_id or response_id
+                if chunk.usage_metadata:
+                    usage = self._extract_usage(chunk.usage_metadata)
                 llm_response = LLMResponse("assistant", is_chunk=True)
 
                 if not chunk.candidates:
                     logger.warning(f"Gemini stream chunk has empty candidates: {chunk}")
                     continue
-                if not chunk.candidates[0].content:
+                candidate = chunk.candidates[0]
+                final_candidate = candidate
+                if not candidate.content:
                     logger.warning(f"Gemini stream chunk has empty content: {chunk}")
                     continue
 
-                if chunk.candidates[0].content.parts and any(
-                    part.function_call for part in chunk.candidates[0].content.parts
-                ):
-                    llm_response = LLMResponse("assistant", is_chunk=False)
-                    llm_response.raw_completion = chunk
-                    llm_response.result_chain = self._process_content_parts(
-                        chunk.candidates[0],
-                        llm_response,
-                        validate_output=False,
-                    )
-                    # This response replaces the whole turn in conversation
-                    # history, so keep the narration and reasoning that were
-                    # already streamed before the tool call. Dropping them made
-                    # the user-visible text missing from history.
-                    if accumulated_text or accumulated_reasoning:
-                        parts = list(llm_response.result_chain.chain or [])
-                        if accumulated_text:
-                            parts.insert(0, Comp.Plain(accumulated_text))
-                            llm_response.result_chain = MessageChain(chain=parts)
-                        if accumulated_reasoning:
-                            # _process_content_parts already stored the reasoning
-                            # that came with the tool-call chunk itself, so append
-                            # to it instead of overwriting that part.
-                            llm_response.reasoning_content = accumulated_reasoning + (
-                                llm_response.reasoning_content or ""
-                            )
-                    llm_response.id = chunk.response_id
-                    if chunk.usage_metadata:
-                        llm_response.usage = self._extract_usage(chunk.usage_metadata)
-                    yield llm_response
-                    return
+                accumulated_parts.extend(candidate.content.parts or [])
 
                 _f = False
 
-                # 提取 reasoning content
-                reasoning = self._extract_reasoning_content(chunk.candidates[0])
+                reasoning = self._extract_reasoning_content(candidate)
                 if reasoning:
                     _f = True
-                    accumulated_reasoning += reasoning
                     llm_response.reasoning_content = reasoning
                 if chunk.text:
                     _f = True
-                    accumulated_text += chunk.text
                     llm_response.result_chain = MessageChain(
                         chain=[Comp.Plain(chunk.text)]
                     )
                 if _f:
                     yield llm_response
 
-                if chunk.candidates[0].finish_reason:
-                    # Process the final chunk for potential tool calls or other content
-                    if chunk.candidates[0].content.parts:
-                        final_response = LLMResponse("assistant", is_chunk=False)
-                        final_response.raw_completion = chunk
-                        final_response.result_chain = self._process_content_parts(
-                            chunk.candidates[0],
-                            final_response,
-                            validate_output=False,
-                        )
-                        final_response.id = chunk.response_id
-                        if chunk.usage_metadata:
-                            final_response.usage = self._extract_usage(
-                                chunk.usage_metadata
-                            )
-                    break
-
-        # Yield final complete response with accumulated text
-        if not final_response:
-            final_response = LLMResponse("assistant", is_chunk=False)
-
-        # Set the complete accumulated reasoning in the final response
-        if accumulated_reasoning:
-            final_response.reasoning_content = accumulated_reasoning
-
-        # Set the complete accumulated text in the final response
-        if accumulated_text:
-            final_response.result_chain = MessageChain(
-                chain=[Comp.Plain(accumulated_text)],
+        final_response = LLMResponse(
+            "assistant", id=response_id, raw_completion=final_chunk, usage=usage
+        )
+        if final_candidate is not None:
+            final_candidate = final_candidate.model_copy(
+                update={"content": types.Content(role="model", parts=accumulated_parts)}
+            )
+            self._process_content_parts(
+                final_candidate,
+                final_response,
+                response_id=response_id,
+                tool_call_scope=tool_call_scope,
+                validate_output=False,
             )
 
         self._ensure_usable_response(
             final_response,
-            response_id=getattr(final_response, "id", None),
-            finish_reason=None,
+            response_id=response_id,
+            finish_reason=str(final_candidate.finish_reason)
+            if final_candidate is not None and final_candidate.finish_reason
+            else None,
         )
 
         yield final_response
@@ -1033,6 +1028,7 @@ class ProviderGoogleGenAI(Provider):
 
         retry = 10
         keys = self.api_keys.copy()
+        tool_call_scope = f"gemini_response_{uuid.uuid4().hex}"
 
         for _ in range(retry):
             try:
@@ -1043,6 +1039,7 @@ class ProviderGoogleGenAI(Provider):
                     payloads,
                     func_tool,
                     request_max_retries=request_max_retries,
+                    tool_call_scope=tool_call_scope,
                     **query_kwargs,
                 )
             except APIError as e:
@@ -1105,6 +1102,7 @@ class ProviderGoogleGenAI(Provider):
 
         retry = 10
         keys = self.api_keys.copy()
+        tool_call_scope = f"gemini_stream_{uuid.uuid4().hex}"
 
         for _ in range(retry):
             try:
@@ -1115,6 +1113,7 @@ class ProviderGoogleGenAI(Provider):
                     payloads,
                     func_tool,
                     request_max_retries=request_max_retries,
+                    tool_call_scope=tool_call_scope,
                     **query_kwargs,
                 ):
                     yield response

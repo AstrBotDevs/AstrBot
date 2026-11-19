@@ -3,6 +3,7 @@ from types import SimpleNamespace
 import httpx
 import pytest
 from google.genai import types
+from google.genai.errors import APIError
 
 import astrbot.core.message.components as Comp
 import astrbot.core.provider.sources.gemini_source as gemini_source
@@ -10,6 +11,17 @@ import astrbot.core.provider.sources.request_retry as request_retry
 from astrbot.core.exceptions import EmptyModelOutputError
 from astrbot.core.provider.entities import LLMResponse
 from astrbot.core.provider.sources.gemini_source import ProviderGoogleGenAI
+
+
+def _make_function_call_candidate(*function_calls):
+    return types.Candidate(
+        content=types.Content(
+            parts=[
+                types.Part(function_call=types.FunctionCall(**function_call))
+                for function_call in function_calls
+            ]
+        )
+    )
 
 
 @pytest.mark.asyncio
@@ -275,16 +287,6 @@ async def test_gemini_get_models_retries_transient_request_error(monkeypatch):
     assert models.calls == 2
 
 
-def _gemini_part(*, text=None, thought=None, function_call=None):
-    return SimpleNamespace(
-        text=text,
-        thought=thought,
-        function_call=function_call,
-        inline_data=None,
-        thought_signature=None,
-    )
-
-
 def _gemini_stream_chunk(
     *,
     text=None,
@@ -293,19 +295,26 @@ def _gemini_stream_chunk(
     finish_reason=None,
     response_id="resp-1",
 ):
-    """Build a minimal stand-in for a google-genai streaming chunk."""
+    """Build a streaming chunk with Google SDK candidate and part types."""
     parts = []
     if text is not None:
-        parts.append(_gemini_part(text=text))
+        parts.append(types.Part(text=text))
     if thought is not None:
-        parts.append(_gemini_part(text=thought, thought=True))
+        parts.append(types.Part(text=thought, thought=True))
     if function_call is not None:
-        parts.append(_gemini_part(function_call=function_call))
+        parts.append(
+            types.Part(
+                function_call=types.FunctionCall(
+                    name=function_call.name,
+                    args=function_call.args,
+                    id=function_call.id,
+                )
+            )
+        )
     return SimpleNamespace(
         candidates=[
-            SimpleNamespace(
-                content=SimpleNamespace(parts=parts),
-                finish_reason=finish_reason,
+            types.Candidate(
+                content=types.Content(parts=parts), finish_reason=finish_reason
             )
         ],
         text=text,
@@ -446,3 +455,453 @@ async def test_gemini_stream_keeps_reasoning_from_tool_call_chunk(monkeypatch):
 
     final = responses[-1]
     assert final.reasoning_content == "weighing optionsdeciding to call"
+
+
+@pytest.mark.asyncio
+async def test_gemini_prepare_conversation_preserves_tool_call_ids_and_responses():
+    provider = ProviderGoogleGenAI.__new__(ProviderGoogleGenAI)
+    contents = await provider._prepare_conversation(
+        {
+            "messages": [
+                {"role": "user", "content": "start"},
+                {
+                    "role": "assistant",
+                    "tool_calls": [
+                        {
+                            "id": "call_same_id",
+                            "function": {"name": "first_tool", "arguments": "{}"},
+                        }
+                    ],
+                },
+                {
+                    "role": "tool",
+                    "tool_call_id": "call_same_id",
+                    "name": "stale_name",
+                    "content": "first result",
+                },
+                {
+                    "role": "assistant",
+                    "tool_calls": [
+                        {
+                            "id": "call_same_id",
+                            "function": {"name": "second_tool", "arguments": "{}"},
+                        }
+                    ],
+                },
+                {
+                    "role": "tool",
+                    "tool_call_id": "call_same_id",
+                    "name": "stale_name",
+                    "content": "second result",
+                },
+                {"role": "user", "content": "continue"},
+            ]
+        }
+    )
+
+    first_call = contents[1].parts[0].function_call
+    first_response = contents[2].parts[0].function_response
+    second_call = contents[3].parts[0].function_call
+    second_response = contents[4].parts[0].function_response
+    assert first_call.id == "call_same_id"
+    assert first_response.id == "call_same_id"
+    assert first_response.name == "first_tool"
+    assert second_call.id == "call_same_id"
+    assert second_response.id == "call_same_id"
+    assert second_response.name == "second_tool"
+
+
+def test_gemini_missing_tool_call_ids_are_unique_and_request_scoped():
+    provider = ProviderGoogleGenAI.__new__(ProviderGoogleGenAI)
+    candidate = _make_function_call_candidate(
+        {"name": "publish", "args": {"status": "draft"}},
+        {"name": "publish", "args": {"status": "draft"}},
+    )
+
+    response = LLMResponse("assistant")
+    provider._process_content_parts(candidate, response, tool_call_scope="request-1")
+    replay = LLMResponse("assistant")
+    provider._process_content_parts(candidate, replay, tool_call_scope="request-1")
+    next_response = LLMResponse("assistant")
+    provider._process_content_parts(
+        candidate, next_response, tool_call_scope="request-2"
+    )
+    fallback_response = LLMResponse("assistant")
+    provider._process_content_parts(candidate, fallback_response)
+    next_fallback_response = LLMResponse("assistant")
+    provider._process_content_parts(candidate, next_fallback_response)
+
+    assert len(set(response.tools_call_ids)) == 2
+    assert all(
+        call_id.startswith("gemini_call_") for call_id in response.tools_call_ids
+    )
+    assert replay.tools_call_ids == response.tools_call_ids
+    assert set(next_response.tools_call_ids).isdisjoint(response.tools_call_ids)
+    assert set(next_fallback_response.tools_call_ids).isdisjoint(
+        fallback_response.tools_call_ids
+    )
+
+
+def test_gemini_explicit_tool_call_scope_wins_over_response_id():
+    provider = ProviderGoogleGenAI.__new__(ProviderGoogleGenAI)
+    candidate = _make_function_call_candidate({"name": "publish", "args": {}})
+
+    first = LLMResponse("assistant")
+    provider._process_content_parts(
+        candidate,
+        first,
+        response_id="provider-response-1",
+        tool_call_scope="replayed-request",
+    )
+    second = LLMResponse("assistant")
+    provider._process_content_parts(
+        candidate,
+        second,
+        response_id="provider-response-2",
+        tool_call_scope="replayed-request",
+    )
+
+    assert first.tools_call_ids == second.tools_call_ids
+
+
+@pytest.mark.asyncio
+async def test_gemini_non_streaming_retries_reuse_tool_call_scope(monkeypatch):
+    provider = ProviderGoogleGenAI.__new__(ProviderGoogleGenAI)
+    provider.api_keys = ["key-1", "key-2"]
+    scopes = []
+
+    async def fake_query(
+        payloads,
+        tools,
+        *,
+        request_max_retries=None,
+        tool_call_scope=None,
+    ):
+        scopes.append(tool_call_scope)
+        if len(scopes) == 1:
+            raise APIError(503, {"error": {"message": "temporary failure"}})
+        return LLMResponse("assistant")
+
+    async def fake_handle_api_error(error, keys):
+        return len(scopes) == 1
+
+    monkeypatch.setattr(provider, "_query", fake_query)
+    monkeypatch.setattr(provider, "_handle_api_error", fake_handle_api_error)
+
+    await provider.text_chat(model="gemini-test", contexts=[])
+
+    assert len(scopes) == 2
+    assert scopes[0]
+    assert scopes[0] == scopes[1]
+
+
+def test_gemini_preserves_provider_tool_call_ids_and_thought_signatures():
+    provider = ProviderGoogleGenAI.__new__(ProviderGoogleGenAI)
+    candidate = types.Candidate(
+        content=types.Content(
+            parts=[
+                types.Part(
+                    function_call=types.FunctionCall(
+                        id="provider-call-id",
+                        name="publish",
+                        args={"status": "draft"},
+                    ),
+                    thought_signature=b"signed-call",
+                )
+            ]
+        )
+    )
+    response = LLMResponse("assistant")
+
+    provider._process_content_parts(
+        candidate,
+        response,
+        response_id="provider-response",
+    )
+
+    assert response.tools_call_ids == ["provider-call-id"]
+    assert response.tools_call_extra_content == {
+        "provider-call-id": {"google": {"thought_signature": "c2lnbmVkLWNhbGw="}}
+    }
+
+
+@pytest.mark.asyncio
+async def test_gemini_non_streaming_requests_get_distinct_fallback_tool_ids(
+    monkeypatch,
+):
+    import astrbot.core.provider.sources.gemini_source as gemini_source
+
+    candidate = _make_function_call_candidate(
+        {"name": "publish", "args": {"status": "draft"}},
+        {"name": "publish", "args": {"status": "draft"}},
+    )
+    result = types.GenerateContentResponse(
+        candidates=[candidate],
+        response_id=None,
+    )
+
+    class FakeModels:
+        async def generate_content(self, **kwargs):
+            return result
+
+    provider = ProviderGoogleGenAI.__new__(ProviderGoogleGenAI)
+    provider.provider_config = {}
+    provider.model_name = "gemini-test"
+    provider.client = SimpleNamespace(models=FakeModels())
+
+    async def fake_prepare_conversation(payloads):
+        return []
+
+    async def fake_prepare_query_config(*args, **kwargs):
+        return None
+
+    monkeypatch.setattr(provider, "_prepare_conversation", fake_prepare_conversation)
+    monkeypatch.setattr(provider, "_prepare_query_config", fake_prepare_query_config)
+
+    async def run_request(provider_name, request_factory, **kwargs):
+        return await request_factory()
+
+    monkeypatch.setattr(gemini_source, "retry_provider_request", run_request)
+    payloads = {"messages": [], "model": "gemini-test"}
+    first_response = await provider._query(payloads, tools=None)
+    second_response = await provider._query(payloads, tools=None)
+    replay_response = await provider._query(
+        payloads,
+        tools=None,
+        tool_call_scope="replayed-invocation",
+    )
+    replay_response_again = await provider._query(
+        payloads,
+        tools=None,
+        tool_call_scope="replayed-invocation",
+    )
+
+    assert first_response.id is None
+    assert second_response.id is None
+    assert set(first_response.tools_call_ids).isdisjoint(second_response.tools_call_ids)
+    assert replay_response.tools_call_ids == replay_response_again.tools_call_ids
+
+
+@pytest.mark.asyncio
+async def test_gemini_streaming_requests_generate_tool_call_ids_without_response_id(
+    monkeypatch,
+):
+    import astrbot.core.provider.sources.gemini_source as gemini_source
+
+    candidate = _make_function_call_candidate(
+        {"name": "publish", "args": {"status": "draft"}},
+        {"name": "publish", "args": {"status": "draft"}},
+    )
+    chunk = types.GenerateContentResponse(
+        candidates=[candidate],
+        response_id=None,
+    )
+
+    class FakeModels:
+        async def generate_content_stream(self, **kwargs):
+            async def chunks():
+                yield chunk
+
+            return chunks()
+
+    provider = ProviderGoogleGenAI.__new__(ProviderGoogleGenAI)
+    provider.provider_config = {}
+    provider.model_name = "gemini-test"
+    provider.client = SimpleNamespace(models=FakeModels())
+
+    async def fake_prepare_conversation(payloads):
+        return []
+
+    async def fake_prepare_query_config(*args, **kwargs):
+        return None
+
+    monkeypatch.setattr(provider, "_prepare_conversation", fake_prepare_conversation)
+    monkeypatch.setattr(provider, "_prepare_query_config", fake_prepare_query_config)
+
+    async def run_request(provider_name, request_factory, **kwargs):
+        return await request_factory()
+
+    monkeypatch.setattr(gemini_source, "retry_provider_request", run_request)
+    payloads = {"messages": [], "model": "gemini-test"}
+    first_responses = [
+        response async for response in provider._query_stream(payloads, None)
+    ]
+    second_responses = [
+        response async for response in provider._query_stream(payloads, None)
+    ]
+    replay_responses = [
+        response
+        async for response in provider._query_stream(
+            payloads,
+            None,
+            tool_call_scope="replayed-stream-invocation",
+        )
+    ]
+    replay_responses_again = [
+        response
+        async for response in provider._query_stream(
+            payloads,
+            None,
+            tool_call_scope="replayed-stream-invocation",
+        )
+    ]
+
+    assert len(first_responses) == 1
+    assert len(second_responses) == 1
+    assert first_responses[0].id is None
+    assert len(set(first_responses[0].tools_call_ids)) == 2
+    assert set(first_responses[0].tools_call_ids).isdisjoint(
+        second_responses[0].tools_call_ids
+    )
+    assert (
+        replay_responses[0].tools_call_ids == replay_responses_again[0].tools_call_ids
+    )
+
+
+@pytest.mark.asyncio
+async def test_gemini_streaming_retries_reuse_tool_call_scope(monkeypatch):
+    provider = ProviderGoogleGenAI.__new__(ProviderGoogleGenAI)
+    provider.api_keys = ["key-1", "key-2"]
+    scopes = []
+
+    async def fake_query_stream(
+        payloads,
+        tools,
+        *,
+        request_max_retries=None,
+        tool_call_scope=None,
+    ):
+        scopes.append(tool_call_scope)
+        if len(scopes) == 1:
+            raise APIError(503, {"error": {"message": "temporary failure"}})
+        yield LLMResponse("assistant")
+
+    async def fake_handle_api_error(error, keys):
+        return len(scopes) == 1
+
+    monkeypatch.setattr(provider, "_query_stream", fake_query_stream)
+    monkeypatch.setattr(provider, "_handle_api_error", fake_handle_api_error)
+
+    responses = [
+        response
+        async for response in provider.text_chat_stream(
+            model="gemini-test",
+            contexts=[],
+        )
+    ]
+
+    assert len(responses) == 1
+    assert len(scopes) == 2
+    assert scopes[0]
+    assert scopes[0] == scopes[1]
+
+
+@pytest.mark.asyncio
+async def test_gemini_streaming_collects_tool_calls_across_chunks(monkeypatch):
+    import astrbot.core.provider.sources.gemini_source as gemini_source
+
+    chunks = [
+        types.GenerateContentResponse(
+            response_id="stream-response",
+            candidates=[
+                types.Candidate(
+                    content=types.Content(
+                        parts=[
+                            types.Part(text="Preparing"),
+                            types.Part(text="Plan", thought=True),
+                        ]
+                    )
+                )
+            ],
+        ),
+        types.GenerateContentResponse(
+            response_id="stream-response",
+            candidates=[
+                types.Candidate(
+                    content=types.Content(
+                        parts=[
+                            types.Part(
+                                function_call=types.FunctionCall(
+                                    name="lookup", args={"item": 1}
+                                ),
+                                thought_signature=b"first-signature",
+                            )
+                        ]
+                    )
+                )
+            ],
+        ),
+        types.GenerateContentResponse(
+            response_id="stream-response",
+            candidates=[
+                types.Candidate(
+                    content=types.Content(
+                        parts=[
+                            types.Part(
+                                function_call=types.FunctionCall(
+                                    name="lookup", args={"item": 2}
+                                ),
+                                thought_signature=b"second-signature",
+                            )
+                        ]
+                    ),
+                    finish_reason=types.FinishReason.STOP,
+                )
+            ],
+            usage_metadata=types.GenerateContentResponseUsageMetadata(
+                prompt_token_count=10, candidates_token_count=5
+            ),
+        ),
+    ]
+
+    class FakeModels:
+        async def generate_content_stream(self, **kwargs):
+            async def responses():
+                for chunk in chunks:
+                    yield chunk
+
+            return responses()
+
+    provider = ProviderGoogleGenAI.__new__(ProviderGoogleGenAI)
+    provider.provider_config = {}
+    provider.model_name = "gemini-test"
+    provider.client = SimpleNamespace(models=FakeModels())
+
+    async def fake_prepare_conversation(payloads):
+        return []
+
+    async def fake_prepare_query_config(*args, **kwargs):
+        return None
+
+    async def run_request(provider_name, request_factory, **kwargs):
+        return await request_factory()
+
+    monkeypatch.setattr(provider, "_prepare_conversation", fake_prepare_conversation)
+    monkeypatch.setattr(provider, "_prepare_query_config", fake_prepare_query_config)
+    monkeypatch.setattr(gemini_source, "retry_provider_request", run_request)
+
+    responses = [
+        response async for response in provider._query_stream({"messages": []}, None)
+    ]
+
+    final = responses[-1]
+    assert [response.is_chunk for response in responses] == [True, False]
+    assert final.tools_call_name == ["lookup", "lookup"]
+    assert final.tools_call_args == [{"item": 1}, {"item": 2}]
+    assert len(set(final.tools_call_ids)) == 2
+    assert final.completion_text == "Preparing"
+    assert final.reasoning_content == "Plan"
+    assert final.usage.total == 15
+    assert set(final.tools_call_extra_content) == set(final.tools_call_ids)
+    assert (
+        final.tools_call_extra_content[final.tools_call_ids[0]]["google"][
+            "thought_signature"
+        ]
+        == "Zmlyc3Qtc2lnbmF0dXJl"
+    )
+    assert (
+        final.tools_call_extra_content[final.tools_call_ids[1]]["google"][
+            "thought_signature"
+        ]
+        == "c2Vjb25kLXNpZ25hdHVyZQ=="
+    )
