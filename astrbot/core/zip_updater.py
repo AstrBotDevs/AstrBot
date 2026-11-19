@@ -7,11 +7,11 @@ import time
 import zipfile
 from pathlib import Path
 
-import certifi
 import httpx
 
 from astrbot.core import logger
 from astrbot.core.repository import GitHubRepository
+from astrbot.core.utils.http_ssl import get_certifi_ssl_context
 from astrbot.core.utils.io import ensure_dir, on_error
 from astrbot.core.utils.version_comparator import VersionComparator
 
@@ -60,14 +60,18 @@ class _RepoZipUpdater:
         Args:
             verify: TLS certificate verification configuration for HTTPX.
         """
-        self._httpx_verify = certifi.where() if verify is None else verify
+        self._httpx_verify = verify
 
     def _create_httpx_client(self, timeout: float = 30.0) -> httpx.AsyncClient:
         return httpx.AsyncClient(
             follow_redirects=True,
             timeout=timeout,
             trust_env=True,
-            verify=self._httpx_verify,
+            verify=(
+                get_certifi_ssl_context(for_httpx=True)
+                if self._httpx_verify is None
+                else self._httpx_verify
+            ),
         )
 
     @staticmethod

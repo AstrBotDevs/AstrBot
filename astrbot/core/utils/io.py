@@ -4,7 +4,6 @@ import logging
 import os
 import shutil
 import socket
-import ssl
 import time
 import uuid
 from pathlib import Path
@@ -12,11 +11,11 @@ from typing import cast
 from urllib.parse import unquote, urlparse
 
 import aiohttp
-import certifi
 import psutil
 from PIL import Image
 
 from .astrbot_path import get_astrbot_temp_path
+from .http_ssl import build_tls_connector
 
 logger = logging.getLogger("astrbot")
 
@@ -118,13 +117,9 @@ async def download_image_by_url(
 ) -> str:
     """下载图片, 返回 path"""
     try:
-        ssl_context = ssl.create_default_context(
-            cafile=certifi.where(),
-        )  # 使用 certifi 提供的 CA 证书
-        connector = aiohttp.TCPConnector(ssl=ssl_context)  # 使用 certifi 的根证书
         async with aiohttp.ClientSession(
             trust_env=True,
-            connector=connector,
+            connector=build_tls_connector(certifi_only=True),
         ) as session:
             if post:
                 async with session.post(url, json=post_data) as resp:
@@ -148,19 +143,16 @@ async def download_image_by_url(
             "This is insecure and exposes the application to man-in-the-middle attacks. "
             "Please investigate and resolve certificate issues."
         )
-        ssl_context = ssl.create_default_context()
-        ssl_context.check_hostname = False
-        ssl_context.verify_mode = ssl.CERT_NONE
         async with aiohttp.ClientSession() as session:
             if post:
-                async with session.post(url, json=post_data, ssl=ssl_context) as resp:
+                async with session.post(url, json=post_data, ssl=False) as resp:
                     if not path:
                         return save_temp_img(await resp.read())
                     with open(path, "wb") as f:
                         f.write(await resp.read())
                     return path
             else:
-                async with session.get(url, ssl=ssl_context) as resp:
+                async with session.get(url, ssl=False) as resp:
                     if not path:
                         return save_temp_img(await resp.read())
                     with open(path, "wb") as f:
@@ -295,13 +287,9 @@ async def download_file(
     """
 
     try:
-        ssl_context = ssl.create_default_context(
-            cafile=certifi.where(),
-        )  # 使用 certifi 提供的 CA 证书
-        connector = aiohttp.TCPConnector(ssl=ssl_context)
         async with aiohttp.ClientSession(
             trust_env=True,
-            connector=connector,
+            connector=build_tls_connector(certifi_only=True),
         ) as session:
             async with session.get(url, timeout=1800) as resp:
                 _raise_for_download_status(resp, url)
@@ -327,11 +315,8 @@ async def download_file(
             "This is insecure and exposes the application to man-in-the-middle attacks. "
             "Please investigate certificate issues with the remote server."
         )
-        ssl_context = ssl.create_default_context()
-        ssl_context.check_hostname = False
-        ssl_context.verify_mode = ssl.CERT_NONE
         async with aiohttp.ClientSession() as session:
-            async with session.get(url, ssl=ssl_context, timeout=120) as resp:
+            async with session.get(url, ssl=False, timeout=120) as resp:
                 _raise_for_download_status(resp, url)
                 with open(path, "wb") as f:
                     await _download_response_to_file(
