@@ -59,7 +59,7 @@ class Platform(abc.ABC):
         Returns:
             A normalized proxy URL, or None when the adapter proxy is disabled.
         """
-        proxy = self.config.get("proxy")
+        proxy = getattr(self, "config", {}).get("proxy")
         if not isinstance(proxy, dict) or proxy.get("mode") != "custom":
             return None
 

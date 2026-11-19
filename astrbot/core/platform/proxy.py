@@ -18,6 +18,8 @@ def create_platform_client_session(
     Returns:
         A configured aiohttp client session.
     """
+    if proxy_url is None and not kwargs:
+        return aiohttp.ClientSession()
     kwargs.setdefault("trust_env", True)
     if proxy_url:
         kwargs["proxy"] = proxy_url
