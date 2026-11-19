@@ -213,7 +213,16 @@ async def test_discord_filters_self_messages(allow_bot_messages, author_id, is_b
 
 @pytest.mark.parametrize(
     "markup",
-    ["@everyone", "<#123>", "<:smile:123>", "<a:wave:123>", "```py\nx\n```"],
+    [
+        "@everyone",
+        "<#123>",
+        "<:smile:123>",
+        "<a:wave:123>",
+        "```py\nx\n```",
+        "https://example.org/wiki/Page_(topic)",
+        "[project docs](https://example.org/wiki/Page_(topic))",
+        "<https://example.org/docs>",
+    ],
 )
 def test_discord_moves_intact_markup_to_next_chunk(markup):
     """Keep each supported token intact when only two characters would fit.
@@ -221,8 +230,17 @@ def test_discord_moves_intact_markup_to_next_chunk(markup):
     Args:
         markup: Discord markup crossing the message boundary.
     """
-    prefix = "A" * 1998
+    prefix = "A" * 1997 + " "
     assert DiscordPlatformEvent._split_content(prefix + markup) == [prefix, markup]
+
+
+def test_discord_link_length_boundary():
+    """Keep a full-sized URL intact and bound the chunks of an oversized URL."""
+    url = "https://example.org/".ljust(2000, "x")
+    assert DiscordPlatformEvent._split_content("See " + url + ".") == ["See ", url, "."]
+    chunks = DiscordPlatformEvent._split_content(url + "x")
+    assert "".join(chunks) == url + "x"
+    assert all(0 < len(chunk) <= 2000 for chunk in chunks)
 
 
 @pytest.mark.parametrize(
@@ -290,6 +308,35 @@ async def test_discord_webhook_skips_blank_chunks(monkeypatch, text, expected):
 
     calls = event.interaction_followup_webhook.send.await_args_list
     assert [call.kwargs for call in calls] == [{"content": part} for part in expected]
+
+
+@pytest.mark.asyncio
+async def test_discord_reports_partial_delivery(monkeypatch):
+    """Stop after a failed chunk without recording the whole reply as sent.
+
+    Args:
+        monkeypatch: Fixture for observing the base event's success bookkeeping.
+    """
+    event = DiscordPlatformEvent.__new__(DiscordPlatformEvent)
+    event._has_send_oper = False
+    event.interaction_followup_webhook = AsyncMock(spec=discord.Webhook)
+    sender = event.interaction_followup_webhook.send
+    failure = OSError("connection lost")
+    sender.side_effect = [None, failure]
+    record_success = AsyncMock()
+    monkeypatch.setattr(discord_platform_event.AstrMessageEvent, "send", record_success)
+    message = MessageChain().message("A" * 2000 + "B" * 2000 + "last")
+
+    with pytest.raises(RuntimeError, match="1 of 3") as caught:
+        await event.send(message)
+
+    assert caught.value.__cause__ is failure
+    assert [call.kwargs["content"] for call in sender.await_args_list] == [
+        "A" * 2000,
+        "B" * 2000,
+    ]
+    assert event._has_send_oper
+    record_success.assert_not_awaited()
 
 
 @pytest.mark.asyncio

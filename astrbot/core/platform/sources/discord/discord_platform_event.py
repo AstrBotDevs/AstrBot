@@ -41,7 +41,13 @@ from .components import DiscordEmbed, DiscordView, action_rows_to_discord_view
 _DISCORD_MARKUP = re.compile(
     r"\\.|(?<!`)(?P<ticks>`{1,3})(?!`)(?P<code>.*?)(?<!`)(?P=ticks)(?!`)"
     r"|(?P<spoiler>\|\|)|<(?:@[!&]?|#|a?:[A-Za-z0-9_]{1,32}:)[0-9]{1,20}>"
-    r"|@everyone|@here",
+    r"|@everyone|@here"
+    # Masked links, angle-bracket links, and bare URLs in message text.
+    r"|\[(?:\\[^\n]|\[[^\[\]\n]*\]|[^\[\]\\\n])*\]\([ \t]*"
+    r"(?:<(?i:https?://)[^\s<>]+>|(?i:https?://)(?:\\.|[^\s()\\<>]|\([^\s)]*\))+)"
+    r"""(?:[ \t]+(?:"[^"\n]*"|'[^'\n]*'))?[ \t]*\)"""
+    r"|<(?i:https?://)[^\s<>]+>"
+    r"""|(?P<url>(?i:https?://)[^\s<>`|]+(?<![.,:;!?'"]))""",
     re.DOTALL,
 )
 
@@ -105,7 +111,15 @@ class DiscordPlatformEvent(AstrMessageEvent):
                 for piece in cls._split_code(token["code"], token["ticks"], limit):
                     parts.append((piece, True))
             else:
-                parts.append((token[0], True))
+                text = token[0]
+                if token["url"] and text.endswith(")"):
+                    # Exclude enclosing prose parentheses, but keep those in the URL.
+                    excess = text.count(")") - text.count("(")
+                    if excess > 0:
+                        end = max(len(text.rstrip(")")), len(text) - excess)
+                        start -= len(text) - end
+                        text = text[:end]
+                parts.append((text, len(text) <= limit))
         parts.append((content[start:], False))
 
         chunks = [""]
@@ -195,30 +209,30 @@ class DiscordPlatformEvent(AstrMessageEvent):
             logger.debug("[Discord] 尝试发送空消息，已忽略。")
             return
 
-        # 根据上下文执行发送/回复操作
-        try:
-            # -- 斜杠指令/交互上下文 --
-            if self.interaction_followup_webhook:
-                sender = self.interaction_followup_webhook.send
+        if self.interaction_followup_webhook:
+            sender = self.interaction_followup_webhook.send
+        else:
+            channel = await self._get_channel()
+            if not channel:
+                return
+            if not isinstance(channel, discord.abc.Messageable):
+                logger.error(f"[Discord] 频道 {channel.id} 不是可发送消息的类型")
+                return
+            sender = channel.send
 
-            # -- 常规消息上下文 --
-            else:
-                channel = await self._get_channel()
-                if not channel:
-                    return
-                if not isinstance(channel, discord.abc.Messageable):
-                    logger.error(f"[Discord] 频道 {channel.id} 不是可发送消息的类型")
-                    return
-                sender = channel.send
-
-            for index, chunk in enumerate(chunks or [""]):
-                kwargs = dict(extra_kwargs) if index == 0 else {}
-                if chunk:
-                    kwargs["content"] = chunk
+        outgoing = chunks or [""]
+        for index, chunk in enumerate(outgoing):
+            kwargs = dict(extra_kwargs) if index == 0 else {}
+            if chunk:
+                kwargs["content"] = chunk
+            try:
                 await sender(**kwargs)
-
-        except Exception as e:
-            logger.error(f"[Discord] 发送消息时发生未知错误: {e}", exc_info=True)
+            except Exception as exc:
+                raise RuntimeError(
+                    f"Discord send failed after {index} of {len(outgoing)} chunks were confirmed"
+                ) from exc
+            # A partial reply counts as an action even if a later send fails.
+            self._has_send_oper = True
 
         await super().send(message)
 
