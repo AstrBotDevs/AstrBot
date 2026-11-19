@@ -39,6 +39,41 @@ With this feature, you can store the `unified_msg_origin` and send messages when
 > About unified_msg_origin.
 > `unified_msg_origin` is a string that records the unique ID of a session. AstrBot uses it to identify which messaging platform and which session it belongs to. This allows messages to be sent to the correct session when using `send_message`. For more about MessageChain, see the next section.
 
+### When You Need the Platform's Send Result
+
+`send_message()` returns `True` when it finds a matching platform. To get the platform's message ID or tracking key, use `send_message_with_receipt()`:
+
+```python
+receipt = await self.context.send_message_with_receipt(
+    event.unified_msg_origin,
+    MessageChain().message("Hello!"),
+)
+
+if receipt is False:
+    print("No matching platform; nothing was sent")
+elif receipt is None:
+    print("Unknown result; do not resend immediately")
+else:
+    print(receipt.message_ids)
+    print(receipt.tracking_keys)
+```
+
+There are only three possible results:
+
+| Result | What to do |
+| --- | --- |
+| `MessageSendReceipt` | The platform accepted the complete message. Read `message_ids` or `tracking_keys`. |
+| `None` | The result is unknown. The message may already be sent. **Do not resend immediately**, or you may send a duplicate. |
+| `False` | No matching platform was found. Nothing was sent by this call. |
+
+Currently, receipts are available for:
+
+- DingTalk: complete plain-text messages, including buffered streaming messages.
+- WeCom applications: complete plain-text messages to one member, including buffered streaming messages.
+- Other platforms and message types usually return `None`.
+
+A receipt means the platform accepted the request. It does not mean the recipient received or read the message. Some platforms provide only `tracking_keys` and no `message_ids`; this is normal.
+
 ## Rich Media Messages
 
 AstrBot supports sending rich media messages such as images, audio, videos, etc. Use `MessageChain` to construct messages.
