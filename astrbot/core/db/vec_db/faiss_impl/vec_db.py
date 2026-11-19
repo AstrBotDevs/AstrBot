@@ -46,7 +46,9 @@ class FaissVecDB(BaseVecDB):
         metadata = metadata or {}
         str_id = id or str(uuid.uuid4())  # 使用 UUID 作为原始 ID
 
-        vector = await self.embedding_provider.get_embedding(content)
+        # Documents are indexed for later retrieval, so use the task-aware
+        # document embedding when the provider supports it.
+        vector = (await self.embedding_provider.get_document_embeddings([content]))[0]
         vector = np.array(vector, dtype=np.float32)
 
         # 使用 DocumentStorage 的方法插入文档
@@ -233,7 +235,7 @@ class FaissVecDB(BaseVecDB):
             List[Result]: 查询结果
 
         """
-        embedding = await self.embedding_provider.get_embedding(query)
+        embedding = await self.embedding_provider.get_query_embedding(query)
         scores, indices = await self.embedding_storage.search(
             vector=np.array(embedding).astype("float32"),
             k=fetch_k if metadata_filters else k,
