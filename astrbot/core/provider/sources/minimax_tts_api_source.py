@@ -1,6 +1,8 @@
+import asyncio
 import json
 import os
 from collections.abc import AsyncIterator
+from pathlib import Path
 
 import aiohttp
 
@@ -32,6 +34,23 @@ class ProviderMiniMaxTTSAPI(TTSProvider):
         )
         self.group_id: str = provider_config.get("minimax-group-id", "")
         self.set_model(provider_config.get("model", ""))
+        self.voice_design_prompt: str = str(
+            provider_config.get("minimax-voice-design-prompt") or "",
+        ).strip()
+        self.voice_design_preview_text: str = str(
+            provider_config.get("minimax-voice-design-preview-text") or "",
+        ).strip()
+        self.voice_design_voice_id: str = str(
+            provider_config.get("minimax-voice-design-voice-id") or "",
+        ).strip()
+        self.voice_design_prompt_audio: str = str(
+            provider_config.get("minimax-voice-design-prompt-audio") or "",
+        ).strip()
+        self.voice_design_api_base: str = str(
+            provider_config.get("minimax-voice-design-api-base") or "",
+        ).strip()
+        self._voice_design_ready = False
+        self._voice_design_lock = asyncio.Lock()
         self.lang_boost: str = provider_config.get("minimax-langboost", "auto")
         self.is_timber_weight: bool = provider_config.get(
             "minimax-is-timber-weight",
@@ -83,6 +102,162 @@ class ProviderMiniMaxTTSAPI(TTSProvider):
             "accept": "application/json, text/plain, */*",
             "content-type": "application/json",
         }
+
+    def _voice_design_url(self, path: str) -> str:
+        """Build a MiniMax voice-design endpoint URL."""
+        if self.voice_design_api_base:
+            api_base = self.voice_design_api_base
+        else:
+            api_base = self.api_base.rstrip("/")
+            if not api_base.endswith("/v1"):
+                api_base = api_base.rsplit("/", 1)[0]
+        return f"{api_base.rstrip('/')}/{path.lstrip('/')}"
+
+    async def _ensure_voice_design(self) -> None:
+        """Design the configured voice before the first synthesis request."""
+        if not self.voice_design_prompt:
+            return
+        if self._voice_design_ready:
+            return
+
+        async with self._voice_design_lock:
+            if self._voice_design_ready:
+                return
+            if self.is_timber_weight:
+                raise ValueError(
+                    "MiniMax voice design cannot be combined with mixed voices.",
+                )
+            if not self.voice_design_preview_text:
+                raise ValueError(
+                    "MiniMax voice design requires 'minimax-voice-design-preview-text'.",
+                )
+            if not self.voice_design_voice_id:
+                raise ValueError(
+                    "MiniMax voice design requires 'minimax-voice-design-voice-id'.",
+                )
+
+            if self.voice_design_prompt_audio:
+                audio_path = Path(self.voice_design_prompt_audio).expanduser()
+                if not audio_path.is_file():
+                    raise FileNotFoundError(
+                        f"MiniMax voice-design prompt audio file does not exist: {audio_path}",
+                    )
+
+                content_type = {
+                    ".m4a": "audio/mp4",
+                    ".mp3": "audio/mpeg",
+                    ".wav": "audio/wav",
+                }.get(audio_path.suffix.lower())
+                if content_type is None:
+                    raise ValueError(
+                        "MiniMax voice design supports only .mp3, .m4a, and .wav prompt audio files.",
+                    )
+
+                try:
+                    async with aiohttp.ClientSession() as session:
+                        form = aiohttp.FormData()
+                        with audio_path.open("rb") as audio_file:
+                            form.add_field(
+                                "file",
+                                audio_file,
+                                filename=audio_path.name,
+                                content_type=content_type,
+                            )
+                            form.add_field("purpose", "prompt_audio")
+                            async with session.post(
+                                self._voice_design_url("files/upload"),
+                                headers={
+                                    "Authorization": self.headers["Authorization"]
+                                },
+                                data=form,
+                                timeout=aiohttp.ClientTimeout(total=60),
+                            ) as response:
+                                if response.status >= 400:
+                                    error_text = (await response.text())[:1024]
+                                    raise RuntimeError(
+                                        "MiniMax voice-design prompt audio upload failed: "
+                                        f"HTTP {response.status}: {error_text}",
+                                    )
+                                upload_data = await response.json(content_type=None)
+
+                        upload_base_resp = upload_data.get("base_resp", {})
+                        upload_status_code = upload_base_resp.get("status_code")
+                        if upload_status_code not in (None, 0, "0"):
+                            status_msg = upload_base_resp.get(
+                                "status_msg",
+                                "unknown error",
+                            )
+                            raise RuntimeError(
+                                f"MiniMax voice-design prompt audio upload failed: {status_msg}",
+                            )
+
+                        file_data = upload_data.get("file") or {}
+                        nested_data = upload_data.get("data") or {}
+                        file_id = (
+                            upload_data.get("file_id")
+                            or file_data.get("file_id")
+                            or nested_data.get("file_id")
+                        )
+                        if not file_id:
+                            raise RuntimeError(
+                                "MiniMax voice-design prompt audio upload returned no file_id.",
+                            )
+                except aiohttp.ClientError as exc:
+                    raise RuntimeError(
+                        f"MiniMax voice-design prompt audio upload request failed: {exc!s}",
+                    ) from exc
+
+            design_body: dict[str, object] = {
+                "prompt": self.voice_design_prompt,
+                "preview_text": self.voice_design_preview_text,
+                "voice_id": self.voice_design_voice_id,
+            }
+
+            try:
+                async with aiohttp.ClientSession() as session:
+                    async with session.post(
+                        self._voice_design_url("voice_design"),
+                        headers=self.headers,
+                        json=design_body,
+                        timeout=aiohttp.ClientTimeout(total=60),
+                    ) as response:
+                        if response.status >= 400:
+                            error_text = (await response.text())[:1024]
+                            raise RuntimeError(
+                                "MiniMax voice design failed: "
+                                f"HTTP {response.status}: {error_text}",
+                            )
+                        design_data = await response.json(content_type=None)
+            except aiohttp.ClientError as exc:
+                raise RuntimeError(
+                    f"MiniMax voice design request failed: {exc!s}",
+                ) from exc
+
+            base_resp = design_data.get("base_resp", {})
+            status_code = base_resp.get("status_code")
+            if status_code not in (None, 0, "0"):
+                status_msg = base_resp.get("status_msg", "unknown error")
+                raise RuntimeError(
+                    f"MiniMax voice design failed: {status_msg}",
+                )
+
+            design_result = design_data.get("data") or {}
+            voice_id = design_data.get("voice_id") or design_result.get("voice_id")
+            if not voice_id:
+                raise RuntimeError(
+                    "MiniMax voice design returned no voice_id.",
+                )
+            self.voice_setting["voice_id"] = voice_id
+            self._voice_design_ready = True
+
+    async def design_voice(self) -> str:
+        """Design the configured MiniMax voice and return its voice ID."""
+        await self._ensure_voice_design()
+        if not self.voice_design_prompt:
+            raise ValueError(
+                "MiniMax voice design requires 'minimax-voice-design-prompt'.",
+            )
+        return self.voice_setting["voice_id"]
 
     def _build_tts_stream_body(self, text: str):
         """构建流式请求体"""
@@ -154,6 +329,7 @@ class ProviderMiniMaxTTSAPI(TTSProvider):
         return b"".join(chunks)
 
     async def get_audio(self, text: str) -> str:
+        await self._ensure_voice_design()
         temp_dir = get_astrbot_temp_path()
         os.makedirs(temp_dir, exist_ok=True)
         path = os.path.join(temp_dir, f"minimax_tts_api_{generate_timestamp_id()}.wav")
