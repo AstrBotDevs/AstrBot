@@ -141,6 +141,10 @@
         }
     },
     "market": {
+    "platform": "Поддерживаемые платформы",
+    "allPlatforms": "Все платформы",
+    "undeclaredPlatform": "Платформы не указаны",
+    "noMatchingPlugins": "Подходящие плагины не найдены. Измените запрос или фильтры.",
         "recommended": "🥳 Рекомендуем",
         "allPlugins": "📦 Все плагины",
         "category": "Категория",

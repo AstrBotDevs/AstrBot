@@ -141,6 +141,10 @@
     }
   },
   "market": {
+    "platform": "支持平台",
+    "allPlatforms": "全部平台",
+    "undeclaredPlatform": "未声明平台",
+    "noMatchingPlugins": "没有符合条件的插件，请调整搜索或筛选条件。",
     "recommended": "🥳 推荐",
     "allPlugins": "📦 全部插件",
     "category": "分类",

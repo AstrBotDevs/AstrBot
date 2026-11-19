@@ -80,6 +80,8 @@ const {
   randomPluginNames,
   marketCategoryFilter,
   marketCategoryItems,
+  marketPlatformFilter,
+  marketPlatformItems,
   getMarketPluginKey,
   normalizeStr,
   toPinyinText,
@@ -326,6 +328,30 @@ const openMarketPluginDetail = (plugin) => {
             :menu-props="{ openOnHover: true, closeOnContentClick: false }"
           ></v-select>
 
+          <v-select
+            v-model="marketPlatformFilter"
+            :items="marketPlatformItems"
+            :label="tm('market.platform')"
+            :aria-label="tm('market.platform')"
+            :placeholder="tm('market.allPlatforms')"
+            persistent-placeholder
+            multiple
+            clearable
+            density="compact"
+            variant="outlined"
+            hide-details
+            class="market-filter-control"
+          >
+            <template #selection="{ item, index }">
+              <span v-if="index === 0" class="text-truncate">
+                {{ item.value === "__undeclared__" ? item.title : item.value }}
+                <span v-if="marketPlatformFilter.length > 1">
+                  (+{{ marketPlatformFilter.length - 1 }})
+                </span>
+              </span>
+            </template>
+          </v-select>
+
           <PluginSortControl
             class="market-sort-control"
             v-model="sortBy"
@@ -341,6 +367,11 @@ const openMarketPluginDetail = (plugin) => {
       </div>
 
       <v-row style="min-height: 26rem" dense>
+        <v-col v-if="!loading_ && sortedPlugins.length === 0" cols="12">
+          <div class="text-center text-medium-emphasis py-8" role="status">
+            {{ tm("market.noMatchingPlugins") }}
+          </div>
+        </v-col>
         <v-col
           v-for="plugin in paginatedPlugins"
           :key="getMarketPluginKey(plugin)"

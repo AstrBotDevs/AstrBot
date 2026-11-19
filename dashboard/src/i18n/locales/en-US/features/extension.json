@@ -141,6 +141,10 @@
     }
   },
   "market": {
+    "platform": "Supported platforms",
+    "allPlatforms": "All platforms",
+    "undeclaredPlatform": "Undeclared platforms",
+    "noMatchingPlugins": "No matching plugins. Adjust your search or filters.",
     "recommended": "🥳 Recommended",
     "allPlugins": "📦 All Extensions",
     "category": "Category",

@@ -141,6 +141,10 @@
     }
   },
   "market": {
+    "platform": "対応プラットフォーム",
+    "allPlatforms": "すべてのプラットフォーム",
+    "undeclaredPlatform": "対応プラットフォーム未指定",
+    "noMatchingPlugins": "一致するプラグインがありません。検索条件やフィルターを変更してください。",
     "recommended": "🥳 おすすめ",
     "allPlugins": "📦 すべてのプラグイン",
     "category": "カテゴリ",
