@@ -340,33 +340,71 @@ const openMarketPluginDetail = (plugin) => {
         </div>
       </div>
 
-      <v-row style="min-height: 26rem" dense>
-        <v-col
-          v-for="plugin in paginatedPlugins"
-          :key="getMarketPluginKey(plugin)"
-          cols="12"
-          md="6"
-          lg="4"
-          class="pb-2"
-        >
-          <MarketPluginCard
-            :plugin="plugin"
-            :default-plugin-icon="defaultPluginIcon"
-            :show-plugin-full-name="showPluginFullName"
-            @install="handleInstallPlugin"
-            @open="openMarketPluginDetail"
-          />
-        </v-col>
-      </v-row>
-
-      <div class="d-flex justify-center mt-4" v-if="totalPages > 1">
-        <v-pagination
-          v-model="currentPage"
-          :length="totalPages"
-          :total-visible="7"
-          size="small"
-        ></v-pagination>
+      <div
+        v-if="pluginMarketData.length === 0 && (loading_ || refreshingMarket)"
+        class="d-flex align-center justify-center"
+        style="min-height: 26rem"
+      >
+        <v-progress-circular indeterminate color="primary" size="48" />
       </div>
+
+      <div
+        v-else-if="pluginMarketData.length === 0"
+        class="d-flex flex-column align-center justify-center text-center"
+        style="min-height: 26rem"
+      >
+        <v-icon size="64" color="info" class="mb-4">mdi-puzzle-outline</v-icon>
+        <div class="text-h5 mb-2">{{ tm("empty.noPlugins") }}</div>
+        <div class="text-body-1 mb-4">{{ tm("empty.noPluginsDesc") }}</div>
+        <v-btn
+          color="primary"
+          variant="tonal"
+          prepend-icon="mdi-refresh"
+          @click="refreshPluginMarket"
+        >
+          {{ tm("buttons.refresh") }}
+        </v-btn>
+      </div>
+
+      <div
+        v-else-if="paginatedPlugins.length === 0"
+        class="d-flex flex-column align-center justify-center text-center"
+        style="min-height: 26rem"
+      >
+        <v-icon size="64" color="info" class="mb-4">mdi-magnify</v-icon>
+        <div class="text-h5 mb-2">{{ tm("empty.noPlugins") }}</div>
+        <div class="text-body-1">{{ tm("empty.noPluginsDesc") }}</div>
+      </div>
+
+      <template v-else>
+        <v-row style="min-height: 26rem" dense>
+          <v-col
+            v-for="plugin in paginatedPlugins"
+            :key="getMarketPluginKey(plugin)"
+            cols="12"
+            md="6"
+            lg="4"
+            class="pb-2"
+          >
+            <MarketPluginCard
+              :plugin="plugin"
+              :default-plugin-icon="defaultPluginIcon"
+              :show-plugin-full-name="showPluginFullName"
+              @install="handleInstallPlugin"
+              @open="openMarketPluginDetail"
+            />
+          </v-col>
+        </v-row>
+
+        <div class="d-flex justify-center mt-4" v-if="totalPages > 1">
+          <v-pagination
+            v-model="currentPage"
+            :length="totalPages"
+            :total-visible="7"
+            size="small"
+          ></v-pagination>
+        </div>
+      </template>
 
       <v-expand-transition>
         <div v-if="randomPlugins.length > 0">
