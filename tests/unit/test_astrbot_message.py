@@ -10,6 +10,25 @@ from astrbot.core.platform.message_type import MessageType
 class TestMessageMember:
     """Tests for MessageMember dataclass."""
 
+    def test_message_member_creation_basic(self):
+        """Test creating a MessageMember with required fields."""
+        member = MessageMember(user_id="user123")
+
+        assert member.user_id == "user123"
+        assert member.nickname is None
+
+    def test_message_member_creation_with_nickname(self):
+        """Test creating a MessageMember with nickname."""
+        member = MessageMember(user_id="user123", nickname="TestUser")
+
+        assert member.user_id == "user123"
+        assert member.nickname == "TestUser"
+
+    def test_message_member_aliases_default_and_positional(self):
+        """Test aliases default to None and remain positionally compatible."""
+        assert MessageMember(user_id="user123").aliases is None
+        assert MessageMember("user123", "TestUser", ["emp-123"]).aliases == ["emp-123"]
+
     def test_message_member_str_with_nickname(self):
         """Test __str__ method with nickname."""
         member = MessageMember(user_id="user123", nickname="TestUser")
