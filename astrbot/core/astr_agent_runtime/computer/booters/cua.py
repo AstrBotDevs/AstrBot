@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import base64
 import inspect
+import re
 import shlex
 from dataclasses import asdict, dataclass, is_dataclass
 from pathlib import Path
@@ -313,12 +314,31 @@ class CuaShellComponent(ShellComponent):
             }
 
         kwargs: dict[str, Any] = {}
-        if cwd is not None:
-            kwargs["cwd"] = cwd
         if timeout is not None:
             kwargs["timeout"] = timeout
-        if env:
-            kwargs["env"] = env
+        # Current SDK shell methods do not accept cwd or env keyword arguments.
+        if cwd is not None or env:
+            if not _is_posix_os_type(self._os_type):
+                return {
+                    "stdout": "",
+                    "stderr": "error: cwd and env overrides are only supported for POSIX CUA images.",
+                    "exit_code": 2,
+                    "success": False,
+                }
+            if env:
+                if any(not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", key) for key in env):
+                    return {
+                        "stdout": "",
+                        "stderr": "error: invalid environment variable name.",
+                        "exit_code": 2,
+                        "success": False,
+                    }
+                assignments = " ".join(
+                    shlex.quote(f"{key}={value}") for key, value in env.items()
+                )
+                command = f"env {assignments} sh -c {shlex.quote(command)}"
+            if cwd is not None:
+                command = f"cd -- {shlex.quote(cwd)} && sh -c {shlex.quote(command)}"
         if background:
             if not _is_posix_os_type(self._os_type):
                 return {
@@ -745,12 +765,18 @@ class CuaBooter(ComputerBooter):
 
     async def boot(self, session_id: str) -> None:
         _ = session_id
+        if not self.local:
+            raise RuntimeError(
+                "Cua Cloud ended on October 18, 2026. Enable the CUA local runtime; "
+                "AstrBot does not configure CUA's own-cloud or direct connections."
+            )
         try:
-            from cua import Image, Sandbox
+            from cua_sandbox import Image, Sandbox
         except ImportError as exc:
             raise RuntimeError(
-                "CUA sandbox support requires the optional `cua` package. "
-                "Install it with `pip install cua` in the AstrBot environment."
+                "CUA sandbox support requires the optional `cua[sandbox]` package. "
+                'Install it with `pip install "cua[sandbox]"` in the AstrBot environment. '
+                "The current cua-sandbox release requires Python 3.11-3.13."
             ) from exc
 
         image_obj = self._build_image(Image)

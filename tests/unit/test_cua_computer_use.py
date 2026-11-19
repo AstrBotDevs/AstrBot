@@ -1,6 +1,7 @@
 import asyncio
 import base64
 import json
+import os
 import shlex
 from pathlib import Path
 
@@ -173,6 +174,104 @@ class SyncPython:
 
 def _agent_computer_use_items():
     return CONFIG_METADATA_3["ai_group"]["metadata"]["agent_computer_use"]["items"]
+
+
+@pytest.mark.asyncio
+@pytest.mark.skipif(os.name != "posix", reason="Executes the POSIX CUA shell wrapper")
+@pytest.mark.parametrize("background", [False, True])
+@pytest.mark.parametrize("directory_exists", [False, True])
+async def test_cua_shell_supports_current_sdk_signature(
+    tmp_path, background, directory_exists
+):
+    class CurrentSDKShell:
+        async def run(self, command: str, timeout: int = 30, background: bool = False):
+            process = await asyncio.create_subprocess_shell(
+                command,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+            )
+            stdout, stderr = await asyncio.wait_for(process.communicate(), timeout)
+            return {
+                "stdout": stdout.decode(),
+                "stderr": stderr.decode(),
+                "returncode": process.returncode,
+            }
+
+    sandbox = FakeSandbox()
+    sandbox.shell = CurrentSDKShell()
+    work_dir = tmp_path / "it's a workspace"
+    if directory_exists:
+        work_dir.mkdir()
+    output_path = tmp_path / "result.txt"
+    value = "spaces; $(touch should-not-exist) ' quoted"
+    command = f'printf "%s" "$CUA_TEST_VALUE" > {shlex.quote(str(output_path))}; pwd'
+
+    result = await CuaShellComponent(sandbox).exec(
+        command, cwd=str(work_dir), env={"CUA_TEST_VALUE": value}, background=background
+    )
+
+    assert result["success"] is directory_exists
+    if not directory_exists:
+        assert not output_path.exists()
+        return
+    if background:
+        assert result["pid"] > 0
+    else:
+        assert result["stdout"].strip() == str(work_dir.resolve())
+    assert output_path.read_text() == value
+    assert not (work_dir / "should-not-exist").exists()
+
+
+@pytest.mark.asyncio
+async def test_cua_shell_rejects_invalid_environment_names():
+    sandbox = FakeSandbox()
+
+    result = await CuaShellComponent(sandbox).exec(
+        "echo ok", env={"BAD; touch injected": "value"}
+    )
+
+    assert result["success"] is False
+    assert "environment variable name" in result["stderr"]
+    assert sandbox.shell.commands == []
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("kwargs", [{"cwd": "C:\\workspace"}, {"env": {"FOO": "bar"}}])
+async def test_cua_shell_rejects_non_posix_environment_overrides(kwargs):
+    sandbox = FakeSandbox()
+
+    result = await CuaShellComponent(sandbox, os_type="windows").exec(
+        "echo ok", **kwargs
+    )
+
+    assert result["success"] is False
+    assert "POSIX" in result["stderr"]
+    assert sandbox.shell.commands == []
+
+
+@pytest.mark.asyncio
+async def test_cua_boot_rejects_retired_cloud_before_import():
+    from astrbot.core.astr_agent_runtime.computer.booters.cua import CuaBooter
+
+    with pytest.raises(RuntimeError, match="Cua Cloud.*ended"):
+        await CuaBooter(local=False, api_key="unused").boot("session")
+
+
+@pytest.mark.asyncio
+async def test_cua_missing_dependency_error_names_sandbox_extra(monkeypatch):
+    from astrbot.core.astr_agent_runtime.computer.booters.cua import CuaBooter
+
+    original_import = __import__
+
+    def missing_cua(name, *args, **kwargs):
+        if name in {"cua", "cua_sandbox"}:
+            raise ImportError("CUA sandbox dependency is missing")
+        return original_import(name, *args, **kwargs)
+
+    monkeypatch.setattr("builtins.__import__", missing_cua)
+
+    with pytest.raises(RuntimeError, match=r"cua\[sandbox\]"):
+        await CuaBooter().boot("session")
 
 
 @pytest.mark.asyncio
@@ -1188,7 +1287,7 @@ async def test_cua_boot_cleans_up_sandbox_when_component_setup_fails(monkeypatch
     original_import = __import__
 
     def fake_import(name, globals=None, locals=None, fromlist=(), level=0):
-        if name == "cua":
+        if name == "cua_sandbox":
 
             class FakeCuaModule:
                 Image = FakeImage
