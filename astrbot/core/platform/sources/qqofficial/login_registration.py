@@ -9,6 +9,8 @@ from urllib.parse import quote
 import httpx
 from Crypto.Cipher import AES
 
+from astrbot.core.utils.http_ssl import get_httpx_default_verify
+
 DEFAULT_QQOFFICIAL_BIND_HOST = "q.qq.com"
 DEFAULT_QQOFFICIAL_QR_POLL_INTERVAL = 2
 DEFAULT_QQOFFICIAL_API_TIMEOUT_MS = 10_000
@@ -63,7 +65,9 @@ async def _post_json(
     payload: dict[str, Any],
     timeout_ms: int,
 ) -> dict[str, Any]:
-    async with httpx.AsyncClient(timeout=timeout_ms / 1000) as client:
+    async with httpx.AsyncClient(
+        timeout=timeout_ms / 1000, verify=get_httpx_default_verify()
+    ) as client:
         response = await client.post(
             url,
             json=payload,

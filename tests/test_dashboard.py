@@ -7,12 +7,14 @@ import shutil
 import sys
 import uuid
 import zipfile
+from contextlib import asynccontextmanager
 from datetime import datetime
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, call
 from urllib.parse import parse_qs, urlsplit
 
+import aiohttp
 import jwt
 import pyotp
 import pytest
@@ -47,7 +49,7 @@ from astrbot.dashboard.server import AstrBotDashboard
 from astrbot.dashboard.services import auth_service
 from astrbot.dashboard.services.auth_service import DASHBOARD_JWT_COOKIE_NAME
 from astrbot.dashboard.services.plugin_page_service import PluginPageService
-from astrbot.dashboard.services.plugin_service import PluginService
+from astrbot.dashboard.services.plugin_service import PluginService, RegistrySource
 from astrbot.dashboard.services.skills_service import SkillsService
 from tests.fixtures.helpers import (
     MockPluginBuilder,
@@ -58,6 +60,40 @@ from tests.fixtures.helpers import (
 _TEST_DASHBOARD_PASSWORD = "AstrbotTest123"
 PLUGIN_PAGE_DEMO_NAME = "astrbot_plugin_page_demo"
 PLUGIN_PAGE_DEMO_PAGE_NAME = "bridge-demo"
+
+
+@pytest.mark.asyncio
+async def test_plugin_marketplace_tries_backup_after_failed_request(
+    monkeypatch, tmp_path
+):
+    primary_url = "https://primary.example/plugins.json"
+    backup_url = "https://backup.example/plugins.json"
+    source = RegistrySource(
+        urls=[primary_url, backup_url],
+        cache_file=str(tmp_path / "plugins.json"),
+        md5_url=None,
+    )
+    plugins = {"example": {"name": "Example"}}
+    requested_urls = []
+
+    @asynccontextmanager
+    async def get(session, url):
+        if session.closed:
+            raise RuntimeError("Session is closed")
+        requested_urls.append(url)
+        if url == primary_url:
+            yield SimpleNamespace(status=503)
+        else:
+            yield SimpleNamespace(status=200, json=AsyncMock(return_value=plugins))
+
+    service = PluginService(None, MagicMock())
+    monkeypatch.setattr(service, "build_registry_source", lambda _: source)
+    monkeypatch.setattr(aiohttp.ClientSession, "get", get)
+
+    assert await service.get_online_plugins(
+        custom_registry=None, force_refresh=True
+    ) == (plugins, None)
+    assert requested_urls == [primary_url, backup_url]
 
 
 def test_skills_service_marks_inactive_plugin_skills(monkeypatch):

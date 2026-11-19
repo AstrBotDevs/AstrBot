@@ -9,7 +9,6 @@ from pathlib import Path
 from types import SimpleNamespace
 from urllib.parse import urlparse
 
-import certifi
 import httpx
 import pytest
 
@@ -17,6 +16,7 @@ from astrbot.core import dashboard_assets, process_restart
 from astrbot.core import updater as core_updater
 from astrbot.core.star.updater import _PluginUpdater
 from astrbot.core.updater import AstrBotUpdater, UpdateProgress
+from astrbot.core.utils.http_ssl import get_certifi_ssl_context
 from astrbot.core.zip_updater import ReleaseInfo, _RepoZipUpdater
 
 
@@ -1285,7 +1285,9 @@ async def test_fetch_release_info_uses_httpx_client_with_env_proxy_support(
     assert fake_async_client_state.init_kwargs["follow_redirects"] is True
     assert fake_async_client_state.init_kwargs["timeout"] == 30.0
     assert fake_async_client_state.init_kwargs["trust_env"] is True
-    assert fake_async_client_state.init_kwargs["verify"] == certifi.where()
+    assert fake_async_client_state.init_kwargs["verify"] is get_certifi_ssl_context(
+        for_httpx=True
+    )
 
 
 @pytest.mark.asyncio
@@ -1329,7 +1331,9 @@ async def test_download_from_repo_url_uses_head_without_metadata_lookup(
     assert fake_async_client_state.init_kwargs["follow_redirects"] is True
     assert fake_async_client_state.init_kwargs["timeout"] == 1800.0
     assert fake_async_client_state.init_kwargs["trust_env"] is True
-    assert fake_async_client_state.init_kwargs["verify"] == certifi.where()
+    assert fake_async_client_state.init_kwargs["verify"] is get_certifi_ssl_context(
+        for_httpx=True
+    )
 
 
 @pytest.mark.asyncio
