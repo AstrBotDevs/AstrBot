@@ -17,6 +17,7 @@ from astrbot.core import dashboard_assets, process_restart
 from astrbot.core import updater as core_updater
 from astrbot.core.star.updater import _PluginUpdater
 from astrbot.core.updater import AstrBotUpdater, UpdateProgress
+from astrbot.core.utils.io import DOWNLOAD_USER_AGENT
 from astrbot.core.zip_updater import ReleaseInfo, _RepoZipUpdater
 
 
@@ -151,6 +152,7 @@ class _FakeAsyncClientState:
     init_kwargs: dict | None = None
     requested_urls: list[str] = field(default_factory=list)
     stream_urls: list[str] = field(default_factory=list)
+    stream_headers: list[dict[str, str]] = field(default_factory=list)
 
 
 class _FakeStatusErrorAsyncClient:
@@ -177,7 +179,7 @@ class _FakeFailingStreamAsyncClient:
     async def __aexit__(self, exc_type, exc, tb) -> None:
         return None
 
-    def stream(self, method: str, url: str):  # noqa: ARG002
+    def stream(self, method: str, url: str, *, headers):  # noqa: ARG002
         return _FakeFailingStreamResponse(self._error)
 
 
@@ -320,7 +322,8 @@ def _build_fake_httpx_module(state: _FakeAsyncClientState) -> SimpleNamespace:
             state.requested_urls.append(url)
             return _FakeJSONResponse(state.json_payload)
 
-        def stream(self, method: str, url: str):
+        def stream(self, method: str, url: str, *, headers):
+            state.stream_headers.append(headers)
             assert method == "GET"
             state.stream_urls.append(url)
             return _FakeStreamResponse(state.stream_payload)
@@ -1325,6 +1328,9 @@ async def test_download_from_repo_url_uses_head_without_metadata_lookup(
     assert fake_async_client_state.stream_urls == [
         "https://github.com/AstrBotDevs/AstrBot/archive/HEAD.zip"
     ]
+    assert fake_async_client_state.stream_headers == [
+        {"User-Agent": DOWNLOAD_USER_AGENT}
+    ]
     assert fake_async_client_state.init_kwargs is not None
     assert fake_async_client_state.init_kwargs["follow_redirects"] is True
     assert fake_async_client_state.init_kwargs["timeout"] == 1800.0
@@ -1859,3 +1865,36 @@ def test_repo_unzip_file_handles_archives_without_explicit_root_dir_entry(
     assert captured["move"] == (expected_file, target_dir)
     assert captured["cleanup"] == expected_root
     assert captured["removed"] == "temp.zip"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("user_agent", "expected"),
+    [
+        (None, DOWNLOAD_USER_AGENT),
+        ("Updater/1", "Updater/1"),
+    ],
+)
+async def test_zip_download_user_agent_on_wire(
+    monkeypatch, tmp_path, user_agent, expected
+):
+    captured = []
+
+    def handle(request):
+        captured.append(request)
+        return httpx.Response(200, content=b"zip")
+
+    updater = _RepoZipUpdater()
+    monkeypatch.setattr(
+        updater,
+        "_create_httpx_client",
+        lambda **_options: httpx.AsyncClient(transport=httpx.MockTransport(handle)),
+    )
+    path = tmp_path / "download.zip"
+    await updater._download_file(
+        "https://example.test/zip", str(path), user_agent=user_agent
+    )
+
+    assert path.read_bytes() == b"zip"
+    assert len(captured) == 1
+    assert captured[0].headers.get_list("user-agent") == [expected]
