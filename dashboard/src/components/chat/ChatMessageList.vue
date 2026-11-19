@@ -212,6 +212,13 @@
                         />
                       </div>
 
+                      <ChatErrorCard
+                        v-else-if="part.type === 'error'"
+                        :code="part.code"
+                        :message="part.message"
+                        @configure-models="emit('configureModels')"
+                      />
+
                       <MarkdownMessagePart
                         v-else-if="part.type === 'plain'"
                         :content="part.text || ''"
@@ -527,6 +534,7 @@
 </template>
 
 <script setup lang="ts">
+import ChatErrorCard from "@/components/chat/message_list_comps/ChatErrorCard.vue";
 import PluginViewMessage from "@/components/chat/message_list_comps/PluginViewMessage.vue";
 import MessageContentTransition from "@/components/chat/MessageContentTransition.vue";
 import { computed, nextTick, reactive, ref } from "vue";
@@ -599,6 +607,7 @@ const props = withDefaults(
 );
 
 const emit = defineEmits<{
+  configureModels: [];
   "update:editDraft": [value: string];
   openEdit: [message: ChatRecord];
   cancelEdit: [];
