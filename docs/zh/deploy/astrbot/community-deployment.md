@@ -50,3 +50,11 @@ __仓库地址：[railgun19457/AstrbotScript](https://github.com/railgun19457/As
 ## AstrBot Android 部署
 
 参考 [zz6zz666/AstrBot-Android-App](https://github.com/zz6zz666/AstrBot-Android-App)
+
+## Pethost 一键模板
+
+[Pethost](https://pethost.dev) 提供一键部署模板，使用官方 `soulter/astrbot` 镜像，数据保存在持久化卷中，并提供带 HTTPS 的独立地址。
+
+1. 打开 [AstrBot 模板](https://pethost.dev/templates/astrbot/)，点击 Deploy on Pethost。
+2. 填写 WebUI 密码：需要包含大写字母、小写字母和数字。
+3. 项目上线后，打开其地址，使用用户名 `astrbot` 和该密码登录。首次登录时 AstrBot 会要求设置新密码。
