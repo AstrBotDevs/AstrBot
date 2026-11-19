@@ -54,7 +54,8 @@
     "storageWarning": "一部のトレースを保存できませんでした。DB エラーまたは容量を確認してください。",
     "loadMore": "もっと読み込む",
     "limitHint": "最大 {count} 件表示。検索条件を絞ってください。",
-    "truncated": "内容またはノード数が上限を超え、一部が省略されました。"
+    "truncated": "内容またはノード数が上限を超え、一部が省略されました。",
+    "connectionLost": "ライブトレース接続が切断されました。再試行してください。"
   },
   "controls": {
     "start": "開始",
@@ -62,7 +63,8 @@
     "pause": "トレース記録を一時停止",
     "resume": "トレース記録を開始",
     "loadFailed": "トレース設定の取得に失敗しました。ページを更新してください。",
-    "updateFailed": "トレース記録の切り替えに失敗しました。再試行してください。"
+    "updateFailed": "トレース記録の切り替えに失敗しました。再試行してください。",
+    "connectionLost": "接続が切断されました"
   },
   "tokens": {
     "title": "Tokens",
@@ -106,10 +108,22 @@
     "title": "フィルター",
     "reset": "リセット",
     "close": "フィルターを閉じる",
-    "errors": "エラーあり",
     "models": "モデル呼び出しあり",
     "plugins": "プラグイン呼び出しあり",
-    "hint": "複数選択するとすべての条件を満たす追跡を表示します。未選択ではすべて表示します。"
+    "commands": "コマンド呼び出しあり",
+    "status": "実行状態",
+    "anyStatus": "すべての状態",
+    "messageTypes": "メッセージ種別",
+    "umo": "セッション UMO",
+    "execution": "実行内容",
+    "timeRange": "期間",
+    "anyTime": "すべての期間",
+    "lastHour": "過去 1 時間",
+    "lastDay": "過去 24 時間",
+    "lastWeek": "過去 7 日間",
+    "lastMonth": "過去 30 日間",
+    "noPlatforms": "利用可能なプラットフォームがありません",
+    "hint": "同じグループ内は OR、異なるグループと選択した実行条件はすべて一致する必要があります。"
   },
   "status": { "error": "エラー", "complete": "完了", "live": "実行中" },
   "handlerDescription": {

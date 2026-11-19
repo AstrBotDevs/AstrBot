@@ -505,6 +505,11 @@ class TraceStore:
         errors: bool = False,
         models: bool = False,
         plugins: bool = False,
+        commands: bool = False,
+        status: str | None = None,
+        platforms: list[str] | None = None,
+        message_types: list[str] | None = None,
+        umo: str = "",
         start_time: int | None = None,
         end_time: int | None = None,
     ) -> dict:
@@ -518,8 +523,14 @@ class TraceStore:
             errors: Require an error.
             models: Require an Agent call.
             plugins: Require a plugin call.
+            commands: Require a command handler.
+            status: Restrict traces to a running, completed, or error state.
+            platforms: Accepted platform IDs.
+            message_types: Accepted message type names.
+            umo: Exact unified message origin.
             start_time: Inclusive minimum trace start time, in Unix seconds.
-            end_time: Inclusive maximum trace start time, in Unix seconds.
+            end_time: Inclusive maximum trace start time, in Unix seconds. The
+                whole final second is included.
 
         Returns:
             Summaries, filtered count, next cursor, and storage health.
@@ -533,13 +544,23 @@ class TraceStore:
         limit = min(100, max(1, limit))
         if page < 1 or (cursor and page != 1):
             raise ValueError("Invalid trace page.")
+        if start_time is not None and end_time is not None and start_time > end_time:
+            raise ValueError("Trace time range is invalid.")
+        if status not in {None, "running", "completed", "error"}:
+            raise ValueError("Invalid trace status.")
         conditions, values = [], []
         if start_time is not None:
             conditions.append("start_ns >= ?")
             values.append(start_time * 1_000_000_000)
         if end_time is not None:
             conditions.append("start_ns <= ?")
-            values.append(end_time * 1_000_000_000)
+            values.append(end_time * 1_000_000_000 + 999_999_999)
+        if status == "running":
+            conditions.append("state='running'")
+        elif status == "completed":
+            conditions.append("state!='running' AND has_errors=0")
+        elif status == "error":
+            conditions.append("has_errors=1")
         for key, enabled in (
             ("has_errors", errors),
             ("has_models", models),
@@ -547,6 +568,32 @@ class TraceStore:
         ):
             if enabled:
                 conditions.append(key + "=1")
+        if commands:
+            conditions.append("COALESCE(json_extract(data, '$.has_commands'), 0)=1")
+        umo_json = "CAST(json_extract(data, '$.attributes.\"astrbot.umo\"') AS TEXT)"
+        if umo:
+            conditions.append(f"{umo_json}=?")
+            values.append(umo)
+        if platforms:
+            selected_platforms = list(dict.fromkeys(platforms))[:20]
+            placeholders = ", ".join("?" for _ in selected_platforms)
+            conditions.append(
+                f"(CASE WHEN instr({umo_json}, ':') > 1 "
+                f"THEN substr({umo_json}, 1, instr({umo_json}, ':') - 1) "
+                f"ELSE '' END) IN ({placeholders})"
+            )
+            values.extend(selected_platforms)
+        if message_types:
+            selected_types = list(dict.fromkeys(message_types))[:20]
+            placeholders = ", ".join("?" for _ in selected_types)
+            after_platform = f"substr({umo_json}, instr({umo_json}, ':') + 1)"
+            conditions.append(
+                f"(CASE WHEN instr({umo_json}, ':') > 1 "
+                f"AND instr({after_platform}, ':') > 1 "
+                f"THEN substr({after_platform}, 1, instr({after_platform}, ':') - 1) "
+                f"ELSE '' END) IN ({placeholders})"
+            )
+            values.extend(selected_types)
         if query:
             conditions.append("search LIKE ? ESCAPE '\\'")
             values.append(

@@ -127,10 +127,28 @@ async def list_traces(
     errors: bool = False,
     models: bool = False,
     plugins: bool = False,
+    commands: bool = False,
+    status: str | None = Query(
+        default=None,
+        pattern="^(running|completed|error)$",
+    ),
+    platforms: str = Query(default="", max_length=1024),
+    message_types: str = Query(default="", max_length=512),
+    umo: str = Query(default="", max_length=1024),
+    start_time: int | None = Query(default=None, ge=0),
+    end_time: int | None = Query(default=None, ge=0),
     _auth: AuthContext = Depends(require_system_scope),
     service: LogService = Depends(get_service),
 ):
     """Return a page of persisted trace summaries."""
+    if start_time is not None and end_time is not None and start_time > end_time:
+        raise ApiError("Trace time range is invalid.", status_code=422)
+    platform_filters = [
+        value.strip() for value in platforms.split(",") if value.strip()
+    ]
+    message_type_filters = [
+        value.strip() for value in message_types.split(",") if value.strip()
+    ]
     try:
         return ok(
             await service.get_trace_history(
@@ -141,6 +159,13 @@ async def list_traces(
                 errors=errors,
                 models=models,
                 plugins=plugins,
+                commands=commands,
+                status=status,
+                platforms=platform_filters,
+                message_types=message_type_filters,
+                umo=umo.strip(),
+                start_time=start_time,
+                end_time=end_time,
             )
         )
     except LogServiceError as exc:
