@@ -5,7 +5,6 @@ import re
 import shutil
 import time
 import zipfile
-from collections.abc import Mapping
 from pathlib import Path
 
 import certifi
@@ -84,8 +83,17 @@ class _RepoZipUpdater:
         timeout: float = 1800.0,
         progress_callback=None,
         *,
-        headers: Mapping[str, str] | None = None,
+        user_agent: str | None = None,
     ) -> None:
+        """Stream a remote ZIP archive to disk.
+
+        Args:
+            url: Archive URL.
+            path: Local destination path.
+            timeout: HTTP client timeout in seconds.
+            progress_callback: Optional callback for download progress.
+            user_agent: Custom User-Agent, or None for the AstrBot default.
+        """
         target_path = Path(path)
         ensure_dir(target_path.parent)
 
@@ -99,7 +107,7 @@ class _RepoZipUpdater:
         try:
             async with self._create_httpx_client(timeout=timeout) as client:
                 async with client.stream(
-                    "GET", url, headers=download_request_headers(headers)
+                    "GET", url, headers=download_request_headers(user_agent)
                 ) as response:
                     response.raise_for_status()
                     response_headers = getattr(response, "headers", {})

@@ -103,11 +103,11 @@ async def test_download_file_writes_successful_response(monkeypatch, tmp_path):
 @pytest.mark.asyncio
 @pytest.mark.parametrize("download", [io.download_file, io.download_image_by_url])
 @pytest.mark.parametrize(
-    ("headers", "expected"),
-    [(None, io.DOWNLOAD_USER_AGENT), ({"uSeR-AgEnT": "Caller/1"}, "Caller/1")],
+    ("user_agent", "expected"),
+    [(None, io.DOWNLOAD_USER_AGENT), ("Caller/1", "Caller/1")],
 )
 async def test_download_get_user_agent_is_preserved_on_tls_retry(
-    monkeypatch, tmp_path, download, headers, expected
+    monkeypatch, tmp_path, download, user_agent, expected
 ):
     class FakeSSLError(Exception):
         pass
@@ -117,19 +117,13 @@ async def test_download_get_user_agent_is_preserved_on_tls_retry(
         monkeypatch, [FakeSSLError(), _FakeResponse(status=200, chunks=[b"data"])]
     )
     target = tmp_path / "result.bin"
-    before = headers.copy() if headers is not None else None
 
-    await download("https://example.test/file", path=str(target), headers=headers)
+    await download("https://example.test/file", path=str(target), user_agent=user_agent)
 
     assert target.read_bytes() == b"data"
     assert len(requests) == 2
     for kwargs in requests:
-        assert [
-            value
-            for name, value in kwargs["headers"].items()
-            if name.lower() == "user-agent"
-        ] == [expected]
-    assert headers == before
+        assert kwargs["headers"] == {"User-Agent": expected}
 
 
 @pytest.mark.asyncio
@@ -143,7 +137,6 @@ async def test_download_get_and_media_wire_headers_do_not_change_generation_post
             (
                 request.method,
                 request.headers.getall("User-Agent"),
-                request.headers.get("X-Test"),
             )
         )
         return web.Response(body=b"downloaded")
@@ -159,29 +152,26 @@ async def test_download_get_and_media_wire_headers_do_not_change_generation_post
         await site.start()
         url = f"http://127.0.0.1:{runner.addresses[0][1]}/file.png"
         await io.download_file(url, str(tmp_path / "file.bin"))
-        headers = {
-            "uSeR-AgEnT": "Caller/1",
-            "USER-AGENT": "duplicate",
-            "X-Test": "kept",
-        }
-        before = headers.copy()
         await io.download_image_by_url(
-            url, path=str(tmp_path / "image.bin"), headers=headers
+            url, path=str(tmp_path / "image.bin"), user_agent="Caller/1"
         )
         await io.download_image_by_url(
-            url, post=True, post_data={"x": 1}, path=str(tmp_path / "generated.bin")
+            url,
+            post=True,
+            post_data={"x": 1},
+            path=str(tmp_path / "generated.bin"),
+            user_agent="ignored-for-post",
         )
         async with media_utils.MediaResolver(
             url, media_type="image"
         ).as_path() as media:
             assert media.read_bytes() == b"downloaded"
-        assert headers == before
     finally:
         await runner.cleanup()
 
     assert seen == [
-        ("GET", [io.DOWNLOAD_USER_AGENT], None),
-        ("GET", ["Caller/1"], "kept"),
-        ("POST", [SERVER_SOFTWARE], None),
-        ("GET", [io.DOWNLOAD_USER_AGENT], None),
+        ("GET", [io.DOWNLOAD_USER_AGENT]),
+        ("GET", ["Caller/1"]),
+        ("POST", [SERVER_SOFTWARE]),
+        ("GET", [io.DOWNLOAD_USER_AGENT]),
     ]

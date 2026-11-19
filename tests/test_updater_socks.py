@@ -1869,14 +1869,14 @@ def test_repo_unzip_file_handles_archives_without_explicit_root_dir_entry(
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
-    ("headers", "expected"),
+    ("user_agent", "expected"),
     [
         (None, DOWNLOAD_USER_AGENT),
-        ({"user-AGENT": "Updater/1", "X-Test": "kept"}, "Updater/1"),
+        ("Updater/1", "Updater/1"),
     ],
 )
 async def test_zip_download_user_agent_on_wire(
-    monkeypatch, tmp_path, headers, expected
+    monkeypatch, tmp_path, user_agent, expected
 ):
     captured = []
 
@@ -1890,12 +1890,11 @@ async def test_zip_download_user_agent_on_wire(
         "_create_httpx_client",
         lambda **_options: httpx.AsyncClient(transport=httpx.MockTransport(handle)),
     )
-    before = headers.copy() if headers is not None else None
     path = tmp_path / "download.zip"
-    await updater._download_file("https://example.test/zip", str(path), headers=headers)
+    await updater._download_file(
+        "https://example.test/zip", str(path), user_agent=user_agent
+    )
 
     assert path.read_bytes() == b"zip"
     assert len(captured) == 1
     assert captured[0].headers.get_list("user-agent") == [expected]
-    assert captured[0].headers.get("x-test") == ("kept" if headers else None)
-    assert headers == before

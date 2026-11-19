@@ -7,7 +7,6 @@ import socket
 import ssl
 import time
 import uuid
-from collections.abc import Mapping
 from pathlib import Path
 from typing import cast
 from urllib.parse import unquote, urlparse
@@ -25,21 +24,16 @@ logger = logging.getLogger("astrbot")
 DOWNLOAD_USER_AGENT = "AstrBot (bot; +https://github.com/AstrBotDevs/AstrBot)"
 
 
-def download_request_headers(
-    headers: Mapping[str, str] | None = None,
-) -> dict[str, str]:
-    """Copy download headers, adding the AstrBot User-Agent if unspecified."""
-    result: dict[str, str] = {}
-    has_user_agent = False
-    for name, value in (headers or {}).items():
-        if name.lower() == "user-agent":
-            if has_user_agent:
-                continue
-            has_user_agent = True
-        result[name] = value
-    if not has_user_agent:
-        result["User-Agent"] = DOWNLOAD_USER_AGENT
-    return result
+def download_request_headers(user_agent: str | None = None) -> dict[str, str]:
+    """Build the single User-Agent header used for downloads.
+
+    Args:
+        user_agent: Custom User-Agent, or None to use the AstrBot default.
+
+    Returns:
+        A mapping containing only the User-Agent header.
+    """
+    return {"User-Agent": DOWNLOAD_USER_AGENT if user_agent is None else user_agent}
 
 
 def _safe_url_for_log(url: str) -> str:
@@ -137,10 +131,21 @@ async def download_image_by_url(
     post_data: dict | None = None,
     path: str | None = None,
     *,
-    headers: Mapping[str, str] | None = None,
+    user_agent: str | None = None,
 ) -> str:
-    """下载图片, 返回 path"""
-    get_headers = download_request_headers(headers) if not post else None
+    """Download an image or invoke a legacy image-generation endpoint.
+
+    Args:
+        url: Image resource URL or generation endpoint.
+        post: Whether to use POST instead of an image GET.
+        post_data: Optional JSON body for the generation POST.
+        path: Local destination, or None for a temporary image file.
+        user_agent: Custom User-Agent for GET only. None uses the AstrBot default.
+
+    Returns:
+        Path to the downloaded image.
+    """
+    get_headers = download_request_headers(user_agent) if not post else None
     try:
         ssl_context = ssl.create_default_context(
             cafile=certifi.where(),
@@ -306,7 +311,7 @@ async def download_file(
     progress_callback=None,
     allow_insecure_ssl_fallback: bool = True,
     *,
-    headers: Mapping[str, str] | None = None,
+    user_agent: str | None = None,
 ) -> None:
     """Download a remote file to a local path.
 
@@ -317,13 +322,13 @@ async def download_file(
         progress_callback: Optional callback for progress payloads.
         allow_insecure_ssl_fallback: Whether certificate failures may retry with
             TLS certificate verification disabled.
-        headers: Optional GET headers. A supplied User-Agent takes precedence.
+        user_agent: Custom User-Agent for GET, or None for the AstrBot default.
 
     Returns:
         None.
     """
 
-    get_headers = download_request_headers(headers)
+    get_headers = download_request_headers(user_agent)
     try:
         ssl_context = ssl.create_default_context(
             cafile=certifi.where(),
