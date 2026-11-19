@@ -49,7 +49,7 @@ def _run_filter(command_name: str, alias: set, message: str):
         get_message_str=lambda: message,
         set_extra=lambda key, value: extras.__setitem__(key, value),
     )
-    ok = cmd_filter.filter(event, None)
+    ok = cmd_filter.filter(event, {"platform_settings": {"locale": "en-US"}})
     return ok, extras.get("parsed_params")
 
 
