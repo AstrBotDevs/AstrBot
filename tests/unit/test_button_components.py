@@ -161,6 +161,67 @@ def test_callback_registry_survives_process_restart(tmp_path, monkeypatch):
     )
 
 
+def test_callback_registration_does_not_wait_for_main_database_writer(
+    tmp_path, monkeypatch
+):
+    """Allow button rendering while the asynchronous main database is writing.
+
+    Args:
+        tmp_path: Temporary directory for the application database.
+        monkeypatch: Isolate the callback registry and shorten lock timeouts.
+    """
+    db_path = tmp_path / "main.db"
+    registry = button_interaction._ButtonCallbackRegistry()
+    monkeypatch.setattr(button_interaction, "_button_callback_registry", registry)
+    button_interaction.configure_button_callback_registry(db_path)
+    connect = sqlite3.connect
+    with connect(db_path) as writer:
+        writer.execute("BEGIN IMMEDIATE")
+        with monkeypatch.context() as patch:
+            patch.setattr(
+                button_interaction.sqlite3,
+                "connect",
+                lambda *args, **kwargs: connect(*args, **{**kwargs, "timeout": 0.01}),
+            )
+            payload = encode_button_callback("approve", {"item": 42})
+        writer.rollback()
+
+    restarted_registry = button_interaction._ButtonCallbackRegistry()
+    monkeypatch.setattr(
+        button_interaction, "_button_callback_registry", restarted_registry
+    )
+    button_interaction.configure_button_callback_registry(db_path)
+    assert decode_button_callback(payload) == ("approve", {"item": 42})
+
+
+def test_callback_registry_migrates_existing_tokens(tmp_path, monkeypatch):
+    """Preserve existing callback tokens when isolating callback storage.
+
+    Args:
+        tmp_path: Temporary directory for the legacy application database.
+        monkeypatch: Isolate the old and restarted callback registries.
+    """
+    db_path = tmp_path / "main.db"
+    legacy = button_interaction._ButtonCallbackRegistry()
+    legacy.configure(db_path)
+    monkeypatch.setattr(button_interaction, "_button_callback_registry", legacy)
+    payload = encode_button_callback("approve", {"item": 42})
+
+    registry = button_interaction._ButtonCallbackRegistry()
+    monkeypatch.setattr(button_interaction, "_button_callback_registry", registry)
+    button_interaction.configure_button_callback_registry(db_path)
+    with sqlite3.connect(db_path) as connection:
+        connection.execute("DROP TABLE button_callbacks")
+        connection.commit()
+
+    restarted_registry = button_interaction._ButtonCallbackRegistry()
+    monkeypatch.setattr(
+        button_interaction, "_button_callback_registry", restarted_registry
+    )
+    button_interaction.configure_button_callback_registry(db_path)
+    assert decode_button_callback(payload) == ("approve", {"item": 42})
+
+
 @pytest.mark.parametrize("payload", ["approve", "astrbot:{}", "astrbot:not-json"])
 def test_callback_codec_rejects_invalid_payload(payload):
     with pytest.raises(ValueError):
