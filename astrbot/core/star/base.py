@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import logging
 from typing import TYPE_CHECKING
+from urllib.parse import urlsplit
 
+from astrbot.core import file_token_service
 from astrbot.core.log import LogManager
 from astrbot.core.utils.command_parser import CommandParserMixin
 from astrbot.core.utils.plugin_kv_store import PluginKVStoreMixin
@@ -86,7 +88,14 @@ class Star(CommandParserMixin, PluginKVStoreMixin):
                 file when the session has no bound configuration.
 
         Returns:
-            The image URL or file path, depending on `return_url`.
+            The image URL or file path, depending on `return_url`. Local fallback
+            URLs use the configured callback API base and a reusable file token
+            with the file service's default lifetime (five minutes by default).
+
+        Raises:
+            RuntimeError: Local output was requested as a URL without a valid
+                HTTP(S) callback API base. Use `return_url=False` for a local path.
+            FileNotFoundError: The local rendered file no longer exists.
         """
         config = self.context.get_config(umo)
         endpoint = None
@@ -94,12 +103,41 @@ class Star(CommandParserMixin, PluginKVStoreMixin):
             if template_name is None:
                 template_name = config.get("t2i_active_template")
             endpoint = config.get("t2i_endpoint") or None
-        return await self.context.html_renderer.render_t2i(
+        result = await self.context.html_renderer.render_t2i(
             text,
             return_url=return_url,
             template_name=template_name,
             endpoint=endpoint,
         )
+        if not return_url:
+            return result
+        rendered_url = urlsplit(result)
+        if rendered_url.scheme in {"http", "https"} and rendered_url.netloc:
+            return result
+
+        callback_base = (config or {}).get("callback_api_base")
+        try:
+            callback_url = (
+                urlsplit(callback_base) if isinstance(callback_base, str) else None
+            )
+            valid_base = (
+                callback_url is not None
+                and callback_url.scheme in {"http", "https"}
+                and callback_url.hostname
+                and callback_url.port != 0
+                and "?" not in callback_base
+                and "#" not in callback_base
+                and not any(char.isspace() for char in callback_base)
+            )
+        except ValueError:
+            valid_base = False
+        if not valid_base:
+            raise RuntimeError(
+                "Local text_to_image output requires a valid HTTP(S) callback_api_base "
+                "to return a URL; configure it or use return_url=False."
+            )
+        token = await file_token_service.register_file(result, single_use=False)
+        return f"{callback_base.rstrip('/')}/api/file/{token}"
 
     async def html_render(
         self,
