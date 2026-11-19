@@ -1,4 +1,5 @@
 import asyncio
+import fnmatch
 import os
 import uuid
 from typing import TypedDict, TypeVar
@@ -10,6 +11,7 @@ from astrbot.core.config.runtime import current_message_config
 from astrbot.core.config.snapshot import AstrBotConfigSnapshot
 from astrbot.core.config_bindings import BINDING_KEY
 from astrbot.core.platform.message_session import MessageSession
+from astrbot.core.platform.message_type import MessageType
 from astrbot.core.umop_config_router import UmopConfigRouter
 from astrbot.core.utils.astrbot_path import get_astrbot_config_path
 from astrbot.core.utils.shared_preferences import SharedPreferences
@@ -195,6 +197,125 @@ class AstrBotConfigManager:
         if overrides:
             return AstrBotConfigSnapshot(conf, overrides)
         return conf
+
+    async def get_platform_configs(
+        self, platform_id: str, message_types: tuple[MessageType, ...]
+    ) -> list[AstrBotConfig]:
+        """Collect possible profiles for bot-wide command registration.
+
+        Args:
+            platform_id: Adapter instance ID, not the platform type.
+            message_types: Message types supported by the registered commands.
+
+        Returns:
+            A conservative union of profiles matching the adapter. Ordered
+            catch-all routes and shadowed literal or identical session patterns
+            are respected. Overlapping complex globs can overestimate this union;
+            per-session message dispatch remains the authorization boundary.
+        """
+        profiles: dict[str, AstrBotConfig] = {}
+        metadata = self._get_abconf_data()
+        configs: list[AstrBotConfig] = []
+        for message_type in message_types:
+            seen_patterns: set[str] = set()
+            for pattern, conf_id in self.ucr.umop_to_conf_id.items():
+                parts = self.ucr._split_umo(pattern)
+                if parts is None:
+                    continue
+                platform_pattern, type_pattern, session_pattern = parts
+                if not fnmatch.fnmatchcase(platform_id, platform_pattern or "*"):
+                    continue
+                if not fnmatch.fnmatchcase(message_type.value, type_pattern or "*"):
+                    continue
+                session_pattern = session_pattern or "*"
+                if session_pattern in seen_patterns:
+                    continue
+                if not any(char in session_pattern for char in "*?[") and any(
+                    fnmatch.fnmatchcase(session_pattern, previous)
+                    for previous in seen_patterns
+                ):
+                    continue
+                seen_patterns.add(session_pattern)
+                meta = metadata.get(conf_id)
+                config = self.confs.get(conf_id)
+                if not (meta and isinstance(meta, dict) and config):
+                    conf_id, config = "default", self.default_conf
+                profiles[conf_id] = config
+                if not session_pattern.strip("*"):
+                    break
+            else:
+                # Without a session catch-all, unmatched sessions still use
+                # the default profile, even when some sessions are routed.
+                profiles["default"] = self.default_conf
+        configs.extend(profiles.values())
+        configs.extend(
+            await self._binding_configs(platform_id, message_types, metadata)
+        )
+        return configs
+
+    async def _binding_configs(
+        self,
+        platform_id: str,
+        message_types: tuple[MessageType, ...],
+        metadata: dict,
+    ) -> list[AstrBotConfig]:
+        """Collect effective profiles selected by exact session bindings.
+
+        Args:
+            platform_id: Adapter instance ID, not the platform type.
+            message_types: Message types supported by the registered commands.
+            metadata: Loaded profile metadata keyed by profile ID.
+
+        Returns:
+            One effective configuration per binding that outranks routing for a
+            session of this adapter, with its session overrides applied.
+        """
+        configs: list[AstrBotConfig] = []
+        for umo, binding in (await self._session_bindings()).items():
+            parts = self.ucr._split_umo(umo)
+            if parts is None:
+                continue
+            platform_pattern, type_pattern, _session_pattern = parts
+            if not fnmatch.fnmatchcase(platform_id, platform_pattern or "*"):
+                continue
+            if not any(
+                fnmatch.fnmatchcase(message_type.value, type_pattern or "*")
+                for message_type in message_types
+            ):
+                continue
+            conf_id = binding.get("profile_id") or self.ucr.get_conf_id_for_umop(umo)
+            meta = metadata.get(conf_id)
+            config = self.confs.get(conf_id)
+            if not (meta and isinstance(meta, dict) and config):
+                config = self.default_conf
+            overrides = binding.get("overrides") or {}
+            configs.append(
+                AstrBotConfigSnapshot(config, overrides) if overrides else config
+            )
+        return configs
+
+    async def _session_bindings(self) -> dict[str, dict]:
+        """Read exact session bindings used by the dashboard and overrides.
+
+        Returns:
+            Binding UMO patterns mapped to their stored binding data. An empty
+            mapping means the backend cannot list them, so route matching alone
+            decides which profiles may serve the adapter.
+        """
+        try:
+            records = await self.sp.range_get_async("umo", key=BINDING_KEY)
+        except Exception as exc:
+            logger.warning(f"Failed to read session bindings: {exc}")
+            return {}
+        if not isinstance(records, (list, tuple)):
+            return {}
+        bindings: dict[str, dict] = {}
+        for record in records:
+            value = getattr(record, "value", None)
+            binding = value.get("val") if isinstance(value, dict) else None
+            if isinstance(binding, dict):
+                bindings[record.scope_id] = binding
+        return bindings
 
     def _create_message_config(
         self, umo: str
