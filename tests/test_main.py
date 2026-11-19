@@ -65,7 +65,8 @@ def _write_dashboard_dist(dist_path, version: str | None = None) -> None:
 
 
 def test_check_env(monkeypatch):
-    version_info_correct = _version_info(3, 10)
+    version_info_correct = _version_info(3, 12)
+    version_info_too_old = _version_info(3, 10)
     version_info_wrong = _version_info(3, 9)
     monkeypatch.setattr(sys, "version_info", version_info_correct)
     with mock.patch("os.makedirs") as mock_makedirs:
@@ -76,6 +77,12 @@ def test_check_env(monkeypatch):
         # Verify all calls used exist_ok=True
         for call_args in mock_makedirs.call_args_list:
             assert call_args[1].get("exist_ok") is True
+
+    # 3.10 and older violate pyproject.toml's requires-python (>=3.12):
+    # WebUI upgrades bypass pip's check, so check_env must reject them.
+    monkeypatch.setattr(sys, "version_info", version_info_too_old)
+    with pytest.raises(SystemExit):
+        check_env()
 
     monkeypatch.setattr(sys, "version_info", version_info_wrong)
     with pytest.raises(SystemExit):

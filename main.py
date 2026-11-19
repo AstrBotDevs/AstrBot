@@ -60,8 +60,11 @@ logo_tmpl = r"""
 
 
 def check_env() -> None:
-    if not (sys.version_info.major == 3 and sys.version_info.minor >= 10):
-        logger.error("Please run this project with Python 3.10 or later.")
+    # Keep this aligned with pyproject.toml's `requires-python = ">=3.12"`.
+    # WebUI upgrades skip pip's requires-python enforcement, so this runtime
+    # check is the only guard for installs that predate the 3.12 requirement.
+    if not (sys.version_info.major == 3 and sys.version_info.minor >= 12):
+        logger.error("Please run this project with Python 3.12 or later.")
         exit()
 
     astrbot_root = get_astrbot_root()
