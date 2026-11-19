@@ -3,6 +3,8 @@
 from astrbot.api import star
 from astrbot.api.event import AstrMessageEvent, MessageEventResult
 
+from ..i18n import translate
+
 
 class SIDCommand:
     """会话ID命令类"""
@@ -13,24 +15,25 @@ class SIDCommand:
     async def sid(self, event: AstrMessageEvent) -> None:
         """获取消息来源信息"""
         sid = event.unified_msg_origin
+        locale = self.context.locale(sid)
         user_id = str(event.get_sender_id())
         umo_platform = event.session.platform_id
         umo_msg_type = event.session.message_type.value
         umo_session_id = event.session.session_id
-        ret = (
-            f"UMO: 「{sid}」\n"
-            f"UID: 「{user_id}」\n"
-            "*Use UMO to set whitelist and configure routing, use UID to set admin list(UMO 可用于设置白名单和配置文件路由，UID 可用于设置管理员列表)\n\n"
-            f"Your session information:\n"
-            f"Bot ID: 「{umo_platform}」\n"
-            f"Message Type: 「{umo_msg_type}」\n"
-            f"Session ID: 「{umo_session_id}」\n\n"
+        ret = translate(
+            "sid",
+            locale,
+            umo=sid,
+            uid=user_id,
+            platform=umo_platform,
+            message_type=umo_msg_type,
+            session_id=umo_session_id,
         )
 
         if (
-            self.context.get_config()["platform_settings"]["unique_session"]
+            self.context.get_config(umo=sid)["platform_settings"]["unique_session"]
             and event.get_group_id()
         ):
-            ret += f"\n\nThe group's ID: 「{event.get_group_id()}」. Set this ID to whitelist to allow the entire group."
+            ret += translate("group_id", locale, group_id=event.get_group_id())
 
         event.set_result(MessageEventResult().message(ret).use_t2i(False))
