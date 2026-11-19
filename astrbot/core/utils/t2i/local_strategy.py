@@ -1198,6 +1198,8 @@ class MarkdownParser:
     """Parse a practical subset of Markdown into local-render blocks."""
 
     _heading_pattern = re.compile(r"^\s*(#{1,6})\s+(.+?)\s*$")
+    # A backtick or tilde fence and its info string; see `_fence_opening`.
+    _fence_pattern = re.compile(r"^\s*(`{3,}|~{3,})(.*)$")
     _list_pattern = re.compile(r"^(\s*)([-+*]|\d+[.)])\s+(.+)$")
     _rule_pattern = re.compile(r"^\s{0,3}((\*\s*){3,}|(-\s*){3,}|(_\s*){3,})$")
     _image_pattern = re.compile(
@@ -1237,6 +1239,42 @@ class MarkdownParser:
         return [cell.strip() for cell in line.strip().strip("|").split("|")]
 
     @classmethod
+    def _fence_opening(cls, line: str) -> tuple[str, str] | None:
+        """Return the fence marker and language when a line opens a code block.
+
+        Args:
+            line: Source Markdown line.
+
+        Returns:
+            The opening run (e.g. ``` or ~~~~) and the info string's first word,
+            or None. As in CommonMark, a backtick fence's info string cannot
+            contain a backtick, so ```inline``` text does not open a block.
+        """
+        match = cls._fence_pattern.match(line)
+        if not match:
+            return None
+        marker, info = match.groups()
+        if marker[0] == "`" and "`" in info:
+            return None
+        words = info.split()
+        return marker, words[0] if words else ""
+
+    @staticmethod
+    def _closes_fence(line: str, marker: str) -> bool:
+        """Return whether a line closes the block opened by ``marker``.
+
+        Args:
+            line: Source Markdown line.
+            marker: The opening fence run.
+
+        Returns:
+            True for a bare run of the same character at least as long, so a
+            ```` fence can show a ``` example and ```py inside a block is code.
+        """
+        stripped = line.strip()
+        return len(stripped) >= len(marker) and stripped == marker[0] * len(stripped)
+
+    @classmethod
     def _starts_block(cls, lines: list[str], index: int) -> bool:
         """Return whether a source line begins a non-paragraph block.
 
@@ -1250,7 +1288,8 @@ class MarkdownParser:
         stripped = lines[index].strip()
         return bool(
             not stripped
-            or stripped.startswith(("```", "$$", ">"))
+            or cls._fence_opening(lines[index]) is not None
+            or stripped.startswith(("$$", ">"))
             or cls._heading_pattern.match(lines[index])
             or cls._rule_pattern.match(lines[index])
             or cls._list_pattern.match(lines[index])
@@ -1281,12 +1320,14 @@ class MarkdownParser:
                 index += 1
                 continue
 
-            fence_match = re.match(r"^\s*```([^\s`]*)", line)
-            if fence_match:
-                language = fence_match.group(1)
+            fence = cls._fence_opening(line)
+            if fence is not None:
+                marker, language = fence
                 code_lines: list[str] = []
                 index += 1
-                while index < len(lines) and not re.match(r"^\s*```", lines[index]):
+                while index < len(lines) and not cls._closes_fence(
+                    lines[index], marker
+                ):
                     code_lines.append(lines[index])
                     index += 1
                 if index < len(lines):
