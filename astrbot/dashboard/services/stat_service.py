@@ -36,6 +36,7 @@ from astrbot.core.desktop_runtime import (
     is_desktop_managed_backend,
     is_desktop_session_auth_enabled,
 )
+from astrbot.core.repository import GitHubRepository
 from astrbot.core.umo_alias import build_umo_alias_map, serialize_umo_alias
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path, get_astrbot_path
 from astrbot.core.utils.auth_password import (
@@ -670,34 +671,55 @@ class StatService:
             raise StatServiceError(f"Error: {exc!s}") from exc
 
     async def test_ghproxy_connection(self, proxy_url: str | None) -> dict:
-        try:
-            target_url = "https://github.com/AstrBotDevs/AstrBot/raw/refs/heads/master/.python-version"
-            # An empty proxy_url means "no acceleration", so GitHub is tested directly.
-            normalized_proxy = (proxy_url or "").strip().rstrip("/")
-            test_url = (
-                f"{normalized_proxy}/{target_url}" if normalized_proxy else target_url
-            )
-            start_time = time.time()
+        """Probe both HTTP paths used by GitHub archive installations.
 
-            async with (
-                aiohttp.ClientSession() as session,
-                session.get(
-                    test_url,
-                    timeout=aiohttp.ClientTimeout(total=10),
-                ) as response,
+        Args:
+            proxy_url: Mirror URL prefix, or None to connect to GitHub directly.
+
+        Returns:
+            A dict with the slower response time in milliseconds.
+
+        Raises:
+            StatServiceError: If either request fails or returns an HTML page.
+        """
+        repository = GitHubRepository("AstrBotDevs", "AstrBot", "master")
+        proxy = (proxy_url or "").strip().rstrip("/")
+        prefix = f"{proxy}/" if proxy else ""
+        checks = (
+            ("raw file", repository.raw_file_url(".python-version"), None, {200}),
+            ("archive", repository.archive_url, {"Range": "bytes=0-0"}, {200, 206}),
+        )
+        async with aiohttp.ClientSession(
+            timeout=aiohttp.ClientTimeout(total=10), trust_env=True
+        ) as session:
+            start = time.monotonic()
+            responses = await asyncio.gather(
+                *(
+                    session.get(prefix + url, headers=headers)
+                    for _, url, headers, _ in checks
+                ),
+                return_exceptions=True,
+            )
+            latency = (time.monotonic() - start) * 1000
+            for (label, _, _, statuses), response in zip(
+                checks, responses, strict=True
             ):
-                if response.status == 200:
-                    end_time = time.time()
-                    _ = await response.text()
-                    return {
-                        "latency": round((end_time - start_time) * 1000, 2),
-                    }
-                raise StatServiceError(f"Failed. Status code: {response.status}")
-        except StatServiceError:
-            raise
-        except Exception as exc:
-            logger.error(traceback.format_exc())
-            raise StatServiceError(f"Error: {exc!s}") from exc
+                if isinstance(response, (aiohttp.ClientError, asyncio.TimeoutError)):
+                    raise StatServiceError(
+                        f"GitHub {label} probe failed ({type(response).__name__})"
+                    ) from response
+                if isinstance(response, BaseException):
+                    raise response
+                if response.status not in statuses:
+                    raise StatServiceError(
+                        f"GitHub {label} probe failed (HTTP {response.status})"
+                    )
+                if response.content_type in {"text/html", "application/xhtml+xml"}:
+                    raise StatServiceError(
+                        f"GitHub {label} probe returned an HTML page"
+                    )
+            # Close the session without reading either response body.
+        return {"latency": round(latency, 2)}
 
     async def test_pypi_index_connection(self, index_url: str | None) -> dict:
         """Check whether a PyPI index (mirror) answers requests.
