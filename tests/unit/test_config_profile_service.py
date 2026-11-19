@@ -5,7 +5,11 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from astrbot.dashboard.services.config_service import ConfigProfileService
+from astrbot.dashboard.services.config_service import (
+    ConfigProfileService,
+    _redact_proxy_credentials,
+    _restore_proxy_credentials_in_config,
+)
 
 
 def test_get_system_config_includes_effective_server_time() -> None:
@@ -48,7 +52,9 @@ async def test_profile_mutations_await_config_manager() -> None:
         lifecycle, runtime={"os": "windows", "sandbox": {"status": "unsupported"}}
     )
 
-    with pytest.raises(ValueError, match="Invalid local filesystem scope for member") as exc:
+    with pytest.raises(
+        ValueError, match="Invalid local filesystem scope for member"
+    ) as exc:
         await service.create_profile(
             "Invalid",
             {
@@ -83,3 +89,31 @@ async def test_profile_mutations_await_config_manager() -> None:
     )
     config_manager.delete_conf.assert_awaited_once_with("profile-id")
     assert "profile-id" not in lifecycle.pipeline_scheduler_mapping
+
+
+def test_proxy_credentials_are_redacted_and_restored_for_dashboard_edits() -> None:
+    config = {
+        "platform": [
+            {
+                "type": "telegram",
+                "id": "telegram",
+                "proxy": {
+                    "mode": "custom",
+                    "type": "http",
+                    "address": "http://proxy-user:proxy-pass@127.0.0.1:7890",
+                },
+            }
+        ]
+    }
+
+    sanitized = _redact_proxy_credentials(config)
+    assert (
+        sanitized["platform"][0]["proxy"]["address"] == "http://***:***@127.0.0.1:7890"
+    )
+    assert config["platform"][0]["proxy"]["address"] == (
+        "http://proxy-user:proxy-pass@127.0.0.1:7890"
+    )
+
+    submitted = sanitized
+    _restore_proxy_credentials_in_config(config, submitted)
+    assert submitted == config

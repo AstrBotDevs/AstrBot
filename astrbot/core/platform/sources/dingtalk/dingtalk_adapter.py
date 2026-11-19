@@ -1,15 +1,20 @@
 import asyncio
 import json
+import platform as system_platform
 import threading
 import time
 import uuid
 from concurrent.futures import CancelledError as FutureCancelledError
 from pathlib import Path
 from typing import Literal, NoReturn, cast
+from urllib.parse import quote_plus
 
 import aiohttp
 import dingtalk_stream
+import requests
+import websockets
 from dingtalk_stream import AckMessage
+from dingtalk_stream.version import VERSION_STRING
 
 from astrbot import logger
 from astrbot.api.event import MessageChain
@@ -56,6 +61,102 @@ DINGTALK_RECONNECT_MAX_DELAY = 300
 DINGTALK_RECONNECT_STABLE_SECONDS = 300
 DINGTALK_BUTTON_CARD_TEMPLATE_ID = "382e4302-551d-4880-bf29-a30acfab2e71.schema"
 DINGTALK_CARD_CALLBACK_TOPIC = "/v1.0/card/instances/callback"
+
+
+class _ProxyDingTalkStreamClient(dingtalk_stream.DingTalkStreamClient):
+    """DingTalk stream client that applies an adapter-scoped proxy."""
+
+    def __init__(self, credential, *, logger, proxy_url: str | None) -> None:
+        super().__init__(credential, logger=logger)
+        self.proxy_url = proxy_url
+
+    def open_connection(self):
+        """Open the DingTalk gateway connection through the configured proxy."""
+        self.logger.info("open connection, url=%s", self.OPEN_CONNECTION_API)
+        request_headers = {
+            "Content-Type": "application/json",
+            "Accept": "application/json",
+            "User-Agent": (
+                f"DingTalkStream/1.0 SDK/{VERSION_STRING} "
+                f"Python/{system_platform.python_version()} "
+                "(+https://github.com/open-dingtalk/dingtalk-stream-sdk-python)"
+            ),
+        }
+        topics = []
+        if self._is_event_required:
+            topics.append({"type": "EVENT", "topic": "*"})
+        topics.extend(
+            {"type": "CALLBACK", "topic": topic} for topic in self.callback_handler_map
+        )
+        request_body = json.dumps(
+            {
+                "clientId": self.credential.client_id,
+                "clientSecret": self.credential.client_secret,
+                "subscriptions": topics,
+                "ua": f"dingtalk-sdk-python/v{VERSION_STRING}-union",
+                "localIp": self.get_host_ip(),
+            }
+        ).encode("utf-8")
+        response_text = ""
+        try:
+            request_kwargs = {
+                "headers": request_headers,
+                "data": request_body,
+            }
+            if self.proxy_url:
+                request_kwargs["proxies"] = {
+                    "http": self.proxy_url,
+                    "https": self.proxy_url,
+                }
+            response = requests.post(
+                self.OPEN_CONNECTION_API,
+                **request_kwargs,
+            )
+            response_text = response.text
+            response.raise_for_status()
+        except Exception as exc:
+            self.logger.error(
+                "open connection failed, error=%s, response.text=%s",
+                exc,
+                response_text,
+            )
+            return None
+        return response.json()
+
+    async def start(self):
+        """Run the SDK stream loop with an explicit WebSocket proxy."""
+        self.pre_start()
+        while True:
+            try:
+                connection = self.open_connection()
+                if not connection:
+                    self.logger.error("open connection failed")
+                    await asyncio.sleep(10)
+                    continue
+                self.logger.info("endpoint is %s", connection)
+                uri = f"{connection['endpoint']}?ticket={quote_plus(connection['ticket'])}"
+                websocket_kwargs = {}
+                if self.proxy_url:
+                    websocket_kwargs["proxy"] = self.proxy_url
+                async with websockets.connect(uri, **websocket_kwargs) as websocket:
+                    self.websocket = websocket
+                    asyncio.create_task(self.keepalive(websocket))
+                    async for raw_message in websocket:
+                        json_message = json.loads(raw_message)
+                        asyncio.create_task(self.background_task(json_message))
+            except KeyboardInterrupt:
+                break
+            except (
+                asyncio.exceptions.CancelledError,
+                websockets.exceptions.ConnectionClosedError,
+            ):
+                self.logger.error("[start] network exception")
+                await asyncio.sleep(10)
+                continue
+            except Exception as exc:
+                await asyncio.sleep(3)
+                self.logger.exception("unknown exception: %s", exc)
+                continue
 
 
 def _dingtalk_reconnect_delay(retry_count: int) -> int:
@@ -117,7 +218,11 @@ class DingtalkPlatformAdapter(Platform):
         self.card_callback_client = AstrCardCallbackClient()
 
         credential = dingtalk_stream.Credential(self.client_id, self.client_secret)
-        client = dingtalk_stream.DingTalkStreamClient(credential, logger=logger)
+        client = _ProxyDingTalkStreamClient(
+            credential,
+            logger=logger,
+            proxy_url=self.proxy_url,
+        )
         client.register_all_event_handler(MyEventHandler())
         client.register_callback_handler(
             dingtalk_stream.ChatbotMessage.TOPIC,

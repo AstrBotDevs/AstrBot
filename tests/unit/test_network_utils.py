@@ -2,6 +2,7 @@ import ssl
 
 import pytest
 
+from astrbot.core.platform import proxy as platform_proxy
 from astrbot.core.utils import network_utils
 
 
@@ -49,3 +50,34 @@ def test_create_proxy_client_allows_verify_override(
 
     assert len(captured_calls) == 1
     assert captured_calls[0]["verify"] is custom_verify
+
+
+def test_create_platform_client_session_uses_socks_connector(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    captured_session_kwargs: list[dict] = []
+    captured_connector_kwargs: list[dict] = []
+    connector = object()
+
+    def fake_from_url(url, **kwargs):
+        captured_connector_kwargs.append({"url": url, **kwargs})
+        return connector
+
+    def fake_client_session(**kwargs):
+        captured_session_kwargs.append(kwargs)
+        return object()
+
+    monkeypatch.setattr(
+        platform_proxy.ProxyConnector,
+        "from_url",
+        staticmethod(fake_from_url),
+    )
+    monkeypatch.setattr(platform_proxy.aiohttp, "ClientSession", fake_client_session)
+
+    platform_proxy.create_platform_client_session(
+        "socks5://127.0.0.1:1080",
+        trust_env=True,
+    )
+
+    assert captured_connector_kwargs == [{"url": "socks5://127.0.0.1:1080"}]
+    assert captured_session_kwargs == [{"trust_env": True, "connector": connector}]

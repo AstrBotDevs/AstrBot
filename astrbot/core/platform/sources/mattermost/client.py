@@ -245,7 +245,11 @@ class MattermostClient:
             "http://", "ws://", 1
         )
         ws_url = f"{ws_url}/api/v4/websocket"
-        return await session.ws_connect(ws_url, heartbeat=30.0)
+        return await session.ws_connect(
+            ws_url,
+            heartbeat=30.0,
+            proxy=self.proxy_url,
+        )
 
     async def send_message_chain(
         self,

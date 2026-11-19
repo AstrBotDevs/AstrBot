@@ -1,5 +1,6 @@
 import asyncio
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -188,6 +189,25 @@ async def test_mattermost_send_message_chain_maps_portable_buttons():
     assert decode_button_callback(callback_token) == (
         "approve",
         {"request_id": 42},
+    )
+
+
+@pytest.mark.asyncio
+async def test_mattermost_websocket_uses_adapter_proxy():
+    client = MattermostClient(
+        "https://chat.example.com",
+        "test_token",
+        proxy_url="http://127.0.0.1:7890",
+    )
+    websocket = object()
+    session = SimpleNamespace(ws_connect=AsyncMock(return_value=websocket))
+    client.ensure_session = AsyncMock(return_value=session)
+
+    assert await client.ws_connect() is websocket
+    session.ws_connect.assert_awaited_once_with(
+        "wss://chat.example.com/api/v4/websocket",
+        heartbeat=30.0,
+        proxy="http://127.0.0.1:7890",
     )
 
 
