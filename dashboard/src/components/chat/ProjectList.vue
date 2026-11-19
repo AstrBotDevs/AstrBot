@@ -8,7 +8,12 @@
         @click="projectsExpanded = !projectsExpanded"
       >
         <span>{{ tm("project.title") }}</span>
-        <ChevronDown v-if="projectsExpanded" :size="16" aria-hidden="true" />
+        <ChevronDown
+          v-if="projectsExpanded"
+          class="expanded-chevron"
+          :size="16"
+          aria-hidden="true"
+        />
         <ChevronRight v-else :size="16" aria-hidden="true" />
       </button>
       <v-btn
@@ -310,7 +315,7 @@ async function handleDeleteSession(projectId: string, session: ProjectSession) {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0 10px 4px;
+  padding: 0 10px;
   color: var(--chat-section-label);
   font-size: 12px;
   font-weight: 500;
@@ -328,6 +333,15 @@ async function handleDeleteSession(projectId: string, session: ProjectSession) {
 
 .project-section-toggle:hover {
   color: rgb(var(--v-theme-on-surface));
+}
+
+.project-section-toggle .expanded-chevron {
+  opacity: 0;
+}
+
+.project-section-toggle:hover .expanded-chevron,
+.project-section-toggle:focus-visible .expanded-chevron {
+  opacity: 1;
 }
 
 .section-action-btn,

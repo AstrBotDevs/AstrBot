@@ -145,10 +145,25 @@
 
         <section class="sidebar-section session-list">
           <div class="sidebar-section-header">
-            <span>{{ tm("conversation.title") }}</span>
+            <button
+              type="button"
+              class="session-section-toggle"
+              :aria-expanded="sessionsExpanded"
+              @click="sessionsExpanded = !sessionsExpanded"
+            >
+              <span>{{ tm("conversation.title") }}</span>
+              <ChevronDown
+                v-if="sessionsExpanded"
+                class="expanded-chevron"
+                :size="16"
+                aria-hidden="true"
+              />
+              <ChevronRight v-else :size="16" aria-hidden="true" />
+            </button>
           </div>
           <div
             v-for="session in sidebarSessions"
+            v-show="sessionsExpanded"
             :key="session.session_id"
             class="session-item"
             :class="{
@@ -194,14 +209,14 @@
             />
           </div>
           <v-progress-linear
-            v-if="sessionsPagination.loading"
+            v-if="sessionsExpanded && sessionsPagination.loading"
             color="primary"
             height="2"
             indeterminate
             :aria-label="tm('conversation.loading')"
           />
           <ChatLoadError
-            v-if="sessionsPagination.error"
+            v-if="sessionsExpanded && sessionsPagination.error"
             :message="tm('conversation.loadFailed')"
             :loading="sessionsPagination.loading"
             @retry="getSessions(sessionsPagination.append)"
@@ -627,6 +642,8 @@ import { isAxiosError } from "axios";
 import {
   ArrowDown,
   ChevronLeft,
+  ChevronDown,
+  ChevronRight,
   Box,
   PanelLeft,
   PanelRightOpen,
@@ -790,6 +807,14 @@ const tokenModelMetadata = ref<Record<string, ProviderModelMetadata>>({});
 const selectedTokenProviderId = ref("");
 const messagesContainer = ref<HTMLElement | null>(null);
 const sidebarContent = ref<HTMLElement | null>(null);
+const sessionsExpanded = ref(chatPreferences().global.sessionsExpanded !== false);
+
+watch(sessionsExpanded, (expanded) => {
+  chatPreferences((preferences) => {
+    preferences.global.sessionsExpanded = expanded;
+  });
+});
+
 const sidebarProjects = ref<InstanceType<typeof ProjectList> | null>(null);
 const sidebarProjectElement = computed<HTMLElement | null>(
   () => sidebarProjects.value?.$el || null,
@@ -1274,7 +1299,7 @@ watch(
 );
 
 watch(
-  [() => sessionsPagination.loading, () => mobileDrawer.open],
+  [() => sessionsPagination.loading, () => mobileDrawer.open, sessionsExpanded],
   () => loadMoreSessions(),
   { flush: "post" },
 );
@@ -2145,6 +2170,7 @@ function handleMessagesScroll() {
 function loadMoreSessions() {
   const container = sidebarContent.value;
   if (
+    !sessionsExpanded.value ||
     !container ||
     container.clientHeight === 0 ||
     (isMobile.value && !mobileDrawer.open) ||
@@ -2598,7 +2624,7 @@ async function stopCurrentSession() {
   padding: 2px 16px 12px;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 0;
 }
 
 .sidebar-section {
@@ -2609,10 +2635,33 @@ async function stopCurrentSession() {
   min-height: 24px;
   display: flex;
   align-items: center;
-  padding: 0 10px 4px;
+  padding: 0 10px;
   color: var(--chat-section-label);
   font-size: 12px;
   font-weight: 500;
+}
+
+.session-section-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 36px;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+.session-section-toggle:hover {
+  color: rgb(var(--v-theme-on-surface));
+}
+
+.session-section-toggle .expanded-chevron {
+  opacity: 0;
+}
+
+.session-section-toggle:hover .expanded-chevron,
+.session-section-toggle:focus-visible .expanded-chevron {
+  opacity: 1;
 }
 
 .session-list {
