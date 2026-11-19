@@ -6,6 +6,7 @@ import os
 import platform
 
 from astrbot.core import logger
+from astrbot.core.agent.message import TextPart
 from astrbot.core.agent.tool import ToolSet
 from astrbot.core.astr_agent_runtime.context import (
     AgentContextWrapper,
@@ -284,8 +285,14 @@ async def apply_computer_use(
             local_policy.allow_execution
             and not local_policy.allow_network
             and LOCAL_NETWORK_POLICY_NOTICE not in (req.system_prompt or "")
+            and not any(
+                isinstance(part, TextPart) and LOCAL_NETWORK_POLICY_NOTICE in part.text
+                for part in req.extra_user_content_parts
+            )
         ):
-            runtime_prompt += f"\n## Execution policy\n{LOCAL_NETWORK_POLICY_NOTICE}\n"
+            req.extra_user_content_parts.append(
+                TextPart(text=LOCAL_NETWORK_POLICY_NOTICE).mark_as_temp()
+            )
         runtime_prompt += "\n## Workspace\n" + await get_workspace_instructions(
             agent_context.event, plugin_context, config.computer_use_runtime
         )
