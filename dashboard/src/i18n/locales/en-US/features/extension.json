@@ -57,7 +57,7 @@
     "back": "Back",
     "selectFile": "Select File",
     "refresh": "Refresh",
-    "updateAll": "Update All",
+    "updateAll": "Batch Update Plugins",
     "pin": "Pin",
     "unpin": "Unpin",
     "deleteSource": "Delete Source",
@@ -255,8 +255,8 @@
       "confirm": "Force Update"
     },
     "updateAllConfirm": {
-      "title": "Confirm Update All Plugins",
-      "message": "Are you sure you want to update all {count} plugins? This operation may take some time.",
+      "title": "Confirm Plugin Updates",
+      "message": "Select the plugins to update. Currently selected: {count}.",
       "confirm": "Confirm Update"
     },
     "sourceBinding": {
@@ -292,7 +292,7 @@
     "fillUrlOrFile": "Please fill in extension URL or upload extension file",
     "dontFillBoth": "Please don't fill in both extension URL and upload file",
     "supportedFormats": "Supports .zip extension files",
-    "updateAllSuccess": "All upgradable extensions have been updated!",
+    "updateAllSuccess": "All selected plugins have been updated!",
     "updateAllFailed": "{failed} of {total} extensions failed to update:",
     "noUpdatesAvailable": "No extensions have updates available",
     "updateDisabled": "This plugin has no usable install source or repository URL, so it cannot be updated or reinstalled",
