@@ -6,8 +6,10 @@ import os
 import re
 import subprocess
 import sys
+import time
 import urllib.error
 import urllib.request
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from functools import cache
 from pathlib import Path
 
@@ -21,6 +23,7 @@ STATUS_OPTIONS = (
     "Closed unmerged",
 )
 DELIVERY_OPTIONS = ("未关联实现", "尚未合入", "已合入待发布", "已发布")
+APPLY_WORKERS = 4
 
 
 def connection(query, path, *, initial=None, progress=None, **variables):
@@ -212,6 +215,12 @@ def tags_containing(commit):
     """
     if not re.fullmatch(r"[0-9a-f]{40}", commit):
         raise ValueError("Invalid implementation commit")
+    started = time.monotonic()
+    print(
+        f"Project sync: release ancestry start commit={commit[:12]}",
+        file=sys.stderr,
+        flush=True,
+    )
     result = subprocess.run(
         ["git", "tag", "--contains", commit],
         cwd=ROOT,
@@ -224,7 +233,14 @@ def tags_containing(commit):
         raise RuntimeError(
             "Cannot verify release tag ancestry; fetch full history and tags"
         )
-    return frozenset(result.stdout.splitlines())
+    tags = frozenset(result.stdout.splitlines())
+    print(
+        f"Project sync: release ancestry complete commit={commit[:12]} tags={len(tags)} "
+        f"seconds={time.monotonic() - started:.2f}",
+        file=sys.stderr,
+        flush=True,
+    )
+    return tags
 
 
 def delivery(content, current, linked, releases, mainline):
@@ -303,11 +319,21 @@ def apply_plan(project, fields, plan, *, apply=False):
     if not apply:
         return
     total = sum(len(entry["changes"]) + (not entry["item"]) for entry in plan)
-    confirmed = 0
-    for entry in plan:
+
+    def apply_entry(entry):
+        """Apply one item sequentially inside one worker.
+
+        Args:
+            entry: Precomputed item plan.
+
+        Returns:
+            Confirmed mutation count and sanitized failure metadata.
+        """
+        confirmed = 0
         item = entry["item"]
-        if not item:
-            try:
+        failed_field = "addProjectItem"
+        try:
+            if not item:
                 result = graphql(
                     """mutation($project: ID!, $content: ID!) {
                       addProjectV2ItemById(input: {projectId:$project, contentId:$content}) { item { id } }
@@ -315,35 +341,11 @@ def apply_plan(project, fields, plan, *, apply=False):
                     {"project": project, "content": entry["content"]},
                 )
                 item = result["addProjectV2ItemById"]["item"]["id"]
-            except (RuntimeError, ValueError, OSError, KeyError, TypeError):
-                print(
-                    json.dumps(
-                        {
-                            "confirmed": confirmed,
-                            "unknown": 1,
-                            "unattempted": total - confirmed - 1,
-                            "number": entry["number"],
-                            "field": "addProjectItem",
-                        }
-                    ),
-                    flush=True,
-                )
-                raise
-            confirmed += 1
-        for name, value in entry["changes"].items():
-            field = fields[name]
-            variables = {"project": project, "item": item, "field": field["id"]}
-            if value != "":
-                variables["value"] = (
-                    {
-                        "singleSelectOptionId": next(
-                            o["id"] for o in field["options"] if o["name"] == value
-                        )
-                    }
-                    if "options" in field
-                    else {"text": value}
-                )
-            try:
+                confirmed += 1
+            for name, value in entry["changes"].items():
+                failed_field = name
+                field = fields[name]
+                variables = {"project": project, "item": item, "field": field["id"]}
                 if value == "":
                     graphql(
                         """mutation($project:ID!,$item:ID!,$field:ID!){
@@ -352,28 +354,72 @@ def apply_plan(project, fields, plan, *, apply=False):
                         variables,
                     )
                 else:
+                    variables["value"] = (
+                        {
+                            "singleSelectOptionId": next(
+                                o["id"] for o in field["options"] if o["name"] == value
+                            )
+                        }
+                        if "options" in field
+                        else {"text": value}
+                    )
                     graphql(
                         """mutation($project:ID!,$item:ID!,$field:ID!,$value:ProjectV2FieldValue!){
-                      updateProjectV2ItemFieldValue(input:{projectId:$project,itemId:$item,fieldId:$field,value:$value}){projectV2Item{id}}
+                          updateProjectV2ItemFieldValue(input:{projectId:$project,itemId:$item,fieldId:$field,value:$value}){projectV2Item{id}}
                         }""",
                         variables,
                     )
-            except (RuntimeError, ValueError, OSError):
-                print(
-                    json.dumps(
-                        {
-                            "confirmed": confirmed,
-                            "unknown": 1,
-                            "unattempted": total - confirmed - 1,
-                            "number": entry["number"],
-                            "field": name,
-                        },
-                        ensure_ascii=False,
-                    ),
-                    flush=True,
-                )
-                raise
-            confirmed += 1
+                confirmed += 1
+        except (RuntimeError, ValueError, OSError, KeyError, TypeError, StopIteration):
+            return {
+                "confirmed": confirmed,
+                "unknown": 1,
+                "field": failed_field,
+                "number": entry["number"],
+            }
+        return {
+            "confirmed": confirmed,
+            "unknown": 0,
+            "field": None,
+            "number": entry["number"],
+        }
+
+    confirmed = 0
+    unknown = 0
+    failures = []
+    with ThreadPoolExecutor(
+        max_workers=APPLY_WORKERS, thread_name_prefix="project-sync"
+    ) as executor:
+        futures = [executor.submit(apply_entry, entry) for entry in plan]
+        for completed, future in enumerate(as_completed(futures), 1):
+            result = future.result()
+            confirmed += result["confirmed"]
+            unknown += result["unknown"]
+            if result["unknown"]:
+                failures.append(result)
+            print(
+                json.dumps(
+                    {"completed_items": completed, "total_items": len(plan), **result}
+                ),
+                flush=True,
+            )
+    if failures:
+        first = failures[0]
+        print(
+            json.dumps(
+                {
+                    "confirmed": confirmed,
+                    "unknown": unknown,
+                    "unattempted": total - confirmed - unknown,
+                    "number": first["number"],
+                    "field": first["field"],
+                }
+            ),
+            flush=True,
+        )
+        raise RuntimeError(
+            "Project mutation failed; rerun reconciliation to repair unknown outcomes"
+        )
     print(
         json.dumps({"confirmed": confirmed, "unknown": 0, "unattempted": 0}), flush=True
     )

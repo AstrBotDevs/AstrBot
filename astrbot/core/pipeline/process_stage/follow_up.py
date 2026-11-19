@@ -3,13 +3,14 @@ from __future__ import annotations
 import asyncio
 from dataclasses import dataclass
 
-from astrbot import logger
-from astrbot.core.agent.runners.tool_loop_agent_runner import FollowUpTicket
-from astrbot.core.astr_agent_run_util import AgentRunner
+from astrbot.core.agent.runtime import (
+    AgentInput,
+    AgentPermissions,
+    AgentTurn,
+    InputReceipt,
+)
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
-from astrbot.core.utils.active_event_registry import active_event_registry
 
-_ACTIVE_AGENT_RUNNERS: dict[str, AgentRunner] = {}
 _FOLLOW_UP_ORDER_STATE: dict[str, dict[str, object]] = {}
 """UMO-level follow-up order state.
 
@@ -23,39 +24,10 @@ State fields:
 @dataclass(slots=True)
 class FollowUpCapture:
     umo: str
-    ticket: FollowUpTicket
+    receipt: InputReceipt
     order_seq: int
     monitor_task: asyncio.Task[None]
     target_run_id: str | None = None
-
-
-def _event_follow_up_text(event: AstrMessageEvent) -> str:
-    text = (event.get_message_str() or "").strip()
-    if text:
-        return text
-    return event.get_message_outline().strip()
-
-
-def register_active_runner(umo: str, runner: AgentRunner) -> None:
-    _ACTIVE_AGENT_RUNNERS[umo] = runner
-    runner_event = getattr(getattr(runner.run_context, "context", None), "event", None)
-    if runner_event is not None:
-        active_event_registry.register_agent_stop_callback(
-            runner_event,
-            runner.request_stop,
-        )
-
-
-def unregister_active_runner(umo: str, runner: AgentRunner) -> None:
-    if _ACTIVE_AGENT_RUNNERS.get(umo) is runner:
-        _ACTIVE_AGENT_RUNNERS.pop(umo, None)
-        runner_event = getattr(
-            getattr(runner.run_context, "context", None),
-            "event",
-            None,
-        )
-        if runner_event is not None:
-            active_event_registry.unregister_agent_stop_callback(runner_event)
 
 
 def _get_follow_up_order_state(umo: str) -> dict[str, object]:
@@ -118,8 +90,7 @@ async def _mark_follow_up_consumed(umo: str, seq: int) -> None:
         _advance_follow_up_turn_locked(state)
         condition.notify_all()
 
-        # Release state only when this UMO has no pending statuses and no active runner.
-        if not statuses and _ACTIVE_AGENT_RUNNERS.get(umo) is None:
+        if not statuses:
             _FOLLOW_UP_ORDER_STATE.pop(umo, None)
 
 
@@ -158,70 +129,64 @@ async def _finish_follow_up_turn(umo: str, seq: int) -> None:
         _advance_follow_up_turn_locked(state)
         condition.notify_all()
 
-        if not statuses and _ACTIVE_AGENT_RUNNERS.get(umo) is None:
+        if not statuses:
             _FOLLOW_UP_ORDER_STATE.pop(umo, None)
 
 
 async def _monitor_follow_up_ticket(
     umo: str,
-    ticket: FollowUpTicket,
+    receipt: InputReceipt,
     order_seq: int,
 ) -> None:
-    """Advance consumed slots immediately on resolution to avoid wake-order drift."""
-    await ticket.resolved.wait()
-    if ticket.consumed:
+    """Release captured ordering only after runtime confirms consumption.
+
+    Args:
+        umo: Source whose input arrival order is tracked by Core.
+        receipt: Runtime-owned durable-consumption acknowledgment.
+        order_seq: Core admission order of this input.
+    """
+    if await receipt:
         await _mark_follow_up_consumed(umo, order_seq)
 
 
-def try_capture_follow_up(event: AstrMessageEvent) -> FollowUpCapture | None:
-    sender_id = event.get_sender_id()
-    if not sender_id:
-        return None
-    runner = _ACTIVE_AGENT_RUNNERS.get(event.unified_msg_origin)
-    if not runner:
-        return None
-    runner_event = getattr(getattr(runner.run_context, "context", None), "event", None)
-    if runner_event is None:
-        return None
-    active_sender_id = runner_event.get_sender_id()
-    if not active_sender_id or active_sender_id != sender_id:
-        return None
+def try_capture_follow_up(
+    event: AstrMessageEvent, turn: AgentTurn | None = None
+) -> FollowUpCapture | None:
+    """Offer input to the exact active turn without inspecting a native runner.
 
-    if runner_event.get_extra("agent_stop_requested"):
-        return None
+    Args:
+        event: Incoming message whose caller identity and role remain explicit.
+        turn: Exact active turn of this input's selected conversation.
 
-    ticket = runner.follow_up(message_text=_event_follow_up_text(event))
-    if not ticket:
+    Returns:
+        A capture to await, or None when this input must open a separate turn.
+    """
+    if turn is None or event.get_extra("agent_stop_requested"):
         return None
-    # Allocate strict order at capture time (arrival order), not at wake time.
-    order_seq = _allocate_follow_up_order(event.unified_msg_origin)
-    monitor_task = asyncio.create_task(
-        _monitor_follow_up_ticket(
-            event.unified_msg_origin,
-            ticket,
-            order_seq,
+    receipt = turn.steer(
+        AgentInput(
+            event=event,
+            permissions=AgentPermissions.from_event(event),
         )
     )
-    logger.info(
-        "Captured follow-up message for active agent run, umo=%s, order_seq=%s",
-        event.unified_msg_origin,
-        order_seq,
+    if receipt is None:
+        return None
+    seq = _allocate_follow_up_order(event.unified_msg_origin)
+    monitor = asyncio.create_task(
+        _monitor_follow_up_ticket(event.unified_msg_origin, receipt, seq)
     )
     return FollowUpCapture(
         umo=event.unified_msg_origin,
-        ticket=ticket,
-        order_seq=order_seq,
-        monitor_task=monitor_task,
-        target_run_id=str(runner_event.message_obj.message_id)
-        if getattr(runner_event.message_obj, "message_id", None) is not None
-        else None,
+        receipt=receipt,
+        order_seq=seq,
+        monitor_task=monitor,
+        target_run_id=turn.id,
     )
 
 
 async def prepare_follow_up_capture(capture: FollowUpCapture) -> tuple[bool, bool]:
     """Return `(consumed_marked, activated)` for internal stage branch handling."""
-    await capture.ticket.resolved.wait()
-    if capture.ticket.consumed:
+    if await capture.receipt:
         await _mark_follow_up_consumed(capture.umo, capture.order_seq)
         return True, False
     await _activate_and_wait_follow_up_turn(capture.umo, capture.order_seq)

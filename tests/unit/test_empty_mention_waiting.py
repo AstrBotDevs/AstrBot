@@ -8,6 +8,7 @@ from unittest.mock import AsyncMock
 import pytest
 import pytest_asyncio
 
+from astrbot.builtin_stars.astrbot.i18n import MESSAGES
 from astrbot.builtin_stars.astrbot.main import Main
 from astrbot.core.config.default import DEFAULT_CONFIG
 from astrbot.core.message.components import At, File, Image, Plain
@@ -67,6 +68,7 @@ async def flow(monkeypatch):
     main = Main.__new__(Main)
     main.context = SimpleNamespace(
         get_config=lambda **kwargs: config,
+        locale=lambda _umo: "en-US",
         get_event_queue=lambda: queue,
         conversation_manager=SimpleNamespace(
             get_curr_conversation_id=AsyncMock(return_value=None),
@@ -256,7 +258,7 @@ async def test_greeting_setup_error_keeps_waiting_until_handler_closes(flow):
     handler = flow.main.handle_empty_mention(make_event([At(qq="bot")]))
     try:
         fallback = await anext(handler)
-        assert not isinstance(fallback, ProviderRequest)
+        assert fallback.get_plain_text() == MESSAGES["en-US"]["empty_mention"]
         assert flow.sessions
     finally:
         await handler.aclose()

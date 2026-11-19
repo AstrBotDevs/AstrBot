@@ -9,7 +9,8 @@ uv.lock
 # IDE and editors
 .vscode
 .idea
-.zed/
+.zed
+.local
 
 # Logs and temporary files
 botpy.log

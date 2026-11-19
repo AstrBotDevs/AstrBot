@@ -455,7 +455,7 @@ function aggregateOverflowSeries(series: ProviderTrendItem[]): ProviderTrendItem
 }
 
 async function fetchBaseStats(): Promise<void> {
-  const response = await statsApi.get(selectedRange.value * 24 * 60 * 60)
+  const response = await statsApi.get(selectedRange.value * 24 * 60 * 60, 'messages,process,instances')
   baseStats.value = response.data.data
 }
 

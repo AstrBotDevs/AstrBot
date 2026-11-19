@@ -8,21 +8,33 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 import pytest_asyncio
+from mcp.types import (
+    BlobResourceContents,
+    CallToolResult,
+    EmbeddedResource,
+    ImageContent,
+    TextContent,
+)
 from opentelemetry.trace import format_trace_id, get_current_span
 
 from astrbot.core.agent.hooks import BaseAgentRunHooks
 from astrbot.core.agent.run_context import ContextWrapper
-from astrbot.core.astr_agent_run_util import AgentRunner
-from astrbot.core.astr_agent_wakeup import wake_main_agent
-from astrbot.core.astr_main_agent import MainAgentBuildResult
-from astrbot.core.astr_main_agent.request import prepare_request
+from astrbot.core.agent.runtime import AgentSessionRef
+from astrbot.core.agent.tool_image_cache import tool_image_cache
+from astrbot.core.agent_wakeup import wake_main_agent
+from astrbot.core.astr_agent_runtime import AstrAgentRuntime
+from astrbot.core.astr_agent_runtime import session as native_session
+from astrbot.core.astr_agent_runtime.main_agent import MainAgentBuildResult
+from astrbot.core.astr_agent_runtime.main_agent import builder as native_builder
+from astrbot.core.astr_agent_runtime.main_agent.request import prepare_request
+from astrbot.core.astr_agent_runtime.runner import AgentRunner
 from astrbot.core.config.default import DEFAULT_CONFIG
 from astrbot.core.event_bus import EventBus
 from astrbot.core.log import _log_context
 from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.pipeline.context import PipelineContext
-from astrbot.core.pipeline.process_stage.method.agent_sub_stages import internal
 from astrbot.core.pipeline.scheduler import PipelineScheduler
+from astrbot.core.platform.agent_wakeup_event import AgentWakeupEvent
 from astrbot.core.platform.astr_message_event import (
     AstrMessageEvent,
     current_message_event,
@@ -31,6 +43,7 @@ from astrbot.core.platform.astrbot_message import AstrBotMessage, MessageMember
 from astrbot.core.platform.message_type import MessageType
 from astrbot.core.platform.platform_metadata import PlatformMetadata
 from astrbot.core.provider.entities import LLMResponse
+from astrbot.core.provider.func_tool_manager import FunctionToolManager
 from astrbot.core.utils import trace as trace_module
 
 
@@ -47,6 +60,7 @@ async def runtime(monkeypatch):
     config = copy.deepcopy(DEFAULT_CONFIG)
     config["provider_settings"]["streaming_response"] = False
     config["provider_settings"]["wake_prefix"] = "/llm "
+    config["provider_settings"]["datetime_system_prompt"] = False
     config["platform_settings"]["unique_session"] = True
     config["admins_id"] = ["astrbot"]
     conversation = SimpleNamespace(cid="conversation", history="[]", token_usage=0)
@@ -66,18 +80,53 @@ async def runtime(monkeypatch):
     async def save(*args, **kwargs):
         conversation.history = json.dumps(kwargs["history"])
 
+    async def get_conversation(umo, cid):
+        conversation.user_id = umo
+        return conversation
+
     context = SimpleNamespace(
         get_event_queue=lambda: queue,
         get_platform_inst=lambda _: SimpleNamespace(meta=lambda: metadata),
         get_config=lambda **_: config,
+        locale=lambda umo=None: config["platform_settings"].get("locale", "zh-CN"),
+        astrbot_config_mgr=SimpleNamespace(
+            _create_message_config=lambda _: (copy.deepcopy(config), frozenset())
+        ),
         conversation_manager=SimpleNamespace(
             get_curr_conversation_id=AsyncMock(return_value=conversation.cid),
-            get_conversation=AsyncMock(return_value=conversation),
+            get_conversation=AsyncMock(side_effect=get_conversation),
             update_conversation=AsyncMock(side_effect=save),
         ),
         get_using_tts_provider_async=AsyncMock(return_value=None),
+        get_llm_tool_manager=lambda: FunctionToolManager(),
         send_message=AsyncMock(return_value=True),
     )
+
+    async def read_history(cid):
+        event = current_message_event.get()
+        umo = event.unified_msg_origin if event else conversation.user_id
+        record = await context.conversation_manager.get_conversation(umo, cid)
+        if record is None:
+            return None
+        return SimpleNamespace(
+            **vars(record),
+            conversation_id=record.cid,
+            umo=record.user_id,
+            content=json.loads(record.history),
+        )
+
+    async def read_execution(cid):
+        record = await read_history(cid)
+        return (record, None) if record is not None else None
+
+    context.conversation_manager.db = SimpleNamespace(
+        get_conversation_by_id=AsyncMock(side_effect=read_history),
+        conversation_store=SimpleNamespace(
+            get_metadata=AsyncMock(side_effect=read_history),
+            read_for_execution=AsyncMock(side_effect=read_execution),
+        ),
+    )
+    context.conversation_manager.to_legacy_conversation = lambda record: record
 
     async def respond(**kwargs):
         event = current_message_event.get()
@@ -114,34 +163,30 @@ async def runtime(monkeypatch):
         text_chat_stream=respond_stream,
     )
 
-    async def build(*, event, plugin_context, config):
-        prepared = await prepare_request(event, plugin_context, config, provider, None)
+    async def build(
+        *, event, plugin_context, config, req=None, collected_input=None, **kwargs
+    ):
+        prepared = await prepare_request(
+            event, plugin_context, config, provider, req, collected_input
+        )
         assert prepared is not None
         control.events.append(event)
         runner = AgentRunner()
         await runner.reset(
             provider=provider,
             request=prepared.request,
-            run_context=ContextWrapper(context=SimpleNamespace(event=event)),
+            run_context=ContextWrapper(
+                context=SimpleNamespace(event=event, send_to_user=True, _output_turn=None)
+            ),
             tool_executor=MagicMock(),
             agent_hooks=BaseAgentRunHooks(),
             streaming=config.streaming_response,
         )
         return MainAgentBuildResult(runner, prepared.request, provider)
 
-    monkeypatch.setattr(internal, "build_main_agent", build)
-    monkeypatch.setattr(internal, "_record_internal_agent_stats", AsyncMock())
-    monkeypatch.setattr(internal.Metric, "upload", AsyncMock())
-    monkeypatch.setattr(
-        internal.SessionServiceManager,
-        "should_process_llm_request",
-        AsyncMock(return_value=True),
-    )
-    monkeypatch.setattr(
-        internal.SessionServiceManager,
-        "is_session_enabled",
-        AsyncMock(return_value=True),
-    )
+    monkeypatch.setattr(native_builder, "build_main_agent", build)
+    monkeypatch.setattr(native_session, "record_agent_stats", AsyncMock())
+    monkeypatch.setattr(native_session.Metric, "upload", AsyncMock())
     monkeypatch.setitem(trace_module.astrbot_config, "trace_enable", True)
     monkeypatch.setattr(
         trace_module,
@@ -149,8 +194,12 @@ async def runtime(monkeypatch):
         lambda *_: SimpleNamespace(append=lambda *args, **kwargs: True),
     )
     monkeypatch.setattr(trace_module, "_get_log_broker", lambda: None)
+    native = AstrAgentRuntime(context, agent_configs=MagicMock(), subagents=MagicMock())
+    runtimes = {"astrbot": native}
     scheduler = PipelineScheduler(
-        PipelineContext(config, SimpleNamespace(context=context), "profile")
+        PipelineContext(
+            config, SimpleNamespace(context=context), "profile", agent_runtimes=runtimes
+        )
     )
     await scheduler.initialize()
     bus = EventBus(
@@ -165,6 +214,7 @@ async def runtime(monkeypatch):
             await asyncio.sleep(0)
             await asyncio.gather(*list(bus._pending_tasks), return_exceptions=True)
 
+    control.native = native
     control.context, control.conversation = context, conversation
     control.bus, control.scheduler, control.drain = bus, scheduler, drain
     control.agent_stage = next(
@@ -176,27 +226,31 @@ async def runtime(monkeypatch):
     for task in pending:
         task.cancel()
     await asyncio.gather(*pending, return_exceptions=True)
+    await native.close()
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("deliver", [False, True])
-@pytest.mark.parametrize("streaming", [False, True])
-async def test_wakeup_uses_current_context_and_sends_final_reply(
-    runtime, deliver, streaming
-):
-    """Keep routing, execution scopes, history, and delivery on the normal path."""
-    runtime.deliver = deliver
-    runtime.agent_stage.streaming_response = streaming
+@pytest.mark.parametrize("source", ["cron", "background_task", "plugin"])
+async def test_wakeup_output_policy_preserves_explicit_sends_and_history(runtime, source):
+    """Keep explicit sends and history when automatic replies are disabled.
+
+    Args:
+        runtime: Real pipeline and offline model host.
+        source: Mechanism initiating the wakeup.
+    """
+    runtime.deliver = True
     history = [{"role": "user", "content": "Existing context"}]
     runtime.conversation.history = json.dumps(history)
     umo = "target:GroupMessage:user_group"
     await wake_main_agent(
-        runtime.context, umo=umo, user_prompt="Continue", source="cron"
+        runtime.context, umo=umo, user_prompt="Continue", source=source
     )
     await asyncio.wait_for(runtime.drain(), 1)
     event = runtime.events[0]
     assert event.unified_msg_origin == umo
     assert event.role == "member"
+    assert event.get_extra("provider_request").conversation.cid == "conversation"
+    assert event.get_extra("provider_request").prompt == "Continue"
     assert runtime.requests[0][0] == history[0]
     assert json.loads(runtime.conversation.history) == history + [
         {"role": "user", "content": [{"type": "text", "text": "Continue"}]},
@@ -206,7 +260,9 @@ async def test_wakeup_uses_current_context_and_sends_final_reply(
         call.args[1].get_plain_text()
         for call in runtime.context.send_message.await_args_list
     ]
-    assert delivered_texts == (["Explicit delivery"] if deliver else []) + ["Reply 1"]
+    assert delivered_texts == ["Explicit delivery"] + (
+        ["Reply 1"] if source == "plugin" else []
+    )
     assert event.trace._summary["state"] == "completed"
     assert not event.trace._summary["has_errors"]
     assert current_message_event.get() is None and _log_context.get() is None
@@ -290,6 +346,38 @@ async def test_platform_stop_cancels_the_wakeup_provider_and_preserves_history(r
 
 
 @pytest.mark.asyncio
+async def test_switching_conversations_does_not_steer_the_previous_active_turn(runtime):
+    umo = "target:FriendMessage:user"
+    runtime.gate.clear()
+    await wake_main_agent(runtime.context, umo=umo, user_prompt="First", source="cron")
+    await asyncio.wait_for(runtime.started.wait(), 1)
+    active = runtime.native.active_turn(umo)
+    active.steer = MagicMock(side_effect=AssertionError("Wrong conversation"))
+    second = SimpleNamespace(
+        cid="second",
+        user_id=umo,
+        token_usage=0,
+        history=json.dumps([{"role": "user", "content": "Second history"}]),
+    )
+    conversations = {"conversation": runtime.conversation, "second": second}
+    manager = runtime.context.conversation_manager
+    manager.get_curr_conversation_id.return_value = "second"
+    manager.get_conversation.side_effect = lambda source, cid: conversations[cid]
+
+    async def save(source, cid, **kwargs):
+        conversations[cid].history = json.dumps(kwargs["history"])
+
+    manager.update_conversation.side_effect = save
+    await wake_main_agent(runtime.context, umo=umo, user_prompt="Next", source="cron")
+    runtime.gate.set()
+    await asyncio.wait_for(runtime.drain(), 1)
+    active.steer.assert_not_called()
+    assert runtime.requests[1][0] == {"role": "user", "content": "Second history"}
+    assert "Second history" not in runtime.conversation.history
+    assert "First" not in second.history
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize("streaming", [False, True])
 async def test_wakeup_failure_is_traced_and_delivered(runtime, streaming):
     """Deliver the provider error while retaining the failed trace and history."""
@@ -309,3 +397,218 @@ async def test_wakeup_failure_is_traced_and_delivered(runtime, streaming):
         == "LLM 响应错误: Reply 1"
     )
     runtime.context.conversation_manager.update_conversation.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_targeted_wakeup_queues_on_its_parent_after_conversation_switch(runtime):
+    umo = "target:FriendMessage:user"
+    runtime.gate.clear()
+    await wake_main_agent(runtime.context, umo=umo, user_prompt="First", source="cron")
+    await asyncio.wait_for(runtime.started.wait(), 1)
+    parent = runtime.native.active_turn(umo)
+    parent.steer = MagicMock(
+        side_effect=AssertionError("Fallback must queue a new turn")
+    )
+    other = SimpleNamespace(cid="other", user_id=umo, history="[]", token_usage=0)
+    conversations = {"conversation": runtime.conversation, "other": other}
+    runtime.context.conversation_manager.get_curr_conversation_id.return_value = "other"
+    runtime.context.conversation_manager.get_conversation.side_effect = (
+        lambda source, cid: conversations.get(cid)
+    )
+    await wake_main_agent(
+        runtime.context,
+        umo=umo,
+        user_prompt="Child result",
+        source="background_task",
+        agent_session=AgentSessionRef("astrbot", "conversation"),
+    )
+    runtime.gate.set()
+    await asyncio.wait_for(runtime.drain(), 1)
+    parent.steer.assert_not_called()
+    assert len(runtime.requests) == 2
+    assert {
+        "role": "assistant",
+        "content": [{"type": "text", "text": "Reply 1"}],
+    } in runtime.requests[1]
+    assert "Child result" in runtime.conversation.history
+    assert other.history == "[]"
+    assert (
+        runtime.context.conversation_manager.get_curr_conversation_id.return_value
+        == "other"
+    )
+
+
+@pytest.mark.asyncio
+async def test_waiting_hook_streaming_override_is_resolved_after_admission(
+    runtime, monkeypatch
+):
+    """Preserve waiting hooks that change this input's output preferences.
+
+    Args:
+        runtime: Real pipeline and offline model host.
+        monkeypatch: Core hook and native builder patch manager.
+    """
+    from astrbot.core.pipeline import context_utils
+    from astrbot.core.star.star_handler import EventType
+
+    original = native_builder.build_main_agent
+    streaming = []
+
+    async def hook(event, kind, *args):
+        if kind == EventType.OnWaitingLLMRequestEvent:
+            event.set_extra("enable_streaming", True)
+        return False
+
+    async def build(**kwargs):
+        streaming.append(kwargs["config"].streaming_response)
+        return await original(**kwargs)
+
+    monkeypatch.setattr(context_utils, "call_event_hook", hook)
+    monkeypatch.setattr(native_builder, "build_main_agent", build)
+    await wake_main_agent(
+        runtime.context,
+        umo="target:FriendMessage:alice",
+        user_prompt="Continue",
+        source="plugin",
+    )
+    await asyncio.wait_for(runtime.drain(), 1)
+    assert streaming == [True]
+
+
+@pytest.mark.asyncio
+async def test_sdk_handle_keeps_permissions_and_follow_up_under_core_admission(runtime):
+    """Expose session status without exposing raw input submission."""
+    from astrbot.api.agents import PlainInput
+    from astrbot.core.agent_service import AgentService
+    from astrbot.core.platform.message_session import MessageSession
+
+    umo = "target:FriendMessage:user"
+    context = runtime.context
+    service = AgentService(context, {"astrbot": runtime.native})
+    source = AgentWakeupEvent(
+        context=context,
+        session=MessageSession.from_str(umo),
+        platform_meta=context.get_platform_inst("target").meta(),
+        source="plugin",
+        prompt="Continue",
+        role="admin",
+    )
+    source.set_extra("_api_key_allow_admin_role", False)
+    run = await service.run_turn(
+        umo=umo,
+        input_message=[PlainInput(text="First input")],
+        send_to_user=False,
+        source_event=source,
+    )
+    assert not hasattr(run, "runtime_turn")
+    assert not hasattr(run.session, "run_turn")
+    assert run.session.ref == AgentSessionRef("astrbot", "conversation")
+    assert (await asyncio.wait_for(run.result(), 1)).text == "Reply 1"
+    assert runtime.events[0].role == "member"
+
+    context.get_config()["provider_settings"]["enable"] = False
+    follow_up = await run.follow_up(input_message=[PlainInput(text="Second input")])
+    assert follow_up.session.ref == run.session.ref
+    assert (await asyncio.wait_for(follow_up.result(), 1)).reason == "skipped"
+    assert len(runtime.requests) == 1
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("vision", [False, True])
+async def test_background_output_uses_normal_overflow_and_image_handling(
+    runtime, monkeypatch, tmp_path, database, vision
+):
+    """Typed wakeup output follows the foreground storage and modality policy."""
+    from astrbot.core.agent.conversation_events import ConversationEventWriter
+
+    original = native_builder.build_main_agent
+    store = database.conversation_store
+    conversation = await store.create(umo="target:FriendMessage:alice", platform_id="target")
+    writer = ConversationEventWriter(store, await store.read(conversation.conversation_id))
+
+    async def build(**kwargs):
+        result = await original(**kwargs)
+        runner = result.agent_runner
+        runner.tool_result_overflow_dir = str(tmp_path)
+        runner.read_tool = SimpleNamespace(name="astrbot_file_read_tool")
+        runner.TOOL_RESULT_MAX_ESTIMATED_TOKENS = 100
+        runner.TOOL_RESULT_PREVIEW_MAX_ESTIMATED_TOKENS = 20
+        result.provider.provider_config["modalities"] = (
+            ["text", "image"] if vision else ["text"]
+        )
+        runner._conversation_event_sink = writer.consume
+        result.conversation_events = writer
+        return result
+
+    monkeypatch.setattr(native_builder, "build_main_agent", build)
+    monkeypatch.setattr(tool_image_cache, "_cache_dir", str(tmp_path / "images"))
+    image_data = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII="
+    output = "large background output " * 1000
+    await wake_main_agent(
+        runtime.context,
+        umo="target:FriendMessage:alice",
+        user_prompt="A background task completed. Review its output.",
+        source="background_task",
+        source_id="background-test",
+        tool_result=(
+            "slow_tool",
+            CallToolResult(
+                content=[
+                    TextContent(type="text", text=output),
+                    ImageContent(type="image", data=image_data, mimeType="image/png"),
+                    EmbeddedResource(
+                        type="resource",
+                        resource=BlobResourceContents(
+                            uri="file:///result.png",
+                            blob=image_data,
+                            mimeType="image/png",
+                        ),
+                    ),
+                ]
+            ),
+        ),
+    )
+    await asyncio.wait_for(runtime.drain(), 3)
+    assert len(runtime.requests) == 1
+    files = list(tmp_path.glob("background-test_*.txt"))
+    assert len(files) == 1
+    saved = files[0].read_text(encoding="utf-8")
+    assert saved.startswith(output)
+    assert "Image returned and cached at path=" in saved
+    assert image_data not in saved
+    assert len(list((tmp_path / "images").glob("*.png"))) == 2
+    contexts = runtime.requests[0]
+    user_messages = [message for message in contexts if message["role"] == "user"]
+    assert len(user_messages) == 1
+    assert "A background task completed." in user_messages[0]["content"][0]["text"]
+    text_parts, image_parts = [], []
+    for message in contexts:
+        content = message.get("content", "")
+        if isinstance(content, str):
+            text_parts.append(content)
+        else:
+            for part in content or []:
+                if part.get("type") == "text":
+                    text_parts.append(part["text"])
+                elif part.get("type") == "image_url":
+                    image_parts.append(part)
+    text = "\n".join(text_parts)
+    assert str(files[0]) in text
+    assert "Use `astrbot_file_read_tool` to inspect it." in text
+    assert output not in text
+    assert image_data not in text
+    assert len(image_parts) == (2 if vision else 0)
+    if vision:
+        assert all(
+            part["image_url"]["url"].endswith(image_data) for part in image_parts
+        )
+    history = (await store.read(conversation.conversation_id)).messages
+    saved_users = [message for message in history if message["role"] == "user"]
+    assert saved_users == user_messages
+    assert output not in json.dumps(history)
+    events = await store.events(conversation.conversation_id)
+    assert not any(event.type == "context.rebased" for event in events)
+    assert sum(
+        event.type == "message.appended" and event.payload["message"]["role"] == "user"
+        for event in events
+    ) == 1

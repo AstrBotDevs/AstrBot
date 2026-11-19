@@ -37,6 +37,9 @@
       <ProviderSelector :model-value="modelValue" @update:model-value="emitUpdate" :provider-type="'chat_completion'"
         :button-text="t('core.shared.providerSelector.selectProviderPool')" />
     </template>
+    <template v-else-if="itemMeta?._special === 'select_agent_configs'">
+      <AgentConfigSelector :model-value="modelValue || []" @update:model-value="emitUpdate" />
+    </template>
     <template v-else-if="itemMeta?._special === 'select_persona'">
       <PersonaSelector :model-value="modelValue" @update:model-value="emitUpdate" />
     </template>
@@ -47,7 +50,7 @@
       <KnowledgeBaseSelector :model-value="modelValue" @update:model-value="emitUpdate" />
     </template>
     <template v-else-if="itemMeta?._special === 'select_plugin_set'">
-      <PluginSetSelector :model-value="modelValue" @update:model-value="emitUpdate" />
+      <PluginSetSelector :model-value="modelValue" :selection-only="itemMeta?.selection_only" @update:model-value="emitUpdate" />
     </template>
     <template v-else-if="itemMeta?._special === 't2i_template'">
       <T2ITemplateEditor />
@@ -191,7 +194,12 @@
       <v-text-field
         :model-value="numericTemp ?? modelValue"
         @update:model-value="val => (numericTemp = val)"
-        @blur="() => { if (numericTemp != null) { emitUpdate(toNumber(numericTemp)) } numericTemp = null }"
+        @blur="() => {
+          if (numericTemp != null) {
+            emitUpdate(itemMeta?.nullable && numericTemp === '' ? null : toNumber(numericTemp))
+          }
+          numericTemp = null
+        }"
         density="compact"
         variant="outlined"
         class="config-field"
@@ -275,6 +283,7 @@ import FileConfigItem from './FileConfigItem.vue'
 import ObjectEditor from './ObjectEditor.vue'
 import ProviderSelector from './ProviderSelector.vue'
 import PersonaSelector from './PersonaSelector.vue'
+import AgentConfigSelector from './AgentConfigSelector.vue'
 import KnowledgeBaseSelector from './KnowledgeBaseSelector.vue'
 import PluginSetSelector from './PluginSetSelector.vue'
 import T2ITemplateEditor from './T2ITemplateEditor.vue'
@@ -331,12 +340,12 @@ const { configText } = usePluginI18n()
 async function emitUpdate(val) {
   val = validateNumericConfig(props.itemMeta?.type, val)
   if (
-    props.itemMeta?._special === 'agent_runner_type'
-    && props.configRoot?.agent_runner
-    && props.itemMeta?.runner_defaults?.[val]
+    props.itemMeta?._special === 'agent_runtime'
+    && props.configRoot?.agent
+    && props.itemMeta?.runtime_defaults?.[val]
   ) {
-    props.configRoot.agent_runner.config = JSON.parse(
-      JSON.stringify(props.itemMeta.runner_defaults[val])
+    props.configRoot.agent.config = JSON.parse(
+      JSON.stringify(props.itemMeta.runtime_defaults[val])
     )
   }
   emit('update:modelValue', val)

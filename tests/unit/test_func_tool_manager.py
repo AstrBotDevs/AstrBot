@@ -7,21 +7,21 @@ from unittest.mock import ANY, AsyncMock
 import pytest
 
 from astrbot.core import sp
-from astrbot.core.computer.booters.local import LocalShellComponent
-from astrbot.core.provider import func_tool_manager as ftm
-from astrbot.core.provider.func_tool_manager import FunctionToolManager
-from astrbot.core.tools.computer_tools.shell import (
+from astrbot.core.astr_agent_runtime.computer.booters.local import LocalShellComponent
+from astrbot.core.astr_agent_runtime.tools.computer_tools.shell import (
     ExecuteShellTool,
     LocalExecuteShellTool,
     ShellSessionTool,
 )
-from astrbot.core.tools.message_tools import SendMessageToUserTool
-from astrbot.core.tools.web_search_tools import (
+from astrbot.core.astr_agent_runtime.tools.message_tools import SendMessageToUserTool
+from astrbot.core.astr_agent_runtime.tools.web_search_tools import (
     DeepSeekFetchWebPageTool,
     DeepSeekWebSearchTool,
     FirecrawlExtractWebPageTool,
     FirecrawlWebSearchTool,
 )
+from astrbot.core.provider import func_tool_manager as ftm
+from astrbot.core.provider.func_tool_manager import FunctionToolManager
 
 
 def test_get_builtin_tool_by_class_returns_cached_instance():
@@ -125,7 +125,9 @@ async def test_local_execute_shell_manages_running_and_closed_results(
     tmp_path,
     allow_network,
 ):
-    from astrbot.core.tools.computer_tools import shell as shell_tools
+    from astrbot.core.astr_agent_runtime.tools.computer_tools import (
+        shell as shell_tools,
+    )
 
     shell = LocalShellComponent()
     shell.exec_managed = AsyncMock(
@@ -244,7 +246,9 @@ async def test_local_shell_tools_fail_closed_without_sender_identity(
     monkeypatch,
     tmp_path,
 ):
-    from astrbot.core.tools.computer_tools import shell as shell_tools
+    from astrbot.core.astr_agent_runtime.tools.computer_tools import (
+        shell as shell_tools,
+    )
 
     shell = LocalShellComponent()
     shell.exec_managed = AsyncMock()
@@ -306,8 +310,12 @@ async def test_local_member_shell_uses_sandbox_backend(
     monkeypatch,
     tmp_path,
 ):
-    from astrbot.core.tools.computer_tools import shell as shell_tools
-    from astrbot.core.tools.computer_tools import util as computer_util
+    from astrbot.core.astr_agent_runtime.tools.computer_tools import (
+        shell as shell_tools,
+    )
+    from astrbot.core.astr_agent_runtime.tools.computer_tools import (
+        util as computer_util,
+    )
 
     shell = LocalShellComponent()
     shell.exec_managed = AsyncMock(
@@ -388,7 +396,9 @@ async def test_local_member_shell_uses_sandbox_backend(
 
 @pytest.mark.asyncio
 async def test_local_member_shell_is_denied_without_supported_sandbox(monkeypatch):
-    from astrbot.core.tools.computer_tools import util as computer_util
+    from astrbot.core.astr_agent_runtime.tools.computer_tools import (
+        util as computer_util,
+    )
 
     class FakeConfig:
         def get_config(self, umo):
@@ -436,7 +446,9 @@ async def test_local_member_shell_is_denied_without_supported_sandbox(monkeypatc
 @pytest.mark.asyncio
 @pytest.mark.skipif(os.name == "nt", reason="Restricted execution needs POSIX.")
 async def test_shell_session_tool_lists_sessions_for_current_owner(monkeypatch):
-    from astrbot.core.tools.computer_tools import shell as shell_tools
+    from astrbot.core.astr_agent_runtime.tools.computer_tools import (
+        shell as shell_tools,
+    )
 
     shell = LocalShellComponent()
     shell.list_sessions = AsyncMock(
@@ -499,7 +511,9 @@ async def test_shell_session_tool_passes_member_identity_to_session_actions(
     component_action,
     yield_time_ms,
 ):
-    from astrbot.core.tools.computer_tools import shell as shell_tools
+    from astrbot.core.astr_agent_runtime.tools.computer_tools import (
+        shell as shell_tools,
+    )
 
     shell = LocalShellComponent()
     operation = AsyncMock(return_value={"session_id": "sh_test", "status": "running"})
@@ -595,7 +609,9 @@ async def test_shell_session_tool_passes_member_identity_to_session_actions(
 
 @pytest.mark.asyncio
 async def test_execute_shell_defaults_to_foreground(monkeypatch):
-    from astrbot.core.tools.computer_tools import shell as shell_tools
+    from astrbot.core.astr_agent_runtime.tools.computer_tools import (
+        shell as shell_tools,
+    )
 
     calls = []
 
@@ -639,7 +655,9 @@ async def test_execute_shell_defaults_to_foreground(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_execute_shell_uses_fresh_default_env_per_call(monkeypatch):
-    from astrbot.core.tools.computer_tools import shell as shell_tools
+    from astrbot.core.astr_agent_runtime.tools.computer_tools import (
+        shell as shell_tools,
+    )
 
     calls = []
 
@@ -685,7 +703,9 @@ async def test_execute_shell_uses_fresh_default_env_per_call(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_execute_shell_copies_user_env_before_execution(monkeypatch):
-    from astrbot.core.tools.computer_tools import shell as shell_tools
+    from astrbot.core.astr_agent_runtime.tools.computer_tools import (
+        shell as shell_tools,
+    )
 
     calls = []
 
@@ -731,7 +751,9 @@ async def test_execute_shell_copies_user_env_before_execution(monkeypatch):
 async def test_execute_shell_avoids_double_background_for_detached_commands(
     monkeypatch,
 ):
-    from astrbot.core.tools.computer_tools import shell as shell_tools
+    from astrbot.core.astr_agent_runtime.tools.computer_tools import (
+        shell as shell_tools,
+    )
 
     calls = []
 
@@ -776,7 +798,9 @@ async def test_execute_shell_avoids_double_background_for_detached_commands(
 
 @pytest.mark.asyncio
 async def test_execute_shell_recognizes_commented_background_command(monkeypatch):
-    from astrbot.core.tools.computer_tools import shell as shell_tools
+    from astrbot.core.astr_agent_runtime.tools.computer_tools import (
+        shell as shell_tools,
+    )
 
     calls = []
 
@@ -832,14 +856,18 @@ async def test_execute_shell_recognizes_commented_background_command(monkeypatch
     ],
 )
 def test_is_self_detached_command_handles_quotes_and_comments(command, expected):
-    from astrbot.core.tools.computer_tools.shell import _is_self_detached_command
+    from astrbot.core.astr_agent_runtime.tools.computer_tools.shell import (
+        _is_self_detached_command,
+    )
 
     assert _is_self_detached_command(command) is expected
 
 
 @pytest.mark.asyncio
 async def test_execute_shell_reports_blank_exception_type(monkeypatch):
-    from astrbot.core.tools.computer_tools import shell as shell_tools
+    from astrbot.core.astr_agent_runtime.tools.computer_tools import (
+        shell as shell_tools,
+    )
 
     class BlankError(Exception):
         def __str__(self):

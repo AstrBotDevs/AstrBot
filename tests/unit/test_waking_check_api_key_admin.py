@@ -7,7 +7,6 @@ from astrbot.core.pipeline.waking_check.stage import (
     WakingCheckStage,
     star_handlers_registry,
 )
-from astrbot.core.star.session_plugin_manager import SessionPluginManager
 
 
 @pytest.mark.asyncio
@@ -38,6 +37,9 @@ async def test_waking_check_enforces_api_key_admin_authorization(
     stage.ignore_at_all = False
     stage.disable_builtin_commands = False
     stage.no_permission_reply = True
+    stage.ctx.plugin_manager = SimpleNamespace(
+        context=SimpleNamespace(get_config=lambda **_: stage.ctx.astrbot_config)
+    )
     stage._umo_auto_name_recorder = MagicMock()
 
     event = MagicMock()
@@ -59,11 +61,6 @@ async def test_waking_check_enforces_api_key_admin_authorization(
     async def return_handlers(_event, handlers):
         return handlers
 
-    monkeypatch.setattr(
-        SessionPluginManager,
-        "filter_handlers_by_session",
-        return_handlers,
-    )
 
     await stage.process(event)
 

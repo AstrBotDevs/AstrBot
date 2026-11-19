@@ -217,17 +217,17 @@ class AstrBotConfig(dict):
                 # 配置项不存在，插入默认值
                 path_ = path + "." + key if path else key
                 logger.info("Config key missing; added default.")
-                new_conf[key] = value
+                new_conf[key] = copy.deepcopy(value)
                 has_new = True
             elif conf[key] is None:
                 # 配置项为 None，使用默认值
-                new_conf[key] = value
+                new_conf[key] = copy.deepcopy(value)
                 has_new = True
             elif isinstance(value, dict):
                 # 递归检查子配置项
                 if not isinstance(conf[key], dict):
                     # 类型不匹配，使用默认值
-                    new_conf[key] = value
+                    new_conf[key] = copy.deepcopy(value)
                     has_new = True
                 elif (
                     isinstance(child_schema, dict)
@@ -236,7 +236,7 @@ class AstrBotConfig(dict):
                     # Free-form mapping declared as "type": "dict": user-added
                     # keys are data instead of stale entries, keep them as-is.
                     new_conf[key] = conf[key]
-                elif (path + "." + key if path else key) == "agent_runner.config":
+                elif (path + "." + key if path else key) == "agent.config":
                     # Runner config is normalized according to runner_type when saved.
                     new_conf[key] = conf[key]
                 else:
