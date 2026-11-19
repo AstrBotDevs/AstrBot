@@ -14,8 +14,11 @@ from astrbot.core.agent_input import (
 )
 from astrbot.core.agent_output import present_turn
 from astrbot.core.agent_output_content import chain_from_content
-from astrbot.core.llm_error_messages import LLM_ERROR_MESSAGE_EXTRA_KEY
-from astrbot.core.message.components import File, Image, Record, Reply, Video
+from astrbot.core.llm_error_messages import (
+    LLM_ERROR_CODE_EXTRA_KEY,
+    LLM_ERROR_MESSAGE_EXTRA_KEY,
+)
+from astrbot.core.message.components import File, Image, Json, Record, Reply, Video
 from astrbot.core.message.message_event_result import (
     MessageChain,
     MessageEventResult,
@@ -208,6 +211,7 @@ class InternalAgentSubStage(Stage):
                     event.set_result(
                         MessageEventResult(
                             chain=chain.chain,
+                            type=chain.type,
                             result_content_type=ResultContentType.LLM_RESULT,
                         )
                     )
@@ -240,7 +244,23 @@ class InternalAgentSubStage(Stage):
                 or event.get_extra(LLM_ERROR_MESSAGE_EXTRA_KEY)
                 or f"Error occurred while processing agent request: {exc}"
             )
-            await event.send(MessageChain().message(str(error)))
+            if event.get_platform_name() == "webchat":
+                await event.send(
+                    MessageChain(
+                        type="chatui_error",
+                        chain=[
+                            Json(
+                                {
+                                    "code": event.get_extra(LLM_ERROR_CODE_EXTRA_KEY)
+                                    or "agent_error",
+                                    "message": str(error),
+                                }
+                            )
+                        ],
+                    )
+                )
+            else:
+                await event.send(MessageChain().message(str(error)))
         finally:
             if turn is not None:
                 active_event_registry.unregister_agent_stop_callback(

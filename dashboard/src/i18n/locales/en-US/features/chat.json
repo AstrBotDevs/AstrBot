@@ -293,5 +293,25 @@
     "resize": "Resize workbench",
     "closeTab": "Close {title}",
     "resize": "Resize workbench"
+  },
+  "executionError": {
+    "noModel": {
+      "title": "No chat model available",
+      "description": "Configure and enable a model to start chatting."
+    },
+    "modelConfiguration": {
+      "title": "This model is unavailable",
+      "description": "Check the model configuration or select another available chat model."
+    },
+    "connection": {
+      "title": "Connection problem",
+      "description": "Check your network connection and try again shortly."
+    },
+    "generic": {
+      "title": "This reply could not be completed",
+      "description": "Try again later or open the details to learn more."
+    },
+    "configureModels": "Configure models",
+    "details": "View details"
   }
 }
