@@ -49,6 +49,7 @@ astrbot/dashboard/dist/
 .astrbot
 .astrbot-tmp
 astrbot.lock
+astrbot.pid
 
 # Other
 chroma

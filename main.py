@@ -31,6 +31,8 @@ def _apply_startup_env_flags(argv: list[str]) -> None:
 
 _apply_startup_env_flags(sys.argv[1:])
 
+from filelock import FileLock, Timeout  # noqa: E402
+
 from astrbot.core import LogBroker, LogManager, db_helper, logger  # noqa: E402
 from astrbot.core.dashboard_assets import resolve_dashboard_dist  # noqa: E402
 from astrbot.core.initial_loader import InitialLoader  # noqa: E402
@@ -165,6 +167,65 @@ if __name__ == "__main__":
         ),
     )
     args = parser.parse_args()
+
+    # Enforce one backend per AstrBot root. A port probe cannot do this: hypercorn
+    # always sets SO_REUSEADDR (hypercorn/config.py, _create_sockets), and on Windows
+    # that lets a second process silently bind an already listening port, so both
+    # instances would serve 6199 without any error. The lock file name matches the
+    # CLI one (astrbot/cli/commands/cmd_run.py) so both entry points exclude each
+    # other. The PID uses a separate file because Windows keeps an exclusive
+    # byte-range lock on the lock file itself, so writing into it would fail.
+    astrbot_root = Path(get_astrbot_root())
+    lock_file = astrbot_root / "astrbot.lock"
+    pid_file = astrbot_root / "astrbot.pid"
+    # The lock is kept in a module-scope name for the whole process lifetime; if the
+    # only reference were dropped, the lock would be released and another instance
+    # could start while this one still runs.
+    instance_lock = FileLock(lock_file, timeout=0)
+    try:
+        instance_lock.acquire()
+    except Timeout:
+        try:
+            holder_pid = pid_file.read_text(encoding="utf-8").strip() or "unknown"
+        except OSError:
+            holder_pid = "unknown"
+        logger.error(
+            "Another AstrBot instance is already running for this root, so startup "
+            "is aborted.\n  root: %s\n  holder pid: %s\n  lock file: %s\n"
+            "Stop the running instance first (Windows: taskkill /PID %s /F; "
+            "POSIX: kill %s), or start AstrBot with a different ASTRBOT_ROOT.",
+            astrbot_root,
+            holder_pid,
+            lock_file,
+            holder_pid,
+            holder_pid,
+        )
+        sys.exit(1)
+    except OSError as exc:
+        # A read-only root (for example a container started with --read-only) or a
+        # lock path owned by another user must fail with a message that names the
+        # path, not with an unhandled traceback. Timeout is an OSError subclass, so
+        # this branch must stay after the Timeout one.
+        logger.error(
+            "The AstrBot lock file cannot be created, so startup is aborted.\n"
+            "  root: %s\n  lock file: %s\n  error: %r\n"
+            "Make the root directory writable, or start AstrBot with a different "
+            "ASTRBOT_ROOT.",
+            astrbot_root,
+            lock_file,
+            exc,
+        )
+        sys.exit(1)
+    try:
+        # The pid file only feeds the diagnostic message above, so a failure to write
+        # it must not keep a single instance from starting.
+        pid_file.write_text(str(os.getpid()), encoding="utf-8")
+    except OSError as exc:
+        logger.warning(
+            "Could not record the owner pid in %s: %r. Startup continues.",
+            pid_file,
+            exc,
+        )
 
     check_env()
 
