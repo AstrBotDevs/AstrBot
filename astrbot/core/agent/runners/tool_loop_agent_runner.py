@@ -38,6 +38,7 @@ from astrbot.core.agent.tool import FunctionTool, ToolSet
 from astrbot.core.agent.tool_image_cache import CachedImage, tool_image_cache
 from astrbot.core.agent_output_content import content_from_chain
 from astrbot.core.exceptions import ConversationPersistenceError, EmptyModelOutputError
+from astrbot.core.message.components import Plain
 from astrbot.core.provider.entities import (
     LLMResponse,
     ProviderRequest,
@@ -1310,8 +1311,21 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         if llm_resp.reasoning_content:
             content.append(ReasoningOutput(text=llm_resp.reasoning_content))
         if llm_resp.result_chain:
-            content.extend(content_from_chain(llm_resp.result_chain))
-        elif llm_resp.completion_text:
+            # Providers that wrap the reply in result_chain need the same
+            # whitespace-only preamble skip as completion_text. Chains carrying
+            # media or any non-Plain component stay untouched.
+            blank_text_chain = (
+                all(isinstance(comp, Plain) for comp in llm_resp.result_chain.chain)
+                and not llm_resp.result_chain.get_plain_text().strip()
+            )
+            if not (llm_resp.tools_call_name and blank_text_chain):
+                content.extend(content_from_chain(llm_resp.result_chain))
+        elif llm_resp.completion_text and (
+            not llm_resp.tools_call_name or llm_resp.completion_text.strip()
+        ):
+            # A whitespace-only preamble carries no information. When tool
+            # calls follow, skip it so no empty message reaches the respond
+            # stage; without tool calls keep the model's reply untouched.
             content.append(PlainOutput(text=llm_resp.completion_text))
         if content:
             self._message_content = tuple(content)
