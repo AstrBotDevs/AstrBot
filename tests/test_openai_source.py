@@ -13,6 +13,7 @@ from PIL import Image as PILImage
 
 import astrbot.core.provider.sources.openai_source as openai_source_module
 import astrbot.core.provider.sources.request_retry as request_retry
+from astrbot.core.agent.tool import ToolSet
 from astrbot.core.exceptions import EmptyModelOutputError
 from astrbot.core.provider.entities import LLMResponse
 from astrbot.core.provider.sources.groq_source import ProviderGroq
@@ -81,6 +82,418 @@ async def test_provider_client_disables_sdk_builtin_retries(overrides, expected_
     try:
         assert isinstance(provider.client, expected_client)
         assert provider.client.max_retries == 0
+    finally:
+        await provider.terminate()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("configuration_value", [None, False, "false", "true"])
+@pytest.mark.parametrize(
+    ("fragments", "expected_id", "expected_name"),
+    [
+        (
+            [("call_", "pi", ""), ("first", "ngping", "{}")],
+            "call_first",
+            "pingping",
+        ),
+        (
+            [("call_one", "ping", ""), (None, "ping", "{}")],
+            "call_one",
+            "pingping",
+        ),
+        (
+            [("abc", "ping", ""), ("abc", None, "{}")],
+            "abcabc",
+            "ping",
+        ),
+        (
+            [("id", "ping", ""), ("id", "ping", "{}")],
+            "idid",
+            "pingping",
+        ),
+        (
+            [("id", "ping", "{"), ("id", "ping", "}")],
+            "idid",
+            "pingping",
+        ),
+        (
+            [("call_x", "foo", '{"value":'), ("call_x", "bar", "1}")],
+            "call_xcall_x",
+            "foobar",
+        ),
+    ],
+    ids=[
+        "different-id-fragments",
+        "identical-name-fragments",
+        "identical-id-fragments",
+        "identical-pair-before-arguments",
+        "identical-pair-during-arguments",
+        "only-id-matches",
+    ],
+)
+async def test_query_stream_preserves_metadata_fragments(
+    monkeypatch, configuration_value, fragments, expected_id, expected_name
+):
+    overrides = (
+        {}
+        if configuration_value is None
+        else {"deduplicate_streaming_tool_metadata": configuration_value}
+    )
+    provider = _make_provider(overrides)
+
+    async def fake_stream():
+        for call_id, name, arguments in fragments:
+            yield ChatCompletionChunk.model_validate(
+                {
+                    "id": "chatcmpl-metadata-fragments",
+                    "object": "chat.completion.chunk",
+                    "created": 0,
+                    "model": "gpt-4o-mini",
+                    "choices": [
+                        {
+                            "index": 0,
+                            "delta": {
+                                "role": "assistant",
+                                "tool_calls": [
+                                    {
+                                        "index": 0,
+                                        "id": call_id,
+                                        "type": "function",
+                                        "function": {
+                                            "name": name,
+                                            "arguments": arguments,
+                                        },
+                                    }
+                                ],
+                            },
+                            "finish_reason": None,
+                        }
+                    ],
+                }
+            )
+
+    async def fake_create(**kwargs):
+        return fake_stream()
+
+    try:
+        monkeypatch.setattr(provider.client.chat.completions, "create", fake_create)
+        responses = [
+            response
+            async for response in provider._query_stream(
+                payloads={"model": "gpt-4o-mini", "messages": []},
+                tools=ToolSet(),
+            )
+        ]
+        assert responses[-1].tools_call_ids == [expected_id]
+        assert responses[-1].tools_call_name == [expected_name]
+    finally:
+        await provider.terminate()
+
+
+@pytest.mark.asyncio
+async def test_query_stream_metadata_replays_are_per_slot_and_request(monkeypatch):
+    provider = _make_provider({"deduplicate_streaming_tool_metadata": True})
+    call_ids = ["call_a", "call_acall_a"]
+    names = ["long_tool_namelong_tool_name", "pingping"]
+
+    async def fake_stream():
+        for part, arguments in enumerate(['{"value":"', "ha", 'ha"}']):
+            tool_calls = []
+            for index in [0, 1] if part == 0 else [1, 0]:
+                tool_call = {
+                    "index": index,
+                    "id": call_ids[index],
+                    "type": "function",
+                    "function": {"name": names[index], "arguments": arguments},
+                }
+                if part == 0:
+                    tool_call["extra_content"] = {"signature": f"sig_{index}"}
+                tool_calls.append(tool_call)
+            yield ChatCompletionChunk.model_validate(
+                {
+                    "id": "chatcmpl-interleaved-replay",
+                    "object": "chat.completion.chunk",
+                    "created": 0,
+                    "model": "gpt-4o-mini",
+                    "choices": [
+                        {
+                            "index": 0,
+                            "delta": {"role": "assistant", "tool_calls": tool_calls},
+                            "finish_reason": None,
+                        }
+                    ],
+                }
+            )
+
+    async def fake_create(**kwargs):
+        return fake_stream()
+
+    try:
+        monkeypatch.setattr(provider.client.chat.completions, "create", fake_create)
+        for _ in range(2):
+            responses = [
+                response
+                async for response in provider._query_stream(
+                    payloads={"model": "gpt-4o-mini", "messages": []},
+                    tools=ToolSet(),
+                )
+            ]
+            final_response = responses[-1]
+            assert final_response.tools_call_ids == call_ids
+            assert final_response.tools_call_name == names
+            assert final_response.tools_call_args == [{"value": "haha"}] * 2
+            assert final_response.tools_call_extra_content == {
+                call_id: {"signature": f"sig_{index}"}
+                for index, call_id in enumerate(call_ids)
+            }
+    finally:
+        await provider.terminate()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("initial_arguments", ["", '{"query":'])
+async def test_query_stream_drops_repeated_tool_call_metadata(
+    monkeypatch, initial_arguments
+):
+    """Repeated full id/name fields must not be concatenated by the SDK."""
+    provider = _make_provider({"deduplicate_streaming_tool_metadata": True})
+
+    def make_chunk(tool_call: dict | None, finish_reason: str | None = None):
+        delta = {"role": "assistant"}
+        if tool_call is not None:
+            delta["tool_calls"] = [tool_call]
+        return ChatCompletionChunk.model_validate(
+            {
+                "id": "chatcmpl-duplicate-metadata",
+                "object": "chat.completion.chunk",
+                "created": 0,
+                "model": "gpt-4o-mini",
+                "choices": [
+                    {
+                        "index": 0,
+                        "delta": delta,
+                        "finish_reason": finish_reason,
+                    }
+                ],
+            }
+        )
+
+    chunks = [
+        make_chunk(
+            {
+                "index": 0,
+                "id": "call_abc",
+                "type": "function",
+                "function": {
+                    "name": "reverse_image_search",
+                    "arguments": initial_arguments,
+                },
+            }
+        ),
+        make_chunk(
+            {
+                "index": 0,
+                "id": "call_abc",
+                "function": {
+                    "name": "reverse_image_search",
+                    "arguments": (
+                        '"sample"' if initial_arguments else '{"query":"sample"'
+                    ),
+                },
+            }
+        ),
+        make_chunk(
+            {
+                "index": 0,
+                "id": "call_abc",
+                "function": {
+                    "name": "reverse_image_search",
+                    "arguments": "}",
+                },
+            }
+        ),
+        make_chunk(None, finish_reason="tool_calls"),
+    ]
+
+    async def fake_stream():
+        for chunk in chunks:
+            yield chunk
+
+    async def fake_create(**kwargs):
+        return fake_stream()
+
+    try:
+        monkeypatch.setattr(provider.client.chat.completions, "create", fake_create)
+        responses = [
+            response
+            async for response in provider._query_stream(
+                payloads={
+                    "model": "gpt-4o-mini",
+                    "messages": [{"role": "user", "content": "find"}],
+                },
+                tools=ToolSet(),
+            )
+        ]
+
+        final_response = responses[-1]
+        assert final_response.tools_call_ids == ["call_abc"]
+        assert final_response.tools_call_name == ["reverse_image_search"]
+        assert final_response.tools_call_args == [{"query": "sample"}]
+    finally:
+        await provider.terminate()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("middle_id", "middle_name"),
+    [
+        ("first", "value"),
+        ("first", None),
+        (None, "value"),
+        ("", ""),
+        ("", None),
+        (None, ""),
+    ],
+)
+async def test_query_stream_disables_deduplication_after_partial_or_changed_metadata(
+    monkeypatch, middle_id, middle_name
+):
+    """Partial or changed metadata must disable suppression for the whole slot."""
+    provider = _make_provider({"deduplicate_streaming_tool_metadata": True})
+
+    def make_chunk(tool_call: dict | None, finish_reason: str | None = None):
+        delta = {"role": "assistant"}
+        if tool_call is not None:
+            delta["tool_calls"] = [tool_call]
+        return ChatCompletionChunk.model_validate(
+            {
+                "id": "chatcmpl-reused-index",
+                "object": "chat.completion.chunk",
+                "created": 0,
+                "model": "gpt-4o-mini",
+                "choices": [
+                    {
+                        "index": 0,
+                        "delta": delta,
+                        "finish_reason": finish_reason,
+                    }
+                ],
+            }
+        )
+
+    chunks = [
+        make_chunk(
+            {
+                "index": 0,
+                "id": "call_",
+                "type": "function",
+                "function": {"name": "get_", "arguments": '{"value":'},
+            }
+        ),
+        make_chunk(
+            {
+                "index": 0,
+                "id": middle_id,
+                "type": "function",
+                "function": {"name": middle_name, "arguments": "2"},
+            }
+        ),
+        make_chunk(
+            {
+                "index": 0,
+                "id": "call_",
+                "type": "function",
+                "function": {"name": "get_", "arguments": "}"},
+            }
+        ),
+        make_chunk(None, finish_reason="tool_calls"),
+    ]
+
+    async def fake_stream():
+        for chunk in chunks:
+            yield chunk
+
+    async def fake_create(**kwargs):
+        return fake_stream()
+
+    try:
+        monkeypatch.setattr(provider.client.chat.completions, "create", fake_create)
+        responses = [
+            response
+            async for response in provider._query_stream(
+                payloads={
+                    "model": "gpt-4o-mini",
+                    "messages": [{"role": "user", "content": "run both"}],
+                },
+                tools=ToolSet(),
+            )
+        ]
+
+        final_response = responses[-1]
+        assert final_response.tools_call_ids == [f"call_{middle_id or ''}call_"]
+        assert final_response.tools_call_name == [f"get_{middle_name or ''}get_"]
+        assert final_response.tools_call_args == [{"value": 2}]
+    finally:
+        await provider.terminate()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("enabled", [False, True])
+async def test_query_stream_preserves_legitimate_repeated_metadata(
+    monkeypatch, enabled
+):
+    """Repeated-looking values are preserved when they occur only once."""
+    provider = _make_provider({"deduplicate_streaming_tool_metadata": enabled})
+
+    async def fake_stream():
+        yield ChatCompletionChunk.model_validate(
+            {
+                "id": "chatcmpl-legitimate-repeat",
+                "object": "chat.completion.chunk",
+                "created": 0,
+                "model": "gpt-4o-mini",
+                "choices": [
+                    {
+                        "index": 0,
+                        "delta": {
+                            "role": "assistant",
+                            "tool_calls": [
+                                {
+                                    "index": 0,
+                                    "id": "idid",
+                                    "type": "function",
+                                    "function": {
+                                        "name": "pingping",
+                                        "arguments": "{}",
+                                    },
+                                }
+                            ],
+                        },
+                        "finish_reason": "tool_calls",
+                    }
+                ],
+            }
+        )
+
+    async def fake_create(**kwargs):
+        return fake_stream()
+
+    try:
+        monkeypatch.setattr(provider.client.chat.completions, "create", fake_create)
+        responses = [
+            response
+            async for response in provider._query_stream(
+                payloads={
+                    "model": "gpt-4o-mini",
+                    "messages": [{"role": "user", "content": "call"}],
+                },
+                tools=ToolSet(),
+            )
+        ]
+
+        final_response = responses[-1]
+        assert final_response.tools_call_ids == ["idid"]
+        assert final_response.tools_call_name == ["pingping"]
     finally:
         await provider.terminate()
 
