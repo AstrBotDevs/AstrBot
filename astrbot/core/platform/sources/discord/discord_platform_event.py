@@ -37,6 +37,9 @@ from astrbot.core.utils.media_utils import (
 from .client import DiscordBotClient
 from .components import DiscordEmbed, DiscordView, action_rows_to_discord_view
 
+# Matches discord.py's built-in typing() refresh interval.
+TYPING_REFRESH_INTERVAL = 5
+
 
 # 自定义Discord视图组件（兼容旧版本）
 class DiscordViewComponent(BaseMessageComponent):
@@ -128,27 +131,28 @@ class DiscordPlatformEvent(AstrMessageEvent):
         return await super().send_streaming(generator, use_fallback)
 
     async def send_typing(self) -> None:
-        """在频道中显示“正在输入…”，直到 stop_typing() 被调用。"""
-        # 斜杠指令已经由 defer 显示“思考中”，无需额外处理
+        """Show the typing indicator until stop_typing() is called."""
+        # Slash commands already show Discord's deferred "thinking" state.
         if self.interaction_followup_webhook:
             return
         if self._typing_task and not self._typing_task.done():
             return
+        # Create the task before any await so overlapping calls cannot start
+        # a second loop.
+        self._typing_task = asyncio.create_task(self._typing_loop())
+
+    async def _typing_loop(self) -> None:
         channel = await self._get_channel()
         if not isinstance(channel, discord.abc.Messageable):
             return
-        self._typing_task = asyncio.create_task(self._typing_loop(channel))
-
-    async def _typing_loop(self, channel: discord.abc.Messageable) -> None:
-        # Discord 的输入状态约 10 秒后失效，需要定期刷新
-        try:
-            while True:
+        # Discord clears the typing state after about 10 seconds, so refresh it
+        # periodically. Failures are retried on the next interval.
+        while True:
+            try:
                 await channel.trigger_typing()
-                await asyncio.sleep(8)
-        except asyncio.CancelledError:
-            raise
-        except Exception as e:
-            logger.debug(f"[Discord] 发送输入状态失败: {e}")
+            except Exception as e:
+                logger.debug(f"[Discord] Failed to send typing indicator: {e}")
+            await asyncio.sleep(TYPING_REFRESH_INTERVAL)
 
     async def stop_typing(self) -> None:
         task, self._typing_task = self._typing_task, None
