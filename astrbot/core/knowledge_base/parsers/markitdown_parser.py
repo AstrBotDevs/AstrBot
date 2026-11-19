@@ -10,7 +10,7 @@ from astrbot.core.knowledge_base.parsers.base import (
 
 
 class MarkitdownParser(BaseParser):
-    """解析 docx, xls, xlsx 格式"""
+    """解析 docx, xls, xlsx, pptx 格式"""
 
     async def parse(self, file_content: bytes, file_name: str) -> ParseResult:
         md = MarkItDown(enable_plugins=False)
