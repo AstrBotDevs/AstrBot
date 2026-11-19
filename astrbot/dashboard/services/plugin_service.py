@@ -1802,15 +1802,18 @@ class PluginService:
         download_url = str(update_info.get("download_url") or "").strip()
         repo_url = str(update_info.get("repo") or "").strip()
         logger.info(f"Updating plugin {plugin_name}")
-        await self.plugin_manager.update_plugin(
-            plugin_name,
-            proxy or "",
-            download_url=download_url,
-            repo_url=repo_url,
-        )
-        await self.refresh_plugin_install_source_after_update(plugin_name, update_info)
-        await self.plugin_manager.reload(plugin_name)
-        await self.sync_skills_after_plugin_change()
+        try:
+            await self.plugin_manager.update_plugin(
+                plugin_name,
+                proxy or "",
+                download_url=download_url,
+                repo_url=repo_url,
+            )
+            await self.refresh_plugin_install_source_after_update(
+                plugin_name, update_info
+            )
+        finally:
+            await self.sync_skills_after_plugin_change()
         logger.info(f"Updated plugin {plugin_name} successfully.")
         return None, "更新成功。"
 
@@ -1825,14 +1828,17 @@ class PluginService:
 
         results = []
         sem = asyncio.Semaphore(PLUGIN_UPDATE_CONCURRENCY)
+        attempted_update = False
 
         async def _update_one(name: str):
+            nonlocal attempted_update
             async with sem:
                 try:
                     logger.info(f"Updating plugin {name} as part of a batch update.")
                     update_info = await self.resolve_market_update_info(name)
                     download_url = str(update_info.get("download_url") or "").strip()
                     repo_url = str(update_info.get("repo") or "").strip()
+                    attempted_update = True
                     await self.plugin_manager.update_plugin(
                         name,
                         proxy,
@@ -1887,7 +1893,7 @@ class PluginService:
                 results.append(result)
 
         failed = [result for result in results if result["status"] == "error"]
-        if len(failed) < len(results):
+        if attempted_update:
             await self.sync_skills_after_plugin_change()
         message = (
             "批量更新完成，全部成功。"
