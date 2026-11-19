@@ -180,8 +180,9 @@ def _agent_computer_use_items():
 @pytest.mark.skipif(os.name != "posix", reason="Executes the POSIX CUA shell wrapper")
 @pytest.mark.parametrize("background", [False, True])
 @pytest.mark.parametrize("directory_exists", [False, True])
+@pytest.mark.parametrize("override_path", [False, True])
 async def test_cua_shell_supports_current_sdk_signature(
-    tmp_path, background, directory_exists
+    tmp_path, background, directory_exists, override_path
 ):
     class CurrentSDKShell:
         async def run(self, command: str, timeout: int = 30, background: bool = False):
@@ -205,9 +206,14 @@ async def test_cua_shell_supports_current_sdk_signature(
     output_path = tmp_path / "result.txt"
     value = "spaces; $(touch should-not-exist) ' quoted"
     command = f'printf "%s" "$CUA_TEST_VALUE" > {shlex.quote(str(output_path))}; pwd'
+    if background:
+        command = f"/bin/sleep 0.4; {command}"
+    env = {"CUA_TEST_VALUE": value}
+    if override_path:
+        env["PATH"] = "/nonexistent"
 
     result = await CuaShellComponent(sandbox).exec(
-        command, cwd=str(work_dir), env={"CUA_TEST_VALUE": value}, background=background
+        command, cwd=str(work_dir), env=env, background=background
     )
 
     assert result["success"] is directory_exists
@@ -216,6 +222,10 @@ async def test_cua_shell_supports_current_sdk_signature(
         return
     if background:
         assert result["pid"] > 0
+        for _ in range(250):
+            if output_path.exists() and output_path.read_text() == value:
+                break
+            await asyncio.sleep(0.02)
     else:
         assert result["stdout"].strip() == str(work_dir.resolve())
     assert output_path.read_text() == value

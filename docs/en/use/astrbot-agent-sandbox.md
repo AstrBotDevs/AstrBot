@@ -506,7 +506,7 @@ The Agent can use the following tools in a CUA sandbox. Actual availability depe
 | Keyboard input | `astrbot_cua_keyboard_type` | Type text into the currently focused control |
 
 > [!WARNING]
-> CUA is optional. Install `cua[sandbox]` in AstrBot's Python environment; the base `cua` package alone does not install the high-level sandbox API. The compatibility notes below were checked against `cua==0.27.5` and `cua-sandbox==0.10.2`, not a live desktop.
+> CUA is optional. Install `cua[sandbox]` in AstrBot's Python environment; the base `cua` package alone does not install the high-level sandbox API. A Linux ARM64 Docker Desktop smoke test with `cua==0.27.5` and `cua-sandbox==0.10.2` verified startup, Shell/Python execution, file transfer, Skills synchronization, and desktop screenshots. Model-driven GUI tasks and other platforms were not verified.
 
 #### When to choose CUA
 
@@ -539,6 +539,7 @@ The current `cua-sandbox` release requires Python 3.11–3.13. For the current A
 - Local Linux/Windows VMs usually require QEMU or the corresponding CUA runtime.
 - macOS VMs usually require the CUA/Lume runtime.
 - Images must provide the CUA computer interfaces (currently through `cua-spacesd`); an arbitrary container image is not sufficient for screenshots and input. AstrBot's Skills synchronization and several fallbacks also require a POSIX shell and `python3`.
+- CUA may provision runtime helpers. The Docker Desktop smoke test created a privileged `cua-runsc-helper` container with host filesystem mounts. Review the upstream runtime requirements and Docker permissions before deploying; the smoke test used `runc`, not a verified gVisor isolation setup.
 
 > [!WARNING]
 > [Cua Cloud ended on October 18, 2026](https://cua.ai/docs/cua-sdk/guides/cua-cloud-ended). Keep `CUA Local Runtime` enabled. AstrBot rejects `cua_local=false`; its adapter does not configure CUA's own-cloud or direct connections.

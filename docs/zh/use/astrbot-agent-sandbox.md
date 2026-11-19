@@ -495,7 +495,7 @@ Agent 可以在 CUA sandbox 中使用多种能力，请见下表：
 | 键盘输入 | `astrbot_cua_keyboard_type` | 向当前焦点输入文本 |
 
 > [!WARNING]
-> CUA 是可选运行时，需要在 AstrBot 的 Python 环境安装 `cua[sandbox]`；仅安装基础 `cua` 包不会安装高层沙箱 API。以下兼容说明核对了 `cua==0.27.5` 和 `cua-sandbox==0.10.2`，尚未做真实桌面端到端验证。
+> CUA 是可选运行时，需要在 AstrBot 的 Python 环境安装 `cua[sandbox]`；仅安装基础 `cua` 包不会安装高层沙箱 API。使用 `cua==0.27.5` 和 `cua-sandbox==0.10.2` 在 Linux ARM64 Docker Desktop 沙箱完成了启动、Shell/Python 执行、文件传输、Skills 同步及桌面截图烟测；尚未验证模型驱动的 GUI 任务及其他平台。
 
 #### 何时选择 CUA
 
@@ -528,6 +528,7 @@ Agent 可以在 CUA sandbox 中使用多种能力，请见下表：
 - 本地 Linux/Windows VM 通常需要 QEMU 或 CUA 对应的本地运行时。
 - macOS VM 通常依赖 CUA/Lume 相关运行时。
 - 镜像需要提供 CUA 电脑接口（当前通过 `cua-spacesd` 提供）；任意容器镜像并不一定支持截图和输入。AstrBot 的 Skills 同步及多种 fallback 还依赖 POSIX Shell 和 `python3`。
+- CUA 可能自动准备运行时辅助组件。本次 Docker Desktop 烟测创建了带宿主文件系统挂载的特权容器 `cua-runsc-helper`。部署前请核对上游运行时要求及 Docker 权限；本次使用 `runc`，没有验证 gVisor 隔离配置。
 
 > [!WARNING]
 > [Cua Cloud 已于 2026-10-18 结束服务](https://cua.ai/docs/cua-sdk/guides/cua-cloud-ended)。请保持 `CUA Local Runtime` 开启。AstrBot 会拒绝 `cua_local=false`；当前适配器不提供 CUA 自有云或直连环境的配置。

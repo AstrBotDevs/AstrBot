@@ -336,7 +336,7 @@ class CuaShellComponent(ShellComponent):
                 assignments = " ".join(
                     shlex.quote(f"{key}={value}") for key, value in env.items()
                 )
-                command = f"env {assignments} sh -c {shlex.quote(command)}"
+                command = f"env {assignments} /bin/sh -c {shlex.quote(command)}"
             if cwd is not None:
                 command = f"cd -- {shlex.quote(cwd)} && sh -c {shlex.quote(command)}"
         if background:
