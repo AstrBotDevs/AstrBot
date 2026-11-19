@@ -13,6 +13,7 @@ from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.platform.message_type import MessageType
 from astrbot.core.utils.session_waiter import (
     SessionController,
+    SessionFilter,
     session_waiter,
 )
 
@@ -24,6 +25,23 @@ def _iter_message_components(event: AstrMessageEvent):
     if not isinstance(messages, Iterable) or isinstance(messages, (str, bytes)):
         return ()
     return tuple(messages)
+
+
+class _SenderSessionFilter(SessionFilter):
+    """Session filter scoped to a specific (conversation, sender) pair.
+
+    Used by the empty-mention waiter so that only the user who initiated the
+    empty mention (not every member of the group) can satisfy the waiter.
+    """
+
+    def filter(self, ev: AstrMessageEvent) -> str:
+        sender_id = ev.get_sender_id() or ""
+        if not sender_id:
+            # Fall back to a sentinel that will not accidentally collide with a
+            # legitimate session key from another member. Angle brackets are
+            # used because no real platform sender id contains them.
+            sender_id = "<unknown>"
+        return f"{ev.unified_msg_origin}:{sender_id}"
 
 
 class Main(star.Star):
@@ -116,7 +134,7 @@ class Main(star.Star):
                 controller.stop()
 
             try:
-                await empty_mention_waiter(event)
+                await empty_mention_waiter(event, session_filter=_SenderSessionFilter())
             except TimeoutError:
                 pass
             except Exception as e:
