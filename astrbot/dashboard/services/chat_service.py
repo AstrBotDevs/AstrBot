@@ -38,6 +38,10 @@ from astrbot.core.utils.media_utils import (
     convert_audio_to_wav,
     detect_image_mime_type_async,
 )
+from astrbot.core.utils.session_lock import (
+    SessionLockTimeoutError,
+    session_lock_manager,
+)
 from astrbot.core.utils.upload import UploadTooLargeError, save_upload_stream
 from astrbot.dashboard.services.chunked_upload_service import (
     ChunkedUploadError,
@@ -46,6 +50,7 @@ from astrbot.dashboard.services.chunked_upload_service import (
 
 SSE_HEARTBEAT = ": heartbeat\n\n"
 CHAT_RUN_SUBSCRIBER_QUEUE_SIZE = 256
+HISTORY_MUTATION_TIMEOUT = 10.0
 # Uploaded chat attachments larger than this are rejected.
 MAX_UPLOAD_FILE_SIZE_MB = 512
 MAX_UPLOAD_FILE_SIZE_BYTES = MAX_UPLOAD_FILE_SIZE_MB * 1024 * 1024
@@ -1978,6 +1983,18 @@ class ChatService:
         return await self.delete_thread(username, thread_id)
 
     async def update_message(self, username: str, data: dict) -> dict:
+        """Edit a WebChat turn after any native history commit finishes.
+
+        Args:
+            username: Authenticated owner of the WebChat session.
+            data: Session ID, message ID, and operation-specific options.
+
+        Returns:
+            Updated message and flags requesting regeneration.
+
+        Raises:
+            ChatServiceError: If validation fails or the session remains busy.
+        """
         session_id = data.get("session_id")
         message_id = data.get("message_id")
         content = data.get("content")
@@ -2000,44 +2017,58 @@ class ChatService:
         if session.creator != username:
             raise ChatServiceError("Permission denied")
 
-        record = await self.db.get_platform_message_history_by_id(message_id)
-        if not record:
-            raise ChatServiceError(f"Message {message_id} not found")
-        if record.platform_id != session.platform_id or record.user_id != session_id:
-            raise ChatServiceError("Message does not belong to the session")
-        if not isinstance(record.content, dict):
-            raise ChatServiceError("Invalid message content")
-        if record.content.get("type") != content.get("type"):
-            raise ChatServiceError("Message type cannot be changed")
-        if content.get("type") != "user":
-            raise ChatServiceError("Only user messages can be edited")
-
         if self.running_convs.get(session_id, False):
             raise ChatServiceError("Stop the active run before editing")
+
         umo = build_webchat_unified_msg_origin(session)
-        conversation_id = await self.conv_mgr.get_curr_conversation_id(umo)
-        snapshot = (
-            await self.db.conversation_store.read(conversation_id)
-            if conversation_id
-            else None
-        )
-        if snapshot is None:
-            raise ChatServiceError("Conversation not found")
         try:
-            replacement = await self.db.conversation_store.rewind_webchat(
-                conversation_id,
-                message_id,
-                content=content,
-                expected_head=snapshot.revision.head_seq,
-                expected_leaf=snapshot.revision.leaf_event_id,
-            )
-        except ContextUnavailableError as exc:
+            async with session_lock_manager.acquire_lock(
+                umo, timeout=HISTORY_MUTATION_TIMEOUT
+            ):
+                record = await self.db.get_platform_message_history_by_id(message_id)
+                if not record:
+                    raise ChatServiceError(f"Message {message_id} not found")
+                if (
+                    record.platform_id != session.platform_id
+                    or record.user_id != session_id
+                ):
+                    raise ChatServiceError("Message does not belong to the session")
+                if not isinstance(record.content, dict):
+                    raise ChatServiceError("Invalid message content")
+                if record.content.get("type") != content.get("type"):
+                    raise ChatServiceError("Message type cannot be changed")
+                if content.get("type") != "user":
+                    raise ChatServiceError("Only user messages can be edited")
+
+                if self.running_convs.get(session_id, False):
+                    raise ChatServiceError("Stop the active run before editing")
+                conversation_id = await self.conv_mgr.get_curr_conversation_id(umo)
+                snapshot = (
+                    await self.db.conversation_store.read(conversation_id)
+                    if conversation_id
+                    else None
+                )
+                if snapshot is None:
+                    raise ChatServiceError("Conversation not found")
+                try:
+                    replacement = await self.db.conversation_store.rewind_webchat(
+                        conversation_id,
+                        message_id,
+                        content=content,
+                        expected_head=snapshot.revision.head_seq,
+                        expected_leaf=snapshot.revision.leaf_event_id,
+                    )
+                except ContextUnavailableError as exc:
+                    raise ChatServiceError(
+                        "Historical context has been cleared; this action is unavailable."
+                    ) from exc
+                except ValueError as exc:
+                    raise ChatServiceError(str(exc)) from exc
+                await self.db.update_platform_session(session_id=session_id)
+        except SessionLockTimeoutError as exc:
             raise ChatServiceError(
-                "Historical context has been cleared; this action is unavailable."
+                "Conversation is busy; please retry after the current reply finishes."
             ) from exc
-        except ValueError as exc:
-            raise ChatServiceError(str(exc)) from exc
-        await self.db.update_platform_session(session_id=session_id)
         return {
             "message": serialize_history_entry(replacement),
             "needs_regenerate": True,
@@ -2056,6 +2087,18 @@ class ChatService:
         username: str,
         data: dict,
     ) -> dict:
+        """Prepare regeneration after any pending native history commit settles.
+
+        Args:
+            username: Authenticated owner of the WebChat session.
+            data: Session ID, message ID, and operation-specific options.
+
+        Returns:
+            Chat input carrying the original user message and a new turn identity.
+
+        Raises:
+            ChatServiceError: If validation fails or the session remains busy.
+        """
         session_id = data.get("session_id")
         message_id = data.get("message_id")
         if not session_id:
@@ -2074,43 +2117,56 @@ class ChatService:
         if session.creator != username:
             raise ChatServiceError("Permission denied")
 
-        target_record = await self.db.get_platform_message_history_by_id(message_id)
-        if not target_record:
-            raise ChatServiceError(f"Message {message_id} not found")
-        if (
-            target_record.platform_id != session.platform_id
-            or target_record.user_id != session_id
-        ):
-            raise ChatServiceError("Message does not belong to the session")
-        if not isinstance(target_record.content, dict):
-            raise ChatServiceError("Invalid message content")
-        if target_record.content.get("type") != "bot":
-            raise ChatServiceError("Only bot messages can be regenerated")
-
         if self.running_convs.get(session_id, False):
             raise ChatServiceError("Stop the active run before regenerating")
+
         umo = build_webchat_unified_msg_origin(session)
-        conversation_id = await self.conv_mgr.get_curr_conversation_id(umo)
-        snapshot = (
-            await self.db.conversation_store.read(conversation_id)
-            if conversation_id
-            else None
-        )
-        if snapshot is None:
-            raise ChatServiceError("Conversation not found")
         try:
-            replacement = await self.db.conversation_store.rewind_webchat(
-                conversation_id,
-                message_id,
-                expected_head=snapshot.revision.head_seq,
-                expected_leaf=snapshot.revision.leaf_event_id,
-            )
-        except ContextUnavailableError as exc:
+            async with session_lock_manager.acquire_lock(
+                umo, timeout=HISTORY_MUTATION_TIMEOUT
+            ):
+                target_record = await self.db.get_platform_message_history_by_id(
+                    message_id
+                )
+                if not target_record:
+                    raise ChatServiceError(f"Message {message_id} not found")
+                if (
+                    target_record.platform_id != session.platform_id
+                    or target_record.user_id != session_id
+                ):
+                    raise ChatServiceError("Message does not belong to the session")
+                if not isinstance(target_record.content, dict):
+                    raise ChatServiceError("Invalid message content")
+                if target_record.content.get("type") != "bot":
+                    raise ChatServiceError("Only bot messages can be regenerated")
+
+                if self.running_convs.get(session_id, False):
+                    raise ChatServiceError("Stop the active run before regenerating")
+                conversation_id = await self.conv_mgr.get_curr_conversation_id(umo)
+                snapshot = (
+                    await self.db.conversation_store.read(conversation_id)
+                    if conversation_id
+                    else None
+                )
+                if snapshot is None:
+                    raise ChatServiceError("Conversation not found")
+                try:
+                    replacement = await self.db.conversation_store.rewind_webchat(
+                        conversation_id,
+                        message_id,
+                        expected_head=snapshot.revision.head_seq,
+                        expected_leaf=snapshot.revision.leaf_event_id,
+                    )
+                except ContextUnavailableError as exc:
+                    raise ChatServiceError(
+                        "Historical context has been cleared; this action is unavailable."
+                    ) from exc
+                except ValueError as exc:
+                    raise ChatServiceError(str(exc)) from exc
+        except SessionLockTimeoutError as exc:
             raise ChatServiceError(
-                "Historical context has been cleared; this action is unavailable."
+                "Conversation is busy; please retry after the current reply finishes."
             ) from exc
-        except ValueError as exc:
-            raise ChatServiceError(str(exc)) from exc
         return {
             "session_id": session_id,
             "message": replacement.content.get("message", []),

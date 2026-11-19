@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import json
 import traceback
 from dataclasses import dataclass
@@ -10,6 +11,12 @@ from astrbot.core import logger
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
 from astrbot.core.db import BaseDatabase
 from astrbot.core.umo_alias import build_umo_alias_map, parse_umo, serialize_umo_alias
+from astrbot.core.utils.session_lock import (
+    SessionLockTimeoutError,
+    session_lock_manager,
+)
+
+HISTORY_MUTATION_TIMEOUT = 10.0
 
 
 class ConversationServiceError(Exception):
@@ -190,18 +197,76 @@ class ConversationService:
         return {"message": "对话信息更新成功"}
 
     async def delete_conversation(self, data: object) -> dict:
+        """Delete conversations after pending native history commits have settled.
+
+        Args:
+            data: A conversation's user ID and ID, or a batch of conversations.
+
+        Returns:
+            Deletion status, including per-item failures for a batch.
+
+        Raises:
+            ConversationServiceError: If the conversation is missing, belongs to
+                another origin, or waiting for the lock or deletion times out.
+        """
         payload = self._payload(data)
         if "conversations" in payload:
             return await self._delete_conversations(payload.get("conversations", []))
 
         user_id, cid = self._require_user_and_cid(payload)
-        await self.conv_mgr.delete_conversation(
-            unified_msg_origin=user_id,
-            conversation_id=cid,
-        )
+        try:
+            async with session_lock_manager.acquire_lock(
+                user_id, timeout=HISTORY_MUTATION_TIMEOUT
+            ):
+                conversation = await self.conv_mgr.get_conversation(user_id, cid)
+                if not conversation or conversation.user_id != user_id:
+                    raise ConversationServiceError("对话不存在")
+
+                plugin_manager = getattr(self.core_lifecycle, "plugin_manager", None)
+                core_plugin = (
+                    plugin_manager.context.get_registered_star("astrbot")
+                    if plugin_manager
+                    else None
+                )
+                group_context = (
+                    getattr(core_plugin.star_cls, "group_chat_context", None)
+                    if core_plugin
+                    else None
+                )
+                # Cleanup runs under the manager's selection lock, so a concurrent
+                # creation or switch cannot lose the new conversation's observations.
+                await self.conv_mgr.delete_conversation(
+                    unified_msg_origin=user_id,
+                    conversation_id=cid,
+                    on_current_deleted=(
+                        group_context.remove_session
+                        if group_context is not None
+                        else None
+                    ),
+                )
+        except SessionLockTimeoutError as exc:
+            raise ConversationServiceError(
+                "Conversation is busy; please retry after the current reply finishes."
+            ) from exc
+        except asyncio.TimeoutError as exc:
+            raise ConversationServiceError(
+                "Conversation deletion timed out; refresh the history and retry if needed."
+            ) from exc
         return {"message": "对话删除成功"}
 
     async def update_history(self, data: object) -> dict:
+        """Replace history without a running native turn overwriting the edit.
+
+        Args:
+            data: Conversation identifiers and the replacement history.
+
+        Returns:
+            History update status.
+
+        Raises:
+            ConversationServiceError: If input is invalid, the conversation is missing
+                or belongs to another origin, or the lock deadline is exceeded.
+        """
         payload = self._payload(data)
         user_id, cid = self._require_user_and_cid(payload)
         history = payload.get("history")
@@ -211,19 +276,29 @@ class ConversationService:
 
         history = self._normalize_history(history)
 
-        conversation = await self.conv_mgr.get_conversation(
-            unified_msg_origin=user_id,
-            conversation_id=cid,
-        )
-        if not conversation:
-            raise ConversationServiceError("对话不存在")
+        # Native turns hold this lock through their final history commit. Apply
+        # the edit afterwards so a running turn cannot restore deleted messages.
+        try:
+            async with session_lock_manager.acquire_lock(
+                user_id, timeout=HISTORY_MUTATION_TIMEOUT
+            ):
+                conversation = await self.conv_mgr.get_conversation(
+                    unified_msg_origin=user_id,
+                    conversation_id=cid,
+                )
+                if not conversation or conversation.user_id != user_id:
+                    raise ConversationServiceError("对话不存在")
 
-        writer = await self.conv_mgr.create_event_writer(
-            unified_msg_origin=user_id,
-            conversation_id=cid,
-            expected_revision=conversation.revision,
-        )
-        await writer.save_history(history, origin="user")
+                writer = await self.conv_mgr.create_event_writer(
+                    unified_msg_origin=user_id,
+                    conversation_id=cid,
+                    expected_revision=conversation.revision,
+                )
+                await writer.save_history(history, origin="user")
+        except SessionLockTimeoutError as exc:
+            raise ConversationServiceError(
+                "Conversation is busy; please retry after the current reply finishes."
+            ) from exc
 
         return {"message": "对话历史更新成功"}
 
@@ -310,10 +385,7 @@ class ConversationService:
                 continue
 
             try:
-                await self.conv_mgr.delete_conversation(
-                    unified_msg_origin=user_id,
-                    conversation_id=cid,
-                )
+                await self.delete_conversation({"user_id": user_id, "cid": cid})
                 deleted_count += 1
             except Exception as exc:
                 failed_items.append(f"user_id:{user_id}, cid:{cid} - {exc!s}")
