@@ -2403,7 +2403,12 @@ async def test_step_notices_reach_model_once_per_threshold(
     await runner.reset(
         provider=mock_provider,
         request=provider_request,
-        run_context=ContextWrapper(context=SimpleNamespace(event=event)),
+        run_context=ContextWrapper(
+            context=SimpleNamespace(
+                event=event,
+                context=SimpleNamespace(locale=MagicMock(return_value="en-US")),
+            )
+        ),
         tool_executor=mock_tool_executor,
         agent_hooks=mock_hooks,
         streaming=streaming,
