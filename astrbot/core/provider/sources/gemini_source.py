@@ -290,6 +290,13 @@ class ProviderGoogleGenAI(Provider):
                     )
                 )
             )
+            if any(
+                t.google_search or t.code_execution or t.url_context for t in tool_list
+            ):
+                # The Gemini API rejects requests that combine built-in tools
+                # (google_search / code_execution / url_context) with function
+                # calling unless server-side tool invocations are opted in.
+                tool_config.include_server_side_tool_invocations = True
 
         extra_body = self.provider_config.get("custom_extra_body")
         if extra_body is None:
