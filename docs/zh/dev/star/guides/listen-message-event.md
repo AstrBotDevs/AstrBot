@@ -238,6 +238,8 @@ async def test(self, event: AstrMessageEvent):
 
 支持同时使用多个过滤器，只需要在函数上添加多个装饰器即可。过滤器使用 `AND` 逻辑。也就是说，只有所有的过滤器都通过了，才会执行函数。
 
+除内置过滤器外，也支持[自定义过滤器](#自定义过滤器)。
+
 ```python
 @filter.command("helloworld")
 @filter.event_message_type(filter.EventMessageType.PRIVATE_MESSAGE)
@@ -245,10 +247,111 @@ async def helloworld(self, event: AstrMessageEvent):
     yield event.plain_result("你好！")
 ```
 
+### 自定义过滤器
+
+内置过滤器无法满足需求时，可以使用 `filter.custom_filter` 注册自定义过滤器。自定义过滤器同样参与 `AND` 判断，可以作用于单个指令、指令组 handler 或某个子指令。
+
+#### 编写过滤器
+
+继承 `CustomFilter` 并实现同步的 `filter` 方法，返回 `True` 放行、返回 `False` 拦截：
+
+```python
+from astrbot.api import AstrBotConfig
+from astrbot.api.event import AstrMessageEvent, filter
+
+
+class GroupWhitelist(filter.CustomFilter):
+    """只在配置中列出的群聊里生效。"""
+
+    def __init__(self, raise_error: bool = True, **kwargs):
+        super().__init__(raise_error, **kwargs)
+
+    def filter(self, event: AstrMessageEvent, cfg: AstrBotConfig) -> bool:
+        groups = (cfg.get("my_plugin") or {}).get("groups") or []
+        return event.get_group_id() in groups
+```
+
+> [!NOTE]
+> - `filter` 是**同步**方法，框架会同步调用，不能在其中 `await`。
+> - 装饰器接收的是**过滤器类**，不是实例（框架会以 `CustomFilter(raise_error)` 的形式实例化）。
+> - 如果子类重写了 `__init__`，请保留 `raise_error` 参数，否则实例化时会报错。
+> - `cfg` 是 AstrBot 的全局配置对象；如需读取插件自己的配置，建议在过滤器实例上提前保存。
+
+#### 作用于指令
+
+```python
+@filter.custom_filter(GroupWhitelist)
+@filter.command("test")
+async def test(self, event: AstrMessageEvent):
+    yield event.plain_result("通过检查")
+```
+
+#### 作用于指令组
+
+装饰在 `command_group` 上时，过滤器只作用于**指令组 handler 本身**，不会级联到组内的子指令：
+
+```python
+@filter.custom_filter(GroupWhitelist)
+@filter.command_group("math")
+def math(self):
+    pass
+```
+
+> [!WARNING]
+> 组级过滤器不会约束子指令。每个子指令由自己的 handler 独立判断，其 `CommandFilter` 不会回查父指令组的过滤器，因此即使组级过滤器返回 `False`，组内子指令仍会照常执行。若要让整组子指令都受限，请把过滤器逐个挂到子指令上（子指令较多时可自行封装一个复用装饰器）。
+
+要为某个子指令加限制，请把 `custom_filter` 写在 `command` **上方**：
+
+```python
+@math.custom_filter(GroupWhitelist)
+@math.command("reset")
+async def math_reset(self, event: AstrMessageEvent):
+    pass
+```
+
+要让组内每个子指令都受限，需要对每个子指令分别声明：
+
+```python
+@math.custom_filter(GroupWhitelist)
+@math.command("add")
+async def math_add(self, event: AstrMessageEvent):
+    pass
+
+
+@math.custom_filter(GroupWhitelist)
+@math.command("sub")
+async def math_sub(self, event: AstrMessageEvent):
+    pass
+```
+
+#### 组合多个过滤器
+
+可以像内置过滤器一样用 `&`、`|` 组合（下面的 `AdminOnly` 是另一个自定义过滤器类）：
+
+```python
+@filter.custom_filter(GroupWhitelist & AdminOnly)  # 全部通过才放行
+@filter.command("a")
+async def a(self, event: AstrMessageEvent):
+    pass
+
+
+@filter.custom_filter(GroupWhitelist() | AdminOnly())  # 任意一个通过即可
+@filter.command("b")
+async def b(self, event: AstrMessageEvent):
+    pass
+```
+
+#### 行为说明
+
+- 过滤器返回 `False` 时，该 handler 会被静默跳过，不会向用户发送任何提示；需要提示时请自行发送（`filter` 是同步方法，可使用 `asyncio.create_task(event.send(...))`）。
+- 过滤器内部抛出的异常会被框架捕获，并向用户发送 `插件 <插件名>: <异常信息>`，同时停止事件传播。
+- 多个过滤器之间是 `AND` 关系，与内置过滤器完全一致。
+- 子指令级过滤器会让被拦截的子指令从「只发送指令组名」时的提示树中消失；组级过滤器返回 `False` 时，指令组 handler 本身不通过，整棵提示树都不会渲染。
+
 ### 事件钩子
 
 > [!TIP]
-> 事件钩子不支持与上面的 @filter.command, @filter.command_group, @filter.event_message_type, @filter.platform_adapter_type, @filter.permission_type 一起使用。
+> 事件钩子不支持与上面的 @filter.command, @filter.command_group, @filter.event_message_type, @filter.platform_adapter_type, @filter.permission_type, @filter.custom_filter 一起使用。
 
 #### Bot 初始化完成时
 
