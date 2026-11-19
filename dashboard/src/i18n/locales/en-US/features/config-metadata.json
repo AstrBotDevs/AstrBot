@@ -596,8 +596,7 @@
         "description": "Proxy Settings",
         "hint": "Disabling the adapter proxy does not override the global proxy settings.",
         "mode": {
-          "description": "Proxy Mode",
-          "labels": ["Do not use proxy", "Use proxy"]
+          "description": "Proxy Mode"
         },
         "type": {
           "description": "Proxy Type",

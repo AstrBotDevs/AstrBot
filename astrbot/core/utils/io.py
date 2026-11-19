@@ -295,14 +295,13 @@ async def download_file(
     Returns:
         None.
     """
+    from astrbot.core.platform.proxy import create_platform_client_session
 
     try:
         ssl_context = ssl.create_default_context(
             cafile=certifi.where(),
         )  # 使用 certifi 提供的 CA 证书
         connector = aiohttp.TCPConnector(ssl=ssl_context)
-        from astrbot.core.platform.proxy import create_platform_client_session
-
         async with create_platform_client_session(
             proxy_url,
             trust_env=True,
@@ -335,8 +334,6 @@ async def download_file(
         ssl_context = ssl.create_default_context()
         ssl_context.check_hostname = False
         ssl_context.verify_mode = ssl.CERT_NONE
-        from astrbot.core.platform.proxy import create_platform_client_session
-
         async with create_platform_client_session(proxy_url) as session:
             async with session.get(url, ssl=ssl_context, timeout=120) as resp:
                 _raise_for_download_status(resp, url)

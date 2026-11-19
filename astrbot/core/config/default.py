@@ -12,6 +12,7 @@ from .agent import get_runtime_config_default
 
 ADAPTER_PROXY_SUPPORTED_TYPES = {
     "discord",
+    "dingtalk",
     "kook",
     "line",
     "mattermost",
@@ -106,7 +107,7 @@ WEBHOOK_SUPPORTED_PLATFORMS = [
 
 # 默认配置
 DEFAULT_CONFIG = {
-    "config_version": 6,
+    "config_version": 7,
     "platform_settings": {
         "unique_session": False,
         "rate_limit": {
@@ -947,7 +948,6 @@ CONFIG_METADATA_2 = {
                                 "description": "代理模式",
                                 "type": "string",
                                 "options": ["none", "custom"],
-                                "labels": ["不使用代理", "使用代理"],
                                 "render_type": "switch",
                             },
                             "type": {

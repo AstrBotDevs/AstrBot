@@ -617,8 +617,7 @@
         "description": "代理设置",
         "hint": "关闭适配器专用代理不会覆盖全局代理设置。",
         "mode": {
-          "description": "代理模式",
-          "labels": ["不使用代理", "使用代理"]
+          "description": "代理模式"
         },
         "type": {
           "description": "代理类型",

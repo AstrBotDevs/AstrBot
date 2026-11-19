@@ -7,6 +7,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
 from typing import Any
+from urllib.parse import urlsplit
 
 from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.utils.metrics import Metric
@@ -66,12 +67,16 @@ class Platform(abc.ABC):
         address = str(proxy.get("address", "")).strip()
         if not address:
             return None
-        if "://" in address:
-            return address
-
         proxy_type = str(proxy.get("type", "http")).strip().lower()
         if proxy_type not in {"http", "https", "socks5"}:
             proxy_type = "http"
+        if "://" in address:
+            if urlsplit(address).scheme.lower() != proxy_type:
+                raise ValueError(
+                    "Proxy address scheme must match the selected proxy type."
+                )
+            return address
+
         return f"{proxy_type}://{address}"
 
     @property

@@ -82,6 +82,8 @@ class MyEventHandler(dingtalk_stream.EventHandler):
     "dingtalk", "钉钉机器人官方 API 适配器", support_streaming_message=True
 )
 class DingtalkPlatformAdapter(Platform):
+    supports_proxy = True
+
     def __init__(
         self,
         platform_config: dict,

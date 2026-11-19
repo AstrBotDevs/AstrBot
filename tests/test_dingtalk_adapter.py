@@ -359,6 +359,9 @@ async def test_dingtalk_button_card_maps_callback_and_url_actions(monkeypatch):
             return "OK"
 
     class FakeSession:
+        def __init__(self, **kwargs):
+            pass
+
         async def __aenter__(self):
             return self
 
@@ -420,6 +423,10 @@ async def test_dingtalk_button_card_maps_callback_and_url_actions(monkeypatch):
     assert buttons[1]["url"] == "https://example.com/docs"
     assert buttons[1]["iosUrl"] == "https://example.com/docs"
     assert "request" not in buttons[1]
+
+
+def test_dingtalk_adapter_registers_proxy_support():
+    assert DingtalkPlatformAdapter.supports_proxy is True
 
 
 @pytest.mark.asyncio

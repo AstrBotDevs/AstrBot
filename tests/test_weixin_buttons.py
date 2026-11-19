@@ -1,3 +1,5 @@
+import asyncio
+from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 import pytest
@@ -14,9 +16,47 @@ from astrbot.core.platform.message_session import MessageSession
 from astrbot.core.platform.platform import Platform
 from astrbot.core.platform.platform_metadata import PlatformMetadata
 from astrbot.core.platform.sources.weixin_oc.weixin_oc_adapter import WeixinOCAdapter
+from astrbot.core.platform.sources.weixin_official_account import weixin_offacc_adapter
 from astrbot.core.platform.sources.weixin_official_account.weixin_offacc_event import (
     WeixinOfficialAccountPlatformEvent,
 )
+
+
+def test_weixin_official_account_client_applies_proxy_to_http_session(monkeypatch):
+    client = SimpleNamespace(_http=SimpleNamespace(proxies={}))
+    calls = []
+
+    def create_client(*args, **kwargs):
+        calls.append((args, kwargs))
+        return client
+
+    monkeypatch.setattr(weixin_offacc_adapter, "WeChatClient", create_client)
+    monkeypatch.setattr(
+        weixin_offacc_adapter,
+        "WeixinOfficialAccountServer",
+        lambda *args: SimpleNamespace(callback=None, active_send_mode=False),
+    )
+    weixin_offacc_adapter.WeixinOfficialAccountPlatformAdapter(
+        {
+            "id": "weixin-test",
+            "port": 8080,
+            "appid": "app",
+            "secret": "secret",
+            "proxy": {
+                "mode": "custom",
+                "type": "socks5",
+                "address": "127.0.0.1:1080",
+            },
+        },
+        {},
+        asyncio.Queue(),
+    )
+
+    assert calls == [(("app", "secret"), {})]
+    assert client._http.proxies == {
+        "http": "socks5://127.0.0.1:1080",
+        "https": "socks5://127.0.0.1:1080",
+    }
 
 
 def _button_row(*, fallback_text: str | None = None) -> ActionRow:

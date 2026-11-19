@@ -8,6 +8,7 @@ import traceback
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, get_args
+from urllib.parse import urlsplit
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from astrbot.core import file_token_service, logger
@@ -344,6 +345,57 @@ def validate_config(
             if not isinstance(address, str) or not address.strip():
                 errors.append(
                     f"平台配置 platform[{index}].proxy.address: 使用代理时不能为空"
+                )
+                continue
+            proxy_type = str(proxy.get("type", "http")).lower()
+            if proxy_type not in {"http", "https", "socks5"}:
+                errors.append(
+                    f"平台配置 platform[{index}].proxy.type: 不支持的代理类型"
+                )
+                continue
+            address = address.strip()
+            has_scheme = "://" in address
+            try:
+                parsed_address = urlsplit(address if has_scheme else f"//{address}")
+                hostname = parsed_address.hostname
+                port = parsed_address.port
+            except ValueError:
+                parsed_address = None
+                hostname = None
+                port = None
+            valid_address = (
+                parsed_address is not None
+                and hostname is not None
+                and port is not None
+                and 1 <= port <= 65535
+                and not any(character.isspace() for character in address)
+                and parsed_address.path in {"", "/"}
+                and not parsed_address.query
+                and not parsed_address.fragment
+            )
+            if (
+                has_scheme
+                and parsed_address is not None
+                and parsed_address.scheme.lower()
+                not in {
+                    "http",
+                    "https",
+                    "socks5",
+                }
+            ):
+                valid_address = False
+            if (
+                has_scheme
+                and parsed_address is not None
+                and parsed_address.scheme.lower() != proxy_type
+            ):
+                errors.append(
+                    f"平台配置 platform[{index}].proxy.type: 必须与代理地址中的 scheme 一致"
+                )
+                continue
+            if not valid_address:
+                errors.append(
+                    f"平台配置 platform[{index}].proxy.address: 请填写有效的主机:端口或代理 URL"
                 )
         provider_settings = data.get("provider_settings", {})
         defaults = get_local_permission_defaults(runtime.get("os") if runtime else None)
@@ -992,6 +1044,9 @@ class ConfigDisplayService:
             for platform in platform_registry
             if getattr(platform, "support_proxy", False)
         }
+        metadata["platform_group"]["metadata"]["platform"]["items"]["proxy"][
+            "condition"
+        ] = {"type": sorted(proxy_supported_types)}
         for platform_template in platform_default_tmpl.values():
             if isinstance(platform_template, dict):
                 if platform_template.get("type") not in proxy_supported_types:

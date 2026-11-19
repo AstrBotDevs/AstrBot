@@ -116,7 +116,6 @@
       :true-value="itemMeta.options[1]"
       :false-value="itemMeta.options[0]"
       @update:model-value="emitUpdate"
-      :label="getLabel(itemMeta, modelValue === itemMeta.options[1] ? 1 : 0, modelValue)"
       color="primary"
       inset
       hide-details

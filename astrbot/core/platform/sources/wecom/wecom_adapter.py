@@ -8,7 +8,6 @@ from pathlib import Path
 from typing import Any, cast
 from urllib.parse import unquote
 
-import requests
 from fastapi.responses import Response as FastAPIResponse
 from requests import Response
 from wechatpy.enterprise import WeChatClient, parse_message
@@ -203,16 +202,14 @@ class WecomPlatformAdapter(Platform):
         self.agent_id: str | None = None
         self._wechat_kf_seen_text_messages: dict[str, float] = {}
 
-        client_session = requests.Session()
-        if self.proxy_url:
-            client_session.proxies.update(
-                {"http": self.proxy_url, "https": self.proxy_url}
-            )
         self.client = WeChatClient(
             self.config["corpid"].strip(),
             self.config["secret"].strip(),
-            session=client_session,
         )
+        if self.proxy_url:
+            self.client._http.proxies.update(
+                {"http": self.proxy_url, "https": self.proxy_url}
+            )
 
         # 微信客服
         self.kf_name = self.config.get("kf_name", None)
