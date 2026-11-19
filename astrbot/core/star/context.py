@@ -3,7 +3,7 @@ from __future__ import annotations
 import logging
 from asyncio import Queue
 from collections.abc import Awaitable, Callable, Sequence
-from typing import TYPE_CHECKING, Any, Protocol
+from typing import TYPE_CHECKING, Any, Literal, Protocol
 
 from deprecated import deprecated
 
@@ -30,6 +30,7 @@ from astrbot.core.platform.astr_message_event import (
     streaming_response_event,
 )
 from astrbot.core.platform.message_type import MessageType
+from astrbot.core.platform.send_receipt import MessageSendReceipt
 from astrbot.core.platform_message_history_mgr import PlatformMessageHistoryManager
 from astrbot.core.provider.decision import DecisionService
 from astrbot.core.provider.entities import LLMResponse, ProviderRequest, ProviderType
@@ -698,22 +699,49 @@ class Context:
         session: str | MessageSesion,
         message_chain: MessageChain,
     ) -> bool:
-        """根据 session(unified_msg_origin) 主动发送消息。
+        """Send a message to a unified message origin.
 
         Args:
-            session: 消息会话。通过 event.session 或者 event.unified_msg_origin 获取。
-            message_chain: 消息链。
+            session: Destination from event.session or event.unified_msg_origin.
+            message_chain: Message content to send.
 
         Returns:
-            是否找到匹配的平台。
+            Whether a matching platform was found. This bool does not confirm
+            remote acceptance. Use send_message_with_receipt for that result.
 
         Raises:
-            ValueError: session 字符串不合法时抛出。
-
-        Note:
-            当 session 为字符串时，会尝试解析为 MessageSession 对象。(类名为MessageSesion是因为历史遗留拼写错误)
-            qq_official(QQ 官方 API 平台) 不支持此方法。
+            ValueError: The session string is invalid.
         """
+        found, _receipt = await self._send_message(session, message_chain)
+        return found
+
+    async def send_message_with_receipt(
+        self,
+        session: str | MessageSesion,
+        message_chain: MessageChain,
+    ) -> MessageSendReceipt | Literal[False] | None:
+        """Send once and return the adapter's optional API acceptance receipt.
+
+        Args:
+            session: Destination from event.session or event.unified_msg_origin.
+            message_chain: Message content to send.
+
+        Returns:
+            A receipt when the adapter confirms the complete chain, None when
+            its outcome is unknown, or False when no platform matches. Unknown
+            results may already have sent content and must not trigger a resend.
+
+        Raises:
+            ValueError: The session string is invalid.
+        """
+        found, receipt = await self._send_message(session, message_chain)
+        return receipt if found else False
+
+    async def _send_message(
+        self,
+        session: str | MessageSesion,
+        message_chain: MessageChain,
+    ) -> tuple[bool, MessageSendReceipt | None]:
         if isinstance(session, str):
             try:
                 session = MessageSesion.from_str(session)
@@ -722,7 +750,7 @@ class Context:
 
         for platform in self.platform_manager.platform_insts:
             if platform.meta().id == session.platform_name:
-                await platform.send_by_session(session, message_chain)
+                receipt = await platform.send_by_session(session, message_chain)
                 event = current_message_event.get()
                 if (
                     event is not None
@@ -770,11 +798,13 @@ class Context:
                         )
                     except Exception:
                         logger.exception("Failed to persist a proactive group message.")
-                return True
+                return True, receipt if isinstance(
+                    receipt, MessageSendReceipt
+                ) else None
         logger.warning(
             f"cannot find platform for session {str(session)}, message not sent"
         )
-        return False
+        return False, None
 
     def add_llm_tools(self, *tools: FunctionTool) -> None:
         """添加 LLM 工具。

@@ -14,10 +14,17 @@ from typing import Any
 
 from astrbot.api import logger
 from astrbot.api.event import MessageChain
-from astrbot.api.message_components import At, ButtonInteraction, Image, Plain
+from astrbot.api.message_components import (
+    ActionRow,
+    At,
+    ButtonInteraction,
+    Image,
+    Plain,
+)
 from astrbot.api.platform import (
     AstrBotMessage,
     MessageMember,
+    MessageSendReceipt,
     MessageType,
     Platform,
     PlatformMetadata,
@@ -32,6 +39,7 @@ from .wecomai_api import (
     WecomAIBotMessageParser,
     WecomAIBotStreamMessageBuilder,
 )
+from .wecomai_buttons import build_wecom_button_card
 from .wecomai_event import WecomAIBotMessageEvent
 from .wecomai_long_connection import WecomAIBotLongConnectionClient
 from .wecomai_queue_mgr import WecomAIQueueMgr
@@ -40,6 +48,7 @@ from .wecomai_utils import (
     WecomAIBotConstants,
     format_session_id,
     generate_random_string,
+    parse_session_id,
     process_encrypted_image,
 )
 from .wecomai_webhook import WecomAIBotWebhookClient, WecomAIBotWebhookError
@@ -88,7 +97,7 @@ class WecomAIBotAdapter(Platform):
         self.encoding_aes_key = self.config.get(
             "encoding_aes_key", self.config.get("wecomaibot_encoding_aes_key", "")
         )
-        self.port = int(self.config["port"])
+        self.port = int(self.config.get("port", 6198))
         self.host = self.config.get("callback_server_host", "0.0.0.0")
         self.bot_name = self.config.get("wecom_ai_bot_name", "")
         self.initial_respond_text = self.config.get(
@@ -441,9 +450,31 @@ class WecomAIBotAdapter(Platform):
         if cmd == "aibot_msg_callback":
             session_id = self._extract_session_id(body)
             stream_id = f"{session_id}_{generate_random_string(10)}"
-            await self._enqueue_message(
-                body, {"req_id": req_id or ""}, stream_id, session_id
-            )
+            callback_params = {"req_id": req_id or ""}
+            native_sender = body.get("from")
+            # The authenticated native callback contract scopes ordinary group
+            # text/mixed messages to mentions of this bot. Compatibility
+            # channels and callbacks for another account do not prove that.
+            if (
+                "compat_info" not in body
+                and body.get("aibotid") == self.long_connection_bot_id
+                and body.get("chattype") == "group"
+                and body.get("msgtype") in {"text", "mixed"}
+                and isinstance(native_sender, dict)
+                and all(
+                    isinstance(value, str)
+                    and value.strip() == value
+                    and value
+                    and not any(ord(char) < 32 for char in value)
+                    for value in (
+                        body.get("chatid"),
+                        body.get("msgid"),
+                        native_sender.get("userid"),
+                    )
+                )
+            ):
+                callback_params["native_group_mention"] = "true"
+            await self._enqueue_message(body, callback_params, stream_id, session_id)
             self.queue_mgr.set_pending_response(
                 stream_id,
                 {
@@ -672,7 +703,11 @@ class WecomAIBotAdapter(Platform):
 
         # 构建 AstrBotMessage
         abm = AstrBotMessage()
-        abm.self_id = self.bot_name
+        abm.self_id = (
+            self.long_connection_bot_id
+            if self.connection_mode == "long_connection"
+            else self.bot_name
+        )
         abm.message_str = "" if button_interaction else content or "[未知消息]"
         abm.message_id = str(message_data.get("msgid") or uuid.uuid4())
         abm.timestamp = int(message_data.get("create_time") or time.time())
@@ -702,10 +737,16 @@ class WecomAIBotAdapter(Platform):
             logger.debug(f"WecomAIAdapter: {abm.message}")
             return abm
 
-        # 处理 At
-        if self.bot_name and f"@{self.bot_name}" in abm.message_str:
+        # Long-connection group addressing comes only from its native callback.
+        if (
+            self.connection_mode == "long_connection"
+            and abm.type == MessageType.GROUP_MESSAGE
+        ):
+            if payload.get("callback_params", {}).get("native_group_mention") == "true":
+                abm.message.append(At(qq=abm.self_id))
+        elif self.bot_name and f"@{self.bot_name}" in abm.message_str:
             abm.message_str = abm.message_str.replace(f"@{self.bot_name}", "").strip()
-            abm.message.append(At(qq=self.bot_name, name=self.bot_name))
+            abm.message.append(At(qq=abm.self_id, name=self.bot_name))
         abm.message.append(Plain(abm.message_str))
         if image_base64:
             for img_b64 in image_base64:
@@ -718,8 +759,69 @@ class WecomAIBotAdapter(Platform):
         self,
         session: MessageSesion,
         message_chain: MessageChain,
-    ) -> None:
-        """通过消息推送 webhook 发送消息。"""
+    ) -> MessageSendReceipt | None:
+        """Send to the original native destination, or the configured webhook.
+
+        Args:
+            session: Original unified message session and destination type.
+            message_chain: Content to send through the adapter.
+
+        Returns:
+            Complete native acceptance, or None for an unconfirmed outcome.
+
+        Raises:
+            ValueError: The native destination cannot be established.
+        """
+        if (
+            self.connection_mode == "long_connection"
+            and not self.only_use_webhook_url_to_send
+        ):
+            kind, target = parse_session_id(session.session_id)
+            expected = (
+                "group" if session.message_type == MessageType.GROUP_MESSAGE else "user"
+            )
+            if (
+                kind not in {"wecomai", expected}
+                or not target
+                or not session.session_id.startswith("wecom_ai_bot_")
+                or not self.long_connection_client
+            ):
+                raise ValueError("Original WeCom destination is unavailable")
+            if not message_chain.chain or any(
+                not isinstance(part, (Plain, ActionRow)) for part in message_chain.chain
+            ):
+                return None
+            content = WecomAIBotMessageEvent._extract_plain_text_from_chain(
+                message_chain
+            )
+            card = build_wecom_button_card(
+                [part for part in message_chain.chain if isinstance(part, ActionRow)]
+            )
+            bodies = (
+                [{"msgtype": "markdown", "markdown": {"content": content}}]
+                if content
+                else []
+            )
+            if card:
+                bodies.append({"msgtype": "template_card", "template_card": card})
+            if not bodies:
+                return None
+            for body in bodies:
+                accepted = await self.long_connection_client.send_command(
+                    "aibot_send_msg",
+                    self.long_connection_client.gen_req_id(),
+                    {
+                        "chatid": target,
+                        "chat_type": 2
+                        if session.message_type == MessageType.GROUP_MESSAGE
+                        else 1,
+                        **body,
+                    },
+                )
+                if accepted is not True:
+                    return None
+            await super().send_by_session(session, message_chain)
+            return MessageSendReceipt()
         if not self.webhook_client:
             raise RuntimeError(
                 "主动消息发送失败: 未配置企业微信消息推送 Webhook URL，请前往配置添加。"
@@ -815,6 +917,7 @@ class WecomAIBotAdapter(Platform):
             only_use_webhook_url_to_send=self.only_use_webhook_url_to_send,
             long_connection_sender=self._send_long_connection_respond_msg,
             long_connection_update_sender=self._send_long_connection_update_msg,
+            adapter=self,
         )
         if not message_event.is_button_interaction():
             message_event.is_at_or_wake_command = True

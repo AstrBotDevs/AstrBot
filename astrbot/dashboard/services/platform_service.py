@@ -20,6 +20,9 @@ from astrbot.core.platform.sources.qqofficial.login_registration import (
     poll_qqofficial_login_once,
     request_qqofficial_login_qr,
 )
+from astrbot.core.platform.sources.wecom_ai_bot.app_registration import (
+    wecom_ai_registration,
+)
 from astrbot.core.platform.sources.weixin_oc.login_registration import (
     poll_weixin_oc_login_once,
     request_weixin_oc_login_qr,
@@ -34,6 +37,16 @@ class PlatformServiceError(Exception):
 
 def random_platform_id_suffix() -> str:
     return "_" + "".join(secrets.choice(string.ascii_lowercase) for _ in range(4))
+
+
+REGISTRATION_HANDLERS = {
+    "lark": "_handle_lark_registration",
+    "weixin_oc": "_handle_weixin_oc_registration",
+    "dingtalk": "_handle_dingtalk_registration",
+    "wecom_ai_bot": "_handle_wecom_ai_registration",
+    "qq_official": "_handle_qqofficial_registration",
+    "qq_official_webhook": "_handle_qqofficial_registration",
+}
 
 
 class PlatformService:
@@ -87,26 +100,9 @@ class PlatformService:
             if not isinstance(platform_config, dict):
                 platform_config = {}
 
-            if platform_type == "lark":
-                return await self._handle_lark_registration(
-                    action,
-                    payload,
-                    platform_config,
-                )
-            if platform_type == "weixin_oc":
-                return await self._handle_weixin_oc_registration(
-                    action,
-                    payload,
-                    platform_config,
-                )
-            if platform_type == "dingtalk":
-                return await self._handle_dingtalk_registration(action, payload)
-            if platform_type in {"qq_official", "qq_official_webhook"}:
-                return await self._handle_qqofficial_registration(
-                    action,
-                    payload,
-                    platform_config,
-                )
+            handler = REGISTRATION_HANDLERS.get(platform_type)
+            if handler is not None:
+                return await getattr(self, handler)(action, payload, platform_config)
 
             raise PlatformServiceError(
                 f"Unsupported platform registration: {platform_type}",
@@ -170,6 +166,7 @@ class PlatformService:
         self,
         action: str,
         payload: dict,
+        platform_config: dict,
     ) -> dict:
         if action == "start":
             registration = await request_dingtalk_app_registration()
@@ -196,6 +193,26 @@ class PlatformService:
             return result
 
         raise PlatformServiceError(f"Unsupported action: {action}", 400)
+
+    async def _handle_wecom_ai_registration(
+        self, action: str, payload: dict, platform_config: dict
+    ) -> dict:
+        """Dispatch the official WeCom QR registration action.
+
+        Args:
+            action: Requested start or poll operation.
+            payload: Request containing the server-held registration code.
+            platform_config: Standard dispatcher configuration, unused here.
+
+        Returns:
+            The official registration result with its native credentials.
+
+        Raises:
+            PlatformServiceError: The requested operation is unsupported.
+        """
+        if action not in {"start", "poll"}:
+            raise PlatformServiceError("Unsupported registration action", 400)
+        return await wecom_ai_registration(action, payload.get("registration_code", ""))
 
     async def _handle_qqofficial_registration(
         self,

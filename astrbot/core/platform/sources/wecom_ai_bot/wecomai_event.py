@@ -6,6 +6,7 @@ from collections.abc import Awaitable, Callable
 from astrbot.api import logger
 from astrbot.api.event import AstrMessageEvent, MessageChain
 from astrbot.api.message_components import ActionRow, At, Image, Plain
+from astrbot.api.platform import MessageSendReceipt
 
 from .wecomai_api import WecomAIBotAPIClient
 from .wecomai_buttons import build_wecom_button_card
@@ -32,6 +33,7 @@ class WecomAIBotMessageEvent(AstrMessageEvent):
         long_connection_update_sender: (
             Callable[[str, dict], Awaitable[bool]] | None
         ) = None,
+        adapter=None,
     ) -> None:
         """初始化消息事件
 
@@ -46,6 +48,7 @@ class WecomAIBotMessageEvent(AstrMessageEvent):
             only_use_webhook_url_to_send: Whether all output uses the webhook client.
             long_connection_sender: Sender for normal long-connection replies.
             long_connection_update_sender: Sender for template-card replacements.
+            adapter: Original platform adapter for complete native session sends.
 
         """
         super().__init__(message_str, message_obj, platform_meta, session_id)
@@ -55,6 +58,7 @@ class WecomAIBotMessageEvent(AstrMessageEvent):
         self.only_use_webhook_url_to_send = only_use_webhook_url_to_send
         self.long_connection_sender = long_connection_sender
         self.long_connection_update_sender = long_connection_update_sender
+        self.adapter = adapter
 
     async def _mark_stream_complete(self, stream_id: str) -> None:
         back_queue = self.queue_mgr.get_or_create_back_queue(stream_id)
@@ -175,8 +179,15 @@ class WecomAIBotMessageEvent(AstrMessageEvent):
         result = "".join(plain_parts)
         return result.strip() if strip_result else result
 
-    async def send(self, message: MessageChain | None) -> None:
-        """发送消息"""
+    async def send(self, message: MessageChain | None) -> MessageSendReceipt | None:
+        """Send the original chain through its native reply or session route.
+
+        Args:
+            message: Complete message content, or None when there is no output.
+
+        Returns:
+            Complete native acceptance when confirmed, otherwise None.
+        """
         if message is None:
             return
         raw = self.message_obj.raw_message
@@ -260,15 +271,13 @@ class WecomAIBotMessageEvent(AstrMessageEvent):
             ]
             template_card = build_wecom_button_card(action_rows)
             if template_card:
-                body = {
-                    "msgtype": "stream_with_template_card",
-                    "stream": {
-                        "id": stream_id,
-                        "finish": True,
-                        "content": content,
-                    },
-                    "template_card": template_card,
-                }
+                if content:
+                    if self.adapter is None:
+                        return None
+                    receipt = await self.adapter.send_by_session(self.session, message)
+                    await super().send(message)
+                    return receipt
+                body = {"msgtype": "template_card", "template_card": template_card}
             else:
                 body = {
                     "msgtype": "stream",
@@ -278,11 +287,17 @@ class WecomAIBotMessageEvent(AstrMessageEvent):
                         "content": content,
                     },
                 }
-            await self.long_connection_sender(
+            accepted = await self.long_connection_sender(
                 req_id,
                 body,
             )
             await super().send(message)
+            if (
+                accepted is True
+                and (content or template_card)
+                and all(isinstance(part, (Plain, ActionRow)) for part in message.chain)
+            ):
+                return MessageSendReceipt()
             return
 
         if self.only_use_webhook_url_to_send and self.webhook_client and message:

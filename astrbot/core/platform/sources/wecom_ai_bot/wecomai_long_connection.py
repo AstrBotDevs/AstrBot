@@ -178,16 +178,30 @@ class WecomAIBotLongConnectionClient:
 
         async with self._command_lock:
             max_retries = 3
+            message_command = cmd in {
+                "aibot_send_msg",
+                "aibot_respond_msg",
+                "aibot_respond_update_msg",
+                "aibot_respond_welcome_msg",
+            }
             for attempt in range(max_retries + 1):
                 response = await self._send_and_wait_response(req_id, payload)
                 if not response:
+                    if message_command:
+                        return False
                     if attempt < max_retries:
                         await asyncio.sleep(min(0.2 * (2**attempt), 2.0))
                         continue
                     return False
 
                 errcode = response.get("errcode")
-                if errcode in (0, None):
+                if (
+                    message_command
+                    and type(errcode) is int
+                    and errcode == 0
+                    or not message_command
+                    and errcode in (0, None)
+                ):
                     return True
 
                 if errcode == 6000 and attempt < max_retries:
