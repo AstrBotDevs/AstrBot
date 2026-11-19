@@ -244,7 +244,7 @@ class MarkdownChunker(BaseChunker):
 
         # 匹配 Markdown 标题行（支持 # 后有或无空格）
         heading_pattern = re.compile(
-            r"^(#{1," + str(self.max_heading_depth) + r"})\s*(.+)$", re.MULTILINE
+            r"^(#{1," + str(self.max_heading_depth) + r"})(?!#)\s*(.+)$", re.MULTILINE
         )
 
         # 找到所有标题及其位置（排除代码块内的）
