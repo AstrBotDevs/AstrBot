@@ -170,12 +170,20 @@ class RetrievalManager:
                 )
 
         # 5. Rerank
+        # Resolve the rerank provider by ID on every retrieval. Vector stores
+        # cache the instance they were built with, so a provider reload would
+        # otherwise keep reranking through the terminated instance and its
+        # pre-reload endpoint, key and model.
         first_rerank = None
-        for kb_opt in kb_options.values():
-            vec_db = kb_opt.get("vec_db")
-            rerank_provider = (
-                getattr(vec_db, "rerank_provider", None) if vec_db else None
-            )
+        for kb_id in kb_ids:
+            try:
+                rerank_provider = await kb_id_helper_map[kb_id].get_rp()
+            except Exception as e:
+                logger.warning(
+                    f"知识库 {kb_id} 解析 Rerank Provider 失败，将跳过该知识库的重排序: {type(e).__name__}: {e}",
+                    exc_info=True,
+                )
+                continue
             if rerank_provider is not None:
                 first_rerank = rerank_provider
                 break
@@ -188,7 +196,10 @@ class RetrievalManager:
                     rerank_provider=first_rerank,
                 )
             except Exception as e:
-                logger.warning(f"Rerank 执行失败，已跳过重排序并使用融合结果: {e}")
+                logger.warning(
+                    f"Rerank 执行失败，已跳过重排序并使用融合结果: {type(e).__name__}: {e}",
+                    exc_info=True,
+                )
 
         return retrieval_results[:top_m_final]
 
