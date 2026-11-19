@@ -4512,7 +4512,7 @@ CONFIG_METADATA_3 = {
                         "description": "系统语言",
                         "type": "string",
                         "options": ["zh-CN", "en-US"],
-                        "labels": ["简体中文", "English"],
+                        "labels": ["🇨🇳 简体中文", "🇺🇸 English"],
                         "hint": "设置系统的语言，用于插件、错误信息回复等地方。不会改变模型回答或 WebUI 的语言。",
                     },
                     "platform_settings.unique_session": {
