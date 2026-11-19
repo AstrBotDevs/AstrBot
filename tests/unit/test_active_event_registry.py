@@ -153,7 +153,7 @@ async def test_repeated_stop_preserves_background_cleanup() -> None:
         await asyncio.wait_for(started.wait(), timeout=1)
         assert registry.request_agent_stop_all("session") == 1
         await asyncio.wait_for(cleaning.wait(), timeout=1)
-        assert registry.request_agent_stop_all("session") == 1
+        assert registry.request_agent_stop_all("session") == 0
     finally:
         release.set()
         await asyncio.wait_for(asyncio.gather(task, return_exceptions=True), timeout=1)
