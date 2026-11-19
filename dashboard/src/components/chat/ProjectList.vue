@@ -1,7 +1,16 @@
 <template>
   <section class="sidebar-section project-list-shell">
     <div class="sidebar-section-header">
-      <span>{{ tm("project.title") }}</span>
+      <button
+        type="button"
+        class="project-section-toggle"
+        :aria-expanded="projectsExpanded"
+        @click="projectsExpanded = !projectsExpanded"
+      >
+        <span>{{ tm("project.title") }}</span>
+        <ChevronDown v-if="projectsExpanded" :size="16" aria-hidden="true" />
+        <ChevronRight v-else :size="16" aria-hidden="true" />
+      </button>
       <v-btn
         icon
         size="x-small"
@@ -14,7 +23,7 @@
       </v-btn>
     </div>
 
-    <div class="project-list-wrap">
+    <div v-show="projectsExpanded" class="project-list-wrap">
       <div v-if="!projects.length" class="project-list-empty">
         {{ tm("project.noProjects") }}
       </div>
@@ -194,6 +203,14 @@ const emit = defineEmits<{
 const { tm } = useModuleI18n("features/chat");
 const confirmDialog = useConfirmDialog();
 
+const projectsExpanded = ref(chatPreferences().global.projectsExpanded === true);
+
+watch(projectsExpanded, (expanded) => {
+  chatPreferences((preferences) => {
+    preferences.global.projectsExpanded = expanded;
+  });
+});
+
 const expandedProjectIds = ref<Set<string>>(readExpandedProjectIds());
 
 watch(
@@ -297,6 +314,20 @@ async function handleDeleteSession(projectId: string, session: ProjectSession) {
   color: var(--chat-section-label);
   font-size: 12px;
   font-weight: 500;
+}
+
+.project-section-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 36px;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+.project-section-toggle:hover {
+  color: rgb(var(--v-theme-on-surface));
 }
 
 .section-action-btn,

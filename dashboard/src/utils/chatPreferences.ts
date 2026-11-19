@@ -21,6 +21,7 @@ export interface ChatPreferences {
     transportMode?: string;
     sttProvider?: string;
     expandedProjectIds?: string[];
+    projectsExpanded?: boolean;
     navigationInSidebar?: boolean;
     draft?: string;
     workbench?: WorkbenchLayout;
