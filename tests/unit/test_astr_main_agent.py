@@ -938,6 +938,189 @@ class TestApplyFileExtract:
 
         assert len(req.contexts) == 0
 
+    @pytest.mark.asyncio
+    async def test_extract_file_moonshotai_uses_proxy_client_and_closes_session(
+        self, monkeypatch, tmp_path: Path
+    ):
+        """extract_file_moonshotai should use create_proxy_client without importing openai."""
+        from astrbot.core.utils import file_extract
+
+        sample_file = tmp_path / "notes.txt"
+        sample_file.write_text("hello moonshot", encoding="utf-8")
+
+        captured_client_args: list[tuple[tuple, dict]] = []
+        captured_requests: list[tuple[str, str, bytes | None]] = []
+        closed = False
+
+        class _FakeResponse:
+            def __init__(
+                self,
+                *,
+                status_code: int = 200,
+                json_data=None,
+                text: str = "",
+            ) -> None:
+                self.status_code = status_code
+                self._json_data = json_data
+                self.text = text
+
+            def raise_for_status(self) -> None:
+                return None
+
+            def json(self):
+                return self._json_data
+
+        class _FakeClient:
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, exc_type, exc_val, exc_tb):
+                nonlocal closed
+                closed = True
+
+            async def post(self, url: str, *, data=None, files=None, timeout=None):
+                assert data == {"purpose": "file-extract"}
+                assert timeout == 600.0
+                filename, handle = files["file"]
+                assert filename == "notes.txt"
+                captured_requests.append(("POST", url, handle.read()))
+                return _FakeResponse(json_data={"id": "file-123"})
+
+            async def get(self, url: str, *, timeout=None):
+                assert timeout == 600.0
+                captured_requests.append(("GET", url, None))
+                return _FakeResponse(text="extracted text")
+
+        def _fake_create_proxy_client(*args, **kwargs):
+            captured_client_args.append((args, kwargs))
+            return _FakeClient()
+
+        monkeypatch.setattr(file_extract, "create_proxy_client", _fake_create_proxy_client)
+
+        result = await file_extract.extract_file_moonshotai(str(sample_file), "msh-key")
+
+        assert result == "extracted text"
+        assert closed is True
+        assert captured_client_args == [
+            (("Moonshot",), {"headers": {"Authorization": "Bearer msh-key"}})
+        ]
+        assert captured_requests == [
+            ("POST", "https://api.moonshot.cn/v1/files", b"hello moonshot"),
+            ("GET", "https://api.moonshot.cn/v1/files/file-123/content", None),
+        ]
+
+    @pytest.mark.asyncio
+    async def test_extract_file_moonshotai_raises_on_http_error(
+        self, monkeypatch, tmp_path: Path
+    ):
+        """HTTP errors during Moonshot upload should propagate."""
+        import httpx
+
+        from astrbot.core.utils import file_extract
+
+        sample_file = tmp_path / "bad.txt"
+        sample_file.write_text("bad", encoding="utf-8")
+
+        class _FailingClient:
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, exc_type, exc_val, exc_tb):
+                return None
+
+            async def post(self, url: str, **kwargs):
+                del kwargs
+                request = httpx.Request("POST", url)
+                return httpx.Response(401, request=request)
+
+        monkeypatch.setattr(
+            file_extract, "create_proxy_client", lambda *a, **kw: _FailingClient()
+        )
+
+        with pytest.raises(httpx.HTTPStatusError):
+            await file_extract.extract_file_moonshotai(str(sample_file), "bad-key")
+
+    @pytest.mark.asyncio
+    async def test_extract_file_moonshotai_retries_transient_failures(
+        self, monkeypatch, tmp_path: Path
+    ):
+        """Transient transport and 429/5xx responses retry with fresh file reads."""
+        import httpx
+
+        from astrbot.core.utils import file_extract
+
+        sample_file = tmp_path / "retry.txt"
+        sample_file.write_text("retry payload", encoding="utf-8")
+
+        post_bodies: list[bytes] = []
+        get_attempts = 0
+        sleeps: list[float] = []
+
+        async def _fake_sleep(delay: float) -> None:
+            sleeps.append(delay)
+
+        class _RetryClient:
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, exc_type, exc_val, exc_tb):
+                return None
+
+            async def post(self, url: str, *, data=None, files=None, timeout=None):
+                del data, timeout
+                _, handle = files["file"]
+                post_bodies.append(handle.read())
+                request = httpx.Request("POST", url)
+                if len(post_bodies) == 1:
+                    raise httpx.ConnectError("temporary reset", request=request)
+                if len(post_bodies) == 2:
+                    return httpx.Response(503, request=request)
+                return httpx.Response(200, json={"id": "file-retry"}, request=request)
+
+            async def get(self, url: str, *, timeout=None):
+                del timeout
+                nonlocal get_attempts
+                get_attempts += 1
+                request = httpx.Request("GET", url)
+                if get_attempts == 1:
+                    return httpx.Response(429, request=request)
+                return httpx.Response(200, text="recovered content", request=request)
+
+        monkeypatch.setattr(file_extract.asyncio, "sleep", _fake_sleep)
+        monkeypatch.setattr(
+            file_extract, "create_proxy_client", lambda *a, **kw: _RetryClient()
+        )
+
+        result = await file_extract.extract_file_moonshotai(str(sample_file), "msh-key")
+
+        assert result == "recovered content"
+        assert post_bodies == [b"retry payload", b"retry payload", b"retry payload"]
+        assert get_attempts == 2
+        assert sleeps == [0.5, 1.0, 0.5]
+
+    def test_entities_and_file_extract_do_not_eagerly_import_llm_sdks(self):
+        """Importing provider entities and file_extract should not load heavy SDKs."""
+        import subprocess
+        import sys
+
+        script = (
+            "import sys\n"
+            "import astrbot.core.provider.entities\n"
+            "import astrbot.core.utils.file_extract\n"
+            "loaded = [p for p in ('anthropic', 'google.genai', 'openai') if p in sys.modules]\n"
+            "assert not loaded, f'Unexpected SDK imports: {loaded}'\n"
+        )
+        env = os.environ.copy()
+        env["PYTHONPATH"] = os.pathsep.join(p for p in sys.path if p)
+        result = subprocess.run(
+            [sys.executable, "-c", script],
+            env=env,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        assert result.returncode == 0, result.stderr or result.stdout
+
 
 class TestEnsurePersonaAndSkills:
     """Tests for _ensure_persona_and_skills function."""
