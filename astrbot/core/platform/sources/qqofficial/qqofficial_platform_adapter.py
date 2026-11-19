@@ -909,6 +909,64 @@ class QQOfficialPlatformAdapter(Platform):
         return re.sub(rf"(?:[ \t]*{markup_pattern}[ \t]*)+", " ", content or "")
 
     @staticmethod
+    def _parse_ordered_mentions(
+        content: str | None,
+        mention_names: dict[str, str],
+        bot_mention_ids: list[str],
+    ) -> tuple[list[BaseMessageComponent], set[str]]:
+        """Split group text into ordered Plain/At components at mention tags.
+
+        Args:
+            content: Raw QQ message content containing mention markup.
+            mention_names: Known mention identifiers mapped to usernames.
+            bot_mention_ids: Identifiers of the bot itself, if mentioned.
+
+        Returns:
+            Ordered components with each confirmed mention kept at its original
+            position, and the bot identifiers that had a locatable tag.
+        """
+        import re
+
+        content = content or ""
+        if not mention_names:
+            components: list[BaseMessageComponent] = []
+            parsed = QQOfficialPlatformAdapter._parse_face_message(content)
+            if parsed:
+                components.append(Plain(parsed))
+            return components, set()
+        tag_pattern = re.compile(
+            "|".join(
+                rf'(?:<qqbot-at-user\s+id="{re.escape(mention_id)}"\s*/>|'
+                rf"<@!?{re.escape(mention_id)}>)"
+                for mention_id in sorted(mention_names, key=len, reverse=True)
+            )
+        )
+        components = []
+        located_bot_ids: set[str] = set()
+        cursor = 0
+        for match in tag_pattern.finditer(content):
+            text = content[cursor : match.start()]
+            if text:
+                components.append(
+                    Plain(QQOfficialPlatformAdapter._parse_face_message(text))
+                )
+            tag = match.group(0)
+            if tag.startswith("<qqbot-at-user"):
+                mention_id = re.search(r'id="([^"]*)"', tag).group(1)
+            else:
+                mention_id = tag[2:].lstrip("!")[:-1]
+            components.append(At(qq=mention_id, name=mention_names.get(mention_id, "")))
+            if mention_id in bot_mention_ids:
+                located_bot_ids.add(mention_id)
+            cursor = match.end()
+        tail = content[cursor:]
+        if tail:
+            components.append(
+                Plain(QQOfficialPlatformAdapter._parse_face_message(tail))
+            )
+        return components, located_bot_ids
+
+    @staticmethod
     async def _parse_from_qqofficial(
         message: botpy.message.Message
         | botpy.message.GroupMessage
@@ -1006,9 +1064,10 @@ class QQOfficialPlatformAdapter(Platform):
                 )
                 if bot is not None:
                     await get_qq_group(bot, abm.group)
+                mentions = getattr(message, "mentions", None) or []
                 bot_mentions = [
                     mention
-                    for mention in (getattr(message, "mentions", None) or [])
+                    for mention in mentions
                     if getattr(mention, "is_you", False) is True
                     and getattr(mention, "id", None) is not None
                 ]
@@ -1026,11 +1085,36 @@ class QQOfficialPlatformAdapter(Platform):
                     plain_content_raw.strip()
                 )
                 abm.self_id = bot_mention_ids[0] if bot_mention_ids else "qq_official"
-                if group_mentioned:
-                    mention_name = (
-                        getattr(bot_mentions[0], "username", "") if bot_mentions else ""
+                mention_name = (
+                    getattr(bot_mentions[0], "username", "") if bot_mentions else ""
+                )
+                mention_names = {
+                    str(mention.id): str(getattr(mention, "username", "") or "")
+                    for mention in mentions
+                    if getattr(mention, "id", None) is not None
+                }
+                chain, located_bot_ids = (
+                    QQOfficialPlatformAdapter._parse_ordered_mentions(
+                        message.content or "",
+                        mention_names,
+                        bot_mention_ids,
                     )
+                )
+                if group_mentioned and not located_bot_ids:
+                    # The bot was mentioned (or a legacy group-at event arrived)
+                    # without any locatable mention tag. Keep wake support while
+                    # marking the At as position-less for model rendering.
                     msg.append(At(qq=abm.self_id, name=mention_name))
+                    abm._self_mention_position_unknown = True
+                    if bot_mentions:
+                        # A real mentions.is_you entry confirms the bot was
+                        # addressed with a reliable identity; legacy group-at
+                        # events carry no usable mention identity.
+                        abm._self_mention_identity_confirmed = True
+                msg.extend(chain)
+                if not msg:
+                    msg.append(Plain(""))
+                abm.ordered_mentions = True
             else:
                 abm.sender = MessageMember(
                     message.author.user_openid,
@@ -1041,7 +1125,7 @@ class QQOfficialPlatformAdapter(Platform):
                 )
                 abm.self_id = "unknown_selfid"
                 msg.append(At(qq="qq_official"))
-            msg.append(Plain(abm.message_str))
+                msg.append(Plain(abm.message_str))
             await QQOfficialPlatformAdapter._append_attachments(
                 msg, message.attachments
             )

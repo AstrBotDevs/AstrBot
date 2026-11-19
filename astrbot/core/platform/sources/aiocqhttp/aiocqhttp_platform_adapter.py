@@ -420,6 +420,9 @@ class AiocqhttpAdapter(Platform):
 
         abm.timestamp = int(time.time())
         abm.message_str = message_str
+        # Group chains keep true Plain/At positions for the agent input
+        # boundary; private chats have no mention ambiguity to resolve.
+        abm.ordered_mentions = abm.type == MessageType.GROUP_MESSAGE
         abm.raw_message = event
 
         return abm

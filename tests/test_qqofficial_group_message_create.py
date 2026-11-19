@@ -12,6 +12,7 @@ from botpy import ConnectionSession
 from astrbot.api.event import MessageChain
 from astrbot.api.message_components import At, Image, Plain, Reply
 from astrbot.api.platform import Group
+from astrbot.core.message.mention_render import follow_up_text
 from astrbot.core.message.message_event_result import (
     MessageEventResult,
     ResultContentType,
@@ -108,10 +109,11 @@ async def test_group_message_create_parser_is_registered_and_dispatches_group_me
 
 
 @pytest.mark.asyncio
-async def test_parse_group_message_create_plain_message_has_no_at_component():
+@pytest.mark.parametrize("content", ["plain group message", ""])
+async def test_parse_group_message_create_plain_message_has_no_at_component(content):
     _, message = _dispatch_group_message(
         _make_group_payload(
-            content="plain group message",
+            content=content,
             group_name="Incoming Group",
         )
     )
@@ -126,11 +128,11 @@ async def test_parse_group_message_create_plain_message_has_no_at_component():
     assert abm.group_id == "group-1"
     assert abm.group is not None
     assert abm.group.group_name == "Incoming Group"
-    assert abm.message_str == "plain group message"
+    assert abm.message_str == content
     assert not any(isinstance(component, At) for component in abm.message)
     assert [
         component.text for component in abm.message if isinstance(component, Plain)
-    ] == ["plain group message"]
+    ] == [content]
 
 
 @pytest.mark.asyncio
@@ -200,7 +202,7 @@ async def test_parse_group_message_create_bot_mention_cleans_plain_text(
     assert abm.message[0].qq == "bot-123"
     assert abm.self_id == "bot-123"
     assert isinstance(abm.message[1], Plain)
-    assert abm.message[1].text == "hello there"
+    assert abm.message[1].text == " hello there"
     assert abm.message_str == "hello there"
     assert abm.sender.user_id == "member-1"
     assert abm.group_id == "group-1"
@@ -1129,3 +1131,88 @@ async def test_webhook_send_by_session_use_markdown_config_false_sends_content()
     assert kwargs["content"] == "webhook plain content"
     assert "markdown" not in kwargs
     assert "msg_type" not in kwargs
+
+
+@pytest.mark.asyncio
+async def test_group_message_keeps_ordered_mentions_and_legacy_message_str():
+    _, message = _dispatch_group_message(
+        _make_group_payload(
+            content="<@!member-alice> 你总结一下，<@bot-123> 你不用管",
+            mentions=[
+                {"id": "member-alice", "username": "小璃"},
+                {"id": "bot-123", "username": "清漪", "is_you": True},
+            ],
+        )
+    )
+
+    abm = await QQOfficialPlatformAdapter._parse_from_qqofficial(
+        message,
+        MessageType.GROUP_MESSAGE,
+    )
+
+    assert abm.ordered_mentions is True
+    assert isinstance(abm.message[0], At)
+    assert (abm.message[0].qq, abm.message[0].name) == ("member-alice", "小璃")
+    assert isinstance(abm.message[1], Plain)
+    assert abm.message[1].text == " 你总结一下，"
+    assert isinstance(abm.message[2], At)
+    assert (abm.message[2].qq, abm.message[2].name) == ("bot-123", "清漪")
+    assert isinstance(abm.message[3], Plain)
+    assert abm.message[3].text == " 你不用管"
+    # 旧清洗结果保持不变：仅移除机器人标签，其他用户的标签保留在文本中
+    assert abm.message_str == "<@!member-alice> 你总结一下， 你不用管"
+
+
+@pytest.mark.parametrize("is_you_event", [True, False], ids=["is_you", "legacy"])
+@pytest.mark.asyncio
+async def test_group_message_without_locatable_tag_keeps_wake_fallback(is_you_event):
+    if is_you_event:
+        _, message = _dispatch_group_message(
+            _make_group_payload(
+                content="帮我看下这个",
+                mentions=[{"id": "bot-123", "username": "清漪", "is_you": True}],
+            )
+        )
+        abm = await QQOfficialPlatformAdapter._parse_from_qqofficial(
+            message,
+            MessageType.GROUP_MESSAGE,
+        )
+        expected_self_id = "bot-123"
+    else:
+        message = botpy.message.GroupMessage(
+            None,
+            "event-legacy",
+            _make_group_payload(content="legacy text", mentions=[])["d"],
+        )
+        abm = await QQOfficialPlatformAdapter._parse_from_qqofficial(
+            message,
+            MessageType.GROUP_MESSAGE,
+            force_group_mention=True,
+        )
+        expected_self_id = "qq_official"
+
+    assert isinstance(abm.message[0], At)
+    assert abm.message[0].qq == expected_self_id
+    assert getattr(abm, "_self_mention_position_unknown") is True
+    assert getattr(abm, "_self_mention_identity_confirmed") is is_you_event
+    assert isinstance(abm.message[1], Plain)
+    assert abm.message[1].text == abm.message_str
+    # 唤醒兜底 At 只保留唤醒意义，不在模型正文中伪造句首 @
+    event = SimpleNamespace(
+        message_obj=abm,
+        message_str=abm.message_str,
+        get_self_id=lambda: abm.self_id,
+        get_message_str=lambda: abm.message_str,
+        get_message_outline=lambda: "",
+        get_extra=lambda key, default=None: default,
+    )
+    text, reminder = follow_up_text(event)
+    assert text == abm.message_str
+    if is_you_event:
+        # 真实 is_you：@ 位置未知，但身份提醒仍然用真实 ID 生成
+        assert reminder == (
+            "<system_reminder>@清漪 refers to you (Your ID: bot-123).</system_reminder>"
+        )
+    else:
+        # 旧兜底没有可靠身份：不编造机器人 ID，也不伪造提醒
+        assert reminder is None

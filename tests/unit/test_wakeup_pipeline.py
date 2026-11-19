@@ -31,6 +31,7 @@ from astrbot.core.astr_agent_runtime.runner import AgentRunner
 from astrbot.core.config.default import DEFAULT_CONFIG
 from astrbot.core.event_bus import EventBus
 from astrbot.core.log import _log_context
+from astrbot.core.message.components import At, Plain
 from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.pipeline.context import PipelineContext
 from astrbot.core.pipeline.scheduler import PipelineScheduler
@@ -39,7 +40,7 @@ from astrbot.core.platform.astr_message_event import (
     AstrMessageEvent,
     current_message_event,
 )
-from astrbot.core.platform.astrbot_message import AstrBotMessage, MessageMember
+from astrbot.core.platform.astrbot_message import AstrBotMessage, Group, MessageMember
 from astrbot.core.platform.message_type import MessageType
 from astrbot.core.platform.platform_metadata import PlatformMetadata
 from astrbot.core.provider.entities import LLMResponse
@@ -227,6 +228,63 @@ async def runtime(monkeypatch):
         task.cancel()
     await asyncio.gather(*pending, return_exceptions=True)
     await native.close()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("split_prefixes", [False, True])
+async def test_group_mentions_render_after_real_wake_prefixes(runtime, split_prefixes):
+    """Render ordered mentions in the model input through the real pipeline."""
+    runtime.context.get_config()["wake_prefix"] = ["astr"]
+    message = AstrBotMessage()
+    message.type = MessageType.GROUP_MESSAGE
+    message.self_id = "bot"
+    message.sender = MessageMember(user_id="alice", nickname="Alice")
+    message.group = Group(group_id="grp-1")
+    message.ordered_mentions = True
+    message.message = [
+        Plain("astr /llm "),
+        At(qq="member-1", name="小璃"),
+        Plain(" 你总结一下，"),
+        At(qq="bot", name="清漪"),
+        Plain(" 你不用管"),
+    ]
+    expected = "@小璃 你总结一下，@清漪 你不用管"
+    if split_prefixes:
+        message.message[:1] = [
+            Plain("astr "),
+            At(qq="bot", name="清漪"),
+            Plain("/llm "),
+        ]
+        expected = "@清漪" + expected
+    message.message_str = "astr /llm 你总结一下， 你不用管"
+    event = AstrMessageEvent(
+        message.message_str,
+        message,
+        PlatformMetadata(id="target", name="aiocqhttp", description="Target"),
+        "user",
+    )
+    await runtime.context.get_event_queue().put(event)
+    await asyncio.wait_for(runtime.started.wait(), 1)
+    await asyncio.wait_for(runtime.drain(), 1)
+
+    # 真实唤醒阶段消费 wake 前缀后，清洗正文不再变化
+    assert event.message_str == "/llm 你总结一下， 你不用管"
+    user_message = runtime.requests[0][-1]
+    assert user_message["role"] == "user"
+    texts = [part["text"] for part in user_message["content"]]
+    # 两个已消费前缀都没有被消息链带回，两个 @ 仍在各自分句
+    assert expected in texts
+    reminders = [text for text in texts if text.startswith("<system_reminder>@")]
+    assert reminders == [
+        "<system_reminder>@清漪 refers to you (Your ID: bot).</system_reminder>"
+    ]
+    # 保存后的长期历史保留自然 @，不保留临时 reminder
+    saved_history = json.loads(runtime.conversation.history)
+    saved_user = saved_history[-2]
+    assert saved_user["role"] == "user"
+    assert [
+        part["text"] for part in saved_user["content"] if part["type"] == "text"
+    ] == [expected]
 
 
 @pytest.mark.asyncio

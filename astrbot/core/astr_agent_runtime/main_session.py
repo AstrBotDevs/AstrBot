@@ -111,6 +111,8 @@ class MainAgentSession(NativeAgentSession):
             return None
         if input.content is not None and not explicit:
             req.prompt = format_input_content(input.content)
+            if not input.content_from_event:
+                event.set_extra("_default_event_prompt", False)
         # Explicit unbound SDK/plugin contexts keep their established semantics.
         # Ordinary turns always reload this session's history after execution admission.
         if not explicit or req.conversation is not None:
