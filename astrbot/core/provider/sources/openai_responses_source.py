@@ -242,6 +242,7 @@ class ProviderOpenAIResponses(ProviderOpenAIOfficial):
         tool_calls_result: ToolCallsResult | list[ToolCallsResult] | None = None,
         model: str | None = None,
         extra_user_content_parts: list[ContentPart] | None = None,
+        extra_headers: dict[str, str] | None = None,
         **kwargs: Any,
     ) -> tuple[dict, list[dict]]:
         """Build a stateless Responses API payload and replayable context.
@@ -255,6 +256,7 @@ class ProviderOpenAIResponses(ProviderOpenAIOfficial):
             tool_calls_result: Function calls and their returned outputs.
             model: Optional per-request model override.
             extra_user_content_parts: Additional user content blocks.
+            extra_headers: HTTP headers applied only to this request.
             **kwargs: Reserved provider request arguments.
 
         Returns:
@@ -292,6 +294,8 @@ class ProviderOpenAIResponses(ProviderOpenAIOfficial):
         }
         if system_prompt:
             payloads["instructions"] = system_prompt
+        if extra_headers:
+            payloads["extra_headers"] = extra_headers
 
         return payloads, context_query
 
