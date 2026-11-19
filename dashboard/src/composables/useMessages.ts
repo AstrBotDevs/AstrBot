@@ -1,5 +1,5 @@
 import { computed, onBeforeUnmount, provide, reactive, ref, type Ref } from "vue";
-import { useI18n } from "@/i18n/composables";
+import { useI18n, useModuleI18n } from "@/i18n/composables";
 import { chatApi, fileApi } from "@/api/v1";
 import { fetchWithAuth } from "@/api/http";
 import type { Session } from "@/composables/useSessions";
@@ -29,6 +29,7 @@ export interface MessagePart {
   };
   type: string;
   text?: string;
+  error_code?: string;
   think?: string;
   message_id?: string | number;
   selected_text?: string;
@@ -1368,7 +1369,15 @@ export function useMessages(options: UseMessagesOptions) {
     }
     if (msgType === "error") {
       markMessageStarted(botRecord);
-      appendPlain(botRecord, `\n\n${String(data)}`);
+      if (["ffmpegNotFound", "messageProcessingFailed"].includes(payload.error_code)) {
+        botRecord.can_retry = false;
+        botRecord.can_fork = false;
+      }
+      messageContent(botRecord).message.push({
+        type: "plain",
+        text: String(data),
+        error_code: payload.error_code,
+      });
       return;
     }
     if (msgType === "complete" || msgType === "break") {
@@ -1615,6 +1624,7 @@ export function displayParts(content: ChatContent): MessagePart[] {
 }
 
 export function messageBlocks(content: ChatContent): MessageDisplayBlock[] {
+  const { tm } = useModuleI18n("features/chat");
   const parts = Array.isArray(content.message)
     ? content.message
     : normalizeMessageParts(content.message, content.reasoning || "");
@@ -1623,7 +1633,15 @@ export function messageBlocks(content: ChatContent): MessageDisplayBlock[] {
   let currentKind: MessageDisplayBlock["kind"] | null = null;
   let currentParts: MessagePart[] = [];
 
-  for (const part of parts) {
+  for (let part of parts) {
+    if (
+      content.type === "bot" &&
+      part.type === "plain" &&
+      (part.error_code === "ffmpegNotFound" ||
+        part.error_code === "messageProcessingFailed")
+    ) {
+      part = { ...part, text: tm(`errors.${part.error_code}`) };
+    }
     if (isEmptyPlainPart(part)) continue;
 
     const nextKind: MessageDisplayBlock["kind"] = isThinkingPart(part)
@@ -1748,7 +1766,7 @@ export function appendPlain(record: ChatRecord, text: string, append = true) {
   markMessageStarted(record);
   const content = record.content;
   let last = content.message[content.message.length - 1];
-  if (!last || last.type !== "plain") {
+  if (!last || last.type !== "plain" || last.error_code) {
     last = { type: "plain", text: "" };
     content.message.push(last);
   }
