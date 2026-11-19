@@ -1011,6 +1011,14 @@
     "general": {
       "description": "General",
       "platform_settings": {
+        "locale": {
+          "description": "System language",
+          "hint": "Set the system language for plugins, error replies, and other system messages. Does not change model responses or the WebUI language.",
+          "labels": [
+            "简体中文",
+            "English"
+          ]
+        },
         "unique_session": {
           "description": "Isolate Conversation",
           "hint": "On supported platforms, each group member has a separate conversation context when enabled. Manage command permissions under Handlers → Command."

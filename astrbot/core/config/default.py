@@ -93,6 +93,7 @@ WEBHOOK_SUPPORTED_PLATFORMS = [
 DEFAULT_CONFIG = {
     "config_version": 6,
     "platform_settings": {
+        "locale": "zh-CN",
         "unique_session": False,
         "rate_limit": {
             "time": 60,
@@ -1150,6 +1151,10 @@ CONFIG_METADATA_2 = {
             "platform_settings": {
                 "type": "object",
                 "items": {
+                    "locale": {
+                        "type": "string",
+                        "options": ["zh-CN", "en-US"],
+                    },
                     "unique_session": {
                         "type": "bool",
                     },
@@ -4503,6 +4508,13 @@ CONFIG_METADATA_3 = {
                 "description": "基本",
                 "type": "object",
                 "items": {
+                    "platform_settings.locale": {
+                        "description": "系统语言",
+                        "type": "string",
+                        "options": ["zh-CN", "en-US"],
+                        "labels": ["简体中文", "English"],
+                        "hint": "设置系统的语言，用于插件、错误信息回复等地方。不会改变模型回答或 WebUI 的语言。",
+                    },
                     "platform_settings.unique_session": {
                         "description": "隔离对话",
                         "type": "bool",

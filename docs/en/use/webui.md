@@ -126,6 +126,14 @@ After editing, click the disk icon labeled `Save Configuration` in the lower-rig
 
 Use the `{}` icon labeled `Edit Configuration File` to edit the current profile as JSON. Select `Apply This Configuration` to stage the changes in the visual editor, close the editor, and then select `Save Configuration`.
 
+### System Language
+
+In a configuration profile, open **Platforms & Messages → General → System language**, select **简体中文** or **English**, and save. The configuration key is `platform_settings.locale`: `zh-CN` by default, or `en-US` for English.
+
+This controls Core tool activity messages, tool result labels, model response errors, reasoning prefixes, permission notices, command validation and group help, and plugin filter and handler error messages. Plugin-provided error details, command descriptions, and reply bodies keep their original text. Model-generated content and the WebUI display language are unaffected.
+
+Use existing profile routing or session configuration overrides to select different languages for different sessions. Missing or unsupported values fall back to Simplified Chinese.
+
 ### System Settings
 
 Global settings are under `System Settings` at the bottom of the sidebar:
