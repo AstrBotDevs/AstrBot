@@ -194,7 +194,9 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         self.stats.end_time = time.time()
 
         parts = []
-        if llm_resp.reasoning_content is not None or llm_resp.reasoning_signature:
+        if llm_resp.reasoning_parts:
+            parts.extend(llm_resp.reasoning_parts)
+        elif llm_resp.reasoning_content is not None or llm_resp.reasoning_signature:
             parts.append(
                 ThinkPart(
                     think=llm_resp.reasoning_content or "",
@@ -644,7 +646,11 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                 parts = []
                 if final is not None:
                     self._sanitize_malformed_tool_calls(final)
-                    if final.reasoning_content is not None or final.reasoning_signature:
+                    if final.reasoning_parts:
+                        parts.extend(final.reasoning_parts)
+                    elif (
+                        final.reasoning_content is not None or final.reasoning_signature
+                    ):
                         parts.append(
                             ThinkPart(
                                 think=final.reasoning_content or "",
@@ -1347,7 +1353,9 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
 
             # Persist the assistant decision before any tool side effects.
             parts = []
-            if llm_resp.reasoning_content is not None or llm_resp.reasoning_signature:
+            if llm_resp.reasoning_parts:
+                parts.extend(llm_resp.reasoning_parts)
+            elif llm_resp.reasoning_content is not None or llm_resp.reasoning_signature:
                 parts.append(
                     ThinkPart(
                         think=llm_resp.reasoning_content or "",
