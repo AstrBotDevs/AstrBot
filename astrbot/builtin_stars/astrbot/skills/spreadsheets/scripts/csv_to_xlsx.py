@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+import io
 import re
 import unicodedata
 from datetime import date, datetime
@@ -121,7 +122,10 @@ def convert_csv_to_xlsx(
         except csv.Error:
             delimiter = "\t" if input_path.suffix.lower() == ".tsv" else ","
 
-    rows = list(csv.reader(text.splitlines(), delimiter=delimiter))
+    # Not text.splitlines(): the reader joins a quoted cell that spans
+    # lines, but the line break itself is gone with the split, so the
+    # words on either side of it are glued together.
+    rows = list(csv.reader(io.StringIO(text, newline=""), delimiter=delimiter))
     if not rows or not any(rows):
         raise ValueError("Delimited input contains no cells.")
     column_count = max(len(row) for row in rows)
