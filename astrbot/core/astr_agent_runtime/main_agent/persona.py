@@ -176,6 +176,30 @@ async def apply_persona(
         req.func_tool.merge(persona_toolset)
 
 
+def apply_proactive_registered_tools(
+    req: ProviderRequest,
+    plugin_context: Context,
+    plugin_tools: ToolSet | None = None,
+) -> None:
+    """Give programmatic wakeups the session's authorized plugin tools.
+
+    Wakeups enter the runtime without a user message, so their persona may
+    exclude registered tools. Seed the authorized set before persona selection
+    and subagent setup; interactive turns keep their persona-filtered set.
+    """
+    if req.func_tool is None:
+        req.func_tool = ToolSet()
+    source = (
+        ToolSet(tools=list(plugin_tools.tools))
+        if plugin_tools is not None
+        else plugin_context.get_llm_tool_manager().get_full_tool_set()
+    )
+    for tool in list(source):
+        if not tool.active:
+            source.remove_tool(tool.name)
+    req.func_tool.merge(source)
+
+
 def apply_safety_instructions(
     config: MainAgentBuildConfig, req: ProviderRequest
 ) -> None:
