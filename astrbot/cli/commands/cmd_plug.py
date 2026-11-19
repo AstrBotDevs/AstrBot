@@ -34,14 +34,14 @@ def display_plugins(plugins, title=None, color=None) -> None:
         click.echo(click.style(title, fg=color, bold=True))
 
     click.echo(
-        f"{'Name':<20} {'Version':<10} {'Status':<10} {'Author':<15} {'Description':<30}"
+        f"{'Name':<20} {'Version':<10} {'Status':<13} {'Author':<15} {'Description':<30}"
     )
-    click.echo("-" * 85)
+    click.echo("-" * 88)
 
     for p in plugins:
         desc = p["desc"][:30] + ("..." if len(p["desc"]) > 30 else "")
         click.echo(
-            f"{p['name']:<20} {p['version']:<10} {p['status']:<10} "
+            f"{p['name']:<20} {p['version']:<10} {p['status'].value:<13} "
             f"{p['author']:<15} {desc:<30}",
         )
 
