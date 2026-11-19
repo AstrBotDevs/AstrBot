@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from "vue";
 import { ChevronRight, Minus, Plus } from "@lucide/vue";
-import MarkdownIt from "markdown-it";
+import MarkdownIt from "markdown-it-ts";
 import DOMPurify from "dompurify";
 import { useModuleI18n } from "@/i18n/composables";
 

@@ -1,8 +1,24 @@
 <script setup lang="ts">
 import { computed } from "vue";
+import { useRoute, useRouter } from "vue-router";
+import { ChevronDown } from "@lucide/vue";
+import StyledMenu from "@/components/shared/StyledMenu.vue";
+import { useModuleI18n } from "@/i18n/composables";
 import ProviderModelMenu from "@/components/chat/ProviderModelMenu.vue";
 import { useChatHeaderStore } from "@/stores/chatHeader";
 
+const route = useRoute();
+const router = useRouter();
+const { tm } = useModuleI18n("features/provider");
+const isProviderWorkspace = computed(() => route.params.conversationId === "models");
+const providerTypes = computed(() => [
+  { value: "chat_completion", label: tm("providers.tabs.chatCompletion") },
+  { value: "speech_to_text", label: tm("providers.tabs.speechToText") },
+  { value: "text_to_speech", label: tm("providers.tabs.textToSpeech") },
+]);
+const selectedType = computed(() =>
+  providerTypes.value.find((type) => type.value === route.query.type) || providerTypes.value[0],
+);
 const chatHeader = useChatHeaderStore();
 const title = computed(() => {
   const t = chatHeader.title.trim();
@@ -14,7 +30,24 @@ const title = computed(() => {
 
 <template>
   <div class="chat-toolbar-context">
-    <ProviderModelMenu variant="header" />
+    <StyledMenu v-if="isProviderWorkspace" location="bottom start" :offset="8">
+      <template #activator="{ props }">
+        <button v-bind="props" type="button" class="provider-type-trigger">
+          {{ selectedType.label }}
+          <ChevronDown :size="16" :stroke-width="1.75" />
+        </button>
+      </template>
+      <v-list-item
+        v-for="type in providerTypes"
+        :key="type.value"
+        class="styled-menu-item"
+        :active="selectedType.value === type.value"
+        @click="router.push({ path: route.path, query: { ...route.query, type: type.value } })"
+      >
+        <v-list-item-title>{{ type.label }}</v-list-item-title>
+      </v-list-item>
+    </StyledMenu>
+    <ProviderModelMenu v-else variant="header" />
     <span v-if="title" class="chat-toolbar-context-title" :title="title">{{
       title
     }}</span>
@@ -22,6 +55,17 @@ const title = computed(() => {
 </template>
 
 <style scoped>
+.provider-type-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 20px;
+  color: rgb(var(--v-theme-on-surface));
+  font-size: 0.8125rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
 .chat-toolbar-context {
   display: flex;
   min-width: 0;
@@ -75,12 +119,12 @@ const title = computed(() => {
   .chat-toolbar-context-title {
     position: absolute;
     top: 50%;
-    left: calc(50% + var(--astrbot-chat-sidebar-width, 0px) / 2);
+    left: calc(50% + (var(--astrbot-chat-sidebar-width, 0px) - var(--astrbot-active-workbench-width, 0px)) / 2);
     width: max(
       0px,
       min(
-        calc((100% - var(--astrbot-chat-sidebar-width, 0px)) * 0.4),
-        calc(100% - var(--astrbot-chat-sidebar-width, 0px) - 440px)
+        calc((100% - var(--astrbot-chat-sidebar-width, 0px) - var(--astrbot-active-workbench-width, 0px)) * 0.4),
+        calc(100% - var(--astrbot-chat-sidebar-width, 0px) - var(--astrbot-active-workbench-width, 0px) - 440px)
       )
     );
     max-width: none;

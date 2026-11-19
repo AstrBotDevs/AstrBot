@@ -5,6 +5,7 @@ from astrbot.core.agent.events import (
     ContextUsage,
     ExecutionMetrics,
     MessageCompleted,
+    OutputReady,
     ReasoningDelta,
     RequestFinished,
     RequestStarted,
@@ -68,6 +69,7 @@ from astrbot.core.agent.runtime import (
 )
 from astrbot.core.agent.tool import FunctionTool, ToolExecResult, ToolSet
 from astrbot.core.agent.tool_executor import BaseFunctionToolExecutor
+from astrbot.core.agent_output_content import chain_from_content
 from astrbot.core.agent_service import AgentRun, AgentService, AgentSessionStatus
 from astrbot.core.astr_agent_context import AgentContextWrapper, AstrAgentContext
 from astrbot.core.db.po import Conversation
@@ -81,6 +83,8 @@ __all__ = [
     "TextDelta",
     "ReasoningDelta",
     "MessageCompleted",
+    "OutputReady",
+    "chain_from_content",
     "RequestStarted",
     "RequestFinished",
     "ToolStarted",

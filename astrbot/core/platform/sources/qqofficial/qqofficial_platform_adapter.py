@@ -108,6 +108,12 @@ class PatchedC2CMessage(botpy.message.C2CMessage):
         super().__init__(api, event_id, data)  # type: ignore
         _set_raw_message_fields(self, data)
 
+    class _User(botpy.message.C2CMessage._User):
+        def __init__(self, data: dict[str, Any]) -> None:
+            super().__init__(data)
+            self.username = data.get("username")
+            self.avatar = data.get("avatar")
+
 
 class PatchedGroupMessage(botpy.message.GroupMessage):
     __slots__ = ("raw_data", "message_type", "msg_elements")
@@ -125,6 +131,7 @@ class PatchedGroupMessage(botpy.message.GroupMessage):
         def __init__(self, data: dict[str, Any]) -> None:
             self.id = data.get("id", None)
             self.username = data.get("username", None)
+            self.member_nickname = data.get("member_nickname")
             self.bot = data.get("bot", None)
             self.avatar = data.get("avatar", None)
             self.member_openid = data.get("member_openid", None)
@@ -985,7 +992,9 @@ class QQOfficialPlatformAdapter(Platform):
             if isinstance(message, botpy.message.GroupMessage):
                 abm.sender = MessageMember(
                     message.author.member_openid,
-                    getattr(message.author, "username", "") or "",
+                    getattr(message.author, "member_nickname", "")
+                    or getattr(message.author, "username", "")
+                    or "",
                 )
                 raw_data = getattr(message, "raw_data", {})
                 group_name = getattr(message, "group_name", None)

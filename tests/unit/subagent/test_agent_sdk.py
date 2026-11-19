@@ -10,7 +10,6 @@ import pytest
 import pytest_asyncio
 
 from astrbot.api.agents import (
-    AgentPermissions,
     FileInput,
     ImageInput,
     PlainInput,
@@ -94,6 +93,10 @@ async def test_output_observers_do_not_change_delivery_or_history(sdk, send_to_u
     assert result.text == "Done"
     assert sdk.platform_send.await_count == int(send_to_user)
     events = [event async for event in run.events()]
+    assert events[-2].type == "output.ready"
+    assert events[-2].payload.source == "reply"
+    assert events[-2].payload.content == result.content
+    assert [event async for event in run.events()] == events
     assert events[-1].type == "turn.finished"
     assert events[-1].payload.result == result
     history = json.loads(sdk.conversation.history)
@@ -243,6 +246,141 @@ async def test_core_and_request_hooks_run_once_and_can_stop_input(
         assert sdk.conversation.history == "[]"
     else:
         assert "Analyze with plugin context" in sdk.conversation.history
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("send_to_user", [True, False])
+async def test_metadata_reaches_hooks_without_becoming_model_input(
+    sdk, monkeypatch, send_to_user
+):
+    """Expose namespaced metadata throughout execution without changing policy."""
+    from astrbot.core.astr_agent_runtime import hooks
+    from astrbot.core.astr_agent_runtime.main_agent import builder
+    from astrbot.core.pipeline import context_utils
+    from astrbot.core.pipeline.respond import stage as respond
+    from astrbot.core.pipeline.result_decorate import stage as decorate
+
+    metadata = {
+        "companion": {"kind": "proactive", "attempt_id": "metadata-only-sentinel"},
+        "provider_request": "must stay nested",
+        "_role_resolved": False,
+        "role": "admin",
+    }
+    observed = []
+
+    async def hook(event, kind, *args, **kwargs):
+        observed.append((kind, event.get_extra("agent_metadata"), event.role, event))
+        return False
+
+    for module in (context_utils, builder, hooks, respond):
+        monkeypatch.setattr(module, "call_event_hook", hook)
+
+    async def decorate_hook(event):
+        await hook(event, EventType.OnDecoratingResultEvent)
+
+    handler = SimpleNamespace(
+        handler_module_path="metadata_test",
+        handler_name="decorate_hook",
+        handler=decorate_hook,
+    )
+    monkeypatch.setattr(
+        decorate,
+        "star_handlers_registry",
+        SimpleNamespace(get_handlers_by_event_type=lambda *args, **kwargs: [handler]),
+    )
+    monkeypatch.setattr(
+        decorate, "star_map", {"metadata_test": SimpleNamespace(name="metadata_test")}
+    )
+    run = await sdk.context.agent.run_turn(
+        umo=sdk.event.unified_msg_origin,
+        input_message=[PlainInput(text="Check in")],
+        metadata=metadata,
+        send_to_user=send_to_user,
+    )
+    result = await asyncio.wait_for(run.result(), 3)
+
+    assert result.status == TurnStatus.COMPLETED
+    kinds = [item[0] for item in observed]
+    assert kinds[0] == EventType.OnWaitingLLMRequestEvent
+    for kind in (
+        EventType.OnLLMRequestEvent,
+        EventType.OnAgentBeginEvent,
+        EventType.OnLLMResponseEvent,
+        EventType.OnAgentDoneEvent,
+    ):
+        assert kind in kinds
+    for kind in (
+        EventType.OnDecoratingResultEvent,
+        EventType.OnAfterMessageSentEvent,
+    ):
+        assert (kind in kinds) == send_to_user
+    assert all(item[1] == metadata and item[2] == "member" for item in observed)
+    event = observed[0][3]
+    assert all(item[3] is event for item in observed)
+    assert event.get_extra("_role_resolved") is True
+    assert event.get_extra("provider_request") != metadata["provider_request"]
+    assert "metadata-only-sentinel" not in repr(sdk.provider.text_chat.call_args_list)
+    assert "metadata-only-sentinel" not in sdk.conversation.history
+    assert sdk.platform_send.await_count == int(send_to_user)
+
+
+@pytest.mark.asyncio
+async def test_queued_metadata_is_isolated_and_follow_up_starts_empty(sdk, monkeypatch):
+    """Snapshot nested data per submission without inheriting source-event extras."""
+    from astrbot.core.pipeline import context_utils
+
+    entered, release = asyncio.Event(), asyncio.Event()
+    observed = {}
+
+    async def respond(**kwargs):
+        entered.set()
+        await release.wait()
+        return LLMResponse(role="assistant", completion_text="Done")
+
+    async def hook(event, kind, *args, **kwargs):
+        if kind == EventType.OnWaitingLLMRequestEvent:
+            metadata = event.get_extra("agent_metadata")
+            observed[event.message_str] = copy.deepcopy(metadata)
+            if event.message_str == "Second":
+                metadata["companion"]["tags"].append("hook mutation")
+        return False
+
+    sdk.provider.text_chat.side_effect = respond
+    monkeypatch.setattr(context_utils, "call_event_hook", hook)
+    sdk.event.set_extra("agent_metadata", {"source": "must not be inherited"})
+    first = await sdk.context.agent.run_turn(
+        umo=sdk.event.unified_msg_origin,
+        source_event=sdk.event,
+        input_message=[PlainInput(text="First")],
+        send_to_user=False,
+    )
+    await asyncio.wait_for(entered.wait(), 3)
+    metadata = {"companion": {"tags": ["submitted"]}}
+    queued = []
+    for prompt in ("Second", "Third"):
+        queued.append(
+            await sdk.context.agent.run_turn(
+                umo=sdk.event.unified_msg_origin,
+                input_message=[PlainInput(text=prompt)],
+                metadata=metadata,
+                send_to_user=False,
+            )
+        )
+    metadata["companion"]["tags"].append("caller mutation")
+    release.set()
+    await asyncio.wait_for(
+        asyncio.gather(first.result(), *(run.result() for run in queued)), 3
+    )
+    follow_up = await queued[0].follow_up(input_message=[PlainInput(text="Follow-up")])
+    await asyncio.wait_for(follow_up.result(), 3)
+
+    assert observed == {
+        "First": {},
+        "Second": {"companion": {"tags": ["submitted"]}},
+        "Third": {"companion": {"tags": ["submitted"]}},
+        "Follow-up": {},
+    }
+    assert metadata == {"companion": {"tags": ["submitted", "caller mutation"]}}
 
 
 @pytest.mark.asyncio
@@ -410,8 +548,8 @@ async def test_portable_media_uses_the_normal_input_preprocessor(sdk, tmp_path):
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("delegated", [False, True])
-async def test_native_sessions_commit_whole_turn_after_execution(sdk, delegated):
-    """Main and child histories remain unchanged until a complete turn settles."""
+async def test_native_sessions_persist_at_supported_execution_boundaries(sdk, delegated):
+    """Event-backed main sessions commit messages before the next model request."""
     from astrbot.core.agent.tool import FunctionTool, ToolSet
     from astrbot.core.astr_agent_runtime.main_session import MainAgentInput
     from astrbot.core.conversation_mgr import ConversationManager
@@ -466,25 +604,23 @@ async def test_native_sessions_commit_whole_turn_after_execution(sdk, delegated)
         )
     try:
         await asyncio.wait_for(entered.wait(), 3)
-        assert await session.history() == []
+        history_before_reply = await session.history()
+        if delegated:
+            assert history_before_reply == []
+        else:
+            assert [message["role"] for message in history_before_reply] == ["user", "assistant", "tool"]
         release.set()
         if turn is not None:
             assert (await turn.result()).text == "Done"
             events = await sdk.db.conversation_store.events(session.id)
             assert [
-                event.type for event in events if event.type != "message.appended"
+                event.type for event in events if event.type not in {"message.appended", "context.rebased"}
             ] == [
                 "conversation.created",
                 "turn.started",
-                "request.started",
-                "request.finished",
-                "tool.started",
-                "tool.finished",
-                "request.started",
-                "request.finished",
                 "turn.finished",
             ]
-            assert events[1].event_id == "webchat-turn"
+            assert next(event for event in events if event.type == "turn.started").event_id == "webchat-turn"
             assert events[-1].payload == {
                 "turn_id": "webchat-turn",
                 "status": "completed",

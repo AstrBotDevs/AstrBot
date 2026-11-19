@@ -2,6 +2,10 @@
   <div
     v-if="props.active"
     class="chat-ui"
+    :style="{
+      '--astrbot-chat-sidebar-width': `${isMobile ? 0 : isSidebarCollapsed ? 56 : 245}px`,
+      '--astrbot-workbench-preferred-width': chatHeader.workbenchWidth ? `${chatHeader.workbenchWidth}px` : undefined,
+    }"
     :class="{ 'is-dark': isDark, 'sidebar-collapsed': isSidebarCollapsed }"
   >
     <v-navigation-drawer
@@ -82,7 +86,7 @@
           :class="{ 'sidebar-workspace-btn--active': isProviderWorkspace }"
           type="button"
           :title="tm('actions.providerConfig')"
-          @click="openProviderWorkspace"
+          @click="openProviderWorkspace()"
         >
           <Box :size="18" class="sidebar-action-icon" />
         </button>
@@ -91,7 +95,7 @@
           class="new-chat-btn sidebar-provider-btn"
           :class="{ 'sidebar-workspace-btn--active': isProviderWorkspace }"
           variant="text"
-          @click="openProviderWorkspace"
+          @click="openProviderWorkspace()"
         >
           <Box :size="18" class="sidebar-action-icon mr-2" />
           <span>{{ tm("actions.providerConfig") }}</span>
@@ -228,6 +232,9 @@
       v-model:enable-reasoning="enableReasoning"
       v-model:send-shortcut="sendShortcut"
       v-model:transport-mode="transportMode"
+      v-model:stt-provider="selectedSttProvider"
+      :stt-providers="sttProviders"
+      @configure-stt="openProviderWorkspace('speech_to_text')"
     />
 
     <main
@@ -235,8 +242,8 @@
       :class="{
         'empty-chat': isEmptyChat,
         'has-side-panel':
+          workbenchVisible ||
           threadPanelOpen ||
-          reasoningPanelOpen ||
           refsSidebarOpen ||
           chatHeader.workspaceFilesOpen,
       }"
@@ -255,8 +262,15 @@
       </transition>
       <section v-if="isProviderWorkspace" class="provider-workspace-shell">
         <ProviderChatCompletionPanel
+          v-if="providerWorkspaceType === 'chat_completion'"
           class="provider-workspace-page"
           :show-border="false"
+        />
+        <ProviderPage
+          v-else
+          class="provider-workspace-page"
+          :default-tab="providerWorkspaceType"
+          embedded
         />
       </section>
 
@@ -277,6 +291,9 @@
             :staged-files="stagedNonImageFiles"
             :disabled="sending"
             :is-recording="isRecording"
+            :recording-mode="recordingMode"
+            :voice-busy="voiceBusy"
+            :audio-levels="audioLevels"
             :is-running="
               Boolean(currSessionId && isSessionRunning(currSessionId))
             "
@@ -299,6 +316,7 @@
             @cancel-active-upload="cancelActiveUpload"
             @start-recording="startRecording"
             @stop-recording="stopRecording"
+            @cancel-recording="cancelRecording"
             @paste-image="handlePaste"
             @file-select="handleFilesSelected"
             @clear-reply="replyTarget = null"
@@ -311,6 +329,18 @@
         class="conversation-stack"
         :class="{ 'is-empty': isEmptyChat }"
       >
+        <Teleport to="#chat-workbench-header">
+          <button
+            v-if="!workbenchVisible"
+            type="button"
+            class="workbench-launcher"
+            :title="tm('workbench.title')"
+            :aria-label="tm('workbench.title')"
+            @click="workbench?.tabs.length ? (workbench.open = true) : openWorkbenchPage()"
+          >
+            <PanelRightOpen :size="18" />
+          </button>
+        </Teleport>
         <v-progress-linear
           v-if="activeSessionPagination?.loading"
           class="history-loading"
@@ -368,9 +398,7 @@
               v-model:edit-draft="messageEditDraft"
               :messages="activeMessages"
               :is-dark="isDark"
-              :is-streaming="
-                Boolean(currSessionId && isSessionRunning(currSessionId))
-              "
+              :is-message-streaming="isMessageStreaming"
               :enable-edit="
                 !Boolean(currSessionId && isSessionRunning(currSessionId))
               "
@@ -386,7 +414,6 @@
               @regenerate-with-model="handleRegenerateMessage"
               @select-bot-text="handleBotTextSelection"
               @open-thread="openThreadPanel"
-              @open-reasoning="openReasoningPanel"
               @open-refs="openRefsSidebar"
               @button-click="handleButtonClick"
             />
@@ -424,6 +451,9 @@
             :staged-files="stagedNonImageFiles"
             :disabled="sending"
             :is-recording="isRecording"
+            :recording-mode="recordingMode"
+            :voice-busy="voiceBusy"
+            :audio-levels="audioLevels"
             :is-running="
               Boolean(currSessionId && isSessionRunning(currSessionId))
             "
@@ -448,6 +478,7 @@
             @cancel-active-upload="cancelActiveUpload"
             @start-recording="startRecording"
             @stop-recording="stopRecording"
+            @cancel-recording="cancelRecording"
             @paste-image="handlePaste"
             @file-select="handleFilesSelected"
             @clear-reply="replyTarget = null"
@@ -541,10 +572,20 @@
       :get-provider-selection="getSelectedProviderSelection"
       @delete="deleteThread"
     />
-    <ReasoningSidebar
-      v-model="reasoningPanelOpen"
-      :parts="activeReasoningParts"
+    <ChatWorkbench
+      v-if="workbench?.tabs.length"
+      :open="workbenchVisible"
+      :session-id="currSessionId"
+      header-target="#chat-workbench-header"
+      :tabs="workbench.tabs"
+      :active-id="workbench.activeId"
       :is-dark="isDark"
+      @select="workbench.activeId = $event"
+      @close-tab="closeWorkbenchTab"
+      @resize="chatHeader.workbenchWidth = $event"
+      @new-tab="openWorkbenchPage()"
+      @open-page="openWorkbenchPage"
+      @close="workbench.open = false"
     />
     <RefsSidebar v-model="refsSidebarOpen" :refs="selectedRefs" />
     <WorkspaceFilesPanel
@@ -572,6 +613,7 @@ import {
   provide,
   reactive,
   ref,
+  toRef,
   watch,
 } from "vue";
 import { useRoute, useRouter } from "vue-router";
@@ -582,6 +624,7 @@ import {
   ChevronLeft,
   Box,
   PanelLeft,
+  PanelRightOpen,
   Pencil,
   Settings,
   SquarePen,
@@ -600,13 +643,15 @@ import ChatMessageList from "@/components/chat/ChatMessageList.vue";
 import ChatUILogo from "@/components/chat/ChatUILogo.vue";
 import type { RegenerateModelSelection } from "@/components/chat/RegenerateMenu.vue";
 import ChatLoadError from "@/components/chat/ChatLoadError.vue";
-import ReasoningSidebar from "@/components/chat/ReasoningSidebar.vue";
 import ThreadPanel from "@/components/chat/ThreadPanel.vue";
+import ChatWorkbench from "@/components/chat/ChatWorkbench.vue";
+import { workbenchChatKey } from "@/utils/chatViews";
+import { chatPreferences } from "@/utils/chatPreferences";
+import { useChatWorkbench } from "@/composables/useChatWorkbench";
 import WorkspaceFilesPanel from "@/components/chat/WorkspaceFilesPanel.vue";
 import RefsSidebar from "@/components/chat/message_list_comps/RefsSidebar.vue";
 import { useSessions, type Session } from "@/composables/useSessions";
 import {
-  messageBlocks as buildMessageBlocks,
   useMessages,
   type ChatRecord,
   type ChatThread,
@@ -614,7 +659,7 @@ import {
   type TransportMode,
 } from "@/composables/useMessages";
 import { useMediaHandling } from "@/composables/useMediaHandling";
-import { useRecording } from "@/composables/useRecording";
+import { useChatVoice } from "@/composables/useChatVoice";
 import { useProjects } from "@/composables/useProjects";
 import { useDragUpload } from "@/composables/useDragUpload";
 import { useProviderModelSelection } from "@/composables/useProviderModelSelection";
@@ -622,6 +667,7 @@ import { useChatHeaderStore } from "@/stores/chatHeader";
 import { useHeaderContextStore } from "@/stores/headerContext";
 import { useMobileDrawerStore } from "@/stores/mobileDrawer";
 import { useCustomizerStore } from "@/stores/customizer";
+import ProviderPage from "@/views/ProviderPage.vue";
 import ProviderChatCompletionPanel from "@/components/provider/ProviderChatCompletionPanel.vue";
 import { useI18n, useModuleI18n } from "@/i18n/composables";
 import { askForConfirmation, useConfirmDialog } from "@/utils/confirmDialog";
@@ -632,7 +678,7 @@ import {
   type ProviderMetadataSource,
 } from "@/utils/providerMetadata";
 import { useToast } from "@/utils/toast";
-import { readChatDraft, writeChatDraft } from "@/utils/chatDraftStorage.mjs";
+import { readChatDraft, writeChatDraft } from "@/utils/chatDraftStorage";
 
 const props = withDefaults(
   defineProps<{ chatboxMode?: boolean; active?: boolean }>(),
@@ -760,11 +806,6 @@ let autoScrollFrame: number | null = null;
 const replyTarget = ref<ChatRecord | null>(null);
 const threadPanelOpen = ref(false);
 const activeThread = ref<ChatThread | null>(null);
-const reasoningPanelOpen = ref(false);
-const activeReasoningTarget = ref<{
-  message: ChatRecord;
-  blockIndex: number;
-} | null>(null);
 const deletingThread = ref(false);
 const refsSidebarOpen = ref(false);
 const selectedRefs = ref<Record<string, unknown> | null>(null);
@@ -791,10 +832,27 @@ let draftSaveTimer: number | null = null;
 let chatResizeObserver: ResizeObserver | null = null;
 let chatMutationObserver: MutationObserver | null = null;
 const {
+  mode: recordingMode,
+  busy: voiceBusy,
+  levels: audioLevels,
   isRecording,
-  startRecording: startRecorder,
-  stopRecording: stopRecorder,
-} = useRecording();
+  sttProviders,
+  selectedSttProvider,
+  loadProviders: loadSttProviders,
+  start: startRecording,
+  finish: stopRecording,
+  cancel: cancelRecording,
+} = useChatVoice({
+  draft,
+  stagedFiles,
+  contextKey: () =>
+    `${currSessionId.value}:${selectedProjectId.value}:${activeWorkspace.value}:${props.active}`,
+  send: sendCurrentMessage,
+  configureStt: () => { void openProviderWorkspace("speech_to_text"); },
+});
+watch(settingsOpen, (open) => {
+  if (open) void loadSttProviders();
+});
 const { smAndDown: isMobile } = useDisplay();
 
 const isSidebarCollapsed = computed(
@@ -802,6 +860,12 @@ const isSidebarCollapsed = computed(
 );
 const isProviderWorkspace = computed(
   () => activeWorkspace.value === "providers",
+);
+
+const providerWorkspaceType = computed(() =>
+  route.query.type === "speech_to_text" || route.query.type === "text_to_speech"
+    ? route.query.type
+    : "chat_completion",
 );
 
 async function backToNavigation() {
@@ -818,21 +882,6 @@ function toggleChatSidebar() {
   customizer.SET_CHAT_SIDEBAR_COLLAPSED(!customizer.chatSidebarCollapsed);
 }
 
-const activeReasoningParts = computed<MessagePart[]>(() => {
-  if (!activeReasoningTarget.value) return [];
-  const blocks = buildMessageBlocks(
-    activeReasoningTarget.value.message.content || { type: "bot", message: [] },
-  );
-  const block = blocks[activeReasoningTarget.value.blockIndex];
-  return block?.kind === "thinking" ? block.parts : [];
-});
-
-watch(reasoningPanelOpen, (open) => {
-  if (!open) {
-    activeReasoningTarget.value = null;
-  }
-});
-
 const {
   loadingMessages,
   sending,
@@ -842,6 +891,7 @@ const {
   activeMessages,
   paginationBySession,
   isSessionRunning,
+  isMessageStreaming,
   isUserMessage,
   messageParts,
   loadSessionMessages,
@@ -880,13 +930,13 @@ const activeSessionPagination = computed(() =>
 );
 
 const transportMode = ref<TransportMode>(
-  (localStorage.getItem("chat.transportMode") as TransportMode) === "websocket"
+  chatPreferences().global.transportMode === "websocket"
     ? "websocket"
     : "sse",
 );
 
 watch(transportMode, (mode) => {
-  localStorage.setItem("chat.transportMode", mode);
+  chatPreferences((preferences) => { preferences.global.transportMode = mode; });
 });
 
 watch(draft, (value) => {
@@ -961,6 +1011,16 @@ const isEmptyChat = computed(
     !loadingMessages.value &&
     !activeMessages.value.length,
 );
+const { state: workbench, closeTab: closeWorkbenchTab, openPage: openWorkbenchPage } = useChatWorkbench(currSessionId, toRef(chatHeader, "workbenchWidth"));
+const workbenchVisible = computed(() =>
+  Boolean(workbench.value?.open && !isProviderWorkspace.value && !selectedProject.value),
+);
+watch(workbenchVisible, (open) => {
+  if (open) closeSecondaryPanels();
+});
+watch([threadPanelOpen, refsSidebarOpen, () => chatHeader.workspaceFilesOpen], (panels) => {
+  if (panels.some(Boolean) && workbench.value) workbench.value.open = false;
+});
 const chatHeaderTitle = computed(
   () => currentSessionTitle.value || selectedProject.value?.title || "",
 );
@@ -1049,25 +1109,9 @@ const {
   setSelection: setProviderSelection,
 } = useProviderModelSelection();
 
-const SESSION_PROVIDER_STORAGE_PREFIX = "chat.sessionProvider.";
-
 function readSessionProviderSelection(sessionId: string) {
-  try {
-    const raw = localStorage.getItem(
-      SESSION_PROVIDER_STORAGE_PREFIX + sessionId,
-    );
-    if (!raw) return null;
-    const parsed = JSON.parse(raw);
-    if (parsed && typeof parsed.providerId === "string" && parsed.providerId) {
-      return {
-        providerId: parsed.providerId,
-        modelName: typeof parsed.modelName === "string" ? parsed.modelName : "",
-      };
-    }
-  } catch {
-    // Ignore corrupted entries.
-  }
-  return null;
+  const selection = chatPreferences().sessions[sessionId]?.provider;
+  return selection?.providerId ? selection : null;
 }
 
 function writeSessionProviderSelection(
@@ -1075,21 +1119,11 @@ function writeSessionProviderSelection(
   selection: { providerId?: string; modelName?: string } | null,
 ) {
   if (!sessionId) return;
-  try {
-    if (!selection?.providerId) {
-      localStorage.removeItem(SESSION_PROVIDER_STORAGE_PREFIX + sessionId);
-      return;
-    }
-    localStorage.setItem(
-      SESSION_PROVIDER_STORAGE_PREFIX + sessionId,
-      JSON.stringify({
-        providerId: selection.providerId,
-        modelName: selection.modelName || "",
-      }),
-    );
-  } catch {
-    // Session model persistence must not block chat flows.
-  }
+  chatPreferences((preferences) => {
+    const session = (preferences.sessions[sessionId] ||= {});
+    if (selection?.providerId) session.provider = { providerId: selection.providerId, modelName: selection.modelName || "" };
+    else delete session.provider;
+  });
 }
 
 // Remember the model picked by the user for the active session.
@@ -1121,8 +1155,6 @@ watch(
     threadSelection.visible = false;
     threadPanelOpen.value = false;
     activeThread.value = null;
-    reasoningPanelOpen.value = false;
-    activeReasoningTarget.value = null;
     refsSidebarOpen.value = false;
     selectedRefs.value = null;
   },
@@ -1294,8 +1326,6 @@ function closeSecondaryPanels() {
   threadSelection.visible = false;
   threadPanelOpen.value = false;
   activeThread.value = null;
-  reasoningPanelOpen.value = false;
-  activeReasoningTarget.value = null;
   refsSidebarOpen.value = false;
   selectedRefs.value = null;
   chatHeader.SET_WORKSPACE_FILES_OPEN(false);
@@ -1305,13 +1335,11 @@ function showChatWorkspace() {
   activeWorkspace.value = "chat";
 }
 
-async function openProviderWorkspace() {
+async function openProviderWorkspace(type = "chat_completion") {
   closeSecondaryPanels();
+  settingsOpen.value = false;
   activeWorkspace.value = "providers";
-  const targetPath = `${basePath()}/models`;
-  if (route.path !== targetPath) {
-  await router.push(targetPath);
-  }
+  await router.push({ path: `${basePath()}/models`, query: { type } });
 }
 
 function sessionTitle(session: Session) {
@@ -1321,7 +1349,7 @@ function sessionTitle(session: Session) {
 function syncSelectedTokenProvider() {
   if (typeof window === "undefined") return;
   selectedTokenProviderId.value =
-    localStorage.getItem("selectedProvider") || "";
+    chatPreferences().global.provider?.providerId || "";
 }
 
 async function loadTokenProviders() {
@@ -1560,14 +1588,16 @@ async function selectSession(sessionId: string, pushRoute = true) {
   selectedProjectId.value = null;
   currSessionId.value = sessionId;
   replyTarget.value = null;
+  // Enter the loading state before route navigation can render an empty chat.
+  const messagesReady = loadedSessions[sessionId]
+    ? Promise.resolve()
+    : loadSessionMessages(sessionId);
   if (pushRoute && route.path !== `${basePath()}/${sessionId}`) {
     await router.push(`${basePath()}/${sessionId}`);
     if (currSessionId.value !== sessionId) return;
   }
-  if (!loadedSessions[sessionId]) {
-    await loadSessionMessages(sessionId);
-    if (currSessionId.value !== sessionId) return;
-  }
+  await messagesReady;
+  if (currSessionId.value !== sessionId) return;
   const storedSelection = readSessionProviderSelection(sessionId);
   setProviderSelection(
     storedSelection?.providerId || "",
@@ -1577,13 +1607,29 @@ async function selectSession(sessionId: string, pushRoute = true) {
   await focusChatInput();
 }
 
-async function sendCurrentMessage() {
-  if (!canSend.value) return;
+provide(workbenchChatKey, async ({ mode, text, sessionId }) => {
+  if (sessionId !== (currSessionId.value || null)) throw new Error("The active session has changed.");
+  if (typeof text !== "string" || !text.trim() || text.length > 100000) throw new Error("Message text must contain 1–100000 characters.");
+  if (mode === "fill") {
+    draft.value = draft.value ? `${draft.value.trimEnd()}\n\n${text}` : text;
+    await focusChatInput();
+  } else if (mode === "send") {
+    if (!currSessionId.value) throw new Error("Open a chat session before sending.");
+    if (sending.value || isSessionRunning(currSessionId.value)) throw new Error("Wait for the current reply to finish.");
+    await sendCurrentMessage(text);
+  } else {
+    throw new Error("Unsupported chat action.");
+  }
+  return { sessionId: currSessionId.value || null };
+});
+
+async function sendCurrentMessage(viewText?: string) {
+  if (viewText === undefined && !canSend.value) return;
 
   const draftSessionId = activeDraftSessionId;
-  const draftText = draft.value;
+  const draftText = viewText ?? draft.value;
   const text = draftText.trim();
-  const outgoingParts = buildOutgoingParts(text);
+  const outgoingParts = viewText === undefined ? buildOutgoingParts(text) : [{ type: "plain", text }];
   sending.value = true;
   try {
     let sessionId = currSessionId.value;
@@ -1619,15 +1665,17 @@ async function sendCurrentMessage() {
     });
     updateTitleFromText(sessionId, text);
 
-    if (draftSaveTimer !== null) {
-      window.clearTimeout(draftSaveTimer);
-      draftSaveTimer = null;
+    if (viewText === undefined) {
+      if (draftSaveTimer !== null) {
+        window.clearTimeout(draftSaveTimer);
+        draftSaveTimer = null;
+      }
+      writeChatDraft(draftSessionId, "");
+      writeChatDraft(activeDraftSessionId, "");
+      draft.value = "";
+      replyTarget.value = null;
+      clearStaged({ revokeUrls: false });
     }
-    writeChatDraft(draftSessionId, "");
-    writeChatDraft(activeDraftSessionId, "");
-    draft.value = "";
-    replyTarget.value = null;
-    clearStaged({ revokeUrls: false });
     scrollToBottom(true);
 
     sendMessageStream({
@@ -1644,6 +1692,7 @@ async function sendCurrentMessage() {
     });
   } catch (error) {
     console.error("Failed to send message:", error);
+    if (viewText !== undefined) throw error;
   } finally {
     sending.value = false;
     await focusChatInput();
@@ -1893,8 +1942,6 @@ async function createThreadFromSelection() {
 
 function openThreadPanel(thread: ChatThread) {
   chatHeader.SET_WORKSPACE_FILES_OPEN(false);
-  reasoningPanelOpen.value = false;
-  activeReasoningTarget.value = null;
   refsSidebarOpen.value = false;
   activeThread.value = thread;
   threadPanelOpen.value = true;
@@ -1904,24 +1951,9 @@ function openRefsSidebar(refs: unknown) {
   chatHeader.SET_WORKSPACE_FILES_OPEN(false);
   threadPanelOpen.value = false;
   activeThread.value = null;
-  reasoningPanelOpen.value = false;
-  activeReasoningTarget.value = null;
   selectedRefs.value =
     refs && typeof refs === "object" ? (refs as Record<string, unknown>) : null;
   refsSidebarOpen.value = true;
-}
-
-function openReasoningPanel(payload: {
-  message: ChatRecord;
-  blockIndex: number;
-}) {
-  chatHeader.SET_WORKSPACE_FILES_OPEN(false);
-  threadPanelOpen.value = false;
-  activeThread.value = null;
-  refsSidebarOpen.value = false;
-  selectedRefs.value = null;
-  activeReasoningTarget.value = payload;
-  reasoningPanelOpen.value = true;
 }
 
 async function loadEarlierWithAnchor() {
@@ -2007,28 +2039,6 @@ async function handleFilesSelected(files: FileList | File[]) {
     } else {
       await processAndUploadFile(file);
     }
-  }
-}
-
-async function startRecording() {
-  try {
-    await startRecorder();
-  } catch (error) {
-    console.error("Failed to start recording:", error);
-    toast.error(tm("voice.error"));
-  }
-}
-
-async function stopRecording() {
-  try {
-    const audioFile = await stopRecorder();
-    const uploaded = await processAndUploadFile(audioFile);
-    if (!uploaded) {
-      toast.error(tm("voice.error"));
-    }
-  } catch (error) {
-    console.error("Failed to stop recording:", error);
-    toast.error(tm("voice.error"));
   }
 }
 
@@ -2202,7 +2212,7 @@ async function stopCurrentSession() {
   /* Side panels live inside .chat-main, which already starts below the 40px
      window toolbar. Keep them flush with the content area's top edge. */
   --chat-panel-top-offset: 0px;
-  --chat-session-active-bg: #efefef;
+  --chat-session-active-bg: rgba(var(--v-theme-on-surface), 0.05);
   --chat-page-bg: #fdfcfc;
   --chat-border: #f2f2f2;
   --chat-muted: rgba(var(--v-theme-on-surface), 0.62);
@@ -2766,6 +2776,20 @@ async function stopCurrentSession() {
   flex-direction: column;
   justify-content: center;
   gap: 28px;
+}
+.workbench-launcher {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border-radius: var(--astrbot-radius-control);
+  color: rgb(var(--v-theme-on-surface));
+  cursor: pointer;
+  -webkit-app-region: no-drag;
+}
+.workbench-launcher:hover {
+  background: rgba(var(--v-theme-on-surface), 0.08);
 }
 
 .messages-panel {

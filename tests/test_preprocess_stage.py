@@ -1,11 +1,13 @@
+import asyncio
 import base64
+import wave
 from io import BytesIO
 from types import SimpleNamespace
 
 import pytest
 import pytest_asyncio
 
-from astrbot.core.message.components import Image, Plain, Reply
+from astrbot.core.message.components import Image, Plain, Record, Reply
 from astrbot.core.pipeline.preprocess_stage import stage as preprocess_stage
 from astrbot.core.pipeline.preprocess_stage.stage import PreProcessStage
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
@@ -221,3 +223,77 @@ async def test_preprocess_path_mapping_accepts_windows_source_to_posix_target(
     image = event.get_messages()[0]
     assert isinstance(image, Image)
     assert image.file == image.path == image.url == str(target_image)
+
+
+@pytest.mark.asyncio
+async def test_preprocess_stt_does_not_log_transcription(tmp_path, caplog):
+    audio_path = tmp_path / "voice.wav"
+    with wave.open(str(audio_path), "wb") as wav_file:
+        wav_file.setnchannels(1)
+        wav_file.setsampwidth(2)
+        wav_file.setframerate(16000)
+        wav_file.writeframes(b"\x00\x00" * 160)
+
+    async def get_text(audio_url):
+        assert audio_url == str(audio_path)
+        return "private transcription"
+
+    provider = SimpleNamespace(get_text=get_text)
+    config = {"provider_stt_settings": {"enable": True, "provider_id": "stt"}}
+
+    async def get_using_stt_provider_async(_umo):
+        return provider
+
+    context = SimpleNamespace(
+        get_config=lambda **_: config,
+        get_using_stt_provider_async=get_using_stt_provider_async,
+    )
+    stage = PreProcessStage()
+    await stage.initialize(
+        SimpleNamespace(
+            astrbot_config=config,
+            plugin_manager=SimpleNamespace(context=context),
+        )
+    )
+    event = FakeEvent([Record(file=str(audio_path))])
+
+    await stage.process(event)
+
+    assert isinstance(event.get_messages()[0], Plain)
+    assert event.get_messages()[0].text == "private transcription"
+    assert "private transcription" not in caplog.text
+
+
+@pytest.mark.asyncio
+async def test_preprocess_stt_propagates_cancellation(tmp_path):
+    audio_path = tmp_path / "voice.wav"
+    with wave.open(str(audio_path), "wb") as wav_file:
+        wav_file.setnchannels(1)
+        wav_file.setsampwidth(2)
+        wav_file.setframerate(16000)
+        wav_file.writeframes(b"\x00\x00" * 160)
+
+    async def get_text(audio_url):
+        raise asyncio.CancelledError
+
+    provider = SimpleNamespace(get_text=get_text)
+    config = {"provider_stt_settings": {"enable": True, "provider_id": "stt"}}
+
+    async def get_using_stt_provider_async(_umo):
+        return provider
+
+    context = SimpleNamespace(
+        get_config=lambda **_: config,
+        get_using_stt_provider_async=get_using_stt_provider_async,
+    )
+    stage = PreProcessStage()
+    await stage.initialize(
+        SimpleNamespace(
+            astrbot_config=config,
+            plugin_manager=SimpleNamespace(context=context),
+        )
+    )
+    event = FakeEvent([Record(file=str(audio_path))])
+
+    with pytest.raises(asyncio.CancelledError):
+        await stage.process(event)

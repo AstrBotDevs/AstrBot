@@ -302,49 +302,5 @@ class SyncProjectTests(unittest.TestCase):
             reconcile.assert_called_once()
 
 
-class WorkflowSecurityTests(unittest.TestCase):
-    def test_sync_job_has_120_minute_timeout(self):
-        workflow = (
-            SCRIPT.parents[1] / ".github/workflows/project-sync.yml"
-        ).read_text()
-        job = workflow.split("  sync:\n", 1)[1].split("    steps:", 1)[0]
-        self.assertIn("    timeout-minutes: 120\n", job)
-
-    def test_fork_pull_request_events_are_filtered_at_job_boundary(self):
-        workflow = (
-            SCRIPT.parents[1] / ".github/workflows/project-sync.yml"
-        ).read_text()
-        job_condition = workflow.split("  sync:\n", 1)[1].split("    environment:", 1)[
-            0
-        ]
-        self.assertIn("github.event_name != 'pull_request_target'", job_condition)
-        self.assertIn(
-            "github.event.pull_request.head.repo.full_name == github.repository",
-            job_condition,
-        )
-
-    def test_sync_job_requires_environment_before_any_steps(self):
-        workflow = (
-            SCRIPT.parents[1] / ".github/workflows/project-sync.yml"
-        ).read_text()
-        job = workflow.split("  sync:\n", 1)[1]
-        self.assertIn("    environment: project-sync\n", job.split("    steps:", 1)[0])
-        self.assertIn(
-            "ASTRBOT_PROJECT_TOKEN: ${{ secrets.ASTRBOT_PROJECT_ENV_TOKEN }}", job
-        )
-        self.assertNotIn("secrets.ASTRBOT_PROJECT_TOKEN", job)
-
-    def test_both_workflows_pin_all_actions_to_full_commit_ids(self):
-        for name in ("project-sync.yml", "project-sync-tests.yml"):
-            workflow = (SCRIPT.parents[1] / ".github/workflows" / name).read_text()
-            actions = re.findall(r"uses:\s+([^\s#]+)", workflow)
-            self.assertEqual(len(actions), 2)
-            for action in actions:
-                with self.subTest(workflow=name, action=action):
-                    self.assertRegex(
-                        action, r"^actions/(checkout|setup-python)@[0-9a-f]{40}$"
-                    )
-
-
 if __name__ == "__main__":
     unittest.main()

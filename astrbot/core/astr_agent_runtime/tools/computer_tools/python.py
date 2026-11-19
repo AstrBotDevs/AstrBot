@@ -12,7 +12,8 @@ from astrbot.core.astr_agent_runtime.computer.computer_client import (
     get_booter,
     get_local_booter,
 )
-from astrbot.core.astr_agent_runtime.context import AstrAgentContext, AstrMessageEvent
+from astrbot.core.astr_agent_runtime.context import AstrAgentContext
+from astrbot.core.astr_agent_runtime.tools.output import prepare_tool_output
 from astrbot.core.message.message_event_result import MessageChain
 
 from ..registry import builtin_tool
@@ -54,8 +55,18 @@ param_schema = {
 
 
 async def handle_result(
-    result: dict, event: AstrMessageEvent
+    result: dict, agent_context: AstrAgentContext
 ) -> mcp.types.CallToolResult:
+    """Preserve model output and prepare webchat images under the turn policy.
+
+    Args:
+        result: Python execution result, including text, images, and errors.
+        agent_context: Execution context owning image delivery.
+
+    Returns:
+        Model-visible execution output and any caller-owned delivery notice.
+    """
+    event = agent_context.event
     data = result.get("data", {})
     output = data.get("output", {})
     error = data.get("error", "")
@@ -76,7 +87,16 @@ async def handle_result(
             )
 
             if event.get_platform_name() == "webchat":
-                await event.send(message=MessageChain().base64_image(img["image/png"]))
+                message = MessageChain().base64_image(img["image/png"])
+                if prepare_tool_output(agent_context, message):
+                    await event.send(message=message)
+        if event.get_platform_name() == "webchat" and not agent_context.send_to_user:
+            resp.content.append(
+                mcp.types.TextContent(
+                    type="text",
+                    text="Images prepared for caller delivery. They have not been sent.",
+                )
+            )
     if text:
         resp.content.append(mcp.types.TextContent(type="text", text=text))
 
@@ -117,7 +137,7 @@ class PythonTool(FunctionTool):
                 timeout=effective_timeout,
                 silent=silent,
             )
-            return await handle_result(result, context.context.event)
+            return await handle_result(result, context.context)
         except Exception as e:
             return f"Error executing code: {str(e)}"
 
@@ -185,6 +205,6 @@ class LocalPythonTool(FunctionTool):
                 filesystem_scope=local_policy.filesystem_scope,
                 **sandbox_roots,
             )
-            return await handle_result(result, context.context.event)
+            return await handle_result(result, context.context)
         except Exception as e:
             return f"Error executing code: {str(e)}"
