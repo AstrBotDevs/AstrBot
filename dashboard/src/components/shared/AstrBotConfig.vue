@@ -9,6 +9,7 @@ import { useConfigTextResolver } from '@/composables/useConfigTextResolver'
 import { useToast } from '@/utils/toast'
 import { FOLD_STATE_PREFIX, readFoldState, writeFoldState } from '@/utils/configFoldState.mjs'
 import { providerApi } from '@/api/v1'
+import { evaluateCondition } from '@/utils/configCondition.mjs'
 
 const props = defineProps({
   metadata: {
@@ -160,14 +161,8 @@ function getValueBySelector(obj, selector) {
 }
 
 function shouldShowItem(itemMeta, itemKey) {
-  if (!itemMeta?.condition) {
-    return true
-  }
-  for (const [conditionKey, expectedValue] of Object.entries(itemMeta.condition)) {
-    const actualValue = getValueBySelector(props.iterable, conditionKey)
-    if (actualValue !== expectedValue) {
-      return false
-    }
+  if (!evaluateCondition(itemMeta?.condition, (key) => getValueBySelector(props.iterable, key))) {
+    return false
   }
   return true
 }
