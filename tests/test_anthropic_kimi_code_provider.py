@@ -494,6 +494,69 @@ def test_prepare_payload_does_not_merge_non_consecutive_tool_results():
     ]
 
 
+@pytest.mark.parametrize("empty_content", ["", [], [{"type": "text", "text": ""}]])
+def test_sanitize_assistant_messages_removes_empty_user_message_and_merges(
+    empty_content,
+):
+    payloads = {
+        "messages": [
+            {
+                "role": "assistant",
+                "content": [{"type": "text", "text": "First answer."}],
+            },
+            {"role": "user", "content": empty_content},
+            {
+                "role": "assistant",
+                "content": [{"type": "text", "text": "Second answer."}],
+            },
+            {"role": "user", "content": "Continue."},
+        ]
+    }
+
+    anthropic_source.ProviderAnthropic._sanitize_assistant_messages(payloads)
+
+    assert payloads["messages"] == [
+        {
+            "role": "assistant",
+            "content": [
+                {"type": "text", "text": "First answer."},
+                {"type": "text", "text": "Second answer."},
+            ],
+        },
+        {"role": "user", "content": "Continue."},
+    ]
+
+
+@pytest.mark.parametrize(
+    "valid_block",
+    [
+        {"type": "text", "text": "Keep this text."},
+        {"type": "text", "text": " "},
+        {
+            "type": "image",
+            "source": {"type": "url", "url": "https://example.com/image.png"},
+        },
+    ],
+)
+def test_sanitize_assistant_messages_removes_empty_text_blocks_only(valid_block):
+    payloads = {
+        "messages": [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": ""},
+                    valid_block,
+                    {"type": "text", "text": ""},
+                ],
+            }
+        ]
+    }
+
+    anthropic_source.ProviderAnthropic._sanitize_assistant_messages(payloads)
+
+    assert payloads["messages"] == [{"role": "user", "content": [valid_block]}]
+
+
 def test_sanitize_assistant_messages_removes_orphaned_tool_results_and_merges():
     payloads = {
         "messages": [
@@ -531,7 +594,8 @@ def test_sanitize_assistant_messages_removes_orphaned_tool_results_and_merges():
     ]
 
 
-def test_sanitize_assistant_messages_keeps_valid_tool_results_only():
+@pytest.mark.parametrize("tool_result", ["one", "", [{"type": "text", "text": ""}]])
+def test_sanitize_assistant_messages_keeps_valid_tool_results_only(tool_result):
     payloads = {
         "messages": [
             {
@@ -557,8 +621,9 @@ def test_sanitize_assistant_messages_keeps_valid_tool_results_only():
                     {
                         "type": "tool_result",
                         "tool_use_id": "call_00",
-                        "content": "one",
+                        "content": tool_result,
                     },
+                    {"type": "text", "text": ""},
                     {
                         "type": "tool_result",
                         "tool_use_id": "",
@@ -572,7 +637,7 @@ def test_sanitize_assistant_messages_keeps_valid_tool_results_only():
     anthropic_source.ProviderAnthropic._sanitize_assistant_messages(payloads)
 
     assert payloads["messages"][1]["content"] == [
-        {"type": "tool_result", "tool_use_id": "call_00", "content": "one"}
+        {"type": "tool_result", "tool_use_id": "call_00", "content": tool_result}
     ]
 
 
@@ -743,6 +808,38 @@ def _setup_provider_with_mock_client(monkeypatch) -> anthropic_source.ProviderAn
     provider.client.messages = fakeMessages
 
     return provider
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("empty_content", ["", [], [{"type": "text", "text": ""}]])
+async def test_text_chat_omits_empty_user_history_at_client_boundary(
+    monkeypatch, empty_content
+):
+    provider = _setup_provider_with_mock_client(monkeypatch)
+
+    try:
+        response = await provider.text_chat(
+            prompt="Continue.",
+            contexts=[
+                {"role": "assistant", "content": "First answer."},
+                {"role": "user", "content": empty_content},
+                {"role": "assistant", "content": "Second answer."},
+            ],
+        )
+    finally:
+        await provider.terminate()
+
+    assert response.completion_text == "Hello"
+    assert _capture_payloads_create.last_kwargs["messages"] == [
+        {
+            "role": "assistant",
+            "content": [
+                {"type": "text", "text": "First answer."},
+                {"type": "text", "text": "Second answer."},
+            ],
+        },
+        {"role": "user", "content": "Continue."},
+    ]
 
 
 @pytest.mark.asyncio
