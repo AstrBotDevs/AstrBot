@@ -689,7 +689,7 @@ class MCPClient:
                 return self.session
 
             if not self._mcp_server_config or not self._server_name:
-                raise Exception("Cannot reconnect: missing connection configuration")
+                raise ValueError("Cannot reconnect: missing connection configuration")
 
             try:
                 logger.info(
