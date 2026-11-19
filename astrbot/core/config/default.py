@@ -1610,18 +1610,6 @@ CONFIG_METADATA_2 = {
                         "proxy": "",
                         "custom_headers": {},
                     },
-                    "Gemini_OpenAI_API": {
-                        "id": "google_gemini_openai",
-                        "provider": "google",
-                        "type": "openai_chat_completion",
-                        "provider_type": "chat_completion",
-                        "enable": True,
-                        "key": [],
-                        "api_base": "https://generativelanguage.googleapis.com/v1beta/openai/",
-                        "timeout": 120,
-                        "proxy": "",
-                        "custom_headers": {},
-                    },
                     "Groq": {
                         "id": "groq",
                         "provider": "groq",

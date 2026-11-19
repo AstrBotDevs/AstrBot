@@ -170,8 +170,7 @@ const groups = computed(() => {
     'Google Gemini': 'Gemini Compatible',
     Anthropic: 'Anthropic Compatible',
     Moonshot: 'Kimi',
-    'SSYCloud(胜算云)': props.tm('providerSources.selector.ssycloud'),
-    Gemini_OpenAI_API: 'Gemini OpenAI API'
+    'SSYCloud(胜算云)': props.tm('providerSources.selector.ssycloud')
   }
   const domains = {
     MiraRouter: 'mirarouter.com',
