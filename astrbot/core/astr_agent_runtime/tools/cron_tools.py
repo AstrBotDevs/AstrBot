@@ -139,11 +139,9 @@ class FutureTaskTool(FunctionTool[AstrAgentContext]):
                 "allow_admin_role": get_agent_permissions(context).is_admin,
             }
 
+            # Timezone is a system setting; profiles may retain a stale default.
             tz_name = str(
-                context.context.context.get_config(
-                    umo=context.context.event.unified_msg_origin
-                ).get("timezone")
-                or ""
+                context.context.context.get_config().get("timezone") or ""
             ).strip()
             tzinfo = None
             if tz_name:
@@ -334,10 +332,7 @@ class FutureTaskTool(FunctionTool[AstrAgentContext]):
             if not jobs:
                 return "No cron jobs found." + hidden_note
             tz_name = str(
-                context.context.context.get_config(
-                    umo=context.context.event.unified_msg_origin
-                ).get("timezone")
-                or ""
+                context.context.context.get_config().get("timezone") or ""
             ).strip()
             tzinfo = None
             if tz_name:
