@@ -175,32 +175,66 @@ class KBHelper:
             return None
         return rp
 
+    def _get_vec_db_lock(self) -> asyncio.Lock:
+        lock = getattr(self, "_vec_db_lock", None)
+        if lock is None:
+            lock = asyncio.Lock()
+            self._vec_db_lock = lock
+        return lock
+
     async def _ensure_vec_db(self) -> "FaissVecDB":
         if not self.kb.embedding_provider_id:
             raise ValueError(f"知识库 {self.kb.kb_name} 未配置 Embedding Provider")
 
-        ep = await self.get_ep()
-        rp: RerankProvider | None = None
-        try:
-            rp = await self.get_rp()
-        except Exception as e:
-            logger.warning(
-                f"知识库 {self.kb.kb_name}({self.kb.kb_id}) 初始化重排序能力失败，将跳过重排序: {e}",
+        async with self._get_vec_db_lock():
+            ep = await self.get_ep()
+            rp: RerankProvider | None = None
+            try:
+                rp = await self.get_rp()
+            except Exception as e:
+                logger.warning(
+                    f"知识库 {self.kb.kb_name}({self.kb.kb_id}) 初始化重排序能力失败，将跳过重排序: {e}",
+                )
+
+            from astrbot.core.db.vec_db.faiss_impl.vec_db import FaissVecDB
+
+            old_vec_db: FaissVecDB | None = getattr(self, "vec_db", None)  # type: ignore[assignment]
+            if (
+                old_vec_db is not None
+                and getattr(old_vec_db, "embedding_provider", None) is ep
+                and getattr(old_vec_db, "rerank_provider", None) is rp
+            ):
+                # Reuse the live instance. Every FaissVecDB owns a SQLAlchemy
+                # engine whose aiosqlite connections each keep a worker thread
+                # alive until disposed, so rebuilding per call leaks threads.
+                self.init_error = None
+                return old_vec_db
+
+            vec_db = FaissVecDB(
+                doc_store_path=str(self.kb_dir / "doc.db"),
+                index_store_path=str(self.kb_dir / "index.faiss"),
+                embedding_provider=ep,
+                rerank_provider=rp,
             )
+            try:
+                await vec_db.initialize()
+            except BaseException:
+                await vec_db.close()
+                raise
+            self.vec_db = vec_db
+            # Clear stale init_error once initialization succeeds.
+            self.init_error = None
 
-        from astrbot.core.db.vec_db.faiss_impl.vec_db import FaissVecDB
-
-        vec_db = FaissVecDB(
-            doc_store_path=str(self.kb_dir / "doc.db"),
-            index_store_path=str(self.kb_dir / "index.faiss"),
-            embedding_provider=ep,
-            rerank_provider=rp,
-        )
-        await vec_db.initialize()
-        self.vec_db = vec_db
-        # Clear stale init_error once initialization succeeds.
-        self.init_error = None
-        return vec_db
+            if old_vec_db is not None:
+                # Providers changed: release the replaced instance's engine
+                # (and its aiosqlite worker threads) instead of dropping it.
+                try:
+                    await old_vec_db.close()
+                except Exception as e:
+                    logger.warning(
+                        f"知识库 {self.kb.kb_name}({self.kb.kb_id}) 关闭旧向量数据库失败: {e}",
+                    )
+            return vec_db
 
     async def delete_vec_db(self) -> None:
         """删除知识库的向量数据库和所有相关文件"""
@@ -211,8 +245,13 @@ class KBHelper:
             shutil.rmtree(self.kb_dir)
 
     async def terminate(self) -> None:
-        if hasattr(self, "vec_db") and self.vec_db:
-            await self.vec_db.close()
+        async with self._get_vec_db_lock():
+            vec_db = getattr(self, "vec_db", None)
+            if vec_db:
+                await vec_db.close()
+                # Drop the closed instance so a later _ensure_vec_db() builds a
+                # fresh one instead of reusing a disposed engine.
+                del self.vec_db
 
     async def upload_document(
         self,
