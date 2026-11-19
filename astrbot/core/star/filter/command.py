@@ -202,6 +202,9 @@ class CommandFilter(HandlerFilter):
             if message_str.startswith(f"{full_cmd} ") or message_str == full_cmd:
                 ok = True
                 message_str = message_str[len(full_cmd) :].strip()
+                # Only one command prefix can match; continuing would let a
+                # later alias strip arguments that happen to equal it.
+                break
         if not ok:
             return False
 
