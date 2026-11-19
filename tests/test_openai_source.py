@@ -1565,6 +1565,58 @@ async def test_parse_openai_completion_reads_nested_data_choices():
         await provider.terminate()
 
 
+@pytest.mark.parametrize(
+    "raw_content",
+    [
+        # "{{...}}" is a set containing a dict for ast.literal_eval
+        '[\n  {{\n    "topic": "x",\n    "contributors": ["1"]\n  }}\n]',
+        '[ {{"topic": "a"}}, {{"topic": "b"}} ]',
+        # list used as a dict key
+        "[{[1]: 2}]",
+    ],
+)
+def test_normalize_content_keeps_text_when_literal_eval_raises_type_error(
+    raw_content,
+):
+    assert ProviderOpenAIOfficial._normalize_content(raw_content) == raw_content
+
+
+@pytest.mark.asyncio
+async def test_parse_openai_completion_keeps_double_brace_array_text():
+    provider = _make_provider()
+    try:
+        content = '[\n  {{\n    "topic": "x",\n    "detail": "y"\n  }}\n]'
+        completion = ChatCompletion.model_validate(
+            {
+                "id": "chatcmpl-double-brace",
+                "object": "chat.completion",
+                "created": 0,
+                "model": "gpt-4o-mini",
+                "choices": [
+                    {
+                        "index": 0,
+                        "message": {
+                            "role": "assistant",
+                            "content": content,
+                        },
+                        "finish_reason": "stop",
+                    }
+                ],
+                "usage": {
+                    "prompt_tokens": 1,
+                    "completion_tokens": 1,
+                    "total_tokens": 2,
+                },
+            }
+        )
+
+        response = await provider._parse_openai_completion(completion, tools=None)
+
+        assert response.completion_text == content
+    finally:
+        await provider.terminate()
+
+
 @pytest.mark.asyncio
 async def test_query_stream_extracts_usage_from_empty_choices_chunk(monkeypatch):
     provider = _make_provider()
