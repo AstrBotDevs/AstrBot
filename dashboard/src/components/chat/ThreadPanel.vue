@@ -109,6 +109,7 @@ provide(viewActionKey, (viewId, input) => {
     id: `local-view-${input.interaction_id}`,
     content: { type: "bot", message: [], reasoning: "", isLoading: true },
   }).value;
+  const replyState = { botRecord, messageSaved: false };
   let visible = false;
   activeBotRecord.value = botRecord;
   sending.value = true;
@@ -118,7 +119,7 @@ provide(viewActionKey, (viewId, input) => {
       messages.value.push(botRecord);
       visible = true;
     }
-    processPayload(botRecord, undefined, payload);
+    processPayload(replyState, undefined, payload);
     if (visible) scrollToBottom();
   }, () => {
     sending.value = false;
@@ -181,6 +182,7 @@ async function send() {
   messages.value.push(userRecord, botRecord);
   const threadUserRecord = messages.value[messages.value.length - 2];
   const threadBotRecord = messages.value[messages.value.length - 1];
+  const replyState = { botRecord: threadBotRecord, messageSaved: false };
   scrollToBottom();
 
   const abort = new AbortController();
@@ -209,12 +211,12 @@ async function send() {
       throw new Error(`Thread request failed: ${response.status}`);
     }
     await readSseStream(response.body, (payload) => {
-      processPayload(threadBotRecord, threadUserRecord, payload);
+      processPayload(replyState, threadUserRecord, payload);
       scrollToBottom();
     });
   } catch (error) {
     appendPlain(
-      threadBotRecord,
+      replyState.botRecord,
       `\n\n${String((error as Error)?.message || error)}`,
     );
     console.error("Failed to send thread message:", error);
@@ -240,10 +242,12 @@ async function handleButtonClick(payload: {
       isLoading: true,
     },
   };
+  const replyState = { botRecord, messageSaved: false };
   let visible = false;
   const showBotRecord = () => {
     if (visible) return;
     messages.value.push(botRecord);
+    replyState.botRecord = messages.value[messages.value.length - 1];
     visible = true;
     scrollToBottom();
   };
@@ -276,13 +280,13 @@ async function handleButtonClick(payload: {
       if (type !== "end" && type !== "user_message_saved") {
         showBotRecord();
       }
-      processPayload(botRecord, undefined, streamPayload);
+      processPayload(replyState, undefined, streamPayload);
       scrollToBottom();
     });
   } catch (error) {
     showBotRecord();
     appendPlain(
-      botRecord,
+      replyState.botRecord,
       `\n\n${String((error as Error)?.message || error)}`,
     );
     console.error("Failed to send thread button interaction:", error);
@@ -343,17 +347,36 @@ async function readSseStream(
 }
 
 function processPayload(
-  botRecord: ChatRecord,
+  replyState: { botRecord: ChatRecord; messageSaved: boolean },
   userRecord: ChatRecord | undefined,
   payload: any,
 ) {
-  const normalized =
-    payload?.ct === "chat"
-      ? { ...payload, type: payload.type || payload.t }
-      : payload;
-  const type = normalized?.type || normalized?.t;
-  const chainType = normalized?.chain_type;
-  const data = normalized?.data ?? "";
+  const type = payload?.type || payload?.t;
+  const chainType = payload?.chain_type;
+  const data = payload?.data ?? "";
+  let botRecord = replyState.botRecord;
+
+  if (
+    replyState.messageSaved &&
+    ["plain", "image", "record", "file", "video", "actionrow", "view"].includes(type) &&
+    chainType !== "agent_stats" &&
+    (type !== "plain" || payloadText(data))
+  ) {
+    const previousIndex = messages.value.indexOf(botRecord);
+    const nextRecord: ChatRecord = {
+      id: `local-thread-bot-${botRecord.id}`,
+      created_at: new Date().toISOString(),
+      turn_id: botRecord.turn_id,
+      content: { type: "bot", message: [], isLoading: true },
+    };
+    const insertIndex =
+      previousIndex < 0 ? messages.value.length : previousIndex + 1;
+    messages.value.splice(insertIndex, 0, nextRecord);
+    botRecord = messages.value[insertIndex];
+    activeBotRecord.value = botRecord;
+    replyState.botRecord = botRecord;
+    replyState.messageSaved = false;
+  }
 
   if (type === "session_id" || type === "session_bound") return;
 
@@ -375,6 +398,7 @@ function processPayload(
     if (data?.refs) {
       botRecord.content.refs = data.refs;
     }
+    replyState.messageSaved = true;
     return;
   }
 
@@ -429,7 +453,12 @@ function processPayload(
       finishToolCall(botRecord, parseJsonSafe(data));
       return;
     }
-    appendPlain(botRecord, payloadText(data), normalized.streaming !== false);
+    const text = payloadText(data);
+    if (payload.streaming === false) {
+      if (text) botRecord.content.message.push({ type: "plain", text });
+    } else {
+      appendPlain(botRecord, text);
+    }
     return;
   }
 

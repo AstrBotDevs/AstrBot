@@ -501,16 +501,13 @@ class OpenApiService:
                     )
                     message_accumulator.add_part(part)
 
-                should_save = False
-                if msg_type == "end":
-                    should_save = bool(
-                        message_accumulator.has_content() or refs or agent_stats
-                    )
-                elif (streaming and msg_type == "complete") or not streaming:
-                    if chain_type not in ("tool_call", "tool_call_result"):
-                        should_save = True
-
-                if should_save:
+                should_save = msg_type == "end" or (
+                    msg_type == "complete"
+                    and chain_type not in ("reasoning", "tool_call", "tool_call_result")
+                )
+                if should_save and (
+                    message_accumulator.has_content() or refs or agent_stats
+                ):
                     message_parts_to_save = message_accumulator.build_message_parts(
                         include_pending_tool_calls=True
                     )

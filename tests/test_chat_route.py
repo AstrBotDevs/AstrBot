@@ -6,6 +6,9 @@ from unittest.mock import AsyncMock, Mock
 
 import pytest
 
+from astrbot.core.message.components import File, Image, Plain
+from astrbot.core.message.message_event_result import MessageChain
+from astrbot.core.platform.sources.webchat import webchat_event
 from astrbot.dashboard.api.chat import resume_chat_run
 from astrbot.dashboard.services import chat_service
 from astrbot.dashboard.services.chat_service import ChatService, ChatServiceError
@@ -258,6 +261,184 @@ async def test_resumed_stream_starts_with_full_snapshot(chat_service_instance):
             run.task.cancel()
             await asyncio.gather(run.task, return_exceptions=True)
         chat_service.webchat_queue_mgr.remove_queues(session_id)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("streaming", [False, True])
+@pytest.mark.parametrize("reasoning", [False, True])
+async def test_chat_segments_keep_boundaries_in_snapshots_and_history(
+    chat_service_instance, streaming, reasoning
+):
+    service = chat_service_instance
+    session_id = "segmented-session"
+    stream = await service.build_chat_stream(
+        "alice",
+        {"message": "hello", "session_id": session_id},
+    )
+    run = next(iter(service.chat_runs.values()))
+    chunks = ["First.", "Second.", "Second.", "Third."]
+    service.save_bot_message.side_effect = [
+        SimpleNamespace(id=index + 10, created_at=datetime.now(UTC))
+        for index in range(len(chunks))
+    ]
+
+    try:
+        await anext(stream)
+        assert _decode_sse_event(await anext(stream))["type"] == "user_message_saved"
+        if reasoning:
+            await run.back_queue.put(
+                {
+                    "type": "plain",
+                    "chain_type": "reasoning",
+                    "data": "Thought.",
+                    "streaming": streaming,
+                }
+            )
+            thought = _decode_sse_event(await asyncio.wait_for(anext(stream), 1))
+            assert thought["chain_type"] == "reasoning"
+            service.save_bot_message.assert_not_awaited()
+        for index, text in enumerate(chunks):
+            await chat_service.webchat_queue_mgr.put_back_queue(
+                run.run_id,
+                {
+                    "type": "plain",
+                    "data": text,
+                    "streaming": streaming,
+                    "message_id": run.run_id,
+                },
+            )
+            event = _decode_sse_event(await asyncio.wait_for(anext(stream), 1))
+            assert event["type"] == "plain"
+            if not streaming:
+                await run.back_queue.put(
+                    {"type": "complete", "data": "", "streaming": False}
+                )
+                complete = _decode_sse_event(await asyncio.wait_for(anext(stream), 1))
+                assert complete["type"] == "complete"
+                saved = _decode_sse_event(await asyncio.wait_for(anext(stream), 1))
+                assert saved["type"] == "message_saved"
+
+            expected_parts = (
+                [{"type": "plain", "text": "".join(chunks[: index + 1])}]
+                if streaming
+                else [{"type": "plain", "text": chunk} for chunk in chunks[: index + 1]]
+            )
+            if reasoning:
+                expected_parts.insert(0, {"type": "think", "think": "Thought."})
+            resumed = await service.build_chat_run_stream("alice", run.run_id)
+            snapshot = _decode_sse_event(await anext(resumed))
+            await resumed.aclose()
+            assert snapshot["data"]["content"]["message"] == expected_parts
+            snapshot_messages = snapshot["data"]["messages"]
+            assert len(snapshot_messages) == (1 if streaming else index + 1)
+            assert [
+                part
+                for message in snapshot_messages
+                for part in message["content"]["message"]
+            ] == expected_parts
+            if streaming:
+                assert "id" not in snapshot_messages[0]
+            else:
+                assert [message["id"] for message in snapshot_messages] == list(
+                    range(10, index + 11)
+                )
+                assert all(message["created_at"] for message in snapshot_messages)
+            assert (
+                service.get_active_chat_runs("alice", session_id)[0]["messages"]
+                == snapshot_messages
+            )
+
+        await chat_service.webchat_queue_mgr.put_back_queue(
+            run.run_id,
+            {"type": "end", "data": "", "streaming": False},
+        )
+        await asyncio.wait_for(run.task, timeout=1)
+        saved_parts = [
+            part
+            for call in service.save_bot_message.await_args_list
+            for part in call.args[1]
+        ]
+        assert saved_parts == expected_parts
+    finally:
+        await stream.aclose()
+        if run.task and not run.task.done():
+            run.task.cancel()
+            await asyncio.gather(run.task, return_exceptions=True)
+        chat_service.webchat_queue_mgr.remove_queues(session_id)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("segmented", [False, True])
+@pytest.mark.parametrize("media_type", ["file", "image"])
+async def test_nonstream_message_chain_is_one_saved_message(
+    chat_service_instance, tmp_path, monkeypatch, segmented, media_type
+):
+    service = chat_service_instance
+    stream = await service.build_chat_stream(
+        "alice", {"message": "hello", "session_id": "chain-session"}
+    )
+    run = next(iter(service.chat_runs.values()))
+    service.save_bot_message.side_effect = [
+        SimpleNamespace(id=10 + index, created_at=datetime.now(UTC))
+        for index in range(2)
+    ]
+    service.create_attachment_from_file = AsyncMock(
+        return_value={"type": media_type, "attachment_id": "attachment-1"}
+    )
+    monkeypatch.setattr(webchat_event, "attachments_dir", str(tmp_path))
+    source = tmp_path / "source.txt"
+    source.write_text("test", encoding="utf-8")
+    media = (
+        File(name="report.txt", file=str(source))
+        if media_type == "file"
+        else Image.fromBase64(
+            "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jGfoAAAAASUVORK5CYII="
+        )
+    )
+    components = [Plain("Caption."), media]
+    chains = (
+        [MessageChain([comp]) for comp in components]
+        if segmented
+        else [MessageChain(components)]
+    )
+    try:
+        await anext(stream)
+        await anext(stream)
+        for index, chain in enumerate(chains):
+            await webchat_event.WebChatMessageEvent._send(
+                run.run_id, chain, run.session_id
+            )
+            events = []
+            while True:
+                event = _decode_sse_event(await asyncio.wait_for(anext(stream), 1))
+                events.append(event)
+                if event["type"] == "message_saved":
+                    break
+            expected_types = (
+                (["plain"] if index == 0 else [media_type])
+                if segmented
+                else ["plain", media_type]
+            )
+            saved_parts = service.save_bot_message.await_args.args[1]
+            assert [part["type"] for part in saved_parts] == expected_types
+            assert events[-2]["type"] == "complete"
+            assert events[-2]["data"] == ""
+            resumed = await service.build_chat_run_stream("alice", run.run_id)
+            snapshot = _decode_sse_event(await anext(resumed))["data"]
+            await resumed.aclose()
+            assert len(snapshot["messages"]) == index + 1
+            assert [
+                part["type"] for part in snapshot["messages"][-1]["content"]["message"]
+            ] == expected_types
+        await run.back_queue.put({"type": "end", "data": "", "streaming": False})
+        await asyncio.wait_for(run.task, 1)
+        assert service.save_bot_message.await_count == len(chains)
+    finally:
+        await stream.aclose()
+        if run.task and not run.task.done():
+            run.task.cancel()
+            await asyncio.gather(run.task, return_exceptions=True)
+        chat_service.webchat_queue_mgr.remove_queues(run.session_id)
 
 
 @pytest.mark.asyncio
