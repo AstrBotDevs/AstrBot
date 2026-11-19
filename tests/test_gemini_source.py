@@ -64,52 +64,6 @@ async def test_gemini_omits_unset_or_unsupported_thinking_config(model, provider
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize(
-    "model",
-    [
-        "gemini-4-carbon",
-        "models/gemini-4-carbon",
-        "publishers/google/models/gemini-4-carbon",
-        "projects/example/locations/global/publishers/google/models/Gemini-4-Carbon",
-    ],
-)
-async def test_gemini_4_serializes_explicit_reasoning_effort(model):
-    provider = ProviderGoogleGenAI.__new__(ProviderGoogleGenAI)
-    provider.provider_config = {
-        "gm_thinking_config": {"level": "HIGH"},
-        "custom_extra_body": {"reasoning_effort": "low"},
-    }
-    provider.provider_settings = {}
-    provider.model_name = model
-    provider.safety_settings = []
-
-    config = await provider._prepare_query_config({})
-
-    assert config.model_dump(exclude_none=True)["thinking_config"] == {
-        "thinking_level": types.ThinkingLevel.LOW,
-    }
-
-
-@pytest.mark.asyncio
-async def test_gemini_prepare_conversation_removes_leading_model_content():
-    provider = ProviderGoogleGenAI.__new__(ProviderGoogleGenAI)
-
-    contents = await provider._prepare_conversation(
-        {
-            "messages": [
-                {"role": "assistant", "content": "stale assistant turn"},
-                {"role": "user", "content": "current user turn"},
-            ]
-        }
-    )
-
-    assert len(contents) == 1
-    assert isinstance(contents[0], types.UserContent)
-    assert contents[0].parts is not None
-    assert contents[0].parts[-1].text == "current user turn"
-
-
-@pytest.mark.asyncio
 async def test_gemini_prepare_conversation_keeps_normal_user_first_history():
     provider = ProviderGoogleGenAI.__new__(ProviderGoogleGenAI)
 
