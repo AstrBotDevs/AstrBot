@@ -277,13 +277,22 @@ class DocumentStorage:
 
             return [self._document_to_dict(doc) for doc in documents]
 
-    async def insert_document(self, doc_id: str, text: str, metadata: dict) -> int:
+    async def insert_document(
+        self,
+        doc_id: str,
+        text: str,
+        metadata: dict,
+        *,
+        integer_id: int | None = None,
+    ) -> int:
         """Insert a single document and return its integer ID.
 
         Args:
             doc_id (str): The document ID (UUID string).
             text (str): The document text.
             metadata (dict): The document metadata.
+            integer_id (int | None): Original integer ID when restoring a backup.
+                Defaults to automatic ID allocation for new documents.
 
         Returns:
             int: The integer ID of the inserted document.
@@ -293,6 +302,7 @@ class DocumentStorage:
 
         async with self.get_session() as session, session.begin():
             document = Document(
+                id=integer_id,
                 doc_id=doc_id,
                 text=text,
                 metadata_=json.dumps(metadata),
