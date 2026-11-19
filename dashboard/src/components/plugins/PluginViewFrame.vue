@@ -219,12 +219,12 @@ const coerceBridgeUploadFile = async (
   );
 };
 
-const sendBridgeResponse = (requestId, ok, payload) => {
+const sendBridgeResponse = (requestId, ok, payload, errorFields = {}) => {
   postToIframe({
     kind: "response",
     requestId,
     ok,
-    ...(ok ? { data: payload } : { error: payload }),
+    ...(ok ? { data: payload } : { error: payload, ...errorFields }),
   });
 };
 
@@ -239,6 +239,28 @@ const getBridgeErrorMessage = (error, fallback) => {
     }
   }
   return error?.message || fallback;
+};
+
+const getBridgeErrorFields = (error) => {
+  const fields = {};
+  // A rejected request carries the structured envelope on the response body,
+  // while the GET/POST/upload paths attach the fields to the thrown error.
+  // Read the response envelope first, then fall back to the top-level fields.
+  const envelope = error?.response?.data;
+  const code = envelope?.data?.code ?? envelope?.code ?? error?.code;
+  const reason = envelope?.reason ?? error?.reason;
+  const confirmed =
+    envelope?.data?.confirmed ?? envelope?.confirmed ?? error?.confirmed;
+  if (typeof code === "string" && code) {
+    fields.errorCode = code;
+  }
+  if (typeof reason === "string" && reason) {
+    fields.errorReason = reason;
+  }
+  if (typeof confirmed === "boolean") {
+    fields.errorConfirmed = confirmed;
+  }
+  return Object.keys(fields).length > 0 ? fields : undefined;
 };
 
 const closeSSEConnection = (subscriptionId) => {
@@ -407,7 +429,15 @@ const handleBridgeRequest = async (message) => {
         params: message.params || {},
       });
       if (response.data?.status === "error") {
-        throw new Error(response.data.message || "Plugin GET request failed.");
+        throw Object.assign(
+          new Error(response.data.message || "Plugin GET request failed."),
+          {
+            code: response.data.data?.code,
+            reason: response.data.reason,
+            confirmed:
+              response.data.data?.confirmed ?? response.data.confirmed,
+          },
+        );
       }
       sendBridgeResponse(requestId, true, response.data?.data ?? response.data);
       return;
@@ -419,7 +449,15 @@ const handleBridgeRequest = async (message) => {
         message.body || {},
       );
       if (response.data?.status === "error") {
-        throw new Error(response.data.message || "Plugin POST request failed.");
+        throw Object.assign(
+          new Error(response.data.message || "Plugin POST request failed."),
+          {
+            code: response.data.data?.code,
+            reason: response.data.reason,
+            confirmed:
+              response.data.data?.confirmed ?? response.data.confirmed,
+          },
+        );
       }
       sendBridgeResponse(requestId, true, response.data?.data ?? response.data);
       return;
@@ -448,8 +486,16 @@ const handleBridgeRequest = async (message) => {
         },
       );
       if (response.data?.status === "error") {
-        throw new Error(
-          response.data.message || "Plugin upload request failed.",
+        throw Object.assign(
+          new Error(
+            response.data.message || "Plugin upload request failed.",
+          ),
+          {
+            code: response.data.data?.code,
+            reason: response.data.reason,
+            confirmed:
+              response.data.data?.confirmed ?? response.data.confirmed,
+          },
         );
       }
       sendBridgeResponse(requestId, true, response.data?.data ?? response.data);
@@ -538,6 +584,7 @@ const handleBridgeRequest = async (message) => {
       requestId,
       false,
       getBridgeErrorMessage(error, "Plugin bridge request failed."),
+      getBridgeErrorFields(error),
     );
   }
 };

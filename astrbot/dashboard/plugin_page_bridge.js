@@ -245,6 +245,16 @@
       if (message.ok) {
         pending.resolve(message.data);
       } else {
+        const legacyFields = {};
+        if (typeof message.errorCode === "string" && message.errorCode) {
+          legacyFields.code = message.errorCode;
+        }
+        if (typeof message.errorReason === "string" && message.errorReason) {
+          legacyFields.reason = message.errorReason;
+        }
+        if (typeof message.errorConfirmed === "boolean") {
+          legacyFields.confirmed = message.errorConfirmed;
+        }
         pending.reject(
           Object.assign(
             new Error(
@@ -252,6 +262,7 @@
                 message.error ||
                 "Plugin bridge request failed.",
             ),
+            legacyFields,
             typeof message.error === "object" ? message.error : {},
           ),
         );

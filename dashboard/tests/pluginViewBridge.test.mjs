@@ -257,6 +257,42 @@ test("existing plugin APIs, SSE, alias, and bootstrap context remain supported",
   });
 });
 
+test("plugin API failures preserve object and legacy structured error fields", async () => {
+  for (const failure of [
+    {
+      error: {
+        message: "The command is invalid.",
+        code: "life_command_invalid",
+        reason: "invalid UTF-8 life command",
+        confirmed: false,
+      },
+    },
+    {
+      error: "The command is invalid.",
+      errorCode: "life_command_invalid",
+      errorReason: "invalid UTF-8 life command",
+      errorConfirmed: false,
+    },
+  ]) {
+    const env = setupBridge("plugin_page");
+    env.bridge.__setInitialContext(env.context);
+    const pending = env.bridge.apiGet("invalid");
+    env.deliver({
+      kind: "response",
+      requestId: env.sent.at(-1).requestId,
+      ok: false,
+      ...failure,
+    });
+    await assert.rejects(pending, (error) => {
+      assert.equal(error.message, "The command is invalid.");
+      assert.equal(error.code, "life_command_invalid");
+      assert.equal(error.reason, "invalid UTF-8 life command");
+      assert.equal(error.confirmed, false);
+      return true;
+    });
+  }
+});
+
 test("chat views report growth and shrinkage without duplicate resize messages", async () => {
   const env = setupBridge();
   env.deliver({ kind: "context", context: env.context });
