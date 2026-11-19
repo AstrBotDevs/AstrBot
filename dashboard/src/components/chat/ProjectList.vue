@@ -15,6 +15,9 @@
     </div>
 
     <div class="project-list-wrap">
+      <div v-if="!projects.length" class="project-list-empty">
+        {{ tm("project.noProjects") }}
+      </div>
       <div v-for="project in projects" :key="project.project_id">
         <div
           class="project-row project-item"
@@ -453,6 +456,7 @@ async function handleDeleteSession(projectId: string, session: ProjectSession) {
   visibility: hidden;
 }
 
+.project-list-empty,
 .project-session-empty {
   padding: 5px 10px;
   color: var(--chat-muted);
