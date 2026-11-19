@@ -71,6 +71,8 @@ class WecomAIQueueListener:
 class WecomAIBotAdapter(Platform):
     """企业微信智能机器人适配器"""
 
+    supports_proxy = True
+
     def __init__(
         self,
         platform_config: dict,
@@ -141,9 +143,14 @@ class WecomAIBotAdapter(Platform):
                 ws_url=self.long_connection_ws_url,
                 heartbeat_interval=self.long_connection_heartbeat_interval,
                 message_handler=self._process_long_connection_payload,
+                proxy_url=self.proxy_url,
             )
         else:
-            self.api_client = WecomAIBotAPIClient(self.token, self.encoding_aes_key)
+            self.api_client = WecomAIBotAPIClient(
+                self.token,
+                self.encoding_aes_key,
+                proxy_url=self.proxy_url,
+            )
             self.server = WecomAIBotServer(
                 host=self.host,
                 port=self.port,
@@ -169,6 +176,7 @@ class WecomAIBotAdapter(Platform):
             try:
                 self.webhook_client = WecomAIBotWebhookClient(
                     self.msg_push_webhook_url,
+                    proxy_url=self.proxy_url,
                 )
             except WecomAIBotWebhookError as e:
                 logger.error("企业微信消息推送 webhook 配置无效: %s", e)
@@ -660,7 +668,11 @@ class WecomAIBotAdapter(Platform):
         # 并行处理图片下载和解密
         if _img_url_to_process:
             tasks = [
-                process_encrypted_image(url, aes_key or self.encoding_aes_key)
+                process_encrypted_image(
+                    url,
+                    aes_key or self.encoding_aes_key,
+                    proxy_url=self.proxy_url,
+                )
                 for url, aes_key in _img_url_to_process
             ]
             results = await asyncio.gather(*tasks)

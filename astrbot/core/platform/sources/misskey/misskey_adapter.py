@@ -49,6 +49,8 @@ DEFAULT_UPLOAD_CONCURRENCY = 3
     "misskey", "Misskey 平台适配器", support_streaming_message=False
 )
 class MisskeyPlatformAdapter(Platform):
+    supports_proxy = True
+
     def __init__(
         self,
         platform_config: dict,

@@ -56,6 +56,8 @@ AT_MENTION_PREFIX_REGEX = re.compile(r"^@[^\s]+(\s*-\s*[^\s]+)?\s*")
     "KOOK 适配器",
 )
 class KookPlatformAdapter(Platform):
+    supports_proxy = True
+
     def __init__(
         self, platform_config: dict, platform_settings: dict, event_queue: asyncio.Queue
     ) -> None:

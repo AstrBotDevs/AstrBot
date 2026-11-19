@@ -16,6 +16,7 @@ from astrbot.core.astr_agent_runtime.computer.booters.local import LocalShellCom
 from astrbot.core.config.agent import normalize_agent
 from astrbot.core.config.astrbot_config import AstrBotConfig
 from astrbot.core.config.default import (
+    ADAPTER_PROXY_SUPPORTED_TYPES,
     CONFIG_METADATA_2,
     CONFIG_METADATA_3,
     CONFIG_METADATA_3_SYSTEM,
@@ -986,8 +987,15 @@ class ConfigDisplayService:
         if logo_registration_tasks:
             await asyncio.gather(*logo_registration_tasks, return_exceptions=True)
 
+        proxy_supported_types = ADAPTER_PROXY_SUPPORTED_TYPES | {
+            platform.name
+            for platform in platform_registry
+            if getattr(platform, "support_proxy", False)
+        }
         for platform_template in platform_default_tmpl.values():
             if isinstance(platform_template, dict):
+                if platform_template.get("type") not in proxy_supported_types:
+                    continue
                 platform_template.setdefault(
                     "proxy",
                     {

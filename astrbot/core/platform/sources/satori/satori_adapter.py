@@ -42,6 +42,8 @@ if TYPE_CHECKING:
     "satori", "Satori 协议适配器", support_streaming_message=False
 )
 class SatoriPlatformAdapter(Platform):
+    supports_proxy = True
+
     def __init__(
         self,
         platform_config: dict,

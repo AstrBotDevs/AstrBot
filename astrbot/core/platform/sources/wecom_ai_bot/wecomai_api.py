@@ -11,6 +11,7 @@ import aiohttp
 from Crypto.Cipher import AES
 
 from astrbot import logger
+from astrbot.core.platform.proxy import create_platform_client_session
 
 from .wecomai_utils import WecomAIBotConstants
 from .WXBizJsonMsgCrypt import WXBizJsonMsgCrypt
@@ -19,16 +20,23 @@ from .WXBizJsonMsgCrypt import WXBizJsonMsgCrypt
 class WecomAIBotAPIClient:
     """企业微信智能机器人 API 客户端"""
 
-    def __init__(self, token: str, encoding_aes_key: str) -> None:
+    def __init__(
+        self,
+        token: str,
+        encoding_aes_key: str,
+        proxy_url: str | None = None,
+    ) -> None:
         """初始化 API 客户端
 
         Args:
             token: 企业微信机器人 Token
             encoding_aes_key: 消息加密密钥
+            proxy_url: Adapter-specific proxy URL, if configured.
 
         """
         self.token = token
         self.encoding_aes_key = encoding_aes_key
+        self.proxy_url = proxy_url
         self.wxcpt = WXBizJsonMsgCrypt(token, encoding_aes_key, "")  # receiveid 为空串
 
     async def decrypt_message(
@@ -167,7 +175,7 @@ class WecomAIBotAPIClient:
             # 下载图片
             logger.info(f"开始下载加密图片: {image_url}")
 
-            async with aiohttp.ClientSession() as session:
+            async with create_platform_client_session(self.proxy_url) as session:
                 async with session.get(image_url, timeout=15) as response:
                     if response.status != 200:
                         error_msg = f"图片下载失败，状态码: {response.status}"
