@@ -291,6 +291,32 @@ def test_cleanup_stray_root_handlers_keeps_loguru_bridge() -> None:
         root_logger.handlers[:] = previous_handlers
 
 
+def test_cleanup_stray_root_handlers_reinstalls_missing_bridge() -> None:
+    """Ensure the bridge is restored when third-party code removed it.
+
+    A plugin calling ``logging.basicConfig(force=True)`` during import wipes
+    every root handler — including the loguru bridge — before installing its
+    own. The cleanup removes that stray handler and must reinstall the bridge,
+    otherwise root-logger records stop reaching the loguru sinks entirely.
+    """
+    root_logger = logging.getLogger()
+    previous_handlers = root_logger.handlers[:]
+    stray_handler = logging.Handler()
+    # Simulate basicConfig(force=True): bridge gone, stray handler installed.
+    root_logger.handlers[:] = [stray_handler]
+
+    try:
+        LogManager.cleanup_stray_root_handlers()
+
+        assert stray_handler not in root_logger.handlers
+        assert any(
+            getattr(handler, LogManager._LOGGER_HANDLER_FLAG, False)
+            for handler in root_logger.handlers
+        )
+    finally:
+        root_logger.handlers[:] = previous_handlers
+
+
 def test_plugin_log_level_write_failure_preserves_previous_state(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
