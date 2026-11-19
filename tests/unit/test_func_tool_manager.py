@@ -19,6 +19,8 @@ from astrbot.core.astr_agent_runtime.tools.web_search_tools import (
     DeepSeekWebSearchTool,
     FirecrawlExtractWebPageTool,
     FirecrawlWebSearchTool,
+    KeenableExtractWebPageTool,
+    KeenableWebSearchTool,
 )
 from astrbot.core.provider import func_tool_manager as ftm
 from astrbot.core.provider.func_tool_manager import FunctionToolManager
@@ -938,6 +940,18 @@ def test_search_tools_are_registered_as_builtin_tools(
     assert manager.is_builtin_tool(extract_name) is True
     assert manager.get_func(search_name) is search_tool
     assert manager.get_func(extract_name) is extract_tool
+
+
+def test_keenable_tools_are_registered_as_builtin_tools():
+    manager = FunctionToolManager()
+
+    search_tool = manager.get_builtin_tool(KeenableWebSearchTool)
+    extract_tool = manager.get_builtin_tool(KeenableExtractWebPageTool)
+
+    assert search_tool.name == "web_search_keenable"
+    assert extract_tool.name == "keenable_extract_web_page"
+    assert manager.is_builtin_tool("web_search_keenable") is True
+    assert manager.is_builtin_tool("keenable_extract_web_page") is True
 
 
 @pytest.mark.asyncio
