@@ -541,3 +541,48 @@ async def test_query_concatenates_multiple_text_blocks():
     response = await provider._query({"model": "claude-test", "messages": []}, None)
 
     assert response.completion_text == "Let me search. The answer is 42."
+
+
+def _history_with_tool_call(call_id: str) -> list[dict]:
+    return [
+        {"role": "user", "content": "run it"},
+        {
+            "role": "assistant",
+            "content": "",
+            "tool_calls": [
+                {
+                    "id": call_id,
+                    "type": "function",
+                    "function": {"name": "demo", "arguments": "{}"},
+                }
+            ],
+        },
+        {"role": "tool", "tool_call_id": call_id, "content": "ok"},
+    ]
+
+
+def test_prepare_payload_shortens_overlong_tool_call_ids():
+    # OpenAI-compatible providers may emit ids longer than Anthropic's 64-char limit.
+    long_id = "call_" + "x" * 80
+    _, messages = _provider()._prepare_payload(_history_with_tool_call(long_id))
+
+    tool_use = next(
+        b for m in messages if m["role"] == "assistant" for b in m["content"]
+    )
+    tool_result = next(
+        b
+        for m in messages
+        if m["role"] == "user"
+        for b in m["content"]
+        if isinstance(b, dict) and b.get("type") == "tool_result"
+    )
+    assert len(tool_use["id"]) <= 64
+    assert tool_use["id"] == tool_result["tool_use_id"]
+    # Stable across calls so replayed history keeps matching.
+    _, again = _provider()._prepare_payload(_history_with_tool_call(long_id))
+    assert again[1]["content"][0]["id"] == tool_use["id"]
+
+
+def test_prepare_payload_keeps_valid_tool_call_ids():
+    _, messages = _provider()._prepare_payload(_history_with_tool_call("toolu_abc123"))
+    assert messages[1]["content"][0]["id"] == "toolu_abc123"
