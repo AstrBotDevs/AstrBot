@@ -2400,14 +2400,13 @@ async def test_step_notices_reach_model_once_per_threshold(
     event.get_platform_name.return_value = "test"
     event.get_platform_id.return_value = "test"
     event.send = AsyncMock()
+    context = MagicMock()
+    context.locale.return_value = "zh-CN"
     await runner.reset(
         provider=mock_provider,
         request=provider_request,
         run_context=ContextWrapper(
-            context=SimpleNamespace(
-                event=event,
-                context=SimpleNamespace(locale=MagicMock(return_value="en-US")),
-            )
+            context=SimpleNamespace(event=event, context=context)
         ),
         tool_executor=mock_tool_executor,
         agent_hooks=mock_hooks,
