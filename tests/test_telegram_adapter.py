@@ -2,7 +2,7 @@ import asyncio
 import importlib
 import sys
 from types import SimpleNamespace
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, call, patch
 
 import pytest
 from telegram import Message, MessageEntity, TextQuote
@@ -1428,3 +1428,38 @@ async def test_telegram_run_rebuilds_fresh_application_after_recreate_init_failu
     app_two.shutdown.assert_awaited()
     app_three.initialize.assert_awaited()
     app_three.start.assert_awaited()
+
+
+def test_telegram_proxy_is_applied_to_bot_and_updater_requests():
+    TelegramPlatformAdapter = _load_telegram_adapter()
+    mock_request_module = MagicMock()
+    with patch.dict(sys.modules, {"telegram.request": mock_request_module}):
+        TelegramPlatformAdapter(
+            make_platform_config(
+                "telegram",
+                telegram_proxy="http://127.0.0.1:7890",
+            ),
+            {},
+            asyncio.Queue(),
+        )
+
+    assert mock_request_module.HTTPXRequest.call_args_list == [
+        call(proxy="http://127.0.0.1:7890"),
+        call(proxy="http://127.0.0.1:7890"),
+    ]
+
+
+@pytest.mark.parametrize("proxy_value", ["", "   ", None])
+def test_telegram_without_proxy_uses_default_requests(proxy_value):
+    TelegramPlatformAdapter = _load_telegram_adapter()
+
+    mock_request_module = MagicMock()
+    with patch.dict(sys.modules, {"telegram.request": mock_request_module}):
+        adapter = TelegramPlatformAdapter(
+            make_platform_config("telegram", telegram_proxy=proxy_value),
+            {},
+            asyncio.Queue(),
+        )
+
+    assert adapter.proxy is None
+    mock_request_module.HTTPXRequest.assert_not_called()

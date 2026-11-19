@@ -84,6 +84,9 @@ class TelegramPlatformAdapter(Platform):
         self.base_url = base_url
         self.file_base_url = file_base_url
 
+        proxy = self.config.get("telegram_proxy") or ""
+        self.proxy = proxy.strip() or None
+
         self.enable_command_register = self.config.get(
             "telegram_command_register",
             True,
@@ -145,13 +148,21 @@ class TelegramPlatformAdapter(Platform):
         )  # max seconds - hard cap to prevent indefinite delay
 
     def _build_application(self) -> None:
-        self.application = (
+        builder = (
             ApplicationBuilder()
             .token(self.config["telegram_token"])
             .base_url(self.base_url)
             .base_file_url(self.file_base_url)
-            .build()
         )
+        if self.proxy:
+            # The proxy is bound to the request objects, so both the Bot request
+            # (sending messages/media) and the getUpdates request need it.
+            from telegram.request import HTTPXRequest
+
+            logger.info("Telegram adapter is using proxy: %s", self.proxy)
+            builder = builder.request(HTTPXRequest(proxy=self.proxy))
+            builder = builder.get_updates_request(HTTPXRequest(proxy=self.proxy))
+        self.application = builder.build()
         message_handler = TelegramMessageHandler(
             filters=filters.ALL,
             callback=self.message_handler,
