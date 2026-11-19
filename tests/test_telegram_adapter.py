@@ -91,6 +91,59 @@ def _build_context() -> MagicMock:
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("after_break", [False, True])
+async def test_telegram_group_stream_keeps_the_new_message_send_error(after_break):
+    from astrbot.api.platform import (
+        AstrBotMessage,
+        MessageMember,
+        MessageType,
+        PlatformMetadata,
+    )
+    from astrbot.core.utils.metrics import Metric
+
+    TelegramPlatformEvent = _load_telegram_platform_event()
+    client = MockTelegramBuilder.create_bot()
+    original_error = MockTelegramNetworkError("message send failed")
+    client.send_message.side_effect = (
+        [SimpleNamespace(message_id=17), original_error]
+        if after_break
+        else [original_error]
+    )
+    incoming = AstrBotMessage()
+    incoming.type = MessageType.GROUP_MESSAGE
+    incoming.group_id = "-100123"
+    incoming.sender = MessageMember("123")
+    incoming.message = []
+    event = TelegramPlatformEvent(
+        "",
+        incoming,
+        PlatformMetadata("telegram", "Telegram", "test"),
+        "-100123",
+        client,
+    )
+
+    async def chunks():
+        if after_break:
+            yield MessageChain([Comp.Plain("First segment")])
+            yield MessageChain(type="break")
+        yield MessageChain([Comp.Plain("Failed segment")])
+
+    with (
+        patch.object(Metric, "upload", new_callable=AsyncMock),
+        pytest.raises(MockTelegramNetworkError) as raised,
+    ):
+        await event.send_streaming(chunks())
+
+    assert raised.value is original_error
+    if after_break:
+        client.edit_message_text.assert_awaited_once_with(
+            text="First segment", chat_id="-100123", message_id=17
+        )
+    else:
+        client.edit_message_text.assert_not_awaited()
+
+
+@pytest.mark.asyncio
 async def test_telegram_topic_with_missing_name_falls_back_to_group_name():
     TelegramPlatformAdapter = _load_telegram_adapter()
     adapter = TelegramPlatformAdapter(

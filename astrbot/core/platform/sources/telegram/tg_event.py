@@ -888,6 +888,7 @@ class TelegramPlatformEvent(AstrMessageEvent):
                     current_content = delta
                 except Exception as e:
                     logger.warning(f"发送消息失败(streaming): {e!s}")
+                    raise
                 message_id = msg.message_id
                 last_edit_time = asyncio.get_running_loop().time()
 
