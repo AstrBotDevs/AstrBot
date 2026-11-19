@@ -1,4 +1,5 @@
 import asyncio
+import codecs
 import contextlib
 import importlib
 import importlib.metadata as importlib_metadata
@@ -11,6 +12,7 @@ import re
 import shlex
 import sys
 import threading
+import weakref
 from collections import deque
 from collections.abc import Mapping
 from dataclasses import dataclass
@@ -27,13 +29,19 @@ from astrbot.core.utils.requirements_utils import (
     extract_requirement_names,
     parse_package_install_input,
 )
-from astrbot.core.utils.runtime_env import is_packaged_desktop_runtime
+from astrbot.core.utils.runtime_env import (
+    is_frozen_runtime,
+    is_packaged_desktop_runtime,
+)
 
 logger = logging.getLogger("astrbot")
 
 _DISTLIB_FINDER_PATCH_ATTEMPTED = False
 _SITE_PACKAGES_IMPORT_LOCK = threading.RLock()
 _PIP_IN_PROCESS_ENV_LOCK = threading.RLock()
+_PIP_INSTALL_LOCKS: weakref.WeakKeyDictionary[
+    asyncio.AbstractEventLoop, asyncio.Lock
+] = weakref.WeakKeyDictionary()
 _WINDOWS_UNC_PATH_PREFIXES = ("\\\\?\\UNC\\", "\\??\\UNC\\")
 _WINDOWS_EXTENDED_PATH_PREFIXES = ("\\\\?\\", "\\??\\")
 _PIP_FAILURE_PATTERNS = {
@@ -1101,6 +1109,85 @@ class PipInstaller:
         )
         importlib.invalidate_caches()
 
+    async def _run_pip_in_subprocess(self, args: list[str]) -> int:
+        """Run ``pip`` in an isolated child process so ``pip`` memory is reclaimed.
+
+        Args:
+            args: Argument vector passed to ``pip`` (excluding the ``pip`` command).
+
+        Returns:
+            Subprocess exit status code.
+
+        Raises:
+            DependencyConflictError: If pip output indicates a dependency conflict.
+        """
+        env = os.environ.copy()
+        for key in [k for k in env if k.upper() == "PYTHONIOENCODING"]:
+            env.pop(key, None)
+        env["PYTHONIOENCODING"] = "utf-8"
+
+        existing_pythonpath = ""
+        for key in [k for k in env if k.upper() == "PYTHONPATH"]:
+            existing_pythonpath = env.pop(key, "") or existing_pythonpath
+        pythonpath_entries = [
+            *(p for p in existing_pythonpath.split(os.pathsep) if p),
+            *(p for p in sys.path if p and os.path.isdir(p)),
+        ]
+        if pythonpath_entries:
+            env["PYTHONPATH"] = os.pathsep.join(dict.fromkeys(pythonpath_entries))
+
+        env_updates = _build_packaged_windows_runtime_build_env(base_env=env)
+        if env_updates:
+            env.update(env_updates)
+
+        stream = _StreamingLogWriter(logger.info, max_lines=_MAX_PIP_OUTPUT_LINES)
+        decoder = codecs.getincrementaldecoder("utf-8")(errors="replace")
+        proc = await asyncio.create_subprocess_exec(
+            sys.executable,
+            "-u",
+            "-m",
+            "pip",
+            *args,
+            stdin=asyncio.subprocess.DEVNULL,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.STDOUT,
+            env=env,
+        )
+        try:
+            if proc.stdout is not None:
+                while True:
+                    chunk = await proc.stdout.read(4096)
+                    if not chunk:
+                        break
+                    stream.write(decoder.decode(chunk))
+            tail = decoder.decode(b"", final=True)
+            if tail:
+                stream.write(tail)
+            stream.flush()
+            result_code = await proc.wait()
+        except BaseException:
+            if proc.returncode is None:
+                with contextlib.suppress(ProcessLookupError):
+                    proc.terminate()
+                try:
+                    await asyncio.wait_for(proc.wait(), timeout=5)
+                except asyncio.TimeoutError:
+                    with contextlib.suppress(ProcessLookupError):
+                        proc.kill()
+                    with contextlib.suppress(Exception):
+                        await proc.wait()
+                except BaseException:
+                    with contextlib.suppress(ProcessLookupError):
+                        proc.kill()
+            raise
+
+        if result_code != 0:
+            conflict = _classify_pip_failure(stream.lines)
+            if conflict:
+                raise conflict
+
+        return result_code
+
     async def _run_pip_in_process(self, args: list[str]) -> int:
         pip_main = _get_pip_main()
         _patch_distlib_finder_for_frozen_runtime()
@@ -1123,7 +1210,14 @@ class PipInstaller:
         return result_code
 
     async def _run_pip_with_classification(self, args: list[str]) -> None:
-        result_code = await self._run_pip_in_process(args)
+        loop = asyncio.get_running_loop()
+        install_lock = _PIP_INSTALL_LOCKS.setdefault(loop, asyncio.Lock())
+        async with install_lock:
+            result_code = (
+                await self._run_pip_in_process(args)
+                if is_frozen_runtime()
+                else await self._run_pip_in_subprocess(args)
+            )
         if result_code != 0:
             raise PipInstallError(
                 f"Installation failed with error code {result_code}",
