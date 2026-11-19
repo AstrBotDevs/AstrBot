@@ -5,7 +5,11 @@ import {
   readPinnedExtensions,
   writePinnedExtensions,
 } from "./extensionPreferenceStorage.mjs";
-import { computed, ref, watch } from "vue";
+import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
+import {
+  readPluginOrganizerPreferences,
+  writePluginOrganizerPreferences,
+} from "./pluginOrganizerStorage.mjs";
 
 const props = defineProps({
   state: {
@@ -168,6 +172,64 @@ const openPluginView = (extension) => {
 };
 
 const pinnedExtensionNames = ref(readPinnedExtensions());
+const organizerPreferences = ref(readPluginOrganizerPreferences());
+const quickFilter = ref("all");
+const selectedFolder = ref("*");
+const draggedPluginName = ref("");
+const dragOverFolder = ref(null);
+const organizerAnchor = ref(null);
+const organizerElement = ref(null);
+const organizerFloating = ref(false);
+const organizerPlaceholderHeight = ref(0);
+let organizerResizeObserver = null;
+const showNewFolderDialog = ref(false);
+const newFolderName = ref("");
+const pluginFolders = computed(() => organizerPreferences.value.folders);
+const folderCards = computed(() => {
+  const countForFolder = (folder) =>
+    filteredPlugins.value.filter(
+      (plugin) =>
+        (organizerPreferences.value.assignments[plugin.name] || "") === folder,
+    ).length;
+  return [
+    {
+      key: "*",
+      title: tm("organizer.all"),
+      icon: "mdi-view-grid-outline",
+      count: filteredPlugins.value.length,
+    },
+    {
+      key: "",
+      title: tm("organizer.uncategorized"),
+      icon: "mdi-folder-outline",
+      count: countForFolder(""),
+    },
+    ...pluginFolders.value.map((folder) => ({
+      key: folder,
+      title: folder,
+      icon: "mdi-folder-outline",
+      count: countForFolder(folder),
+    })),
+  ];
+});
+const organizerFilterOptions = [
+  { value: "all", title: tm("organizer.filters.all") },
+  { value: "active", title: tm("organizer.filters.active") },
+  { value: "stopped", title: tm("organizer.filters.stopped") },
+  { value: "updates", title: tm("organizer.filters.updates") },
+  { value: "pinned", title: tm("organizer.filters.pinned") },
+];
+const organizerCounts = computed(() => ({
+  total: filteredPlugins.value.length,
+  active: filteredPlugins.value.filter((plugin) => plugin.activated).length,
+  updates: filteredPlugins.value.filter((plugin) => plugin.has_update).length,
+}));
+
+watch(
+  organizerPreferences,
+  (preferences) => writePluginOrganizerPreferences(preferences),
+  { deep: true },
+);
 
 const pinnedExtensionOrder = computed(() => {
   const order = new Map();
@@ -177,9 +239,25 @@ const pinnedExtensionOrder = computed(() => {
   return order;
 });
 
+const visibleInstalledPlugins = computed(() =>
+  filteredPlugins.value.filter((plugin) => {
+    const assignedFolder =
+      organizerPreferences.value.assignments[plugin.name] || "";
+    const matchesFolder =
+      selectedFolder.value === "*" || assignedFolder === selectedFolder.value;
+    const matchesQuickFilter =
+      quickFilter.value === "all" ||
+      (quickFilter.value === "active" && plugin.activated) ||
+      (quickFilter.value === "stopped" && !plugin.activated) ||
+      (quickFilter.value === "updates" && plugin.has_update) ||
+      (quickFilter.value === "pinned" && isPinnedExtension(plugin));
+    return matchesFolder && matchesQuickFilter;
+  }),
+);
+
 const sortedInstalledPlugins = computed(() => {
   const order = pinnedExtensionOrder.value;
-  return [...filteredPlugins.value].sort((a, b) => {
+  return [...visibleInstalledPlugins.value].sort((a, b) => {
     const aIndex = order.has(a?.name)
       ? order.get(a.name)
       : Number.POSITIVE_INFINITY;
@@ -202,6 +280,58 @@ watch(
   { deep: true },
 );
 
+const measureOrganizer = () => {
+  if (!organizerElement.value) return;
+  if (!organizerFloating.value) {
+    organizerPlaceholderHeight.value =
+      organizerElement.value.getBoundingClientRect().height;
+  }
+};
+
+const updateOrganizerPosition = () => {
+  const hasRoomForSidebar = window.matchMedia("(min-width: 1500px)").matches;
+  const anchor = organizerAnchor.value;
+  if (!hasRoomForSidebar || !anchor) {
+    organizerFloating.value = false;
+    return;
+  }
+  // Read the in-flow anchor so this works when the dashboard scrolls inside
+  // a nested container instead of scrolling the window itself.
+  const bounds = anchor.getBoundingClientRect();
+  if (!organizerFloating.value && bounds.bottom < 0)
+    organizerFloating.value = true;
+  else if (organizerFloating.value && bounds.top > 120)
+    organizerFloating.value = false;
+};
+
+const handleOrganizerResize = () => {
+  if (!window.matchMedia("(min-width: 1500px)").matches)
+    organizerFloating.value = false;
+  requestAnimationFrame(() => {
+    measureOrganizer();
+    updateOrganizerPosition();
+  });
+};
+
+onMounted(() => {
+  measureOrganizer();
+  updateOrganizerPosition();
+  window.addEventListener("scroll", updateOrganizerPosition, {
+    passive: true,
+    capture: true,
+  });
+  window.addEventListener("resize", handleOrganizerResize, { passive: true });
+  organizerResizeObserver = new ResizeObserver(measureOrganizer);
+  if (organizerElement.value)
+    organizerResizeObserver.observe(organizerElement.value);
+});
+
+onBeforeUnmount(() => {
+  window.removeEventListener("scroll", updateOrganizerPosition, true);
+  window.removeEventListener("resize", handleOrganizerResize);
+  organizerResizeObserver?.disconnect();
+});
+
 const isPinnedExtension = (extension) => {
   const name = extension?.name;
   return !!name && pinnedExtensionOrder.value.has(name);
@@ -216,6 +346,66 @@ const togglePinnedExtension = (extension) => {
     next.unshift(name);
   }
   pinnedExtensionNames.value = next;
+};
+
+const extensionFolder = (extension) =>
+  organizerPreferences.value.assignments[extension.name] || "";
+
+const extensionFolderLabel = (extension) =>
+  extensionFolder(extension) || tm("organizer.uncategorized");
+
+const setExtensionFolder = (extensionName, folder) => {
+  const assignments = { ...organizerPreferences.value.assignments };
+  if (folder) assignments[extensionName] = folder;
+  else delete assignments[extensionName];
+  organizerPreferences.value = { ...organizerPreferences.value, assignments };
+};
+
+const handlePluginDragStart = (extension, event) => {
+  if (event.target.closest("button, a, input, .v-switch, .v-btn")) {
+    event.preventDefault();
+    return;
+  }
+  draggedPluginName.value = extension.name;
+  event.dataTransfer?.setData("text/plain", extension.name);
+  if (event.dataTransfer) event.dataTransfer.effectAllowed = "move";
+};
+
+const handlePluginDrop = (folder, event) => {
+  event.preventDefault();
+  const pluginName =
+    event.dataTransfer?.getData("text/plain") || draggedPluginName.value;
+  if (!pluginName) return;
+  setExtensionFolder(pluginName, folder === "*" ? "" : folder);
+  draggedPluginName.value = "";
+  dragOverFolder.value = null;
+};
+
+const createPluginFolder = () => {
+  const name = newFolderName.value.trim();
+  if (!name || pluginFolders.value.includes(name)) return;
+  organizerPreferences.value = {
+    ...organizerPreferences.value,
+    folders: [...pluginFolders.value, name],
+  };
+  selectedFolder.value = name;
+  newFolderName.value = "";
+  showNewFolderDialog.value = false;
+};
+
+const removeSelectedPluginFolder = () => {
+  const folder = selectedFolder.value;
+  if (!folder || folder === "*") return;
+  const assignments = Object.fromEntries(
+    Object.entries(organizerPreferences.value.assignments).filter(
+      ([, assignedFolder]) => assignedFolder !== folder,
+    ),
+  );
+  organizerPreferences.value = {
+    folders: pluginFolders.value.filter((item) => item !== folder),
+    assignments,
+  };
+  selectedFolder.value = "*";
 };
 </script>
 
@@ -264,7 +454,182 @@ const togglePinnedExtension = (extension) => {
           </v-text-field>
         </div>
       </div>
+      <div
+        ref="organizerAnchor"
+        class="plugin-organizer-anchor"
+        :style="
+          organizerFloating
+            ? { minHeight: `${organizerPlaceholderHeight + 16}px` }
+            : undefined
+        "
+      >
+        <Teleport to="body" :disabled="!organizerFloating">
+          <section
+            ref="organizerElement"
+            class="plugin-organizer mt-4"
+            :class="{ 'plugin-organizer--floating': organizerFloating }"
+            :aria-label="tm('organizer.title')"
+          >
+            <div class="plugin-organizer__heading">
+              <div>
+                <h2 class="text-subtitle-1 font-weight-bold">
+                  {{ tm("organizer.title") }}
+                </h2>
+                <p class="text-body-2 text-medium-emphasis mb-0">
+                  {{ tm("organizer.hint") }}
+                </p>
+              </div>
+              <v-btn
+                color="primary"
+                variant="tonal"
+                prepend-icon="mdi-folder-plus-outline"
+                @click="showNewFolderDialog = true"
+                >{{ tm("organizer.newFolder") }}</v-btn
+              >
+            </div>
+
+            <div class="plugin-folder-grid">
+              <v-card
+                v-for="folder in folderCards"
+                :key="folder.key || 'uncategorized'"
+                class="plugin-folder-card"
+                :class="{
+                  'plugin-folder-card--all': folder.key === '*',
+                  'plugin-folder-card--selected': selectedFolder === folder.key,
+                  'plugin-folder-card--drop-target':
+                    dragOverFolder === folder.key,
+                }"
+                variant="outlined"
+                :aria-pressed="selectedFolder === folder.key"
+                role="button"
+                tabindex="0"
+                @click="selectedFolder = folder.key"
+                @keydown.enter.prevent="selectedFolder = folder.key"
+                @keydown.space.prevent="selectedFolder = folder.key"
+                @dragover.prevent="
+                  folder.key !== '*' && (dragOverFolder = folder.key)
+                "
+                @dragleave="dragOverFolder = null"
+                @drop.prevent="
+                  folder.key !== '*' && handlePluginDrop(folder.key, $event)
+                "
+              >
+                <div class="plugin-folder-card__icon">
+                  <v-icon :icon="folder.icon" size="24" />
+                </div>
+                <div class="plugin-folder-card__details">
+                  <div class="plugin-folder-card__title">
+                    {{ folder.title }}
+                  </div>
+                  <div
+                    class="plugin-folder-card__count text-caption text-medium-emphasis"
+                  >
+                    {{ tm("organizer.count", { count: folder.count }) }}
+                  </div>
+                </div>
+                <v-icon
+                  v-if="selectedFolder === folder.key"
+                  icon="mdi-check-circle"
+                  color="primary"
+                  size="18"
+                  class="plugin-folder-card__selected-icon"
+                />
+              </v-card>
+            </div>
+            <div class="plugin-organizer__footer">
+              <div
+                class="plugin-organizer__stats text-body-2 text-medium-emphasis"
+              >
+                <span>{{
+                  tm("organizer.stats.plugins", {
+                    count: organizerCounts.total,
+                  })
+                }}</span>
+                <span>{{
+                  tm("organizer.stats.running", {
+                    count: organizerCounts.active,
+                  })
+                }}</span>
+                <span>{{
+                  tm("organizer.stats.updates", {
+                    count: organizerCounts.updates,
+                  })
+                }}</span>
+              </div>
+              <v-btn-toggle
+                v-model="quickFilter"
+                color="primary"
+                mandatory
+                divided
+                density="comfortable"
+                variant="outlined"
+                class="plugin-organizer__filter-toggle"
+                :aria-label="tm('organizer.filterLabel')"
+              >
+                <v-btn
+                  v-for="option in organizerFilterOptions"
+                  :key="option.value"
+                  :value="option.value"
+                  size="small"
+                  :aria-pressed="quickFilter === option.value"
+                  >{{ option.title }}</v-btn
+                >
+              </v-btn-toggle>
+              <v-btn
+                v-if="selectedFolder !== '*' && selectedFolder !== ''"
+                color="error"
+                variant="text"
+                prepend-icon="mdi-folder-remove-outline"
+                @click="removeSelectedPluginFolder"
+                >{{ tm("organizer.deleteFolder") }}</v-btn
+              >
+            </div>
+          </section>
+        </Teleport>
+      </div>
     </div>
+
+    <v-dialog v-model="showNewFolderDialog" max-width="420">
+      <v-card>
+        <v-card-title>{{ tm("organizer.newFolderTitle") }}</v-card-title>
+        <v-card-text>
+          <v-text-field
+            v-model="newFolderName"
+            :label="tm('organizer.folderName')"
+            prepend-inner-icon="mdi-folder-outline"
+            autofocus
+            maxlength="40"
+            counter
+            @keydown.enter="createPluginFolder"
+          />
+          <div
+            v-if="
+              newFolderName.trim() &&
+              pluginFolders.includes(newFolderName.trim())
+            "
+            class="text-caption text-error"
+          >
+            {{ tm("organizer.duplicateFolder") }}
+          </div>
+        </v-card-text>
+        <v-card-actions>
+          <v-spacer />
+          <v-btn variant="text" @click="showNewFolderDialog = false">{{
+            tm("buttons.cancel")
+          }}</v-btn>
+          <v-btn
+            color="primary"
+            variant="tonal"
+            :disabled="
+              !newFolderName.trim() ||
+              pluginFolders.includes(newFolderName.trim())
+            "
+            @click="createPluginFolder"
+            >{{ tm("organizer.createFolder") }}</v-btn
+          >
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
 
     <v-card
       v-if="failedPluginItems.length > 0"
@@ -342,7 +707,7 @@ const togglePinnedExtension = (extension) => {
 
     <v-fade-transition hide-on-leave>
       <div>
-        <v-row v-if="sortedInstalledPlugins.length === 0" class="text-center">
+        <v-row v-if="filteredPlugins.length === 0" class="text-center">
           <v-col cols="12" class="pa-2">
             <v-icon size="64" color="info" class="mb-4"
               >mdi-puzzle-outline</v-icon
@@ -354,13 +719,37 @@ const togglePinnedExtension = (extension) => {
           </v-col>
         </v-row>
 
-        <v-row>
+        <v-row
+          v-else-if="sortedInstalledPlugins.length === 0"
+          class="text-center"
+        >
+          <v-col cols="12" class="pa-8 text-body-1 text-medium-emphasis">
+            {{ tm("organizer.noMatch") }}
+          </v-col>
+        </v-row>
+
+        <TransitionGroup
+          v-if="sortedInstalledPlugins.length > 0"
+          name="plugin-list"
+          tag="div"
+          class="v-row"
+        >
           <v-col
             cols="12"
             md="6"
             v-for="extension in sortedInstalledPlugins"
             :key="extension.name"
             class="pb-2"
+            :class="{
+              'plugin-card-column--dragging':
+                draggedPluginName === extension.name,
+            }"
+            draggable="true"
+            @dragstart="handlePluginDragStart(extension, $event)"
+            @dragend="
+              draggedPluginName = '';
+              dragOverFolder = null;
+            "
           >
             <ExtensionCard
               :extension="extension"
@@ -384,9 +773,40 @@ const togglePinnedExtension = (extension) => {
               @open-view="openPluginView(extension)"
               @change-source="openPluginSourceBindingDialog(extension)"
             >
+              <template #management>
+                <div class="plugin-card-folder-label" @click.stop>
+                  <v-icon icon="mdi-folder-outline" size="16" />
+                  <span>{{ extensionFolderLabel(extension) }}</span>
+                  <v-menu location="bottom end">
+                    <template #activator="{ props: folderMenuProps }">
+                      <v-btn
+                        v-bind="folderMenuProps"
+                        icon="mdi-folder-move-outline"
+                        size="x-small"
+                        variant="text"
+                        :aria-label="tm('organizer.moveToFolder')"
+                      />
+                    </template>
+                    <v-list density="compact">
+                      <v-list-item
+                        :title="tm('organizer.uncategorized')"
+                        prepend-icon="mdi-folder-outline"
+                        @click="setExtensionFolder(extension.name, '')"
+                      />
+                      <v-list-item
+                        v-for="folder in pluginFolders"
+                        :key="folder"
+                        :title="folder"
+                        prepend-icon="mdi-folder-outline"
+                        @click="setExtensionFolder(extension.name, folder)"
+                      />
+                    </v-list>
+                  </v-menu>
+                </div>
+              </template>
             </ExtensionCard>
           </v-col>
-        </v-row>
+        </TransitionGroup>
       </div>
     </v-fade-transition>
 
@@ -474,16 +894,13 @@ const togglePinnedExtension = (extension) => {
               </span>
               <span v-else>
                 {{
-                  selectedSourceBindingCandidate.version ||
-                  tm("status.unknown")
+                  selectedSourceBindingCandidate.version || tm("status.unknown")
                 }}
               </span>
             </div>
           </div>
           <v-alert
-            v-if="
-              selectedSourceBindingCandidate?.validation_status === 'error'
-            "
+            v-if="selectedSourceBindingCandidate?.validation_status === 'error'"
             type="error"
             variant="tonal"
             density="compact"
@@ -505,7 +922,8 @@ const togglePinnedExtension = (extension) => {
               sourceBindingDialog.loading ||
               sourceBindingDialog.candidates.length === 0 ||
               !sourceBindingDialog.selectedKey ||
-              (selectedSourceBindingCandidate?.install_method === 'repository' &&
+              (selectedSourceBindingCandidate?.install_method ===
+                'repository' &&
                 selectedSourceBindingCandidate?.validation_status !== 'valid')
             "
             @click="confirmPluginSourceBinding"
@@ -605,7 +1023,262 @@ const togglePinnedExtension = (extension) => {
   width: 100%;
 }
 
+.plugin-organizer-anchor {
+  display: flow-root;
+}
+
+.plugin-organizer {
+  padding: 18px 20px;
+  border: 1px solid rgba(var(--v-border-color), var(--v-border-opacity, 0.12));
+  border-radius: 16px;
+  background: rgb(var(--v-theme-surface));
+}
+
+.plugin-organizer__heading,
+.plugin-organizer__footer,
+.plugin-organizer__stats {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.plugin-organizer__heading,
+.plugin-organizer__footer {
+  justify-content: space-between;
+  flex-wrap: wrap;
+}
+
+.plugin-folder-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr));
+  grid-auto-rows: 1fr;
+  gap: 12px;
+  margin-top: 12px;
+}
+
+.plugin-folder-card {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  min-width: 0;
+  min-height: 84px;
+  height: 100%;
+  box-sizing: border-box;
+  padding: 14px;
+  border-radius: 14px;
+  cursor: pointer;
+  transition:
+    border-color 160ms ease,
+    background-color 160ms ease,
+    box-shadow 160ms ease;
+}
+
+.plugin-folder-card--all .plugin-folder-card__title {
+  white-space: nowrap;
+}
+
+.plugin-folder-card:hover {
+  border-color: rgba(var(--v-theme-primary), 0.62);
+  background: rgba(var(--v-theme-primary), 0.045);
+}
+
+.plugin-folder-card--selected {
+  border-color: rgb(var(--v-theme-primary)) !important;
+  background: rgba(var(--v-theme-primary), 0.09);
+  box-shadow: 0 0 0 1px rgba(var(--v-theme-primary), 0.18);
+}
+
+.plugin-folder-card--drop-target {
+  border: 2px dashed rgb(var(--v-theme-primary)) !important;
+  background: rgba(var(--v-theme-primary), 0.14);
+}
+
+.plugin-folder-card:focus-visible {
+  outline: 2px solid rgb(var(--v-theme-primary));
+  outline-offset: 2px;
+}
+
+.plugin-folder-card__icon {
+  display: grid;
+  flex: 0 0 44px;
+  width: 44px;
+  height: 44px;
+  place-items: center;
+  border-radius: 12px;
+  background: rgba(var(--v-theme-primary), 0.1);
+  color: rgb(var(--v-theme-primary));
+}
+
+.plugin-folder-card__details {
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.plugin-folder-card__title {
+  font-weight: 650;
+  line-height: 1.3;
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
+
+.plugin-folder-card__count {
+  margin-top: 3px;
+  white-space: nowrap;
+}
+
+.plugin-folder-card__selected-icon {
+  flex: 0 0 auto;
+  margin-left: auto;
+}
+
+.plugin-organizer__stats {
+  flex-wrap: wrap;
+}
+
+.plugin-organizer__stats span + span::before {
+  content: "·";
+  margin-right: 12px;
+  color: rgba(var(--v-theme-on-surface), 0.4);
+}
+
+.plugin-organizer__filter-toggle {
+  flex-wrap: wrap;
+  height: auto;
+}
+
+.plugin-organizer__filter-toggle :deep(.v-btn) {
+  min-height: 38px;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.plugin-list-enter-active,
+.plugin-list-leave-active,
+.plugin-list-move {
+  transition:
+    opacity 180ms ease,
+    transform 180ms ease;
+}
+
+.plugin-list-enter-from,
+.plugin-list-leave-to {
+  opacity: 0;
+  transform: translateY(10px);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .plugin-list-enter-active,
+  .plugin-list-leave-active,
+  .plugin-list-move {
+    transition: none;
+  }
+}
+
+.plugin-card-column--dragging {
+  opacity: 0.48;
+}
+
+.plugin-card-folder-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: fit-content;
+  margin: 10px 0 0 auto;
+  padding: 3px 5px 3px 9px;
+  border-radius: 999px;
+  background: rgba(var(--v-theme-primary), 0.08);
+  color: rgba(var(--v-theme-on-surface), 0.72);
+  font-size: 12px;
+}
+@media (min-width: 1500px) {
+  .plugin-organizer--floating {
+    position: fixed;
+    z-index: 1000;
+    top: 88px;
+    right: 24px;
+    width: 360px;
+    max-width: calc(100vw - 32px);
+    box-sizing: border-box;
+    max-height: calc(100vh - 112px);
+    overflow-y: auto;
+    border-color: rgba(var(--v-theme-primary), 0.2);
+    background: rgb(var(--v-theme-surface));
+    box-shadow: 0 16px 42px rgba(15, 23, 42, 0.16);
+  }
+
+  .plugin-organizer--floating .plugin-folder-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .plugin-organizer--floating .plugin-folder-card {
+    grid-column: auto;
+    min-height: 68px;
+  }
+
+  .plugin-organizer--floating .plugin-organizer__heading {
+    align-items: flex-start;
+  }
+
+  .plugin-organizer--floating .plugin-organizer__heading .v-btn {
+    width: 100%;
+  }
+
+  .plugin-organizer--floating .plugin-organizer__stats {
+    gap: 6px 10px;
+  }
+
+  .plugin-organizer--floating .plugin-organizer__filter-toggle {
+    width: 100%;
+  }
+
+  .plugin-organizer--floating .plugin-organizer__filter-toggle :deep(.v-btn) {
+    flex: 1 1 30%;
+    padding-inline: 8px;
+  }
+}
+
 @media (max-width: 700px) {
+  .plugin-organizer {
+    padding: 15px 14px;
+  }
+
+  .plugin-organizer__heading,
+  .plugin-organizer__footer {
+    align-items: flex-start;
+  }
+
+  .plugin-organizer__stats,
+  .plugin-organizer__filter-toggle {
+    width: 100%;
+  }
+
+  .plugin-organizer__filter-toggle :deep(.v-btn) {
+    flex: 1 1 auto;
+    padding-inline: 8px;
+  }
+
+  .plugin-folder-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .plugin-folder-card--all .plugin-folder-card__title {
+    white-space: normal;
+  }
+
+  .plugin-folder-card {
+    min-height: 76px;
+    gap: 9px;
+    padding: 11px;
+  }
+
+  .plugin-folder-card__icon {
+    flex-basis: 38px;
+    width: 38px;
+    height: 38px;
+  }
+
   .installed-header-row {
     align-items: stretch !important;
     flex-direction: column;
