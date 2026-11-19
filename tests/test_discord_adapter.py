@@ -211,6 +211,162 @@ async def test_discord_filters_self_messages(allow_bot_messages, author_id, is_b
         assert client.on_message_received.call_args.args[0]["message"] is message
 
 
+@pytest.mark.parametrize(
+    "markup",
+    [
+        "@everyone",
+        "<#123>",
+        "<:smile:123>",
+        "<a:wave:123>",
+        "```py\nx\n```",
+        "https://example.org/wiki/Page_(topic)",
+        "[project docs](https://example.org/wiki/Page_(topic))",
+        "<https://example.org/docs>",
+    ],
+)
+def test_discord_moves_intact_markup_to_next_chunk(markup):
+    """Keep each supported token intact when only two characters would fit.
+
+    Args:
+        markup: Discord markup crossing the message boundary.
+    """
+    prefix = "A" * 1997 + " "
+    assert DiscordPlatformEvent._split_content(prefix + markup) == [prefix, markup]
+
+
+def test_discord_link_length_boundary():
+    """Keep a full-sized URL intact and bound the chunks of an oversized URL."""
+    url = "https://example.org/".ljust(2000, "x")
+    assert DiscordPlatformEvent._split_content("See " + url + ".") == ["See ", url, "."]
+    chunks = DiscordPlatformEvent._split_content(url + "x")
+    assert "".join(chunks) == url + "x"
+    assert all(0 < len(chunk) <= 2000 for chunk in chunks)
+
+
+@pytest.mark.parametrize(
+    ("content", "expected"),
+    [
+        pytest.param(
+            r"\|| `a || b` ".ljust(1999) + "||hidden||",
+            [r"\|| `a || b` ".ljust(1999), "||hidden||"],
+            id="move-spoiler-after-literal-pipes",
+        ),
+        pytest.param(
+            "||" + "X" * 1996 + "Y" * 1994 + "<@123>||tail",
+            ["||" + "X" * 1996 + "||", "||" + "Y" * 1994 + "||", "||<@123>||tail"],
+            id="reopen-spoiler-and-preserve-mention",
+        ),
+        pytest.param(
+            "```py\n" + "X" * 1990 + "\n<@123>\n```",
+            ["```py\n" + "X" * 1990 + "\n```", "```py\n<@123>\n```"],
+            id="reopen-code-block-with-language",
+        ),
+        pytest.param(
+            "||" + "X" * 1990 + " `foo before || after` secret||",
+            ["||" + "X" * 1990 + " ||", "||`foo before || after` secret||"],
+            id="move-inline-code-in-spoiler",
+        ),
+        pytest.param(
+            "||``" + "X" * 1991 + "`literal || pipes`` tail||",
+            ["||``" + "X" * 1990 + "``||", "||``X`literal || pipes`` tail||"],
+            id="split-inline-code-at-literal-backtick",
+        ),
+    ],
+)
+def test_discord_preserves_formatting_across_chunks(content, expected):
+    """Check delimiter placement when formatted text crosses the message limit.
+
+    Args:
+        content: Original Discord message content.
+        expected: Independently formatted messages in delivery order.
+    """
+    assert DiscordPlatformEvent._split_content(content) == expected
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        ("A" * 2000 + " " * 2000 + "last line", ["A" * 2000, "last line"]),
+        (" " * 2001, []),
+    ],
+    ids=["blank-middle", "all-blank"],
+)
+async def test_discord_webhook_skips_blank_chunks(monkeypatch, text, expected):
+    """Deliver nonblank followup chunks in order.
+
+    Args:
+        monkeypatch: Fixture for isolating the base event send.
+        text: Text to send through the webhook.
+        expected: Content of each expected webhook call.
+    """
+    event = DiscordPlatformEvent.__new__(DiscordPlatformEvent)
+    event.interaction_followup_webhook = AsyncMock(spec=discord.Webhook)
+    monkeypatch.setattr(discord_platform_event.AstrMessageEvent, "send", AsyncMock())
+
+    await event.send(MessageChain().message(text))
+
+    calls = event.interaction_followup_webhook.send.await_args_list
+    assert [call.kwargs for call in calls] == [{"content": part} for part in expected]
+
+
+@pytest.mark.asyncio
+async def test_discord_reports_partial_delivery(monkeypatch):
+    """Stop after a failed chunk without recording the whole reply as sent.
+
+    Args:
+        monkeypatch: Fixture for observing the base event's success bookkeeping.
+    """
+    event = DiscordPlatformEvent.__new__(DiscordPlatformEvent)
+    event._has_send_oper = False
+    event.interaction_followup_webhook = AsyncMock(spec=discord.Webhook)
+    sender = event.interaction_followup_webhook.send
+    failure = OSError("connection lost")
+    sender.side_effect = [None, failure]
+    record_success = AsyncMock()
+    monkeypatch.setattr(discord_platform_event.AstrMessageEvent, "send", record_success)
+    message = MessageChain().message("A" * 2000 + "B" * 2000 + "last")
+
+    with pytest.raises(RuntimeError, match="1 of 3") as caught:
+        await event.send(message)
+
+    assert caught.value.__cause__ is failure
+    assert [call.kwargs["content"] for call in sender.await_args_list] == [
+        "A" * 2000,
+        "B" * 2000,
+    ]
+    assert event._has_send_oper
+    record_success.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_discord_keeps_media_and_reply_after_blank_chunk(monkeypatch):
+    """Attach media and reply metadata once, to the first delivered chunk.
+
+    Args:
+        monkeypatch: Fixture for isolating the base event send.
+    """
+    channel = MagicMock(spec=discord.abc.Messageable)
+    event = DiscordPlatformEvent.__new__(DiscordPlatformEvent)
+    event.client = MagicMock()
+    event.interaction_followup_webhook = None
+    event._get_channel = AsyncMock(return_value=channel)
+    monkeypatch.setattr(discord_platform_event.AstrMessageEvent, "send", AsyncMock())
+    image_url = "https://example.com/photo.png"
+    caption = "caption" * 300
+    message = MessageChain(
+        chain=[Reply(id=123), Image.fromURL(image_url), Plain(" " * 2000 + caption)]
+    )
+
+    await event.send(message)
+
+    first, second = [call.kwargs for call in channel.send.await_args_list]
+    assert first["reference"] is event.client.get_message.return_value
+    assert [embed.image.url for embed in first["embeds"]] == [image_url]
+    assert first["content"] == caption[:2000]
+    assert second == {"content": caption[2000:]}
+
+
 @pytest.mark.asyncio
 @pytest.mark.parametrize("component_type", ["video", "video_url", "file"])
 @pytest.mark.parametrize("with_text", [False, True])
