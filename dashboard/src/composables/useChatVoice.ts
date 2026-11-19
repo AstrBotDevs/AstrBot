@@ -1,3 +1,4 @@
+import { chatPreferences } from "@/utils/chatPreferences";
 import {
   computed,
   onBeforeUnmount,
@@ -27,7 +28,7 @@ export function useChatVoice(options: {
   const busy = computed(() => processing.value || recording.isStarting.value);
   const sttProviders = ref<{ title: string; value: string }[]>([]);
   const selectedSttProvider = ref(
-    localStorage.getItem("chat.sttProvider") || "",
+    chatPreferences().global.sttProvider || "",
   );
   let epoch = 0;
   let request: AbortController | null = null;
@@ -157,7 +158,7 @@ export function useChatVoice(options: {
   }
 
   watch(selectedSttProvider, (value) =>
-    localStorage.setItem("chat.sttProvider", value),
+    chatPreferences((preferences) => { preferences.global.sttProvider = value; }),
   );
   watch(options.contextKey, cancel, { flush: "sync" });
   watch(recording.error, (error) => {
