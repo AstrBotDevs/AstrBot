@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from "vue";
 import { ChevronRight, Minus, Plus } from "@lucide/vue";
-import MarkdownIt from "markdown-it";
+import MarkdownIt from "markdown-it-ts";
 import DOMPurify from "dompurify";
 import { useModuleI18n } from "@/i18n/composables";
 
@@ -58,13 +58,6 @@ type PreviewPart = {
 
 const records = computed(() =>
   props.messages
-    .filter(
-      (entry) =>
-        !entry ||
-        typeof entry !== "object" ||
-        !("role" in entry) ||
-        entry.role !== "_checkpoint",
-    )
     .map((entry) => {
       const message =
         entry && typeof entry === "object" && !Array.isArray(entry)

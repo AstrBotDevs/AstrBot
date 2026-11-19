@@ -103,7 +103,9 @@
         "charCount": "{count} симв.",
         "searchSuccess": "Поиск завершен, найдено: {count}",
         "searchFailed": "Ошибка выполнения поиска",
-        "queryRequired": "Введите поисковый запрос"
+        "queryRequired": "Введите поисковый запрос",
+        "debugMode": "Режим отладки (t-SNE)",
+        "tsneVisualization": "Визуализация t-SNE"
     },
     "settings": {
         "title": "Общие настройки базы",

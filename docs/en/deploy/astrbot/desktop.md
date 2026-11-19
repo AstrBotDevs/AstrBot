@@ -26,6 +26,12 @@ Repository: [AstrBotDevs/AstrBot-desktop](https://github.com/AstrBotDevs/AstrBot
 2. Download the installer for your operating system (e.g. `.exe`, `.dmg`, `.rpm`, `.deb`).
 3. Launch the desktop client after installation and follow the setup wizard to complete initialization.
 
+## Check for Updates
+
+The desktop client automatically checks for app updates when the main interface loads. When an update is available, the header displays “AstrBot has a new version!” in both Bot and Chat modes. A dot also appears on the options menu in the top-right corner, and the update entry inside the menu is marked.
+
+Click “AstrBot has a new version!” in the header to open the desktop app update dialog. You can also open the options menu and select the update entry to check manually and confirm installation. Automatic checks do not download or install updates. If a check fails, use the same entry to retry.
+
 ## Difference from Launcher Deployment
 
 - Desktop client: focuses on an out-of-the-box GUI experience.

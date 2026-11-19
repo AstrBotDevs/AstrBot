@@ -1,35 +1,45 @@
 import { ref } from "vue";
 
-const SELECTED_PROVIDER_KEY = "selectedProvider";
-const SELECTED_PROVIDER_MODEL_KEY = "selectedProviderModel";
+import { chatPreferences } from "@/utils/chatPreferences";
+import { getStoredDashboardUsername } from "@/utils/chatConfigBinding";
 
 // Module-level state so every ProviderModelMenu instance (header, input)
 // shares the same selection.
 const selectedProviderId = ref("");
 const selectedModelName = ref("");
-let syncedFromStorage = false;
+let syncedUser = "";
 
 function syncFromStorage() {
-  if (syncedFromStorage || typeof window === "undefined") return;
-  syncedFromStorage = true;
-  selectedProviderId.value = localStorage.getItem(SELECTED_PROVIDER_KEY) || "";
-  selectedModelName.value =
-    localStorage.getItem(SELECTED_PROVIDER_MODEL_KEY) || "";
+  const user = getStoredDashboardUsername();
+  if (syncedUser === user) return;
+  syncedUser = user;
+  const selection = chatPreferences().global.provider;
+  selectedProviderId.value = selection?.providerId || "";
+  selectedModelName.value = selection?.modelName || "";
 }
 
 export function useProviderModelSelection() {
   syncFromStorage();
 
-  function setSelection(providerId: string, modelName = "") {
-    selectedProviderId.value = providerId;
-    selectedModelName.value = modelName;
-    try {
-      localStorage.setItem(SELECTED_PROVIDER_KEY, providerId);
-      localStorage.setItem(SELECTED_PROVIDER_MODEL_KEY, modelName);
-    } catch {
-      // Selection persistence must not block the UI.
-    }
+  function resetSelection() {
+    syncedUser = "";
+    selectedProviderId.value = "";
+    selectedModelName.value = "";
   }
 
-  return { selectedProviderId, selectedModelName, setSelection };
+  function setSelection(providerId: string, modelName = "") {
+    selectedProviderId.value = providerId;
+    selectedModelName.value = providerId ? modelName : "";
+    chatPreferences((preferences) => {
+      if (providerId) preferences.global.provider = { providerId, modelName };
+      else delete preferences.global.provider;
+    });
+  }
+
+  return {
+    selectedProviderId,
+    selectedModelName,
+    setSelection,
+    resetSelection,
+  };
 }

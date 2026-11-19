@@ -4,7 +4,7 @@ import json
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, Mock
 
 import pytest
 
@@ -12,13 +12,19 @@ from astrbot.core.message.components import (
     At,
     AtAll,
     BaseMessageComponent,
+    ButtonInteraction,
+    File,
+    Image,
     Plain,
     Record,
+    Video,
 )
+from astrbot.core.platform.button_interaction import encode_button_callback
 from astrbot.core.platform.sources.kook.kook_client import KookClient
 from astrbot.core.platform.sources.kook.kook_config import KookConfig
 from astrbot.core.platform.sources.kook.kook_types import (
     KookMessageEventData,
+    KookMessageType,
     KookWebsocketEvent,
 )
 from tests.test_kook.shared import (
@@ -31,6 +37,7 @@ TEST_BOT_ID = 1234567891
 TEST_BOT_USERNAME = "test_username"
 TEST_BOT_NICKNAME = "test_nickname"
 TEST_AUDIO_WAV_PATH = "/tmp/kook_audio.wav"
+TEST_MEDIA_URL = "https://img.kookapp.cn/assets/media"
 
 
 def mock_kook_client(config: KookConfig, event_callback):
@@ -222,3 +229,165 @@ async def test_kook_event_warp_message(
         assert astrbotMessage.message_str == expected_message_str
     else:
         assert get_json_field(raw_event, expected_message_str)
+
+
+@pytest.mark.asyncio
+async def test_kook_button_click_enters_event_pipeline(monkeypatch):
+    monkeypatch.setattr(
+        "astrbot.core.platform.sources.kook.kook_adapter.KookClient",
+        mock_kook_client,
+    )
+    monkeypatch.setattr(
+        "astrbot.core.platform.sources.kook.kook_adapter.KookRolesRecord",
+        mock_kook_roles_record,
+    )
+
+    from astrbot.core.platform.sources.kook.kook_adapter import KookPlatformAdapter
+
+    event_queue = asyncio.Queue()
+    adapter = KookPlatformAdapter({}, {}, event_queue)
+    callback_value = encode_button_callback("approve", {"request_id": 42})
+    click_event = KookMessageEventData.from_dict(
+        {
+            "channel_type": "GROUP",
+            "type": 255,
+            "target_id": "guild-1",
+            "author_id": "1",
+            "content": "[system]",
+            "msg_id": "interaction-1",
+            "msg_timestamp": 1_700_000_000_000,
+            "nonce": "",
+            "from_type": 1,
+            "extra": {
+                "type": "message_btn_click",
+                "body": {
+                    "value": callback_value,
+                    "msg_id": "source-message-1",
+                    "user_id": "user-1",
+                    "target_id": "channel-1",
+                    "user_info": {"username": "Alice"},
+                },
+            },
+        }
+    )
+
+    await adapter._on_received(click_event)
+
+    event = event_queue.get_nowait()
+    assert event.is_button_interaction()
+    assert event.get_sender_id() == "user-1"
+    assert event.get_group_id() == "channel-1"
+    interaction = event.get_button_interaction()
+    assert isinstance(interaction, ButtonInteraction)
+    assert interaction.action_id == "approve"
+    assert interaction.data == {"request_id": 42}
+    assert interaction.interaction_id == "interaction-1"
+    assert interaction.source_message_id == "source-message-1"
+
+    click_event.extra.body["value"] = "foreign-callback"
+    await adapter._on_received(click_event)
+    assert event_queue.empty()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "message_type,expected_component",
+    [
+        (KookMessageType.IMAGE, Image(file=TEST_MEDIA_URL)),
+        (
+            KookMessageType.FILE,
+            File(name="standalone.bin", url=TEST_MEDIA_URL),
+        ),
+        (
+            KookMessageType.AUDIO,
+            Record(file=TEST_MEDIA_URL, url=TEST_MEDIA_URL),
+        ),
+        (KookMessageType.VIDEO, Video(file=TEST_MEDIA_URL)),
+    ],
+)
+async def test_kook_standalone_media_enters_event_pipeline(
+    monkeypatch, message_type, expected_component
+):
+    monkeypatch.setattr(
+        "astrbot.core.platform.sources.kook.kook_adapter.KookClient",
+        mock_kook_client,
+    )
+    monkeypatch.setattr(
+        "astrbot.core.platform.sources.kook.kook_adapter.KookRolesRecord",
+        mock_kook_roles_record,
+    )
+    media_resolver = Mock(side_effect=AssertionError("Media must be resolved after queuing"))
+    monkeypatch.setattr(
+        "astrbot.core.platform.sources.kook.kook_adapter.MediaResolver",
+        media_resolver,
+    )
+
+    from astrbot.core.platform.sources.kook.kook_adapter import KookPlatformAdapter
+
+    event_queue = asyncio.Queue()
+    adapter = KookPlatformAdapter({}, {}, event_queue)
+    adapter.client.last_sn = 0
+    adapter.client.event_callback = adapter._on_received
+
+    raw_event = json.loads(KookEventDataPath.GROUP_MESSAGE.read_text(encoding="utf-8"))
+    raw_event["d"]["type"] = message_type.value
+    raw_event["d"]["content"] = TEST_MEDIA_URL
+    raw_event["d"]["extra"]["type"] = message_type.value
+    raw_event["d"]["extra"]["attachments"] = {
+        "type": message_type.name.lower(),
+        "name": "standalone.bin",
+        "url": "https://img.kookapp.cn/assets/alternate",
+    }
+    event = KookWebsocketEvent.from_json(json.dumps(raw_event))
+
+    await KookClient._handle_signal(adapter.client, event)
+
+    queued_event = event_queue.get_nowait()
+    assert queued_event.message_obj.message == [expected_component]
+    assert queued_event.message_str == f"[{message_type.name.lower()}]"
+    media_resolver.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_kook_file_card_preserves_remote_attachment(monkeypatch):
+    monkeypatch.setattr(
+        "astrbot.core.platform.sources.kook.kook_adapter.KookClient",
+        mock_kook_client,
+    )
+    monkeypatch.setattr(
+        "astrbot.core.platform.sources.kook.kook_adapter.KookRolesRecord",
+        mock_kook_roles_record,
+    )
+
+    from astrbot.core.platform.sources.kook.kook_adapter import KookPlatformAdapter
+
+    event_queue = asyncio.Queue()
+    adapter = KookPlatformAdapter({}, {}, event_queue)
+    adapter.client.last_sn = 0
+    adapter.client.event_callback = adapter._on_received
+
+    raw_event = json.loads(
+        KookEventDataPath.MESSAGE_WITH_CARD_1.read_text(encoding="utf-8")
+    )
+    raw_event["d"]["content"] = json.dumps(
+        [
+            {
+                "type": "card",
+                "modules": [
+                    {
+                        "type": "file",
+                        "src": TEST_MEDIA_URL,
+                        "title": "standalone.bin",
+                    }
+                ],
+            }
+        ]
+    )
+    event = KookWebsocketEvent.from_json(json.dumps(raw_event))
+
+    await KookClient._handle_signal(adapter.client, event)
+
+    queued_event = event_queue.get_nowait()
+    attachment = queued_event.message_obj.message[-1]
+    assert attachment == File(name="standalone.bin", url=TEST_MEDIA_URL)
+    assert await attachment.get_file(allow_return_url=True) == TEST_MEDIA_URL

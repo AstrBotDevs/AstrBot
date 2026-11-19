@@ -1,3 +1,4 @@
+import asyncio
 from datetime import datetime, timezone
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
@@ -38,6 +39,8 @@ async def test_profile_mutations_await_config_manager() -> None:
     )
     lifecycle = SimpleNamespace(
         astrbot_config_mgr=config_manager,
+        agent_configs=SimpleNamespace(lock=asyncio.Lock()),
+        agent_runtimes={},
         reload_pipeline_scheduler=AsyncMock(),
         pipeline_scheduler_mapping={"profile-id": object()},
     )
@@ -45,20 +48,20 @@ async def test_profile_mutations_await_config_manager() -> None:
         lifecycle, runtime={"os": "windows", "sandbox": {"status": "unsupported"}}
     )
 
-    with pytest.raises(ValueError, match="Local permission member:") as exc:
+    with pytest.raises(ValueError, match="Invalid local filesystem scope for member") as exc:
         await service.create_profile(
             "Invalid",
             {
                 "provider_settings": {
                     "computer_use_runtime": "local",
                     "computer_use_local_permissions": {
-                        role: {"filesystem_scope": "workspace"}
+                        role: {"filesystem_scope": "invalid"}
                         for role in ("member", "admin")
                     },
                 }
             },
         )
-    assert "Local permission admin:" in str(exc.value)
+    assert "Invalid local filesystem scope for admin" in str(exc.value)
     config_manager.create_conf.assert_not_awaited()
     lifecycle.reload_pipeline_scheduler.assert_not_awaited()
 

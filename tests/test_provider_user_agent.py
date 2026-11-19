@@ -65,7 +65,7 @@ async def provider_http_server(unused_tcp_port, monkeypatch):
     monkeypatch.setenv("no_proxy", "127.0.0.1")
 
     async def handle(request):
-        requests.append(request.headers)
+        requests.append(request)
         return web.json_response(
             {
                 "object": "list",
@@ -124,7 +124,7 @@ async def test_provider_sdk_sends_exactly_one_user_agent(
     try:
         await provider.client.models.list()
         assert len(requests) == 1
-        assert requests[0].getall("User-Agent") == [
+        assert requests[0].headers.getall("User-Agent") == [
             custom_headers.get("user-agent", DEFAULT_USER_AGENT)
         ]
         assert config == original
@@ -163,7 +163,7 @@ async def test_aiohttp_provider_sends_user_agent(
         client = provider.client or await provider._get_client()
         async with client.get(base_url) as response:
             assert response.status == 200
-        assert requests[0].getall("User-Agent") == [
+        assert requests[0].headers.getall("User-Agent") == [
             custom_headers.get("USER-AGENT", DEFAULT_USER_AGENT)
         ]
     finally:
@@ -185,13 +185,15 @@ async def test_dashscope_sends_user_agent(model, custom_headers, provider_http_s
         {},
     )
     assert await provider.get_embeddings(["hello"]) == [[0.1]]
-    assert requests[0].getall("User-Agent") == [
+    assert requests[0].headers.getall("User-Agent") == [
         custom_headers.get("User-Agent", DEFAULT_USER_AGENT)
     ]
 
 
 @pytest.mark.asyncio
-async def test_edge_tts_synthesis_uses_astrbot_user_agent(monkeypatch, unused_tcp_port):
+async def test_edge_tts_synthesis_preserves_sdk_user_agent(
+    monkeypatch, unused_tcp_port
+):
     edge_tts = pytest.importorskip("edge_tts")
     from astrbot.core.provider.sources import edge_tts_source  # noqa: F401
 
@@ -218,6 +220,8 @@ async def test_edge_tts_synthesis_uses_astrbot_user_agent(monkeypatch, unused_tc
         with pytest.raises(edge_tts.exceptions.NoAudioReceived):
             async for _ in edge_tts.Communicate("hello", "en-US-AriaNeural").stream():
                 pass
-        assert requests[0].getall("User-Agent") == [DEFAULT_USER_AGENT]
+        assert requests[0].getall("User-Agent") == [
+            edge_tts.constants.BASE_HEADERS["User-Agent"]
+        ]
     finally:
         await runner.cleanup()

@@ -2,6 +2,18 @@
 
 Plugins can provide `.astrbot-plugin/i18n/*.json` files in their own directory so the WebUI can display plugin names, descriptions, and configuration text in the current language.
 
+## Message Reply Language
+
+Call `self.context.locale(event.unified_msg_origin)` to obtain the session's system language: `zh-CN` or `en-US`. The method reads the effective configuration, including profile routing, session overrides, and the current message's configuration snapshot. Calling `self.context.locale()` without a UMO reads the default profile.
+
+Users configure `platform_settings.locale` under **Platforms & Messages → General → System language**. Missing or unsupported values fall back to `zh-CN`. This setting is independent of the WebUI display language. Runtime translation resources and formatting belong to the plugin; Core provides the locale lookup API. The built-in plugins keep their runtime translations in their own `i18n.py` modules. Plugins supply their own reply translations, for example:
+
+```python
+locale = self.context.locale(event.unified_msg_origin)
+text = "操作成功。" if locale == "zh-CN" else "Operation successful."
+yield event.plain_result(text)
+```
+
 ## Directory Structure
 
 ```text
@@ -19,12 +31,14 @@ Locale file names use WebUI locales, such as `zh-CN.json` and `en-US.json`. Each
 When the current locale has no translation, a field is missing, or the locale file does not exist, AstrBot falls back to the default text:
 
 - Plugin names, card short descriptions, and descriptions fall back to `display_name`, `short_desc`, and `desc` in `metadata.yaml`.
-- Configuration text falls back to `description`, `hint`, and `labels` in `_conf_schema.json`.
+- Configuration text falls back to `description`, `hint`, `labels`, and `subtitles` in `_conf_schema.json`.
 - Page text falls back to the Page directory name, default Page title, or fallback text provided by page code.
 
 ## Metadata
 
 `metadata` overrides the plugin name, card short description, and description shown on plugin pages.
+
+Sidebar plugin group headings, hover cards, and default titles that use the plugin name also read `metadata.display_name` for the current locale and update immediately when the language changes. The sidebar accepts only nonempty strings; missing, blank, or invalid translations fall back to the original `display_name`, then `name`. The existing precedence of `views.<view>.title` over `pages.<view>.title` stays unchanged; grouped views without a valid title still show their directory name. Routes, pinned items, and expanded groups use stable plugin IDs or view paths and do not change with translated names.
 
 ```json
 {
@@ -54,7 +68,8 @@ Example `_conf_schema.json`:
     "description": "Mode",
     "type": "string",
     "options": ["fast", "safe"],
-    "labels": ["Fast", "Safe"]
+    "labels": ["Fast", "Safe"],
+    "subtitles": ["Faster responses", "More conservative processing"]
   }
 }
 ```
@@ -70,13 +85,14 @@ Corresponding `.astrbot-plugin/i18n/zh-CN.json`:
     },
     "mode": {
       "description": "模式",
-      "labels": ["快速", "安全"]
+      "labels": ["快速", "安全"],
+      "subtitles": ["更快响应", "更保守的处理"]
     }
   }
 }
 ```
 
-`options` are stored configuration values and should usually not be translated. Use `labels` for select display text.
+`options` are stored configuration values and should usually not be translated. Use `labels` for select display text. Use `subtitles` for descriptions below each option, aligned with `options` by index.
 
 ## Plugin Views
 
@@ -105,7 +121,7 @@ Corresponding `.astrbot-plugin/i18n/en-US.json`:
 }
 ```
 
-`title` is used by the WebUI shell title and the view component name on the plugin detail page. `description` is used by the view component description on the plugin detail page. Other fields are read by the page through the bridge:
+`title` is used by the sidebar, the WebUI shell title, and the view component name on the plugin detail page. `description` is used by the view component description on the plugin detail page. Other fields are read by the page through the bridge:
 
 ```js
 const bridge = window.AstrBotPluginView;

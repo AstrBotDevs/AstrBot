@@ -1,5 +1,5 @@
 {
-  "welcome": "Welcome",
+  "welcome": "Overview",
   "dashboard": "Dashboard",
   "platforms": "Platforms",
   "providers": "Providers",
@@ -12,10 +12,11 @@
     "logs": "Logs",
     "trace": "Trace"
   },
-  "subagent": "SubAgents",
+  "subagent": "Subagent Management",
   "toolUse": "MCP Tools",
   "config": "Config",
   "chat": "Chat",
+  "backToNavigation": "Back to navigation",
   "botMode": "Bot",
   "options": "Options",
   "cron": "Future Tasks",
