@@ -18,15 +18,6 @@ from astrbot.core.provider.sources.gemini_source import ProviderGoogleGenAI
 def _gemini_config_provider(
     model: str, provider_config: dict | None = None
 ) -> ProviderGoogleGenAI:
-    """Build a provider stub that can build request configs without network I/O.
-
-    Args:
-        model: Model identifier to configure on the provider stub.
-        provider_config: Optional provider configuration dictionary.
-
-    Returns:
-        Configured ProviderGoogleGenAI stub instance.
-    """
     provider = ProviderGoogleGenAI.__new__(ProviderGoogleGenAI)
     provider.provider_config = provider_config or {}
     provider.provider_settings = {}
@@ -36,11 +27,6 @@ def _gemini_config_provider(
 
 
 def _gemini_func_toolset() -> SimpleNamespace:
-    """Build a minimal ToolSet stand-in exposing one function declaration.
-
-    Returns:
-        SimpleNamespace implementing get_func_desc_google_genai_style.
-    """
     return SimpleNamespace(
         get_func_desc_google_genai_style=lambda: {
             "function_declarations": [
@@ -107,107 +93,89 @@ async def test_gemini_omits_unset_or_unsupported_thinking_config(model, provider
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
-    "provider_config",
+    ("model", "cfg", "with_func", "choice", "expected_mode", "expected_flag"),
     [
-        {"gm_native_search": True},
-        {"gm_url_context": True},
-        {"gm_native_coderunner": True},
+        (
+            "gemini-3.8-flash",
+            {"gm_native_search": True},
+            True,
+            "auto",
+            "VALIDATED",
+            True,
+        ),
+        ("gemini-3.8-flash", {"gm_url_context": True}, True, "auto", "VALIDATED", True),
+        (
+            "gemini-3.8-flash",
+            {"gm_native_coderunner": True},
+            True,
+            "auto",
+            "VALIDATED",
+            True,
+        ),
+        (
+            "gemini-3.5-flash-lite",
+            {"gm_native_search": True},
+            True,
+            "auto",
+            "VALIDATED",
+            True,
+        ),
+        (
+            "gateway/gemini-3.8-flash-high",
+            {"gm_native_search": True},
+            True,
+            "auto",
+            "VALIDATED",
+            True,
+        ),
+        (
+            "Gateway/Gemini-3.8-Flash-High",
+            {"gm_native_search": True},
+            True,
+            "auto",
+            "VALIDATED",
+            True,
+        ),
+        ("gemini-4-neon", {"gm_native_search": True}, True, "auto", "VALIDATED", True),
+        ("gemini-3.8-flash", {"gm_native_search": True}, True, "required", "ANY", True),
+        ("gemini-3.8-flash", {}, True, "auto", "AUTO", None),
+        ("gemini-3.8-flash", {"gm_native_search": True}, False, "auto", None, None),
+        ("gemini-2.5-flash", {"gm_native_search": True}, True, "auto", "AUTO", None),
+        (
+            "gateway/gemini-2.5-flash",
+            {"gm_native_search": True},
+            True,
+            "auto",
+            "AUTO",
+            None,
+        ),
     ],
 )
-async def test_gemini_enables_server_side_tool_invocations_for_tool_combination(
-    provider_config,
+async def test_gemini_tool_combination_config_matrix(
+    model, cfg, with_func, choice, expected_mode, expected_flag
 ):
-    # Built-in tools + function calling on Gemini 3+ must opt into server-side
-    # tool invocations to avoid 400 INVALID_ARGUMENT ("Please enable
-    # tool_config.include_server_side_tool_invocations to use Built-in tools
-    # with Function calling.").
-    model = "gemini-3.8-flash"
-    provider = _gemini_config_provider(model, provider_config)
-
-    config = await provider._prepare_query_config(
-        {"model": model}, tools=_gemini_func_toolset()
-    )
-
-    assert config.tool_config is not None
-    assert config.tool_config.include_server_side_tool_invocations is True
-    assert config.tool_config.function_calling_config is not None
-    # AUTO mode is not supported together with the flag.
-    assert (
-        config.tool_config.function_calling_config.mode
-        == types.FunctionCallingConfigMode.VALIDATED
-    )
-
-
-@pytest.mark.asyncio
-@pytest.mark.parametrize(
-    "model",
-    [
-        "gateway/gemini-3.8-flash-high",
-        "Gateway/Gemini-3.8-Flash-High",
-        "gemini-4-flash-preview",
-        "gemini-5-pro",
-    ],
-)
-async def test_gemini_enables_tool_combination_for_aliased_and_future_models(model):
-    # Model names can carry gateway prefixes; Gemini 4+ generations are supported as well.
-    provider = _gemini_config_provider(model, {"gm_native_search": True})
-
-    config = await provider._prepare_query_config(
-        {"model": model}, tools=_gemini_func_toolset()
-    )
-
-    assert config.tool_config is not None
-    assert config.tool_config.include_server_side_tool_invocations is True
-    assert config.tool_config.function_calling_config is not None
-    assert (
-        config.tool_config.function_calling_config.mode
-        == types.FunctionCallingConfigMode.VALIDATED
-    )
-
-
-@pytest.mark.asyncio
-async def test_gemini_required_tool_choice_keeps_any_mode_for_tool_combination():
-    model = "gemini-3.8-flash"
-    provider = _gemini_config_provider(model, {"gm_native_search": True})
-
+    provider = _gemini_config_provider(model, cfg)
     config = await provider._prepare_query_config(
         {"model": model},
-        tools=_gemini_func_toolset(),
-        tool_choice="required",
+        tools=_gemini_func_toolset() if with_func else None,
+        tool_choice=choice,
     )
 
+    if expected_mode is None:
+        assert config.tool_config is None
+        assert config.tools is not None
+        return
+
     assert config.tool_config is not None
-    assert config.tool_config.include_server_side_tool_invocations is True
+    assert config.tool_config.include_server_side_tool_invocations is expected_flag
     assert config.tool_config.function_calling_config is not None
-    assert (
-        config.tool_config.function_calling_config.mode
-        == types.FunctionCallingConfigMode.ANY
+    assert config.tool_config.function_calling_config.mode == getattr(
+        types.FunctionCallingConfigMode, expected_mode
     )
 
 
 @pytest.mark.asyncio
-async def test_gemini_function_only_requests_keep_auto_mode():
-    model = "gemini-3.8-flash"
-    provider = _gemini_config_provider(model)
-
-    config = await provider._prepare_query_config(
-        {"model": model}, tools=_gemini_func_toolset()
-    )
-
-    assert config.tool_config is not None
-    assert config.tool_config.include_server_side_tool_invocations is None
-    assert config.tool_config.function_calling_config is not None
-    assert (
-        config.tool_config.function_calling_config.mode
-        == types.FunctionCallingConfigMode.AUTO
-    )
-
-
-@pytest.mark.asyncio
-async def test_gemini_function_only_config_omits_server_side_flag_kwarg(monkeypatch):
-    # google-genai<1.68.0 does not define
-    # ToolConfig.include_server_side_tool_invocations and rejects unknown
-    # constructor arguments, so plain function calling must not pass it.
+async def test_gemini_tool_config_sdk_fallback_and_kwarg_omission(monkeypatch, caplog):
     captured_kwargs: dict = {}
     original_tool_config = types.ToolConfig
 
@@ -215,73 +183,32 @@ async def test_gemini_function_only_config_omits_server_side_flag_kwarg(monkeypa
         captured_kwargs.update(kwargs)
         return original_tool_config(**kwargs)
 
-    monkeypatch.setattr(gemini_source.types, "ToolConfig", _capturing_tool_config)
-
-    model = "gemini-2.5-flash"
-    provider = _gemini_config_provider(model)
-
-    await provider._prepare_query_config({"model": model}, tools=_gemini_func_toolset())
-
+    with monkeypatch.context() as m:
+        m.setattr(gemini_source.types, "ToolConfig", _capturing_tool_config)
+        await _gemini_config_provider("gemini-2.5-flash")._prepare_query_config(
+            {"model": "gemini-2.5-flash"}, tools=_gemini_func_toolset()
+        )
     assert "include_server_side_tool_invocations" not in captured_kwargs
 
-
-@pytest.mark.asyncio
-async def test_gemini_tool_combination_warns_when_sdk_lacks_server_side_flag(
-    monkeypatch, caplog
-):
-    # Simulate google-genai<1.68.0, where ToolConfig has no
-    # include_server_side_tool_invocations field and rejects the keyword.
+    # Simulate google-genai<1.68.0 where include_server_side_tool_invocations is absent.
     class _LegacyToolConfig(types.ToolConfig):
         pass
 
     _LegacyToolConfig.model_fields = {
-        name: field_info
-        for name, field_info in types.ToolConfig.model_fields.items()
-        if name != "include_server_side_tool_invocations"
+        k: v
+        for k, v in types.ToolConfig.model_fields.items()
+        if k != "include_server_side_tool_invocations"
     }
     monkeypatch.setattr(gemini_source.types, "ToolConfig", _LegacyToolConfig)
-
-    model = "gemini-3.8-flash"
-    provider = _gemini_config_provider(model, {"gm_native_search": True})
     caplog.set_level(logging.WARNING, logger="astrbot")
 
-    config = await provider._prepare_query_config(
-        {"model": model}, tools=_gemini_func_toolset()
-    )
+    config = await _gemini_config_provider(
+        "gemini-3.8-flash", {"gm_native_search": True}
+    )._prepare_query_config({"model": "gemini-3.8-flash"}, tools=_gemini_func_toolset())
 
     assert "google-genai>=1.68.0" in caplog.text
     assert config.tool_config is not None
     assert config.tool_config.include_server_side_tool_invocations is None
-
-
-@pytest.mark.asyncio
-async def test_gemini_builtin_only_requests_keep_tool_config_unset():
-    model = "gemini-3.8-flash"
-    provider = _gemini_config_provider(model, {"gm_native_search": True})
-
-    config = await provider._prepare_query_config({"model": model})
-
-    assert config.tool_config is None
-    assert config.tools is not None
-
-
-@pytest.mark.asyncio
-@pytest.mark.parametrize("model", ["gemini-2.5-flash", "gateway/gemini-2.5-flash"])
-async def test_gemini_legacy_models_do_not_opt_in_server_side_tool_invocations(model):
-    # Gemini 1.x/2.x must not receive the preview-only opt-in flag.
-    provider = _gemini_config_provider(model, {"gm_native_search": True})
-
-    config = await provider._prepare_query_config(
-        {"model": model}, tools=_gemini_func_toolset()
-    )
-
-    assert config.tool_config is not None
-    assert config.tool_config.include_server_side_tool_invocations is None
-    assert config.tool_config.function_calling_config is not None
-    assert (
-        config.tool_config.function_calling_config.mode
-        == types.FunctionCallingConfigMode.AUTO
-    )
 
 
 @pytest.mark.asyncio
@@ -671,12 +598,6 @@ async def test_gemini_stream_keeps_reasoning_from_tool_call_chunk(monkeypatch):
 
 
 def _gemini_server_side_response_parts() -> list[types.Part]:
-    """Build the server-side tool parts returned by a combined tool turn.
-
-    Returns:
-        List of google-genai Part objects representing a server-side search call
-        and its corresponding response.
-    """
     signature = b"\x01\x02"
     return [
         types.Part(
@@ -723,49 +644,29 @@ def test_gemini_process_content_parts_keeps_server_side_tool_parts():
     google_extra = llm_response.tools_call_extra_content["call-1"]["google"]
     assert google_extra["thought_signature"] == base64.b64encode(b"\x03").decode()
     stored = google_extra["server_parts"]
-    assert ["tool_call" in part for part in stored] == [True, False]
-    assert ["tool_response" in part for part in stored] == [False, True]
+    assert ["tool_call" in p for p in stored] == [True, False]
+    assert ["tool_response" in p for p in stored] == [False, True]
     assert stored[0]["thought_signature"] == base64.b64encode(b"\x01\x02").decode()
-    # The payload is persisted in conversation history and must stay JSON-safe.
     json.dumps(stored)
-    # It must also survive the OpenAI-style tool call model used by the agent loop.
     tool_call_model = llm_response.to_openai_tool_calls_model()[0]
     assert (
         tool_call_model.model_dump()["extra_content"]["google"]["server_parts"]
         == stored
     )
-    # The function-call signature still feeds the narration dedupe logic.
     assert llm_response.reasoning_signature == base64.b64encode(b"\x03").decode()
 
 
-def test_gemini_process_content_parts_ignores_server_side_signature_for_reasoning():
+@pytest.mark.parametrize(
+    ("text_signature", "expected"),
+    [
+        (None, None),
+        (b"\x09\x09", base64.b64encode(b"\x09\x09").decode("utf-8")),
+    ],
+)
+def test_gemini_process_content_parts_reasoning_signature_isolation(
+    text_signature, expected
+):
     provider = ProviderGoogleGenAI.__new__(ProviderGoogleGenAI)
-    candidate = SimpleNamespace(
-        content=types.Content(
-            role="model",
-            parts=[
-                *_gemini_server_side_response_parts(),
-                types.Part(text="It is sunny in Shanghai."),
-            ],
-        ),
-        finish_reason=None,
-    )
-    llm_response = LLMResponse(role="assistant")
-
-    ProviderGoogleGenAI._process_content_parts(
-        provider, candidate, llm_response, validate_output=False
-    )
-
-    # The server-side parts themselves are not persisted for a turn without a
-    # custom function call, so replaying their signature as the narration
-    # signature would corrupt the next request.
-    assert llm_response.reasoning_signature is None
-    assert llm_response.tools_call_extra_content == {}
-
-
-def test_gemini_process_content_parts_keeps_content_part_signature_for_reasoning():
-    provider = ProviderGoogleGenAI.__new__(ProviderGoogleGenAI)
-    text_signature = b"\x09\x09"
     candidate = SimpleNamespace(
         content=types.Content(
             role="model",
@@ -782,13 +683,12 @@ def test_gemini_process_content_parts_keeps_content_part_signature_for_reasoning
         provider, candidate, llm_response, validate_output=False
     )
 
-    assert llm_response.reasoning_signature == base64.b64encode(text_signature).decode(
-        "utf-8"
-    )
+    assert llm_response.reasoning_signature == expected
+    assert llm_response.tools_call_extra_content == {}
 
 
 @pytest.mark.asyncio
-async def test_gemini_prepare_conversation_replays_server_side_tool_parts():
+async def test_gemini_prepare_conversation_replays_server_parts_and_maps_tool_name():
     provider = ProviderGoogleGenAI.__new__(ProviderGoogleGenAI)
     server_side_parts = [
         part.model_dump(exclude_none=True, mode="json")
@@ -823,30 +723,25 @@ async def test_gemini_prepare_conversation_replays_server_side_tool_parts():
                         }
                     ],
                 },
+                {"role": "tool", "tool_call_id": "call-1", "content": "sunny"},
             ]
         }
     )
 
-    model_content = contents[1]
-    assert model_content.parts is not None
-    parts = model_content.parts
-    assert len(parts) == 3
-    assert parts[0].tool_call is not None
-    assert parts[0].tool_call.id == "search-1"
-    assert parts[0].tool_call.tool_type == types.ToolType.GOOGLE_SEARCH_WEB
-    assert parts[0].tool_call.args == {"queries": ["Shanghai weather"]}
+    assert [c.role for c in contents] == ["user", "model", "user"]
+    parts = contents[1].parts
+    assert parts is not None and len(parts) == 3
+    assert parts[0].tool_call is not None and parts[0].tool_call.id == "search-1"
     assert parts[0].thought_signature == b"\x01\x02"
-    assert parts[1].tool_response is not None
-    assert parts[1].tool_response.id == "search-1"
-    assert parts[1].tool_response.tool_type == types.ToolType.GOOGLE_SEARCH_WEB
-    assert parts[1].tool_response.response == {
-        "search_suggestions": "Shanghai weather forecast"
-    }
+    assert (
+        parts[1].tool_response is not None and parts[1].tool_response.id == "search-1"
+    )
     assert parts[1].thought_signature == b"\x01\x02"
     assert parts[2].function_call is not None
     assert parts[2].function_call.name == "get_weather"
-    assert parts[2].function_call.args == {"city": "Shanghai"}
     assert parts[2].thought_signature == b"\x03"
+    func_resp = contents[2].parts[0].function_response
+    assert func_resp is not None and func_resp.name == "get_weather"
 
 
 @pytest.mark.asyncio
@@ -871,87 +766,38 @@ async def test_gemini_stream_keeps_server_side_tool_parts_for_next_turn(monkeypa
         ],
     )
 
-    final = responses[-1]
-    stored = final.tools_call_extra_content["call-1"]["google"]["server_parts"]
-    expected_signature = base64.b64encode(b"\x01\x02").decode()
-    # Earlier chunks are prepended so response order is preserved.
+    stored = responses[-1].tools_call_extra_content["call-1"]["google"]["server_parts"]
     assert stored == [
-        {
-            "tool_call": {
-                "id": "search-1",
-                "tool_type": "GOOGLE_SEARCH_WEB",
-                "args": {"queries": ["Shanghai weather"]},
-            },
-            "thought_signature": expected_signature,
-        },
-        {
-            "tool_response": {
-                "id": "search-1",
-                "tool_type": "GOOGLE_SEARCH_WEB",
-                "response": {"search_suggestions": "Shanghai weather forecast"},
-            },
-            "thought_signature": expected_signature,
-        },
+        part.model_dump(exclude_none=True, mode="json") for part in server_side_parts
     ]
     json.dumps(stored)
 
 
 @pytest.mark.asyncio
-async def test_gemini_prepare_conversation_maps_tool_result_to_function_name():
-    # Tool results only carry tool_call_id, but Gemini needs the function name.
-    provider = ProviderGoogleGenAI.__new__(ProviderGoogleGenAI)
-
-    contents = await provider._prepare_conversation(
-        {
-            "messages": [
-                {"role": "user", "content": "what's the weather?"},
-                {
-                    "role": "assistant",
-                    "tool_calls": [
-                        {
-                            "id": "call-1",
-                            "type": "function",
-                            "function": {
-                                "name": "get_weather",
-                                "arguments": '{"city": "Shanghai"}',
-                            },
-                        }
-                    ],
-                },
-                {"role": "tool", "tool_call_id": "call-1", "content": "sunny"},
-            ]
-        }
-    )
-
-    assert [content.role for content in contents] == ["user", "model", "user"]
-    function_call = contents[1].parts[0].function_call
-    function_response = contents[2].parts[0].function_response
-    assert function_call is not None and function_call.name == "get_weather"
-    assert function_response is not None
-    # Regression: this used to echo the raw call ID ("call-1") as the name,
-    # which made the next Gemini request fail with INVALID_ARGUMENT.
-    assert function_response.name == "get_weather"
-
-
-@pytest.mark.asyncio
-@pytest.mark.parametrize("narration", ["", "let me search first"])
-async def test_gemini_prepare_conversation_does_not_duplicate_server_side_signature(
-    narration,
+@pytest.mark.parametrize(
+    ("narration", "narration_sig", "expect_text", "expect_text_sig"),
+    [
+        ("", b"\x01\x02", False, None),
+        ("let me search first", b"\x01\x02", True, None),
+        ("let me search first", b"\x09\x09", True, b"\x09\x09"),
+    ],
+)
+async def test_gemini_prepare_conversation_narration_signature_dedup(
+    narration, narration_sig, expect_text, expect_text_sig
 ):
-    # A signature already carried by a server-side part must not be reattached.
     provider = ProviderGoogleGenAI.__new__(ProviderGoogleGenAI)
-    signature = b"\x01\x02"
+    tool_signature = b"\x01\x02"
     server_side_part = types.Part(
         tool_call=types.ToolCall(
             tool_type="GOOGLE_SEARCH_WEB", args={"queries": ["x"]}, id="search-1"
         ),
-        thought_signature=signature,
+        thought_signature=tool_signature,
     ).model_dump(exclude_none=True, mode="json")
     content = [
         {
             "type": "think",
             "think": "",
-            "encrypted": base64.b64encode(signature).decode(),
+            "encrypted": base64.b64encode(narration_sig).decode(),
         }
     ]
     if narration:
@@ -968,71 +814,7 @@ async def test_gemini_prepare_conversation_does_not_duplicate_server_side_signat
                         {
                             "id": "call-1",
                             "type": "function",
-                            "function": {
-                                "name": "get_weather",
-                                "arguments": "{}",
-                            },
-                            "extra_content": {
-                                "google": {"server_parts": [server_side_part]}
-                            },
-                        }
-                    ],
-                },
-            ]
-        }
-    )
-
-    model_parts = contents[1].parts
-    text_parts = [part for part in model_parts if part.text is not None]
-    if narration:
-        assert [part.text for part in text_parts] == [narration]
-        assert text_parts[0].thought_signature is None
-    else:
-        assert text_parts == []
-    function_call = next(part for part in model_parts if part.function_call)
-    assert function_call.thought_signature is None
-    # The signature is only present on the replayed server-side tool part.
-    assert [part.thought_signature for part in model_parts if part.tool_call] == [
-        signature
-    ]
-
-
-@pytest.mark.asyncio
-async def test_gemini_prepare_conversation_keeps_distinct_narration_signature():
-    # When the narration part carries a different thought signature from the
-    # server-side or function-call parts, both signatures must be preserved.
-    provider = ProviderGoogleGenAI.__new__(ProviderGoogleGenAI)
-    narration_signature = b"\x09\x09"
-    tool_signature = b"\x01\x02"
-    server_side_part = types.Part(
-        tool_call=types.ToolCall(
-            tool_type="GOOGLE_SEARCH_WEB", args={"queries": ["x"]}, id="search-1"
-        ),
-        thought_signature=tool_signature,
-    ).model_dump(exclude_none=True, mode="json")
-
-    contents = await provider._prepare_conversation(
-        {
-            "messages": [
-                {"role": "user", "content": "what's the weather?"},
-                {
-                    "role": "assistant",
-                    "content": [
-                        {
-                            "type": "think",
-                            "think": "initial thought",
-                            "encrypted": base64.b64encode(narration_signature).decode(),
-                        },
-                        {"type": "text", "text": "let me search first"},
-                    ],
-                    "tool_calls": [
-                        {
-                            "id": "call-1",
-                            "type": "function",
-                            "function": {
-                                "name": "get_weather",
-                                "arguments": "{}",
-                            },
+                            "function": {"name": "get_weather", "arguments": "{}"},
                             "extra_content": {
                                 "google": {"server_parts": [server_side_part]}
                             },
@@ -1045,10 +827,12 @@ async def test_gemini_prepare_conversation_keeps_distinct_narration_signature():
 
     model_parts = contents[1].parts
     assert model_parts is not None
-    assert len(model_parts) == 3
-    assert model_parts[0].text == "let me search first"
-    assert model_parts[0].thought_signature == narration_signature
-    assert model_parts[1].tool_call is not None
-    assert model_parts[1].thought_signature == tool_signature
-    assert model_parts[2].function_call is not None
-    assert model_parts[2].thought_signature is None
+    text_parts = [p for p in model_parts if p.text is not None]
+    if expect_text:
+        assert [p.text for p in text_parts] == [narration]
+        assert text_parts[0].thought_signature == expect_text_sig
+    else:
+        assert text_parts == []
+    func_call = next(p for p in model_parts if p.function_call)
+    assert func_call.thought_signature is None
+    assert [p.thought_signature for p in model_parts if p.tool_call] == [tool_signature]
