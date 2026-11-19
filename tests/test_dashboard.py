@@ -96,6 +96,53 @@ async def test_plugin_marketplace_tries_backup_after_failed_request(
     assert requested_urls == [primary_url, backup_url]
 
 
+@pytest.mark.asyncio
+async def test_plugin_marketplace_retries_primary_after_caching_backup(
+    monkeypatch, tmp_path
+):
+    primary_url = "https://primary.example/plugins.json"
+    backup_url = "https://backup.example/plugins.json"
+    source = RegistrySource(
+        urls=[primary_url, backup_url],
+        cache_file=str(tmp_path / "plugins.json"),
+        md5_url="https://primary.example/plugins-md5.json",
+    )
+    primary_data = {"primary": {"name": "Primary"}}
+    backup_data = {"backup": {"name": "Backup"}}
+    responses = {
+        primary_url: (503, None),
+        backup_url: (200, backup_data),
+    }
+
+    @asynccontextmanager
+    async def get(session, url):
+        assert not session.closed
+        status, payload = responses[url]
+        yield SimpleNamespace(status=status, json=AsyncMock(return_value=payload))
+
+    service = PluginService(None, MagicMock())
+    monkeypatch.setattr(service, "build_registry_source", lambda _: source)
+    monkeypatch.setattr(service, "fetch_remote_md5", AsyncMock(return_value="same-md5"))
+    monkeypatch.setattr(aiohttp.ClientSession, "get", get)
+
+    assert await service.get_online_plugins(
+        custom_registry=None, force_refresh=False
+    ) == (backup_data, None)
+
+    responses[backup_url] = (503, None)
+    cached_data, warning = await service.get_online_plugins(
+        custom_registry=None, force_refresh=False
+    )
+    assert cached_data == backup_data
+    assert warning
+
+    responses[primary_url] = (200, primary_data)
+    assert await service.get_online_plugins(
+        custom_registry=None, force_refresh=False
+    ) == (primary_data, None)
+    assert service.load_cached_md5(source.cache_file) == "same-md5"
+
+
 def test_skills_service_marks_inactive_plugin_skills(monkeypatch):
     skills = [
         SimpleNamespace(

@@ -1030,7 +1030,10 @@ class PluginService:
                             "Fetched remote plugin marketplace data successfully; "
                             f"received {len(remote_data)} plugins."
                         )
-                        current_md5 = await self.fetch_remote_md5(source.md5_url)
+                        # The configured checksum describes the primary registry.
+                        current_md5 = None
+                        if url == source.urls[0]:
+                            current_md5 = await self.fetch_remote_md5(source.md5_url)
                         self.save_plugin_cache(
                             source.cache_file,
                             remote_data,
