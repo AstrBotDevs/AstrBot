@@ -523,29 +523,32 @@ class BackupService:
         filename: str | None,
         token: str | None,
         jwt_secret: str | None,
+        require_token: bool = True,
     ) -> BackupDownload:
         if not filename:
             raise BackupServiceError("缺少参数 filename")
-        if not token:
+        # Callers that already authenticated with an API key do not carry the
+        # short-lived dashboard JWT download token.
+        if require_token and not token:
             raise BackupServiceError("缺少参数 token")
-        if not jwt_secret:
-            raise BackupServiceError("服务器配置错误")
-
-        try:
-            jwt.decode(
-                token,
-                jwt_secret,
-                algorithms=["HS256"],
-                options={
-                    "require": ["exp"],
-                    "verify_signature": True,
-                    "verify_exp": True,
-                },
-            )
-        except jwt.ExpiredSignatureError as exc:
-            raise BackupServiceError("Token 已过期，请刷新页面后重试") from exc
-        except jwt.InvalidTokenError as exc:
-            raise BackupServiceError("Token 无效") from exc
+        if token:
+            if not jwt_secret:
+                raise BackupServiceError("服务器配置错误")
+            try:
+                jwt.decode(
+                    token,
+                    jwt_secret,
+                    algorithms=["HS256"],
+                    options={
+                        "require": ["exp"],
+                        "verify_signature": True,
+                        "verify_exp": True,
+                    },
+                )
+            except jwt.ExpiredSignatureError as exc:
+                raise BackupServiceError("Token 已过期，请刷新页面后重试") from exc
+            except jwt.InvalidTokenError as exc:
+                raise BackupServiceError("Token 无效") from exc
 
         filename = self._validate_backup_filename(filename, missing="缺少参数 filename")
         file_path = os.path.join(self.backup_dir, filename)

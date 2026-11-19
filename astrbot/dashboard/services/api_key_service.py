@@ -10,6 +10,7 @@ from astrbot.core.utils.datetime_utils import normalize_datetime_utc
 
 from .auth_service import (
     ALL_OPEN_API_SCOPES,
+    BACKUP_IMPORT_SCOPE,
     CHAT_ADMIN_SCOPE,
     CONFIG_EDIT_ADMIN_SCOPE,
     DEFAULT_OPEN_API_SCOPES,
@@ -85,6 +86,8 @@ class ApiKeyService:
             )
         if CHAT_ADMIN_SCOPE in scopes and "chat" not in scopes:
             raise ApiKeyServiceError(f"{CHAT_ADMIN_SCOPE} requires the chat scope")
+        if BACKUP_IMPORT_SCOPE in scopes and "backup" not in scopes:
+            raise ApiKeyServiceError(f"{BACKUP_IMPORT_SCOPE} requires the backup scope")
         for scope in tuple(scopes):
             scopes.extend(OPEN_API_SCOPE_INCLUDES.get(scope, ()))
         normalized_scopes = list(dict.fromkeys(scopes))

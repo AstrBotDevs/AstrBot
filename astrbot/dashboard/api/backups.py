@@ -5,19 +5,20 @@ from fastapi.responses import FileResponse
 
 from astrbot.core import logger
 from astrbot.dashboard.async_utils import run_maybe_async
-from astrbot.dashboard.responses import error, ok
+from astrbot.dashboard.responses import ApiError, error, ok
 from astrbot.dashboard.schemas import (
     BackupImportRequest,
     BackupRenameRequest,
     BackupUploadInitRequest,
     BackupUploadSessionRequest,
 )
+from astrbot.dashboard.services.auth_service import BACKUP_IMPORT_SCOPE
 from astrbot.dashboard.services.backup_service import (
     BackupService,
     BackupServiceError,
 )
 
-from .auth import AuthContext, require_dashboard_user, require_scope
+from .auth import AuthContext, ScopeDependency, require_dashboard_user
 from .multipart import UploadFileAdapter
 
 router = APIRouter(tags=["Backups"])
@@ -32,8 +33,7 @@ def get_service(request: Request) -> BackupService:
     return request.app.state.services.backups
 
 
-async def require_system_scope(request: Request) -> AuthContext:
-    return await require_scope(request, "system")
+require_backup_scope = ScopeDependency("backup")
 
 
 def _model_dict(payload) -> dict:
@@ -87,6 +87,7 @@ def _download_backup(
     filename: str | None,
     token: str | None,
     service: BackupService,
+    require_token: bool = True,
 ):
     try:
         filename = _safe_backup_filename(filename)
@@ -95,6 +96,7 @@ def _download_backup(
                 filename=filename,
                 token=token,
                 jwt_secret=service.config.get("dashboard", {}).get("jwt_secret"),
+                require_token=require_token,
             )
         )
     except BackupServiceError as exc:
@@ -108,7 +110,7 @@ def _download_backup(
 async def list_backups(
     page: int = Query(default=1),
     page_size: int = Query(default=20),
-    _auth: AuthContext = Depends(require_system_scope),
+    _auth: AuthContext = Depends(require_backup_scope),
     service: BackupService = Depends(get_service),
 ):
     return await _run(
@@ -132,7 +134,7 @@ async def list_dashboard_backups(
 
 @router.post("/backups")
 async def create_backup(
-    _auth: AuthContext = Depends(require_system_scope),
+    _auth: AuthContext = Depends(require_backup_scope),
     service: BackupService = Depends(get_service),
 ):
     return await _run(service.export_backup, prefix="创建备份失败")
@@ -149,7 +151,7 @@ async def export_dashboard_backup(
 @router.post("/backups/upload")
 async def upload_backup(
     file: UploadFile = File(...),
-    _auth: AuthContext = Depends(require_system_scope),
+    _auth: AuthContext = Depends(require_backup_scope),
     service: BackupService = Depends(get_service),
 ):
     return await _run(
@@ -173,7 +175,7 @@ async def upload_dashboard_backup(
 @router.post("/backups/upload/init")
 async def init_backup_upload(
     payload: BackupUploadInitRequest,
-    auth: AuthContext = Depends(require_system_scope),
+    auth: AuthContext = Depends(require_backup_scope),
     service: BackupService = Depends(get_service),
 ):
     return await _run(
@@ -199,7 +201,7 @@ async def upload_backup_chunk(
     upload_id: str = Form(...),
     chunk_index: str = Form(...),
     chunk: UploadFile = File(...),
-    auth: AuthContext = Depends(require_system_scope),
+    auth: AuthContext = Depends(require_backup_scope),
     service: BackupService = Depends(get_service),
 ):
     return await _run(
@@ -235,7 +237,7 @@ async def upload_dashboard_backup_chunk(
 @router.post("/backups/upload/complete")
 async def complete_backup_upload(
     payload: BackupUploadSessionRequest,
-    auth: AuthContext = Depends(require_system_scope),
+    auth: AuthContext = Depends(require_backup_scope),
     service: BackupService = Depends(get_service),
 ):
     return await _run(
@@ -259,7 +261,7 @@ async def complete_dashboard_backup_upload(
 @router.post("/backups/upload/abort")
 async def abort_backup_upload(
     payload: BackupUploadSessionRequest,
-    auth: AuthContext = Depends(require_system_scope),
+    auth: AuthContext = Depends(require_backup_scope),
     service: BackupService = Depends(get_service),
 ):
     return await _run(
@@ -283,7 +285,7 @@ async def abort_dashboard_backup_upload(
 @router.post("/backups/upload/status")
 async def status_backup_upload(
     payload: BackupUploadSessionRequest,
-    auth: AuthContext = Depends(require_system_scope),
+    auth: AuthContext = Depends(require_backup_scope),
     service: BackupService = Depends(get_service),
 ):
     return await _run(
@@ -307,7 +309,7 @@ async def status_dashboard_backup_upload(
 @router.get("/backups/tasks/{task_id}")
 async def get_backup_progress(
     task_id: str,
-    _auth: AuthContext = Depends(require_system_scope),
+    _auth: AuthContext = Depends(require_backup_scope),
     service: BackupService = Depends(get_service),
 ):
     return await _run(lambda: service.get_progress(task_id), prefix="获取任务进度失败")
@@ -329,15 +331,24 @@ async def get_dashboard_backup_progress(
 async def download_backup(
     filename: str,
     request: Request,
+    auth: AuthContext = Depends(require_backup_scope),
     token: str | None = Query(default=None),
     service: BackupService = Depends(get_service),
 ):
-    if not token:
+    # API keys authenticate themselves, so the short-lived dashboard JWT
+    # download token is only required for dashboard/browser callers.
+    require_token = auth.via != "api_key"
+    if require_token and not token:
         auth_header = request.headers.get("Authorization", "").strip()
         scheme, separator, credentials = auth_header.partition(" ")
         if separator and scheme.lower() == "bearer":
             token = credentials.strip() or None
-    return _download_backup(filename=filename, token=token, service=service)
+    return _download_backup(
+        filename=filename,
+        token=token,
+        service=service,
+        require_token=require_token,
+    )
 
 
 @legacy_router.get("/download")
@@ -353,7 +364,7 @@ async def download_dashboard_backup(
 async def rename_backup(
     filename: str,
     payload: BackupRenameRequest,
-    _auth: AuthContext = Depends(require_system_scope),
+    _auth: AuthContext = Depends(require_backup_scope),
     service: BackupService = Depends(get_service),
 ):
     return await _run(
@@ -380,7 +391,7 @@ async def rename_dashboard_backup(
 @router.delete("/backups/{filename:path}")
 async def delete_backup(
     filename: str,
-    _auth: AuthContext = Depends(require_system_scope),
+    _auth: AuthContext = Depends(require_backup_scope),
     service: BackupService = Depends(get_service),
 ):
     return await _run(
@@ -406,7 +417,7 @@ async def delete_dashboard_backup(
 @router.post("/backups/{filename:path}/check")
 async def check_backup(
     filename: str,
-    _auth: AuthContext = Depends(require_system_scope),
+    _auth: AuthContext = Depends(require_backup_scope),
     service: BackupService = Depends(get_service),
 ):
     return await _run(
@@ -429,13 +440,27 @@ async def check_dashboard_backup(
     )
 
 
-@router.post("/backups/{filename:path}/import")
+@router.post(
+    "/backups/{filename:path}/import",
+    openapi_extra={"x-astrbot-sensitive-scopes": [BACKUP_IMPORT_SCOPE]},
+)
 async def import_backup(
     filename: str,
     payload: BackupImportRequest,
-    _auth: AuthContext = Depends(require_system_scope),
+    auth: AuthContext = Depends(require_backup_scope),
     service: BackupService = Depends(get_service),
 ):
+    # Importing overwrites the live data directory, so API keys need the
+    # sensitive sub-scope on top of the base backup scope.
+    if (
+        auth.via == "api_key"
+        and "*" not in auth.scopes
+        and BACKUP_IMPORT_SCOPE not in auth.scopes
+    ):
+        raise ApiError(
+            f"{BACKUP_IMPORT_SCOPE} scope is required to import backups",
+            status_code=403,
+        )
     return await _run(
         lambda: service.import_backup(
             {"filename": _safe_backup_filename(filename), **_model_dict(payload)}
