@@ -288,6 +288,20 @@ A `file` field stores a list of uploaded file paths. `file_types` lists allowed 
 
 ![File upload](./images/plugin-config-file.png)
 
+In the WebUI, open **Extensions → Plugins → Installed**, click the plugin's gear
+icon (**Extension Config**), and click **Manage Files** for a `file` item.
+Uploaded PNG/APNG, JPEG (including `.jpe`/`.jfif`), WebP, GIF, BMP/DIB, TIFF, and ICO
+images show thumbnails; click a
+thumbnail to open a larger preview, and press Escape or the close button to
+return to the list. Non-image, missing, invalid, and oversized files remain
+manageable without a preview.
+
+Previews require the same plugin authentication as file management and are
+restricted to the selected field's upload directory. They are limited to 10 MiB
+of input and 20 million decoded pixels, rendered as PNG with a maximum edge of
+1024 pixels, and do not modify the uploaded file. Animated images show their first
+frame. Existing upload, add-to-config, delete, and save behavior is unchanged.
+
 ### Configuration group {#object}
 
 Define child fields in `object.items`. `collapsed: true` starts a group collapsed; click its title to expand it, as shown. The outermost configuration object cannot collapse.

@@ -25,7 +25,13 @@
           <v-list density="compact" lines="one">
             <v-list-item v-for="item in mergedFileItems" :key="item.path">
               <template #prepend>
-                <v-icon size="18">mdi-file</v-icon>
+                <div class="file-thumbnail mr-3">
+                  <v-lazy v-if="dialog && item.status !== 'missing' && /\.(a?png|jpe?g|jpe|jfif|webp|gif|bmp|dib|tiff?|ico)$/i.test(item.path)"
+                    :key="`${pluginName}:${configKey}:${item.path}:${previewRevision}`" min-height="48" width="56">
+                    <ConfigImagePreview :plugin-name="pluginName" :config-key="configKey" :path="item.path" />
+                  </v-lazy>
+                  <v-icon v-else size="18">mdi-file</v-icon>
+                </div>
               </template>
               <v-list-item-title class="file-name">
                 {{ getDisplayName(item.path) }}
@@ -77,6 +83,7 @@ import { computed, ref, watch } from 'vue'
 import { pluginApi } from '@/api/v1'
 import { useToast } from '@/utils/toast'
 import { useModuleI18n } from '@/i18n/composables'
+import ConfigImagePreview from './ConfigImagePreview.vue'
 
 const props = defineProps({
   modelValue: {
@@ -109,6 +116,7 @@ const loadingFiles = ref(false)
 const MAX_FILE_BYTES = 500 * 1024 * 1024
 const MAX_FILE_MB = 500
 const directoryFiles = ref([])
+const previewRevision = ref(0)
 
 const fileList = computed({
   get: () => (Array.isArray(props.modelValue) ? props.modelValue : []),
@@ -277,6 +285,7 @@ const uploadFiles = async (files) => {
         const updatedDirectory = new Set(directoryFiles.value)
         uploaded.forEach((path) => updatedDirectory.add(path))
         directoryFiles.value = Array.from(updatedDirectory)
+        previewRevision.value += 1
         toast.success(tm('fileUpload.uploadSuccess', { count: uploaded.length }))
       }
 
@@ -380,6 +389,14 @@ watch(
 .file-name {
   font-weight: 600;
   word-break: break-word;
+}
+
+.file-thumbnail {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 56px;
+  height: 48px;
 }
 
 .upload-item {
