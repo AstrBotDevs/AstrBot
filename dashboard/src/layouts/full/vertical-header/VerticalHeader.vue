@@ -164,7 +164,7 @@ const chatHeaderStyle = computed(() => {
     // window material in the top-left corner.
     left: "0px",
     width: "100%",
-    "--astrbot-chat-sidebar-width": `${sidebarWidth}px`,
+    "--astrbot-chat-sidebar-width": `${sidebarWidth + (!smAndDown.value && customizer.chatNavigationInSidebar ? 56 : 0)}px`,
     "--astrbot-workbench-preferred-width": chatHeader.workbenchWidth ? `${chatHeader.workbenchWidth}px` : undefined,
   };
 });
@@ -1098,6 +1098,7 @@ onMounted(async () => {
     <v-btn
       v-if="$vuetify.display.smAndDown"
       class="header-menu-btn"
+      :class="{ 'header-menu-btn--browser': !isDesktopReleaseMode }"
       icon
       rounded="lg"
       variant="text"
@@ -2617,6 +2618,11 @@ html[data-astrbot-desktop-platform='macos'] .top-header.chat-mode-header.chat-mo
 
 .top-header .header-menu-btn:hover {
   color: rgba(var(--v-theme-on-surface), 0.9);
+}
+
+.top-header .v-toolbar__content > .header-menu-btn--browser:first-child {
+  margin-inline-start: -12px;
+  margin-inline-end: 12px;
 }
 
 .header-toolbar-label {

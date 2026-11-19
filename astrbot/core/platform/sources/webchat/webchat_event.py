@@ -77,10 +77,12 @@ class WebChatMessageEvent(AstrMessageEvent):
                     {
                         "type": {
                             "chatui_view": "view",
+                            "chatui_error": "error",
                             "ui_action_result": "ui_action_result",
                         }.get(message.type, "plain"),
                         "data": comp.data
-                        if message.type in {"chatui_view", "ui_action_result"}
+                        if message.type
+                        in {"chatui_view", "ui_action_result", "chatui_error"}
                         else json.dumps(comp.data, ensure_ascii=False),
                         "streaming": streaming,
                         "chain_type": message.type,

@@ -28,6 +28,7 @@ function setup() {
     computed,
     watch,
     sidebarContent: ref(null),
+    sessionsExpanded: ref(true),
     sidebarProjectElement: ref(null),
     messagesContainer: ref(null),
     ResizeObserver: class {
@@ -283,12 +284,17 @@ test("an underfilled sidebar loads after rendering, pauses on failure, and skips
   context.isMobile.value = true;
   context.loadMoreSessions();
   assert.equal(requests.length, 3, "closed mobile drawer must not load");
+  context.sessionsExpanded.value = false;
   context.mobileDrawer.open = true;
+  await nextTick();
+  context.loadMoreSessions();
+  assert.equal(requests.length, 3, "collapsed conversations must not load");
+  context.sessionsExpanded.value = true;
   await nextTick();
   assert.equal(
     requests[3].params.page,
     3,
-    "opening an underfilled drawer resumes pagination",
+    "expanding conversations in an underfilled drawer resumes pagination",
   );
   resolvePage(requests[3], 60, 90, 90);
   await new Promise(setImmediate);

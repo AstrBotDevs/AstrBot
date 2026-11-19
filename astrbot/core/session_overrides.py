@@ -27,6 +27,7 @@ OVERRIDE_TYPES = {
     "kb_names": list,
     "kb_final_top_k": int,
     "platform_settings.id_blacklist": list,
+    "platform_settings.locale": str,
 }
 _locks = [asyncio.Lock() for _ in range(64)]
 

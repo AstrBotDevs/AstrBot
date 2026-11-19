@@ -46,6 +46,7 @@ const GEMINI_4_DEFAULT_REASONING_LEVELS = ['auto', 'low', 'medium', 'high', 'xhi
 const GEMINI_4_REASONING_LEVELS = {
   'gemini-4-carbon': ['auto', 'low', 'medium', 'high'],
   'gemini-4-argon': ['auto', 'low', 'medium', 'high'],
+  'gemini-4-neon': ['auto', 'low', 'medium', 'high', 'xhigh'],
   'gemini-4-hydrogen': ['auto', 'low', 'medium', 'high', 'xhigh']
 }
 

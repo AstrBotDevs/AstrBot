@@ -88,6 +88,7 @@ async def runtime(monkeypatch):
         get_event_queue=lambda: queue,
         get_platform_inst=lambda _: SimpleNamespace(meta=lambda: metadata),
         get_config=lambda **_: config,
+        locale=lambda umo=None: config["platform_settings"].get("locale", "zh-CN"),
         astrbot_config_mgr=SimpleNamespace(
             _create_message_config=lambda _: (copy.deepcopy(config), frozenset())
         ),
