@@ -12,7 +12,7 @@ from astrbot.core.agent.runners.deerflow.deerflow_api_client import DeerFlowAPIC
 from astrbot.core.db.po import ProviderStat
 from astrbot.core.utils.active_event_registry import active_event_registry
 
-from .utils.rst_scene import RstScene
+from ..i18n import translate
 
 THIRD_PARTY_AGENT_RUNNER_KEY = {
     "dify": "dify_conversation_id",
@@ -38,8 +38,8 @@ async def _cleanup_deerflow_thread_if_present(
             return
 
         cfg = context.get_config(umo=umo)
-        agent_runner = cfg.get("agent_runner", {})
-        if agent_runner.get("runner_type") != DEERFLOW_PROVIDER_TYPE:
+        agent_runner = cfg.get("agent", {})
+        if agent_runner.get("runtime") != DEERFLOW_PROVIDER_TYPE:
             return
         runner_config = agent_runner.get("config", {})
         if not isinstance(runner_config, dict):
@@ -110,120 +110,73 @@ class ConversationCommands:
         return conv.persona_id
 
     async def reset(self, message: AstrMessageEvent) -> None:
-        """重置 LLM 会话"""
+        """Clear the context of the current conversation.
+
+        Args:
+            message: Command event identifying the session and sender.
+        """
         umo = message.unified_msg_origin
-        cfg = self.context.get_config(umo=message.unified_msg_origin)
-        is_unique_session = cfg["platform_settings"]["unique_session"]
-        is_group = bool(message.get_group_id())
+        cfg = self.context.get_config(umo=umo)
+        agent_runner_type = cfg["agent"]["runtime"]
 
-        scene = RstScene.get_scene(is_group, is_unique_session)
-
-        alter_cmd_cfg = await sp.get_async("global", "global", "alter_cmd", {})
-        plugin_config = alter_cmd_cfg.get("astrbot", {})
-        reset_cfg = plugin_config.get("reset", {})
-
-        required_perm = reset_cfg.get(
-            scene.key,
-            "admin" if is_group and not is_unique_session else "member",
-        )
-
-        if required_perm == "admin" and message.role != "admin":
-            message.set_result(
-                MessageEventResult().message(
-                    f"Reset command requires admin permission in {scene.name} scenario, "
-                    f"you (ID {message.get_sender_id()}) are not admin, cannot perform this action.",
-                ),
-            )
-            return
-
-        agent_runner_type = cfg["agent_runner"]["runner_type"]
+        active_event_registry.stop_all(umo, exclude=message)
+        cid = await self.context.conversation_manager.get_curr_conversation_id(umo)
         if agent_runner_type in THIRD_PARTY_AGENT_RUNNER_KEY:
-            active_event_registry.stop_all(umo, exclude=message)
             await _clear_third_party_agent_runner_state(
                 self.context,
                 umo,
                 agent_runner_type,
             )
-            message.set_result(
-                MessageEventResult().message("✅ Conversation reset successfully.")
-            )
-            return
-
-        if not await self.context.get_using_provider_async(umo):
-            message.set_result(
-                MessageEventResult().message(
-                    "😕 Cannot find any LLM provider. Configure one first."
-                ),
-            )
-            return
-
-        cid = await self.context.conversation_manager.get_curr_conversation_id(umo)
-
-        if not cid:
-            message.set_result(
-                MessageEventResult().message(
-                    "😕 You are not in a conversation. Use /new to create one.",
-                ),
-            )
-            return
-
-        active_event_registry.stop_all(umo, exclude=message)
-
-        await self.context.conversation_manager.update_conversation(
-            umo,
-            cid,
-            [],
-        )
-
-        ret = "✅ Conversation reset successfully."
+        else:
+            if cid:
+                await self.context.conversation_manager.update_conversation(
+                    umo,
+                    cid,
+                    history=[],
+                )
 
         message.set_extra("_clean_group_context_session", True)
-
-        message.set_result(MessageEventResult().message(ret))
+        message.set_result(
+            MessageEventResult().message(translate("reset", self.context.locale(umo)))
+        )
 
     async def stop(self, message: AstrMessageEvent) -> None:
-        """停止当前会话正在运行的 Agent"""
-        cfg = self.context.get_config(umo=message.unified_msg_origin)
-        agent_runner_type = cfg["agent_runner"]["runner_type"]
-        umo = message.unified_msg_origin
+        """Request a stop for the current message origin's registered work.
 
-        if agent_runner_type in THIRD_PARTY_AGENT_RUNNER_KEY:
-            stopped_count = active_event_registry.stop_all(umo, exclude=message)
-        else:
-            stopped_count = active_event_registry.request_agent_stop_all(
-                umo,
-                exclude=message,
-            )
+        Args:
+            message: Stop command event, excluded from the request.
+        """
+        locale = self.context.locale(message.unified_msg_origin)
+        stopped_count = active_event_registry.request_agent_stop_all(
+            message.unified_msg_origin, exclude=message
+        )
 
         if stopped_count > 0:
             message.set_result(
                 MessageEventResult().message(
-                    f"✅ Requested to stop {stopped_count} running tasks."
+                    translate("stopping", locale, count=stopped_count)
                 )
             )
             return
 
-        message.set_result(
-            MessageEventResult().message("✅ No running tasks in the current session.")
-        )
+        message.set_result(MessageEventResult().message(translate("no_tasks", locale)))
 
     async def new_conv(self, message: AstrMessageEvent) -> None:
-        """创建新对话"""
+        """Start a new conversation without clearing the previous history.
+
+        Args:
+            message: Command event identifying the session and sender.
+        """
         cfg = self.context.get_config(umo=message.unified_msg_origin)
-        agent_runner_type = cfg["agent_runner"]["runner_type"]
+        agent_runner_type = cfg["agent"]["runtime"]
+        active_event_registry.stop_all(message.unified_msg_origin, exclude=message)
         if agent_runner_type in THIRD_PARTY_AGENT_RUNNER_KEY:
-            active_event_registry.stop_all(message.unified_msg_origin, exclude=message)
             await _clear_third_party_agent_runner_state(
                 self.context,
                 message.unified_msg_origin,
                 agent_runner_type,
             )
-            message.set_result(
-                MessageEventResult().message("✅ New conversation created.")
-            )
-            return
 
-        active_event_registry.stop_all(message.unified_msg_origin, exclude=message)
         cpersona = await self._get_current_persona_id(message.unified_msg_origin)
         cid = await self.context.conversation_manager.new_conversation(
             message.unified_msg_origin,
@@ -235,20 +188,23 @@ class ConversationCommands:
 
         message.set_result(
             MessageEventResult().message(
-                f"✅ Switched to new conversation: {cid[:4]}。"
+                translate(
+                    "new_conversation",
+                    self.context.locale(message.unified_msg_origin),
+                    cid=cid[:4],
+                )
             ),
         )
 
     async def stats(self, message: AstrMessageEvent) -> None:
         """Show token usage statistics for the current conversation."""
         umo = message.unified_msg_origin
+        locale = self.context.locale(umo)
         cid = await self.context.conversation_manager.get_curr_conversation_id(umo)
 
         if not cid:
             message.set_result(
-                MessageEventResult().message(
-                    "❌ You are not in a conversation. Use /new to create one."
-                ),
+                MessageEventResult().message(translate("no_conversation", locale)),
             )
             return
 
@@ -277,9 +233,7 @@ class ConversationCommands:
 
         if stats.record_count == 0:
             message.set_result(
-                MessageEventResult().message(
-                    "📊 No stats available for this conversation yet."
-                ),
+                MessageEventResult().message(translate("no_stats", locale)),
             )
             return
 
@@ -288,12 +242,14 @@ class ConversationCommands:
         total_output = stats.total_output
         total_tokens = total_input_other + total_input_cached + total_output
 
-        ret = (
-            f"📊 Conversation Token usage (ID: {cid[:8]}...)\n"
-            f"Total:          {total_tokens:,}\n"
-            f"Input (cached): {total_input_cached:,}\n"
-            f"Input (other):  {total_input_other:,}\n"
-            f"Output:         {total_output:,}\n"
+        ret = translate(
+            "stats",
+            locale,
+            cid=cid[:8],
+            total=total_tokens,
+            cached=total_input_cached,
+            other=total_input_other,
+            output=total_output,
         )
 
         message.set_result(MessageEventResult().message(ret))

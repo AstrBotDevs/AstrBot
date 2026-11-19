@@ -14,8 +14,15 @@ from astrbot.api.platform import (
     PlatformMetadata,
     register_platform_adapter,
 )
-from astrbot.core.message.components import BaseMessageComponent, File, Record, Video
+from astrbot.core.message.components import (
+    BaseMessageComponent,
+    ButtonInteraction,
+    File,
+    Record,
+    Video,
+)
 from astrbot.core.platform.astr_message_event import MessageSesion
+from astrbot.core.platform.button_interaction import decode_button_callback
 from astrbot.core.utils.media_utils import MediaResolver
 
 from .kook_client import KookClient
@@ -85,7 +92,14 @@ class KookPlatformAdapter(Platform):
             f'[KOOK] 收到来自"{event.channel_type.name}"渠道的消息, 消息类型为: {event.type.name}({event.type.value})'
         )
         event_type = event.type
-        if event_type in (KookMessageType.KMARKDOWN, KookMessageType.CARD):
+        if event_type in (
+            KookMessageType.KMARKDOWN,
+            KookMessageType.CARD,
+            KookMessageType.IMAGE,
+            KookMessageType.FILE,
+            KookMessageType.AUDIO,
+            KookMessageType.VIDEO,
+        ):
             if self._should_ignore_event_by_bot_nickname(event.author_id):
                 logger.debug("[KOOK] 判断此消息为来自机器人自身的消息, 忽略此消息")
                 return
@@ -96,6 +110,13 @@ class KookPlatformAdapter(Platform):
                 logger.error(f"[KOOK] 消息处理异常: {e}")
         elif event_type == KookMessageType.SYSTEM:
             match event.extra.type:
+                case "message_btn_click":
+                    try:
+                        abm = await self.convert_message(event)
+                        if abm is not None:
+                            await self.handle_msg(abm)
+                    except Exception as e:
+                        logger.error(f"[KOOK] Failed to process button click: {e}")
                 case KookRoleExtraType():
                     # 此时 target_id 就是频道id(guild_id)
                     guild_id = event.target_id
@@ -406,7 +427,7 @@ class KookPlatformAdapter(Platform):
             file_name = file[1]
             file_url = file[2]
             if file_type == KookModuleType.FILE:
-                message.append(File(name=file_name, file=file_url))
+                message.append(File(name=file_name, url=file_url))
             elif file_type == KookModuleType.VIDEO:
                 message.append(Video(file=file_url))
             elif file_type == KookModuleType.AUDIO:
@@ -440,7 +461,92 @@ class KookPlatformAdapter(Platform):
             valid_urls.append(el.src)
         return valid_urls
 
-    async def convert_message(self, data: KookMessageEventData) -> AstrBotMessage:
+    def _convert_button_interaction(
+        self,
+        data: KookMessageEventData,
+    ) -> AstrBotMessage | None:
+        """Convert a KOOK button system event into a portable interaction.
+
+        Args:
+            data: Parsed KOOK system event with a ``message_btn_click`` body.
+
+        Returns:
+            A normalized AstrBot message, or ``None`` for malformed or foreign
+            callback payloads.
+        """
+        body = data.extra.body
+        if not isinstance(body, dict):
+            logger.debug("[KOOK] Ignored a button click without an event body.")
+            return None
+
+        callback_payload = body.get("value")
+        if not isinstance(callback_payload, str):
+            logger.debug("[KOOK] Ignored a button click without a callback value.")
+            return None
+        try:
+            action_id, callback_data = decode_button_callback(
+                callback_payload, allow_expired=True
+            )
+        except ValueError:
+            logger.debug("[KOOK] Ignored a button click not created by AstrBot.")
+            return None
+
+        user_id = str(body.get("user_id") or "").strip()
+        if not user_id:
+            logger.debug("[KOOK] Ignored a button click without a user id.")
+            return None
+
+        target_id = str(body.get("target_id") or data.target_id or "unknown")
+        user_info = body.get("user_info")
+        if not isinstance(user_info, dict):
+            user_info = {}
+        nickname = str(
+            user_info.get("nickname") or user_info.get("username") or user_id
+        )
+
+        abm = AstrBotMessage()
+        abm.raw_message = data.to_dict()
+        abm.self_id = str(self.client.bot_id)
+        abm.sender = MessageMember(user_id=user_id, nickname=nickname)
+        abm.message_id = data.msg_id or "unknown"
+        abm.timestamp = (
+            data.msg_timestamp // 1000
+            if data.msg_timestamp > 10_000_000_000
+            else data.msg_timestamp
+        )
+        if data.channel_type == KookChannelType.GROUP:
+            abm.type = MessageType.GROUP_MESSAGE
+            abm.group_id = target_id
+            abm.session_id = target_id
+        elif data.channel_type == KookChannelType.PERSON:
+            abm.type = MessageType.FRIEND_MESSAGE
+            abm.session_id = user_id
+        else:
+            abm.type = MessageType.OTHER_MESSAGE
+            abm.group_id = target_id
+            abm.session_id = target_id
+
+        abm.message_str = action_id
+        abm.message = [
+            ButtonInteraction(
+                action_id=action_id,
+                data=callback_data,
+                interaction_id=abm.message_id,
+                source_message_id=str(body.get("msg_id") or "") or None,
+                callback_data=callback_payload,
+            )
+        ]
+        return abm
+
+    async def convert_message(
+        self,
+        data: KookMessageEventData,
+    ) -> AstrBotMessage | None:
+        if data.type == KookMessageType.SYSTEM:
+            if data.extra.type == "message_btn_click":
+                return self._convert_button_interaction(data)
+            return None
+
         abm = AstrBotMessage()
         abm.raw_message = data.to_dict()
         abm.self_id = self.client.bot_id
@@ -486,6 +592,26 @@ class KookPlatformAdapter(Platform):
                 logger.error(f"[KOOK] 原始消息内容: {data.to_json()}")
                 abm.message_str = "[卡片消息解析失败]"
                 abm.message = [Plain(text="[卡片消息解析失败]")]
+        elif data.type in (
+            KookMessageType.IMAGE,
+            KookMessageType.FILE,
+            KookMessageType.AUDIO,
+            KookMessageType.VIDEO,
+        ):
+            content = str(data.content)
+            abm.message_str = f"[{data.type.name.lower()}]"
+            if data.type == KookMessageType.IMAGE:
+                abm.message = [Image(file=content)]
+            elif data.type == KookMessageType.FILE:
+                attachments = getattr(data.extra, "attachments", None)
+                file_name = (
+                    attachments.get("name") if isinstance(attachments, dict) else None
+                )
+                abm.message = [File(name=file_name or "file", url=content)]
+            elif data.type == KookMessageType.AUDIO:
+                abm.message = [Record(file=content, url=content)]
+            else:
+                abm.message = [Video(file=content)]
         else:
             logger.warning(f'[KOOK] 不支持的kook消息类型: "{data.type.name}"')
             abm.message_str = "[不支持的消息类型]"

@@ -23,7 +23,7 @@ Proactive message push: Supported.
 
 ### Setup Flow
 
-1. In AstrBot WebUI, click `Bots` in the left sidebar, then click `+ Create Bot`.
+1. In AstrBot WebUI, click `Platforms` in the left sidebar, then click `Add Adapter`.
 2. Select `QQ Official Bot (Webhook)`.
 3. Under `Choose setup method`, select `One-click QR setup`, click start, then scan the QR code with mobile QQ.
 4. After confirming the QR binding, click `Save`.
@@ -33,9 +33,7 @@ Proactive message push: Supported.
 8. Save the callback configuration, then restart AstrBot.
 
 > [!TIP]
-> With `Unified Webhook Mode`, AstrBot generates a unique Webhook callback URL automatically. You can find it in the logs or on the bot card in WebUI.
-
-![unified_webhook](https://files.astrbot.app/docs/source/images/use/unified-webhook.png)
+> With `Unified Webhook Mode`, AstrBot generates a unique Webhook callback URL automatically. You can find it under `Data & Logs → Logs`, or select the bot in `Platforms` and click `View Webhook URL`.
 
 ### Use in Group Chats
 
@@ -93,8 +91,8 @@ Open `Development -> Development Settings`, find IP whitelist, and add your serv
 ### Configure in AstrBot
 
 1. Open AstrBot Dashboard.
-2. Click `Bots` in the left sidebar.
-3. Click `+ Create Bot`.
+2. Click `Platforms` in the left sidebar.
+3. Click `Add Adapter`.
 4. Select `QQ Official Bot (Webhook)`.
 
 Recommended: use `One-click QR setup`.
@@ -124,7 +122,7 @@ The Webhook callback URL must be reachable from QQ Open Platform over the public
 
 Open `Development -> Callback Configuration`.
 
-After you save the bot in AstrBot, AstrBot generates a unique Webhook callback URL. You can find it in the logs or on the bot card in WebUI.
+After you save the bot in AstrBot, AstrBot generates a unique Webhook callback URL. You can find it under `Data & Logs → Logs`, or select the bot in `Platforms` and click `View Webhook URL`.
 
 Use that URL as the request URL.
 

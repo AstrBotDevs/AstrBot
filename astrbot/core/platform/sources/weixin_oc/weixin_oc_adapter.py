@@ -17,7 +17,16 @@ import qrcode as qrcode_lib
 
 from astrbot import logger
 from astrbot.api.event import MessageChain
-from astrbot.api.message_components import File, Image, Plain, Record, Reply, Video
+from astrbot.api.message_components import (
+    ActionRow,
+    Button,
+    File,
+    Image,
+    Plain,
+    Record,
+    Reply,
+    Video,
+)
 from astrbot.api.platform import (
     AstrBotMessage,
     MessageMember,
@@ -113,6 +122,9 @@ class WeixinOCAdapter(Platform):
     REPLY_MATCH_WINDOW_MS = 60_000
     RECENT_SESSION_CACHE_TTL_S = 1_800
     MAX_RECENT_MESSAGE_SESSIONS = 500
+    # Aiohttp reads ClientTimeout(total=0) as "no timeout", and the dashboard
+    # writes 0 when a numeric field is cleared, so a timeout must stay positive.
+    MIN_TIMEOUT_MS = 1_000
 
     def __init__(
         self,
@@ -127,15 +139,20 @@ class WeixinOCAdapter(Platform):
             platform_config.get("weixin_oc_base_url", "https://ilinkai.weixin.qq.com")
         ).rstrip("/")
         self.bot_type = str(platform_config.get("weixin_oc_bot_type", "3"))
-        self.qr_poll_interval = max(
+        self.qr_poll_interval = self._get_int_config(
+            "weixin_oc_qr_poll_interval",
             1,
-            int(platform_config.get("weixin_oc_qr_poll_interval", 1)),
+            1,
         )
-        self.long_poll_timeout_ms = int(
-            platform_config.get("weixin_oc_long_poll_timeout_ms", 35_000),
+        self.long_poll_timeout_ms = self._get_int_config(
+            "weixin_oc_long_poll_timeout_ms",
+            35_000,
+            self.MIN_TIMEOUT_MS,
         )
-        self.api_timeout_ms = int(
-            platform_config.get("weixin_oc_api_timeout_ms", 120_000),
+        self.api_timeout_ms = self._get_int_config(
+            "weixin_oc_api_timeout_ms",
+            120_000,
+            self.MIN_TIMEOUT_MS,
         )
         self.cdn_base_url = str(
             platform_config.get(
@@ -1651,6 +1668,31 @@ class WeixinOCAdapter(Platform):
         for segment in message_chain.chain:
             if isinstance(segment, Plain):
                 pending_text += segment.text
+                continue
+
+            if isinstance(segment, ActionRow):
+                fallback_parts = [
+                    f"{button.label}: {button.action.url}"
+                    for button in segment.buttons
+                    if isinstance(button.action, Button.UrlAction)
+                ]
+                callback_labels = [
+                    button.label
+                    for button in segment.buttons
+                    if isinstance(button.action, Button.CallbackAction)
+                ]
+                if callback_labels:
+                    fallback_parts.append(
+                        segment.fallback_text
+                        or (
+                            f"可选操作：{' / '.join(callback_labels)}"
+                            "（当前平台不支持按钮，请发送选项名称）"
+                        )
+                    )
+                if fallback_parts:
+                    if pending_text and not pending_text.endswith("\n"):
+                        pending_text += "\n"
+                    pending_text += "\n".join(fallback_parts)
                 continue
 
             if isinstance(segment, (Image, Video, File)):

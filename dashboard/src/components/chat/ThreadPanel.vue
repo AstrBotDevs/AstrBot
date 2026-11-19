@@ -1,6 +1,6 @@
 <template>
-  <transition name="slide-left">
-    <aside v-if="modelValue && thread" class="thread-panel">
+  <transition name="chat-panel">
+    <aside v-if="modelValue && thread" class="thread-panel chat-side-panel">
       <div class="thread-panel-header">
         <div class="thread-panel-title">{{ tm("thread.title") }}</div>
         <div class="thread-panel-actions">
@@ -26,8 +26,10 @@
         <ChatMessageList
           :messages="messages"
           :is-dark="isDark"
-          :is-streaming="sending"
+          :is-message-streaming="(message) => sending && message === activeBotRecord"
           variant="thread"
+          @button-click="handleButtonClick"
+          @configure-models="emit('configureModels')"
         />
       </div>
 
@@ -55,11 +57,14 @@
 </template>
 
 <script setup lang="ts">
-import { nextTick, ref, watch } from "vue";
+import "@/components/chat/chatPanelTransition.css";
+import { nextTick, provide, ref, watch } from "vue";
+import { streamViewAction, viewActionKey, workbenchKey } from "@/utils/chatViews";
 import { chatApi } from "@/api/v1";
 import { fetchWithAuth } from "@/api/http";
 import {
   appendPlain,
+  appendError,
   appendReasoningPart,
   buildChatRequestFlags,
   extractReasoningText,
@@ -74,7 +79,7 @@ import {
   type MessagePart,
   type ChatThread,
 } from "@/composables/useMessages";
-import { useModuleI18n } from "@/i18n/composables";
+import { useI18n, useModuleI18n } from "@/i18n/composables";
 import ChatMessageList from "@/components/chat/ChatMessageList.vue";
 
 const props = defineProps<{
@@ -82,18 +87,48 @@ const props = defineProps<{
   thread: ChatThread | null;
   isDark: boolean;
   deleting?: boolean;
+  getProviderSelection: () => { providerId: string; modelName: string };
 }>();
 
 const emit = defineEmits<{
+  configureModels: [];
   "update:modelValue": [value: boolean];
   delete: [thread: ChatThread];
 }>();
 
 const { tm } = useModuleI18n("features/chat");
+// Thread views stay within their own conversation and action handler.
+provide(workbenchKey, undefined);
+const { locale } = useI18n();
 const messages = ref<ChatRecord[]>([]);
 const draft = ref("");
 const sending = ref(false);
+const activeBotRecord = ref<ChatRecord | null>(null);
 const messagesEl = ref<HTMLElement | null>(null);
+
+provide(viewActionKey, (viewId, input) => {
+  if (sending.value) return Promise.reject(new Error("Wait for the current reply to finish."));
+  const botRecord = ref<ChatRecord>({
+    id: `local-view-${input.interaction_id}`,
+    content: { type: "bot", message: [], reasoning: "", isLoading: true },
+  }).value;
+  let visible = false;
+  activeBotRecord.value = botRecord;
+  sending.value = true;
+  return streamViewAction(viewId, input, (payload) => {
+    if (payload.type === "run_started") return;
+    if (!visible && payload.type !== "end" && payload.type !== "user_message_saved") {
+      messages.value.push(botRecord);
+      visible = true;
+    }
+    processPayload(botRecord, undefined, payload);
+    if (visible) scrollToBottom();
+  }, () => {
+    sending.value = false;
+    activeBotRecord.value = null;
+  });
+});
+
 
 watch(
   () => props.thread?.thread_id,
@@ -152,19 +187,27 @@ async function send() {
   scrollToBottom();
 
   const abort = new AbortController();
+  activeBotRecord.value = threadBotRecord;
   sending.value = true;
   try {
-    const response = await fetchWithAuth(chatApi.sendThreadMessageUrl(props.thread.thread_id), {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
+    const selection = props.getProviderSelection();
+    const response = await fetchWithAuth(
+      chatApi.sendThreadMessageUrl(props.thread.thread_id),
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          message: [{ type: "plain", text }],
+          flags: buildChatRequestFlags(),
+          locale: locale.value,
+          selected_provider: selection.providerId,
+          selected_model: selection.modelName,
+        }),
+        signal: abort.signal,
       },
-      body: JSON.stringify({
-        message: [{ type: "plain", text }],
-        flags: buildChatRequestFlags(),
-      }),
-      signal: abort.signal,
-    });
+    );
     if (!response.ok || !response.body) {
       throw new Error(`Thread request failed: ${response.status}`);
     }
@@ -173,13 +216,76 @@ async function send() {
       scrollToBottom();
     });
   } catch (error) {
-    appendPlain(
-      threadBotRecord,
-      `\n\n${String((error as Error)?.message || error)}`,
-    );
+    appendError(threadBotRecord, error, "connection_error");
     console.error("Failed to send thread message:", error);
   } finally {
     sending.value = false;
+    activeBotRecord.value = null;
+  }
+}
+
+async function handleButtonClick(payload: {
+  message: ChatRecord;
+  callbackData: string;
+}) {
+  if (!props.thread || sending.value || !payload.callbackData) return;
+  const messageId = crypto.randomUUID?.() || `${Date.now()}-${Math.random()}`;
+  const botRecord: ChatRecord = {
+    id: `local-thread-button-bot-${messageId}`,
+    created_at: new Date().toISOString(),
+    content: {
+      type: "bot",
+      message: [],
+      reasoning: "",
+      isLoading: true,
+    },
+  };
+  let visible = false;
+  const showBotRecord = () => {
+    if (visible) return;
+    messages.value.push(botRecord);
+    visible = true;
+    scrollToBottom();
+  };
+
+  activeBotRecord.value = botRecord;
+  sending.value = true;
+  try {
+    const response = await fetchWithAuth(
+      chatApi.sendThreadMessageUrl(props.thread.thread_id),
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          message: [
+            {
+              type: "button_interaction",
+              callback_data: payload.callbackData,
+              source_message_id: payload.message.id,
+            },
+          ],
+          flags: buildChatRequestFlags(),
+        }),
+      },
+    );
+    if (!response.ok || !response.body) {
+      throw new Error(`Thread button request failed: ${response.status}`);
+    }
+    await readSseStream(response.body, (streamPayload) => {
+      const type = streamPayload?.type || streamPayload?.t;
+      if (type !== "end" && type !== "user_message_saved") {
+        showBotRecord();
+      }
+      processPayload(botRecord, undefined, streamPayload);
+      scrollToBottom();
+    });
+  } catch (error) {
+    showBotRecord();
+    appendError(botRecord, error, "connection_error");
+    console.error("Failed to send thread button interaction:", error);
+  } finally {
+    sending.value = false;
+    activeBotRecord.value = null;
   }
 }
 
@@ -194,7 +300,10 @@ function normalizeRecord(record: any): ChatRecord {
     content: {
       type: content.type || (record.sender_id === "bot" ? "bot" : "user"),
       message: normalizedMessage,
-      reasoning: extractReasoningText(normalizedMessage, content.reasoning || ""),
+      reasoning: extractReasoningText(
+        normalizedMessage,
+        content.reasoning || "",
+      ),
       agentStats: content.agentStats || content.agent_stats,
       refs: content.refs,
     },
@@ -230,7 +339,11 @@ async function readSseStream(
   }
 }
 
-function processPayload(botRecord: ChatRecord, userRecord: ChatRecord, payload: any) {
+function processPayload(
+  botRecord: ChatRecord,
+  userRecord: ChatRecord | undefined,
+  payload: any,
+) {
   const normalized =
     payload?.ct === "chat"
       ? { ...payload, type: payload.type || payload.t }
@@ -242,10 +355,11 @@ function processPayload(botRecord: ChatRecord, userRecord: ChatRecord, payload: 
   if (type === "session_id" || type === "session_bound") return;
 
   if (type === "user_message_saved") {
+    if (!userRecord) return;
     userRecord.id = data?.id || userRecord.id;
     userRecord.created_at = data?.created_at || userRecord.created_at;
-    userRecord.llm_checkpoint_id =
-      data?.llm_checkpoint_id || userRecord.llm_checkpoint_id;
+    userRecord.turn_id =
+      data?.turn_id || userRecord.turn_id;
     return;
   }
 
@@ -253,8 +367,8 @@ function processPayload(botRecord: ChatRecord, userRecord: ChatRecord, payload: 
     markMessageStarted(botRecord);
     botRecord.id = data?.id || botRecord.id;
     botRecord.created_at = data?.created_at || botRecord.created_at;
-    botRecord.llm_checkpoint_id =
-      data?.llm_checkpoint_id || botRecord.llm_checkpoint_id;
+    botRecord.turn_id =
+      data?.turn_id || botRecord.turn_id;
     if (data?.refs) {
       botRecord.content.refs = data.refs;
     }
@@ -269,7 +383,7 @@ function processPayload(botRecord: ChatRecord, userRecord: ChatRecord, payload: 
 
   if (type === "error") {
     markMessageStarted(botRecord);
-    appendPlain(botRecord, `\n\n${String(data)}`);
+    appendError(botRecord, data);
     return;
   }
 
@@ -316,6 +430,15 @@ function processPayload(botRecord: ChatRecord, userRecord: ChatRecord, payload: 
     return;
   }
 
+  if ((type === "actionrow" || type === "view") && data && typeof data === "object") {
+    markMessageStarted(botRecord);
+    botRecord.content.message.push({
+      ...(data as Record<string, unknown>),
+      type,
+    });
+    return;
+  }
+
   if (["image", "record", "file", "video"].includes(type)) {
     markMessageStarted(botRecord);
     const rawFilename = String(data)
@@ -327,7 +450,9 @@ function processPayload(botRecord: ChatRecord, userRecord: ChatRecord, payload: 
     const storedFilename =
       separatorIndex >= 0 ? rawFilename.slice(0, separatorIndex) : rawFilename;
     const displayFilename =
-      separatorIndex >= 0 ? rawFilename.slice(separatorIndex + 1) : storedFilename;
+      separatorIndex >= 0
+        ? rawFilename.slice(separatorIndex + 1)
+        : storedFilename;
     const filename = displayFilename || storedFilename;
     const mediaPart: MessagePart = { type, filename };
     if (storedFilename && storedFilename !== filename) {
@@ -348,26 +473,17 @@ function scrollToBottom() {
 
 <style scoped>
 .thread-panel {
-  width: 380px;
+  --chat-side-panel-width: 380px;
+  width: var(--chat-side-panel-width);
   height: calc(100% - var(--chat-panel-top-offset, 0px));
   margin-top: var(--chat-panel-top-offset, 0px);
-  border-left: 1px solid var(--chat-border, rgba(var(--v-theme-on-surface), 0.1));
+  border-left: 1px solid
+    var(--chat-border, rgba(var(--v-theme-on-surface), 0.1));
   background: var(--chat-page-bg, rgb(var(--v-theme-surface)));
   color: rgb(var(--v-theme-on-surface));
   display: flex;
   flex-direction: column;
   flex-shrink: 0;
-}
-
-.slide-left-enter-active,
-.slide-left-leave-active {
-  transition: all 0.2s ease;
-}
-
-.slide-left-enter-from,
-.slide-left-leave-to {
-  transform: translateX(100%);
-  opacity: 0;
 }
 
 .thread-panel-header {
@@ -470,7 +586,8 @@ function scrollToBottom() {
   .thread-panel-header {
     min-height: 52px;
     padding: calc(10px + env(safe-area-inset-top)) 12px 8px;
-    border-bottom: 1px solid var(--chat-border, rgba(var(--v-border-color), 0.12));
+    border-bottom: 1px solid
+      var(--chat-border, rgba(var(--v-border-color), 0.12));
   }
 
   .thread-selected-text {
@@ -501,5 +618,4 @@ function scrollToBottom() {
     flex-shrink: 0;
   }
 }
-
 </style>

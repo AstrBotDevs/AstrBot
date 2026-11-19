@@ -407,7 +407,7 @@
 import { isCancel } from 'axios';
 import { debounce } from 'lodash';
 import { markRaw } from 'vue';
-import { VueMonacoEditor } from '@guolao/vue-monaco-editor';
+import { LazyMonacoEditor as VueMonacoEditor } from '@/components/shared/LazyMonacoEditor';
 import { conversationApi } from '@/api/v1';
 import { useCommonStore } from '@/stores/common';
 import { useCustomizerStore } from '@/stores/customizer';
@@ -802,8 +802,6 @@ export default {
                     params.search = search;
                 }
 
-                params.exclude_ids = 'astrbot';
-                params.exclude_platforms = 'webchat';
                 params.include_history = false;
 
                 const response = await conversationApi.list(params, {

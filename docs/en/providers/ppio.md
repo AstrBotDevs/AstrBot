@@ -14,19 +14,13 @@ Once you find the model, click its card to expand a detail panel on the right. S
 
 ![image](https://files.astrbot.app/docs/source/images/ppio/image-3.png)
 
-Open the AstrBot dashboard → Service Providers page, click **Add Provider**, find and click `PPIO Cloud` (requires version >= 3.5.10; older versions are also supported, see below).
+In the AstrBot WebUI, open **Providers → Chat Completion**, click **Add**, and select `PPIO`.
 
-![image](https://files.astrbot.app/docs/source/images/ppio/image.png)
-
-Fill in the API Key and model name in the dialog form, then click **Save** to complete the setup.
-
-> [!TIP]
-> If you are using an older version of AstrBot (< 3.5.10), open the AstrBot dashboard → Service Providers page, click **Add Provider**, find `OpenAI`, and click to enter.
-> 1. Set the ID to `ppio` (any name works)
-> 2. Set `API Base URL` to `https://api.ppinfra.com/v3/openai`
-> 3. Fill in the API Key and model name in the dialog form, then click **Save** to complete the setup.
+Enter the provider name and `API Key`, check the `API Base URL`, then click **Save and Fetch Models**. Click `+` beside the desired model and make sure it is enabled. Alternatively, click **Save Configuration**, then **Custom Model** and enter the exact model ID. Use **Test Model** beside the configured model to check availability.
 
 ## Usage
+
+Open **Config**, select the profile to use, and go to **AI → Model**. Set **Chat Model** to the model you just added, then click **Save Configuration** at the bottom right. This setting is for AstrBot built-in AI.
 
 Send the `/provider` command to the bot to switch to the PPIO Cloud provider you just added.
 

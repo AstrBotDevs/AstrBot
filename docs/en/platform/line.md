@@ -40,8 +40,8 @@ How to get them:
 ## Configure AstrBot
 
 1. Open the AstrBot admin panel
-2. Click `Bots` in the left sidebar
-3. Click `+ Create Bot`
+2. Click `Platforms` in the left sidebar
+3. Click `Add Adapter`
 4. Select `line`
 
 Fill in these fields:
@@ -58,7 +58,7 @@ Click Save.
 
 The LINE adapter supports **unified webhook mode only**.
 
-After saving, click `View Webhook URL` on the bot card and copy the URL.
+After saving, select the bot in `Platforms` and click `View Webhook URL` to copy the URL.
 
 Then in LINE Developers Console:
 

@@ -4,6 +4,8 @@ import httpx
 import pytest
 from google.genai import types
 
+import astrbot.core.message.components as Comp
+import astrbot.core.provider.sources.gemini_source as gemini_source
 import astrbot.core.provider.sources.request_retry as request_retry
 from astrbot.core.exceptions import EmptyModelOutputError
 from astrbot.core.provider.entities import LLMResponse
@@ -33,39 +35,32 @@ async def test_gemini_thinking_level_is_serialized_on_every_request():
 
 
 @pytest.mark.asyncio
-async def test_gemini_37_minimal_thinking_level_falls_back_to_medium():
-    model = "gemini-3.7-flash"
+@pytest.mark.parametrize(
+    ("model", "provider_config"),
+    [
+        ("gemini-4-argon", {}),
+        ("gemini-4-argon", {"gm_thinking_config": {"level": "HIGH"}}),
+        (
+            "gemini-4-argon",
+            {
+                "gm_thinking_config": {"level": "HIGH"},
+                "custom_extra_body": {"reasoning_effort": "auto"},
+            },
+        ),
+        ("gemini-4-argon", {"custom_extra_body": {"reasoning_effort": "xhigh"}}),
+        ("gemini-3.8-flash", {"gm_thinking_config": {"level": "MINIMAL"}}),
+    ],
+)
+async def test_gemini_omits_unset_or_unsupported_thinking_config(model, provider_config):
     provider = ProviderGoogleGenAI.__new__(ProviderGoogleGenAI)
-    provider.provider_config = {"gm_thinking_config": {"level": "MINIMAL"}}
+    provider.provider_config = provider_config
     provider.provider_settings = {}
-    provider.model_name = model
+    provider.model_name = "gemini-2.5-flash"
     provider.safety_settings = []
 
     config = await provider._prepare_query_config({"model": model})
 
-    assert config.thinking_config is not None
-    assert config.thinking_config.model_dump(exclude_none=True) == {
-        "thinking_level": types.ThinkingLevel.MEDIUM,
-    }
-
-
-@pytest.mark.asyncio
-async def test_gemini_prepare_conversation_removes_leading_model_content():
-    provider = ProviderGoogleGenAI.__new__(ProviderGoogleGenAI)
-
-    contents = await provider._prepare_conversation(
-        {
-            "messages": [
-                {"role": "assistant", "content": "stale assistant turn"},
-                {"role": "user", "content": "current user turn"},
-            ]
-        }
-    )
-
-    assert len(contents) == 1
-    assert isinstance(contents[0], types.UserContent)
-    assert contents[0].parts is not None
-    assert contents[0].parts[-1].text == "current user turn"
+    assert "thinking_config" not in config.model_dump(exclude_none=True)
 
 
 @pytest.mark.asyncio
@@ -144,6 +139,48 @@ async def test_gemini_prepare_conversation_resolves_local_history_image(tmp_path
     assert image_part.inline_data is not None
     assert image_part.inline_data.mime_type == "image/webp"
     assert image_part.inline_data.data == image_bytes
+
+
+@pytest.mark.asyncio
+async def test_gemini_prepare_conversation_resolves_url_history_audio(monkeypatch):
+    audio_url = "https://example.com/history.mp3"
+
+    async def fake_resolve_media_ref(media_ref, *, media_type, strict):
+        assert media_ref == audio_url
+        assert media_type == "audio"
+        assert strict is True
+        return SimpleNamespace(base64_data="YXVkaW8=", mime_type="audio/mpeg")
+
+    monkeypatch.setattr(
+        gemini_source,
+        "resolve_media_ref_to_base64_data",
+        fake_resolve_media_ref,
+    )
+    provider = ProviderGoogleGenAI.__new__(ProviderGoogleGenAI)
+
+    contents = await provider._prepare_conversation(
+        {
+            "messages": [
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": "[Audio]"},
+                        {"type": "audio_url", "audio_url": {"url": audio_url}},
+                    ],
+                },
+                {"role": "assistant", "content": "Received."},
+                {"role": "user", "content": "Reply in text."},
+            ]
+        }
+    )
+
+    assert contents[0].parts is not None
+    audio_part = contents[0].parts[1]
+    assert audio_part.inline_data is not None
+    assert audio_part.inline_data.mime_type == "audio/mpeg"
+    assert audio_part.inline_data.data == b"audio"
+    assert contents[-1].parts is not None
+    assert contents[-1].parts[-1].text == "Reply in text."
 
 
 def test_gemini_empty_output_raises_empty_model_output_error():
@@ -236,3 +273,176 @@ async def test_gemini_get_models_retries_transient_request_error(monkeypatch):
 
     assert await provider.get_models() == ["gemini-a"]
     assert models.calls == 2
+
+
+def _gemini_part(*, text=None, thought=None, function_call=None):
+    return SimpleNamespace(
+        text=text,
+        thought=thought,
+        function_call=function_call,
+        inline_data=None,
+        thought_signature=None,
+    )
+
+
+def _gemini_stream_chunk(
+    *,
+    text=None,
+    thought=None,
+    function_call=None,
+    finish_reason=None,
+    response_id="resp-1",
+):
+    """Build a minimal stand-in for a google-genai streaming chunk."""
+    parts = []
+    if text is not None:
+        parts.append(_gemini_part(text=text))
+    if thought is not None:
+        parts.append(_gemini_part(text=thought, thought=True))
+    if function_call is not None:
+        parts.append(_gemini_part(function_call=function_call))
+    return SimpleNamespace(
+        candidates=[
+            SimpleNamespace(
+                content=SimpleNamespace(parts=parts),
+                finish_reason=finish_reason,
+            )
+        ],
+        text=text,
+        response_id=response_id,
+        usage_metadata=None,
+    )
+
+
+def _gemini_stream_provider():
+    provider = ProviderGoogleGenAI.__new__(ProviderGoogleGenAI)
+    provider.provider_config = {}
+    provider.provider_settings = {}
+    provider.model_name = "gemini-3.7-flash"
+    provider.safety_settings = []
+    provider.client = SimpleNamespace(
+        models=SimpleNamespace(generate_content_stream=lambda **kwargs: None)
+    )
+    return provider
+
+
+async def _drain_gemini_stream(provider, monkeypatch, chunks):
+    async def fake_stream():
+        for chunk in chunks:
+            yield chunk
+
+    async def fake_retry(
+        provider_name,
+        request_factory,
+        max_attempts=None,
+    ):
+        return fake_stream()
+
+    monkeypatch.setattr(gemini_source, "retry_provider_request", fake_retry)
+    return [
+        response
+        async for response in provider._query_stream(
+            payloads={
+                "messages": [{"role": "user", "content": "what's the weather?"}],
+                "model": "gemini-3.7-flash",
+            },
+            tools=None,
+        )
+    ]
+
+
+@pytest.mark.asyncio
+async def test_gemini_stream_keeps_narration_emitted_before_tool_call(monkeypatch):
+    """Narration streamed before a tool call must reach the final response.
+
+    Regression test for the tool-call branch that used to build the final
+    LLMResponse from the tool-call chunk alone and return immediately, leaving
+    text the user had already seen out of the conversation history.
+    """
+    provider = _gemini_stream_provider()
+    tool_call = SimpleNamespace(
+        name="get_weather",
+        args={"city": "Shenyang"},
+        id="call-1",
+        thought_signature=None,
+    )
+
+    responses = await _drain_gemini_stream(
+        provider,
+        monkeypatch,
+        [
+            _gemini_stream_chunk(text="Sure, let me check that for you."),
+            _gemini_stream_chunk(function_call=tool_call),
+        ],
+    )
+
+    final = responses[-1]
+    assert final.is_chunk is False
+    assert final.tools_call_name == ["get_weather"]
+    plain_text = "".join(
+        part.text
+        for part in (final.result_chain.chain or [])
+        if isinstance(part, Comp.Plain)
+    )
+    assert "Sure, let me check that for you." in plain_text
+
+
+@pytest.mark.asyncio
+async def test_gemini_stream_keeps_conversation_header_until_consumed(
+    monkeypatch,
+):
+    """The conversation header must be present while the stream is consumed."""
+    provider = _gemini_stream_provider()
+    headers: dict[str, str] = {}
+    provider.client._api_client = SimpleNamespace(
+        _http_options=SimpleNamespace(headers=headers),
+    )
+    observed_headers: list[str | None] = []
+
+    async def fake_stream():
+        observed_headers.append(headers.get("x-astrbot-conversation-id"))
+        yield _gemini_stream_chunk(text="ok")
+
+    async def fake_retry(provider_name, request_factory, max_attempts=None):
+        return fake_stream()
+
+    monkeypatch.setattr(gemini_source, "retry_provider_request", fake_retry)
+    responses = [
+        response
+        async for response in provider._query_stream(
+            payloads={
+                "messages": [{"role": "user", "content": "hello"}],
+                "model": "gemini-3.7-flash",
+            },
+            tools=None,
+            conversation_id="conversation-1",
+        )
+    ]
+
+    assert responses[-1].completion_text == "ok"
+    assert observed_headers == ["conversation-1"]
+    assert "x-astrbot-conversation-id" not in headers
+
+
+@pytest.mark.asyncio
+async def test_gemini_stream_keeps_reasoning_from_tool_call_chunk(monkeypatch):
+    """Reasoning on the tool-call chunk itself must not be overwritten."""
+    provider = _gemini_stream_provider()
+    tool_call = SimpleNamespace(
+        name="get_weather",
+        args={"city": "Shenyang"},
+        id="call-1",
+        thought_signature=None,
+    )
+
+    responses = await _drain_gemini_stream(
+        provider,
+        monkeypatch,
+        [
+            _gemini_stream_chunk(thought="weighing options"),
+            _gemini_stream_chunk(function_call=tool_call, thought="deciding to call"),
+        ],
+    )
+
+    final = responses[-1]
+    assert final.reasoning_content == "weighing optionsdeciding to call"

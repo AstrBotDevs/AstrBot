@@ -12,14 +12,12 @@ from astrbot.core import logger
 from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.platform.message_type import MessageType
 from astrbot.core.utils.session_waiter import (
-    FILTERS,
-    USER_SESSIONS,
     SessionController,
-    SessionWaiter,
     session_waiter,
 )
 
 from .group_chat_context import GroupChatContext
+from .i18n import MESSAGES
 
 
 def _iter_message_components(event: AstrMessageEvent):
@@ -40,15 +38,6 @@ class Main(star.Star):
             )
         except BaseException as e:
             logger.error(f"group chat context init failed: {e}")
-
-    @filter.event_message_type(filter.EventMessageType.ALL, priority=maxsize)
-    async def handle_session_control_agent(self, event: AstrMessageEvent) -> None:
-        """会话控制代理"""
-        for session_filter in FILTERS:
-            session_id = session_filter.filter(event)
-            if session_id in USER_SESSIONS:
-                await SessionWaiter.trigger(session_id, event)
-                event.stop_event()
 
     @filter.event_message_type(filter.EventMessageType.ALL, priority=maxsize - 1)
     async def handle_empty_mention(self, event: AstrMessageEvent):
@@ -74,6 +63,9 @@ class Main(star.Star):
             if not (is_empty_mention or is_wake_prefix_only):
                 return
 
+            messages_i18n = MESSAGES.get(
+                self.context.locale(event.unified_msg_origin), MESSAGES["zh-CN"]
+            )
             if p_settings.get("empty_mention_waiting_need_reply", True):
                 try:
                     curr_cid = await self.context.conversation_manager.get_curr_conversation_id(
@@ -109,7 +101,7 @@ class Main(star.Star):
                     )
                 except Exception as e:
                     logger.error(f"LLM response failed: {e!s}")
-                    yield event.plain_result("想要问什么呢？😄")
+                    yield event.plain_result(messages_i18n["empty_mention"])
 
             @session_waiter(60)
             async def empty_mention_waiter(
@@ -132,7 +124,7 @@ class Main(star.Star):
             except TimeoutError:
                 pass
             except Exception as e:
-                yield event.plain_result("发生错误，请联系管理员: " + str(e))
+                yield event.plain_result(messages_i18n["error"].format(detail=str(e)))
             finally:
                 event.stop_event()
         except Exception as e:
@@ -147,8 +139,8 @@ class Main(star.Star):
             or group_context_settings["active_reply"]["enable"]
         )
 
-    @filter.platform_adapter_type(
-        filter.PlatformAdapterType.ALL,
+    @filter.event_message_type(
+        filter.EventMessageType.GROUP_MESSAGE,
         priority=maxsize - 2,
     )
     async def persist_group_message(self, event: AstrMessageEvent) -> None:
@@ -193,7 +185,10 @@ class Main(star.Star):
         except Exception:
             logger.exception("Failed to persist an incoming group message.")
 
-    @filter.platform_adapter_type(filter.PlatformAdapterType.ALL)
+    @filter.event_message_type(
+        filter.EventMessageType.GROUP_MESSAGE,
+        priority=maxsize - 2,
+    )
     async def on_message(self, event: AstrMessageEvent):
         """群聊上下文感知"""
         message_components = _iter_message_components(event)
@@ -240,7 +235,9 @@ class Main(star.Star):
 
                     if not session_curr_cid:
                         logger.error(
-                            "当前未处于对话状态，无法主动回复，请确保 平台设置->会话隔离(unique_session) 未开启，并使用 /new 创建一个会话。",
+                            "No active conversation is available for proactive replies. "
+                            "Disable Isolate Conversation in Config -> Platforms & Messages "
+                            "-> General, then use /new to create a conversation.",
                         )
                         return
 

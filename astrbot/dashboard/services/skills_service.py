@@ -10,11 +10,11 @@ from pathlib import Path
 from typing import Any
 
 from astrbot.core import DEMO_MODE, logger
-from astrbot.core.computer.computer_client import (
+from astrbot.core.astr_agent_runtime.computer.computer_client import (
     _discover_bay_credentials,
     sync_skills_to_active_sandboxes,
 )
-from astrbot.core.skills.neo_skill_sync import NeoSkillSyncManager
+from astrbot.core.astr_agent_runtime.computer.neo_skill_sync import NeoSkillSyncManager
 from astrbot.core.skills.skill_manager import SkillManager
 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
 
@@ -102,23 +102,6 @@ class SkillsService:
             raise SkillsServiceError(
                 "You are not permitted to do this operation in demo mode"
             )
-
-    @staticmethod
-    async def _save_upload(file: Any, target_path: str) -> None:
-        if hasattr(file, "save"):
-            maybe_awaitable = file.save(target_path)
-            if hasattr(maybe_awaitable, "__await__"):
-                await maybe_awaitable
-            return
-
-        if hasattr(file, "read"):
-            data = file.read()
-            if hasattr(data, "__await__"):
-                data = await data
-            Path(target_path).write_bytes(data)
-            return
-
-        raise SkillsServiceError("Invalid upload file")
 
     def resolve_local_skill_dir(self, name: str) -> Path:
         skill_name = str(name or "").strip()
@@ -252,7 +235,7 @@ class SkillsService:
         provider_settings = self.core_lifecycle.astrbot_config.get(
             "provider_settings", {}
         )
-        runtime = provider_settings.get("computer_use_runtime", "local")
+        runtime = provider_settings.get("computer_use_runtime", "none")
         skill_mgr = SkillManager()
         skills = skill_mgr.list_skills(
             active_only=False,
@@ -308,7 +291,7 @@ class SkillsService:
         temp_path = _next_available_temp_path(temp_dir, filename)
 
         try:
-            await self._save_upload(file, temp_path)
+            await file.save(temp_path)
             try:
                 skill_name = skill_mgr.install_skill_from_zip(
                     temp_path,
@@ -365,7 +348,7 @@ class SkillsService:
                     continue
 
                 temp_path = _next_available_temp_path(temp_dir, filename)
-                await self._save_upload(file, temp_path)
+                await file.save(temp_path)
 
                 try:
                     skill_name = skill_mgr.install_skill_from_zip(

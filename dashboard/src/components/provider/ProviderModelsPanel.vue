@@ -24,7 +24,7 @@
           prepend-icon="mdi-download"
           :loading="loadingModels"
           variant="tonal"
-          rounded="xl"
+          rounded="lg"
           @click="emit('fetch-models')"
         >
           {{ isSourceModified ? tm('providerSources.saveAndFetchModels') : tm('providerSources.fetchModels') }}
@@ -34,7 +34,7 @@
           color="primary"
           prepend-icon="mdi-pencil-plus"
           variant="text"
-          rounded="xl"
+          rounded="lg"
           @click="emit('open-manual-model')"
         >
           {{ tm('models.manualAddButton') }}
@@ -412,6 +412,7 @@ const isProviderSaving = (providerId) => props.savingProviders.includes(provider
 
 <style scoped>
 .provider-models-panel {
+  container: provider-models / inline-size;
   display: grid;
   gap: 18px;
 }
@@ -426,7 +427,7 @@ const isProviderSaving = (providerId) => props.savingProviders.includes(provider
 
 .provider-models-title {
   margin: 0;
-  font-size: 18px;
+  font-size: 16px;
   font-weight: 650;
   line-height: 1.3;
 }
@@ -438,7 +439,7 @@ const isProviderSaving = (providerId) => props.savingProviders.includes(provider
 
 .provider-models-subtitle {
   display: block;
-  margin-top: 6px;
+  margin-top: 4px;
   color: rgba(var(--v-theme-on-surface), 0.56);
   font-size: 12px;
 }
@@ -488,6 +489,7 @@ const isProviderSaving = (providerId) => props.savingProviders.includes(provider
 .provider-models-list {
   display: flex;
   flex-direction: column;
+  gap: 8px;
 }
 
 .provider-models-list--available {
@@ -501,12 +503,14 @@ const isProviderSaving = (providerId) => props.savingProviders.includes(provider
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  padding: 12px 0;
-  border-bottom: 1px solid rgba(var(--v-theme-on-surface), 0.06);
+  padding: 14px 16px;
+  border: 1px solid rgba(var(--v-theme-on-surface), 0.07);
+  border-radius: 12px;
+  background: rgba(var(--v-theme-on-surface), 0.025);
 }
 
-.provider-model-row:last-child {
-  border-bottom: 0;
+.provider-model-row:hover {
+  border-color: rgba(var(--v-theme-primary), 0.22);
 }
 
 .provider-model-row__main {
@@ -605,10 +609,10 @@ const isProviderSaving = (providerId) => props.savingProviders.includes(provider
 }
 
 .provider-models-empty--small {
-  min-height: 120px;
+  min-height: 80px;
 }
 
-@media (max-width: 760px) {
+@container provider-models (max-width: 760px) {
   .provider-models-toolbar {
     align-items: stretch;
     flex-direction: column;
@@ -625,13 +629,13 @@ const isProviderSaving = (providerId) => props.savingProviders.includes(provider
   }
 
   .provider-models-search {
-    flex: 1 1 100%;
+    flex: 1 1 200px;
     min-width: 0;
     max-width: none;
   }
 
   .provider-models-toolbar__actions :deep(.v-btn) {
-    flex: 1 1 160px;
+    flex: 0 1 auto;
     min-width: 0;
   }
 
@@ -640,22 +644,31 @@ const isProviderSaving = (providerId) => props.savingProviders.includes(provider
   }
 }
 
-@media (max-width: 600px) {
-  .provider-models-panel {
-    gap: 14px;
-  }
-
+@container provider-models (max-width: 600px) {
   .provider-model-row {
     align-items: stretch;
     flex-direction: column;
     gap: 10px;
-    padding: 14px 0;
+    padding: 14px;
   }
 
   .provider-model-row__actions {
     align-self: flex-end;
     flex-wrap: wrap;
     justify-content: flex-end;
+  }
+}
+
+@container provider-models (max-width: 480px) {
+  .provider-models-search {
+    flex-basis: 100%;
+  }
+
+  .provider-models-toolbar__actions :deep(.v-btn) {
+    flex: 1 1 120px;
+    height: auto;
+    min-height: 36px;
+    padding-block: 8px;
   }
 }
 </style>

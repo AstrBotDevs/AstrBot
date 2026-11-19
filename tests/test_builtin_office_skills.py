@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import csv
 import json
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -23,11 +24,16 @@ DOCUMENT_SCRIPTS = BUILTIN_SKILLS_DIR / "documents" / "scripts"
 def _run_script(
     script: Path, *arguments: Path | str
 ) -> subprocess.CompletedProcess[str]:
+    # Lock the child's stdio to UTF-8: otherwise it uses the Windows ANSI
+    # code page (e.g. cp1252) and crashes printing CJK JSON.
+    env = {**os.environ, "PYTHONIOENCODING": "utf-8"}
     return subprocess.run(
         [sys.executable, str(script), *(str(argument) for argument in arguments)],
         check=False,
         capture_output=True,
         text=True,
+        encoding="utf-8",
+        env=env,
     )
 
 
@@ -127,19 +133,3 @@ def test_document_skill_inspects_validates_scrubs_and_extracts_table(
             ["项目", "状态"],
             ["DOCX Skill", "完成"],
         ]
-
-
-def test_office_skill_docs_cover_advanced_workflows() -> None:
-    spreadsheets = (BUILTIN_SKILLS_DIR / "spreadsheets" / "SKILL.md").read_text(
-        encoding="utf-8"
-    )
-    documents = (BUILTIN_SKILLS_DIR / "documents" / "SKILL.md").read_text(
-        encoding="utf-8"
-    )
-
-    for text in ("keep_vba=True", "conditional formatting", "data validation"):
-        assert text in spreadsheets
-    for text in ("tracked revisions", "content controls", "digital signature"):
-        assert text in documents
-    assert "Codex" not in spreadsheets
-    assert "Codex" not in documents

@@ -15,7 +15,7 @@ class PlatformMessageHistoryManager:
         content: dict,
         sender_id: str | None = None,
         sender_name: str | None = None,
-        llm_checkpoint_id: str | None = None,
+        turn_id: str | None = None,
         max_messages: int | None = None,
     ) -> PlatformMessageHistory:
         """Insert a new platform message history record."""
@@ -25,7 +25,7 @@ class PlatformMessageHistoryManager:
             content=content,
             sender_id=sender_id,
             sender_name=sender_name,
-            llm_checkpoint_id=llm_checkpoint_id,
+            turn_id=turn_id,
             max_messages=max_messages,
         )
 
@@ -122,6 +122,21 @@ class PlatformMessageHistoryManager:
         history.reverse()
         return history
 
+    async def count(self, platform_id: str, user_id: str) -> int:
+        """Count history rows for a platform/user scope.
+
+        Args:
+            platform_id: Platform identifier used to partition history.
+            user_id: Platform user or session identifier.
+
+        Returns:
+            Number of matching history rows.
+        """
+        return await self.db.count_platform_message_history(
+            platform_id=platform_id,
+            user_id=user_id,
+        )
+
     async def delete(
         self, platform_id: str, user_id: str, offset_sec: int = 86400
     ) -> None:
@@ -136,13 +151,13 @@ class PlatformMessageHistoryManager:
         self,
         message_id: int,
         content: dict | None = None,
-        llm_checkpoint_id: str | None = None,
+        turn_id: str | None = None,
     ) -> None:
         """Update a platform message history record."""
         await self.db.update_platform_message_history(
             message_id=message_id,
             content=content,
-            llm_checkpoint_id=llm_checkpoint_id,
+            turn_id=turn_id,
         )
 
     async def delete_by_id(self, message_id: int) -> None:

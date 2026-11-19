@@ -167,12 +167,13 @@
 import { ref, onMounted, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { knowledgeApi } from '@/api/v1'
-import { useModuleI18n } from '@/i18n/composables'
+import { useI18n, useModuleI18n } from '@/i18n/composables'
 import DocumentsTab from './components/DocumentsTab.vue'
 import RetrievalTab from './components/RetrievalTab.vue'
 import SettingsTab from './components/SettingsTab.vue'
 
 const { tm: t } = useModuleI18n('features/knowledge-base/detail')
+const { locale } = useI18n()
 const route = useRoute()
 
 const emit = defineEmits<{
@@ -224,7 +225,7 @@ const loadKB = async () => {
 const formatDate = (dateStr: string) => {
   if (!dateStr) return '-'
   const date = new Date(dateStr)
-  return date.toLocaleString('zh-CN', {
+  return date.toLocaleString(locale.value, {
     year: 'numeric',
     month: '2-digit',
     day: '2-digit',

@@ -41,6 +41,7 @@ def _write_astrbot_root(path: Path) -> None:
 def test_plugin_install_editable_symlinks_local_plugin(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
+    require_symlink: Path,
 ) -> None:
     root = tmp_path / "root"
     source = tmp_path / "source-plugin"

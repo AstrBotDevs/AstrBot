@@ -1,6 +1,18 @@
 {
   "title": "Let's Chat!",
   "subtitle": "Chat with AI Assistant",
+  "settings": {
+    "general": "General",
+    "chat": "Chat",
+    "appearance": "Appearance",
+    "light": "Light",
+    "dark": "Dark",
+    "system": "System",
+    "streaming": "Streaming output",
+    "streamingHint": "Show responses as they are generated. Applies only to ChatUI.",
+    "reasoning": "Show reasoning",
+    "reasoningHint": "Display reasoning returned by the model. Applies only to ChatUI."
+  },
   "input": {
     "placeholder": "Ask anything...",
     "projectPlaceholder": "What should we work on next?",
@@ -18,9 +30,30 @@
     "assistant": "Assistant",
     "system": "System",
     "error": "Error Message",
-    "loading": "Thinking..."
+    "loading": "Thinking...",
+    "loadingVariants": [
+      "(｡•̀ᴗ-)✧ Thinking...",
+      "(・_・ヾ Pondering...",
+      "(๑•̀ㅂ•́)و Gathering my thoughts...",
+      "(｡･ω･｡) Looking for inspiration...",
+      "( •̀ ω •́ )✧ Thinking it through...",
+      "(つ•̀ω•́)つ Finding the right words...",
+      "(・・。)ゞ Connecting the dots...",
+      "(ง •_•)ง Working it out...",
+      "( ˘ω˘ ) Exploring possibilities...",
+      "(ﾉ◕ヮ◕)ﾉ Brewing an answer..."
+    ]
   },
   "voice": {
+    "transcribing": "Dictating…",
+    "transcribe": "Dictate text",
+    "sendAudio": "Record and send audio",
+    "cancel": "Cancel recording",
+    "finishTranscription": "Finish and transcribe",
+    "sttModel": "Transcription model",
+    "configure": "Configure",
+    "noSttProvider": "Configure an available speech-to-text model first",
+    "transcriptionFailed": "Transcription failed. Please try again.",
     "start": "Start Recording",
     "stop": "Stop Recording",
     "recording": "New Recording",
@@ -38,6 +71,7 @@
     "examples": "Example Questions"
   },
   "actions": {
+    "scrollToBottom": "Scroll to bottom",
     "copy": "Copy",
     "regenerate": "Regenerate",
     "retry": "Retry",
@@ -74,6 +108,8 @@
     "placeholder": "Ask about this excerpt..."
   },
   "conversation": {
+    "loading": "Loading conversations",
+    "loadFailed": "Could not load conversations",
     "title": "Conversations",
     "newConversation": "New Conversation",
     "noHistory": "No conversation history",
@@ -115,12 +151,31 @@
     "title": "Config"
   },
   "reasoning": {
+    "worked": "Ran for {duration}",
+    "working": "Running for {duration}",
+    "workCompleted": "Run details",
+    "durationHours": "{hours}h {minutes}m {seconds}s",
+    "durationMinutes": "{minutes}m {seconds}s",
+    "durationSeconds": "{seconds}s",
+    "enabled": "Reasoning enabled",
+    "disabled": "Reasoning disabled",
     "thinking": "Thinking Process",
     "summarySeparator": ", ",
     "thinkSummary": "Thought {count} times",
     "toolSummary": "used {count} tools",
     "think": "Thinking",
     "toolUsed": "Using Tool"
+  },
+  "history": {
+    "edit": "Edit message",
+    "context_pruned": "Historical context has been cleared. Continuing from this point is unavailable.",
+    "context_unavailable": "Historical context is unavailable at this point.",
+    "inactive_message": "This message belongs to a replaced conversation version.",
+    "run_active": "Stop the current generation first.",
+    "unsupported_message": "This action is not supported for this message.",
+    "loadFailed": "Could not load messages",
+    "loadEarlierFailed": "Could not load earlier messages",
+    "loading": "Loading earlier messages"
   },
   "reply": {
     "replyTo": "Reply to",
@@ -133,12 +188,14 @@
     "name": "Project Name",
     "emoji": "Icon (Emoji)",
     "description": "Description (Optional)",
+    "moreSettings": "More settings",
     "workspace": {
       "type": "Workspace",
       "session": "Per-session workspace",
       "project": "Shared project workspace",
       "custom": "Custom path",
-      "path": "Workspace path"
+      "path": "Workspace path",
+      "selectPath": "Select folder"
     },
     "loadingSessions": "Loading conversations...",
     "noSessions": "No conversations in this project",
@@ -152,6 +209,7 @@
     "refresh": "Refresh file tree",
     "filter": "Filter files...",
     "clearFilter": "Clear file filter",
+    "selectSession": "Select a conversation to browse its workspace files",
     "empty": "This workspace is empty",
     "noMatches": "No matching files",
     "loadFailed": "Failed to load workspace files",
@@ -215,5 +273,45 @@
     "exit": "Exit",
     "partialFailure": "{failed} of {total} conversations failed to delete",
     "requestFailed": "Failed to delete conversations. Please try again."
+  },
+  "pluginView": {
+    "loading": "Loading view…",
+    "unavailable": "This view is unavailable. The text result is shown instead."
+  },
+  "workbench": {
+    "newTab": "New workbench",
+    "chooseView": "Choose a plugin view",
+    "empty": "No workbench views are registered. Enable a plugin that provides one.",
+    "loadError": "Could not load workbench views.",
+    "retry": "Retry",
+
+    "title": "Workbench",
+    "openView": "Open in workbench",
+    "hide": "Hide workbench",
+    "expand": "Expand workbench",
+    "restore": "Restore panel size",
+    "resize": "Resize workbench",
+    "closeTab": "Close {title}",
+    "resize": "Resize workbench"
+  },
+  "executionError": {
+    "noModel": {
+      "title": "No chat model available",
+      "description": "Configure and enable a model to start chatting."
+    },
+    "modelConfiguration": {
+      "title": "This model is unavailable",
+      "description": "Check the model configuration or select another available chat model."
+    },
+    "connection": {
+      "title": "Connection problem",
+      "description": "Check your network connection and try again shortly."
+    },
+    "generic": {
+      "title": "This reply could not be completed",
+      "description": "Try again later or open the details to learn more."
+    },
+    "configureModels": "Configure models",
+    "details": "View details"
   }
 }

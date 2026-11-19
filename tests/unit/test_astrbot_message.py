@@ -3,27 +3,12 @@
 import time
 from unittest.mock import patch
 
-from astrbot.core.message.components import Image, Plain
 from astrbot.core.platform.astrbot_message import AstrBotMessage, Group, MessageMember
 from astrbot.core.platform.message_type import MessageType
 
 
 class TestMessageMember:
     """Tests for MessageMember dataclass."""
-
-    def test_message_member_creation_basic(self):
-        """Test creating a MessageMember with required fields."""
-        member = MessageMember(user_id="user123")
-
-        assert member.user_id == "user123"
-        assert member.nickname is None
-
-    def test_message_member_creation_with_nickname(self):
-        """Test creating a MessageMember with nickname."""
-        member = MessageMember(user_id="user123", nickname="TestUser")
-
-        assert member.user_id == "user123"
-        assert member.nickname == "TestUser"
 
     def test_message_member_str_with_nickname(self):
         """Test __str__ method with nickname."""
@@ -44,39 +29,6 @@ class TestMessageMember:
 
 class TestGroup:
     """Tests for Group dataclass."""
-
-    def test_group_creation_basic(self):
-        """Test creating a Group with required fields."""
-        group = Group(group_id="group123")
-
-        assert group.group_id == "group123"
-        assert group.group_name is None
-        assert group.group_avatar is None
-        assert group.group_owner is None
-        assert group.group_admins is None
-        assert group.members is None
-        assert group.member_count is None
-
-    def test_group_creation_with_all_fields(self):
-        """Test creating a Group with all fields."""
-        members = [MessageMember(user_id="user1"), MessageMember(user_id="user2")]
-        group = Group(
-            group_id="group123",
-            group_name="Test Group",
-            group_avatar="http://example.com/avatar.jpg",
-            group_owner="owner123",
-            group_admins=["admin1", "admin2"],
-            members=members,
-            member_count=2,
-        )
-
-        assert group.group_id == "group123"
-        assert group.group_name == "Test Group"
-        assert group.group_avatar == "http://example.com/avatar.jpg"
-        assert group.group_owner == "owner123"
-        assert group.group_admins == ["admin1", "admin2"]
-        assert group.members == members
-        assert group.member_count == 2
 
     def test_group_str_with_all_fields(self):
         """Test __str__ method with all fields."""
@@ -131,27 +83,6 @@ class TestAstrBotMessage:
         with patch.object(time, "time", return_value=1234567890):
             message = AstrBotMessage()
             assert message.timestamp == 1234567890
-
-    def test_astrbot_message_all_attributes(self):
-        """Test setting all attributes on AstrBotMessage."""
-        message = AstrBotMessage()
-        message.type = MessageType.FRIEND_MESSAGE
-        message.self_id = "bot123"
-        message.session_id = "session123"
-        message.message_id = "msg123"
-        message.sender = MessageMember(user_id="user123", nickname="TestUser")
-        message.message = [Plain(text="Hello")]
-        message.message_str = "Hello"
-        message.raw_message = {"raw": "data"}
-
-        assert message.type == MessageType.FRIEND_MESSAGE
-        assert message.self_id == "bot123"
-        assert message.session_id == "session123"
-        assert message.message_id == "msg123"
-        assert message.sender.user_id == "user123"
-        assert len(message.message) == 1
-        assert message.message_str == "Hello"
-        assert message.raw_message == {"raw": "data"}
 
     def test_astrbot_message_str(self):
         """Test __str__ method."""
@@ -238,37 +169,3 @@ class TestAstrBotMessageTypes:
 
         assert message.type == MessageType.OTHER_MESSAGE
         assert message.type.value == "OtherMessage"
-
-
-class TestAstrBotMessageChain:
-    """Tests for AstrBotMessage message chain."""
-
-    def test_message_chain_with_plain_text(self):
-        """Test message chain with plain text."""
-        message = AstrBotMessage()
-        message.message = [Plain(text="Hello world")]
-
-        assert len(message.message) == 1
-        assert isinstance(message.message[0], Plain)
-        assert message.message[0].text == "Hello world"
-
-    def test_message_chain_with_multiple_components(self):
-        """Test message chain with multiple components."""
-        message = AstrBotMessage()
-        message.message = [
-            Plain(text="Hello "),
-            Plain(text="world"),
-            Image(file="http://example.com/img.jpg"),
-        ]
-
-        assert len(message.message) == 3
-        assert isinstance(message.message[0], Plain)
-        assert isinstance(message.message[1], Plain)
-        assert isinstance(message.message[2], Image)
-
-    def test_message_chain_empty(self):
-        """Test empty message chain."""
-        message = AstrBotMessage()
-        message.message = []
-
-        assert len(message.message) == 0

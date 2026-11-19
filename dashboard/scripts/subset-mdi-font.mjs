@@ -91,7 +91,8 @@ export function* collectFiles(dir, exts) {
 
 /** Scan source files and return a Set of used mdi-* icon names. */
 export function scanUsedIcons(sourceFiles) {
-    const iconPattern = /mdi-[a-z][a-z0-9-]*/g;
+	// TODO: Replace fragile regex-based scanning with a more robust approach.
+    const iconPattern = /(?<![\w/\\-])mdi-[a-z][a-z0-9-]*(?![\w./\\-])/g;
     const usedIcons = new Set(REQUIRED_ICONS);
     for (const file of sourceFiles) {
         const content = readFileSync(file, "utf-8");

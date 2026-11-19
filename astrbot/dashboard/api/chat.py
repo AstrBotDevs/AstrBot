@@ -1,10 +1,15 @@
 from __future__ import annotations
 
+import asyncio
+import json
+import time
 from typing import Any
 
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, File, Form, Query, Request, UploadFile
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 
+from astrbot.core.chatui import ViewActionRequest, ViewError, view_store
+from astrbot.core.message.components import UIInteraction, ViewContext
 from astrbot.dashboard.async_utils import run_maybe_async
 from astrbot.dashboard.responses import error, ok
 from astrbot.dashboard.schemas import (
@@ -16,6 +21,8 @@ from astrbot.dashboard.schemas import (
     ChatThreadMessageRequest,
 )
 from astrbot.dashboard.services.chat_service import (
+    MAX_UPLOAD_FILE_SIZE_BYTES,
+    MAX_UPLOAD_FILE_SIZE_MB,
     ChatService,
     ChatServiceError,
 )
@@ -36,6 +43,276 @@ def get_service(request: Request) -> ChatService:
 
 
 require_chat_scope = ScopeDependency("chat")
+
+# HTTP responses use fixed public text, never the exception's diagnostic message.
+VIEW_ERROR_MESSAGES = {
+    "FORBIDDEN": "This view is not accessible.",
+    "VIEW_UNAVAILABLE": "This view is unavailable.",
+    "ACTION_NOT_ALLOWED": "This action is not declared by the view.",
+    "INVALID_INPUT": "The view action input is invalid.",
+    "REVISION_CONFLICT": "The view has changed. Review it and try again.",
+    "ACTION_IN_PROGRESS": "Another action is still pending.",
+    "ACTION_OUTCOME_UNKNOWN": "The action has no recorded outcome yet.",
+}
+
+
+@router.get("/chat/workbench/views")
+async def list_workbench_views(
+    request: Request,
+    _auth: AuthContext = Depends(require_chat_scope),
+):
+    """List enabled plugin views registered for the workbench launcher."""
+    pages = request.app.state.services.plugin_pages
+    views = []
+    for plugin in pages.plugin_manager.context.get_all_stars():
+        if not plugin.activated:
+            continue
+        for spec in plugin.views:
+            if spec.target != "chat_workbench_with_launcher":
+                continue
+            entry = await pages.serialize_plugin_page(
+                plugin, spec.name, target="chat_workbench_with_launcher"
+            )
+            if entry:
+                views.append(
+                    {
+                        **entry,
+                        "plugin_name": plugin.name,
+                        "display_name": plugin.display_name or plugin.name,
+                        "i18n": plugin.i18n or {},
+                    }
+                )
+    return ok(views)
+
+
+@router.get("/chat/workbench/views/{plugin_name}/{view_name}")
+async def get_workbench_view(
+    plugin_name: str,
+    view_name: str,
+    request: Request,
+    auth: AuthContext = Depends(require_chat_scope),
+):
+    """Return a launcher view's entry using the same scoped asset authentication."""
+    pages = request.app.state.services.plugin_pages
+    plugin = pages.get_plugin_metadata_by_name(plugin_name)
+    if not plugin or not plugin.activated:
+        return JSONResponse({"message": "This view is unavailable."}, status_code=404)
+    token = pages.issue_plugin_page_asset_token(
+        plugin_name=plugin.name,
+        view_name=view_name,
+        username=auth.username,
+        locale="en-US",
+    )
+    entry = await pages.serialize_plugin_page(
+        plugin,
+        view_name,
+        target="chat_workbench_with_launcher",
+        include_content_path=True,
+        asset_token=token or "",
+    )
+    if not entry or not token:
+        return JSONResponse({"message": "This view is unavailable."}, status_code=404)
+    return ok(
+        {
+            "page": entry,
+            "plugin": {
+                "name": plugin.name,
+                "display_name": plugin.display_name or plugin.name,
+                "activated": True,
+                "i18n": plugin.i18n or {},
+            },
+        }
+    )
+
+
+@router.get("/chat/views/{view_id}")
+async def get_chat_view(
+    view_id: str,
+    request: Request,
+    auth: AuthContext = Depends(require_chat_scope),
+    service: ChatService = Depends(get_service),
+):
+    """Return an authorized card snapshot and scoped frontend resources."""
+    try:
+        record, plugin, spec, entry = await service.get_chat_view(
+            auth.username, view_id
+        )
+        pages = request.app.state.services.plugin_pages
+        token = pages.issue_plugin_page_asset_token(
+            plugin_name=plugin.name,
+            view_name=spec.name,
+            username=auth.username,
+            locale="en-US",
+        )
+        if not token:
+            raise ViewError("VIEW_UNAVAILABLE", "View resources are unavailable.")
+        return ok(
+            {
+                "id": view_id,
+                "view_metadata": {
+                    "name": spec.name,
+                    "title": spec.title,
+                    "description": spec.description,
+                    "i18n": plugin.i18n or {},
+                },
+                "name": spec.name,
+                "target": spec.target,
+                "data": record["data"],
+                "revision": record["revision"],
+                "text": record["text"],
+                "context": {
+                    "pluginName": plugin.name,
+                    "displayName": plugin.display_name or plugin.name,
+                    "pageName": spec.name,
+                    "pageTitle": spec.title or spec.name,
+                    "i18n": plugin.i18n or {},
+                },
+                "html": await asyncio.to_thread(entry.read_text, encoding="utf-8"),
+                "base_url": pages.build_plugin_page_view_content_path(
+                    plugin.name, spec.name, token
+                ),
+            }
+        )
+    except ViewError as exc:
+        return JSONResponse(
+            {
+                "code": exc.code,
+                "message": VIEW_ERROR_MESSAGES.get(
+                    exc.code, "The view request could not be completed."
+                ),
+            },
+            status_code=403 if exc.code == "FORBIDDEN" else 404,
+        )
+
+
+@router.post("/chat/views/{view_id}/actions")
+async def run_chat_view_action(
+    view_id: str,
+    payload: ViewActionRequest,
+    auth: AuthContext = Depends(require_chat_scope),
+    service: ChatService = Depends(get_service),
+):
+    """Submit a view action to the authenticated message event pipeline."""
+    try:
+        record, _, spec, _ = await service.get_chat_view(auth.username, view_id)
+        if payload.action_id not in spec.actions:
+            raise ViewError(
+                "ACTION_NOT_ALLOWED", "This action is not declared by the view."
+            )
+        previous = await asyncio.to_thread(view_store.begin, view_id, payload)
+        if previous is not None:
+            return JSONResponse(previous)
+        # The reservation excludes competing callbacks; now read its snapshot.
+        record = await asyncio.to_thread(view_store.get, view_id)
+        interaction = UIInteraction(
+            action_id=payload.action_id,
+            interaction_id=payload.interaction_id,
+            data=payload.data,
+            source_message_id=record["message_id"],
+            view=ViewContext(
+                **{
+                    key: record[key]
+                    for key in ("id", "name", "version", "revision", "data")
+                }
+            ),
+        )
+        post_data = {
+            "session_id": record["session_id"],
+            "message": [{"type": "plain", "text": payload.action_id}],
+            "_skip_user_history": True,
+            "_platform_history_id": record["platform"],
+            "_api_key_allow_admin_role": auth.via != "api_key"
+            or "chat:admin" in auth.scopes,
+        }
+        if record["platform"] == "webchat_thread":
+            thread = await service.db.get_webchat_thread_by_id(record["session_id"])
+            post_data["_thread_selected_text"] = thread.selected_text
+        try:
+            stream = await service.build_chat_stream(
+                auth.username,
+                post_data,
+                ui_interaction=interaction,
+                ui_plugin_module=record["module"],
+            )
+        except BaseException:
+            await asyncio.to_thread(
+                view_store.finish,
+                view_id,
+                payload.interaction_id,
+                error={
+                    "code": "ACTION_FAILED",
+                    "message": "The action could not be dispatched.",
+                },
+            )
+            raise
+        return StreamingResponse(
+            stream,
+            media_type="text/event-stream",
+            headers={"Cache-Control": "no-cache"},
+        )
+    except ViewError as exc:
+        response = {
+            "code": exc.code,
+            "message": VIEW_ERROR_MESSAGES.get(
+                exc.code, "The view request could not be completed."
+            ),
+        }
+        if exc.code == "REVISION_CONFLICT":
+            current = await asyncio.to_thread(view_store.get, view_id)
+            response["snapshot"] = {
+                "data": current["data"],
+                "revision": current["revision"],
+            }
+        return JSONResponse(
+            response,
+            status_code=409
+            if exc.code
+            in {"REVISION_CONFLICT", "ACTION_IN_PROGRESS", "ACTION_OUTCOME_UNKNOWN"}
+            else 403,
+        )
+
+
+@router.get("/chat/views/{view_id}/actions/{interaction_id}")
+async def get_chat_view_action(
+    view_id: str,
+    interaction_id: str,
+    auth: AuthContext = Depends(require_chat_scope),
+    service: ChatService = Depends(get_service),
+):
+    """Read an accepted action without executing plugin code again."""
+    try:
+        await service.get_chat_view(auth.username, view_id)
+        with view_store.connect() as db:
+            row = db.execute(
+                "SELECT result,started FROM actions WHERE view_id=? AND id=?",
+                (view_id, interaction_id),
+            ).fetchone()
+        if not row:
+            return JSONResponse(
+                {"code": "ACTION_NOT_FOUND", "message": "The action was not accepted."},
+                status_code=404,
+            )
+        if row["result"]:
+            return JSONResponse(json.loads(row["result"]))
+        return JSONResponse(
+            {
+                "code": "ACTION_IN_PROGRESS"
+                if time.time() - row["started"] < 180
+                else "ACTION_OUTCOME_UNKNOWN",
+                "message": "The action has no recorded outcome yet.",
+            },
+            status_code=409,
+        )
+    except ViewError as exc:
+        return JSONResponse(
+            {
+                "code": exc.code,
+                "message": VIEW_ERROR_MESSAGES.get(
+                    exc.code, "The view request could not be completed."
+                ),
+            },
+            status_code=403,
+        )
 
 
 async def _json_or_empty(request: Request) -> dict[str, Any]:
@@ -106,6 +383,19 @@ async def _send_chat(
     )
 
 
+@router.post("/chat/transcriptions")
+async def transcribe_chat_audio(
+    file: UploadFile = File(...),
+    provider_id: str = Form(default=""),
+    _username: str = Depends(require_dashboard_user),
+    service: ChatService = Depends(get_service),
+):
+    try:
+        return await _run(lambda: service.transcribe_audio(file, provider_id))
+    finally:
+        await file.close()
+
+
 @router.get("/chat/sessions/new")
 async def create_chat_session(
     request: Request,
@@ -137,10 +427,19 @@ async def batch_delete_chat_sessions(
 @router.get("/chat/sessions/{session_id}")
 async def get_chat_session(
     session_id: str,
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=1000, ge=1, le=1000),
     auth: AuthContext = Depends(require_chat_scope),
     service: ChatService = Depends(get_service),
 ):
-    return await _run(lambda: service.get_session(auth.username, session_id))
+    return await _run(
+        lambda: service.get_session(
+            auth.username,
+            session_id,
+            page=page,
+            page_size=page_size,
+        )
+    )
 
 
 @router.patch("/chat/sessions/{session_id}")
@@ -539,6 +838,11 @@ async def dashboard_post_file(
     service: ChatService = Depends(get_service),
 ):
     try:
+        content_length = int(request.headers.get("content-length") or 0)
+        if content_length > MAX_UPLOAD_FILE_SIZE_BYTES:
+            raise ChatServiceError(
+                f"File too large (limit {MAX_UPLOAD_FILE_SIZE_MB} MB)"
+            )
         upload = await single_upload(request)
         if upload is None:
             raise ChatServiceError("Missing key: file")

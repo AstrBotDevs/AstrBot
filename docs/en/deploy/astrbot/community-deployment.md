@@ -21,7 +21,7 @@ Repository Address: [zhende1113/Antlia](https://github.com/zhende1113/Antlia/)
 
 ## Linux One-Click Deployment Script (Based on Docker)
 
-Supports AstrBot / NapCat.
+Supports AstrBot.
 
 > [!TIP]
 > Use `sudo` for elevated permissions if you have insufficient privileges.

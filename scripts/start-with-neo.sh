@@ -258,7 +258,7 @@ print_astrbot_config_hint() {
         echo ""
     fi
     echo -e "  ${CYAN}AstrBot Dashboard 配置指引：${NC}"
-    echo -e "  1. AI 配置 → Agent Computer Use"
+    echo -e "  1. Config → AI → Capabilities → Agent Computer Use"
     echo -e "     • Computer Use Runtime → ${YELLOW}沙箱${NC}"
     echo -e "     • 沙箱环境驱动器        → ${YELLOW}Shipyard Neo${NC}"
     echo -e "     • Shipyard Neo API Endpoint → ${YELLOW}http://127.0.0.1:$BAY_PORT${NC}"

@@ -155,7 +155,7 @@ async def test_database_initialization_removes_redundant_umo_index(temp_db):
 
 @pytest.mark.asyncio
 async def test_name_command_saves_group_alias_with_auto_name(temp_db):
-    context = SimpleNamespace(get_db=lambda: temp_db)
+    context = SimpleNamespace(get_db=lambda: temp_db, locale=lambda umo: "en-US")
     event = make_group_event()
 
     await NameCommand(context).name(event, "Backend Room")
@@ -181,7 +181,7 @@ async def test_name_command_without_alias_shows_current_names(temp_db):
         auto_name="Old Group",
         user_alias="Backend Room",
     )
-    context = SimpleNamespace(get_db=lambda: temp_db)
+    context = SimpleNamespace(get_db=lambda: temp_db, locale=lambda umo: "en-US")
     event = make_group_event()
 
     await NameCommand(context).name(event, "")

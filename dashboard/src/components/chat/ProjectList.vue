@@ -1,7 +1,21 @@
 <template>
   <section class="sidebar-section project-list-shell">
     <div class="sidebar-section-header">
-      <span>{{ tm("project.title") }}</span>
+      <button
+        type="button"
+        class="project-section-toggle"
+        :aria-expanded="projectsExpanded"
+        @click="projectsExpanded = !projectsExpanded"
+      >
+        <span>{{ tm("project.title") }}</span>
+        <ChevronDown
+          v-if="projectsExpanded"
+          class="expanded-chevron"
+          :size="16"
+          aria-hidden="true"
+        />
+        <ChevronRight v-else :size="16" aria-hidden="true" />
+      </button>
       <v-btn
         icon
         size="x-small"
@@ -14,7 +28,10 @@
       </v-btn>
     </div>
 
-    <div class="project-list-wrap">
+    <div v-show="projectsExpanded" class="project-list-wrap">
+      <div v-if="!projects.length" class="project-list-empty">
+        {{ tm("project.noProjects") }}
+      </div>
       <div v-for="project in projects" :key="project.project_id">
         <div
           class="project-row project-item"
@@ -133,6 +150,7 @@
 </template>
 
 <script setup lang="ts">
+import { chatPreferences } from "@/utils/chatPreferences";
 import { ref, watch } from "vue";
 import {
   ChevronDown,
@@ -190,6 +208,14 @@ const emit = defineEmits<{
 const { tm } = useModuleI18n("features/chat");
 const confirmDialog = useConfirmDialog();
 
+const projectsExpanded = ref(chatPreferences().global.projectsExpanded === true);
+
+watch(projectsExpanded, (expanded) => {
+  chatPreferences((preferences) => {
+    preferences.global.projectsExpanded = expanded;
+  });
+});
+
 const expandedProjectIds = ref<Set<string>>(readExpandedProjectIds());
 
 watch(
@@ -217,20 +243,14 @@ watch(
 );
 
 function readExpandedProjectIds() {
-  try {
-    const raw = localStorage.getItem("chat.projectExpandedIds");
-    const parsed = raw ? JSON.parse(raw) : [];
-    return new Set(Array.isArray(parsed) ? parsed.filter(Boolean) : []);
-  } catch {
-    return new Set<string>();
-  }
+  const ids = chatPreferences().global.expandedProjectIds;
+  return new Set<string>(Array.isArray(ids) ? ids.filter((id) => typeof id === "string") : []);
 }
 
 function persistExpandedProjectIds() {
-  localStorage.setItem(
-    "chat.projectExpandedIds",
-    JSON.stringify([...expandedProjectIds.value]),
-  );
+  chatPreferences((preferences) => {
+    preferences.global.expandedProjectIds = [...expandedProjectIds.value];
+  });
 }
 
 function isProjectExpanded(projectId: string) {
@@ -295,10 +315,33 @@ async function handleDeleteSession(projectId: string, session: ProjectSession) {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0 10px 4px;
+  padding: 0 10px;
   color: var(--chat-section-label);
   font-size: 12px;
   font-weight: 500;
+}
+
+.project-section-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 36px;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+.project-section-toggle:hover {
+  color: rgb(var(--v-theme-on-surface));
+}
+
+.project-section-toggle .expanded-chevron {
+  opacity: 0;
+}
+
+.project-section-toggle:hover .expanded-chevron,
+.project-section-toggle:focus-visible .expanded-chevron {
+  opacity: 1;
 }
 
 .section-action-btn,
@@ -336,7 +379,7 @@ async function handleDeleteSession(projectId: string, session: ProjectSession) {
   width: 100%;
   min-height: 30px;
   border: 0;
-  border-radius: 8px;
+  border-radius: var(--astrbot-radius-navigation);
   background: transparent;
   color: inherit;
   display: flex;
@@ -350,10 +393,14 @@ async function handleDeleteSession(projectId: string, session: ProjectSession) {
 }
 
 .project-row:hover,
-.project-row.active,
-.project-session-row:hover,
-.project-session-row.active {
+.project-session-row:hover {
   background: var(--chat-session-active-bg);
+}
+
+/* Active session stays clearly highlighted (subtle in light mode otherwise). */
+.project-row.active,
+.project-session-row.active {
+  background: rgba(var(--v-theme-primary), 0.22);
 }
 
 .project-emoji {
@@ -454,6 +501,7 @@ async function handleDeleteSession(projectId: string, session: ProjectSession) {
   visibility: hidden;
 }
 
+.project-list-empty,
 .project-session-empty {
   padding: 5px 10px;
   color: var(--chat-muted);

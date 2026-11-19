@@ -25,16 +25,25 @@ export function resolvePluginI18n(i18n, locale, key, fallback = "") {
   return value === undefined || value === null ? fallback : value;
 }
 
-function getPluginPageI18nBase(page) {
-  if (page && typeof page === "object") {
-    if (typeof page.i18n_key === "string" && page.i18n_key.trim()) {
-      return page.i18n_key.trim();
+/** Resolve each view label from translations, metadata, then its default. */
+export function resolvePluginViewText(i18n, locale, view, attr) {
+  const name = typeof view === "string" ? view : view?.page_name || view?.name;
+  for (const candidate of new Set([locale, "zh-CN", "en-US"].filter(Boolean))) {
+    for (const prefix of ["views", "pages"]) {
+      const value = resolvePluginI18n(
+        i18n,
+        candidate,
+        `${prefix}.${name}.${attr}`,
+      );
+      if (typeof value === "string" && value.trim()) return value.trim();
     }
-    const pageName = page.page_name || page.name;
-    return pageName ? `pages.${pageName}` : "";
   }
-
-  return page ? `pages.${page}` : "";
+  const value = typeof view === "object" ? view?.[attr] : undefined;
+  return typeof value === "string" && value.trim()
+    ? value.trim()
+    : attr === "title"
+    ? name || ""
+    : "";
 }
 
 export function usePluginI18n() {
@@ -72,30 +81,21 @@ export function usePluginI18n() {
   };
 
   const pluginPageText = (plugin, page, attr, fallback = "") => {
-    const base = getPluginPageI18nBase(page);
-    if (!base || !attr) {
-      return fallback;
-    }
-    return resolve(plugin?.i18n, `${base}.${attr}`, fallback);
+    const metadata =
+      typeof page === "object"
+        ? page
+        : plugin?.views?.find((view) => view.name === page) || { name: page };
+    return (
+      resolvePluginViewText(plugin?.i18n, locale.value, metadata, attr) ||
+      fallback
+    );
   };
 
-  const pluginPageTitle = (plugin, page, fallback = "") => {
-    const pageFallback =
-      fallback ||
-      (page && typeof page === "object"
-        ? page.title || page.name || page.page_name
-        : page) ||
-      "";
-    return pluginPageText(plugin, page, "title", pageFallback);
-  };
+  const pluginViewTitle = (plugin, page, fallback = "") =>
+    pluginPageText(plugin, page, "title", fallback);
 
-  const pluginPageDescription = (plugin, page, fallback = "") => {
-    const pageFallback =
-      fallback ||
-      (page && typeof page === "object" ? page.description || page.desc : "") ||
-      "";
-    return pluginPageText(plugin, page, "description", pageFallback);
-  };
+  const pluginViewDescription = (plugin, page, fallback = "") =>
+    pluginPageText(plugin, page, "description", fallback);
 
   const configText = (i18n, path, attr, fallback = "") => {
     const key = path ? `config.${path}.${attr}` : `config.${attr}`;
@@ -109,8 +109,8 @@ export function usePluginI18n() {
     pluginDesc,
     pluginShortDesc,
     pluginPageText,
-    pluginPageTitle,
-    pluginPageDescription,
+    pluginViewTitle,
+    pluginViewDescription,
     configText,
   };
 }

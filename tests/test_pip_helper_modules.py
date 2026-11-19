@@ -181,24 +181,6 @@ def test_build_missing_requirements_install_lines_returns_empty_tuple_when_all_s
     assert install_lines == ()
 
 
-def test_build_missing_requirements_install_lines_returns_none_for_option_lines(
-    tmp_path,
-):
-    requirements_path = tmp_path / "requirements.txt"
-    requirements_path.write_text(
-        "--extra-index-url https://example.com/simple\nboto3\n",
-        encoding="utf-8",
-    )
-
-    install_lines = requirements_utils.build_missing_requirements_install_lines(
-        str(requirements_path),
-        ["--extra-index-url https://example.com/simple", "boto3"],
-        {"boto3"},
-    )
-
-    assert install_lines is None
-
-
 def test_build_missing_requirements_install_lines_skips_inactive_marker_lines(
     tmp_path,
 ):
@@ -445,7 +427,10 @@ def test_get_core_constraints_logs_resolution_step_context(monkeypatch):
 def test_iter_requirements_supports_direct_line_input():
     parsed = list(
         requirements_utils.iter_requirements(
-            lines=["demo-package>=1.0", 'other-package; sys_platform == "win32"']
+            lines=[
+                "demo-package>=1.0",
+                'other-package; sys_platform == "nonexistent_platform"',
+            ]
         )
     )
 

@@ -4,6 +4,7 @@ from types import SimpleNamespace
 
 import pytest
 
+from astrbot.core.config.agent import get_runtime_config_default
 from astrbot.core.config.agent_runner import (
     AGENT_RUNNER_CONFIG_DEFAULTS,
     get_agent_runner_config_default,
@@ -68,16 +69,17 @@ async def test_agent_request_normalizes_incomplete_runner_config():
             "streaming_response": True,
             "unsupported_streaming_strategy": "aggregate",
         },
-        "agent_runner": {
-            "runner_type": "dify",
+        "agent": {
+            "runtime": "dify",
             "config": {"dify_api_key": "saved-key"},
         },
     }
     stage = AgentRequestSubStage()
+    context = SimpleNamespace(astrbot_config=config, agent_runtimes={})
 
-    await stage.initialize(SimpleNamespace(astrbot_config=config))
+    await stage.initialize(context)
 
-    assert stage.agent_sub_stage.runner_config == {
+    assert context.astrbot_config["agent"]["config"] == {
         **get_agent_runner_config_default("dify"),
         "dify_api_key": "saved-key",
     }
@@ -89,10 +91,12 @@ async def test_agent_request_normalizes_incomplete_runner_config():
 def test_each_runner_configuration_round_trips(tmp_path, runner_type: str):
     config = copy.deepcopy(DEFAULT_CONFIG)
     expected = {
-        "runner_type": runner_type,
-        "config": get_agent_runner_config_default(runner_type),
+        "runtime": "astrbot" if runner_type == "local" else runner_type,
+        "config": get_runtime_config_default(
+            "astrbot" if runner_type == "local" else runner_type
+        ),
     }
-    config["agent_runner"] = expected
+    config["agent"] = expected
     config_path = tmp_path / f"{runner_type}.json"
     config_path.write_text(json.dumps(config), encoding="utf-8")
 
@@ -100,7 +104,7 @@ def test_each_runner_configuration_round_trips(tmp_path, runner_type: str):
     loaded.save_config()
     reloaded = AstrBotConfig(config_path=str(config_path))
 
-    assert reloaded["agent_runner"] == expected
+    assert reloaded["agent"] == expected
 
 
 def test_local_legacy_fields_are_fully_migrated():
@@ -137,7 +141,7 @@ def test_local_legacy_fields_are_fully_migrated():
         ]
     }
     assert _migrate_agent_runner_config(config, default_config)
-    assert config["config_version"] == 3
+    assert config["config_version"] == 4
     assert config["agent_runner"] == {
         "runner_type": "local",
         "config": {
@@ -400,12 +404,12 @@ def test_profile_migration_merges_runner_provider_source(
 
     loaded = AstrBotConfig(config_path=str(profile_path))
 
-    assert loaded["agent_runner"]["runner_type"] == "dify"
-    assert loaded["agent_runner"]["config"]["dify_api_key"] == "source-key"
+    assert loaded["agent"]["runtime"] == "dify"
+    assert loaded["agent"]["config"]["dify_api_key"] == "source-key"
     assert (
-        loaded["agent_runner"]["config"]["dify_api_base"] == "https://example.test/v1"
+        loaded["agent"]["config"]["dify_api_base"] == "https://example.test/v1"
     )
-    assert "provider_source_id" not in loaded["agent_runner"]["config"]
+    assert "provider_source_id" not in loaded["agent"]["config"]
 
     assert finalize_config_migrations([default_config, loaded])
     assert default_config["provider"] == []
@@ -524,8 +528,59 @@ def test_multiple_profiles_can_copy_one_provider_and_migration_is_idempotent():
     assert [global_config, *profiles] == first_result
 
 
+@pytest.mark.parametrize("config_version", [2, 3, 4, 5])
+@pytest.mark.parametrize("max_steps", [30, 64])
+@pytest.mark.parametrize("is_profile", [False, True])
+def test_agent_step_limit_upgrade_is_persisted_once(
+    tmp_path, monkeypatch, config_version, max_steps, is_profile
+):
+    profile_root = tmp_path / "profiles"
+    profile_root.mkdir()
+    monkeypatch.setattr(
+        "astrbot.core.utils.migra_helper.get_astrbot_config_path",
+        lambda: str(profile_root),
+    )
+    monkeypatch.setattr(
+        "astrbot.core.utils.migra_helper.get_astrbot_data_path",
+        lambda: str(tmp_path),
+    )
+    default_path = tmp_path / "cmd_config.json"
+    default_path.write_text(json.dumps(DEFAULT_CONFIG), encoding="utf-8")
+    config_path = profile_root / "custom.json" if is_profile else default_path
+    config = copy.deepcopy(DEFAULT_CONFIG)
+    config.pop("agent")
+    config["agent_runner"] = {
+        "runner_type": "local",
+        "config": get_agent_runner_config_default("local"),
+    }
+    config["config_version"] = config_version
+    if config_version == 2:
+        config.pop("agent_runner")
+        config["provider_settings"]["max_agent_step"] = max_steps
+    else:
+        config["agent_runner"]["config"]["misc"]["max_steps"] = max_steps
+    config_path.write_text(json.dumps(config), encoding="utf-8")
+
+    loaded = AstrBotConfig(config_path=str(config_path))
+    expected_steps = 128 if config_version < 4 and max_steps == 30 else max_steps
+    assert loaded["agent"]["config"]["misc"]["max_steps"] == expected_steps
+    persisted = json.loads(config_path.read_text(encoding="utf-8-sig"))
+    assert persisted["config_version"] == max(
+        config_version, DEFAULT_CONFIG["config_version"]
+    )
+    assert persisted["agent"]["config"]["misc"]["max_steps"] == expected_steps
+
+    loaded["agent"]["config"]["misc"]["max_steps"] = 30
+    loaded.save_config()
+    for _ in range(2):
+        reloaded = AstrBotConfig(config_path=str(config_path))
+        assert reloaded["agent"]["config"]["misc"]["max_steps"] == 30
+        assert "agent_runner" not in reloaded
+
+
 def test_new_agent_runner_config_is_authoritative_and_opaque_on_reload(tmp_path):
     config = copy.deepcopy(DEFAULT_CONFIG)
+    config.pop("agent")
     config["config_version"] = 2
     config["provider_settings"]["agent_runner_type"] = "coze"
     config["agent_runner"] = {
@@ -541,7 +596,7 @@ def test_new_agent_runner_config_is_authoritative_and_opaque_on_reload(tmp_path)
 
     loaded = AstrBotConfig(config_path=str(config_path))
 
-    assert loaded["agent_runner"]["runner_type"] == "dify"
-    assert loaded["agent_runner"]["config"]["dify_api_key"] == "saved-key"
-    assert loaded["agent_runner"]["config"]["variables"] == {"nested": {"value": 1}}
+    assert loaded["agent"]["runtime"] == "dify"
+    assert loaded["agent"]["config"]["dify_api_key"] == "saved-key"
+    assert loaded["agent"]["config"]["variables"] == {"nested": {"value": 1}}
     assert "agent_runner_type" not in loaded["provider_settings"]

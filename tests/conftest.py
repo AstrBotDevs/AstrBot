@@ -4,11 +4,14 @@ AstrBot 测试配置
 提供共享的 pytest fixtures 和测试工具。
 """
 
+import asyncio
+import copy
 import json
 import os
 import sys
 from asyncio import Queue
 from pathlib import Path
+from tempfile import TemporaryDirectory
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -24,6 +27,12 @@ if str(PROJECT_ROOT) not in sys.path:
 # 设置测试环境变量
 os.environ.setdefault("TESTING", "true")
 os.environ.setdefault("ASTRBOT_TEST_MODE", "true")
+
+# Nested conftests can import astrbot.core before pytest_configure runs.
+# Its global config reads and may write cmd_config.json during import.
+_test_root = TemporaryDirectory(prefix="astrbot-pytest-")
+_test_env = pytest.MonkeyPatch()
+_test_env.setenv("ASTRBOT_ROOT", _test_root.name)
 
 
 # ============================================================
@@ -89,6 +98,9 @@ def pytest_addoption(parser):
 
 def pytest_configure(config):
     """注册自定义标记。"""
+    config.add_cleanup(_test_root.cleanup)
+    config.add_cleanup(_test_env.undo)
+
     config.addinivalue_line("markers", "unit: 单元测试")
     config.addinivalue_line("markers", "integration: 集成测试")
     config.addinivalue_line("markers", "slow: 慢速测试")
@@ -99,6 +111,12 @@ def pytest_configure(config):
     config.addinivalue_line("markers", "tier_d: D-tier tests (extended / integration)")
 
 
+def pytest_sessionfinish():
+    """Release pooled connections before Windows removes the isolated data root."""
+    if core := sys.modules.get("astrbot.core"):
+        asyncio.run(core.db_helper.engine.dispose())
+
+
 # ============================================================
 # 临时目录和文件 Fixtures
 # ============================================================
@@ -107,6 +125,26 @@ def pytest_configure(config):
 @pytest.fixture
 def temp_dir(tmp_path: Path) -> Path:
     """创建临时目录用于测试。"""
+    return tmp_path
+
+
+@pytest.fixture
+def require_symlink(tmp_path: Path) -> Path:
+    """Skip the test when symlink creation is denied by the OS.
+
+    Windows only allows symbolic links with admin or developer-mode
+    privileges, so tests that build symlink fixtures cannot run there.
+    """
+    probe = tmp_path / ".symlink_probe"
+    try:
+        probe.symlink_to(tmp_path)
+    except OSError as exc:
+        # 1314 (ERROR_PRIVILEGE_NOT_HELD): Windows requires admin or
+        # developer mode. Anything else is a real error and must fail.
+        if getattr(exc, "winerror", None) == 1314:
+            pytest.skip("symlink creation is not permitted on this platform")
+        raise
+    probe.unlink()
     return tmp_path
 
 
@@ -240,15 +278,23 @@ def astrbot_config(temp_config_file: Path):
     """创建 AstrBotConfig 实例。"""
     from astrbot.core.config.astrbot_config import AstrBotConfig
 
-    config = AstrBotConfig()
-    config._config_path = str(temp_config_file)  # noqa: SLF001
-    return config
+    return AstrBotConfig(str(temp_config_file))
+
+
+@pytest.fixture(scope="module")
+def dashboard_test_config(tmp_path_factory):
+    """Create a separate persisted configuration for each dashboard test module."""
+    from astrbot.core.config.astrbot_config import AstrBotConfig
+    from astrbot.core.config.default import DEFAULT_CONFIG
+
+    path = tmp_path_factory.mktemp("dashboard-config") / "cmd_config.json"
+    return AstrBotConfig(str(path), default_config=copy.deepcopy(DEFAULT_CONFIG))
 
 
 @pytest.fixture
 def main_agent_build_config():
     """创建 MainAgentBuildConfig 实例。"""
-    from astrbot.core.astr_main_agent import MainAgentBuildConfig
+    from astrbot.core.astr_agent_runtime.main_agent import MainAgentBuildConfig
 
     return MainAgentBuildConfig(
         tool_call_timeout=60,
@@ -321,7 +367,7 @@ async def mock_context(
     astrbot_config_mgr = MagicMock()
     knowledge_base_manager = MagicMock()
     cron_manager = MagicMock()
-    subagent_orchestrator = None
+    subagents = None
 
     context = Context(
         event_queue,
@@ -335,7 +381,7 @@ async def mock_context(
         astrbot_config_mgr,
         knowledge_base_manager,
         cron_manager,
-        subagent_orchestrator,
+        subagents,
     )
 
     return context
@@ -383,3 +429,10 @@ def pytest_runtest_setup(item):
             f"TEST_{required_platform.upper()}_ENABLED"
         ):
             pytest.skip(f"TEST_{required_platform.upper()}_ENABLED not set")
+
+
+@pytest_asyncio.fixture
+async def database(temp_db):
+    """Provide an initialized SQLite database for event-storage tests."""
+    await temp_db.initialize()
+    return temp_db
