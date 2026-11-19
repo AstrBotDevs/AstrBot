@@ -9,6 +9,7 @@ from typing import Any
 import aiohttp
 
 from astrbot.api import logger
+from astrbot.core.platform.proxy import create_platform_client_session
 
 
 class WecomAIBotLongConnectionClient:
@@ -21,10 +22,12 @@ class WecomAIBotLongConnectionClient:
         ws_url: str,
         heartbeat_interval: int,
         message_handler: Callable[[dict[str, Any]], Awaitable[None]],
+        proxy_url: str | None = None,
     ) -> None:
         self.bot_id = bot_id
         self.secret = secret
         self.ws_url = ws_url
+        self.proxy_url = proxy_url
         self.heartbeat_interval = max(5, int(heartbeat_interval))
         self.message_handler = message_handler
 
@@ -58,11 +61,17 @@ class WecomAIBotLongConnectionClient:
 
     async def _run_once(self) -> None:
         timeout = aiohttp.ClientTimeout(total=None, sock_connect=15, sock_read=None)
-        async with aiohttp.ClientSession(timeout=timeout) as session:
+        async with create_platform_client_session(
+            self.proxy_url,
+            timeout=timeout,
+        ) as session:
             self._session = session
             logger.info("[WecomAI][LongConn] 正在连接: %s", self.ws_url)
             async with session.ws_connect(
-                self.ws_url, heartbeat=None, autoping=True
+                self.ws_url,
+                heartbeat=None,
+                autoping=True,
+                proxy=self.proxy_url,
             ) as ws:
                 self._ws = ws
                 await self._subscribe()

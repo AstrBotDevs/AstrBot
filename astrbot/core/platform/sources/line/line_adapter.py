@@ -93,6 +93,8 @@ LINE_I18N_RESOURCES = {
     i18n_resources=LINE_I18N_RESOURCES,
 )
 class LinePlatformAdapter(Platform):
+    supports_proxy = True
+
     def __init__(
         self,
         platform_config: dict,

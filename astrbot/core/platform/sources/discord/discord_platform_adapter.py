@@ -52,6 +52,8 @@ else:
     "discord", "Discord 适配器 (基于 Pycord)", support_streaming_message=False
 )
 class DiscordPlatformAdapter(Platform):
+    supports_proxy = True
+
     def __init__(
         self,
         platform_config: dict,

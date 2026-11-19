@@ -5,6 +5,7 @@ import time
 from collections.abc import Callable, Coroutine
 from typing import Any, cast
 
+import requests
 from requests import Response
 from wechatpy import WeChatClient, create_reply, parse_message
 from wechatpy.crypto import WeChatCrypto
@@ -315,6 +316,8 @@ class WeixinOfficialAccountServer:
     "weixin_official_account", "微信公众平台 适配器", support_streaming_message=False
 )
 class WeixinOfficialAccountPlatformAdapter(Platform):
+    supports_proxy = True
+
     def __init__(
         self,
         platform_config: dict,
@@ -345,9 +348,15 @@ class WeixinOfficialAccountPlatformAdapter(Platform):
             self._event_queue, self.config, self.user_buffer
         )
 
+        client_session = requests.Session()
+        if self.proxy_url:
+            client_session.proxies.update(
+                {"http": self.proxy_url, "https": self.proxy_url}
+            )
         self.client = WeChatClient(
             self.config["appid"].strip(),
             self.config["secret"].strip(),
+            session=client_session,
         )
 
         self.client.__setattr__("API_BASE_URL", self.api_base_url)

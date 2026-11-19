@@ -63,6 +63,7 @@ def register_platform_adapter(
             adapter_display_name=adapter_display_name,
             logo_path=logo_path,
             support_streaming_message=support_streaming_message,
+            support_proxy=bool(getattr(cls, "supports_proxy", False)),
             module_path=module_path,
             i18n_resources=i18n_resources,
             config_metadata=config_metadata,

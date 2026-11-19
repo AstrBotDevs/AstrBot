@@ -38,3 +38,6 @@ class PlatformMetadata:
 
     support_ui_interaction: bool = False
     """Whether the adapter supports UI views and their interaction callbacks."""
+
+    support_proxy: bool = False
+    """Whether the adapter applies its adapter-scoped proxy setting."""

@@ -10,6 +10,21 @@ from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 
 from .agent import get_runtime_config_default
 
+ADAPTER_PROXY_SUPPORTED_TYPES = {
+    "discord",
+    "kook",
+    "line",
+    "mattermost",
+    "misskey",
+    "satori",
+    "slack",
+    "telegram",
+    "wecom",
+    "wecom_ai_bot",
+    "weixin_oc",
+    "weixin_official_account",
+}
+
 
 def get_local_permission_defaults(system: str | None = None) -> dict:
     """Return fresh Local permission defaults shared by all operating systems.
@@ -3426,21 +3441,6 @@ CONFIG_METADATA_2 = {
         },
     },
 }
-
-
-for _platform_template in CONFIG_METADATA_2["platform_group"]["metadata"]["platform"][
-    "config_template"
-].values():
-    if isinstance(_platform_template, dict):
-        _platform_template.setdefault(
-            "proxy",
-            {
-                "mode": "none",
-                "type": "http",
-                "address": "",
-            },
-        )
-
 
 """
 Since v4.7.0, fields such as name, description, and hint support i18n.

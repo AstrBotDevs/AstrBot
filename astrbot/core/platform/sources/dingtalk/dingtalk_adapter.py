@@ -37,6 +37,7 @@ from astrbot.core.platform.button_interaction import (
     decode_button_callback,
     encode_button_callback,
 )
+from astrbot.core.platform.proxy import create_platform_client_session
 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
 from astrbot.core.utils.io import download_file
 from astrbot.core.utils.media_utils import (
@@ -499,7 +500,7 @@ class DingtalkPlatformAdapter(Platform):
         temp_dir.mkdir(parents=True, exist_ok=True)
         f_path = temp_dir / f"dingtalk_{uuid.uuid4()}.{ext}"
         async with (
-            aiohttp.ClientSession() as session,
+            create_platform_client_session(self.proxy_url) as session,
             session.post(
                 "https://api.dingtalk.com/v1.0/robot/messageFiles/download",
                 headers=headers,
@@ -523,7 +524,7 @@ class DingtalkPlatformAdapter(Platform):
             if not download_url:
                 logger.error(f"下载钉钉文件失败: 未找到 downloadUrl, 响应: {resp_data}")
                 return ""
-            await download_file(download_url, str(f_path))
+            await download_file(download_url, str(f_path), proxy_url=self.proxy_url)
         return str(f_path)
 
     async def get_access_token(self) -> str:
@@ -538,7 +539,7 @@ class DingtalkPlatformAdapter(Platform):
             logger.warning(f"通过 dingtalk_stream 获取 access_token 失败: {e}")
 
         payload = {"appKey": self.client_id, "appSecret": self.client_secret}
-        async with aiohttp.ClientSession() as session:
+        async with create_platform_client_session(self.proxy_url) as session:
             async with session.post(
                 "https://api.dingtalk.com/v1.0/oauth2/accessToken",
                 json=payload,
@@ -586,7 +587,7 @@ class DingtalkPlatformAdapter(Platform):
             "Content-Type": "application/json",
             "x-acs-dingtalk-access-token": access_token,
         }
-        async with aiohttp.ClientSession() as session:
+        async with create_platform_client_session(self.proxy_url) as session:
             async with session.post(
                 "https://api.dingtalk.com/v1.0/robot/groupMessages/send",
                 headers=headers,
@@ -619,7 +620,7 @@ class DingtalkPlatformAdapter(Platform):
             "Content-Type": "application/json",
             "x-acs-dingtalk-access-token": access_token,
         }
-        async with aiohttp.ClientSession() as session:
+        async with create_platform_client_session(self.proxy_url) as session:
             async with session.post(
                 "https://api.dingtalk.com/v1.0/robot/oToMessages/batchSend",
                 headers=headers,
@@ -722,7 +723,7 @@ class DingtalkPlatformAdapter(Platform):
         }
         try:
             async with (
-                aiohttp.ClientSession() as session,
+                create_platform_client_session(self.proxy_url) as session,
                 session.post(
                     "https://api.dingtalk.com/v1.0/card/instances/createAndDeliver",
                     headers=headers,
@@ -777,7 +778,7 @@ class DingtalkPlatformAdapter(Platform):
             filename=media_file_path.name,
             content_type="application/octet-stream",
         )
-        async with aiohttp.ClientSession() as session:
+        async with create_platform_client_session(self.proxy_url) as session:
             async with session.post(
                 f"https://oapi.dingtalk.com/media/upload?access_token={access_token}&type={media_type}",
                 data=form,

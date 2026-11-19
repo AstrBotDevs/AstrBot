@@ -36,6 +36,8 @@ from .mattermost_event import MattermostMessageEvent
     support_streaming_message=False,
 )
 class MattermostPlatformAdapter(Platform):
+    supports_proxy = True
+
     def __init__(
         self,
         platform_config: dict,

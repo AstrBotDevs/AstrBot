@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any, cast
 from urllib.parse import unquote
 
+import requests
 from fastapi.responses import Response as FastAPIResponse
 from requests import Response
 from wechatpy.enterprise import WeChatClient, parse_message
@@ -170,6 +171,8 @@ class WecomServer:
 
 @register_platform_adapter("wecom", "wecom 适配器", support_streaming_message=False)
 class WecomPlatformAdapter(Platform):
+    supports_proxy = True
+
     WECHAT_KF_TEXT_CONTENT_DEDUP_TTL_SECONDS = 15
 
     def __init__(
@@ -200,9 +203,15 @@ class WecomPlatformAdapter(Platform):
         self.agent_id: str | None = None
         self._wechat_kf_seen_text_messages: dict[str, float] = {}
 
+        client_session = requests.Session()
+        if self.proxy_url:
+            client_session.proxies.update(
+                {"http": self.proxy_url, "https": self.proxy_url}
+            )
         self.client = WeChatClient(
             self.config["corpid"].strip(),
             self.config["secret"].strip(),
+            session=client_session,
         )
 
         # 微信客服

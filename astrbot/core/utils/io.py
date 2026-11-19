@@ -279,6 +279,7 @@ async def download_file(
     show_progress: bool = False,
     progress_callback=None,
     allow_insecure_ssl_fallback: bool = True,
+    proxy_url: str | None = None,
 ) -> None:
     """Download a remote file to a local path.
 
@@ -289,6 +290,7 @@ async def download_file(
         progress_callback: Optional callback for progress payloads.
         allow_insecure_ssl_fallback: Whether certificate failures may retry with
             TLS certificate verification disabled.
+        proxy_url: Optional adapter-specific proxy URL.
 
     Returns:
         None.
@@ -299,7 +301,10 @@ async def download_file(
             cafile=certifi.where(),
         )  # 使用 certifi 提供的 CA 证书
         connector = aiohttp.TCPConnector(ssl=ssl_context)
-        async with aiohttp.ClientSession(
+        from astrbot.core.platform.proxy import create_platform_client_session
+
+        async with create_platform_client_session(
+            proxy_url,
             trust_env=True,
             connector=connector,
         ) as session:
@@ -330,7 +335,9 @@ async def download_file(
         ssl_context = ssl.create_default_context()
         ssl_context.check_hostname = False
         ssl_context.verify_mode = ssl.CERT_NONE
-        async with aiohttp.ClientSession() as session:
+        from astrbot.core.platform.proxy import create_platform_client_session
+
+        async with create_platform_client_session(proxy_url) as session:
             async with session.get(url, ssl=ssl_context, timeout=120) as resp:
                 _raise_for_download_status(resp, url)
                 with open(path, "wb") as f:

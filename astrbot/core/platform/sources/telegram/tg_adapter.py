@@ -57,6 +57,8 @@ else:
 
 @register_platform_adapter("telegram", "telegram 适配器")
 class TelegramPlatformAdapter(Platform):
+    supports_proxy = True
+
     _FORUM_TOPIC_NAME_CACHE_MAX_SIZE = 1000
 
     def __init__(
