@@ -1270,6 +1270,28 @@
           "description": "Group Chat Image Caption Model",
           "hint": "Used to understand images injected from group chat records, configured separately from the default image caption model."
         },
+        "image_caption_decision": {
+          "provider_id": {
+            "description": "Image Caption Decision Model",
+            "hint": "Choose a decision model that accepts images. Leave empty to caption every image without a decision."
+          },
+          "invert": {
+            "description": "Invert Decision",
+            "hint": "When off, caption only a false answer with confidence at or above the threshold. When on, caption only a true answer with confidence at or above the threshold."
+          },
+          "threshold": {
+            "description": "Confidence Threshold",
+            "hint": "Minimum required confidence, from 0 to 1."
+          },
+          "prompt": {
+            "description": "Decision Prompt",
+            "hint": "Ask the decision model a yes or no question about the image."
+          },
+          "placeholder": {
+            "description": "Rejected Caption Placeholder",
+            "hint": "Text used in group context when captioning is rejected or the decision cannot be made."
+          }
+        },
         "group_message_history_enable": {
           "description": "Persist Group Chat Messages",
           "hint": "Persist all group messages and allow the model to query them using tools."

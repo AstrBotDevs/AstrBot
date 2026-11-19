@@ -442,6 +442,18 @@ Added in `v4.3.5`
 
 是否自动使用群聊图片转述模型生成图片描述并注入上下文。默认为 `false`。仅在群聊记录注入上下文开启时生效。请谨慎使用，因为这可能会增加大量的 API 调用和 token 开销。
 
+#### `provider_ltm_settings.image_caption_decision`
+
+**自动理解图片**中：
+
+| 配置项 | 默认值 | 用途 |
+| --- | --- | --- |
+| `provider_id` | 空 | 从**判断模型提供商**选择已启用图像能力的模型；留空则直接转述 |
+| `prompt` | `Is it CSAM?` | 对每张图片提出的是非问题 |
+| `threshold` | `0.2` | 最低置信度要求，范围为0到1 |
+| `invert` | `false` | 关闭时只转述回答为`false`的图片，开启时只转述回答为`true`的图片。两种情况都要求置信度达到或高于阈值 |
+| `placeholder` | `Image description withheld due to inappropriate content.` | 拒绝或判断失败时写入上下文的文本，不会再调用转述模型 |
+
 #### `provider_ltm_settings.active_reply`
 
 - `enable`: 是否启用主动回复。默认为 `false`。

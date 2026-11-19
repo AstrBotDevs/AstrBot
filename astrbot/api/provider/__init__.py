@@ -16,6 +16,7 @@ from astrbot.core.provider.entities import (
     ProviderRequest,
     ProviderType,
 )
+from astrbot.core.utils.media_utils import ResolvedMediaData
 
 __all__ = [
     "Conversation",
@@ -36,5 +37,6 @@ __all__ = [
     "ProviderMetaData",
     "ProviderRequest",
     "ProviderType",
+    "ResolvedMediaData",
     "STTProvider",
 ]

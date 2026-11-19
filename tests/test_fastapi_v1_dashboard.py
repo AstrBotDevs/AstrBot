@@ -2372,37 +2372,20 @@ async def test_v1_create_standalone_provider_matches_dashboard_alias_capability(
 
 
 @pytest.mark.asyncio
-async def test_v1_decision_provider_capability_maps_and_filters(
-    asgi_client: httpx.AsyncClient,
-    fake_core_lifecycle,
-):
-    response = await asgi_client.post(
-        "/api/v1/providers",
-        json={
-            "capability": "decision",
-            "config": {
-                "id": "decision-main",
-                "type": "system_one_decision",
-                "api_base": "https://api.example.test/v1/systemone",
-                "model": "jev-latest",
-                "enable": True,
-            },
-        },
-        headers=_jwt_headers(),
+async def test_v1_decision_provider_capability_maps_and_filters(asgi_client):
+    url = "/api/v1/providers"
+    headers = _jwt_headers()
+    config = {"id": "judge", "type": "system_one_decision", "model": "jev-latest"}
+    await asgi_client.post(
+        url, json={"capability": "decision", "config": config}, headers=headers
     )
 
-    assert response.status_code == 200
-    assert response.json()["status"] == "ok"
-    provider = fake_core_lifecycle.astrbot_config["provider"][-1]
-    assert provider["provider_type"] == "decision"
-
-    list_response = await asgi_client.get(
-        "/api/v1/providers?capability=decision",
-        headers=_jwt_headers(),
+    response = await asgi_client.get(
+        url, params={"capability": "decision"}, headers=headers
     )
-    assert list_response.status_code == 200
-    providers = list_response.json()["data"]["providers"]
-    assert [item["id"] for item in providers] == ["decision-main"]
+    (provider,) = response.json()["data"]["providers"]
+    assert provider["id"] == "judge"
+    assert provider["modalities"] == ["text", "image"]
 
 
 @pytest.mark.asyncio

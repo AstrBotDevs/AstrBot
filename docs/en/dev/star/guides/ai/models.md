@@ -32,6 +32,13 @@ should_reply = await self.context.decision.yes_no(
     threshold=0.7,
 )
 
+should_route = await self.context.decision.matches(
+    question="Does this message request a refund?",
+    expected_answer=True,
+    confidence_threshold=0.85,
+    state=event.message_str,
+)
+
 strategy = await self.context.decision.choose(
     question="Which reply strategy should be used?",
     criteria={"short": "A brief reply", "detailed": "A detailed reply"},
@@ -42,7 +49,9 @@ print(strategy.choice)
 
 `yes_no()` returns a `bool`: `True` when the affirmative probability meets `threshold`. `choose()` returns a `DecisionChoiceAnswer`; read `.choice` for the selected value.
 
-`state` supplies context as text, a list, or a dict. Calls use the current decision provider unless you pass `provider_id`.
+`matches()` checks the selected yes or no answer and the model's confidence in it. It returns `True` only when the answer equals `expected_answer` and confidence meets or exceeds `confidence_threshold`.
+
+`state` accepts text, a list, a dict, or a prepared image (`ResolvedMediaData`) for models with image input. Calls use the current decision provider unless you pass `provider_id`.
 
 To answer multiple questions in one request, call `ask({name: question}, state=...)`. Answers use the same keys. Import these types from `astrbot.api.provider`:
 

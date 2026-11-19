@@ -9,6 +9,7 @@ from typing import Any, TypeGuard
 import httpx
 
 from astrbot import logger
+from astrbot.core.utils.media_utils import ResolvedMediaData
 
 from ..entities import (
     DecisionAnswer,
@@ -121,7 +122,7 @@ class OpenAIDecisionProvider(DecisionProvider):
         String state is sent as text input. Dict state, and list state made of
         objects, is sent as an ``input_json`` part so that keys such as
         ``role`` or ``image_url`` stay plain business data. Other lists are
-        serialized as JSON text input.
+        serialized as JSON text input. Resolved images are sent as image parts.
 
         Args:
             questions: Question heads keyed by caller-defined identifiers.
@@ -209,13 +210,29 @@ class OpenAIDecisionProvider(DecisionProvider):
                     {"type": "predicate", "name": name, "instructions": instructions}
                 )
 
-        if state is not None and not isinstance(state, (str, dict, list)):
+        if state is not None and not isinstance(
+            state, (str, dict, list, ResolvedMediaData)
+        ):
             raise ValueError(
-                "OpenAI decision state must be a string, a dict, or a list"
+                "OpenAI decision state must be text, JSON, or a resolved image"
             )
+        if isinstance(state, ResolvedMediaData) and not state.mime_type.startswith(
+            "image/"
+        ):
+            raise ValueError("Unsupported OpenAI decision image input")
         try:
             if state is None or isinstance(state, str):
                 request_input: Any = state or ""
+            elif isinstance(state, ResolvedMediaData):
+                request_input = [
+                    {
+                        "type": "message",
+                        "role": "user",
+                        "content": [
+                            {"type": "input_image", "image_url": state.to_data_url()}
+                        ],
+                    }
+                ]
             elif isinstance(state, dict) or all(
                 isinstance(item, dict) for item in state
             ):
