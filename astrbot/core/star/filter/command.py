@@ -197,16 +197,21 @@ class CommandFilter(HandlerFilter):
 
         # 检查是否以指令开头
         message_str = re.sub(r"\s+", " ", event.get_message_str().strip())
-        ok = False
-        for full_cmd in self.get_complete_command_names():
-            if message_str.startswith(f"{full_cmd} ") or message_str == full_cmd:
-                ok = True
-                message_str = message_str[len(full_cmd) :].strip()
-                # Only one command prefix can match; continuing would let a
-                # later alias strip arguments that happen to equal it.
-                break
-        if not ok:
+        # Only one command prefix can be stripped; pick the longest match so a
+        # space-containing alias wins over a shorter prefixing name, and no
+        # argument that happens to equal a command name gets stripped twice.
+        matched_cmd = max(
+            (
+                full_cmd
+                for full_cmd in self.get_complete_command_names()
+                if message_str.startswith(f"{full_cmd} ") or message_str == full_cmd
+            ),
+            key=len,
+            default=None,
+        )
+        if matched_cmd is None:
             return False
+        message_str = message_str[len(matched_cmd) :].strip()
 
         # 分割为列表
         ls = message_str.split(" ")

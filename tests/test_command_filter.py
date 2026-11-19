@@ -91,3 +91,16 @@ def test_invoking_via_alias_still_passes_arguments():
 
     assert command_filter.filter(event, None) is True
     assert event.extras["parsed_params"] == {"arg": "hello"}
+
+
+def test_longest_command_name_wins_over_prefixing_shorter_name():
+    """A longer alias containing spaces must win over the shorter main name."""
+    command_filter = CommandFilter(
+        "hello",
+        alias={"hello world"},
+        handler_md=SimpleNamespace(handler=single_arg_handler),
+    )
+    event = _make_event("hello world x")
+
+    assert command_filter.filter(event, None) is True
+    assert event.extras["parsed_params"] == {"arg": "x"}
