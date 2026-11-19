@@ -1097,6 +1097,7 @@ onMounted(async () => {
     <v-btn
       v-if="$vuetify.display.smAndDown"
       class="header-menu-btn"
+      :class="{ 'header-menu-btn--browser': !isDesktopReleaseMode }"
       icon
       rounded="lg"
       variant="text"
@@ -2614,6 +2615,11 @@ html[data-astrbot-desktop-platform='macos'] .top-header.chat-mode-header.chat-mo
 
 .top-header .header-menu-btn:hover {
   color: rgba(var(--v-theme-on-surface), 0.9);
+}
+
+.top-header .v-toolbar__content > .header-menu-btn--browser:first-child {
+  margin-inline-start: -12px;
+  margin-inline-end: 12px;
 }
 
 .header-toolbar-label {
