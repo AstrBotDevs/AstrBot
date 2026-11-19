@@ -130,6 +130,42 @@ class TestSecurityRestrictions:
         for cmd in blocked_commands:
             assert _is_safe_command(cmd) is False, f"Command '{cmd}' should be blocked"
 
+    def test_is_safe_command_blocked_despite_obfuscation(self):
+        """Test blocked commands stay blocked when written differently."""
+        blocked_commands = [
+            # Extra or alternative whitespace must not defeat the match.
+            "rm  -rf /",
+            "sudo\trm -rf /",
+            "kill  -9 -1",
+            # Chaining onto a harmless command must not hide the payload.
+            "echo hi;rm -rf /",
+            "echo hi&&rm -rf /",
+            "echo hi || rm -rf /",
+            "true\nrm -rf /",
+            # Reaching the same binary by another path.
+            "/bin/rm -rf /",
+            "/usr/bin/rm -rf /home",
+            # Flag spelling variants.
+            "rm -r -f /home",
+            "rm --recursive --force /home",
+            # A shell started with -c runs the payload inside.
+            'sh -c "rm -rf /"',
+            "bash -c 'rm -rf /'",
+            'sh -c "echo hi; rm -rf /"',
+        ]
+        for cmd in blocked_commands:
+            assert _is_safe_command(cmd) is False, f"Command '{cmd}' should be blocked"
+
+    def test_is_safe_command_allowed_alongside_blocked_text(self):
+        """Test harmless commands that merely mention dangerous words run."""
+        allowed_commands = [
+            "echo 'rm -rf happens in the sandbox'",
+            "grep -r 'rm -rf' docs/",
+            "git log --grep='rm -rf'",
+        ]
+        for cmd in allowed_commands:
+            assert _is_safe_command(cmd) is True, f"Command '{cmd}' should be allowed"
+
 
 class TestLocalShellComponent:
     """Tests for LocalShellComponent."""
@@ -679,7 +715,9 @@ class TestShipyardBooter:
     @pytest.mark.asyncio
     async def test_shipyard_booter_init(self):
         """Test ShipyardBooter initialization."""
-        with patch("astrbot.core.astr_agent_runtime.computer.booters.shipyard.ShipyardClient"):
+        with patch(
+            "astrbot.core.astr_agent_runtime.computer.booters.shipyard.ShipyardClient"
+        ):
             from astrbot.core.astr_agent_runtime.computer.booters.shipyard import (
                 ShipyardBooter,
             )
