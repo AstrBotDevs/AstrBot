@@ -2259,3 +2259,36 @@ async def test_query_filters_empty_list_content_assistant_message(monkeypatch):
         assert messages[1] == {"role": "user", "content": "again"}
     finally:
         await provider.terminate()
+
+
+@pytest.mark.asyncio
+async def test_prepare_chat_payload_does_not_mutate_caller_contexts():
+    """The payload builder must not leak changes into the caller's contexts.
+
+    `_no_save` marks messages that history persistence must skip (persona
+    opening lines). If payload preparation deleted the marker from the
+    caller's own dicts, those lines would be persisted on the next save.
+    """
+    provider = _make_provider()
+    contexts = [
+        {"role": "user", "content": "opening line", "_no_save": True},
+        {
+            "role": "assistant",
+            "content": [{"type": "text", "text": "opening reply"}],
+        },
+    ]
+    try:
+        payloads, context_query = await provider._prepare_chat_payload(
+            prompt=None, contexts=contexts
+        )
+
+        # The marker survives on the caller's object and is gone from the payload.
+        assert contexts[0]["_no_save"] is True
+        assert "_no_save" not in payloads["messages"][0]
+
+        # Payload-side edits stay local to the payload.
+        payloads["messages"][1]["content"] = [{"type": "text", "text": "changed"}]
+        assert contexts[1]["content"] == [{"type": "text", "text": "opening reply"}]
+        assert context_query[1]["content"] == [{"type": "text", "text": "changed"}]
+    finally:
+        await provider.terminate()

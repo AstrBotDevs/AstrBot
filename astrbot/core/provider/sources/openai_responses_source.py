@@ -260,7 +260,11 @@ class ProviderOpenAIResponses(ProviderOpenAIOfficial):
         Returns:
             The Responses payload and its chat-format source context.
         """
-        context_query = copy.deepcopy(self._ensure_message_to_dicts(contexts))
+        # Same reasoning as ProviderOpenAIOfficial._prepare_chat_payload: the
+        # steps below only drop a top-level `_no_save` key, and the Responses
+        # conversion reads the transcript without mutating it, so copying the
+        # message dicts is enough to keep the caller's contexts untouched.
+        context_query = [dict(m) for m in self._ensure_message_to_dicts(contexts)]
         if prompt is not None:
             context_query.append(
                 await self.assemble_context(
