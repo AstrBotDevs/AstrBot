@@ -350,6 +350,194 @@ async def test_upload_document_cleans_up_on_storage_failure(
 
 
 @pytest.mark.asyncio
+async def test_upload_document_logs_stage_and_cause_on_failure(
+    tmp_path: Path,
+    stub_provider_manager_module,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """A failed upload must log its stage and wrapped cause.
+
+    The sinks only render the format string, so diagnostics carried in
+    ``extra`` never reach the operator. Without the cause in the message an
+    upload failure is indistinguishable from an unknown generic error.
+
+    Args:
+        tmp_path: Temporary directory for the helper's media folder.
+        stub_provider_manager_module: Stub avoiding circular core imports.
+        caplog: Pytest log capture fixture.
+
+    Raises:
+        KnowledgeBaseUploadError: Expected; raised by the failing upload.
+    """
+    KBHelper = _import_kb_helper()
+
+    helper = KBHelper.__new__(KBHelper)
+    helper.kb = KnowledgeBase(
+        kb_name="Test KB",
+        description="",
+        embedding_provider_id="emb",
+    )
+    helper.kb_db = MagicMock()
+    helper.vec_db = AsyncMock()
+    helper.kb_medias_dir = tmp_path / "medias"
+    helper.kb_medias_dir.mkdir()
+    helper.chunker = AsyncMock()
+    helper.chunker.chunk = AsyncMock(return_value=["hello world"])
+
+    parse_result = MagicMock()
+    parse_result.text = "hello world"
+    parse_result.media = []
+
+    boom = PermissionError(13, "Permission denied", "index.faiss")
+    helper.vec_db.insert_batch = AsyncMock(side_effect=boom)
+    helper.vec_db.delete_documents = AsyncMock()
+
+    with (
+        patch(
+            "astrbot.core.knowledge_base.kb_helper.select_parser",
+            new=AsyncMock(
+                return_value=MagicMock(parse=AsyncMock(return_value=parse_result)),
+            ),
+        ),
+        patch.object(helper, "_ensure_vec_db", new=AsyncMock()),
+        caplog.at_level("WARNING", logger="astrbot"),
+        pytest.raises(KnowledgeBaseUploadError),
+    ):
+        await helper.upload_document(
+            file_name="demo.txt",
+            file_content=b"hello world",
+            file_type="txt",
+        )
+
+    messages = [r.getMessage() for r in caplog.records]
+    combined = "\n".join(messages)
+    assert "[storage]" in combined, combined
+    assert "index.faiss" in combined, combined
+
+
+@pytest.mark.asyncio
+async def test_upload_document_logs_chained_cause_for_non_storage_stage(
+    tmp_path: Path,
+    stub_provider_manager_module,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Stages relying on ``raise ... from exc`` must still log the reason.
+
+    Only the storage stage copies the underlying exception into
+    ``details["cause"]``. Parsing, chunking and metadata stages keep it on the
+    exception chain instead, so the log must fall back to ``__cause__`` or
+    those failures stay as opaque as before.
+
+    Args:
+        tmp_path: Temporary directory for the helper's media folder.
+        stub_provider_manager_module: Stub avoiding circular core imports.
+        caplog: Pytest log capture fixture.
+
+    Raises:
+        KnowledgeBaseUploadError: Expected; raised by the failing upload.
+    """
+    KBHelper = _import_kb_helper()
+
+    helper = KBHelper.__new__(KBHelper)
+    helper.kb = KnowledgeBase(
+        kb_name="Test KB",
+        description="",
+        embedding_provider_id="emb",
+    )
+    helper.kb_db = MagicMock()
+    helper.vec_db = AsyncMock()
+    helper.kb_medias_dir = tmp_path / "medias"
+    helper.kb_medias_dir.mkdir()
+    helper.chunker = AsyncMock()
+
+    boom = UnicodeDecodeError("utf-8", b"\xff", 0, 1, "invalid start byte")
+
+    with (
+        patch(
+            "astrbot.core.knowledge_base.kb_helper.select_parser",
+            new=AsyncMock(side_effect=boom),
+        ),
+        patch.object(helper, "_ensure_vec_db", new=AsyncMock()),
+        caplog.at_level("WARNING", logger="astrbot"),
+        pytest.raises(KnowledgeBaseUploadError),
+    ):
+        await helper.upload_document(
+            file_name="demo.txt",
+            file_content=b"hello world",
+            file_type="txt",
+        )
+
+    messages = [r.getMessage() for r in caplog.records]
+    combined = "\n".join(messages)
+    assert "[parsing]" in combined, combined
+    # The chained exception is rendered via str(), so match its message text
+    # rather than the exception class name.
+    assert "codec can't decode byte" in combined, combined
+
+
+@pytest.mark.asyncio
+async def test_upload_document_redacts_api_key_from_logged_cause(
+    tmp_path: Path,
+    stub_provider_manager_module,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """A provider error quoting an API key must not reach the log verbatim.
+
+    ``details["cause"]`` is stored as ``str(exc)`` and ``__cause__`` is a raw
+    exception, so both branches can carry a provider response containing the
+    live key. Now that the cause is appended to the log message, the value has
+    to be redacted first or the fix trades a diagnosis gap for a credential
+    leak.
+
+    Args:
+        tmp_path: Temporary directory for the helper's media folder.
+        stub_provider_manager_module: Stub avoiding circular core imports.
+        caplog: Pytest log capture fixture.
+
+    Raises:
+        KnowledgeBaseUploadError: Expected; raised by the failing upload.
+    """
+    KBHelper = _import_kb_helper()
+
+    helper = KBHelper.__new__(KBHelper)
+    helper.kb = KnowledgeBase(
+        kb_name="Test KB",
+        description="",
+        embedding_provider_id="emb",
+    )
+    helper.kb_db = MagicMock()
+    helper.vec_db = AsyncMock()
+    helper.kb_medias_dir = tmp_path / "medias"
+    helper.kb_medias_dir.mkdir()
+    helper.chunker = AsyncMock()
+
+    secret = "sk-proj-AbCd1234EfGh5678IjKl9012"
+    # A provider error that echoes the request credentials. ValueError renders
+    # its message verbatim, unlike UnicodeDecodeError whose str() ignores
+    # extra args, so this actually carries the key into the cause text.
+    boom = ValueError(f"Incorrect API key provided: {secret}")
+
+    with (
+        patch(
+            "astrbot.core.knowledge_base.kb_helper.select_parser",
+            new=AsyncMock(side_effect=boom),
+        ),
+        patch.object(helper, "_ensure_vec_db", new=AsyncMock()),
+        caplog.at_level("WARNING", logger="astrbot"),
+        pytest.raises(KnowledgeBaseUploadError),
+    ):
+        await helper.upload_document(
+            file_name="demo.txt",
+            file_content=b"hello world",
+            file_type="txt",
+        )
+
+    combined = "\n".join(r.getMessage() for r in caplog.records)
+    assert secret not in combined, f"API key leaked into log: {combined}"
+    assert "[REDACTED]" in combined, combined
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize(
     ("file_name", "file_type"),
     [

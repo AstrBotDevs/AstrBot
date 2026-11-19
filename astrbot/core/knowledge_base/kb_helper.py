@@ -19,6 +19,7 @@ from astrbot.core.provider.provider import (
 from astrbot.core.provider.provider import (
     Provider as LLMProvider,
 )
+from astrbot.core.utils.error_redaction import redact_sensitive_text
 
 from .chunking.base import BaseChunker
 from .chunking.markdown import MarkdownChunker
@@ -496,7 +497,23 @@ class KBHelper:
             return doc
         except Exception as e:
             if isinstance(e, KnowledgeBaseUploadError):
-                logger.warning(f"上传文档失败: {e}", extra={"details": e.details})
+                # The console and file sinks render only ``message``, so an
+                # ``extra={"details": ...}`` payload never reaches the log and
+                # the underlying failure stays invisible. Append the stage and
+                # the root cause to the message so failed uploads are
+                # debuggable without a debugger. Only the storage stage records
+                # ``details["cause"]``; the other stages keep the reason on the
+                # exception chain via ``raise ... from exc``.
+                #
+                # ``details["cause"]`` is stored verbatim by the storage stage
+                # and ``__cause__`` is a raw exception object, so either branch
+                # can carry a provider response quoting the API key. Redact
+                # before formatting or this log line leaks credentials.
+                cause = e.details.get("cause") or e.__cause__
+                suffix = (
+                    f"; cause: {redact_sensitive_text(str(cause))}" if cause else ""
+                )
+                logger.warning(f"上传文档失败[{e.stage}]: {e}{suffix}")
             else:
                 logger.error(f"上传文档失败: {e}", exc_info=True)
 
