@@ -427,11 +427,11 @@
           },
           "cua_local": {
             "description": "CUA ローカルサンドボックス",
-            "hint": "CUA ローカルサンドボックスを優先するかどうかを指定します。デフォルトで有効になっており、クラウドサンドボックス用の CUA_API_KEY を用意せずに利用できます。無効にすると CUA クラウドサンドボックスを使用できます。"
+            "hint": "有効のままにしてください。Cua Cloud は 2026 年 10 月 18 日に終了しました。AstrBot は現在、ローカル CUA サンドボックスのみを設定できます。"
           },
           "cua_api_key": {
             "description": "CUA API Key",
-            "hint": "CUA クラウドサンドボックスの API Key です。ローカルサンドボックスを無効にした場合のみ必要です。CUA_API_KEY 環境変数でも指定できます。"
+            "hint": "終了した Cua Cloud サービスの旧設定です。ローカル CUA サンドボックスに API Key は不要です。"
           },
           "shipyard_endpoint": {
             "description": "Shipyard API Endpoint",

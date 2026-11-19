@@ -335,11 +335,11 @@
           },
           "cua_local": {
             "description": "CUA Local Sandbox",
-            "hint": "Prefer a local CUA sandbox. Enabled by default to avoid requiring CUA_API_KEY for cloud sandboxes. Disable this to use CUA cloud sandboxes."
+            "hint": "Keep enabled. Cua Cloud ended on October 18, 2026; AstrBot only configures local CUA sandboxes."
           },
           "cua_api_key": {
             "description": "CUA API Key",
-            "hint": "CUA cloud sandbox API key. Required only when local sandbox is disabled. You can also provide it via the CUA_API_KEY environment variable."
+            "hint": "Legacy setting for the retired Cua Cloud service. Local CUA sandboxes do not require an API key."
           },
           "shipyard_endpoint": {
             "description": "Shipyard API Endpoint",
