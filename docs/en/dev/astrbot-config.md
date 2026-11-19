@@ -41,6 +41,7 @@ The default AstrBot configuration is as follows:
             "interval": "1.5,3.5",
             "log_base": 2.6,
             "words_count_threshold": 150,
+            "max_segments": 0,
             "regex": ".*?[。？！~…]+|.+$",
             "content_cleanup_rule": "",
         },
@@ -224,7 +225,8 @@ Segmented reply settings.
 - `interval_method`: Method for segmentation intervals. Options are `random` and `log`. Default is `random`.
 - `interval`: Interval time for segmentation. For `random`, fill in two comma-separated numbers representing min and max intervals (seconds). For `log`, fill in one number representing the log base. Default is `"1.5,3.5"`.
 - `log_base`: Log base, only applicable when `interval_method` is `log`. Default is `2.6`.
-- `words_count_threshold`: Character limit for segmented replies. Only messages shorter than this value will be segmented; longer messages will be sent directly (unsegmented). Default is `150`.
+- `words_count_threshold`: Word count threshold for enabling segmentation. An original text segment is segmented only when it does not exceed this value; longer text is sent directly. Default is `150`.
+- `max_segments`: Maximum number of segments produced from each original text segment. Content beyond the limit is merged into the final segment to avoid data loss. Set to `0` for no limit. Default is `0`.
 - `regex`: Used to split a message. By default, it splits based on punctuation like periods and question marks. `re.findall(r'<regex>', text)`. Default is `".*?[。？！~…]+|.+$"`.
 - `content_cleanup_rule`: Removes specified content from segments. Supports regex. For example, `[。？！]` will remove all periods, question marks, and exclamation points. `re.sub(r'<regex>', '', text)`.
 
