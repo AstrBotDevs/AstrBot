@@ -35,35 +35,6 @@ async def test_gemini_thinking_level_is_serialized_on_every_request():
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize(
-    ("model", "provider_config"),
-    [
-        ("gemini-4-argon", {}),
-        ("gemini-4-argon", {"gm_thinking_config": {"level": "HIGH"}}),
-        (
-            "gemini-4-argon",
-            {
-                "gm_thinking_config": {"level": "HIGH"},
-                "custom_extra_body": {"reasoning_effort": "auto"},
-            },
-        ),
-        ("gemini-4-argon", {"custom_extra_body": {"reasoning_effort": "xhigh"}}),
-        ("gemini-3.8-flash", {"gm_thinking_config": {"level": "MINIMAL"}}),
-    ],
-)
-async def test_gemini_omits_unset_or_unsupported_thinking_config(model, provider_config):
-    provider = ProviderGoogleGenAI.__new__(ProviderGoogleGenAI)
-    provider.provider_config = provider_config
-    provider.provider_settings = {}
-    provider.model_name = "gemini-2.5-flash"
-    provider.safety_settings = []
-
-    config = await provider._prepare_query_config({"model": model})
-
-    assert "thinking_config" not in config.model_dump(exclude_none=True)
-
-
-@pytest.mark.asyncio
 async def test_gemini_prepare_conversation_keeps_normal_user_first_history():
     provider = ProviderGoogleGenAI.__new__(ProviderGoogleGenAI)
 

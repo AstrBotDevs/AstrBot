@@ -1918,10 +1918,6 @@
       },
       "gm_thinking_config": {
         "description": "思考設定",
-        "budget": {
-          "description": "思考予算",
-          "hint": "Gemini 2.5の思考トークン予算を設定します。空欄の場合はモデルの既定値を使用します。参照 https://ai.google.dev/gemini-api/docs/thinking#set-budget"
-        },
         "level": {
           "description": "思考レベル",
           "hint": "参照 https://ai.google.dev/gemini-api/docs/thinking#thinking-levels"
