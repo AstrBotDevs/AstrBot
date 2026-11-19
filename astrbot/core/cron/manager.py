@@ -472,8 +472,11 @@ class CronJobManager:
         role = (
             "admin"
             if (
-                payload.get("origin", "tool") == "api"
-                or payload.get("sender_id") in (cfg.get("admins_id") or [])
+                payload.get("allow_admin_role") is not False
+                and (
+                    payload.get("origin", "tool") == "api"
+                    or payload.get("sender_id") in (cfg.get("admins_id") or [])
+                )
             )
             else "member"
         )
