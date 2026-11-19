@@ -47,6 +47,13 @@ class Main(star.Star):
             cfg = self.context.get_config(umo=event.unified_msg_origin)
             p_settings = cfg["platform_settings"]
             wake_prefix = cfg.get("wake_prefix", [])
+            provider_wake_prefix = cfg.get("provider_settings", {}).get(
+                "wake_prefix",
+                "",
+            )
+            for bot_wake_prefix in wake_prefix:
+                if provider_wake_prefix.startswith(bot_wake_prefix):
+                    provider_wake_prefix = provider_wake_prefix[len(bot_wake_prefix) :]
             if len(messages) != 1:
                 return
 
@@ -66,7 +73,10 @@ class Main(star.Star):
             messages_i18n = MESSAGES.get(
                 self.context.locale(event.unified_msg_origin), MESSAGES["zh-CN"]
             )
-            if p_settings.get("empty_mention_waiting_need_reply", True):
+            if (
+                p_settings.get("empty_mention_waiting_need_reply", True)
+                and not provider_wake_prefix
+            ):
                 try:
                     curr_cid = await self.context.conversation_manager.get_curr_conversation_id(
                         event.unified_msg_origin,
