@@ -84,12 +84,14 @@
           </v-btn>
         </div>
 
-        <AstrBotConfig
-          :iterable="draft"
-          :metadata="metadata['platform_group']?.metadata"
-          metadata-key="platform"
-          :is-editing="true"
-        />
+        <v-form ref="platformConfigForm" @submit.prevent>
+          <AstrBotConfig
+            :iterable="draft"
+            :metadata="metadata['platform_group']?.metadata"
+            metadata-key="platform"
+            :is-editing="true"
+          />
+        </v-form>
       </section>
 
       <v-divider />
@@ -454,6 +456,7 @@ function openConfigDrawer(configId) {
 }
 
 const draft = ref({});
+const platformConfigForm = ref(null);
 const originalPlatformId = ref("");
 const initialConfigSnapshot = ref("");
 const initialRouteSnapshot = ref("");
@@ -896,6 +899,7 @@ function rewritePatternPlatform(pattern, targetPlatformId) {
 
 async function save() {
   if (!canSave.value) return;
+  if (platformConfigForm.value && !(await platformConfigForm.value.validate()).valid) return;
   saving.value = true;
   try {
     const oldPlatformId = originalPlatformId.value;

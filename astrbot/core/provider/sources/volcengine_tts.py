@@ -16,6 +16,8 @@ from ..provider import TTSProvider
 from ..register import register_provider_adapter
 
 
+# This TTS provider endpoint is deprecated;
+# no need to fix any bugs until adapting new endpoint.
 @register_provider_adapter(
     "volcengine_tts",
     "火山引擎 TTS",

@@ -334,9 +334,6 @@ class ProviderOpenAIResponses(ProviderOpenAIOfficial):
             if key not in self.default_params:
                 extra_body[key] = payloads.pop(key)
 
-        max_tokens = extra_body.pop("max_tokens", None)
-        if max_tokens is not None and "max_output_tokens" not in extra_body:
-            extra_body["max_output_tokens"] = max_tokens
         reasoning_effort = extra_body.pop("reasoning_effort", None)
         if reasoning_effort is not None and "reasoning" not in extra_body:
             extra_body["reasoning"] = {"effort": reasoning_effort}
@@ -405,9 +402,6 @@ class ProviderOpenAIResponses(ProviderOpenAIOfficial):
             if key not in self.default_params:
                 extra_body[key] = payloads.pop(key)
 
-        max_tokens = extra_body.pop("max_tokens", None)
-        if max_tokens is not None and "max_output_tokens" not in extra_body:
-            extra_body["max_output_tokens"] = max_tokens
         reasoning_effort = extra_body.pop("reasoning_effort", None)
         if reasoning_effort is not None and "reasoning" not in extra_body:
             extra_body["reasoning"] = {"effort": reasoning_effort}

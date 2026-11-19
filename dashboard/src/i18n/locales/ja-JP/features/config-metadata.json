@@ -1685,31 +1685,11 @@
       },
       "custom_extra_body": {
         "description": "カスタムリクエストボディパラメーター",
-        "hint": "リクエストに temperature、top_p、max_tokens、reasoning_effort などの追加パラメーターを含めるために使用します。",
+        "hint": "プロバイダーがサポートする追加パラメーターをリクエストに含めます。",
         "template_schema": {
-          "temperature": {
-            "description": "Temperature パラメーター",
-            "hint": "出力のランダム性を制御します。通常の範囲は 0～2 で、値が高いほどランダムになります。",
-            "name": "Temperature"
-          },
-          "top_p": {
-            "description": "Top-p サンプリング",
-            "hint": "Nucleus サンプリングのパラメーターです。通常の範囲は 0～1 で、モデルが考慮する確率質量を制御します。",
-            "name": "Top-p"
-          },
-          "max_tokens": {
-            "description": "最大トークン数",
-            "hint": "生成する最大トークン数です。",
-            "name": "Max Tokens"
-          },
-          "max_output_tokens": {
-            "description": "最大出力トークン数",
-            "hint": "生成する最大トークン数です。",
-            "name": "Max Output Tokens"
-          },
           "reasoning_effort": {
             "description": "推論強度",
-            "hint": "推論モデルの推論強度を制御します。対応する値はモデルによって異なります。",
+            "hint": "対応する推論強度はモデルによって異なり、一部のオプションは効果がない場合があります。",
             "name": "Reasoning Effort"
           }
         }
@@ -2135,7 +2115,7 @@
       },
       "max_context_tokens": {
         "description": "モデルのコンテキストウィンドウサイズ",
-        "hint": "モデルの最大コンテキストトークン数です。0 の場合、利用可能であればモデルメタデータから自動入力します。"
+        "hint": "コンテキストに含められるトークン数の上限です。モデルの最大コンテキスト長以下に設定してください。0 または空欄の場合、まずモデルメタデータを使用し、利用できない場合はコンテキストウィンドウのフォールバック値を使用します（コンテキスト圧縮設定で変更可能）。"
       },
       "dify_api_key": {
         "description": "API Key",

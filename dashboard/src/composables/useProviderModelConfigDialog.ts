@@ -11,36 +11,7 @@ interface UseProviderModelConfigDialogOptions {
   showMessage: (message: string, color?: string) => void
 }
 
-// Quick-add templates for `custom_extra_body` on Gemini providers. They use the
-// Gemini SDK parameter names (max_output_tokens instead of OpenAI's max_tokens).
-// Other parameters can still be added by key; the Gemini SDK validates them.
-const GEMINI_EXTRA_BODY_TEMPLATE = {
-  temperature: {
-    name: 'Temperature',
-    description: '温度参数',
-    hint: '控制输出的随机性，范围通常为 0-2。值越高越随机。',
-    type: 'float',
-    default: 1.0,
-    slider: { min: 0, max: 2, step: 0.1 }
-  },
-  top_p: {
-    name: 'Top-p',
-    description: 'Top-p 采样',
-    hint: '核采样参数，范围通常为 0-1。控制模型考虑的概率质量。',
-    type: 'float',
-    default: 1.0,
-    slider: { min: 0, max: 1, step: 0.01 }
-  },
-  max_output_tokens: {
-    name: 'Max Output Tokens',
-    description: '最大输出词元（Tokens）数',
-    hint: '生成的最大词元（Tokens）数。',
-    type: 'int',
-    default: 8192
-  }
-}
-
-// Fallback only. Avoid actually depending on this.
+// Fallback for Gemini 4 models without a known list of reasoning levels.
 const GEMINI_4_DEFAULT_REASONING_LEVELS = ['auto', 'low', 'medium', 'high', 'xhigh']
 
 const GEMINI_4_REASONING_LEVELS = {
@@ -61,6 +32,7 @@ export function useProviderModelConfigDialog(options: UseProviderModelConfigDial
     showMessage
   } = options
 
+  const providerEditForm = ref<{ validate: () => Promise<{ valid: boolean }> } | null>(null)
   const showProviderEditDialog = ref(false)
   const providerEditData = ref<any | null>(null)
   const providerEditOriginalId = ref('')
@@ -75,22 +47,40 @@ export function useProviderModelConfigDialog(options: UseProviderModelConfigDial
     const schema = JSON.parse(JSON.stringify(configSchema.value))
     const hiddenKeys = ['id', 'model']
     const modelName = providerEditData.value?.model?.toLowerCase().split('/').pop() || ''
-    const extraBodySchema = schema.provider.items.custom_extra_body
 
-    if (selectedProviderSource.value?.type === 'googlegenai_chat_completion') {
-      extraBodySchema.template_schema = { ...GEMINI_EXTRA_BODY_TEMPLATE }
-      if (modelName.startsWith('gemini-4')) {
-        const modelLevels = Object.entries(GEMINI_4_REASONING_LEVELS).find(([modelId]) =>
-          modelName === modelId || modelName.startsWith(`${modelId}-`)
-        )?.[1]
-        extraBodySchema.template_schema.reasoning_effort = {
-          name: 'Reasoning Effort',
-          type: 'string',
-          options: modelLevels ?? GEMINI_4_DEFAULT_REASONING_LEVELS
+    if (schema.provider.items.max_context_tokens) {
+      schema.provider.items.max_context_tokens.required = false
+      schema.provider.items.max_context_tokens.placeholder = 'Use default.'
+      schema.provider.items.max_context_tokens.min = 0
+      schema.provider.items.max_context_tokens.integer = true
+    }
+
+    const extraBody = schema.provider.items.custom_extra_body
+    if (extraBody?.template_schema) {
+      extraBody.render_type = 'inline'
+      if (selectedProviderSource.value?.type === 'googlegenai_chat_completion') {
+        const { reasoning_effort } = extraBody.template_schema
+        extraBody.template_schema = {}
+        if (modelName.startsWith('gemini-4')) {
+          const modelLevels = Object.entries(GEMINI_4_REASONING_LEVELS).find(([modelId]) =>
+            modelName === modelId || modelName.startsWith(`${modelId}-`)
+          )?.[1]
+          extraBody.template_schema.reasoning_effort = {
+            ...reasoning_effort,
+            name: 'Reasoning Effort',
+            type: 'string',
+            options: modelLevels ?? GEMINI_4_DEFAULT_REASONING_LEVELS
+          }
         }
+      } else if (extraBody.template_schema.reasoning_effort) {
+        if (modelName.startsWith('gemini-')) {
+          delete extraBody.template_schema.reasoning_effort.default
+        }
+        extraBody.template_schema.reasoning_effort.render_type = 'reasoning_effort'
       }
-    } else if (modelName.startsWith('gemini-')) {
-      delete extraBodySchema.template_schema?.reasoning_effort?.default
+      if (extraBody.template_schema.reasoning_effort) {
+        extraBody.inline_fields_after = { reasoning_effort: 'max_context_tokens' }
+      }
     }
 
     for (const key of hiddenKeys) {
@@ -111,11 +101,26 @@ export function useProviderModelConfigDialog(options: UseProviderModelConfigDial
 
   function openProviderEdit(provider: any) {
     const editableProvider = JSON.parse(JSON.stringify(provider))
-    if (editableProvider.provider_source_id) {
-      delete editableProvider.reasoning
+    const providerType = editableProvider.provider_type
+      || selectedProviderSource.value?.provider_type
+      || (editableProvider.provider_source_id ? 'chat_completion' : undefined)
+    if (providerType === 'chat_completion') {
+      // Omitted values still need an editable field when the dialog is reopened.
+      editableProvider.max_context_tokens ??= ''
     }
     if (selectedProviderSource.value?.type === 'googlegenai_chat_completion') {
       editableProvider.custom_extra_body ??= {}
+    }
+    // Keep model fields together without introducing fields on other provider types.
+    for (const key of ['modalities', 'max_context_tokens', 'custom_extra_body']) {
+      if (key in editableProvider) {
+        const value = editableProvider[key]
+        delete editableProvider[key]
+        editableProvider[key] = value
+      }
+    }
+    if (editableProvider.provider_source_id) {
+      delete editableProvider.reasoning
     }
     providerEditData.value = editableProvider
     providerEditOriginalId.value = provider.id
@@ -137,6 +142,13 @@ export function useProviderModelConfigDialog(options: UseProviderModelConfigDial
     const newProviderConfig = buildModelProviderConfig?.(modelId)
     if (!newProviderConfig) return
 
+    for (const key of ['modalities', 'max_context_tokens', 'custom_extra_body']) {
+      if (key in newProviderConfig) {
+        const value = newProviderConfig[key]
+        delete newProviderConfig[key]
+        newProviderConfig[key] = value
+      }
+    }
     providerEditData.value = newProviderConfig
     providerEditOriginalId.value = ''
     providerEditMode.value = 'add'
@@ -145,6 +157,7 @@ export function useProviderModelConfigDialog(options: UseProviderModelConfigDial
 
   async function saveEditedProvider() {
     if (!providerEditData.value) return
+    if (providerEditForm.value && !(await providerEditForm.value.validate()).valid) return
 
     savingProviders.value.push(providerEditData.value.id)
     try {
@@ -153,11 +166,15 @@ export function useProviderModelConfigDialog(options: UseProviderModelConfigDial
       if (isAdding && !sourceId) {
         throw new Error(tm('providerSources.selectHint'))
       }
+      const providerConfig = { ...providerEditData.value }
+      if (providerConfig.max_context_tokens === '' || providerConfig.max_context_tokens == null) {
+        delete providerConfig.max_context_tokens
+      }
       const res = isAdding
-        ? await providerApi.createInSource(sourceId, providerEditData.value)
+        ? await providerApi.createInSource(sourceId, providerConfig)
         : await providerApi.update(
           providerEditOriginalId.value || providerEditData.value.id,
-          providerEditData.value
+          providerConfig
       )
 
       if (res.data.status === 'error') {
@@ -181,6 +198,7 @@ export function useProviderModelConfigDialog(options: UseProviderModelConfigDial
   }
 
   return {
+    providerEditForm,
     showProviderEditDialog,
     providerEditData,
     savingProviders,

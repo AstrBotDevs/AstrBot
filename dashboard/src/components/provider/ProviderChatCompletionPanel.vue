@@ -67,7 +67,7 @@
 
           <v-divider></v-divider>
 
-          <div class="provider-config-body">
+          <v-form ref="providerSourceForm" class="provider-config-body" @submit.prevent>
             <section class="provider-section config-form">
               <div class="provider-section-head">
                 <div class="provider-section-title">{{ tm('providers.settings') }}</div>
@@ -129,7 +129,7 @@
                 @add-model-provider="openModelAddDialog"
               />
             </section>
-          </div>
+          </v-form>
         </div>
 
         <div v-else class="provider-empty-state">
@@ -176,13 +176,15 @@
           {{ providerEditDialogTitle }}
         </v-card-title>
         <v-card-text class="py-4 config-form">
-          <AstrBotConfig
-            v-if="providerEditData"
-            :iterable="providerEditData"
-            :metadata="providerModelConfigSchema"
-            metadataKey="provider"
-            :is-editing="true"
-          />
+          <v-form ref="providerEditForm" @submit.prevent="saveEditedProvider">
+            <AstrBotConfig
+              v-if="providerEditData"
+              :iterable="providerEditData"
+              :metadata="providerModelConfigSchema"
+              metadataKey="provider"
+              :is-editing="true"
+            />
+          </v-form>
         </v-card-text>
         <v-card-actions class="pa-4">
           <v-spacer></v-spacer>
@@ -270,6 +272,7 @@ const {
   selectProviderSource,
   addProviderSource,
   deleteProviderSource,
+  providerSourceForm,
   saveProviderSource,
   fetchAvailableModels,
   buildModelProviderConfig,
@@ -298,6 +301,7 @@ const providerSourceFieldLinks = computed(() => (
 const showManualModelDialog = ref(false)
 
 const {
+  providerEditForm,
   showProviderEditDialog,
   providerEditData,
   savingProviders,
