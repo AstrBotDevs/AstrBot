@@ -63,7 +63,7 @@ def test_command_alias_does_not_consume_argument_matching_alias():
     )
     event = _make_event("hello h")
 
-    assert command_filter.filter(event, None) is True
+    assert command_filter.filter(event, {}) is True
     assert event.extras["parsed_params"] == {"arg": "h"}
 
 
@@ -76,7 +76,7 @@ def test_command_alias_does_not_consume_first_argument_of_many():
     )
     event = _make_event("hello h extra")
 
-    assert command_filter.filter(event, None) is True
+    assert command_filter.filter(event, {}) is True
     assert event.extras["parsed_params"] == {"arg": "h"}
 
 
@@ -89,7 +89,7 @@ def test_invoking_via_alias_still_passes_arguments():
     )
     event = _make_event("h hello")
 
-    assert command_filter.filter(event, None) is True
+    assert command_filter.filter(event, {}) is True
     assert event.extras["parsed_params"] == {"arg": "hello"}
 
 
@@ -102,5 +102,5 @@ def test_longest_command_name_wins_over_prefixing_shorter_name():
     )
     event = _make_event("hello world x")
 
-    assert command_filter.filter(event, None) is True
+    assert command_filter.filter(event, {}) is True
     assert event.extras["parsed_params"] == {"arg": "x"}
