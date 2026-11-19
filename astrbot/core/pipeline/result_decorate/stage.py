@@ -7,7 +7,7 @@ from collections.abc import AsyncGenerator
 from astrbot.core import file_token_service, html_renderer, logger
 from astrbot.core.i18n import get_config_locale, translate
 from astrbot.core.message.components import At, Image, Json, Node, Plain, Record, Reply
-from astrbot.core.message.message_event_result import ResultContentType
+from astrbot.core.message.message_event_result import MessageChain, ResultContentType
 from astrbot.core.pipeline.content_safety_check.stage import ContentSafetyCheckStage
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from astrbot.core.platform.message_type import MessageType
@@ -123,6 +123,84 @@ class ResultDecorateStage(Stage):
                 result.append(seg)
         return result if result else [text]
 
+    async def _send_streaming_tts(self, event: AstrMessageEvent) -> None:
+        """Send voice for a streamed reply after its text has been delivered.
+
+        Streaming replies bypass the TTS block in ``process``. By the time the
+        final result arrives the text is already on the platform, so only the
+        Record is sent here; ``dual_output`` must not append the text again.
+        """
+        if event.is_stopped():
+            return
+
+        tts_cfg = self.ctx.plugin_manager.context.get_config(
+            umo=event.unified_msg_origin,
+        ).get("provider_tts_settings", {})
+        if not tts_cfg.get("enable"):
+            return
+
+        try:
+            tts_provider = (
+                await self.ctx.plugin_manager.context.get_using_tts_provider_async(
+                    event.unified_msg_origin,
+                )
+            )
+        except Exception:
+            logger.warning(
+                "Failed to resolve TTS provider for %s",
+                event.unified_msg_origin,
+                exc_info=True,
+            )
+            return
+        if not tts_provider:
+            logger.warning(
+                f"Session {event.unified_msg_origin} has no text-to-speech "
+                "provider configured.",
+            )
+            return
+
+        result = event.get_result()
+        if result is None or not result.chain:
+            return
+
+        use_file_service = tts_cfg.get("use_file_service")
+        callback_api_base = self.ctx.astrbot_config.get("callback_api_base")
+
+        for comp in result.chain:
+            if not isinstance(comp, Plain) or len(comp.text) <= 1:
+                continue
+            try:
+                logger.info(f"TTS request: {comp.text}")
+                audio_path = await tts_provider.get_audio(comp.text)
+                logger.info(f"TTS result: {audio_path}")
+                if not audio_path:
+                    logger.error(
+                        "Failed to convert the streamed message segment to speech "
+                        f"because no TTS audio file was found: {comp.text}",
+                    )
+                    continue
+
+                url = None
+                if use_file_service and callback_api_base:
+                    token = await file_token_service.register_file(audio_path)
+                    url = f"{callback_api_base}/api/file/{token}"
+                    logger.debug(f"Registered: {url}")
+
+                await event.send(
+                    MessageChain(
+                        [
+                            Record(
+                                file=url or audio_path,
+                                url=url or audio_path,
+                                text=comp.text,
+                            ),
+                        ],
+                    ),
+                )
+            except Exception:
+                logger.error(traceback.format_exc())
+                logger.error("TTS failed for streamed reply; only text was sent.")
+
     async def process(
         self,
         event: AstrMessageEvent,
@@ -190,6 +268,8 @@ class ResultDecorateStage(Stage):
 
         # 流式输出不执行下面的逻辑
         if is_stream:
+            if event.get_extra("tts_stream_dual", False):
+                await self._send_streaming_tts(event)
             return
 
         # 需要再获取一次。插件可能直接对 chain 进行了替换。
@@ -273,6 +353,12 @@ class ResultDecorateStage(Stage):
                 )
             )
 
+            tts_trigger_probability = (
+                1.0
+                if event.get_extra("tts_forced", False)
+                else self.tts_trigger_probability
+            )
+
             should_tts = (
                 bool(
                     self.ctx.plugin_manager.context.get_config(
@@ -280,7 +366,7 @@ class ResultDecorateStage(Stage):
                     )["provider_tts_settings"]["enable"]
                 )
                 and result.is_llm_result()
-                and random.random() <= self.tts_trigger_probability
+                and random.random() <= tts_trigger_probability
                 and tts_provider
             )
             if should_tts and not tts_provider:

@@ -1,5 +1,6 @@
 import asyncio
 import inspect
+import random
 from collections.abc import AsyncGenerator, Awaitable, Callable
 from typing import TYPE_CHECKING
 
@@ -377,6 +378,49 @@ class ThirdPartyAgentSubStage(Stage):
             and not event.platform_meta.support_streaming_message
         )
         streaming_used = streaming_response and not stream_to_general
+
+        # When the reply would be streamed but TTS voice replies are enabled,
+        # streaming delivery bypasses the result decorate stage (the only place
+        # where text is converted into voice messages). Roll the dice once here:
+        # with dual_output the text keeps streaming and the voice is sent after
+        # STREAMING_FINISH; without it the reply is switched to non-streaming so
+        # the decorate stage can emit voice only. Live mode has its own
+        # streaming TTS pipeline and is excluded.
+        tts_cfg = self.ctx.plugin_manager.context.get_config(
+            umo=event.unified_msg_origin
+        ).get("provider_tts_settings", {})
+        if (
+            streaming_used
+            and tts_cfg.get("enable")
+            and event.get_extra("action_type") != "live"
+        ):
+            try:
+                tts_prob = float(tts_cfg.get("trigger_probability", 1.0))
+            except (TypeError, ValueError):
+                tts_prob = 1.0
+            if random.random() < max(0.0, min(tts_prob, 1.0)):
+                # Only roll when a usable TTS provider exists, so a
+                # misconfigured TTS setup cannot silently disable streaming
+                # for regular chat replies.
+                try:
+                    tts_provider = await self.ctx.plugin_manager.context.get_using_tts_provider_async(
+                        event.unified_msg_origin
+                    )
+                except ValueError:
+                    # The session may resolve to a provider of the wrong
+                    # type; treat it as no usable TTS provider.
+                    tts_provider = None
+                if tts_provider is not None:
+                    if tts_cfg.get("dual_output"):
+                        event.set_extra("tts_stream_dual", True)
+                    else:
+                        event.set_extra("tts_forced", True)
+                        # ``streaming_response`` is passed to the runner below,
+                        # so it must be disabled as well; otherwise the runner
+                        # still streams while the non-streaming handler is
+                        # selected.
+                        streaming_response = False
+                        streaming_used = False
 
         runner_closed = False
         stream_consumed = False
