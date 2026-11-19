@@ -79,6 +79,7 @@ async def test_active_reply_does_not_create_conversation_when_current_missing():
     results = [item async for item in main.on_message(event)]
 
     assert results == []
+    assert event.get_extra("_active_reply_request") is None
     conv_mgr.get_curr_conversation_id.assert_awaited_once_with(event.unified_msg_origin)
     conv_mgr.new_conversation.assert_not_called()
     conv_mgr.get_conversation.assert_not_called()
@@ -111,7 +112,8 @@ async def test_active_reply_reuses_current_umo_conversation():
 
     results = [item async for item in main.on_message(event)]
 
-    assert results == [llm_request]
+    assert results == [None]
+    assert event.get_extra("_active_reply_request") is llm_request
     conv_mgr.get_curr_conversation_id.assert_awaited_once_with(event.unified_msg_origin)
     conv_mgr.new_conversation.assert_not_called()
     conv_mgr.get_conversation.assert_awaited_once_with(
