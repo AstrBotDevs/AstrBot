@@ -5,6 +5,7 @@ import re
 import shutil
 import time
 import zipfile
+from collections.abc import Mapping
 from pathlib import Path
 
 import certifi
@@ -12,7 +13,7 @@ import httpx
 
 from astrbot.core import logger
 from astrbot.core.repository import GitHubRepository
-from astrbot.core.utils.io import ensure_dir, on_error
+from astrbot.core.utils.io import download_request_headers, ensure_dir, on_error
 from astrbot.core.utils.version_comparator import VersionComparator
 
 __all__ = ["ReleaseInfo"]
@@ -82,6 +83,8 @@ class _RepoZipUpdater:
         path: str,
         timeout: float = 1800.0,
         progress_callback=None,
+        *,
+        headers: Mapping[str, str] | None = None,
     ) -> None:
         target_path = Path(path)
         ensure_dir(target_path.parent)
@@ -95,10 +98,12 @@ class _RepoZipUpdater:
 
         try:
             async with self._create_httpx_client(timeout=timeout) as client:
-                async with client.stream("GET", url) as response:
+                async with client.stream(
+                    "GET", url, headers=download_request_headers(headers)
+                ) as response:
                     response.raise_for_status()
-                    headers = getattr(response, "headers", {})
-                    total_size = int(headers.get("content-length", 0))
+                    response_headers = getattr(response, "headers", {})
+                    total_size = int(response_headers.get("content-length", 0))
                     downloaded_size = 0
                     start_time = time.time()
                     await _emit_progress(

@@ -7,6 +7,7 @@ import socket
 import ssl
 import time
 import uuid
+from collections.abc import Mapping
 from pathlib import Path
 from typing import cast
 from urllib.parse import unquote, urlparse
@@ -19,6 +20,26 @@ from PIL import Image
 from .astrbot_path import get_astrbot_temp_path
 
 logger = logging.getLogger("astrbot")
+
+
+DOWNLOAD_USER_AGENT = "AstrBot (bot; +https://github.com/AstrBotDevs/AstrBot)"
+
+
+def download_request_headers(
+    headers: Mapping[str, str] | None = None,
+) -> dict[str, str]:
+    """Copy download headers, adding the AstrBot User-Agent if unspecified."""
+    result: dict[str, str] = {}
+    has_user_agent = False
+    for name, value in (headers or {}).items():
+        if name.lower() == "user-agent":
+            if has_user_agent:
+                continue
+            has_user_agent = True
+        result[name] = value
+    if not has_user_agent:
+        result["User-Agent"] = DOWNLOAD_USER_AGENT
+    return result
 
 
 def _safe_url_for_log(url: str) -> str:
@@ -115,8 +136,11 @@ async def download_image_by_url(
     post: bool = False,
     post_data: dict | None = None,
     path: str | None = None,
+    *,
+    headers: Mapping[str, str] | None = None,
 ) -> str:
     """下载图片, 返回 path"""
+    get_headers = download_request_headers(headers) if not post else None
     try:
         ssl_context = ssl.create_default_context(
             cafile=certifi.where(),
@@ -134,7 +158,7 @@ async def download_image_by_url(
                         f.write(await resp.read())
                     return path
             else:
-                async with session.get(url) as resp:
+                async with session.get(url, headers=get_headers) as resp:
                     if not path:
                         return save_temp_img(await resp.read())
                     with open(path, "wb") as f:
@@ -160,7 +184,9 @@ async def download_image_by_url(
                         f.write(await resp.read())
                     return path
             else:
-                async with session.get(url, ssl=ssl_context) as resp:
+                async with session.get(
+                    url, ssl=ssl_context, headers=get_headers
+                ) as resp:
                     if not path:
                         return save_temp_img(await resp.read())
                     with open(path, "wb") as f:
@@ -279,6 +305,8 @@ async def download_file(
     show_progress: bool = False,
     progress_callback=None,
     allow_insecure_ssl_fallback: bool = True,
+    *,
+    headers: Mapping[str, str] | None = None,
 ) -> None:
     """Download a remote file to a local path.
 
@@ -289,11 +317,13 @@ async def download_file(
         progress_callback: Optional callback for progress payloads.
         allow_insecure_ssl_fallback: Whether certificate failures may retry with
             TLS certificate verification disabled.
+        headers: Optional GET headers. A supplied User-Agent takes precedence.
 
     Returns:
         None.
     """
 
+    get_headers = download_request_headers(headers)
     try:
         ssl_context = ssl.create_default_context(
             cafile=certifi.where(),
@@ -303,7 +333,7 @@ async def download_file(
             trust_env=True,
             connector=connector,
         ) as session:
-            async with session.get(url, timeout=1800) as resp:
+            async with session.get(url, timeout=1800, headers=get_headers) as resp:
                 _raise_for_download_status(resp, url)
                 with open(path, "wb") as f:
                     await _download_response_to_file(
@@ -331,7 +361,9 @@ async def download_file(
         ssl_context.check_hostname = False
         ssl_context.verify_mode = ssl.CERT_NONE
         async with aiohttp.ClientSession() as session:
-            async with session.get(url, ssl=ssl_context, timeout=120) as resp:
+            async with session.get(
+                url, ssl=ssl_context, timeout=120, headers=get_headers
+            ) as resp:
                 _raise_for_download_status(resp, url)
                 with open(path, "wb") as f:
                     await _download_response_to_file(
