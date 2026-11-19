@@ -1,147 +1,292 @@
 # Plugin Configuration
 
-As plugin functionality grows, you may need to define configurations to allow users to customize plugin behavior.
+Define `_conf_schema.json` in your plugin directory. AstrBot uses it to generate a WebUI form and passes the configuration to your plugin.
 
-AstrBot provides "powerful" configuration parsing and visualization features. Users can configure plugins directly in the management panel without modifying code.
+## Minimal example
 
-## Configuration Definition
-
-To register configurations, first add a `_conf_schema.json` JSON file in your plugin directory.
-
-The file content is a `Schema` that represents the configuration. The Schema is in JSON format, for example:
+Add `_conf_schema.json` to your [plugin template](./simple.md):
 
 ```json
 {
-  "token": {
-    "description": "Bot Token",
+  "greeting": {
     "type": "string",
-    "secret": true
+    "description": "Greeting",
+    "default": "Hello!"
+  }
+}
+```
+
+Receive and read the configuration in `main.py`:
+
+```python
+from astrbot.api import AstrBotConfig
+from astrbot.api.event import AstrMessageEvent, filter
+from astrbot.api.star import Context, Star
+
+
+class GreetingPlugin(Star):
+    def __init__(self, context: Context, config: AstrBotConfig):
+        super().__init__(context)
+        self.config = config
+
+    @filter.command("greet")
+    async def greet(self, event: AstrMessageEvent):
+        yield event.plain_result(self.config["greeting"])
+```
+
+Reload the plugin and open its configuration from the WebUI **Plugins** page. Change the greeting, click **Save and Close**, and send `/greet` to receive the configured reply.
+
+![Minimal configuration form in the WebUI](./images/plugin-config-minimal.png)
+
+## Control examples
+
+Each JSON example below is a complete `_conf_schema.json`. Use one on its own or combine the fields you need into a single file.
+
+### Single-line text {#string}
+
+Use `string` for a single line of text.
+
+```json
+{
+  "nickname": {
+    "type": "string",
+    "description": "Assistant name",
+    "default": "AstrBot"
+  }
+}
+```
+
+![Single-line text](./images/plugin-config-string.png)
+
+### Multiline text {#text}
+
+Use `text` for a multiline input.
+
+```json
+{
+  "reply_template": {
+    "type": "text",
+    "description": "Reply template",
+    "default": "Hello!\nHow can I help?"
+  }
+}
+```
+
+![Multiline text](./images/plugin-config-text.png)
+
+### Number inputs {#number}
+
+Use `int` for integers and `float` for fractional values.
+
+```json
+{
+  "retries": {
+    "type": "int",
+    "description": "Retry count",
+    "default": 3
   },
-  "sub_config": {
-    "description": "Test nested configuration",
-    "type": "object",
-    "hint": "xxxx",
-    "items": {
-      "name": {
-        "description": "testsub",
-        "type": "string",
-        "hint": "xxxx"
-      },
-      "id": {
-        "description": "testsub",
-        "type": "int",
-        "hint": "xxxx"
-      },
-      "time": {
-        "description": "testsub",
-        "type": "int",
-        "hint": "xxxx",
-        "default": 123
-      }
+  "timeout": {
+    "type": "float",
+    "description": "Timeout (seconds)",
+    "default": 2.5
+  }
+}
+```
+
+![Number inputs](./images/plugin-config-number.png)
+
+### Switch {#bool}
+
+A `bool` stores `true` or `false`.
+
+```json
+{
+  "enabled": {
+    "type": "bool",
+    "description": "Enable automatic replies",
+    "default": true
+  }
+}
+```
+
+![Switch](./images/plugin-config-bool.png)
+
+### Password input {#secret}
+
+Add `secret: true` to mask a `string`; string lists also support it. Masking does not encrypt the saved value. The example key is fictional.
+
+```json
+{
+  "api_key": {
+    "type": "string",
+    "description": "API Key",
+    "default": "demo-key-not-a-real-secret",
+    "secret": true
+  }
+}
+```
+
+![Password input](./images/plugin-config-secret.png)
+
+### Single-select dropdown {#select}
+
+`options` contains saved values, `labels` supplies display names, and `subtitles` supplies descriptions, matched by position. The screenshot shows the open dropdown.
+
+```json
+{
+  "reply_mode": {
+    "type": "string",
+    "description": "Reply style",
+    "default": "short",
+    "options": [
+      "short",
+      "detailed"
+    ],
+    "labels": [
+      "Brief",
+      "Detailed"
+    ],
+    "subtitles": [
+      "For quick questions",
+      "Include steps and explanations"
+    ]
+  }
+}
+```
+
+![Single-select dropdown](./images/plugin-config-select.png)
+
+### Multi-select dropdown {#multiselect}
+
+Use `list` with `options` for a multi-select dropdown that saves a list of option values.
+
+```json
+{
+  "channels": {
+    "type": "list",
+    "description": "Enabled in",
+    "default": [
+      "private"
+    ],
+    "options": [
+      "private",
+      "group"
+    ],
+    "labels": [
+      "Private chats",
+      "Group chats"
+    ]
+  }
+}
+```
+
+![Multi-select dropdown](./images/plugin-config-multiselect.png)
+
+### Checkbox group {#checkbox}
+
+Add `render_type: "checkbox"` to a multi-select field to display checkboxes.
+
+```json
+{
+  "channels": {
+    "type": "list",
+    "description": "Enabled in",
+    "default": [
+      "private"
+    ],
+    "render_type": "checkbox",
+    "options": [
+      "private",
+      "group"
+    ],
+    "labels": [
+      "Private chats",
+      "Group chats"
+    ]
+  }
+}
+```
+
+![Checkbox group](./images/plugin-config-checkbox.png)
+
+### Slider {#slider}
+
+For `int` and `float`, `slider` defines the minimum, maximum, and step.
+
+```json
+{
+  "temperature": {
+    "type": "float",
+    "description": "Randomness",
+    "default": 0.7,
+    "slider": {
+      "min": 0,
+      "max": 2,
+      "step": 0.1
     }
   }
 }
 ```
 
-- `type`: **Required**. The type of the configuration. Supports `string`, `text`, `int`, `float`, `bool`, `object`, `list`, `dict`, `template_list`, `file`. When the type is `text`, it will be visualized as a larger resizable textarea component to accommodate large text.
-- `description`: Optional. Description of the configuration. A one-sentence description of the configuration's behavior is recommended.
-- `hint`: Optional. Hint information for the configuration, displayed in the question mark button on the right in the image above, shown when hovering over it.
-- `obvious_hint`: Optional. Whether the configuration hint should be prominently displayed, like `token` in the image above.
-- `default`: Optional. The default value of the configuration. If the user hasn't configured it, the default value will be used. Default values: int is 0, float is 0.0, bool is False, string is "", object is {}, list is [].
-- `items`: Optional. If the configuration type is `object`, the `items` field needs to be added. The content of `items` is the sub-Schema of this configuration item. Theoretically, it can be nested infinitely, but excessive nesting is not recommended.
-- `invisible`: Optional. Whether the configuration is hidden. Default is `false`. If set to `true`, it will not be displayed in the management panel.
-- `secret`: Optional. Applies to `string` and string `list` fields. When set to `true`, the dashboard displays a password input and lets the user temporarily reveal its value. This only masks the value in the UI; it does not encrypt the value in the configuration file.
-- `options`: Optional. A list, such as `"options": ["chat", "agent", "workflow"]`. Provides dropdown list options.
-- `labels`: Optional. Display labels aligned with `options` by index; stored values remain unchanged.
-- `subtitles`: Optional. Short descriptions aligned with `options` by index, displayed beneath each dropdown item label. Use an empty string or omit trailing entries for options without a subtitle. Supported by single-select and multi-select dropdowns; plain checkboxes do not display subtitles.
-- `slider`: Optional. Applies to `int` and `float` fields. A dict，such as `"slider": {"min": 1, "max": 100, "step": 1}`. Displays a slider with configurable minimum, maximum, and step values.
-- `editor_mode`: Optional. Whether to enable code editor mode. Requires AstrBot >= `v3.5.10`. Versions below this won't report errors but won't take effect. Default is false.
-- `editor_language`: Optional. The code language for the code editor, defaults to `json`.
-- `editor_theme`: Optional. The theme for the code editor. Options are `vs-light` (default) and `vs-dark`.
-- `_special`: Optional. Used to call AstrBot's visualization features for provider selection, persona selection, knowledge base selection, etc. See details below.
+![Slider](./images/plugin-config-slider.png)
 
-### Sensitive configuration fields
+### String list {#list}
 
-Sensitive strings such as API keys, access tokens, and passwords should set `"secret": true`. The dashboard masks their contents by default and provides a control to temporarily reveal or hide them. String lists also support this field, which is useful when a plugin accepts multiple API keys:
+Without `options`, a `list` opens an editor for adding or removing strings. The screenshot shows the editor after clicking Add More.
 
 ```json
 {
-  "api_key": {
-    "description": "API Key",
-    "type": "string",
-    "default": "",
-    "secret": true
-  },
-  "backup_api_keys": {
-    "description": "Backup API keys",
+  "keywords": {
     "type": "list",
-    "default": [],
-    "secret": true
+    "description": "Trigger words",
+    "default": [
+      "AstrBot",
+      "help"
+    ]
   }
 }
 ```
 
-`secret` does not change the value or data type received by the plugin. It only masks the value in the dashboard; the original value is still stored in the plugin configuration file. Plugins should avoid logging, echoing, or otherwise exposing these values.
+![String list](./images/plugin-config-list.png)
 
-### Configuration Internationalization (Optional)
+### Code editor {#editor}
 
-Configuration `description`, `hint`, and select `labels` and `subtitles` can follow the WebUI language. See [Plugin Internationalization](./plugin-i18n).
-
-When the code editor is enabled, it looks like this:
-
-![editor_mode](https://files.astrbot.app/docs/source/images/plugin/image-6.png)
-
-![editor_mode_fullscreen](https://files.astrbot.app/docs/source/images/plugin/image-7.png)
-
-The **_special** field is only available after v4.0.0. Common values include `select_provider`, `select_provider_tts`, `select_provider_stt`, `select_persona`, and `select_knowledgebase`, allowing users to quickly select model providers, personas, knowledge bases, and other data already configured in the WebUI.
-
-- `select_provider`, `select_provider_tts`, `select_provider_stt`, and `select_persona` return strings.
-- `select_knowledgebase` returns a `list` and supports multiple selection, so the corresponding config item should use `type: list` with a default value of `[]`.
-- `sender_id` opens the Select users dialog with search by nickname, ID or source session, saving only user IDs. Use `type: list` with a default value of `[]`. The list shows 50 results per page, supports previous/next navigation and selections across pages, and returns to the first page when searching or refreshing. Only recorded users are searched; historical messages are not backfilled. Hidden copy icons take no layout space. Hover over an entry and use its copy icon to copy the raw user ID.
-- `umo` opens the Select session sources dialog with search by group name, nickname, alias or UMO. Use `type: string` with a default of `""` for a single UMO string, or `type: list` with a default of `[]` for multiple UMOs. Each entry shows the full UMO in gray parentheses after its name, with the bot ID below; group-chat badges are blue and private-chat badges are green. All entries use the interface font. Candidate titles stay on one line and selected titles use up to two lines, with an ellipsis when truncated; hover to view the full name and UMO. Hidden copy icons take no layout space. Hover over an entry and use its copy icon to copy the full UMO.
-
-For example, add the following to `_conf_schema.json`:
+`editor_mode` replaces the text input with a code editor. Set `editor_language` for syntax highlighting and `editor_theme` to `vs-light` or `vs-dark`. The saved value remains a string.
 
 ```json
 {
-  "users": {
-    "description": "Selected users",
-    "type": "list",
-    "default": [],
-    "_special": "sender_id"
-  },
-  "sources": {
-    "description": "Session sources",
-    "type": "list",
-    "default": [],
-    "_special": "umo"
+  "payload": {
+    "type": "text",
+    "description": "Request body",
+    "default": "{\n  \"temperature\": 0.7\n}",
+    "editor_mode": true,
+    "editor_language": "json",
+    "editor_theme": "vs-light"
   }
 }
 ```
 
-User suggestions are deduplicated by platform instance and sender ID, retaining the newest matching record; identical IDs on different platforms remain separate. Session sources are sorted by the latest existing conversation, alias or sender `updated_at`, descending. User suggestions are recorded when a message wakes the bot; an unrecorded ID can be added directly when no search results match. Session sources also support entering unrecorded UMOs manually. Both selectors support `readonly`. The bot page restricts platform instances through the component's `platformId` prop; plugin configuration schemas do not currently expose this filter.
+![Code editor](./images/plugin-config-editor.png)
 
-> [!NOTE]
-> For reference, AstrBot Core also uses other internal `_special` values, such as `select_providers`, `provider_pool`, `persona_pool`, `select_plugin_set`, `t2i_template`, `get_embedding_dim`, and `select_agent_runner_provider:*` (where `*` is a placeholder for the runner type). These are internal implementations and may change at any time — please avoid using them in plugins.
+### File upload {#file}
 
-Using `select_provider` as an example, it will display as follows:
-
-![image](https://files.astrbot.app/docs/source/images/plugin/image-select-provider.png)
-
-### `file` type schema
-
-Introduced in v4.13.0, this allows plugins to define file-upload configuration items to guide users to upload files required by the plugin.
+A `file` field stores a list of uploaded file paths. `file_types` lists allowed extensions. The screenshot shows the upload dialog.
 
 ```json
 {
-  "demo_files": {
+  "reference_files": {
     "type": "file",
-    "description": "Uploaded files for demo",
+    "description": "Reference files",
     "default": [],
-    "file_types": ["pdf", "docx"]
+    "file_types": [
+      "pdf",
+      "txt"
+    ]
   }
 }
 ```
+
+![File upload](./images/plugin-config-file.png)
 
 In the WebUI, open **Extensions → Plugins → Installed**, click the plugin's gear
 icon (**Extension Config**), and click **Manage Files** for a `file` item.
@@ -157,94 +302,84 @@ of input and 20 million decoded pixels, rendered as PNG with a maximum edge of
 1024 pixels, and do not modify the uploaded file. Animated images show their first
 frame. Existing upload, add-to-config, delete, and save behavior is unchanged.
 
-### `dict` type schema
+### Configuration group {#object}
 
-Used to visualize editing a Python `dict` type configuration. For example, AstrBot Core's custom extra body parameter configuration:
+Define child fields in `object.items`. `collapsed: true` starts a group collapsed; click its title to expand it, as shown. The outermost configuration object cannot collapse.
 
-```py
-"custom_extra_body": {
-  "description": "Custom request body parameters",
-  "type": "dict",
-  "items": {},
-  "hint": "Used to add extra parameters to requests, such as temperature, top_p, max_tokens, etc.",
-  "template_schema": {
-      "temperature": {
-          "name": "Temperature",
-          "description": "Temperature parameter",
-          "hint": "Controls randomness of output, typically 0-2. Higher is more random.",
-          "type": "float",
-          "default": 0.6,
-          "slider": {"min": 0, "max": 2, "step": 0.1},
+```json
+{
+  "advanced": {
+    "type": "object",
+    "description": "Advanced settings",
+    "collapsed": true,
+    "items": {
+      "timeout": {
+        "type": "int",
+        "description": "Timeout (seconds)",
+        "default": 30
       },
-      "top_p": {
-          "name": "Top-p",
-          "description": "Top-p sampling",
-          "hint": "Nucleus sampling parameter, typically 0-1. Controls probability mass considered.",
-          "type": "float",
-          "default": 1.0,
-          "slider": {"min": 0, "max": 1, "step": 0.01},
-      },
-      "max_tokens": {
-          "name": "Max Tokens",
-          "description": "Maximum tokens",
-          "hint": "Maximum number of tokens to generate.",
-          "type": "int",
-          "default": 8192,
-      },
-  },
+      "retries": {
+        "type": "int",
+        "description": "Retry count",
+        "default": 3
+      }
+    }
+  }
 }
 ```
 
-### `template_list` type schema
+![Configuration group](./images/plugin-config-object.png)
 
-> [!NOTE]
-> Introduced in v4.10.4. For more details see: [#4208](https://github.com/AstrBotDevs/AstrBot/pull/4208)
+### Key-value editor {#dict}
 
-Plugin developers can add a template-style configuration to `_conf_schema` in the following format (somewhat similar to nested configs):
+Use `dict` for editable key-value pairs. Optional `template_schema` provides types and defaults for common keys. The screenshot shows the open editor.
 
 ```json
- "field_id": {
-  "type": "template_list",
-  "description": "Template List Field",
-  "templates": {
-    "template_1": {
-        "name": "Template One",
-        "hint":"hint",
-        "display_item": "attr_name",
-        "hide_hint_in_list": true,
+{
+  "headers": {
+    "type": "dict",
+    "description": "Custom headers",
+    "default": {
+      "X-App": "demo"
+    },
+    "template_schema": {
+      "X-App": {
+        "type": "string",
+        "description": "Application ID",
+        "default": "demo"
+      }
+    }
+  }
+}
+```
+
+![Key-value editor](./images/plugin-config-dict.png)
+
+### Template list {#template-list}
+
+`templates` defines repeatable structures, and `display_item` selects a summary field. The screenshot shows an added, expanded entry. Saved entries include a `__template_key` identifier.
+
+```json
+{
+  "rules": {
+    "type": "template_list",
+    "description": "Reply rules",
+    "default": [],
+    "templates": {
+      "keyword": {
+        "name": "Keyword reply",
+        "display_item": "keyword",
         "items": {
-          "attr_name": {
-            "description": "Attribute Name",
+          "keyword": {
             "type": "string",
-            "default": ""
+            "description": "Keyword",
+            "default": "help"
           },
-          "attr_a": {
-            "description": "Attribute A",
-            "type": "int",
-            "default": 10
-          },
-          "attr_b": {
-            "description": "Attribute B",
-            "hint": "This is a boolean attribute",
-            "type": "bool",
-            "default": true
+          "reply": {
+            "type": "text",
+            "description": "Reply text",
+            "default": "Please describe your problem."
           }
-        }
-      },
-    "template_2": {
-      "name": "Template Two",
-      "hint":"hint",
-      "items": {
-        "attr_c": {
-          "description": "Attribute A",
-          "type": "int",
-          "default": 10
-        },
-        "attr_d": {
-          "description": "Attribute B",
-          "hint": "This is a boolean attribute",
-          "type": "bool",
-          "default": true
         }
       }
     }
@@ -252,51 +387,140 @@ Plugin developers can add a template-style configuration to `_conf_schema` in th
 }
 ```
 
-Saved config example:
+![Template list](./images/plugin-config-template-list.png)
+
+Example of the saved `rules` value:
 
 ```json
-"field_id": [
+{
+  "rules": [
     {
-        "__template_key": "template_1",
-        "attr_name": "",
-        "attr_a": 10,
-        "attr_b": true
-    },
-    {
-        "__template_key": "template_2",
-        "attr_c": 10,
-        "attr_d": true
+      "__template_key": "keyword",
+      "keyword": "help",
+      "reply": "Please describe your problem."
     }
-]
+  ]
+}
 ```
 
-Templates also support these optional fields:
+### Model selectors {#provider}
 
-- `display_item`: Specifies the key of a `string` item inside the template `items`. When set, the WebUI shows that field's current value in the collapsed list of added template entries, for example `Attribute Name: my-adapter`, making it easier to distinguish multiple entries created from the same template. Dot paths are supported for fields inside nested objects, for example `meta.name`.
-- `hide_hint_in_list`: When set to `true`, the WebUI hides the template `hint` in the collapsed list of added template entries. The template selection dropdown still shows the `hint`, and hints for fields inside the expanded entry are not affected.
+These selectors list configured chat, speech recognition, and speech synthesis models and save a provider ID. The screenshot shows the chat-model menu with demo entries.
 
-<img width="1000" alt="image" src="https://github.com/user-attachments/assets/74876d30-11a4-491b-a7a0-8ebe8d603782" />
-
-## Using Configuration in Plugins
-
-When loading plugins, AstrBot will check if there's a `_conf_schema.json` file in the plugin directory. If it exists, it will automatically parse the configuration and save it under `data/config/<plugin_name>_config.json` (a configuration file entity created according to the Schema), and pass it to `__init__()` when instantiating the plugin class.
-
-```py
-from astrbot.api import AstrBotConfig
-
-
-class ConfigPlugin(Star):
-    def __init__(
-        self, context: Context, config: AstrBotConfig
-    ):  # AstrBotConfig inherits from Dict and has all dictionary methods
-        super().__init__(context)
-        self.config = config
-        print(self.config)
-
-        # Supports direct configuration saving
-        # self.config.save_config() # Save configuration
+```json
+{
+  "chat_model": {
+    "type": "string",
+    "description": "Chat model",
+    "default": "",
+    "_special": "select_provider"
+  },
+  "stt_model": {
+    "type": "string",
+    "description": "Speech recognition model",
+    "default": "",
+    "_special": "select_provider_stt"
+  },
+  "tts_model": {
+    "type": "string",
+    "description": "Speech synthesis model",
+    "default": "",
+    "_special": "select_provider_tts"
+  }
+}
 ```
 
-## Configuration Updates
+![Model selectors](./images/plugin-config-provider.png)
 
-When you update the Schema across different versions, AstrBot will recursively inspect the configuration items in the Schema, automatically adding default values for missing items and removing those that no longer exist.
+### Persona selector {#persona}
+
+Choose an existing persona and save its ID. The screenshot uses demo personas.
+
+```json
+{
+  "persona": {
+    "type": "string",
+    "description": "Persona",
+    "default": "",
+    "_special": "select_persona"
+  }
+}
+```
+
+![Persona selector](./images/plugin-config-persona.png)
+
+### Knowledge-base selector {#knowledge}
+
+Knowledge bases support multiple selections; use `type: "list"`. The screenshot uses demo knowledge bases.
+
+```json
+{
+  "knowledge_bases": {
+    "type": "list",
+    "description": "Knowledge bases",
+    "default": [],
+    "_special": "select_knowledgebase"
+  }
+}
+```
+
+![Knowledge-base selector](./images/plugin-config-knowledge.png)
+
+### User selector {#sender}
+
+Search recorded users by name or ID and save a list of user IDs. An unlisted ID can be added manually. The screenshot uses demo users.
+
+```json
+{
+  "users": {
+    "type": "list",
+    "description": "Selected users",
+    "default": [],
+    "_special": "sender_id"
+  }
+}
+```
+
+![User selector](./images/plugin-config-sender.png)
+
+### Session selector {#umo}
+
+Save a list of complete UMOs. For a single selection, use `type: "string"` and `default: ""` to save one UMO. Unlisted UMOs can be entered manually. The screenshot uses demo sessions.
+
+```json
+{
+  "sessions": {
+    "type": "list",
+    "description": "Target sessions",
+    "default": [],
+    "_special": "umo"
+  }
+}
+```
+
+![Session selector](./images/plugin-config-umo.png)
+
+## Common fields
+
+Every field requires a `type`. Add these optional properties as needed:
+
+| Property | Purpose |
+| --- | --- |
+| `description` | Label displayed in the form |
+| `default` | Value used when the field is not configured; must match `type` |
+| `hint` | Additional guidance for the field |
+| `obvious_hint` | Set to `true` to display `hint` directly |
+| `invisible` | Set to `true` to hide the field in the WebUI |
+
+`description`, `hint`, and option `labels` and `subtitles` support [plugin localization](./plugin-i18n.md).
+
+## Saving and updating
+
+Read and modify `AstrBotConfig` like a dictionary. To persist changes from your plugin, call `save_config()`:
+
+```python
+self.config["greeting"] = "Welcome back!"
+self.config.save_config()
+```
+
+Configuration is stored in `data/config/<plugin_directory_name>_config.json`. After updating `_conf_schema.json`, reload the plugin. AstrBot fills in defaults for new fields and removes fields that are no longer in the schema.

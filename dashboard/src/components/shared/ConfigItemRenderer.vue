@@ -50,7 +50,7 @@
       <KnowledgeBaseSelector :model-value="modelValue" @update:model-value="emitUpdate" />
     </template>
     <template v-else-if="itemMeta?._special === 'select_plugin_set'">
-      <PluginSetSelector :model-value="modelValue" @update:model-value="emitUpdate" />
+      <PluginSetSelector :model-value="modelValue" :selection-only="itemMeta?.selection_only" @update:model-value="emitUpdate" />
     </template>
     <template v-else-if="itemMeta?._special === 't2i_template'">
       <T2ITemplateEditor />
@@ -194,7 +194,12 @@
       <v-text-field
         :model-value="numericTemp ?? modelValue"
         @update:model-value="val => (numericTemp = val)"
-        @blur="() => { if (numericTemp != null) { emitUpdate(toNumber(numericTemp)) } numericTemp = null }"
+        @blur="() => {
+          if (numericTemp != null) {
+            emitUpdate(itemMeta?.nullable && numericTemp === '' ? null : toNumber(numericTemp))
+          }
+          numericTemp = null
+        }"
         density="compact"
         variant="outlined"
         class="config-field"

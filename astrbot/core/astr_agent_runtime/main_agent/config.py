@@ -93,6 +93,8 @@ class MainAgentBuildConfig:
         """
         normalize_legacy_web_search_config(config)
         settings = copy.deepcopy(config.get("provider_settings") or {})
+        settings["plugin_set"] = copy.deepcopy(config.get("plugin_set", ["*"]))
+        settings["disabled_plugins"] = copy.deepcopy(config.get("disabled_plugins", []))
         runner_config = config.get("agent", {}).get("config", {})
         model = runner_config.get("model", {})
         persona = runner_config.get("persona", {})

@@ -19,7 +19,6 @@ from astrbot.core.agent.message import (
     ContentPart,
     ToolCall,
     ToolCallMessageSegment,
-    is_checkpoint_message,
 )
 from astrbot.core.agent.tool import ToolSet
 from astrbot.core.db.po import Conversation
@@ -59,9 +58,11 @@ class DecisionBooleanQuestion:
 
     Attributes:
         instructions: The statement or question evaluated by the model.
+        criteria: Optional descriptions for the "true" and/or "false" outcomes.
     """
 
     instructions: str
+    criteria: Mapping[str, str] | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -251,8 +252,6 @@ class ProviderRequest:
         result_parts = []
 
         for ctx in self.contexts:
-            if is_checkpoint_message(ctx):
-                continue
             role = ctx.get("role", "unknown")
             content = ctx.get("content", "")
 

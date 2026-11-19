@@ -132,7 +132,7 @@ Too few results can miss an answer; too many increase input length and noise. St
 
 ### Choose a knowledge base for one group or private chat
 
-Under `Custom Rules`, assign knowledge bases and a retrieval count to a specific message source. Session selections override the profile. Clearing the selection and saving removes the override and restores the profile's knowledge bases. See [Custom Rules](./custom-rules.md).
+Under **Config → Manage session mappings**, select knowledge bases and a retrieval count for a session. An empty list disables knowledge-base retrieval; choose **Follow profile** to restore inheritance. See [Session Overrides](./custom-rules.md).
 
 ## Maintain a knowledge base
 

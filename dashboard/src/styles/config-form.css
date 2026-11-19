@@ -74,7 +74,7 @@
 }
 
 .config-form :deep(.v-field) {
-  border-radius: 10px;
+  border-radius: var(--astrbot-radius-control);
   background: transparent;
 }
 

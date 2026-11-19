@@ -1011,6 +1011,14 @@
     "general": {
       "description": "General",
       "platform_settings": {
+        "locale": {
+          "description": "System language",
+          "hint": "Set the system language for plugins, error replies, and other system messages. Does not change model responses or the WebUI language.",
+          "labels": [
+            "🇨🇳 简体中文",
+            "🇺🇸 English"
+          ]
+        },
         "unique_session": {
           "description": "Isolate Conversation",
           "hint": "On supported platforms, each group member has a separate conversation context when enabled. Manage command permissions under Handlers → Command."
@@ -1148,6 +1156,15 @@
     }
   },
   "access_group": {
+    "blacklist": {
+      "description": "Blacklist",
+      "platform_settings": {
+        "id_blacklist": {
+          "description": "Blocked session IDs",
+          "hint": "Stop processing these sessions. Blacklist takes priority over whitelist, including administrators."
+        }
+      }
+    },
     "name": "Access Control",
     "admins": {
       "description": "Administrators",
@@ -1763,6 +1780,10 @@
       "dashscope_tts_voice": {
         "description": "Voice"
       },
+      "dashscope_tts_websocket_url": {
+        "description": "WebSocket Endpoint",
+        "hint": "Optional. Fill in when using a Qwen-Audio-TTS model. Leave blank to use the DashScope SDK default endpoint. Enter a complete WebSocket URL, such as wss://{WorkspaceId}.cn-beijing.maas.aliyuncs.com/api-ws/v1/inference, replacing {WorkspaceId} with your actual workspace ID."
+      },
       "gm_resp_image_modal": {
         "description": "Enable image modality",
         "hint": "When enabled, responses can include images. Requires model support or it will error. See the Google Gemini website for supported models. Tip: if you need image generation, disable the `Enable member recognition` setting for better results."
@@ -1803,11 +1824,11 @@
         "description": "Thinking Config",
         "budget": {
           "description": "Thinking Budget",
-          "hint": "Guides the model on the specific number of thinking tokens to use for reasoning. See: https://ai.google.dev/gemini-api/docs/thinking#set-budget"
+          "hint": "Thinking token budget for Gemini 2.5. Leave blank to use the model default. See https://ai.google.dev/gemini-api/docs/thinking#set-budget"
         },
         "level": {
           "description": "Thinking Level",
-          "hint": "Recommended for Gemini 3 models and onwards, lets you control reasoning behavior.See: https://ai.google.dev/gemini-api/docs/thinking#thinking-levels"
+          "hint": "See https://ai.google.dev/gemini-api/docs/thinking#thinking-levels"
         }
       },
       "anth_thinking_config": {
@@ -1912,6 +1933,15 @@
       "openai-tts-voice": {
         "description": "voice",
         "hint": "OpenAI TTS voice. OpenAI defaults: 'alloy', 'echo', 'fable', 'onyx', 'nova', 'shimmer'."
+      },
+      "deepseek-tts-voice": {
+        "description": "Voice",
+        "hint": "DeepSeek TTS voice. The corresponding voice_id is sent to the API.",
+        "labels": ["Stella (female, default)", "Tide (male)"]
+      },
+      "deepseek-tts-filter-markdown": {
+        "description": "Filter Markdown",
+        "hint": "Remove Markdown formatting before synthesis. Enabled by default."
       },
       "elevenlabs-tts-voice-id": {
         "description": "Voice ID",

@@ -1,7 +1,14 @@
 from collections.abc import AsyncGenerator
 
 from astrbot import logger
-from astrbot.core.message.components import At, AtAll, ButtonInteraction, Reply
+from astrbot.core.i18n import get_config_locale, translate
+from astrbot.core.message.components import (
+    At,
+    AtAll,
+    ButtonInteraction,
+    Reply,
+    UIInteraction,
+)
 from astrbot.core.message.message_event_result import MessageChain, MessageEventResult
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from astrbot.core.platform.button_interaction import (
@@ -12,7 +19,7 @@ from astrbot.core.platform.button_interaction import (
 from astrbot.core.star.filter.button_action import ButtonActionFilter
 from astrbot.core.star.filter.command_group import CommandGroupFilter
 from astrbot.core.star.filter.permission import PermissionTypeFilter
-from astrbot.core.star.session_plugin_manager import SessionPluginManager
+from astrbot.core.star.filter.ui_action import UIActionFilter
 from astrbot.core.star.star import star_map
 from astrbot.core.star.star_handler import EventType, star_handlers_registry
 from astrbot.core.utils.session_waiter import FILTERS, USER_SESSIONS
@@ -111,7 +118,10 @@ class WakingCheckStage(Stage):
                 break
 
         # 检查 wake
-        wake_prefixes = self.ctx.astrbot_config["wake_prefix"]
+        effective_config = self.ctx.plugin_manager.context.get_config(
+            umo=event.unified_msg_origin
+        )
+        wake_prefixes = effective_config["wake_prefix"]
         messages = event.get_messages()
         is_wake = event.is_wake
         for wake_prefix in [] if is_wake else wake_prefixes:
@@ -157,6 +167,7 @@ class WakingCheckStage(Stage):
             # 检查是否是私聊
             if (
                 not event.is_button_interaction()
+                and event.get_ui_interaction() is None
                 and event.is_private_chat()
                 and (
                     not self.friend_message_needs_wake_prefix
@@ -173,7 +184,26 @@ class WakingCheckStage(Stage):
         handlers_parsed_params = {}  # 注册了指令的 handler
 
         # 将 plugins_name 设置到 event 中
-        enabled_plugins_name = self.ctx.astrbot_config.get("plugin_set", ["*"])
+        disabled_plugins = effective_config.get("disabled_plugins", [])
+        enabled_plugins_name = effective_config.get("plugin_set", ["*"])
+        if disabled_plugins:
+            from astrbot.core.star.star import star_registry
+
+            enabled_plugins_name = [
+                plugin.name
+                for plugin in star_registry
+                if plugin.name
+                and (
+                    plugin.reserved
+                    or (
+                        plugin.name not in disabled_plugins
+                        and (
+                            "*" in enabled_plugins_name
+                            or plugin.name in enabled_plugins_name
+                        )
+                    )
+                )
+            ]
         if enabled_plugins_name == ["*"]:
             # 如果是 *，则表示所有插件都启用
             event.plugins_name = None
@@ -185,6 +215,17 @@ class WakingCheckStage(Stage):
             EventType.AdapterMessageEvent,
             plugins_name=event.plugins_name,
         ):
+            plugin = star_map.get(handler.handler_module_path)
+            ui_interaction = event.get_ui_interaction()
+            if isinstance(ui_interaction, UIInteraction) and (
+                handler.handler_module_path != event.get_extra("ui_plugin_module")
+                or not any(
+                    isinstance(item, UIActionFilter) for item in handler.event_filters
+                )
+            ):
+                continue
+            if plugin and not plugin.reserved and plugin.name in disabled_plugins:
+                continue
             if event.is_button_interaction() and not any(
                 isinstance(handler_filter, ButtonActionFilter)
                 for handler_filter in handler.event_filters
@@ -207,17 +248,22 @@ class WakingCheckStage(Stage):
             for filter in handler.event_filters:
                 try:
                     if isinstance(filter, PermissionTypeFilter):
-                        if not filter.filter(event, self.ctx.astrbot_config):
+                        if not filter.filter(event, effective_config):
                             permission_not_pass = True
                             permission_filter_raise_error = filter.raise_error
-                    elif not filter.filter(event, self.ctx.astrbot_config):
+                    elif not filter.filter(event, effective_config):
                         passed = False
                         break
                 except Exception as e:
                     await event.send(
                         MessageEventResult()
                         .message(
-                            f"插件 {star_map[handler.handler_module_path].name}: {e}",
+                            translate(
+                                "plugin_filter_error",
+                                get_config_locale(effective_config),
+                                plugin=star_map[handler.handler_module_path].name,
+                                detail=str(e),
+                            ),
                         )
                         .use_markdown(False),
                     )
@@ -232,7 +278,11 @@ class WakingCheckStage(Stage):
                     if self.no_permission_reply:
                         await event.send(
                             MessageChain().message(
-                                f"您(ID: {event.get_sender_id()})的权限不足以使用此指令。通过 /sid 获取 ID 并请管理员添加。",
+                                translate(
+                                    "permission_denied",
+                                    get_config_locale(effective_config),
+                                    sender_id=event.get_sender_id(),
+                                ),
                             ),
                         )
                     logger.info(
@@ -260,16 +310,12 @@ class WakingCheckStage(Stage):
             event._extras.pop("parsed_params", None)
 
         # 根据会话配置过滤插件处理器
-        activated_handlers = await SessionPluginManager.filter_handlers_by_session(
-            event,
-            activated_handlers,
-        )
 
         event.set_extra("activated_handlers", activated_handlers)
         event.set_extra("handlers_parsed_params", handlers_parsed_params)
 
         # Admit follow-up input without invoking callbacks before access checks.
-        if not is_wake:
+        if not is_wake and event.get_ui_interaction() is None:
             for session_filter in tuple(FILTERS):
                 session = USER_SESSIONS.get(session_filter.filter(event))
                 if session and not session.session_controller.future.done():

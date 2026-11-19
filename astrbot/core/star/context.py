@@ -17,6 +17,7 @@ from astrbot.core.astrbot_config_mgr import AstrBotConfigManager
 from astrbot.core.config.astrbot_config import AstrBotConfig
 from astrbot.core.conversation_mgr import ConversationManager
 from astrbot.core.db import BaseDatabase
+from astrbot.core.i18n import get_config_locale
 from astrbot.core.knowledge_base.kb_mgr import KnowledgeBaseManager
 from astrbot.core.llm_error_messages import LLM_ERROR_MESSAGES
 from astrbot.core.message.message_event_result import MessageChain
@@ -168,8 +169,10 @@ class Context:
         """模型提供商管理器"""
         self.platform_manager = platform_manager
         """平台适配器管理器"""
-        self.conversation_manager = conversation_manager
-        """会话管理器"""
+        self.conversations = conversation_manager
+        """Conversation operations available to plugins."""
+        self.conversation_manager = self.conversations
+        """Compatibility alias for plugins using the previous entry point."""
         self.message_history_manager = message_history_manager
         """平台消息历史管理器"""
         self.persona_manager = persona_manager
@@ -661,21 +664,34 @@ class Context:
         return prov
 
     def get_config(self, umo: str | None = None) -> AstrBotConfig:
-        """获取 AstrBot 的配置。
+        """Read the default profile or a session's effective configuration.
 
         Args:
-            umo: unified_message_origin 值，用于获取特定会话的配置。
+            umo: Unified message origin of the session to resolve.
 
         Returns:
-            AstrBot 配置对象。
+            The shared default profile when umo is omitted. For the active
+            message's UMO, returns its pipeline configuration snapshot; other
+            sessions resolve their current profiles and overrides normally.
 
-        Note:
-            如果不提供 umo 参数，将返回默认配置。
         """
         if not umo:
             # 使用默认配置
             return self._config
         return self.astrbot_config_mgr.get_conf(umo)
+
+    def locale(self, umo: str | None = None) -> str:
+        """Resolve the bot reply language for a session.
+
+        Args:
+            umo: Unified message origin. Omit to use the default profile.
+
+        Returns:
+            ``zh-CN`` or ``en-US`` from the effective configuration, falling
+            back to ``zh-CN`` when missing or unsupported. This is independent
+            of the WebUI display language.
+        """
+        return get_config_locale(self.get_config(umo=umo))
 
     async def send_message(
         self,
