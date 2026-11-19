@@ -21,6 +21,7 @@ from astrbot.core.agent.output import PlainOutput, ReasoningOutput
 from astrbot.core.agent.runtime import AgentTurn, TurnStatus
 from astrbot.core.agent_output_content import chain_from_content
 from astrbot.core.i18n import translate
+from astrbot.core.llm_error_messages import LLM_ERROR_CODE_EXTRA_KEY
 from astrbot.core.message.components import Json
 from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.persona_error_reply import (
@@ -174,7 +175,25 @@ async def present_turn(
                     if result.error and result.error.code == "provider_error"
                     else f"Error occurred during AI execution.\n{result.error.message if result.error else 'Unknown error'}"
                 )
-                yield MessageChain().message(text)
+                if event.get_platform_name() == "webchat":
+                    yield MessageChain(
+                        type="chatui_error",
+                        chain=[
+                            Json(
+                                {
+                                    "code": event.get_extra(LLM_ERROR_CODE_EXTRA_KEY)
+                                    or (
+                                        result.error.code
+                                        if result.error
+                                        else "agent_error"
+                                    ),
+                                    "message": text,
+                                }
+                            )
+                        ],
+                    )
+                else:
+                    yield MessageChain().message(text)
             return
         if isinstance(payload, TurnPrepared):
             event.set_extra("_agent_chat_model", payload.model)

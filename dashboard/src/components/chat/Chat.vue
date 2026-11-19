@@ -416,6 +416,7 @@
               @open-thread="openThreadPanel"
               @open-refs="openRefsSidebar"
               @button-click="handleButtonClick"
+              @configure-models="openProviderWorkspace()"
             />
           </div>
         </section>
@@ -571,6 +572,7 @@
       :deleting="deletingThread"
       :get-provider-selection="getSelectedProviderSelection"
       @delete="deleteThread"
+      @configure-models="openProviderWorkspace()"
     />
     <ChatWorkbench
       v-if="workbench?.tabs.length"
