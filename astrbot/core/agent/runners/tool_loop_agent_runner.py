@@ -1760,10 +1760,15 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                 )
 
                 _final_resp: CallToolResult | None = None
+                tool_result_parts: list[str] = []
                 async for resp in executor:
                     if isinstance(resp, CallToolResult):
                         res = resp
                         _final_resp = resp
+                        if not res.content:
+                            tool_result_parts.append("The tool returned no content.")
+                            continue
+
                         inline_result, cached_images = await self.prepare_tool_result(
                             result=res,
                             tool_call_id=func_tool_id,
@@ -1774,13 +1779,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                                 cached_image
                             )
                         if inline_result:
-                            _append_tool_call_result(
-                                func_tool_id,
-                                inline_result
-                                + self._build_repeated_tool_call_guidance(
-                                    func_tool_name, tool_call_streak
-                                ),
-                            )
+                            tool_result_parts.append(inline_result)
 
                     elif resp is None:
                         # Tool 直接请求发送消息给用户
@@ -1791,25 +1790,30 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                         )
                         self._transition_state(AgentState.DONE)
                         self.stats.end_time = time.time()
-                        _append_tool_call_result(
-                            func_tool_id,
+                        tool_result_parts.append(
                             "The tool has no return value, or has sent the result directly to the user."
-                            + self._build_repeated_tool_call_guidance(
-                                func_tool_name, tool_call_streak
-                            ),
                         )
                     else:
                         # 不应该出现其他类型
                         logger.warning(
                             f"Tool 返回了不支持的类型: {type(resp)}。",
                         )
-                        _append_tool_call_result(
-                            func_tool_id,
+                        tool_result_parts.append(
                             "*The tool has returned an unsupported type. Please tell the user to check the definition and implementation of this tool.*"
-                            + self._build_repeated_tool_call_guidance(
-                                func_tool_name, tool_call_streak
-                            ),
                         )
+
+                if tool_result_parts:
+                    inline_result = await self._materialize_large_tool_result(
+                        tool_call_id=func_tool_id,
+                        content="\n\n".join(tool_result_parts),
+                    )
+                    _append_tool_call_result(
+                        func_tool_id,
+                        inline_result
+                        + self._build_repeated_tool_call_guidance(
+                            func_tool_name, tool_call_streak
+                        ),
+                    )
 
                 try:
                     await self.agent_hooks.on_tool_end(
