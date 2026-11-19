@@ -61,7 +61,7 @@ def test_responses_provider_templates_are_independent_and_stateless():
     assert templates["DeepSeek Responses"]["api_base"] == "https://api.deepseek.com/v1"
     assert templates["xAI"]["type"] == "openai_responses"
     assert templates["xAI"]["api_base"] == "https://api.x.ai/v1"
-    assert "xai_native_search" not in templates["xAI"]
+    assert templates["xAI"]["xai_native_search"] is False
 
 
 def test_convert_chat_history_preserves_response_items_and_function_calls():

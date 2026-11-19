@@ -11,6 +11,7 @@ from astrbot.core.agent.events import (
     ToolFinished,
     ToolRejected,
     ToolStarted,
+    WebSearchSources,
 )
 from astrbot.core.agent.message import Message
 from astrbot.core.agent.output import PlainOutput, ReasoningOutput
@@ -137,6 +138,19 @@ async def run_agent(
                 async for resp in responses:
                     if not isinstance(resp, AgentResponse):
                         payload = resp
+                        if isinstance(payload, WebSearchSources):
+                            if astr_event.get_platform_name() == "webchat":
+                                await astr_event.send(
+                                    MessageChain(
+                                        type="web_search_sources",
+                                        chain=[
+                                            Json(
+                                                data={"sources": list(payload.sources)}
+                                            )
+                                        ],
+                                    )
+                                )
+                            continue
                         if isinstance(payload, (TextDelta, ReasoningDelta)):
                             (
                                 emitted_reasoning
