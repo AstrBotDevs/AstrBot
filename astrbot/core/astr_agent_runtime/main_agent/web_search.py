@@ -30,6 +30,7 @@ WEB_SEARCH_CITATION_TOOL_NAMES = frozenset(
         "web_search_tavily",
         "web_search_bocha",
         "web_search_brave",
+        "web_search_firecrawl",
         "web_search_exa",
         "web_search_anysearch",
         "web_search_deepseek",
