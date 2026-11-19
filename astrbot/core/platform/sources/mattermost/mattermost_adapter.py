@@ -36,6 +36,8 @@ from .mattermost_event import MattermostMessageEvent
     support_streaming_message=False,
 )
 class MattermostPlatformAdapter(Platform):
+    supports_proxy = True
+
     def __init__(
         self,
         platform_config: dict,
@@ -74,6 +76,7 @@ class MattermostPlatformAdapter(Platform):
             self.base_url,
             self.bot_token,
             action_callback_url=action_callback_url,
+            proxy_url=self.proxy_url,
         )
         self.metadata = PlatformMetadata(
             name="mattermost",

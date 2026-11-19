@@ -165,7 +165,11 @@ function shouldShowItem(itemMeta, itemKey) {
   }
   for (const [conditionKey, expectedValue] of Object.entries(itemMeta.condition)) {
     const actualValue = getValueBySelector(props.iterable, conditionKey)
-    if (actualValue !== expectedValue) {
+    if (
+      Array.isArray(expectedValue)
+        ? !expectedValue.includes(actualValue)
+        : actualValue !== expectedValue
+    ) {
       return false
     }
   }

@@ -52,6 +52,8 @@ else:
     "discord", "Discord 适配器 (基于 Pycord)", support_streaming_message=False
 )
 class DiscordPlatformAdapter(Platform):
+    supports_proxy = True
+
     def __init__(
         self,
         platform_config: dict,
@@ -156,7 +158,7 @@ class DiscordPlatformAdapter(Platform):
             )
             return
 
-        proxy = self.config.get("discord_proxy") or None
+        proxy = self.proxy_url or self.config.get("discord_proxy") or None
         allow_bot_messages = bool(self.config.get("discord_allow_bot_messages"))
         self.client = DiscordBotClient(token, proxy, allow_bot_messages)
         self.client.on_message_received = on_received

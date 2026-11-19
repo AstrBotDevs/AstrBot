@@ -18,6 +18,7 @@ from astrbot.core.config.agent_runner import (
     get_agent_runner_config_default,
     normalize_agent_runner,
 )
+from astrbot.core.config.default import ADAPTER_PROXY_SUPPORTED_TYPES
 from astrbot.core.utils.astrbot_path import (
     get_astrbot_config_path,
     get_astrbot_data_path,
@@ -463,6 +464,23 @@ def migrate_config_on_load(config: dict[str, Any], config_path: Path) -> bool:
         changed = True
     if config.get("config_version", 0) < 6:
         config["config_version"] = 6
+        changed = True
+    if config.get("config_version", 0) < 7:
+        platforms = config.get("platform")
+        if isinstance(platforms, list):
+            for platform_config in platforms:
+                if (
+                    isinstance(platform_config, dict)
+                    and platform_config.get("type") in ADAPTER_PROXY_SUPPORTED_TYPES
+                    and "proxy" not in platform_config
+                ):
+                    platform_config["proxy"] = {
+                        "mode": "none",
+                        "type": "http",
+                        "address": "",
+                    }
+                    changed = True
+        config["config_version"] = 7
         changed = True
     return changed
 

@@ -5,7 +5,6 @@ import time
 import uuid
 from typing import Any, cast
 
-import aiohttp
 from slack_sdk.socket_mode.request import SocketModeRequest
 from slack_sdk.web.async_client import AsyncWebClient
 
@@ -26,6 +25,7 @@ from astrbot.core.platform.button_interaction import (
     ButtonActionExpiredError,
     decode_button_callback,
 )
+from astrbot.core.platform.proxy import create_platform_client_session
 from astrbot.core.utils.webhook_utils import log_webhook_info
 
 from ...register import register_platform_adapter
@@ -39,6 +39,8 @@ from .slack_event import SlackMessageEvent
     support_streaming_message=False,
 )
 class SlackAdapter(Platform):
+    supports_proxy = True
+
     def __init__(
         self,
         platform_config: dict,
@@ -77,7 +79,11 @@ class SlackAdapter(Platform):
         )
 
         # 初始化 Slack Web Client
-        self.web_client = AsyncWebClient(token=self.bot_token, logger=logger)
+        self.web_client = AsyncWebClient(
+            token=self.bot_token,
+            proxy=self.proxy_url,
+            logger=logger,
+        )
         self.socket_client = None
         self.webhook_client = None
 
@@ -429,7 +435,7 @@ class SlackAdapter(Platform):
     async def get_file_base64(self, url: str) -> str:
         """下载 Slack 文件并返回 Base64 编码的内容"""
         headers = {"Authorization": f"Bearer {self.bot_token}"}
-        async with aiohttp.ClientSession() as session:
+        async with create_platform_client_session(self.proxy_url) as session:
             async with session.get(url, headers=headers) as resp:
                 if resp.status == 200:
                     content = await resp.read()
@@ -453,6 +459,7 @@ class SlackAdapter(Platform):
                 self.web_client,
                 self.app_token,
                 self._handle_socket_event,
+                self.proxy_url,
             )
 
             logger.info("Slack 适配器 (Socket Mode) 启动中...")

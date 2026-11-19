@@ -13,6 +13,7 @@ import aiohttp
 from Crypto.Cipher import AES
 
 from astrbot.api import logger
+from astrbot.core.platform.proxy import create_platform_client_session
 
 
 # 常量定义
@@ -154,12 +155,14 @@ def format_error_response(error_code: int, error_msg: str) -> str:
 async def process_encrypted_image(
     image_url: str,
     aes_key_base64: str,
+    proxy_url: str | None = None,
 ) -> tuple[bool, str]:
     """下载并解密加密图片
 
     Args:
         image_url: 加密图片的URL
         aes_key_base64: Base64编码的AES密钥(与回调加解密相同)
+        proxy_url: Adapter-specific proxy URL, if configured.
 
     Returns:
         Tuple[bool, str]: status 为 True 时 data 是解密后的图片数据的 base64 编码，
@@ -169,7 +172,7 @@ async def process_encrypted_image(
     # 1. 下载加密图片
     logger.info("开始下载加密图片: %s", image_url)
     try:
-        async with aiohttp.ClientSession() as session:
+        async with create_platform_client_session(proxy_url) as session:
             async with session.get(image_url, timeout=15) as response:
                 response.raise_for_status()
                 encrypted_data = await response.read()

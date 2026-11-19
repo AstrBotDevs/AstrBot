@@ -8,6 +8,7 @@ import traceback
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, get_args
+from urllib.parse import urlsplit, urlunsplit
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from astrbot.core import file_token_service, logger
@@ -16,6 +17,7 @@ from astrbot.core.astr_agent_runtime.computer.booters.local import LocalShellCom
 from astrbot.core.config.agent import normalize_agent
 from astrbot.core.config.astrbot_config import AstrBotConfig
 from astrbot.core.config.default import (
+    ADAPTER_PROXY_SUPPORTED_TYPES,
     CONFIG_METADATA_2,
     CONFIG_METADATA_3,
     CONFIG_METADATA_3_SYSTEM,
@@ -49,6 +51,161 @@ PROTECTED_2FA_CONFIG_PATHS = (
     ("dashboard", "totp", "recovery_code_hash"),
 )
 MAX_FILE_BYTES = 500 * 1024 * 1024
+_REDACTED_PROXY_CREDENTIAL = "***"
+
+
+def _split_proxy_address(address: str):
+    """Split a proxy address while accepting both URL and host:port forms.
+
+    Args:
+        address: Proxy address supplied by a user.
+
+    Returns:
+        The parsed address and whether it included a URL scheme.
+    """
+    has_scheme = "://" in address
+    return urlsplit(address if has_scheme else f"//{address}"), has_scheme
+
+
+def _build_proxy_address(parsed, has_scheme: bool, netloc: str) -> str:
+    """Build a proxy address after changing only its credentials.
+
+    Args:
+        parsed: Parsed proxy URL.
+        has_scheme: Whether the original address included a scheme.
+        netloc: Replacement network location.
+
+    Returns:
+        A proxy address in the original URL or host:port format.
+    """
+    value = urlunsplit(
+        (
+            parsed.scheme if has_scheme else "",
+            netloc,
+            parsed.path,
+            parsed.query,
+            parsed.fragment,
+        )
+    )
+    return value if has_scheme else value.removeprefix("//")
+
+
+def _redact_proxy_address(address: str) -> str:
+    """Redact credentials embedded in one proxy address.
+
+    Args:
+        address: Proxy address that may contain username and password.
+
+    Returns:
+        The address with its credential portion replaced by placeholders.
+    """
+    try:
+        parsed, has_scheme = _split_proxy_address(address)
+        if parsed.username is None and parsed.password is None:
+            return address
+        host_port = parsed.netloc.rsplit("@", 1)[-1]
+        userinfo = _REDACTED_PROXY_CREDENTIAL
+        if parsed.password is not None:
+            userinfo += f":{_REDACTED_PROXY_CREDENTIAL}"
+        return _build_proxy_address(parsed, has_scheme, f"{userinfo}@{host_port}")
+    except ValueError:
+        return address
+
+
+def _restore_proxy_credentials(current_address: str, submitted_address: str) -> str:
+    """Restore unchanged proxy credentials masked in a dashboard response.
+
+    Args:
+        current_address: Stored proxy address containing the real credentials.
+        submitted_address: Address returned by the dashboard after editing.
+
+    Returns:
+        The submitted address with stored credentials restored when placeholders
+        are still present.
+    """
+    try:
+        current, current_has_scheme = _split_proxy_address(current_address)
+        submitted, submitted_has_scheme = _split_proxy_address(submitted_address)
+        submitted_userinfo, submitted_host = (
+            submitted.netloc.rsplit("@", 1)
+            if "@" in submitted.netloc
+            else ("", submitted.netloc)
+        )
+        if _REDACTED_PROXY_CREDENTIAL not in submitted_userinfo:
+            return submitted_address
+        if "@" not in current.netloc:
+            return submitted_address
+        current_userinfo = current.netloc.rsplit("@", 1)[0]
+        return _build_proxy_address(
+            submitted,
+            submitted_has_scheme or current_has_scheme,
+            f"{current_userinfo}@{submitted_host}",
+        )
+    except ValueError:
+        return submitted_address
+
+
+def _redact_proxy_credentials(config: dict) -> dict:
+    """Return a copy of a configuration with adapter proxy credentials masked.
+
+    Args:
+        config: Configuration to copy and sanitize.
+
+    Returns:
+        A sanitized configuration copy.
+    """
+    # AstrBotConfig is a dict subclass with non-copyable synchronization
+    # locks stored as attributes; copy only its mapping contents for responses.
+    sanitized = copy.deepcopy(dict(config))
+    platforms = sanitized.get("platform")
+    if isinstance(platforms, list):
+        for platform in platforms:
+            if not isinstance(platform, dict):
+                continue
+            proxy = platform.get("proxy")
+            if isinstance(proxy, dict) and isinstance(proxy.get("address"), str):
+                proxy["address"] = _redact_proxy_address(proxy["address"])
+    return sanitized
+
+
+def _restore_proxy_credentials_in_config(current_config: dict, config: dict) -> None:
+    """Restore masked adapter proxy credentials in a submitted configuration.
+
+    Args:
+        current_config: Stored configuration containing real credentials.
+        config: Submitted configuration updated in place.
+    """
+    current_platforms = current_config.get("platform", [])
+    submitted_platforms = config.get("platform", [])
+    if not isinstance(current_platforms, list) or not isinstance(
+        submitted_platforms, list
+    ):
+        return
+    current_by_key = {
+        (item.get("type"), item.get("id")): item
+        for item in current_platforms
+        if isinstance(item, dict)
+    }
+    for index, submitted in enumerate(submitted_platforms):
+        if not isinstance(submitted, dict):
+            continue
+        current = current_by_key.get((submitted.get("type"), submitted.get("id")))
+        if current is None and index < len(current_platforms):
+            current = current_platforms[index]
+        if not isinstance(current, dict):
+            continue
+        current_proxy = current.get("proxy")
+        submitted_proxy = submitted.get("proxy")
+        if (
+            isinstance(current_proxy, dict)
+            and isinstance(submitted_proxy, dict)
+            and isinstance(current_proxy.get("address"), str)
+            and isinstance(submitted_proxy.get("address"), str)
+        ):
+            submitted_proxy["address"] = _restore_proxy_credentials(
+                current_proxy["address"],
+                submitted_proxy["address"],
+            )
 
 
 def try_cast(value: Any, type_: str):
@@ -333,6 +490,68 @@ def validate_config(
             **schema["misc_config_group"]["metadata"],
         }
         validate(data, meta_all)
+        for index, platform in enumerate(data.get("platform", [])):
+            if not isinstance(platform, dict):
+                continue
+            proxy = platform.get("proxy")
+            if not isinstance(proxy, dict) or proxy.get("mode") != "custom":
+                continue
+            address = proxy.get("address")
+            if not isinstance(address, str) or not address.strip():
+                errors.append(
+                    f"平台配置 platform[{index}].proxy.address: 使用代理时不能为空"
+                )
+                continue
+            proxy_type = str(proxy.get("type", "http")).lower()
+            if proxy_type not in {"http", "https", "socks5"}:
+                errors.append(
+                    f"平台配置 platform[{index}].proxy.type: 不支持的代理类型"
+                )
+                continue
+            address = address.strip()
+            has_scheme = "://" in address
+            try:
+                parsed_address = urlsplit(address if has_scheme else f"//{address}")
+                hostname = parsed_address.hostname
+                port = parsed_address.port
+            except ValueError:
+                parsed_address = None
+                hostname = None
+                port = None
+            valid_address = (
+                parsed_address is not None
+                and hostname is not None
+                and port is not None
+                and 1 <= port <= 65535
+                and not any(character.isspace() for character in address)
+                and parsed_address.path in {"", "/"}
+                and not parsed_address.query
+                and not parsed_address.fragment
+            )
+            if (
+                has_scheme
+                and parsed_address is not None
+                and parsed_address.scheme.lower()
+                not in {
+                    "http",
+                    "https",
+                    "socks5",
+                }
+            ):
+                valid_address = False
+            if (
+                has_scheme
+                and parsed_address is not None
+                and parsed_address.scheme.lower() != proxy_type
+            ):
+                errors.append(
+                    f"平台配置 platform[{index}].proxy.type: 必须与代理地址中的 scheme 一致"
+                )
+                continue
+            if not valid_address:
+                errors.append(
+                    f"平台配置 platform[{index}].proxy.address: 请填写有效的主机:端口或代理 URL"
+                )
         provider_settings = data.get("provider_settings", {})
         defaults = get_local_permission_defaults(runtime.get("os") if runtime else None)
         permissions = (
@@ -584,13 +803,13 @@ class ConfigProfileService:
 
     def get_profile_schema(self) -> dict:
         return {
-            "config": DEFAULT_CONFIG,
+            "config": _redact_proxy_credentials(DEFAULT_CONFIG),
             "metadata": ConfigMetadataI18n.convert_to_i18n_keys(CONFIG_METADATA_3),
         }
 
     def get_system_schema(self) -> dict:
         return {
-            "config": self.acm.confs["default"],
+            "config": _redact_proxy_credentials(self.acm.confs["default"]),
             "metadata": ConfigMetadataI18n.convert_to_i18n_keys(
                 CONFIG_METADATA_3_SYSTEM
             ),
@@ -687,7 +906,7 @@ class ConfigProfileService:
         if config_id not in self.acm.confs:
             raise ValueError(f"Config file {config_id} does not exist")
         return {
-            "config": self.acm.confs[config_id],
+            "config": _redact_proxy_credentials(self.acm.confs[config_id]),
             "metadata": ConfigMetadataI18n.convert_to_i18n_keys(CONFIG_METADATA_3),
         }
 
@@ -744,6 +963,7 @@ class ConfigProfileService:
                 config[key] = default_conf.get(key, [])
 
         current_config = self.acm.confs[config_id]
+        _restore_proxy_credentials_in_config(current_config, config)
         if (
             not allow_admin_id_change
             and "admins_id" in config
@@ -975,6 +1195,27 @@ class ConfigDisplayService:
         if logo_registration_tasks:
             await asyncio.gather(*logo_registration_tasks, return_exceptions=True)
 
+        proxy_supported_types = ADAPTER_PROXY_SUPPORTED_TYPES | {
+            platform.name
+            for platform in platform_registry
+            if getattr(platform, "support_proxy", False)
+        }
+        metadata["platform_group"]["metadata"]["platform"]["items"]["proxy"][
+            "condition"
+        ] = {"type": sorted(proxy_supported_types)}
+        for platform_template in platform_default_tmpl.values():
+            if isinstance(platform_template, dict):
+                if platform_template.get("type") not in proxy_supported_types:
+                    continue
+                platform_template.setdefault(
+                    "proxy",
+                    {
+                        "mode": "none",
+                        "type": "http",
+                        "address": "",
+                    },
+                )
+
         provider_default_tmpl = metadata["provider_group"]["metadata"]["provider"][
             "config_template"
         ]
@@ -984,7 +1225,7 @@ class ConfigDisplayService:
 
         return {
             "metadata": metadata,
-            "config": self.config,
+            "config": _redact_proxy_credentials(self.config),
             "platform_i18n_translations": platform_i18n_translations,
         }
 

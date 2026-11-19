@@ -163,7 +163,11 @@ async def test_platform_callback_honors_row_deadline(
         session = MagicMock()
         session.__aenter__.return_value = session
         session.post.return_value.__aenter__.return_value = SimpleNamespace(status=200)
-        monkeypatch.setattr(dingtalk_adapter.aiohttp, "ClientSession", lambda: session)
+        monkeypatch.setattr(
+            dingtalk_adapter.aiohttp,
+            "ClientSession",
+            lambda **kwargs: session,
+        )
         adapter = object.__new__(dingtalk_adapter.DingtalkPlatformAdapter)
         adapter.get_access_token = AsyncMock(return_value="token")
         assert await adapter._send_button_card(

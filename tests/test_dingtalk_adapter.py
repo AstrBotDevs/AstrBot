@@ -1,6 +1,7 @@
 import asyncio
 import json
 import threading
+from unittest.mock import MagicMock
 
 import dingtalk_stream
 import pytest
@@ -25,6 +26,7 @@ from astrbot.core.platform.sources.dingtalk.dingtalk_adapter import (
     DINGTALK_RECONNECT_MAX_DELAY,
     DingtalkPlatformAdapter,
     _dingtalk_reconnect_delay,
+    _ProxyDingTalkStreamClient,
 )
 from astrbot.core.platform.sources.dingtalk.dingtalk_event import (
     DingtalkMessageEvent,
@@ -359,6 +361,9 @@ async def test_dingtalk_button_card_maps_callback_and_url_actions(monkeypatch):
             return "OK"
 
     class FakeSession:
+        def __init__(self, **kwargs):
+            pass
+
         async def __aenter__(self):
             return self
 
@@ -420,6 +425,76 @@ async def test_dingtalk_button_card_maps_callback_and_url_actions(monkeypatch):
     assert buttons[1]["url"] == "https://example.com/docs"
     assert buttons[1]["iosUrl"] == "https://example.com/docs"
     assert "request" not in buttons[1]
+
+
+def test_dingtalk_adapter_registers_proxy_support():
+    assert DingtalkPlatformAdapter.supports_proxy is True
+
+    adapter = DingtalkPlatformAdapter.__new__(DingtalkPlatformAdapter)
+    adapter.config = {"id": "dingtalk-test"}
+    assert adapter.meta().support_proxy is True
+
+
+def test_dingtalk_stream_open_connection_uses_adapter_proxy(monkeypatch):
+    client = _ProxyDingTalkStreamClient(
+        dingtalk_stream.Credential("client", "secret"),
+        logger=MagicMock(),
+        proxy_url="socks5://127.0.0.1:1080",
+    )
+    client._is_event_required = True
+    client.get_host_ip = lambda: "127.0.0.1"
+    response = MagicMock()
+    response.text = "{}"
+    response.json.return_value = {"endpoint": "wss://example.com", "ticket": "ticket"}
+    post = MagicMock(return_value=response)
+    monkeypatch.setattr(dingtalk_adapter.requests, "post", post)
+
+    assert client.open_connection() == response.json.return_value
+    request_kwargs = post.call_args.kwargs
+    assert request_kwargs["proxies"] == {
+        "http": "socks5://127.0.0.1:1080",
+        "https": "socks5://127.0.0.1:1080",
+    }
+
+
+@pytest.mark.asyncio
+async def test_dingtalk_stream_websocket_uses_adapter_proxy(monkeypatch):
+    client = _ProxyDingTalkStreamClient(
+        dingtalk_stream.Credential("client", "secret"),
+        logger=MagicMock(),
+        proxy_url="socks5://127.0.0.1:1080",
+    )
+    client.open_connection = MagicMock(
+        return_value={"endpoint": "wss://example.com", "ticket": "ticket"}
+    )
+
+    class FakeWebSocket:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, traceback):
+            return False
+
+        def __aiter__(self):
+            return self
+
+        async def __anext__(self):
+            raise KeyboardInterrupt
+
+    connect = MagicMock(return_value=FakeWebSocket())
+    monkeypatch.setattr(dingtalk_adapter.websockets, "connect", connect)
+    monkeypatch.setattr(
+        dingtalk_adapter.asyncio,
+        "create_task",
+        lambda coroutine: coroutine.close(),
+    )
+
+    await client.start()
+
+    connect.assert_called_once_with(
+        "wss://example.com?ticket=ticket",
+        proxy="socks5://127.0.0.1:1080",
+    )
 
 
 @pytest.mark.asyncio

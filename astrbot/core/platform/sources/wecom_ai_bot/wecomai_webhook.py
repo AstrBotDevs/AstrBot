@@ -22,6 +22,7 @@ from astrbot.api.message_components import (
     Record,
     Video,
 )
+from astrbot.core.platform.proxy import create_platform_client_session
 from astrbot.core.utils.media_utils import convert_audio_format
 
 from .wecomai_buttons import build_wecom_button_card
@@ -34,9 +35,15 @@ class WecomAIBotWebhookError(RuntimeError):
 class WecomAIBotWebhookClient:
     """企业微信智能机器人 webhook 消息推送客户端。"""
 
-    def __init__(self, webhook_url: str, timeout_seconds: int = 15) -> None:
+    def __init__(
+        self,
+        webhook_url: str,
+        timeout_seconds: int = 15,
+        proxy_url: str | None = None,
+    ) -> None:
         self.webhook_url = webhook_url.strip()
         self.timeout_seconds = timeout_seconds
+        self.proxy_url = proxy_url
         if not self.webhook_url:
             raise WecomAIBotWebhookError("消息推送 webhook URL 不能为空")
         self._webhook_key = self._extract_webhook_key()
@@ -74,7 +81,10 @@ class WecomAIBotWebhookClient:
 
     async def send_payload(self, payload: dict[str, Any]) -> None:
         timeout = aiohttp.ClientTimeout(total=self.timeout_seconds)
-        async with aiohttp.ClientSession(timeout=timeout) as session:
+        async with create_platform_client_session(
+            self.proxy_url,
+            timeout=timeout,
+        ) as session:
             async with session.post(self.webhook_url, json=payload) as response:
                 text = await response.text()
                 if response.status != 200:
@@ -128,7 +138,10 @@ class WecomAIBotWebhookClient:
         )
 
         timeout = aiohttp.ClientTimeout(total=self.timeout_seconds)
-        async with aiohttp.ClientSession(timeout=timeout) as session:
+        async with create_platform_client_session(
+            self.proxy_url,
+            timeout=timeout,
+        ) as session:
             async with session.post(
                 self._build_upload_url(media_type),
                 data=form,

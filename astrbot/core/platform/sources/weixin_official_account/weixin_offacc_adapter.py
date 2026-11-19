@@ -315,6 +315,8 @@ class WeixinOfficialAccountServer:
     "weixin_official_account", "微信公众平台 适配器", support_streaming_message=False
 )
 class WeixinOfficialAccountPlatformAdapter(Platform):
+    supports_proxy = True
+
     def __init__(
         self,
         platform_config: dict,
@@ -349,6 +351,10 @@ class WeixinOfficialAccountPlatformAdapter(Platform):
             self.config["appid"].strip(),
             self.config["secret"].strip(),
         )
+        if self.proxy_url:
+            self.client._http.proxies.update(
+                {"http": self.proxy_url, "https": self.proxy_url}
+            )
 
         self.client.__setattr__("API_BASE_URL", self.api_base_url)
 

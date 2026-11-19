@@ -20,6 +20,7 @@ from astrbot.api.message_components import (
     Video,
 )
 from astrbot.core.platform.button_interaction import encode_button_callback
+from astrbot.core.platform.proxy import create_platform_client_session
 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
 from astrbot.core.utils.media_utils import MediaResolver, detect_image_mime_type_async
 
@@ -30,15 +31,18 @@ class MattermostClient:
         base_url: str,
         token: str,
         action_callback_url: str = "",
+        proxy_url: str | None = None,
     ) -> None:
         self.base_url = base_url.rstrip("/")
         self.token = token
         self.action_callback_url = action_callback_url
+        self.proxy_url = proxy_url
         self._session: aiohttp.ClientSession | None = None
 
     async def ensure_session(self) -> aiohttp.ClientSession:
         if self._session is None or self._session.closed:
-            self._session = aiohttp.ClientSession(
+            self._session = create_platform_client_session(
+                self.proxy_url,
                 timeout=aiohttp.ClientTimeout(total=30),
             )
         return self._session
@@ -241,7 +245,11 @@ class MattermostClient:
             "http://", "ws://", 1
         )
         ws_url = f"{ws_url}/api/v4/websocket"
-        return await session.ws_connect(ws_url, heartbeat=30.0)
+        return await session.ws_connect(
+            ws_url,
+            heartbeat=30.0,
+            proxy=self.proxy_url,
+        )
 
     async def send_message_chain(
         self,
