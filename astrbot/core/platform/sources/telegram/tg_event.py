@@ -1,4 +1,5 @@
 import asyncio
+import bisect
 import os
 import re
 from collections.abc import Callable
@@ -8,6 +9,7 @@ import telegramify_markdown
 from telegram import (
     InlineKeyboardButton,
     InlineKeyboardMarkup,
+    MessageEntity,
     ReactionTypeCustomEmoji,
     ReactionTypeEmoji,
 )
@@ -31,6 +33,14 @@ from astrbot.api.message_components import (
 from astrbot.api.platform import AstrBotMessage, Group, MessageType, PlatformMetadata
 from astrbot.core.platform.button_interaction import encode_button_callback
 from astrbot.core.utils.metrics import Metric
+
+_SPOILER_SCAN = re.compile(
+    r"\\."
+    r"|```[\s\S]*?```"
+    r"|(?<!`)(?P<ticks>`+)(?!`)(?:(?!\n\n).)*?(?<!`)(?P=ticks)(?!`)"
+    r"|(?P<spoiler>\|\|)",
+    re.DOTALL,
+)
 
 
 def _is_gif(path: str) -> bool:
@@ -89,28 +99,86 @@ class TelegramPlatformEvent(AstrMessageEvent):
         self.client = client
 
     @classmethod
-    def _split_message(cls, text: str) -> list[str]:
-        if len(text) <= cls.MAX_MESSAGE_LENGTH:
-            return [text]
+    def _split_text_entities(
+        cls,
+        text: str,
+        entities: list[telegramify_markdown.MessageEntity],
+    ) -> list[tuple[str, list[MessageEntity]]]:
+        """Split rendered text and entities within Telegram's character limit.
 
-        chunks = []
-        while text:
-            if len(text) <= cls.MAX_MESSAGE_LENGTH:
-                chunks.append(text)
-                break
+        Telegram caps ``sendMessage.text`` at 4096 characters while measuring
+        ``MessageEntity`` offsets and lengths in UTF-16 code units.
 
-            split_point = cls.MAX_MESSAGE_LENGTH
-            segment = text[: cls.MAX_MESSAGE_LENGTH]
+        Args:
+            text: Rendered message text or plain-text fallback.
+            entities: Converted entities associated with ``text``.
 
-            for _, pattern in cls.SPLIT_PATTERNS.items():
-                if matches := list(pattern.finditer(segment)):
-                    last_match = matches[-1]
-                    split_point = last_match.end()
-                    break
+        Returns:
+            Ordered ``(chunk_text, chunk_entities)`` tuples sized for Telegram.
+        """
+        if not text or not text.strip():
+            return []
 
-            chunks.append(text[:split_point])
-            text = text[split_point:].lstrip()
+        offsets = [0]
+        for char in text:
+            offsets.append(offsets[-1] + (2 if ord(char) > 0xFFFF else 1))
 
+        ranges: list[tuple[int, int]] = []
+        text_len = len(text)
+        if text_len <= cls.MAX_MESSAGE_LENGTH:
+            ranges.append((0, text_len))
+        else:
+            start = 0
+            while start < text_len:
+                if ranges:
+                    while start < text_len and text[start].isspace():
+                        start += 1
+                    if start >= text_len:
+                        break
+                end = min(start + cls.MAX_MESSAGE_LENGTH, text_len)
+                if end < text_len:
+                    for pattern in cls.SPLIT_PATTERNS.values():
+                        matches = list(pattern.finditer(text, start, end))
+                        if matches and text[start : matches[-1].end()].strip():
+                            end = matches[-1].end()
+                            break
+                ranges.append((start, end))
+                start = end
+
+        chunks: list[tuple[str, list[MessageEntity]]] = []
+        for raw_start, raw_end in ranges:
+            trim_start, trim_end = raw_start, raw_end
+            if len(ranges) > 1:
+                while trim_start < trim_end and text[trim_start].isspace():
+                    trim_start += 1
+                while trim_end > trim_start and text[trim_end - 1].isspace():
+                    trim_end -= 1
+            if trim_start >= trim_end:
+                continue
+
+            chunk = text[trim_start:trim_end]
+            chunk_utf16_start = offsets[trim_start]
+            chunk_utf16_end = offsets[trim_end]
+            chunk_entities: list[MessageEntity] = []
+            for entity in entities:
+                left = max(chunk_utf16_start, entity.offset)
+                right = min(chunk_utf16_end, entity.offset + entity.length)
+                if left >= right:
+                    continue
+                # Telegram entities must not end on trailing whitespace.
+                end_index = bisect.bisect_left(offsets, right, trim_start, trim_end + 1)
+                while offsets[end_index] > left and text[end_index - 1].isspace():
+                    end_index -= 1
+                if offsets[end_index] <= left:
+                    continue
+                data = entity.to_dict()
+                data.update(
+                    offset=left - chunk_utf16_start,
+                    length=offsets[end_index] - left,
+                )
+                if converted := MessageEntity.de_json(data, bot=None):
+                    chunk_entities.append(converted)
+            chunks.append((chunk, chunk_entities))
         return chunks
 
     @classmethod
@@ -120,26 +188,106 @@ class TelegramPlatformEvent(AstrMessageEvent):
         text: str,
         payload: dict[str, Any],
     ) -> None:
-        """按 Telegram 限制切分文本后逐段发送。"""
-        chunks = cls._split_message(text)
-        for index, chunk in enumerate(chunks):
+        """Convert Markdown once, split safely, and send formatted chunks.
+
+        Args:
+            client: Telegram bot client used to send messages.
+            text: Outgoing Markdown or plain text.
+            payload: Base ``send_message`` keyword arguments.
+
+        Raises:
+            BadRequest: Re-raised when Telegram rejects a chunk containing spoilers
+                even after stripping non-spoiler entities, to avoid leaking spoilers.
+            ValueError: Re-raised if entity conversion fails when spoilers exist.
+        """
+        # Pair ||...|| outside escapes/code spans and strip boundary newlines so
+        # <tg-spoiler> never triggers CommonMark HTML blocks or fails over code.
+        delims = [m for m in _SPOILER_SCAN.finditer(text) if m["spoiler"]]
+        has_spoiler = "<tg-spoiler>" in text.lower()
+        if len(delims) >= 2:
+            parts: list[str] = []
+            pos = 0
+            for opener, closer in zip(delims[0::2], delims[1::2]):
+                parts.append(text[pos : opener.start()])
+                body = text[opener.end() : closer.start()]
+                stripped_body = re.sub(r"^[ \t]*\r?\n+", "", body)
+                stripped_body = re.sub(r"\r?\n+[ \t]*$", "", stripped_body)
+                if (
+                    stripped_body
+                    and not stripped_body.lstrip(" \t").startswith("```")
+                    and not stripped_body.rstrip(" \t").endswith("```")
+                ):
+                    parts.append(f"<tg-spoiler>{stripped_body}</tg-spoiler>")
+                    has_spoiler = True
+                else:
+                    parts.append(text[opener.start() : closer.end()])
+                pos = closer.end()
+            parts.append(text[pos:])
+            normalized_text = "".join(parts)
+        else:
+            normalized_text = text
+
+        try:
+            plain_text, entities = telegramify_markdown.convert(normalized_text)
+        except ValueError as e:
+            if has_spoiler:
+                raise
+            logger.warning(
+                f"Failed to convert Telegram Markdown, using plain text: {e!s}"
+            )
+            chunks = cls._split_text_entities(text, [])
+        else:
+            if not plain_text.strip() and not has_spoiler:
+                plain_text, entities = text, []
+            # Telegram Bot API forbids spoiler entities from overlapping code or pre.
+            spoiler_ranges = [
+                (ent.offset, ent.offset + ent.length)
+                for ent in entities
+                if ent.type == "spoiler"
+            ]
+            if spoiler_ranges:
+                entities = [
+                    ent
+                    for ent in entities
+                    if not (
+                        ent.type in ("code", "pre")
+                        and any(
+                            s_start < ent.offset + ent.length and ent.offset < s_end
+                            for s_start, s_end in spoiler_ranges
+                        )
+                    )
+                ]
+            chunks = cls._split_text_entities(plain_text, entities)
+
+        for index, (chunk, chunk_entities) in enumerate(chunks):
             chunk_payload = dict(payload)
             if index < len(chunks) - 1:
                 chunk_payload.pop("reply_markup", None)
-            try:
-                markdown_text = telegramify_markdown.markdownify(
-                    chunk,
-                )
-                await client.send_message(
-                    text=markdown_text,
-                    parse_mode="MarkdownV2",
-                    **cast(Any, chunk_payload),
-                )
-            except (ValueError, BadRequest) as e:
-                logger.warning(
-                    f"Failed to convert message to Markdown，using normal text: {e!s}"
-                )
-                await client.send_message(text=chunk, **cast(Any, chunk_payload))
+            if chunk_entities:
+                try:
+                    await client.send_message(
+                        text=chunk,
+                        entities=chunk_entities,
+                        **cast(Any, chunk_payload),
+                    )
+                    continue
+                except BadRequest as e:
+                    spoilers = [
+                        entity for entity in chunk_entities if entity.type == "spoiler"
+                    ]
+                    if len(spoilers) == len(chunk_entities):
+                        raise
+                    logger.warning(
+                        f"Telegram rejected message entities, retrying with reduced formatting: {e!s}"
+                    )
+                    if spoilers:
+                        await client.send_message(
+                            text=chunk,
+                            entities=spoilers,
+                            **cast(Any, chunk_payload),
+                        )
+                        continue
+            await client.send_message(text=chunk, **cast(Any, chunk_payload))
 
     @classmethod
     def _build_inline_keyboard(

@@ -7,6 +7,9 @@ import sys
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
+from telegram import MessageEntity
+from telegram.error import BadRequest
+from telegramify_markdown import convert
 
 
 class MockTelegramNetworkError(Exception):
@@ -32,6 +35,7 @@ def create_mock_telegram_modules():
     mock_telegram.Update = MagicMock
     mock_telegram.InlineKeyboardButton = MagicMock
     mock_telegram.InlineKeyboardMarkup = MagicMock
+    mock_telegram.MessageEntity = MessageEntity
     mock_telegram.constants = MagicMock()
     mock_telegram.constants.ChatType = MagicMock()
     mock_telegram.constants.ChatType.PRIVATE = "private"
@@ -41,7 +45,7 @@ def create_mock_telegram_modules():
     mock_telegram.constants.ChatAction.UPLOAD_DOCUMENT = "upload_document"
     mock_telegram.constants.ChatAction.UPLOAD_PHOTO = "upload_photo"
     mock_telegram.error = MagicMock()
-    mock_telegram.error.BadRequest = Exception
+    mock_telegram.error.BadRequest = BadRequest
     mock_telegram.error.Forbidden = MockTelegramForbidden
     mock_telegram.error.InvalidToken = MockTelegramInvalidToken
     mock_telegram.error.NetworkError = MockTelegramNetworkError
@@ -61,6 +65,7 @@ def create_mock_telegram_modules():
     # Mock telegramify_markdown
     mock_telegramify = MagicMock()
     mock_telegramify.markdownify = lambda text, **kwargs: text
+    mock_telegramify.convert = convert
 
     # Mock apscheduler
     mock_apscheduler = MagicMock()
