@@ -197,7 +197,18 @@ class GroupChatContext:
             )
 
     async def _format_message(self, event: AstrMessageEvent, cfg: dict) -> str:
-        datetime_str = datetime.datetime.now().strftime("%H:%M:%S")
+        message_time = datetime.datetime.now()
+        timestamp = getattr(event.message_obj, "timestamp", None)
+        if (
+            not isinstance(timestamp, bool)
+            and isinstance(timestamp, (int, float))
+            and timestamp > 0
+        ):
+            try:
+                message_time = datetime.datetime.fromtimestamp(timestamp)
+            except (OSError, OverflowError, ValueError):
+                pass
+        datetime_str = message_time.strftime("%Y-%m-%d %H:%M:%S")
         parts = [f"[{event.message_obj.sender.nickname}/{datetime_str}]: "]
 
         for comp in event.get_messages():
