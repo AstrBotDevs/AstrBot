@@ -175,7 +175,9 @@ async def runtime(monkeypatch):
             provider=provider,
             request=prepared.request,
             run_context=ContextWrapper(
-                context=SimpleNamespace(event=event, send_to_user=True, _output_turn=None)
+                context=SimpleNamespace(
+                    event=event, send_to_user=True, _output_turn=None
+                )
             ),
             tool_executor=MagicMock(),
             agent_hooks=BaseAgentRunHooks(),
@@ -230,7 +232,9 @@ async def runtime(monkeypatch):
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("source", ["cron", "background_task", "plugin"])
-async def test_wakeup_output_policy_preserves_explicit_sends_and_history(runtime, source):
+async def test_wakeup_output_policy_preserves_explicit_sends_and_history(
+    runtime, source
+):
     """Keep explicit sends and history when automatic replies are disabled.
 
     Args:
@@ -248,6 +252,8 @@ async def test_wakeup_output_policy_preserves_explicit_sends_and_history(runtime
     event = runtime.events[0]
     assert event.unified_msg_origin == umo
     assert event.role == "member"
+    assert event.get_self_id() == "astrbot"
+    assert event.get_sender_id() == "user_group"
     assert event.get_extra("provider_request").conversation.cid == "conversation"
     assert event.get_extra("provider_request").prompt == "Continue"
     assert runtime.requests[0][0] == history[0]
@@ -522,8 +528,12 @@ async def test_background_output_uses_normal_overflow_and_image_handling(
 
     original = native_builder.build_main_agent
     store = database.conversation_store
-    conversation = await store.create(umo="target:FriendMessage:alice", platform_id="target")
-    writer = ConversationEventWriter(store, await store.read(conversation.conversation_id))
+    conversation = await store.create(
+        umo="target:FriendMessage:alice", platform_id="target"
+    )
+    writer = ConversationEventWriter(
+        store, await store.read(conversation.conversation_id)
+    )
 
     async def build(**kwargs):
         result = await original(**kwargs)
@@ -607,7 +617,11 @@ async def test_background_output_uses_normal_overflow_and_image_handling(
     assert output not in json.dumps(history)
     events = await store.events(conversation.conversation_id)
     assert not any(event.type == "context.rebased" for event in events)
-    assert sum(
-        event.type == "message.appended" and event.payload["message"]["role"] == "user"
-        for event in events
-    ) == 1
+    assert (
+        sum(
+            event.type == "message.appended"
+            and event.payload["message"]["role"] == "user"
+            for event in events
+        )
+        == 1
+    )
