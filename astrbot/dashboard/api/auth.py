@@ -146,6 +146,9 @@ async def _require_api_key_scope(
         if isinstance(api_key.scopes, list)
         else [str(scope) for scope in DEFAULT_OPEN_API_SCOPES]
     )
+    # Existing default and wildcard keys must not inherit knowledge-base access.
+    if scope == "kb" and scope not in scopes:
+        raise ApiError("Insufficient API key scope", status_code=403)
     if (
         "*" not in scopes
         and scope not in scopes

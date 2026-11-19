@@ -20,7 +20,7 @@ from astrbot.dashboard.services.knowledge_base_service import (
     KnowledgeBaseServiceError,
 )
 
-from .auth import AuthContext, require_dashboard_user, require_scope
+from .auth import AuthContext, ScopeDependency, require_dashboard_user
 from .multipart import multipart_parts
 
 router = APIRouter(tags=["Knowledge Bases"])
@@ -35,8 +35,7 @@ def get_service(request: Request) -> KnowledgeBaseService:
     return request.app.state.services.knowledge_bases
 
 
-async def require_kb_scope(request: Request) -> AuthContext:
-    return await require_scope(request, "kb")
+require_kb_scope = ScopeDependency("kb")
 
 
 async def _json_or_empty(request: Request) -> dict[str, Any]:
