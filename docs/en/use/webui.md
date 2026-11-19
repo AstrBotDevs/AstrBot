@@ -80,6 +80,10 @@ To replace the TOTP secret, you can do so in the TOTP management window, where y
 
 AstrBot includes a built-in ChatUI for talking to configured models directly in your browser.
 
+When no chat model is available, the conversation displays a warning card. Select **Configure models** to open the model configuration page inside ChatUI, configure and enable a model, then return to the conversation and resend your message. Invalid model configurations also offer this shortcut. Other LLM / Agent failures show a short message with **View details** to expand the original error. Partial replies remain visible, and server-side error cards are saved in chat history and survive a refresh. Connection failures display a separate connection error message.
+
+![Error card component examples: missing model and interrupted reply](images/chat-error-cards.jpg)
+
 ChatUI supports these common workflows:
 
 - The sidebar initially loads the 30 most recent conversations. Scroll near the bottom to automatically load older conversations, with a progress bar while loading. Automatic requests pause after a failure; select **Retry** to continue.
