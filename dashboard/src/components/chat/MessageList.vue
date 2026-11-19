@@ -137,7 +137,12 @@
                       />
                     </div>
 
-                    <div
+                    <PluginViewMessage
+                        v-else-if="part.type === 'view'"
+                        :part="part"
+                        :is-dark="isDark"
+                      />
+                      <div
                       v-else-if="part.type === 'tool_call'"
                       class="tool-call-block"
                     >
@@ -150,7 +155,7 @@
                           :is-dark="isDark"
                         >
                           <template #label>
-                            <v-icon size="16">mdi-code-json</v-icon>
+                            <CodeXml :size="16" aria-hidden="true" />
                             <span>{{ tool.name || "python" }}</span>
                             <span class="tool-call-inline-status">
                               {{ toolCallStatusText(tool) }}
@@ -269,6 +274,8 @@
 </template>
 
 <script setup lang="ts">
+import PluginViewMessage from "@/components/chat/message_list_comps/PluginViewMessage.vue";
+import { CodeXml } from "@lucide/vue";
 import MessageContentTransition from "@/components/chat/MessageContentTransition.vue";
 import { computed, nextTick, reactive, ref } from "vue";
 import axios from "axios";

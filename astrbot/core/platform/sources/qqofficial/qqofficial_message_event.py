@@ -1,11 +1,14 @@
 import asyncio
 import base64
 import copy
+import json
 import logging
 import os
 import random
+import re
 from pathlib import Path
-from typing import cast
+from typing import Any, cast
+from urllib.parse import quote
 
 import aiofiles
 import botpy
@@ -105,6 +108,11 @@ _QQOFFICIAL_SEND_API_ERRORS = (
 )
 
 
+class _UserInfoRoute(Route):
+    # Scope the current production API domain to the new user lookup.
+    DOMAIN = "api.bot.qq.com"
+
+
 class QQOfficialMessageEvent(AstrMessageEvent):
     MARKDOWN_NOT_ALLOWED_ERROR = "不允许发送原生 markdown"
     IMAGE_FILE_TYPE = 1
@@ -125,9 +133,74 @@ class QQOfficialMessageEvent(AstrMessageEvent):
         session_id: str,
         bot: Client,
     ) -> None:
+        # Streaming support depends on the message source, not just the adapter.
+        platform_meta = copy.copy(platform_meta)
+        platform_meta.support_streaming_message = isinstance(
+            message_obj.raw_message, botpy.message.C2CMessage
+        )
         super().__init__(message_str, message_obj, platform_meta, session_id)
         self.bot = bot
         self.send_buffer = None
+        source = getattr(message_obj, "raw_message", None)
+        if isinstance(source, (botpy.message.C2CMessage, botpy.message.GroupMessage)):
+            avatar = getattr(source.author, "avatar", None)
+            if isinstance(avatar, str) and avatar.strip():
+                self.set_extra("sender_avatar", avatar)
+
+    def get_sender_group_nickname(self) -> str | None:
+        """Get the sender's nickname in the current QQ group.
+
+        Returns:
+            The nickname supplied by the group event, or None if unavailable.
+        """
+        source = getattr(self.message_obj, "raw_message", None)
+        if isinstance(source, botpy.message.GroupMessage):
+            nickname = getattr(source.author, "member_nickname", None)
+            if isinstance(nickname, str) and nickname.strip():
+                return nickname
+        return None
+
+    async def get_user_info(self, user_openid: str) -> dict[str, Any] | None:
+        """Fetch the basic profile of a QQ user on demand.
+
+        Args:
+            user_openid: The user's QQ OpenID in a C2C conversation.
+
+        Returns:
+            The profile payload, or None if the profile is unavailable.
+        """
+        if not user_openid.strip():
+            return None
+
+        route = _UserInfoRoute(
+            "GET",
+            "/v2/users/{user_openid}/info",
+            user_openid=quote(user_openid, safe=""),
+        )
+        try:
+            response = await asyncio.wait_for(
+                self.bot.api._http.request(route),
+                timeout=3,
+            )
+        except Exception as exc:
+            logger.debug(
+                "[QQOfficial] User info request failed: %s", type(exc).__name__
+            )
+            return None
+
+        # qq-botpy returns text when the JSON content type includes a charset.
+        if isinstance(response, str):
+            try:
+                response = json.loads(response)
+            except json.JSONDecodeError:
+                return None
+
+        if isinstance(response, dict) and any(
+            field in response
+            for field in ("username", "avatar", "allow_proactive_msg", "union_openid")
+        ):
+            return response
+        return None
 
     async def get_group(self, group_id: str | None = None, **kwargs) -> Group | None:
         """Get QQ group or guild-channel information for this event.
@@ -252,7 +325,12 @@ class QQOfficialMessageEvent(AstrMessageEvent):
         return ""
 
     async def send_streaming(self, generator, use_fallback: bool = False):
-        """流式输出仅支持消息列表私聊（C2C），其他消息源退化为普通发送"""
+        """Stream C2C replies or deliver ordinary messages for other sources.
+
+        Args:
+            generator: Message chains produced by the running agent.
+            use_fallback: Whether non-C2C replies are sent at sentence boundaries.
+        """
         # 先标记事件层“已执行发送操作”，避免异常路径遗漏
         await super().send_streaming(generator, use_fallback)
         # QQ C2C 流式协议：开始/中间分片使用 state=1，结束分片使用 state=10
@@ -264,6 +342,31 @@ class QQOfficialMessageEvent(AstrMessageEvent):
             self.message_obj.raw_message
         )  # 提前获取，避免 generator 为空时 NameError
         try:
+            if use_fallback and not isinstance(source, botpy.message.C2CMessage):
+                buffer = ""
+                pattern = re.compile(r"[^。？！~…]+[。？！~…]+")
+                async for chain in generator:
+                    if chain.type == "break":
+                        if buffer.strip():
+                            await self.send(MessageChain([Plain(buffer)]))
+                        buffer = ""
+                        continue
+                    for comp in chain.chain:
+                        if isinstance(comp, Plain):
+                            buffer += comp.text
+                            if any(mark in comp.text for mark in "。？！~…"):
+                                buffer = await self.process_buffer(buffer, pattern)
+                        else:
+                            # Flush preceding text before media to preserve output order.
+                            if buffer.strip():
+                                await self.send(MessageChain([Plain(buffer)]))
+                                buffer = ""
+                            await self.send(chain.derive([comp]))
+                            await asyncio.sleep(1.5)
+                if buffer.strip():
+                    await self.send(MessageChain([Plain(buffer)]))
+                return None
+
             async for chain in generator:
                 source = self.message_obj.raw_message
 

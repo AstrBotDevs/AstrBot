@@ -93,6 +93,7 @@ WEBHOOK_SUPPORTED_PLATFORMS = [
 DEFAULT_CONFIG = {
     "config_version": 6,
     "platform_settings": {
+        "locale": "zh-CN",
         "unique_session": False,
         "rate_limit": {
             "time": 60,
@@ -1150,6 +1151,10 @@ CONFIG_METADATA_2 = {
             "platform_settings": {
                 "type": "object",
                 "items": {
+                    "locale": {
+                        "type": "string",
+                        "options": ["zh-CN", "en-US"],
+                    },
                     "unique_session": {
                         "type": "bool",
                     },
@@ -1358,7 +1363,7 @@ CONFIG_METADATA_2 = {
                             "sexually_explicit": "BLOCK_MEDIUM_AND_ABOVE",
                             "dangerous_content": "BLOCK_MEDIUM_AND_ABOVE",
                         },
-                        "gm_thinking_config": {"budget": 0, "level": "HIGH"},
+                        "gm_thinking_config": {"budget": None, "level": "AUTO"},
                         "proxy": "",
                     },
                     "Anthropic": {
@@ -1907,6 +1912,7 @@ CONFIG_METADATA_2 = {
                         "api_key": "",
                         "model": "cosyvoice-v1",
                         "dashscope_tts_voice": "loongstella",
+                        "dashscope_tts_websocket_url": "",
                         "timeout": "20",
                     },
                     "Azure TTS": {
@@ -2650,6 +2656,11 @@ CONFIG_METADATA_2 = {
                         "secret": True,
                     },
                     "dashscope_tts_voice": {"description": "音色", "type": "string"},
+                    "dashscope_tts_websocket_url": {
+                        "description": "WebSocket Endpoint",
+                        "type": "string",
+                        "hint": "可选，使用 Qwen-Audio-TTS 模型时填写。留空使用 DashScope SDK 默认地址。请填写完整 WebSocket 地址，例如 wss://{WorkspaceId}.cn-beijing.maas.aliyuncs.com/api-ws/v1/inference，并将 {WorkspaceId} 替换为实际业务空间 ID。",
+                    },
                     "gm_resp_image_modal": {
                         "description": "启用图片模态",
                         "type": "bool",
@@ -2728,17 +2739,20 @@ CONFIG_METADATA_2 = {
                             "budget": {
                                 "description": "Thinking Budget",
                                 "type": "int",
-                                "hint": "Guides the model on the specific number of thinking tokens to use for reasoning. See: https://ai.google.dev/gemini-api/docs/thinking#set-budget",
+                                "nullable": True,
+                                "hint": "Thinking token budget for Gemini 2.5. Leave blank to use the model default. See https://ai.google.dev/gemini-api/docs/thinking#set-budget",
                             },
                             "level": {
                                 "description": "Thinking Level",
                                 "type": "string",
-                                "hint": "Recommended for Gemini 3 models and onwards, lets you control reasoning behavior.See: https://ai.google.dev/gemini-api/docs/thinking#thinking-levels",
+                                "hint": "AUTO uses Google's model default. See https://ai.google.dev/gemini-api/docs/thinking#thinking-levels",
                                 "options": [
+                                    "AUTO",
                                     "MINIMAL",
                                     "LOW",
                                     "MEDIUM",
                                     "HIGH",
+                                    "XHIGH",
                                 ],
                             },
                         },
@@ -4494,6 +4508,13 @@ CONFIG_METADATA_3 = {
                 "description": "基本",
                 "type": "object",
                 "items": {
+                    "platform_settings.locale": {
+                        "description": "系统语言",
+                        "type": "string",
+                        "options": ["zh-CN", "en-US"],
+                        "labels": ["🇨🇳 简体中文", "🇺🇸 English"],
+                        "hint": "设置系统的语言，用于插件、错误信息回复等地方。不会改变模型回答或 WebUI 的语言。",
+                    },
                     "platform_settings.unique_session": {
                         "description": "隔离对话",
                         "type": "bool",
