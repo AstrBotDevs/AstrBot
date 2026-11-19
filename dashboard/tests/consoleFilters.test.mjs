@@ -39,6 +39,23 @@ test("log filters intersect level, source, plugin, platform, category, and keywo
   assert.equal(state.isLogVisible(log), false);
 });
 
+test("a plugin-scoped console shows only that plugin's logs under the other filters", () => {
+  const { state } = setup();
+  state.pluginName = "weather";
+  const log = { level: "INFO", data: "Weather updated", source: "plugin", plugin_name: "weather" };
+  assert.equal(state.isLogVisible(log), true);
+  for (const changed of [
+    { plugin_name: "other" }, { plugin_name: null, source: "core" }, { plugin_name: undefined },
+  ]) assert.equal(state.isLogVisible({ ...log, ...changed }), false);
+  // The scope cannot be widened by the in-console plugin filter.
+  state.selectedPlugin = "other";
+  assert.equal(state.isLogVisible({ ...log, plugin_name: "other" }), false);
+  assert.equal(state.isLogVisible(log), false);
+  state.selectedPlugin = null;
+  state.selectedLevels = [3];
+  assert.equal(state.isLogVisible(log), false);
+});
+
 test("plugin options prefer display names and keep stable IDs as values and subtitles", () => {
   const { component, state } = setup();
   state.localLogCache = [
@@ -137,6 +154,18 @@ for (const pendingMethod of ["fetchLogHistory", "fetchPluginDisplayNames"]) {
     assert.equal(listeners, 0);
   });
 }
+
+test("a history response that arrives after unmount is ignored", async () => {
+  let finishRequest;
+  const { component, state } = setup({ removeEventListener() {} }, {
+    logApi: { history: () => new Promise((resolve) => { finishRequest = resolve; }) },
+  });
+  const fetching = state.fetchLogHistory();
+  component.beforeUnmount.call(state);
+  finishRequest({ data: { data: { logs: [{ time: 1, level: "INFO", data: "Late log" }] } } });
+  await fetching;
+  assert.equal(state.localLogCache.length, 0);
+});
 
 test("a pending reconnect cannot open a stream after unmount", async () => {
   let connections = 0;
