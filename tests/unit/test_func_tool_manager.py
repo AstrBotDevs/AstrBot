@@ -19,6 +19,8 @@ from astrbot.core.astr_agent_runtime.tools.web_search_tools import (
     DeepSeekWebSearchTool,
     FirecrawlExtractWebPageTool,
     FirecrawlWebSearchTool,
+    SpecStreamExtractWebPageTool,
+    SpecStreamWebSearchTool,
 )
 from astrbot.core.provider import func_tool_manager as ftm
 from astrbot.core.provider.func_tool_manager import FunctionToolManager
@@ -921,6 +923,12 @@ async def test_execute_shell_reports_blank_exception_type(monkeypatch):
             DeepSeekFetchWebPageTool,
             "web_search_deepseek",
             "deepseek_fetch_web_page",
+        ),
+        (
+            SpecStreamWebSearchTool,
+            SpecStreamExtractWebPageTool,
+            "web_search_specstream",
+            "specstream_extract_web_page",
         ),
     ],
 )

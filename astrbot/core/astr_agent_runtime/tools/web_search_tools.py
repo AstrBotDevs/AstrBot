@@ -32,6 +32,8 @@ WEB_SEARCH_TOOL_NAMES = [
     "scholar_search_serpapi",
     "web_search_deepseek",
     "deepseek_fetch_web_page",
+    "web_search_specstream",
+    "specstream_extract_web_page",
 ]
 _TAVILY_WEB_SEARCH_TOOL_CONFIG = {
     "provider_settings.web_search": True,
@@ -64,6 +66,10 @@ _ANYSEARCH_WEB_SEARCH_TOOL_CONFIG = {
 _DEEPSEEK_WEB_SEARCH_TOOL_CONFIG = {
     "provider_settings.web_search": True,
     "provider_settings.websearch_provider": "deepseek",
+}
+_SPECSTREAM_WEB_SEARCH_TOOL_CONFIG = {
+    "provider_settings.web_search": True,
+    "provider_settings.websearch_provider": "specstream",
 }
 _SERPAPI_WEB_SEARCH_TOOL_CONFIG = {
     "provider_settings.web_search": True,
@@ -139,6 +145,8 @@ _TAVILY_RETRYABLE_HTTP_STATUSES: frozenset[int] = frozenset({401, 403, 429, 432,
 _FIRECRAWL_RETRYABLE_HTTP_STATUSES: frozenset[int] = frozenset({401, 402, 403, 429})
 _EXA_RETRYABLE_HTTP_STATUSES: frozenset[int] = frozenset({401, 402, 429})
 _DEEPSEEK_RETRYABLE_HTTP_STATUSES: frozenset[int] = frozenset({401, 402, 429})
+# 401 - missing or invalid key, 402 - empty balance.
+_SPECSTREAM_RETRYABLE_HTTP_STATUSES: frozenset[int] = frozenset({401, 402})
 
 _TAVILY_KEY_ROTATOR = _KeyRotator("websearch_tavily_key", "Tavily")
 _BOCHA_KEY_ROTATOR = _KeyRotator("websearch_bocha_key", "BoCha")
@@ -147,6 +155,7 @@ _FIRECRAWL_KEY_ROTATOR = _KeyRotator("websearch_firecrawl_key", "Firecrawl")
 _EXA_KEY_ROTATOR = _KeyRotator("websearch_exa_key", "Exa")
 _ANYSEARCH_KEY_ROTATOR = _KeyRotator("websearch_anysearch_key", "AnySearch")
 _DEEPSEEK_KEY_ROTATOR = _KeyRotator("websearch_deepseek_key", "DeepSeek")
+_SPECSTREAM_KEY_ROTATOR = _KeyRotator("websearch_specstream_key", "SpecStream")
 _SERPAPI_KEY_ROTATOR = _KeyRotator("websearch_serpapi_key", "SerpApi")
 
 
@@ -2325,6 +2334,198 @@ class DeepSeekFetchWebPageTool(FunctionTool[AstrAgentContext]):
         return f"URL: {url}\nTitle: {data.get('title', '')}\nContent: {data['content']}"
 
 
+@builtin_tool(config=_SPECSTREAM_WEB_SEARCH_TOOL_CONFIG)
+@pydantic_dataclass
+class SpecStreamWebSearchTool(FunctionTool[AstrAgentContext]):
+    name: str = "web_search_specstream"
+    description: str = (
+        "Search the live web using SpecStream and return sources with snippets. "
+        "Use specstream_extract_web_page for full page content when needed."
+    )
+    parameters: dict = Field(
+        default_factory=lambda: {
+            "type": "object",
+            "properties": {
+                "query": {
+                    "type": "string",
+                    "minLength": 1,
+                    "description": "Required. The question or search query.",
+                },
+                "count": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 50,
+                    "default": 10,
+                    "description": "Optional. Maximum number of results, 1-50. Default is 10.",
+                },
+            },
+            "required": ["query"],
+        }
+    )
+
+    async def call(self, context, **kwargs) -> ToolExecResult:
+        """Search the SpecStream Search API and normalize the sources.
+
+        Args:
+            context: Current agent execution context.
+            **kwargs: Search query and optional count.
+
+        Returns:
+            Search results with citation indices, or an input/configuration error.
+
+        Raises:
+            RuntimeError: If all keys fail or a non-retryable HTTP error is returned.
+        """
+        _, provider_settings, _ = _get_runtime(context)
+        keys = provider_settings.get("websearch_specstream_key", [])
+        if not keys:
+            return "Error: SpecStream API key is not configured in AstrBot."
+
+        query = kwargs.get("query")
+        if not isinstance(query, str) or not query.strip():
+            return "Error: query must be a non-blank string."
+        count = kwargs.get("count", 10)
+        if type(count) is not int or not 1 <= count <= 50:
+            return "Error: count must be an integer between 1 and 50."
+
+        last_error = None
+        tried_keys: set[str] = set()
+        for _ in range(len(set(keys))):
+            key = await _SPECSTREAM_KEY_ROTATOR.get(provider_settings, tried_keys)
+            headers = {"Authorization": f"Bearer {key}"}
+            async with aiohttp.ClientSession(trust_env=True) as session:
+                async with session.get(
+                    "https://api.specstream.ai/v1/web-search",
+                    params={"q": query},
+                    headers=headers,
+                ) as response:
+                    if response.status != 200:
+                        reason = await response.text()
+                        last_error = RuntimeError(
+                            f"SpecStream web search failed: {reason}, status: {response.status}"
+                        )
+                        if response.status in _SPECSTREAM_RETRYABLE_HTTP_STATUSES:
+                            continue
+                        raise last_error
+                    data = await response.json()
+            break
+        else:
+            if last_error is not None:
+                raise last_error
+            raise RuntimeError("SpecStream web search failed with all configured keys.")
+
+        # The API has no result-count parameter, so trim locally.
+        sources = (data.get("data") or {}).get("sources") or []
+        results = [
+            SearchResult(
+                title=item.get("title") or "",
+                url=item["url"],
+                snippet=item.get("snippet") or "",
+            )
+            for item in sources
+            if item.get("url")
+        ][:count]
+        if not results:
+            return "Error: SpecStream web search does not return any results."
+        return _search_result_payload(results)
+
+
+@builtin_tool(config=_SPECSTREAM_WEB_SEARCH_TOOL_CONFIG)
+@pydantic_dataclass
+class SpecStreamExtractWebPageTool(FunctionTool[AstrAgentContext]):
+    name: str = "specstream_extract_web_page"
+    description: str = (
+        "Extract a single web page using SpecStream and return its title and "
+        "Markdown content. Use this to read a known URL, including a page found "
+        "through web search."
+    )
+    parameters: dict = Field(
+        default_factory=lambda: {
+            "type": "object",
+            "properties": {
+                "url": {
+                    "type": "string",
+                    "minLength": 1,
+                    "description": "Required. HTTP or HTTPS URL of the page to extract.",
+                },
+            },
+            "required": ["url"],
+        }
+    )
+
+    async def call(self, context, **kwargs) -> ToolExecResult:
+        """Extract Markdown content from the SpecStream Extract API.
+
+        Args:
+            context: Current agent execution context.
+            **kwargs: The HTTP or HTTPS page URL to extract.
+
+        Returns:
+            The page URL, title and Markdown content, or an input/configuration error.
+
+        Raises:
+            RuntimeError: If all keys fail or a non-retryable HTTP error is returned.
+        """
+        _, provider_settings, _ = _get_runtime(context)
+        keys = provider_settings.get("websearch_specstream_key", [])
+        if not keys:
+            return "Error: SpecStream API key is not configured in AstrBot."
+
+        url = kwargs.get("url")
+        try:
+            parsed = urlsplit(url) if isinstance(url, str) else None
+            # Port syntax and range are validated only when this property is read.
+            _ = parsed.port if parsed is not None else None
+            valid_url = (
+                parsed is not None
+                and parsed.scheme in {"http", "https"}
+                and bool(parsed.hostname)
+                and not any(char.isspace() for char in url)
+            )
+        except ValueError:
+            valid_url = False
+        if not valid_url:
+            return "Error: url must be an HTTP or HTTPS URL with a host."
+
+        last_error = None
+        tried_keys: set[str] = set()
+        for _ in range(len(set(keys))):
+            key = await _SPECSTREAM_KEY_ROTATOR.get(provider_settings, tried_keys)
+            headers = {
+                "Authorization": f"Bearer {key}",
+                "Content-Type": "application/json",
+            }
+            async with aiohttp.ClientSession(trust_env=True) as session:
+                async with session.post(
+                    "https://api.specstream.ai/v1/extract",
+                    json={"urls": [url], "format": "markdown"},
+                    headers=headers,
+                ) as response:
+                    if response.status != 200:
+                        reason = await response.text()
+                        last_error = RuntimeError(
+                            f"SpecStream extract failed: {reason}, status: {response.status}"
+                        )
+                        if response.status in _SPECSTREAM_RETRYABLE_HTTP_STATUSES:
+                            continue
+                        raise last_error
+                    data = await response.json()
+            break
+        else:
+            if last_error is not None:
+                raise last_error
+            raise RuntimeError("SpecStream extract failed with all configured keys.")
+
+        results = (data.get("data") or {}).get("results") or []
+        page = results[0] if results else {}
+        if page.get("status") != "ok" or not page.get("text"):
+            return (
+                "Error: SpecStream extract does not return any content "
+                f"(status: {page.get('status', 'unknown')})."
+            )
+        return f"URL: {url}\nTitle: {page.get('title') or ''}\nContent: {page['text']}"
+
+
 __all__ = [
     "AnySearchWebSearchTool",
     "BaiduWebSearchTool",
@@ -2339,6 +2540,8 @@ __all__ = [
     "SerpApiNewsSearchTool",
     "SerpApiScholarSearchTool",
     "SerpApiWebSearchTool",
+    "SpecStreamExtractWebPageTool",
+    "SpecStreamWebSearchTool",
     "TavilyExtractWebPageTool",
     "TavilyWebSearchTool",
     "WEB_SEARCH_TOOL_NAMES",

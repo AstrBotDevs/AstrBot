@@ -153,6 +153,7 @@ DEFAULT_CONFIG = {
         "websearch_exa_key": [],
         "websearch_anysearch_key": [],
         "websearch_deepseek_key": [],
+        "websearch_specstream_key": [],
         "websearch_serpapi_key": [],
         "web_search_link": False,
         "display_reasoning_text": False,
@@ -3813,6 +3814,7 @@ CONFIG_METADATA_3 = {
                             "firecrawl",
                             "exa",
                             "anysearch",
+                            "specstream",
                         ],
                         "labels": [
                             "SerpApi",
@@ -3824,6 +3826,7 @@ CONFIG_METADATA_3 = {
                             "Firecrawl",
                             "Exa",
                             "AnySearch",
+                            "SpecStream",
                         ],
                         "subtitles": [
                             "Google 网页、新闻、图片、学术和财经搜索",
@@ -3835,6 +3838,7 @@ CONFIG_METADATA_3 = {
                             "",
                             "",
                             "",
+                            "SpecStream 实时网页搜索与页面提取",
                         ],
                         "condition": {
                             "provider_settings.web_search": True,
@@ -3923,6 +3927,17 @@ CONFIG_METADATA_3 = {
                         "secret": True,
                         "condition": {
                             "provider_settings.websearch_provider": "deepseek",
+                            "provider_settings.web_search": True,
+                        },
+                    },
+                    "provider_settings.websearch_specstream_key": {
+                        "description": "SpecStream API Key",
+                        "type": "list",
+                        "items": {"type": "string"},
+                        "hint": "可添加多个 Key 进行轮询。获取 Key：[https://specstream.ai](https://specstream.ai)",
+                        "secret": True,
+                        "condition": {
+                            "provider_settings.websearch_provider": "specstream",
                             "provider_settings.web_search": True,
                         },
                     },
