@@ -461,6 +461,23 @@ class LogManager:
             logging.getLogger(name).setLevel(level)
 
     @classmethod
+    def cleanup_stray_root_handlers(cls) -> None:
+        """Remove root logging handlers left by third-party code.
+
+        Plugin installs run ``pip.main`` in-process, which may attach handlers
+        to the root logger; plugin imports may also call
+        ``logging.basicConfig(force=True)``, which removes the loguru bridge
+        while doing so. Stray handlers are removed and the bridge is
+        reinstalled (idempotently), keeping records from third-party
+        libraries flowing to the configured sinks.
+        """
+        root_logger = logging.getLogger()
+        for handler in root_logger.handlers[:]:
+            if not getattr(handler, cls._LOGGER_HANDLER_FLAG, False):
+                root_logger.removeHandler(handler)
+        cls._setup_root_bridge()
+
+    @classmethod
     def _ensure_logger_enricher_filter(cls, logger: logging.Logger) -> None:
         has_filter = any(
             getattr(existing_filter, cls._ENRICH_FILTER_FLAG, False)
