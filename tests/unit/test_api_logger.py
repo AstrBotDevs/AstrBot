@@ -267,6 +267,30 @@ def test_plugin_log_level_is_persisted_atomically(
     assert not list(tmp_path.glob("*.tmp"))
 
 
+def test_cleanup_stray_root_handlers_keeps_loguru_bridge() -> None:
+    """Ensure the post-pip cleanup drops stray handlers but not the bridge.
+
+    Plugins are loaded/reloaded with ``pip.main`` side effects that may attach
+    handlers to the root logger. The cleanup must remove those while keeping
+    AstrBot's own loguru intercept handler, otherwise records logged by
+    third-party libraries stop reaching loguru sinks after a plugin reload.
+    """
+    root_logger = logging.getLogger()
+    previous_handlers = root_logger.handlers[:]
+    bridge_handler = logging.Handler()
+    setattr(bridge_handler, LogManager._LOGGER_HANDLER_FLAG, True)
+    stray_handler = logging.Handler()
+    root_logger.handlers[:] = [bridge_handler, stray_handler]
+
+    try:
+        LogManager.cleanup_stray_root_handlers()
+
+        assert stray_handler not in root_logger.handlers
+        assert bridge_handler in root_logger.handlers
+    finally:
+        root_logger.handlers[:] = previous_handlers
+
+
 def test_plugin_log_level_write_failure_preserves_previous_state(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

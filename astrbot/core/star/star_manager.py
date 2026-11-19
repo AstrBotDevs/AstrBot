@@ -31,6 +31,7 @@ from astrbot.core import (
 from astrbot.core.agent.handoff import FunctionTool, HandoffTool
 from astrbot.core.config.astrbot_config import AstrBotConfig
 from astrbot.core.config.default import VERSION
+from astrbot.core.log import LogManager
 from astrbot.core.platform.register import unregister_platform_adapters_by_module
 from astrbot.core.provider.register import llm_tools
 from astrbot.core.utils.astrbot_path import (
@@ -1519,8 +1520,7 @@ class PluginManager:
                         concrete_tool.active = False
 
         # 清除 pip.main 导致的多余的 logging handlers
-        for handler in logging.root.handlers[:]:
-            logging.root.removeHandler(handler)
+        LogManager.cleanup_stray_root_handlers()
         try:
             await sync_command_configs()
         except Exception as e:
