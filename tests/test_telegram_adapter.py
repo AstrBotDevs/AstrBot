@@ -5,6 +5,7 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from telegram import Message, MessageEntity, TextQuote
 
 import astrbot.api.message_components as Comp
@@ -88,6 +89,59 @@ def _build_context() -> MagicMock:
     context.bot.username = "test_bot"
     context.bot.id = 12345678
     return context
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("register", [True, False])
+@pytest.mark.parametrize("refresh", [True, False])
+async def test_telegram_album_delivery_is_independent_of_command_settings(
+    register, refresh
+):
+    TelegramPlatformAdapter = _load_telegram_adapter()
+    queue = asyncio.Queue()
+    with patch.dict(
+        TelegramPlatformAdapter.__init__.__globals__,
+        {"AsyncIOScheduler": AsyncIOScheduler},
+    ):
+        adapter = TelegramPlatformAdapter(
+            make_platform_config(
+                "telegram",
+                telegram_command_register=register,
+                telegram_command_auto_refresh=refresh,
+                telegram_media_group_timeout=0.01,
+            ),
+            {},
+            queue,
+        )
+
+    try:
+        adapter._start_command_scheduler()
+        adapter._start_command_scheduler()
+        command_job = adapter.scheduler.get_job("telegram_command_register")
+        assert (command_job is not None) == (register and refresh)
+
+        for message_id in (1, 2):
+            photo = MagicMock()
+            photo.get_file = AsyncMock(return_value=create_mock_file())
+            await adapter.message_handler(
+                create_mock_update(
+                    message_text=None,
+                    message_id=message_id,
+                    media_group_id="album",
+                    photo=[photo],
+                ),
+                _build_context(),
+            )
+
+        event = await asyncio.wait_for(queue.get(), timeout=1)
+        assert len(event.message_obj.message) == 2
+        assert all(isinstance(item, Comp.Image) for item in event.message_obj.message)
+        assert queue.empty()
+        assert not adapter.media_group_cache
+    finally:
+        if adapter.scheduler.running:
+            adapter.scheduler.shutdown()
+            await asyncio.sleep(0)
 
 
 @pytest.mark.asyncio

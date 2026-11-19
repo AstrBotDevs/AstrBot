@@ -210,18 +210,18 @@ class TelegramPlatformAdapter(Platform):
         self._polling_recovery_requested.clear()
 
     def _start_command_scheduler(self) -> None:
-        if not self.enable_command_refresh or not self.enable_command_register:
-            return
         if self.scheduler.running:
             return
 
-        self.scheduler.add_job(
-            self.register_commands,
-            "interval",
-            seconds=self.config.get("telegram_command_register_interval", 300),
-            id="telegram_command_register",
-            misfire_grace_time=60,
-        )
+        if self.enable_command_refresh and self.enable_command_register:
+            self.scheduler.add_job(
+                self.register_commands,
+                "interval",
+                seconds=self.config.get("telegram_command_register_interval", 300),
+                id="telegram_command_register",
+                misfire_grace_time=60,
+            )
+        # Album processing also uses this scheduler, independently of commands.
         self.scheduler.start()
 
     @override
