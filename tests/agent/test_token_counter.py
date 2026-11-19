@@ -46,9 +46,12 @@ class TestTextCounting:
         assert counter.count_tokens([_msg("user", text)]) == expected
 
     def test_text_parts_are_rounded_independently(self):
-        assert counter.count_tokens(
-            [_msg("user", [TextPart(text="ab"), TextPart(text="cd")])]
-        ) == 0
+        assert (
+            counter.count_tokens(
+                [_msg("user", [TextPart(text="ab"), TextPart(text="cd")])]
+            )
+            == 0
+        )
 
     def test_plain_string(self):
         tokens = counter.count_tokens([_msg("user", "hello world")])
@@ -168,7 +171,7 @@ class TestTrustedUsage:
                 ),
             ],
         )
-        tokens = counter.count_tokens([msg], trusted_token_usage=42)
+        tokens = counter.count_tokens([msg], reported_token_usage=42)
         assert tokens == 42
 
 
