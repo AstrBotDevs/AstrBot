@@ -240,7 +240,8 @@ class MarkdownChunker(BaseChunker):
 
         """
         # 先标记围栏代码块的范围，解析时跳过
-        fenced_ranges = self._find_fenced_code_ranges(text)
+        fenced_ranges = iter(self._find_fenced_code_ranges(text))
+        fence = next(fenced_ranges, None)
 
         # 匹配 Markdown 标题行（支持 # 后有或无空格）
         heading_pattern = re.compile(
@@ -250,11 +251,13 @@ class MarkdownChunker(BaseChunker):
         # 找到所有标题及其位置（排除代码块内的）
         headings = []
         for match in heading_pattern.finditer(text):
-            if self._is_in_fenced_block(match.start(), fenced_ranges):
+            start = match.start()
+            while fence is not None and fence[1] <= start:
+                fence = next(fenced_ranges, None)
+            if fence is not None and fence[0] <= start:
                 continue
             level = len(match.group(1))
             title = match.group(2).strip()
-            start = match.start()
             end = match.end()
             headings.append(
                 {"level": level, "title": title, "start": start, "end": end}
@@ -337,11 +340,3 @@ class MarkdownChunker(BaseChunker):
             continue
 
         return ranges
-
-    @staticmethod
-    def _is_in_fenced_block(pos: int, ranges: list[tuple[int, int]]) -> bool:
-        """判断给定位置是否在围栏代码块内"""
-        for start, end in ranges:
-            if start <= pos < end:
-                return True
-        return False
