@@ -500,26 +500,62 @@ async def _materialize_media_ref(
             parsed = urlparse(media_ref)
             target_suffix = Path(parsed.path).suffix or suffix
             target_path = _temp_media_path(media_type, target_suffix)
+        fd, reserved_path = tempfile.mkstemp(
+            prefix=f"{target_path.stem}_",
+            suffix=target_path.suffix,
+            dir=target_path.parent,
+        )
+        os.close(fd)
+        target_path = Path(reserved_path)
         cleanup_paths.append(target_path)
         try:
             await download_file(media_ref, str(target_path))
+            mime_type = _guess_mime_type(target_path)
+            if media_type == "image":
+                detected_mime_type = await detect_image_mime_type_async(
+                    target_path,
+                    default_mime_type=None,
+                )
+                if detected_mime_type:
+                    mime_type = detected_mime_type
+                    detected_suffix = _extension_from_mime_type(detected_mime_type)
+                    if (
+                        detected_suffix
+                        and target_path.suffix.lower() != detected_suffix
+                    ):
+                        detected_path = _temp_media_path("image", detected_suffix)
+                        fd, reserved_path = tempfile.mkstemp(
+                            prefix=f"{detected_path.stem}_",
+                            suffix=detected_path.suffix,
+                            dir=detected_path.parent,
+                        )
+                        os.close(fd)
+                        detected_path = Path(reserved_path)
+                        cleanup_paths.append(detected_path)
+                        rename_task = asyncio.create_task(
+                            asyncio.to_thread(os.replace, target_path, detected_path)
+                        )
+                        try:
+                            await asyncio.shield(rename_task)
+                        except asyncio.CancelledError:
+                            # The worker keeps running after cancellation. Wait for it
+                            # before cleanup so it cannot replace a reused path later.
+                            while not rename_task.done():
+                                try:
+                                    await asyncio.shield(rename_task)
+                                except asyncio.CancelledError:
+                                    continue
+                                except Exception:
+                                    break
+                            try:
+                                rename_task.result()
+                            except Exception:
+                                pass
+                            raise
+                        target_path = detected_path
         except (Exception, asyncio.CancelledError):
             _cleanup_paths(cleanup_paths)
             raise
-        mime_type = _guess_mime_type(target_path)
-        if media_type == "image":
-            detected_mime_type = await detect_image_mime_type_async(
-                target_path,
-                default_mime_type=None,
-            )
-            if detected_mime_type:
-                mime_type = detected_mime_type
-                detected_suffix = _extension_from_mime_type(detected_mime_type)
-                if detected_suffix and target_path.suffix.lower() != detected_suffix:
-                    detected_path = _temp_media_path("image", detected_suffix)
-                    await asyncio.to_thread(target_path.rename, detected_path)
-                    cleanup_paths[-1] = detected_path
-                    target_path = detected_path
         return _LocalMediaFile(
             path=target_path,
             mime_type=mime_type,
