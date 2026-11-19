@@ -51,7 +51,8 @@ async def save_upload_stream(
         UploadTooLargeError: The upload exceeded ``max_bytes``.
     """
     path = Path(dest)
-    temp_path = path.with_name(f"{path.name}.{uuid.uuid4().hex}.tmp")
+    # Keep the sibling name bounded even when the destination reaches NAME_MAX.
+    temp_path = path.with_name(f".upload-{uuid.uuid4().hex}.tmp")
     try:
         await upload.seek(0)
     except Exception:
