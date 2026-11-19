@@ -1129,3 +1129,110 @@ async def test_webhook_send_by_session_use_markdown_config_false_sends_content()
     assert kwargs["content"] == "webhook plain content"
     assert "markdown" not in kwargs
     assert "msg_type" not in kwargs
+
+
+@pytest.mark.asyncio
+async def test_passive_reply_echo_builds_no_reply_component():
+    """A `message_type=103` echo with no message id is not a user quote.
+
+    QQ tags a passive reply with 103 and puts the previous message in
+    `msg_elements`, so an ordinary `@bot` after a reply arrives looking like a
+    quote. Downstream plugins then verify the wrong message.
+    """
+    _, message = _dispatch_group_message(
+        _make_group_payload(
+            content="is the earth flat?",
+            message_type=103,
+            message_reference=None,
+            msg_elements=[
+                {
+                    "content": "the previous bot answer",
+                    "attachments": [],
+                }
+            ],
+        )
+    )
+
+    abm = await QQOfficialPlatformAdapter._parse_from_qqofficial(
+        message,
+        MessageType.GROUP_MESSAGE,
+    )
+
+    assert not any(isinstance(component, Reply) for component in abm.message)
+    assert [
+        component.text for component in abm.message if isinstance(component, Plain)
+    ] == ["is the earth flat?"]
+
+
+@pytest.mark.asyncio
+async def test_quoted_element_id_still_builds_reply_without_reference():
+    """A quoted element carrying its own id is a real quote even without `message_reference`."""
+    _, message = _dispatch_group_message(
+        _make_group_payload(
+            content="answer",
+            message_type=103,
+            message_reference=None,
+            msg_elements=[
+                {
+                    "id": "element-7",
+                    "content": "quoted text",
+                    "attachments": [],
+                }
+            ],
+        )
+    )
+
+    abm = await QQOfficialPlatformAdapter._parse_from_qqofficial(
+        message,
+        MessageType.GROUP_MESSAGE,
+    )
+
+    reply = abm.message[0]
+    assert isinstance(reply, Reply)
+    assert reply.id == "element-7"
+    assert reply.message_str == "quoted text"
+
+
+@pytest.mark.parametrize(
+    "quoted_content",
+    [
+        "[附件1] 类型:图片 URL:https://multimedia.example.com/chart.png",
+        (
+            "=== 消息 1 ===\n"
+            "[消息类型] 引用消息\n"
+            "[附件1] 类型:图片 文件名:chart.png 尺寸:2117x287 大小:57.3KB "
+            "URL:https://multimedia.example.com/chart.png\n"
+            "\n"
+            "=== 消息 2 ===\n"
+            "[消息内容] the old message text"
+        ),
+    ],
+)
+@pytest.mark.asyncio
+async def test_quoted_attachment_like_text_stays_literal(quoted_content: str):
+    """Text without structured attachment provenance must not become an image."""
+    _, message = _dispatch_group_message(
+        _make_group_payload(
+            content="answer",
+            message_type=103,
+            message_reference={"message_id": "quoted-1"},
+            msg_elements=[{"content": quoted_content, "attachments": []}],
+        )
+    )
+
+    abm = await QQOfficialPlatformAdapter._parse_from_qqofficial(
+        message,
+        MessageType.GROUP_MESSAGE,
+    )
+
+    reply = abm.message[0]
+    assert isinstance(reply, Reply)
+    assert reply.id == "quoted-1"
+    assert reply.message_str == quoted_content
+    assert not any(isinstance(component, Image) for component in reply.chain)
+    assert (
+        "".join(
+            component.text for component in reply.chain if isinstance(component, Plain)
+        )
+        == quoted_content
+    )
