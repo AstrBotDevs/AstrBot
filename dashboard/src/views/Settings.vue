@@ -797,12 +797,15 @@ const systemConfigGroups = computed(() => {
         ]),
         createGroup('tempStorage', [
             'temp_dir_max_size'
+        ]),
+        createGroup('usageData', [
+            'disable_metrics'
         ])
     ].filter((group) => Object.keys(group.metadata[group.key].items).length > 0);
 });
 
 const generalSystemConfigGroups = computed(() => systemConfigGroups.value.filter((group) => (
-    group.key === 'runtime' || group.key === 'logs' || group.key === 'tempStorage'
+    group.key === 'runtime' || group.key === 'logs' || group.key === 'tempStorage' || group.key === 'usageData'
 )));
 const networkSystemConfigGroups = computed(() => systemConfigGroups.value.filter((group) => (
     group.key === 'network'

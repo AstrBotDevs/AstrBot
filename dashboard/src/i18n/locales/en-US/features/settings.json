@@ -65,6 +65,10 @@
       "tempStorage": {
         "title": "Cache",
         "subtitle": "Automatic cleanup threshold for the temporary directory."
+      },
+      "usageData": {
+        "title": "Usage Data",
+        "subtitle": "Collection and opt-out of anonymous usage data."
       }
     },
     "timePreview": {
