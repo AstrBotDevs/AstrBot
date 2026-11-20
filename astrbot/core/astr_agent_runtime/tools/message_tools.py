@@ -159,7 +159,7 @@ class SendMessageToUserTool(FunctionTool[AstrAgentContext]):
             messages[1:] if messages and messages[0].role == "system" else messages,
             include_temporary=True,
         )
-        writer = getattr(context.context, "conversation_events", None)
+        writer = context.context.conversation_events
         if writer is not None:
             await writer.save_history(history, origin="system")
         else:

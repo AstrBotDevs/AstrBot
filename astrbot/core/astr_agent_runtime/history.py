@@ -102,7 +102,7 @@ async def save_agent_history(
     if delivered_texts and messages_to_save:
         final = messages_to_save[-1]
         persisted = dump_messages([final])
-        content = persisted[0].get("content") if persisted else None
+        content = persisted[0].get("content")
         final_text = (
             content
             if isinstance(content, str)

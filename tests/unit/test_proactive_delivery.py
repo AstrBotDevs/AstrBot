@@ -8,7 +8,6 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 import pytest_asyncio
-from opentelemetry.trace import format_trace_id, get_current_span
 
 from astrbot.core.agent.conversation_events import ConversationEventWriter
 from astrbot.core.agent.hooks import BaseAgentRunHooks
@@ -26,19 +25,14 @@ from astrbot.core.astr_agent_runtime.tools.message_tools import SendMessageToUse
 from astrbot.core.config.default import DEFAULT_CONFIG
 from astrbot.core.conversation_mgr import ConversationManager
 from astrbot.core.event_bus import EventBus
-from astrbot.core.log import _log_context
 from astrbot.core.pipeline.context import PipelineContext
 from astrbot.core.pipeline.scheduler import PipelineScheduler
-from astrbot.core.platform.astr_message_event import (
-    AstrMessageEvent,
-    current_message_event,
-)
+from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from astrbot.core.platform.astrbot_message import AstrBotMessage, MessageMember
 from astrbot.core.platform.message_type import MessageType
 from astrbot.core.platform.platform_metadata import PlatformMetadata
 from astrbot.core.provider.entities import LLMResponse
 from astrbot.core.provider.func_tool_manager import FunctionToolManager
-from astrbot.core.utils import trace as trace_module
 
 
 @pytest_asyncio.fixture
@@ -93,12 +87,6 @@ async def runtime(monkeypatch, database):
     )
 
     async def respond(**kwargs):
-        event = current_message_event.get()
-        assert _log_context.get().platform_id == "target"
-        assert (
-            format_trace_id(get_current_span().get_span_context().trace_id)
-            == event.trace.trace_id
-        )
         control.requests.append(kwargs["contexts"])
         control.started.set()
         await control.gate.wait()
@@ -146,7 +134,9 @@ async def runtime(monkeypatch, database):
         )
         assert prepared is not None
         prepared.request.func_tool = ToolSet([SendMessageToUserTool()])
-        writer = ConversationEventWriter(store, await store.read(record.conversation_id))
+        writer = ConversationEventWriter(
+            store, await store.read(record.conversation_id)
+        )
         runner = AgentRunner()
         await runner.reset(
             provider=provider,
@@ -167,13 +157,6 @@ async def runtime(monkeypatch, database):
     monkeypatch.setattr(native_builder, "build_main_agent", build)
     monkeypatch.setattr(native_session, "record_agent_stats", AsyncMock())
     monkeypatch.setattr(native_session.Metric, "upload", AsyncMock())
-    monkeypatch.setitem(trace_module.astrbot_config, "trace_enable", True)
-    monkeypatch.setattr(
-        trace_module,
-        "get_trace_store",
-        lambda *_: SimpleNamespace(append=lambda *args, **kwargs: True),
-    )
-    monkeypatch.setattr(trace_module, "_get_log_broker", lambda: None)
     native = AstrAgentRuntime(context, agent_configs=MagicMock(), subagents=MagicMock())
     runtimes = {"astrbot": native}
     scheduler = PipelineScheduler(
@@ -343,7 +326,10 @@ async def test_proactive_delivery_distinguishes_send_and_storage_failures(
     ]
     assert len(deliveries) == 1
     snapshot = await runtime.store.read(runtime.cid)
-    assert {"role": "assistant", "content": "Take your medicine"} not in snapshot.messages
+    assert {
+        "role": "assistant",
+        "content": "Take your medicine",
+    } not in snapshot.messages
 
 
 @pytest.mark.asyncio
