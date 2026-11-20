@@ -439,7 +439,10 @@ async def test_provider_manager_async_selection_uses_effective_config():
     manager.inst_map = {"preferred": preferred_provider}
     manager.acm = MagicMock()
     manager.acm.get_conf.return_value = {
-        "agent": {"runtime": "astrbot", "config": {"model": {"provider_id": "preferred"}}}
+        "agent": {
+            "runtime": "astrbot",
+            "config": {"model": {"provider_id": "preferred"}},
+        }
     }
 
     result = await manager.get_using_provider_async(
@@ -468,9 +471,7 @@ class TestGetSessionConv:
         conv_mgr.get_curr_conversation_id.assert_called_once_with(
             mock_event.unified_msg_origin
         )
-        conv_mgr.db.get_conversation_by_id.assert_called_once_with(
-            "existing-conv-id"
-        )
+        conv_mgr.db.get_conversation_by_id.assert_called_once_with("existing-conv-id")
 
     @pytest.mark.asyncio
     async def test_get_session_conv_create_new(self, mock_event, mock_context):
@@ -2344,6 +2345,7 @@ class TestBuildMainAgent:
             prompt="describe this",
             image_urls=[valid_image_path],
             model="text-model",
+            extra_body={"reasoning_effort": "max", "custom_flag": True},
         )
         mock_context.get_provider_by_id.side_effect = lambda provider_id: (
             image_provider if provider_id == "image-provider" else None
@@ -2380,6 +2382,7 @@ class TestBuildMainAgent:
         assert result.provider is image_provider
         assert result.provider_request.image_urls == [valid_image_path]
         assert result.provider_request.model is None
+        assert result.provider_request.extra_body == {"custom_flag": True}
         assert mock_runner.reset.call_args.kwargs["provider"] is image_provider
         assert mock_runner.reset.call_args.kwargs["fallback_providers"] == []
 
@@ -3739,7 +3742,9 @@ async def test_wakeup_collects_current_conversation_without_an_explicit_request(
     from astrbot.core.platform.message_session import MessageSession
 
     history = [{"role": "user", "content": "Existing context"}]
-    conversation = SimpleNamespace(cid="conversation", history=json.dumps(history), content=history)
+    conversation = SimpleNamespace(
+        cid="conversation", history=json.dumps(history), content=history
+    )
     manager = SimpleNamespace(
         get_curr_conversation_id=AsyncMock(return_value="conversation"),
         db=SimpleNamespace(get_conversation_by_id=AsyncMock(return_value=conversation)),

@@ -291,11 +291,17 @@ class ProviderGoogleGenAI(Provider):
                 )
             )
 
-        extra_body = self.provider_config.get("custom_extra_body")
-        if extra_body is None:
-            extra_body = {}
-        if not isinstance(extra_body, dict):
+        custom_extra_body = self.provider_config.get("custom_extra_body")
+        if custom_extra_body is None:
+            custom_extra_body = {}
+        if not isinstance(custom_extra_body, dict):
             raise ValueError("Gemini custom_extra_body must be a JSON object.")
+        extra_body = dict(custom_extra_body)
+        request_extra_body = payloads.get("extra_body")
+        if isinstance(request_extra_body, dict):
+            for key, value in request_extra_body.items():
+                if key != "reasoning_effort" or is_gemini_4:
+                    extra_body[key] = value
 
         thinking_config = None
         thinking_settings = self.provider_config.get("gm_thinking_config") or {}
@@ -1028,6 +1034,8 @@ class ProviderGoogleGenAI(Provider):
         model = model or self.get_model()
 
         payloads = {"messages": context_query, "model": model}
+        if isinstance(extra_body := kwargs.get("extra_body"), dict) and extra_body:
+            payloads["extra_body"] = dict(extra_body)
         if func_tool and not func_tool.empty():
             payloads["tool_choice"] = tool_choice
 
@@ -1100,6 +1108,8 @@ class ProviderGoogleGenAI(Provider):
         model = model or self.get_model()
 
         payloads = {"messages": context_query, "model": model}
+        if isinstance(extra_body := kwargs.get("extra_body"), dict) and extra_body:
+            payloads["extra_body"] = dict(extra_body)
         if func_tool and not func_tool.empty():
             payloads["tool_choice"] = tool_choice
 

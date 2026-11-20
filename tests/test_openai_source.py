@@ -2259,3 +2259,210 @@ async def test_query_filters_empty_list_content_assistant_message(monkeypatch):
         assert messages[1] == {"role": "user", "content": "again"}
     finally:
         await provider.terminate()
+
+
+@pytest.mark.asyncio
+async def test_query_merges_request_extra_body_over_custom_extra_body(monkeypatch):
+    custom_extra_body = {"reasoning_effort": "low", "temperature": 0.2}
+    provider = _make_provider({"custom_extra_body": custom_extra_body})
+    try:
+        captured_kwargs: dict[str, object] = {}
+
+        async def fake_create(**kwargs):
+            captured_kwargs.update(kwargs)
+            return ChatCompletion.model_validate(
+                {
+                    "id": "chatcmpl-test",
+                    "object": "chat.completion",
+                    "created": 0,
+                    "model": "o3-mini",
+                    "choices": [
+                        {
+                            "index": 0,
+                            "message": {"role": "assistant", "content": "ok"},
+                            "finish_reason": "stop",
+                        }
+                    ],
+                }
+            )
+
+        monkeypatch.setattr(provider.client.chat.completions, "create", fake_create)
+
+        payloads, _ = await provider._prepare_chat_payload(
+            "hi",
+            model="o3-mini",
+            extra_body={"reasoning_effort": "high"},
+        )
+        # Running _query twice simulates an API key retry and must retain extra_body.
+        await provider._query(payloads=payloads, tools=None)
+        captured_kwargs.clear()
+        await provider._query(payloads=payloads, tools=None)
+
+        assert captured_kwargs["extra_body"] == {
+            "reasoning_effort": "high",
+            "temperature": 0.2,
+        }
+        assert custom_extra_body == {"reasoning_effort": "low", "temperature": 0.2}
+    finally:
+        await provider.terminate()
+
+
+@pytest.mark.asyncio
+async def test_query_updates_nested_reasoning_object_instead_of_sending_both(
+    monkeypatch,
+):
+    custom_extra_body = {"reasoning": {"effort": "low", "exclude": False}}
+    provider = _make_provider({"custom_extra_body": custom_extra_body})
+    try:
+        captured_kwargs: dict[str, object] = {}
+
+        async def fake_create(**kwargs):
+            captured_kwargs.update(kwargs)
+            return ChatCompletion.model_validate(
+                {
+                    "id": "chatcmpl-test",
+                    "object": "chat.completion",
+                    "created": 0,
+                    "model": "openai/gpt-5.4",
+                    "choices": [
+                        {
+                            "index": 0,
+                            "message": {"role": "assistant", "content": "ok"},
+                            "finish_reason": "stop",
+                        }
+                    ],
+                }
+            )
+
+        monkeypatch.setattr(provider.client.chat.completions, "create", fake_create)
+
+        payloads, _ = await provider._prepare_chat_payload(
+            "hi",
+            model="openai/gpt-5.4",
+            extra_body={"reasoning_effort": "high"},
+        )
+        await provider._query(payloads=payloads, tools=None)
+
+        assert captured_kwargs["extra_body"] == {
+            "reasoning": {"effort": "high", "exclude": False},
+        }
+        assert custom_extra_body == {"reasoning": {"effort": "low", "exclude": False}}
+    finally:
+        await provider.terminate()
+
+
+@pytest.mark.asyncio
+async def test_query_and_stream_clear_openrouter_budget_and_deepseek_thinking(
+    monkeypatch,
+):
+    async def _empty_stream():
+        if False:
+            yield None
+
+    # 1. OpenRouter: reasoning.max_tokens and reasoning.enabled are mutually
+    # exclusive with reasoning.effort and must be removed on effort override.
+    openrouter_custom = {
+        "reasoning": {"max_tokens": 4096, "enabled": True, "exclude": False}
+    }
+    provider_or = _make_provider({"custom_extra_body": openrouter_custom})
+    try:
+        captured: list[dict[str, object]] = []
+
+        async def fake_create(**kwargs):
+            captured.append(kwargs)
+            if kwargs.get("stream"):
+                return _empty_stream()
+            return ChatCompletion.model_validate(
+                {
+                    "id": "chatcmpl-or",
+                    "object": "chat.completion",
+                    "created": 0,
+                    "model": "openai/gpt-5.4",
+                    "choices": [
+                        {
+                            "index": 0,
+                            "message": {"role": "assistant", "content": "ok"},
+                            "finish_reason": "stop",
+                        }
+                    ],
+                }
+            )
+
+        monkeypatch.setattr(provider_or.client.chat.completions, "create", fake_create)
+        payloads, _ = await provider_or._prepare_chat_payload(
+            "hi",
+            model="openai/gpt-5.4",
+            extra_body={"reasoning_effort": "medium"},
+        )
+        await provider_or._query(payloads=payloads, tools=None)
+        async for _ in provider_or._query_stream(payloads=payloads, tools=None):
+            pass
+
+        assert len(captured) == 2
+        for call in captured:
+            assert call["extra_body"] == {
+                "reasoning": {"effort": "medium", "exclude": False},
+            }
+        assert openrouter_custom == {
+            "reasoning": {"max_tokens": 4096, "enabled": True, "exclude": False}
+        }
+    finally:
+        await provider_or.terminate()
+
+    # 2. DeepSeek: config-level thinking.type must be cleared when WebChat sends
+    # reasoning_effort, and preserved when no request effort is present.
+    deepseek_custom = {"thinking": {"type": "disabled"}}
+    provider_ds = _make_provider(
+        {"provider": "deepseek", "custom_extra_body": deepseek_custom}
+    )
+    try:
+        captured_ds: list[dict[str, object]] = []
+
+        async def fake_ds_create(**kwargs):
+            captured_ds.append(kwargs)
+            if kwargs.get("stream"):
+                return _empty_stream()
+            return ChatCompletion.model_validate(
+                {
+                    "id": "chatcmpl-ds",
+                    "object": "chat.completion",
+                    "created": 0,
+                    "model": "deepseek-v4-flash",
+                    "choices": [
+                        {
+                            "index": 0,
+                            "message": {"role": "assistant", "content": "ok"},
+                            "finish_reason": "stop",
+                        }
+                    ],
+                }
+            )
+
+        monkeypatch.setattr(
+            provider_ds.client.chat.completions, "create", fake_ds_create
+        )
+        for effort, expected in [
+            ("high", {"reasoning_effort": "high"}),
+            ("none", {"thinking": {"type": "disabled"}}),
+        ]:
+            payloads_override, _ = await provider_ds._prepare_chat_payload(
+                "hi", model="deepseek-v4-flash", extra_body={"reasoning_effort": effort}
+            )
+            await provider_ds._query(payloads=payloads_override, tools=None)
+            async for _ in provider_ds._query_stream(
+                payloads=payloads_override, tools=None
+            ):
+                pass
+            assert [call["extra_body"] for call in captured_ds] == [expected, expected]
+            captured_ds.clear()
+
+        payloads_default, _ = await provider_ds._prepare_chat_payload(
+            "hi",
+            model="deepseek-v4-flash",
+        )
+        await provider_ds._query(payloads=payloads_default, tools=None)
+
+        assert captured_ds[0]["extra_body"] == {"thinking": {"type": "disabled"}}
+        assert deepseek_custom == {"thinking": {"type": "disabled"}}
+    finally:
+        await provider_ds.terminate()

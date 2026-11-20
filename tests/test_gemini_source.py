@@ -446,3 +446,68 @@ async def test_gemini_stream_keeps_reasoning_from_tool_call_chunk(monkeypatch):
 
     final = responses[-1]
     assert final.reasoning_content == "weighing optionsdeciding to call"
+
+
+@pytest.mark.asyncio
+async def test_gemini_request_extra_body_overrides_custom_extra_body():
+    provider = ProviderGoogleGenAI.__new__(ProviderGoogleGenAI)
+    custom_extra_body = {"reasoning_effort": "low", "max_output_tokens": 2048}
+    provider.provider_config = {"custom_extra_body": custom_extra_body}
+    provider.provider_settings = {}
+    provider.model_name = "gemini-4-neon"
+    provider.safety_settings = []
+
+    config = await provider._prepare_query_config(
+        {
+            "model": "gemini-4-neon",
+            "extra_body": {"reasoning_effort": "xhigh"},
+        }
+    )
+
+    assert config.thinking_config is not None
+    assert config.thinking_config.model_dump(exclude_none=True) == {
+        "thinking_level": types.ThinkingLevel("XHIGH"),
+    }
+    assert config.max_output_tokens == 2048
+    assert custom_extra_body == {"reasoning_effort": "low", "max_output_tokens": 2048}
+
+
+@pytest.mark.asyncio
+async def test_gemini_request_extra_body_invalid_level_falls_back_to_model_default():
+    provider = ProviderGoogleGenAI.__new__(ProviderGoogleGenAI)
+    provider.provider_config = {"custom_extra_body": {"reasoning_effort": "low"}}
+    provider.provider_settings = {}
+    provider.model_name = "gemini-4-argon"
+    provider.safety_settings = []
+
+    config = await provider._prepare_query_config(
+        {
+            "model": "gemini-4-argon",
+            "extra_body": {"reasoning_effort": "xhigh"},
+        }
+    )
+
+    assert "thinking_config" not in config.model_dump(exclude_none=True)
+
+
+def test_gemini_4_thinking_levels_match_frontend_registry():
+    import json
+    from pathlib import Path
+
+    json_path = (
+        Path(__file__).resolve().parents[1]
+        / "dashboard"
+        / "src"
+        / "utils"
+        / "geminiThinkingLevels.json"
+    )
+    frontend_registry = json.loads(json_path.read_text(encoding="utf-8"))
+
+    assert [level.upper() for level in frontend_registry["fallback"]] == [
+        level for level in gemini_source.GEMINI_4_FALLBACK_THINKING_LEVELS
+        if level != "XHIGH"
+    ]
+    assert {
+        model_id: tuple(level.upper() for level in levels)
+        for model_id, levels in frontend_registry["models"].items()
+    } == gemini_source.GEMINI_4_THINKING_LEVELS

@@ -397,3 +397,215 @@ async def test_parse_failed_response_raises_provider_error():
 
     with pytest.raises(RuntimeError, match="server_error: failed"):
         await provider._parse_response(response, tools=None)
+
+
+@pytest.mark.asyncio
+async def test_responses_request_extra_body_overrides_reasoning_and_survives_retry(
+    monkeypatch,
+):
+    custom_extra_body = {
+        "reasoning": {"effort": "low", "summary": "auto"},
+        "max_tokens": 256,
+    }
+    provider = _make_provider({"custom_extra_body": custom_extra_body})
+    captured_calls: list[dict] = []
+
+    async def fake_create(**kwargs):
+        captured_calls.append(kwargs)
+        return _make_response(
+            [
+                {
+                    "type": "message",
+                    "id": "msg_1",
+                    "role": "assistant",
+                    "status": "completed",
+                    "content": [
+                        {"type": "output_text", "text": "done", "annotations": []}
+                    ],
+                }
+            ]
+        )
+
+    monkeypatch.setattr(provider.client.responses, "create", fake_create)
+
+    payloads, _ = await provider._prepare_chat_payload(
+        "hello",
+        model="gpt-6.1-sol",
+        extra_body={"reasoning_effort": "max"},
+    )
+    await provider._query(payloads, tools=None)
+    await provider._query(payloads, tools=None)
+
+    assert len(captured_calls) == 2
+    for call in captured_calls:
+        assert call["extra_body"] == {
+            "reasoning": {"effort": "max", "summary": "auto"},
+            "max_output_tokens": 256,
+        }
+    assert custom_extra_body == {
+        "reasoning": {"effort": "low", "summary": "auto"},
+        "max_tokens": 256,
+    }
+
+
+@pytest.mark.asyncio
+async def test_responses_request_default_param_override_drops_shadowed_custom_key(
+    monkeypatch,
+):
+    custom_extra_body = {"temperature": 0.9, "reasoning": {"effort": "low"}}
+    provider = _make_provider({"custom_extra_body": custom_extra_body})
+    captured: dict = {}
+
+    async def fake_create(**kwargs):
+        captured.update(kwargs)
+        return _make_response(
+            [
+                {
+                    "type": "message",
+                    "id": "msg_2",
+                    "role": "assistant",
+                    "status": "completed",
+                    "content": [
+                        {"type": "output_text", "text": "done", "annotations": []}
+                    ],
+                }
+            ]
+        )
+
+    monkeypatch.setattr(provider.client.responses, "create", fake_create)
+
+    payloads, _ = await provider._prepare_chat_payload(
+        "hello",
+        model="gpt-5.4",
+        extra_body={"temperature": 0.2, "reasoning_effort": "xhigh"},
+    )
+    await provider._query(payloads, tools=None)
+
+    assert captured["temperature"] == 0.2
+    assert "temperature" not in captured["extra_body"]
+    assert captured["extra_body"]["reasoning"] == {"effort": "xhigh"}
+
+
+@pytest.mark.asyncio
+async def test_responses_request_native_params_win_over_custom_aliases(monkeypatch):
+    custom_extra_body = {"reasoning_effort": "high", "max_tokens": 8192}
+    provider = _make_provider({"custom_extra_body": custom_extra_body})
+    captured_calls: list[dict] = []
+
+    async def fake_stream():
+        yield SimpleNamespace(
+            type="response.completed",
+            response=_make_response(
+                [
+                    {
+                        "type": "message",
+                        "id": "msg_3",
+                        "role": "assistant",
+                        "status": "completed",
+                        "content": [
+                            {"type": "output_text", "text": "done", "annotations": []}
+                        ],
+                    }
+                ]
+            ),
+        )
+
+    async def fake_create(**kwargs):
+        captured_calls.append(kwargs)
+        if kwargs.get("stream"):
+            return fake_stream()
+        return _make_response(
+            [
+                {
+                    "type": "message",
+                    "id": "msg_3",
+                    "role": "assistant",
+                    "status": "completed",
+                    "content": [
+                        {"type": "output_text", "text": "done", "annotations": []}
+                    ],
+                }
+            ]
+        )
+
+    monkeypatch.setattr(provider.client.responses, "create", fake_create)
+
+    payloads, _ = await provider._prepare_chat_payload(
+        "hello",
+        model="gpt-5.4",
+        extra_body={"reasoning": {"effort": "low"}, "max_output_tokens": 256},
+    )
+    await provider._query(payloads, tools=None)
+    async for _ in provider._query_stream(payloads, tools=None):
+        pass
+
+    assert len(captured_calls) == 2
+    for call in captured_calls:
+        assert call["reasoning"] == {"effort": "low"}
+        assert call["max_output_tokens"] == 256
+        assert "reasoning" not in call["extra_body"]
+        assert "reasoning_effort" not in call["extra_body"]
+        assert "max_output_tokens" not in call["extra_body"]
+        assert "max_tokens" not in call["extra_body"]
+
+
+@pytest.mark.asyncio
+async def test_responses_request_max_tokens_alias_overrides_config_max_output_tokens(
+    monkeypatch,
+):
+    custom_extra_body = {"max_output_tokens": 8192}
+    provider = _make_provider({"custom_extra_body": custom_extra_body})
+    captured_calls: list[dict] = []
+
+    async def fake_stream():
+        yield SimpleNamespace(
+            type="response.completed",
+            response=_make_response(
+                [
+                    {
+                        "type": "message",
+                        "id": "msg_4",
+                        "role": "assistant",
+                        "status": "completed",
+                        "content": [
+                            {"type": "output_text", "text": "done", "annotations": []}
+                        ],
+                    }
+                ]
+            ),
+        )
+
+    async def fake_create(**kwargs):
+        captured_calls.append(kwargs)
+        if kwargs.get("stream"):
+            return fake_stream()
+        return _make_response(
+            [
+                {
+                    "type": "message",
+                    "id": "msg_4",
+                    "role": "assistant",
+                    "status": "completed",
+                    "content": [
+                        {"type": "output_text", "text": "done", "annotations": []}
+                    ],
+                }
+            ]
+        )
+
+    monkeypatch.setattr(provider.client.responses, "create", fake_create)
+
+    payloads, _ = await provider._prepare_chat_payload(
+        "hello",
+        model="gpt-5.4",
+        extra_body={"max_tokens": 256},
+    )
+    await provider._query(payloads, tools=None)
+    async for _ in provider._query_stream(payloads, tools=None):
+        pass
+
+    assert len(captured_calls) == 2
+    for call in captured_calls:
+        assert call["extra_body"]["max_output_tokens"] == 256
+        assert "max_tokens" not in call["extra_body"]
+    assert custom_extra_body == {"max_output_tokens": 8192}
