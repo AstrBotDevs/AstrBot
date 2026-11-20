@@ -77,6 +77,7 @@ async def runtime(monkeypatch, database):
         get_event_queue=lambda: queue,
         get_platform_inst=lambda _: SimpleNamespace(meta=lambda: metadata),
         get_config=lambda **_: config,
+        locale=lambda umo=None: config["platform_settings"].get("locale", "zh-CN"),
         astrbot_config_mgr=SimpleNamespace(
             _create_message_config=lambda _: (copy.deepcopy(config), frozenset())
         ),
@@ -142,7 +143,12 @@ async def runtime(monkeypatch, database):
             provider=provider,
             request=prepared.request,
             run_context=ContextWrapper(
-                context=SimpleNamespace(event=event, context=context)
+                context=SimpleNamespace(
+                    event=event,
+                    context=context,
+                    send_to_user=True,
+                    _output_turn=None,
+                )
             ),
             tool_executor=FunctionToolExecutor,
             agent_hooks=BaseAgentRunHooks(),
