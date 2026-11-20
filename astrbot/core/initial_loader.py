@@ -25,52 +25,58 @@ class InitialLoader:
         self.webui_dir: str | None = None
 
     async def start(self) -> None:
-        core_lifecycle = AstrBotCoreLifecycle(self.log_broker, self.db)
+        loop = asyncio.get_running_loop()
+        main_task = asyncio.current_task()
+        # docker stop 发送 SIGTERM，而 PID 1 没有处理器时内核会忽略它。
+        # 在初始化之前注册，像 Ctrl+C 一样取消主任务以走优雅退出流程。
+        sigterm_installed = False
+        if main_task is not None:
+            try:
+                loop.add_signal_handler(signal.SIGTERM, main_task.cancel)
+                sigterm_installed = True
+            except (NotImplementedError, RuntimeError):
+                # Windows event loops do not support add_signal_handler.
+                pass
 
         try:
-            await core_lifecycle.initialize()
-        except Exception as e:
-            logger.critical(traceback.format_exc())
-            logger.critical(f"😭 Failed to initialize AstrBot: {e} !!!")
-            return
+            core_lifecycle = AstrBotCoreLifecycle(self.log_broker, self.db)
 
-        core_task = core_lifecycle.start()
+            try:
+                await core_lifecycle.initialize()
+            except asyncio.CancelledError:
+                logger.info("🌈 Shutting down AstrBot...")
+                await self.db.engine.dispose()
+                return
+            except Exception as e:
+                logger.critical(traceback.format_exc())
+                logger.critical(f"😭 Failed to initialize AstrBot: {e} !!!")
+                return
 
-        webui_dir = self.webui_dir
+            core_task = core_lifecycle.start()
 
-        self.dashboard_server = AstrBotDashboard(
-            core_lifecycle,
-            self.db,
-            core_lifecycle.dashboard_shutdown_event,
-            webui_dir,
-        )
+            webui_dir = self.webui_dir
 
-        coro = self.dashboard_server.run()
-        if coro:
-            # 启动核心任务和仪表板服务器
-            task = asyncio.gather(core_task, coro)
-        else:
-            task = asyncio.ensure_future(core_task)
-        sigterm_installed = self._install_sigterm_handler(task)
-        try:
-            await task  # 整个AstrBot在这里运行
-        except asyncio.CancelledError:
-            logger.info("🌈 Shutting down AstrBot...")
-            await core_lifecycle.stop()
+            self.dashboard_server = AstrBotDashboard(
+                core_lifecycle,
+                self.db,
+                core_lifecycle.dashboard_shutdown_event,
+                webui_dir,
+            )
+
+            coro = self.dashboard_server.run()
+            if coro:
+                # 启动核心任务和仪表板服务器
+                task = asyncio.gather(core_task, coro)
+            else:
+                task = core_task
+            try:
+                await task  # 整个AstrBot在这里运行
+            except asyncio.CancelledError:
+                logger.info("🌈 Shutting down AstrBot...")
+                if sigterm_installed:
+                    # 退出过程中忽略重复的 SIGTERM，避免打断 stop()
+                    loop.add_signal_handler(signal.SIGTERM, lambda: None)
+                await core_lifecycle.stop()
         finally:
             if sigterm_installed:
-                asyncio.get_running_loop().remove_signal_handler(signal.SIGTERM)
-
-    @staticmethod
-    def _install_sigterm_handler(task: asyncio.Future) -> bool:
-        """Shut down gracefully on SIGTERM (e.g. ``docker stop``), like on SIGINT.
-
-        Cancelling an already-cancelled task is a no-op, so repeated signals do
-        not trigger the shutdown twice.
-        """
-        try:
-            asyncio.get_running_loop().add_signal_handler(signal.SIGTERM, task.cancel)
-        except (NotImplementedError, RuntimeError):
-            # Windows event loops do not support add_signal_handler.
-            return False
-        return True
+                loop.remove_signal_handler(signal.SIGTERM)
