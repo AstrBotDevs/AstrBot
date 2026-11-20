@@ -795,6 +795,7 @@ class TelegramPlatformAdapter(Platform):
             record = Comp.Record(file=path_wav, url=path_wav)
             record.path = path_wav
             message.message = [record]
+            _apply_caption()
 
         elif update.message.audio:
             # Audio files use their own Bot API field and do not fall back to document.
