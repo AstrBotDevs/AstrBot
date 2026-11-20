@@ -247,6 +247,8 @@ class ResultDecorateStage(Stage):
                             if not split_response:
                                 new_chain.append(comp)
                                 continue
+                            
+                            previous_plain: Plain | None = None
                             for seg in split_response:
                                 if self.content_cleanup_rule:
                                     try:
@@ -259,8 +261,18 @@ class ResultDecorateStage(Stage):
                                         )
                                         self.content_cleanup_rule = None
                                 seg = seg.strip()
+                                # 将段首的闭合引号、括号接回前一个文本段。
+                                while (
+                                    previous_plain is not None
+                                    and seg
+                                    and seg[0] in "”’」』）)]】》〉"
+                                ):
+                                    previous_plain.text += seg[0]
+                                    seg = seg[1:].lstrip()
+
                                 if seg:
-                                    new_chain.append(Plain(seg))
+                                    previous_plain = Plain(seg)
+                                    new_chain.append(previous_plain)
                         else:
                             # 非 Plain 类型的消息段不分段
                             new_chain.append(comp)
