@@ -198,14 +198,17 @@ def remove(name: str) -> None:
     if not plugin or not plugin.get("local_path"):
         raise click.ClickException(f"Plugin {name} does not exist or is not installed")
 
-    plugin_path = plugin["local_path"]
+    plugin_path = Path(plugin["local_path"])
 
     click.confirm(
         f"Are you sure you want to uninstall plugin {name}?", default=False, abort=True
     )
 
     try:
-        shutil.rmtree(plugin_path)
+        if plugin_path.is_symlink():
+            plugin_path.unlink()
+        else:
+            shutil.rmtree(plugin_path)
         click.echo(f"Plugin {name} has been uninstalled")
     except Exception as e:
         raise click.ClickException(f"Failed to uninstall plugin {name}: {e}")

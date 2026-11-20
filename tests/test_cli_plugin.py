@@ -1,5 +1,6 @@
 from pathlib import Path
 
+import httpx
 import pytest
 from click import ClickException
 from click.testing import CliRunner
@@ -106,6 +107,39 @@ def test_plugin_install_editable_rejects_existing_plugin(
 
     assert result.exit_code != 0
     assert "already exists" in result.output
+
+
+@pytest.mark.parametrize("editable", [False, True], ids=["copy", "editable"])
+def test_remove_local_plugin_preserves_source(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    request: pytest.FixtureRequest,
+    editable: bool,
+) -> None:
+    if editable:
+        request.getfixturevalue("require_symlink")
+    name = "astrbot_plugin_local_demo"
+    source = tmp_path / "source-plugin"
+    _write_astrbot_root(tmp_path)
+    _write_plugin(source, name)
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(
+        httpx.Client,
+        "get",
+        lambda self, url: httpx.Response(
+            200, request=httpx.Request("GET", url), json={}
+        ),
+    )
+
+    runner = CliRunner()
+    install_args = ["install", "-e"] if editable else ["install"]
+    installed = runner.invoke(plug, [*install_args, str(source)])
+    assert installed.exit_code == 0, installed.output
+
+    removed = runner.invoke(plug, ["remove", name], input="y\n")
+    assert removed.exit_code == 0, removed.output
+    assert not (tmp_path / "data" / "plugins" / name).exists()
+    assert (source / "main.py").read_text(encoding="utf-8") == "PLUGIN_LOADED = True\n"
 
 
 def test_plugin_install_rejects_plugin_name_with_path_separator(
