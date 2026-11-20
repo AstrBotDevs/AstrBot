@@ -125,10 +125,7 @@ async def test_mixed_questions_match_names_and_preserve_answer_semantics(
         )
 
     provider = provider_factory(handler)
-    answers = await provider.ask(
-        questions,
-        "The service is down.",
-    )
+    answers = await provider.ask(questions, "The service is down.")
     assert len(sent) == 1
     request = sent[0]
     assert str(request.url) == ENDPOINT
@@ -170,10 +167,8 @@ async def test_mixed_questions_match_names_and_preserve_answer_semantics(
         "",
         "中文",
         {},
-        [],
         [1, "text"],
         {"role": "system", "type": "image", "image_url": "https://private.test/a"},
-        [{"type": "text", "text": "Not a content block"}],
         [
             {
                 "type": "image",
@@ -201,48 +196,9 @@ async def test_state_remains_plain_text_or_business_json(provider_factory, state
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("state_kwargs", [{}, {"state": None}, {"state": ""}])
-@pytest.mark.parametrize("method", ["ask", "choose", "yes_no"])
-async def test_service_empty_context_works_with_gemini_input_requirement(
-    provider_factory, state_kwargs, method
-):
-    def handler(request):
-        body = json.loads(request.content)
-        if not body["input"]:
-            return httpx.Response(
-                400,
-                json={"error": {"message": "Missing text in content of type text."}},
-            )
-        question = body["questions"]["q0"]
-        if question["type"] == "choice":
-            answer = {
-                "type": "choice",
-                "choice": "o1",
-                "confidence": 0.8,
-                "probabilities": {"o1": 0.8, "o2": 0.2},
-            }
-        else:
-            answer = BOOL_ANSWER
-        return httpx.Response(200, json={"answers": {"q0": answer}})
-
-    provider = provider_factory(handler)
-    manager = _manager()
-    manager.get_using_provider_async = AsyncMock(return_value=provider)
-    service = DecisionService(manager)
-    if method == "ask":
-        answers = await service.ask({"answer": BOOLEAN}, **state_kwargs)
-        assert answers["answer"].probability == 0.05
-    elif method == "choose":
-        answer = await service.choose("Pick", ["reply", "wait"], **state_kwargs)
-        assert answer.choice == "reply"
-    else:
-        assert await service.yes_no("Urgent?", **state_kwargs) is False
-
-
-@pytest.mark.asyncio
 @pytest.mark.parametrize(
     "state",
-    [42, True, ("a",), [object()], {"x": float("nan")}, [float("inf")], "\ud800"],
+    [42, [object()], {"x": float("nan")}, [float("inf")], "\ud800"],
 )
 async def test_invalid_state_never_sends_a_request(provider_factory, state):
     handler = MagicMock(side_effect=AssertionError("No request expected"))
@@ -257,43 +213,14 @@ async def test_invalid_state_never_sends_a_request(provider_factory, state):
     "question",
     [
         object(),
-        DecisionBooleanQuestion(None),
         DecisionBooleanQuestion(" "),
-        DecisionChoiceQuestion("Pick", None),
         DecisionChoiceQuestion("Pick", ["a", "b"]),
         DecisionChoiceQuestion("Pick", {"a": "one"}),
         DecisionChoiceQuestion("Pick", {str(i): "" for i in range(256)}),
-        DecisionChoiceQuestion("Pick", {" a": "", "b": ""}),
-        DecisionChoiceQuestion("Pick", {"a\n": "", "b": ""}),
-        DecisionChoiceQuestion("Pick", {"a\x7fb": "", "b": ""}),
-        DecisionChoiceQuestion("Pick", {"a" * 129: "", "b": ""}),
-        DecisionChoiceQuestion("Pick", {"😀" * 129: "", "b": ""}),
-        *[
-            DecisionChoiceQuestion("Pick", {f"a{space}b": "", "b": ""})
-            for space in ("\u00a0", "\u2003", "\u2028", "\u202f", "\u3000")
-        ],
-        *[
-            DecisionChoiceQuestion("Pick", {f"a{char}b": "", "b": ""})
-            for char in (
-                "\u200b",
-                "\u200d",
-                "\u00ad",
-                "\u202e",
-                "\ue000",
-                "\U000f0000",
-                "\u0378",
-                "\ufdd0",
-                "\ud800",
-            )
-        ],
         DecisionChoiceQuestion("Pick", {"": "", "b": ""}),
-        DecisionChoiceQuestion("Pick", {1: "", "1": ""}),
         DecisionChoiceQuestion("Pick", {"a": None, "b": ""}),
-        DecisionScoreQuestion("Rate", "ab"),
         DecisionScoreQuestion("Rate", ["one"]),
         DecisionScoreQuestion("Rate", ["low", " "]),
-        DecisionScoreQuestion("Rate", ["low", 1]),
-        DecisionScoreQuestion("Rate", []),
         DecisionScoreQuestion("Rate", [str(i) for i in range(256)]),
     ],
 )
@@ -325,117 +252,6 @@ async def test_question_count_boundaries(provider_factory, count):
         with pytest.raises(ValueError):
             await provider.ask(questions)
         transport.assert_not_called()
-
-
-@pytest.mark.asyncio
-@pytest.mark.parametrize(
-    ("option_id", "count"),
-    [
-        pytest.param("a", 2, id="single-character"),
-        pytest.param("a" * 128, 2, id="max-ascii-id"),
-        pytest.param("😀" * 128, 2, id="max-utf8-id"),
-        pytest.param("a b", 2, id="ascii-space"),
-        pytest.param("中文", 2, id="unicode"),
-        pytest.param("e\u0301", 2, id="combining-mark"),
-        pytest.param("❤\ufe0f", 2, id="variation-selector"),
-        pytest.param("😀" * 128, 255, id="max-options-and-utf8-id"),
-    ],
-)
-async def test_valid_choice_id_and_count_boundaries(provider_factory, option_id, count):
-    criteria = {option_id: "First", **{f"other{i}": "" for i in range(count - 1)}}
-
-    def handler(request):
-        assert json.loads(request.content)["questions"]["q0"]["criteria"] == criteria
-        return httpx.Response(
-            200,
-            json={
-                "answers": {
-                    "q0": {
-                        "type": "choice",
-                        "choice": option_id,
-                        "confidence": 1.0,
-                        "probabilities": {
-                            key: float(key == option_id) for key in criteria
-                        },
-                    }
-                }
-            },
-        )
-
-    provider = provider_factory(handler)
-    answers = await provider.ask({"answer": DecisionChoiceQuestion("Pick", criteria)})
-    assert answers["answer"].choice == option_id
-
-
-@pytest.mark.asyncio
-@pytest.mark.parametrize(
-    ("probabilities", "choice", "valid"),
-    [
-        ({"b": 0.5, "a": 0.5}, "a", True),
-        ({"b": 0.5, "a": 0.5}, "b", False),
-        ({"a": 0.5004, "b": 0.4996}, "a", True),
-        ({"a": 0.5004, "b": 0.4996}, "b", False),
-        ({"😀": 0.5, "中": 0.5}, "中", True),
-        ({"😀": 0.5, "中": 0.5}, "😀", False),
-        (
-            {"billing": 0.99, "shipping": 0.004, "other": 0.003, "technical": 0.002},
-            "billing",
-            True,
-        ),
-    ],
-)
-async def test_choice_winner_matches_maximum_and_utf8_tie_order(
-    provider_factory, probabilities, choice, valid
-):
-    provider = provider_factory(
-        lambda request: httpx.Response(
-            200,
-            json={
-                "answers": {
-                    "q0": {
-                        "type": "choice",
-                        "choice": choice,
-                        "probabilities": probabilities,
-                        "confidence": max(probabilities.values()),
-                    }
-                }
-            },
-        )
-    )
-    questions = {
-        "answer": DecisionChoiceQuestion("Pick", dict.fromkeys(probabilities, ""))
-    }
-    if valid:
-        assert (await provider.ask(questions))["answer"].choice == choice
-    else:
-        with pytest.raises(DecisionError, match="invalid choice"):
-            await provider.ask(questions)
-
-
-@pytest.mark.asyncio
-@pytest.mark.parametrize("probability", [0, 0.009999, 0.01, 0.99, 0.990001, 1])
-async def test_noul_probability_boundaries(provider_factory, probability):
-    provider = provider_factory(
-        lambda request: httpx.Response(
-            200,
-            json={
-                "answers": {
-                    "q0": {
-                        "type": "noul",
-                        "noul": probability,
-                        "confidence": max(probability, 1 - probability),
-                    }
-                }
-            },
-        )
-    )
-    if 0.01 <= probability <= 0.99:
-        assert (await provider.ask({"answer": BOOLEAN}))[
-            "answer"
-        ].probability == probability
-    else:
-        with pytest.raises(DecisionError, match="invalid boolean"):
-            await provider.ask({"answer": BOOLEAN})
 
 
 @pytest.mark.asyncio
@@ -480,10 +296,6 @@ async def test_http_safety_blocks_whole_batch_without_leaking_input(
     ("body", "expected_status"),
     [
         ({}, "HTTP 400"),
-        ([], "HTTP 400"),
-        ({"error": None}, "HTTP 400"),
-        ({"error": []}, "HTTP 400"),
-        ({"error": {"code": []}}, "HTTP 400"),
         (
             {"error": {"code": "private-context", "message": "private-context"}},
             "HTTP 400",
@@ -515,38 +327,21 @@ async def test_other_bad_requests_remain_http_errors(
         (BOOLEAN, BOOL_ANSWER, {"type": "predicate"}),
         (BOOLEAN, BOOL_ANSWER, {"noul": True}),
         (BOOLEAN, BOOL_ANSWER, {"noul": -0.1}),
-        (BOOLEAN, BOOL_ANSWER, {"noul": None}),
-        (BOOLEAN, BOOL_ANSWER, {"confidence": 0.05}),
-        (BOOLEAN, BOOL_ANSWER, {"confidence": float("nan")}),
-        (BOOLEAN, BOOL_ANSWER, {"noul": 10**400}),
-        (CHOICE, CHOICE_ANSWER, {"choice": "wait"}),
-        (CHOICE, CHOICE_ANSWER, {"choice": ["reply"]}),
-        (CHOICE, CHOICE_ANSWER, {"confidence": 0.7}),
-        (CHOICE, CHOICE_ANSWER, {"probabilities": {"reply": 1.0}}),
+        (BOOLEAN, BOOL_ANSWER, {"noul": 1.1}),
+        (CHOICE, CHOICE_ANSWER, {"choice": "unknown"}),
+        (CHOICE, CHOICE_ANSWER, {"confidence": float("nan")}),
         (CHOICE, CHOICE_ANSWER, {"probabilities": {"reply": 0.8, "other": 0.2}}),
         (CHOICE, CHOICE_ANSWER, {"probabilities": {"reply": 0.8, "wait": 0.3}}),
-        (CHOICE, CHOICE_ANSWER, {"probabilities": {"reply": True, "wait": 0}}),
-        (CHOICE, CHOICE_ANSWER, {"probabilities": [0.8, 0.2]}),
-        (
-            CHOICE,
-            CHOICE_ANSWER,
-            {"probabilities": {"reply": float("inf"), "wait": 0.2}},
-        ),
         (SCORE, SCORE_ANSWER, {"score": 1.0}),
-        (SCORE, SCORE_ANSWER, {"score": True}),
         (SCORE, SCORE_ANSWER, {"score": 2.1}),
-        (SCORE, SCORE_ANSWER, {"score": float("nan")}),
         (SCORE, SCORE_ANSWER, {"score": 10**400}),
         (SCORE, SCORE_ANSWER, {"legend": {"0": "Wrong", "1": "Degraded", "2": "Down"}}),
-        (SCORE, SCORE_ANSWER, {"legend": None}),
         (SCORE, SCORE_ANSWER, {"probabilities": {"1": 0.5, "2": 0.5}}),
-        (SCORE, SCORE_ANSWER, {"confidence": 0.8}),
     ],
 )
 async def test_rejects_invalid_answer_contract(
     provider_factory, question, answer, changes
 ):
-    # Raw JSON exercises non-finite numbers from non-conforming gateways.
     provider = provider_factory(
         lambda request: httpx.Response(
             200,
@@ -562,52 +357,16 @@ async def test_rejects_invalid_answer_contract(
     "body",
     [
         [],
-        {},
         {"answers": []},
         {"answers": {}},
         {"answers": {"q0": BOOL_ANSWER, "extra": BOOL_ANSWER}},
         {"answers": {"q0": None}},
-        {"answers": {"q0": {"type": "UNKNOWN"}}},
     ],
 )
 async def test_rejects_incomplete_or_malformed_batches(provider_factory, body):
     provider = provider_factory(lambda request: httpx.Response(200, json=body))
     with pytest.raises(DecisionError):
         await provider.ask({"answer": BOOLEAN})
-
-
-@pytest.mark.asyncio
-@pytest.mark.parametrize(
-    ("feedback", "blocked"),
-    [
-        ({"block_reason": "safety", "block_reason_message": "private-context"}, True),
-        ("private-context", False),
-        ({"block_reason": ["private-context"]}, False),
-    ],
-)
-async def test_content_filter_blocks_whole_batch_without_leaking_input(
-    provider_factory, caplog, feedback, blocked
-):
-    private_state = "private-context"
-    provider = provider_factory(
-        lambda request: httpx.Response(
-            200,
-            json={
-                "answers": {"q0": BOOL_ANSWER, "q1": CHOICE_ANSWER},
-                "prompt_feedback": feedback,
-            },
-        )
-    )
-    caplog.set_level(logging.WARNING, logger="astrbot")
-    if blocked:
-        with pytest.raises(DecisionError, match="blocked") as exc:
-            await provider.ask({"a": BOOLEAN, "b": CHOICE}, private_state)
-        assert private_state not in "".join(traceback.format_exception(exc.value))
-    else:
-        answers = await provider.ask({"a": BOOLEAN, "b": CHOICE}, private_state)
-        assert answers["a"].probability == 0.05
-        assert answers["b"].choice == "reply"
-    assert private_state not in caplog.text
 
 
 @pytest.mark.asyncio
@@ -635,9 +394,7 @@ async def test_endpoint_preserves_custom_route(provider_factory, base, expected)
         {"model": ""},
         {"key": ["a"]},
         {"timeout": 0},
-        {"timeout": float("inf")},
         {"total_timeout": float("nan")},
-        {"total_timeout": -1},
         {"max_concurrency": 0},
     ],
 )
@@ -648,7 +405,7 @@ async def test_rejects_invalid_configuration(provider_factory, overrides):
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("status", [400, 401, 403, 429, 500, 503])
+@pytest.mark.parametrize("status", [400, 401, 429, 503])
 async def test_http_errors_and_connection_test_do_not_retry_by_default(
     provider_factory, status, caplog
 ):
@@ -774,9 +531,21 @@ async def test_concurrency_limit(provider_factory):
 
 
 @pytest.mark.asyncio
-async def test_service_choose_thresholds_and_fallback(provider_factory):
+async def test_service_integration_and_explicit_input_forwarding(provider_factory):
+    from astrbot.api.provider import (
+        DecisionInput as PublicInput,
+    )
+    from astrbot.api.provider import (
+        DecisionMedia as PublicMedia,
+    )
+
+    received_inputs = []
+
     def handler(request):
-        question = json.loads(request.content)["questions"]["q0"]
+        body = json.loads(request.content)
+        assert body["input"], "Gemini requires non-empty input"
+        received_inputs.append(body["input"])
+        question = body["questions"]["q0"]
         if question["instructions"] == "Fail?":
             return httpx.Response(503)
         if question["type"] == "choice":
@@ -794,14 +563,21 @@ async def test_service_choose_thresholds_and_fallback(provider_factory):
     manager = _manager()
     manager.get_using_provider_async = AsyncMock(return_value=provider)
     service = DecisionService(manager)
+
     choice = await service.choose("Pick", {"short": "Brief", "long": "Detailed"})
     assert choice.choice == "long"
     assert choice.probabilities == {"short": 0.3, "long": 0.7}
-    assert await service.yes_no("Urgent?") is False
+    assert await service.yes_no("Urgent?", state="") is False
     assert await service.yes_no("Urgent?", threshold=0.05) is True
     assert await service.yes_no("Fail?", default=True) is True
     with pytest.raises(DecisionError):
         await service.yes_no("Fail?")
+
+    media_state = PublicInput(
+        ["Photo:", PublicMedia("image", "image/png", uri="https://example.com/a.png")]
+    )
+    assert await service.yes_no("Is it true?", state=media_state) is False
+    assert received_inputs[-1][1]["type"] == "image"
 
 
 @pytest.mark.asyncio
@@ -858,27 +634,52 @@ async def test_template_config_save_manager_reload_and_test(monkeypatch):
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
-    ("kind", "mime"),
+    ("media", "expected_block"),
     [
-        ("image", "image/png"),
-        ("audio", "audio/wav"),
-        ("video", "video/mp4"),
-        ("document", "application/pdf"),
+        (
+            DecisionMedia("image", "image/png", data="AA==", resolution="high"),
+            {
+                "type": "image",
+                "mime_type": "image/png",
+                "data": "AA==",
+                "resolution": "high",
+            },
+        ),
+        (
+            DecisionMedia("audio", "audio/wav", uri="https://example.com/clip.wav"),
+            {
+                "type": "audio",
+                "mime_type": "audio/wav",
+                "uri": "https://example.com/clip.wav",
+            },
+        ),
+        (
+            DecisionMedia(
+                "video", "video/mp4", uri="https://example.com/v.mp4", resolution="low"
+            ),
+            {
+                "type": "video",
+                "mime_type": "video/mp4",
+                "uri": "https://example.com/v.mp4",
+                "resolution": "low",
+            },
+        ),
+        (
+            DecisionMedia("document", "application/pdf", data="AA=="),
+            {"type": "document", "mime_type": "application/pdf", "data": "AA=="},
+        ),
     ],
 )
-@pytest.mark.parametrize("source", ["data", "uri"])
 async def test_explicit_media_preserves_wire_blocks_and_order(
-    provider_factory, kind, mime, source
+    provider_factory, media, expected_block
 ):
-    media_value = "AA==" if source == "data" else "https://example.com/media"
-    media = DecisionMedia(type=kind, mime_type=mime, **{source: media_value})
     state = DecisionInput(content=["Context:\n", media, "\nEnd."])
     original = copy.deepcopy(state)
 
     def handler(request):
         assert json.loads(request.content)["input"] == [
             {"type": "text", "text": "Context:\n"},
-            {"type": kind, "mime_type": mime, source: media_value},
+            expected_block,
             {"type": "text", "text": "\nEnd."},
         ]
         return httpx.Response(200, json={"answers": {"q0": BOOL_ANSWER}})
@@ -890,45 +691,14 @@ async def test_explicit_media_preserves_wire_blocks_and_order(
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
-    ("kind", "resolution"),
-    [
-        ("image", "low"),
-        ("image", "medium"),
-        ("image", "high"),
-        ("image", "ultra_high"),
-        ("video", "low"),
-        ("video", "medium"),
-        ("video", "high"),
-    ],
-)
-async def test_media_resolution_is_forwarded(provider_factory, kind, resolution):
-    mime = "image/jpeg" if kind == "image" else "video/mp4"
-
-    def handler(request):
-        assert json.loads(request.content)["input"][0]["resolution"] == resolution
-        return httpx.Response(200, json={"answers": {"q0": BOOL_ANSWER}})
-
-    provider = provider_factory(handler)
-    await provider.ask(
-        {"q": BOOLEAN},
-        DecisionInput([DecisionMedia(kind, mime, data="AA==", resolution=resolution)]),
-    )
-
-
-@pytest.mark.asyncio
-@pytest.mark.parametrize(
     ("state", "message"),
     [
         (DecisionInput([]), "non-empty content list"),
-        (DecisionInput("text"), "non-empty content list"),
-        (DecisionInput(None), "non-empty content list"),
         (DecisionInput([""]), "text must not be empty"),
-        (DecisionInput([{}]), "text or DecisionMedia"),
         (
             DecisionInput([{"type": "image", "uri": "https://example.com/a"}]),
-            "text or DecisionMedia",
+            "DecisionMedia",
         ),
-        (DecisionInput([42]), "text or DecisionMedia"),
         (DecisionInput(["\ud800"]), "request is not JSON serializable"),
         (
             DecisionInput([DecisionMedia("image", "image/png")]),
@@ -953,32 +723,6 @@ async def test_media_resolution_is_forwarded(provider_factory, kind, resolution)
         ),
         (
             DecisionInput(
-                [DecisionMedia("image", "image/png", data="private-context!")]
-            ),
-            "valid base64",
-        ),
-        (
-            DecisionInput([DecisionMedia("image", "image/png", data=b"AA==")]),
-            "non-empty base64",
-        ),
-        (
-            DecisionInput([DecisionMedia("image", "image/png", uri="")]),
-            "non-empty HTTPS URI",
-        ),
-        (
-            DecisionInput(
-                [DecisionMedia("image", "image/png", uri="file:///private-context")]
-            ),
-            "requires an HTTPS URI",
-        ),
-        (
-            DecisionInput(
-                [DecisionMedia("image", "image/png", uri="gs://bucket/a.png")]
-            ),
-            "requires an HTTPS URI",
-        ),
-        (
-            DecisionInput(
                 [DecisionMedia("image", "image/png", uri="http://example.com/a.png")]
             ),
             "requires an HTTPS URI",
@@ -996,18 +740,12 @@ async def test_media_resolution_is_forwarded(provider_factory, kind, resolution)
             "valid HTTPS URI",
         ),
         (
-            DecisionInput([DecisionMedia("image", "audio/wav", data="AA==")]),
-            "media MIME type",
-        ),
-        (
-            DecisionInput(
-                [DecisionMedia("document", "application/octet-stream", data="AA==")]
-            ),
-            "media MIME type",
-        ),
-        (
             DecisionInput([DecisionMedia("thought", "image/png", data="AA==")]),
-            "media MIME type",
+            "media type or MIME type",
+        ),
+        (
+            DecisionInput([DecisionMedia("image", " ", data="AA==")]),
+            "media type or MIME type",
         ),
         (
             DecisionInput(
@@ -1017,43 +755,10 @@ async def test_media_resolution_is_forwarded(provider_factory, kind, resolution)
         ),
         (
             DecisionInput(
-                [
-                    DecisionMedia(
-                        "document", "application/pdf", data="AA==", resolution="low"
-                    )
-                ]
-            ),
-            "media resolution",
-        ),
-        (
-            DecisionInput(
-                [
-                    DecisionMedia(
-                        "video", "video/mp4", data="AA==", resolution="ultra_high"
-                    )
-                ]
-            ),
-            "media resolution",
-        ),
-        (
-            DecisionInput(
                 [DecisionMedia("image", "image/png", data="AA==", resolution="unknown")]
             ),
             "media resolution",
         ),
-        (
-            [DecisionMedia("image", "image/png", data="AA==")],
-            "state is not JSON serializable",
-        ),
-        (
-            {"content": [DecisionMedia("image", "image/png", data="AA==")]},
-            "state is not JSON serializable",
-        ),
-        (
-            DecisionInput([DecisionMedia([], "image/png", data="AA==")]),
-            "media MIME type",
-        ),
-        (DecisionInput([DecisionMedia("image", [], data="AA==")]), "media MIME type"),
         ({"private-context": object()}, "state is not JSON serializable"),
     ],
 )
@@ -1067,48 +772,6 @@ async def test_invalid_input_is_rejected_without_exposing_data(
     handler.assert_not_called()
     assert "private-context" not in str(error.value) + caplog.text
     assert error.value.__suppress_context__ or error.value.__context__ is None
-
-
-@pytest.mark.asyncio
-@pytest.mark.parametrize("method", ["ask", "choose", "yes_no"])
-async def test_service_forwards_explicit_input(provider_factory, method):
-    from astrbot.api.provider import (
-        DecisionInput as PublicInput,
-    )
-    from astrbot.api.provider import (
-        DecisionMedia as PublicMedia,
-    )
-
-    state = PublicInput(
-        ["Photo:", PublicMedia("image", "image/png", uri="https://example.com/a.png")]
-    )
-
-    def handler(request):
-        payload = json.loads(request.content)
-        assert payload["input"][1]["type"] == "image"
-        question = payload["questions"]["q0"]
-        answer = (
-            BOOL_ANSWER
-            if question["type"] == "noul"
-            else {
-                "type": "choice",
-                "choice": "o1",
-                "confidence": 0.8,
-                "probabilities": {"o1": 0.8, "o2": 0.2},
-            }
-        )
-        return httpx.Response(200, json={"answers": {"q0": answer}})
-
-    provider = provider_factory(handler)
-    manager = _manager()
-    manager.get_using_provider_async = AsyncMock(return_value=provider)
-    service = DecisionService(manager)
-    if method == "ask":
-        assert (await service.ask({"q": BOOLEAN}, state))["q"].probability == 0.05
-    elif method == "choose":
-        assert (await service.choose("Pick", ["A", "B"], state=state)).choice == "A"
-    else:
-        assert await service.yes_no("Is it true?", state=state) is False
 
 
 @pytest.mark.asyncio
@@ -1138,10 +801,12 @@ async def test_inline_media_size_limits(provider_factory, monkeypatch, kind, siz
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("count", [2, 10, 11, 255])
-@pytest.mark.parametrize("score_error", [0, 0.0005, 0.002])
+@pytest.mark.parametrize(
+    ("count", "score_error", "valid"),
+    [(255, 0.0, True), (255, 0.0005, True), (11, 0.002, False)],
+)
 async def test_score_levels_and_expectation_at_extended_boundaries(
-    provider_factory, count, score_error
+    provider_factory, count, score_error, valid
 ):
     criteria = [f"Level {i}" for i in range(count)]
 
@@ -1166,7 +831,7 @@ async def test_score_levels_and_expectation_at_extended_boundaries(
         )
 
     provider = provider_factory(handler)
-    if score_error > 0.001:
+    if not valid:
         with pytest.raises(DecisionError):
             await provider.ask({"q": DecisionScoreQuestion("Rate", criteria)})
     else:

@@ -105,11 +105,11 @@ answers = await self.context.decision.ask(
 
 使用上文通用的 `ask()`、`choose()` 和 `yes_no()` 方法，并指定 `provider_id="gemini_decision"`。
 
-Gemini 布尔题使用 `noul`，表示**为真**的概率，范围为 `[0.01, 0.99]`。`yes_no()` 将此概率与阈值比较，阈值高于 `0.99` 时不会命中。Gemini 的布尔置信度为 `max(p, 1-p)`。适配器尚未暴露可选布尔判定描述 `true_description` 和 `false_description`，可将相应定义写入 `instructions`。单选必须选择最高概率项；概率完全相同时，取 UTF-8 字节序最小的选项 ID。评分置信度为各等级概率中的最大值。
+Gemini 布尔题使用 `noul`，表示**为真**的概率（通常位于 `[0.01, 0.99]`）。`yes_no()` 将此概率与阈值比较。适配器尚未暴露可选布尔判定描述 `true_description` 和 `false_description`，可将相应定义写入 `instructions`。
 
-每次请求支持 1–1,000 道题，每道单选支持 2–255 个选项，评分支持 2–255 档（推荐 2–10 档）。选项 ID 包含 1–128 个字符，最多 512 个 UTF-8 字节；允许内部 ASCII 空格、组合标记和变体选择符。禁止首尾空白、非 ASCII 空白，以及 Unicode Other 类字符（`Cc`、`Cf`、`Cs`、`Co`、`Cn`），包括零宽格式字符和私用区字符。描述可以为空。非法输入会在发送前抛出 `ValueError`。调用方的问题 ID 在内部映射，返回答案仍保留原始键。
+每次请求支持 1–1,000 道题，每道单选支持 2–255 个选项，评分支持 2–255 档（推荐 2–10 档）。选项 ID 须为非空字符串，描述可以为空。非法输入会在发送前抛出 `ValueError`，其余接口约束由 Google 服务端校验。调用方的问题 ID 在内部映射，返回答案仍保留原始键。
 
-答案缺失或不一致会让整批调用抛出 `DecisionError`。[官方接口](https://aistudio.google.com/docs/decisions-api)通过 HTTP 400 返回安全拦截，`error.code` 为 `safety`、`prohibited_content`、`blocklist`、`image_safety` 或 `content_blocked`；适配器也识别非空字符串形式的 `prompt_feedback.block_reason`，忽略未知的反馈结构。HTTP 400 错误包含已识别的 `invalid_request` 分类（若存在），不会输出未知错误码或服务器消息；拦截不会被转换成答案。`yes_no(default=...)` 保留显式降级行为。
+答案缺失或不一致会让整批调用抛出 `DecisionError`。[官方接口](https://aistudio.google.com/docs/decisions-api)通过 HTTP 400 返回安全拦截，`error.code` 为 `safety`、`prohibited_content`、`blocklist`、`image_safety` 或 `content_blocked`。HTTP 400 错误包含已识别的 `invalid_request` 分类（若存在），不会输出未知错误码或服务器消息；拦截不会被转换成答案。`yes_no(default=...)` 保留显式降级行为。
 
 Gemini 将普通字典和列表（包括空容器）发送为 JSON 文本。省略 `state`、传入 `None` 或空字符串时，使用 JSON 文本 `"{}"`，因为接口不接受空输入。不支持或无法序列化的值以及 `NaN`/`Infinity` 会被拒绝。通过下方的 `DecisionInput` 显式传入媒体；问题指令仍只支持文本。
 
@@ -137,7 +137,7 @@ has_damage = await self.context.decision.yes_no(
 )
 ```
 
-同一个 `state` 也可用于 `ask()` 和 `choose()`。每个 `DecisionMedia` 必须指定真实的 `mime_type`，并且只提供 `uri` 或 `data` 中的一项。内联媒体使用 `data=base64.b64encode(file_bytes).decode("ascii")`，不加 data URI 前缀。适配器在解码前检查内联媒体大小：按解码后的字节数计算，每次请求合计不超过 100 MB，每个 PDF 不超过 50 MB。适配器不会自动读取本地路径或上传文件。
+同一个 `state` 也可用于 `ask()` 和 `choose()`。每个 `DecisionMedia` 必须指定真实的 `mime_type`，并且只提供 `uri` 或 `data` 中的一项。内联媒体使用 `data=base64.b64encode(file_bytes).decode("ascii")`，不加 data URI 前缀。适配器按编码长度估算内联媒体大小（每次请求合计不超过 100 MB，每个 PDF 不超过 50 MB），不会为校验而在内存中完整解码载荷。适配器不会自动读取本地路径或上传文件。
 
 | `type` | MIME 类型示例 | 输入方式 |
 | --- | --- | --- |
