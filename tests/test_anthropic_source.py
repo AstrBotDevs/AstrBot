@@ -21,6 +21,73 @@ def _provider() -> ProviderAnthropic:
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("streaming", [False, True])
+@pytest.mark.parametrize("enabled", [None, True, False], ids=["default", "on", "off"])
+async def test_anthropic_prompt_cache_option(monkeypatch, streaming, enabled):
+    captured = {}
+
+    def handle(request):
+        captured.update(json.loads(request.content))
+        if streaming:
+            return sdk_httpx.Response(
+                200,
+                headers={"content-type": "text/event-stream"},
+                content=_tool_use_stream([]),
+            )
+        return sdk_httpx.Response(
+            200,
+            json={
+                "id": "msg_1",
+                "type": "message",
+                "role": "assistant",
+                "model": "claude-test",
+                "content": [{"type": "text", "text": "ok"}],
+                "stop_reason": "end_turn",
+                "stop_sequence": None,
+                "usage": {"input_tokens": 1, "output_tokens": 1},
+            },
+        )
+
+    monkeypatch.setattr(
+        ProviderAnthropic,
+        "_create_http_client",
+        lambda self, config: sdk_httpx.AsyncClient(
+            transport=sdk_httpx.MockTransport(handle)
+        ),
+    )
+    config = {
+        "id": "anthropic-test",
+        "type": "anthropic_chat_completion",
+        "key": ["sk-test"],
+        "model": "claude-test",
+        "api_base": "https://api.anthropic.test",
+    }
+    if enabled is not None:
+        config["anth_enable_prompt_cache"] = enabled
+    provider = ProviderAnthropic(config, {})
+    payload = {
+        "model": "claude-test",
+        "messages": [{"role": "user", "content": "hi"}],
+        "system": [{"type": "text", "text": "Be helpful."}],
+    }
+    try:
+        if streaming:
+            responses = [
+                response async for response in provider._query_stream(payload, None)
+            ]
+        else:
+            responses = [await provider._query(payload, None)]
+    finally:
+        await provider.terminate()
+
+    assert responses
+    if enabled is False:
+        assert "cache_control" not in captured["system"][-1]
+    else:
+        assert captured["system"][-1]["cache_control"] == {"type": "ephemeral"}
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize(
     ("custom_headers", "expected_key"),
     [({}, "test-key"), ({"x-api-key": "override-key"}, "override-key")],

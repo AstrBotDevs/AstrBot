@@ -553,7 +553,8 @@ class ProviderAnthropic(Provider):
 
         if "max_tokens" not in payloads:
             payloads["max_tokens"] = 65536
-        self._apply_explicit_prompt_cache_breakpoints(payloads)
+        if self.provider_config.get("anth_enable_prompt_cache", True):
+            self._apply_explicit_prompt_cache_breakpoints(payloads)
         self._apply_thinking_config(payloads)
         self._sanitize_assistant_messages(payloads)
 
@@ -677,7 +678,8 @@ class ProviderAnthropic(Provider):
 
         if "max_tokens" not in payloads:
             payloads["max_tokens"] = 65536
-        self._apply_explicit_prompt_cache_breakpoints(payloads)
+        if self.provider_config.get("anth_enable_prompt_cache", True):
+            self._apply_explicit_prompt_cache_breakpoints(payloads)
         self._apply_thinking_config(payloads)
         self._sanitize_assistant_messages(payloads)
 
