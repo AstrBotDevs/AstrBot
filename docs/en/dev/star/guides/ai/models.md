@@ -62,11 +62,11 @@ The adapter calls the REST endpoint directly and does not require a Google SDK u
 
 Use the common `ask()`, `choose()`, and `yes_no()` methods above with `provider_id="gemini_decision"`.
 
-Gemini boolean questions use `noul`, the probability of **true**, in `[0.01, 0.99]`. `yes_no()` compares that probability with its threshold; thresholds above `0.99` cannot match. Gemini's boolean confidence is `max(p, 1-p)`. The adapter does not expose the optional boolean criteria `true_description` and `false_description`; include those definitions in `instructions` instead. Choice answers must select the highest-probability option; exact ties use the first ID in UTF-8 byte order. Score confidence is the largest level probability.
+Gemini boolean questions use `noul`, the probability of **true** (typically in `[0.01, 0.99]`). `yes_no()` compares that probability with its threshold. The adapter does not expose the optional boolean criteria `true_description` and `false_description`; include those definitions in `instructions` instead.
 
-Requests accept 1–1,000 questions, 2–255 options per choice, and 2–255 score levels (2–10 recommended). Choice IDs contain 1–128 characters, at most 512 UTF-8 bytes; internal ASCII spaces, combining marks, and variation selectors are allowed. Surrounding/non-ASCII whitespace and Unicode Other categories (`Cc`, `Cf`, `Cs`, `Co`, `Cn`), including zero-width format and private-use characters, are rejected. Descriptions may be empty. Invalid inputs raise `ValueError` before sending. Caller question IDs are mapped internally, and answers retain the original keys.
+Requests accept 1–1,000 questions, 2–255 options per choice, and 2–255 score levels (2–10 recommended). Option IDs must be non-empty strings; descriptions may be empty. Invalid inputs raise `ValueError` before sending, and additional wire constraints are enforced by Google's API. Caller question IDs are mapped internally, and answers retain the original keys.
 
-Missing or inconsistent answers fail the whole batch with `DecisionError`. The [official API](https://aistudio.google.com/docs/decisions-api) reports safety blocking as HTTP 400 with `error.code` equal to `safety`, `prohibited_content`, `blocklist`, `image_safety`, or `content_blocked`. The adapter also recognizes a non-empty string `prompt_feedback.block_reason` and ignores unknown feedback shapes. HTTP 400 errors include the known `invalid_request` code when present; unknown codes and server messages remain hidden. Errors are sanitized; blocking never becomes an answer. `yes_no(default=...)` retains its explicit fallback behavior.
+Missing or inconsistent answers fail the whole batch with `DecisionError`. The [official API](https://aistudio.google.com/docs/decisions-api) reports safety blocking as HTTP 400 with `error.code` equal to `safety`, `prohibited_content`, `blocklist`, `image_safety`, or `content_blocked`. HTTP 400 errors include the known `invalid_request` code when present; unknown codes and server messages remain hidden. Errors are sanitized; blocking never becomes an answer. `yes_no(default=...)` retains its explicit fallback behavior.
 
 Gemini sends ordinary dict/list state as JSON text, including empty containers. Omitted state, `None`, and an empty string become the JSON text `"{}"` because the API rejects empty input. Unsupported or non-serializable values and `NaN`/`Infinity` are rejected. Use `DecisionInput` below to send media explicitly; question instructions remain text-only.
 
@@ -94,7 +94,7 @@ has_damage = await self.context.decision.yes_no(
 )
 ```
 
-The same `state` works with `ask()` and `choose()`. Each `DecisionMedia` requires its actual `mime_type` and exactly one of `uri` or `data`. For inline media, set `data=base64.b64encode(file_bytes).decode("ascii")`, with no data-URI prefix. Before decoding, the adapter checks inline media sizes: up to 100 MB of decoded bytes per request and 50 MB per PDF. The adapter does not read local paths or upload files automatically.
+The same `state` works with `ask()` and `choose()`. Each `DecisionMedia` requires its actual `mime_type` and exactly one of `uri` or `data`. For inline media, set `data=base64.b64encode(file_bytes).decode("ascii")`, with no data-URI prefix. The adapter checks inline media size limits from the encoded length (up to 100 MB of decoded bytes per request and 50 MB per PDF) without decoding the payload into memory. The adapter does not read local paths or upload files automatically.
 
 | `type` | Example MIME type | Input |
 | --- | --- | --- |

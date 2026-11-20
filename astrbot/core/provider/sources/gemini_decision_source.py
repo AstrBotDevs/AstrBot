@@ -1,10 +1,8 @@
 from __future__ import annotations
 
 import asyncio
-import base64
 import json
 import math
-import unicodedata
 from collections.abc import Mapping
 from typing import Any, TypeGuard
 
@@ -40,44 +38,8 @@ _DEFAULT_MAX_CONCURRENCY = 4
 _PROBABILITY_SUM_TOLERANCE = 1e-3 + 1e-12
 _MAX_INLINE_MEDIA_BYTES = 100_000_000
 _MAX_INLINE_PDF_BYTES = 50_000_000
-_MEDIA_MIME_TYPES = {
-    "image": {
-        "image/png",
-        "image/jpeg",
-        "image/webp",
-        "image/heic",
-        "image/heif",
-        "image/gif",
-        "image/bmp",
-        "image/tiff",
-    },
-    "audio": {
-        "audio/wav",
-        "audio/mp3",
-        "audio/mpeg",
-        "audio/aiff",
-        "audio/aac",
-        "audio/ogg",
-        "audio/flac",
-        "audio/m4a",
-        "audio/opus",
-        "audio/webm",
-        "audio/l16",
-        "audio/alaw",
-        "audio/mulaw",
-    },
-    "video": {
-        "video/mp4",
-        "video/mpeg",
-        "video/mov",
-        "video/avi",
-        "video/webm",
-        "video/wmv",
-        "video/x-flv",
-        "video/3gpp",
-    },
-    "document": {"application/pdf"},
-}
+_MEDIA_TYPES = ("image", "audio", "video", "document")
+_MEDIA_RESOLUTIONS = ("low", "medium", "high", "ultra_high")
 
 
 def _is_finite_number(value: Any) -> TypeGuard[float]:
@@ -129,19 +91,21 @@ def _build_input(state: DecisionState | None) -> str | list[dict[str, Any]]:
         if not isinstance(part, DecisionMedia):
             raise ValueError("DecisionInput requires text or DecisionMedia")
         if (
-            not isinstance(part.type, str)
-            or part.type not in _MEDIA_MIME_TYPES
+            part.type not in _MEDIA_TYPES
             or not isinstance(part.mime_type, str)
-            or part.mime_type not in _MEDIA_MIME_TYPES[part.type]
+            or not part.mime_type.strip()
         ):
-            raise ValueError("Unsupported Gemini decision media MIME type")
+            raise ValueError("Unsupported Gemini decision media type or MIME type")
         if (part.data is None) == (part.uri is None):
             raise ValueError("DecisionMedia requires exactly one of data or uri")
-        block: dict[str, Any] = {"type": part.type, "mime_type": part.mime_type}
+        block: dict[str, Any] = {
+            "type": part.type,
+            "mime_type": part.mime_type.strip(),
+        }
         if part.data is not None:
             if not isinstance(part.data, str) or not part.data:
                 raise ValueError("DecisionMedia data must be non-empty base64")
-            # Check decoded size before allocating a decoded copy of the media.
+            # Estimate decoded size from encoded length without decoding into memory.
             media_bytes = len(part.data) // 4 * 3 - (
                 2 if part.data.endswith("==") else int(part.data.endswith("="))
             )
@@ -150,10 +114,6 @@ def _build_input(state: DecisionState | None) -> str | list[dict[str, Any]]:
                 raise ValueError("Gemini inline PDF exceeds 50 MB")
             if inline_bytes > _MAX_INLINE_MEDIA_BYTES:
                 raise ValueError("Gemini inline media exceeds 100 MB per request")
-            try:
-                base64.b64decode(part.data, validate=True)
-            except ValueError:
-                raise ValueError("DecisionMedia data must be valid base64") from None
             block["data"] = part.data
         else:
             if not isinstance(part.uri, str) or not part.uri:
@@ -170,8 +130,7 @@ def _build_input(state: DecisionState | None) -> str | list[dict[str, Any]]:
         if part.resolution is not None:
             if (
                 part.type not in ("image", "video")
-                or part.resolution not in ("low", "medium", "high", "ultra_high")
-                or (part.type == "video" and part.resolution == "ultra_high")
+                or part.resolution not in _MEDIA_RESOLUTIONS
             ):
                 raise ValueError("Unsupported Gemini decision media resolution")
             block["resolution"] = part.resolution
@@ -312,13 +271,7 @@ class GeminiDecisionProvider(DecisionProvider):
                 for option_id, description in question.criteria.items():
                     if (
                         not isinstance(option_id, str)
-                        or not 1 <= len(option_id) <= 128
-                        or option_id != option_id.strip()
-                        or any(
-                            unicodedata.category(char).startswith("C")
-                            or (char.isspace() and char != " ")
-                            for char in option_id
-                        )
+                        or not option_id.strip()
                         or not isinstance(description, str)
                     ):
                         raise ValueError(f"question {head} has invalid choice criteria")
@@ -351,7 +304,7 @@ class GeminiDecisionProvider(DecisionProvider):
                 ensure_ascii=False,
                 allow_nan=False,
             ).encode()
-        except (TypeError, ValueError):
+        except ValueError:
             raise ValueError(
                 "Gemini decision request is not JSON serializable"
             ) from None
@@ -434,14 +387,6 @@ class GeminiDecisionProvider(DecisionProvider):
 
         if not isinstance(body, Mapping):
             raise DecisionError("Gemini decision endpoint returned an invalid response")
-        feedback = body.get("prompt_feedback")
-        if (
-            isinstance(feedback, Mapping)
-            and isinstance(feedback.get("block_reason"), str)
-            and feedback["block_reason"]
-        ):
-            # Do not log server-provided text, which may contain private input.
-            raise DecisionError("Gemini decision input was blocked by content filters")
         raw_answers = body.get("answers")
         if not isinstance(raw_answers, Mapping) or set(raw_answers) != set(
             heads_by_name
@@ -461,27 +406,17 @@ class GeminiDecisionProvider(DecisionProvider):
             raw_answer = raw_answers[name]
             if not isinstance(raw_answer, Mapping):
                 raise invalid_answer("decision")
-            confidence = raw_answer.get("confidence")
-            if not _is_unit_number(confidence):
-                raise invalid_answer("confidence")
             if question["type"] == "noul":
                 probability = raw_answer.get("noul")
                 if not (
-                    raw_answer.get("type") == "noul"
-                    and _is_unit_number(probability)
-                    and 0.01 <= probability <= 0.99
-                    and math.isclose(
-                        confidence,
-                        max(probability, 1 - probability),
-                        rel_tol=0.0,
-                        abs_tol=_PROBABILITY_SUM_TOLERANCE,
-                    )
+                    raw_answer.get("type") == "noul" and _is_unit_number(probability)
                 ):
                     raise invalid_answer("boolean")
                 answers[head] = DecisionBooleanAnswer(probability=float(probability))
                 continue
 
             kind = question["type"]
+            confidence = raw_answer.get("confidence")
             expected_keys = (
                 set(question["criteria"])
                 if kind == "choice"
@@ -490,6 +425,7 @@ class GeminiDecisionProvider(DecisionProvider):
             raw_probabilities = raw_answer.get("probabilities")
             if not (
                 raw_answer.get("type") == kind
+                and _is_unit_number(confidence)
                 and isinstance(raw_probabilities, Mapping)
                 and set(raw_probabilities) == expected_keys
                 and all(_is_unit_number(value) for value in raw_probabilities.values())
@@ -504,23 +440,10 @@ class GeminiDecisionProvider(DecisionProvider):
             probabilities = {
                 key: float(value) for key, value in raw_probabilities.items()
             }
-            highest_probability = max(probabilities.values())
-            if not math.isclose(
-                confidence,
-                highest_probability,
-                rel_tol=0.0,
-                abs_tol=_PROBABILITY_SUM_TOLERANCE,
-            ):
-                raise invalid_answer(kind)
 
             if kind == "choice":
                 choice = raw_answer.get("choice")
-                # Exact ties use UTF-8 byte order, independent of response order.
-                expected_choice = min(
-                    probabilities,
-                    key=lambda key: (-probabilities[key], key.encode("utf-8")),
-                )
-                if not isinstance(choice, str) or choice != expected_choice:
+                if not isinstance(choice, str) or choice not in probabilities:
                     raise invalid_answer(kind)
                 answers[head] = DecisionChoiceAnswer(
                     choice=choice,
