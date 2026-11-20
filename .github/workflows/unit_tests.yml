@@ -63,14 +63,4 @@ jobs:
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
         run: |
-          if [ "${{ runner.os }}" = "Linux" ]; then
-            bash ./scripts/run_pytests_ci.sh ./tests --cov=astrbot --cov-report=xml
-          else
-            bash ./scripts/run_pytests_ci.sh ./tests
-          fi
-
-      - name: Upload coverage
-        if: runner.os == 'Linux' && github.repository == 'AstrBotDevs/AstrBot'
-        uses: codecov/codecov-action@v7
-        with:
-          token: ${{ secrets.CODECOV_TOKEN }}
+          bash ./scripts/run_pytests_ci.sh ./tests
