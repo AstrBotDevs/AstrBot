@@ -82,7 +82,14 @@ class ContextManager:
                 ):
                     # Custom compressors may mutate the existing list in place.
                     self.revision += 1
-                    result = await self._run_compression(result, total_tokens)
+                    estimated_prev_tokens = (
+                        total_tokens if trusted_token_usage == 0 else None
+                    )
+                    result = await self._run_compression(
+                        result,
+                        total_tokens,
+                        estimated_prev_tokens=estimated_prev_tokens,
+                    )
 
             return result
         except ConversationPersistenceError:
@@ -91,8 +98,46 @@ class ContextManager:
             logger.error(f"Error during context processing: {e}", exc_info=True)
             return messages
 
+    @staticmethod
+    def _is_unchanged_messages(
+        before: list[Message],
+        after: list[Message],
+        est_before: int,
+        est_after: int,
+    ) -> bool:
+        """Return True if compression made no observable change to messages."""
+        return bool(after) and est_after == est_before and after == before
+
+    @staticmethod
+    def _calibrate_token_count(
+        estimated_tokens: int,
+        est_before: int,
+        prev_tokens: int,
+        *,
+        has_messages: bool,
+    ) -> int:
+        """Calibrate a post-compression heuristic token count against ``prev_tokens``.
+
+        When ``prev_tokens`` (for example, API-reported ``trusted_token_usage``)
+        exceeds the local pre-compression heuristic ``est_before``, uncalibrated
+        recounts can underestimate real usage and skip fallback truncation.
+        Scaling by ``prev_tokens / est_before`` keeps checks aligned with real
+        usage while preserving proportional reductions from real compression.
+        """
+        if prev_tokens <= est_before:
+            return estimated_tokens
+        if estimated_tokens <= 0:
+            return prev_tokens if (est_before <= 0 and has_messages) else 0
+        if est_before <= 0:
+            return estimated_tokens
+        # Exact integer ceiling of estimated_tokens * prev_tokens / est_before.
+        return (estimated_tokens * prev_tokens + est_before - 1) // est_before
+
     async def _run_compression(
-        self, messages: list[Message], prev_tokens: int
+        self,
+        messages: list[Message],
+        prev_tokens: int,
+        estimated_prev_tokens: int | None = None,
     ) -> list[Message]:
         """
         Compress/truncate the messages.
@@ -105,24 +150,60 @@ class ContextManager:
         Args:
             messages: The original message list.
             prev_tokens: The token count before compression.
+            estimated_prev_tokens: Optional uncalibrated token estimate for
+                ``messages`` prior to compression.
 
         Returns:
             The compressed/truncated message list.
         """
         logger.debug("Compress triggered, starting compression...")
 
+        original_messages = list(messages)
+        est_before = (
+            estimated_prev_tokens
+            if estimated_prev_tokens is not None
+            else self.token_counter.count_tokens(messages)
+        )
+
         messages = await self.compressor(messages)
 
-        # double check
-        tokens_after_summary = self.token_counter.count_tokens(messages)
+        # double check (calibrated against prev_tokens when heuristic underestimates)
+        raw_tokens_after_summary = self.token_counter.count_tokens(messages)
+        compression_noop = self._is_unchanged_messages(
+            original_messages,
+            messages,
+            est_before,
+            raw_tokens_after_summary,
+        )
+        tokens_after_summary = (
+            max(raw_tokens_after_summary, prev_tokens)
+            if compression_noop
+            else self._calibrate_token_count(
+                raw_tokens_after_summary,
+                est_before,
+                prev_tokens,
+                has_messages=bool(messages),
+            )
+        )
 
         # calculate compress rate
-        compress_rate = (tokens_after_summary / self.config.max_context_tokens) * 100
-        logger.info(
-            f"Compress completed."
-            f" {prev_tokens} -> {tokens_after_summary} tokens,"
-            f" compression rate: {compress_rate:.2f}%.",
+        compress_rate = (
+            (tokens_after_summary / self.config.max_context_tokens) * 100
+            if self.config.max_context_tokens > 0
+            else 0.0
         )
+        if compression_noop:
+            logger.warning(
+                f"Compression made no changes."
+                f" {prev_tokens} -> {tokens_after_summary} tokens,"
+                f" context usage: {compress_rate:.2f}%.",
+            )
+        else:
+            logger.info(
+                f"Compress completed."
+                f" {prev_tokens} -> {tokens_after_summary} tokens,"
+                f" compression rate: {compress_rate:.2f}%.",
+            )
 
         # last check
         if not self.compressor.should_compress(
@@ -144,6 +225,7 @@ class ContextManager:
             [seg for seg in rnd if isinstance(seg, Message)]
             for rnd in split_into_rounds(messages[first_non_system:])
         ]
+        raw_tokens = raw_tokens_after_summary
         tokens = tokens_after_summary
         dropped_rounds = 0
         # Built-in estimates are additive and compression checks only use tokens.
@@ -157,12 +239,20 @@ class ContextManager:
             dropped_round = rounds[dropped_rounds]
             dropped_rounds += 1
             if incremental_tokens:
-                tokens -= self.token_counter.count_tokens(dropped_round)
+                raw_tokens = max(
+                    0, raw_tokens - self.token_counter.count_tokens(dropped_round)
+                )
             else:
                 messages = system_messages + [
                     msg for rnd in rounds[dropped_rounds:] for msg in rnd
                 ]
-                tokens = self.token_counter.count_tokens(messages)
+                raw_tokens = self.token_counter.count_tokens(messages)
+            tokens = self._calibrate_token_count(
+                raw_tokens,
+                est_before,
+                prev_tokens,
+                has_messages=True,
+            )
         if incremental_tokens and dropped_rounds:
             messages = system_messages + [
                 msg for rnd in rounds[dropped_rounds:] for msg in rnd
