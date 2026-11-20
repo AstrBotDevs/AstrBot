@@ -1658,6 +1658,18 @@ CONFIG_METADATA_2 = {
                         "proxy": "",
                         "custom_headers": {},
                     },
+                    "LLMTR": {
+                        "id": "llmtr",
+                        "provider": "llmtr",
+                        "type": "openai_chat_completion",
+                        "provider_type": "chat_completion",
+                        "enable": True,
+                        "key": [],
+                        "timeout": 120,
+                        "api_base": "https://llmtr.com/v1",
+                        "proxy": "",
+                        "custom_headers": {},
+                    },
                     "PPIO": {
                         "id": "ppio",
                         "provider": "ppio",
