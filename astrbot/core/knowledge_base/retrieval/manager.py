@@ -68,6 +68,7 @@ class RetrievalManager:
         kb_id_helper_map: dict[str, KBHelper],
         top_k_fusion: int = 20,
         top_m_final: int = 5,
+        errors: list[str] | None = None,
     ) -> list[RetrievalResult]:
         """混合检索
 
@@ -82,6 +83,8 @@ class RetrievalManager:
             kb_ids: 知识库 ID 列表
             top_m_final: 最终返回数量
             enable_rerank: 是否启用 Rerank
+            errors: If given, collects embedding and rerank failures that were
+                skipped, so the caller can report them.
 
         Returns:
             List[RetrievalResult]: 检索结果列表
@@ -115,6 +118,7 @@ class RetrievalManager:
             query=query,
             kb_ids=kb_ids,
             kb_options=kb_options,
+            errors=errors,
         )
         time_end = time.time()
         logger.debug(
@@ -189,6 +193,8 @@ class RetrievalManager:
                 )
             except Exception as e:
                 logger.warning(f"Rerank 执行失败，已跳过重排序并使用融合结果: {e}")
+                if errors is not None:
+                    errors.append(f"Rerank failed: {type(e).__name__}: {e}")
 
         return retrieval_results[:top_m_final]
 
@@ -197,6 +203,7 @@ class RetrievalManager:
         query: str,
         kb_ids: list[str],
         kb_options: dict,
+        errors: list[str] | None = None,
     ):
         """稠密检索 (向量相似度)
 
@@ -206,6 +213,7 @@ class RetrievalManager:
             query: 查询文本
             kb_ids: 知识库 ID 列表
             top_k: 返回结果数量
+            errors: If given, collects the failure of each skipped knowledge base.
 
         Returns:
             List[Result]: 检索结果列表
@@ -232,6 +240,11 @@ class RetrievalManager:
                     f"知识库 {kb_id} 稠密检索失败: {type(e).__name__}: {e}",
                     exc_info=True,
                 )
+                if errors is not None:
+                    errors.append(
+                        f"Embedding search in knowledge base {kb_id} failed: "
+                        f"{type(e).__name__}: {e}"
+                    )
                 # skip the faulty KB and continue
 
         # 按相似度排序并返回 top_k
