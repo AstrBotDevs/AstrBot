@@ -141,3 +141,37 @@ for (const phase of ["awaiting_approval", "unknown"]) {
     }
   });
 }
+
+test("a Python call in the run details says it is waiting for approval", async () => {
+  // Python calls are drawn by the timeline itself, not by ToolCallCard.
+  const { readFileSync } = await import("node:fs");
+  const ts = (await import("typescript")).default;
+  const vm = await import("node:vm");
+  const source = readFileSync(
+    new URL(
+      "../src/components/chat/message_list_comps/ReasoningTimeline.vue",
+      import.meta.url,
+    ),
+    "utf8",
+  )
+    .split('<script setup lang="ts">')[1]
+    .split("</script>")[0];
+  const ast = ts.createSourceFile("t.ts", source, ts.ScriptTarget.Latest, true);
+  const fn = ast.statements.find(
+    (node) =>
+      ts.isFunctionDeclaration(node) &&
+      node.name?.text === "toolCallStatusText",
+  );
+  const context = { tm: (key) => key };
+  vm.runInNewContext(ts.transpile(fn.getText(ast)), context);
+  const status = (tool) => context.toolCallStatusText(tool);
+  assert.equal(status({}), "toolStatus.running");
+  assert.equal(
+    status({ phase: "awaiting_approval" }),
+    "toolStatus.awaitingApproval",
+  );
+  assert.equal(
+    status({ phase: "awaiting_approval", finished_ts: 2 }),
+    "toolStatus.done",
+  );
+});
