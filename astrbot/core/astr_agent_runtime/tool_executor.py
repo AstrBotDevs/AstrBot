@@ -311,6 +311,61 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
             return
 
     @classmethod
+    async def execute_with_args(
+        cls,
+        tool: FunctionTool,
+        run_context: ContextWrapper[AstrAgentContext],
+        tool_args: dict[str, T.Any],
+    ):
+        """Execute a tool while keeping tool arguments separate from controls."""
+        tool_args = dict(tool_args)
+
+        if (
+            isinstance(tool, HandoffTool | MCPTool)
+            or cls.execute.__func__ is not FunctionToolExecutor.execute.__func__
+        ):
+            async with aclosing(cls.execute(tool, run_context, **tool_args)) as results:
+                async for result in results:
+                    yield result
+            return
+
+        if tool.is_background_task and getattr(
+            run_context.context, "send_to_user", True
+        ):
+            event = run_context.context.event
+            if active_event_registry.get_background_stop_signal(event).is_set():
+                return
+            task_id = uuid.uuid4().hex
+
+            async def run_in_background() -> None:
+                try:
+                    await cls._execute_background_with_args(
+                        tool, run_context, task_id, tool_args
+                    )
+                except Exception as exc:
+                    logger.error(
+                        f"Background task {task_id} failed: {exc!s}", exc_info=True
+                    )
+
+            task = asyncio.create_task(run_in_background())
+            active_event_registry.register_background_task(event, task)
+            yield mcp.types.CallToolResult(
+                content=[
+                    mcp.types.TextContent(
+                        type="text",
+                        text=f"Background task submitted. task_id={task_id}",
+                    )
+                ]
+            )
+            return
+
+        async with aclosing(
+            cls._execute_local_with_args(tool, run_context, tool_args)
+        ) as results:
+            async for result in results:
+                yield result
+
+    @classmethod
     def _get_runtime_computer_tools(
         cls,
         runtime: str,
@@ -630,13 +685,34 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
         task_id: str,
         **tool_args,
     ) -> None:
+        await cls._execute_background_with_args(
+            tool, run_context, task_id, tool_args, legacy=True
+        )
+
+    @classmethod
+    async def _execute_background_with_args(
+        cls,
+        tool: FunctionTool,
+        run_context: ContextWrapper[AstrAgentContext],
+        task_id: str,
+        tool_args: dict[str, T.Any],
+        *,
+        legacy: bool = False,
+    ) -> None:
         # run the tool
         permissions = get_agent_permissions(run_context)
         result = mcp.types.CallToolResult(content=[])
         try:
-            async for r in cls._execute_local(
-                tool, run_context, tool_call_timeout=3600, **tool_args
-            ):
+            results = (
+                cls._execute_local(
+                    tool, run_context, tool_call_timeout=3600, **tool_args
+                )
+                if legacy
+                else cls._execute_local_with_args(
+                    tool, run_context, tool_args, tool_call_timeout=3600
+                )
+            )
+            async for r in results:
                 if isinstance(r, mcp.types.CallToolResult):
                     result.content.extend(r.content)
                     result.isError = result.isError or r.isError
@@ -684,6 +760,34 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
         tool_call_timeout: int | None = None,
         **tool_args,
     ):
+        async with aclosing(
+            cls._execute_local_with_args(
+                tool,
+                run_context,
+                tool_args,
+                tool_call_timeout=tool_call_timeout,
+            )
+        ) as results:
+            async for result in results:
+                yield result
+
+    @classmethod
+    async def _execute_local_with_args(
+        cls,
+        tool: FunctionTool,
+        run_context: ContextWrapper[AstrAgentContext],
+        tool_args: dict[str, T.Any],
+        *,
+        tool_call_timeout: int | None = None,
+    ):
+        """Run a local tool while keeping its argument map separate from controls.
+
+        Args:
+            tool: Tool being executed.
+            run_context: Context for the current agent run.
+            tool_args: Arguments supplied by the tool caller.
+            tool_call_timeout: Optional executor timeout override.
+        """
         event = run_context.context.event
         if not event:
             raise ValueError("Event must be provided for local function tools.")
@@ -728,9 +832,8 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
 
         wrapper = call_local_llm_tool(
             context=run_context,
-            handler=awaitable,
+            handler=lambda *args, **kwargs: awaitable(*args, **tool_args),
             method_name=method_name,
-            **tool_args,
         )
         async with aclosing(wrapper):
             while True:

@@ -2766,9 +2766,10 @@ async def test_unknown_tool_is_rejected_without_claiming_execution(
 async def test_steering_detaches_running_tool_without_reexecution(
     runner, provider_request, mock_hooks, monkeypatch, outcome
 ):
+    from mcp.types import CallToolResult, TextContent
+
     from astrbot.core.agent.runtime import AgentSessionRef
     from astrbot.core.utils.active_event_registry import ActiveEventRegistry
-    from mcp.types import CallToolResult, TextContent
 
     registry = ActiveEventRegistry()
     monkeypatch.setattr(
@@ -2874,3 +2875,277 @@ async def test_steering_detaches_running_tool_without_reexecution(
                     task.cancel()
                 await asyncio.gather(task, return_exceptions=True)
         registry.unregister(event)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("schema", "arguments", "expected"),
+    [
+        (
+            {
+                "type": "object",
+                "additionalProperties": {"type": "integer", "minimum": 0},
+            },
+            {"paper": 12},
+            {"paper": 12},
+        ),
+        (
+            {
+                "type": "object",
+                "properties": {"fixed": {"type": "string"}},
+                "additionalProperties": {"type": "integer"},
+            },
+            {"fixed": "ok", "paper": 12},
+            {"fixed": "ok", "paper": 12},
+        ),
+        (
+            {
+                "type": "object",
+                "properties": {"fixed": {"type": "string"}},
+                "additionalProperties": False,
+            },
+            {"fixed": "ok", "extra": 12},
+            {"fixed": "ok"},
+        ),
+        (
+            {"type": "object", "additionalProperties": {"type": "integer"}},
+            {"paper": "invalid"},
+            {},
+        ),
+        ({"type": "object", "additionalProperties": {}}, {"paper": 12}, {"paper": 12}),
+        ({"type": "object", "additionalProperties": True}, {"paper": 12}, {"paper": 12}),
+        ({"type": "object", "patternProperties": {"^sku_": {"type": "integer"}}, "additionalProperties": False}, {"sku_paper": 12}, {"sku_paper": 12}),
+        ({"type": "object", "allOf": [{"properties": {"paper": {"type": "integer"}}}]}, {"paper": 12}, {"paper": 12}),
+        ({"$defs": {"order": {"type": "object", "additionalProperties": {"type": "integer"}}}, "$ref": "#/$defs/order"}, {"paper": 12}, {"paper": 12}),
+    ],
+)
+async def test_inline_tool_receives_schema_valid_dynamic_arguments(
+    runner, mock_hooks, schema, arguments, expected
+):
+    received = []
+
+    class CapturingExecutor:
+        @classmethod
+        def execute(cls, tool, run_context, **tool_args):
+            async def generator():
+                from mcp.types import CallToolResult, TextContent
+
+                received.append(tool_args)
+                yield CallToolResult(content=[TextContent(type="text", text="ok")])
+
+            return generator()
+
+    tool = FunctionTool(
+        name="quote", description="Quote items.", parameters=schema, handler=AsyncMock()
+    )
+    provider = SingleToolThenFinalProvider(tool.name, arguments)
+    request = ProviderRequest(
+        prompt="quote", func_tool=ToolSet(tools=[tool]), contexts=[]
+    )
+    await runner.reset(
+        provider=provider,
+        request=request,
+        run_context=ContextWrapper(context=None),
+        tool_executor=CapturingExecutor,
+        agent_hooks=mock_hooks,
+        streaming=False,
+    )
+    async for _ in runner.step_until_done(3):
+        pass
+    assert received == [expected]
+
+
+@pytest.mark.asyncio
+async def test_dynamic_schema_regex_does_not_block_event_loop(runner, mock_hooks, monkeypatch):
+    processes = []
+    create_process = asyncio.create_subprocess_exec
+
+    async def capture_process(*args, **kwargs):
+        process = await create_process(*args, **kwargs)
+        processes.append(process)
+        return process
+
+    monkeypatch.setattr(asyncio, "create_subprocess_exec", capture_process)
+    tool = FunctionTool(
+        name="quote",
+        description="Quote items.",
+        parameters={
+            "type": "object",
+            "patternProperties": {"^(a+)+$": {"type": "integer"}},
+            "additionalProperties": True,
+        },
+        handler=AsyncMock(),
+    )
+    provider = SingleToolThenFinalProvider(tool.name, {"a" * 100 + "!": 12})
+    request = ProviderRequest(prompt="quote", func_tool=ToolSet(tools=[tool]), contexts=[])
+    await runner.reset(
+        provider=provider,
+        request=request,
+        run_context=ContextWrapper(context=None),
+        tool_executor=MockToolExecutor,
+        agent_hooks=mock_hooks,
+        streaming=False,
+    )
+
+    async def drain():
+        return [event async for event in runner.step_until_done(3)]
+
+    task = asyncio.create_task(drain())
+    await asyncio.sleep(1)
+    assert processes and not task.done()
+    await asyncio.wait_for(task, timeout=10)
+    assert processes[0].returncode is not None
+    assert not mock_hooks.tool_start_called
+    tool_messages = [m for m in runner.run_context.messages if m.role == "tool"]
+    assert "Tool argument validation could not be completed" in str(tool_messages[0].content)
+
+
+@pytest.mark.asyncio
+async def test_cancelling_dynamic_schema_validation_stops_child(runner, mock_hooks, monkeypatch):
+    processes = []
+    create_process = asyncio.create_subprocess_exec
+
+    async def capture_process(*args, **kwargs):
+        process = await create_process(*args, **kwargs)
+        processes.append(process)
+        return process
+
+    monkeypatch.setattr(asyncio, "create_subprocess_exec", capture_process)
+    tool = FunctionTool(
+        name="quote",
+        description="Quote items.",
+        parameters={
+            "type": "object",
+            "patternProperties": {"^(a+)+$": {"type": "integer"}},
+            "additionalProperties": True,
+        },
+        handler=AsyncMock(),
+    )
+    provider = SingleToolThenFinalProvider(tool.name, {"a" * 100 + "!": 12})
+    request = ProviderRequest(prompt="quote", func_tool=ToolSet(tools=[tool]), contexts=[])
+    await runner.reset(
+        provider=provider,
+        request=request,
+        run_context=ContextWrapper(context=None),
+        tool_executor=MockToolExecutor,
+        agent_hooks=mock_hooks,
+        streaming=False,
+    )
+
+    async def drain():
+        return [event async for event in runner.step_until_done(3)]
+
+    task = asyncio.create_task(drain())
+    for _ in range(40):
+        if processes:
+            break
+        await asyncio.sleep(0.05)
+    assert processes
+    task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await asyncio.wait_for(task, timeout=5)
+    assert processes[0].returncode is not None
+    assert not mock_hooks.tool_start_called
+
+
+@pytest.mark.asyncio
+async def test_frozen_runtime_rejects_unvalidated_dynamic_arguments(runner, mock_hooks, monkeypatch):
+    tool = FunctionTool(
+        name="quote",
+        description="Quote items.",
+        parameters={"type": "object", "additionalProperties": {"type": "integer"}},
+        handler=AsyncMock(),
+    )
+    provider = SingleToolThenFinalProvider(tool.name, {"paper": 12})
+    request = ProviderRequest(prompt="quote", func_tool=ToolSet(tools=[tool]), contexts=[])
+    await runner.reset(
+        provider=provider,
+        request=request,
+        run_context=ContextWrapper(context=None),
+        tool_executor=MockToolExecutor,
+        agent_hooks=mock_hooks,
+        streaming=False,
+    )
+    monkeypatch.setattr(sys, "frozen", True, raising=False)
+    async for _ in runner.step_until_done(3):
+        pass
+    assert not mock_hooks.tool_start_called
+    tool_messages = [m for m in runner.run_context.messages if m.role == "tool"]
+    assert "Tool argument validation could not be completed" in str(tool_messages[0].content)
+
+
+@pytest.mark.asyncio
+async def test_dynamic_schema_keeps_filter_for_handler_without_kwargs(runner, mock_hooks):
+    received = []
+
+    class CapturingExecutor:
+        @classmethod
+        def execute(cls, tool, run_context, **tool_args):
+            async def generator():
+                from mcp.types import CallToolResult, TextContent
+
+                received.append(tool_args)
+                yield CallToolResult(content=[TextContent(type="text", text="ok")])
+
+            return generator()
+
+    async def handler(event, fixed):
+        return fixed
+
+    tool = FunctionTool(
+        name="quote",
+        description="Quote items.",
+        parameters={"type": "object", "properties": {"fixed": {"type": "string"}}},
+        handler=handler,
+    )
+    provider = SingleToolThenFinalProvider(tool.name, {"fixed": "ok", "extra": 12})
+    request = ProviderRequest(prompt="quote", func_tool=ToolSet(tools=[tool]), contexts=[])
+    await runner.reset(
+        provider=provider,
+        request=request,
+        run_context=ContextWrapper(context=None),
+        tool_executor=CapturingExecutor,
+        agent_hooks=mock_hooks,
+        streaming=False,
+    )
+    async for _ in runner.step_until_done(3):
+        pass
+    assert received == [{"fixed": "ok"}]
+
+
+@pytest.mark.asyncio
+async def test_inline_dynamic_arguments_do_not_collide_with_executor_controls(runner, mock_hooks):
+    received = {}
+
+    async def handler(_event, **kwargs):
+        received.update(kwargs)
+        return "ok"
+
+    arguments = {
+        "tool": "t",
+        "run_context": "r",
+        "tool_call_timeout": 7,
+        "context": "c",
+        "handler": "h",
+        "method_name": "m",
+        "task_id": "id",
+    }
+    tool = FunctionTool(
+        name="quote",
+        description="Quote items.",
+        parameters={"type": "object", "additionalProperties": True},
+        handler=handler,
+    )
+    provider = SingleToolThenFinalProvider(tool.name, arguments)
+    request = ProviderRequest(prompt="quote", func_tool=ToolSet(tools=[tool]), contexts=[])
+    await runner.reset(
+        provider=provider,
+        request=request,
+        run_context=ContextWrapper(context=SimpleNamespace(event=SimpleNamespace(), send_to_user=False)),
+        tool_executor=FunctionToolExecutor,
+        agent_hooks=mock_hooks,
+        streaming=False,
+    )
+    async for _ in runner.step_until_done(3):
+        pass
+    assert received == arguments
