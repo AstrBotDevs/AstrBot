@@ -80,6 +80,7 @@ async def collect_initial_request(
             req.contexts = (
                 list(req.contexts) if isinstance(req.contexts, list) else req.contexts
             )
+            req.extra_body = dict(req.extra_body or {})
         else:
             req = ProviderRequest()
             req.prompt = ""
@@ -282,6 +283,17 @@ async def collect_initial_request(
             if consumed_provider_prefix:
                 event.set_extra("_consumed_provider_prefix", consumed_provider_prefix)
             event.set_extra("_default_event_prompt", True)
+
+    if (
+        isinstance(reasoning_effort := event.get_extra("reasoning_effort"), str)
+        and reasoning_effort
+        and "reasoning_effort" not in (req.extra_body or {})
+    ):
+        req.extra_body = {
+            **(req.extra_body or {}),
+            "reasoning_effort": reasoning_effort,
+        }
+
     req.image_urls = normalize_and_dedupe_strings(req.image_urls)
     quote_image_ref = None
     quote = next(

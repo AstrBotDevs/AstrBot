@@ -92,7 +92,16 @@ export type ChatFlags = {
      * Display reasoning content for this WebChat request independently of the global display_reasoning_text setting.
      */
     enable_reasoning?: boolean;
+    /**
+     * Reasoning effort for the selected model in this WebChat request. It overrides the provider's configured reasoning_effort for supported providers and is ignored by unsupported providers. When omitted or invalid, the model default is used.
+     */
+    reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
 };
+
+/**
+ * Reasoning effort for the selected model in this WebChat request. It overrides the provider's configured reasoning_effort for supported providers and is ignored by unsupported providers. When omitted or invalid, the model default is used.
+ */
+export type reasoning_effort = 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
 
 export type ChatMessagePatchRequest = {
     content: {

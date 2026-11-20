@@ -112,6 +112,9 @@ async def test_get_session_returns_complete_content_and_pagination_metadata(
             return []
 
     service = object.__new__(ChatService)
+    service._resolve_chat_provider = AsyncMock(
+        return_value={"agent_runner_type": "astrbot", "default_provider_id": ""}
+    )
     service.db = Database()
     service.conv_mgr = SimpleNamespace(
         get_curr_conversation_id=AsyncMock(return_value=None)

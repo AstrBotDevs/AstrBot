@@ -26,6 +26,7 @@ from astrbot.core.platform.sources.webchat.request_flags import (
     resolve_webchat_request_flags,
 )
 from astrbot.core.platform.sources.webchat.webchat_queue_mgr import webchat_queue_mgr
+from astrbot.core.provider.entities import ProviderType
 from astrbot.core.utils.active_event_registry import active_event_registry
 from astrbot.core.utils.astrbot_path import (
     get_astrbot_data_path,
@@ -1183,6 +1184,15 @@ class ChatService:
                 run.message_parts = snapshot_accumulator.build_message_parts(
                     include_pending_tool_calls=True
                 )
+                if msg_type == "end" and run.platform_history_id == "webchat_thread":
+                    thread_umo = build_thread_unified_msg_origin(
+                        run.username, run.session_id
+                    )
+                    result = {
+                        **result,
+                        "thread_id": run.session_id,
+                        **await self._resolve_chat_provider(thread_umo),
+                    }
                 self._publish_chat_run(run, result)
                 if attachment_saved_payload:
                     self._publish_chat_run(run, attachment_saved_payload)
@@ -1705,6 +1715,28 @@ class ChatService:
                 row[f"can_{action}"] = reason is None
                 row[f"{action}_unavailable_reason"] = reason
 
+    async def _resolve_chat_provider(self, umo: str) -> dict[str, str]:
+        """Resolve the runtime and default chat provider for a conversation.
+
+        Args:
+            umo: Unified message origin used for configuration and provider routing.
+
+        Returns:
+            Runtime and effective provider ID for the WebChat client.
+        """
+        config = self.core_lifecycle.astrbot_config_mgr.get_conf(umo)
+        runtime = config.get("agent", {}).get("runtime", "astrbot")
+        provider_id = ""
+        if runtime == "astrbot":
+            provider = (
+                await self.core_lifecycle.provider_manager.get_using_provider_async(
+                    ProviderType.CHAT_COMPLETION, umo=umo
+                )
+            )
+            if provider is not None:
+                provider_id = provider.provider_config["id"]
+        return {"agent_runner_type": runtime, "default_provider_id": provider_id}
+
     async def get_session(
         self,
         username: str,
@@ -1759,9 +1791,10 @@ class ChatService:
         linked = any(
             row.get("turn_id") or row.get("context_event_id") for row in history
         )
+        session_umo = build_webchat_unified_msg_origin(session)
         await self.add_history_capabilities(
             history,
-            build_webchat_unified_msg_origin(session) if linked else None,
+            session_umo if linked else None,
             running=self.running_convs.get(session_id, False),
         )
         response_data = {
@@ -1782,6 +1815,7 @@ class ChatService:
             "threads": [serialize_thread(thread) for thread in threads],
             "is_running": self.running_convs.get(session_id, False),
             "active_runs": self.get_active_chat_runs(username, session_id),
+            **await self._resolve_chat_provider(session_umo),
         }
         if project_info:
             response_data["project"] = {
@@ -1894,9 +1928,10 @@ class ChatService:
         linked = any(
             row.get("turn_id") or row.get("context_event_id") for row in history
         )
+        thread_umo = build_thread_unified_msg_origin(username, thread_id)
         await self.add_history_capabilities(
             history,
-            build_thread_unified_msg_origin(username, thread_id) if linked else None,
+            thread_umo if linked else None,
             running=self.running_convs.get(thread_id, False),
         )
         return {
@@ -1904,6 +1939,7 @@ class ChatService:
             "history": history,
             "is_running": self.running_convs.get(thread_id, False),
             "active_runs": self.get_active_chat_runs(username, thread_id),
+            **await self._resolve_chat_provider(thread_umo),
         }
 
     async def get_thread_from_dashboard_query(

@@ -1523,7 +1523,9 @@ paths:
               $ref: "#/components/schemas/ChatThreadMessageRequest"
       responses:
         "200":
-          description: Server-sent chat stream or an error envelope
+          description: >-
+            Server-sent chat stream or an error envelope. The end event includes
+            thread_id, agent_runner_type, and the effective default_provider_id.
 
   /api/v1/chat/projects:
     get:
@@ -6332,6 +6334,10 @@ components:
           type: boolean
           default: true
           description: Display reasoning content for this WebChat request independently of the global display_reasoning_text setting.
+        reasoning_effort:
+          type: string
+          enum: [none, minimal, low, medium, high, xhigh, max]
+          description: Reasoning effort for the selected model in this WebChat request. It overrides the provider's configured reasoning_effort for supported providers and is ignored by unsupported providers. When omitted or invalid, the model default is used.
       additionalProperties: false
 
     ChatRequest:
