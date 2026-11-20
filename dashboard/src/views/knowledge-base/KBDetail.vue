@@ -8,7 +8,7 @@
     <div v-else-if="loadError" class="loading-container">
       <v-icon size="72" color="error">mdi-alert-circle-outline</v-icon>
       <p class="mt-4 text-medium-emphasis">{{ t('states.loadError') }}</p>
-      <v-btn class="mt-4" prepend-icon="mdi-refresh" color="primary" variant="tonal" @click="loadKB">
+      <v-btn class="mt-4" prepend-icon="mdi-refresh" color="primary" variant="tonal" @click="loadKB()">
         {{ t('states.retry') }}
       </v-btn>
     </div>
@@ -141,7 +141,7 @@
 
         <!-- 文档管理 -->
         <v-window-item value="documents">
-          <DocumentsTab :kb-id="kbId" :kb="kb" @refresh="loadKB" />
+          <DocumentsTab :kb-id="kbId" :kb="kb" @refresh="refreshKB" />
         </v-window-item>
 
         <!-- 知识库检索 -->
@@ -151,7 +151,7 @@
 
         <!-- 设置 -->
         <v-window-item value="settings">
-          <SettingsTab :kb="kb" @updated="loadKB" />
+          <SettingsTab :kb="kb" @updated="refreshKB" />
         </v-window-item>
       </v-window>
     </div>
@@ -164,7 +164,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, watch } from 'vue'
+import { ref, onMounted, onUnmounted, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { knowledgeApi } from '@/api/v1'
 import { useI18n, useModuleI18n } from '@/i18n/composables'
@@ -198,28 +198,38 @@ const showSnackbar = (text: string, color: string = 'success') => {
   snackbar.value.show = true
 }
 
+let kbRequestId = 0
+
 // 加载知识库详情
-const loadKB = async () => {
-  loading.value = true
-  loadError.value = false
+const loadKB = async (background = false) => {
+  if (background && loading.value) return
+  const requestId = ++kbRequestId
+  if (!background) {
+    loading.value = true
+    loadError.value = false
+  }
   try {
     const response = await knowledgeApi.get(kbId.value)
+    if (requestId !== kbRequestId) return
     if (response.data.status === 'ok') {
       kb.value = response.data.data
       loadError.value = false
       emit('title-change', kb.value.kb_name || '')
     } else {
-      loadError.value = true
+      if (!background) loadError.value = true
       showSnackbar(response.data.message || t('states.loadError'), 'error')
     }
   } catch (error) {
+    if (requestId !== kbRequestId) return
     console.error('Failed to load knowledge base:', error)
-    loadError.value = true
+    if (!background) loadError.value = true
     showSnackbar(t('states.loadError'), 'error')
   } finally {
-    loading.value = false
+    if (!background && requestId === kbRequestId) loading.value = false
   }
 }
+
+const refreshKB = () => loadKB(true)
 
 // 格式化日期
 const formatDate = (dateStr: string) => {
@@ -236,6 +246,10 @@ const formatDate = (dateStr: string) => {
 
 onMounted(() => {
   loadKB()
+})
+
+onUnmounted(() => {
+  kbRequestId += 1
 })
 
 watch(
