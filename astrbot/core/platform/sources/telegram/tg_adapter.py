@@ -905,6 +905,11 @@ class TelegramPlatformAdapter(Platform):
 
         # Add this message to the cache
         entry = self.media_group_cache[media_group_id]
+        if any(
+            cached.message and cached.message.message_id == update.message.message_id
+            for cached, _ in entry["items"]
+        ):
+            return
         entry["items"].append((update, context))
         logger.debug(
             f"Add message to media group {media_group_id}, "

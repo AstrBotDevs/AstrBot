@@ -1436,19 +1436,22 @@ async def test_telegram_album_event_text_includes_later_captions(first_caption):
     adapter = _load_telegram_adapter()(
         make_platform_config("telegram"), {}, asyncio.Queue()
     )
-    items = []
-    for filename, caption in [
-        ("first.txt", first_caption),
-        ("second.txt", "Second document"),
+    for message_id, filename, caption in [
+        (1, "first.txt", first_caption),
+        (2, "second.txt", "Second document"),
+        (2, "second.txt", "Second document"),
     ]:
         document = create_mock_file(f"https://example.com/{filename}")
         document.file_name = filename
         update = create_mock_update(
-            message_text=None, document=document, caption=caption
+            message_text=None,
+            document=document,
+            caption=caption,
+            media_group_id="album",
+            message_id=message_id,
         )
-        items.append((update, _build_context()))
+        await adapter.handle_media_group_message(update, _build_context())
 
-    adapter.media_group_cache["album"] = {"items": items}
     with patch.object(adapter, "commit_event") as commit:
         await adapter.process_media_group("album")
 
