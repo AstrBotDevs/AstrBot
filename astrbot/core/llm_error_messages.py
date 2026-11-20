@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -61,3 +62,51 @@ def set_llm_error_message(event: AstrMessageEvent, key: str, **params: str) -> N
     messages = LLM_ERROR_MESSAGES.get(locale, LLM_ERROR_MESSAGES["zh-CN"])
     event.set_extra(LLM_ERROR_CODE_EXTRA_KEY, key)
     event.set_extra(LLM_ERROR_MESSAGE_EXTRA_KEY, messages[key].format(**params))
+
+
+# Provider failures reach the turn result only as text (exception class and
+# message, e.g. "All chat models failed: AuthenticationError: Error code: 401").
+# These patterns give ChatUI a stable code for the failures a user can fix.
+_PROVIDER_FAILURE_CODES = (
+    (
+        "providerToolsRequireResponses",
+        re.compile(r"/v1/responses", re.IGNORECASE),
+    ),
+    (
+        "providerAuth",
+        re.compile(
+            r"AuthenticationError|PermissionDeniedError|Error code: 40[13]\b"
+            r"|\b40[13] (?:UNAUTHENTICATED|PERMISSION_DENIED)\b"
+            r"|invalid[ _-]?api[ _-]?key|incorrect api key",
+            re.IGNORECASE,
+        ),
+    ),
+    (
+        "providerRateLimit",
+        re.compile(
+            r"RateLimitError|Error code: 429\b|\b429 RESOURCE_EXHAUSTED\b"
+            r"|insufficient_quota",
+            re.IGNORECASE,
+        ),
+    ),
+    (
+        "providerModelNotFound",
+        re.compile(r"NotFoundError|Error code: 404\b", re.IGNORECASE),
+    ),
+)
+
+
+def classify_provider_failure(text: str) -> str:
+    """Return a stable code for a failed model request.
+
+    Args:
+        text: Error text of the failed request.
+
+    Returns:
+        One of the provider failure codes, or ``provider_error`` when the
+        failure has no specific user action.
+    """
+    for code, pattern in _PROVIDER_FAILURE_CODES:
+        if pattern.search(text or ""):
+            return code
+    return "provider_error"

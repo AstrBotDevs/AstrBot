@@ -20,6 +20,7 @@ from astrbot.core.agent.runtime import AgentTurn, TurnResult, TurnStatus
 from astrbot.core.agent_output_content import content_from_chain
 from astrbot.core.astr_agent_runtime.history import ConversationHistoryObserver
 from astrbot.core.astr_agent_runtime.runner import AgentRunner, _watch_agent_stop_signal
+from astrbot.core.llm_error_messages import classify_provider_failure
 
 if TYPE_CHECKING:
     from astrbot.core.agent.conversation_events import ConversationEventWriter
@@ -210,7 +211,10 @@ async def execute_native_loop(
         if error
         else TurnStatus.COMPLETED,
         content=content if not error else (),
-        error=RuntimeErrorInfo(code="provider_error", message=response.completion_text)
+        error=RuntimeErrorInfo(
+            code=classify_provider_failure(response.completion_text),
+            message=response.completion_text,
+        )
         if error and response is not None
         else None,
         reason=runner.run_context.run_end_reason or "completed",

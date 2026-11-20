@@ -22,13 +22,6 @@
 - 三类视图教程分别提供 Meme Manager 独立页面、阅读清单消息演示、上下文用量常驻工作台示例，并附实机截图及示例插件。
 - Add target-specific examples: Meme Manager for standalone pages, an interactive reading list for messages, and a resident context-usage workbench, with screenshots and example plugins.
 
-### Plugin view registration / 插件视图注册
-
-- `Star.chatui_views` → `metadata.yaml` 的 `views`：默认标题和描述随声明保存，i18n 的 `views.<name>`（兼容 `pages.<name>`）按字段覆盖；没有翻译时回退到 metadata。旧的独立页面声明省略 target 时仍为 `plugin_page`。
-- Move view declarations from `Star.chatui_views` to `metadata.yaml` under `views`. Keep default labels in metadata and override them with i18n `views.<name>` (legacy `pages.<name>` remains supported). Existing declarations without a target remain standalone `plugin_page` views.
-- `chat_workbench` + `launcher=True` → `chat_workbench_with_launcher`：同一视图既能由消息或工具打开，也能从工作台「＋」打开。只由插件打开的视图继续使用 `chat_workbench`。
-- Replace `chat_workbench` + `launcher=True` with `chat_workbench_with_launcher` for views that can open from messages/tools and from **+**. Keep `chat_workbench` for plugin-opened views without a launcher entry.
-
 ### Model requests / 模型请求
 
 - OpenAI 兼容接口：只有报错明确表示模型不支持工具时，才去掉工具重试，同时去掉 `tool_choice`；警告中附带原始报错。其他和工具有关的错误（如工具参数结构不合法）不再被吞掉。
@@ -39,3 +32,12 @@
 - Context compression looks up the context window of the model actually used for the request. Usage before compression starts from the tokens reported for the previous request and adds an estimate for messages added since.
 - 当前模型不能接收音频且未开启语音识别时，模型会收到一条说明，提示用户开启语音识别或换用支持音频的模型，而不是只看到 `[Audio]`。
 - When the current model cannot receive audio and speech recognition is off, the model receives a note asking it to tell the user to enable speech recognition or switch to an audio-capable model, instead of a bare `[Audio]` placeholder.
+- 模型请求失败时附带稳定的错误代码：API 密钥被拒（401/403）为 `providerAuth`，额度或频率限制（429）为 `providerRateLimit`，模型需要 Responses 接口才能使用工具为 `providerToolsRequireResponses`，模型不存在（404）为 `providerModelNotFound`，其他仍为 `provider_error`。ChatUI 的报错卡片据此给出处理建议。
+- Failed model requests carry a stable error code: `providerAuth` for a rejected API key (401/403), `providerRateLimit` for quota or rate limits (429), `providerToolsRequireResponses` when the model needs the Responses API for tools, `providerModelNotFound` for an unknown model (404), and `provider_error` otherwise. ChatUI error cards use it to suggest a fix.
+
+### Plugin view registration / 插件视图注册
+
+- `Star.chatui_views` → `metadata.yaml` 的 `views`：默认标题和描述随声明保存，i18n 的 `views.<name>`（兼容 `pages.<name>`）按字段覆盖；没有翻译时回退到 metadata。旧的独立页面声明省略 target 时仍为 `plugin_page`。
+- Move view declarations from `Star.chatui_views` to `metadata.yaml` under `views`. Keep default labels in metadata and override them with i18n `views.<name>` (legacy `pages.<name>` remains supported). Existing declarations without a target remain standalone `plugin_page` views.
+- `chat_workbench` + `launcher=True` → `chat_workbench_with_launcher`：同一视图既能由消息或工具打开，也能从工作台「＋」打开。只由插件打开的视图继续使用 `chat_workbench`。
+- Replace `chat_workbench` + `launcher=True` with `chat_workbench_with_launcher` for views that can open from messages/tools and from **+**. Keep `chat_workbench` for plugin-opened views without a launcher entry.
