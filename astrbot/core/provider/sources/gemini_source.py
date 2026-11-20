@@ -31,6 +31,7 @@ from ..headers import build_conversation_headers
 from ..register import register_provider_adapter
 from .chat_request import chat_request
 from .gemini_api_common import gemini_api_version
+from .gemini_usage_backfill import wrap_httpx_client_for_usage_backfill
 from .request_retry import retry_provider_request
 
 GEMINI_4_FALLBACK_THINKING_LEVELS = ("LOW", "MEDIUM", "HIGH", "XHIGH")
@@ -157,7 +158,9 @@ class ProviderGoogleGenAI(Provider):
         if self._http_client is not None:
             self._stale_http_clients = [self._http_client]
 
-        self._http_client = httpx.AsyncClient(**async_client_kwargs)
+        self._http_client = wrap_httpx_client_for_usage_backfill(
+            httpx.AsyncClient(**async_client_kwargs)
+        )
         http_options.httpx_async_client = self._http_client
 
         self.client = genai.Client(
