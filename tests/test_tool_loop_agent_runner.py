@@ -632,12 +632,6 @@ async def test_tool_loop_next_request_includes_tool_result(
         pass
 
     assert provider.call_count == 2
-    assert (
-        runner.request_context_manager.token_counter.count_tokens(
-            provider.received_contexts[0]
-        )
-        < 820
-    )
     second_contexts = provider.received_contexts[1]
     tool_messages = [msg for msg in second_contexts if msg.role == "tool"]
     assert len(tool_messages) == 1

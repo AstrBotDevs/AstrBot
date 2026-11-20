@@ -972,7 +972,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                 json.dumps(
                     [
                         {
-                            "active": getattr(tool, "active", True),
+                            "active": tool.active,
                             "description": tool.description,
                             "name": tool.name,
                             "parameters": tool.parameters,
@@ -1291,20 +1291,6 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             await self._finalize_aborted_step()
             return
         self.run_context.messages = processed_messages
-        if snapshot:
-            processed_message_fingerprints, processed_tool_schema_fingerprint = (
-                self._context_usage_fingerprints(
-                    processed_messages,
-                    self._func_tool_for_provider(),
-                )
-            )
-            if (
-                len(processed_messages) < len(snapshot.message_fingerprints)
-                or snapshot.tool_schema_fingerprint != processed_tool_schema_fingerprint
-                or snapshot.message_fingerprints
-                != processed_message_fingerprints[: len(snapshot.message_fingerprints)]
-            ):
-                self._context_usage_snapshot = None
         if self._conversation_event_sink is not None and (
             processed_messages is not previous_messages
             or self.request_context_manager.revision != context_revision
