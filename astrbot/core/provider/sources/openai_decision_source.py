@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import asyncio
-import base64
 import json
 import math
 from collections.abc import Mapping
@@ -92,10 +91,16 @@ def _input_parts(decision_input: DecisionInput) -> list[dict[str, Any]]:
         if part.data is not None:
             if not isinstance(part.data, str) or not part.data:
                 raise ValueError("DecisionMedia data must be non-empty base64")
-            try:
-                base64.b64decode(part.data, validate=True)
-            except ValueError:
-                raise ValueError("DecisionMedia data must be valid base64") from None
+            if part.data.startswith("data:"):
+                raise ValueError(
+                    "DecisionMedia data must be raw base64 without a data URI prefix"
+                )
+            # Check the API URL limit before allocating the concatenated data URI.
+            if (
+                len("data:") + len(part.mime_type) + len(";base64,") + len(part.data)
+                > _MAX_IMAGE_URL_LENGTH
+            ):
+                raise ValueError("OpenAI decision image exceeds the 1 GiB URL limit")
             image_url = f"data:{part.mime_type};base64,{part.data}"
         else:
             # The API pattern ^(data:|https?://) is case-sensitive.
@@ -110,9 +115,9 @@ def _input_parts(decision_input: DecisionInput) -> list[dict[str, Any]]:
                 uri_host = ""
             if not uri_host:
                 raise ValueError("OpenAI decision image uri must be an HTTP(S) URL")
+            if len(part.uri) > _MAX_IMAGE_URL_LENGTH:
+                raise ValueError("OpenAI decision image exceeds the 1 GiB URL limit")
             image_url = part.uri
-        if len(image_url) > _MAX_IMAGE_URL_LENGTH:
-            raise ValueError("OpenAI decision image exceeds the 1 GiB URL limit")
         content.append({"type": "input_image", "image_url": image_url})
     return content
 
