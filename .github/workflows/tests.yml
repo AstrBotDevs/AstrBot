@@ -1,0 +1,56 @@
+name: Tests
+
+on:
+  push:
+    branches:
+      - master
+    paths-ignore:
+      - README*.md
+      - changelogs/**
+      - dashboard/**
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  unit-tests:
+    name: Run pytest suite on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - ubuntu-latest
+          - windows-latest
+          - macos-latest
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: astral-sh/setup-uv@v10.3.3
+
+      - name: Smoke test
+        timeout-minutes: 10
+        run: uv run scripts/smoke_startup_check.py
+
+      - name: Sandbox for Linux
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y bubblewrap
+          # Ubuntu's AppArmor policy blocks user-namespace capabilities by default.
+          # Allow them on this ephemeral runner so the real sandbox tests can run.
+          if [ -f /proc/sys/kernel/apparmor_restrict_unprivileged_userns ]; then
+            sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+          fi
+          bwrap --unshare-all --ro-bind / / /bin/true
+
+      - name: Sandbox for macOS
+        if: runner.os == 'macOS'
+        run: test -x /usr/bin/sandbox-exec
+
+      - name: Unit tests
+        shell: bash
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+        run: bash ./scripts/run_pytests_ci.sh ./tests
