@@ -514,7 +514,10 @@ class ProviderAnthropic(Provider):
 
         last_block = system_blocks[-1]
         if isinstance(last_block, dict) and "cache_control" not in last_block:
-            last_block["cache_control"] = dict(cls._PROMPT_CACHE_CONTROL)
+            payloads["system"] = [
+                *system_blocks[:-1],
+                {**last_block, "cache_control": dict(cls._PROMPT_CACHE_CONTROL)},
+            ]
 
     async def _query(
         self,
