@@ -75,6 +75,7 @@ AstrBot WebUI支持基于 TOTP（Time-based One-Time Password）的双因素认�
 
 - 启用双因素认证后，修改 TOTP 相关配置时需要先验证当前的 TOTP 验证码，以防止未经授权的修改。
 - 修改管理面板密码会撤销所有受信任设备。
+- 登录时勾选“信任此设备 30 天”后，受信任记录保存在浏览器 Cookie 中：关闭无痕窗口、清除 Cookie 或更换浏览器后需要重新验证。该 Cookie 带 `Secure` 标记，请通过 HTTPS（或本机 `localhost`）访问 WebUI，否则浏览器会丢弃它，该功能将不生效。
 
 ## ChatUI
 

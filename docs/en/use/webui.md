@@ -75,6 +75,7 @@ To replace the TOTP secret, you can do so in the TOTP management window, where y
 
 - Once two-factor authentication is enabled, modifying TOTP-related configurations requires verifying the current TOTP code to prevent unauthorized changes.
 - Changing the admin panel password will revoke all trusted devices.
+- After selecting "Trust this device for 30 days" at login, the trusted record is kept in a browser cookie: closing a private window, clearing cookies, or switching browsers requires verifying again. The cookie carries the `Secure` flag, so access the WebUI over HTTPS (or `localhost`); otherwise the browser drops it and device trust does not take effect.
 
 ## ChatUI
 

@@ -269,7 +269,8 @@ def _set_trusted_device_cookie(
         httponly=True,
         samesite="strict",
         secure=_use_secure_dashboard_jwt_cookie(request),
-        path="/api/auth",
+        # Scoped to /api so both /api/auth/login and /api/v1/auth/login receive it.
+        path="/api",
     )
 
 
