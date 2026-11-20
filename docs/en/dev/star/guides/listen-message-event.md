@@ -28,7 +28,7 @@ class AstrBotMessage:
 
     type: MessageType  # Message type
     self_id: str  # Bot's identification ID
-    session_id: str  # Session ID. Depends on the unique_session setting.
+    session_id: str  # Session ID. Holds the raw adapter value; the event's session_id is rewritten when Isolate Conversation is enabled.
     message_id: str  # Message ID
     group_id: str = ""  # Group ID, empty if it's a private chat
     sender: MessageMember  # Sender
@@ -41,6 +41,11 @@ class AstrBotMessage:
 ```
 
 Here, `raw_message` is the **raw message object** from the messaging platform adapter.
+
+> [!WARNING]
+> When users enable **Isolate Conversation** (`platform_settings.unique_session`), the `session_id` of group messages is rewritten to a platform-specific composite ID, and `unified_msg_origin` changes along with it. On QQ (`aiocqhttp`), for example, `default:GroupMessage:987654321` becomes `default:GroupMessage:123456789_987654321` (`sender ID_group ID`). The format is not consistent across platforms: Lark (`lark`) uses `sender ID%group ID`.
+> If your plugin needs to store or query data per group, use `event.get_group_id()` to get the raw group ID instead of relying on `session_id` or parsing `unified_msg_origin`. Otherwise the same session is identified differently depending on whether the setting is enabled, and lookups will fail.
+> The rewrite only happens on platforms that register an isolated-session ID builder; on all others (for example Telegram or Discord) `session_id` stays unchanged. The built value differs per platform: QQ, Slack and Matrix produce `sender ID_group ID`, Lark produces `sender ID%group ID`, Misskey produces `session ID_sender ID`, while **DingTalk returns only the `sender ID` with no group component**. Do not assume that `session_id` contains a group ID on every platform.
 
 ### Message Chain
 

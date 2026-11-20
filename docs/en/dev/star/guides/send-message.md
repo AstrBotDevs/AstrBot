@@ -39,6 +39,10 @@ With this feature, you can store the `unified_msg_origin` and send messages when
 > About unified_msg_origin.
 > `unified_msg_origin` is a string that records the unique ID of a session. AstrBot uses it to identify which messaging platform and which session it belongs to. This allows messages to be sent to the correct session when using `send_message`. For more about MessageChain, see the next section.
 
+> [!WARNING]
+> `unified_msg_origin` embeds the `session_id`, and the `session_id` of group messages changes format when **Isolate Conversation** (`platform_settings.unique_session`) is enabled. Before storing a `unified_msg_origin` long-term, check whether your plugin needs it to stay stable across that setting; use `event.get_group_id()` when you need to target a group. See [Handling Message Events](./listen-message-event) for the exact formats. The rewrite only applies on platforms that support isolation.
+> `event.get_group_id()` is for group identification only and is **not** a valid `Context.send_message` target; that argument must be a `unified_msg_origin` or a `MessageSession`, and a raw group ID raises `ValueError`.
+
 ## Rich Media Messages
 
 AstrBot supports sending rich media messages such as images, audio, videos, etc. Use `MessageChain` to construct messages.
