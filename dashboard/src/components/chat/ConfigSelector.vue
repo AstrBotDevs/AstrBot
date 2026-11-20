@@ -92,6 +92,13 @@ interface ConfigInfo {
 interface ConfigChangedPayload {
     configId: string;
     agentRunnerType: string;
+    defaultProviderId: string | null;
+    source: 'sync' | 'user';
+}
+
+interface CachedConfigMeta {
+    agentRunnerType: string;
+    defaultProviderId: string | null;
 }
 
 const props = withDefaults(defineProps<{
@@ -120,7 +127,7 @@ const agentRunnerType = ref('astrbot');
 const saving = ref(false);
 const pendingSync = ref(false);
 const routingEntries = ref<Array<{ pattern: string; confId: string }>>([]);
-const configCache = ref<Record<string, string>>({});
+const configCache = ref<Record<string, CachedConfigMeta>>({});
 
 const toast = useToast();
 
@@ -222,7 +229,7 @@ function resolveConfigId(umo: string | null): string {
     return 'default';
 }
 
-async function getAgentRunnerType(confId: string): Promise<string> {
+async function getConfigMeta(confId: string): Promise<CachedConfigMeta> {
     if (configCache.value[confId]) {
         return configCache.value[confId];
     }
@@ -230,22 +237,31 @@ async function getAgentRunnerType(confId: string): Promise<string> {
         const res = await configProfileApi.get(confId);
         const config = ((res.data.data as any).config || {}) as any;
         const type = config?.agent?.runtime || 'astrbot';
-        configCache.value[confId] = type;
-        return type;
+        const rawProviderId =
+            type === 'astrbot' ? config?.agent?.config?.model?.provider_id : '';
+        const meta: CachedConfigMeta = {
+            agentRunnerType: type,
+            defaultProviderId:
+                typeof rawProviderId === 'string' ? rawProviderId.trim() : ''
+        };
+        configCache.value[confId] = meta;
+        return meta;
     } catch (error) {
         console.error('获取配置文件详情失败', error);
-        return 'astrbot';
+        return { agentRunnerType: 'astrbot', defaultProviderId: null };
     }
 }
 
-async function setSelection(confId: string) {
+async function setSelection(confId: string, source: 'sync' | 'user' = 'sync') {
     const normalized = confId || 'default';
     selectedConfigId.value = normalized;
-    const runnerType = await getAgentRunnerType(normalized);
-    agentRunnerType.value = runnerType;
+    const meta = await getConfigMeta(normalized);
+    agentRunnerType.value = meta.agentRunnerType;
     emit('config-changed', {
         configId: normalized,
-        agentRunnerType: runnerType
+        agentRunnerType: meta.agentRunnerType,
+        defaultProviderId: meta.defaultProviderId,
+        source
     });
 }
 
@@ -277,20 +293,16 @@ async function confirmSelection() {
     if (!tempSelectedConfig.value) {
         return;
     }
-    const previousId = selectedConfigId.value;
-    await setSelection(tempSelectedConfig.value);
-    setStoredSelectedChatConfigId(tempSelectedConfig.value);
-    const applied = await applySelectionToBackend(tempSelectedConfig.value);
-    if (!applied) {
-        setStoredSelectedChatConfigId(previousId);
-        await setSelection(previousId);
+    const configId = tempSelectedConfig.value;
+    if (await applySelectionToBackend(configId)) {
+        setStoredSelectedChatConfigId(configId);
+        await setSelection(configId, 'user');
     }
     dialog.value = false;
 }
 
 async function syncSelectionForSession() {
     if (!targetUmo.value) {
-        pendingSync.value = true;
         return;
     }
     if (pendingSync.value) {

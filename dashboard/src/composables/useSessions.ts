@@ -82,8 +82,6 @@ export function useSessions(chatboxMode: boolean = false) {
             const sessionId = response.data.data.session_id;
             const platformId = response.data.data.platform_id;
 
-            currSessionId.value = sessionId;
-
             if (selectedConfigId && selectedConfigId !== 'default' && platformId === 'webchat') {
                 try {
                     const umoDetails = buildWebchatUmoDetails(sessionId, false);
@@ -92,6 +90,8 @@ export function useSessions(chatboxMode: boolean = false) {
                     console.error('Failed to bind config to session', err);
                 }
             }
+
+            currSessionId.value = sessionId;
 
             // 更新 URL
             const basePath = chatboxMode ? '/chatbox' : '/chat';

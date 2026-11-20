@@ -25,6 +25,19 @@
     "dropToUpload": "ドロップしてファイルをアップロード",
     "stopGenerating": "生成を停止"
   },
+  "reasoningEffort": {
+    "label": "推論の強度",
+    "levels": {
+      "default": "プロバイダーの既定値",
+      "none": "オフ",
+      "minimal": "最小",
+      "low": "低",
+      "medium": "中",
+      "high": "高",
+      "xhigh": "超高",
+      "max": "最高"
+    }
+  },
   "message": {
     "user": "ユーザー",
     "assistant": "アシスタント",
@@ -284,15 +297,13 @@
     "empty": "ワークベンチビューが登録されていません。対応するプラグインを有効にしてください。",
     "loadError": "ビューを読み込めませんでした。",
     "retry": "再試行",
-
     "title": "ワークベンチ",
     "openView": "ワークベンチで開く",
     "hide": "ワークベンチを閉じる",
     "expand": "ワークベンチを拡大",
     "restore": "パネルサイズを戻す",
     "resize": "ワークベンチの幅を調整",
-    "closeTab": "{title} を閉じる",
-    "resize": "ワークベンチの幅を調整"
+    "closeTab": "{title} を閉じる"
   },
   "executionError": {
     "noModel": {

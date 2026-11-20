@@ -25,6 +25,19 @@
     "dropToUpload": "松开鼠标上传文件",
     "stopGenerating": "停止生成"
   },
+  "reasoningEffort": {
+    "label": "推理强度",
+    "levels": {
+      "default": "跟随提供商",
+      "none": "关闭",
+      "minimal": "极低",
+      "low": "低",
+      "medium": "中",
+      "high": "高",
+      "xhigh": "超高",
+      "max": "最高"
+    }
+  },
   "message": {
     "user": "用户",
     "assistant": "助手",
@@ -284,15 +297,13 @@
     "empty": "还没有注册的工作台视图。启用提供此类视图的插件后，会显示在这里。",
     "loadError": "无法加载工作台视图。",
     "retry": "重试",
-
     "title": "工作台",
     "openView": "在工作台中打开",
     "hide": "收起工作台",
     "expand": "展开工作台",
     "restore": "还原面板大小",
     "resize": "调整工作台宽度",
-    "closeTab": "关闭 {title}",
-    "resize": "调整工作台宽度"
+    "closeTab": "关闭 {title}"
   },
   "executionError": {
     "noModel": {
