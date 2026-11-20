@@ -1428,3 +1428,38 @@ async def test_telegram_run_rebuilds_fresh_application_after_recreate_init_failu
     app_two.shutdown.assert_awaited()
     app_three.initialize.assert_awaited()
     app_three.start.assert_awaited()
+
+
+@pytest.mark.parametrize("first_caption", [None, "First document"])
+@pytest.mark.asyncio
+async def test_telegram_album_event_text_includes_later_captions(first_caption):
+    adapter = _load_telegram_adapter()(
+        make_platform_config("telegram"), {}, asyncio.Queue()
+    )
+    for message_id, filename, caption in [
+        (1, "first.txt", first_caption),
+        (2, "second.txt", "Second document"),
+        (2, "second.txt", "Second document"),
+    ]:
+        document = create_mock_file(f"https://example.com/{filename}")
+        document.file_name = filename
+        update = create_mock_update(
+            message_text=None,
+            document=document,
+            caption=caption,
+            media_group_id="album",
+            message_id=message_id,
+        )
+        await adapter.handle_media_group_message(update, _build_context())
+
+    with patch.object(adapter, "commit_event") as commit:
+        await adapter.process_media_group("album")
+
+    event = commit.call_args.args[0]
+    captions = [
+        part.text for part in event.get_messages() if isinstance(part, Comp.Plain)
+    ]
+    assert captions == [
+        caption for caption in (first_caption, "Second document") if caption
+    ]
+    assert event.get_message_str() == "\n".join(captions)
