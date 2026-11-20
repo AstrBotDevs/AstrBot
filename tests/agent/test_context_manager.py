@@ -791,6 +791,350 @@ class TestContextManager:
         assert result == [messages[0], messages[-1]]
         assert [message.model_dump() for message in messages] == before
 
+    # ==================== Trusted Usage Calibration & No-Op Fallback Tests ====================
+
+    def _underestimated_multi_round_history(self) -> list[Message]:
+        """System + 5 older rounds (including a tool-call round) + latest round.
+
+        With ``EstimateTokenCounter``, total heuristic tokens are ~730 (< 820
+        for ``max_context_tokens=1000``), reproducing the real-world regime
+        where ``trusted_token_usage`` exceeds the compression threshold while
+        uncalibrated heuristic recounts fall below it.
+        """
+        return [
+            self.create_message("system", "s" * 100),  # 30
+            # Round 0: 120 tokens
+            self.create_message("user", "a" * 200),
+            self.create_message("assistant", "b" * 200),
+            # Round 1: 120 tokens
+            self.create_message("user", "c" * 200),
+            self.create_message("assistant", "d" * 200),
+            # Round 2 (tool chain): 30 + tool_call(~25) + 30 + 30 ≈ 115 tokens
+            self.create_message("user", "e" * 100),
+            Message(
+                role="assistant",
+                tool_calls=[
+                    ToolCall(
+                        id="call_1",
+                        function=ToolCall.FunctionBody(name="lookup", arguments="{}"),
+                    )
+                ],
+            ),
+            Message(role="tool", content="f" * 100, tool_call_id="call_1"),
+            self.create_message("assistant", "g" * 100),
+            # Round 3: 120 tokens
+            self.create_message("user", "h" * 200),
+            self.create_message("assistant", "i" * 200),
+            # Round 4: 120 tokens
+            self.create_message("user", "j" * 200),
+            self.create_message("assistant", "k" * 200),
+            # Round 5 (latest active request): 105 tokens
+            self.create_message("user", "z" * 350),
+        ]
+
+    @pytest.mark.asyncio
+    async def test_failed_llm_summary_with_trusted_usage_underestimate_falls_back_to_truncation(
+        self, caplog
+    ):
+        """Failed LLM compression must still truncate oldest rounds when
+        ``trusted_token_usage`` exceeds the limit even if the heuristic does not.
+        """
+        provider = FailingProvider()
+        config = ContextConfig(
+            max_context_tokens=1000,
+            llm_compress_provider=provider,  # type: ignore[arg-type]
+        )
+        manager = ContextManager(config)
+        messages = self._underestimated_multi_round_history()
+        est_before = manager.token_counter.count_tokens(messages)
+        trusted_usage = 989  # 98.9% > 82%, mirroring ~1.037M / 1.048M
+
+        assert est_before < 820  # uncalibrated heuristic sits below 82% threshold
+
+        with caplog.at_level("INFO"):
+            result = await manager.process(messages, trusted_token_usage=trusted_usage)
+
+        # Dropping only Round 0 leaves calibrated tokens > 820; dropping Round 0
+        # and Round 1 brings calibrated tokens <= 820 while keeping the tool chain.
+        expected = [messages[0], *messages[5:]]
+        est_after_one_drop = manager.token_counter.count_tokens(
+            [messages[0], *messages[3:]]
+        )
+        est_after_two_drops = manager.token_counter.count_tokens(expected)
+        assert math.ceil(est_after_one_drop * trusted_usage / est_before) > 820
+        assert math.ceil(est_after_two_drops * trusted_usage / est_before) <= 820
+
+        assert result == expected
+        assert "Compression made no changes" in caplog.text
+        assert "Compress completed" not in caplog.text
+        assert "Dropped 2 oldest round(s)." in caplog.text
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("failure_mode", ["empty_summary", "err_role"])
+    async def test_noop_llm_summary_responses_with_trusted_usage_fall_back_to_truncation(
+        self, failure_mode
+    ):
+        """Empty or error-role summary responses must also trigger fallback truncation."""
+        provider = MockProvider()
+        if failure_mode == "empty_summary":
+            provider.text_chat = AsyncMock(
+                return_value=LLMResponse(role="assistant", completion_text="   ")
+            )
+        else:
+            provider.text_chat = AsyncMock(
+                return_value=LLMResponse(
+                    role="err", completion_text="503 Service Unavailable"
+                )
+            )
+        config = ContextConfig(
+            max_context_tokens=1000,
+            llm_compress_provider=provider,  # type: ignore[arg-type]
+        )
+        manager = ContextManager(config)
+        messages = self._underestimated_multi_round_history()
+
+        result = await manager.process(messages, trusted_token_usage=989)
+
+        assert result == [messages[0], *messages[5:]]
+
+    @pytest.mark.asyncio
+    async def test_successful_llm_summary_with_trusted_usage_reflects_real_reduction(
+        self, caplog
+    ):
+        """Successful compression scales down cleanly without unnecessary truncation."""
+        provider = MockProvider()
+        config = ContextConfig(
+            max_context_tokens=1000,
+            llm_compress_provider=provider,  # type: ignore[arg-type]
+            llm_compress_keep_recent_ratio=0.15,
+        )
+        manager = ContextManager(config)
+        messages = self._underestimated_multi_round_history()
+
+        with caplog.at_level("INFO"):
+            result = await manager.process(messages, trusted_token_usage=989)
+
+        assert result[0] is messages[0]
+        assert result[-1] is messages[-1]
+        assert any(
+            isinstance(m.content, str) and "Summary of conversation" in m.content
+            for m in result
+        )
+        assert "Compress completed" in caplog.text
+        assert "dropping the oldest rounds" not in caplog.text
+
+    @pytest.mark.asyncio
+    async def test_successful_llm_summary_still_above_calibrated_limit_truncates(self):
+        """Even when summarization succeeds, fallback truncation runs if the
+        calibrated post-summary token count still exceeds the threshold.
+        """
+        provider = MockProvider()
+        # Produce a verbose summary (~510 heuristic tokens) so raw post-summary
+        # estimate (~650) sits below 820 while calibrated count (~880) exceeds 820.
+        provider.text_chat = AsyncMock(
+            return_value=LLMResponse(role="assistant", completion_text="w" * 1700)
+        )
+        config = ContextConfig(
+            max_context_tokens=1000,
+            llm_compress_provider=provider,  # type: ignore[arg-type]
+            llm_compress_keep_recent_ratio=0.0,
+        )
+        manager = ContextManager(config)
+        messages = self._underestimated_multi_round_history()
+
+        result = await manager.process(messages, trusted_token_usage=989)
+
+        # Fallback drops the oversized summary round and keeps [system, latest].
+        assert result == [messages[0], messages[-1]]
+
+    @pytest.mark.asyncio
+    async def test_truncate_by_turns_compressor_with_trusted_usage_continues_to_calibrated_limit(
+        self,
+    ):
+        """TruncateByTurnsCompressor dropping 1 round must keep truncating until
+        calibrated tokens fall below the compression threshold.
+        """
+        config = ContextConfig(max_context_tokens=1000, truncate_turns=1)
+        manager = ContextManager(config)
+        messages = [
+            self.create_message("system", "s" * 100),  # 30
+            *[
+                msg
+                for _ in range(10)
+                for msg in (
+                    self.create_message("user", "u" * 110),  # 33
+                    self.create_message("assistant", "a" * 110),  # 33
+                )
+            ],
+        ]
+        # est_before = 30 + 10 * 66 = 690 (< 820), trusted_usage = 980 (> 820).
+        # TruncateByTurnsCompressor drops 1 turn -> 9 rounds left (est=624, cal=887 > 820).
+        # Fallback drops 1 more round -> 8 rounds left (est=558, cal=793 <= 820).
+        est_before = manager.token_counter.count_tokens(messages)
+        assert est_before == 690
+
+        result = await manager.process(messages, trusted_token_usage=980)
+
+        assert result == [messages[0], *messages[5:]]
+
+    @pytest.mark.asyncio
+    async def test_noop_copy_compressor_and_custom_counter_calibrate_in_non_incremental_loop(
+        self,
+    ):
+        """Non-incremental fallback path must detect copy no-ops and calibrate every recount."""
+        from astrbot.core.agent.context.compressor import TruncateByTurnsCompressor
+
+        class SubclassCounter(EstimateTokenCounter):
+            pass
+
+        class CopyNoOpCompressor(TruncateByTurnsCompressor):
+            async def __call__(self, messages):
+                return [msg.model_copy(deep=True) for msg in messages]
+
+        messages = self._underestimated_multi_round_history()
+        incremental_manager = ContextManager(
+            ContextConfig(
+                max_context_tokens=1000,
+                llm_compress_provider=FailingProvider(),  # type: ignore[arg-type]
+            )
+        )
+        non_incremental_manager = ContextManager(
+            ContextConfig(
+                max_context_tokens=1000,
+                custom_token_counter=SubclassCounter(),
+                custom_compressor=CopyNoOpCompressor(),
+            )
+        )
+
+        incremental_result = await incremental_manager.process(
+            messages, trusted_token_usage=989
+        )
+        non_incremental_result = await non_incremental_manager.process(
+            messages, trusted_token_usage=989
+        )
+
+        assert non_incremental_result == incremental_result
+        assert non_incremental_result == [messages[0], *messages[5:]]
+
+    @pytest.mark.asyncio
+    async def test_noop_compression_with_zero_estimate_and_trusted_usage(self, caplog):
+        """When heuristic estimate is 0 but trusted usage exceeds the limit,
+        failed compression still falls back to dropping oldest rounds down to
+        the latest round.
+        """
+        config = ContextConfig(
+            max_context_tokens=1000,
+            llm_compress_provider=FailingProvider(),  # type: ignore[arg-type]
+        )
+        manager = ContextManager(config)
+        messages = [
+            self.create_message("system", "sys"),
+            self.create_message("user", "hi"),
+            self.create_message("assistant", "ok"),
+            self.create_message("user", "yo"),
+            self.create_message("assistant", "ok"),
+            self.create_message("user", "go"),
+        ]
+        assert manager.token_counter.count_tokens(messages) == 0
+
+        with caplog.at_level("WARNING"):
+            result = await manager.process(messages, trusted_token_usage=950)
+
+        assert result == [messages[0], messages[-1]]
+        assert "only the latest round left" in caplog.text
+
+    @pytest.mark.asyncio
+    async def test_trusted_usage_edge_cases_empty_single_round_and_zero_limit(
+        self, caplog
+    ):
+        """Verify empty history, single-round history, and max_context_tokens=0."""
+        # 1. Empty messages with trusted_token_usage > 0
+        manager = ContextManager(
+            ContextConfig(
+                max_context_tokens=1000,
+                llm_compress_provider=FailingProvider(),  # type: ignore[arg-type]
+            )
+        )
+        assert await manager.process([], trusted_token_usage=950) == []
+
+        # 2. Single-round conversation (only latest active request) stays intact
+        single_round = [
+            self.create_message("system", "s" * 100),
+            self.create_message("user", "u" * 200),
+        ]
+        with caplog.at_level("WARNING"):
+            result = await manager.process(single_round, trusted_token_usage=950)
+        assert result == single_round
+        assert "only the latest round left" in caplog.text
+
+        # 3. max_context_tokens == 0 skips compression even with high trusted usage
+        provider = FailingProvider()
+        unlimited_manager = ContextManager(
+            ContextConfig(
+                max_context_tokens=0,
+                llm_compress_provider=provider,  # type: ignore[arg-type]
+            )
+        )
+        multi_round = self._underestimated_multi_round_history()
+        assert (
+            await unlimited_manager.process(multi_round, trusted_token_usage=999_999)
+            == multi_round
+        )
+        assert provider.last_text_chat_kwargs is None
+
+    @pytest.mark.asyncio
+    async def test_calibration_boundary_precision_avoids_float_truncation_skip(self):
+        """At 1 token above threshold (821 / 1000), exact integer calibration
+        must not lose precision and falsely skip fallback truncation.
+        """
+        config = ContextConfig(
+            max_context_tokens=1000,
+            llm_compress_provider=FailingProvider(),  # type: ignore[arg-type]
+        )
+        manager = ContextManager(config)
+        # Prime heuristic total (29 tokens) where float `29 * (821 / 29)` can drift.
+        messages = [
+            self.create_message("user", "a" * 34),  # 10 tokens
+            self.create_message("assistant", "b" * 34),  # 10 tokens
+            self.create_message("user", "c" * 30),  # 9 tokens
+        ]
+        assert manager.token_counter.count_tokens(messages) == 29
+
+        result = await manager.process(messages, trusted_token_usage=821)
+
+        assert result == [messages[-1]]
+
+    @pytest.mark.asyncio
+    async def test_inplace_mutating_custom_compressor_is_not_misclassified_as_noop(
+        self, caplog
+    ):
+        """A custom compressor that mutates the list in place must be recognized
+        as having compressed the context rather than treated as a no-op.
+        """
+        from astrbot.core.agent.context.compressor import TruncateByTurnsCompressor
+
+        class InPlaceCompressor(TruncateByTurnsCompressor):
+            async def __call__(self, messages):
+                del messages[1:9]
+                return messages
+
+        manager = ContextManager(
+            ContextConfig(
+                max_context_tokens=1000,
+                custom_compressor=InPlaceCompressor(),
+            )
+        )
+        messages = self._underestimated_multi_round_history()
+        expected = [messages[0], *messages[9:]]
+
+        with caplog.at_level("INFO"):
+            result = await manager.process(messages, trusted_token_usage=989)
+
+        assert result == expected
+        assert "Compress completed" in caplog.text
+        assert "Compression made no changes" not in caplog.text
+        assert "dropping the oldest rounds" not in caplog.text
+
     # ==================== Combined Truncation and Compression Tests ====================
 
     @pytest.mark.asyncio
