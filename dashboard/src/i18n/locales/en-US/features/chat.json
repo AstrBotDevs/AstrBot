@@ -295,6 +295,10 @@
     "resize": "Resize workbench"
   },
   "executionError": {
+    "auxiliaryModel": {
+      "title": "A speech or knowledge base model failed",
+      "description": "The model used for speech-to-text, text-to-speech or knowledge base retrieval did not respond, so this reply went on without it. Check that provider's configuration; the details show the cause."
+    },
     "noModel": {
       "title": "No chat model available",
       "description": "Configure and enable a model to start chatting."

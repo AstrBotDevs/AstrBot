@@ -1,6 +1,8 @@
 # Unreleased
 
 - QQ Official: failed image uploads no longer log base64 payloads, avoiding dashboard freezes from oversized log entries. Retry attempts decrease from five to three, with one summary warning.
+- ChatUI：语音转文字、语音合成或知识库检索（嵌入、重排序）的模型调用失败时，回复照常继续，同时显示一张「语音或知识库模型调用失败」卡片，详情中注明是哪个模型和原因，并可直接跳转到模型配置。此前这些失败只写入日志。其他平台行为不变。
+- ChatUI: When the model for speech-to-text, text-to-speech or knowledge base retrieval (embedding, rerank) fails, the reply still goes on and a "speech or knowledge base model failed" card names the model and the cause, with a link to the model configuration. These failures were previously only logged. Other platforms are unchanged.
 
 ### Overview page / 总览页
 

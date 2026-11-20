@@ -6,6 +6,7 @@ from collections.abc import AsyncGenerator
 from pathlib import Path
 
 from astrbot.core import logger
+from astrbot.core.auxiliary_model_errors import notify_auxiliary_model_failure
 from astrbot.core.message.components import Image, Plain, Record, Reply
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
@@ -232,6 +233,12 @@ class PreProcessStage(Stage):
                     f"Session {event.unified_msg_origin} has no speech-to-text "
                     "provider configured.",
                 )
+                if any(isinstance(comp, Record) for comp in event.get_messages()):
+                    await notify_auxiliary_model_failure(
+                        event,
+                        "Speech-to-text",
+                        "Speech-to-text is enabled, but no provider is selected.",
+                    )
                 return
 
             async def _stt_record(record_comp: Record, is_reply: bool = False):
@@ -263,6 +270,12 @@ class PreProcessStage(Stage):
                         logger.error(traceback.format_exc())
                         suffix = " (referenced message)" if is_reply else ""
                         logger.error(f"Speech-to-text{suffix} failed: {e}")
+                        await notify_auxiliary_model_failure(
+                            event,
+                            "Speech-to-text "
+                            f"({stt_provider.provider_config.get('id', 'unknown')})",
+                            str(e),
+                        )
                         break
                 return None
 

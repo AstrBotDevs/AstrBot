@@ -5,6 +5,7 @@ import traceback
 from collections.abc import AsyncGenerator
 
 from astrbot.core import file_token_service, html_renderer, logger
+from astrbot.core.auxiliary_model_errors import notify_auxiliary_model_failure
 from astrbot.core.i18n import get_config_locale, translate
 from astrbot.core.message.components import At, Image, Json, Node, Plain, Record, Reply
 from astrbot.core.message.message_event_result import ResultContentType
@@ -326,6 +327,8 @@ class ResultDecorateStage(Stage):
 
             if should_tts and tts_provider:
                 new_chain = []
+                # The first failed segment shows one ChatUI card for the reply.
+                tts_error = None
                 for comp in result.chain:
                     if isinstance(comp, Plain) and len(comp.text) > 1:
                         try:
@@ -337,6 +340,7 @@ class ResultDecorateStage(Stage):
                                     "Failed to convert the message segment to speech "
                                     f"because no TTS audio file was found: {comp.text}",
                                 )
+                                tts_error = tts_error or "No audio file was returned."
                                 new_chain.append(comp)
                                 continue
 
@@ -367,13 +371,21 @@ class ResultDecorateStage(Stage):
                             )
                             if dual_output:
                                 new_chain.append(comp)
-                        except Exception:
+                        except Exception as exc:
                             logger.error(traceback.format_exc())
                             logger.error("TTS failed; sending text instead.")
+                            tts_error = tts_error or str(exc)
                             new_chain.append(comp)
                     else:
                         new_chain.append(comp)
                 result.chain = new_chain
+                if tts_error:
+                    await notify_auxiliary_model_failure(
+                        event,
+                        "Text-to-speech "
+                        f"({tts_provider.provider_config.get('id', 'unknown')})",
+                        tts_error,
+                    )
 
             # 文本转图片
             elif (

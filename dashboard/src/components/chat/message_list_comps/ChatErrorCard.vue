@@ -1,11 +1,11 @@
 <template>
   <div
     class="chat-error-card"
-    :class="{ 'is-warning': configurationError }"
+    :class="{ 'is-warning': needsConfiguration }"
     role="status"
   >
     <component
-      :is="configurationError ? TriangleAlert : CircleAlert"
+      :is="needsConfiguration ? TriangleAlert : CircleAlert"
       :size="19"
       class="error-icon"
       aria-hidden="true"
@@ -18,7 +18,7 @@
         {{ tm(`executionError.${category}.description`) }}
       </p>
       <v-btn
-        v-if="configurationError"
+        v-if="needsConfiguration"
         class="configure-button"
         size="small"
         variant="tonal"
@@ -44,6 +44,8 @@ const emit = defineEmits<{ configureModels: [] }>();
 const { tm } = useModuleI18n("features/chat");
 
 const category = computed(() => {
+  // A speech or knowledge-base model failed; the reply went on without it.
+  if (props.code === "auxiliaryModelFailed") return "auxiliaryModel";
   if (props.code === "noProvider") return "noModel";
   if (
     [
@@ -60,6 +62,9 @@ const category = computed(() => {
 });
 const configurationError = computed(() =>
   ["noModel", "modelConfiguration"].includes(category.value),
+);
+const needsConfiguration = computed(
+  () => configurationError.value || category.value === "auxiliaryModel",
 );
 </script>
 
