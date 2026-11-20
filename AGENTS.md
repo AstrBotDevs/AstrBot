@@ -101,6 +101,7 @@ def calculate_metrics(user_id: int, force_refresh: bool = False) -> dict:
 
 1. Title format: use conventional commit messages
 2. Use English to write PR title and descriptions.
+3. Use the repository's `PULL_REQUEST_TEMPLATE` to write the description, and do not change the fields or format provided by the template.
 
 ## Release versions
 
