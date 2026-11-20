@@ -247,7 +247,7 @@ class ResultDecorateStage(Stage):
                             if not split_response:
                                 new_chain.append(comp)
                                 continue
-                            
+
                             previous_plain: Plain | None = None
                             for seg in split_response:
                                 if self.content_cleanup_rule:
