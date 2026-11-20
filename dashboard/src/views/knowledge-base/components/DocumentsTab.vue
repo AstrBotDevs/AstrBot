@@ -11,7 +11,7 @@
 
     <!-- 文档列表 -->
     <v-card variant="outlined">
-      <v-data-table-server :headers="headers" :items="documents" :loading="loading"
+      <v-data-table-server :headers="headers" :items="displayDocuments" :loading="loading"
         :items-per-page-options="[10, 25, 50, 100]"
         :items-per-page="pageSize" :page="page" :items-length="total"
         @update:page="onPageChange" @update:items-per-page="onItemsPerPageChange">
@@ -272,11 +272,30 @@ const fileInput = ref<HTMLInputElement | null>(null)
 const uploadMode = ref('file') // 'file' or 'url'
 const uploadUrl = ref('')
 const llmProviders = ref<any[]>([])
-const uploadingTasks = ref<Map<string, any>>(new Map())
-const progressPollingInterval = ref<number | null>(null)
+
+type UploadingDocument = {
+  doc_id: string
+  doc_name: string
+  file_type: string
+  file_size: number
+  chunk_count: number
+  created_at: string
+  uploading: boolean
+  taskId: string
+  uploadProgress: { stage: string; current: number; total: number }
+}
+
+const uploadingTasks = ref(new Map<string, UploadingDocument[]>())
+const progressTimers = new Map<string, number>()
+const completedTasks = new Set<string>()
+const displayDocuments = computed(() => [
+  ...Array.from(uploadingTasks.value.values()).reverse().flat(),
+  ...documents.value
+])
 const tavilyConfigStatus = ref('loading') // 'loading', 'configured', 'not_configured', 'error'
 const showTavilyDialog = ref(false)
 let documentsRequestId = 0
+let disposed = false
 
 const snackbar = ref({
   show: false,
@@ -346,6 +365,7 @@ const headers = [
 // 加载文档列表
 const loadDocuments = async () => {
   const requestId = ++documentsRequestId
+  const completedBeforeRequest = [...completedTasks]
   loading.value = true
   try {
     const response = await knowledgeApi.documents(props.kbId, {
@@ -353,16 +373,25 @@ const loadDocuments = async () => {
       page_size: pageSize.value,
       search: searchQuery.value.trim() || undefined,
     })
-    if (requestId !== documentsRequestId) return
-    if (response.data.status === 'ok') {
-      const data = response.data.data
-      documents.value = data.items || []
-      total.value = data.total || 0
+    if (requestId !== documentsRequestId) return false
+    if (response.data.status !== 'ok') {
+      showSnackbar(response.data.message || '加载文档列表失败', 'error')
+      return false
     }
+    const data = response.data.data
+    documents.value = data.items || []
+    total.value = data.total || 0
+    for (const taskId of completedBeforeRequest) {
+      uploadingTasks.value.delete(taskId)
+      completedTasks.delete(taskId)
+    }
+    return true
   } catch (error) {
-    if (requestId !== documentsRequestId) return
-    console.error('Failed to load documents:', error)
-    showSnackbar('加载文档列表失败', 'error')
+    if (requestId === documentsRequestId) {
+      console.error('Failed to load documents:', error)
+      showSnackbar('加载文档列表失败', 'error')
+    }
+    return false
   } finally {
     if (requestId === documentsRequestId) {
       loading.value = false
@@ -422,7 +451,8 @@ const startUpload = async () => {
 
 // 上传文件
 const uploadFiles = async () => {
-  if (selectedFiles.value.length === 0) {
+  const files = [...selectedFiles.value]
+  if (files.length === 0) {
     showSnackbar(t('upload.fileRequired'), 'warning')
     return
   }
@@ -433,7 +463,7 @@ const uploadFiles = async () => {
     const formData = new FormData()
 
     // 添加所有文件
-    selectedFiles.value.forEach((file, index) => {
+    files.forEach((file, index) => {
       formData.append(`file${index}`, file)
     })
 
@@ -449,6 +479,7 @@ const uploadFiles = async () => {
     formData.append('max_retries', uploadSettings.value.max_retries.toString())
 
     const response = await knowledgeApi.uploadDocument(props.kbId, formData)
+    if (disposed) return
 
     if (response.data.status === 'ok') {
       const result = response.data.data
@@ -456,41 +487,29 @@ const uploadFiles = async () => {
 
       showSnackbar(`正在后台上传 ${result.file_count} 个文件...`, 'info')
 
-      // 为每个文件添加占位条目到文档列表
-      const uploadingDocs = selectedFiles.value.map((file, index) => ({
-        doc_id: `uploading_${taskId}_${index}`,
-        doc_name: file.name,
-        file_type: file.name.split('.').pop() || '',
-        file_size: file.size,
-        chunk_count: 0,
-        created_at: new Date().toISOString(),
-        uploading: true,
-        taskId: taskId,
-        uploadProgress: {
-          stage: 'waiting',
-          current: 0,
-          total: 100
-        }
-      }))
-
-      // 添加到文档列表顶部
-      documents.value = [...uploadingDocs, ...documents.value]
-
-      // 关闭对话框
-      closeUploadDialog()
-
-      // 开始轮询进度
       if (taskId) {
-        startProgressPolling(taskId)
+        startProgressPolling(taskId, files.map((file, index) => ({
+          doc_id: `uploading_${taskId}_${index}`,
+          doc_name: file.name,
+          file_type: file.name.split('.').pop() || '',
+          file_size: file.size,
+          chunk_count: 0,
+          created_at: new Date().toISOString(),
+          uploading: true,
+          taskId,
+          uploadProgress: { stage: 'waiting', current: 0, total: 100 }
+        })))
       }
+      closeUploadDialog()
     } else {
       showSnackbar(response.data.message || t('documents.uploadFailed'), 'error')
     }
   } catch (error) {
+    if (disposed) return
     console.error('Failed to upload document:', error)
     showSnackbar(t('documents.uploadFailed'), 'error')
   } finally {
-    uploading.value = false
+    if (!disposed) uploading.value = false
   }
 }
 
@@ -526,6 +545,7 @@ const uploadFromUrl = async () => {
 
 
     const response = await knowledgeApi.importDocumentFromUrl(props.kbId, payload)
+    if (disposed) return
 
     if (response.data.status === 'ok') {
       const result = response.data.data
@@ -533,125 +553,104 @@ const uploadFromUrl = async () => {
 
       showSnackbar(`正在从 URL 后台提取内容...`, 'info')
 
-      // 添加占位条目
-      const uploadingDoc = {
-        doc_id: `uploading_${taskId}_0`,
-        doc_name: result.url,
-        file_type: 'url',
-        file_size: 0, // URL has no size
-        chunk_count: 0,
-        created_at: new Date().toISOString(),
-        uploading: true,
-        taskId: taskId,
-        uploadProgress: {
-          stage: 'waiting',
-          current: 0,
-          total: 100
-        }
-      }
-
-      documents.value = [uploadingDoc, ...documents.value]
-      closeUploadDialog()
-
       if (taskId) {
-        startProgressPolling(taskId)
+        startProgressPolling(taskId, [{
+          doc_id: `uploading_${taskId}_0`,
+          doc_name: result.url,
+          file_type: 'url',
+          file_size: 0,
+          chunk_count: 0,
+          created_at: new Date().toISOString(),
+          uploading: true,
+          taskId,
+          uploadProgress: { stage: 'waiting', current: 0, total: 100 }
+        }])
       }
+      closeUploadDialog()
     } else {
       showSnackbar(response.data.message || t('documents.uploadFailed'), 'error')
     }
   } catch (error: any) {
+    if (disposed) return
     console.error('Failed to upload from URL:', error)
     const message = error.response?.data?.message || t('documents.uploadFailed')
     showSnackbar(message, 'error')
   } finally {
-    uploading.value = false
+    if (!disposed) uploading.value = false
   }
 }
 
-// 开始轮询进度
-const startProgressPolling = (taskId: string) => {
-  // 如果已经在轮询，先停止
-  if (progressPollingInterval.value) {
-    stopProgressPolling()
-  }
+const startProgressPolling = (taskId: string, rows: UploadingDocument[]) => {
+  if (disposed || uploadingTasks.value.has(taskId)) return
+  uploadingTasks.value.set(taskId, rows)
 
-  progressPollingInterval.value = window.setInterval(async () => {
+  const schedule = () => {
+    progressTimers.set(taskId, window.setTimeout(poll, 500))
+  }
+  const poll = async () => {
+    progressTimers.delete(taskId)
+    if (disposed) return
+
+    let response: Awaited<ReturnType<typeof knowledgeApi.task>>
     try {
-      const response = await knowledgeApi.task(taskId)
-
-      if (response.data.status === 'ok') {
-        const data = response.data.data
-        const status = data.status
-
-        if (status === 'processing' && data.progress) {
-          // 更新进度
-          const progress = data.progress
-          const fileIndex = progress.file_index || 0
-
-          // 更新对应文件的进度
-          documents.value = documents.value.map(doc => {
-            if (doc.taskId === taskId) {
-              const docIndex = parseInt(doc.doc_id.split('_').pop() || '0')
-              if (docIndex === fileIndex) {
-                return {
-                  ...doc,
-                  uploadProgress: {
-                    stage: progress.stage || 'waiting',
-                    current: progress.current || 0,
-                    total: progress.total || 100
-                  }
-                }
-              }
-            }
-            return doc
-          })
-        } else if (status === 'completed') {
-          // 任务完成
-          stopProgressPolling()
-
-          const result = data.result
-          const successCount = result?.success_count || 0
-          const failedCount = result?.failed_count || 0
-
-          // 移除上传中的占位文档
-          documents.value = documents.value.filter(doc => doc.taskId !== taskId)
-
-          // Reload current page
-          await loadDocuments()
-          emit('refresh')
-
-          if (failedCount === 0) {
-            showSnackbar(`成功上传 ${successCount} 个文档`)
-          } else {
-            showSnackbar(`上传完成: ${successCount} 个成功, ${failedCount} 个失败`, 'warning')
-          }
-        } else if (status === 'failed') {
-          // 任务失败
-          stopProgressPolling()
-
-          // 移除上传中的占位文档
-          documents.value = documents.value.filter(doc => doc.taskId !== taskId)
-
-          showSnackbar(`上传失败: ${data.error || '未知错误'}`, 'error')
-        }
-      } else {
-        // 任务不存在，停止轮询
-        stopProgressPolling()
-        documents.value = documents.value.filter(doc => doc.taskId !== taskId)
-      }
+      response = await knowledgeApi.task(taskId)
     } catch (error) {
-      console.error('Failed to fetch progress:', error)
-      // 不立即停止，允许重试
+      if (!disposed) {
+        console.error('Failed to fetch progress:', error)
+        schedule()
+      }
+      return
     }
-  }, 500) // 每500ms轮询一次
-}
+    if (disposed) return
 
-// 停止轮询进度
-const stopProgressPolling = () => {
-  if (progressPollingInterval.value) {
-    clearInterval(progressPollingInterval.value)
-    progressPollingInterval.value = null
+    if (response.data.status !== 'ok') {
+      if (response.data.message === '找不到该任务') {
+        uploadingTasks.value.delete(taskId)
+        showSnackbar(response.data.message, 'error')
+      } else {
+        schedule()
+      }
+      return
+    }
+    const data = response.data.data
+    if (data.status === 'completed') {
+      completedTasks.add(taskId)
+      for (const row of uploadingTasks.value.get(taskId) ?? []) {
+        row.uploadProgress = { stage: 'awaiting_refresh', current: 100, total: 100 }
+      }
+      const refreshed = await loadDocuments()
+      if (disposed) return
+      emit('refresh')
+      if (!refreshed) return
+
+      const successCount = data.result?.success_count || 0
+      const failedCount = data.result?.failed_count || 0
+      if (failedCount === 0) {
+        showSnackbar(`成功上传 ${successCount} 个文档`)
+      } else {
+        showSnackbar(`上传完成: ${successCount} 个成功, ${failedCount} 个失败`, 'warning')
+      }
+      return
+    }
+    if (data.status === 'failed') {
+      uploadingTasks.value.delete(taskId)
+      showSnackbar(`上传失败: ${data.error || '未知错误'}`, 'error')
+      return
+    }
+    if (data.status === 'processing' && data.progress) {
+      const progress = data.progress
+      const row = uploadingTasks.value.get(taskId)?.[progress.file_index || 0]
+      if (row) {
+        row.uploadProgress = {
+          stage: progress.stage || 'waiting',
+          current: progress.current || 0,
+          total: progress.total || 100
+        }
+      }
+    }
+    schedule()
   }
+  schedule()
 }
 
 // 获取上传百分比
@@ -670,7 +669,8 @@ const getStageText = (stage: string) => {
     'cleaning': '清洗内容...',
     'parsing': '解析文档...',
     'chunking': '文本分块...',
-    'embedding': '生成向量...'
+    'embedding': '生成向量...',
+    'awaiting_refresh': '等待刷新文档列表...'
   }
   return stageMap[stage] || stage
 }
@@ -826,8 +826,12 @@ onMounted(() => {
 })
 
 onUnmounted(() => {
+  disposed = true
   documentsRequestId += 1
-  stopProgressPolling()
+  progressTimers.forEach((timer) => window.clearTimeout(timer))
+  progressTimers.clear()
+  completedTasks.clear()
+  uploadingTasks.value.clear()
 })
 </script>
 
