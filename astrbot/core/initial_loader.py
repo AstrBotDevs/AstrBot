@@ -6,6 +6,7 @@
 """
 
 import asyncio
+import signal
 import traceback
 
 from astrbot.core import LogBroker, logger
@@ -49,9 +50,27 @@ class InitialLoader:
             # 启动核心任务和仪表板服务器
             task = asyncio.gather(core_task, coro)
         else:
-            task = core_task
+            task = asyncio.ensure_future(core_task)
+        sigterm_installed = self._install_sigterm_handler(task)
         try:
             await task  # 整个AstrBot在这里运行
         except asyncio.CancelledError:
             logger.info("🌈 Shutting down AstrBot...")
             await core_lifecycle.stop()
+        finally:
+            if sigterm_installed:
+                asyncio.get_running_loop().remove_signal_handler(signal.SIGTERM)
+
+    @staticmethod
+    def _install_sigterm_handler(task: asyncio.Future) -> bool:
+        """Shut down gracefully on SIGTERM (e.g. ``docker stop``), like on SIGINT.
+
+        Cancelling an already-cancelled task is a no-op, so repeated signals do
+        not trigger the shutdown twice.
+        """
+        try:
+            asyncio.get_running_loop().add_signal_handler(signal.SIGTERM, task.cancel)
+        except (NotImplementedError, RuntimeError):
+            # Windows event loops do not support add_signal_handler.
+            return False
+        return True
