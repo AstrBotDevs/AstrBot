@@ -312,7 +312,10 @@
     "sourceBindSuccess": "プラグインソースを更新しました",
     "validatingPlugin": "プラグインを検証中…",
     "pluginValidateSuccess": "プラグインの検証に成功しました",
-    "pluginValidateFailed": "プラグインの検証に失敗しました"
+    "pluginValidateFailed": "プラグインの検証に失敗しました",
+    "runtimeSwitchSuccess": "実行環境を切り替えました",
+    "runtimeSwitchFailed": "実行環境の切り替えに失敗しました",
+    "runtimeSwitchDisabled": "このプラグインは実行環境を切り替えられません"
   },
   "upload": {
     "fromFile": "ファイルからインストール",
@@ -453,7 +456,8 @@
       "viewHandlers": "ハンドラーを表示",
       "updateTo": "更新先",
       "reinstall": "再インストール",
-      "changeSource": "プラグインソースを変更"
+      "changeSource": "プラグインソースを変更",
+      "runtimeEnvironment": "実行環境"
     },
     "status": {
       "hasUpdate": "新しいバージョンがあります",
@@ -469,6 +473,14 @@
     },
     "errors": {
       "confirmNotRegistered": "$confirm が正しく登録されていません"
+    },
+    "runtime": {
+      "title": "実行環境",
+      "inProcess": "プロセス内実行",
+      "inProcessDesc": "デフォルト。プラグインは AstrBot 本体と同じプロセスで実行されます。",
+      "isolated": "分離実行",
+      "isolatedDesc": "実験的。プラグインは独立したプロセスで実行され、クラッシュしても本体に影響しません。",
+      "switchWarning": "切り替え後、プラグインは自動的に再読み込みされます。"
     }
   },
   "conflicts": {

@@ -14,6 +14,7 @@
   "failedPlugins": {
     "title": "加载失败插件（{count}）",
     "hint": "这些插件加载失败，仍可尝试重载或直接删除。",
+    "switchToInProcess": "切回进程内",
     "columns": {
       "plugin": "插件",
       "error": "错误"
@@ -312,7 +313,10 @@
     "sourceBindSuccess": "插件源已更新",
     "validatingPlugin": "正在校验插件...",
     "pluginValidateSuccess": "插件校验通过",
-    "pluginValidateFailed": "插件校验失败"
+    "pluginValidateFailed": "插件校验失败",
+    "runtimeSwitchSuccess": "运行环境已切换",
+    "runtimeSwitchFailed": "运行环境切换失败",
+    "runtimeSwitchDisabled": "当前插件不支持切换运行环境"
   },
   "upload": {
     "fromFile": "从文件安装",
@@ -453,7 +457,8 @@
       "viewHandlers": "查看行为",
       "updateTo": "更新到",
       "reinstall": "重新安装",
-      "changeSource": "更换插件源"
+      "changeSource": "更换插件源",
+      "runtimeEnvironment": "运行环境"
     },
     "status": {
       "hasUpdate": "有新版本可用",
@@ -469,6 +474,14 @@
     },
     "errors": {
       "confirmNotRegistered": "$confirm 未正确注册"
+    },
+    "runtime": {
+      "title": "运行环境",
+      "inProcess": "进程内运行",
+      "inProcessDesc": "默认。插件与 AstrBot 主程序运行在同一进程中。",
+      "isolated": "隔离运行",
+      "isolatedDesc": "实验性。插件在独立进程中运行，崩溃不会影响主程序。",
+      "switchWarning": "切换后插件将自动重载。"
     }
   },
   "conflicts": {

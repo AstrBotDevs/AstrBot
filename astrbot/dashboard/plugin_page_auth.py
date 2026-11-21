@@ -1,5 +1,7 @@
 PLUGIN_PAGE_BRIDGE_PATH = "/api/plugin/page/bridge-sdk.js"
 PLUGIN_PAGE_TOKEN_TYPE = "plugin_page_asset"
+# Page scope wildcard: the token is valid for every page of the scoped plugin.
+WILDCARD_PAGE_SCOPE = "*"
 
 
 class PluginPageAuth:

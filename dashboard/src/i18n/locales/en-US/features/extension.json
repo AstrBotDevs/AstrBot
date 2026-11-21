@@ -14,6 +14,7 @@
   "failedPlugins": {
     "title": "Failed to Load Plugins ({count})",
     "hint": "These plugins failed to load. You can try reloading or deleting them directly.",
+    "switchToInProcess": "Switch to In-Process",
     "columns": {
       "plugin": "Plugin",
       "error": "Error"
@@ -312,7 +313,10 @@
     "sourceBindSuccess": "Plugin source updated",
     "validatingPlugin": "Validating plugin...",
     "pluginValidateSuccess": "Plugin validation passed",
-    "pluginValidateFailed": "Plugin validation failed"
+    "pluginValidateFailed": "Plugin validation failed",
+    "runtimeSwitchSuccess": "Runtime switched",
+    "runtimeSwitchFailed": "Failed to switch runtime",
+    "runtimeSwitchDisabled": "This plugin's runtime cannot be switched"
   },
   "upload": {
     "fromFile": "Install from File",
@@ -453,7 +457,8 @@
       "viewHandlers": "View Handlers",
       "updateTo": "Update to",
       "reinstall": "Reinstall",
-      "changeSource": "Change Plugin Source"
+      "changeSource": "Change Plugin Source",
+      "runtimeEnvironment": "Runtime"
     },
     "status": {
       "hasUpdate": "New version available",
@@ -469,6 +474,14 @@
     },
     "errors": {
       "confirmNotRegistered": "$confirm not properly registered"
+    },
+    "runtime": {
+      "title": "Runtime Environment",
+      "inProcess": "In-process",
+      "inProcessDesc": "Default. The plugin runs in the same process as AstrBot.",
+      "isolated": "Isolated",
+      "isolatedDesc": "Experimental. The plugin runs in a separate process; crashes won't affect the main program.",
+      "switchWarning": "The plugin will reload automatically after switching."
     }
   },
   "conflicts": {

@@ -41,7 +41,7 @@ CORE_MESSAGES = {
 }
 
 
-def get_config_locale(config: Mapping[str, Any]) -> str:
+def get_config_locale(config: Mapping[str, Any] | None) -> str:
     """Read the bot reply language from an effective configuration.
 
     Args:
@@ -50,7 +50,7 @@ def get_config_locale(config: Mapping[str, Any]) -> str:
     Returns:
         A supported locale, defaulting to Chinese for missing or invalid values.
     """
-    locale = config.get("platform_settings", {}).get("locale", "zh-CN")
+    locale = (config or {}).get("platform_settings", {}).get("locale", "zh-CN")
     return locale if isinstance(locale, str) and locale in CORE_MESSAGES else "zh-CN"
 
 
