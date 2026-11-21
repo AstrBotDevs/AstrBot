@@ -1746,6 +1746,10 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                     # 如果没有 handler（如 MCP 工具），使用所有参数
                     valid_params = func_tool_args
 
+                # Copy before any hook sees the arguments so in-place edits by start
+                # hooks or the tool cannot rewrite the model's recorded tool call.
+                valid_params = copy.deepcopy(valid_params)
+
                 try:
                     await self.agent_hooks.on_tool_start(
                         self.run_context,
