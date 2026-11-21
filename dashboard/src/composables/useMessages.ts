@@ -50,6 +50,8 @@ export interface ToolCall {
   result?: unknown;
   ts?: number;
   finished_ts?: number;
+  // "unknown": the turn ended before this call returned.
+  phase?: "unknown";
   [key: string]: unknown;
 }
 
@@ -1368,6 +1370,13 @@ export function useMessages(options: UseMessagesOptions) {
     if (msgType === "error") {
       markMessageStarted(botRecord);
       appendError(botRecord, data);
+      // A failed run may send no "end", so mark unreturned calls here too; a
+      // late result clears the mark.
+      for (const part of botRecord.content.message) {
+        for (const tool of part.tool_calls || []) {
+          if (!tool.finished_ts) tool.phase = "unknown";
+        }
+      }
       return;
     }
     if (msgType === "complete" || msgType === "break") {
@@ -1392,6 +1401,13 @@ export function useMessages(options: UseMessagesOptions) {
     if (msgType === "end") {
       if (connection) connection.completed = true;
       markMessageStarted(botRecord);
+      // Calls still without a result when the turn ends never returned; the
+      // backend stores them the same way.
+      for (const part of botRecord.content.message) {
+        for (const tool of part.tool_calls || []) {
+          if (!tool.finished_ts) tool.phase = "unknown";
+        }
+      }
       return;
     }
 
@@ -1809,6 +1825,8 @@ export function finishToolCall(record: ChatRecord, result: any) {
     if (part.type !== "tool_call" || !Array.isArray(part.tool_calls)) continue;
     const tool = part.tool_calls.find((item) => item.id === targetId);
     if (tool) {
+      // A late result supersedes an earlier "unknown" mark.
+      delete tool.phase;
       tool.result = result.result;
       tool.finished_ts = result.ts || Date.now() / 1000;
       return;
