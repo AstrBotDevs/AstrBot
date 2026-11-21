@@ -1370,6 +1370,13 @@ export function useMessages(options: UseMessagesOptions) {
     if (msgType === "error") {
       markMessageStarted(botRecord);
       appendError(botRecord, data);
+      // A failed run may send no "end", so mark unreturned calls here too; a
+      // late result clears the mark.
+      for (const part of botRecord.content.message) {
+        for (const tool of part.tool_calls || []) {
+          if (!tool.finished_ts) tool.phase = "unknown";
+        }
+      }
       return;
     }
     if (msgType === "complete" || msgType === "break") {

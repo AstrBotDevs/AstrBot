@@ -145,9 +145,17 @@ class _ButtonCallbackRegistry:
                 f"they stay usable and will be retried: {exc}"
             )
             return
+        cutoff = time.time() - _EXPIRED_RETENTION_SECONDS
         with self._lock:
             for token in pending:
                 self._unsaved.pop(token, None)
+            for token, (_, _, expires_at) in list(self._cache.items()):
+                if expires_at is not None and expires_at < cutoff:
+                    self._cache.pop(token, None)
+
+    async def flush(self) -> None:
+        """Wait for callback writes still running, so a shutdown keeps them."""
+        await asyncio.gather(*self._pending_writes, return_exceptions=True)
 
     def resolve(
         self, token: str, *, allow_expired: bool = False
@@ -212,6 +220,11 @@ def configure_button_callback_registry(db_path: str | Path) -> None:
         db_path: Path to AstrBot's SQLite database.
     """
     _button_callback_registry.configure(db_path)
+
+
+async def flush_button_callbacks() -> None:
+    """Wait for pending button callback writes before AstrBot stops."""
+    await _button_callback_registry.flush()
 
 
 def encode_button_callback(

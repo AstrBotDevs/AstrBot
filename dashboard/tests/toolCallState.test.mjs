@@ -123,6 +123,28 @@ test("a turn ending before a call returns marks only that call interrupted", asy
   }
 });
 
+test("a failed run marks the unreturned call interrupted without an end event", async () => {
+  const h = messagesHarness();
+  try {
+    await h.emit({
+      type: "plain",
+      chain_type: "tool_call",
+      data: JSON.stringify({ id: "open", name: "shell", ts: 1 }),
+    });
+    await h.emit({
+      type: "error",
+      data: { code: "agent_error", message: "WebChat run failed" },
+    });
+    const calls = h.bot.content.message.flatMap((part) => part.tool_calls || []);
+    assert.deepEqual(
+      calls.map((call) => [call.id, call.phase]),
+      [["open", "unknown"]],
+    );
+  } finally {
+    h.stop();
+  }
+});
+
 test("a late result clears the interrupted mark", () => {
   const h = messagesHarness();
   try {
