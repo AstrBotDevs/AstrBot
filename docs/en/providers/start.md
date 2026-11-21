@@ -34,6 +34,14 @@ Using DeepSeek as an example, assuming you have registered and logged in to a De
 6. Click **Save and Fetch Models**, find the desired model, click `+`, and make sure it is enabled. If the model list cannot be fetched, click **Save Configuration**, then **Custom Model** and enter the model ID. Use **Test Model** beside the model to check connectivity.
 7. Open **Config**, select the profile to use, and go to **AI → Model**. Set **Chat Model** to the model you just added, then click **Save Configuration** at the bottom right. This setting is for AstrBot built-in AI.
 
+## Automatic Prompt Caching for Anthropic-Compatible Services
+
+Under **Providers → Chat Completion**, select the Anthropic provider source and expand **Advanced Configuration...** to find **Automatic Prompt Caching**. ChatUI's **Model Configuration** entry also opens these provider source settings.
+
+This option is enabled by default and automatically adds a cache breakpoint to the system prompt. If a compatible gateway rejects requests because it does not support `cache_control`, turn the option off, click **Save Configuration**, confirm that saving succeeded, and retry. The setting applies to both streaming and non-streaming requests. It controls only AstrBot's automatic cache markers; explicit markers supplied by the caller are preserved.
+
+![Automatic prompt caching disabled for a local compatible endpoint (Chinese interface)](/images/anthropic-prompt-cache-off-zh.jpg)
+
 ## Using Environment Variables to Load Keys
 
 > Introduced in v4.13.0.

@@ -1831,6 +1831,10 @@
           "hint": "See https://ai.google.dev/gemini-api/docs/thinking#thinking-levels"
         }
       },
+      "anth_enable_prompt_cache": {
+        "description": "Automatic Prompt Caching",
+        "hint": "Automatically add cache breakpoints to Anthropic requests. Disable this for compatible gateways that do not support caching."
+      },
       "anth_thinking_config": {
         "description": "Thinking Config",
         "type": {

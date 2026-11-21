@@ -514,7 +514,10 @@ class ProviderAnthropic(Provider):
 
         last_block = system_blocks[-1]
         if isinstance(last_block, dict) and "cache_control" not in last_block:
-            last_block["cache_control"] = dict(cls._PROMPT_CACHE_CONTROL)
+            payloads["system"] = [
+                *system_blocks[:-1],
+                {**last_block, "cache_control": dict(cls._PROMPT_CACHE_CONTROL)},
+            ]
 
     async def _query(
         self,
@@ -553,7 +556,8 @@ class ProviderAnthropic(Provider):
 
         if "max_tokens" not in payloads:
             payloads["max_tokens"] = 65536
-        self._apply_explicit_prompt_cache_breakpoints(payloads)
+        if self.provider_config.get("anth_enable_prompt_cache", True):
+            self._apply_explicit_prompt_cache_breakpoints(payloads)
         self._apply_thinking_config(payloads)
         self._sanitize_assistant_messages(payloads)
 
@@ -677,7 +681,8 @@ class ProviderAnthropic(Provider):
 
         if "max_tokens" not in payloads:
             payloads["max_tokens"] = 65536
-        self._apply_explicit_prompt_cache_breakpoints(payloads)
+        if self.provider_config.get("anth_enable_prompt_cache", True):
+            self._apply_explicit_prompt_cache_breakpoints(payloads)
         self._apply_thinking_config(payloads)
         self._sanitize_assistant_messages(payloads)
 
