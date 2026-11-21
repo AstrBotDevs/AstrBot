@@ -42,10 +42,16 @@ async def _resolve_provider(
     umo = payload.get("umo")
     from astrbot.core.provider.entities import ProviderType as CoreProviderType
 
-    return await manager.get_using_provider_async(
-        provider_type=CoreProviderType[_KIND_TO_PROVIDER_TYPE[kind]],
-        umo=to_umo_string(umo) if umo is not None else None,
-    )
+    try:
+        return await manager.get_using_provider_async(
+            provider_type=CoreProviderType[_KIND_TO_PROVIDER_TYPE[kind]],
+            umo=to_umo_string(umo) if umo is not None else None,
+        )
+    except ValueError:
+        if kind is ProviderKind.EMBEDDING:
+            insts = getattr(manager, "embedding_provider_insts", None) or []
+            return insts[0] if insts else None
+        raise
 
 
 class LLMGenerateService:

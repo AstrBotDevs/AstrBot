@@ -156,14 +156,20 @@ class SessionWait:
 class SessionService:
     """Linear multi-turn waits on inbound session messages."""
 
-    def __init__(self, ctx: PluginContext) -> None:
+    def __init__(
+        self,
+        ctx: PluginContext,
+        *,
+        waiters: dict[str, _Waiter] | None = None,
+    ) -> None:
         """Initialize the session service.
 
         Args:
             ctx: Owning plugin context used for Host invocation.
+            waiters: Optional shared waiter table across scoped contexts.
         """
         self._ctx = ctx
-        self._waiters: dict[str, _Waiter] = {}
+        self._waiters: dict[str, _Waiter] = waiters if waiters is not None else {}
 
     def wait(
         self,

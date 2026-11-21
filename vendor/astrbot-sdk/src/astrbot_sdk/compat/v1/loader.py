@@ -787,9 +787,9 @@ def _resolve_astrbot_root(plugin_root: Path) -> Path | None:
     """
     data_path = os.environ.get("ASTRBOT_DATA_PATH")
     if data_path:
-        candidate = Path(data_path).resolve().parent
-        if (candidate / "data").is_dir():
-            return candidate
+        resolved_data = Path(data_path).resolve()
+        if (resolved_data / "plugins" / plugin_root.name) == plugin_root:
+            return resolved_data.parent
     if (
         plugin_root.parent.name == "plugins"
         and plugin_root.parent.parent.name == "data"

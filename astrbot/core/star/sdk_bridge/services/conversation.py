@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import inspect
 import json
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
@@ -364,6 +365,9 @@ def _serialize_history(record: Any) -> dict[str, Any]:
     """Serialize one PlatformMessageHistory row to a JSON-safe dict."""
     created_at = getattr(record, "created_at", None)
     updated_at = getattr(record, "updated_at", None)
+    checkpoint = getattr(record, "turn_id", None)
+    if checkpoint is None:
+        checkpoint = getattr(record, "llm_checkpoint_id", None)
     return {
         "id": record.id,
         "platform_id": record.platform_id,
@@ -371,7 +375,8 @@ def _serialize_history(record: Any) -> dict[str, Any]:
         "sender_id": record.sender_id,
         "sender_name": record.sender_name,
         "content": record.content,
-        "llm_checkpoint_id": record.llm_checkpoint_id,
+        "llm_checkpoint_id": checkpoint,
+        "turn_id": checkpoint,
         "created_at": created_at.isoformat() if created_at else None,
         "updated_at": updated_at.isoformat() if updated_at else None,
     }
@@ -401,14 +406,21 @@ class MessageHistoryService:
     async def handle(self, operation: str, payload: dict[str, Any]) -> Any:
         """Serve one message.history operation."""
         if operation == "insert":
+            checkpoint = payload.get("turn_id") or payload.get("llm_checkpoint_id")
+            insert_params = inspect.signature(self._manager.insert).parameters
+            extra_kw = (
+                {"turn_id": checkpoint}
+                if "turn_id" in insert_params
+                else {"llm_checkpoint_id": checkpoint}
+            )
             record = await self._manager.insert(
                 platform_id=self._required(payload, "platform_id"),
                 user_id=self._required(payload, "user_id"),
                 content=payload.get("content") or {},
                 sender_id=payload.get("sender_id"),
                 sender_name=payload.get("sender_name"),
-                llm_checkpoint_id=payload.get("llm_checkpoint_id"),
                 max_messages=payload.get("max_messages"),
+                **extra_kw,
             )
             return {"record": _serialize_history(record)}
         if operation == "insert_message_chain":
@@ -453,10 +465,17 @@ class MessageHistoryService:
             )
             return {}
         if operation == "update":
+            checkpoint = payload.get("turn_id") or payload.get("llm_checkpoint_id")
+            update_params = inspect.signature(self._manager.update).parameters
+            extra_kw = (
+                {"turn_id": checkpoint}
+                if "turn_id" in update_params
+                else {"llm_checkpoint_id": checkpoint}
+            )
             await self._manager.update(
                 int(self._required(payload, "message_id")),
                 content=payload.get("content"),
-                llm_checkpoint_id=payload.get("llm_checkpoint_id"),
+                **extra_kw,
             )
             return {}
         if operation == "delete_by_id":

@@ -303,7 +303,13 @@ class LLMService:
             "system_prompt": request.system_prompt,
             "provider_id": request.provider_id,
             "umo": (
-                request.umo if request.umo is not None else self._ctx._ambient_umo()
+                request.umo
+                if request.umo is not None
+                else (
+                    request.event.umo
+                    if request.event is not None
+                    else self._ctx._ambient_umo()
+                )
             ),
             "max_steps": request.max_steps,
             "tools": list(request.tools) if request.tools is not None else None,

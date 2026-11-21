@@ -1119,6 +1119,12 @@ class StdioPluginClient:
                         frame.id,
                     )
                     continue
+                if isinstance(frame, CancelFrame):
+                    self.logger.debug(
+                        "Ignoring late Runner cancel for %s",
+                        frame.id,
+                    )
+                    continue
                 raise InvalidRequest(f"Runner cannot send {type(frame).__name__}")
         except Exception as exc:
             failure = exc

@@ -126,6 +126,7 @@ class PluginContext(Generic[ConfigT]):
         default_factory=dict,
         repr=False,
     )
+    _session_waiters: dict[str, Any] = field(default_factory=dict, repr=False)
     _parent_call_id: str | None = field(default=None, repr=False)
     _retired: bool = field(default=False, repr=False)
     _root_ctx: PluginContext[ConfigT] | None = field(default=None, repr=False)
@@ -139,10 +140,12 @@ class PluginContext(Generic[ConfigT]):
         self.assets = AssetService(self)
         self.plugins = PluginRegistryService(self)
         self.render = RenderService(self)
-        self.sessions = SessionService(self)
+        self.sessions = SessionService(self, waiters=self._session_waiters)
         self.tools = ToolService(self)
         self.llm = LLMService(self)
-        self.web = WebService(self)
+        self.web = (
+            self._root_ctx.web if self._root_ctx is not None else WebService(self)
+        )
 
     def current_config(self) -> ConfigT:
         """Return the latest confirmed configuration snapshot."""
@@ -181,6 +184,7 @@ class PluginContext(Generic[ConfigT]):
             _host_service_invoker=root._host_service_invoker,
             dynamic_tools=root.dynamic_tools,
             cron_handlers=root.cron_handlers,
+            _session_waiters=root._session_waiters,
             _parent_call_id=call_id,
             _retired=False,
             _root_ctx=root,

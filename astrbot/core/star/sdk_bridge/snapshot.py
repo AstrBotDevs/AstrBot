@@ -234,7 +234,7 @@ async def build_legacy_snapshot(context: Context) -> dict[str, Any]:
         ("speech_to_text", ProviderType.SPEECH_TO_TEXT),
         ("text_to_speech", ProviderType.TEXT_TO_SPEECH),
     ):
-        provider = pm._resolve_using_provider(provider_type, None, None)
+        provider = pm._resolve_using_provider(provider_type, None)
         defaults[key] = str(provider.meta().id) if provider is not None else None
     defaults["embedding"] = (
         str(pm.embedding_provider_insts[0].meta().id)

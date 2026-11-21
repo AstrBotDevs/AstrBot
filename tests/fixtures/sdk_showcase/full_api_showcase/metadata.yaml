@@ -1,0 +1,31 @@
+schema_version: 2
+name: full_api_showcase
+desc: Full-surface SDK plugin exercising every Host capability, lifecycle hook, view, web route, and LLM/agent API.
+author: astrbot
+version: 1.0.0
+dependencies:
+  astrbot/full_api_peer: ">=1.0.0"
+runtime:
+  api: sdk
+  entrypoint: main:FullApiShowcasePlugin
+  sdk_version: ">=0.1,<0.2"
+capabilities:
+  required:
+    - id: message.receive
+    - id: message.observe
+    - id: message.send
+    - id: message.modify
+    - id: message.wait
+    - id: conversation.read
+    - id: conversation.write
+    - id: plugin.inspect
+    - id: render.image
+    - id: llm.tool.register
+    - id: llm.observe
+    - id: llm.generate
+    - id: llm.embed
+    - id: llm.agent
+    - id: llm.modify
+    - id: speech.transcribe
+    - id: speech.synthesize
+    - id: web.route

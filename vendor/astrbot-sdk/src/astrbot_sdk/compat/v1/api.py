@@ -83,7 +83,7 @@ class _BlockedModule(ModuleType):
 
 
 class _SharedPreferences:
-    """Legacy sp facade backed by plugin-scoped KV storage."""
+    """Legacy sp facade backed by Host sp.store with KV fallback."""
 
     _ctx: Any = None
 
@@ -92,19 +92,122 @@ class _SharedPreferences:
         """Bind the plugin context (called once by the compat loader)."""
         cls._ctx = ctx
 
-    def _storage(self) -> Any:
-        if _SharedPreferences._ctx is None:
+    @staticmethod
+    def _require_ctx() -> Any:
+        ctx = _SharedPreferences._ctx
+        if ctx is None:
             raise ValueError("sp not initialized")
-        return _SharedPreferences._ctx.storage
+        return ctx
+
+    @staticmethod
+    def _uses_sp_store(ctx: Any) -> bool:
+        caps = getattr(ctx, "capabilities", None)
+        return (
+            caps is not None
+            and caps.has("sp.store")
+            and hasattr(ctx, "_invoke_capability")
+        )
+
+    async def get_async(
+        self,
+        scope: str,
+        scope_id: str,
+        key: str,
+        default: Any = None,
+    ) -> Any:
+        """Read one scoped preference from Host sp.store or storage."""
+        ctx = self._require_ctx()
+        if self._uses_sp_store(ctx):
+            result = await ctx._invoke_capability(
+                "sp.store",
+                "get",
+                {
+                    "scope": scope,
+                    "scope_id": scope_id,
+                    "key": key,
+                    "default": default,
+                },
+            )
+            return result.get("value", default) if isinstance(result, dict) else default
+        return await ctx.storage.get(f"sp:{scope}:{scope_id}:{key}", default)
+
+    async def range_get_async(
+        self,
+        scope: str,
+        scope_id: str | None = None,
+        key: str | None = None,
+    ) -> list[_ShellRecord]:
+        """List preference entries matching optional scope_id/key filters."""
+        ctx = self._require_ctx()
+        if self._uses_sp_store(ctx):
+            result = await ctx._invoke_capability(
+                "sp.store",
+                "range_get",
+                {"scope": scope, "scope_id": scope_id, "key": key},
+            )
+            entries = result.get("entries", []) if isinstance(result, dict) else []
+            return [
+                _ShellRecord(
+                    scope=entry.get("scope"),
+                    scope_id=entry.get("scope_id"),
+                    key=entry.get("key"),
+                    value={"val": entry.get("value")},
+                )
+                for entry in entries
+            ]
+        return []
+
+    async def put_async(
+        self,
+        scope: str,
+        scope_id: str,
+        key: str,
+        value: Any,
+    ) -> None:
+        """Persist one scoped preference."""
+        ctx = self._require_ctx()
+        if self._uses_sp_store(ctx):
+            await ctx._invoke_capability(
+                "sp.store",
+                "put",
+                {"scope": scope, "scope_id": scope_id, "key": key, "value": value},
+            )
+            return
+        await ctx.storage.set(f"sp:{scope}:{scope_id}:{key}", value)
+
+    async def remove_async(self, scope: str, scope_id: str, key: str) -> None:
+        """Remove one scoped preference."""
+        ctx = self._require_ctx()
+        if self._uses_sp_store(ctx):
+            await ctx._invoke_capability(
+                "sp.store",
+                "remove",
+                {"scope": scope, "scope_id": scope_id, "key": key},
+            )
+            return
+        await ctx.storage.delete(f"sp:{scope}:{scope_id}:{key}")
+
+    async def clear_async(self, scope: str, scope_id: str) -> None:
+        """Clear every preference under one scope_id."""
+        ctx = self._require_ctx()
+        if self._uses_sp_store(ctx):
+            await ctx._invoke_capability(
+                "sp.store",
+                "clear",
+                {"scope": scope, "scope_id": scope_id},
+            )
 
     async def get(self, scope: str, key: str, default: Any = None) -> Any:
-        return await self._storage().get(f"sp:{scope}:{key}", default)
+        """Read one scope/key preference."""
+        return await self.get_async(scope, scope, key, default)
 
     async def put(self, scope: str, key: str, value: Any) -> None:
-        await self._storage().set(f"sp:{scope}:{key}", value)
+        """Write one scope/key preference."""
+        await self.put_async(scope, scope, key, value)
 
     async def remove(self, scope: str, key: str) -> None:
-        await self._storage().delete(f"sp:{scope}:{key}")
+        """Delete one scope/key preference."""
+        await self.remove_async(scope, scope, key)
 
     async def session_get(
         self,
@@ -113,10 +216,30 @@ class _SharedPreferences:
         default: Any = None,
         **_: Any,
     ) -> Any:
-        return await self._storage().get(f"sp:session:{umo}:{key}", default)
+        """Read one session-scoped preference (`scope='umo'`)."""
+        return await self.get_async("umo", str(umo), key, default)
 
     async def session_put(self, umo: str, key: str, value: Any) -> None:
-        await self._storage().set(f"sp:session:{umo}:{key}", value)
+        """Persist one session-scoped preference (`scope='umo'`)."""
+        await self.put_async("umo", str(umo), key, value)
+
+    async def session_remove(self, umo: str, key: str) -> None:
+        """Remove one session-scoped preference (`scope='umo'`)."""
+        await self.remove_async("umo", str(umo), key)
+
+    async def global_get(self, key: str | None = None, default: Any = None) -> Any:
+        """Read one global preference or list global entries when key is None."""
+        if key is None:
+            return await self.range_get_async("global", "global", None)
+        return await self.get_async("global", "global", key, default)
+
+    async def global_put(self, key: str, value: Any) -> None:
+        """Persist one global preference (`scope='global'`)."""
+        await self.put_async("global", "global", key, value)
+
+    async def global_remove(self, key: str) -> None:
+        """Remove one global preference (`scope='global'`)."""
+        await self.remove_async("global", "global", key)
 
 
 def _utils_io_mod() -> ModuleType:

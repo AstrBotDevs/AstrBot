@@ -470,6 +470,89 @@ class ProviderManagerFacade:
             return TTSProvider(self._ctx, provider_id=provider_id)
         raise ValueError(f"Unknown provider type: {provider_type}")
 
+    async def set_provider(
+        self,
+        provider_id: str,
+        provider_type: Any,
+        umo: Any = None,
+    ) -> None:
+        """Persist the active provider selection via the host provider service.
+
+        Args:
+            provider_id: Target provider identifier.
+            provider_type: Legacy ProviderType enum member or its string value.
+            umo: Optional session identifier for per-session overrides.
+        """
+        kind = _legacy_type_from_any(provider_type)
+        umo_text = _umo_str(umo)
+        await self._ctx._invoke_capability(
+            "provider.write",
+            "set_provider",
+            {
+                "provider_id": str(provider_id),
+                "provider_type": _PREF_KEY_BY_KIND[kind],
+                "umo": umo_text,
+            },
+        )
+        if umo_text:
+            prefs = self._snapshot.setdefault("provider_umo_prefs", {})
+            prefs.setdefault(umo_text, {})[_PREF_KEY_BY_KIND[kind]] = str(provider_id)
+        else:
+            defaults = self._snapshot.setdefault("provider_defaults", {})
+            defaults[_SNAPSHOT_KEY_BY_KIND[kind]] = str(provider_id)
+
+    async def create_provider(self, new_config: dict[str, Any]) -> None:
+        """Create and load a provider on the host runtime.
+
+        Args:
+            new_config: Provider configuration mapping including an ``id``.
+        """
+        await self._ctx._invoke_capability(
+            "provider.write",
+            "create_provider",
+            {"new_config": dict(new_config)},
+        )
+
+    async def update_provider(
+        self,
+        origin_provider_id: str,
+        new_config: dict[str, Any],
+    ) -> None:
+        """Update an existing host provider configuration and reload it.
+
+        Args:
+            origin_provider_id: Existing provider identifier to update.
+            new_config: Replacement provider configuration mapping.
+        """
+        await self._ctx._invoke_capability(
+            "provider.write",
+            "update_provider",
+            {
+                "origin_provider_id": str(origin_provider_id),
+                "new_config": dict(new_config),
+            },
+        )
+
+    async def delete_provider(
+        self,
+        provider_id: str | None = None,
+        provider_source_id: str | None = None,
+    ) -> None:
+        """Delete a provider or provider source on the host runtime.
+
+        Args:
+            provider_id: Specific provider instance identifier to delete.
+            provider_source_id: Provider source identifier matching providers.
+        """
+        await self._ctx._invoke_capability(
+            "provider.write",
+            "delete_provider",
+            {
+                "provider_id": provider_id,
+                "provider_source_id": provider_source_id,
+            },
+        )
+
 
 def copy_global_config(snapshot: dict, umo: str | None) -> GlobalConfig:
     """Return a deep-copied routed global config facade."""

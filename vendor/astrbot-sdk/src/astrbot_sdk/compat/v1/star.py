@@ -115,6 +115,22 @@ class Context:
 
         return copy_global_config(self._snapshot, str(umo) if umo is not None else None)
 
+    def locale(self, umo: str | None = None) -> str:
+        """Resolve the bot reply language for a session.
+
+        Args:
+            umo: Unified message origin. Omit to use the default profile.
+
+        Returns:
+            ``zh-CN`` or ``en-US`` from the routed configuration, falling back
+            to ``zh-CN`` when missing or unsupported.
+        """
+        from .host_snapshot import route_config
+
+        cfg = route_config(self._snapshot, str(umo) if umo is not None else None)
+        loc = (cfg.get("platform_settings") or {}).get("locale", "zh-CN")
+        return loc if isinstance(loc, str) and loc in {"zh-CN", "en-US"} else "zh-CN"
+
     # ---- providers ---------------------------------------------------------
 
     def get_using_provider(self, umo: str | None = None) -> Provider | None:
@@ -209,6 +225,7 @@ class Context:
     ) -> LLMResponse:
         """Run the built-in tool-loop agent (legacy signature)."""
         from ...llm import AgentRequest
+        from .conversation import umo_from_str
         from .provider import build_input_message, contexts_to_messages
 
         messages = contexts_to_messages(contexts)
@@ -220,13 +237,18 @@ class Context:
             tool_names = tuple(
                 tool.name for tool in getattr(tools, "tools", []) if tool.name
             )
+        sdk_event = getattr(event, "_event", None)
+        resolved_umo = getattr(sdk_event, "umo", None)
+        if resolved_umo is None and getattr(event, "unified_msg_origin", None):
+            resolved_umo = umo_from_str(str(event.unified_msg_origin))
         request = AgentRequest(
             input=tuple(messages),
+            umo=resolved_umo,
             system_prompt=system_prompt or None,
             provider_id=chat_provider_id,
             max_steps=max_steps,
             tools=tool_names,
-            event=getattr(event, "_event", None),
+            event=sdk_event,
         )
         response = await self._ctx.llm.run_agent(request)
         return LLMResponse(
