@@ -2250,6 +2250,73 @@ if __name__ == "__main__":
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("streaming", [False, True])
+async def test_turn_limit_preserves_long_tool_history_on_next_saved_reply(
+    tmp_path, runner, mock_provider, mock_tool_executor, mock_hooks, streaming
+):
+    """Keep a completed tool-heavy turn when the next reply is persisted."""
+    from astrbot.core.agent.conversation_events import ConversationEventWriter
+    from astrbot.core.agent.message import ToolCall, dump_messages
+    from astrbot.core.db.sqlite import SQLiteDatabase
+
+    previous = [
+        Message(role="system", content="Earlier memory"),
+        Message(role="user", content="Inspect the files"),
+    ]
+    # Seventeen batches and twenty-two calls produce forty-one non-system messages.
+    for batch, width in enumerate([2, 1, 1, 2, 1, 2, 1, 3, 1, 1, 1, 1, 1, 1, 1, 1, 1]):
+        calls = [
+            ToolCall(
+                id=f"read-{batch}-{i}",
+                function=ToolCall.FunctionBody(name="read", arguments="{}"),
+            )
+            for i in range(width)
+        ]
+        previous.append(Message(role="assistant", tool_calls=calls))
+        previous.extend(
+            Message(role="tool", tool_call_id=call.id, content="File contents")
+            for call in calls
+        )
+    previous.append(Message(role="assistant", content="Inspection complete"))
+    initial_history = dump_messages(previous)
+    assert len(initial_history) == 42
+
+    db = SQLiteDatabase(str(tmp_path / "logical_turn_history.db"))
+    await db.initialize()
+    try:
+        conv = await db.create_conversation("umo", "p")
+        writer = ConversationEventWriter(
+            db.conversation_store,
+            await db.conversation_store.read(conv.conversation_id),
+        )
+        await writer.save_history(initial_history)
+        mock_provider.should_call_tools = False
+        await runner.reset(
+            provider=mock_provider,
+            request=ProviderRequest(prompt="Continue", contexts=writer.get_messages()),
+            run_context=ContextWrapper(context=None),
+            tool_executor=mock_tool_executor,
+            agent_hooks=mock_hooks,
+            streaming=streaming,
+            enforce_max_turns=20,
+            conversation_event_sink=writer.consume,
+        )
+        await writer.start_turn({"kind": "agent"})
+
+        await collect_events(runner.step_until_done(3))
+        await writer.save_history(dump_messages(runner.run_context.messages))
+        await writer.finish_turn("completed")
+
+        history = (await db.conversation_store.read(conv.conversation_id)).messages
+        assert history[:42] == initial_history
+        assert [message["role"] for message in history[42:]] == ["user", "assistant"]
+        assert len(history) == 44
+        assert mock_provider.call_count == 1
+    finally:
+        await db.engine.dispose()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("streaming", [False, True])
 async def test_event_journal_records_requests_tools_and_final_context(
     tmp_path, runner, provider_request, mock_tool_executor, mock_hooks, streaming
 ):
