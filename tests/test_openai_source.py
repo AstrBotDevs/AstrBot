@@ -2064,6 +2064,149 @@ def test_sanitize_assistant_messages_resets_tool_ids_after_non_tool_message():
     ]
 
 
+def test_sanitize_assistant_messages_removes_malformed_tool_calls():
+    valid_call = {
+        "id": "call_ok",
+        "type": "function",
+        "function": {"name": "search", "arguments": "{}"},
+    }
+    payloads = {
+        "messages": [
+            {"role": "user", "content": "hello"},
+            {
+                "role": "assistant",
+                "content": None,
+                "tool_calls": [
+                    "not-a-dict",
+                    {"type": "function", "function": {"name": "no_id"}},
+                    {"id": "", "type": "function", "function": {"name": "empty_id"}},
+                    {"id": 123, "type": "function", "function": {"name": "int_id"}},
+                ],
+            },
+            {
+                "role": "assistant",
+                "content": "checking",
+                "tool_calls": [
+                    "bad-entry",
+                    {"type": "function", "function": {"name": "missing_id"}},
+                    valid_call,
+                ],
+            },
+            {"role": "tool", "tool_call_id": "call_ok", "content": "result"},
+        ]
+    }
+
+    ProviderOpenAIOfficial._sanitize_assistant_messages(payloads)
+
+    assert payloads["messages"] == [
+        {"role": "user", "content": "hello"},
+        {
+            "role": "assistant",
+            "content": "checking",
+            "tool_calls": [valid_call],
+        },
+        {"role": "tool", "tool_call_id": "call_ok", "content": "result"},
+    ]
+
+
+def test_sanitize_assistant_messages_rejects_delayed_result_for_reused_unanswered_id():
+    def call(call_id: str, name: str = "search") -> dict:
+        return {
+            "id": call_id,
+            "type": "function",
+            "function": {"name": name, "arguments": "{}"},
+        }
+
+    payloads = {
+        "messages": [
+            {"role": "user", "content": "first"},
+            {"role": "assistant", "tool_calls": [call("search")]},
+            {"role": "user", "content": "retry"},
+            {
+                "role": "assistant",
+                "tool_calls": [call("search"), call("lookup", "lookup")],
+            },
+            {"role": "tool", "tool_call_id": "search", "content": "delayed old result"},
+            {"role": "tool", "tool_call_id": "lookup", "content": "fresh lookup"},
+            {"role": "assistant", "content": "done"},
+        ]
+    }
+
+    ProviderOpenAIOfficial._sanitize_assistant_messages(payloads)
+
+    assert payloads["messages"] == [
+        {"role": "user", "content": "first"},
+        {"role": "user", "content": "retry"},
+        {
+            "role": "assistant",
+            "content": None,
+            "tool_calls": [call("lookup", "lookup")],
+        },
+        {"role": "tool", "tool_call_id": "lookup", "content": "fresh lookup"},
+        {"role": "assistant", "content": "done"},
+    ]
+
+
+def test_sanitize_assistant_messages_avoids_orphan_tool_call_id_collision():
+    def call(call_id: str) -> dict:
+        return {
+            "id": call_id,
+            "type": "function",
+            "function": {"name": "search", "arguments": "{}"},
+        }
+
+    payloads = {
+        "messages": [
+            {"role": "assistant", "tool_calls": [call("search")]},
+            {"role": "tool", "tool_call_id": "search", "content": "first"},
+            {"role": "assistant", "tool_calls": [call("search")]},
+            {"role": "tool", "tool_call_id": "call_astrbot_2_0", "content": "orphan"},
+            {"role": "tool", "tool_call_id": "search", "content": "second"},
+        ]
+    }
+
+    ProviderOpenAIOfficial._sanitize_assistant_messages(payloads)
+
+    messages = payloads["messages"]
+    assert len(messages) == 4
+    second_call_id = messages[2]["tool_calls"][0]["id"]
+    assert second_call_id != "search"
+    assert second_call_id != "call_astrbot_2_0"
+    assert messages[3] == {
+        "role": "tool",
+        "tool_call_id": second_call_id,
+        "content": "second",
+    }
+
+
+def test_sanitize_assistant_messages_keeps_prior_valid_round_before_later_ambiguous_batch():
+    def call(call_id: str) -> dict:
+        return {
+            "id": call_id,
+            "type": "function",
+            "function": {"name": "search", "arguments": "{}"},
+        }
+
+    payloads = {
+        "messages": [
+            {"role": "assistant", "tool_calls": [call("dup")]},
+            {"role": "tool", "tool_call_id": "dup", "content": "valid earlier"},
+            {"role": "assistant", "tool_calls": [call("dup"), call("dup")]},
+            {"role": "assistant", "tool_calls": [call("dup")]},
+            {"role": "tool", "tool_call_id": "dup", "content": "ambiguous delayed"},
+            {"role": "assistant", "content": "done"},
+        ]
+    }
+
+    ProviderOpenAIOfficial._sanitize_assistant_messages(payloads)
+
+    assert payloads["messages"] == [
+        {"role": "assistant", "content": None, "tool_calls": [call("dup")]},
+        {"role": "tool", "tool_call_id": "dup", "content": "valid earlier"},
+        {"role": "assistant", "content": "done"},
+    ]
+
+
 @pytest.mark.asyncio
 async def test_query_filters_empty_assistant_message_without_tool_calls(monkeypatch):
     """Test that empty assistant messages without tool_calls are filtered out."""
