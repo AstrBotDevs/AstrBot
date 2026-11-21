@@ -145,7 +145,13 @@ async def build_main_agent(
 
     # Add session context before capability instructions.
     await workspace.apply_workspace_instructions(event, req, plugin_context)
-    await knowledge_base.apply_knowledge_base(event, req, plugin_context, config)
+    kb_retrieved = await knowledge_base.apply_knowledge_base(
+        event,
+        req,
+        plugin_context,
+        config,
+        fallback_query=prepared.default_retrieval_query,
+    )
 
     # Session plugin filtering precedes builtins, which have their own settings.
     if req.func_tool is not None:
@@ -232,6 +238,7 @@ async def build_main_agent(
             link_display=event.get_platform_name() == "webchat",
         )
     if config.call_request_hook:
+        prompt_before_hook = req.prompt
         if await call_event_hook(
             event,
             EventType.OnLLMRequestEvent,
@@ -241,6 +248,19 @@ async def build_main_agent(
             else None,
         ):
             return None
+        # Trigger one-shot supplemental KB retrieval when pre-hook input had no
+        # substantive query and a hook populated retrieval_query or prompt.
+        # An explicit req.retrieval_query == "" strictly suppresses retrieval.
+        if not kb_retrieved and (
+            req.retrieval_query is not None or req.prompt != prompt_before_hook
+        ):
+            await knowledge_base.apply_knowledge_base(
+                event,
+                req,
+                plugin_context,
+                config,
+                add_tool=False,
+            )
         # Hooks may add images; preserve the cache from input preparation.
         await prepare_request_images(
             req,

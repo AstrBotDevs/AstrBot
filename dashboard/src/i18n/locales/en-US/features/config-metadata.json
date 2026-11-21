@@ -187,9 +187,23 @@
         "description": "Final Results Count",
         "hint": "Number of results retrieved from the knowledge base. Higher values may provide more relevant information but could also introduce noise. Adjust based on actual needs"
       },
+      "kb_min_score": {
+        "description": "Minimum Relevance Score",
+        "hint": "Minimum relevance score threshold for automatic knowledge base injection. Results below this score are filtered out. Defaults to 0.0 (no filtering)."
+      },
       "kb_agentic_mode": {
         "description": "Agentic Knowledge Base Retrieval",
         "hint": "When enabled, knowledge base retrieval becomes an LLM Tool, allowing the model to autonomously decide when to query the knowledge base. Requires the model to support function calling."
+      },
+      "kb_retrieval_mode": {
+        "description": "Knowledge Base Retrieval Mode",
+        "hint": "Leave empty to follow the legacy Agentic toggle. Hybrid mode automatically injects high-relevance hits while keeping the astr_kb_search tool available for active follow-up queries.",
+        "labels": [
+          "Follow Agentic Toggle (Default)",
+          "Automatic Injection (auto)",
+          "Agentic Tool Only (agentic)",
+          "Hybrid Auto + Tool (hybrid)"
+        ]
       }
     },
     "websearch": {

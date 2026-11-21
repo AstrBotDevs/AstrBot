@@ -203,9 +203,23 @@
         "description": "最终返回结果数",
         "hint": "从知识库中检索到的结果数量,越大可能获得越多相关信息,但也可能引入噪音。建议根据实际需求调整"
       },
+      "kb_min_score": {
+        "description": "最小相关度阈值",
+        "hint": "自动注入知识库时的最小相关度分数阈值，低于该分数的结果将被过滤。默认 0.0 表示不过滤。"
+      },
       "kb_agentic_mode": {
         "description": "Agentic 知识库检索",
         "hint": "启用后,知识库检索将作为 LLM Tool,由模型自主决定何时调用知识库进行查询。需要模型支持函数调用能力。"
+      },
+      "kb_retrieval_mode": {
+        "description": "知识库检索模式",
+        "hint": "留空时完全兼容原有 Agentic 开关；hybrid 模式在命中高相关度结果时自动注入，同时保留 astr_kb_search 工具供模型主动深挖。",
+        "labels": [
+          "跟随 Agentic 开关（默认）",
+          "自动注入 (auto)",
+          "仅工具主动检索 (agentic)",
+          "混合模式 (hybrid)"
+        ]
       }
     },
     "websearch": {

@@ -218,6 +218,8 @@ class ProviderRequest:
     """附加的上次请求后工具调用的结果。参考: https://platform.openai.com/docs/guides/function-calling#handling-function-calls"""
     model: str | None = None
     """模型名称，为 None 时使用提供商的默认模型"""
+    retrieval_query: str | None = None
+    """Optional clean query text used for knowledge-base retrieval."""
     _plugin_id: str | None = field(default=None, init=False, repr=False)
 
     def __repr__(self) -> str:

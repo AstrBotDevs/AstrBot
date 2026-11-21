@@ -315,7 +315,9 @@ DEFAULT_CONFIG = {
     "kb_names": [],  # 默认知识库名称列表
     "kb_fusion_top_k": 20,  # 知识库检索融合阶段返回结果数量
     "kb_final_top_k": 5,  # 知识库检索最终返回结果数量
+    "kb_min_score": 0.0,  # Minimum relevance score threshold for automatic KB injection
     "kb_agentic_mode": False,
+    "kb_retrieval_mode": "",  # "", "auto", "agentic", or "hybrid"; empty follows kb_agentic_mode
     "disable_builtin_commands": False,
     "disable_metrics": False,
 }
@@ -3428,7 +3430,9 @@ CONFIG_METADATA_2 = {
             "kb_names": {"type": "list", "items": {"type": "string"}},
             "kb_fusion_top_k": {"type": "int", "default": 20},
             "kb_final_top_k": {"type": "int", "default": 5},
+            "kb_min_score": {"type": "float", "default": 0.0},
             "kb_agentic_mode": {"type": "bool"},
+            "kb_retrieval_mode": {"type": "string", "default": ""},
         },
     },
 }
@@ -3813,10 +3817,27 @@ CONFIG_METADATA_3 = {
                         "type": "int",
                         "hint": "从知识库中检索到的结果数量，越大可能获得越多相关信息，但也可能引入噪音。建议根据实际需求调整",
                     },
+                    "kb_min_score": {
+                        "description": "最小相关度阈值",
+                        "type": "float",
+                        "hint": "自动注入知识库时的最小相关度分数阈值，低于该分数的结果将被过滤。默认 0.0 表示不过滤。",
+                    },
                     "kb_agentic_mode": {
                         "description": "Agentic 知识库检索",
                         "type": "bool",
                         "hint": "启用后，知识库检索将作为 LLM Tool，由模型自主决定何时调用知识库进行查询。需要模型支持函数调用能力。",
+                    },
+                    "kb_retrieval_mode": {
+                        "description": "知识库检索模式",
+                        "type": "string",
+                        "options": ["", "auto", "agentic", "hybrid"],
+                        "labels": [
+                            "跟随 Agentic 开关（默认）",
+                            "自动注入 (auto)",
+                            "仅工具主动检索 (agentic)",
+                            "混合模式 (hybrid)",
+                        ],
+                        "hint": "留空时完全兼容原有 Agentic 开关；hybrid 模式在命中高相关度结果时自动注入，同时保留 astr_kb_search 工具供模型主动深挖。",
                     },
                 },
                 "condition": {
