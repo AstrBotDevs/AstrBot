@@ -473,10 +473,21 @@ class KookClient:
         astrbot_message_type: MessageType,
         kook_message_type: KookMessageType,
         reply_message_id: str | int = "",
-    ):
-        """发送文本消息
-        消息发送接口文档参见: https://developer.kookapp.cn/doc/http/message#%E5%8F%91%E9%80%81%E9%A2%91%E9%81%93%E8%81%8A%E5%A4%A9%E6%B6%88%E6%81%AF
-        KMarkdown格式参见: https://developer.kookapp.cn/doc/kmarkdown-desc
+    ) -> str | None:
+        """Send a message and return its KOOK message ID.
+
+        Args:
+            target_id: Channel or user receiving the message.
+            content: Message body.
+            astrbot_message_type: Channel or private conversation type.
+            kook_message_type: KOOK content type.
+            reply_message_id: Optional message to quote.
+
+        Returns:
+            Created message ID, or None on a transport or decoding error.
+
+        Raises:
+            RuntimeError: If KOOK rejects the message.
         """
         url = KookApiPaths.CHANNEL_MESSAGE_CREATE
         if astrbot_message_type == MessageType.FRIEND_MESSAGE:
@@ -499,8 +510,7 @@ class KookClient:
                         raise RuntimeError(
                             f'发送kook消息类型 "{kook_message_type.name}" 失败: {result}'
                         )
-                    # else:
-                    #     logger.info("[KOOK] 发送消息成功")
+                    return result["data"]["msg_id"]
                 else:
                     raise RuntimeError(
                         f'发送kook消息类型 "{kook_message_type.name}" HTTP错误: {resp.status} , 响应内容 : {await resp.text()}'
@@ -511,6 +521,31 @@ class KookClient:
             logger.error(
                 f'[KOOK] 发送kook消息类型 "{kook_message_type.name}" 异常: {e}'
             )
+            return None
+
+    async def update_text(
+        self, msg_id: str, content: str, astrbot_message_type: MessageType
+    ) -> None:
+        """Replace the contents of a KOOK message.
+
+        Args:
+            msg_id: ID returned when the message was created.
+            content: Complete replacement text.
+            astrbot_message_type: Channel or private conversation type.
+
+        Raises:
+            RuntimeError: If KOOK rejects the update.
+        """
+        url = KookApiPaths.CHANNEL_MESSAGE_UPDATE
+        if astrbot_message_type == MessageType.FRIEND_MESSAGE:
+            url = KookApiPaths.DIRECT_MESSAGE_UPDATE
+        async with self._http_client.post(
+            url, json={"msg_id": msg_id, "content": content}
+        ) as resp:
+            resp.raise_for_status()
+            result = await resp.json()
+            if result["code"] != 0:
+                raise RuntimeError(f"KOOK message update failed: {result}")
 
     async def upload_asset(self, file_url: str | None) -> str:
         """上传文件到kook,获得远端资源url
