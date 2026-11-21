@@ -1,4 +1,5 @@
 import json
+import math
 from collections.abc import AsyncIterator
 from types import TracebackType
 from typing import Any
@@ -43,9 +44,13 @@ def _needs_backfill(usage_metadata: dict[str, Any], key: str) -> bool:
     current = usage_metadata[key]
     if current is None:
         return True
-    if isinstance(current, bool) or not isinstance(current, int):
+    if isinstance(current, bool):
         return False
-    return current <= 0
+    if isinstance(current, int):
+        return current <= 0
+    if isinstance(current, float):
+        return math.isfinite(current) and current <= 0.0
+    return False
 
 
 def _nested_positive_int(mapping: dict[str, Any], *path: str) -> int | None:
@@ -96,8 +101,20 @@ def backfill_usage_metadata(usage_metadata: Any) -> bool:
     if _needs_backfill(usage_metadata, "cachedContentTokenCount"):
         cached_tokens = _extract_first_positive_int(billing_usage, _CACHED_TOKEN_PATHS)
         if cached_tokens is not None:
-            usage_metadata["cachedContentTokenCount"] = cached_tokens
-            changed = True
+            prompt_tokens = usage_metadata.get("promptTokenCount")
+            if (
+                not isinstance(prompt_tokens, bool)
+                and isinstance(prompt_tokens, (int, float))
+                and math.isfinite(prompt_tokens)
+            ):
+                max_cached = int(prompt_tokens)
+                if max_cached <= 0:
+                    cached_tokens = None
+                elif cached_tokens > max_cached:
+                    cached_tokens = max_cached
+            if cached_tokens is not None:
+                usage_metadata["cachedContentTokenCount"] = cached_tokens
+                changed = True
 
     if _needs_backfill(usage_metadata, "thoughtsTokenCount"):
         reasoning_tokens = _extract_first_positive_int(
@@ -174,33 +191,112 @@ def _backfill_json_bytes(raw_bytes: bytes) -> bytes | None:
         return None
 
 
-def _rewrite_sse_line(raw_line: bytes) -> bytes:
-    if _BILLING_USAGE_MARKER not in raw_line:
-        return raw_line
+def _split_sse_line_ending(raw_line: bytes) -> tuple[bytes, bytes]:
+    """Split a raw SSE line into its payload bytes and trailing line ending.
 
+    Args:
+        raw_line: Raw SSE line bytes, optionally ending in CRLF, LF, or CR.
+
+    Returns:
+        Tuple of ``(body_bytes, line_ending)``.
+    """
     if raw_line.endswith(b"\r\n"):
-        body_bytes = raw_line[:-2]
-        line_ending = b"\r\n"
-    elif raw_line.endswith(b"\n"):
-        body_bytes = raw_line[:-1]
-        line_ending = b"\n"
-    else:
-        body_bytes = raw_line
-        line_ending = b""
+        return raw_line[:-2], b"\r\n"
+    if raw_line.endswith(b"\n"):
+        return raw_line[:-1], b"\n"
+    if raw_line.endswith(b"\r"):
+        return raw_line[:-1], b"\r"
+    return raw_line, b""
 
-    if body_bytes.startswith(b"data: "):
-        prefix = b"data: "
-        payload_bytes = body_bytes[6:]
-    elif body_bytes.startswith(b"data:"):
-        prefix = b"data:"
-        payload_bytes = body_bytes[5:]
-    else:
-        return raw_line
 
-    rewritten = _backfill_json_bytes(payload_bytes)
+def _rewrite_sse_event(event_lines: list[bytes]) -> bytes:
+    """Backfill usageMetadata inside a buffered SSE event (single or multi-line).
+
+    Args:
+        event_lines: Non-empty SSE lines belonging to one event, excluding the
+            trailing blank event-delimiter line.
+
+    Returns:
+        Rewritten event bytes if a valid JSON payload was backfilled, otherwise
+        the original event bytes untouched.
+    """
+    if not event_lines:
+        return b""
+
+    data_entries: list[tuple[int, bytes, bytes, bytes]] = []
+    for idx, raw_line in enumerate(event_lines):
+        body_bytes, line_ending = _split_sse_line_ending(raw_line)
+        if body_bytes.startswith(b"data: "):
+            data_entries.append((idx, b"data: ", body_bytes[6:], line_ending))
+        elif body_bytes.startswith(b"data:"):
+            data_entries.append((idx, b"data:", body_bytes[5:], line_ending))
+
+    if not data_entries:
+        return b"".join(event_lines)
+
+    if len(data_entries) == 1:
+        combined_payload = data_entries[0][2]
+    else:
+        combined_payload = b"\n".join(entry[2] for entry in data_entries)
+
+    if _BILLING_USAGE_MARKER not in combined_payload:
+        return b"".join(event_lines)
+
+    rewritten = _backfill_json_bytes(combined_payload)
     if rewritten is None:
-        return raw_line
-    return prefix + rewritten + line_ending
+        return b"".join(event_lines)
+
+    data_index_set = {entry[0] for entry in data_entries}
+    first_prefix = data_entries[0][1]
+    last_idx = data_entries[-1][0]
+    last_ending = data_entries[-1][3]
+
+    out_parts: list[bytes] = []
+    for idx, raw_line in enumerate(event_lines):
+        if idx not in data_index_set:
+            out_parts.append(raw_line)
+        elif idx == last_idx:
+            out_parts.append(first_prefix + rewritten + last_ending)
+    return b"".join(out_parts)
+
+
+def _pop_complete_sse_lines(buffer: bytearray) -> list[bytes]:
+    """Extract complete SSE lines terminated by CRLF, LF, or bare CR.
+
+    A lone trailing CR at the end of ``buffer`` is kept until the next chunk
+    or EOF so a CRLF sequence split across chunk boundaries stays intact.
+
+    Args:
+        buffer: Mutable raw byte buffer receiving incoming stream chunks.
+
+    Returns:
+        List of complete raw SSE lines (including their line terminators).
+    """
+    lines: list[bytes] = []
+    start = 0
+    buf_len = len(buffer)
+    while start < buf_len:
+        nl = buffer.find(b"\n", start)
+        cr = buffer.find(b"\r", start)
+        if nl == -1 and cr == -1:
+            break
+        if nl != -1 and (cr == -1 or nl < cr):
+            lines.append(bytes(buffer[start : nl + 1]))
+            start = nl + 1
+            continue
+        # CR precedes LF (or no LF found).
+        if cr + 1 == buf_len:
+            # Hold trailing CR until the next byte shows whether LF follows.
+            break
+        if buffer[cr + 1] == 0x0A:
+            lines.append(bytes(buffer[start : cr + 2]))
+            start = cr + 2
+        else:
+            lines.append(bytes(buffer[start : cr + 1]))
+            start = cr + 1
+    if start:
+        del buffer[:start]
+    return lines
 
 
 def _parse_media_type(headers: httpx.Headers) -> str:
@@ -238,10 +334,11 @@ class _BytesAsyncStream(httpx.AsyncByteStream):
 
 
 class _UsageBackfillSSEStream(httpx.AsyncByteStream):
-    """Line-buffered SSE stream that backfills relay ``usageMetadata`` fields.
+    """Event-buffered SSE stream that backfills relay ``usageMetadata`` fields.
 
-    Buffers incomplete lines at the raw byte level until ``\\n`` arrives so
-    multi-byte UTF-8 sequences and JSON lines split across arbitrary TCP chunks
+    Buffers incomplete lines at the raw byte level across CRLF, LF, and bare CR
+    line endings, and joins multi-line ``data:`` fields within each SSE event
+    before backfilling so multi-byte UTF-8 sequences and split JSON payloads
     are never corrupted.
     """
 
@@ -267,26 +364,42 @@ class _UsageBackfillSSEStream(httpx.AsyncByteStream):
             source = self._raw_stream.__aiter__()
 
         buffer = bytearray()
+        event_lines: list[bytes] = []
         async for chunk in source:
             if not chunk:
                 continue
-            search_from = len(buffer)
             buffer.extend(chunk)
-            nl = buffer.find(b"\n", search_from)
-            if nl == -1:
+            complete_lines = _pop_complete_sse_lines(buffer)
+            if not complete_lines:
                 continue
-            start = 0
             out_parts: list[bytes] = []
-            while nl != -1:
-                raw_line = bytes(buffer[start : nl + 1])
-                out_parts.append(_rewrite_sse_line(raw_line))
-                start = nl + 1
-                nl = buffer.find(b"\n", start)
-            del buffer[:start]
-            yield b"".join(out_parts) if len(out_parts) > 1 else out_parts[0]
+            for raw_line in complete_lines:
+                body_bytes, _ = _split_sse_line_ending(raw_line)
+                if not body_bytes:
+                    if event_lines:
+                        out_parts.append(_rewrite_sse_event(event_lines))
+                        event_lines.clear()
+                    out_parts.append(raw_line)
+                else:
+                    event_lines.append(raw_line)
+            if out_parts:
+                yield b"".join(out_parts) if len(out_parts) > 1 else out_parts[0]
 
         if buffer:
-            yield _rewrite_sse_line(bytes(buffer))
+            raw_tail = bytes(buffer)
+            body_bytes, _ = _split_sse_line_ending(raw_tail)
+            if not body_bytes:
+                tail_parts: list[bytes] = []
+                if event_lines:
+                    tail_parts.append(_rewrite_sse_event(event_lines))
+                    event_lines.clear()
+                tail_parts.append(raw_tail)
+                yield b"".join(tail_parts)
+            else:
+                event_lines.append(raw_tail)
+
+        if event_lines:
+            yield _rewrite_sse_event(event_lines)
 
     async def aclose(self) -> None:
         if self._closed:
@@ -358,6 +471,7 @@ class GeminiUsageBackfillTransport(httpx.AsyncBaseTransport):
             except Exception:
                 pass
             raise
+        await response.aclose()
 
         rewritten = _backfill_json_bytes(body)
         if rewritten is None and not needs_decode:
@@ -418,6 +532,12 @@ def wrap_httpx_client_for_usage_backfill(
     Wraps both the default transport and any configured proxy/mounted
     transports so explicit proxies, ``trust_env`` environment proxies, SSL
     verification, timeouts, and ``aclose()`` lifecycles remain preserved.
+
+    Args:
+        client: Async httpx client whose transports should be wrapped.
+
+    Returns:
+        The same ``httpx.AsyncClient`` instance with wrapped transports.
     """
     wrapped_by_id: dict[int, GeminiUsageBackfillTransport] = {}
 

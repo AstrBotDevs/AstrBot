@@ -27,11 +27,19 @@ def _relay_usage_metadata(
     reasoning_nested: Any = 19,
     include_official_keys: bool = True,
 ) -> dict[str, Any]:
+    reasoning_for_total = (
+        reasoning_nested
+        if isinstance(reasoning_nested, int)
+        and not isinstance(reasoning_nested, bool)
+        and reasoning_nested > 0
+        else 0
+    )
+    total_tokens = 12572 + 6 + reasoning_for_total
     usage: dict[str, Any] = {
         "promptTokenCount": 12572,
         "toolUsePromptTokenCount": 0,
         "candidatesTokenCount": 6,
-        "totalTokenCount": 12597,
+        "totalTokenCount": total_tokens,
         "promptTokensDetails": None,
         "toolUsePromptTokensDetails": None,
         "candidatesTokensDetails": None,
@@ -41,7 +49,7 @@ def _relay_usage_metadata(
             "openai_usage": {
                 "prompt_tokens": 12572,
                 "completion_tokens": 6,
-                "total_tokens": 12597,
+                "total_tokens": total_tokens,
                 "prompt_tokens_details": {
                     "cached_tokens": cached_nested,
                     "text_tokens": 0,
@@ -653,7 +661,7 @@ async def test_transport_gzip_json_and_gzip_sse_responses():
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("chunk_size", [1, 2, 3, 5, 11])
-@pytest.mark.parametrize("newline", [b"\n", b"\r\n"])
+@pytest.mark.parametrize("newline", [b"\n", b"\r\n", b"\r"])
 async def test_transport_sse_arbitrary_tiny_chunk_splits_preserve_utf8_and_backfill(
     chunk_size, newline
 ):
@@ -902,12 +910,26 @@ async def test_provider_google_genai_wires_usage_backfill_transport_and_lifecycl
         {
             "id": "gemini-test",
             "model": "gemini-2.5-flash",
-            "key": ["key-1", "key-2"],
+            "key": ["key-1", "key-2", "key-3"],
             "api_base": "https://relay.example",
             "proxy": "http://127.0.0.1:18080",
         },
         {},
     )
+    closed_clients: list[httpx.AsyncClient] = []
+
+    def _track_aclose(client: httpx.AsyncClient) -> None:
+        orig_aclose = client.aclose
+
+        async def _wrapped_aclose() -> None:
+            closed_clients.append(client)
+            await orig_aclose()
+
+        client.aclose = _wrapped_aclose  # type: ignore[method-assign]
+
+    first_client: httpx.AsyncClient | None = None
+    second_client: httpx.AsyncClient | None = None
+    third_client: httpx.AsyncClient | None = None
     try:
         assert provider._http_client is not None
         assert isinstance(
@@ -918,16 +940,31 @@ async def test_provider_google_genai_wires_usage_backfill_transport_and_lifecycl
             for m in provider._http_client._mounts.values()
         )
         first_client = provider._http_client
+        _track_aclose(first_client)
+
         provider.set_key("key-2")
-        assert provider._http_client is not first_client
+        second_client = provider._http_client
+        assert second_client is not None and second_client is not first_client
+        _track_aclose(second_client)
         assert provider._stale_http_clients == [first_client]
+
+        provider.set_key("key-3")
+        third_client = provider._http_client
+        assert third_client is not None and third_client is not second_client
+        _track_aclose(third_client)
+        assert provider._stale_http_clients == [first_client, second_client]
         assert isinstance(
             provider._http_client._transport, GeminiUsageBackfillTransport
         )
     finally:
         await provider.terminate()
+
     assert provider._http_client is None
     assert provider._stale_http_clients == []
+    assert first_client is not None and first_client.is_closed is True
+    assert second_client is not None and second_client.is_closed is True
+    assert third_client is not None and third_client.is_closed is True
+    assert closed_clients == [first_client, second_client, third_client]
 
     # Default official endpoint config (empty api_base, no explicit proxy)
     default_provider = ProviderGoogleGenAI(
@@ -1053,7 +1090,8 @@ async def test_e2e_google_genai_sdk_model_validate_and_provider_query_non_stream
         assert non_stream_resp.usage.input_cached == 10523
         assert non_stream_resp.usage.input_other == 12572 - 10523
         assert non_stream_resp.usage.input == 12572
-        assert non_stream_resp.usage.output == 6
+        assert non_stream_resp.usage.output == 26
+        assert non_stream_resp.usage.total == 12598
         assert (
             non_stream_resp.raw_completion.usage_metadata.cached_content_token_count
             == 10523
@@ -1077,11 +1115,409 @@ async def test_e2e_google_genai_sdk_model_validate_and_provider_query_non_stream
         assert final_stream.usage.input_cached == 10522
         assert final_stream.usage.input_other == 12572 - 10522
         assert final_stream.usage.input == 12572
-        assert final_stream.usage.output == 6
+        assert final_stream.usage.output == 25
+        assert final_stream.usage.total == 12597
         assert (
             final_stream.raw_completion.usage_metadata.cached_content_token_count
             == 10522
         )
         assert final_stream.raw_completion.usage_metadata.thoughts_token_count == 19
+    finally:
+        await sdk_http_client.aclose()
+
+
+@pytest.mark.parametrize("official_value", [0.0, -0.0, -1.5])
+def test_backfill_usage_metadata_backfills_non_positive_finite_floats(official_value):
+    usage = _relay_usage_metadata(
+        cached_official=official_value,
+        thoughts_official=official_value,
+        cached_nested=1200,
+        reasoning_nested=15,
+    )
+
+    assert backfill_usage_metadata(usage) is True
+    assert usage["cachedContentTokenCount"] == 1200
+    assert usage["thoughtsTokenCount"] == 15
+
+
+@pytest.mark.parametrize(
+    "official_value",
+    [5.0, 0.5, float("nan"), float("inf"), float("-inf"), False, True],
+)
+def test_backfill_usage_metadata_skips_positive_non_finite_or_bool_official_values(
+    official_value,
+):
+    usage = _relay_usage_metadata(
+        cached_official=official_value,
+        thoughts_official=official_value,
+        cached_nested=1200,
+        reasoning_nested=15,
+    )
+
+    assert backfill_usage_metadata(usage) is False
+
+
+def test_backfill_usage_metadata_clamps_cached_tokens_to_prompt_token_count():
+    usage = {
+        "promptTokenCount": 500,
+        "candidatesTokenCount": 10,
+        "cachedContentTokenCount": 0,
+        "billing_usage": {"cached_tokens": 900},
+    }
+    assert backfill_usage_metadata(usage) is True
+    assert usage["cachedContentTokenCount"] == 500
+
+    zero_prompt = {
+        "promptTokenCount": 0,
+        "candidatesTokenCount": 10,
+        "cachedContentTokenCount": 0,
+        "billing_usage": {"cached_tokens": 100},
+    }
+    assert backfill_usage_metadata(zero_prompt) is False
+    assert zero_prompt["cachedContentTokenCount"] == 0
+
+    provider = ProviderGoogleGenAI.__new__(ProviderGoogleGenAI)
+    extracted = provider._extract_usage(
+        types.GenerateContentResponseUsageMetadata(
+            prompt_token_count=500,
+            cached_content_token_count=900,
+            candidates_token_count=10,
+        )
+    )
+    assert extracted.input_cached == 500
+    assert extracted.input_other == 0
+    assert extracted.input == 500
+
+
+def test_extract_usage_includes_thoughts_tokens_without_double_counting():
+    provider = ProviderGoogleGenAI.__new__(ProviderGoogleGenAI)
+
+    # Gemini standard & relays where candidates_token_count excludes thoughts
+    excluded = provider._extract_usage(
+        types.GenerateContentResponseUsageMetadata(
+            prompt_token_count=1000,
+            cached_content_token_count=400,
+            candidates_token_count=50,
+            thoughts_token_count=120,
+            total_token_count=1170,
+        )
+    )
+    assert excluded.input_other == 600
+    assert excluded.input_cached == 400
+    assert excluded.output == 170
+    assert excluded.total == 1170
+
+    # Relays where candidates_token_count already includes thoughts
+    included = provider._extract_usage(
+        types.GenerateContentResponseUsageMetadata(
+            prompt_token_count=1000,
+            cached_content_token_count=400,
+            candidates_token_count=170,
+            thoughts_token_count=120,
+            total_token_count=1170,
+        )
+    )
+    assert included.output == 170
+    assert included.total == 1170
+
+    # Missing total_token_count follows Gemini spec (candidates + thoughts)
+    no_total = provider._extract_usage(
+        types.GenerateContentResponseUsageMetadata(
+            prompt_token_count=1000,
+            cached_content_token_count=400,
+            candidates_token_count=50,
+            thoughts_token_count=120,
+            total_token_count=None,
+        )
+    )
+    assert no_total.output == 170
+
+    # Tool-use prompt tokens do not inflate uncounted output
+    with_tool_prompt = provider._extract_usage(
+        types.GenerateContentResponseUsageMetadata(
+            prompt_token_count=1000,
+            tool_use_prompt_token_count=80,
+            candidates_token_count=50,
+            thoughts_token_count=120,
+            total_token_count=1250,
+        )
+    )
+    assert with_tool_prompt.output == 170
+
+
+@pytest.mark.asyncio
+async def test_transport_json_response_closes_upstream_stream_even_when_stream_requires_explicit_close():
+    class _ExplicitCloseStream(httpx.AsyncByteStream):
+        def __init__(self, body: bytes) -> None:
+            self._body = body
+            self.close_calls = 0
+
+        async def __aiter__(self) -> AsyncIterator[bytes]:
+            yield self._body
+
+        async def aclose(self) -> None:
+            self.close_calls += 1
+
+    class _NoAutoCloseResponse(httpx.Response):
+        async def aread(self) -> bytes:
+            chunks = [chunk async for chunk in self.stream]
+            self._content = b"".join(chunks)
+            return self._content
+
+    backfill_body = json.dumps(
+        _gemini_payload(
+            usage_metadata=_relay_usage_metadata(cached_nested=700, reasoning_nested=11)
+        )
+    ).encode("utf-8")
+    plain_body = json.dumps(_gemini_payload(text="plain")).encode("utf-8")
+    backfill_stream = _ExplicitCloseStream(backfill_body)
+    plain_stream = _ExplicitCloseStream(plain_body)
+
+    class _InnerTransport(httpx.AsyncBaseTransport):
+        async def handle_async_request(self, request: httpx.Request) -> httpx.Response:
+            stream = (
+                backfill_stream if request.url.path == "/backfill" else plain_stream
+            )
+            return _NoAutoCloseResponse(
+                200,
+                headers={"Content-Type": "application/json"},
+                stream=stream,
+            )
+
+    transport = GeminiUsageBackfillTransport(_InnerTransport())
+    async with httpx.AsyncClient(transport=transport) as client:
+        r1 = await client.post("https://relay.example/backfill")
+        r2 = await client.post("https://relay.example/plain")
+
+    assert backfill_stream.close_calls == 1
+    assert plain_stream.close_calls == 1
+    assert r1.json()["usageMetadata"]["cachedContentTokenCount"] == 700
+    assert r2.json()["candidates"][0]["content"]["parts"][0]["text"] == "plain"
+
+
+@pytest.mark.asyncio
+async def test_transport_sse_bare_cr_streams_incrementally_before_eof():
+    import asyncio
+
+    ev1 = _gemini_payload(text="first", finish_reason=None)
+    ev2 = _gemini_payload(
+        text="second",
+        usage_metadata=_relay_usage_metadata(cached_nested=800, reasoning_nested=14),
+    )
+    release_second = asyncio.Event()
+
+    class _GatedBareCRStream(httpx.AsyncByteStream):
+        async def __aiter__(self) -> AsyncIterator[bytes]:
+            yield (b"data: " + json.dumps(ev1).encode("utf-8") + b"\r\r" + b"data: ")
+            await release_second.wait()
+            yield json.dumps(ev2).encode("utf-8") + b"\r\r"
+
+        async def aclose(self) -> None:
+            return None
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            headers={"Content-Type": "text/event-stream"},
+            stream=_GatedBareCRStream(),
+        )
+
+    transport = GeminiUsageBackfillTransport(httpx.MockTransport(handler))
+    async with httpx.AsyncClient(transport=transport) as client:
+        async with client.stream("POST", "https://relay.example/cr") as resp:
+            chunks_iter = resp.aiter_bytes()
+            first_out = await asyncio.wait_for(anext(chunks_iter), timeout=2.0)
+            assert b'"first"' in first_out
+            release_second.set()
+            rest = [chunk async for chunk in chunks_iter]
+
+    full_wire = first_out + b"".join(rest)
+    parsed_lines = list(httpx.Response(200, content=full_wire).iter_lines())
+    data_events = [
+        json.loads(line[6:]) for line in parsed_lines if line.startswith("data: ")
+    ]
+    assert len(data_events) == 2
+    assert data_events[1]["usageMetadata"]["cachedContentTokenCount"] == 800
+    assert data_events[1]["usageMetadata"]["thoughtsTokenCount"] == 14
+
+
+@pytest.mark.asyncio
+async def test_transport_sse_joins_multiline_data_fields_and_backfills():
+    payload = _gemini_payload(
+        text="multi-data",
+        usage_metadata=_relay_usage_metadata(cached_nested=9100, reasoning_nested=23),
+    )
+    pretty_lines = json.dumps(payload, indent=2, ensure_ascii=False).splitlines()
+
+    # 1. Transport-level test with event: metadata line preserved alongside joined data: fields.
+    sse_with_event = (
+        "event: message\n"
+        + "\n".join(f"data: {line}" for line in pretty_lines)
+        + "\n\n"
+    ).encode()
+    sliced_with_event = [
+        sse_with_event[i : i + 7] for i in range(0, len(sse_with_event), 7)
+    ]
+
+    def event_handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            headers={"Content-Type": "text/event-stream"},
+            stream=_ChunkedAsyncStream(sliced_with_event),
+        )
+
+    transport = GeminiUsageBackfillTransport(httpx.MockTransport(event_handler))
+    async with httpx.AsyncClient(transport=transport) as client:
+        async with client.stream("POST", "https://relay.example/sse") as resp:
+            raw_out = await resp.aread()
+
+    lines = list(httpx.Response(200, content=raw_out).iter_lines())
+    assert lines[0] == "event: message"
+    data_lines = [line for line in lines if line.startswith("data: ")]
+    assert len(data_lines) == 1
+    parsed = json.loads(data_lines[0][6:])
+    assert parsed["usageMetadata"]["cachedContentTokenCount"] == 9100
+    assert parsed["usageMetadata"]["thoughtsTokenCount"] == 23
+
+    # 2. End-to-end through google-genai SDK with multi-line data: fields.
+    sse_wire = ("\n".join(f"data: {line}" for line in pretty_lines) + "\n\n").encode()
+    sliced = [sse_wire[i : i + 7] for i in range(0, len(sse_wire), 7)]
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            headers={"Content-Type": "text/event-stream"},
+            stream=_ChunkedAsyncStream(sliced),
+        )
+
+    sdk_http_client = wrap_httpx_client_for_usage_backfill(
+        httpx.AsyncClient(
+            base_url="https://relay.example",
+            transport=httpx.MockTransport(handler),
+        )
+    )
+    try:
+        provider = ProviderGoogleGenAI.__new__(ProviderGoogleGenAI)
+        provider.provider_config = {}
+        provider.provider_settings = {}
+        provider.model_name = "gemini-2.5-flash"
+        provider.safety_settings = []
+        provider._http_client = sdk_http_client
+        provider._stale_http_clients = []
+        provider.client = genai.Client(
+            api_key="test-key",
+            http_options=types.HttpOptions(
+                api_version="v1beta",
+                base_url="https://relay.example",
+                httpx_async_client=sdk_http_client,
+            ),
+        ).aio
+
+        stream_responses = [
+            item
+            async for item in provider._query_stream(
+                payloads={
+                    "messages": [{"role": "user", "content": "hello"}],
+                    "model": "gemini-2.5-flash",
+                },
+                tools=None,
+            )
+        ]
+        final_stream = stream_responses[-1]
+        assert final_stream.completion_text == "multi-data"
+        assert final_stream.usage is not None
+        assert final_stream.usage.input_cached == 9100
+        assert final_stream.usage.output == 29
+        assert (
+            final_stream.raw_completion.usage_metadata.cached_content_token_count
+            == 9100
+        )
+        assert final_stream.raw_completion.usage_metadata.thoughts_token_count == 23
+    finally:
+        await sdk_http_client.aclose()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("terminal_shape", ["empty_candidates", "empty_content"])
+async def test_provider_query_stream_retains_usage_from_terminal_usage_only_chunk(
+    terminal_shape,
+):
+    content_chunk = _gemini_payload(
+        text="streamed answer",
+        usage_metadata=None,
+        finish_reason="STOP",
+    )
+    usage_meta = _relay_usage_metadata(cached_nested=8888, reasoning_nested=17)
+    if terminal_shape == "empty_candidates":
+        terminal_chunk: dict[str, Any] = {
+            "responseId": "resp-relay-1",
+            "candidates": [],
+            "usageMetadata": usage_meta,
+        }
+    else:
+        terminal_chunk = {
+            "responseId": "resp-relay-1",
+            "candidates": [{"finishReason": "STOP"}],
+            "usageMetadata": usage_meta,
+        }
+
+    sse_wire = (
+        f"data: {json.dumps(content_chunk, ensure_ascii=False)}\n\n"
+        f"data: {json.dumps(terminal_chunk, ensure_ascii=False)}\n\n"
+    ).encode()
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            headers={"Content-Type": "text/event-stream"},
+            stream=_ChunkedAsyncStream([sse_wire]),
+        )
+
+    sdk_http_client = wrap_httpx_client_for_usage_backfill(
+        httpx.AsyncClient(
+            base_url="https://relay.example",
+            transport=httpx.MockTransport(handler),
+        )
+    )
+    try:
+        provider = ProviderGoogleGenAI.__new__(ProviderGoogleGenAI)
+        provider.provider_config = {}
+        provider.provider_settings = {}
+        provider.model_name = "gemini-2.5-flash"
+        provider.safety_settings = []
+        provider._http_client = sdk_http_client
+        provider._stale_http_clients = []
+        provider.client = genai.Client(
+            api_key="test-key",
+            http_options=types.HttpOptions(
+                api_version="v1beta",
+                base_url="https://relay.example",
+                httpx_async_client=sdk_http_client,
+            ),
+        ).aio
+
+        stream_responses = [
+            item
+            async for item in provider._query_stream(
+                payloads={
+                    "messages": [{"role": "user", "content": "hello"}],
+                    "model": "gemini-2.5-flash",
+                },
+                tools=None,
+            )
+        ]
+        final_stream = stream_responses[-1]
+        assert final_stream.is_chunk is False
+        assert final_stream.completion_text == "streamed answer"
+        assert final_stream.usage is not None
+        assert final_stream.usage.input_cached == 8888
+        assert final_stream.usage.input_other == 12572 - 8888
+        assert final_stream.usage.output == 23
+        assert final_stream.usage.total == 12595
+        assert (
+            final_stream.raw_completion.usage_metadata.cached_content_token_count
+            == 8888
+        )
+        assert final_stream.raw_completion.usage_metadata.thoughts_token_count == 17
     finally:
         await sdk_http_client.aclose()
