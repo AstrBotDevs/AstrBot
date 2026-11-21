@@ -1,5 +1,6 @@
 import asyncio
 import copy
+import json
 import sys
 import time
 import traceback
@@ -1203,13 +1204,31 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
 
         # Process request-time context before sending it to the provider.
         token_usage = self.req.conversation.token_usage if self.req.conversation else 0
+        fixed_overhead_tokens = 0
+        if (
+            token_usage > 0
+            and self.request_context_manager_config.max_context_tokens > 0
+        ):
+            func_tool = self._func_tool_for_provider()
+            if func_tool and not func_tool.empty():
+                schema_json = json.dumps(
+                    func_tool.openai_schema(),
+                    ensure_ascii=False,
+                    default=str,
+                )
+                fixed_overhead_tokens = (
+                    self._tool_result_token_counter._estimate_tokens(schema_json)
+                )
         self._simple_print_message_role("[BefCompact]", self.run_context.messages)
         previous_messages = self.run_context.messages
         context_revision = self.request_context_manager.revision
+        process_kwargs: dict[str, T.Any] = {"trusted_token_usage": token_usage}
+        if fixed_overhead_tokens > 0:
+            process_kwargs["fixed_overhead_tokens"] = fixed_overhead_tokens
         processed_messages = await self._await_or_stop(
             self.request_context_manager.process(
                 self.run_context.messages,
-                trusted_token_usage=token_usage,
+                **process_kwargs,
             )
         )
         if processed_messages is None:

@@ -148,10 +148,14 @@ class TestContextManager:
 
         provider = MockProvider()
         provider.text_chat = AsyncMock(
-            return_value=LLMResponse(role="assistant", completion_text="  ", usage=TokenUsage(output=3))
+            return_value=LLMResponse(
+                role="assistant", completion_text="  ", usage=TokenUsage(output=3)
+            )
         )
         sink = AsyncMock()
-        compressor = LLMSummaryCompressor(provider=provider, keep_recent_ratio=0.15, request_event_emitter=sink)  # type: ignore[arg-type]
+        compressor = LLMSummaryCompressor(
+            provider=provider, keep_recent_ratio=0.15, request_event_emitter=sink
+        )  # type: ignore[arg-type]
         messages = self.create_messages(6)
 
         with patch("astrbot.core.agent.context.compressor.logger") as mock_logger:
@@ -708,7 +712,9 @@ class TestContextManager:
                 return super().count_tokens(messages, trusted_token_usage) + 1000
 
         counter = RequestOverheadCounter() if custom_counter else EstimateTokenCounter()
-        original = self._rounds_with_tool_chain("f" * (5000 if oversized_latest else 20))
+        original = self._rounds_with_tool_chain(
+            "f" * (5000 if oversized_latest else 20)
+        )
         messages = [
             original[0],
             Message(
@@ -783,7 +789,9 @@ class TestContextManager:
         messages = self._rounds_with_tool_chain("latest request")
         before = [message.model_dump() for message in messages]
         manager = ContextManager(
-            ContextConfig(max_context_tokens=100, custom_compressor=InspectingCompressor())
+            ContextConfig(
+                max_context_tokens=100, custom_compressor=InspectingCompressor()
+            )
         )
 
         result = await manager.process(messages)
@@ -794,12 +802,16 @@ class TestContextManager:
     # ==================== Trusted Usage Calibration & No-Op Fallback Tests ====================
 
     def _underestimated_multi_round_history(self) -> list[Message]:
-        """System + 5 older rounds (including a tool-call round) + latest round.
+        """Build a multi-round history whose heuristic estimate is below threshold.
 
         With ``EstimateTokenCounter``, total heuristic tokens are ~730 (< 820
         for ``max_context_tokens=1000``), reproducing the real-world regime
         where ``trusted_token_usage`` exceeds the compression threshold while
         uncalibrated heuristic recounts fall below it.
+
+        Returns:
+            Message list containing a system message, five older rounds
+            (including one tool-call round), and a latest active user round.
         """
         return [
             self.create_message("system", "s" * 100),  # 30
@@ -1134,6 +1146,291 @@ class TestContextManager:
         assert "Compress completed" in caplog.text
         assert "Compression made no changes" not in caplog.text
         assert "dropping the oldest rounds" not in caplog.text
+
+    @pytest.mark.asyncio
+    async def test_zero_pre_estimate_positive_post_estimate_still_triggers_fallback(
+        self,
+    ):
+        """When pre-compression estimate is 0 and trusted usage exceeds limit,
+        a positive post-compression estimate below threshold must not bypass
+        fallback truncation.
+        """
+        from astrbot.core.agent.context.compressor import TruncateByTurnsCompressor
+
+        class GrowingContentCompressor(TruncateByTurnsCompressor):
+            async def __call__(self, messages):
+                return [
+                    messages[0],
+                    self.create_message("user", "a" * 20),
+                    messages[2],
+                    messages[3],
+                    messages[4],
+                    messages[5],
+                ]
+
+            @staticmethod
+            def create_message(role: str, content: str) -> Message:
+                return Message(role=role, content=content)
+
+        manager = ContextManager(
+            ContextConfig(
+                max_context_tokens=1000,
+                custom_compressor=GrowingContentCompressor(),
+            )
+        )
+        messages = [
+            self.create_message("system", "sys"),
+            self.create_message("user", "hi"),
+            self.create_message("assistant", "ok"),
+            self.create_message("user", "yo"),
+            self.create_message("assistant", "ok"),
+            self.create_message("user", "go"),
+        ]
+        assert manager.token_counter.count_tokens(messages) == 0
+
+        result = await manager.process(messages, trusted_token_usage=950)
+
+        assert result == [messages[0], messages[-1]]
+
+    @pytest.mark.asyncio
+    async def test_fixed_overhead_tokens_are_not_scaled_away_during_fallback(self):
+        """Fixed request overhead (such as tool schemas) must remain accounted
+        for while dropping rounds so fallback does not stop prematurely.
+        """
+        manager = ContextManager(
+            ContextConfig(
+                max_context_tokens=1000,
+                llm_compress_provider=FailingProvider(),  # type: ignore[arg-type]
+            )
+        )
+        messages = [
+            self.create_message("user", "a" * 100),  # 30
+            self.create_message("assistant", "b" * 100),  # 30 (round 0: 60)
+            self.create_message("user", "c" * 100),  # 30
+            self.create_message("assistant", "d" * 100),  # 30 (round 1: 60)
+            self.create_message("user", "e" * 100),  # 30
+            self.create_message("assistant", "f" * 100),  # 30 (round 2: 60)
+            self.create_message("user", "g" * 100),  # 30 (round 3: 30)
+        ]
+        # est_before = 210, fixed_overhead = 500 -> est_total_before = 710.
+        # With trusted_token_usage = 950:
+        # - Without fixed overhead, dropping 1 round (210 -> 150) scales to
+        #   ceil(150 * 950 / 210) = 679 <= 820 and stops prematurely.
+        # - With fixed_overhead_tokens = 500:
+        #   1 drop (150 + 500 = 650): ceil(650 * 950 / 710) = 870 > 820
+        #   2 drops (90 + 500 = 590): ceil(590 * 950 / 710) = 790 <= 820
+        assert manager.token_counter.count_tokens(messages) == 210
+
+        result = await manager.process(
+            messages,
+            trusted_token_usage=950,
+            fixed_overhead_tokens=500,
+        )
+
+        assert result == messages[4:]
+
+    @pytest.mark.asyncio
+    async def test_fixed_overhead_when_trusted_usage_within_est_plus_fixed(self):
+        """When trusted_token_usage sits between est_before and est_before + fixed,
+        the excess stays fixed instead of shrinking with dropped rounds.
+        """
+        manager = ContextManager(
+            ContextConfig(
+                max_context_tokens=1000,
+                llm_compress_provider=FailingProvider(),  # type: ignore[arg-type]
+            )
+        )
+        messages = [
+            self.create_message("user", "a" * 200),  # 60
+            self.create_message("assistant", "b" * 200),  # 60 (round 0: 120)
+            self.create_message("user", "c" * 200),  # 60
+            self.create_message("assistant", "d" * 200),  # 60 (round 1: 120)
+            self.create_message("user", "e" * 200),  # 60
+            self.create_message("assistant", "f" * 200),  # 60 (round 2: 120)
+            self.create_message("user", "g" * 200),  # 60 (round 3: 60)
+        ]
+        # est_before = 420, fixed = 550, trusted_usage = 950 (<= 420 + 550 = 970).
+        # Effective fixed excess = 950 - 420 = 530.
+        # 1 drop (300 + 530 = 830 > 820); 2 drops (180 + 530 = 710 <= 820).
+        assert manager.token_counter.count_tokens(messages) == 420
+
+        result = await manager.process(
+            messages,
+            trusted_token_usage=950,
+            fixed_overhead_tokens=550,
+        )
+
+        assert result == messages[4:]
+
+    @pytest.mark.asyncio
+    async def test_enforce_max_turns_recalibrates_stale_trusted_usage(self):
+        """History trimmed by enforce_max_turns must recalibrate trusted_token_usage
+        so valid recent rounds are not dropped by stale pre-trim usage.
+        """
+        provider = FailingProvider()
+        manager = ContextManager(
+            ContextConfig(
+                enforce_max_turns=2,
+                truncate_turns=1,
+                max_context_tokens=1000,
+                llm_compress_provider=provider,  # type: ignore[arg-type]
+            )
+        )
+        messages = [
+            self.create_message("system", "s" * 100),  # 30
+            *[
+                msg
+                for idx in range(6)
+                for msg in (
+                    self.create_message("user", f"u{idx}" + "x" * 160),  # ~48
+                    self.create_message("assistant", f"a{idx}" + "y" * 160),  # ~48
+                )
+            ],
+        ]
+        # Original 6 turns ~ 610 heuristic tokens; enforce_max_turns=2 retains
+        # system + 2 turns (~224 tokens). Calibrating trusted_token_usage=950
+        # yields ~350 <= 820, so compression is skipped and both turns survive.
+        result = await manager.process(messages, trusted_token_usage=950)
+
+        assert result == [messages[0], *messages[-4:]]
+        assert provider.last_text_chat_kwargs is None
+
+    @pytest.mark.asyncio
+    async def test_inplace_message_mutation_same_estimate_is_not_noop(self, caplog):
+        """A custom compressor mutating a Message in place with the same
+        heuristic token estimate must not be misclassified as a no-op.
+        """
+        from astrbot.core.agent.context.compressor import TruncateByTurnsCompressor
+
+        class InPlaceContentMutator(TruncateByTurnsCompressor):
+            async def __call__(self, messages):
+                messages[1].content = "z" * len(str(messages[1].content))
+                return messages
+
+        manager = ContextManager(
+            ContextConfig(
+                max_context_tokens=1000,
+                custom_compressor=InPlaceContentMutator(),
+            )
+        )
+        messages = [
+            self.create_message("system", "s" * 100),
+            self.create_message("user", "a" * 300),
+            self.create_message("assistant", "b" * 300),
+            self.create_message("user", "c" * 300),
+        ]
+
+        with caplog.at_level("INFO"):
+            await manager.process(messages, trusted_token_usage=950)
+
+        assert "Compress completed" in caplog.text
+        assert "Compression made no changes" not in caplog.text
+
+    @pytest.mark.asyncio
+    async def test_zero_recount_after_drop_does_not_stop_fallback_early(self, caplog):
+        """When a positive pre-compression estimate drops to 0 while multiple
+        older rounds remain, fallback truncation must continue down to the
+        latest round rather than stopping early at 0 tokens.
+        """
+        manager = ContextManager(
+            ContextConfig(
+                max_context_tokens=1000,
+                llm_compress_provider=FailingProvider(),  # type: ignore[arg-type]
+            )
+        )
+        messages = [
+            self.create_message("system", "sys"),  # 0
+            self.create_message("user", "a" * 34),  # 10
+            self.create_message("assistant", "b" * 34),  # 10 (round 0: 20)
+            self.create_message("user", "hi"),  # 0
+            self.create_message("assistant", "ok"),  # 0 (round 1: 0)
+            self.create_message("user", "yo"),  # 0
+            self.create_message("assistant", "ok"),  # 0 (round 2: 0)
+            self.create_message("user", "go"),  # 0 (round 3: 0)
+        ]
+        # est_before = 20 (> 0), trusted_token_usage = 950.
+        # After dropping round 0, raw_tokens == 0 while rounds 1, 2, 3 remain.
+        # Unmeasured gap = 950 - 20 = 930 > 820 -> must keep dropping rounds 1 & 2.
+        assert manager.token_counter.count_tokens(messages) == 20
+
+        with caplog.at_level("WARNING"):
+            result = await manager.process(messages, trusted_token_usage=950)
+
+        assert result == [messages[0], messages[-1]]
+        assert "only the latest round left" in caplog.text
+
+    @pytest.mark.asyncio
+    async def test_tool_loop_runner_passes_tool_schema_fixed_overhead_to_context_manager(
+        self,
+    ):
+        """ToolLoopAgentRunner passes estimated tool-schema overhead to
+        ContextManager.process when trusted token usage and max context are set.
+        """
+        from unittest.mock import MagicMock
+
+        from astrbot.core.agent.hooks import BaseAgentRunHooks
+        from astrbot.core.agent.run_context import ContextWrapper
+        from astrbot.core.agent.runners.tool_loop_agent_runner import (
+            ToolLoopAgentRunner,
+        )
+        from astrbot.core.agent.tool import FunctionTool, ToolSet
+        from astrbot.core.provider.entities import ProviderRequest
+
+        class EchoTool(FunctionTool):
+            def __init__(self) -> None:
+                super().__init__(
+                    name="verbose_schema_tool",
+                    description="D" * 2000,
+                    parameters={
+                        "type": "object",
+                        "properties": {
+                            "payload": {"type": "string", "description": "P" * 1000}
+                        },
+                    },
+                )
+
+            async def call(self, context, **kwargs):
+                return "ok"
+
+        provider = MagicMock()
+        provider.provider_config = {"id": "p1", "max_context_tokens": 10000}
+        provider.meta = MagicMock(return_value=MagicMock(model="test-model"))
+        provider.get_model = MagicMock(return_value="test-model")
+        provider.text_chat = AsyncMock(
+            return_value=LLMResponse(role="assistant", completion_text="done")
+        )
+        provider.text_chat_stream = MagicMock()
+
+        conversation = MagicMock()
+        conversation.token_usage = 9000
+        req = ProviderRequest(
+            prompt="hello",
+            conversation=conversation,
+            func_tool=ToolSet([EchoTool()]),
+        )
+        runner = ToolLoopAgentRunner()
+        await runner.reset(
+            provider=provider,
+            request=req,
+            run_context=ContextWrapper(context=None),
+            tool_executor=MagicMock(),
+            agent_hooks=BaseAgentRunHooks(),
+            streaming=False,
+        )
+
+        captured_kwargs: dict = {}
+
+        async def spy_process(messages, **kwargs):
+            captured_kwargs.update(kwargs)
+            return messages
+
+        runner.request_context_manager.process = spy_process  # type: ignore[method-assign]
+
+        async for _ in runner.step_until_done(1):
+            pass
+
+        assert captured_kwargs["trusted_token_usage"] == 9000
+        assert captured_kwargs["fixed_overhead_tokens"] > 500
 
     # ==================== Combined Truncation and Compression Tests ====================
 

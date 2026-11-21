@@ -1,3 +1,5 @@
+import copy
+
 from astrbot import logger
 from astrbot.core.exceptions import ConversationPersistenceError
 
@@ -47,20 +49,31 @@ class ContextManager:
             )
 
     async def process(
-        self, messages: list[Message], trusted_token_usage: int = 0
+        self,
+        messages: list[Message],
+        trusted_token_usage: int = 0,
+        *,
+        fixed_overhead_tokens: int = 0,
     ) -> list[Message]:
         """Process the messages.
 
         Args:
             messages: The original message list.
+            trusted_token_usage: API-reported prompt token usage for the
+                preceding request, or ``0`` when unavailable.
+            fixed_overhead_tokens: Optional heuristic estimate of request-fixed
+                tokens outside ``messages`` (such as tool schemas) included in
+                ``trusted_token_usage``.
 
         Returns:
             The processed message list.
         """
         try:
             result = messages
+            effective_trusted_usage = trusted_token_usage
+            estimated_prev_tokens: int | None = None
 
-            # 1. 基于轮次的截断 (Enforce max turns)
+            # 1. Enforce max turns before token-based compression.
             if self.config.enforce_max_turns != -1:
                 result = self.truncator.truncate_by_turns(
                     result,
@@ -70,11 +83,21 @@ class ContextManager:
 
             if result is not messages:
                 self.revision += 1
+                if effective_trusted_usage > 0:
+                    est_orig = self.token_counter.count_tokens(messages)
+                    estimated_prev_tokens = self.token_counter.count_tokens(result)
+                    effective_trusted_usage = self._calibrate_token_count(
+                        estimated_prev_tokens,
+                        est_orig,
+                        effective_trusted_usage,
+                        has_messages=bool(result),
+                        fixed_overhead_tokens=fixed_overhead_tokens,
+                    )
 
-            # 2. 基于 token 的压缩
+            # 2. Token-based compression.
             if self.config.max_context_tokens > 0:
                 total_tokens = self.token_counter.count_tokens(
-                    result, trusted_token_usage
+                    result, effective_trusted_usage
                 )
 
                 if self.compressor.should_compress(
@@ -82,13 +105,13 @@ class ContextManager:
                 ):
                     # Custom compressors may mutate the existing list in place.
                     self.revision += 1
-                    estimated_prev_tokens = (
-                        total_tokens if trusted_token_usage == 0 else None
-                    )
+                    if estimated_prev_tokens is None and effective_trusted_usage == 0:
+                        estimated_prev_tokens = total_tokens
                     result = await self._run_compression(
                         result,
                         total_tokens,
                         estimated_prev_tokens=estimated_prev_tokens,
+                        fixed_overhead_tokens=fixed_overhead_tokens,
                     )
 
             return result
@@ -105,7 +128,18 @@ class ContextManager:
         est_before: int,
         est_after: int,
     ) -> bool:
-        """Return True if compression made no observable change to messages."""
+        """Check whether compression made no observable change to messages.
+
+        Args:
+            before: Independent pre-compression message snapshot.
+            after: Message list returned by the compressor.
+            est_before: Uncalibrated heuristic token estimate before compression.
+            est_after: Uncalibrated heuristic token estimate after compression.
+
+        Returns:
+            ``True`` when ``after`` is non-empty and matches ``before`` in both
+            content and heuristic token estimate; otherwise ``False``.
+        """
         return bool(after) and est_after == est_before and after == before
 
     @staticmethod
@@ -115,32 +149,71 @@ class ContextManager:
         prev_tokens: int,
         *,
         has_messages: bool,
+        fixed_overhead_tokens: int = 0,
     ) -> int:
         """Calibrate a post-compression heuristic token count against ``prev_tokens``.
 
         When ``prev_tokens`` (for example, API-reported ``trusted_token_usage``)
         exceeds the local pre-compression heuristic ``est_before``, uncalibrated
         recounts can underestimate real usage and skip fallback truncation.
-        Scaling by ``prev_tokens / est_before`` keeps checks aligned with real
-        usage while preserving proportional reductions from real compression.
+        Fixed request overhead outside ``messages`` (such as tool schemas) is
+        retained without scaling it down as message rounds are dropped.
+
+        Args:
+            estimated_tokens: Post-compression uncalibrated heuristic token count.
+            est_before: Pre-compression uncalibrated heuristic token count.
+            prev_tokens: Pre-compression token count (for example, trusted API
+                usage).
+            has_messages: Whether the post-compression message list is non-empty.
+            fixed_overhead_tokens: Optional heuristic estimate of request-fixed
+                tokens outside ``messages`` that do not shrink when rounds are
+                dropped.
+
+        Returns:
+            Calibrated post-compression token count.
         """
         if prev_tokens <= est_before:
             return estimated_tokens
-        if estimated_tokens <= 0:
-            return prev_tokens if (est_before <= 0 and has_messages) else 0
+
+        fixed = max(0, fixed_overhead_tokens)
+        if not has_messages:
+            return min(prev_tokens, fixed) if fixed > 0 else 0
+
+        non_negative_est = max(0, estimated_tokens)
         if est_before <= 0:
-            return estimated_tokens
+            return max(prev_tokens, non_negative_est + fixed)
+
+        unmeasured_gap = prev_tokens - est_before
+        if fixed > 0:
+            est_total_before = est_before + fixed
+            est_total_after = non_negative_est + fixed
+            if prev_tokens > est_total_before:
+                calibrated = (
+                    est_total_after * prev_tokens + est_total_before - 1
+                ) // est_total_before
+            else:
+                calibrated = unmeasured_gap + non_negative_est
+            if non_negative_est == 0:
+                return max(calibrated, unmeasured_gap)
+            return calibrated
+
+        if non_negative_est == 0:
+            # Retain the unmeasured gap when messages remain so a zero recount
+            # does not terminate fallback truncation while old rounds remain.
+            return unmeasured_gap
+
         # Exact integer ceiling of estimated_tokens * prev_tokens / est_before.
-        return (estimated_tokens * prev_tokens + est_before - 1) // est_before
+        return (non_negative_est * prev_tokens + est_before - 1) // est_before
 
     async def _run_compression(
         self,
         messages: list[Message],
         prev_tokens: int,
         estimated_prev_tokens: int | None = None,
+        *,
+        fixed_overhead_tokens: int = 0,
     ) -> list[Message]:
-        """
-        Compress/truncate the messages.
+        """Compress or truncate messages to fit within the token budget.
 
         If the context still exceeds the limit after compression (for example
         because the summary request failed), whole rounds are dropped, oldest
@@ -152,13 +225,20 @@ class ContextManager:
             prev_tokens: The token count before compression.
             estimated_prev_tokens: Optional uncalibrated token estimate for
                 ``messages`` prior to compression.
+            fixed_overhead_tokens: Optional heuristic estimate of request-fixed
+                tokens outside ``messages``.
 
         Returns:
             The compressed/truncated message list.
         """
         logger.debug("Compress triggered, starting compression...")
 
-        original_messages = list(messages)
+        original_messages = [
+            msg.model_copy(deep=True)
+            if isinstance(msg, Message)
+            else copy.deepcopy(msg)
+            for msg in messages
+        ]
         est_before = (
             estimated_prev_tokens
             if estimated_prev_tokens is not None
@@ -183,6 +263,7 @@ class ContextManager:
                 est_before,
                 prev_tokens,
                 has_messages=bool(messages),
+                fixed_overhead_tokens=fixed_overhead_tokens,
             )
         )
 
@@ -252,6 +333,7 @@ class ContextManager:
                 est_before,
                 prev_tokens,
                 has_messages=True,
+                fixed_overhead_tokens=fixed_overhead_tokens,
             )
         if incremental_tokens and dropped_rounds:
             messages = system_messages + [
