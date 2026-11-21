@@ -6,6 +6,7 @@ import {
   client as openApiV1Client,
   type BackupExportRequest,
   type BackupRenameRequest,
+  type BackupSettingsUpdateRequest,
   type BackupUploadInitRequest,
   type BackupUploadRequest,
   type BackupUploadSessionRequest,
@@ -745,7 +746,27 @@ export const updatesApi = {
   },
 };
 
+export interface BackupSettings {
+  backup_dir: string;
+  effective_backup_dir: string;
+  default_backup_dir: string;
+  is_custom: boolean;
+  source: 'default' | 'config' | 'env' | 'override';
+  env_override: boolean;
+  has_active_tasks: boolean;
+  is_valid: boolean;
+  validation_error: string | null;
+}
+
 export const backupApi = {
+  getSettings() {
+    return typed<BackupSettings>(openApiV1.getBackupSettings());
+  },
+  updateSettings(payload: BackupSettingsUpdateRequest) {
+    return typed<BackupSettings>(
+      openApiV1.updateBackupSettings({ body: payload }),
+    );
+  },
   list(params?: BackupListParams) {
     return typed<any>(openApiV1.listBackups({ query: generatedQuery(params) }));
   },

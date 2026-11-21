@@ -13,6 +13,7 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from astrbot.core import file_token_service, logger
 from astrbot.core.astr_agent_runtime.computer import computer_client
 from astrbot.core.astr_agent_runtime.computer.booters.local import LocalShellComponent
+from astrbot.core.backup.constants import get_backup_directories
 from astrbot.core.config.agent import normalize_agent
 from astrbot.core.config.astrbot_config import AstrBotConfig
 from astrbot.core.config.default import (
@@ -29,7 +30,10 @@ from astrbot.core.db import BaseDatabase
 from astrbot.core.platform.register import platform_cls_map, platform_registry
 from astrbot.core.provider.register import provider_registry
 from astrbot.core.star.star import star_registry
-from astrbot.core.utils.astrbot_path import get_astrbot_plugin_data_path
+from astrbot.core.utils.astrbot_path import (
+    get_astrbot_plugin_data_path,
+    validate_astrbot_backup_dir,
+)
 from astrbot.core.utils.totp import (
     is_totp_enabled,
     revoke_user_trusted_devices,
@@ -333,6 +337,16 @@ def validate_config(
             **schema["misc_config_group"]["metadata"],
         }
         validate(data, meta_all)
+        raw_backup_dir = data.get("backup_dir")
+        if isinstance(raw_backup_dir, str) and raw_backup_dir.strip():
+            try:
+                validate_astrbot_backup_dir(
+                    raw_backup_dir,
+                    extra_protected_dirs=get_backup_directories().values(),
+                    check_writable=False,
+                )
+            except ValueError as exc:
+                errors.append(f"backup_dir: {exc}")
         provider_settings = data.get("provider_settings", {})
         defaults = get_local_permission_defaults(runtime.get("os") if runtime else None)
         permissions = (

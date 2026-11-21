@@ -194,6 +194,29 @@
     "dialog": {
       "title": "バックアップ管理"
     },
+    "settings": {
+      "title": "バックアップ出力ディレクトリ",
+      "defaultBadge": "デフォルト",
+      "customBadge": "カスタム",
+      "envBadge": "環境変数",
+      "edit": "変更",
+      "copyPath": "パスをコピー",
+      "copySuccess": "バックアップディレクトリのパスをコピーしました",
+      "copyFailed": "パスのコピーに失敗しました",
+      "inputLabel": "カスタムバックアップ出力ディレクトリ",
+      "inputPlaceholder": "空欄でデフォルトに戻す：{dir}",
+      "browse": "参照",
+      "resetDefault": "デフォルトに戻す",
+      "hintDefault": "空欄の場合はデフォルトディレクトリ（{dir}）が使用されます。相対パスは data ディレクトリが基準になり、絶対パスも使用できます。",
+      "hintNoAutoMove": "ディレクトリを変更しても、以前のディレクトリにある既存のバックアップファイルは自動的に移動・削除されません。",
+      "envOverrideHint": "現在、環境変数 ASTRBOT_BACKUP_DIR により上書きされているため、ここでは変更できません。",
+      "activeTaskHint": "バックアップのエクスポート、インポート、またはアップロードが進行中です。完了後にディレクトリを変更してください。",
+      "saveSuccess": "バックアップ出力ディレクトリを更新しました",
+      "resetSuccess": "デフォルトのバックアップディレクトリに戻しました",
+      "loadFailed": "バックアップディレクトリ設定の読み込みに失敗しました",
+      "saveFailed": "バックアップディレクトリの更新に失敗しました",
+      "invalidControlChars": "ディレクトリパスに制御文字を含めることはできません"
+    },
     "tabs": {
       "export": "バックアップをエクスポート",
       "import": "バックアップをインポート",
@@ -207,6 +230,7 @@
       "processing": "エクスポート中…",
       "wait": "データをパッケージ化しています。しばらくお待ちください…",
       "completed": "エクスポートが完了しました",
+      "savedPath": "保存先：{path}",
       "download": "バックアップをダウンロード",
       "another": "新しいバックアップを作成",
       "failed": "エクスポートに失敗しました",
@@ -263,7 +287,8 @@
       "renameRequired": "ファイル名を入力してください",
       "renameInvalidChars": "ファイル名に使用できない文字が含まれています",
       "renameFailed": "名前の変更に失敗しました",
-      "ftpHint": "大きなバックアップファイルは、FTP/SFTP などを使用して data/backups ディレクトリへ直接アップロードすることもできます"
+      "ftpHint": "大きなバックアップファイルは、FTP/SFTP などを使用して data/backups ディレクトリへ直接アップロードすることもできます",
+      "ftpHintWithDir": "大きなバックアップファイルは、FTP/SFTP などを使用して {dir} ディレクトリへ直接アップロードすることもできます"
     }
   },
   "apiKey": {

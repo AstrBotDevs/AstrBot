@@ -99,6 +99,10 @@ class BackupRenameRequest(OpenModel):
     new_name: str | None = None
 
 
+class BackupSettingsUpdateRequest(OpenModel):
+    backup_dir: str | None = None
+
+
 class UpdateRequest(OpenModel):
     version: str | None = None
     proxy: str | None = None

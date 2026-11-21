@@ -29,6 +29,10 @@ export type BackupRenameRequest = {
     new_name: string;
 };
 
+export type BackupSettingsUpdateRequest = {
+    backup_dir?: (string) | null;
+};
+
 export type BackupUploadInitRequest = {
     filename: string;
     total_size: number;
@@ -3720,6 +3724,18 @@ export type StatusBackupUploadData = {
 export type StatusBackupUploadResponse = (SuccessEnvelope);
 
 export type StatusBackupUploadError = unknown;
+
+export type GetBackupSettingsResponse = (SuccessEnvelope);
+
+export type GetBackupSettingsError = unknown;
+
+export type UpdateBackupSettingsData = {
+    body: BackupSettingsUpdateRequest;
+};
+
+export type UpdateBackupSettingsResponse = (SuccessEnvelope);
+
+export type UpdateBackupSettingsError = unknown;
 
 export type GetBackupProgressData = {
     path: {

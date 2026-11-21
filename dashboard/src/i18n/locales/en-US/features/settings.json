@@ -194,6 +194,29 @@
     "dialog": {
       "title": "Backup Manager"
     },
+    "settings": {
+      "title": "Backup Export Directory",
+      "defaultBadge": "Default",
+      "customBadge": "Custom",
+      "envBadge": "Environment",
+      "edit": "Change",
+      "copyPath": "Copy path",
+      "copySuccess": "Backup directory path copied",
+      "copyFailed": "Failed to copy path",
+      "inputLabel": "Custom backup export directory",
+      "inputPlaceholder": "Leave blank for default: {dir}",
+      "browse": "Browse",
+      "resetDefault": "Reset to Default",
+      "hintDefault": "Leave blank to use the default directory ({dir}). Relative paths resolve under the data directory; absolute paths are also supported.",
+      "hintNoAutoMove": "Changing the directory only affects new exports and the backup list; existing backup files in the previous directory will not be moved or deleted automatically.",
+      "envOverrideHint": "Currently overridden by the ASTRBOT_BACKUP_DIR environment variable and cannot be changed here.",
+      "activeTaskHint": "A backup export, import, or upload is currently in progress. Wait until it finishes before changing the directory.",
+      "saveSuccess": "Backup export directory updated",
+      "resetSuccess": "Reset to default backup directory",
+      "loadFailed": "Failed to load backup directory settings",
+      "saveFailed": "Failed to update backup directory",
+      "invalidControlChars": "Directory path cannot contain control characters"
+    },
     "tabs": {
       "export": "Export Backup",
       "import": "Import Backup",
@@ -207,6 +230,7 @@
       "processing": "Exporting...",
       "wait": "Please wait, packaging data...",
       "completed": "Export Completed!",
+      "savedPath": "Saved to: {path}",
       "download": "Download Backup",
       "another": "Create New Backup",
       "failed": "Export Failed",
@@ -263,7 +287,8 @@
       "renameRequired": "Please enter a filename",
       "renameInvalidChars": "Filename contains invalid characters",
       "renameFailed": "Rename failed",
-      "ftpHint": "For large backup files, you can also upload directly to the data/backups directory via FTP/SFTP"
+      "ftpHint": "For large backup files, you can also upload directly to the data/backups directory via FTP/SFTP",
+      "ftpHintWithDir": "For large backup files, you can also upload directly to {dir} via FTP/SFTP"
     }
   },
   "apiKey": {
