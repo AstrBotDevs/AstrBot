@@ -45,6 +45,7 @@ from .kook_types import (
     KookRoleExtraType,
     PlainTextElement,
     SectionModule,
+    VoiceModule,
 )
 
 KOOK_AT_SELECTOR_REGEX = re.compile(r"\((met|rol)\)([^()]+)\(\1\)")
@@ -408,6 +409,11 @@ class KookPlatformAdapter(Platform):
                         files.append((module.type, module.title, module.src))
                         text_parts.append(f" [{module.type.value}]")
 
+                    case VoiceModule():
+                        url = await self.client.get_voice_url(data, module.media_id)
+                        files.append((module.type, "", url))
+                        text_parts.append(" [voice]")
+
                     case _:
                         logger.debug(f"[KOOK] 跳过或未处理模块: {module.type}")
 
@@ -430,6 +436,8 @@ class KookPlatformAdapter(Platform):
                 message.append(File(name=file_name, url=file_url))
             elif file_type == KookModuleType.VIDEO:
                 message.append(Video(file=file_url))
+            elif file_type == KookModuleType.VOICE:
+                message.append(Record(file=file_url, url=file_url))
             elif file_type == KookModuleType.AUDIO:
                 path_wav = await MediaResolver(
                     file_url,
