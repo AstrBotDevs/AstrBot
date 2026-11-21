@@ -3,7 +3,7 @@
 import pytest
 
 from astrbot.core.agent.context.truncator import ContextTruncator
-from astrbot.core.agent.message import Message, ToolCall
+from astrbot.core.agent.message import Message, ToolCall, load_messages
 
 
 class TestContextTruncator:
@@ -183,6 +183,66 @@ class TestContextTruncator:
             )
 
         assert result == messages
+
+    @pytest.mark.parametrize("drop_turns", [0, 1, 2])
+    def test_turn_limit_ignores_pre_user_fragment(self, drop_turns):
+        """Do not count an assistant/tool prelude or retain it after truncation."""
+        systems = [self.create_message("system", "Persona")]
+        prelude = self.create_tool_turn(1, "prelude")[1:]
+        turns = [self.create_tool_turn(1, f"task-{i}") for i in range(3)]
+        messages = systems + prelude + [msg for turn in turns for msg in turn]
+        truncator = ContextTruncator()
+
+        assert truncator.truncate_by_turns(messages, 3) is messages
+        result = truncator.truncate_by_turns(messages, 2, drop_turns)
+
+        retained = max(1, 3 - drop_turns)
+        assert result == systems + [msg for turn in turns[-retained:] for msg in turn]
+        assert result[len(systems)].role == "user"
+
+    @pytest.mark.parametrize("drop_turns", [1, 2, 10])
+    def test_drop_oldest_does_not_count_pre_user_fragment(self, drop_turns):
+        """A pre-user fragment never uses up a requested whole-turn drop."""
+        systems = [self.create_message("system", "Persona")]
+        prelude = self.create_tool_turn(1, "prelude")[1:]
+        turns = [self.create_tool_turn(1, f"task-{i}") for i in range(3)]
+        messages = systems + prelude + [msg for turn in turns for msg in turn]
+
+        result = ContextTruncator().truncate_by_dropping_oldest_turns(
+            messages, drop_turns
+        )
+
+        assert result == systems + [
+            msg for turn in turns[min(drop_turns, 2) :] for msg in turn
+        ]
+
+    @pytest.mark.parametrize("method", ["limit", "drop"])
+    def test_internal_user_messages_stay_with_their_originating_turn(self, method):
+        """Keep and drop persisted internal user messages with the actual request."""
+        current = load_messages(
+            [
+                {"role": "user", "content": "Inspect the output"},
+                {"role": "assistant", "content": "Working"},
+                {"role": "user", "content": "Tool image", "_turn_continuation": True},
+                {"role": "assistant", "content": "Image reviewed"},
+                {"role": "user", "content": "Step limit", "_turn_continuation": True},
+            ]
+        )
+        older = self.create_tool_turn(1, "old")
+        messages = older + current
+        truncator = ContextTruncator()
+
+        if method == "limit":
+            assert truncator.truncate_by_turns(messages, 2) is messages
+            assert truncator.truncate_by_turns(messages, 1) == current
+        else:
+            assert truncator.truncate_by_dropping_oldest_turns(messages, 1) == current
+
+        next_turn = self.create_tool_turn(1, "next")
+        assert (
+            truncator.truncate_by_dropping_oldest_turns(current + next_turn, 1)
+            == next_turn
+        )
 
     # ==================== fix_messages Tests ====================
 

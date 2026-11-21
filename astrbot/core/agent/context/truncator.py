@@ -108,8 +108,10 @@ class ContextTruncator:
     ) -> list[Message]:
         """Keep the most recent complete user turns when the limit is exceeded.
 
-        A turn starts at a user message and includes all subsequent assistant
-        messages, tool calls and tool results until the next user message.
+        A turn starts at a user input and includes all subsequent assistant
+        messages, tool calls, tool results and generated user-role messages
+        until the next user input. A pre-user fragment does not count as a turn
+        and is discarded when truncation occurs.
         The current, possibly unfinished turn counts towards the limit and is
         always retained along with the leading system messages.
 
@@ -128,6 +130,8 @@ class ContextTruncator:
 
         system_messages, non_system_messages = self._split_system_rest(messages)
         rounds = cast(list[list[Message]], split_into_rounds(non_system_messages))
+        if rounds and (rounds[0][0].role != "user" or rounds[0][0]._turn_continuation):
+            rounds = rounds[1:]
 
         if len(rounds) <= max(1, keep_most_recent_turns):
             return messages
@@ -143,6 +147,9 @@ class ContextTruncator:
     ) -> list[Message]:
         """Drop the oldest complete user turns while preserving the latest one.
 
+        A pre-user fragment is discarded along with the removed turns and
+        does not count towards the number of turns dropped.
+
         Args:
             messages: Context including any leading system messages.
             drop_turns: Number of oldest turns to remove. Nonpositive values
@@ -156,6 +163,8 @@ class ContextTruncator:
 
         system_messages, non_system_messages = self._split_system_rest(messages)
         rounds = cast(list[list[Message]], split_into_rounds(non_system_messages))
+        if rounds and (rounds[0][0].role != "user" or rounds[0][0]._turn_continuation):
+            rounds = rounds[1:]
 
         if len(rounds) <= 1:
             return messages

@@ -2317,6 +2317,101 @@ async def test_turn_limit_preserves_long_tool_history_on_next_saved_reply(
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("streaming", [False, True])
+@pytest.mark.parametrize("internal_message", ["budget", "image"])
+async def test_internal_user_messages_preserve_current_turn_and_reloaded_history(
+    tmp_path,
+    runner,
+    provider_request,
+    mock_hooks,
+    monkeypatch,
+    streaming,
+    internal_message,
+):
+    """A generated user-role message stays in its request across SQLite reloads."""
+    from astrbot.core.agent.conversation_events import ConversationEventWriter
+    from astrbot.core.agent.message import dump_messages
+    from astrbot.core.agent.tool_image_cache import tool_image_cache
+    from astrbot.core.db.sqlite import SQLiteDatabase
+
+    monkeypatch.setattr(
+        tool_image_cache,
+        "save_image",
+        lambda **kwargs: SimpleNamespace(
+            file_path="cached.png", mime_type="image/png", tool_name="test_tool"
+        ),
+    )
+    monkeypatch.setattr(
+        tool_image_cache,
+        "get_image_base64_by_path",
+        lambda *args: ("dGVzdA==", "image/png"),
+    )
+    db = SQLiteDatabase(str(tmp_path / "internal_turn_history.db"))
+    await db.initialize()
+    try:
+        conv = await db.create_conversation("umo", "p")
+        writer = ConversationEventWriter(
+            db.conversation_store,
+            await db.conversation_store.read(conv.conversation_id),
+        )
+        provider = CapturingToolLoopProvider("test_tool")
+        await runner.reset(
+            provider=provider,
+            request=provider_request,
+            run_context=ContextWrapper(context=None),
+            tool_executor=MockMixedContentToolExecutor
+            if internal_message == "image"
+            else MockToolExecutor,
+            agent_hooks=mock_hooks,
+            streaming=streaming,
+            enforce_max_turns=1,
+            conversation_event_sink=writer.consume,
+        )
+        original_request = runner.run_context.messages[0]
+        await writer.start_turn({"kind": "agent"})
+        await collect_events(
+            runner.step_until_done(1 if internal_message == "budget" else 3)
+        )
+
+        final_context = provider.received_contexts[-1]
+        assert final_context[0] == original_request
+        assert [message.role for message in final_context] == [
+            "user",
+            "assistant",
+            "tool",
+            "user",
+        ]
+        await writer.save_history(dump_messages(runner.run_context.messages))
+        await writer.finish_turn("completed")
+        snapshot = await db.conversation_store.read(conv.conversation_id)
+        history = snapshot.messages
+        assert history[3]["_turn_continuation"] is True
+        assert history[0] == original_request.model_dump()
+
+        writer = ConversationEventWriter(db.conversation_store, snapshot)
+        await runner.reset(
+            provider=provider,
+            request=ProviderRequest(prompt="Follow-up", contexts=writer.get_messages()),
+            run_context=ContextWrapper(context=None),
+            tool_executor=MockToolExecutor,
+            agent_hooks=mock_hooks,
+            streaming=streaming,
+            enforce_max_turns=2,
+            conversation_event_sink=writer.consume,
+        )
+        await writer.start_turn({"kind": "agent"})
+        await collect_events(runner.step_until_done(3))
+        await writer.save_history(dump_messages(runner.run_context.messages))
+        await writer.finish_turn("completed")
+
+        saved = (await db.conversation_store.read(conv.conversation_id)).messages
+        assert saved[: len(history)] == history
+        assert len(saved) == len(history) + 2
+    finally:
+        await db.engine.dispose()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("streaming", [False, True])
 async def test_event_journal_records_requests_tools_and_final_context(
     tmp_path, runner, provider_request, mock_tool_executor, mock_hooks, streaming
 ):

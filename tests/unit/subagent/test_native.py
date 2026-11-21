@@ -14,6 +14,46 @@ from astrbot.core.provider.entities import LLMResponse
 
 
 @pytest.mark.asyncio
+async def test_native_followup_preserves_internal_turn_boundaries_after_restore(
+    environment,
+):
+    """Reloading delegated history must not promote an internal notice to a turn."""
+    env = environment
+    selected = await env.save_agent("worker", config={"compression": {"max_turns": 2}})
+    agent = await env.service.spawn(
+        env.root, [{"type": "plain", "text": "Initial"}], config_id=selected.config_id
+    )
+    await env.service.wait(env.root, [agent["agent_id"]], 2000, "all")
+    record = env.store.get(agent["agent_id"], env.scope)
+    session = await env.native.open_session(
+        env.scope.umo,
+        session_id=record.conversation_id,
+        options={"profile": "subagent"},
+    )
+    history = [
+        {"role": "user", "content": "Original request"},
+        {"role": "user", "content": "Internal notice", "_turn_continuation": True},
+        {"role": "assistant", "content": "Done"},
+    ]
+    await session._commit_history(history, None)
+    await session.close()
+
+    await env.service.send(
+        env.root, record.agent_id, [{"type": "plain", "text": "Continue"}]
+    )
+    result = await env.service.wait(env.root, [record.agent_id], 2000, "all")
+    assert result["agents"][0]["state"] == "completed"
+    restored = await env.native.open_session(
+        env.scope.umo,
+        session_id=record.conversation_id,
+        options={"profile": "subagent"},
+    )
+    saved = await restored.history()
+    assert saved[: len(history)] == history
+    assert len(saved) == len(history) + 2
+
+
+@pytest.mark.asyncio
 async def test_native_runtime_owns_computer_initialization_and_shutdown(
     environment, monkeypatch
 ):
