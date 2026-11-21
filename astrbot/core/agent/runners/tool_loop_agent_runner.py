@@ -2073,16 +2073,19 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         executor = None
         try:
             detach = getattr(self.tool_executor, "detach", None)
+            # Isolate tool execution from recorded arguments so in-place mutations
+            # inside local handlers do not corrupt hooks, detach state, or tool_call_args.
+            exec_arguments = copy.deepcopy(arguments)
             executor = self._iter_tool_executor_results(
                 self.tool_executor.execute(
-                    tool=tool, run_context=self.run_context, **arguments
+                    tool=tool, run_context=self.run_context, **exec_arguments
                 ),
                 detach=partial(
                     detach,
                     tool=tool,
                     run_context=self.run_context,
                     task_id=execution_id,
-                    arguments=arguments,
+                    arguments=copy.deepcopy(arguments),
                 )
                 if detach is not None
                 else None,
