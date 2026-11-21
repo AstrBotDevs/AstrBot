@@ -8,6 +8,7 @@ from anthropic.types import Message, MessageDeltaUsage, TextBlock, Usage
 
 from astrbot.core.agent.tool import FunctionTool, ToolSet
 from astrbot.core.provider.entities import TokenUsage
+from astrbot.core.provider.modalities import AUDIO_NOT_RECEIVED_HINT
 from astrbot.core.provider.sources.anthropic_source import ProviderAnthropic
 
 # The SDK bundles its own httpx (``httpx`` before 1.0.0, ``httpx2`` after).
@@ -541,3 +542,90 @@ async def test_query_concatenates_multiple_text_blocks():
     response = await provider._query({"model": "claude-test", "messages": []}, None)
 
     assert response.completion_text == "Let me search. The answer is 42."
+
+
+@pytest.mark.asyncio
+async def test_assemble_context_explains_unreceived_audio():
+    message = await _provider().assemble_context("what was said?", audio_urls=["a.wav"])
+
+    assert message["content"] == [
+        {"type": "text", "text": "what was said?"},
+        {"type": "text", "text": AUDIO_NOT_RECEIVED_HINT},
+    ]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("streaming", [False, True])
+@pytest.mark.parametrize("tool_marks", [0, 4])
+async def test_cache_breakpoints_apply_to_final_wire_payload(
+    monkeypatch, streaming, tool_marks
+):
+    captured = []
+
+    def handle(request):
+        captured.append(json.loads(request.content))
+        return sdk_httpx.Response(
+            400,
+            json={
+                "type": "error",
+                "error": {
+                    "type": "invalid_request_error",
+                    "message": "offline capture",
+                },
+            },
+        )
+
+    monkeypatch.setattr(
+        ProviderAnthropic,
+        "_create_http_client",
+        lambda self, config: sdk_httpx.AsyncClient(
+            transport=sdk_httpx.MockTransport(handle)
+        ),
+    )
+    provider = ProviderAnthropic(
+        {
+            "id": "test",
+            "type": "anthropic_chat_completion",
+            "key": ["test-key"],
+            "model": "claude-test",
+            "api_base": "https://offline.invalid",
+            "custom_extra_body": {
+                "tools": [
+                    {"name": str(i), "cache_control": {"type": "ephemeral"}}
+                    for i in range(tool_marks)
+                ]
+            },
+        },
+        {},
+    )
+    payload = {
+        "model": "claude-test",
+        "system": [{"type": "text", "text": "sys"}],
+        "messages": [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": "keep"},
+                    {"type": "tool_result", "tool_use_id": "orphan", "content": "drop"},
+                ],
+            }
+        ],
+    }
+    try:
+        with pytest.raises(BadRequestError):
+            if streaming:
+                async for _ in provider._query_stream(
+                    payload, None, request_max_retries=1
+                ):
+                    pass
+            else:
+                await provider._query(payload, None, request_max_retries=1)
+    finally:
+        await provider.terminate()
+    wire = captured[0]
+    content = wire["messages"][-1]["content"]
+    assert len(content) == 1 and content[0]["text"] == "keep"
+    blocks = [*wire.get("tools", []), *wire["system"], *content]
+    assert sum("cache_control" in block for block in blocks) <= 4
+    if not tool_marks:
+        assert content[0]["cache_control"] == {"type": "ephemeral"}

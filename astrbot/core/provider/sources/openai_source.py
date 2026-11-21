@@ -1162,16 +1162,27 @@ class ProviderOpenAIOfficial(Provider):
                 image_fallback_used=True,
             )
 
-        if (
-            "Function calling is not enabled" in str(e)
-            or ("tool" in str(e).lower() and "support" in str(e).lower())
-            or ("function" in str(e).lower() and "support" in str(e).lower())
+        # OpenAI, Ollama, Gemini (OpenAI-compatible) and SiliconCloud report this
+        # with different codes, so only the message text can be matched.
+        if func_tool and re.search(
+            # Only match messages that say tools themselves are unsupported, so
+            # unrelated errors (e.g. "function tools with reasoning_effort are
+            # not supported", invalid tool schemas) are surfaced instead of
+            # silently dropping every tool.
+            r"function calling is not enabled"
+            r"|(?:does not|doesn't|do not|don't|not) support"
+            r" (?:function calling|functions|tools|tool use|tool calling|tool calls)"
+            r"|(?:tools|tool use|tool calling|function calling) (?:is|are) not supported"
+            r"|不支持.{0,6}(?:工具|函数|function|tool)",
+            str(e),
+            re.IGNORECASE,
         ):
-            # openai, ollama, gemini openai, siliconcloud 的错误提示与 code 不统一，只能通过字符串匹配
             logger.warning(
-                f"{self.get_model()} 不支持函数工具调用，已自动去除，不影响使用。如需永久关闭，可前往 WebUI 中关闭工具调用。",
+                f"{self.get_model()} 不支持函数工具调用，已自动去除，不影响使用。如需永久关闭，可前往 WebUI 中关闭工具调用。原始错误: {e}",
             )
             payloads.pop("tools", None)
+            # tool_choice without tools is rejected by OpenAI-compatible APIs.
+            payloads.pop("tool_choice", None)
             return (
                 False,
                 chosen_key,

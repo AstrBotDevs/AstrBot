@@ -28,6 +28,7 @@ from astrbot.core.utils.network_utils import (
 )
 
 from ..headers import build_conversation_headers, build_provider_headers
+from ..modalities import AUDIO_NOT_RECEIVED_HINT
 from ..register import register_provider_adapter
 from .request_retry import retry_provider_request, retry_provider_request_context
 
@@ -38,6 +39,10 @@ from .request_retry import retry_provider_request, retry_provider_request_contex
 )
 class ProviderAnthropic(Provider):
     _PROMPT_CACHE_CONTROL = {"type": "ephemeral"}
+    _MAX_CACHE_BREAKPOINTS = 4
+    _CACHEABLE_BLOCK_TYPES = frozenset(
+        {"text", "image", "document", "tool_use", "tool_result"}
+    )
 
     @staticmethod
     def _ensure_usable_response(
@@ -507,14 +512,84 @@ class ProviderAnthropic(Provider):
         return {"type": "auto"}
 
     @classmethod
-    def _apply_explicit_prompt_cache_breakpoints(cls, payloads: dict) -> None:
-        system_blocks = payloads.get("system")
-        if not isinstance(system_blocks, list) or not system_blocks:
-            return
+    def _apply_explicit_prompt_cache_breakpoints(
+        cls, payloads: dict, extra_tools: list | None = None
+    ) -> None:
+        """Mark the system prompt and the conversation tail as cache breakpoints.
 
-        last_block = system_blocks[-1]
-        if isinstance(last_block, dict) and "cache_control" not in last_block:
-            last_block["cache_control"] = dict(cls._PROMPT_CACHE_CONTROL)
+        The system breakpoint caches the tool definitions and system prompt.
+        The tail breakpoint caches the whole conversation so far, so the next
+        request (a tool result or the next user turn) reads the history from
+        the cache instead of paying for it again. Only cache markers are
+        added; the content sent to the model is unchanged.
+
+        Args:
+            payloads: Anthropic request payload, modified in place.
+            extra_tools: Tool definitions supplied through the SDK extra body.
+        """
+        system_blocks = payloads.get("system")
+        messages = payloads.get("messages")
+        tools = extra_tools if isinstance(extra_tools, list) else payloads.get("tools")
+        blocks = [
+            *(system_blocks if isinstance(system_blocks, list) else []),
+            *(tools if isinstance(tools, list) else []),
+            *(
+                part
+                for message in (messages if isinstance(messages, list) else [])
+                if isinstance(message, dict)
+                and isinstance(message.get("content"), list)
+                for part in message["content"]
+            ),
+        ]
+        # The API's four-breakpoint budget includes tool definitions.
+        count = sum(
+            isinstance(block, dict) and "cache_control" in block for block in blocks
+        )
+        if count >= cls._MAX_CACHE_BREAKPOINTS:
+            return
+        if isinstance(system_blocks, list) and system_blocks:
+            last_block = system_blocks[-1]
+            if isinstance(last_block, dict) and "cache_control" not in last_block:
+                last_block["cache_control"] = dict(cls._PROMPT_CACHE_CONTROL)
+                count += 1
+        if (
+            count >= cls._MAX_CACHE_BREAKPOINTS
+            or not isinstance(messages, list)
+            or not messages
+        ):
+            return
+        last_message = messages[-1]
+        if not isinstance(last_message, dict):
+            return
+        content = last_message.get("content")
+        if isinstance(content, str):
+            if content:
+                last_message["content"] = [
+                    {
+                        "type": "text",
+                        "text": content,
+                        "cache_control": dict(cls._PROMPT_CACHE_CONTROL),
+                    }
+                ]
+            return
+        if not isinstance(content, list):
+            return
+        for index in range(len(content) - 1, -1, -1):
+            block = content[index]
+            if not isinstance(block, dict) or "cache_control" in block:
+                return
+            if block.get("type") in cls._CACHEABLE_BLOCK_TYPES and (
+                block.get("type") != "text" or block.get("text")
+            ):
+                # A new list and block dict keep the marker out of the
+                # caller's message history.
+                content = list(content)
+                content[index] = {
+                    **block,
+                    "cache_control": dict(cls._PROMPT_CACHE_CONTROL),
+                }
+                last_message["content"] = content
+                return
 
     async def _query(
         self,
@@ -553,9 +628,10 @@ class ProviderAnthropic(Provider):
 
         if "max_tokens" not in payloads:
             payloads["max_tokens"] = 65536
-        self._apply_explicit_prompt_cache_breakpoints(payloads)
         self._apply_thinking_config(payloads)
         self._sanitize_assistant_messages(payloads)
+        # Mark the final, sanitized blocks so a dropped block cannot take a marker.
+        self._apply_explicit_prompt_cache_breakpoints(payloads, extra_body.get("tools"))
 
         try:
             completion = await retry_provider_request(
@@ -677,9 +753,10 @@ class ProviderAnthropic(Provider):
 
         if "max_tokens" not in payloads:
             payloads["max_tokens"] = 65536
-        self._apply_explicit_prompt_cache_breakpoints(payloads)
         self._apply_thinking_config(payloads)
         self._sanitize_assistant_messages(payloads)
+        # Mark the final, sanitized blocks so a dropped block cannot take a marker.
+        self._apply_explicit_prompt_cache_breakpoints(payloads, extra_body.get("tools"))
 
         async with retry_provider_request_context(
             "Anthropic",
@@ -1044,8 +1121,9 @@ class ProviderAnthropic(Provider):
                 if image_dict:
                     content.append(image_dict)
         if audio_urls:
+            # The Anthropic Messages API has no audio input block.
             for _audio_path in audio_urls:
-                content.append({"type": "text", "text": "[Audio]"})
+                content.append({"type": "text", "text": AUDIO_NOT_RECEIVED_HINT})
 
         # 如果只有主文本且没有额外内容块和图片，返回简单格式以保持向后兼容
         if (
