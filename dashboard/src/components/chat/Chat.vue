@@ -1664,6 +1664,12 @@ async function sendCurrentMessage(viewText?: string) {
   const outgoingParts = viewText === undefined ? buildOutgoingParts(text) : [{ type: "plain", text }];
   sending.value = true;
   try {
+    const selection = { ...getSelectedProviderSelection() };
+    const streamOptions = {
+      transport: transportMode.value,
+      enableStreaming: enableStreaming.value,
+      enableReasoning: enableReasoning.value,
+    };
     let sessionId = currSessionId.value;
     const targetProjectId = selectedProjectId.value;
     const targetProject = selectedProject.value;
@@ -1688,7 +1694,6 @@ async function sendCurrentMessage(viewText?: string) {
     }
 
     const messageId = crypto.randomUUID?.() || `${Date.now()}-${Math.random()}`;
-    const selection = getSelectedProviderSelection();
     writeSessionProviderSelection(sessionId, selection);
     const { userRecord, botRecord } = createLocalExchange({
       sessionId,
@@ -1714,11 +1719,9 @@ async function sendCurrentMessage(viewText?: string) {
       sessionId,
       messageId,
       parts: outgoingParts,
-      transport: transportMode.value,
-      enableStreaming: enableStreaming.value,
-      enableReasoning: enableReasoning.value,
-      selectedProvider: selection?.providerId || "",
-      selectedModel: selection?.modelName || "",
+      ...streamOptions,
+      selectedProvider: selection.providerId || "",
+      selectedModel: selection.modelName || "",
       userRecord,
       botRecord,
     });
