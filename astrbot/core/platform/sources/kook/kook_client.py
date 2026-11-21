@@ -534,7 +534,8 @@ class KookClient:
             astrbot_message_type: Channel or private conversation type.
 
         Raises:
-            RuntimeError: If KOOK rejects the update.
+            aiohttp.ClientError: If the HTTP request or response fails.
+            RuntimeError: If KOOK returns a nonzero API code.
         """
         url = KookApiPaths.CHANNEL_MESSAGE_UPDATE
         if astrbot_message_type == MessageType.FRIEND_MESSAGE:

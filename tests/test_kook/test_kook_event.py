@@ -418,3 +418,26 @@ async def test_streaming_edits_created_message(monkeypatch, message_type, endpoi
     assert requests[2:] == [
         (f"{base}/update", {"msg_id": "created-id", "content": "Hello world!"})
     ]
+
+
+@pytest.mark.asyncio
+async def test_streaming_flushes_pending_text_on_generator_error(monkeypatch):
+    monkeypatch.setattr(
+        "astrbot.core.platform.sources.kook.kook_event.monotonic", lambda: 0.0
+    )
+    client = AsyncMock(spec=KookClient)
+    client.send_text.return_value = "created-id"
+    message = mock_astrbot_message()
+    event = KookEvent("", message, PlatformMetadata("kook", "", "kook"), "test", client)
+
+    async def chunks():
+        yield MessageChain().message("Hello")
+        yield MessageChain().message(" world")
+        raise ValueError("generation failed")
+
+    with pytest.raises(ValueError, match="generation failed"):
+        await event.send_streaming(chunks())
+
+    client.update_text.assert_awaited_once_with(
+        "created-id", "Hello world", message.type
+    )

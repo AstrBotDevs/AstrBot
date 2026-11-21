@@ -318,7 +318,20 @@ class KookEvent(AstrMessageEvent):
             # Batch rapid deltas since each edit counts towards the message quota.
             next_edit = monotonic() + 1
 
-        async for chain in generator:
+        iterator = aiter(generator)
+        while True:
+            try:
+                chain = await anext(iterator)
+            except StopAsyncIteration:
+                break
+            except Exception:
+                # Deliver text already received while preserving the generation error.
+                try:
+                    await publish()
+                except Exception:
+                    logger.exception("Failed to flush buffered KOOK text")
+                raise
+
             if chain.type == "break" or any(
                 not isinstance(component, Plain) for component in chain.chain
             ):
