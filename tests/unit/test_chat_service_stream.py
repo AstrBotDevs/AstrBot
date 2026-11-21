@@ -23,7 +23,8 @@ def test_history_recomputes_approval_remaining_time():
     normalized = chat_service.normalize_reasoning_message_parts([dict(row)])[0]
     # The snapshot sent to a client that reconnects to a running turn.
     snapshot = chat_service.build_bot_history_content([dict(row)])["message"][0]
-    assert 0 < served["expires_in"] <= 30
+    # Two clock reads can differ by a rounding step.
+    assert 0 < served["expires_in"] <= 30.01
     assert 0 < normalized["expires_in"] <= 30
     assert 0 < snapshot["expires_in"] <= 30
     expired = chat_service.normalize_reasoning_message_parts(
