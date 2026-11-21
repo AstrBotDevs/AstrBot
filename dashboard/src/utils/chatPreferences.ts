@@ -33,6 +33,8 @@ export interface ChatPreferences {
       provider?: { providerId: string; modelName: string };
       draft?: string;
       workbench?: WorkbenchLayout;
+      // Per-conversation request options (see chatSessionPrefs.mjs).
+      options?: Record<string, unknown>;
     }
   >;
 }

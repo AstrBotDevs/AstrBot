@@ -1693,6 +1693,43 @@ async def test_managed_shell_accepts_stdin_and_polls_incremental_output(yield_ti
 
 
 @pytest.mark.asyncio
+async def test_unisolated_session_refuses_input_once_isolation_is_required():
+    """A session opened before the conversation was narrowed keeps its old
+    access, so it must not take more input under the narrower policy."""
+    shell = LocalShellComponent()
+    result = await shell.exec_managed(
+        _python_command("value = input(); print(f'got:{value}', flush=True)"),
+        owner_id="owner-a",
+        creator_id="user-a",
+        creator_is_admin=False,
+        sandboxed=False,
+        permission_check=lambda: True,
+        yield_time_ms=100,
+    )
+    try:
+        assert result["status"] == "running"
+        with pytest.raises(ValueError, match="wider access"):
+            await shell.write_session(
+                owner_id="owner-a",
+                requester_id="user-a",
+                requester_is_admin=False,
+                session_id=result["session_id"],
+                chars="hello\n",
+                require_sandboxed=True,
+            )
+        polled = await shell.poll_session(
+            owner_id="owner-a",
+            requester_id="user-a",
+            requester_is_admin=False,
+            session_id=result["session_id"],
+            yield_time_ms=0,
+        )
+        assert "got:" not in polled["stdout"]
+    finally:
+        await shell.shutdown_sessions()
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize("yield_time_ms", [-1, 300_001])
 async def test_managed_shell_rejects_invalid_poll_wait(yield_time_ms):
     with pytest.raises(ValueError, match="must be between 0 and 300000"):

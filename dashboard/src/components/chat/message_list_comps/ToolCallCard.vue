@@ -11,6 +11,15 @@
         {{ tm("actions.toolCallUsed", { name: displayToolName }) }}
       </span>
       <span class="tool-call-duration">{{ toolCallDuration }}</span>
+      <!-- An interrupted call has no duration; it shows this instead. -->
+      <span v-if="interrupted" class="tool-call-interrupted">
+        <TriangleAlert :size="14" aria-hidden="true" />
+        {{ tm("toolStatus.interrupted") }}
+      </span>
+      <span v-else-if="awaitingApproval" class="tool-call-interrupted awaiting">
+        <v-icon size="14">mdi-hand-back-right-outline</v-icon>
+        {{ tm("toolStatus.awaitingApproval") }}
+      </span>
       <ChevronRight
         :size="22"
         class="tool-call-expand-icon"
@@ -40,13 +49,23 @@
           formattedResult
         }}</pre>
       </div>
+      <div v-if="interrupted" class="tool-call-interrupted-detail">
+        {{ tm("toolStatus.interruptedDetail") }}
+      </div>
     </div>
   </div>
 </template>
 
 <script setup>
-import { computed, onMounted, onUnmounted, ref } from "vue";
-import { ChevronRight, CodeXml, Globe, Terminal, Wrench } from "@lucide/vue";
+import { computed, onUnmounted, ref, watch } from "vue";
+import {
+  ChevronRight,
+  CodeXml,
+  Globe,
+  Terminal,
+  TriangleAlert,
+  Wrench,
+} from "@lucide/vue";
 import { useModuleI18n } from "@/i18n/composables";
 
 const props = defineProps({
@@ -69,8 +88,19 @@ const isExpanded = ref(props.initialExpanded);
 const currentTime = ref(Date.now() / 1000);
 let timer = null;
 
+// The turn ended before this call returned (see useMessages / chat_service).
+const interrupted = computed(
+  () => !props.toolCall.finished_ts && props.toolCall.phase === "unknown",
+);
+// An approval card for this call is open (see useMessages).
+const awaitingApproval = computed(
+  () =>
+    !props.toolCall.finished_ts && props.toolCall.phase === "awaiting_approval",
+);
+
 const elapsedTime = computed(() => {
-  if (props.toolCall.finished_ts) return "";
+  if (props.toolCall.finished_ts || interrupted.value || awaitingApproval.value)
+    return "";
   const startTime = Number(props.toolCall.ts);
   if (!Number.isFinite(startTime) || startTime <= 0) return "";
   return formatDuration(currentTime.value - startTime);
@@ -132,11 +162,23 @@ const updateTime = () => {
   currentTime.value = Date.now() / 1000;
 };
 
-onMounted(() => {
-  if (!props.toolCall.finished_ts) {
-    timer = setInterval(updateTime, 100);
-  }
-});
+// Tick only while the call runs; it can wait for approval, finish or be
+// interrupted after mount.
+watch(
+  () =>
+    !props.toolCall.finished_ts &&
+    !interrupted.value &&
+    !awaitingApproval.value,
+  (running) => {
+    if (timer !== null) clearInterval(timer);
+    timer = null;
+    if (running) {
+      updateTime();
+      timer = setInterval(updateTime, 100);
+    }
+  },
+  { immediate: true },
+);
 
 onUnmounted(() => {
   if (timer) {
@@ -198,6 +240,25 @@ onUnmounted(() => {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.tool-call-interrupted {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  flex-shrink: 0;
+  font-size: 12px;
+  color: rgb(var(--v-theme-warning));
+}
+
+.tool-call-interrupted.awaiting {
+  color: rgb(var(--v-theme-info));
+}
+
+.tool-call-interrupted-detail {
+  margin-bottom: 8px;
+  font-size: 12px;
+  color: rgb(var(--v-theme-warning));
 }
 
 .tool-call-duration {

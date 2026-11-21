@@ -22,6 +22,7 @@ from astrbot.core.platform.sources.webchat.message_parts_helper import (
     create_attachment_part_from_existing_file,
 )
 from astrbot.core.platform.sources.webchat.request_flags import (
+    resolve_webchat_chat_options,
     resolve_webchat_request_flags,
 )
 from astrbot.core.platform.sources.webchat.webchat_queue_mgr import webchat_queue_mgr
@@ -543,6 +544,7 @@ class LiveChatService:
                     "session_id": session_id,
                     "message": payload,
                     "flags": resolve_webchat_request_flags(message),
+                    **resolve_webchat_chat_options(message),
                     **{
                         key: message.get(key)
                         for key in (

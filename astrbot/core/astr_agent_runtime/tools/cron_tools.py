@@ -1,3 +1,4 @@
+from contextvars import ContextVar
 from datetime import datetime
 from datetime import timezone as dt_timezone
 from typing import Any
@@ -11,9 +12,23 @@ from astrbot.core.agent.run_context import ContextWrapper
 from astrbot.core.agent.runtime import get_agent_permissions
 from astrbot.core.agent.tool import FunctionTool, ToolExecResult
 from astrbot.core.astr_agent_runtime.context import AstrAgentContext
+from astrbot.core.astr_agent_runtime.permission_mode import (
+    WORKSPACE_MODES,
+    get_permission_mode,
+)
 from astrbot.core.astr_agent_runtime.tools.registry import builtin_tool
 from astrbot.core.cron.manager import CronJobSchedulingError
 from astrbot.core.platform.message_type import MessageType
+
+# Set by the approval gate for the one future_task call it approved; the
+# gate and the tool run in the same task, while concurrent calls (sub-agents
+# share the event) have their own context.
+# Job payload key recording that a scheduled task's creation or last edit was
+# approved, so its unattended runs use listed tools without asking.
+TOOL_APPROVAL_GRANT_KEY = "tool_approval_granted"
+TASK_APPROVAL_GRANTED: ContextVar[bool] = ContextVar(
+    "task_approval_granted", default=False
+)
 
 _CRON_TOOL_CONFIG = {
     "provider_settings.proactive_capability.add_cron_tools": True,
@@ -137,7 +152,13 @@ class FutureTaskTool(FunctionTool[AstrAgentContext]):
                 "note": note,
                 "origin": "tool",
                 "allow_admin_role": get_agent_permissions(context).is_admin,
+                # Set by the approval gate when the user approved this task.
+                TOOL_APPROVAL_GRANT_KEY: TASK_APPROVAL_GRANTED.get(),
             }
+            if get_permission_mode(context.context.event) in WORKSPACE_MODES:
+                # Runs later with the same narrowed access as the ChatUI
+                # conversation it was created in.
+                payload["permission_mode"] = "workspace"
 
             tz_name = str(
                 context.context.context.get_config(
@@ -249,6 +270,16 @@ class FutureTaskTool(FunctionTool[AstrAgentContext]):
                 return f"Deleted cron job {job_id}."
 
             payload = dict(job.payload) if isinstance(job.payload, dict) else {}
+            # An edit keeps unattended approval only if this edit was approved
+            # (by whoever edits it, e.g. a group admin); a missing key means
+            # no grant, so an unapproved edit leaves the payload as it was.
+            if TASK_APPROVAL_GRANTED.get():
+                payload[TOOL_APPROVAL_GRANT_KEY] = True
+            else:
+                payload.pop(TOOL_APPROVAL_GRANT_KEY, None)
+            # An edit may narrow the task's access but never widens it.
+            if get_permission_mode(context.context.event) in WORKSPACE_MODES:
+                payload["permission_mode"] = "workspace"
 
             updates: dict[str, Any] = {}
             if "name" in kwargs:

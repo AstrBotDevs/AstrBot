@@ -489,6 +489,10 @@ class CronJobManager:
                 cron_job=json.dumps(extras["cron_job"], ensure_ascii=False)
             ),
             role=role,
+            # Only the narrowing ChatUI mode is carried over to the run.
+            permission_mode=(
+                "workspace" if payload.get("permission_mode") == "workspace" else None
+            ),
         )
 
 

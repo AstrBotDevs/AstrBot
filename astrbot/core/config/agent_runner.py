@@ -32,6 +32,7 @@ AGENT_RUNNER_CONFIG_DEFAULTS: dict[str, dict[str, Any]] = {
             "tool_schema_mode": "full",
             "tool_call_timeout": 120,
             "sanitize_context_by_modalities": False,
+            "tool_approval": {"tools": [], "timeout": 120},
         },
     },
     "dify": {

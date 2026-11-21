@@ -153,7 +153,19 @@ class ChatFlags(BaseModel):
     enable_reasoning: bool = True
 
 
-class ChatMessageRegenerateRequest(OpenModel):
+class ChatOptions(OpenModel):
+    """Per-conversation ChatUI options; see ``resolve_webchat_chat_options``."""
+
+    permission_mode: Literal["workspace", "workspace_no_ask", "ask", "full"] | None = (
+        None
+    )
+
+
+class ChatPermissionModeRequest(OpenModel):
+    mode: Literal["workspace", "workspace_no_ask", "ask", "full"]
+
+
+class ChatMessageRegenerateRequest(ChatOptions):
     locale: str | None = None
     selected_provider: str | None = None
     selected_model: str | None = None
@@ -167,7 +179,7 @@ class ChatThreadCreateRequest(OpenModel):
     selected_text: str
 
 
-class ChatThreadMessageRequest(OpenModel):
+class ChatThreadMessageRequest(ChatOptions):
     locale: str | None = None
     message: Any
     selected_provider: str | None = None

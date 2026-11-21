@@ -324,6 +324,7 @@
             :failed-uploads="failedUploadViews"
             :active-uploads="activeUploadViews"
             :placeholder="tm('input.projectPlaceholder')"
+            v-model:permission-mode="permissionMode"
             @send="sendCurrentMessage"
             @stop="stopCurrentSession"
             @remove-image="removeImage"
@@ -479,6 +480,7 @@
             :token-usage="tokenUsageIndicator"
             :session-id="currSessionId || null"
             :current-session="currentSession"
+            v-model:permission-mode="permissionMode"
             :reply-to="chatInputReplyTarget"
             :send-shortcut="sendShortcut"
             :show-provider-selector="false"
@@ -501,7 +503,22 @@
             @paste-image="handlePaste"
             @file-select="handleFilesSelected"
             @clear-reply="replyTarget = null"
-          />
+          >
+            <template #extension>
+              <ButtonActionRow
+                v-if="dockedApproval"
+                :key="String(dockedApproval.message.id)"
+                :part="dockedApproval.part"
+                docked
+                @callback="
+                  handleButtonClick({
+                    message: dockedApproval.message,
+                    callbackData: $event,
+                  })
+                "
+              />
+            </template>
+          </ChatInput>
         </section>
       </div>
     </main>
@@ -660,7 +677,14 @@ import ProjectDialog, {
 } from "@/components/chat/ProjectDialog.vue";
 import ProjectList, { type Project } from "@/components/chat/ProjectList.vue";
 import ProjectView from "@/components/chat/ProjectView.vue";
-import ChatInput from "@/components/chat/ChatInput.vue";
+import ChatInput, {
+  type ChatPermissionMode,
+} from "@/components/chat/ChatInput.vue";
+import ButtonActionRow from "@/components/chat/ButtonActionRow.vue";
+import {
+  approvalCardKey,
+  latestOpenApproval,
+} from "@/composables/useActionRowChoices";
 import ChatMessageList from "@/components/chat/ChatMessageList.vue";
 import ChatUILogo from "@/components/chat/ChatUILogo.vue";
 import type { RegenerateModelSelection } from "@/components/chat/RegenerateMenu.vue";
@@ -685,6 +709,11 @@ import { useChatVoice } from "@/composables/useChatVoice";
 import { useProjects } from "@/composables/useProjects";
 import { useDragUpload } from "@/composables/useDragUpload";
 import { useProviderModelSelection } from "@/composables/useProviderModelSelection";
+import {
+  clearChatSessionPrefs,
+  readChatSessionPrefs,
+  writeChatSessionPref,
+} from "@/utils/chatSessionPrefs.mjs";
 import { useChatHeaderStore } from "@/stores/chatHeader";
 import { useHeaderContextStore } from "@/stores/headerContext";
 import { useMobileDrawerStore } from "@/stores/mobileDrawer";
@@ -1141,6 +1170,52 @@ const {
   setSelection: setProviderSelection,
 } = useProviderModelSelection();
 
+// Per-conversation permission mode: saved with the conversation's options as
+// soon as it changes (or on the first send of a new conversation); a new
+// conversation starts from "ask", the default, which is not stored. A change
+// is also applied to work already running in the conversation that was
+// active when it was made.
+const permissionMode = ref<ChatPermissionMode>("ask");
+watch(
+  permissionMode,
+  async (mode, _previous, onCleanup) => {
+    const sessionId = currSessionId.value;
+    writeChatSessionPref(
+      sessionId,
+      "permission_mode",
+      mode === "ask" ? "" : mode,
+    );
+    if (!sessionId) return;
+    let current = true;
+    onCleanup(() => {
+      current = false;
+    });
+    try {
+      const response = await chatApi.setPermissionMode(sessionId, mode);
+      if (response.data?.status !== "ok") {
+        throw new Error(response.data?.message || "Permission update failed");
+      }
+    } catch (error) {
+      if (current && currSessionId.value === sessionId) {
+        toast.error(
+          tm("permissionMode.saveFailed", {
+            error: error instanceof Error ? error.message : String(error),
+          }),
+        );
+      }
+    }
+  },
+  // Sync, so the session that owned the change is captured before a route
+  // change can switch it.
+  { flush: "sync" },
+);
+watch(currSessionId, (sessionId) => {
+  if (sessionId) return;
+  permissionMode.value = "ask";
+});
+
+const SESSION_PROVIDER_STORAGE_PREFIX = "chat.sessionProvider.";
+
 function readSessionProviderSelection(sessionId: string) {
   const selection = chatPreferences().sessions[sessionId]?.provider;
   return selection?.providerId ? selection : null;
@@ -1167,6 +1242,15 @@ watch([currentProviderId, currentModelName], ([providerId, modelName]) => {
 });
 
 provide("isDark", isDark);
+provide("approvalPermissionMode", permissionMode);
+
+// The newest unanswered approval card is shown on the input box instead of
+// in the message list; the list keeps a one-line record once it is answered.
+const dockedApproval = computed(() => latestOpenApproval(activeMessages.value));
+provide(
+  "approvalDockKey",
+  computed(() => approvalCardKey(dockedApproval.value?.part)),
+);
 
 watch(
   [chatHeaderTitle, chatHeaderSubtitle, activeProject],
@@ -1630,6 +1714,12 @@ async function selectSession(sessionId: string, pushRoute = true) {
   }
   await messagesReady;
   if (currSessionId.value !== sessionId) return;
+  const prefs = readChatSessionPrefs(sessionId);
+  permissionMode.value = ["workspace", "workspace_no_ask", "full"].includes(
+    String(prefs.permission_mode),
+  )
+    ? (prefs.permission_mode as ChatPermissionMode)
+    : "ask";
   const storedSelection = readSessionProviderSelection(sessionId);
   setProviderSelection(
     storedSelection?.providerId || "",
@@ -1690,6 +1780,11 @@ async function sendCurrentMessage(viewText?: string) {
     const messageId = crypto.randomUUID?.() || `${Date.now()}-${Math.random()}`;
     const selection = getSelectedProviderSelection();
     writeSessionProviderSelection(sessionId, selection);
+    writeChatSessionPref(
+      sessionId,
+      "permission_mode",
+      permissionMode.value === "ask" ? "" : permissionMode.value,
+    );
     const { userRecord, botRecord } = createLocalExchange({
       sessionId,
       messageId,
@@ -2042,6 +2137,8 @@ async function deleteThread(thread: ChatThread) {
   deletingThread.value = true;
   try {
     await chatApi.deleteThread(thread.thread_id);
+    // A thread stores its own permission mode.
+    clearChatSessionPrefs(thread.thread_id);
     removeThreadFromMessages(thread.thread_id);
     if (activeThread.value?.thread_id === thread.thread_id) {
       threadPanelOpen.value = false;

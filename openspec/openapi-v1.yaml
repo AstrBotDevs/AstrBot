@@ -1373,6 +1373,27 @@ paths:
         "200":
           $ref: "#/components/responses/Ok"
 
+  /api/v1/chat/sessions/{session_id}/permission-mode:
+    put:
+      tags: [Chat]
+      summary: Apply a ChatUI permission mode change to running work
+      description: Sub-agents and later tool calls of a running turn in this conversation use the new mode from their next tool call. Only the caller's own WebChat conversations are accepted (403 otherwise). Scheduled runs are never given full access this way.
+      operationId: setChatPermissionMode
+      x-astrbot-scope: chat
+      parameters:
+        - $ref: "#/components/parameters/SessionId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ChatPermissionModeRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+        "403":
+          description: The conversation is not the caller's WebChat session.
+
   /api/v1/chat/sessions/{session_id}/stop:
     post:
       tags: [Chat]
@@ -6363,6 +6384,8 @@ components:
           type: string
         selected_model:
           type: string
+        permission_mode:
+          $ref: "#/components/schemas/ChatPermissionMode"
         enable_streaming:
           type: boolean
           default: true
@@ -6410,6 +6433,19 @@ components:
           additionalProperties: true
       additionalProperties: false
 
+    ChatPermissionMode:
+      type: string
+      enum: [workspace, workspace_no_ask, ask, full]
+      description: ChatUI permission mode of the conversation for this request. It only narrows the role's configured access (workspace), skips approval prompts (full), or does both (workspace_no_ask); omit to ask for approval as configured.
+
+    ChatPermissionModeRequest:
+      type: object
+      required: [mode]
+      properties:
+        mode:
+          $ref: "#/components/schemas/ChatPermissionMode"
+      additionalProperties: false
+
     ChatMessageRegenerateRequest:
       type: object
       properties:
@@ -6420,6 +6456,8 @@ components:
           type: string
         selected_model:
           type: string
+        permission_mode:
+          $ref: "#/components/schemas/ChatPermissionMode"
         enable_streaming:
           type: boolean
           default: true
@@ -6460,6 +6498,8 @@ components:
           type: string
         selected_model:
           type: string
+        permission_mode:
+          $ref: "#/components/schemas/ChatPermissionMode"
         enable_streaming:
           type: boolean
           default: true

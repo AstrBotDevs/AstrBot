@@ -4,6 +4,7 @@ import asyncio
 import json
 import os
 import re
+import time
 import uuid
 from collections.abc import AsyncIterator
 from copy import deepcopy
@@ -12,6 +13,10 @@ from pathlib import Path, PurePosixPath
 from typing import Any
 
 from astrbot.core import logger, sp
+from astrbot.core.astr_agent_runtime.permission_mode import (
+    conversation_key,
+    set_conversation_permission_mode,
+)
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
 from astrbot.core.db import BaseDatabase
 from astrbot.core.db.conversation import ContextUnavailableError
@@ -23,6 +28,7 @@ from astrbot.core.platform.sources.webchat.message_parts_helper import (
     webchat_message_parts_have_content,
 )
 from astrbot.core.platform.sources.webchat.request_flags import (
+    resolve_webchat_chat_options,
     resolve_webchat_request_flags,
 )
 from astrbot.core.platform.sources.webchat.webchat_queue_mgr import webchat_queue_mgr
@@ -113,6 +119,12 @@ def normalize_reasoning_message_parts(
         if not isinstance(part, dict):
             continue
         copied = dict(part)
+        if copied.get("type") == "actionrow" and isinstance(
+            copied.get("expires_at"), (int, float)
+        ):
+            # The client anchors the deadline on its own clock (see
+            # webchat_event): send the time left, not only the server time.
+            copied["expires_in"] = max(0, copied["expires_at"] - time.time())
         if copied.get("type") == "reasoning":
             copied = {"type": "think", "think": copied.get("text", "")}
         parts.append(copied)
@@ -163,10 +175,19 @@ def build_bot_history_content(
 
 
 class BotMessageAccumulator:
+    """Collect the bot output of one turn as WebChat history message parts.
+
+    A tool call takes its place in ``parts`` when it starts and is completed in
+    place when its result arrives, so later parts (such as an approval card)
+    stay after it. ``record`` is the turn's history record once first saved;
+    later saves update it, so a turn is one history entry.
+    """
+
     def __init__(self) -> None:
         self.parts: list[dict] = []
         self.pending_text = ""
         self.pending_tool_calls: dict[str, dict] = {}
+        self.record = None
 
     def has_content(self) -> bool:
         return bool(self.parts or self.pending_text or self.pending_tool_calls)
@@ -186,6 +207,18 @@ class BotMessageAccumulator:
         if chain_type == "tool_call_result":
             self._flush_pending_text()
             self._store_tool_call_result(result_text)
+            return
+
+        if chain_type == "approval_result":
+            # Record the backend's decision on the approval card it belongs to.
+            result = self._parse_json_object(result_text) or {}
+            for part in self.parts:
+                if (
+                    part.get("type") == "actionrow"
+                    and part.get("tool_call_id")
+                    and part.get("tool_call_id") == result.get("tool_call_id")
+                ):
+                    part["outcome"] = result.get("outcome")
             return
 
         if chain_type == "reasoning":
@@ -209,13 +242,21 @@ class BotMessageAccumulator:
         self._flush_pending_text()
         self.parts.append(part)
 
-    def build_message_parts(
-        self, *, include_pending_tool_calls: bool = False
-    ) -> list[dict]:
+    def build_message_parts(self, *, final: bool = False) -> list[dict]:
+        """Return the message parts collected so far.
+
+        Args:
+            final: Whether the turn is over. Tool calls that never returned are
+                then marked ``unknown``: whether their side effects happened
+                (stop, timeout, or a failure mid-call) cannot be known.
+
+        Returns:
+            The message parts, including running tool calls.
+        """
         self._flush_pending_text()
-        if include_pending_tool_calls and self.pending_tool_calls:
+        if final:
             for tool_call in self.pending_tool_calls.values():
-                self.parts.append({"type": "tool_call", "tool_calls": [tool_call]})
+                tool_call["phase"] = "unknown"
             self.pending_tool_calls = {}
         return self.parts
 
@@ -253,7 +294,12 @@ class BotMessageAccumulator:
         tool_call_id = str(tool_call.get("id") or "")
         if not tool_call_id:
             return
-        self.pending_tool_calls[tool_call_id] = tool_call
+        existing = self.pending_tool_calls.get(tool_call_id)
+        if existing is not None:
+            existing.update(tool_call)
+        else:
+            self.pending_tool_calls[tool_call_id] = tool_call
+            self.parts.append({"type": "tool_call", "tool_calls": [tool_call]})
 
     def _store_tool_call_result(self, result_text: str) -> None:
         tool_result = self._parse_json_object(result_text)
@@ -264,12 +310,13 @@ class BotMessageAccumulator:
         if not tool_call_id:
             return
 
-        tool_call = self.pending_tool_calls.pop(tool_call_id, None) or {
-            "id": tool_call_id
-        }
+        tool_call = self.pending_tool_calls.pop(tool_call_id, None)
+        if tool_call is None:
+            # A result without a known call is stored on its own.
+            tool_call = {"id": tool_call_id}
+            self.parts.append({"type": "tool_call", "tool_calls": [tool_call]})
         tool_call["result"] = tool_result.get("result")
         tool_call["finished_ts"] = tool_result.get("ts")
-        self.parts.append({"type": "tool_call", "tool_calls": [tool_call]})
 
     @staticmethod
     def _parse_json_object(raw_text: str) -> dict | None:
@@ -403,8 +450,19 @@ def serialize_history_entry(history) -> dict:
         Dict with all model fields plus created_at/updated_at serialized as
         UTC-aware ISO strings (e.g. ``2026-07-06T04:00:00+00:00``).
     """
+    serialized = history.model_dump()
+    content = serialized.get("content")
+    parts = content.get("message") if isinstance(content, dict) else None
+    for part in parts if isinstance(parts, list) else []:
+        # Time left on a button deadline, recomputed whenever history is served.
+        if (
+            isinstance(part, dict)
+            and part.get("type") == "actionrow"
+            and isinstance(part.get("expires_at"), (int, float))
+        ):
+            part["expires_in"] = max(0, part["expires_at"] - time.time())
     return {
-        **history.model_dump(),
+        **serialized,
         "created_at": to_utc_isoformat(history.created_at),
         "updated_at": to_utc_isoformat(history.updated_at),
     }
@@ -867,6 +925,7 @@ class ChatService:
             )
             webchat_queue_mgr.remove_queues(thread_id)
             self.running_convs.pop(thread_id, None)
+            set_conversation_permission_mode(conversation_key(creator, thread_id), None)
 
     async def save_bot_message(
         self,
@@ -876,19 +935,38 @@ class ChatService:
         refs: dict,
         turn_id: str | None = None,
         platform_history_id: str = "webchat",
+        record=None,
     ):
-        record = await self.platform_history_mgr.insert(
-            platform_id=platform_history_id,
-            user_id=webchat_conv_id,
-            content=build_bot_history_content(
-                message_parts,
-                agent_stats=agent_stats,
-                refs=refs,
-            ),
-            sender_id="bot",
-            sender_name="bot",
-            turn_id=turn_id,
+        """Insert the bot message of a turn, or update its existing record.
+
+        Args:
+            webchat_conv_id: WebChat conversation ID.
+            message_parts: Everything the bot sent in this turn so far.
+            agent_stats: Latest agent statistics.
+            refs: Web search references.
+            turn_id: Turn the record belongs to.
+            platform_history_id: History bucket (main chat or thread).
+            record: This turn's record from an earlier save, if any.
+
+        Returns:
+            The turn's history record.
+        """
+        content = build_bot_history_content(
+            message_parts,
+            agent_stats=agent_stats,
+            refs=refs,
         )
+        if record is not None:
+            await self.platform_history_mgr.update(record.id, content=content)
+        else:
+            record = await self.platform_history_mgr.insert(
+                platform_id=platform_history_id,
+                user_id=webchat_conv_id,
+                content=content,
+                sender_id="bot",
+                sender_name="bot",
+                turn_id=turn_id,
+            )
         from astrbot.core.chatui import view_store
 
         if record:
@@ -1065,16 +1143,23 @@ class ChatService:
         pending_agent_stats = {}
         pending_refs = {}
 
-        async def flush_pending_bot_message():
+        async def flush_pending_bot_message(final: bool = True):
+            """Save the buffered bot message.
+
+            Args:
+                final: Whether the turn is over. Earlier saves (each streamed
+                    segment, an approval card) update the same record.
+
+            Returns:
+                The saved record, or None when there was nothing to save.
+            """
             nonlocal pending_accumulator, pending_agent_stats, pending_refs
             if not (
                 pending_accumulator.has_content() or pending_refs or pending_agent_stats
             ):
                 return None
 
-            message_parts_to_save = pending_accumulator.build_message_parts(
-                include_pending_tool_calls=True
-            )
+            message_parts_to_save = pending_accumulator.build_message_parts(final=final)
             plain_text = collect_plain_text_from_message_parts(message_parts_to_save)
             try:
                 extracted_refs = extract_web_search_refs(
@@ -1096,10 +1181,13 @@ class ChatService:
                 extracted_refs,
                 run.turn_id,
                 run.platform_history_id,
+                record=pending_accumulator.record,
             )
-            pending_accumulator = BotMessageAccumulator()
-            pending_agent_stats = {}
-            pending_refs = {}
+            pending_accumulator.record = saved_record
+            if final:
+                pending_accumulator = BotMessageAccumulator()
+                pending_agent_stats = {}
+                pending_refs = {}
             return saved_record
 
         self.running_convs[run.session_id] = True
@@ -1180,9 +1268,7 @@ class ChatService:
                         accumulator.add_part(part)
 
                 snapshot_accumulator = deepcopy(display_accumulator)
-                run.message_parts = snapshot_accumulator.build_message_parts(
-                    include_pending_tool_calls=True
-                )
+                run.message_parts = snapshot_accumulator.build_message_parts()
                 self._publish_chat_run(run, result)
                 if attachment_saved_payload:
                     self._publish_chat_run(run, attachment_saved_payload)
@@ -1201,7 +1287,9 @@ class ChatService:
                         should_save = True
 
                 if should_save:
-                    saved_record = await flush_pending_bot_message()
+                    saved_record = await flush_pending_bot_message(
+                        final=msg_type == "end"
+                    )
                     if saved_record:
                         self._publish_chat_run(
                             run,
@@ -1228,7 +1316,7 @@ class ChatService:
             for accumulator in (pending_accumulator, display_accumulator):
                 accumulator.add_part({**error, "type": "error"})
             run.message_parts = deepcopy(display_accumulator).build_message_parts(
-                include_pending_tool_calls=True
+                final=True
             )
             self._publish_chat_run(run, {"type": "error", "data": error})
         finally:
@@ -1284,6 +1372,7 @@ class ChatService:
         session_id = post_data.get("session_id", post_data.get("conversation_id"))
         selected_provider = post_data.get("selected_provider")
         selected_model = post_data.get("selected_model")
+        chat_options = resolve_webchat_chat_options(post_data)
         flags = resolve_webchat_request_flags(post_data)
         platform_history_id = post_data.get("_platform_history_id") or "webchat"
         thread_selected_text = post_data.get("_thread_selected_text")
@@ -1388,6 +1477,7 @@ class ChatService:
                         "message": message_parts,
                         "selected_provider": selected_provider,
                         "selected_model": selected_model,
+                        **chat_options,
                         "selected_stt_provider": post_data.get("selected_stt_provider"),
                         "selected_tts_provider": post_data.get("selected_tts_provider"),
                         "persona_prompt": post_data.get("persona_prompt"),
@@ -1484,6 +1574,9 @@ class ChatService:
 
         if session.platform_id == "webchat":
             webchat_queue_mgr.remove_queues(session_id)
+            set_conversation_permission_mode(
+                conversation_key(username, session_id), None
+            )
 
         await self.db.delete_platform_session(session_id)
         await asyncio.to_thread(view_store.delete_session, session_id)
@@ -1940,6 +2033,7 @@ class ChatService:
             "locale": data.get("locale"),
             "selected_provider": data.get("selected_provider"),
             "selected_model": data.get("selected_model"),
+            **resolve_webchat_chat_options(data),
             "_platform_history_id": "webchat_thread",
             "_thread_selected_text": thread.selected_text,
             "_skip_user_history": is_button_interaction,
@@ -2118,6 +2212,7 @@ class ChatService:
             "locale": data.get("locale"),
             "selected_provider": data.get("selected_provider"),
             "selected_model": data.get("selected_model"),
+            **resolve_webchat_chat_options(data),
             "_skip_user_history": True,
             "_turn_id": replacement.turn_id,
         }

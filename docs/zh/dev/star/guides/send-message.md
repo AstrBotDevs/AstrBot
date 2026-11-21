@@ -146,6 +146,17 @@ async def confirm(self, event: AstrMessageEvent):
 - `Button.UrlAction` 只打开链接，不触发插件回调，也不受 `action_timeout` 限制。`fallback_text` 用于不支持按钮的平台，不是过期提示。
 - `@filter.button_action()` 不指定 ID 时匹配所有按钮回调。通过 `event.get_button_interaction()` 获取 `ButtonInteraction` 事件组件。
 
+`ActionRow` 还有几个可选字段，目前只有 WebChat（ChatUI）使用，其他平台忽略：
+
+| 字段 | 作用 |
+| --- | --- |
+| `single_use` | 默认 `False`。设为 `True` 表示这一行只需要一个回答：点击后整行锁定，并显示“已选择：按钮名”。 |
+| `title` | 卡片标题。 |
+| `detail` | 卡片的补充说明，默认折叠，可点击“查看详情”展开。 |
+| `tool_call_id` | 这行按钮针对的工具调用 ID，ChatUI 会把对应的工具卡片标为“等待批准”。 |
+
+设置了 `action_timeout` 时，ChatUI 会在到期后把按钮显示为“已过期”。[工具审批](../../../use/tool-approval.md)的卡片就是这样构造的。
+
 ## 发送视频消息
 
 ```python

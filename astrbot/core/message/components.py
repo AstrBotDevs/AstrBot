@@ -223,6 +223,15 @@ class ActionRow(BaseMessageComponent):
     buttons: list[Button]
     fallback_text: str | None = None
     action_timeout: float | None = Field(default=None, gt=0, allow_inf_nan=False)
+    # Hint that the row asks for one answer, so a client may lock it after a click.
+    single_use: bool = False
+    # Optional card text for clients that can render one: a heading and
+    # secondary text the client may keep collapsed.
+    title: str | None = None
+    detail: str | None = None
+    # Tool call this row asks about, so a client can mark that call as
+    # waiting for approval.
+    tool_call_id: str | None = None
     _action_expires_at: float | None = PrivateAttr(default=None)
 
     @property
@@ -245,6 +254,14 @@ class ActionRow(BaseMessageComponent):
             data["fallback_text"] = self.fallback_text
         if self.action_timeout is not None:
             data["action_timeout"] = self.action_timeout
+        if self.single_use:
+            data["single_use"] = True
+        if self.title is not None:
+            data["title"] = self.title
+        if self.detail is not None:
+            data["detail"] = self.detail
+        if self.tool_call_id is not None:
+            data["tool_call_id"] = self.tool_call_id
         return {"type": "actionrow", "data": data}
 
 

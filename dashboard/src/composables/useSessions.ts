@@ -1,4 +1,5 @@
 import { ref, computed, reactive } from 'vue';
+import { clearChatSessionPrefs } from '@/utils/chatSessionPrefs.mjs';
 import { useRouter } from 'vue-router';
 import { chatApi, configRouteApi } from '@/api/v1';
 import { buildWebchatUmoDetails, getStoredSelectedChatConfigId } from '@/utils/chatConfigBinding';
@@ -109,7 +110,12 @@ export function useSessions(chatboxMode: boolean = false) {
 
     async function deleteSession(sessionId: string) {
         try {
-            await chatApi.deleteSession(sessionId);
+            const response = await chatApi.deleteSession(sessionId);
+            // Keep the conversation's options when the server refused the delete.
+            if (response.data?.status === 'error') {
+                throw new Error(response.data.message || 'Failed to delete session');
+            }
+            clearChatSessionPrefs(sessionId);
             await getSessions();
             currSessionId.value = '';
             selectedSessions.value = [];
@@ -161,6 +167,9 @@ export function useSessions(chatboxMode: boolean = false) {
 
             const failedItems = data.failed_items;
             const failedSessionIds = new Set(failedItems.map(item => item.session_id));
+            for (const sessionId of sessionIds) {
+                if (!failedSessionIds.has(sessionId)) clearChatSessionPrefs(sessionId);
+            }
             const currentSessionDeleted = Boolean(
                 currentSessionId &&
                 sessionIds.includes(currentSessionId) &&

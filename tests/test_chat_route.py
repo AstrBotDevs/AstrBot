@@ -689,11 +689,10 @@ async def test_error_cards_survive_stream_completion_and_history(
             {"type": "error", **error},
         ]
         assert run.message_parts == expected
-        assert [
-            part
-            for call in service.save_bot_message.await_args_list
-            for part in call.args[1]
-        ] == expected
+        # A turn is one record: later saves update it with everything so far.
+        calls = service.save_bot_message.await_args_list
+        assert calls[-1].args[1] == expected
+        assert all(call.kwargs.get("record") is not None for call in calls[1:])
         assert [frame["data"] for frame in frames if frame["type"] == "error"] == [
             error
         ]

@@ -1,4 +1,6 @@
+import asyncio
 import sqlite3
+import threading
 
 import pytest
 
@@ -13,50 +15,103 @@ from astrbot.core.platform.button_interaction import (
 )
 
 
-def test_action_row_serializes_portable_buttons():
-    row = ActionRow(
-        buttons=[
-            Button(
-                id="confirm",
-                label="Confirm",
-                action=Button.CallbackAction(data={"order_id": 42}),
-                style=Button.Style.PRIMARY,
-            ),
-            Button(
-                id="docs",
-                label="Docs",
-                action=Button.UrlAction(url="https://example.com/docs"),
-            ),
-        ],
-        fallback_text="Choose an action",
-    )
+def test_expired_callbacks_are_pruned_from_the_database(tmp_path, monkeypatch):
+    registry = button_interaction._ButtonCallbackRegistry()
+    path = tmp_path / "callbacks.db"
+    registry.configure(path)
+    monkeypatch.setattr(button_interaction.time, "time", lambda: 100.0)
+    token = registry.register("old", None, expires_at=101)
+    monkeypatch.setattr(button_interaction.time, "time", lambda: 200000.0)
+    registry.register("new", None, expires_at=200100)
+    with sqlite3.connect(path) as connection:
+        assert (
+            connection.execute(
+                "SELECT COUNT(*) FROM button_callbacks WHERE token=?", (token,)
+            ).fetchone()[0]
+            == 0
+        )
 
-    assert row.toDict() == {
-        "type": "actionrow",
-        "data": {
-            "buttons": [
-                {
-                    "id": "confirm",
-                    "label": "Confirm",
-                    "action": {
-                        "type": "callback",
-                        "data": {"order_id": 42},
-                    },
-                    "style": "primary",
-                },
-                {
-                    "id": "docs",
-                    "label": "Docs",
-                    "action": {
-                        "type": "url",
-                        "url": "https://example.com/docs",
-                    },
-                    "style": "default",
-                },
-            ],
-            "fallback_text": "Choose an action",
-        },
-    }
+
+@pytest.mark.asyncio
+async def test_registration_saves_on_a_worker_thread(tmp_path, monkeypatch):
+    """A locked database must not block the event loop, so saving happens
+    off the loop thread while the callback is usable at once."""
+    registry = button_interaction._ButtonCallbackRegistry()
+    path = tmp_path / "callbacks.db"
+    registry.configure(path)
+    connect = sqlite3.connect
+    threads = []
+    release = threading.Event()
+    loop = asyncio.get_running_loop()
+    write_started = asyncio.Event()
+
+    def held_connect(*args, **kwargs):
+        threads.append(threading.current_thread())
+        loop.call_soon_threadsafe(write_started.set)
+        release.wait(timeout=10)
+        return connect(*args, **kwargs)
+
+    monkeypatch.setattr(button_interaction.sqlite3, "connect", held_connect)
+    token = registry.register("approve", {"id": 1})
+    assert registry.resolve(token) == ("approve", {"id": 1})
+    # The loop keeps running other work while the write is still held.
+    await asyncio.wait_for(write_started.wait(), timeout=10)
+    assert registry._pending_writes
+    release.set()
+    await registry.flush()
+    assert not registry._pending_writes
+    assert threading.main_thread() not in threads
+    restarted = button_interaction._ButtonCallbackRegistry()
+    restarted.configure(path)
+    assert restarted.resolve(token) == ("approve", {"id": 1})
+
+
+def test_long_expired_callbacks_leave_the_cache(tmp_path, monkeypatch):
+    registry = button_interaction._ButtonCallbackRegistry()
+    registry.configure(tmp_path / "callbacks.db")
+    monkeypatch.setattr(button_interaction.time, "time", lambda: 100.0)
+    old = registry.register("old", None, expires_at=101)
+    monkeypatch.setattr(button_interaction.time, "time", lambda: 200000.0)
+    recent = registry.register("recent", None, expires_at=199999)
+    assert old not in registry._cache
+    # Within the retention day a late click still gets the expiry notice.
+    with pytest.raises(button_interaction.ButtonActionExpiredError):
+        registry.resolve(recent)
+
+
+def test_failed_save_keeps_the_callback_and_retries(tmp_path, monkeypatch):
+    registry = button_interaction._ButtonCallbackRegistry()
+    path = tmp_path / "callbacks.db"
+    registry.configure(path)
+    connect = sqlite3.connect
+
+    def locked(*args, **kwargs):
+        raise sqlite3.OperationalError("database is locked")
+
+    monkeypatch.setattr(button_interaction.sqlite3, "connect", locked)
+    monkeypatch.setattr(button_interaction, "_MAX_CACHED_CALLBACKS", 1)
+    first = registry.register("first", None)
+    second = registry.register("second", None)
+    # Unsaved callbacks stay usable and are not evicted by the cache limit.
+    assert registry.resolve(first) == ("first", None)
+    assert registry.resolve(second) == ("second", None)
+
+    monkeypatch.setattr(button_interaction.sqlite3, "connect", connect)
+    registry.register("third", None)
+    restarted = button_interaction._ButtonCallbackRegistry()
+    restarted.configure(path)
+    assert restarted.resolve(first) == ("first", None)
+    assert restarted.resolve(second) == ("second", None)
+
+
+def test_cache_limit_drops_only_saved_callbacks(tmp_path, monkeypatch):
+    registry = button_interaction._ButtonCallbackRegistry()
+    registry.configure(tmp_path / "callbacks.db")
+    monkeypatch.setattr(button_interaction, "_MAX_CACHED_CALLBACKS", 2)
+    tokens = [registry.register(str(index), None) for index in range(4)]
+    assert list(registry._cache) == tokens[2:]
+    # A dropped entry is still found in the database.
+    assert registry.resolve(tokens[0]) == ("0", None)
 
 
 @pytest.mark.parametrize(

@@ -1570,7 +1570,9 @@ async def test_stop_interrupts_pending_regular_tool(mock_hooks):
         provider=provider,
         request=request,
         run_context=ContextWrapper(
-            context=SimpleNamespace(event=event, context=SimpleNamespace())
+            context=SimpleNamespace(
+                event=event, context=SimpleNamespace(get_config=lambda **_kwargs: {})
+            )
         ),
         tool_executor=FunctionToolExecutor(),
         agent_hooks=mock_hooks,

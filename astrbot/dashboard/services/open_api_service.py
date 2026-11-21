@@ -46,7 +46,7 @@ class OpenApiWebSocketChatBridge:
     create_attachment_from_file: Callable[[str, str], Awaitable[Any]]
     extract_web_search_refs: Callable[[str, list], dict]
     insert_user_message: Callable[[str, str, list], Awaitable[None]]
-    save_bot_message: Callable[[str, list, dict, dict], Awaitable[Any]]
+    save_bot_message: Callable[..., Awaitable[Any]]
 
 
 class OpenApiService:
@@ -519,7 +519,7 @@ class OpenApiService:
 
                 if should_save:
                     message_parts_to_save = message_accumulator.build_message_parts(
-                        include_pending_tool_calls=True
+                        final=msg_type == "end"
                     )
                     plain_text = collect_plain_text_from_message_parts(
                         message_parts_to_save
@@ -540,7 +540,10 @@ class OpenApiService:
                         message_parts_to_save,
                         agent_stats,
                         refs,
+                        record=message_accumulator.record,
                     )
+                    # Later saves of this turn update the same record.
+                    message_accumulator.record = saved_record
                     if saved_record:
                         await send_json(
                             {
@@ -554,9 +557,6 @@ class OpenApiService:
                                 "session_id": session_id,
                             }
                         )
-                    message_accumulator = BotMessageAccumulator()
-                    agent_stats = {}
-                    refs = {}
                 if msg_type == "end":
                     break
         except Exception as exc:

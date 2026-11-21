@@ -4411,6 +4411,22 @@ CONFIG_METADATA_3 = {
                             "agent.runtime": "astrbot",
                         },
                     },
+                    "agent.config.misc.tool_approval.tools": {
+                        "description": "需要审批的工具",
+                        "type": "list",
+                        "items": {"type": "string"},
+                        "hint": "名单内的工具执行前需要发起人点击「允许」或回复确认码。留空表示不审批。批准创建或修改定时任务时，也会批准该任务到点运行时用到的名单内工具。",
+                        "condition": {
+                            "agent.runtime": "astrbot",
+                        },
+                    },
+                    "agent.config.misc.tool_approval.timeout": {
+                        "description": "工具审批超时时间（秒）",
+                        "type": "int",
+                        "condition": {
+                            "agent.runtime": "astrbot",
+                        },
+                    },
                     "agent.config.misc.tool_schema_mode": {
                         "description": "工具调用模式",
                         "type": "string",

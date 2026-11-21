@@ -9,6 +9,10 @@ from astrbot.core.astr_agent_runtime.computer.process_sandbox import (
     get_process_sandbox_status,
 )
 from astrbot.core.astr_agent_runtime.context import AstrAgentContext
+from astrbot.core.astr_agent_runtime.permission_mode import (
+    WORKSPACE_MODES,
+    get_permission_mode,
+)
 from astrbot.core.config.default import get_local_permission_defaults
 from astrbot.core.db import BaseDatabase
 from astrbot.core.utils.astrbot_path import get_astrbot_workspaces_path
@@ -113,6 +117,7 @@ def get_local_permission_policy(
         umo=context.context.event.unified_msg_origin
     )
     provider_settings = cfg.get("provider_settings", {})
+    inspected_role = role
     role = (
         "admin"
         if (role or get_agent_permissions(context).role) == "admin"
@@ -133,6 +138,15 @@ def get_local_permission_policy(
     filesystem_scope = role_policy.get("filesystem_scope", defaults["filesystem_scope"])
     if filesystem_scope not in {"none", "workspace", "host"}:
         filesystem_scope = defaults["filesystem_scope"]
+    # ChatUI "workspace" permission mode can only narrow the configured access:
+    # host files become workspace-only, which also puts execution under process
+    # isolation. Inspecting another role's policy is unaffected.
+    if (
+        inspected_role is None
+        and filesystem_scope == "host"
+        and get_permission_mode(context.context.event) in WORKSPACE_MODES
+    ):
+        filesystem_scope = "workspace"
     allow_execution = (
         filesystem_scope != "none"
         and role_policy.get("allow_execution", defaults["allow_execution"]) is True
