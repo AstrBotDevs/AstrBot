@@ -1292,10 +1292,11 @@ class PluginManager:
                                 metadata.star_cls,
                             )
 
-                    # 视图解析会读 activated 判断插件是否可用，而 activated 要到下面
-                    # （`metadata.activated = metadata.module_path not in inactivated_plugins`）
-                    # 才更新。先同步一次，否则「禁用后重新启用」时 resolve_view 读到的
-                    # 还是上一次的 False，误报 The view's plugin is unavailable。
+                    # resolve_view() below reads `activated` to decide whether the
+                    # plugin is available, but that flag is only refreshed from
+                    # `inactivated_plugins` further down in this function. Sync it
+                    # first, otherwise the "disable then enable" path still sees the
+                    # previous False and rejects the view as unavailable.
                     metadata.activated = not plugin_disabled
 
                     if not plugin_disabled and metadata.star_cls is not None:
