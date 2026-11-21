@@ -285,8 +285,25 @@ class KnowledgeBaseManager:
         kb_names: list[str],
         top_k_fusion: int = 20,
         top_m_final: int = 5,
+        errors: list[str] | None = None,
     ) -> dict | None:
-        """从指定知识库中检索相关内容"""
+        """从指定知识库中检索相关内容
+
+        Args:
+            query: Text to search for.
+            kb_names: Names of the knowledge bases to search.
+            top_k_fusion: Results kept after rank fusion.
+            top_m_final: Results returned.
+            errors: If given, collects failures that were skipped (an
+                unavailable knowledge base, a failed embedding or rerank call).
+
+        Returns:
+            The context text and results, an empty dict when no knowledge base
+            was requested, or None when nothing matched.
+
+        Raises:
+            ValueError: Every requested knowledge base is unavailable.
+        """
         kb_ids = []
         kb_id_helper_map = {}
         unavailable_kbs = []
@@ -295,6 +312,11 @@ class KnowledgeBaseManager:
                 if kb_helper.init_error:
                     unavailable_kbs.append((kb_name, kb_helper.init_error))
                     logger.warning(f"知识库 {kb_name} 不可用: {kb_helper.init_error}")
+                    if errors is not None:
+                        errors.append(
+                            f"Knowledge base {kb_name} is unavailable: "
+                            f"{kb_helper.init_error}"
+                        )
                     continue
                 kb_ids.append(kb_helper.kb.kb_id)
                 kb_id_helper_map[kb_helper.kb.kb_id] = kb_helper
@@ -313,6 +335,7 @@ class KnowledgeBaseManager:
             kb_id_helper_map=kb_id_helper_map,
             top_k_fusion=top_k_fusion,
             top_m_final=top_m_final,
+            errors=errors,
         )
         if not results:
             return None
