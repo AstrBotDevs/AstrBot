@@ -755,8 +755,6 @@ def test_gemini_preserves_provider_tool_call_ids_and_thought_signatures():
 async def test_gemini_non_streaming_requests_get_distinct_fallback_tool_ids(
     monkeypatch,
 ):
-    import astrbot.core.provider.sources.gemini_source as gemini_source
-
     candidate = _make_function_call_candidate(
         {"name": "publish", "args": {"status": "draft"}},
         {"name": "publish", "args": {"status": "draft"}},
@@ -784,10 +782,6 @@ async def test_gemini_non_streaming_requests_get_distinct_fallback_tool_ids(
     monkeypatch.setattr(provider, "_prepare_conversation", fake_prepare_conversation)
     monkeypatch.setattr(provider, "_prepare_query_config", fake_prepare_query_config)
 
-    async def run_request(provider_name, request_factory, **kwargs):
-        return await request_factory()
-
-    monkeypatch.setattr(gemini_source, "retry_provider_request", run_request)
     payloads = {"messages": [], "model": "gemini-test"}
     first_response = await provider._query(payloads, tools=None)
     second_response = await provider._query(payloads, tools=None)
@@ -812,8 +806,6 @@ async def test_gemini_non_streaming_requests_get_distinct_fallback_tool_ids(
 async def test_gemini_streaming_requests_generate_tool_call_ids_without_response_id(
     monkeypatch,
 ):
-    import astrbot.core.provider.sources.gemini_source as gemini_source
-
     candidate = _make_function_call_candidate(
         {"name": "publish", "args": {"status": "draft"}},
         {"name": "publish", "args": {"status": "draft"}},
@@ -844,10 +836,6 @@ async def test_gemini_streaming_requests_generate_tool_call_ids_without_response
     monkeypatch.setattr(provider, "_prepare_conversation", fake_prepare_conversation)
     monkeypatch.setattr(provider, "_prepare_query_config", fake_prepare_query_config)
 
-    async def run_request(provider_name, request_factory, **kwargs):
-        return await request_factory()
-
-    monkeypatch.setattr(gemini_source, "retry_provider_request", run_request)
     payloads = {"messages": [], "model": "gemini-test"}
     first_responses = [
         response async for response in provider._query_stream(payloads, None)
@@ -924,8 +912,6 @@ async def test_gemini_streaming_retries_reuse_tool_call_scope(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_gemini_streaming_collects_tool_calls_across_chunks(monkeypatch):
-    import astrbot.core.provider.sources.gemini_source as gemini_source
-
     chunks = [
         types.GenerateContentResponse(
             response_id="stream-response",
@@ -999,12 +985,8 @@ async def test_gemini_streaming_collects_tool_calls_across_chunks(monkeypatch):
     async def fake_prepare_query_config(*args, **kwargs):
         return None
 
-    async def run_request(provider_name, request_factory, **kwargs):
-        return await request_factory()
-
     monkeypatch.setattr(provider, "_prepare_conversation", fake_prepare_conversation)
     monkeypatch.setattr(provider, "_prepare_query_config", fake_prepare_query_config)
-    monkeypatch.setattr(gemini_source, "retry_provider_request", run_request)
 
     responses = [
         response async for response in provider._query_stream({"messages": []}, None)
@@ -1031,3 +1013,90 @@ async def test_gemini_streaming_collects_tool_calls_across_chunks(monkeypatch):
         ]
         == "c2Vjb25kLXNpZ25hdHVyZQ=="
     )
+
+
+@pytest.mark.asyncio
+async def test_gemini_streaming_does_not_retry_after_yielding_chunk(monkeypatch):
+    provider = ProviderGoogleGenAI.__new__(ProviderGoogleGenAI)
+    provider.api_keys = ["key-1", "key-2"]
+    attempts = 0
+    handle_error_calls = 0
+
+    async def fake_query_stream(
+        payloads,
+        tools,
+        *,
+        request_max_retries=None,
+        tool_call_scope=None,
+    ):
+        nonlocal attempts
+        attempts += 1
+        yield LLMResponse("assistant", completion_text="partial", is_chunk=True)
+        raise APIError(503, {"error": {"message": "mid-stream failure"}})
+
+    async def fake_handle_api_error(error, keys):
+        nonlocal handle_error_calls
+        handle_error_calls += 1
+        return True
+
+    monkeypatch.setattr(provider, "_query_stream", fake_query_stream)
+    monkeypatch.setattr(provider, "_handle_api_error", fake_handle_api_error)
+
+    received: list[LLMResponse] = []
+    with pytest.raises(APIError):
+        async for response in provider.text_chat_stream(
+            model="gemini-test",
+            contexts=[],
+        ):
+            received.append(response)
+
+    assert len(received) == 1
+    assert received[0].is_chunk is True
+    assert received[0].completion_text == "partial"
+    assert attempts == 1
+    assert handle_error_calls == 0
+
+
+@pytest.mark.asyncio
+async def test_gemini_tool_response_preserves_name_across_text_only_assistant_message():
+    provider = ProviderGoogleGenAI.__new__(ProviderGoogleGenAI)
+    provider.provider_config = {}
+    payloads = {
+        "messages": [
+            {"role": "user", "content": "Check weather"},
+            {
+                "role": "assistant",
+                "content": None,
+                "tool_calls": [
+                    {
+                        "id": "call-weather-1",
+                        "type": "function",
+                        "function": {
+                            "name": "get_weather",
+                            "arguments": '{"city": "Tokyo"}',
+                        },
+                    }
+                ],
+            },
+            {"role": "assistant", "content": "Checking now..."},
+            {
+                "role": "tool",
+                "tool_call_id": "call-weather-1",
+                "name": "stale_name",
+                "content": "sunny",
+            },
+        ]
+    }
+
+    contents = await provider._prepare_conversation(payloads)
+
+    tool_responses = [
+        part.function_response
+        for content in contents
+        for part in (content.parts or [])
+        if part.function_response is not None
+    ]
+    assert len(tool_responses) == 1
+    assert tool_responses[0].id == "call-weather-1"
+    assert tool_responses[0].name == "get_weather"
+    assert tool_responses[0].response == {"name": "get_weather", "content": "sunny"}

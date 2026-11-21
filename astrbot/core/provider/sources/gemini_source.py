@@ -562,12 +562,17 @@ class ProviderGoogleGenAI(Provider):
                 append_or_extend(gemini_contents, parts, types.UserContent)
 
             elif role == "assistant":
-                # Tool responses belong to the most recent assistant tool-call batch.
-                tool_call_names = {
-                    tool["id"]: tool["function"]["name"]
-                    for tool in message.get("tool_calls") or []
-                    if tool.get("id")
-                }
+                tool_calls = message.get("tool_calls")
+                if tool_calls:
+                    # Tool responses belong to the most recent assistant tool-call batch.
+                    tool_call_names = {
+                        tool["id"]: tool["function"]["name"]
+                        for tool in tool_calls
+                        if isinstance(tool, dict)
+                        and tool.get("id")
+                        and isinstance(tool.get("function"), dict)
+                        and tool["function"].get("name")
+                    }
                 parts = []
                 tool_parts: list[types.Part] = []
                 if "tool_calls" in message:
@@ -1274,6 +1279,7 @@ class ProviderGoogleGenAI(Provider):
         tool_call_scope = f"gemini_stream_{uuid.uuid4().hex}"
 
         for _ in range(retry):
+            emitted_chunk = False
             try:
                 query_kwargs = {}
                 if conversation_id:
@@ -1288,9 +1294,15 @@ class ProviderGoogleGenAI(Provider):
                     )
                 ) as responses:
                     async for response in responses:
+                        emitted_chunk = True
                         yield response
                 break
             except APIError as e:
+                if emitted_chunk:
+                    logger.warning(
+                        "Gemini stream failed after emitting partial output; skipping retry."
+                    )
+                    raise
                 if await self._handle_api_error(e, keys):
                     continue
                 break
