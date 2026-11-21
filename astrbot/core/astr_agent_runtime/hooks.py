@@ -63,6 +63,14 @@ class MainAgentHooks(BaseAgentRunHooks[AstrAgentContext]):
             context_observer=self._context_observer,
         )
 
+    async def on_llm_response_intermediate(self, run_context, llm_response) -> None:
+        await call_event_hook(
+            run_context.context.event,
+            EventType.OnLLMResponseIntermediateEvent,
+            llm_response,
+            context_observer=self._context_observer,
+        )
+
     async def on_agent_done(self, run_context, llm_response) -> None:
         await call_event_hook(
             run_context.context.event,

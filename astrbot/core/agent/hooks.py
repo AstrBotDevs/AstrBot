@@ -22,6 +22,19 @@ class BaseAgentRunHooks(Generic[TContext]):
             llm_response: Final model response, available before delivery.
         """
 
+    async def on_llm_response_intermediate(
+        self,
+        run_context: ContextWrapper[TContext],
+        llm_response: LLMResponse,
+    ) -> None:
+        """Handle an intermediate model reply that requests tool calls.
+
+        Args:
+            run_context: Context associated with the response.
+            llm_response: Completed tool-calling round response, available before
+                its final message content is emitted and before its tools run.
+        """
+
     async def on_tool_start(
         self,
         run_context: ContextWrapper[TContext],
