@@ -167,10 +167,10 @@ async def collect_initial_request(
             fallback_quoted_image_count = 0
             for comp in reply_comps:
                 has_embedded_image = False
+                unavailable_embedded_images = 0
                 if comp.chain:
                     for reply_comp in comp.chain:
                         if isinstance(reply_comp, Image):
-                            has_embedded_image = True
                             try:
                                 image_path = await reply_comp.convert_to_file_path()
                             except Exception as exc:
@@ -183,10 +183,9 @@ async def collect_initial_request(
                                         reply_comp.url or reply_comp.file
                                     ),
                                 )
-                                req.extra_user_content_parts.append(
-                                    TextPart(text="[Image unavailable]")
-                                )
+                                unavailable_embedded_images += 1
                                 continue
+                            has_embedded_image = True
                             req.image_urls.append(image_path)
                             attachment_paths.append(image_path)
                             source_ref = reply_comp.url or reply_comp.file or ""
@@ -231,7 +230,8 @@ async def collect_initial_request(
                             )
 
                 # Fallback quoted image extraction for reply-id-only payloads, or when
-                # embedded reply chain only contains placeholders (e.g. [Forward Message], [Image]).
+                # embedded reply chain only contains placeholders or unresolved images.
+                fallback_recovered_image = False
                 if not has_embedded_image:
                     try:
                         fallback_images = normalize_and_dedupe_strings(
@@ -252,22 +252,24 @@ async def collect_initial_request(
                                 config.max_quoted_fallback_images,
                                 event.unified_msg_origin,
                             )
-                            continue
-                        if len(fallback_images) > remaining_limit:
-                            logger.warning(
-                                "Truncate quoted fallback images for umo=%s, reply_id=%s from %d to %d",
-                                event.unified_msg_origin,
-                                getattr(comp, "id", None),
-                                len(fallback_images),
-                                remaining_limit,
-                            )
-                            fallback_images = fallback_images[:remaining_limit]
-                        for image_ref in fallback_images:
-                            if image_ref in req.image_urls:
-                                continue
-                            req.image_urls.append(image_ref)
-                            fallback_quoted_image_count += 1
-                            quoted_image_refs.add(image_ref)
+                        else:
+                            if len(fallback_images) > remaining_limit:
+                                logger.warning(
+                                    "Truncate quoted fallback images for umo=%s, reply_id=%s from %d to %d",
+                                    event.unified_msg_origin,
+                                    getattr(comp, "id", None),
+                                    len(fallback_images),
+                                    remaining_limit,
+                                )
+                                fallback_images = fallback_images[:remaining_limit]
+                            if fallback_images:
+                                fallback_recovered_image = True
+                            for image_ref in fallback_images:
+                                if image_ref in req.image_urls:
+                                    continue
+                                req.image_urls.append(image_ref)
+                                fallback_quoted_image_count += 1
+                                quoted_image_refs.add(image_ref)
                     except Exception as exc:  # noqa: BLE001
                         logger.warning(
                             "Failed to resolve fallback quoted images for umo=%s, reply_id=%s: %s",
@@ -276,6 +278,11 @@ async def collect_initial_request(
                             exc,
                             exc_info=True,
                         )
+                if unavailable_embedded_images and not fallback_recovered_image:
+                    req.extra_user_content_parts.extend(
+                        TextPart(text="[Image unavailable]")
+                        for _ in range(unavailable_embedded_images)
+                    )
 
     req.image_urls = normalize_and_dedupe_strings(req.image_urls)
     quote_image_ref = None
