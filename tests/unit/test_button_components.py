@@ -41,19 +41,42 @@ async def test_registration_saves_on_a_worker_thread(tmp_path, monkeypatch):
     registry.configure(path)
     connect = sqlite3.connect
     threads = []
+    release = threading.Event()
+    loop = asyncio.get_running_loop()
+    write_started = asyncio.Event()
 
-    def recording_connect(*args, **kwargs):
+    def held_connect(*args, **kwargs):
         threads.append(threading.current_thread())
+        loop.call_soon_threadsafe(write_started.set)
+        release.wait(timeout=10)
         return connect(*args, **kwargs)
 
-    monkeypatch.setattr(button_interaction.sqlite3, "connect", recording_connect)
+    monkeypatch.setattr(button_interaction.sqlite3, "connect", held_connect)
     token = registry.register("approve", {"id": 1})
     assert registry.resolve(token) == ("approve", {"id": 1})
-    await asyncio.gather(*registry._pending_writes)
-    assert threads and threading.main_thread() not in threads
+    # The loop keeps running other work while the write is still held.
+    await asyncio.wait_for(write_started.wait(), timeout=10)
+    assert registry._pending_writes
+    release.set()
+    await registry.flush()
+    assert not registry._pending_writes
+    assert threading.main_thread() not in threads
     restarted = button_interaction._ButtonCallbackRegistry()
     restarted.configure(path)
     assert restarted.resolve(token) == ("approve", {"id": 1})
+
+
+def test_long_expired_callbacks_leave_the_cache(tmp_path, monkeypatch):
+    registry = button_interaction._ButtonCallbackRegistry()
+    registry.configure(tmp_path / "callbacks.db")
+    monkeypatch.setattr(button_interaction.time, "time", lambda: 100.0)
+    old = registry.register("old", None, expires_at=101)
+    monkeypatch.setattr(button_interaction.time, "time", lambda: 200000.0)
+    recent = registry.register("recent", None, expires_at=199999)
+    assert old not in registry._cache
+    # Within the retention day a late click still gets the expiry notice.
+    with pytest.raises(button_interaction.ButtonActionExpiredError):
+        registry.resolve(recent)
 
 
 def test_failed_save_keeps_the_callback_and_retries(tmp_path, monkeypatch):
