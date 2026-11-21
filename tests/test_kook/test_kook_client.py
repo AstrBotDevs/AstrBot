@@ -372,6 +372,9 @@ async def test_kook_voice_card_enters_pipeline_as_record(
     monkeypatch.setattr(
         "astrbot.core.platform.sources.kook.kook_adapter.KookClient", KookClient
     )
+    resolver = Mock()
+    resolver.return_value.to_path = AsyncMock(return_value=TEST_AUDIO_WAV_PATH)
+    monkeypatch.setattr("astrbot.core.message.components.MediaResolver", resolver)
 
     queue = asyncio.Queue()
     adapter = KookPlatformAdapter({}, {}, queue)
@@ -400,12 +403,18 @@ async def test_kook_voice_card_enters_pipeline_as_record(
 
     await adapter.client._handle_signal(KookWebsocketEvent.from_dict(raw))
 
+    http.post.assert_not_called()
+    resolver.assert_not_called()
+    messages = queue.get_nowait().get_messages()
+    record = next(message for message in messages if isinstance(message, Record))
+    assert await record.convert_to_file_path() == TEST_AUDIO_WAV_PATH
+    assert await record.convert_to_file_path() == TEST_AUDIO_WAV_PATH
+
     http.post.assert_called_once_with(
         "https://www.kookapp.cn/api/v3/asset/voice-token",
         json={"scene": scene, "msg_id": data["msg_id"], "media_id": 42, **conversation},
     )
-    messages = queue.get_nowait().get_messages()
-    assert Record(file=TEST_MEDIA_URL, url=TEST_MEDIA_URL) in messages
+    assert [call.args[0] for call in resolver.call_args_list].count(TEST_MEDIA_URL) == 1
 
 
 @pytest.mark.asyncio
