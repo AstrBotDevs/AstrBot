@@ -12,8 +12,21 @@ on:
   workflow_dispatch:
 
 jobs:
+  smoke-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: astral-sh/setup-uv@v10.4.0
+      - run: |
+          uv run ruff format --check .
+          uv run ruff check .
+          uv run scripts/smoke_startup_check.py
+
   unit-tests:
-    name: Run pytest suite on ${{ matrix.os }}
+    needs: smoke-test
     runs-on: ${{ matrix.os }}
     timeout-minutes: 30
     strategy:
@@ -23,15 +36,13 @@ jobs:
           - ubuntu-latest
           - windows-latest
           - macos-latest
+    env:
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
 
     steps:
       - uses: actions/checkout@v7
 
       - uses: astral-sh/setup-uv@v10.3.3
-
-      - name: Smoke test
-        timeout-minutes: 10
-        run: uv run scripts/smoke_startup_check.py
 
       - name: Sandbox for Linux
         if: runner.os == 'Linux'
@@ -49,8 +60,4 @@ jobs:
         if: runner.os == 'macOS'
         run: test -x /usr/bin/sandbox-exec
 
-      - name: Unit tests
-        shell: bash
-        env:
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-        run: bash ./scripts/run_pytests_ci.sh ./tests
+      - run: bash ./scripts/run_pytests_ci.sh ./tests
