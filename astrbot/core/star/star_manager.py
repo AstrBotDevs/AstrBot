@@ -1292,6 +1292,12 @@ class PluginManager:
                                 metadata.star_cls,
                             )
 
+                    # 视图解析会读 activated 判断插件是否可用，而 activated 要到下面
+                    # （`metadata.activated = metadata.module_path not in inactivated_plugins`）
+                    # 才更新。先同步一次，否则「禁用后重新启用」时 resolve_view 读到的
+                    # 还是上一次的 False，误报 The view's plugin is unavailable。
+                    metadata.activated = not plugin_disabled
+
                     if not plugin_disabled and metadata.star_cls is not None:
                         from astrbot.core.chatui import resolve_view
                         from astrbot.core.star.filter.ui_action import UIActionFilter
