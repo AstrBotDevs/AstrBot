@@ -115,18 +115,24 @@ Using the community onboarding guide, explain how to join the project. If the ma
 
 Documents do not become permanent model memory. The relevant knowledge base must be selected by the current profile or a session rule. Different profiles can use different knowledge bases; creating one does not enable it for every bot.
 
-### Standard versus Agentic retrieval
+### Choose a retrieval mode
 
-| Mode | When retrieval happens | Chat model requirement |
+Under `AI → Capabilities → Knowledge Base`, use `Knowledge Base Retrieval Mode` to control how AstrBot queries selected knowledge bases:
+
+| Option | Behavior | Chat model requirement |
 | --- | --- | --- |
-| Standard retrieval (default) | Retrieves using the current message and appends relevant passages to the model request | Does not require knowledge base tool calling |
-| `Agentic Knowledge Base Retrieval` | Exposes retrieval as a tool; the model decides when and how to query it | The model and its API must support tool calling |
+| `Follow Agentic Toggle (Default)` | Leaves the mode empty to follow the legacy `Agentic Knowledge Base Retrieval` toggle (automatic injection when off, tool-only when on) | Depends on the `Agentic Knowledge Base Retrieval` toggle |
+| `Automatic Injection (auto)` | Retrieves using the current message and appends matching passages to the model request | Does not require knowledge base tool calling |
+| `Agentic Tool Only (agentic)` | Exposes only the `astr_kb_search` tool so the model decides when and how to query | The model and its API must support tool calling |
+| `Hybrid Auto + Tool (hybrid)` | Automatically injects passages that pass the relevance threshold while keeping `astr_kb_search` available for active follow-up queries | The model and its API must support tool calling |
 
-Keep the default mode if you want retrieval before each answer. With Agentic retrieval enabled, the model may answer without querying the knowledge base. For testing, explicitly ask it to query first.
+Keep automatic injection or choose `Hybrid Auto + Tool (hybrid)` if you want relevant passages retrieved before answering. In tool-only Agentic mode, the model may answer without querying the knowledge base; for testing, explicitly ask it to query first.
 
-### Adjust result counts
+### Adjust result counts and relevance threshold
 
 `Fusion Search Results Count` controls the candidate count after results from multiple knowledge bases are fused. `Final Results Count` controls how many passages reach the model. Their defaults are 20 and 5.
+
+`Minimum Relevance Score` sets the absolute relevance floor for automatic injection (defaults to `0.0`, which disables filtering). It is evaluated against the rerank relevance score when a reranker is enabled, or dense vector similarity otherwise, preventing low-relevance hits from polluting context. Active tool calls through `astr_kb_search` bypass this automatic injection threshold.
 
 Too few results can miss an answer; too many increase input length and noise. Start with the defaults and adjust based on the actual passages returned by the retrieval test.
 

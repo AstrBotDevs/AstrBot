@@ -70,7 +70,7 @@ async def retrieve_knowledge_base(
             parsed = float(raw_threshold)
             if math.isfinite(parsed) and parsed > 0.0:
                 threshold = parsed
-        except (TypeError, ValueError):
+        except (TypeError, ValueError, OverflowError):
             threshold = 0.0
 
     all_kbs = [await kb_mgr.get_kb_by_name(kb) for kb in kb_names]
@@ -95,16 +95,26 @@ async def retrieve_knowledge_base(
 
     results = kb_context.get("results", [])
     if threshold > 0.0 and isinstance(results, list):
-        filtered = []
+        filtered: list[tuple[dict, float]] = []
         for item in results:
             if not isinstance(item, dict):
                 continue
+            # Prefer the absolute relevance_score (rerank relevance or raw dense
+            # cosine similarity) over RankFusion's batch-normalized score so
+            # lone or tied weak candidates do not bypass kb_min_score.
+            raw_score = (
+                item.get("relevance_score")
+                if "relevance_score" in item
+                else item.get("score")
+            )
+            if isinstance(raw_score, bool) or raw_score is None:
+                continue
             try:
-                score = float(item.get("score", 0.0))
-            except (TypeError, ValueError):
+                score = float(raw_score)
+            except (TypeError, ValueError, OverflowError):
                 continue
             if math.isfinite(score) and score >= threshold:
-                filtered.append(item)
+                filtered.append((item, score))
         if not filtered:
             logger.debug(
                 "[KB] Filtered out all %d results below min_score=%.4f for session %s",
@@ -115,8 +125,7 @@ async def retrieve_knowledge_base(
             return None
         if len(filtered) < len(results):
             lines = ["以下是相关的知识库内容,请参考这些信息回答用户的问题:\n"]
-            for idx, item in enumerate(filtered, 1):
-                score = float(item.get("score", 0.0))
+            for idx, (item, score) in enumerate(filtered, 1):
                 lines.append(f"【知识 {idx}】")
                 lines.append(
                     f"来源: {item.get('kb_name', '')} / {item.get('doc_name', '')}"

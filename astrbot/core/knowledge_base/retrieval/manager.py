@@ -165,6 +165,7 @@ class RetrievalManager:
                         metadata={
                             "chunk_index": fr.chunk_index,
                             "char_count": len(fr.content),
+                            "relevance_score": fr.dense_similarity,
                         },
                     ),
                 )
@@ -276,6 +277,7 @@ class RetrievalManager:
             if idx < len(results):
                 result = results[idx]
                 result.score = rerank_result.relevance_score
+                result.metadata["relevance_score"] = rerank_result.relevance_score
                 reranked_list.append(result)
 
         reranked_list.sort(key=lambda x: x.score, reverse=True)

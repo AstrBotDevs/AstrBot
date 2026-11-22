@@ -21,6 +21,7 @@ class FusedResult:
     kb_id: str
     content: str
     score: float
+    dense_similarity: float | None = None
 
 
 class RankFusion:
@@ -169,6 +170,11 @@ class RankFusion:
         fused_results = []
         seen_contents: set[str] = set()
         for identifier in sorted_ids:
+            dense_sim = (
+                vec_doc_id_to_dense[identifier].similarity
+                if identifier in vec_doc_id_to_dense
+                else None
+            )
             # 优先从稀疏检索获取完整信息
             if identifier in chunk_id_to_sparse:
                 sr = chunk_id_to_sparse[identifier]
@@ -179,6 +185,7 @@ class RankFusion:
                     kb_id=sr.kb_id,
                     content=sr.content,
                     score=fusion_scores[identifier],
+                    dense_similarity=dense_sim,
                 )
             elif identifier in vec_doc_id_to_dense:
                 # 从向量检索获取信息,需要从数据库获取块的详细信息
@@ -191,6 +198,7 @@ class RankFusion:
                     kb_id=chunk_md["kb_id"],
                     content=vec_result.data["text"],
                     score=fusion_scores[identifier],
+                    dense_similarity=dense_sim,
                 )
             else:
                 continue

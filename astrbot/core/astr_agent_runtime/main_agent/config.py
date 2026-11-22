@@ -146,7 +146,7 @@ class MainAgentBuildConfig:
                         "Invalid kb_min_score: %s, fallback to 0.0",
                         raw_kb_min_score,
                     )
-            except (TypeError, ValueError):
+            except (TypeError, ValueError, OverflowError):
                 logger.warning(
                     "Invalid kb_min_score: %s, fallback to 0.0",
                     raw_kb_min_score,

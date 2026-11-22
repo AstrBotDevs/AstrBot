@@ -220,6 +220,8 @@ class ProviderRequest:
     """模型名称，为 None 时使用提供商的默认模型"""
     retrieval_query: str | None = None
     """Optional clean query text used for knowledge-base retrieval."""
+    _kb_retrieved: bool = field(default=False, init=False, repr=False, compare=False)
+    """Internal per-request flag tracking whether automatic KB retrieval already ran."""
     _plugin_id: str | None = field(default=None, init=False, repr=False)
 
     def __repr__(self) -> str:
