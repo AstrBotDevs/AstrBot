@@ -467,7 +467,16 @@ def test_qq_interaction_falls_back_to_native_button_fields() -> None:
     "client_class",
     [QQOfficialBotClient, QQOfficialWebhookBotClient],
 )
-async def test_qq_clients_acknowledge_and_dispatch_button_clicks(client_class) -> None:
+@pytest.mark.parametrize("persistence_fails", [False, True])
+async def test_qq_clients_acknowledge_and_dispatch_button_clicks(
+    client_class, persistence_fails
+) -> None:
+    """Dispatch button clicks only after their delivery route is saved.
+
+    Args:
+        client_class: WebSocket or webhook client implementation to exercise.
+        persistence_fails: Whether saving the delivery route raises an error.
+    """
     client = client_class(
         intents=botpy.Intents(interaction=True),
         bot_log=False,
@@ -475,17 +484,29 @@ async def test_qq_clients_acknowledge_and_dispatch_button_clicks(client_class) -
     try:
         client.api.on_interaction_result = AsyncMock()
         platform = SimpleNamespace(
-            remember_session_scene=Mock(),
+            remember_session_scene=AsyncMock(),
             create_event=Mock(side_effect=lambda message: message),
             commit_event=Mock(),
         )
         client.set_platform(platform)
 
-        await client.on_interaction_create(_make_interaction())
+        async def persist_scene(session_id, scene):
+            platform.commit_event.assert_not_called()
+            if persistence_fails:
+                raise OSError("disk error")
+
+        platform.remember_session_scene.side_effect = persist_scene
+        if persistence_fails:
+            with pytest.raises(OSError, match="disk error"):
+                await client.on_interaction_create(_make_interaction())
+            platform.commit_event.assert_not_called()
+            platform.create_event.assert_not_called()
+        else:
+            await client.on_interaction_create(_make_interaction())
+            event = platform.commit_event.call_args.args[0]
+            assert isinstance(event.message[0], ButtonInteraction)
 
         client.api.on_interaction_result.assert_awaited_once_with("interaction-1", 0)
-        platform.remember_session_scene.assert_called_once_with("group-1", "group")
-        event = platform.commit_event.call_args.args[0]
-        assert isinstance(event.message[0], ButtonInteraction)
+        platform.remember_session_scene.assert_awaited_once_with("group-1", "group")
     finally:
         await client.close()
