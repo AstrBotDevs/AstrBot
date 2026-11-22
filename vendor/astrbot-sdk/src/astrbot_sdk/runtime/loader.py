@@ -574,6 +574,18 @@ class LoadedPlugin:
         discovered = await outcome
         return list(discovered or [])
 
+    async def invoke_cron(self, handler_id: str, payload: Any) -> Any:
+        """Invoke one scheduled cron handler registered on PluginContext."""
+        handler = self.instance._ctx.cron_handlers.get(handler_id)
+        if handler is None:
+            raise InvalidRequest(f"unknown cron handler: {handler_id}")
+        args = list(payload.get("args") or ())
+        kwargs = dict(payload.get("kwargs") or {})
+        result = handler(*args, **kwargs)
+        if inspect.isawaitable(result):
+            return await result
+        return result
+
     async def shutdown(
         self,
         *,

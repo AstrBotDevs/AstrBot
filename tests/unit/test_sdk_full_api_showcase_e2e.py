@@ -11,6 +11,7 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 import pytest
+from starlette.datastructures import Headers
 
 from astrbot.api.event import AstrMessageEvent
 from astrbot.api.message_components import Image, Plain
@@ -23,14 +24,27 @@ from astrbot.api.platform import (
 )
 from astrbot.api.provider import Provider
 from astrbot.api.web import PluginRequest, bind_request_context
+from astrbot.core import file_token_service
 from astrbot.core.astrbot_config_mgr import AstrBotConfigManager
+from astrbot.core.chatui import ViewResult as CoreViewResult
+from astrbot.core.chatui import resolve_view, view_store
 from astrbot.core.config import AstrBotConfig
 from astrbot.core.conversation_mgr import ConversationManager
 from astrbot.core.cron.manager import CronJobManager
 from astrbot.core.db.sqlite import SQLiteDatabase
 from astrbot.core.knowledge_base.kb_mgr import KnowledgeBaseManager
+from astrbot.core.message.components import (
+    ActionRow,
+    Button,
+    ButtonInteraction,
+    Json,
+    UIInteraction,
+    ViewContext,
+)
 from astrbot.core.message.message_event_result import MessageEventResult
 from astrbot.core.persona_mgr import PersonaManager
+from astrbot.core.pipeline.context_utils import call_handler
+from astrbot.core.platform.astrbot_message import Group
 from astrbot.core.platform.manager import PlatformManager
 from astrbot.core.platform_message_history_mgr import PlatformMessageHistoryManager
 from astrbot.core.provider.entities import (
@@ -293,7 +307,12 @@ class _ShowcasePlatform(Platform):
 
     def meta(self) -> PlatformMetadata:
         """Return platform metadata matching webchat events."""
-        return PlatformMetadata(name="webchat", description="E2E WebChat", id="webchat")
+        return PlatformMetadata(
+            name="webchat",
+            description="E2E WebChat",
+            id="webchat",
+            support_ui_interaction=True,
+        )
 
     def get_client(self) -> object:
         """Return the mock bot client."""
@@ -307,11 +326,18 @@ class _ShowcasePlatform(Platform):
 class _ShowcaseMessageEvent(AstrMessageEvent):
     """Concrete AstrMessageEvent recording outbound sends, typing, and reactions."""
 
-    def __init__(self, text: str, umo_session_id: str = "user-1") -> None:
+    def __init__(
+        self,
+        text: str,
+        umo_session_id: str = "user-1",
+        *,
+        extra_components: list | None = None,
+    ) -> None:
         platform_meta = PlatformMetadata(
             name="webchat",
             description="E2E WebChat",
             id="webchat",
+            support_ui_interaction=True,
         )
         msg = AstrBotMessage()
         msg.type = MessageType.FRIEND_MESSAGE
@@ -319,19 +345,26 @@ class _ShowcaseMessageEvent(AstrMessageEvent):
         msg.session_id = umo_session_id
         msg.message_id = f"msg-{umo_session_id}-{abs(hash(text))}"
         msg.sender = MessageMember(user_id="user-1", nickname="Moon")
-        msg.message = [Plain(text)]
+        msg.message = [Plain(text), *(extra_components or [])]
         msg.message_str = text
-        msg.raw_message = {"text": text}
+        msg.raw_message = (
+            "admin",
+            umo_session_id,
+            {"text": text, "_platform_history_id": "webchat"},
+        )
         super().__init__(
             message_str=text,
             message_obj=msg,
             platform_meta=platform_meta,
             session_id=umo_session_id,
         )
+        self.role = "admin"
         self.is_wake = True
         self.is_at_or_wake_command = True
         self.sent_messages: list[object] = []
+        self.streamed_chunks: list[list[object]] = []
         self.typing_count = 0
+        self.stop_typing_count = 0
         self.reactions: list[str] = []
 
     async def send(self, message) -> None:
@@ -339,13 +372,35 @@ class _ShowcaseMessageEvent(AstrMessageEvent):
         self.sent_messages.append(message)
         self._has_send_oper = True
 
+    async def send_streaming(
+        self,
+        generator: AsyncGenerator,
+        use_fallback: bool = False,
+    ) -> None:
+        """Record streamed chunks delivered via event.send_streaming."""
+        _ = use_fallback
+        chunks = [chain async for chain in generator]
+        self.streamed_chunks.append(chunks)
+        self._has_send_oper = True
+
     async def send_typing(self) -> None:
         """Record typing indicator forwarding."""
         self.typing_count += 1
 
+    async def stop_typing(self) -> None:
+        """Record stop-typing indicator forwarding."""
+        self.stop_typing_count += 1
+
     async def react(self, emoji: str) -> None:
         """Record emoji reaction forwarding."""
         self.reactions.append(emoji)
+
+    async def get_group(self, group_id: str | None = None) -> Group:
+        """Return normalized Group metadata for event.get_group queries."""
+        return Group(
+            group_id=group_id or "grp-default",
+            group_name="Showcase Group",
+        )
 
 
 class _LocalHtmlRenderer:
@@ -394,9 +449,10 @@ class _WebRequestDouble:
         *,
         query_items: list[tuple[str, str]] | None = None,
         body_bytes: bytes = b"",
+        headers: dict[str, str] | None = None,
     ) -> None:
         self.method = method
-        self.headers: dict[str, str] = {}
+        self.headers = Headers(headers or {})
         self.cookies: dict[str, str] = {}
         query_str = "&".join(f"{k}={v}" for k, v in (query_items or ()))
         self.url = SimpleNamespace(path=path, query=query_str)
@@ -451,12 +507,70 @@ async def _dispatch_matching_handler(
     handler = candidates[0]
     parsed = event.get_extra("parsed_params") or {}
     results: list[MessageEventResult] = []
-    async for _ in handler.handler(event, **parsed):
+    yielded_items: list[object] = []
+    async for item in call_handler(event, handler.handler, **parsed):
+        if item is not None:
+            yielded_items.append(item)
         res = event.get_result()
         if res is not None:
             results.append(res)
             event.clear_result()
+    event.set_extra("_yielded_items", yielded_items)
     return results
+
+
+async def _invoke_web_route_raw(
+    context: Context,
+    method: str,
+    path: str,
+    *,
+    plugin_name: str,
+    query_items: list[tuple[str, str]] | None = None,
+    body_bytes: bytes = b"",
+    headers: dict[str, str] | None = None,
+) -> tuple[int, dict[str, str], bytes]:
+    """Resolve and invoke one registered plugin web route, returning status/headers/body.
+
+    Args:
+        context: Host Context holding registered_web_apis.
+        method: HTTP verb (e.g. GET, POST).
+        path: Request subpath matching the registered route.
+        plugin_name: Owning plugin name passed in PluginRequest.
+        query_items: Optional query parameter pairs.
+        body_bytes: Optional raw request body.
+        headers: Optional request headers.
+
+    Returns:
+        Tuple of (status_code, response_headers_dict, raw_body_bytes).
+    """
+    matched = _match_registered_web_api(context.registered_web_apis, path, method)
+    assert matched is not None, f"Web route {method} {path} not registered"
+    view_handler, path_values = matched
+    req = _WebRequestDouble(
+        method,
+        path,
+        query_items=query_items,
+        body_bytes=body_bytes,
+        headers=headers,
+    )
+    plugin_request = PluginRequest(
+        req,
+        path_params=path_values,
+        plugin_name=plugin_name,
+        username="admin",
+    )
+    with bind_request_context(plugin_request):
+        response = await view_handler(**path_values)
+    raw = b""
+    if hasattr(response, "body_iterator") and response.body_iterator is not None:
+        async for chunk in response.body_iterator:
+            raw += chunk if isinstance(chunk, bytes) else str(chunk).encode("utf-8")
+    elif getattr(response, "path", None):
+        raw = Path(response.path).read_bytes()
+    elif getattr(response, "body", None):
+        raw = bytes(response.body)
+    resp_headers = {str(k).lower(): str(v) for k, v in response.headers.items()}
+    return int(response.status_code), resp_headers, raw
 
 
 async def _invoke_web_route(
@@ -467,36 +581,19 @@ async def _invoke_web_route(
     plugin_name: str,
     query_items: list[tuple[str, str]] | None = None,
     body_bytes: bytes = b"",
+    headers: dict[str, str] | None = None,
 ) -> dict:
-    """Resolve and invoke one registered plugin web route in a PluginRequest context.
-
-    Args:
-        context: Host Context holding registered_web_apis.
-        method: HTTP verb (e.g. GET, POST).
-        path: Request subpath matching the registered route.
-        plugin_name: Owning plugin name passed in PluginRequest.
-        query_items: Optional query parameter pairs.
-        body_bytes: Optional raw request body.
-
-    Returns:
-        Decoded JSON dict from the ASGI Response returned by the bridge view handler.
-    """
-    matched = _match_registered_web_api(context.registered_web_apis, path, method)
-    assert matched is not None, f"Web route {method} {path} not registered"
-    view_handler, path_values = matched
-    req = _WebRequestDouble(method, path, query_items=query_items, body_bytes=body_bytes)
-    plugin_request = PluginRequest(
-        req,
-        path_params=path_values,
+    """Resolve and invoke one registered plugin web route and decode its JSON payload."""
+    status, _headers, raw = await _invoke_web_route_raw(
+        context,
+        method,
+        path,
         plugin_name=plugin_name,
-        username="admin",
+        query_items=query_items,
+        body_bytes=body_bytes,
+        headers=headers,
     )
-    with bind_request_context(plugin_request):
-        response = await view_handler(**path_values)
-    assert response.status_code == 200
-    raw = b""
-    async for chunk in response.body_iterator:
-        raw += chunk
+    assert status == 200, f"Expected 200 OK from {method} {path}, got {status}: {raw!r}"
     return json.loads(raw)
 
 
@@ -561,6 +658,7 @@ async def _setup_real_core(
     config_path = astrbot_root / "data" / "cmd_config.json"
     config_path.parent.mkdir(parents=True, exist_ok=True)
     config = AstrBotConfig(config_path=str(config_path))
+    config["callback_api_base"] = "http://127.0.0.1:6185"
     config["dashboard"] = {**dict(config.get("dashboard") or {}), "jwt_secret": "showcase-jwt-secret"}
     config["provider_stt_settings"] = {"enable": True, "provider_id": "stt-main"}
     config["provider_tts_settings"] = {"enable": True, "provider_id": "tts-main"}
@@ -569,6 +667,13 @@ async def _setup_real_core(
         "config": {"model": {"provider_id": "chat-main"}},
     }
     config.save_config()
+
+    await db.upsert_umo_alias(
+        "webchat:FriendMessage:user-1",
+        "admin",
+        "WebChat User 1",
+        "Showcase Alias",
+    )
 
     ucr = UmopConfigRouter(sp=real_sp)
     await ucr.initialize()
@@ -659,6 +764,33 @@ async def _setup_real_core(
         agent_runtimes={},
     )
     context.html_renderer = _LocalHtmlRenderer(tmp_path)  # type: ignore[assignment]
+
+    class _OrchestratorStub:
+        def __init__(self) -> None:
+            self.handoffs = [
+                SimpleNamespace(
+                    name="init_sub",
+                    description="Initial subagent",
+                    provider_id="chat-main",
+                    agent=SimpleNamespace(name="init_sub"),
+                )
+            ]
+            self.reload_configs: list[dict] = []
+
+        async def reload_from_config(self, cfg: dict) -> None:
+            self.reload_configs.append(dict(cfg))
+            self.handoffs = [
+                SimpleNamespace(
+                    name=str(item.get("name", "sub")),
+                    description=str(item.get("description", "")),
+                    provider_id=str(item.get("provider_id", "chat-main")),
+                    agent=SimpleNamespace(name=str(item.get("name", "sub"))),
+                )
+                for item in (cfg.get("agents") or [])
+            ]
+
+    orchestrator_stub = _OrchestratorStub()
+    context.subagent_orchestrator = orchestrator_stub  # type: ignore[assignment]
     await cron_mgr.start(context)
     sdk_mgr = SDKPluginManager(context, store_dir)
     pm_stub = SimpleNamespace(
@@ -666,6 +798,8 @@ async def _setup_real_core(
         _sdk_plugin_manager=sdk_mgr,
         plugin_store_path=str(store_dir),
         reload=AsyncMock(return_value=(True, None)),
+        turn_off_plugin=AsyncMock(return_value=None),
+        turn_on_plugin=AsyncMock(return_value=None),
     )
     context._star_manager = pm_stub  # type: ignore[assignment]
     core_lifecycle = SimpleNamespace(
@@ -689,6 +823,8 @@ async def _setup_real_core(
         provider_mgr=provider_mgr,
         kb_mgr=kb_mgr,
         platform=platform,
+        event_queue=event_queue,
+        orchestrator_stub=orchestrator_stub,
         context=context,
         sdk_mgr=sdk_mgr,
         pm_stub=pm_stub,
@@ -783,6 +919,24 @@ async def test_new_sdk_full_api_showcase_against_real_core(
         )
         assert "AstrBot SDK Full API Showcase" in served_html.content
 
+        served_card_html = await page_svc.serve_page_content(
+            plugin_name="full_api_showcase",
+            view_name="card",
+            asset_path="",
+            asset_token="",
+            jwt_secret="showcase-jwt-secret",
+            username="admin",
+            locale="zh-CN",
+            theme=None,
+        )
+        assert "AstrBot SDK Interactive Card View" in served_card_html.content
+        _plugin_meta, resolved_card_spec, resolved_card_entry = resolve_view(
+            bridge.module_path,
+            "card",
+        )
+        assert resolved_card_spec.name == "card"
+        assert resolved_card_entry.is_file()
+
         token = page_svc.issue_plugin_page_asset_token(
             plugin_name="full_api_showcase",
             view_name="dashboard",
@@ -842,24 +996,41 @@ async def test_new_sdk_full_api_showcase_against_real_core(
         assert ping_results[0].chain[0].text == "LIVE:pong:12"
 
         # Full capability showcase suite command.
+        suite_event = _ShowcaseMessageEvent("showcase suite")
         suite_results = await _dispatch_matching_handler(
             env.config,
             bridge.module_path,
-            _ShowcaseMessageEvent("showcase suite"),
+            suite_event,
         )
         assert len(suite_results) == 1
         report = json.loads(suite_results[0].chain[0].text)
         assert report["all_passed"] is True, f"Showcase suite failed: {report}"
-        assert report["storage_ok"] is True
-        assert report["assets_ok"] is True
-        assert report["convs_ok"] is True
-        assert report["plugins_ok"] is True
-        assert report["render_ok"] is True
-        assert report["tools_ok"] is True
-        assert report["llm_ok"] is True
+        for flag in (
+            "storage_ok",
+            "assets_ok",
+            "file_token_ok",
+            "convs_ok",
+            "events_platform_ok",
+            "cron_ok",
+            "kb_ok",
+            "history_ok",
+            "plugins_ok",
+            "render_ok",
+            "tools_ok",
+            "llm_ok",
+        ):
+            assert report[flag] is True, f"Expected {flag} to pass: {report}"
         assert "13" in report["agent_text"]
         assert report["config_reloaded"] >= 1
         assert report["hooks"].get("plugin_loaded", 0) >= 1
+
+        token_file_path = await file_token_service.handle_file(report["file_token"])
+        assert Path(token_file_path).read_bytes() == b"TOKEN-PAYLOAD"
+        assert suite_event.typing_count >= 1
+        assert suite_event.stop_typing_count >= 1
+        assert "rocket" in suite_event.reactions
+        assert len(suite_event.streamed_chunks) >= 1
+        assert ("sdk_raw_ping", {"ping": 1}) in env.platform.raw_actions
 
         # Verify side effects on Host registries & PlatformAdapter.
         assert any(
@@ -868,13 +1039,77 @@ async def test_new_sdk_full_api_showcase_against_real_core(
             for _umo, chain in env.platform.sent_sessions
             for seg in chain.chain
         )
+        assert any(
+            isinstance(seg, ActionRow)
+            for _umo, chain in env.platform.sent_sessions
+            for seg in chain.chain
+        )
         runtime_tool = llm_tools.get_func("runtime_echo")
         discovered_tool = llm_tools.get_func("discovered_ping")
+        stream_tool = llm_tools.get_func("showcase_stream_echo")
         assert runtime_tool is not None
         assert discovered_tool is not None
+        assert stream_tool is not None
         assert llm_tools.get_func("dyn_temp") is None
         assert await runtime_tool.handler(_ShowcaseMessageEvent("t"), tag="e2e") == "runtime-echo:e2e"
         assert await discovered_tool.handler(_ShowcaseMessageEvent("d"), note="hi") == "discovered:hi"
+        stream_tool_out = stream_tool.handler(_ShowcaseMessageEvent("s"), text="abc")
+        if hasattr(stream_tool_out, "__aiter__"):
+            stream_chunks = [part async for part in stream_tool_out]
+            assert any("stream-tool:abc" in str(part) for part in stream_chunks)
+        else:
+            assert "stream-tool:abc" in str(await stream_tool_out)
+
+        # ChatUI View creation (ViewResult) + UIInteraction update + ButtonInteraction.
+        view_ev = _ShowcaseMessageEvent("showcase view")
+        await _dispatch_matching_handler(env.config, bridge.module_path, view_ev)
+        view_payload = next(
+            seg.data
+            for chain in view_ev.sent_messages
+            for seg in chain.chain
+            if isinstance(seg, Json)
+        )
+        view_id = str(view_payload["id"])
+        assert view_store.get(view_id)["data"] == {"count": 1}
+
+        ui_ev = _ShowcaseMessageEvent(
+            "",
+            extra_components=[
+                UIInteraction(
+                    action_id="refresh",
+                    interaction_id="ui-1",
+                    data={},
+                    view=ViewContext(
+                        id=view_id,
+                        name="card",
+                        version=1,
+                        revision=1,
+                        data={"count": 1},
+                    ),
+                )
+            ],
+        )
+        await _dispatch_matching_handler(env.config, bridge.module_path, ui_ev)
+        yielded_ui = ui_ev.get_extra("_yielded_items") or []
+        assert any(
+            isinstance(item, CoreViewResult) and item.data == {"count": 2}
+            for item in yielded_ui
+        )
+
+        btn_ev = _ShowcaseMessageEvent(
+            "",
+            extra_components=[
+                ButtonInteraction(
+                    action_id="sdk_approve",
+                    interaction_id="btn-1",
+                    data={"item": "pr-7"},
+                )
+            ],
+        )
+        btn_results = await _dispatch_matching_handler(
+            env.config, bridge.module_path, btn_ev
+        )
+        assert btn_results[0].chain[0].text == "btn-approved:pr-7"
 
         # Multi-turn session wait dialog via real SessionWaitService interceptor.
         sent_before = len(env.platform.sent_sessions)
@@ -938,6 +1173,33 @@ async def test_new_sdk_full_api_showcase_against_real_core(
             "body": "body-bytes",
             "prefix": "LIVE",
         }
+        err_status, _err_hdrs, err_raw = await _invoke_web_route_raw(
+            env.context,
+            "GET",
+            "/showcase/echo/demo",
+            plugin_name="full_api_showcase",
+            query_items=[("mode", "error")],
+        )
+        assert err_status == 418
+        assert json.loads(err_raw)["data"] == {"topic": "demo"}
+        stream_status, _stream_hdrs, stream_raw = await _invoke_web_route_raw(
+            env.context,
+            "GET",
+            "/showcase/echo/demo",
+            plugin_name="full_api_showcase",
+            query_items=[("mode", "stream")],
+        )
+        assert stream_status == 200
+        assert b"data: part-1" in stream_raw and b"data: part-2" in stream_raw
+        file_status, _file_hdrs, file_raw = await _invoke_web_route_raw(
+            env.context,
+            "GET",
+            "/showcase/echo/demo",
+            plugin_name="full_api_showcase",
+            query_items=[("mode", "file")],
+        )
+        assert file_status == 200
+        assert file_raw == b"file-route-ok"
 
         # Pipeline hooks mutate LLMRequest and MessageResult when authorized.
         hook_handlers = star_handlers_registry.get_handlers_by_module_name(bridge.module_path)
@@ -950,11 +1212,47 @@ async def test_new_sdk_full_api_showcase_against_real_core(
         msg_sent_hook = next(
             h for h in hook_handlers if h.event_type == EventType.OnAfterMessageSentEvent
         )
+        waiting_hook = next(
+            h for h in hook_handlers if h.event_type == EventType.OnWaitingLLMRequestEvent
+        )
+        llm_resp_hook = next(
+            h for h in hook_handlers if h.event_type == EventType.OnLLMResponseEvent
+        )
+        tool_call_hook = next(
+            h for h in hook_handlers if h.event_type == EventType.OnUsingLLMToolEvent
+        )
+        tool_res_hook = next(
+            h for h in hook_handlers if h.event_type == EventType.OnLLMToolRespondEvent
+        )
+        agent_begin_hook = next(
+            h for h in hook_handlers if h.event_type == EventType.OnAgentBeginEvent
+        )
+        agent_done_hook = next(
+            h for h in hook_handlers if h.event_type == EventType.OnAgentDoneEvent
+        )
+        plugin_err_hook = next(
+            h for h in hook_handlers if h.event_type == EventType.OnPluginErrorEvent
+        )
 
         hook_ev = _ShowcaseMessageEvent("hook")
+        await waiting_hook.handler(hook_ev)
         req = ProviderRequest(prompt="[hook-test] hi", system_prompt="base")
         await llm_req_hook.handler(hook_ev, req)
         assert "[hook-llm-req]" in req.system_prompt
+        await llm_resp_hook.handler(hook_ev, LLMResponse(role="assistant", completion_text="ok"))
+        tool_stub = SimpleNamespace(name="showcase_add", description="Add")
+        await tool_call_hook.handler(hook_ev, tool_stub, {"a": 1, "b": 2})
+        await tool_res_hook.handler(
+            hook_ev,
+            tool_stub,
+            {"a": 1, "b": 2},
+            SimpleNamespace(content=[SimpleNamespace(text="3")]),
+        )
+        await agent_begin_hook.handler(hook_ev)
+        await agent_done_hook.handler(hook_ev)
+        await plugin_err_hook.handler(
+            hook_ev, "full_api_showcase", "showcase_add", RuntimeError("boom"), "tb"
+        )
 
         hook_ev.set_result(MessageEventResult().message("[hook-test] out"))
         await msg_res_hook.handler(hook_ev)
@@ -975,11 +1273,11 @@ async def test_legacy_main_api_showcase_against_real_core(
     env = await _setup_real_core(
         tmp_path,
         monkeypatch,
-        ("legacy_main_api_showcase",),
+        ("full_api_peer", "legacy_main_api_showcase"),
     )
     try:
         loaded = await env.sdk_mgr.load_all()
-        assert loaded == ["legacy_main_api_showcase"]
+        assert set(loaded) == {"full_api_peer", "legacy_main_api_showcase"}
 
         bridge = env.sdk_mgr.bridges["legacy_main_api_showcase"]
 
@@ -1003,6 +1301,10 @@ async def test_legacy_main_api_showcase_against_real_core(
             "kb_ok",
             "cron_ok",
             "dyn_tools_ok",
+            "db_read_ok",
+            "file_token_ok",
+            "subagent_ok",
+            "plugin_lifecycle_ok",
             "platform_ok",
             "isolation_guarded",
         ):
@@ -1017,9 +1319,23 @@ async def test_legacy_main_api_showcase_against_real_core(
             for _umo, chain in env.platform.sent_sessions
             for seg in chain.chain
         )
+        assert any(
+            isinstance(seg, ActionRow)
+            for _umo, chain in env.platform.sent_sessions
+            for seg in chain.chain
+        )
         assert suite_event.typing_count >= 1
+        assert suite_event.stop_typing_count >= 1
+        assert len(suite_event.streamed_chunks) >= 1
         assert "thumbsup" in suite_event.reactions
         assert ("get_login_info", {"echo": "ok"}) in env.platform.raw_actions
+
+        legacy_token_path = await file_token_service.handle_file(report["legacy_file_token"])
+        assert Path(legacy_token_path).read_bytes() == b"LEGACY-FILE-TOKEN"
+        assert len(env.orchestrator_stub.reload_configs) == 1
+        env.pm_stub.turn_off_plugin.assert_awaited_once_with("full_api_peer")
+        env.pm_stub.turn_on_plugin.assert_awaited_once_with("full_api_peer")
+        assert env.event_queue.qsize() >= 2
 
         # Verify both decorator-registered and dynamic FunctionTool execute cleanly.
         legacy_mul = llm_tools.get_func("legacy_mul")
@@ -1029,13 +1345,105 @@ async def test_legacy_main_api_showcase_against_real_core(
         assert await legacy_mul.handler(_ShowcaseMessageEvent("m"), a=3, b=4) == "12"
         assert await legacy_dyn.handler(_ShowcaseMessageEvent("d"), x=5) == "dyn-mul:15"
 
-        # Verify command group subcommand, regex filter, and legacy web route.
+        # Verify dynamic command, typed/greedy subcommands, nested subgroup, guarded filter,
+        # ChatUI view + UIInteraction, ButtonInteraction, and legacy_req_llm.
+        dyn_res = await _dispatch_matching_handler(
+            env.config,
+            bridge.module_path,
+            _ShowcaseMessageEvent("lg_dyn"),
+        )
+        assert dyn_res[0].chain[0].text == "lg-dyn-pong"
+
         lg_res = await _dispatch_matching_handler(
             env.config,
             bridge.module_path,
             _ShowcaseMessageEvent("lg ping"),
         )
         assert lg_res[0].chain[0].text == "lg-pong"
+
+        echo_res = await _dispatch_matching_handler(
+            env.config,
+            bridge.module_path,
+            _ShowcaseMessageEvent("lg echo 4 hello greedy world"),
+        )
+        assert echo_res[0].chain[0].text == "echo:4:hello greedy world"
+
+        alias_res = await _dispatch_matching_handler(
+            env.config,
+            bridge.module_path,
+            _ShowcaseMessageEvent("lg ec 2 hi there"),
+        )
+        assert alias_res[0].chain[0].text == "echo:2:hi there"
+
+        sub_res = await _dispatch_matching_handler(
+            env.config,
+            bridge.module_path,
+            _ShowcaseMessageEvent("lg sub leaf"),
+        )
+        assert sub_res[0].chain[0].text == "lg-sub-leaf"
+
+        guarded_res = await _dispatch_matching_handler(
+            env.config,
+            bridge.module_path,
+            _ShowcaseMessageEvent("legacy_guarded allow"),
+        )
+        assert guarded_res[0].chain[0].text == "guarded-ok"
+
+        req_llm_res = await _dispatch_matching_handler(
+            env.config,
+            bridge.module_path,
+            _ShowcaseMessageEvent("legacy_req_llm"),
+        )
+        assert len(req_llm_res) == 1 and bool(req_llm_res[0].chain[0].text)
+
+        leg_view_ev = _ShowcaseMessageEvent("legacy_view")
+        await _dispatch_matching_handler(env.config, bridge.module_path, leg_view_ev)
+        leg_view_payload = next(
+            seg.data
+            for chain in leg_view_ev.sent_messages
+            for seg in chain.chain
+            if isinstance(seg, Json)
+        )
+        leg_view_id = str(leg_view_payload["id"])
+        assert view_store.get(leg_view_id)["data"] == {"clicks": 0}
+
+        leg_ui_ev = _ShowcaseMessageEvent(
+            "",
+            extra_components=[
+                UIInteraction(
+                    action_id="bump",
+                    interaction_id="ui-2",
+                    data={},
+                    view=ViewContext(
+                        id=leg_view_id,
+                        name="legacy_card",
+                        version=1,
+                        revision=1,
+                        data={"clicks": 0},
+                    ),
+                )
+            ],
+        )
+        await _dispatch_matching_handler(env.config, bridge.module_path, leg_ui_ev)
+        assert any(
+            isinstance(item, CoreViewResult) and item.data == {"clicks": 1}
+            for item in (leg_ui_ev.get_extra("_yielded_items") or [])
+        )
+
+        leg_btn_ev = _ShowcaseMessageEvent(
+            "",
+            extra_components=[
+                ButtonInteraction(
+                    action_id="lg_btn",
+                    interaction_id="b-1",
+                    data={"k": "ok"},
+                )
+            ],
+        )
+        leg_btn_res = await _dispatch_matching_handler(
+            env.config, bridge.module_path, leg_btn_ev
+        )
+        assert leg_btn_res[0].chain[0].text == "lg-btn:ok"
 
         regex_res = await _dispatch_matching_handler(
             env.config,
@@ -1056,6 +1464,58 @@ async def test_legacy_main_api_showcase_against_real_core(
             "plugin": "legacy_main_api_showcase",
             "q": "ok",
         }
+        rich_json = await _invoke_web_route(
+            env.context,
+            "GET",
+            "/legacy/rich",
+            plugin_name="legacy_main_api_showcase",
+            query_items=[("mode", "json")],
+        )
+        assert rich_json == {"ok": True, "mode": "json"}
+        l_err_status, _hdrs, l_err_raw = await _invoke_web_route_raw(
+            env.context,
+            "GET",
+            "/legacy/rich",
+            plugin_name="legacy_main_api_showcase",
+            query_items=[("mode", "error")],
+        )
+        assert l_err_status == 418
+        l_err_payload = json.loads(l_err_raw)
+        assert l_err_payload["data"] == {"ok": False}
+        assert "legacy-err" in l_err_raw.decode("utf-8")
+        l_stream_status, _hdrs, l_stream_raw = await _invoke_web_route_raw(
+            env.context,
+            "GET",
+            "/legacy/rich",
+            plugin_name="legacy_main_api_showcase",
+            query_items=[("mode", "stream")],
+        )
+        assert l_stream_status == 200
+        assert b"legacy-chunk-1" in l_stream_raw and b"legacy-chunk-2" in l_stream_raw
+        l_file_status, _hdrs, l_file_raw = await _invoke_web_route_raw(
+            env.context,
+            "GET",
+            "/legacy/rich",
+            plugin_name="legacy_main_api_showcase",
+            query_items=[("mode", "file")],
+        )
+        assert l_file_status == 200
+        assert l_file_raw == b"legacy-file-ok"
+        multipart_body = (
+            b'--b7\r\nContent-Disposition: form-data; name="field"\r\n\r\nv1\r\n'
+            b'--b7\r\nContent-Disposition: form-data; name="upload"; filename="u.txt"\r\n'
+            b"Content-Type: text/plain\r\n\r\nUP-123\r\n--b7--\r\n"
+        )
+        form_res = await _invoke_web_route(
+            env.context,
+            "POST",
+            "/legacy/rich",
+            plugin_name="legacy_main_api_showcase",
+            query_items=[("mode", "form")],
+            headers={"content-type": "multipart/form-data; boundary=b7"},
+            body_bytes=multipart_body,
+        )
+        assert form_res == {"field": "v1", "uploaded": "u.txt"}
 
         # Multi-turn @session_waiter flow.
         wait_event = _ShowcaseMessageEvent("legacy_wait")

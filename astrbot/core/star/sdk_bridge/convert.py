@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import base64
 import mimetypes
+from collections.abc import Mapping
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -18,19 +19,29 @@ from astrbot_sdk.events import (
     SenderRole,
 )
 from astrbot_sdk.message_components import (
+    ActionRow,
     At,
     AtAll,
+    Button,
+    ButtonInteraction,
     Face,
     File,
     Forward,
     Image,
+    Json,
+    Location,
+    Music,
     Node,
     Nodes,
     Plain,
+    Poke,
     Record,
     Reply,
+    Share,
+    UIInteraction,
     UnknownSegment,
     Video,
+    ViewContext,
 )
 from astrbot_sdk.messages import MessageChain
 from astrbot_sdk.results import EventResult, MessageResult, Propagation
@@ -148,6 +159,105 @@ def to_sdk_chain(components: list, *, asset_store: Any = None) -> MessageChain:
             segments.append(Face(id=int(component.id)))
         elif isinstance(component, core_comp.Forward):
             segments.append(Forward(id=str(component.id)))
+        elif isinstance(component, core_comp.Poke):
+            segments.append(
+                Poke(
+                    poke_type=str(getattr(component, "_type", "126") or "126"),
+                    user_id=component.target_id(),
+                ),
+            )
+        elif isinstance(component, core_comp.Json):
+            segments.append(Json(data=component.data))
+        elif isinstance(component, core_comp.Share):
+            segments.append(
+                Share(
+                    url=component.url,
+                    title=component.title,
+                    content=component.content or "",
+                    image=component.image or "",
+                ),
+            )
+        elif isinstance(component, core_comp.Location):
+            segments.append(
+                Location(
+                    lat=float(component.lat),
+                    lon=float(component.lon),
+                    title=component.title or "",
+                    content=component.content or "",
+                ),
+            )
+        elif isinstance(component, core_comp.Music):
+            segments.append(
+                Music(
+                    music_type=str(getattr(component, "_type", "custom") or "custom"),
+                    id=int(getattr(component, "id", 0) or 0),
+                    url=component.url or "",
+                    audio=component.audio or "",
+                    title=component.title or "",
+                    content=component.content or "",
+                    image=component.image or "",
+                ),
+            )
+        elif isinstance(component, core_comp.Button):
+            raw_style = (
+                component.style.value
+                if isinstance(component.style, core_comp.Button.Style)
+                else str(component.style or "default")
+            )
+            sdk_style: Any = (
+                raw_style if raw_style in ("primary", "danger") else "secondary"
+            )
+            if isinstance(component.action, core_comp.Button.UrlAction):
+                segments.append(
+                    Button(
+                        label=component.label,
+                        url=component.action.url,
+                        style=sdk_style,
+                    ),
+                )
+            else:
+                segments.append(
+                    Button(
+                        label=component.label,
+                        action_id=component.id,
+                        data=component.action.data,
+                        style=sdk_style,
+                    ),
+                )
+        elif isinstance(component, core_comp.ActionRow):
+            row_buttons = to_sdk_chain(
+                list(component.buttons),
+                asset_store=asset_store,
+            ).segments
+            segments.append(ActionRow(row_buttons))  # type: ignore[arg-type]
+        elif isinstance(component, core_comp.ButtonInteraction):
+            segments.append(
+                ButtonInteraction(
+                    action_id=component.action_id,
+                    interaction_id=component.interaction_id,
+                    data=component.data,
+                    source_message_id=component.source_message_id,
+                    callback_data=component.callback_data,
+                ),
+            )
+        elif isinstance(component, core_comp.UIInteraction):
+            view_ctx = component.view
+            segments.append(
+                UIInteraction(
+                    action_id=component.action_id,
+                    interaction_id=component.interaction_id,
+                    data=component.data,
+                    source=component.source,
+                    source_message_id=component.source_message_id,
+                    view=ViewContext(
+                        id=view_ctx.id,
+                        name=view_ctx.name,
+                        version=view_ctx.version,
+                        revision=view_ctx.revision,
+                        data=dict(view_ctx.data),
+                    ),
+                ),
+            )
         elif isinstance(component, core_comp.Reply):
             segments.append(
                 Reply(
@@ -338,6 +448,106 @@ def to_core_chain(
             components.append(core_comp.Face(id=segment.id))
         elif isinstance(segment, Forward):
             components.append(core_comp.Forward(id=segment.id))
+        elif isinstance(segment, Poke):
+            components.append(
+                core_comp.Poke(
+                    poke_type=segment.poke_type,
+                    id=segment.user_id or 0,
+                ),
+            )
+        elif isinstance(segment, Json):
+            json_data = (
+                dict(segment.data)
+                if isinstance(segment.data, Mapping)
+                else segment.data
+            )
+            components.append(core_comp.Json(data=json_data))
+        elif isinstance(segment, Share):
+            components.append(
+                core_comp.Share(
+                    url=segment.url,
+                    title=segment.title,
+                    content=segment.content,
+                    image=segment.image,
+                ),
+            )
+        elif isinstance(segment, Location):
+            components.append(
+                core_comp.Location(
+                    lat=segment.lat,
+                    lon=segment.lon,
+                    title=segment.title,
+                    content=segment.content,
+                ),
+            )
+        elif isinstance(segment, Music):
+            components.append(
+                core_comp.Music(
+                    _type=segment.music_type,
+                    id=segment.id,
+                    url=segment.url,
+                    audio=segment.audio,
+                    title=segment.title,
+                    content=segment.content,
+                    image=segment.image,
+                ),
+            )
+        elif isinstance(segment, Button):
+            core_style = (
+                segment.style
+                if segment.style in ("primary", "danger", "success")
+                else "default"
+            )
+            if segment.url is not None:
+                action: Any = core_comp.Button.UrlAction(url=segment.url)
+                btn_id = segment.action_id or "url"
+            else:
+                action = core_comp.Button.CallbackAction(data=segment.data)
+                btn_id = segment.action_id or "btn"
+            components.append(
+                core_comp.Button(
+                    id=btn_id,
+                    label=segment.label,
+                    action=action,
+                    style=core_comp.Button.Style(core_style),
+                ),
+            )
+        elif isinstance(segment, ActionRow):
+            components.append(
+                core_comp.ActionRow(
+                    buttons=to_core_chain(
+                        MessageChain(*segment.buttons),
+                        resolve_asset=resolve_asset,
+                    ),
+                ),
+            )
+        elif isinstance(segment, ButtonInteraction):
+            components.append(
+                core_comp.ButtonInteraction(
+                    action_id=segment.action_id,
+                    interaction_id=segment.interaction_id,
+                    data=segment.data,
+                    source_message_id=segment.source_message_id,
+                    callback_data=segment.callback_data,
+                ),
+            )
+        elif isinstance(segment, UIInteraction):
+            components.append(
+                core_comp.UIInteraction(
+                    action_id=segment.action_id,
+                    interaction_id=segment.interaction_id,
+                    data=segment.data,
+                    source=segment.source,
+                    source_message_id=segment.source_message_id,
+                    view=core_comp.ViewContext(
+                        id=segment.view.id,
+                        name=segment.view.name,
+                        version=segment.view.version,
+                        revision=segment.view.revision,
+                        data=dict(segment.view.data),
+                    ),
+                ),
+            )
         elif isinstance(segment, Reply):
             components.append(
                 core_comp.Reply(

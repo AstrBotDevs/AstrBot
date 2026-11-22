@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import re
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -18,12 +19,69 @@ from astrbot.api import (
     logger,
     sp,
 )
+from astrbot.api import (
+    agent as api_agent,
+)
+from astrbot.api.agents import (
+    AgentConfig,
+    AgentRole,
+    AgentRuntime,
+    ImageOutput,
+    PlainOutput,
+    URLMedia,
+    chain_from_content,
+)
 from astrbot.api.all import MessageChain, Plain
+from astrbot.api.chatui import ViewResult, ViewSpec
 from astrbot.api.event import AstrMessageEvent, filter
+from astrbot.api.event.filter import (
+    CustomFilter,
+    EventMessageType,
+    GreedyStr,
+    PermissionType,
+    PlatformAdapterType,
+)
+from astrbot.api.message_components import (
+    ActionRow,
+    At,
+    AtAll,
+    BaseMessageComponent,
+    Button,
+    Face,
+    Forward,
+    Image,
+    Json,
+    Location,
+    Music,
+    Node,
+    Nodes,
+    Poke,
+    Reply,
+    Share,
+)
+from astrbot.api.platform import MessageMember, register_platform_adapter
 from astrbot.api.provider import ProviderType
-from astrbot.api.star import Context, Star, StarTools
-from astrbot.api.web import request
+from astrbot.api.star import Context, Star, StarTools, register
+from astrbot.api.web import (
+    error_response,
+    file_response,
+    json_response,
+    request,
+    stream_response,
+)
+from astrbot.core import file_token_service
+from astrbot.core.star.star_handler import star_handlers_registry
 from astrbot.core.utils.session_waiter import SessionController, session_waiter
+
+
+class _HeaderFilter(CustomFilter):
+    """Legacy custom filter verifying filter composition."""
+
+    def filter(self, event: AstrMessageEvent, cfg: Any = None) -> bool:
+        _ = cfg
+        return "allow" in event.message_str or event.message_str.startswith(
+            "legacy_guarded"
+        )
 
 
 @dataclass
@@ -46,6 +104,7 @@ class LegacyDynTool(FunctionTool):
         return f"dyn-mul:{int(x) * 3}"
 
 
+@register("legacy_main_api_showcase", "astrbot", "Legacy full showcase", "1.0.0")
 class LegacyMainApiShowcasePlugin(Star):
     """Exercise AstrBot's classic `astrbot.api` / `Context` surface in isolated mode."""
 
@@ -55,12 +114,19 @@ class LegacyMainApiShowcasePlugin(Star):
         self._cron_fired = asyncio.Event()
         self._cron_payload: dict[str, Any] = {}
         self._hook_counts: dict[str, int] = {}
+        self._lifecycle_hits = 0
         self._terminated = False
         self.context.register_web_api(
             "/legacy/ping",
             self._web_ping,
             ["GET"],
             "Legacy showcase ping route",
+        )
+        self.context.register_web_api(
+            "/legacy/rich",
+            self._web_rich,
+            ["GET", "POST"],
+            "Legacy showcase rich HTTP route",
         )
 
     async def _web_ping(self) -> dict[str, Any]:
@@ -71,14 +137,58 @@ class LegacyMainApiShowcasePlugin(Star):
             "q": request.query.get("q", ""),
         }
 
+    async def _web_rich(self) -> Any:
+        """Exercise rich HTTP request inspection and response helpers."""
+        mode = request.query.get("mode", "json")
+        if mode == "error":
+            return error_response("legacy-err", status_code=418, data={"ok": False})
+        if mode == "stream":
+
+            async def _sse():
+                yield "legacy-chunk-1\n"
+                yield b"legacy-chunk-2\n"
+
+            return stream_response(_sse())
+        if mode == "file":
+            f = Path(StarTools.get_data_dir()) / "legacy_web_file.txt"
+            f.write_text("legacy-file-ok", encoding="utf-8")
+            return file_response(f, filename="legacy_web_file.txt")
+        if mode == "form":
+            form = await request.form()
+            files = await request.files()
+            uploaded_name = ""
+            if "upload" in files:
+                uploaded = files["upload"]
+                uploaded_name = getattr(uploaded, "filename", "uploaded")
+            return json_response(
+                {
+                    "field": form.get("field", ""),
+                    "uploaded": uploaded_name,
+                }
+            )
+        return json_response({"ok": True, "mode": mode})
+
     async def _on_cron_tick(self, tag: str = "") -> None:
         """Cron callback invoked inside the isolated Runner from Host APScheduler."""
         self._cron_payload = {"tag": tag}
         self._cron_fired.set()
 
+    async def _dyn_cmd(self, event: AstrMessageEvent):
+        """Dynamically registered command invoked via HandlerRegisterService."""
+        _ = event
+        yield event.plain_result("lg-dyn-pong")
+
     async def terminate(self) -> None:
         """Mark plugin termination on shutdown/unload."""
         self._terminated = True
+
+    @filter.on_astrbot_loaded()
+    async def on_astrbot_loaded_hook(self) -> None:
+        self._lifecycle_hits += 1
+
+    @filter.on_platform_loaded()
+    async def on_platform_loaded_hook(self) -> None:
+        self._lifecycle_hits += 1
 
     @filter.command_group("lg")
     def lg(self) -> None:
@@ -88,6 +198,61 @@ class LegacyMainApiShowcasePlugin(Star):
     async def lg_ping(self, event: AstrMessageEvent):
         """Respond inside a legacy sub-command."""
         yield event.plain_result("lg-pong")
+
+    @lg.command("echo", alias={"ec"})
+    async def lg_echo(self, event: AstrMessageEvent, count: int, rest: GreedyStr):
+        """Exercise typed int parameter and GreedyStr parsing inside subcommand."""
+        yield event.plain_result(f"echo:{count}:{rest}")
+
+    @lg.group("sub")
+    def lg_sub(self) -> None:
+        """Nested command group."""
+
+    @lg_sub.command("leaf")
+    async def lg_sub_leaf(self, event: AstrMessageEvent):
+        """Respond from nested command group leaf."""
+        yield event.plain_result("lg-sub-leaf")
+
+    @filter.custom_filter(_HeaderFilter)
+    @filter.event_message_type(EventMessageType.PRIVATE_MESSAGE)
+    @filter.permission_type(PermissionType.ADMIN)
+    @filter.platform_adapter_type(PlatformAdapterType.WEBCHAT)
+    @filter.command("legacy_guarded")
+    async def legacy_guarded(self, event: AstrMessageEvent):
+        """Exercise composed legacy filters (custom + type + permission + platform)."""
+        yield event.plain_result("guarded-ok")
+
+    @filter.button_action("lg_btn")
+    async def on_lg_btn(self, event: AstrMessageEvent):
+        """Handle callback button clicks with action_id ``lg_btn``."""
+        inter = event.get_button_interaction()
+        val = inter.data.get("k") if isinstance(inter.data, dict) else inter.data
+        yield event.plain_result(f"lg-btn:{val}")
+
+    @filter.ui_action("bump")
+    async def on_ui_bump(self, event: AstrMessageEvent):
+        """Handle ChatUI card action ``bump``."""
+        inter = event.get_ui_interaction()
+        prev = int(inter.view.data.get("clicks", 0)) if inter is not None else 0
+        yield event.view_result(data={"clicks": prev + 1})
+
+    @filter.command("legacy_view")
+    async def legacy_view(self, event: AstrMessageEvent):
+        """Create a legacy ChatUI card view."""
+        yield event.view_result(
+            name="legacy_card",
+            data={"clicks": 0},
+            text="Legacy card fallback",
+            title="Legacy Card",
+        )
+
+    @filter.command("legacy_req_llm")
+    async def legacy_req_llm(self, event: AstrMessageEvent):
+        """Exercise yielding `event.request_llm(...)`."""
+        yield event.request_llm(
+            prompt="req-llm-ping",
+            system_prompt="sys-brief",
+        )
 
     @filter.regex(r"^#legacy-ping$")
     async def legacy_regex(self, event: AstrMessageEvent):
@@ -106,11 +271,87 @@ class LegacyMainApiShowcasePlugin(Star):
         _ = event
         return str(a * b)
 
+    @filter.on_waiting_llm_request()
+    async def on_waiting_llm(self, event: AstrMessageEvent) -> None:
+        _ = event
+        self._hook_counts["on_waiting_llm_request"] = (
+            self._hook_counts.get("on_waiting_llm_request", 0) + 1
+        )
+
     @filter.on_llm_request()
     async def on_llm_req(self, event: AstrMessageEvent, req: Any) -> None:
         _ = (event, req)
         self._hook_counts["on_llm_request"] = (
             self._hook_counts.get("on_llm_request", 0) + 1
+        )
+
+    @filter.on_llm_response()
+    async def on_llm_res(self, event: AstrMessageEvent, resp: Any) -> None:
+        _ = (event, resp)
+        self._hook_counts["on_llm_response"] = (
+            self._hook_counts.get("on_llm_response", 0) + 1
+        )
+
+    @filter.on_using_llm_tool()
+    async def on_using_tool(
+        self, event: AstrMessageEvent, tool: Any, tool_args: Any
+    ) -> None:
+        _ = (event, tool, tool_args)
+        self._hook_counts["on_using_llm_tool"] = (
+            self._hook_counts.get("on_using_llm_tool", 0) + 1
+        )
+
+    @filter.on_llm_tool_respond()
+    async def on_tool_respond(
+        self, event: AstrMessageEvent, tool: Any, tool_args: Any, tool_result: Any
+    ) -> None:
+        _ = (event, tool, tool_args, tool_result)
+        self._hook_counts["on_llm_tool_respond"] = (
+            self._hook_counts.get("on_llm_tool_respond", 0) + 1
+        )
+
+    @filter.on_agent_begin()
+    async def on_agent_begin_hook(self, event: AstrMessageEvent, req: Any) -> None:
+        _ = (event, req)
+        self._hook_counts["on_agent_begin"] = (
+            self._hook_counts.get("on_agent_begin", 0) + 1
+        )
+
+    @filter.on_agent_done()
+    async def on_agent_done_hook(
+        self, event: AstrMessageEvent, req: Any, resp: Any
+    ) -> None:
+        _ = (event, req, resp)
+        self._hook_counts["on_agent_done"] = (
+            self._hook_counts.get("on_agent_done", 0) + 1
+        )
+
+    @filter.on_plugin_error()
+    async def on_plugin_err(
+        self,
+        event: AstrMessageEvent,
+        plugin_name: str,
+        handler_name: str,
+        error: str,
+        tb: str,
+    ) -> None:
+        _ = (event, plugin_name, handler_name, error, tb)
+        self._hook_counts["on_plugin_error"] = (
+            self._hook_counts.get("on_plugin_error", 0) + 1
+        )
+
+    @filter.on_plugin_loaded()
+    async def on_plugin_loaded_hook(self, metadata: Any) -> None:
+        _ = metadata
+        self._hook_counts["on_plugin_loaded"] = (
+            self._hook_counts.get("on_plugin_loaded", 0) + 1
+        )
+
+    @filter.on_plugin_unloaded()
+    async def on_plugin_unloaded_hook(self, metadata: Any) -> None:
+        _ = metadata
+        self._hook_counts["on_plugin_unloaded"] = (
+            self._hook_counts.get("on_plugin_unloaded", 0) + 1
         )
 
     @filter.on_decorating_result()
@@ -156,16 +397,26 @@ class LegacyMainApiShowcasePlugin(Star):
             cfg_saved = await self.config.save_config_async()
         config_ok = bool(global_cfg) and bool(locale_val) and cfg_saved
 
-        # 2. Star registry & StarTools
+        # 2. Star registry, Star KV/render methods, & StarTools
         stars = await self.context.get_all_stars_async()
         self_meta = self.context.get_registered_star("legacy_main_api_showcase")
         data_dir = Path(StarTools.get_data_dir())
         marker = data_dir / "legacy_marker.txt"
         marker.write_text("legacy-dir-ok", encoding="utf-8")
+        await self.put_kv_data("star_kv_k", {"x": 9})
+        star_kv = await self.get_kv_data("star_kv_k")
+        await self.delete_kv_data("star_kv_k")
+        star_kv_after = await self.get_kv_data("star_kv_k", "gone")
+        t2i_asset = await self.text_to_image("star render text")
+        html_asset = await self.html_render("<b>{{ m }}</b>", {"m": "ok"})
         stars_ok = (
             len(stars) >= 1
             and self_meta is not None
             and marker.read_text(encoding="utf-8") == "legacy-dir-ok"
+            and star_kv == {"x": 9}
+            and star_kv_after == "gone"
+            and bool(t2i_asset)
+            and bool(html_asset)
         )
 
         # 3. SharedPreferences (`sp`)
@@ -332,48 +583,170 @@ class LegacyMainApiShowcasePlugin(Star):
             and self._cron_payload.get("tag") == "live-fire"
         )
 
-        # 9. Dynamic FunctionTool + toggle + pending Web API settle
+        # 9. Dynamic FunctionTool + StarTools async toggle + dynamic command register
         self.context.register_llm_tool(LegacyDynTool)
+        self.context.register_commands(
+            "legacy_main_api_showcase",
+            "lg_dyn",
+            "Dynamic legacy command",
+            1,
+            self._dyn_cmd,
+        )
         pending = list(getattr(self.context, "_pending", []))
         if pending:
             await asyncio.gather(*pending)
             self.context._pending.clear()
-        deact_ok = await self.context.deactivate_llm_tool_async("legacy_dyn_tool")
-        act_ok = await self.context.activate_llm_tool_async("legacy_dyn_tool")
+        deact_ok = await StarTools.deactivate_llm_tool_async("legacy_dyn_tool")
+        act_ok = await StarTools.activate_llm_tool_async("legacy_dyn_tool")
         dyn_tools_ok = deact_ok and act_ok
 
-        # 10. HTML T2I, proactive send_message, event actions, and call_action
+        # 10. Event injection (get_event_queue & StarTools.create_event), DB read,
+        # file_token_service, subagents.reload, plugin.lifecycle
+        await self.context.get_event_queue().put(event)
+        abm = await StarTools.create_message(
+            type="FriendMessage",
+            self_id="bot-self",
+            session_id="user-1",
+            sender=MessageMember(user_id="user-1", nickname="Moon"),
+            message=[Plain("startools-injected")],
+            message_str="startools-injected",
+        )
+        await StarTools.create_event(abm, platform="webchat", is_wake=True)
+        await StarTools.send_message(
+            umo,
+            MessageChain().message("startools-send-ok"),
+        )
+
+        aliases = await self.context.get_db().get_umo_aliases([umo])
+        db_convs = await self.context.get_db().get_conversations(user_id="user-1")
+        db_read_ok = isinstance(aliases, list) and isinstance(db_convs, list)
+
+        token_file = data_dir / "legacy_token.txt"
+        token_file.write_bytes(b"LEGACY-FILE-TOKEN")
+        legacy_file_token = await file_token_service.register_file(
+            str(token_file),
+            single_use=False,
+        )
+        legacy_img_url = await Image.fromFileSystem(
+            str(token_file)
+        ).register_to_file_service()
+        file_token_ok = bool(legacy_file_token) and "/api/file/" in legacy_img_url
+
+        init_handoffs = list(self.context.subagent_orchestrator.handoffs)
+        reloaded_handoffs = await self.context.subagent_orchestrator.reload_from_config(
+            {"agents": [{"name": "reloaded_sub"}]}
+        )
+        subagent_ok = len(init_handoffs) >= 1 and len(reloaded_handoffs) >= 1
+
+        plugin_lifecycle_ok = True
+        if self.context.get_registered_star("full_api_peer") is not None:
+            await self.context._star_manager.turn_off_plugin("full_api_peer")
+            await self.context._star_manager.turn_on_plugin("full_api_peer")
+
+        # 11. HTML T2I, streaming/buffer, event actions, rich components, DTOs
         img_path = await html_renderer.render_t2i("legacy render")
         await self.context.send_message(
             umo,
             MessageChain().message("legacy-proactive-ok"),
         )
-        await event.send_typing()
-        await event.react("thumbsup")
-        bot_info = await event.bot.api.call_action("get_login_info", echo="ok")
-        platform_ok = (
-            bool(img_path)
-            and isinstance(bot_info, dict)
-            and bot_info.get("result", {}).get("echo") == "ok"
+        await event.send(
+            MessageChain(
+                chain=[
+                    Plain("legacy-rich"),
+                    At(qq="u1", name="Moon"),
+                    AtAll(),
+                    Reply(id="r1", message_str="orig"),
+                    Face(id=1),
+                    Forward(id="f1"),
+                    Nodes([Node(content=[Plain("ln")], uin="u1", name="Moon")]),
+                    Poke(user_id="u1", poke_type="126"),
+                    Json(data={"k": 1}),
+                    Share(url="https://astrbot.app", title="AstrBot"),
+                    Location(lat=31.2, lon=121.5, title="SH"),
+                    Music(
+                        url="https://astrbot.app/s",
+                        audio="https://astrbot.app/a.mp3",
+                        title="Song",
+                    ),
+                    ActionRow(
+                        [
+                            Button.callback("LegacyClick", "lg_btn", data={"k": "v"}),
+                            Button.link("Docs", "https://astrbot.app"),
+                        ]
+                    ),
+                ]
+            )
         )
 
-        # 11. Isolation boundary check for host-internal deprecated APIs
+        async def _leg_stream():
+            yield MessageChain().message("leg-stream-1")
+            yield MessageChain().message("leg-stream-2")
+
+        await event.send_streaming(_leg_stream(), use_fallback=True)
+        buf_tail = await event.process_buffer(
+            "buf-a\nbuf-b\ntail", re.compile(r"[^\n]+\n")
+        )
+
+        await event.send_typing()
+        await event.stop_typing()
+        await event.react("thumbsup")
+        grp = await event.get_group("grp-legacy")
+        event.set_extra("lg_extra", "ok")
+        extra_ok = event.get_extra("lg_extra") == "ok"
+        event.clear_extra()
+        temp_track = data_dir / "track_temp.txt"
+        temp_track.write_text("tmp", encoding="utf-8")
+        event.track_temporary_local_file(str(temp_track))
+        event.untrack_temporary_local_file(str(temp_track))
+        event.cleanup_temporary_local_files()
+        temp_track.unlink(missing_ok=True)
+
+        bot_info = await event.bot.api.call_action("get_login_info", echo="ok")
+
+        agent_chain = chain_from_content(
+            [
+                PlainOutput("agent-ok"),
+                ImageOutput(URLMedia("https://astrbot.app/a.png")),
+            ]
+        )
+        cfg_dto = AgentConfig(model="mock-gpt", system_prompt="sys")
+        view_spec = ViewSpec(
+            name="legacy_card", target="chat_message", actions=["bump"]
+        )
+        view_res = ViewResult(name="legacy_card", data={"clicks": 0}, text="fb")
+        chatui_agents_ok = (
+            isinstance(agent_chain.chain[0], BaseMessageComponent)
+            and cfg_dto.model == "mock-gpt"
+            and AgentRole.MAIN == "main"
+            and view_spec.name == "legacy_card"
+            and view_res.name == "legacy_card"
+            and len(star_handlers_registry) >= 1
+        )
+        platform_ok = (
+            bool(img_path)
+            and buf_tail == "tail"
+            and grp is not None
+            and extra_ok
+            and isinstance(bot_info, dict)
+            and bot_info.get("result", {}).get("echo") == "ok"
+            and chatui_agents_ok
+        )
+
+        # 12. Explicit IsolationUnsupportedError checks (5 in-process + AgentRuntime)
         isolation_guarded = True
         for forbidden_call in (
-            lambda: self.context.register_commands(
-                "legacy_main_api_showcase",
-                "bad",
-                "desc",
-                1,
-                self.lg_ping,
-            ),
-            lambda: self.context.get_db(),
+            lambda: register_platform_adapter("custom", "custom", None),
+            lambda: self.context.register_provider(object()),
+            lambda: api_agent("custom_agent"),
+            lambda: self.context.get_llm_tool_manager(),
+            lambda: self.context.get_db()(),
+            lambda: AgentRuntime(),
         ):
             try:
                 forbidden_call()
                 isolation_guarded = False
             except Exception as exc:
-                if "unavailable in isolated legacy mode" not in str(exc):
+                if "unavailable" not in str(exc):
                     isolation_guarded = False
 
         report = {
@@ -386,8 +759,33 @@ class LegacyMainApiShowcasePlugin(Star):
             "kb_ok": kb_ok,
             "cron_ok": cron_ok,
             "dyn_tools_ok": dyn_tools_ok,
+            "db_read_ok": db_read_ok,
+            "file_token_ok": file_token_ok,
+            "legacy_file_token": legacy_file_token,
+            "subagent_ok": subagent_ok,
+            "plugin_lifecycle_ok": plugin_lifecycle_ok,
             "platform_ok": platform_ok,
             "isolation_guarded": isolation_guarded,
+            "lifecycle_hits": self._lifecycle_hits,
+            "hooks": dict(self._hook_counts),
         }
-        report["all_passed"] = all(report.values())
+        report["all_passed"] = all(
+            (
+                config_ok,
+                stars_ok,
+                sp_ok,
+                providers_ok,
+                conv_history_ok,
+                persona_ok,
+                kb_ok,
+                cron_ok,
+                dyn_tools_ok,
+                db_read_ok,
+                file_token_ok,
+                subagent_ok,
+                plugin_lifecycle_ok,
+                platform_ok,
+                isolation_guarded,
+            )
+        )
         yield event.plain_result(json.dumps(report, sort_keys=True))

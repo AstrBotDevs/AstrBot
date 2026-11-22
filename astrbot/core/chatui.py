@@ -158,7 +158,14 @@ def resolve_view(
     from astrbot.core.star.star import star_map
 
     plugin = star_map.get(module)
-    if not plugin or not plugin.activated or plugin.star_cls is None:
+    is_sdk_bridge = bool(
+        plugin and (plugin.module_path or "").startswith("sdk_bridge.")
+    )
+    if (
+        not plugin
+        or not plugin.activated
+        or (plugin.star_cls is None and not is_sdk_bridge)
+    ):
         raise ViewError("VIEW_UNAVAILABLE", "The view's plugin is unavailable.")
     for spec in plugin.views:
         if spec.name != name:
@@ -174,7 +181,16 @@ def resolve_view(
             )
         if version is not None and version != spec.version:
             break
-        root = Path(plugin.module.__file__).resolve().parent
+        if is_sdk_bridge:
+            pages = getattr(plugin, "_sdk_views_pages", None)
+            if pages is not None and spec.name not in pages:
+                break
+            sdk_root = getattr(plugin, "_sdk_plugin_root", None)
+            if sdk_root is None:
+                return plugin, spec, spec.entry
+            root = Path(sdk_root).resolve()
+        else:
+            root = Path(plugin.module.__file__).resolve().parent
         entry = (root / spec.entry).resolve()
         if spec.target == "plugin_page" and not entry.is_file():
             entry = (root / "pages" / spec.name / "index.html").resolve()

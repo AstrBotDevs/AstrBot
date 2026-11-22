@@ -6,19 +6,22 @@ import asyncio
 import enum
 import logging
 import os
+import re
 from typing import Any
 
 from ...events import MessageEvent, SenderRole
 from ...results import Propagation
 from .components import (
-    EventResultType as EventResultType,
-)
-from .components import (
+    ButtonInteraction,
     Image,
     MessageChain,
     MessageEventResult,
     Plain,
+    UIInteraction,
     from_sdk_segment,
+)
+from .components import (
+    EventResultType as EventResultType,
 )
 from .components import (
     ResultContentType as ResultContentType,
@@ -99,6 +102,40 @@ class CustomFilter:
         self.custom_filter = custom_filter
 
 
+class ButtonActionFilter:
+    """Filter matching normalized callback button interaction events."""
+
+    def __init__(self, action_id: str | None = None) -> None:
+        self.action_id = action_id
+
+    def filter(self, event: Any, cfg: Any = None) -> bool:
+        del cfg
+        interaction = (
+            event.get_button_interaction()
+            if hasattr(event, "get_button_interaction")
+            else None
+        )
+        if interaction is None:
+            return False
+        return self.action_id is None or interaction.action_id == self.action_id
+
+
+class UIActionFilter:
+    """Filter matching authenticated ChatUI view interaction events."""
+
+    def __init__(self, action_id: str | None = None) -> None:
+        self.action_id = action_id
+
+    def filter(self, event: Any, cfg: Any = None) -> bool:
+        del cfg
+        interaction = (
+            event.get_ui_interaction() if hasattr(event, "get_ui_interaction") else None
+        )
+        if interaction is None:
+            return False
+        return self.action_id is None or interaction.action_id == self.action_id
+
+
 class _CommandGroup:
     """Legacy command-group handle returned by @filter.command_group.
 
@@ -155,6 +192,24 @@ class _CommandGroup:
                     handler=awaitable.handler,
                 )
             return _accumulate(awaitable, marker)
+
+        return decorator
+
+    def button_action(self, action_id: str | None = None, **_: Any) -> Any:
+        """Filter decorator for callback button click interactions."""
+        marker = ButtonActionFilter(action_id)
+
+        def decorator(handler: Any) -> Any:
+            return _accumulate(handler, marker)
+
+        return decorator
+
+    def ui_action(self, action_id: str | None = None, **_: Any) -> Any:
+        """Filter decorator for authenticated ChatUI view action interactions."""
+        marker = UIActionFilter(action_id)
+
+        def decorator(handler: Any) -> Any:
+            return _accumulate(handler, marker)
 
         return decorator
 
@@ -309,6 +364,8 @@ class _FilterNamespace:
     PlatformAdapterType = PlatformAdapterType
     PlatformAdapterTypeFilter = PlatformAdapterTypeFilter
     CustomFilter = CustomFilter
+    ButtonActionFilter = ButtonActionFilter
+    UIActionFilter = UIActionFilter
 
     def command(self, command_name: str, alias: set | None = None, **_: Any) -> Any:
         def decorator(handler: Any) -> Any:
@@ -368,6 +425,24 @@ class _FilterNamespace:
                     handler=awaitable.handler,
                 )
             return _accumulate(awaitable, marker)
+
+        return decorator
+
+    def button_action(self, action_id: str | None = None, **_: Any) -> Any:
+        """Filter decorator for callback button click interactions."""
+        marker = ButtonActionFilter(action_id)
+
+        def decorator(handler: Any) -> Any:
+            return _accumulate(handler, marker)
+
+        return decorator
+
+    def ui_action(self, action_id: str | None = None, **_: Any) -> Any:
+        """Filter decorator for authenticated ChatUI view action interactions."""
+        marker = UIActionFilter(action_id)
+
+        def decorator(handler: Any) -> Any:
+            return _accumulate(handler, marker)
 
         return decorator
 
@@ -480,6 +555,7 @@ class AstrMessageEvent:
         self.created_at = event.timestamp.timestamp()
         self.plugins_name = event.extras.get("plugins_name")
         self._call_llm = False
+        self._has_send_oper = False
         self._temporary_local_files: list[str] = []
 
     # ---- identity helpers -------------------------------------------------
@@ -514,6 +590,39 @@ class AstrMessageEvent:
 
     def get_messages(self) -> list:
         return self.message_obj.message
+
+    def is_button_interaction(self) -> bool:
+        """Return whether this event represents a portable button click."""
+        return any(isinstance(c, ButtonInteraction) for c in self.get_messages())
+
+    def get_button_interaction(self) -> ButtonInteraction | None:
+        """Return the normalized button click carried by this event, if any."""
+        return next(
+            (c for c in self.get_messages() if isinstance(c, ButtonInteraction)),
+            None,
+        )
+
+    def get_ui_interaction(self) -> UIInteraction | None:
+        """Return the ChatUI view action attached to this event, if any."""
+        return next(
+            (c for c in self.get_messages() if isinstance(c, UIInteraction)),
+            None,
+        )
+
+    def view_result(
+        self,
+        *,
+        data: dict[str, Any],
+        name: str | None = None,
+        text: str = "",
+        title: str = "",
+    ) -> Any:
+        """Create a named ChatUI view card or update the current interaction card."""
+        from .chatui import ViewResult
+
+        if name is None and (self.get_ui_interaction() is None or text):
+            raise ValueError("A view update requires a UI interaction and no text.")
+        return ViewResult(data=data, name=name, text=text, title=title)
 
     def is_private_chat(self) -> bool:
         return self._event.is_private
@@ -742,6 +851,42 @@ class AstrMessageEvent:
         else:
             chain = to_message_chain(message)
         await self._context._ctx.messages.send(self._event.umo, chain)
+        self._has_send_oper = True
+
+    async def process_buffer(self, buffer: str, pattern: re.Pattern) -> str:
+        """Split a streaming text buffer by regex and proactively send matches."""
+        while True:
+            match = re.search(pattern, buffer)
+            if not match:
+                break
+            matched_text = match.group().strip()
+            if matched_text:
+                await self.send(MessageChain(chain=[Plain(matched_text)]))
+                await asyncio.sleep(0)
+            buffer = buffer[match.end() :]
+        return buffer
+
+    async def send_streaming(
+        self,
+        generator: Any,
+        use_fallback: bool = False,
+    ) -> None:
+        """Stream incremental MessageChain chunks through the Host event."""
+        from ...messages import to_message_chain
+
+        async def _sdk_chunks():
+            async for chunk in generator:
+                if isinstance(chunk, MessageChain):
+                    yield chunk.to_sdk()
+                else:
+                    yield to_message_chain(chunk)
+
+        await self._context._ctx.events.send_streaming(
+            self.unified_msg_origin,
+            _sdk_chunks(),
+            use_fallback=use_fallback,
+        )
+        self._has_send_oper = True
 
     def request_llm(
         self,
@@ -782,9 +927,17 @@ def translate_compat_result(
 ) -> Any:
     """Translate one yielded legacy value into an SDK EventResult-ish value."""
     from ...results import MessageResult
+    from ...results import ViewResult as SDKViewResult
+    from .chatui import ViewResult as CompatViewResult
 
     if item is None:
         return None
+    if isinstance(item, CompatViewResult):
+        return item.to_sdk_result(
+            propagation=Propagation.STOP if event.is_stopped() else Propagation.CONTINUE
+        )
+    if isinstance(item, SDKViewResult):
+        return item
     if isinstance(item, MessageEventResult):
         sdk_result = item.to_sdk_result()
         return sdk_result

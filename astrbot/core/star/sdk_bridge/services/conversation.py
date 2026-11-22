@@ -13,12 +13,14 @@ from astrbot_sdk.conversations import (
 )
 from astrbot_sdk.errors import Conflict, InvalidRequest, NotFound
 
-from ..convert import to_core_chain, to_umo_string
+from ..convert import to_core_chain, to_core_context_message, to_umo_string
 
 if TYPE_CHECKING:
     from astrbot.core.conversation_mgr import ConversationManager
     from astrbot.core.db.po import Conversation as ConversationPO
     from astrbot.core.star.context import Context
+
+    from .assets import AssetStore
 
 
 def _content_to_text(content: Any) -> str:
@@ -83,33 +85,42 @@ def to_sdk_conversation(conv: ConversationPO) -> Conversation:
     )
 
 
-def _to_history(messages: Any) -> list[dict[str, Any]]:
+def _to_history(messages: Any, *, resolve_asset: Any = None) -> list[dict[str, Any]]:
     """Convert SDK messages into the core history format.
 
-    Mirrors the core serializer: tool_calls and tool_call_id are only present
-    when set.
+    Args:
+        messages: Sequence of SDK Message DTOs.
+        resolve_asset: Optional AssetRef resolver for multimodal parts.
+
+    Returns:
+        Serialized OpenAI-compatible history message dicts.
     """
-    history = []
-    for message in messages:
-        item: dict[str, Any] = {"role": message.role, "content": message.content}
-        if message.tool_calls is not None:
-            item["tool_calls"] = [dict(call) for call in message.tool_calls]
-        if message.tool_call_id is not None:
-            item["tool_call_id"] = message.tool_call_id
-        history.append(item)
-    return history
+    return [
+        to_core_context_message(message, resolve_asset=resolve_asset)
+        for message in messages
+    ]
 
 
 class ConversationServiceBase:
     """Shared helpers for the conversation capability services."""
 
-    def __init__(self, context: Context) -> None:
+    def __init__(
+        self,
+        context: Context,
+        store: AssetStore | None = None,
+    ) -> None:
         """Initialize the service.
 
         Args:
             context: AstrBot star context with the conversation manager.
+            store: Optional AssetStore used to resolve multimodal content assets.
         """
         self._context = context
+        self._store = store
+
+    @property
+    def _resolve_asset(self) -> Any:
+        return self._store.resolve if self._store is not None else None
 
     @property
     def _manager(self) -> ConversationManager:
@@ -232,7 +243,10 @@ class ConversationWriteService(ConversationServiceBase):
             umo = self._umo(payload)
             cid = await self._manager.new_conversation(
                 umo,
-                content=_to_history(payload.get("messages", [])),
+                content=_to_history(
+                    payload.get("messages", []),
+                    resolve_asset=self._resolve_asset,
+                ),
                 title=payload.get("title"),
                 persona_id=payload.get("persona_id"),
             )
@@ -256,7 +270,10 @@ class ConversationWriteService(ConversationServiceBase):
                 title=patch.title,
                 persona_id=patch.persona_id,
                 history=(
-                    _to_history(list(patch.messages))
+                    _to_history(
+                        list(patch.messages),
+                        resolve_asset=self._resolve_asset,
+                    )
                     if patch.messages is not None
                     else None
                 ),
@@ -275,7 +292,12 @@ class ConversationWriteService(ConversationServiceBase):
                 history = json.loads(conv.history) if conv.history else []
             except json.JSONDecodeError:
                 history = []
-            history.extend(_to_history(payload.get("messages", [])))
+            history.extend(
+                _to_history(
+                    payload.get("messages", []),
+                    resolve_asset=self._resolve_asset,
+                )
+            )
             await self._manager.update_conversation(umo, cid, history=history)
             return {}
         if operation == "append_message":

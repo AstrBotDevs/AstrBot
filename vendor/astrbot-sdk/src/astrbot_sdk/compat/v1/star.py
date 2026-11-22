@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import uuid
 from collections.abc import Mapping
 from typing import Any
 
@@ -58,14 +59,19 @@ class Context:
         self._tasks: list[asyncio.Task] = []
         self._stars_cache: list | None = None
         self._web_routes: list = []
+        self._dynamic_commands: dict[str, Any] = {}
         self.logger = ctx.logger
         from .conversation import ConversationManager
         from .cron import CronManagerFacade
         from .host_snapshot import (
             AstrbotConfigMgrFacade,
+            DbReadFacade,
+            EventQueueFacade,
             PersonaManagerFacade,
             PlatformManagerFacade,
             ProviderManagerFacade,
+            StarManagerFacade,
+            SubagentOrchestratorFacade,
         )
         from .kb import KbManagerFacade
         from .message_history import MessageHistoryManagerFacade
@@ -82,6 +88,10 @@ class Context:
         self.kb_manager = KbManagerFacade(self)
         self.cron_manager = CronManagerFacade(self)
         self.message_history_manager = MessageHistoryManagerFacade(self)
+        self.subagent_orchestrator = SubagentOrchestratorFacade(self, self._snapshot)
+        self._star_manager = StarManagerFacade(self)
+        self._db_facade = DbReadFacade(self)
+        self._event_queue = EventQueueFacade(self)
 
     @property
     def persona_manager(self) -> Any:
@@ -326,10 +336,44 @@ class Context:
 
     # ---- host-internal APIs (fail loudly) ------------------------------------
 
-    def register_commands(self, *args: Any, **kwargs: Any) -> None:
-        """Manage host command registrations (unsupported when isolated)."""
-        raise IsolationUnsupportedError(
-            "register_commands is unavailable in isolated legacy mode"
+    def register_commands(
+        self,
+        star_name: str,
+        command_name: str,
+        desc: str,
+        priority: int,
+        awaitable: Any,
+        use_regex: bool = False,
+        ignore_prefix: bool = False,
+    ) -> None:
+        """Dynamically register one command or regex handler on the Host."""
+        del star_name, ignore_prefix
+        from ...registration import HandlerKind, HandlerSpec
+        from .loader import _wrap_handler
+
+        handler_id = f"dyn_{uuid.uuid4().hex[:12]}"
+        spec = HandlerSpec(
+            kind=HandlerKind.MESSAGE if use_regex else HandlerKind.COMMAND,
+            id=handler_id,
+            path=None if use_regex else command_name,
+            regex=command_name if use_regex else None,
+            priority=int(priority),
+            description=desc,
+        )
+        self._dynamic_commands[handler_id] = _wrap_handler(self, awaitable, spec)
+        self._pending.append(
+            asyncio.get_running_loop().create_task(
+                self._ctx._invoke_capability(
+                    "handler.register",
+                    "register",
+                    {
+                        "handler_id": handler_id,
+                        "command_name": command_name,
+                        "desc": desc,
+                        "use_regex": bool(use_regex),
+                    },
+                ),
+            ),
         )
 
     def get_llm_tool_manager(self) -> Any:
@@ -339,10 +383,8 @@ class Context:
         )
 
     def get_event_queue(self) -> Any:
-        """The host event queue is host-internal (unsupported)."""
-        raise IsolationUnsupportedError(
-            "get_event_queue is unavailable in isolated legacy mode"
-        )
+        """Return the legacy event queue facade backed by event.inject."""
+        return self._event_queue
 
     def get_platform(self, platform_type: Any) -> Any:
         """Return the first platform adapter matching the given type name.
@@ -372,8 +414,8 @@ class Context:
         return None
 
     def get_db(self) -> Any:
-        """The host database is host-internal (unsupported)."""
-        raise IsolationUnsupportedError("get_db is unavailable in isolated legacy mode")
+        """Return read-only DB facade over ``db.read`` (raw SQL writes raise)."""
+        return self._db_facade
 
     def register_provider(self, *args: Any, **kwargs: Any) -> None:
         """Custom providers are host-internal (unsupported)."""
@@ -696,6 +738,74 @@ class StarTools:
         return await cls._bound().send_message(session, message_chain)
 
     @classmethod
+    async def create_message(
+        cls,
+        type: str,
+        self_id: str,
+        session_id: str,
+        sender: Any,
+        message: list[Any],
+        message_str: str,
+        message_id: str = "",
+        raw_message: object = None,
+        group_id: str = "",
+    ) -> Any:
+        """Create a legacy AstrBotMessage instance."""
+        from .event import AstrBotMessage, MessageType
+
+        return AstrBotMessage(
+            type=MessageType(type),
+            self_id=self_id,
+            session_id=session_id,
+            message_id=message_id or uuid.uuid4().hex,
+            sender=sender,
+            message=list(message),
+            message_str=message_str,
+            raw_message=raw_message,
+            group_id=group_id,
+        )
+
+    @classmethod
+    async def create_event(
+        cls,
+        abm: Any,
+        platform: str = "aiocqhttp",
+        is_wake: bool = True,
+    ) -> None:
+        """Inject a synthetic AstrBotMessage into the Host pipeline."""
+        from .components import MessageChain
+        from .event import MessageType
+
+        ctx = cls._bound()
+        insts = ctx.platform_manager.get_insts()
+        matched = next((p for p in insts if p.meta().id == platform), None)
+        if matched is None:
+            matched = next((p for p in insts if p.meta().name == platform), None)
+        platform_id = matched.meta().id if matched is not None else str(platform)
+        raw_type = getattr(abm, "type", MessageType.FRIEND_MESSAGE)
+        type_str = (
+            raw_type.value if isinstance(raw_type, MessageType) else str(raw_type)
+        )
+        umo = f"{platform_id}:{type_str}:{getattr(abm, 'session_id', '')}"
+        sender = getattr(abm, "sender", None)
+        await ctx._ctx._invoke_capability(
+            "event.inject",
+            "inject",
+            {
+                "umo": umo,
+                "chain": MessageChain(
+                    chain=list(getattr(abm, "message", []) or [])
+                ).to_sdk(),
+                "message_str": str(getattr(abm, "message_str", "") or ""),
+                "sender_id": str(getattr(sender, "user_id", "") or ""),
+                "sender_name": str(getattr(sender, "nickname", "") or ""),
+                "self_id": str(getattr(abm, "self_id", "") or ""),
+                "is_wake": bool(is_wake),
+                "extras": {},
+            },
+        )
+
+    @classmethod
     def register_llm_tool(cls, tool_class: type[FunctionTool]) -> None:
         cls._bound().register_llm_tool(tool_class)
 
@@ -708,8 +818,18 @@ class StarTools:
         return cls._bound().activate_llm_tool(name)
 
     @classmethod
+    async def activate_llm_tool_async(cls, name: str) -> bool:
+        """Asynchronously activate a registered function-calling tool via the Host."""
+        return await cls._bound().activate_llm_tool_async(name)
+
+    @classmethod
     def deactivate_llm_tool(cls, name: str) -> bool:
         return cls._bound().deactivate_llm_tool(name)
+
+    @classmethod
+    async def deactivate_llm_tool_async(cls, name: str) -> bool:
+        """Asynchronously deactivate a registered function-calling tool via the Host."""
+        return await cls._bound().deactivate_llm_tool_async(name)
 
 
 class Star:

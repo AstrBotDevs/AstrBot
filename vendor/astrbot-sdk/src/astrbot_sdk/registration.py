@@ -119,6 +119,10 @@ class HandlerSpec:
     roles: tuple[SenderRole, ...] = ()
     regex: str | None = None
     regex_flags: int = 0
+    button_action: bool = False
+    button_action_id: str | None = None
+    ui_action: bool = False
+    ui_action_id: str | None = None
 
     @property
     def required_capability(self) -> str | None:
@@ -378,6 +382,52 @@ class _OnNamespace:
             roles=tuple(roles),
             regex=regex_pattern,
             regex_flags=regex_flags,
+        )
+        return lambda handler: _attach_handler_spec(handler, spec)
+
+    def button_action(
+        self,
+        action_id: str | None = None,
+        *,
+        message_types: Collection[MessageType] = (),
+        platforms: Collection[str] = (),
+        roles: Collection[SenderRole] = (),
+        priority: int = 0,
+        id: str | None = None,
+        description: str | None = None,
+    ) -> Callable[[HandlerT], HandlerT]:
+        """Register a handler triggered by callback button interactions."""
+        _validate_handler_id(id)
+        spec = HandlerSpec(
+            kind=HandlerKind.MESSAGE,
+            id=id,
+            description=description,
+            priority=priority,
+            message_types=tuple(message_types),
+            platforms=tuple(platforms),
+            roles=tuple(roles),
+            button_action=True,
+            button_action_id=action_id,
+        )
+        return lambda handler: _attach_handler_spec(handler, spec)
+
+    def ui_action(
+        self,
+        action_id: str | None = None,
+        *,
+        priority: int = 0,
+        id: str | None = None,
+        description: str | None = None,
+    ) -> Callable[[HandlerT], HandlerT]:
+        """Register a handler triggered by authenticated ChatUI view actions."""
+        _validate_handler_id(id)
+        spec = HandlerSpec(
+            kind=HandlerKind.MESSAGE,
+            id=id,
+            description=description,
+            priority=priority,
+            ui_action=True,
+            ui_action_id=action_id,
         )
         return lambda handler: _attach_handler_spec(handler, spec)
 
@@ -659,6 +709,10 @@ def discover_handlers(plugin: object) -> tuple[HandlerRegistration, ...]:
             roles=spec.roles,
             regex=spec.regex,
             regex_flags=spec.regex_flags,
+            button_action=spec.button_action,
+            button_action_id=spec.button_action_id,
+            ui_action=spec.ui_action,
+            ui_action_id=spec.ui_action_id,
             tool_name=spec.tool_name,
             resumable=spec.resumable,
             streaming_input=spec.streaming_input,

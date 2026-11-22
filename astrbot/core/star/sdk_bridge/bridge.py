@@ -19,12 +19,15 @@ from astrbot_sdk.errors import (
     NotFound,
     RemotePluginError,
 )
-from astrbot_sdk.results import GroupUsage
+from astrbot_sdk.results import GroupUsage, Propagation
+from astrbot_sdk.results import ViewResult as SDKViewResult
 from astrbot_sdk.runtime.metadata import PluginMetadata, load_metadata
 from astrbot_sdk.runtime.stdio_client import StdioPluginClient
 from astrbot_sdk.tools import ToolCallContext
 
 from astrbot.core import logger, sp
+from astrbot.core.chatui import ViewResult as CoreViewResult
+from astrbot.core.chatui import ViewSpec
 from astrbot.core.config.astrbot_config import AstrBotConfig
 from astrbot.core.message.message_event_result import MessageEventResult
 from astrbot.core.provider.register import llm_tools
@@ -108,12 +111,16 @@ def _asset_root() -> Path:
     return Path(get_astrbot_data_path()) / "sdk_assets"
 
 
-def _metadata_views(metadata: Any) -> list[dict]:
+def _metadata_views(metadata: Any) -> list[ViewSpec]:
     """Extract the views declaration from plugin metadata (views or pages)."""
     views = getattr(metadata, "views", None) or getattr(metadata, "pages", None)
     if not views:
         return []
-    return [dict(item) for item in views if isinstance(item, dict | Mapping)]
+    return [
+        ViewSpec.model_validate(dict(item))
+        for item in views
+        if isinstance(item, dict | Mapping)
+    ]
 
 
 def _param_types() -> dict[str, type]:
@@ -378,12 +385,8 @@ class SDKPluginBridge:
             self.manifest_metadata = metadata
             self.plugin_id = metadata.plugin_id
             legacy_only = {
-                "platform.raw",
                 "config.write",
                 "persona.write",
-                "cron.schedule",
-                "kb.manage",
-                "message.history",
             }
             declared = legacy_only & metadata.capabilities.all_ids
             if declared:
@@ -559,6 +562,14 @@ class SDKPluginBridge:
             # Same as in-process plugins: the dashboard config tab reads
             # metadata.config and metadata.config.schema.
             star_metadata.config = config
+        star_metadata._sdk_views_pages = {
+            page["name"]
+            for page in (self._views_manifest.get("pages") or [])
+            if isinstance(page, dict) and page.get("name")
+        }
+        star_metadata._sdk_plugin_root = (
+            self.plugin_root if self._external is None else None
+        )
         star_map[self.module_path] = star_metadata
         star_registry.append(star_metadata)
 
@@ -586,13 +597,19 @@ class SDKPluginBridge:
         # Command-group filters are referenced by their sub-commands for the
         # usage tree; link them only after every handler has been registered
         # so a sub-command declared before its group still resolves.
-        for parent_path, sub_filter in self._pending_command_links:
+        for parent_path, sub_filter in sorted(
+            self._pending_command_links,
+            key=lambda item: item[0].count(" "),
+        ):
             parent = self._command_group_filters.get(parent_path)
             if parent is None:
                 continue
             parent.add_sub_command_filter(sub_filter)
             if isinstance(sub_filter, CommandGroupFilter):
                 sub_filter.parent_group = parent
+            else:
+                sub_filter.parent_command_names = parent.get_complete_command_names()
+                sub_filter._cmpl_cmd_names = None
         star_metadata.star_handler_full_names = list(self._handler_full_names)
         if any(h.kind.value == "lifecycle.tool_discovery" for h in handshake.handlers):
             await self.sync_discovered_tools()
@@ -929,7 +946,7 @@ class SDKPluginBridge:
             command_name=parts[-1],
             alias=aliases,
             handler_md=handler_md,
-            parent_command_names=parts[:-1],
+            parent_command_names=([" ".join(parts[:-1])] if len(parts) > 1 else [""]),
         )
 
     def _register_message(self, descriptor: Any) -> str:
@@ -963,6 +980,7 @@ class SDKPluginBridge:
     @staticmethod
     def _build_message_filters(descriptor: Any) -> list:
         """Compile handshake filter details into core handler filters."""
+        from astrbot.core.star.filter.button_action import ButtonActionFilter
         from astrbot.core.star.filter.event_message_type import (
             EventMessageType,
             EventMessageTypeFilter,
@@ -975,6 +993,7 @@ class SDKPluginBridge:
             PlatformAdapterTypeFilter,
         )
         from astrbot.core.star.filter.regex import RegexFilter
+        from astrbot.core.star.filter.ui_action import UIActionFilter
 
         details = descriptor.details
         filters: list = []
@@ -1011,6 +1030,10 @@ class SDKPluginBridge:
                     re.compile(str(regex), int(details.get("regex_flags", 0))),
                 ),
             )
+        if details.get("button_action"):
+            filters.append(ButtonActionFilter(details.get("button_action_id")))
+        if details.get("ui_action"):
+            filters.append(UIActionFilter(details.get("ui_action_id")))
         return filters
 
     def _mark_event_sent(self, umo: Any) -> None:
@@ -1037,6 +1060,16 @@ class SDKPluginBridge:
             try:
                 async for result in client.invoke(handler_id, sdk_event):
                     if result is not None:
+                        if isinstance(result, SDKViewResult):
+                            if result.propagation is Propagation.STOP:
+                                event.stop_event()
+                            yield CoreViewResult(
+                                name=result.name,
+                                data=dict(result.data),
+                                text=result.text,
+                                title=result.title,
+                            )
+                            continue
                         apply_sdk_result(
                             event,
                             result,
@@ -1050,6 +1083,7 @@ class SDKPluginBridge:
                     if not events:
                         bridge._inflight_events.pop(key, None)
 
+        stub.__module__ = bridge.module_path
         return stub
 
     def _register_tool(self, descriptor: Any) -> str:
@@ -1202,7 +1236,15 @@ class SDKPluginBridge:
             if key is not None:
                 bridge._inflight_events.setdefault(key, []).append(event)
             try:
-                return await client.invoke_tool(handler_id, call, kwargs)
+                result = await client.invoke_tool(handler_id, call, kwargs)
+                if isinstance(result, SDKViewResult):
+                    return CoreViewResult(
+                        name=result.name,
+                        data=dict(result.data),
+                        text=result.text,
+                        title=result.title,
+                    )
+                return result
             finally:
                 if key is not None:
                     events = bridge._inflight_events.get(key)
@@ -1211,6 +1253,7 @@ class SDKPluginBridge:
                         if not events:
                             bridge._inflight_events.pop(key, None)
 
+        stub.__module__ = bridge.module_path
         return stub
 
     def _make_command_stub(
@@ -1272,6 +1315,16 @@ class SDKPluginBridge:
                                 .use_markdown(False),
                             )
                             event.stop_event()
+                        elif isinstance(result, SDKViewResult):
+                            if result.propagation is Propagation.STOP:
+                                event.stop_event()
+                            yield CoreViewResult(
+                                name=result.name,
+                                data=dict(result.data),
+                                text=result.text,
+                                title=result.title,
+                            )
+                            continue
                         else:
                             apply_sdk_result(
                                 event,
@@ -1288,6 +1341,7 @@ class SDKPluginBridge:
                     if not events:
                         bridge._inflight_events.pop(key, None)
 
+        stub.__module__ = bridge.module_path
         return stub
 
     async def _dispatch_capability(
@@ -1323,14 +1377,14 @@ class SDKPluginBridge:
             SpStoreService(),
             MessageSendService(self.context, store, mark_sent=self._mark_event_sent),
             ConversationReadService(self.context),
-            ConversationWriteService(self.context),
+            ConversationWriteService(self.context, store=store),
             AssetTransferService(store),
             FileTokenService(store),
             PluginInspectService(),
             PluginLifecycleService(self.context),
             ProviderWriteService(self.context),
             PlatformRawService(self.context),
-            EventStateService(self._inflight_events),
+            EventStateService(self._inflight_events, store),
             EventInjectService(self.context),
             DbService(self.context),
             ConfigWriteService(

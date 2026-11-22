@@ -310,8 +310,11 @@ def install(host_version: str | None = None) -> None:
         return
 
     from . import (
+        agents,
+        chatui,
         components,
         event,
+        host_snapshot,
         html,
         loader,
         platform_events,
@@ -338,6 +341,8 @@ def install(host_version: str | None = None) -> None:
     api_mod.agent = _unsupported_agent
     api_mod.html_renderer = html.HtmlRendererFacade()
     api_mod.sp = _SharedPreferences()
+    file_token_svc = host_snapshot.FileTokenServiceFacade()
+    api_mod.file_token_service = file_token_svc
 
     event_mod = ModuleType("astrbot.api.event")
     event_mod.__path__ = []
@@ -435,6 +440,8 @@ def install(host_version: str | None = None) -> None:
     register_mod.register_permission_type = event.filter.permission_type
     register_mod.register_platform_adapter_type = event.filter.platform_adapter_type
     register_mod.register_custom_filter = event.filter.custom_filter
+    register_mod.register_button_action = event.filter.button_action
+    register_mod.register_ui_action = event.filter.ui_action
     register_mod.register_agent = _unsupported_agent
     for hook_name in (
         "on_llm_request",
@@ -628,6 +635,7 @@ def install(host_version: str | None = None) -> None:
     message_components_mod = ModuleType("astrbot.core.message.components")
     message_components_mod.BaseMessageComponent = components.BaseMessageComponent
     for name in (
+        "ComponentType",
         "Plain",
         "At",
         "AtAll",
@@ -644,6 +652,12 @@ def install(host_version: str | None = None) -> None:
         "Json",
         "Share",
         "Location",
+        "Music",
+        "Button",
+        "ActionRow",
+        "ButtonInteraction",
+        "ViewContext",
+        "UIInteraction",
         "Unknown",
         "ComponentTypes",
     ):
@@ -729,6 +743,13 @@ def install(host_version: str | None = None) -> None:
         "Poke",
         "Json",
         "Share",
+        "Location",
+        "Music",
+        "Button",
+        "ActionRow",
+        "ButtonInteraction",
+        "ViewContext",
+        "UIInteraction",
         "MessageChain",
     ):
         setattr(api_platform_mod, name, getattr(components, name))
@@ -750,11 +771,25 @@ def install(host_version: str | None = None) -> None:
     star_tools_mod.StarTools = star.StarTools
 
     star_handler_mod = ModuleType("astrbot.core.star.star_handler")
-    # Registry introspection is Host-internal; isolated plugins see an empty
-    # registry (degraded but import-safe).
+    # Populated dynamically from handshake snapshot["handlers"] during plugin load.
     star_handler_mod.star_handlers_registry = []
     star_handler_mod.StarHandlerMetadata = _ShellRecord
-    star_handler_mod.EventType = _ShellRecord
+
+    class _CompatEventType:
+        AdapterMessageEvent = "AdapterMessageEvent"
+        OnLLMRequestEvent = "OnLLMRequestEvent"
+        OnLLMResponseEvent = "OnLLMResponseEvent"
+        OnWaitingLLMRequestEvent = "OnWaitingLLMRequestEvent"
+        OnCallingLLMToolEvent = "OnCallingLLMToolEvent"
+        OnAfterMessageSentEvent = "OnAfterMessageSentEvent"
+        OnDecoratingResultEvent = "OnDecoratingResultEvent"
+        OnPluginErrorEvent = "OnPluginErrorEvent"
+        OnPluginLoadedEvent = "OnPluginLoadedEvent"
+        OnPluginUnloadedEvent = "OnPluginUnloadedEvent"
+        OnAstrBotLoadedEvent = "OnAstrBotLoadedEvent"
+        OnPlatformLoadedEvent = "OnPlatformLoadedEvent"
+
+    star_handler_mod.EventType = _CompatEventType
 
     astrbot_path_mod = ModuleType("astrbot.core.utils.astrbot_path")
 
@@ -823,6 +858,12 @@ def install(host_version: str | None = None) -> None:
         "Json",
         "Share",
         "Location",
+        "Music",
+        "Button",
+        "ActionRow",
+        "ButtonInteraction",
+        "ViewContext",
+        "UIInteraction",
         "Unknown",
         "ComponentTypes",
         "MessageChain",
@@ -875,6 +916,10 @@ def install(host_version: str | None = None) -> None:
     all_mod.event_message_type = event_mod.filter.event_message_type
     all_mod.regex = event_mod.filter.regex
     all_mod.platform_adapter_type = event_mod.filter.platform_adapter_type
+    all_mod.button_action = event_mod.filter.button_action
+    all_mod.ui_action = event_mod.filter.ui_action
+    all_mod.ButtonActionFilter = event.ButtonActionFilter
+    all_mod.UIActionFilter = event.UIActionFilter
     all_mod.EventMessageType = event.EventMessageType
     all_mod.EventMessageTypeFilter = event.EventMessageTypeFilter
     all_mod.PlatformAdapterType = event.PlatformAdapterType
@@ -905,9 +950,35 @@ def install(host_version: str | None = None) -> None:
         "Poke",
         "Json",
         "Share",
+        "Location",
+        "Music",
+        "Button",
+        "ActionRow",
+        "ButtonInteraction",
+        "ViewContext",
+        "UIInteraction",
         "MessageChain",
     ):
         setattr(all_mod, name, getattr(components_mod, name))
+
+    chatui_mod = ModuleType("astrbot.api.chatui")
+    chatui_mod.ViewSpec = chatui.ViewSpec
+    chatui_mod.ViewResult = chatui.ViewResult
+
+    core_chatui_mod = ModuleType("astrbot.core.chatui")
+    core_chatui_mod.ViewSpec = chatui.ViewSpec
+    core_chatui_mod.ViewResult = chatui.ViewResult
+
+    agents_mod = ModuleType("astrbot.api.agents")
+    for attr_name, attr_val in agents.build_agents_module_dict().items():
+        setattr(agents_mod, attr_name, attr_val)
+    agents_mod.__all__ = list(agents.build_agents_module_dict().keys())
+
+    button_filter_mod = ModuleType("astrbot.core.star.filter.button_action")
+    button_filter_mod.ButtonActionFilter = event.ButtonActionFilter
+
+    ui_filter_mod = ModuleType("astrbot.core.star.filter.ui_action")
+    ui_filter_mod.UIActionFilter = event.UIActionFilter
 
     astrbot_mod.api = api_mod
     api_mod.event = event_mod
@@ -915,6 +986,8 @@ def install(host_version: str | None = None) -> None:
     api_mod.provider = provider_mod
     api_mod.message_components = components_mod
     api_mod.message = message_mod
+    api_mod.chatui = chatui_mod
+    api_mod.agents = agents_mod
     api_mod.all = all_mod
 
     sys.modules["astrbot"] = astrbot_mod
@@ -928,6 +1001,9 @@ def install(host_version: str | None = None) -> None:
     sys.modules["astrbot.api.all"] = all_mod
     sys.modules["astrbot.api.web"] = web_mod
     sys.modules["astrbot.api.util"] = api_util_mod
+    sys.modules["astrbot.api.chatui"] = chatui_mod
+    sys.modules["astrbot.api.agents"] = agents_mod
+    sys.modules["astrbot.core.chatui"] = core_chatui_mod
 
     # Type-only astrbot.core submodules are safe to expose; everything else
     # under astrbot.core stays blocked (live Host internals).
@@ -986,6 +1062,8 @@ def install(host_version: str | None = None) -> None:
     sys.modules["astrbot.core.star.register"] = register_mod
     sys.modules["astrbot.core.star.filter.permission"] = permission_mod
     sys.modules["astrbot.core.star.filter.event_message_type"] = event_message_type_mod
+    sys.modules["astrbot.core.star.filter.button_action"] = button_filter_mod
+    sys.modules["astrbot.core.star.filter.ui_action"] = ui_filter_mod
     sys.modules["astrbot.core.message.components"] = message_components_mod
     sys.modules["astrbot.core.config"] = config_mod
     sys.modules["astrbot.core.config.astrbot_config"] = astrbot_config_mod
@@ -1009,8 +1087,9 @@ def install(host_version: str | None = None) -> None:
     # Loudly block the real Host internals; the Runner shares the core venv,
     # so astrbot.core would import successfully without this.
     blocked_core = _BlockedModule("astrbot.core")
-    # Type-only top-level re-exports stay importable.
+    # Type-only and bridged top-level re-exports stay importable.
     blocked_core.AstrBotConfig = dict
+    blocked_core.file_token_service = file_token_svc
     sys.modules["astrbot.core"] = blocked_core
 
     _installed = True

@@ -443,11 +443,15 @@ def parse_metadata(
             "support_platforms must be a list of non-empty strings"
         )
 
-    pages = normalized.get("pages", ())
+    pages = (
+        normalized.get("views")
+        if "views" in normalized
+        else normalized.get("pages", ())
+    )
     if not isinstance(pages, list | tuple) or not all(
         isinstance(item, Mapping) for item in pages
     ):
-        raise InvalidPluginMetadata("pages must be a list of mappings")
+        raise InvalidPluginMetadata("views/pages must be a list of mappings")
     immutable_pages = tuple(MappingProxyType(dict(item)) for item in pages)
 
     i18n = normalized.get("i18n", {})
@@ -475,6 +479,7 @@ def parse_metadata(
         "astrbot_version",
         "support_platforms",
         "pages",
+        "views",
         "i18n",
         "runtime",
         "capabilities",

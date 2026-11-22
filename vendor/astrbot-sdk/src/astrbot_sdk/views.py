@@ -39,6 +39,23 @@ class ViewPageEntry:
     files: tuple[ViewFileEntry, ...]
 
 
+@dataclass(frozen=True, slots=True)
+class ViewSpec:
+    """Declaration describing a plugin-owned ChatUI view."""
+
+    name: str
+    target: str = "plugin_page"
+    title: str = ""
+    description: str = ""
+    version: int = 1
+    actions: tuple[str, ...] = ()
+
+    @property
+    def entry(self) -> Path:
+        """Return the conventional entry HTML path relative to plugin root."""
+        return Path("views") / self.name / ENTRY_FILE_NAME
+
+
 def _views_root(plugin_root: Path) -> Path | None:
     for dir_name in VIEW_ROOT_DIR_NAMES:
         candidate = plugin_root / dir_name

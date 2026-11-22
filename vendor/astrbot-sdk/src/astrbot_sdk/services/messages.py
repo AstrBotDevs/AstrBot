@@ -1,9 +1,10 @@
 from __future__ import annotations
 
+from collections.abc import AsyncIterable
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
-from ..events import UMO
+from ..events import UMO, MessageEvent
 from ..messages import MessageLike, to_message_chain
 from .assets import prepare_outbound_chain
 
@@ -55,3 +56,17 @@ class MessageService:
         )
         message_id = result.get("message_id", "")
         return SendReceipt(message_id=str(message_id))
+
+    async def send_streaming(
+        self,
+        target: MessageEvent | UMO | str,
+        chunks: AsyncIterable[MessageLike],
+        *,
+        use_fallback: bool = False,
+    ) -> None:
+        """Stream incremental chunks via the active session's Host event."""
+        await self._ctx.events.send_streaming(
+            target,
+            chunks,
+            use_fallback=use_fallback,
+        )

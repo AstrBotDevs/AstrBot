@@ -13,6 +13,7 @@ import asyncio
 import copy
 import fnmatch
 import logging
+from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
 
@@ -768,3 +769,250 @@ class AstrbotConfigMgrFacade:
             if item.get("id") == "default":
                 fallback = dict(item)
         return fallback
+
+
+class DbReadFacade:
+    """Read-only database facade over ``db.read`` with explicit write guards."""
+
+    def __init__(self, facade_context: Any) -> None:
+        self._facade_context = facade_context
+
+    async def get_umo_aliases(
+        self,
+        umos: list[str] | None = None,
+    ) -> list[SimpleNamespace]:
+        """Return UMO alias records matching optional UMO list."""
+        result = await self._facade_context._ctx._invoke_capability(
+            "db.read",
+            "get_umo_aliases",
+            {"umos": list(umos) if umos is not None else None},
+        )
+        return [
+            SimpleNamespace(**dict(row)) for row in (result or {}).get("aliases") or []
+        ]
+
+    async def get_conversations(
+        self,
+        user_id: str | None = None,
+        platform_id: str | None = None,
+    ) -> list[SimpleNamespace]:
+        """Return ConversationV2 metadata rows without message content."""
+        result = await self._facade_context._ctx._invoke_capability(
+            "db.read",
+            "get_conversations",
+            {"user_id": user_id, "platform_id": platform_id},
+        )
+        return [
+            SimpleNamespace(**dict(row))
+            for row in (result or {}).get("conversations") or []
+        ]
+
+    def __call__(self, *args: Any, **kwargs: Any) -> Any:
+        """Raw SQL session context manager is host-internal (unsupported)."""
+        raise IsolationUnsupportedError(
+            "raw database session access is unavailable in isolated legacy mode; "
+            "only read-only get_umo_aliases/get_conversations are bridged"
+        )
+
+    def __getattr__(self, name: str) -> Any:
+        if name.startswith("_"):
+            raise AttributeError(name)
+        raise IsolationUnsupportedError(
+            f"db.{name} is unavailable in isolated legacy mode; only read-only "
+            "get_umo_aliases/get_conversations are bridged"
+        )
+
+
+class EventQueueFacade:
+    """Legacy ``context.get_event_queue()`` facade over ``event.inject``."""
+
+    def __init__(self, facade_context: Any) -> None:
+        self._facade_context = facade_context
+
+    @staticmethod
+    def _build_payload(event: Any) -> dict[str, Any]:
+        from .components import MessageChain
+
+        raw_messages = event.get_messages() if hasattr(event, "get_messages") else []
+        sdk_chain = MessageChain(chain=list(raw_messages or [])).to_sdk()
+        extras = event.get_extra() if hasattr(event, "get_extra") else {}
+        return {
+            "umo": str(
+                getattr(event, "unified_msg_origin", None)
+                or getattr(event, "session", "")
+            ),
+            "chain": sdk_chain,
+            "message_str": str(
+                event.get_message_str()
+                if hasattr(event, "get_message_str")
+                else getattr(event, "message_str", "")
+            ),
+            "sender_id": str(
+                event.get_sender_id() if hasattr(event, "get_sender_id") else ""
+            ),
+            "sender_name": str(
+                event.get_sender_name() if hasattr(event, "get_sender_name") else ""
+            ),
+            "self_id": str(
+                event.get_self_id() if hasattr(event, "get_self_id") else ""
+            ),
+            "is_wake": bool(
+                event.is_wake_up()
+                if hasattr(event, "is_wake_up")
+                else getattr(event, "is_wake", True)
+            ),
+            "extras": dict(extras) if isinstance(extras, dict) else {},
+        }
+
+    async def put(self, event: Any) -> None:
+        """Queue one legacy message event onto the Host pipeline."""
+        await self._facade_context._ctx._invoke_capability(
+            "event.inject",
+            "inject",
+            self._build_payload(event),
+        )
+
+    def put_nowait(self, event: Any) -> None:
+        """Schedule event injection without blocking the caller."""
+        task = asyncio.get_running_loop().create_task(self.put(event))
+        self._facade_context._pending.append(task)
+
+
+class FileTokenServiceFacade:
+    """Legacy ``file_token_service`` facade over ``file.token``."""
+
+    _ctx: Any = None
+
+    @classmethod
+    def initialize(cls, ctx: Any) -> None:
+        """Bind the active SDK context for runner-local calls."""
+        cls._ctx = ctx
+
+    async def register_file(
+        self,
+        file_path: str | Path,
+        timeout: float | None = None,
+        single_use: bool = True,
+    ) -> str:
+        """Upload a local file to Host asset store and register a download token."""
+        if self._ctx is None:
+            raise ValueError("file_token_service not initialized")
+        return await self._ctx.assets.issue_download_token(
+            Path(file_path),
+            timeout=timeout,
+            single_use=single_use,
+        )
+
+
+class SubagentOrchestratorFacade:
+    """Legacy ``context.subagent_orchestrator`` facade over ``subagents.reload``."""
+
+    def __init__(self, facade_context: Any, snapshot: dict[str, Any]) -> None:
+        self._facade_context = facade_context
+        self.handoffs = [
+            SimpleNamespace(**dict(entry))
+            for entry in snapshot.get("subagent_handoffs") or []
+        ]
+
+    async def reload_from_config(self, cfg: dict[str, Any]) -> list[SimpleNamespace]:
+        """Reload Host subagent handoffs from configuration dict."""
+        result = await self._facade_context._ctx._invoke_capability(
+            "subagents.reload",
+            "reload",
+            {"config": dict(cfg)},
+        )
+        self.handoffs = [
+            SimpleNamespace(**dict(entry))
+            for entry in (result or {}).get("handoffs") or []
+        ]
+        return list(self.handoffs)
+
+
+class StarManagerFacade:
+    """Legacy ``context._star_manager`` facade over ``plugin.lifecycle``."""
+
+    def __init__(self, facade_context: Any) -> None:
+        self._facade_context = facade_context
+
+    async def turn_off_plugin(self, plugin_name: str) -> None:
+        """Disable a plugin by name on the Host."""
+        await self._facade_context._ctx._invoke_capability(
+            "plugin.lifecycle",
+            "turn_off",
+            {"plugin_name": plugin_name},
+        )
+
+    async def turn_on_plugin(self, plugin_name: str) -> None:
+        """Enable a plugin by name on the Host."""
+        await self._facade_context._ctx._invoke_capability(
+            "plugin.lifecycle",
+            "turn_on",
+            {"plugin_name": plugin_name},
+        )
+
+    async def reload(self, specified_plugin_name: str | None = None) -> None:
+        """Reload one plugin or all plugins on the Host."""
+        await self._facade_context._ctx._invoke_capability(
+            "plugin.lifecycle",
+            "reload",
+            {"plugin_name": specified_plugin_name},
+        )
+
+    async def install_plugin(
+        self,
+        repo_url: str = "",
+        proxy: str = "",
+        *,
+        ignore_version_check: bool = False,
+        download_url: str = "",
+    ) -> Any:
+        """Install a plugin through the Host plugin manager."""
+        result = await self._facade_context._ctx._invoke_capability(
+            "plugin.lifecycle",
+            "install",
+            {
+                "repo_url": repo_url,
+                "proxy": proxy,
+                "ignore_version_check": ignore_version_check,
+                "download_url": download_url,
+            },
+        )
+        return (result or {}).get("result")
+
+    async def update_plugin(
+        self,
+        plugin_name: str,
+        proxy: str = "",
+        *,
+        download_url: str = "",
+        repo_url: str = "",
+    ) -> None:
+        """Update an installed plugin through the Host plugin manager."""
+        await self._facade_context._ctx._invoke_capability(
+            "plugin.lifecycle",
+            "update",
+            {
+                "plugin_name": plugin_name,
+                "proxy": proxy,
+                "download_url": download_url,
+                "repo_url": repo_url,
+            },
+        )
+
+    async def uninstall_plugin(
+        self,
+        plugin_name: str,
+        delete_config: bool = False,
+        delete_data: bool = False,
+    ) -> bool:
+        """Uninstall a plugin through the Host plugin manager."""
+        result = await self._facade_context._ctx._invoke_capability(
+            "plugin.lifecycle",
+            "uninstall",
+            {
+                "plugin_name": plugin_name,
+                "delete_config": delete_config,
+                "delete_data": delete_data,
+            },
+        )
+        return bool((result or {}).get("uninstalled"))

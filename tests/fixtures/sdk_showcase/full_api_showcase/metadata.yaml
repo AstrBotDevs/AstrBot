@@ -5,6 +5,15 @@ author: astrbot
 version: 1.0.0
 dependencies:
   astrbot/full_api_peer: ">=1.0.0"
+views:
+  - name: dashboard
+    target: plugin_page
+    title: Full API Showcase
+  - name: card
+    target: chat_message
+    title: SDK Interactive Card
+    actions:
+      - refresh
 runtime:
   api: sdk
   entrypoint: main:FullApiShowcasePlugin
@@ -16,6 +25,13 @@ capabilities:
     - id: message.send
     - id: message.modify
     - id: message.wait
+    - id: assets.transfer
+    - id: file.token
+    - id: event.state
+    - id: platform.raw
+    - id: cron.schedule
+    - id: kb.manage
+    - id: message.history
     - id: conversation.read
     - id: conversation.write
     - id: plugin.inspect

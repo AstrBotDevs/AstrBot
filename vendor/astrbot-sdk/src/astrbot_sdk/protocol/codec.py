@@ -20,27 +20,37 @@ from ..events import (
     SenderRole,
 )
 from ..message_components import (
+    ActionRow,
     At,
     AtAll,
+    Button,
+    ButtonInteraction,
     Face,
     File,
     Forward,
     Image,
+    Json,
+    Location,
     MediaSegment,
     MessageSegment,
+    Music,
     Node,
     Nodes,
     Plain,
+    Poke,
     Record,
     Reply,
+    Share,
+    UIInteraction,
     UnknownSegment,
     Video,
+    ViewContext,
 )
 from ..messages import MessageChain
 from ..protocol_registry import (
     _PROTOCOL_DATACLASSES,
 )
-from ..results import EventResult, GroupUsage, MessageResult, Propagation
+from ..results import EventResult, GroupUsage, MessageResult, Propagation, ViewResult
 
 JSONValue: TypeAlias = (
     None | bool | int | float | str | list["JSONValue"] | dict[str, "JSONValue"]
@@ -507,6 +517,88 @@ def _encode_segment(
         return {"type": "Face", "id": segment.id}
     if isinstance(segment, Forward):
         return {"type": "Forward", "id": segment.id}
+    if isinstance(segment, Poke):
+        return {
+            "type": "Poke",
+            "poke_type": segment.poke_type,
+            "user_id": segment.user_id,
+        }
+    if isinstance(segment, Json):
+        payload = (
+            dict(segment.data) if isinstance(segment.data, Mapping) else segment.data
+        )
+        return {"type": "Json", "data": encode_value(payload)}
+    if isinstance(segment, Share):
+        return {
+            "type": "Share",
+            "url": segment.url,
+            "title": segment.title,
+            "content": segment.content,
+            "image": segment.image,
+        }
+    if isinstance(segment, Location):
+        return {
+            "type": "Location",
+            "lat": segment.lat,
+            "lon": segment.lon,
+            "title": segment.title,
+            "content": segment.content,
+        }
+    if isinstance(segment, Music):
+        return {
+            "type": "Music",
+            "music_type": segment.music_type,
+            "id": segment.id,
+            "url": segment.url,
+            "audio": segment.audio,
+            "title": segment.title,
+            "content": segment.content,
+            "image": segment.image,
+        }
+    if isinstance(segment, Button):
+        return {
+            "type": "Button",
+            "label": segment.label,
+            "action_id": segment.action_id,
+            "url": segment.url,
+            "data": encode_value(segment.data),
+            "style": segment.style,
+            "emoji": segment.emoji,
+            "disabled": segment.disabled,
+        }
+    if isinstance(segment, ActionRow):
+        return {
+            "type": "ActionRow",
+            "buttons": [
+                _encode_segment(btn, allow_unknown=allow_unknown)
+                for btn in segment.buttons
+            ],
+        }
+    if isinstance(segment, ButtonInteraction):
+        return {
+            "type": "ButtonInteraction",
+            "action_id": segment.action_id,
+            "interaction_id": segment.interaction_id,
+            "data": encode_value(segment.data),
+            "source_message_id": segment.source_message_id,
+            "callback_data": segment.callback_data,
+        }
+    if isinstance(segment, UIInteraction):
+        return {
+            "type": "UIInteraction",
+            "action_id": segment.action_id,
+            "interaction_id": segment.interaction_id,
+            "data": encode_value(segment.data),
+            "source": segment.source,
+            "source_message_id": segment.source_message_id,
+            "view": {
+                "id": segment.view.id,
+                "name": segment.view.name,
+                "version": segment.view.version,
+                "revision": segment.view.revision,
+                "data": encode_value(dict(segment.view.data)),
+            },
+        }
     if isinstance(segment, MediaSegment):
         return _encode_media(segment)
     if isinstance(segment, Node):
@@ -563,6 +655,101 @@ def _decode_segment(data: Mapping[str, Any]) -> MessageSegment:
             return Face(id=int(data["id"]))
         if segment_type == "Forward":
             return Forward(id=str(data["id"]))
+        if segment_type == "Poke":
+            user_id = data.get("user_id")
+            return Poke(
+                poke_type=str(data.get("poke_type", "126")),
+                user_id=str(user_id) if user_id is not None else None,
+            )
+        if segment_type == "Json":
+            return Json(data=decode_value(data.get("data")))
+        if segment_type == "Share":
+            return Share(
+                url=str(data.get("url", "")),
+                title=str(data.get("title", "")),
+                content=str(data.get("content", "")),
+                image=str(data.get("image", "")),
+            )
+        if segment_type == "Location":
+            return Location(
+                lat=float(data.get("lat", 0.0)),
+                lon=float(data.get("lon", 0.0)),
+                title=str(data.get("title", "")),
+                content=str(data.get("content", "")),
+            )
+        if segment_type == "Music":
+            return Music(
+                music_type=str(data.get("music_type", "custom")),
+                id=int(data.get("id", 0)),
+                url=str(data.get("url", "")),
+                audio=str(data.get("audio", "")),
+                title=str(data.get("title", "")),
+                content=str(data.get("content", "")),
+                image=str(data.get("image", "")),
+            )
+        if segment_type == "Button":
+            return Button(
+                label=str(data["label"]),
+                action_id=(
+                    str(data["action_id"])
+                    if data.get("action_id") is not None
+                    else None
+                ),
+                url=str(data["url"]) if data.get("url") is not None else None,
+                data=decode_value(data.get("data")),
+                style=str(data.get("style", "secondary")),  # type: ignore[arg-type]
+                emoji=str(data["emoji"]) if data.get("emoji") is not None else None,
+                disabled=bool(data.get("disabled", False)),
+            )
+        if segment_type == "ActionRow":
+            raw_buttons = data["buttons"]
+            if not isinstance(raw_buttons, list):
+                raise TypeError
+            decoded_buttons = [_decode_segment(item) for item in raw_buttons]
+            if not all(isinstance(btn, Button) for btn in decoded_buttons):
+                raise TypeError
+            return ActionRow(buttons=decoded_buttons)  # type: ignore[arg-type]
+        if segment_type == "ButtonInteraction":
+            return ButtonInteraction(
+                action_id=str(data["action_id"]),
+                interaction_id=str(data["interaction_id"]),
+                data=decode_value(data.get("data")),
+                source_message_id=(
+                    str(data["source_message_id"])
+                    if data.get("source_message_id") is not None
+                    else None
+                ),
+                callback_data=(
+                    str(data["callback_data"])
+                    if data.get("callback_data") is not None
+                    else None
+                ),
+            )
+        if segment_type == "UIInteraction":
+            view_raw = data["view"]
+            if not isinstance(view_raw, Mapping):
+                raise TypeError
+            view_data = decode_value(view_raw.get("data", {}))
+            if not isinstance(view_data, Mapping):
+                raise TypeError
+            return UIInteraction(
+                action_id=str(data["action_id"]),
+                interaction_id=str(data["interaction_id"]),
+                data=decode_value(data.get("data")),
+                source=str(data.get("source", "view")),
+                source_message_id=(
+                    str(data["source_message_id"])
+                    if data.get("source_message_id") is not None
+                    else None
+                ),
+                view=ViewContext(
+                    id=str(view_raw["id"]),
+                    name=str(view_raw["name"]),
+                    version=int(view_raw.get("version", 1)),
+                    revision=int(view_raw.get("revision", 0)),
+                    data=view_data,
+                ),
+            )
         if segment_type in _MEDIA_CLASSES:
             return _decode_media(data)
         if segment_type == "Node":
@@ -673,6 +860,16 @@ def encode_result(result: EventResult | None) -> JSONValue:
                 "quote": result.quote,
             }
         )
+    elif isinstance(result, ViewResult):
+        data.update(
+            {
+                "type": "view",
+                "name": result.name,
+                "data": encode_value(dict(result.data)),
+                "text": result.text,
+                "title": result.title,
+            }
+        )
     return data
 
 
@@ -706,6 +903,18 @@ def decode_result(data: Any) -> EventResult | None:
                 propagation=propagation,
                 message=decode_message_chain(message),
                 quote=bool(data.get("quote", False)),
+            )
+        if data.get("type") == "view":
+            raw_view_data = decode_value(data.get("data", {}))
+            if not isinstance(raw_view_data, Mapping):
+                raise TypeError
+            raw_name = data.get("name")
+            return ViewResult(
+                propagation=propagation,
+                name=str(raw_name) if raw_name is not None else None,
+                data=dict(raw_view_data),
+                text=str(data.get("text", "")),
+                title=str(data.get("title", "")),
             )
     except (KeyError, TypeError, ValueError) as exc:
         raise InvalidRequest("invalid handler result payload") from exc

@@ -7,8 +7,9 @@ from enum import StrEnum
 from types import MappingProxyType
 from typing import Any
 
+from .message_components import ButtonInteraction, UIInteraction
 from .messages import MessageChain, MessageLike
-from .results import EventResult, MessageResult, Propagation, message_result
+from .results import EventResult, MessageResult, Propagation, ViewResult, message_result
 
 
 class MessageType(StrEnum):
@@ -82,6 +83,27 @@ class MessageEvent:
     def is_group(self) -> bool:
         return self.umo.message_type is MessageType.GROUP
 
+    @property
+    def is_button_interaction(self) -> bool:
+        """Return whether the inbound message carries a button interaction."""
+        return self.button_interaction is not None
+
+    @property
+    def button_interaction(self) -> ButtonInteraction | None:
+        """Return the inbound ButtonInteraction segment, if present."""
+        return next(
+            (seg for seg in self.message if isinstance(seg, ButtonInteraction)),
+            None,
+        )
+
+    @property
+    def ui_interaction(self) -> UIInteraction | None:
+        """Return the inbound ChatUI view interaction segment, if present."""
+        return next(
+            (seg for seg in self.message if isinstance(seg, UIInteraction)),
+            None,
+        )
+
     def reply(
         self,
         content: MessageLike,
@@ -90,6 +112,40 @@ class MessageEvent:
         propagation: Propagation = Propagation.CONTINUE,
     ) -> MessageResult:
         return message_result(content, quote=quote, propagation=propagation)
+
+    def view_result(
+        self,
+        *,
+        data: Mapping[str, Any],
+        name: str | None = None,
+        text: str = "",
+        title: str = "",
+        stop: bool = False,
+    ) -> ViewResult:
+        """Create a named ChatUI view card or update the active interaction card.
+
+        Args:
+            data: JSON-compatible card snapshot data.
+            name: Registered view name when creating a new card; omit to update.
+            text: Fallback text when creating a new view card.
+            title: Display title when creating a new view card.
+            stop: Whether to stop further pipeline propagation.
+
+        Returns:
+            ViewResult ready to yield or return from a handler.
+
+        Raises:
+            ValueError: If creation/update invariants are violated.
+        """
+        if name is None and (self.ui_interaction is None or text):
+            raise ValueError("A view update requires a UI interaction and no text.")
+        return ViewResult(
+            propagation=Propagation.STOP if stop else Propagation.CONTINUE,
+            data=data,
+            name=name,
+            text=text,
+            title=title,
+        )
 
     def stop(self) -> EventResult:
         return EventResult(propagation=Propagation.STOP)

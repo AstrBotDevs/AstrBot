@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import json
 import os
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Annotated, Any
 
@@ -19,7 +20,13 @@ from astrbot_sdk import (
     lifecycle,
     on,
 )
-from astrbot_sdk.conversations import ConversationPatch, Message
+from astrbot_sdk.conversations import (
+    AudioPart,
+    ConversationPatch,
+    ImagePart,
+    Message,
+    TextPart,
+)
 from astrbot_sdk.hooks import (
     LLMRequest,
     LLMResponse,
@@ -28,9 +35,32 @@ from astrbot_sdk.hooks import (
     ToolResult,
 )
 from astrbot_sdk.llm import AgentRequest, ProviderKind
-from astrbot_sdk.message_components import Image, Plain
+from astrbot_sdk.message_components import (
+    ActionRow,
+    At,
+    AtAll,
+    Button,
+    Face,
+    Forward,
+    Image,
+    Json,
+    Location,
+    Music,
+    Node,
+    Nodes,
+    Plain,
+    Poke,
+    Reply,
+    Share,
+)
 from astrbot_sdk.messages import MessageChain
 from astrbot_sdk.tools import Tool, ToolCallContext, ToolDefinition
+from astrbot_sdk.web import (
+    error_response,
+    file_response,
+    json_response,
+    stream_response,
+)
 
 
 class ShowcaseConfig(PluginConfig):
@@ -76,21 +106,42 @@ class FullApiShowcasePlugin(Plugin[ShowcaseConfig]):
         self._shutdown_reason: str | None = None
         self._config_reloaded_count = 0
         self._hook_counts: dict[str, int] = {}
+        self._cron_fired = asyncio.Event()
+        self._cron_tag = ""
 
         @self.ctx.web.route(
             "/showcase/echo/<topic>",
             methods=["GET", "POST"],
             description="Echo showcase web route",
         )
-        async def echo_route(req: Any, topic: str) -> dict[str, Any]:
+        async def echo_route(req: Any, topic: str) -> Any:
             body = (await req.body()).decode("utf-8")
-            return {
-                "topic": topic,
-                "q": req.query.get("q", ""),
-                "method": req.method,
-                "body": body,
-                "prefix": self.ctx.current_config().greeting_prefix,
-            }
+            mode = req.query.get("mode", "json")
+            if mode == "error":
+                return error_response(
+                    "showcase-err", status_code=418, data={"topic": topic}
+                )
+            if mode == "stream":
+
+                async def _sse():
+                    yield "data: part-1\n\n"
+                    yield b"data: part-2\n\n"
+
+                return stream_response(_sse())
+            if mode == "file":
+                sample_file = Path(self.ctx.storage.data_dir) / "web_sample.txt"
+                sample_file.parent.mkdir(parents=True, exist_ok=True)
+                sample_file.write_text("file-route-ok", encoding="utf-8")
+                return file_response(sample_file, filename="web_sample.txt")
+            return json_response(
+                {
+                    "topic": topic,
+                    "q": req.query.get("q", ""),
+                    "method": req.method,
+                    "body": body,
+                    "prefix": self.ctx.current_config().greeting_prefix,
+                }
+            )
 
     def _bump_hook(self, stage: str) -> None:
         self._hook_counts[stage] = self._hook_counts.get(stage, 0) + 1
@@ -141,6 +192,19 @@ class FullApiShowcasePlugin(Plugin[ShowcaseConfig]):
         _ = call
         return str(a + b)
 
+    @on.streaming_tool(
+        name="showcase_stream_echo",
+        description="Streaming-input echo tool",
+    )
+    async def showcase_stream_echo(
+        self,
+        call: ToolCallContext,
+        text: Annotated[str, "Text payload"],
+    ) -> str:
+        """Echo streamed input arguments."""
+        _ = call
+        return f"stream-tool:{text}"
+
     @on.tool_discovery
     async def discover_tools(self) -> list[ToolDefinition]:
         """Expose a discovered dynamic tool catalog."""
@@ -161,6 +225,16 @@ class FullApiShowcasePlugin(Plugin[ShowcaseConfig]):
     async def on_plugin_loaded(self, info: Any) -> None:
         _ = info
         self._bump_hook("plugin_loaded")
+
+    @hooks.plugin_unloaded()
+    async def on_plugin_unloaded(self, info: Any) -> None:
+        _ = info
+        self._bump_hook("plugin_unloaded")
+
+    @hooks.waiting_llm_request()
+    async def on_waiting_llm_request(self, event: MessageEvent | None) -> None:
+        _ = event
+        self._bump_hook("waiting_llm_request")
 
     @hooks.llm_request()
     async def on_llm_request(self, event: MessageEvent | None, req: LLMRequest) -> None:
@@ -194,6 +268,25 @@ class FullApiShowcasePlugin(Plugin[ShowcaseConfig]):
         _ = (event, result)
         self._bump_hook("tool_result")
 
+    @hooks.agent_start()
+    async def on_agent_start(self, event: MessageEvent | None) -> None:
+        _ = event
+        self._bump_hook("agent_start")
+
+    @hooks.agent_end()
+    async def on_agent_end(self, event: MessageEvent | None) -> None:
+        _ = event
+        self._bump_hook("agent_end")
+
+    @hooks.plugin_error()
+    async def on_plugin_error(
+        self,
+        event: MessageEvent | None,
+        error: Any,
+    ) -> None:
+        _ = (event, error)
+        self._bump_hook("plugin_error")
+
     @hooks.message_result()
     async def on_message_result(
         self,
@@ -215,6 +308,30 @@ class FullApiShowcasePlugin(Plugin[ShowcaseConfig]):
         """Respond to regex trigger using confirmed live config."""
         cfg = self.ctx.current_config()
         yield event.reply(f"{cfg.greeting_prefix}:pong:{cfg.max_items}")
+
+    @on.button_action("sdk_approve")
+    async def on_sdk_approve(self, event: MessageEvent):
+        """Handle callback button clicks matching action_id ``sdk_approve``."""
+        inter = event.button_interaction
+        item = inter.data.get("item") if isinstance(inter.data, dict) else inter.data
+        yield event.reply(f"btn-approved:{item}")
+
+    @on.ui_action("refresh")
+    async def on_refresh_card(self, event: MessageEvent):
+        """Handle authenticated ChatUI card refresh interactions."""
+        inter = event.ui_interaction
+        prev = int(inter.view.data.get("count", 0)) if inter is not None else 0
+        yield event.view_result(data={"count": prev + 1})
+
+    @on.command("showcase view")
+    async def showcase_view(self, event: MessageEvent):
+        """Create an interactive ChatUI message card view."""
+        yield event.view_result(
+            name="card",
+            data={"count": 1},
+            text="SDK card fallback",
+            title="SDK Card",
+        )
 
     @on.command("showcase dialog")
     async def showcase_dialog(self, event: MessageEvent):
@@ -247,7 +364,7 @@ class FullApiShowcasePlugin(Plugin[ShowcaseConfig]):
             and note_path.read_text(encoding="utf-8") == "local-ok"
         )
 
-        # 2. Assets upload & download
+        # 2. Assets upload, download & file_token_service download token
         payload_bytes = b"PNG-SHOWCASE-PAYLOAD"
         uploaded = await self.ctx.assets.upload(
             payload_bytes,
@@ -255,22 +372,64 @@ class FullApiShowcasePlugin(Plugin[ShowcaseConfig]):
             media_type="image/png",
         )
         downloaded_path = await self.ctx.assets.download(uploaded)
+        file_token = await self.ctx.assets.issue_download_token(
+            b"TOKEN-PAYLOAD",
+            filename="token.txt",
+            single_use=False,
+        )
         try:
             assets_ok = downloaded_path.read_bytes() == payload_bytes
         finally:
             downloaded_path.unlink(missing_ok=True)
 
-        # 3. Proactive outbound message with Image asset
+        # 3. Proactive outbound messages (media + all rich segments)
         await self.ctx.messages.send(
             event.umo,
             MessageChain(Plain("proactive-sdk-ok"), Image(source=uploaded)),
         )
+        await self.ctx.messages.send(
+            event.umo,
+            MessageChain(
+                Plain("rich-sdk"),
+                At(user_id="u1", name="Moon"),
+                AtAll(),
+                Reply(id="m1", text="q"),
+                Face(id=1),
+                Forward(id="f1"),
+                Nodes([Node(sender_id="u1", content=[Plain("n")])]),
+                Poke(poke_type="126", user_id="u1"),
+                Json(data={"k": 1}),
+                Share(url="https://astrbot.app", title="AstrBot"),
+                Location(lat=31.2, lon=121.5, title="SH"),
+                Music(
+                    music_type="custom",
+                    url="https://astrbot.app/s",
+                    audio="https://astrbot.app/a.mp3",
+                    title="Song",
+                ),
+                ActionRow(
+                    [
+                        Button.callback("Approve", "sdk_approve", data={"item": "x"}),
+                        Button.link("Docs", "https://astrbot.app"),
+                    ]
+                ),
+            ),
+        )
 
-        # 4. Conversations full CRUD
+        # 4. Conversations full CRUD + multimodal parts
         created = await self.ctx.conversations.create(
             event.umo,
             title="t1",
-            messages=(Message(role="user", content="hello"),),
+            messages=(
+                Message(
+                    role="user",
+                    content=(
+                        TextPart("hello"),
+                        ImagePart(source="https://astrbot.app/a.png"),
+                        AudioPart(source="https://astrbot.app/a.wav"),
+                    ),
+                ),
+            ),
         )
         cur = await self.ctx.conversations.current(event.umo)
         fetched = await self.ctx.conversations.get(event.umo, created.id)
@@ -298,7 +457,91 @@ class FullApiShowcasePlugin(Plugin[ShowcaseConfig]):
             and after_del is None
         )
 
-        # 5. Plugin inspection + host-scoped & direct peer services
+        # 5. Event state, typing/react/group/call_llm, streaming & raw platform action
+        await self.ctx.events.set_call_llm(event, False)
+        await self.ctx.events.send_typing(event)
+        await self.ctx.events.stop_typing(event)
+        await self.ctx.events.react(event, "rocket")
+        grp_info = await self.ctx.events.get_group(event, group_id="grp-1")
+
+        async def _sdk_stream():
+            yield "sdk-stream-1"
+            yield Plain("sdk-stream-2")
+
+        await self.ctx.messages.send_streaming(event, _sdk_stream(), use_fallback=True)
+        raw_res = await self.ctx.platforms.call_action(
+            "webchat", "sdk_raw_ping", ping=1
+        )
+        events_platform_ok = (
+            grp_info is not None
+            and grp_info.get("group_id") == "grp-1"
+            and isinstance(raw_res, dict)
+            and raw_res.get("ping") == 1
+        )
+
+        # 6. Cron, KnowledgeBase, & MessageHistory Host services
+        async def _sdk_cron_cb(tag: str = "") -> None:
+            self._cron_tag = tag
+            self._cron_fired.set()
+
+        basic_job = await self.ctx.cron.add_basic_job(
+            "sdk_basic_job",
+            "*/5 * * * *",
+            _sdk_cron_cb,
+        )
+        listed_jobs = await self.ctx.cron.list_jobs()
+        await self.ctx.cron.delete_job(str(basic_job["job_id"]))
+        await self.ctx.cron.add_once_job(
+            "sdk_once_job",
+            datetime.now(UTC) + timedelta(seconds=0.15),
+            _sdk_cron_cb,
+            kwargs={"tag": "sdk-cron-ok"},
+            replace_existing=True,
+        )
+        await asyncio.wait_for(self._cron_fired.wait(), timeout=5.0)
+        cron_ok = (
+            any(j.get("job_id") == basic_job.get("job_id") for j in listed_jobs)
+            and self._cron_tag == "sdk-cron-ok"
+        )
+
+        emb_provs = await self.ctx.llm.list_providers(ProviderKind.EMBEDDING)
+        kb_rec = await self.ctx.kb.create(
+            "sdk_modern_kb",
+            embedding_provider_id=emb_provs[0].id,
+        )
+        kb_list = await self.ctx.kb.list()
+        kb_by_id = await self.ctx.kb.get(str(kb_rec["kb_id"]))
+        kb_by_name = await self.ctx.kb.get_by_name("sdk_modern_kb")
+        kb_del = await self.ctx.kb.delete(str(kb_rec["kb_id"]))
+        kb_ok = (
+            any(k.get("kb_id") == kb_rec.get("kb_id") for k in kb_list)
+            and kb_by_id is not None
+            and kb_by_name is not None
+            and kb_del is True
+        )
+
+        hist_rec = await self.ctx.history.insert(
+            "webchat",
+            "sdk_hist_u1",
+            {"role": "user", "text": "sdk-h1"},
+            sender_id="sdk_hist_u1",
+        )
+        await self.ctx.history.insert_chain(
+            "webchat",
+            "sdk_hist_u1",
+            "sdk-h2",
+            role="bot",
+        )
+        hist_cnt = await self.ctx.history.count("webchat", "sdk_hist_u1")
+        hist_rows = await self.ctx.history.get("webchat", "sdk_hist_u1")
+        await self.ctx.history.update(
+            int(hist_rec["id"]),
+            content={"role": "user", "text": "sdk-h1-upd"},
+        )
+        await self.ctx.history.delete_by_id(int(hist_rec["id"]))
+        history_ok = hist_cnt >= 2 and len(hist_rows) >= 2
+
+        # 7. Plugin inspection + host-scoped & direct peer services
         all_plugins = await self.ctx.plugins.list()
         peer_info = await self.ctx.plugins.get("astrbot/full_api_peer")
         svc_res = await self.ctx.plugins.call_service(
@@ -318,7 +561,7 @@ class FullApiShowcasePlugin(Plugin[ShowcaseConfig]):
             and direct_res.get("tag") == "[full_api_peer] clean"
         )
 
-        # 6. Render HTML & text to image assets
+        # 8. Render HTML & text to image assets
         html_asset = await self.ctx.render.html(
             "<h1>{{ title }}</h1>",
             {"title": "Hi"},
@@ -332,7 +575,7 @@ class FullApiShowcasePlugin(Plugin[ShowcaseConfig]):
             html_dl.unlink(missing_ok=True)
             text_dl.unlink(missing_ok=True)
 
-        # 7. Dynamic tools: register/unregister + update_runtime_tools
+        # 9. Dynamic tools: register/unregister + update_runtime_tools
         async def dyn_temp(call: ToolCallContext, item: str = "x") -> str:
             _ = call
             return f"temp:{item}"
@@ -342,7 +585,7 @@ class FullApiShowcasePlugin(Plugin[ShowcaseConfig]):
         runtime_refs = await self.ctx.tools.update_runtime_tools([RuntimeEchoTool()])
         tools_ok = [ref.name for ref in runtime_refs] == ["runtime_echo"]
 
-        # 8. LLM providers, generate, stream, embed, TTS/STT, and agent loop
+        # 10. LLM providers, generate, stream, embed, TTS/STT, and agent loop
         chat_providers = await self.ctx.llm.list_providers(ProviderKind.CHAT)
         cur_provider = await self.ctx.llm.current_provider(ProviderKind.CHAT)
         gen_res = await self.ctx.llm.generate("ping-chat", system_prompt="be brief")
@@ -375,7 +618,13 @@ class FullApiShowcasePlugin(Plugin[ShowcaseConfig]):
             "config_reloaded": self._config_reloaded_count,
             "storage_ok": storage_ok,
             "assets_ok": assets_ok,
+            "file_token": file_token,
+            "file_token_ok": bool(file_token),
             "convs_ok": convs_ok,
+            "events_platform_ok": events_platform_ok,
+            "cron_ok": cron_ok,
+            "kb_ok": kb_ok,
+            "history_ok": history_ok,
             "plugins_ok": plugins_ok,
             "render_ok": render_ok,
             "tools_ok": tools_ok,
@@ -387,7 +636,12 @@ class FullApiShowcasePlugin(Plugin[ShowcaseConfig]):
             (
                 storage_ok,
                 assets_ok,
+                bool(file_token),
                 convs_ok,
+                events_platform_ok,
+                cron_ok,
+                kb_ok,
+                history_ok,
                 plugins_ok,
                 render_ok,
                 tools_ok,

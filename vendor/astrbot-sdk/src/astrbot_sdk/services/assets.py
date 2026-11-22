@@ -141,6 +141,43 @@ class AssetService:
                 offset += length
         return target
 
+    async def issue_download_token(
+        self,
+        source: AssetRef | Path | bytes,
+        *,
+        filename: str | None = None,
+        media_type: str | None = None,
+        timeout: int | float | None = 300,
+        single_use: bool = False,
+    ) -> str:
+        """Stage a local asset or bytes on Host and issue a file download token.
+
+        Args:
+            source: Existing AssetRef, local Path, or raw bytes to expose.
+            filename: Optional filename hint when uploading raw bytes or paths.
+            media_type: Optional MIME type hint when uploading.
+            timeout: Token expiration duration in seconds.
+            single_use: Whether the token expires after one HTTP download.
+
+        Returns:
+            Signed/opaque download token string for ``/api/file/{token}``.
+        """
+        asset = (
+            source
+            if isinstance(source, AssetRef)
+            else await self.upload(source, filename=filename, media_type=media_type)
+        )
+        result = await self._ctx._invoke_capability(
+            "file.token",
+            "register",
+            {
+                "asset": asset,
+                "timeout": float(timeout) if timeout is not None else None,
+                "single_use": bool(single_use),
+            },
+        )
+        return str(result["token"])
+
 
 async def prepare_outbound_chain(
     chain: MessageChain,

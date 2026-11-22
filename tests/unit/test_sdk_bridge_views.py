@@ -98,7 +98,9 @@ async def test_bridge_views_served_via_pipeline(
         metadata = star_map[bridge.module_path]
         # metadata.yaml's views declaration and the manifest's i18n both
         # reached the registry entry.
-        assert metadata.views == [{"name": "demo", "title": "Demo Page"}]
+        from astrbot.core.chatui import ViewSpec
+
+        assert metadata.views == [ViewSpec(name="demo", title="Demo Page")]
         assert metadata.i18n == {"zh-CN": {"views": {"demo": {"title": "演示页"}}}}
         assert bridge._views_manifest["pages"][0]["name"] == "demo"
 

@@ -21,7 +21,17 @@ from .llm import LLMService
 from .plugins import PluginRegistryService
 from .protocol_registry import register_protocol_dataclass
 from .render import RenderService
-from .services import AssetService, MessageService, PluginStorage, SessionService
+from .services import (
+    AssetService,
+    CronClient,
+    EventStateClient,
+    KnowledgeBaseClient,
+    MessageHistoryClient,
+    MessageService,
+    PlatformClient,
+    PluginStorage,
+    SessionService,
+)
 from .tasks import TaskGroup
 from .tools import ToolService
 from .web import WebService
@@ -105,6 +115,11 @@ class PluginContext(Generic[ConfigT]):
     tools: ToolService = field(init=False)
     llm: LLMService = field(init=False)
     web: WebService = field(init=False)
+    events: EventStateClient = field(init=False)
+    platforms: PlatformClient = field(init=False)
+    cron: CronClient = field(init=False)
+    kb: KnowledgeBaseClient = field(init=False)
+    history: MessageHistoryClient = field(init=False)
     tasks: TaskGroup = field(default_factory=TaskGroup)
     _host_capability_invoker: HostCapabilityInvoker | None = field(
         default=None,
@@ -143,6 +158,11 @@ class PluginContext(Generic[ConfigT]):
         self.sessions = SessionService(self, waiters=self._session_waiters)
         self.tools = ToolService(self)
         self.llm = LLMService(self)
+        self.events = EventStateClient(self)
+        self.platforms = PlatformClient(self)
+        self.cron = CronClient(self)
+        self.kb = KnowledgeBaseClient(self)
+        self.history = MessageHistoryClient(self)
         self.web = (
             self._root_ctx.web if self._root_ctx is not None else WebService(self)
         )

@@ -702,6 +702,10 @@ class StdioPluginServer:
                         "roles": [role.value for role in spec.roles],
                         "regex": spec.regex,
                         "regex_flags": spec.regex_flags,
+                        "button_action": spec.button_action,
+                        "button_action_id": spec.button_action_id,
+                        "ui_action": spec.ui_action,
+                        "ui_action_id": spec.ui_action_id,
                     }
                 handlers.append(
                     {
