@@ -430,6 +430,34 @@ async def test_kook_voice_card_enters_pipeline_as_record(
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "quote_type,expected_component",
+    [
+        (KookMessageType.IMAGE, Image(file=TEST_MEDIA_URL)),
+        (KookMessageType.AUDIO, Record(file=TEST_MEDIA_URL, url=TEST_MEDIA_URL)),
+        (KookMessageType.VIDEO, Video(file=TEST_MEDIA_URL)),
+        (KookMessageType.FILE, File(name="file", url=TEST_MEDIA_URL)),
+    ],
+)
+async def test_kook_quoted_media(quote_type, expected_component):
+    from astrbot.core.platform.sources.kook.kook_adapter import KookPlatformAdapter
+
+    raw_event = json.loads(KookEventDataPath.GROUP_MESSAGE.read_text(encoding="utf-8"))
+    raw_event["d"]["extra"]["quote"].update(type=quote_type, content=TEST_MEDIA_URL)
+    event = KookWebsocketEvent.from_dict(raw_event)
+    adapter = KookPlatformAdapter({}, {}, asyncio.Queue())
+    try:
+        message = await adapter.convert_message(event.data)
+    finally:
+        await adapter.client.close()
+
+    reply, body = message.message
+    assert isinstance(reply, Reply)
+    assert reply.chain == [expected_component]
+    assert body == Plain(text="done!")
+
+
+@pytest.mark.asyncio
 async def test_kook_file_card_preserves_remote_attachment(monkeypatch):
     monkeypatch.setattr(
         "astrbot.core.platform.sources.kook.kook_adapter.KookClient",

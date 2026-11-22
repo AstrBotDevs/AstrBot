@@ -657,6 +657,18 @@ class KookPlatformAdapter(Platform):
 
         quote = data.extra.quote
         if quote is not None:
+            quoted_chain: list[BaseMessageComponent] = []
+            match quote.type:
+                case KookMessageType.TEXT | KookMessageType.KMARKDOWN:
+                    quoted_chain.append(Plain(text=quote.content))
+                case KookMessageType.IMAGE:
+                    quoted_chain.append(Image(file=quote.content))
+                case KookMessageType.AUDIO:
+                    quoted_chain.append(Record(file=quote.content, url=quote.content))
+                case KookMessageType.VIDEO:
+                    quoted_chain.append(Video(file=quote.content))
+                case KookMessageType.FILE:
+                    quoted_chain.append(File(name="file", url=quote.content))
             abm.message.insert(
                 0,
                 Reply(
@@ -665,9 +677,7 @@ class KookPlatformAdapter(Platform):
                     sender_nickname=quote.author.nickname,
                     time=quote.create_at // 1000,
                     message_str=quote.content,
-                    chain=[Plain(text=quote.content)]
-                    if quote.type in (KookMessageType.TEXT, KookMessageType.KMARKDOWN)
-                    else [],
+                    chain=quoted_chain,
                 ),
             )
         return abm
