@@ -25,7 +25,7 @@ def resolve_webchat_request_flags(payload: dict[str, Any]) -> dict[str, Any]:
     legacy top-level field, then the server default.
 
     ``reasoning_effort`` is read only from ``flags``. A missing or invalid value
-    resolves to ``None`` so the provider keeps the model's default level.
+    resolves to ``None`` so the provider's reasoning settings remain unchanged.
 
     Args:
         payload: Incoming WebChat request or queue payload.

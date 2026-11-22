@@ -93,13 +93,13 @@ export type ChatFlags = {
      */
     enable_reasoning?: boolean;
     /**
-     * Reasoning effort for the selected model in this WebChat request. It overrides the provider's configured reasoning_effort for supported providers and is ignored by unsupported providers. When omitted or invalid, the model default is used.
+     * Reasoning effort for the selected model in this WebChat request. It overrides the provider's configured reasoning_effort for supported providers and is ignored by unsupported providers. If omitted or invalid, WebChat leaves the provider's reasoning settings unchanged.
      */
     reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
 };
 
 /**
- * Reasoning effort for the selected model in this WebChat request. It overrides the provider's configured reasoning_effort for supported providers and is ignored by unsupported providers. When omitted or invalid, the model default is used.
+ * Reasoning effort for the selected model in this WebChat request. It overrides the provider's configured reasoning_effort for supported providers and is ignored by unsupported providers. If omitted or invalid, WebChat leaves the provider's reasoning settings unchanged.
  */
 export type reasoning_effort = 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
 
