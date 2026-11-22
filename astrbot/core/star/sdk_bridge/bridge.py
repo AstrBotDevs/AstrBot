@@ -364,13 +364,13 @@ class SDKPluginBridge:
             metadata = SimpleNamespace(
                 author=str(spec.get("author") or ""),
                 desc=str(spec.get("desc") or ""),
-                views=[],
-                pages=None,
+                views=list(spec.get("views") or []),
+                pages=spec.get("pages"),
                 display_name=spec.get("display_name"),
                 short_desc=spec.get("short_desc"),
                 repo=spec.get("repo"),
-                support_platforms=[],
-                astrbot_version=None,
+                support_platforms=list(spec.get("support_platforms") or []),
+                astrbot_version=spec.get("astrbot_version"),
             )
         elif self.legacy:
             from astrbot_sdk.runtime.loader import _load_metadata_for_legacy
@@ -443,7 +443,41 @@ class SDKPluginBridge:
             host_info["snapshot"] = await build_legacy_snapshot(self.context)
         config = None
         if self._external is not None:
-            config = self._external.get("config")
+            inline_schema = self._external.get("config_schema")
+            if isinstance(inline_schema, dict):
+                from astrbot.core.utils.astrbot_path import get_astrbot_config_path
+
+                self._json_schema = dict(inline_schema)
+                cfg = AstrBotConfig(
+                    config_path=str(
+                        Path(get_astrbot_config_path())
+                        / f"{self.root_dir_name}_config.json"
+                    ),
+                    schema=to_astrbot_config_schema(self._json_schema),
+                )
+                if isinstance(self._external.get("config"), Mapping):
+                    cfg.update(dict(self._external["config"]))
+                validate_against_json_schema(self._json_schema, dict(cfg))
+                config = cfg
+            elif self.plugin_root.is_dir():
+                if self.legacy:
+                    config = _load_legacy_plugin_config(
+                        self.plugin_root,
+                        self.root_dir_name,
+                    )
+                else:
+                    config, self._json_schema = _load_sdk_plugin_config(
+                        self.plugin_root,
+                        self.root_dir_name,
+                    )
+                    if config is not None and isinstance(
+                        self._external.get("config"), Mapping
+                    ):
+                        config.update(dict(self._external["config"]))
+                if config is None:
+                    config = self._external.get("config")
+            else:
+                config = self._external.get("config")
         elif self.legacy:
             config = _load_legacy_plugin_config(self.plugin_root, self.root_dir_name)
         else:

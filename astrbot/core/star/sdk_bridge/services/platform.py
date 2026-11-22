@@ -42,6 +42,8 @@ class PlatformRawService:
         if adapter is None:
             raise NotFound(f"platform not found: {platform_id}")
         bot = getattr(adapter, "bot", None)
+        if bot is None and callable(getattr(adapter, "get_client", None)):
+            bot = adapter.get_client()
         if bot is None:
             raise NotFound(f"platform {platform_id} exposes no bot client")
         client = getattr(bot, "api", bot)

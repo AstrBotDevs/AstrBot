@@ -37,6 +37,23 @@ def _encode_item(value: Any) -> Any:
     return encode_value(value)
 
 
+def _encode_recorded_op(op: dict[str, Any]) -> dict[str, Any]:
+    """Encode a recorded raw or pre-encoded write op into wire format."""
+    if "raw" in op:
+        return {
+            "field": op["field"],
+            "op": op["op"],
+            "value": _encode_item(op["raw"]),
+        }
+    if "raw_list" in op:
+        return {
+            "field": op["field"],
+            "op": op["op"],
+            "value": [_encode_item(item) for item in op["raw_list"]],
+        }
+    return dict(op)
+
+
 class TrackedList(list):
     """List that records mutation operations for Host-side application."""
 
@@ -48,7 +65,7 @@ class TrackedList(list):
     def append(self, value: Any) -> None:
         super().append(value)
         self._ops.append(
-            {"field": self._field, "op": "append", "value": _encode_item(value)},
+            {"field": self._field, "op": "append", "raw": value},
         )
 
     def extend(self, values: Any) -> None:
@@ -58,7 +75,7 @@ class TrackedList(list):
             {
                 "field": self._field,
                 "op": "extend",
-                "value": [_encode_item(item) for item in values],
+                "raw_list": list(values),
             },
         )
 
@@ -73,7 +90,7 @@ class TrackedList(list):
             {
                 "field": self._field,
                 "op": "set",
-                "value": [_encode_item(item) for item in self],
+                "raw_list": list(self),
             },
         )
 
@@ -131,11 +148,10 @@ class HookDTO:
         if name in self._list_fields:
             if not isinstance(value, TrackedList):
                 value = TrackedList(name, value, ops)
-            # List fields may hold message segments, which only the chain
-            # codec can encode.
-            encoded = [_encode_item(item) for item in value]
-        else:
-            encoded = encode_value(value)
+            values[name] = value
+            ops.append({"field": name, "op": "set", "raw_list": list(value)})
+            return
+        encoded = encode_value(value)
         values[name] = value
         ops.append({"field": name, "op": "set", "value": encoded})
 
@@ -146,7 +162,50 @@ class HookDTO:
             values[name] = TrackedList(name, values.get(name), ops)
 
     def _write_ops(self) -> list[dict]:
-        return object.__getattribute__(self, "_ops")
+        return [_encode_recorded_op(op) for op in object.__getattribute__(self, "_ops")]
+
+    async def _prepare_write_ops(self, asset_service: Any) -> list[dict]:
+        """Upload local media segments in recorded writes before encoding."""
+        from .message_components import MessageSegment
+        from .services.assets import prepare_outbound_chain
+
+        encoded_ops: list[dict] = []
+        for op in object.__getattribute__(self, "_ops"):
+            if "raw" in op and isinstance(op["raw"], MessageSegment):
+                prepared = await prepare_outbound_chain(
+                    MessageChain(op["raw"]),
+                    asset_service,
+                )
+                encoded_ops.append(
+                    {
+                        "field": op["field"],
+                        "op": op["op"],
+                        "value": _encode_item(prepared[0]),
+                    }
+                )
+            elif "raw_list" in op and any(
+                isinstance(item, MessageSegment) for item in op["raw_list"]
+            ):
+                prepared_items: list[Any] = []
+                for item in op["raw_list"]:
+                    if isinstance(item, MessageSegment):
+                        prepared_chain = await prepare_outbound_chain(
+                            MessageChain(item),
+                            asset_service,
+                        )
+                        prepared_items.append(_encode_item(prepared_chain[0]))
+                    else:
+                        prepared_items.append(_encode_item(item))
+                encoded_ops.append(
+                    {
+                        "field": op["field"],
+                        "op": op["op"],
+                        "value": prepared_items,
+                    }
+                )
+            else:
+                encoded_ops.append(_encode_recorded_op(op))
+        return encoded_ops
 
 
 class LLMRequest(HookDTO):

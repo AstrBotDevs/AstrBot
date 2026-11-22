@@ -716,7 +716,11 @@ class LoadedPlugin:
             from ..hooks import HookDTO
 
             return {
-                "writes": dto._write_ops() if isinstance(dto, HookDTO) else [],
+                "writes": (
+                    await dto._prepare_write_ops(scoped_ctx.assets)
+                    if isinstance(dto, HookDTO)
+                    else []
+                ),
             }
         finally:
             if call_id is not None:

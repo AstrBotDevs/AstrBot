@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextvars
 import logging
 from collections.abc import Coroutine
 from typing import Any, TypeVar
@@ -43,7 +44,23 @@ class TaskGroup:
         if self._closing:
             coro.close()
             raise AstrBotSDKError("plugin is stopping; background task rejected")
-        task: asyncio.Task[Any] = asyncio.create_task(coro, name=name)
+        ctx_copy = contextvars.copy_context()
+
+        def _create_detached() -> asyncio.Task[Any]:
+            from .context import (
+                _ACTIVE_INVOCATION_CTX,
+                _AMBIENT_CALL_ID,
+                _AMBIENT_EVENT,
+                _AMBIENT_UMO,
+            )
+
+            _ACTIVE_INVOCATION_CTX.set(None)
+            _AMBIENT_CALL_ID.set(None)
+            _AMBIENT_EVENT.set(None)
+            _AMBIENT_UMO.set(None)
+            return asyncio.create_task(coro, name=name)
+
+        task: asyncio.Task[Any] = ctx_copy.run(_create_detached)
         self._cancellable.add(task)
 
         def _done(done_task: asyncio.Task[Any]) -> None:

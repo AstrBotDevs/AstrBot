@@ -54,14 +54,23 @@ class PluginServiceRouter:
             raise InvalidRequest("plugin.service.invoke requires target and service")
 
         caller_meta = getattr(caller_bridge, "manifest_metadata", None)
-        if caller_meta is None:
+        external_spec = getattr(caller_bridge, "_external", None)
+        if caller_meta is not None:
+            declared_deps = set(caller_meta.dependencies.keys()) | set(
+                caller_meta.optional_dependencies.keys()
+            )
+        elif isinstance(external_spec, Mapping) and (
+            "dependencies" in external_spec or "optional_dependencies" in external_spec
+        ):
+            deps = external_spec.get("dependencies") or {}
+            opt_deps = external_spec.get("optional_dependencies") or {}
+            declared_deps = set(
+                deps.keys() if isinstance(deps, Mapping) else deps
+            ) | set(opt_deps.keys() if isinstance(opt_deps, Mapping) else opt_deps)
+        else:
             raise CapabilityDenied(
                 "plugin service calls require manifest dependency declarations"
             )
-
-        declared_deps = set(caller_meta.dependencies.keys()) | set(
-            caller_meta.optional_dependencies.keys()
-        )
         target_bridge = self._find_target(target_identifier)
         target_aliases = {target_identifier}
         if target_bridge is not None:
