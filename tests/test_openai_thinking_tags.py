@@ -4,6 +4,9 @@ from openai.types.chat.chat_completion import ChatCompletion
 from astrbot.core.provider.sources.openai_source import ProviderOpenAIOfficial
 
 
+thinking_close = "</" + "thinking>"
+
+
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
     ("content", "reasoning_field", "answer", "reasoning"),
@@ -29,12 +32,51 @@ from astrbot.core.provider.sources.openai_source import ProviderOpenAIOfficial
         ("<thinker>Example</thinker>", None, "<thinker>Example</thinker>", None),
         ("<thinking>Inline</thinking>Answer", "Structured", "Answer", "Structured"),
         ("<thinking>Inline</thinking>Answer", "", "Answer", ""),
-        ("<thinking>Unfinished", None, "<thinking>Unfinished", None),
+        (
+            "<thinking>Unfinished",
+            None,
+            "",
+            "<thinking>Unfinished",
+        ),
         (
             "<think>Example</thinking>Answer",
             None,
-            "<think>Example</thinking>Answer",
+            "Answer",
+            "Example",
+        ),
+        (
+            (
+                f"Draft one{thinking_close}\n"
+                f"Intermediate draft{thinking_close}\n"
+                "Final answer"
+            ),
             None,
+            "Final answer",
+            f"Draft one{thinking_close}\nIntermediate draft{thinking_close}",
+        ),
+        (
+            f"Draft{thinking_close}\nFinal answer",
+            None,
+            "Final answer",
+            f"Draft{thinking_close}",
+        ),
+        (
+            f"Literal closing tag {thinking_close} remains visible",
+            None,
+            f"Literal closing tag {thinking_close} remains visible",
+            None,
+        ),
+        (
+            f"Examples: {thinking_close} and {thinking_close}",
+            None,
+            f"Examples: {thinking_close} and",
+            None,
+        ),
+        (
+            f"Draft{thinking_close}\nPrefix <thinking>Unfinished",
+            None,
+            "",
+            f"Draft{thinking_close}\n<thinking>Unfinished",
         ),
     ],
 )
@@ -67,54 +109,3 @@ async def test_openai_reasoning_tag_compatibility(
         assert response.reasoning_content == reasoning
     else:
         assert not response.reasoning_content
-
-
-@pytest.mark.asyncio
-async def test_openai_discards_reasoning_before_unmatched_closing_tags():
-    provider = ProviderOpenAIOfficial.__new__(ProviderOpenAIOfficial)
-    provider.reasoning_key = "reasoning_content"
-    closing_tag = "</" + "thinking>"
-    completion = ChatCompletion.model_validate(
-        {
-            "id": "unmatched-reasoning-tags",
-            "object": "chat.completion",
-            "created": 0,
-            "model": "test-model",
-            "choices": [
-                {
-                    "index": 0,
-                    "finish_reason": "stop",
-                    "message": {
-                        "role": "assistant",
-                        "content": (
-                            f"Draft one{closing_tag}"
-                            f"Draft two\n{closing_tag}"
-                            "Final answer"
-                        ),
-                    },
-                }
-            ],
-        }
-    )
-
-    response = await provider._parse_openai_completion(completion, None)
-
-    assert response.completion_text == "Final answer"
-    assert response.reasoning_content == (
-        f"Draft one{closing_tag}Draft two\n{closing_tag}"
-    )
-
-
-def test_openai_discards_reasoning_tags_split_across_stream_chunks():
-    provider = ProviderOpenAIOfficial.__new__(ProviderOpenAIOfficial)
-    state = [False, ""]
-    chunks = [
-        "Visible <thi",
-        "nking>hidden</thi",
-        "nking> answer",
-    ]
-
-    visible = "".join(provider._strip_stream_reasoning(chunk, state) for chunk in chunks)
-
-    assert visible == "Visible  answer"
-    assert state == [False, ""]

@@ -589,55 +589,6 @@ class ProviderOpenAIOfficial(Provider):
 
         return llm_response
 
-    def _strip_stream_reasoning(self, text: str, state_flag: list) -> str:
-        """Strip <thinking>...</thinking> blocks that may span multiple chunks."""
-        tag_prefixes = ("<think", "<thinking", "</think", "</thinking")
-        buf = state_flag[1] + text
-        state_flag[1] = ""
-        partial_tag_length = next(
-            (
-                length
-                for length in range(min(len(buf), max(map(len, tag_prefixes))), 0, -1)
-                if any(prefix.startswith(buf[-length:]) for prefix in tag_prefixes)
-            ),
-            0,
-        )
-        if partial_tag_length:
-            state_flag[1] = buf[-partial_tag_length:]
-            buf = buf[:-partial_tag_length]
-
-        out = []
-        while buf:
-            if state_flag[0]:
-                idx = buf.find("</thinking>")
-                if idx < 0:
-                    idx2 = buf.find("</think>")
-                    if idx2 < 0:
-                        buf = ""
-                    else:
-                        buf = buf[idx2 + len("</think>") :]
-                        state_flag[0] = False
-                else:
-                    buf = buf[idx + len("</thinking>") :]
-                    state_flag[0] = False
-                continue
-            m = re.search(r"<(thinking|think)>", buf)
-            if m:
-                out.append(buf[: m.start()])
-                tag = m.group(1)
-                rest = buf[m.end() :]
-                close = rest.find(f"</{tag}>")
-                if close < 0:
-                    state_flag[0] = True
-                    buf = ""
-                else:
-                    # The tag closes in this chunk, so discard the reasoning between.
-                    buf = rest[close + len(f"</{tag}>") :]
-            else:
-                out.append(buf)
-                buf = ""
-        return "".join(out)
-
     async def _query_stream(
         self,
         payloads: dict,
@@ -692,8 +643,6 @@ class ProviderOpenAIOfficial(Provider):
 
         state = ChatCompletionStreamState()
 
-        _stream_think = [False, ""]  # reasoning flag and buffered partial tag
-
         async for chunk in stream:
             choice = chunk.choices[0] if chunk.choices else None
             delta = choice.delta if choice else None
@@ -729,10 +678,7 @@ class ProviderOpenAIOfficial(Provider):
                 _y = True
             if delta and delta.content:
                 # Don't strip streaming chunks to preserve spaces between words
-                raw_text = self._normalize_content(delta.content, strip=False)
-                # Filter inline reasoning tags (e.g. <thinking>...</thinking>)
-                # that some compatible providers leak into the content stream.
-                completion_text = self._strip_stream_reasoning(raw_text, _stream_think)
+                completion_text = self._normalize_content(delta.content, strip=False)
                 llm_response.result_chain = MessageChain(
                     chain=[Comp.Plain(completion_text)],
                 )
@@ -914,45 +860,77 @@ class ProviderOpenAIOfficial(Provider):
         if choice.message.content is not None:
             completion_text = self._normalize_content(choice.message.content)
             # Some compatible providers wrap reasoning in <think> or <thinking> tags.
-            # we use regex to remove them, and store then in reasoning_content field
-            reasoning_pattern = re.compile(r"<(think|thinking)>(.*?)</\1>", re.DOTALL)
+            # Accept either supported closing spelling for compatibility.
+            reasoning_pattern = re.compile(
+                r"<(?:think|thinking)>(.*?)</(?:think|thinking)>",
+                re.DOTALL | re.IGNORECASE,
+            )
             matches = reasoning_pattern.findall(completion_text)
             if matches:
                 llm_response.reasoning_content = "\n".join(
-                    [match[1].strip() for match in matches],
+                    [match.strip() for match in matches],
                 )
                 completion_text = reasoning_pattern.sub("", completion_text).strip()
-            # Some compatible providers omit opening tags and use a closing tag
-            # as a reasoning delimiter. The final answer follows the last one.
-            closing_tags = list(
-                re.finditer(r"</(?:think|thinking)>", completion_text, re.IGNORECASE)
-            )
-            has_opening_tag = re.search(
-                r"<(?:think|thinking)>",
-                completion_text,
+
+            closing_tag_pattern = re.compile(
+                r"</(?:think|thinking)>",
                 re.IGNORECASE,
             )
-            if closing_tags and not has_opening_tag:
-                answer_start = closing_tags[-1].end()
-                if completion_text[answer_start:].strip():
-                    unmatched_reasoning = completion_text[:answer_start].strip()
-                    if unmatched_reasoning:
-                        llm_response.reasoning_content = "\n".join(
-                            part
-                            for part in (
-                                llm_response.reasoning_content,
-                                unmatched_reasoning,
-                            )
-                            if part
+            # A provider may omit opening tags and use line-delimited closing
+            # tags as boundaries between drafts and the visible answer.
+            boundary_ends = []
+            for closing_match in closing_tag_pattern.finditer(completion_text):
+                suffix = completion_text[closing_match.end() :]
+                if re.match(r"[ \t]*\r?\n", suffix):
+                    boundary_ends.append(closing_match.end())
+            if (
+                trailing_closing_match := re.search(
+                    r"(?:^|\n)[^\n]*</(?:think|thinking)>[ \t]*$",
+                    completion_text,
+                    re.IGNORECASE,
+                )
+            ) and "\n" in completion_text[: trailing_closing_match.start()]:
+                boundary_ends.append(trailing_closing_match.end())
+            if boundary_ends:
+                answer_start = boundary_ends[-1]
+                unmatched_reasoning = completion_text[:answer_start].strip()
+                if unmatched_reasoning:
+                    llm_response.reasoning_content = "\n".join(
+                        part
+                        for part in (
+                            llm_response.reasoning_content,
+                            unmatched_reasoning,
                         )
-                    completion_text = completion_text[answer_start:].strip()
-                else:
-                    completion_text = re.sub(
-                        r"</(?:think|thinking)>",
-                        "",
-                        completion_text,
-                        flags=re.IGNORECASE,
-                    ).strip()
+                        if part
+                    )
+                completion_text = completion_text[answer_start:].strip()
+
+            opening_tag_pattern = re.compile(
+                r"<(?:think|thinking)>",
+                re.IGNORECASE,
+            )
+            if opening_match := opening_tag_pattern.search(completion_text):
+                reasoning_start = opening_match.start()
+                unmatched_reasoning = completion_text[reasoning_start:].strip()
+                if unmatched_reasoning:
+                    llm_response.reasoning_content = "\n".join(
+                        part
+                        for part in (
+                            llm_response.reasoning_content,
+                            unmatched_reasoning,
+                        )
+                        if part
+                    )
+                completion_text = ""
+
+            # Remove only a trailing delimiter so literal tag examples remain.
+            completion_text = re.sub(
+                r"</(?:think|thinking)>\s*$",
+                "",
+                completion_text,
+                count=1,
+                flags=re.IGNORECASE,
+            ).strip()
             llm_response.result_chain = MessageChain().message(completion_text)
         elif refusal := getattr(choice.message, "refusal", None):
             refusal_text = self._normalize_content(refusal)
