@@ -364,6 +364,7 @@ def install(host_version: str | None = None) -> None:
     star_mod.Star = star.Star
     star_mod.Context = star.Context
     star_mod.MessageSesion = star.MessageSesion
+    star_mod.MessageSession = star.MessageSesion
     star_mod.StarTools = star.StarTools
     star_mod.register = star.register
 
@@ -442,6 +443,7 @@ def install(host_version: str | None = None) -> None:
     register_mod.register_custom_filter = event.filter.custom_filter
     register_mod.register_button_action = event.filter.button_action
     register_mod.register_ui_action = event.filter.ui_action
+    register_mod.register_on_message = event.filter.on_message
     register_mod.register_agent = _unsupported_agent
     for hook_name in (
         "on_llm_request",
@@ -507,7 +509,38 @@ def install(host_version: str | None = None) -> None:
     message_tools_mod = ModuleType("astrbot.core.tools.message_tools")
     message_tools_mod.SendMessageToUserTool = _ShellRecord
 
-    astr_main_agent_mod = ModuleType("astrbot.core.astr_main_agent")
+    def _resolve_fallback_providers(
+        provider_inst: Any,
+        plugin_context: Any,
+        fallback_ids: list[str] | Any,
+    ) -> list[Any]:
+        if not isinstance(fallback_ids, list):
+            return []
+        cur_id = str(getattr(provider_inst, "provider_config", {}).get("id", ""))
+        if not cur_id and callable(getattr(provider_inst, "meta", None)):
+            meta_obj = provider_inst.meta()
+            cur_id = str(getattr(meta_obj, "id", "") or "")
+        seen = {cur_id} if cur_id else set()
+        result: list[Any] = []
+        get_by_id = getattr(plugin_context, "get_provider_by_id", None)
+        for fid in fallback_ids:
+            if not isinstance(fid, str) or not fid or fid in seen:
+                continue
+            resolved = get_by_id(fid) if callable(get_by_id) else None
+            if resolved is not None:
+                result.append(resolved)
+                seen.add(fid)
+        return result
+
+    def _select_image_provider(
+        provider_inst: Any,
+        req: Any = None,
+        fallback_providers: list[Any] | None = None,
+    ) -> Any:
+        _ = (req, fallback_providers)
+        return provider_inst
+
+    astr_main_agent_mod = _namespace_package("astrbot.core.astr_main_agent")
     astr_main_agent_mod.MainAgentBuildConfig = _ShellRecord
     astr_main_agent_mod.build_main_agent = _unsupported(
         "build_main_agent (proactive in-plugin agent)"
@@ -515,6 +548,26 @@ def install(host_version: str | None = None) -> None:
     astr_main_agent_mod._get_session_conv = _unsupported(
         "_get_session_conv (proactive in-plugin agent)"
     )
+    astr_main_agent_mod._get_fallback_chat_providers = _resolve_fallback_providers
+    astr_main_agent_mod._select_image_chat_provider = _select_image_provider
+
+    astr_main_agent_providers_mod = ModuleType("astrbot.core.astr_main_agent.providers")
+    astr_main_agent_providers_mod.resolve_fallback_providers = (
+        _resolve_fallback_providers
+    )
+    astr_main_agent_providers_mod.select_image_provider = _select_image_provider
+
+    astr_agent_runtime_mod = _namespace_package("astrbot.core.astr_agent_runtime")
+    astr_agent_runtime_main_mod = _namespace_package(
+        "astrbot.core.astr_agent_runtime.main_agent"
+    )
+    astr_agent_runtime_providers_mod = ModuleType(
+        "astrbot.core.astr_agent_runtime.main_agent.providers"
+    )
+    astr_agent_runtime_providers_mod.resolve_fallback_providers = (
+        _resolve_fallback_providers
+    )
+    astr_agent_runtime_providers_mod.select_image_provider = _select_image_provider
 
     regex_filter_mod = ModuleType("astrbot.core.star.filter.regex")
     regex_filter_mod.RegexFilter = event.RegexFilter
@@ -535,6 +588,7 @@ def install(host_version: str | None = None) -> None:
     platform_mod.Group = event.Group
     platform_mod.PlatformStatus = event.PlatformStatus
     platform_mod.MessageSesion = star.MessageSesion
+    platform_mod.MessageSession = star.MessageSesion
 
     # Per-platform source modules legacy plugins import for isinstance
     # checks and raw bot access. Parents up to astrbot.core.platform already
@@ -918,6 +972,7 @@ def install(host_version: str | None = None) -> None:
     all_mod.platform_adapter_type = event_mod.filter.platform_adapter_type
     all_mod.button_action = event_mod.filter.button_action
     all_mod.ui_action = event_mod.filter.ui_action
+    all_mod.on_message = event_mod.filter.on_message
     all_mod.ButtonActionFilter = event.ButtonActionFilter
     all_mod.UIActionFilter = event.UIActionFilter
     all_mod.EventMessageType = event.EventMessageType
@@ -1040,6 +1095,16 @@ def install(host_version: str | None = None) -> None:
     sys.modules["astrbot.core.tools"] = tools_pkg
     sys.modules["astrbot.core.tools.message_tools"] = message_tools_mod
     sys.modules["astrbot.core.astr_main_agent"] = astr_main_agent_mod
+    sys.modules["astrbot.core.astr_main_agent.providers"] = (
+        astr_main_agent_providers_mod
+    )
+    sys.modules["astrbot.core.astr_agent_runtime"] = astr_agent_runtime_mod
+    sys.modules["astrbot.core.astr_agent_runtime.main_agent"] = (
+        astr_agent_runtime_main_mod
+    )
+    sys.modules["astrbot.core.astr_agent_runtime.main_agent.providers"] = (
+        astr_agent_runtime_providers_mod
+    )
     sys.modules["astrbot.core.agent.hooks"] = agent_hooks_mod
     sys.modules["astrbot.core.star.filter.regex"] = regex_filter_mod
     sys.modules["astrbot.core.message"] = _namespace_package("astrbot.core.message")

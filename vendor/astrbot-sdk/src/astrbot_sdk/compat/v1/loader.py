@@ -312,15 +312,22 @@ def _compile_filters(
     Returns the spec plus any custom Python filters, which are evaluated
     Runner-side at invoke time.
     """
+    resolved_priority = next(
+        (int(p) for s in filters if (p := getattr(s, "priority", None)) is not None),
+        0,
+    )
     for spec in filters:
         if isinstance(spec, HookMarker):
             stage = spec.stage
             if stage.startswith("lifecycle."):
-                return HandlerSpec(kind=HandlerKind.LIFECYCLE_STARTUP), []
+                return HandlerSpec(
+                    kind=HandlerKind.LIFECYCLE_STARTUP,
+                    priority=resolved_priority,
+                ), []
             kind = HOOK_STAGE_KINDS.get(stage)
             if kind is None:
                 raise InvalidPluginDefinition(f"unsupported legacy hook stage: {stage}")
-            return HandlerSpec(kind=kind), []
+            return HandlerSpec(kind=kind, priority=resolved_priority), []
         if isinstance(spec, LLMToolMarker):
             return HandlerSpec(kind=HandlerKind.TOOL, tool_name=spec.name), []
 
@@ -331,6 +338,7 @@ def _compile_filters(
     regex_flags = 0
     message_types: list[MessageType] = []
     platforms: list[str] = []
+    allow_all_platforms = False
     roles: list[SenderRole] = []
     custom_filters = []
     button_action = False
@@ -387,9 +395,12 @@ def _compile_filters(
             if isinstance(platform_type, str):
                 platforms.append(platform_type)
             elif isinstance(platform_type, PlatformAdapterType):
-                for member, name in PLATFORM_ADAPTER_NAMES.items():
-                    if platform_type & member:
-                        platforms.append(name)
+                if platform_type & PlatformAdapterType.ALL:
+                    allow_all_platforms = True
+                else:
+                    for member, name in PLATFORM_ADAPTER_NAMES.items():
+                        if platform_type & member:
+                            platforms.append(name)
             else:
                 platforms.append(str(platform_type))
         elif isinstance(spec, PermissionTypeFilter):
@@ -400,6 +411,9 @@ def _compile_filters(
         elif isinstance(spec, CustomFilter):
             custom_filters.append(spec.custom_filter)
 
+    effective_platforms: tuple[str, ...] = (
+        () if allow_all_platforms else tuple(platforms)
+    )
     if path is not None:
         sub_command = bool(
             filters
@@ -410,13 +424,14 @@ def _compile_filters(
         return (
             HandlerSpec(
                 kind=HandlerKind.COMMAND,
+                priority=resolved_priority,
                 path=path,
                 group=group,
                 group_custom_filters=group_custom_filters,
                 sub_command=sub_command,
                 aliases=aliases,
                 message_types=tuple(message_types),
-                platforms=tuple(platforms),
+                platforms=effective_platforms,
                 roles=tuple(roles),
             ),
             custom_filters,
@@ -424,8 +439,9 @@ def _compile_filters(
     return (
         HandlerSpec(
             kind=HandlerKind.MESSAGE,
+            priority=resolved_priority,
             message_types=tuple(message_types),
-            platforms=tuple(platforms),
+            platforms=effective_platforms,
             roles=tuple(roles),
             regex=regex,
             regex_flags=regex_flags,
@@ -878,7 +894,14 @@ def load_legacy_plugin(
         from ...runtime.loader import install_virtual_plugin_root
 
         install_virtual_plugin_root(root)
-    module_name = f"{package}.main"
+    if (root / "main.py").is_file():
+        module_name = f"{package}.main"
+    elif (root / f"{root.name}.py").is_file():
+        module_name = f"{package}.{root.name}"
+    elif (root / "__init__.py").is_file():
+        module_name = package
+    else:
+        module_name = f"{package}.main"
 
     # Bind the legacy facades before any plugin code runs: plugins may touch
     # StarTools/sp/html_renderer at module import time (top-level statements
@@ -1020,6 +1043,7 @@ def load_legacy_plugin(
             kind=spec.kind,
             id=method_name,
             description=inspect.getdoc(method),
+            priority=spec.priority,
             path=spec.path,
             group=spec.group,
             group_custom_filters=spec.group_custom_filters,

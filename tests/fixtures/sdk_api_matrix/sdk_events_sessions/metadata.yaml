@@ -1,0 +1,16 @@
+schema_version: 2
+name: sdk_events_sessions
+desc: Dedicated new-SDK plugin exercising EventStateClient, PlatformClient, MessageService, and SessionFilters.
+author: astrbot
+version: 1.0.0
+runtime:
+  api: sdk
+  entrypoint: main:SdkEventsSessionsPlugin
+  sdk_version: ">=0.1,<0.2"
+capabilities:
+  required:
+    - id: message.receive
+    - id: message.send
+    - id: message.wait
+    - id: event.state
+    - id: platform.raw

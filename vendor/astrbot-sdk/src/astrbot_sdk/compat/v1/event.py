@@ -49,6 +49,7 @@ class CommandFilter:
         alias: set | None = None,
         is_group: bool = False,
         is_sub_command: bool = False,
+        priority: int | None = None,
     ) -> None:
         self.command_name = command_name
         self.alias = alias or set()
@@ -56,22 +57,35 @@ class CommandFilter:
         # (in-process CommandGroupFilter) instead of running the handler.
         self.is_group = is_group
         self.is_sub_command = is_sub_command
+        self.priority = priority
 
 
 class RegexFilter:
-    def __init__(self, regex: str) -> None:
+    def __init__(self, regex: str, priority: int | None = None) -> None:
         self.regex = regex
+        self.priority = priority
 
 
 class EventMessageTypeFilter:
-    def __init__(self, event_message_type: Any) -> None:
+    def __init__(
+        self,
+        event_message_type: Any,
+        priority: int | None = None,
+    ) -> None:
         self.event_message_type = event_message_type
+        self.priority = priority
 
 
 class PermissionTypeFilter:
-    def __init__(self, permission_type: Any, raise_error: bool = True) -> None:
+    def __init__(
+        self,
+        permission_type: Any,
+        raise_error: bool = True,
+        priority: int | None = None,
+    ) -> None:
         self.permission_type = permission_type
         self.raise_error = raise_error
+        self.priority = priority
 
     def filter(self, event: Any, cfg: Any = None) -> bool:
         """Runtime permission check, mirroring the in-process filter."""
@@ -84,8 +98,13 @@ class PermissionTypeFilter:
 
 
 class PlatformAdapterTypeFilter:
-    def __init__(self, platform_adapter_type_or_str: Any) -> None:
+    def __init__(
+        self,
+        platform_adapter_type_or_str: Any,
+        priority: int | None = None,
+    ) -> None:
         self.platform_type = platform_adapter_type_or_str
+        self.priority = priority
 
 
 class CustomFilter:
@@ -96,17 +115,28 @@ class CustomFilter:
     filters are used as-is.
     """
 
-    def __init__(self, custom_filter: Any, *args: Any) -> None:
+    def __init__(
+        self,
+        custom_filter: Any,
+        *args: Any,
+        priority: int | None = None,
+    ) -> None:
         if isinstance(custom_filter, type):
             custom_filter = custom_filter(args[0] if args else True)
         self.custom_filter = custom_filter
+        self.priority = priority
 
 
 class ButtonActionFilter:
     """Filter matching normalized callback button interaction events."""
 
-    def __init__(self, action_id: str | None = None) -> None:
+    def __init__(
+        self,
+        action_id: str | None = None,
+        priority: int | None = None,
+    ) -> None:
         self.action_id = action_id
+        self.priority = priority
 
     def filter(self, event: Any, cfg: Any = None) -> bool:
         del cfg
@@ -123,8 +153,13 @@ class ButtonActionFilter:
 class UIActionFilter:
     """Filter matching authenticated ChatUI view interaction events."""
 
-    def __init__(self, action_id: str | None = None) -> None:
+    def __init__(
+        self,
+        action_id: str | None = None,
+        priority: int | None = None,
+    ) -> None:
         self.action_id = action_id
+        self.priority = priority
 
     def filter(self, event: Any, cfg: Any = None) -> bool:
         del cfg
@@ -152,13 +187,20 @@ class _CommandGroup:
         # loader must scan the group anchor's filters from here.
         self.handler = handler
 
-    def command(self, name: str, alias: set | None = None, **_: Any) -> Any:
+    def command(
+        self,
+        name: str,
+        alias: set | None = None,
+        priority: int | None = None,
+        **_: Any,
+    ) -> Any:
         full = f"{self.prefix} {name}"
         aliases = {f"{self.prefix} {a}" for a in (alias or set())}
 
         def decorator(handler: Any) -> Any:
             handler = _accumulate(
-                handler, CommandFilter(full, aliases, is_sub_command=True)
+                handler,
+                CommandFilter(full, aliases, is_sub_command=True, priority=priority),
             )
             for marker in self.filters:
                 handler = _accumulate(handler, marker)
@@ -166,23 +208,43 @@ class _CommandGroup:
 
         return decorator
 
-    def command_group(self, name: str, alias: set | None = None, **_: Any) -> Any:
+    def command_group(
+        self,
+        name: str,
+        alias: set | None = None,
+        priority: int | None = None,
+        **_: Any,
+    ) -> Any:
         full = f"{self.prefix} {name}"
 
         def decorator(handler: Any) -> Any:
-            handler = _accumulate(handler, CommandFilter(full, alias, is_group=True))
+            handler = _accumulate(
+                handler,
+                CommandFilter(full, alias, is_group=True, priority=priority),
+            )
             for marker in self.filters:
                 handler = _accumulate(handler, marker)
             return _CommandGroup(full, self.filters, handler=handler)
 
         return decorator
 
-    def group(self, name: str, alias: set | None = None, **kwargs: Any) -> Any:
+    def group(
+        self,
+        name: str,
+        alias: set | None = None,
+        **kwargs: Any,
+    ) -> Any:
         """Legacy alias of command_group (RegisteringCommandable.group)."""
         return self.command_group(name, alias, **kwargs)
 
-    def custom_filter(self, custom_filter: Any, *args: Any, **_: Any) -> Any:
-        marker = CustomFilter(custom_filter, *args)
+    def custom_filter(
+        self,
+        custom_filter: Any,
+        *args: Any,
+        priority: int | None = None,
+        **_: Any,
+    ) -> Any:
+        marker = CustomFilter(custom_filter, *args, priority=priority)
 
         def decorator(awaitable: Any) -> Any:
             if isinstance(awaitable, _CommandGroup):
@@ -195,18 +257,28 @@ class _CommandGroup:
 
         return decorator
 
-    def button_action(self, action_id: str | None = None, **_: Any) -> Any:
+    def button_action(
+        self,
+        action_id: str | None = None,
+        priority: int | None = None,
+        **_: Any,
+    ) -> Any:
         """Filter decorator for callback button click interactions."""
-        marker = ButtonActionFilter(action_id)
+        marker = ButtonActionFilter(action_id, priority=priority)
 
         def decorator(handler: Any) -> Any:
             return _accumulate(handler, marker)
 
         return decorator
 
-    def ui_action(self, action_id: str | None = None, **_: Any) -> Any:
+    def ui_action(
+        self,
+        action_id: str | None = None,
+        priority: int | None = None,
+        **_: Any,
+    ) -> Any:
         """Filter decorator for authenticated ChatUI view action interactions."""
-        marker = UIActionFilter(action_id)
+        marker = UIActionFilter(action_id, priority=priority)
 
         def decorator(handler: Any) -> Any:
             return _accumulate(handler, marker)
@@ -217,8 +289,9 @@ class _CommandGroup:
 class HookMarker:
     """Marker accumulated by legacy hook decorators (on_llm_request etc.)."""
 
-    def __init__(self, stage: str) -> None:
+    def __init__(self, stage: str, priority: int | None = None) -> None:
         self.stage = stage
+        self.priority = priority
 
 
 class EventMessageType(enum.Flag):
@@ -367,55 +440,106 @@ class _FilterNamespace:
     ButtonActionFilter = ButtonActionFilter
     UIActionFilter = UIActionFilter
 
-    def command(self, command_name: str, alias: set | None = None, **_: Any) -> Any:
+    def command(
+        self,
+        command_name: str,
+        alias: set | None = None,
+        priority: int | None = None,
+        **_: Any,
+    ) -> Any:
         def decorator(handler: Any) -> Any:
-            return _accumulate(handler, CommandFilter(command_name, alias))
+            return _accumulate(
+                handler, CommandFilter(command_name, alias, priority=priority)
+            )
 
         return decorator
 
     def command_group(
-        self, command_name: str, alias: set | None = None, **_: Any
+        self,
+        command_name: str,
+        alias: set | None = None,
+        priority: int | None = None,
+        **_: Any,
     ) -> Any:
         def decorator(handler: Any) -> Any:
-            _accumulate(handler, CommandFilter(command_name, alias, is_group=True))
+            _accumulate(
+                handler,
+                CommandFilter(command_name, alias, is_group=True, priority=priority),
+            )
             return _CommandGroup(command_name, handler=handler)
 
         return decorator
 
-    def regex(self, regex_str: str, **_: Any) -> Any:
+    def regex(self, regex_str: str, priority: int | None = None, **_: Any) -> Any:
         def decorator(handler: Any) -> Any:
-            return _accumulate(handler, RegexFilter(regex_str))
+            return _accumulate(handler, RegexFilter(regex_str, priority=priority))
 
         return decorator
 
-    def event_message_type(self, event_message_type: Any, **_: Any) -> Any:
-        def decorator(handler: Any) -> Any:
-            return _accumulate(handler, EventMessageTypeFilter(event_message_type))
-
-        return decorator
-
-    def permission_type(
-        self, permission_type: Any, raise_error: bool = True, **_: Any
+    def event_message_type(
+        self,
+        event_message_type: Any,
+        priority: int | None = None,
+        **_: Any,
     ) -> Any:
         def decorator(handler: Any) -> Any:
             return _accumulate(
                 handler,
-                PermissionTypeFilter(permission_type, raise_error),
+                EventMessageTypeFilter(event_message_type, priority=priority),
             )
 
         return decorator
 
-    def platform_adapter_type(self, platform_adapter_type_or_str: Any, **_: Any) -> Any:
+    def on_message(self, *, priority: int | None = None, **_: Any) -> Any:
+        """Match any inbound adapter message event."""
+
         def decorator(handler: Any) -> Any:
             return _accumulate(
                 handler,
-                PlatformAdapterTypeFilter(platform_adapter_type_or_str),
+                EventMessageTypeFilter(EventMessageType.ALL, priority=priority),
             )
 
         return decorator
 
-    def custom_filter(self, custom_filter: Any, *args: Any, **_: Any) -> Any:
-        marker = CustomFilter(custom_filter, *args)
+    def permission_type(
+        self,
+        permission_type: Any,
+        raise_error: bool = True,
+        priority: int | None = None,
+        **_: Any,
+    ) -> Any:
+        def decorator(handler: Any) -> Any:
+            return _accumulate(
+                handler,
+                PermissionTypeFilter(permission_type, raise_error, priority=priority),
+            )
+
+        return decorator
+
+    def platform_adapter_type(
+        self,
+        platform_adapter_type_or_str: Any,
+        priority: int | None = None,
+        **_: Any,
+    ) -> Any:
+        def decorator(handler: Any) -> Any:
+            return _accumulate(
+                handler,
+                PlatformAdapterTypeFilter(
+                    platform_adapter_type_or_str, priority=priority
+                ),
+            )
+
+        return decorator
+
+    def custom_filter(
+        self,
+        custom_filter: Any,
+        *args: Any,
+        priority: int | None = None,
+        **_: Any,
+    ) -> Any:
+        marker = CustomFilter(custom_filter, *args, priority=priority)
 
         def decorator(awaitable: Any) -> Any:
             if isinstance(awaitable, _CommandGroup):
@@ -428,18 +552,28 @@ class _FilterNamespace:
 
         return decorator
 
-    def button_action(self, action_id: str | None = None, **_: Any) -> Any:
+    def button_action(
+        self,
+        action_id: str | None = None,
+        priority: int | None = None,
+        **_: Any,
+    ) -> Any:
         """Filter decorator for callback button click interactions."""
-        marker = ButtonActionFilter(action_id)
+        marker = ButtonActionFilter(action_id, priority=priority)
 
         def decorator(handler: Any) -> Any:
             return _accumulate(handler, marker)
 
         return decorator
 
-    def ui_action(self, action_id: str | None = None, **_: Any) -> Any:
+    def ui_action(
+        self,
+        action_id: str | None = None,
+        priority: int | None = None,
+        **_: Any,
+    ) -> Any:
         """Filter decorator for authenticated ChatUI view action interactions."""
-        marker = UIActionFilter(action_id)
+        marker = UIActionFilter(action_id, priority=priority)
 
         def decorator(handler: Any) -> Any:
             return _accumulate(handler, marker)
@@ -448,53 +582,75 @@ class _FilterNamespace:
 
     # ---- Pipeline hooks -----------------------------------------------------
 
-    def _hook(self, stage: str) -> Any:
+    def _hook(self, stage: str, priority: int | None = None) -> Any:
         def decorator(handler: Any) -> Any:
-            return _accumulate(handler, HookMarker(stage))
+            return _accumulate(handler, HookMarker(stage, priority=priority))
 
         return decorator
 
-    def on_llm_request(self, *_args: Any, **_: Any) -> Any:
-        return self._hook("llm_request")
+    def on_llm_request(self, *_args: Any, priority: int | None = None, **_: Any) -> Any:
+        return self._hook("llm_request", priority=priority)
 
-    def on_llm_response(self, *_args: Any, **_: Any) -> Any:
-        return self._hook("llm_response")
+    def on_llm_response(
+        self, *_args: Any, priority: int | None = None, **_: Any
+    ) -> Any:
+        return self._hook("llm_response", priority=priority)
 
-    def on_decorating_result(self, *_args: Any, **_: Any) -> Any:
-        return self._hook("message_result")
+    def on_decorating_result(
+        self, *_args: Any, priority: int | None = None, **_: Any
+    ) -> Any:
+        return self._hook("message_result", priority=priority)
 
-    def after_message_sent(self, *_args: Any, **_: Any) -> Any:
-        return self._hook("message_sent")
+    def after_message_sent(
+        self, *_args: Any, priority: int | None = None, **_: Any
+    ) -> Any:
+        return self._hook("message_sent", priority=priority)
 
-    def on_waiting_llm_request(self, *_args: Any, **_: Any) -> Any:
-        return self._hook("waiting_llm_request")
+    def on_waiting_llm_request(
+        self, *_args: Any, priority: int | None = None, **_: Any
+    ) -> Any:
+        return self._hook("waiting_llm_request", priority=priority)
 
-    def on_using_llm_tool(self, *_args: Any, **_: Any) -> Any:
-        return self._hook("tool_call")
+    def on_using_llm_tool(
+        self, *_args: Any, priority: int | None = None, **_: Any
+    ) -> Any:
+        return self._hook("tool_call", priority=priority)
 
-    def on_llm_tool_respond(self, *_args: Any, **_: Any) -> Any:
-        return self._hook("tool_result")
+    def on_llm_tool_respond(
+        self, *_args: Any, priority: int | None = None, **_: Any
+    ) -> Any:
+        return self._hook("tool_result", priority=priority)
 
-    def on_agent_begin(self, *_args: Any, **_: Any) -> Any:
-        return self._hook("agent_start")
+    def on_agent_begin(self, *_args: Any, priority: int | None = None, **_: Any) -> Any:
+        return self._hook("agent_start", priority=priority)
 
-    def on_agent_done(self, *_args: Any, **_: Any) -> Any:
-        return self._hook("agent_end")
+    def on_agent_done(self, *_args: Any, priority: int | None = None, **_: Any) -> Any:
+        return self._hook("agent_end", priority=priority)
 
-    def on_plugin_error(self, *_args: Any, **_: Any) -> Any:
-        return self._hook("plugin_error")
+    def on_plugin_error(
+        self, *_args: Any, priority: int | None = None, **_: Any
+    ) -> Any:
+        return self._hook("plugin_error", priority=priority)
 
-    def on_plugin_loaded(self, *_args: Any, **_: Any) -> Any:
-        return self._hook("plugin_loaded")
+    def on_plugin_loaded(
+        self, *_args: Any, priority: int | None = None, **_: Any
+    ) -> Any:
+        return self._hook("plugin_loaded", priority=priority)
 
-    def on_plugin_unloaded(self, *_args: Any, **_: Any) -> Any:
-        return self._hook("plugin_unloaded")
+    def on_plugin_unloaded(
+        self, *_args: Any, priority: int | None = None, **_: Any
+    ) -> Any:
+        return self._hook("plugin_unloaded", priority=priority)
 
-    def on_astrbot_loaded(self, *_args: Any, **_: Any) -> Any:
-        return self._hook("lifecycle.startup")
+    def on_astrbot_loaded(
+        self, *_args: Any, priority: int | None = None, **_: Any
+    ) -> Any:
+        return self._hook("lifecycle.startup", priority=priority)
 
-    def on_platform_loaded(self, *_args: Any, **_: Any) -> Any:
-        return self._hook("lifecycle.startup")
+    def on_platform_loaded(
+        self, *_args: Any, priority: int | None = None, **_: Any
+    ) -> Any:
+        return self._hook("lifecycle.startup", priority=priority)
 
     def llm_tool(self, name: str | None = None, **_: Any) -> Any:
         def decorator(handler: Any) -> Any:

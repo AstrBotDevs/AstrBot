@@ -40,6 +40,8 @@ class MessageSesion:
                 MessageType.GROUP: "GroupMessage",
                 MessageType.OTHER: "OtherMessage",
             }[core_type]
+        elif hasattr(core_type, "value"):
+            core_type = core_type.value
         return f"{self.platform_name}:{core_type}:{self.session_id}"
 
     @staticmethod
@@ -565,12 +567,16 @@ class Context:
         if isinstance(session, str):
             session = MessageSesion.from_str(session)
         core_type = session.message_type
-        sdk_type = {
-            "FriendMessage": MessageType.PRIVATE,
-            "private": MessageType.PRIVATE,
-            "GroupMessage": MessageType.GROUP,
-            "group": MessageType.GROUP,
-        }.get(core_type, MessageType.OTHER)
+        if isinstance(core_type, MessageType):
+            sdk_type = core_type
+        else:
+            raw_type = getattr(core_type, "value", core_type)
+            sdk_type = {
+                "FriendMessage": MessageType.PRIVATE,
+                "private": MessageType.PRIVATE,
+                "GroupMessage": MessageType.GROUP,
+                "group": MessageType.GROUP,
+            }.get(raw_type, MessageType.OTHER)
         umo = UMO(session.platform_name, sdk_type, session.session_id)
         chain = (
             message_chain.to_sdk()

@@ -1,0 +1,14 @@
+schema_version: 2
+name: sdk_commands_messages
+desc: Dedicated new-SDK plugin exercising commands, filters, events, results, and all message components.
+author: astrbot
+version: 1.0.0
+runtime:
+  api: sdk
+  entrypoint: main:SdkCommandsMessagesPlugin
+  sdk_version: ">=0.1,<0.2"
+capabilities:
+  required:
+    - id: message.receive
+    - id: message.send
+    - id: assets.transfer

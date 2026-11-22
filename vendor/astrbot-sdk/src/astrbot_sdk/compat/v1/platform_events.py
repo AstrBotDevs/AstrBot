@@ -13,6 +13,7 @@ deliberately has no equivalent.
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from typing import Any
 
 from ...events import MessageEvent
@@ -53,7 +54,7 @@ class LegacyBotApiProxy:
         Returns:
             Decoded adapter result.
         """
-        return await self._context._ctx._invoke_capability(
+        resp = await self._context._ctx._invoke_capability(
             PLATFORM_RAW_CAPABILITY,
             "call_action",
             {
@@ -63,6 +64,9 @@ class LegacyBotApiProxy:
                 "params": params,
             },
         )
+        if isinstance(resp, Mapping) and "result" in resp:
+            return resp["result"]
+        return resp
 
 
 class LegacyBotProxy:

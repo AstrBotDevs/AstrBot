@@ -1,0 +1,20 @@
+schema_version: 2
+name: sdk_lifecycle_config_hooks
+desc: Dedicated new-SDK plugin exercising config schema, lifecycle, TaskGroup, cron, plugins/services, DirectContext, CallScopeRetired, CapabilitySet, native check, and all 12 hooks.
+author: astrbot
+version: 1.0.0
+dependencies:
+  astrbot/full_api_peer: ">=1.0.0"
+runtime:
+  api: sdk
+  entrypoint: main:SdkLifecycleConfigHooksPlugin
+  sdk_version: ">=0.1,<0.2"
+capabilities:
+  required:
+    - id: message.receive
+    - id: message.observe
+    - id: message.modify
+    - id: cron.schedule
+    - id: plugin.inspect
+    - id: llm.observe
+    - id: llm.modify

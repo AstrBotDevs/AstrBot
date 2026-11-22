@@ -577,12 +577,54 @@ class PlatformFacade:
             facade_context: Legacy Context facade used to reach the Host.
             entry: Snapshot platform metadata dict (id/name/description).
         """
+        from .event import PlatformStatus
+
         self._facade_context = facade_context
         self._entry = dict(entry)
         # Legacy plugins read platform.config (e.g. bot.platform.config for
         # the qq_official appid); the snapshot ships it redacted by the Host.
         self.config: dict = dict(entry.get("config") or {})
         self.client_self_id = ""
+        raw_status = str(self._entry.get("status") or PlatformStatus.RUNNING.value)
+        try:
+            self._status = PlatformStatus(raw_status)
+        except ValueError:
+            self._status = PlatformStatus.RUNNING
+
+    @property
+    def status(self) -> Any:
+        """Return the legacy PlatformStatus enum value for this adapter."""
+        return self._status
+
+    @status.setter
+    def status(self, value: Any) -> None:
+        """Update the cached PlatformStatus on this facade."""
+        self._status = value
+
+    @property
+    def errors(self) -> list[Any]:
+        """Return snapshot-safe empty error list (host manages adapter errors)."""
+        return []
+
+    @property
+    def last_error(self) -> Any:
+        """Return None (host manages adapter errors)."""
+        return None
+
+    async def send_by_session(self, session: Any, message_chain: Any) -> Any:
+        """Forward proactive session sends through Context.send_message."""
+        from .star import MessageSesion
+
+        if isinstance(session, str):
+            target: Any = MessageSesion.from_str(session)
+        elif not getattr(session, "platform_name", None):
+            platform_id = self._entry.get("id") or self._entry.get("name") or ""
+            msg_type = getattr(session, "message_type", "FriendMessage")
+            sid = getattr(session, "session_id", str(session))
+            target = MessageSesion(platform_id, msg_type, sid)
+        else:
+            target = session
+        return await self._facade_context.send_message(target, message_chain)
 
     def meta(self) -> Any:
         """Return the adapter metadata namespace (mirrors core Platform.meta)."""

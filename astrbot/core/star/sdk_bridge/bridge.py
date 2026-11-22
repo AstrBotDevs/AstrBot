@@ -798,13 +798,21 @@ class SDKPluginBridge:
         parts = command_path.split()
 
         aliases: set[str] = set()
+        parent_prefix = " ".join(parts[:-1])
         for alias in descriptor.details.get("aliases", []):
-            alias_parts = str(alias).split()
-            if alias_parts[:-1] != parts[:-1]:
+            alias_str = str(alias).strip()
+            if not alias_str:
+                continue
+            if not parent_prefix:
+                aliases.add(alias_str)
+            elif alias_str.startswith(f"{parent_prefix} "):
+                aliases.add(alias_str[len(parent_prefix) + 1 :].strip())
+            elif " " not in alias_str:
+                aliases.add(alias_str)
+            else:
                 raise InvalidRequest(
                     f"alias {alias!r} must share the parent path of {command_path!r}",
                 )
-            aliases.add(alias_parts[-1])
 
         is_group = bool(descriptor.details.get("group"))
         group_custom_filters = bool(descriptor.details.get("group_custom_filters"))
@@ -858,6 +866,47 @@ class SDKPluginBridge:
                 "member-only role filtering is not supported yet; "
                 f"handler {descriptor.id} ignores roles {sorted(roles)}",
             )
+        msg_types = descriptor.details.get("message_types") or []
+        if msg_types:
+            from astrbot.core.star.filter.event_message_type import (
+                EventMessageType,
+                EventMessageTypeFilter,
+            )
+
+            type_flags = EventMessageType(0)
+            for message_type in msg_types:
+                type_flags |= {
+                    "private": EventMessageType.PRIVATE_MESSAGE,
+                    "group": EventMessageType.GROUP_MESSAGE,
+                    "other": EventMessageType.OTHER_MESSAGE,
+                }[message_type]
+            handler_md.event_filters.append(EventMessageTypeFilter(type_flags))
+        platforms = descriptor.details.get("platforms") or []
+        if platforms:
+            from astrbot.core.star.filter.platform_adapter_type import (
+                ADAPTER_NAME_2_TYPE,
+                PlatformAdapterType,
+                PlatformAdapterTypeFilter,
+            )
+
+            platform_flags = PlatformAdapterType(0)
+            matched_all = False
+            for platform in platforms:
+                p_name = str(platform)
+                if p_name == "all":
+                    matched_all = True
+                    break
+                flag = ADAPTER_NAME_2_TYPE.get(p_name)
+                if flag is not None:
+                    platform_flags |= flag
+            if not matched_all and platform_flags:
+                handler_md.event_filters.append(
+                    PlatformAdapterTypeFilter(platform_flags),
+                )
+            elif not matched_all:
+                handler_md.event_filters.append(
+                    PlatformAdapterTypeFilter(str(platforms[0])),
+                )
         star_handlers_registry.append(handler_md)
         if is_group:
             self._command_group_filters[command_path] = command_filter
@@ -990,6 +1039,8 @@ class SDKPluginBridge:
             PermissionTypeFilter,
         )
         from astrbot.core.star.filter.platform_adapter_type import (
+            ADAPTER_NAME_2_TYPE,
+            PlatformAdapterType,
             PlatformAdapterTypeFilter,
         )
         from astrbot.core.star.filter.regex import RegexFilter
@@ -1009,8 +1060,22 @@ class SDKPluginBridge:
             EventMessageTypeFilter(type_flags or EventMessageType.ALL),
         )
 
-        for platform in details.get("platforms", []):
-            filters.append(PlatformAdapterTypeFilter(str(platform)))
+        platforms = details.get("platforms") or []
+        if platforms:
+            platform_flags = PlatformAdapterType(0)
+            matched_all = False
+            for platform in platforms:
+                p_name = str(platform)
+                if p_name == "all":
+                    matched_all = True
+                    break
+                flag = ADAPTER_NAME_2_TYPE.get(p_name)
+                if flag is not None:
+                    platform_flags |= flag
+            if not matched_all and platform_flags:
+                filters.append(PlatformAdapterTypeFilter(platform_flags))
+            elif not matched_all:
+                filters.append(PlatformAdapterTypeFilter(str(platforms[0])))
 
         roles = set(details.get("roles", []))
         if roles == {"admin"}:

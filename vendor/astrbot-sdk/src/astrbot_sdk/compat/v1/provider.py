@@ -341,6 +341,18 @@ class Provider:
         """Return the explicitly bound provider id, if any."""
         return self._provider_id
 
+    @property
+    def provider_config(self) -> dict[str, Any]:
+        """Return a minimal legacy provider_config dict derived from metadata."""
+        meta_obj = self.meta()
+        if meta_obj is None:
+            return {"id": self._provider_id or ""}
+        return {
+            "id": meta_obj.id,
+            "model": meta_obj.model,
+            "type": meta_obj.type,
+        }
+
 
 class TTSProvider:
     """Legacy TTS facade backed by ctx.llm.synthesize."""

@@ -728,7 +728,7 @@ class LegacyMainApiShowcasePlugin(Star):
             and grp is not None
             and extra_ok
             and isinstance(bot_info, dict)
-            and bot_info.get("result", {}).get("echo") == "ok"
+            and bot_info.get("echo") == "ok"
             and chatui_agents_ok
         )
 

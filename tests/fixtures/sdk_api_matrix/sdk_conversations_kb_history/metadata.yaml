@@ -1,0 +1,18 @@
+schema_version: 2
+name: sdk_conversations_kb_history
+desc: Dedicated new-SDK plugin exercising ConversationService, KnowledgeBaseClient, and MessageHistoryClient.
+author: astrbot
+version: 1.0.0
+runtime:
+  api: sdk
+  entrypoint: main:SdkConversationsKbHistoryPlugin
+  sdk_version: ">=0.1,<0.2"
+capabilities:
+  required:
+    - id: message.receive
+    - id: assets.transfer
+    - id: conversation.read
+    - id: conversation.write
+    - id: llm.generate
+    - id: kb.manage
+    - id: message.history
