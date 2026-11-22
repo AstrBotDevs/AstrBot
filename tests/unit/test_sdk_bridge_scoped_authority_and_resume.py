@@ -517,10 +517,14 @@ async def test_external_uds_listener_sanitizes_credential_filename(
     cred_dir = tmp_path / "creds"
     listener = ExternalUDSListener()
     try:
+        if os.name != "posix":
+            with pytest.raises(NotImplementedError):
+                listener.enroll("../../escape\\id", cred_dir)
+            assert not cred_dir.exists()
+            return
         cred_path, _queue = listener.enroll("../../escape\\id", cred_dir)
         assert cred_path.resolve().parent == cred_dir.resolve()
-        if os.name == "posix":
-            assert (cred_path.stat().st_mode & 0o777) == 0o600
+        assert (cred_path.stat().st_mode & 0o777) == 0o600
     finally:
         await listener.stop()
 

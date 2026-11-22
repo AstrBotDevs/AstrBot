@@ -107,10 +107,13 @@ class ExternalUDSListener:
         Returns:
             Tuple of `(credential_file_path, accepted_transport_queue)`.
         """
+        if os.name != "posix":
+            raise NotImplementedError(
+                "Unix domain socket external workers require a POSIX host"
+            )
         resolved_dir = credential_dir.resolve()
         resolved_dir.mkdir(parents=True, exist_ok=True)
-        if os.name == "posix":
-            os.chmod(resolved_dir, 0o700)
+        os.chmod(resolved_dir, 0o700)
         secret = credential or secrets.token_urlsafe(32)
         safe_name = re.sub(r"[^A-Za-z0-9._-]", "_", plugin_id).strip("._") or "plugin"
         cred_path = resolved_dir / f"{safe_name}.credential.json"
@@ -129,22 +132,19 @@ class ExternalUDSListener:
             )
             + "\n"
         )
-        if os.name == "posix":
-            # Create the bootstrap file with 0600 permissions directly so it is
-            # never readable under a permissive umask before chmod runs.
-            flags = os.O_WRONLY | os.O_CREAT | os.O_TRUNC | getattr(os, "O_NOFOLLOW", 0)
-            fd = os.open(cred_path, flags, 0o600)
-            try:
-                os.fchmod(fd, 0o600)
-                handle = os.fdopen(fd, "w", encoding="utf-8")
-            except BaseException:
-                with contextlib.suppress(OSError):
-                    os.close(fd)
-                raise
-            with handle:
-                handle.write(payload_text)
-        else:
-            cred_path.write_text(payload_text, encoding="utf-8")
+        # Create the bootstrap file with 0600 permissions directly so it is
+        # never readable under a permissive umask before chmod runs.
+        flags = os.O_WRONLY | os.O_CREAT | os.O_TRUNC | getattr(os, "O_NOFOLLOW", 0)
+        fd = os.open(cred_path, flags, 0o600)
+        try:
+            os.fchmod(fd, 0o600)
+            handle = os.fdopen(fd, "w", encoding="utf-8")
+        except BaseException:
+            with contextlib.suppress(OSError):
+                os.close(fd)
+            raise
+        with handle:
+            handle.write(payload_text)
 
         queue: asyncio.Queue[FrameTransport] = asyncio.Queue()
         self._slots[plugin_id] = {
