@@ -92,7 +92,7 @@ ChatUI supports these common workflows:
   If the list does not fill the sidebar, more pages load automatically. Opening an older conversation by URL keeps its title and selected sidebar entry visible before its page loads.
 - Create, rename, and delete conversations, and switch previous conversations from the sidebar.
 - Select the config profile, model provider, and model on the chat page; if Provider session separation is enabled, you can also choose a model for the current session only.
-- Adjust reasoning effort in the chat input for supported models.
+- Adjust reasoning effort in the chat input for supported models. WebChat hides this control when **Disable thinking mode** is enabled for the selected Ollama provider.
 - Send text, images, files, and voice input; uploaded attachments show previews and use file signature checks to help identify file types.
 - View model thinking, tool-call status, knowledge-base or web-search references, and per-message token and latency statistics.
 - Copy or regenerate existing replies, including regenerating with another model.

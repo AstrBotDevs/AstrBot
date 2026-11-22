@@ -65,6 +65,12 @@ test("sends a manual choice only on supporting models until the user clears it",
   const modelB = { reasoning_efforts: ["none", "low", "high"] };
   assert.equal(resolveReasoningEffort(provider, modelA, "max").effort, "max");
   assert.equal(resolveReasoningEffort(provider, modelB, "max").effort, null);
+  const ollama = {
+    type: "openai_chat_completion",
+    provider: "ollama",
+    ollama_disable_thinking: true,
+  };
+  assert.deepEqual(resolveReasoningEffort(ollama, modelA, "max"), { levels: [], effort: null });
   assert.equal(resolveReasoningEffort(provider, modelA, "max").effort, "max");
   assert.equal(resolveReasoningEffort(provider, modelB, "none").effort, "none");
   assert.equal(resolveReasoningEffort(provider, modelB, "").effort, null);

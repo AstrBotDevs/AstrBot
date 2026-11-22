@@ -22,11 +22,26 @@ export type ReasoningEffort = (typeof REASONING_EFFORT_LEVELS)[number];
 
 /** Return the menu options and the active preference for this model. */
 export function resolveReasoningEffort(
-  provider: { type?: string; model?: string } | null | undefined,
+  provider: {
+    type?: string;
+    model?: string;
+    provider?: string;
+    ollama_disable_thinking?: boolean | string;
+  } | null | undefined,
   metadata: ProviderModelMetadata | null | undefined,
   manual?: string | null,
 ): { levels: ReasoningEffort[]; effort: ReasoningEffort | null } {
   if (!provider) return { levels: [], effort: null };
+
+  if (provider.provider === "ollama") {
+    const disabled = provider.ollama_disable_thinking;
+    const thinkingDisabled = typeof disabled === "string"
+      ? ["1", "true", "yes", "on"].includes(disabled.trim().toLowerCase())
+      : disabled;
+    if (thinkingDisabled) {
+      return { levels: [], effort: null };
+    }
+  }
 
   let supported = metadata?.reasoning_efforts ?? [];
   if (provider.type === "googlegenai_chat_completion") {
