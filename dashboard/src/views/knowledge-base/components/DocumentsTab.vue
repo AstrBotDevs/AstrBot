@@ -288,6 +288,7 @@ type UploadingDocument = {
 const uploadingTasks = ref(new Map<string, UploadingDocument[]>())
 const progressTimers = new Map<string, number>()
 const completedTasks = new Set<string>()
+const reconciledUploadIndices = new Map<string, Set<number>>()
 const displayDocuments = computed(() => [
   ...Array.from(uploadingTasks.value.values()).reverse().flat(),
   ...documents.value
@@ -384,6 +385,7 @@ const loadDocuments = async () => {
     for (const taskId of completedBeforeRequest) {
       uploadingTasks.value.delete(taskId)
       completedTasks.delete(taskId)
+      reconciledUploadIndices.delete(taskId)
     }
     return true
   } catch (error) {
@@ -583,6 +585,7 @@ const uploadFromUrl = async () => {
 const startProgressPolling = (taskId: string, rows: UploadingDocument[]) => {
   if (disposed || uploadingTasks.value.has(taskId)) return
   uploadingTasks.value.set(taskId, rows)
+  reconciledUploadIndices.set(taskId, new Set<number>())
 
   const schedule = () => {
     progressTimers.set(taskId, window.setTimeout(poll, 500))
@@ -606,6 +609,7 @@ const startProgressPolling = (taskId: string, rows: UploadingDocument[]) => {
     if (response.data.status !== 'ok') {
       if (response.data.message === '找不到该任务') {
         uploadingTasks.value.delete(taskId)
+        reconciledUploadIndices.delete(taskId)
         showSnackbar(response.data.message, 'error')
       } else {
         schedule()
@@ -634,6 +638,7 @@ const startProgressPolling = (taskId: string, rows: UploadingDocument[]) => {
     }
     if (data.status === 'failed') {
       uploadingTasks.value.delete(taskId)
+      reconciledUploadIndices.delete(taskId)
       showSnackbar(`上传失败: ${data.error || '未知错误'}`, 'error')
       return
     }
@@ -645,6 +650,25 @@ const startProgressPolling = (taskId: string, rows: UploadingDocument[]) => {
           stage: progress.stage || 'waiting',
           current: progress.current || 0,
           total: progress.total || 100
+        }
+      }
+      const uploadedIndices = new Set<number>(
+        Array.isArray(progress.uploaded_file_indices)
+          ? progress.uploaded_file_indices.filter((index: number) => Number.isInteger(index) && index >= 0)
+          : []
+      )
+      const reconciled = reconciledUploadIndices.get(taskId) || new Set<number>()
+      reconciledUploadIndices.set(taskId, reconciled)
+      const needsRefresh = [...uploadedIndices].some((index) => !reconciled.has(index))
+      if (needsRefresh) {
+        const refreshed = await loadDocuments()
+        if (disposed) return
+        if (refreshed) {
+          const rows = uploadingTasks.value.get(taskId)
+          if (rows) {
+            uploadingTasks.value.set(taskId, rows.filter((_, index) => !uploadedIndices.has(index)))
+          }
+          for (const index of uploadedIndices) reconciled.add(index)
         }
       }
     }
