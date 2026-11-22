@@ -169,8 +169,7 @@ class ContextManager:
             "Context still exceeds max tokens after compression, dropping the oldest rounds..."
         )
         # Drop whole rounds, oldest first, so that tool calls stay with their
-        # results, and recount after each one. The latest round is the current
-        # request and is always kept.
+        # results. Always keep the latest round, which is the current request.
         first_non_system = next(
             (i for i, msg in enumerate(messages) if msg.role != "system"),
             len(messages),
@@ -182,13 +181,27 @@ class ContextManager:
         ]
         tokens = tokens_after_summary
         dropped_rounds = 0
-        while len(rounds) > 1 and self.compressor.should_compress(
+        # Built-in estimates are additive and compression checks only use tokens.
+        # Custom implementations need updated messages and a full recount.
+        incremental_tokens = type(self.token_counter) is EstimateTokenCounter and type(
+            self.compressor
+        ) in (TruncateByTurnsCompressor, LLMSummaryCompressor)
+        while len(rounds) - dropped_rounds > 1 and self.compressor.should_compress(
             messages, tokens, self.config.max_context_tokens
         ):
-            rounds.pop(0)
+            dropped_round = rounds[dropped_rounds]
             dropped_rounds += 1
-            messages = system_messages + [msg for rnd in rounds for msg in rnd]
-            tokens = self.token_counter.count_tokens(messages)
+            if incremental_tokens:
+                tokens -= self.token_counter.count_tokens(dropped_round)
+            else:
+                messages = system_messages + [
+                    msg for rnd in rounds[dropped_rounds:] for msg in rnd
+                ]
+                tokens = self.token_counter.count_tokens(messages)
+        if incremental_tokens and dropped_rounds:
+            messages = system_messages + [
+                msg for rnd in rounds[dropped_rounds:] for msg in rnd
+            ]
         logger.info(f"Dropped {dropped_rounds} oldest round(s).")
 
         if self.compressor.should_compress(

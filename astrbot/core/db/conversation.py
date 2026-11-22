@@ -31,8 +31,6 @@ EVENT_TYPES = CONTEXT_TYPES | {
     "conversation.updated",
     "turn.started",
     "turn.finished",
-    "tool.started",
-    "tool.finished",
 }
 REBASE_REASONS = {"compaction", "reset", "legacy_replace", "migration", "snapshot"}
 EVENT_INSERT_BATCH_ROWS = 100
@@ -909,17 +907,14 @@ class ConversationStore:
             for key, value in changes.items():
                 if value is not None and not isinstance(value, str):
                     raise ValueError("Metadata must be text or null")
-        elif kind in {"turn.finished", "tool.finished"}:
+        elif kind == "turn.finished":
             if payload.get("status") not in {
                 "completed",
                 "failed",
                 "cancelled",
             }:
                 raise ValueError("Invalid execution status")
-            key = {
-                "turn.finished": "turn_id",
-                "tool.finished": "execution_id",
-            }[kind]
+            key = "turn_id"
             start = batch_events.get(payload.get(key, ""))
             duplicate = False
             if start is None:
@@ -961,33 +956,6 @@ class ConversationStore:
             if duplicate or (kind, payload[key]) in batch_finishes:
                 raise ConversationConflictError("Execution already finished")
             batch_finishes.add((kind, payload[key]))
-        elif kind == "tool.started":
-            turn = batch_events.get(payload.get("turn_id", ""))
-            if turn is None:
-                turn = (
-                    await session.execute(
-                        select(
-                            ConversationEvent.conversation_ref,
-                            ConversationEvent.type,
-                        ).where(
-                            ConversationEvent.event_id == payload.get("turn_id", "")
-                        )
-                    )
-                ).one_or_none()
-            if (
-                not turn
-                or turn.conversation_ref != conv.id
-                or turn.type != "turn.started"
-            ):
-                raise ValueError("Missing parent turn")
-            if kind == "tool.started" and (
-                not isinstance(payload.get("tool_name"), str)
-                or not isinstance(payload.get("tool_call_id"), str)
-                or not isinstance(payload.get("arguments"), dict)
-            ):
-                raise ValueError(
-                    "A tool execution requires a name, call ID and arguments"
-                )
 
     async def _prune_plugin_context(self, session, conv) -> None:
         """Reclaim superseded plugin bodies while retaining active execution baselines.
@@ -1077,35 +1045,61 @@ class ConversationStore:
         del serialized_drafts
         async with self.db.get_db() as session:
             await session.execute(text("BEGIN IMMEDIATE"))
-            metadata = (
-                await session.execute(
-                    select(
-                        ConversationV3,
-                        *conversation_revision_columns(),
-                        text("""EXISTS (
-                            SELECT 1 FROM conversation_events INDEXED BY ix_context_plugin_live
-                            WHERE conversation_ref=conversations_v3.id
-                              AND type='context.rebased'
-                              AND json_extract(payload,'$.origin')='plugin'
-                              AND payload IS NOT NULL
-                        ) AS has_plugin_baseline"""),
-                    ).where(ConversationV3.conversation_id == cid)
-                )
-            ).one_or_none()
-            if metadata is None:
-                raise ValueError("Conversation not found")
-            conv, head_seq, leaf_event_id, has_plugin_baseline = metadata
             event_ids = {draft["event_id"] for draft in drafts if draft.get("event_id")}
-            existing_by_id: dict[str, ConversationEvent] = {}
-            if event_ids:
-                # Bind one JSON array so large batches stay within SQLite's parameter limit.
-                ids = func.json_each(json.dumps(list(event_ids))).table_valued("value")
-                stored_events = await session.scalars(
-                    select(ConversationEvent).where(
-                        col(ConversationEvent.event_id).in_(select(ids.c.value))
+            # Bind one JSON array so large batches stay within SQLite's parameter limit.
+            ids = func.json_each(json.dumps(list(event_ids))).table_valued("value")
+            metadata_columns = (
+                *conversation_revision_columns(),
+                text("""EXISTS (
+                    SELECT 1 FROM conversation_events INDEXED BY ix_context_plugin_live
+                    WHERE conversation_ref=conversations_v3.id
+                      AND type='context.rebased'
+                      AND json_extract(payload,'$.origin')='plugin'
+                      AND payload IS NOT NULL
+                ) AS has_plugin_baseline"""),
+            )
+            if len(event_ids) == 1:
+                metadata_rows = (
+                    await session.execute(
+                        select(
+                            ConversationV3,
+                            ConversationEvent,
+                            *metadata_columns,
+                        )
+                        .outerjoin(
+                            ConversationEvent,
+                            col(ConversationEvent.event_id).in_(select(ids.c.value)),
+                        )
+                        .where(ConversationV3.conversation_id == cid)
                     )
-                )
-                existing_by_id = {event.event_id: event for event in stored_events}
+                ).all()
+                if not metadata_rows:
+                    raise ValueError("Conversation not found")
+                conv, _, head_seq, leaf_event_id, has_plugin_baseline = metadata_rows[0]
+                existing_by_id = {
+                    event.event_id: event
+                    for _, event, *_ in metadata_rows
+                    if event is not None
+                }
+            else:
+                metadata = (
+                    await session.execute(
+                        select(ConversationV3, *metadata_columns).where(
+                            ConversationV3.conversation_id == cid
+                        )
+                    )
+                ).one_or_none()
+                if metadata is None:
+                    raise ValueError("Conversation not found")
+                conv, head_seq, leaf_event_id, has_plugin_baseline = metadata
+                existing_by_id = {}
+                if event_ids:
+                    stored_events = await session.scalars(
+                        select(ConversationEvent).where(
+                            col(ConversationEvent.event_id).in_(select(ids.c.value))
+                        )
+                    )
+                    existing_by_id = {event.event_id: event for event in stored_events}
 
             existing = []
             for draft in drafts:

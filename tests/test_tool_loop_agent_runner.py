@@ -1660,8 +1660,9 @@ async def test_steering_appends_user_messages_after_all_tool_results(
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("streaming", [False, True])
 async def test_follow_up_ticket_consumed_when_no_next_tool_call(
-    runner, mock_provider, provider_request, mock_tool_executor, mock_hooks
+    runner, mock_provider, provider_request, mock_tool_executor, mock_hooks, streaming
 ):
     mock_provider.should_call_tools = False
     mock_event = MockEvent("test:FriendMessage:follow_up_no_tool", "u1")
@@ -1673,7 +1674,7 @@ async def test_follow_up_ticket_consumed_when_no_next_tool_call(
         run_context=run_context,
         tool_executor=mock_tool_executor,
         agent_hooks=mock_hooks,
-        streaming=False,
+        streaming=streaming,
     )
 
     ticket = runner.follow_up(message_text="follow up without tool")
@@ -1684,6 +1685,20 @@ async def test_follow_up_ticket_consumed_when_no_next_tool_call(
 
     assert ticket.resolved.is_set() is True
     assert ticket.consumed is True
+
+    async def subsequent_tool():
+        await asyncio.sleep(0.01)
+        yield "foreground result"
+
+    detach = MagicMock(return_value=None)
+    results = [
+        result
+        async for result in runner._iter_tool_executor_results(
+            subsequent_tool(), detach=detach
+        )
+    ]
+    assert results == ["foreground result"]
+    detach.assert_not_called()
 
 
 @pytest.mark.asyncio
@@ -2261,13 +2276,15 @@ async def test_event_journal_records_requests_tools_and_final_context(
         runtime_events = await collect_events(runner.step_until_done(3))
         captured = [call.args[0] for call in sink.await_args_list]
         assert sum(event.type == "context.updated" for event in captured) == 1
-        assert sum(event.type == "context.appended" for event in captured) == 3
+        assert sum(event.type == "context.appended" for event in captured) == 4
         await writer.save_history(dump_messages(runner.run_context.messages))
         await writer.finish_turn("completed")
         events = await db.conversation_store.events(conv.conversation_id)
         types = [e.type for e in events]
         assert "request.started" not in types and "request.finished" not in types
-        assert types.count("tool.started") == types.count("tool.finished") == 1
+        assert "tool.started" not in types and "tool.finished" not in types
+        runtime_types = [event.type for event in runtime_events]
+        assert runtime_types.count("tool.started") == runtime_types.count("tool.finished") == 1
         assert types[-1] == "turn.finished"
         assistant_events = [e for e in events if e.type == "message.appended" and "status" in e.payload]
         assert [e.event_id for e in assistant_events] == [
@@ -2277,9 +2294,11 @@ async def test_event_journal_records_requests_tools_and_final_context(
         usage = [e.payload["usage"] for e in assistant_events]
         assert sum(item["input_tokens"] for item in usage) == 330
         assert sum(item["cached_input_tokens"] for item in usage) == 30
-        finished_tool = next(e for e in events if e.type == "tool.finished")
-        assert finished_tool.payload["status"] == "completed"
-        assert finished_tool.payload["result"]["content"][0]["type"] == "text"
+        finished_tool = next(e for e in runtime_events if e.type == "tool.finished")
+        assert finished_tool.status == "completed"
+        tool_message = next(e.payload["message"] for e in events if e.type == "message.appended" and e.payload["message"]["role"] == "tool")
+        assert tool_message["tool_call_id"] == "call_varying_usage"
+        assert "工具执行结果" in str(tool_message["content"])
         history = (await db.conversation_store.read(conv.conversation_id)).messages
         assert [m["role"] for m in history] == ["user", "assistant", "tool", "user", "assistant"]
         assert ticket is not None and ticket.consumed
@@ -2313,7 +2332,7 @@ async def test_journal_failure_does_not_retry_a_model_or_fallback(
 
 
 @pytest.mark.asyncio
-async def test_tool_started_is_acknowledged_before_creating_executor(
+async def test_tool_call_message_is_acknowledged_before_creating_executor(
     runner, provider_request, mock_hooks
 ):
     from unittest.mock import Mock
@@ -2326,8 +2345,10 @@ async def test_tool_started_is_acknowledged_before_creating_executor(
 
     async def persist(response):
         seen.append(response.type)
-        if response.type == "tool.started":
-            assert response.event_id
+        if response.type == "context.appended" and any(
+            message.get("tool_calls") for message in response.data["messages"]
+        ):
+            assert response.data["assistant"]["event_id"]
             raise ConversationPersistenceError("unavailable")
         return True
 
@@ -2379,10 +2400,14 @@ async def test_step_notices_reach_model_once_per_threshold(
     event.get_platform_name.return_value = "test"
     event.get_platform_id.return_value = "test"
     event.send = AsyncMock()
+    context = MagicMock()
+    context.locale.return_value = "zh-CN"
     await runner.reset(
         provider=mock_provider,
         request=provider_request,
-        run_context=ContextWrapper(context=SimpleNamespace(event=event)),
+        run_context=ContextWrapper(
+            context=SimpleNamespace(event=event, context=context)
+        ),
         tool_executor=mock_tool_executor,
         agent_hooks=mock_hooks,
         streaming=streaming,
@@ -2853,3 +2878,118 @@ async def test_runner_reuses_request_id_for_fallback_provider(
     assert primary_id == runner._request_id
     assert captured["fallback"][0]["request_id"] == primary_id
     assert captured["fallback"][0]["umo"] == "aiocqhttp:GroupMessage:100"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("outcome", ["completed", "failed", "partial_failure", "cancelled"])
+async def test_steering_detaches_running_tool_without_reexecution(
+    runner, provider_request, mock_hooks, monkeypatch, outcome
+):
+    from astrbot.core.agent.runtime import AgentSessionRef
+    from astrbot.core.utils.active_event_registry import ActiveEventRegistry
+    from mcp.types import CallToolResult, TextContent
+
+    registry = ActiveEventRegistry()
+    monkeypatch.setattr(
+        "astrbot.core.astr_agent_runtime.tool_executor.active_event_registry", registry
+    )
+    wakeup = AsyncMock()
+    monkeypatch.setattr(
+        "astrbot.core.astr_agent_runtime.tool_executor.wake_main_agent", wakeup
+    )
+    event = MockEvent("test:GroupMessage:steering", "alice")
+    extras = {}
+    event.get_extra = extras.get
+    event.set_extra = extras.__setitem__
+    event.role = "member"
+    registry.register(event)
+    original_session = AgentSessionRef("astrbot", "original-conversation")
+    context = SimpleNamespace(event=event, context=object(), agent_session=original_session)
+    started, release, closed = (asyncio.Event() for _ in range(3))
+    calls = []
+
+    class SlowExecutor(FunctionToolExecutor):
+        @classmethod
+        async def execute(cls, tool, run_context, **arguments):
+            owner = asyncio.current_task()
+            calls.append(arguments)
+            try:
+                started.set()
+                await release.wait()
+                if outcome == "failed":
+                    raise RuntimeError("background failure")
+                yield CallToolResult(content=[TextContent(type="text", text="finished once")])
+                if outcome == "partial_failure":
+                    raise RuntimeError("failure after partial output")
+            finally:
+                assert asyncio.current_task() is owner
+                closed.set()
+
+    provider = VaryingUsageProvider()
+    original_text_chat = provider.text_chat
+    requests = []
+
+    async def capture_request(**kwargs):
+        requests.append([message.model_dump() for message in kwargs["contexts"]])
+        return await original_text_chat(**kwargs)
+
+    provider.text_chat = AsyncMock(side_effect=capture_request)
+    await runner.reset(
+        provider=provider, request=provider_request,
+        run_context=ContextWrapper(context=context), tool_executor=SlowExecutor,
+        agent_hooks=mock_hooks, streaming=False,
+    )
+    foreground = asyncio.create_task(collect_events(runner.step_until_done(3)))
+    background = None
+    try:
+        await asyncio.wait_for(started.wait(), 1)
+        ticket = runner.follow_up(message_text="answer this first")
+        events = await asyncio.wait_for(foreground, 1)
+        assert ticket is not None and ticket.consumed
+        assert not closed.is_set()
+        background = next(iter(registry._background_tasks[event.unified_msg_origin]))
+        finished = next(event for event in events if event.type == "tool.finished")
+        assert finished.structured_result["status"] == "running"
+        assert finished.structured_result["background_task_id"] == finished.execution_id
+        assert runner.run_context.messages[-2].content == [TextPart(text="answer this first")]
+        # One initial request starts the tool, then one request receives both inputs.
+        assert provider.text_chat.await_count == 2
+        request_messages = requests[1]
+        assert request_messages[-2]["role"] == "tool"
+        assert "Tool continues in background." in request_messages[-2]["content"]
+        assert finished.execution_id in request_messages[-2]["content"]
+        assert request_messages[-1] == {
+            "role": "user", "content": [{"type": "text", "text": "answer this first"}],
+        }
+        wakeup.assert_not_awaited()
+        context.agent_session = AgentSessionRef("astrbot", "new-selection")
+        registry.unregister(event)
+        if outcome == "cancelled":
+            registry.request_agent_stop_all(event.unified_msg_origin)
+        release.set()
+        await asyncio.wait_for(asyncio.gather(background, return_exceptions=True), 1)
+        assert closed.is_set() and len(calls) == 1
+        assert not registry._background_tasks
+        if outcome == "cancelled":
+            assert background.cancelled()
+            wakeup.assert_not_awaited()
+        else:
+            wakeup.assert_awaited_once()
+            payload = wakeup.call_args.kwargs
+            assert payload["agent_session"] == original_session
+            assert payload["source_id"] == finished.execution_id
+            assert payload["source"] == "background_task"
+            name, result = payload["tool_result"]
+            assert name
+            assert ("background failure" if outcome == "failed" else "finished once") in result.content[0].text
+            assert result.isError == (outcome in ("failed", "partial_failure"))
+            if outcome == "partial_failure":
+                assert "failure after partial output" in result.content[1].text
+    finally:
+        release.set()
+        for task in (foreground, background):
+            if task is not None:
+                if not task.done():
+                    task.cancel()
+                await asyncio.gather(task, return_exceptions=True)
+        registry.unregister(event)

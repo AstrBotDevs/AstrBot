@@ -65,7 +65,7 @@ async def provider_http_server(unused_tcp_port, monkeypatch):
     monkeypatch.setenv("no_proxy", "127.0.0.1")
 
     async def handle(request):
-        requests.append(request.headers)
+        requests.append(request)
         return web.json_response(
             {
                 "object": "list",
@@ -124,7 +124,7 @@ async def test_provider_sdk_sends_exactly_one_user_agent(
     try:
         await provider.client.models.list()
         assert len(requests) == 1
-        assert requests[0].getall("User-Agent") == [
+        assert requests[0].headers.getall("User-Agent") == [
             custom_headers.get("user-agent", DEFAULT_USER_AGENT)
         ]
         assert config == original
@@ -133,7 +133,10 @@ async def test_provider_sdk_sends_exactly_one_user_agent(
 
 
 @pytest.mark.asyncio
-async def test_gemini_text_chat_dedupes_dynamic_headers(provider_http_server):
+@pytest.mark.parametrize("ua_header", ["user-agent", "User-Agent"])
+async def test_gemini_text_chat_dedupes_dynamic_headers(
+    ua_header, provider_http_server
+):
     # Per-request headers must replace SDK defaults without duplicate values.
     base_url, requests = provider_http_server
     provider = ProviderGoogleGenAI(
@@ -143,7 +146,7 @@ async def test_gemini_text_chat_dedupes_dynamic_headers(provider_http_server):
             "key": ["test-key"],
             "api_base": base_url,
             "custom_headers": {
-                "user-agent": "custom/{model}",
+                ua_header: "custom/{model}",
                 "X-Goog-Api-Client": "client/{model}",
             },
         },
@@ -154,8 +157,8 @@ async def test_gemini_text_chat_dedupes_dynamic_headers(provider_http_server):
         with pytest.raises(Exception, match="candidates is empty"):
             await provider.text_chat(prompt="hi", conversation_id="cid-1")
         assert len(requests) == 1
-        assert requests[0].getall("User-Agent") == ["custom/test-model"]
-        assert requests[0].getall("x-goog-api-client") == ["client/test-model"]
+        assert requests[0].headers.getall("User-Agent") == ["custom/test-model"]
+        assert requests[0].headers.getall("x-goog-api-client") == ["client/test-model"]
     finally:
         await provider.terminate()
 
@@ -191,9 +194,11 @@ async def test_custom_headers_replace_sdk_defaults_of_other_case(
             default_headers=provider.client.default_headers,
         )
         await provider.client.models.list(extra_headers=headers)
-        assert requests[0].getall("User-Agent") == ["custom/test-model"]
-        assert requests[0].getall("Accept") == ["application/json; m=test-model"]
-        assert requests[0].getall("X-Stainless-Lang") == ["static-lang"]
+        assert requests[0].headers.getall("User-Agent") == ["custom/test-model"]
+        assert requests[0].headers.getall("Accept") == [
+            "application/json; m=test-model"
+        ]
+        assert requests[0].headers.getall("X-Stainless-Lang") == ["static-lang"]
     finally:
         await provider.terminate()
 
@@ -229,7 +234,7 @@ async def test_aiohttp_provider_sends_user_agent(
         client = provider.client or await provider._get_client()
         async with client.get(base_url) as response:
             assert response.status == 200
-        assert requests[0].getall("User-Agent") == [
+        assert requests[0].headers.getall("User-Agent") == [
             custom_headers.get("USER-AGENT", DEFAULT_USER_AGENT)
         ]
     finally:
@@ -251,7 +256,7 @@ async def test_dashscope_sends_user_agent(model, custom_headers, provider_http_s
         {},
     )
     assert await provider.get_embeddings(["hello"]) == [[0.1]]
-    assert requests[0].getall("User-Agent") == [
+    assert requests[0].headers.getall("User-Agent") == [
         custom_headers.get("User-Agent", DEFAULT_USER_AGENT)
     ]
 
