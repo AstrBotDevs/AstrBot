@@ -1065,10 +1065,19 @@ class PluginManager:
         """
         if runtime not in ("isolated", "in-process"):
             return False, f"不支持的运行环境: {runtime}"
-        plugin_dir = os.path.join(self.plugin_store_path, root_dir_name)
-        if not os.path.isdir(plugin_dir):
+        if (
+            not root_dir_name
+            or "/" in root_dir_name
+            or "\\" in root_dir_name
+            or root_dir_name in (".", "..")
+            or Path(root_dir_name).name != root_dir_name
+        ):
+            return False, f"非法插件目录名: {root_dir_name}"
+        store_root = Path(self.plugin_store_path).resolve()
+        plugin_dir_path = (store_root / root_dir_name).resolve()
+        if plugin_dir_path.parent != store_root or not plugin_dir_path.is_dir():
             return False, f"插件目录不存在: {root_dir_name}"
-        if is_sdk_plugin_dir(plugin_dir):
+        if is_sdk_plugin_dir(plugin_dir_path):
             return False, "新版 SDK 插件始终隔离运行，无需切换"
 
         async with self._pm_lock:
@@ -1107,9 +1116,10 @@ class PluginManager:
             if runtime == "in-process":
                 # The isolated venv (data/plugin_venvs/<dir>) is no longer
                 # needed once the plugin runs inside the core process.
-                remove_dir(
-                    str(Path(get_astrbot_data_path()) / "plugin_venvs" / root_dir_name),
-                )
+                venv_root = (Path(get_astrbot_data_path()) / "plugin_venvs").resolve()
+                venv_dir = (venv_root / root_dir_name).resolve()
+                if venv_dir.parent == venv_root:
+                    remove_dir(str(venv_dir))
 
             success, error = await self.load(specified_dir_name=root_dir_name)
             if success:

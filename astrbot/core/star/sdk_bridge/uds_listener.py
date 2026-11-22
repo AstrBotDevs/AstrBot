@@ -7,6 +7,7 @@ import contextlib
 import hmac
 import json
 import os
+import re
 import secrets
 import shutil
 import tempfile
@@ -102,15 +103,18 @@ class ExternalUDSListener:
         Returns:
             Tuple of `(credential_file_path, accepted_transport_queue)`.
         """
-        credential_dir.mkdir(parents=True, exist_ok=True)
+        resolved_dir = credential_dir.resolve()
+        resolved_dir.mkdir(parents=True, exist_ok=True)
         if os.name == "posix":
-            os.chmod(credential_dir, 0o700)
+            os.chmod(resolved_dir, 0o700)
         secret = credential or secrets.token_urlsafe(32)
-        safe_name = plugin_id.replace("/", "_").replace("..", "_")
-        cred_path = credential_dir / f"{safe_name}.credential.json"
+        safe_name = re.sub(r"[^A-Za-z0-9._-]", "_", plugin_id).strip("._") or "plugin"
+        cred_path = resolved_dir / f"{safe_name}.credential.json"
+        if cred_path.resolve(strict=False).parent != resolved_dir:
+            raise ValueError(f"Invalid credential target path: {cred_path}")
         if cred_path.is_symlink():
             cred_path.unlink()
-        cred_path.write_text(
+        payload_text = (
             json.dumps(
                 {
                     "plugin_id": plugin_id,
@@ -119,11 +123,24 @@ class ExternalUDSListener:
                 },
                 indent=2,
             )
-            + "\n",
-            encoding="utf-8",
+            + "\n"
         )
         if os.name == "posix":
-            os.chmod(cred_path, 0o600)
+            # Create the bootstrap file with 0600 permissions directly so it is
+            # never readable under a permissive umask before chmod runs.
+            flags = os.O_WRONLY | os.O_CREAT | os.O_TRUNC | getattr(os, "O_NOFOLLOW", 0)
+            fd = os.open(cred_path, flags, 0o600)
+            try:
+                os.fchmod(fd, 0o600)
+                handle = os.fdopen(fd, "w", encoding="utf-8")
+            except BaseException:
+                with contextlib.suppress(OSError):
+                    os.close(fd)
+                raise
+            with handle:
+                handle.write(payload_text)
+        else:
+            cred_path.write_text(payload_text, encoding="utf-8")
 
         queue: asyncio.Queue[FrameTransport] = asyncio.Queue()
         self._slots[plugin_id] = {

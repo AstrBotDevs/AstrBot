@@ -3139,3 +3139,49 @@ async def test_set_plugin_runtime_to_in_process_removes_venv_and_failed_record(
     assert not venv_dir.exists()
     assert preferences["plugin_runtime_overrides"] == {"legacy_iso": "in-process"}
     assert "legacy_iso" not in pm.failed_plugin_dict
+
+
+@pytest.mark.asyncio
+async def test_set_plugin_runtime_rejects_path_traversal_and_preserves_outside_dirs(
+    plugin_manager_pm,
+    tmp_path,
+    monkeypatch,
+):
+    """Reject traversal/absolute names in PluginManager and PluginService runtime switches."""
+    from astrbot.dashboard.services.plugin_service import PluginService, PluginServiceError
+
+    pm = plugin_manager_pm
+    outside_plugin = tmp_path / "outside_plugin"
+    outside_plugin.mkdir()
+    marker_plugin = outside_plugin / "keep.txt"
+    marker_plugin.write_text("keep", encoding="utf-8")
+
+    data_root = tmp_path / "data"
+    (data_root / "plugin_venvs").mkdir(parents=True)
+    outside_venv_target = data_root / "keep_dir"
+    outside_venv_target.mkdir()
+    marker_venv = outside_venv_target / "important.txt"
+    marker_venv.write_text("safe", encoding="utf-8")
+    monkeypatch.setattr(
+        star_manager_module,
+        "get_astrbot_data_path",
+        lambda: str(data_root),
+    )
+
+    for bad_name in ("../outside_plugin", "../keep_dir", str(outside_plugin), "a/b", "..", "."):
+        success, error = await pm.set_plugin_runtime(bad_name, "in-process")
+        assert not success
+        assert error is not None
+
+    assert marker_plugin.read_text(encoding="utf-8") == "keep"
+    assert marker_venv.read_text(encoding="utf-8") == "safe"
+
+    pm.context.get_all_stars = lambda: []
+    service = PluginService(AsyncMock(), pm)
+    service._ensure_not_demo = lambda: None
+    for bad_name in ("../outside_plugin", str(outside_plugin), ".."):
+        with pytest.raises(PluginServiceError):
+            await service.set_plugin_runtime({"name": bad_name, "runtime": "in-process"})
+
+    assert marker_plugin.read_text(encoding="utf-8") == "keep"
+    assert marker_venv.read_text(encoding="utf-8") == "safe"

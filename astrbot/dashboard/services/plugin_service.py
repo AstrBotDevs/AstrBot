@@ -194,12 +194,20 @@ class PluginService:
             if star.name == plugin_name:
                 root_dir_name = star.root_dir_name
                 break
-        if not root_dir_name and os.path.isdir(
-            os.path.join(self.plugin_manager.plugin_store_path, plugin_name),
-        ):
-            # Failed plugins are absent from star_registry; the dashboard
-            # refers to them by directory name.
-            root_dir_name = plugin_name
+        if not root_dir_name:
+            store_root = Path(self.plugin_manager.plugin_store_path).resolve()
+            if store_root.is_dir():
+                for entry in store_root.iterdir():
+                    if (
+                        entry.name == plugin_name
+                        and not entry.is_symlink()
+                        and entry.is_dir()
+                    ):
+                        # Failed plugins are absent from star_registry; resolve
+                        # enumerated store children instead of building a path
+                        # from untrusted input.
+                        root_dir_name = entry.name
+                        break
         if not root_dir_name:
             raise PluginServiceError(
                 f"未找到插件: {plugin_name}",

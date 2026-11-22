@@ -506,6 +506,22 @@ class ExtPlugin(Plugin):
 
 
 @pytest.mark.asyncio
+async def test_external_uds_listener_sanitizes_credential_filename(
+    tmp_path: Path,
+) -> None:
+    """Credential enrollment confines filenames inside credential_dir with 0600 mode."""
+    cred_dir = tmp_path / "creds"
+    listener = ExternalUDSListener()
+    try:
+        cred_path, _queue = listener.enroll("../../escape\\id", cred_dir)
+        assert cred_path.resolve().parent == cred_dir.resolve()
+        if os.name == "posix":
+            assert (cred_path.stat().st_mode & 0o777) == 0o600
+    finally:
+        await listener.stop()
+
+
+@pytest.mark.asyncio
 async def test_native_rust_worker_plugin_json_e2e(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
