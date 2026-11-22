@@ -17,6 +17,7 @@ from astrbot.core.message.components import (
     Image,
     Plain,
     Record,
+    Reply,
     Video,
 )
 from astrbot.core.platform.button_interaction import encode_button_callback
@@ -148,8 +149,18 @@ class JsonFieldPaths:
         ),
         (
             KookEventDataPath.GROUP_MESSAGE,
-            ["d", "extra", "kmarkdown", "raw_content"],
-            [Plain(text="done!")],
+            "done!",
+            [
+                Reply(
+                    id="69a788adb0cfb9ece50eae1c",
+                    chain=[Plain(text="/am 1")],
+                    sender_id="2701973210937821093781",
+                    sender_nickname="some_username",
+                    time=1772587180,
+                    message_str="/am 1",
+                ),
+                Plain(text="done!"),
+            ],
         ),
         (
             KookEventDataPath.MESSAGE_WITH_CARD_1,
@@ -332,6 +343,7 @@ async def test_kook_standalone_media_enters_event_pipeline(
     raw_event = json.loads(KookEventDataPath.GROUP_MESSAGE.read_text(encoding="utf-8"))
     raw_event["d"]["type"] = message_type.value
     raw_event["d"]["content"] = TEST_MEDIA_URL
+    del raw_event["d"]["extra"]["quote"]
     raw_event["d"]["extra"]["type"] = message_type.value
     raw_event["d"]["extra"]["attachments"] = {
         "type": message_type.name.lower(),

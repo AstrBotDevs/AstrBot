@@ -5,7 +5,7 @@ from collections.abc import Awaitable, Callable
 
 from astrbot import logger
 from astrbot.api.event import MessageChain
-from astrbot.api.message_components import At, AtAll, Image, Plain
+from astrbot.api.message_components import At, AtAll, Image, Plain, Reply
 from astrbot.api.platform import (
     AstrBotMessage,
     Group,
@@ -655,6 +655,21 @@ class KookPlatformAdapter(Platform):
             abm.message_str = "[不支持的消息类型]"
             abm.message = [Plain(text="[不支持的消息类型]")]
 
+        quote = data.extra.quote
+        if quote is not None:
+            abm.message.insert(
+                0,
+                Reply(
+                    id=quote.id,
+                    sender_id=quote.author.id,
+                    sender_nickname=quote.author.nickname,
+                    time=quote.create_at // 1000,
+                    message_str=quote.content,
+                    chain=[Plain(text=quote.content)]
+                    if quote.type in (KookMessageType.TEXT, KookMessageType.KMARKDOWN)
+                    else [],
+                ),
+            )
         return abm
 
     def create_event(self, message: AstrBotMessage) -> KookEvent:

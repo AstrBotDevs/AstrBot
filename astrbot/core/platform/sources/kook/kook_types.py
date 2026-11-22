@@ -480,6 +480,14 @@ class KookAuthor(KookBaseReceiveDataClass):
     roles: list[int] = Field(default_factory=list)
 
 
+class KookQuote(KookBaseReceiveDataClass):
+    id: str
+    type: int
+    content: str
+    create_at: int
+    author: KookAuthor
+
+
 class KookMarkdownMentionPart(KookBaseReceiveDataClass):
     """
     文档参考: https://developer.kookapp.cn/doc/event/message
@@ -555,6 +563,7 @@ class KookExtra(KookBaseReceiveDataClass):
     code: str | None = None
     body: KookRole | dict[str, Any] | None = None
     author: KookAuthor | None = None
+    quote: KookQuote | None = None
     kmarkdown: KookKMarkdown | None = None
     last_msg_content: str | None = None
     mention: list[str] = Field(default_factory=list)
