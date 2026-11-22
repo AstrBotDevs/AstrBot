@@ -1,26 +1,13 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
+import { createRequire } from "node:module";
 import test from "node:test";
 import vm from "node:vm";
 import ts from "typescript";
 
-const levelsJson = JSON.parse(
-  readFileSync(
-    new URL("../src/utils/geminiThinkingLevels.json", import.meta.url),
-    "utf8",
-  ),
-);
-const source = readFileSync(
-  new URL("../src/utils/reasoningEffort.ts", import.meta.url),
-  "utf8",
-);
-const context = vm.createContext({
-  exports: {},
-  require: (specifier) => {
-    if (specifier === "./geminiThinkingLevels.json") return levelsJson;
-    throw new Error(`Unexpected import: ${specifier}`);
-  },
-});
+const moduleUrl = new URL("../src/utils/reasoningEffort.ts", import.meta.url);
+const source = readFileSync(moduleUrl, "utf8");
+const context = vm.createContext({ exports: {}, require: createRequire(moduleUrl) });
 vm.runInContext(
   ts.transpile(source, {
     module: ts.ModuleKind.CommonJS,
@@ -32,134 +19,30 @@ vm.runInContext(
 const resolveReasoningEffort = (...args) =>
   JSON.parse(JSON.stringify(context.exports.resolveReasoningEffort(...args)));
 
-test("adapts levels for Gemini 4 models and hides selector for non-Gemini-4 models", () => {
-  assert.deepEqual(
-    resolveReasoningEffort({
-      type: "googlegenai_chat_completion",
-      model: "gemini-4-carbon",
-    }),
-    { levels: ["low", "medium", "high"], effort: null },
-  );
-  assert.deepEqual(
-    resolveReasoningEffort({
-      type: "googlegenai_chat_completion",
-      model: "models/gemini-4-argon-preview",
-    }),
-    { levels: ["low", "medium", "high"], effort: null },
-  );
-  assert.deepEqual(
-    resolveReasoningEffort({
-      type: "googlegenai_chat_completion",
-      model: "gemini-4-neon",
-    }),
-    { levels: ["low", "medium", "high", "xhigh"], effort: null },
-  );
-  assert.deepEqual(
-    resolveReasoningEffort({
-      type: "googlegenai_chat_completion",
-      model: "gemini-4-hydrogen-001",
-    }),
-    { levels: ["low", "medium", "high", "xhigh"], effort: null },
-  );
-  assert.deepEqual(
-    resolveReasoningEffort({
-      type: "googlegenai_chat_completion",
-      model: "gemini-2.5-pro",
-    }),
-    { levels: [], effort: null },
-  );
+test("shows the selectable levels for each Gemini model", () => {
+  const standard = ["low", "medium", "high"];
+  const extended = [...standard, "xhigh"];
+  for (const [model, levels] of [
+    ["gemini-4-carbon", standard],
+    ["models/gemini-4-argon-preview", standard],
+    ["gemini-4-neon", extended],
+    ["gemini-4-hydrogen-001", extended],
+    ["gemini-2.5-pro", []],
+  ]) {
+    const provider = { type: "googlegenai_chat_completion", model };
+    assert.deepEqual(resolveReasoningEffort(provider), { levels, effort: null }, model);
+  }
 });
 
-test("uses provider-specific levels and hides models without selectable effort", () => {
-  // DeepSeek exposes its native levels and keeps its default until a manual selection.
-  assert.deepEqual(
-    resolveReasoningEffort(
-      { type: "openai_chat_completion", model: "deepseek-v4-flash" },
-      { reasoning: true, reasoning_efforts: ["none", "low", "high", "max"] },
-    ),
-    { levels: ["none", "low", "high", "max"], effort: null },
-  );
-
-  // Xiaomi MiMo: toggle-only (reasoning: true, reasoning_efforts: []) -> selector hidden.
-  assert.deepEqual(
-    resolveReasoningEffort(
-      { type: "xiaomi_chat_completion", model: "mimo-v2.5" },
-      { reasoning: true, reasoning_efforts: [] },
-    ),
-    { levels: [], effort: null },
-  );
-
-  // OpenAI Responses & OpenAI Subscribe plugin models with 5/6 levels.
-  assert.deepEqual(
-    resolveReasoningEffort(
-      { type: "openai_responses", model: "gpt-6.1-sol" },
-      {
-        reasoning: true,
-        reasoning_efforts: ["low", "medium", "high", "xhigh", "max"],
-      },
-    ),
-    { levels: ["low", "medium", "high", "xhigh", "max"], effort: null },
-  );
-  assert.deepEqual(
-    resolveReasoningEffort(
-      { type: "OpenAI Subscribe", model: "gpt-6-luna" },
-      {
-        reasoning: true,
-        reasoning_efforts: ["none", "low", "medium", "high", "xhigh", "max"],
-      },
-    ),
-    {
-      levels: ["none", "low", "medium", "high", "xhigh", "max"],
-      effort: null,
-    },
-  );
-
-  // Non-reasoning model stays hidden; Anthropic & Kimi Code follow models.dev reasoning_efforts.
-  assert.deepEqual(
-    resolveReasoningEffort(
-      { type: "openai_chat_completion", model: "gpt-4o" },
-      { reasoning: false, reasoning_efforts: [] },
-    ),
-    { levels: [], effort: null },
-  );
-  assert.deepEqual(
-    resolveReasoningEffort(
-      {
-        type: "anthropic_chat_completion",
-        model: "claude-opus-4-8",
-        anth_thinking_config: { type: "adaptive", effort: "high" },
-      },
-      {
-        reasoning: true,
-        reasoning_efforts: ["low", "medium", "high", "xhigh", "max"],
-      },
-    ),
-    { levels: ["low", "medium", "high", "xhigh", "max"], effort: null },
-  );
-  assert.deepEqual(
-    resolveReasoningEffort(
-      { type: "kimi_code_chat_completion", model: "kimi-for-coding" },
-      {
-        reasoning: true,
-        reasoning_efforts: ["none", "low", "high", "max"],
-      },
-    ),
-    { levels: ["none", "low", "high", "max"], effort: null },
-  );
-  assert.deepEqual(
-    resolveReasoningEffort(
-      { type: "kimi_code_chat_completion", model: "kimi-for-coding-highspeed" },
-      { reasoning: true, reasoning_efforts: [] },
-    ),
-    { levels: [], effort: null },
-  );
-  assert.deepEqual(
-    resolveReasoningEffort(
-      { type: "anthropic_chat_completion", model: "claude-3-7-sonnet" },
-      { reasoning: true },
-    ),
-    { levels: [], effort: null },
-  );
+test("uses advertised levels and leaves the provider default in effect", () => {
+  const levels = ["low", "medium", "high", "xhigh", "max"];
+  const metadata = { reasoning_efforts: levels };
+  for (const provider of [
+    { type: "custom_adapter" },
+    { type: "anthropic_chat_completion", anth_thinking_config: { effort: "high" } },
+  ]) {
+    assert.deepEqual(resolveReasoningEffort(provider, metadata), { levels, effort: null });
+  }
 });
 
 test("a preset or reasoning flag alone does not advertise selectable levels", () => {

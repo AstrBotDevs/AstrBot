@@ -279,7 +279,7 @@ def test_llm_metadata_resolves_provider_and_consensus_reasoning_efforts():
         gpt_61 = llm_metadata.resolve_model_metadata(
             "gpt-6.1-sol",
             provider="openai",
-            adapter_type="OpenAI Subscribe",
+            adapter_type="custom_adapter",
         )
         assert gpt_61 is not None
         assert gpt_61["reasoning_efforts"] == [
