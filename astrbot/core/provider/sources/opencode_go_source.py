@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import copy
 import random
+import uuid
 from collections.abc import AsyncGenerator
 from typing import Any
 
@@ -51,6 +52,10 @@ class ProviderOpenCodeGo(ProviderOpenAIOfficial):
             custom_headers["User-Agent"] = OPENCODE_GO_USER_AGENT
         merged_provider_config["custom_headers"] = custom_headers
         super().__init__(merged_provider_config, provider_settings)
+        # Requests that are not bound to an AstrBot conversation (for example the
+        # WebUI model test or model listing) still need a stable routing identity.
+        # Keep one per provider instance so OpenCode can cache prompts for it.
+        self._fallback_session_id = uuid.uuid4().hex
 
     async def _prepare_opencode_request(
         self, payloads: dict, tools: ToolSet | None
@@ -166,10 +171,39 @@ class ProviderOpenCodeGo(ProviderOpenAIOfficial):
         raise RuntimeError("OpenCode Go request failed after all retries.")
 
     def _opencode_session_headers(self, conversation_id: str | None) -> dict[str, str]:
-        """Build OpenCode Go routing headers for one conversation."""
-        if not conversation_id:
-            return {}
-        return {OPENCODE_SESSION_HEADER: str(conversation_id)}
+        """Build the OpenCode Go routing header for one request.
+
+        OpenCode rejects inference requests without ``x-opencode-session``. AstrBot
+        conversations supply the value when one is bound; otherwise the stable
+        per-provider fallback keeps one-off calls routable and cache-friendly.
+
+        Args:
+            conversation_id: Bound AstrBot conversation ID, or None for one-off calls.
+
+        Returns:
+            A header mapping that always contains the session ID.
+        """
+        session_id = (
+            str(conversation_id) if conversation_id else self._fallback_session_id
+        )
+        return {OPENCODE_SESSION_HEADER: session_id}
+
+    async def get_models(self) -> list[str]:
+        """List models exposed by OpenCode Go with the routing header attached.
+
+        Returns:
+            Sorted model identifiers.
+
+        Raises:
+            Exception: If the model list request fails.
+        """
+        models = await retry_provider_request(
+            "OpenCode Go",
+            lambda: self.client.models.list(
+                extra_headers=self._opencode_session_headers(None),
+            ),
+        )
+        return sorted(model.id for model in models.data)
 
     async def _query(
         self,

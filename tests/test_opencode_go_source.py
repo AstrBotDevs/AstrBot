@@ -86,6 +86,118 @@ async def test_opencode_go_sends_user_agent_and_session_id(
 
 
 @pytest.mark.asyncio
+async def test_opencode_go_one_off_requests_use_stable_session_id(
+    unused_tcp_port, monkeypatch
+):
+    requests = []
+
+    async def handle(request):
+        requests.append(request)
+        return web.json_response(
+            {
+                "id": "chatcmpl_test",
+                "object": "chat.completion",
+                "created": 1,
+                "model": "kimi-k3",
+                "choices": [
+                    {
+                        "index": 0,
+                        "message": {"role": "assistant", "content": "ok"},
+                        "finish_reason": "stop",
+                    }
+                ],
+                "usage": {
+                    "prompt_tokens": 1,
+                    "completion_tokens": 1,
+                    "total_tokens": 2,
+                },
+            }
+        )
+
+    app = web.Application()
+    app.router.add_post("/v1/chat/completions", handle)
+    runner = web.AppRunner(app)
+    monkeypatch.setenv("NO_PROXY", "127.0.0.1")
+    monkeypatch.setenv("no_proxy", "127.0.0.1")
+    await runner.setup()
+    try:
+        await web.TCPSite(runner, "127.0.0.1", unused_tcp_port).start()
+        provider = ProviderOpenCodeGo(
+            {
+                "id": "test-opencode-go-one-off",
+                "type": "opencode_go_chat_completion",
+                "model": "kimi-k3",
+                "key": ["test-key"],
+                "api_base": f"http://127.0.0.1:{unused_tcp_port}/v1",
+            },
+            {},
+        )
+        try:
+            payload = {
+                "model": "kimi-k3",
+                "messages": [{"role": "user", "content": "hi"}],
+            }
+            await provider._query(dict(payload), None)
+            await provider._query(dict(payload), None)
+
+            assert len(requests) == 2
+            session_ids = [
+                request.headers.get("x-opencode-session") for request in requests
+            ]
+            assert all(session_ids)
+            assert session_ids[0] == session_ids[1]
+        finally:
+            await provider.terminate()
+    finally:
+        await runner.cleanup()
+
+
+@pytest.mark.asyncio
+async def test_opencode_go_model_list_sends_session_id(unused_tcp_port, monkeypatch):
+    requests = []
+
+    async def handle(request):
+        requests.append(request)
+        return web.json_response(
+            {
+                "object": "list",
+                "data": [
+                    {"id": "beam-free", "object": "model", "created": 1},
+                    {"id": "claude-haiku-5-5", "object": "model", "created": 1},
+                ],
+            }
+        )
+
+    app = web.Application()
+    app.router.add_get("/v1/models", handle)
+    runner = web.AppRunner(app)
+    monkeypatch.setenv("NO_PROXY", "127.0.0.1")
+    monkeypatch.setenv("no_proxy", "127.0.0.1")
+    await runner.setup()
+    try:
+        await web.TCPSite(runner, "127.0.0.1", unused_tcp_port).start()
+        provider = ProviderOpenCodeGo(
+            {
+                "id": "test-opencode-go-models",
+                "type": "opencode_go_chat_completion",
+                "model": "kimi-k3",
+                "key": ["test-key"],
+                "api_base": f"http://127.0.0.1:{unused_tcp_port}/v1",
+            },
+            {},
+        )
+        try:
+            models = await provider.get_models()
+
+            assert models == ["beam-free", "claude-haiku-5-5"]
+            assert requests[0].headers.get("x-opencode-session")
+        finally:
+            await provider.terminate()
+    finally:
+        await runner.cleanup()
+
+
+@pytest.mark.asyncio
 async def test_opencode_go_stream_sends_session_id(unused_tcp_port, monkeypatch):
     requests = []
 
