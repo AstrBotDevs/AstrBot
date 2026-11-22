@@ -247,6 +247,13 @@ class AiocqhttpMessageEvent(AstrMessageEvent):
 
         async for chain in generator:
             if isinstance(chain, MessageChain):
+                if chain.type == "break":
+                    buffer = "".join(leading_punctuation + text_parts).strip()
+                    if buffer:
+                        await self.send(MessageChain([Plain(buffer)]))
+                    text_parts.clear()
+                    leading_punctuation.clear()
+                    continue
                 for comp in chain.chain:
                     if isinstance(comp, Plain):
                         # Scan new text only; join unfinished fragments when sending.
@@ -268,6 +275,11 @@ class AiocqhttpMessageEvent(AstrMessageEvent):
                         if start < len(text):
                             text_parts.append(text[start:])
                     else:
+                        buffer = "".join(leading_punctuation + text_parts).strip()
+                        if buffer:
+                            await self.send(MessageChain([Plain(buffer)]))
+                        text_parts.clear()
+                        leading_punctuation.clear()
                         await self.send(MessageChain(chain=[comp]))
                         await asyncio.sleep(1.5)  # 限速
 
