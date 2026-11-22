@@ -662,7 +662,7 @@ import {
   SquarePen,
   Trash2,
 } from "@lucide/vue";
-import { chatApi, configProfileApi, providerApi } from "@/api/v1";
+import { chatApi, configProfileApi } from "@/api/v1";
 import ChatSettingsDialog from "@/components/chat/ChatSettingsDialog.vue";
 import ChatToolbarContext from "@/components/chat/ChatToolbarContext.vue";
 import ProjectDialog, {
@@ -696,6 +696,7 @@ import { useMediaHandling } from "@/composables/useMediaHandling";
 import { useChatVoice } from "@/composables/useChatVoice";
 import { useProjects } from "@/composables/useProjects";
 import { useDragUpload } from "@/composables/useDragUpload";
+import type { ProviderConfig } from "@/composables/useProviderCatalog";
 import { useProviderModelSelection } from "@/composables/useProviderModelSelection";
 import { useChatHeaderStore } from "@/stores/chatHeader";
 import { useHeaderContextStore } from "@/stores/headerContext";
@@ -705,12 +706,7 @@ import ProviderPage from "@/views/ProviderPage.vue";
 import ProviderChatCompletionPanel from "@/components/provider/ProviderChatCompletionPanel.vue";
 import { useI18n, useModuleI18n } from "@/i18n/composables";
 import { askForConfirmation, useConfirmDialog } from "@/utils/confirmDialog";
-import {
-  contextLimit,
-  formatTokenCount,
-  type ProviderModelMetadata,
-  type ProviderMetadataSource,
-} from "@/utils/providerMetadata";
+import { contextLimit, formatTokenCount } from "@/utils/providerMetadata";
 import { useToast } from "@/utils/toast";
 import { readChatDraft, writeChatDraft } from "@/utils/chatDraftStorage";
 
@@ -791,12 +787,6 @@ const { isDragging, dragEvents } = useDragUpload((files) => {
 
 type WorkspaceView = "chat" | "providers";
 
-interface TokenProviderConfig extends ProviderMetadataSource {
-  id: string;
-  enable?: boolean;
-  type?: string;
-}
-
 const activeWorkspace = ref<WorkspaceView>("chat");
 const projectDialogOpen = ref(false);
 const editingProject = ref<Project | null>(null);
@@ -815,8 +805,6 @@ const projectSessionsById = ref<Record<string, Session[]>>({});
 const loadingProjectSessionIds = ref<string[]>([]);
 const loadingSessions = ref(false);
 const draft = ref(readChatDraft(currSessionId.value));
-const tokenProviderConfigs = ref<TokenProviderConfig[]>([]);
-const tokenModelMetadata = ref<Record<string, ProviderModelMetadata>>({});
 const selectedTokenProviderId = ref("");
 const messagesContainer = ref<HTMLElement | null>(null);
 const sidebarContent = ref<HTMLElement | null>(null);
@@ -1160,10 +1148,13 @@ function getSelectedProviderSelection() {
 }
 
 const {
+  providerCatalog,
   selectedProviderId: currentProviderId,
   selectedModelName: currentModelName,
   setSelection: setProviderSelection,
 } = useProviderModelSelection();
+const { providers: tokenProviderConfigs, modelMetadata: tokenModelMetadata } =
+  providerCatalog;
 
 const activeAgentRunnerType = ref("astrbot");
 // Null while the session's backend-resolved default provider has not loaded yet.
@@ -1253,7 +1244,7 @@ function reasoningEffortFor(
   if (normalizedRunner !== "astrbot" && normalizedRunner !== "internal") {
     return { levels: [], effort: null, requestEffort: null };
   }
-  let provider: TokenProviderConfig | undefined;
+  let provider: ProviderConfig | undefined;
   if (providerId) {
     provider = tokenProviderConfigs.value.find((item) => item.id === providerId);
   } else if (fallbackConfigProviderId !== null) {
@@ -1566,14 +1557,7 @@ function syncSelectedTokenProvider() {
 async function loadTokenProviders() {
   syncSelectedTokenProvider();
   try {
-    const response = await providerApi.listByProviderType("chat_completion");
-    if (response.data.status === "ok") {
-      tokenModelMetadata.value = ((response.data as any).model_metadata ||
-        {}) as Record<string, ProviderModelMetadata>;
-      tokenProviderConfigs.value = (
-        (response.data.data || []) as unknown as TokenProviderConfig[]
-      ).filter((provider) => provider.enable !== false);
-    }
+    await providerCatalog.load("chat_completion");
   } catch (error) {
     console.error("Failed to load provider context metadata:", error);
   }

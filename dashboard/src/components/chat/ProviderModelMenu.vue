@@ -3,6 +3,7 @@
     ref="providerSelectMenuRef"
     :model-value="selectedProviderId"
     :fallback-model="selectedModelName"
+    :catalog="providerCatalog"
     provider-type="chat_completion"
     :variant="variant"
     :allow-empty="true"
@@ -30,7 +31,7 @@ const props = withDefaults(
   },
 );
 
-const { selectedProviderId, selectedModelName, setSelection } =
+const { providerCatalog, selectedProviderId, selectedModelName, setSelection } =
   useProviderModelSelection();
 const providerSelectMenuRef = ref<InstanceType<
   typeof ProviderSelectMenu

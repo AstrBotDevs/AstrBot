@@ -1,5 +1,6 @@
 import { ref } from "vue";
 
+import { useProviderCatalog } from "./useProviderCatalog";
 import { chatPreferences } from "@/utils/chatPreferences";
 import { getStoredDashboardUsername } from "@/utils/chatConfigBinding";
 
@@ -7,12 +8,14 @@ import { getStoredDashboardUsername } from "@/utils/chatConfigBinding";
 // shares the same selection.
 const selectedProviderId = ref("");
 const selectedModelName = ref("");
+const providerCatalog = useProviderCatalog();
 let syncedUser = "";
 
 function syncFromStorage() {
   const user = getStoredDashboardUsername();
   if (syncedUser === user) return;
   syncedUser = user;
+  providerCatalog.reset();
   const selection = chatPreferences().global.provider;
   selectedProviderId.value = selection?.providerId || "";
   selectedModelName.value = selection?.modelName || "";
@@ -23,6 +26,7 @@ export function useProviderModelSelection() {
 
   function resetSelection() {
     syncedUser = "";
+    providerCatalog.reset();
     selectedProviderId.value = "";
     selectedModelName.value = "";
   }
@@ -37,6 +41,7 @@ export function useProviderModelSelection() {
   }
 
   return {
+    providerCatalog,
     selectedProviderId,
     selectedModelName,
     setSelection,
