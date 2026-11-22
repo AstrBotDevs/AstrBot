@@ -215,6 +215,9 @@ class TestBackupPathResolutionAndValidation:
             for incomplete in (r"\\backups", "//backups"):
                 with pytest.raises(ValueError, match="Incomplete Windows path anchor"):
                     validate_astrbot_backup_dir(incomplete)
+            for unc_root in (r"\\example-nas\share", r"\\example-nas\share\\"):
+                with pytest.raises(ValueError, match="filesystem root"):
+                    validate_astrbot_backup_dir(unc_root, check_writable=False)
             # Valid UNC subdirectory passes syntax validation (without hitting disk).
             unc_resolved = validate_astrbot_backup_dir(
                 r"\\example-nas\share\astrbot-backups", check_writable=False
@@ -486,7 +489,7 @@ class TestBackupServiceCustomDirectory:
         assert fixed["is_valid"] is True
         assert fixed["source"] == "default"
 
-    def test_list_backups_skips_symlink_escaping_backup_dir(
+    def test_list_download_delete_rename_reject_symlink_escape_and_missing_files(
         self, isolated_env, monkeypatch: pytest.MonkeyPatch
     ):
         service = isolated_env.service
@@ -497,17 +500,67 @@ class TestBackupServiceCustomDirectory:
         outside_zip = _create_valid_backup_zip(isolated_env.tmp_path / "secret.zip")
         escaped_entry = custom_dir / "escaped.zip"
         escaped_entry.write_bytes(b"placeholder")
+        (custom_dir / "subdir.zip").mkdir()
 
-        real_resolve = Path.resolve
+        real_realpath = os.path.realpath
 
-        def _fake_resolve(self_path: Path, strict: bool = False) -> Path:
-            if self_path.name == "escaped.zip":
-                return real_resolve(outside_zip, strict=False)
-            return real_resolve(self_path, strict=strict)
+        def _fake_realpath(p):
+            if os.path.basename(str(p)) == "escaped.zip":
+                return real_realpath(str(outside_zip))
+            return real_realpath(p)
 
-        monkeypatch.setattr(Path, "resolve", _fake_resolve)
+        monkeypatch.setattr(
+            "astrbot.dashboard.services.backup_service.os.path.realpath", _fake_realpath
+        )
         listed = service.list_backups(page=1, page_size=20)
         assert [item["filename"] for item in listed["items"]] == [inside_zip.name]
+
+        token = jwt.encode(
+            {"username": "astrbot", "exp": 4_102_444_800},
+            JWT_SECRET,
+            algorithm="HS256",
+        )
+        # Escaping symlink must be rejected by download, delete, check, and rename.
+        with pytest.raises(BackupServiceError, match="无效的文件名"):
+            service.prepare_download(
+                filename="escaped.zip", token=token, jwt_secret=JWT_SECRET
+            )
+        with pytest.raises(BackupServiceError, match="无效的文件名"):
+            service.delete_backup({"filename": "escaped.zip"})
+        with pytest.raises(BackupServiceError, match="无效的文件名"):
+            service.check_backup({"filename": "escaped.zip"})
+        with pytest.raises(BackupServiceError, match="无效的文件名"):
+            service.rename_backup({"filename": "escaped.zip", "new_name": "renamed"})
+        with pytest.raises(BackupServiceError, match="无效的文件名"):
+            service.rename_backup({"filename": "legit.zip", "new_name": "escaped"})
+
+        # Missing file or directory with .zip name reports not found cleanly.
+        for missing_name in ("does_not_exist.zip", "subdir.zip"):
+            with pytest.raises(BackupServiceError, match="不存在"):
+                service.prepare_download(
+                    filename=missing_name, token=token, jwt_secret=JWT_SECRET
+                )
+            with pytest.raises(BackupServiceError, match="不存在"):
+                service.delete_backup({"filename": missing_name})
+            with pytest.raises(BackupServiceError, match="不存在"):
+                service.check_backup({"filename": missing_name})
+
+    @pytest.mark.asyncio
+    async def test_direct_upload_writes_to_custom_directory(self, isolated_env):
+        service = isolated_env.service
+        custom_dir = isolated_env.tmp_path / "direct_uploads"
+        service.update_backup_settings({"backup_dir": str(custom_dir)})
+
+        sample_zip = _create_valid_backup_zip(
+            isolated_env.tmp_path / "direct_source.zip"
+        )
+        result = await service.upload_backup(
+            _StubUploadFile("direct_source.zip", sample_zip.read_bytes())
+        )
+        saved = Path(result["path"])
+        assert saved.parent == Path(os.path.realpath(str(custom_dir)))
+        assert saved.is_file()
+        assert result["backup_dir"] == os.path.realpath(str(custom_dir))
 
     def test_update_backup_settings_rolls_back_on_save_config_error(
         self, isolated_env, monkeypatch: pytest.MonkeyPatch

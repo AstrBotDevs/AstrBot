@@ -343,7 +343,16 @@ def validate_astrbot_backup_dir(
     else:
         resolved_str = get_default_astrbot_backups_path()
 
-    resolved_path = Path(resolved_str)
+    # Canonicalize via os.path.realpath and require a concrete filesystem root
+    # anchor (/, C:\, D:\, \\server\share\) before touching the filesystem.
+    canonical_str = os.path.realpath(resolved_str)
+    anchor = Path(canonical_str).anchor
+    if not anchor:
+        raise ValueError("Backup directory cannot be a filesystem root directory.")
+    if not canonical_str.startswith(anchor):
+        raise ValueError("Backup directory cannot be a filesystem root directory.")
+
+    resolved_path = Path(canonical_str)
     resolved_cmp = _norm_path_for_compare(resolved_path)
 
     # Reject filesystem roots (/, C:\, D:\, \\server\share\).
@@ -407,10 +416,7 @@ def validate_astrbot_backup_dir(
                 f"managed AstrBot directories ({Path(protected).name})."
             )
 
-    if resolved_path.exists() and not resolved_path.is_dir():
-        raise ValueError("Backup directory path points to an existing file.")
-
     if check_writable:
         _probe_directory_writable(resolved_path)
 
-    return resolved_str
+    return canonical_str

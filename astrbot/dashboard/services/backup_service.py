@@ -339,12 +339,82 @@ class BackupService:
             raise BackupServiceError("无效的文件名")
         return filename
 
-    def _resolve_backup_file_path(self, filename: str, *, backup_dir: str) -> str:
-        base = Path(backup_dir).resolve(strict=False)
-        candidate = (base / filename).resolve(strict=False)
-        if not candidate.is_relative_to(base) or candidate == base:
+    @staticmethod
+    def _is_within_backup_dir(candidate_real: str, base_real: str) -> bool:
+        """Check whether canonical path ``candidate_real`` stays inside ``base_real``.
+
+        Args:
+            candidate_real: Canonicalized file path.
+            base_real: Canonicalized backup directory path.
+
+        Returns:
+            True if ``candidate_real`` is a strict descendant of ``base_real``.
+        """
+        candidate_cmp = os.path.normcase(candidate_real)
+        base_cmp = os.path.normcase(base_real)
+        base_prefix = os.path.join(base_cmp, "")
+        return candidate_cmp != base_cmp and candidate_cmp.startswith(base_prefix)
+
+    def _find_existing_backup_file(
+        self, filename: str, *, backup_dir: str
+    ) -> tuple[str, str] | None:
+        """Locate an existing backup file by matching server-enumerated entries.
+
+        Matching against ``os.scandir`` entries avoids joining request input
+        directly into filesystem paths for lookups while rejecting symlinks
+        whose targets escape ``backup_dir``.
+
+        Args:
+            filename: Validated single-segment backup filename.
+            backup_dir: Effective backup directory path.
+
+        Returns:
+            ``(canonical_path, matched_filename)`` when a regular file matches,
+            or ``None`` if no matching regular file exists.
+
+        Raises:
+            BackupServiceError: If a matching entry resolves outside
+                ``backup_dir``.
+        """
+        base_real = os.path.realpath(backup_dir)
+        try:
+            with os.scandir(base_real) as entries:
+                for entry in entries:
+                    if entry.name != filename:
+                        continue
+                    candidate_real = os.path.realpath(entry.path)
+                    if not self._is_within_backup_dir(candidate_real, base_real):
+                        raise BackupServiceError("无效的文件名")
+                    if not os.path.isfile(candidate_real):
+                        return None
+                    return candidate_real, entry.name
+        except OSError:
+            return None
+        return None
+
+    def _resolve_new_backup_file_path(self, filename: str, *, backup_dir: str) -> str:
+        """Resolve a safe destination path for a new backup file inside ``backup_dir``.
+
+        Args:
+            filename: Validated single-segment backup filename.
+            backup_dir: Effective backup directory path.
+
+        Returns:
+            Canonical path guaranteed to reside inside ``backup_dir``.
+
+        Raises:
+            BackupServiceError: If the filename is invalid or resolves outside
+                ``backup_dir``.
+        """
+        safe_name = self._validate_backup_filename(filename, missing="无效的文件名")
+        base_real = os.path.realpath(backup_dir)
+        base_prefix = os.path.join(base_real, "")
+        candidate_real = os.path.realpath(os.path.join(base_real, safe_name))
+        if not candidate_real.startswith(base_prefix):
             raise BackupServiceError("无效的文件名")
-        return str(candidate)
+        if not self._is_within_backup_dir(candidate_real, base_real):
+            raise BackupServiceError("无效的文件名")
+        return candidate_real
 
     def _init_task(self, task_id: str, task_type: str, status: str = "pending") -> None:
         self.backup_tasks[task_id] = {
@@ -437,22 +507,22 @@ class BackupService:
     def list_backups(self, *, page: int, page_size: int) -> dict:
         self.ensure_cleanup_task_started()
         backup_dir = self._require_valid_backup_dir(check_writable=False)
+        base_real = os.path.realpath(backup_dir)
         try:
-            Path(backup_dir).mkdir(parents=True, exist_ok=True)
-            entries = os.listdir(backup_dir)
+            Path(base_real).mkdir(parents=True, exist_ok=True)
+            with os.scandir(base_real) as scan:
+                entries = list(scan)
         except OSError as exc:
             raise BackupServiceError(f"Cannot access backup directory: {exc}") from exc
 
         backup_files = []
-        for filename in entries:
+        for entry in entries:
+            filename = entry.name
             if not filename.endswith(".zip") or filename.startswith("."):
                 continue
 
-            try:
-                file_path = self._resolve_backup_file_path(
-                    filename, backup_dir=backup_dir
-                )
-            except BackupServiceError:
+            file_path = os.path.realpath(entry.path)
+            if not self._is_within_backup_dir(file_path, base_real):
                 logger.debug(f"跳过越界备份文件: {filename}")
                 continue
             if not os.path.isfile(file_path):
@@ -543,7 +613,7 @@ class BackupService:
 
         with self._dir_lock:
             backup_dir = self._require_valid_backup_dir(check_writable=True)
-            zip_path = self._resolve_backup_file_path(
+            zip_path = self._resolve_new_backup_file_path(
                 unique_filename, backup_dir=backup_dir
             )
             self._active_direct_uploads += 1
@@ -664,7 +734,7 @@ class BackupService:
         try:
             session = self.chunked_uploads.get_session(upload_id, owner=owner)
             backup_dir = self._require_valid_backup_dir(check_writable=True)
-            output_path = self._resolve_backup_file_path(
+            output_path = self._resolve_new_backup_file_path(
                 session.filename, backup_dir=backup_dir
             )
             file_size = await self.chunked_uploads.assemble(
@@ -721,9 +791,10 @@ class BackupService:
             missing="缺少 filename 参数",
         )
         backup_dir = self._require_valid_backup_dir(check_writable=False)
-        zip_path = self._resolve_backup_file_path(filename, backup_dir=backup_dir)
-        if not os.path.isfile(zip_path):
+        found = self._find_existing_backup_file(filename, backup_dir=backup_dir)
+        if found is None:
             raise BackupServiceError(f"备份文件不存在: {filename}")
+        zip_path, _ = found
 
         kb_manager = getattr(self.core_lifecycle, "kb_manager", None)
         importer = AstrBotImporter(
@@ -747,9 +818,10 @@ class BackupService:
 
         with self._dir_lock:
             backup_dir = self._require_valid_backup_dir(check_writable=False)
-            zip_path = self._resolve_backup_file_path(filename, backup_dir=backup_dir)
-            if not os.path.isfile(zip_path):
+            found = self._find_existing_backup_file(filename, backup_dir=backup_dir)
+            if found is None:
                 raise BackupServiceError(f"备份文件不存在: {filename}")
+            zip_path, _ = found
 
             task_id = str(uuid.uuid4())
             self._init_task(task_id, "import", "pending")
@@ -843,10 +915,11 @@ class BackupService:
 
         filename = self._validate_backup_filename(filename, missing="缺少参数 filename")
         backup_dir = self._require_valid_backup_dir(check_writable=False)
-        file_path = self._resolve_backup_file_path(filename, backup_dir=backup_dir)
-        if not os.path.isfile(file_path):
+        found = self._find_existing_backup_file(filename, backup_dir=backup_dir)
+        if found is None:
             raise BackupServiceError("备份文件不存在")
-        return BackupDownload(path=file_path, filename=filename)
+        file_path, matched_name = found
+        return BackupDownload(path=file_path, filename=matched_name)
 
     def delete_backup(self, data: object) -> tuple[dict | None, str | None]:
         payload = self._payload(data)
@@ -855,9 +928,10 @@ class BackupService:
             missing="缺少参数 filename",
         )
         backup_dir = self._require_valid_backup_dir(check_writable=False)
-        file_path = self._resolve_backup_file_path(filename, backup_dir=backup_dir)
-        if not os.path.isfile(file_path):
+        found = self._find_existing_backup_file(filename, backup_dir=backup_dir)
+        if found is None:
             raise BackupServiceError("备份文件不存在")
+        file_path, _ = found
 
         os.remove(file_path)
         return None, "删除备份成功"
@@ -880,11 +954,14 @@ class BackupService:
 
         new_filename = f"{new_name}.zip"
         backup_dir = self._require_valid_backup_dir(check_writable=False)
-        old_path = self._resolve_backup_file_path(filename, backup_dir=backup_dir)
-        if not os.path.isfile(old_path):
+        found = self._find_existing_backup_file(filename, backup_dir=backup_dir)
+        if found is None:
             raise BackupServiceError("备份文件不存在")
+        old_path, _ = found
 
-        new_path = self._resolve_backup_file_path(new_filename, backup_dir=backup_dir)
+        new_path = self._resolve_new_backup_file_path(
+            new_filename, backup_dir=backup_dir
+        )
         if os.path.exists(new_path):
             raise BackupServiceError(f"文件名 '{new_filename}' 已存在")
 
