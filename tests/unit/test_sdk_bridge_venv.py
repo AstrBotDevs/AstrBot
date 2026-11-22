@@ -128,7 +128,7 @@ async def test_venv_pyproject_source(
     plugin.mkdir()
     (plugin / "pyproject.toml").write_text(
         '[project]\nname = "pyproject-plugin"\nversion = "0.1"\n'
-        f'dependencies = ["fake-legacy-dep @ file://{wheel}"]\n',
+        f'dependencies = ["fake-legacy-dep @ {wheel.as_uri()}"]\n',
         "utf-8",
     )
 

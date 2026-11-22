@@ -14,6 +14,7 @@
   "failedPlugins": {
     "title": "読み込みに失敗したプラグイン（{count}）",
     "hint": "これらのプラグインは読み込みに失敗しました。再読み込みするか、直接削除できます。",
+    "switchToInProcess": "プロセス内実行に切り替え",
     "columns": {
       "plugin": "プラグイン",
       "error": "エラー"

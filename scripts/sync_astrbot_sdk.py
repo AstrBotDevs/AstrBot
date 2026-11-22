@@ -105,7 +105,8 @@ def compute_tree_sha256(root: Path) -> str:
             _is_forbidden_native_artifact(p) for p in file_path.parents
         ) or _is_forbidden_native_artifact(file_path):
             raise ValueError(f"forbidden build artifact in vendor snapshot: {rel}")
-        data = file_path.read_bytes()
+        # Normalize CRLF line endings so Windows checkouts match POSIX digests.
+        data = file_path.read_bytes().replace(b"\r\n", b"\n")
         hasher.update(rel.encode("utf-8"))
         hasher.update(b"\x00")
         hasher.update(str(len(data)).encode("ascii"))

@@ -134,12 +134,13 @@ class CrasherPlugin(Star):
     )
     try:
         await supervisor.start()
+        old_client = supervisor.require_client()
         with pytest.raises((RemotePluginError, HostUnavailable)):
             _ = [
                 r
                 async for r in supervisor.require_client().invoke("boom", make_event())
             ]
-        await wait_for_client(supervisor)
+        await wait_for_client(supervisor, old_client=old_client)
         results = [
             r async for r in supervisor.require_client().invoke("ok", make_event())
         ]

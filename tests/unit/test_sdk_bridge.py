@@ -186,7 +186,7 @@ def test_to_sdk_chain_registers_local_media(tmp_path: Path) -> None:
     components = to_core_chain(chain, resolve_asset=store.resolve)
     assert isinstance(components[0], core_comp.Image)
     # core's fromFileSystem wraps the resolved path in a file:// URL.
-    assert components[0].file == f"file://{store.resolve(segment.source)}"
+    assert components[0].file == store.resolve(segment.source).as_uri()
 
     # Without a store, local media still degrades to an inert segment.
     degraded = to_sdk_chain([core_comp.Image.fromFileSystem(str(image_file))])

@@ -392,6 +392,10 @@ class DynPlugin(Plugin):
 
 
 @pytest.mark.asyncio
+@pytest.mark.skipif(
+    not hasattr(asyncio, "start_unix_server"),
+    reason="Unix domain sockets require POSIX",
+)
 async def test_external_uds_listener_enrolls_and_detaches_without_killing_pid(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

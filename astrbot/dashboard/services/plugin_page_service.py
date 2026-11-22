@@ -94,12 +94,13 @@ class PluginPageService:
         Bridge-hosted plugins serve views through the RPC pipeline; the
         dashboard never reads their view files from disk.
         """
-        if not (plugin.module_path or "").startswith("sdk_bridge."):
+        module_path = str(getattr(plugin, "module_path", None) or "")
+        if not module_path.startswith("sdk_bridge."):
             return None
         manager = getattr(self.plugin_manager, "_sdk_plugin_manager", None)
         if manager is None:
             return None
-        return manager.bridges.get(plugin.root_dir_name or "")
+        return manager.bridges.get(getattr(plugin, "root_dir_name", None) or "")
 
     @staticmethod
     def get_by_path(source: dict | None, key: str):

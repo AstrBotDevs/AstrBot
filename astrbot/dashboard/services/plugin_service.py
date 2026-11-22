@@ -192,7 +192,7 @@ class PluginService:
         root_dir_name = None
         for star in self.plugin_manager.context.get_all_stars():
             if star.name == plugin_name:
-                root_dir_name = star.root_dir_name
+                root_dir_name = getattr(star, "root_dir_name", None)
                 break
         if not root_dir_name:
             store_root = Path(self.plugin_manager.plugin_store_path).resolve()
@@ -704,14 +704,17 @@ class PluginService:
             Tuple of (runtime, runtime_switchable) where runtime is
             "isolated" or "in-process".
         """
-        runtime = (
-            "isolated"
-            if str(plugin.module_path or "").startswith("sdk_bridge.")
-            else "in-process"
-        )
-        if plugin.reserved or not plugin.root_dir_name:
+        module_path = str(getattr(plugin, "module_path", None) or "")
+        runtime = "isolated" if module_path.startswith("sdk_bridge.") else "in-process"
+        root_dir_name = getattr(plugin, "root_dir_name", None)
+        store_path = getattr(self.plugin_manager, "plugin_store_path", None)
+        if (
+            getattr(plugin, "reserved", False)
+            or not root_dir_name
+            or not isinstance(store_path, (str, Path))
+        ):
             return runtime, False
-        plugin_dir = Path(self.plugin_manager.plugin_store_path) / plugin.root_dir_name
+        plugin_dir = Path(store_path) / root_dir_name
         if not plugin_dir.is_dir() or is_sdk_plugin_dir(plugin_dir):
             return runtime, False
         return runtime, True

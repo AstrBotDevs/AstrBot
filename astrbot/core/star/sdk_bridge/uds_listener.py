@@ -61,6 +61,10 @@ class ExternalUDSListener:
         """Bind the Unix domain socket with owner-only permissions."""
         if self._server is not None:
             return
+        if not hasattr(asyncio, "start_unix_server"):
+            raise NotImplementedError(
+                "Unix domain socket external workers require a POSIX host"
+            )
         if self.socket_path.exists():
             self.socket_path.unlink()
         self._server = await asyncio.start_unix_server(

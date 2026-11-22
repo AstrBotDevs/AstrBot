@@ -331,6 +331,21 @@ class CfgPlugin(Plugin[CfgModel]):
             )
         assert json.loads(on_disk_cfg.read_text(encoding="utf-8-sig"))["limit"] == 3
 
+        from astrbot.core.star.star_handler import star_handlers_registry
+
+        handler = star_handlers_registry.star_handlers_map[
+            f"sdk_bridge.{plugin_dir.name}_show_cfg"
+        ]
+        ev_before = FakeCoreEvent("cfg")
+        outputs_before = []
+        async for _ in handler.handler(ev_before):
+            if ev_before.get_result():
+                outputs_before.append(ev_before.get_result().chain[0].text)
+            ev_before.clear_result()
+        assert len(outputs_before) == 1
+        assert outputs_before[0].startswith("limit=3,key=initial-secret,pid=")
+        worker_pid = int(outputs_before[0].rsplit("pid=", 1)[1])
+
         # Valid config saves and hot-updates live Worker without reloading/restarting PID.
         await file_service.save_plugin_configs(
             {"api_key": "secret2", "limit": 5},
@@ -343,18 +358,13 @@ class CfgPlugin(Plugin[CfgModel]):
             "limit": 5,
         }
 
-        from astrbot.core.star.star_handler import star_handlers_registry
-
-        handler = star_handlers_registry.star_handlers_map[
-            f"sdk_bridge.{plugin_dir.name}_show_cfg"
-        ]
         ev = FakeCoreEvent("cfg")
         outputs = []
         async for _ in handler.handler(ev):
             if ev.get_result():
                 outputs.append(ev.get_result().chain[0].text)
             ev.clear_result()
-        assert outputs == [f"limit=5,key=secret2,pid={initial_pid}"]
+        assert outputs == [f"limit=5,key=secret2,pid={worker_pid}"]
 
         # @lifecycle.config_changed failure rolls back on-disk config to limit=5.
         with pytest.raises(ValueError, match="回滚"):
