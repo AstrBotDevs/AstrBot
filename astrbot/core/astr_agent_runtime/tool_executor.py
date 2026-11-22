@@ -509,8 +509,31 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
                 _output_turn=getattr(run_context.context, "_output_turn", None),
             ),
         )
+        completion_text = llm_resp.completion_text or ""
+        if completion_text.lstrip().startswith(
+            (
+                "<｜DSML｜tool_calls>",
+                "<｜DSML｜calls>",
+                "<｜｜DSML｜｜ calls>",
+                "<｜｜DSML｜｜ invoke",
+            )
+        ):
+            yield mcp.types.CallToolResult(
+                content=[
+                    mcp.types.TextContent(
+                        type="text",
+                        text=(
+                            "Subagent returned an unparsed tool-call envelope "
+                            "instead of a final answer. Retry the handoff or use "
+                            "a provider with function-calling support."
+                        ),
+                    )
+                ],
+                isError=True,
+            )
+            return
         yield mcp.types.CallToolResult(
-            content=[mcp.types.TextContent(type="text", text=llm_resp.completion_text)]
+            content=[mcp.types.TextContent(type="text", text=completion_text)]
         )
 
     @classmethod
