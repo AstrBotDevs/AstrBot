@@ -18,18 +18,36 @@ import os
 import re
 import sys
 import sysconfig
+from collections.abc import Sequence
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
 import tomllib
+from packaging.requirements import InvalidRequirement, Requirement
+from packaging.specifiers import SpecifierSet
+from packaging.utils import canonicalize_name
+from packaging.version import InvalidVersion, Version
 
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 
 _INSTALL_TIMEOUT_SECONDS = 600
 _MARKER_NAME = ".astrbot-deps.json"
+_GROUP_VENV_ROOT = "groups"
 
-# Serialize venv creation/installation per plugin directory.
+# Serialize venv creation/installation per plugin directory or group id.
 _venv_locks: dict[str, asyncio.Lock] = {}
+
+
+@dataclass(frozen=True, slots=True)
+class EnvironmentGroup:
+    """Shared Python environment plan for one or more compatible plugins."""
+
+    id: str
+    requirements: tuple[str, ...]
+    options: tuple[str, ...]
+    plugin_roots: tuple[Path, ...]
+    python_executable: Path | None = None
 
 
 def _venv_dir(plugin_root: Path) -> Path:
@@ -362,3 +380,380 @@ async def ensure_plugin_venv(
             encoding="utf-8",
         )
         return python
+
+
+def _parse_req_entries(
+    requirements: Sequence[str],
+) -> tuple[dict[str, tuple[SpecifierSet, str | None, Version | None]], list[str]]:
+    """Parse requirement lines into canonical constraints keyed by package name."""
+    parsed: dict[str, tuple[SpecifierSet, str | None, Version | None]] = {}
+    unparsed: list[str] = []
+    for raw in requirements:
+        # Local wheel paths may contain spaces or OS separators; inspect filename.
+        stripped = raw.strip()
+        if stripped.lower().endswith(".whl") and " @ " not in stripped:
+            stem = Path(stripped).name[:-4]
+            parts = stem.split("-")
+            if len(parts) >= 2:
+                pkg = canonicalize_name(parts[0])
+                try:
+                    ver: Version | None = Version(parts[1])
+                except InvalidVersion:
+                    ver = None
+                url = str(Path(stripped).resolve())
+                if pkg in parsed:
+                    prev_spec, prev_url, prev_ver = parsed[pkg]
+                    if prev_url is not None and prev_url != url:
+                        return {}, [f"__conflict__:{pkg}"]
+                    parsed[pkg] = (prev_spec, url, ver or prev_ver)
+                else:
+                    parsed[pkg] = (SpecifierSet(), url, ver)
+                continue
+            unparsed.append(stripped)
+            continue
+
+        try:
+            req = Requirement(stripped)
+        except InvalidRequirement:
+            unparsed.append(stripped)
+            continue
+
+        pkg = canonicalize_name(req.name)
+        url_val = req.url
+        wheel_ver: Version | None = None
+        if url_val and url_val.lower().endswith(".whl"):
+            parts = Path(url_val).name[:-4].split("-")
+            if len(parts) >= 2:
+                try:
+                    wheel_ver = Version(parts[1])
+                except InvalidVersion:
+                    wheel_ver = None
+        if pkg in parsed:
+            prev_spec, prev_url, prev_ver = parsed[pkg]
+            if prev_url and url_val and prev_url != url_val:
+                return {}, [f"__conflict__:{pkg}"]
+            parsed[pkg] = (
+                prev_spec & req.specifier,
+                url_val or prev_url,
+                wheel_ver or prev_ver,
+            )
+        else:
+            parsed[pkg] = (req.specifier, url_val, wheel_ver)
+    return parsed, unparsed
+
+
+def _specifiers_compatible(
+    reqs_a: Sequence[str],
+    opts_a: Sequence[str],
+    reqs_b: Sequence[str],
+    opts_b: Sequence[str],
+) -> bool:
+    """Check whether two normalized requirement sets can share one venv."""
+    if tuple(sorted(set(opts_a))) != tuple(sorted(set(opts_b))):
+        return False
+
+    parsed_a, unparsed_a = _parse_req_entries(reqs_a)
+    parsed_b, unparsed_b = _parse_req_entries(reqs_b)
+    if any(u.startswith("__conflict__:") for u in (*unparsed_a, *unparsed_b)):
+        return False
+    # Unparseable specs (VCS URLs, editable flags) only merge if identical.
+    if set(unparsed_a) != set(unparsed_b) and (unparsed_a or unparsed_b):
+        return False
+
+    for pkg in set(parsed_a) & set(parsed_b):
+        spec_a, url_a, ver_a = parsed_a[pkg]
+        spec_b, url_b, ver_b = parsed_b[pkg]
+        if url_a and url_b and url_a != url_b:
+            return False
+        if (url_a or url_b) and (spec_a or spec_b):
+            wheel_ver = ver_a or ver_b
+            combined_spec = spec_a & spec_b
+            if wheel_ver is None or not combined_spec.contains(
+                wheel_ver, prereleases=True
+            ):
+                return False
+            continue
+
+        combined = spec_a & spec_b
+        exact_pins: set[Version] = set()
+        lower: tuple[Version, bool] | None = None
+        upper: tuple[Version, bool] | None = None
+        for spec in combined:
+            if spec.operator in ("==", "===") and not spec.version.endswith(".*"):
+                try:
+                    pin = Version(spec.version)
+                except InvalidVersion:
+                    return False
+                exact_pins.add(pin)
+                lower = (pin, True)
+                upper = (pin, True)
+            elif spec.operator in (">=", ">", "~="):
+                try:
+                    ver = Version(spec.version.removesuffix(".*"))
+                except InvalidVersion:
+                    continue
+                inc = spec.operator != ">"
+                if lower is None or ver > lower[0] or (ver == lower[0] and not inc):
+                    lower = (ver, inc)
+            elif spec.operator in ("<=", "<"):
+                try:
+                    ver = Version(spec.version.removesuffix(".*"))
+                except InvalidVersion:
+                    continue
+                inc = spec.operator == "<="
+                if upper is None or ver < upper[0] or (ver == upper[0] and not inc):
+                    upper = (ver, inc)
+
+        if len(exact_pins) > 1:
+            return False
+        if exact_pins:
+            pin = next(iter(exact_pins))
+            if not combined.contains(pin, prereleases=True):
+                return False
+        if lower is not None and upper is not None:
+            if lower[0] > upper[0]:
+                return False
+            if lower[0] == upper[0] and not (lower[1] and upper[1]):
+                return False
+    return True
+
+
+def _group_fingerprint(requirements: Sequence[str], options: Sequence[str]) -> str:
+    digest = hashlib.sha256()
+    for item in sorted(set(requirements)):
+        digest.update(item.encode("utf-8"))
+        digest.update(b"\x00")
+    digest.update(b"|")
+    for opt in sorted(set(options)):
+        digest.update(opt.encode("utf-8"))
+        digest.update(b"\x00")
+    digest.update(sys.version.encode("utf-8"))
+    digest.update(sys.executable.encode("utf-8"))
+    return digest.hexdigest()
+
+
+def plan_environment_groups(
+    plugin_roots: Sequence[Path],
+    logger: logging.Logger | None = None,
+) -> dict[Path, EnvironmentGroup]:
+    """Cluster local plugin directories into compatible Python environment groups.
+
+    Plugins with zero effective third-party dependencies share the ``default``
+    group using the Core interpreter. Plugins declaring third-party packages
+    are greedily merged when their dependency constraints are compatible.
+
+    Args:
+        plugin_roots: Local plugin directories to plan.
+        logger: Optional logger for normalization diagnostics.
+
+    Returns:
+        Mapping from plugin root path to its assigned ``EnvironmentGroup``.
+    """
+    log = logger or logging.getLogger("astrbot.plugin_venv")
+    default_roots: list[Path] = []
+    dep_items: list[tuple[Path, tuple[str, ...], tuple[str, ...]]] = []
+
+    for root in sorted(plugin_roots, key=lambda p: p.name):
+        source = resolve_dependency_source(root)
+        if source is None:
+            default_roots.append(root)
+            continue
+        reqs, opts = _effective_requirements(source, log)
+        if not reqs:
+            default_roots.append(root)
+            continue
+        dep_items.append((root, tuple(sorted(set(reqs))), tuple(opts)))
+
+    groups: list[EnvironmentGroup] = []
+    if default_roots:
+        groups.append(
+            EnvironmentGroup(
+                id="default",
+                requirements=(),
+                options=(),
+                plugin_roots=tuple(default_roots),
+                python_executable=None,
+            )
+        )
+
+    dep_clusters: list[tuple[list[Path], set[str], list[str]]] = []
+    for root, reqs, opts in dep_items:
+        placed = False
+        for c_roots, c_reqs, c_opts in dep_clusters:
+            if _specifiers_compatible(list(c_reqs), c_opts, reqs, opts):
+                c_roots.append(root)
+                c_reqs.update(reqs)
+                if not c_opts and opts:
+                    c_opts.extend(opts)
+                placed = True
+                break
+        if not placed:
+            dep_clusters.append(([root], set(reqs), list(opts)))
+
+    for c_roots, c_reqs, c_opts in dep_clusters:
+        sorted_reqs = tuple(sorted(c_reqs))
+        sorted_opts = tuple(c_opts)
+        fp = _group_fingerprint(sorted_reqs, sorted_opts)
+        groups.append(
+            EnvironmentGroup(
+                id=f"grp-{fp[:12]}",
+                requirements=sorted_reqs,
+                options=sorted_opts,
+                plugin_roots=tuple(c_roots),
+                python_executable=None,
+            )
+        )
+
+    mapping: dict[Path, EnvironmentGroup] = {}
+    for group in groups:
+        for root in group.plugin_roots:
+            mapping[root] = group
+    return mapping
+
+
+async def ensure_environment_groups(
+    plugin_roots: Sequence[Path],
+    logger: logging.Logger | None = None,
+) -> dict[Path, EnvironmentGroup]:
+    """Prepare shared venvs for compatible plugin groups with conflict fallback.
+
+    Args:
+        plugin_roots: Candidate local Python plugin directories.
+        logger: Optional logger receiving venv setup output.
+
+    Returns:
+        Mapping from plugin root path to materialized ``EnvironmentGroup`` with
+        resolved ``python_executable`` paths. Plugins whose dependency manifests
+        fail validation are omitted so their individual bridge start surfaces
+        the plugin-scoped error cleanly.
+    """
+    log = logger or logging.getLogger("astrbot.plugin_venv")
+    valid_roots: list[Path] = []
+    for root in plugin_roots:
+        try:
+            resolve_dependency_source(root)
+        except Exception as exc:  # noqa: BLE001 - handled per-plugin on bridge start
+            log.debug(
+                "Skipping group planning for %s (%s)",
+                root.name,
+                exc,
+            )
+            continue
+        valid_roots.append(root)
+
+    planned = plan_environment_groups(valid_roots, log)
+    unique_groups: dict[str, EnvironmentGroup] = {}
+    for group in planned.values():
+        unique_groups[group.id] = group
+
+    resolved: dict[Path, EnvironmentGroup] = {}
+    data_root = Path(get_astrbot_data_path()) / "plugin_venvs" / _GROUP_VENV_ROOT
+    for group in unique_groups.values():
+        if group.id == "default":
+            for root in group.plugin_roots:
+                resolved[root] = group
+            continue
+
+        lock = _venv_locks.setdefault(f"group:{group.id}", asyncio.Lock())
+        async with lock:
+            venv_dir = data_root / group.id
+            marker = venv_dir / _MARKER_NAME
+            fp = _group_fingerprint(group.requirements, group.options)
+            python = _venv_python(venv_dir)
+            cached_ok = False
+            if python.is_file() and marker.is_file():
+                try:
+                    recorded = json.loads(marker.read_text(encoding="utf-8"))
+                except json.JSONDecodeError:
+                    recorded = None
+                if isinstance(recorded, dict) and recorded.get("fingerprint") == fp:
+                    cached_ok = True
+
+            if cached_ok:
+                mat = EnvironmentGroup(
+                    id=group.id,
+                    requirements=group.requirements,
+                    options=group.options,
+                    plugin_roots=group.plugin_roots,
+                    python_executable=python,
+                )
+                for root in group.plugin_roots:
+                    resolved[root] = mat
+                continue
+
+            log.info(
+                f"Creating shared environment group {group.id} for "
+                f"{[r.name for r in group.plugin_roots]} at {venv_dir}",
+            )
+            venv_dir.parent.mkdir(parents=True, exist_ok=True)
+            await _run(
+                [
+                    sys.executable,
+                    "-m",
+                    "venv",
+                    "--system-site-packages",
+                    str(venv_dir),
+                ],
+                group.plugin_roots[0],
+                log,
+            )
+            _link_core_site_packages(venv_dir)
+            try:
+                await _install(
+                    list(group.requirements),
+                    list(group.options),
+                    group.plugin_roots[0],
+                    python,
+                    log,
+                )
+            except RuntimeError as exc:
+                if len(group.plugin_roots) > 1:
+                    log.warning(
+                        f"Shared install failed for group {group.id}; splitting "
+                        f"plugins into isolated venvs: {exc}",
+                    )
+                    for root in group.plugin_roots:
+                        indiv_py = await ensure_plugin_venv(root, log)
+                        resolved[root] = EnvironmentGroup(
+                            id=f"solo-{root.name}",
+                            requirements=(),
+                            options=(),
+                            plugin_roots=(root,),
+                            python_executable=indiv_py,
+                        )
+                    continue
+                log.error(
+                    f"Dependency installation failed for {group.id}; "
+                    f"loading against the core environment: {exc}"
+                )
+                mat = EnvironmentGroup(
+                    id=group.id,
+                    requirements=group.requirements,
+                    options=group.options,
+                    plugin_roots=group.plugin_roots,
+                    python_executable=python,
+                )
+                for root in group.plugin_roots:
+                    resolved[root] = mat
+                continue
+
+            marker.write_text(
+                json.dumps(
+                    {
+                        "fingerprint": fp,
+                        "requirements": list(group.requirements),
+                    }
+                ),
+                encoding="utf-8",
+            )
+            mat = EnvironmentGroup(
+                id=group.id,
+                requirements=group.requirements,
+                options=group.options,
+                plugin_roots=group.plugin_roots,
+                python_executable=python,
+            )
+            for root in group.plugin_roots:
+                resolved[root] = mat
+
+    return resolved

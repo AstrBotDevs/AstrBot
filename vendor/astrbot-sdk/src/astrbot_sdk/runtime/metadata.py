@@ -41,6 +41,13 @@ class PluginLanguage(StrEnum):
     RUST = "rust"
 
 
+class PluginIsolation(StrEnum):
+    """Process isolation strategy for local SDK plugins."""
+
+    SHARED = "shared"
+    DEDICATED = "dedicated"
+
+
 @dataclass(frozen=True, slots=True)
 class RuntimeMetadata:
     api: PluginAPIFamily
@@ -50,6 +57,7 @@ class RuntimeMetadata:
     sdk_version: str
     language: PluginLanguage = PluginLanguage.PYTHON
     command: tuple[str, ...] = ()
+    isolation: PluginIsolation = PluginIsolation.SHARED
 
 
 @dataclass(frozen=True, slots=True)
@@ -295,7 +303,14 @@ def _parse_runtime(
     if not isinstance(runtime, Mapping):
         raise InvalidPluginMetadata("runtime must be a mapping")
 
-    unknown = set(runtime) - {"api", "entrypoint", "sdk_version", "language", "command"}
+    unknown = set(runtime) - {
+        "api",
+        "entrypoint",
+        "sdk_version",
+        "language",
+        "command",
+        "isolation",
+    }
     if unknown:
         raise InvalidPluginMetadata(
             f"unknown runtime fields: {', '.join(sorted(map(str, unknown)))}"
@@ -315,6 +330,17 @@ def _parse_runtime(
     command: tuple[str, ...] = ()
     if "command" in runtime and runtime["command"] is not None:
         command = _validate_command(runtime["command"], plugin_root=plugin_root)
+
+    isolation = PluginIsolation.DEDICATED if command else PluginIsolation.SHARED
+    raw_isolation = runtime.get("isolation")
+    if raw_isolation is not None:
+        try:
+            isolation = PluginIsolation(str(raw_isolation))
+        except ValueError as exc:
+            supported = ", ".join(sorted(item.value for item in PluginIsolation))
+            raise InvalidPluginMetadata(
+                f"runtime.isolation must be one of: {supported}"
+            ) from exc
 
     if command and language != PluginLanguage.PYTHON and "entrypoint" not in runtime:
         entrypoint = ""
@@ -352,6 +378,7 @@ def _parse_runtime(
         sdk_version=sdk_version,
         language=language,
         command=command,
+        isolation=isolation,
     )
 
 
@@ -533,6 +560,16 @@ def parse_plugin_json(
         raise InvalidPluginMetadata(f"invalid SemVer version: {version!r}") from exc
     desc = str(data.get("description") or "")
     command = _validate_command(data.get("command"), plugin_root=plugin_root)
+    isolation = PluginIsolation.DEDICATED
+    raw_isolation = data.get("isolation")
+    if raw_isolation is not None:
+        try:
+            isolation = PluginIsolation(str(raw_isolation))
+        except ValueError as exc:
+            supported = ", ".join(sorted(item.value for item in PluginIsolation))
+            raise InvalidPluginMetadata(
+                f"plugin.json isolation must be one of: {supported}"
+            ) from exc
     host_version = _optional_string(data, "hostVersion")
     if host_version:
         _validate_specifier(host_version, "hostVersion")
@@ -555,6 +592,7 @@ def parse_plugin_json(
             sdk_version=">=0.1",
             language=PluginLanguage.RUST,
             command=command,
+            isolation=isolation,
         ),
         capabilities=_parse_capabilities(data),
         astrbot_version=host_version,

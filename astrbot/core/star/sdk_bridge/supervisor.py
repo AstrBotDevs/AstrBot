@@ -14,12 +14,13 @@ import logging
 import random
 import time
 from collections.abc import Callable, Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
 from astrbot_sdk.capabilities import CapabilitySet
 from astrbot_sdk.errors import HostUnavailable
+from astrbot_sdk.runtime.group_worker import GroupWorkerClient, MuxPluginClient
 from astrbot_sdk.runtime.stdio_client import StdioPluginClient
 from astrbot_sdk.runtime.transport import WebSocketTransport
 from astrbot_sdk.runtime.ws_client import WSPluginClient
@@ -118,6 +119,9 @@ class RunnerSupervisor:
         client = self._client
         if client is None:
             return None
+        direct_pid = getattr(client, "pid", None)
+        if direct_pid is not None:
+            return direct_pid
         process = getattr(client, "_process", None)
         return getattr(process, "pid", None)
 
@@ -344,4 +348,154 @@ class ExternalRunnerSupervisor(RunnerSupervisor):
             logger=self.logger,
             legacy=self.legacy,
             start_timeout=self.timing.start_timeout,
+        )
+
+
+@dataclass(slots=True)
+class _PoolEntry:
+    """One active shared Group Worker subprocess and its open plugin channels."""
+
+    client: GroupWorkerClient
+    channels: set[str] = field(default_factory=set)
+
+
+class GroupWorkerPool:
+    """Share one ``GroupWorkerClient`` process across plugins in the same group."""
+
+    def __init__(self) -> None:
+        self._entries: dict[
+            tuple[str, str, tuple[tuple[str, str], ...]], _PoolEntry
+        ] = {}
+        self._locks: dict[
+            tuple[str, str, tuple[tuple[str, str], ...]],
+            asyncio.Lock,
+        ] = {}
+
+    async def open_plugin(
+        self,
+        group_key: str,
+        plugin_root: Path,
+        *,
+        python_executable: Path | str | None,
+        env: Mapping[str, str],
+        legacy: bool,
+        client_kwargs: Mapping[str, Any],
+    ) -> MuxPluginClient:
+        """Attach one plugin channel to the group's shared worker process.
+
+        Args:
+            group_key: Environment group identifier (e.g. ``"default"`` or ``"grp-..."``).
+            plugin_root: Directory containing the plugin to load.
+            python_executable: Interpreter path for this environment group.
+            env: Extra environment variables passed when starting the worker.
+            legacy: Whether the plugin runs through ``compat.v1``.
+            client_kwargs: Keyword arguments forwarded to ``MuxPluginClient``.
+
+        Returns:
+            A bound ``MuxPluginClient`` sharing the group's OS process.
+        """
+        pool_key = (
+            group_key,
+            str(python_executable or ""),
+            tuple(sorted(env.items())),
+        )
+        lock = self._locks.setdefault(pool_key, asyncio.Lock())
+        async with lock:
+            entry = self._entries.get(pool_key)
+            if entry is not None and not entry.client.is_running:
+                self._entries.pop(pool_key, None)
+                await entry.client.close()
+                entry = None
+            if entry is None:
+                worker = GroupWorkerClient(
+                    python_executable=python_executable,
+                    env=env,
+                    start_timeout=float(client_kwargs.get("start_timeout") or 180.0),
+                    logger=logging.getLogger(f"astrbot.sdk_bridge.group.{group_key}"),
+                )
+                await worker.start()
+                entry = _PoolEntry(client=worker)
+                self._entries[pool_key] = entry
+
+            current_entry = entry
+
+            async def _release(channel_id: str | None = None) -> None:
+                async with lock:
+                    if self._entries.get(pool_key) is not current_entry:
+                        return
+                    if channel_id is not None:
+                        current_entry.channels.discard(channel_id)
+                    current_entry.channels.intersection_update(
+                        current_entry.client._channels
+                    )
+                    if not current_entry.channels:
+                        self._entries.pop(pool_key, None)
+                        await current_entry.client.close()
+
+            try:
+                client = await current_entry.client.open_plugin(
+                    plugin_root,
+                    legacy=legacy,
+                    **dict(client_kwargs),
+                )
+            except Exception:
+                if (
+                    self._entries.get(pool_key) is current_entry
+                    and not current_entry.channels
+                ):
+                    self._entries.pop(pool_key, None)
+                    await current_entry.client.close()
+                raise
+
+            channel_id = client._channel_id
+            current_entry.channels.add(channel_id)
+            client._on_release = lambda cid=channel_id: _release(cid)
+            return client
+
+    async def close_all(self) -> None:
+        """Close every pooled Group Worker subprocess."""
+        entries = list(self._entries.values())
+        self._entries.clear()
+        for entry in entries:
+            await entry.client.close()
+
+
+class GroupRunnerSupervisor(RunnerSupervisor):
+    """Supervise one plugin running as a channel inside a shared ``GroupWorkerPool``."""
+
+    def __init__(
+        self,
+        plugin_root: Path,
+        *,
+        pool: GroupWorkerPool,
+        group_key: str,
+        **kwargs: Any,
+    ) -> None:
+        """Initialize a group-multiplexed plugin supervisor.
+
+        Args:
+            plugin_root: Plugin directory to load inside the shared worker.
+            pool: Shared ``GroupWorkerPool`` owning group worker processes.
+            group_key: Environment group identifier selecting the target worker.
+            **kwargs: Forwarded to ``RunnerSupervisor``.
+        """
+        super().__init__(plugin_root, **kwargs)
+        self._pool = pool
+        self._group_key = group_key
+
+    async def _make_client(self) -> MuxPluginClient:
+        """Open a fresh channel for this plugin on its shared Group Worker."""
+        return await self._pool.open_plugin(
+            self._group_key,
+            self.plugin_root,
+            python_executable=self.python_executable,
+            env=self.env,
+            legacy=self.legacy,
+            client_kwargs={
+                "capability_handler": self.capability_handler,
+                "service_handler": self.service_handler,
+                "tools_invalidated_handler": self.tools_invalidated_handler,
+                "logger": self.logger,
+                "start_timeout": self.timing.start_timeout,
+            },
         )

@@ -95,10 +95,17 @@ from .services import (
 )
 from .services.plugin_service_router import PluginServiceRouter
 from .snapshot import build_legacy_snapshot
-from .supervisor import ExternalRunnerSupervisor, RunnerSupervisor
+from .supervisor import (
+    ExternalRunnerSupervisor,
+    GroupRunnerSupervisor,
+    GroupWorkerPool,
+    RunnerSupervisor,
+)
 from .uds_listener import ExternalUDSListener
-from .venv import ensure_plugin_venv
+from .venv import ensure_environment_groups, ensure_plugin_venv
 from .ws_listener import ExternalRunnerListener
+
+_UNSET = object()
 
 if TYPE_CHECKING:
     from astrbot.core.star.context import Context
@@ -278,6 +285,9 @@ class SDKPluginBridge:
         listener: ExternalRunnerListener | None = None,
         external_queue: asyncio.Queue[Any] | None = None,
         revoke_external: Callable[[], None] | None = None,
+        worker_pool: GroupWorkerPool | None = None,
+        group_key: str | None = None,
+        python_executable_override: Any = _UNSET,
     ) -> None:
         """Initialize the bridge for one SDK plugin.
 
@@ -308,6 +318,9 @@ class SDKPluginBridge:
         self._listener = listener
         self._external_queue = external_queue
         self._revoke_external = revoke_external
+        self._worker_pool = worker_pool
+        self._group_key = group_key
+        self._python_executable_override = python_executable_override
         self._claims_token: str | None = None
         self._supervisor: RunnerSupervisor | None = None
         self.handshake: Any = None
@@ -427,10 +440,16 @@ class SDKPluginBridge:
         self._grants = grants
         python_executable = None
         if self._external is None and (self.legacy or language == "python"):
-            python_executable = await ensure_plugin_venv(
-                self.plugin_root,
-                self.plugin_logger,
-            )
+            if (
+                not (not self.legacy and command)
+                and self._python_executable_override is not _UNSET
+            ):
+                python_executable = self._python_executable_override
+            elif not command:
+                python_executable = await ensure_plugin_venv(
+                    self.plugin_root,
+                    self.plugin_logger,
+                )
 
         # Services must be ready before start(): capability calls can already
         # arrive while the Runner executes lifecycle.startup during handshake.
@@ -511,25 +530,57 @@ class SDKPluginBridge:
                 host_info=host_info,
             )
         else:
-            self._supervisor = RunnerSupervisor(
-                self.plugin_root,
-                legacy=self.legacy,
-                python_executable=python_executable,
-                env={
-                    "ASTRBOT_DATA_PATH": str(_asset_root().parent),
-                    # Keep SDK plugin data under the AstrBot data directory
-                    # instead of the inherited cwd.
-                    "ASTRBOT_SDK_DATA_DIR": str(_asset_root().parent / "plugin_data"),
-                },
-                grants=grants,
-                config=config,
-                capability_handler=self._dispatch_capability,
-                service_handler=self._handle_service_call,
-                tools_invalidated_handler=self._on_tools_invalidated,
-                logger=self.plugin_logger,
-                on_circuit_open=self._mark_circuit_open,
-                host_info=host_info,
+            isolation = (
+                str(getattr(metadata.runtime, "isolation", "shared"))
+                if not self.legacy
+                else "dedicated"
             )
+            use_group_worker = (
+                not self.legacy
+                and self._worker_pool is not None
+                and language == "python"
+                and not command
+                and isolation != "dedicated"
+            )
+            runner_env_map = {
+                "ASTRBOT_DATA_PATH": str(_asset_root().parent),
+                # Keep SDK plugin data under the AstrBot data directory
+                # instead of the inherited cwd.
+                "ASTRBOT_SDK_DATA_DIR": str(_asset_root().parent / "plugin_data"),
+            }
+            if use_group_worker:
+                assert self._worker_pool is not None
+                self._supervisor = GroupRunnerSupervisor(
+                    self.plugin_root,
+                    pool=self._worker_pool,
+                    group_key=self._group_key or "default",
+                    legacy=self.legacy,
+                    python_executable=python_executable,
+                    env=runner_env_map,
+                    grants=grants,
+                    config=config,
+                    capability_handler=self._dispatch_capability,
+                    service_handler=self._handle_service_call,
+                    tools_invalidated_handler=self._on_tools_invalidated,
+                    logger=self.plugin_logger,
+                    on_circuit_open=self._mark_circuit_open,
+                    host_info=host_info,
+                )
+            else:
+                self._supervisor = RunnerSupervisor(
+                    self.plugin_root,
+                    legacy=self.legacy,
+                    python_executable=python_executable,
+                    env=runner_env_map,
+                    grants=grants,
+                    config=config,
+                    capability_handler=self._dispatch_capability,
+                    service_handler=self._handle_service_call,
+                    tools_invalidated_handler=self._on_tools_invalidated,
+                    logger=self.plugin_logger,
+                    on_circuit_open=self._mark_circuit_open,
+                    host_info=host_info,
+                )
         try:
             handshake = await self._supervisor.start()
         except Exception:
@@ -1611,6 +1662,7 @@ class SDKPluginManager:
         self.uds_listener: ExternalUDSListener | None = None
         self.approval_store = CapabilityApprovalStore()
         self.service_router = PluginServiceRouter()
+        self.worker_pool = GroupWorkerPool()
         self.blocked_plugins: dict[str, BlockedPlugin] = {}
         self._last_plan: DependencyPlan | None = None
 
@@ -1683,13 +1735,6 @@ class SDKPluginManager:
             self.blocked_plugins[specified_dir_name] = blocked_info
             raise DependencyBlocked(blocked_info.reason)
 
-        for entry in legacy_dirs:
-            bridge = SDKPluginBridge(entry, self.context, legacy=True)
-            await bridge.start()
-            self.bridges[entry.name] = bridge
-            loaded.append(entry.name)
-            logger.info(f"Loaded SDK plugin {entry.name} (isolated)")
-
         sdk_order = (
             [specified_dir_name]
             if specified_dir_name and specified_dir_name in plan.load_order
@@ -1697,12 +1742,39 @@ class SDKPluginManager:
             if specified_dir_name is None
             else []
         )
+        local_py_roots: list[Path] = list(legacy_dirs)
+        for dir_name in sdk_order:
+            meta = sdk_candidates[dir_name]
+            if meta.runtime.language.value == "python" and not meta.runtime.command:
+                local_py_roots.append(sdk_dirs[dir_name])
+        local_py_roots.extend(unplanned_sdk_dirs)
+        env_groups = (
+            await ensure_environment_groups(local_py_roots, logger)
+            if local_py_roots
+            else {}
+        )
+
+        for entry in legacy_dirs:
+            bridge = SDKPluginBridge(entry, self.context, legacy=True)
+            if isinstance(bridge, SDKPluginBridge) and entry in env_groups:
+                bridge._python_executable_override = env_groups[entry].python_executable
+            await bridge.start()
+            self.bridges[entry.name] = bridge
+            loaded.append(entry.name)
+            logger.info(f"Loaded SDK plugin {entry.name} (isolated)")
+
         for dir_name in sdk_order:
             entry = sdk_dirs[dir_name]
             bridge = SDKPluginBridge(entry, self.context)
             if isinstance(bridge, SDKPluginBridge):
                 bridge._approval_store = self.approval_store
                 bridge._service_router = self.service_router
+                bridge._worker_pool = self.worker_pool
+                if entry in env_groups:
+                    bridge._group_key = env_groups[entry].id
+                    bridge._python_executable_override = env_groups[
+                        entry
+                    ].python_executable
             await bridge.start()
             self.bridges[dir_name] = bridge
             loaded.append(dir_name)
@@ -1713,6 +1785,12 @@ class SDKPluginManager:
             if isinstance(bridge, SDKPluginBridge):
                 bridge._approval_store = self.approval_store
                 bridge._service_router = self.service_router
+                bridge._worker_pool = self.worker_pool
+                if entry in env_groups:
+                    bridge._group_key = env_groups[entry].id
+                    bridge._python_executable_override = env_groups[
+                        entry
+                    ].python_executable
             await bridge.start()
             self.bridges[entry.name] = bridge
             loaded.append(entry.name)
@@ -1826,6 +1904,7 @@ class SDKPluginManager:
             if bridge is not None:
                 await bridge.stop(reason="shutdown")
         self.bridges.clear()
+        await self.worker_pool.close_all()
         for listener in list(self.listeners.values()):
             await listener.stop()
         self.listeners.clear()

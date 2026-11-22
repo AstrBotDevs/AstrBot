@@ -5,6 +5,7 @@ import asyncio
 import os
 from pathlib import Path
 
+from .group_worker import serve_group_stdio
 from .stdio_server import serve_stdio_plugin
 from .uds_runner import serve_uds_plugin
 from .ws_runner import RUNNER_TOKEN_ENV, serve_ws_plugin
@@ -34,6 +35,11 @@ def main() -> None:
         help="Use the stdio transport (host-spawned runners)",
     )
     transport.add_argument(
+        "--group-stdio",
+        action="store_true",
+        help="Serve multiple plugins over a multiplexed stdio stream",
+    )
+    transport.add_argument(
         "--ws",
         metavar="URL",
         help="Dial out to the Host WebSocket listener (ws:// or wss://)",
@@ -43,13 +49,18 @@ def main() -> None:
         metavar="CREDENTIAL_FILE",
         help="Attach to the Host Unix domain socket via an external credential file",
     )
-    parser.add_argument("--plugin-root", type=Path, required=True)
+    parser.add_argument("--plugin-root", type=Path, required=False)
     parser.add_argument(
         "--legacy",
         action="store_true",
         help="Load the plugin through the legacy compat layer",
     )
     args = parser.parse_args()
+    if args.group_stdio:
+        asyncio.run(serve_group_stdio())
+        return
+    if args.plugin_root is None:
+        parser.error("--plugin-root is required for --stdio/--ws/--uds")
     if args.stdio:
         asyncio.run(serve_stdio_plugin(args.plugin_root, legacy=args.legacy))
         return
