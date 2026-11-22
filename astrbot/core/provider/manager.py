@@ -525,6 +525,10 @@ class ProviderManager:
                 from .sources.openai_tts_api_source import (
                     ProviderOpenAITTSAPI as ProviderOpenAITTSAPI,
                 )
+            case "stepfun_tts_api":
+                from .sources.stepfun_tts_api_source import (
+                    ProviderStepFunTTSAPI as ProviderStepFunTTSAPI,
+                )
             case "deepseek_tts_api":
                 from .sources.deepseek_tts_api_source import (
                     ProviderDeepSeekTTSAPI as ProviderDeepSeekTTSAPI,

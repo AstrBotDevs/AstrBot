@@ -1955,6 +1955,9 @@
         "description": "voice",
         "hint": "OpenAI TTS 的声音。OpenAI 默认支持：'alloy', 'echo', 'fable', 'onyx', 'nova', 'shimmer'"
       },
+      "stepfun-tts-voice": {
+        "description": "音色 ID"
+      },
       "deepseek-tts-voice": {
         "description": "音色",
         "hint": "DeepSeek TTS 音色，实际请求使用对应的 voice_id。",
