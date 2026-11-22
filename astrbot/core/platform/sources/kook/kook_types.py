@@ -480,12 +480,17 @@ class KookAuthor(KookBaseReceiveDataClass):
     roles: list[int] = Field(default_factory=list)
 
 
+class KookQuoteAuthor(KookBaseReceiveDataClass):
+    id: str
+    nickname: str
+
+
 class KookQuote(KookBaseReceiveDataClass):
     id: str
     type: int
     content: str
     create_at: int
-    author: KookAuthor
+    author: KookQuoteAuthor
 
 
 class KookMarkdownMentionPart(KookBaseReceiveDataClass):

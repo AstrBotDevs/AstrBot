@@ -218,11 +218,11 @@ async def test_kook_event_warp_message(
 
     adapter = KookPlatformAdapter({}, {}, asyncio.Queue())
 
-    raw_event_str = expected_json_data_path.read_text(encoding="utf-8")
-    raw_event = json.loads(raw_event_str)
-    event = KookWebsocketEvent.from_json(
-        raw_event_str,
-    )
+    raw_event = json.loads(expected_json_data_path.read_text(encoding="utf-8"))
+    if expected_json_data_path == KookEventDataPath.GROUP_MESSAGE:
+        quote = raw_event["d"]["extra"]["quote"]
+        quote["author"] = {key: quote["author"][key] for key in ("id", "nickname")}
+    event = KookWebsocketEvent.from_json(json.dumps(raw_event))
     assert isinstance(event.data, KookMessageEventData)
 
     astrbotMessage = await adapter.convert_message(event.data)
