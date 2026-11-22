@@ -1875,8 +1875,6 @@ async def helloworld(self, event: AstrMessageEvent):
 
 关于 CQHTTP API，请参考如下文档：
 
-Napcat API 文档：<https://napcat.apifox.cn/>
-
 Lagrange API 文档：<https://lagrange-onebot.apifox.cn/>
 
 #### 载入的所有插件
