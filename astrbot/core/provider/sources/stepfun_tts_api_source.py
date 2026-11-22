@@ -1,3 +1,4 @@
+from contextlib import suppress
 from pathlib import Path
 from uuid import uuid4
 
@@ -40,6 +41,7 @@ class ProviderStepFunTTSAPI(TTSProvider):
 
         Raises:
             httpx.HTTPError: If the API request fails.
+            OSError: If the WAV file cannot be written.
             ValueError: If StepFun returns an invalid WAV response.
         """
         response = await self.client.post(
@@ -59,7 +61,12 @@ class ProviderStepFunTTSAPI(TTSProvider):
         temp_dir = Path(get_astrbot_temp_path())
         temp_dir.mkdir(parents=True, exist_ok=True)
         output_path = temp_dir / f"stepfun_tts_api_{uuid4().hex}.wav"
-        output_path.write_bytes(audio)
+        try:
+            output_path.write_bytes(audio)
+        except OSError:
+            with suppress(OSError):
+                output_path.unlink(missing_ok=True)
+            raise
         return str(output_path)
 
     async def terminate(self) -> None:
