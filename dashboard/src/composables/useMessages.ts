@@ -419,6 +419,7 @@ export function useMessages(options: UseMessagesOptions) {
       if (resumeRuns && Array.isArray(payload.active_runs)) {
         await restoreNextActiveRun(sessionId, payload.active_runs);
       }
+      return payload;
     } catch (error) {
       if (sessionLoadEpochs[sessionId] !== epoch) return;
       console.error("Failed to load session messages:", error);

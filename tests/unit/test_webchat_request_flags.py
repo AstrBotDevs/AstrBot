@@ -207,6 +207,7 @@ def test_llm_metadata_resolves_provider_and_consensus_reasoning_efforts():
                     "models": {
                         "kimi-for-coding": {
                             "id": "kimi-for-coding",
+                            "family": "kimi-coding",
                             "reasoning": True,
                             "reasoning_options": [
                                 {
@@ -217,6 +218,7 @@ def test_llm_metadata_resolves_provider_and_consensus_reasoning_efforts():
                         },
                         "kimi-for-coding-highspeed": {
                             "id": "kimi-for-coding-highspeed",
+                            "family": "kimi-coding",
                             "reasoning": True,
                             "reasoning_options": [],
                         },

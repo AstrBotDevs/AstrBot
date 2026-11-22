@@ -1156,34 +1156,32 @@ const {
 const { providers: tokenProviderConfigs, modelMetadata: tokenModelMetadata } =
   providerCatalog;
 
-const activeAgentRunnerType = ref("astrbot");
-// Null while the session's backend-resolved default provider has not loaded yet.
-const defaultConfigProviderId = ref<string | null>(null);
-const threadAgentRunnerType = ref("astrbot");
-const threadDefaultConfigProviderId = ref<string | null>(null);
+interface ChatRunnerConfig {
+  agentRunnerType: string;
+  defaultProviderId: string;
+}
+
+const activeSessionConfig = ref<ChatRunnerConfig | null>(null);
+const threadConfig = ref<ChatRunnerConfig | null>(null);
 let sessionConfigSeq = 0;
 
 async function syncActiveSessionConfig(
   sessionId: string | null,
-  { reset = false } = {},
+  { loadHistory = false } = {},
 ) {
   const seq = ++sessionConfigSeq;
-  if (reset) {
-    defaultConfigProviderId.value = null;
-  }
   try {
     if (sessionId) {
-      // Ask the backend for the effective default provider so wildcard UMO
-      // routes, /provider session overrides, and fallbacks stay authoritative.
-      const res = await chatApi.getSession(sessionId, { page: 1, page_size: 1 });
+      const data = loadHistory
+        ? await loadSessionMessages(sessionId)
+        : (await chatApi.getSession(sessionId, { page: 1, page_size: 1 })).data?.data;
       if (seq !== sessionConfigSeq) return;
-      const data = res.data?.data as
-        | { agent_runner_type?: string; default_provider_id?: string }
-        | undefined;
-      activeAgentRunnerType.value = data?.agent_runner_type || "astrbot";
-      defaultConfigProviderId.value =
+      activeSessionConfig.value =
         typeof data?.default_provider_id === "string"
-          ? data.default_provider_id
+          ? {
+              agentRunnerType: data.agent_runner_type || "astrbot",
+              defaultProviderId: data.default_provider_id,
+            }
           : null;
       return;
     }
@@ -1196,13 +1194,14 @@ async function syncActiveSessionConfig(
     const runtime = config?.agent?.runtime || "astrbot";
     const rawProviderId =
       runtime === "astrbot" ? config?.agent?.config?.model?.provider_id : "";
-    activeAgentRunnerType.value = runtime;
-    defaultConfigProviderId.value =
-      typeof rawProviderId === "string" ? rawProviderId.trim() : "";
+    activeSessionConfig.value = {
+      agentRunnerType: runtime,
+      defaultProviderId: typeof rawProviderId === "string" ? rawProviderId.trim() : "",
+    };
   } catch (error) {
     if (seq !== sessionConfigSeq) return;
     console.error("Failed to resolve default provider for reasoning effort:", error);
-    defaultConfigProviderId.value = null;
+    activeSessionConfig.value = null;
   }
 }
 
@@ -1221,8 +1220,13 @@ function handleChatConfigChanged(payload: {
     return;
   }
   ++sessionConfigSeq;
-  activeAgentRunnerType.value = payload.agentRunnerType || "astrbot";
-  defaultConfigProviderId.value = payload.defaultProviderId;
+  activeSessionConfig.value =
+    payload.defaultProviderId === null
+      ? null
+      : {
+          agentRunnerType: payload.agentRunnerType,
+          defaultProviderId: payload.defaultProviderId,
+        };
 }
 
 function handleThreadConfigResolved(payload: {
@@ -1231,29 +1235,26 @@ function handleThreadConfigResolved(payload: {
   defaultProviderId: string;
 }) {
   if (payload.threadId !== activeThread.value?.thread_id) return;
-  threadAgentRunnerType.value = payload.agentRunnerType || "astrbot";
-  threadDefaultConfigProviderId.value = payload.defaultProviderId;
+  threadConfig.value = payload;
 }
 
 function reasoningEffortFor(
   providerId: string,
-  fallbackConfigProviderId: string | null = defaultConfigProviderId.value,
-  runnerType: string = activeAgentRunnerType.value,
+  config = activeSessionConfig.value,
 ) {
-  const normalizedRunner = runnerType.toLowerCase();
-  if (normalizedRunner !== "astrbot" && normalizedRunner !== "internal") {
+  if (!config || !["astrbot", "internal"].includes(config.agentRunnerType.toLowerCase())) {
     return { levels: [], effort: null, requestEffort: null };
   }
   let provider: ProviderConfig | undefined;
   if (providerId) {
     provider = tokenProviderConfigs.value.find((item) => item.id === providerId);
-  } else if (fallbackConfigProviderId !== null) {
+  } else {
     // Mirror ProviderManager._resolve_using_provider: use the resolved default
     // provider first, falling back to the first enabled provider when unset.
     provider =
-      (fallbackConfigProviderId
+      (config.defaultProviderId
         ? tokenProviderConfigs.value.find(
-            (item) => item.id === fallbackConfigProviderId,
+            (item) => item.id === config.defaultProviderId,
           )
         : undefined) || tokenProviderConfigs.value[0];
   }
@@ -1275,29 +1276,26 @@ const currentReasoningEffort = computed(() =>
 );
 
 function getThreadReasoningEffort(providerId: string) {
-  return reasoningEffortFor(
-    providerId,
-    threadDefaultConfigProviderId.value,
-    threadAgentRunnerType.value,
-  ).requestEffort;
+  return reasoningEffortFor(providerId, threadConfig.value).requestEffort;
 }
 
 watch(
   currSessionId,
-  (nextSessionId, prevSessionId) => {
-    const shouldReset = Boolean(prevSessionId) || !nextSessionId;
-    void syncActiveSessionConfig(nextSessionId || null, { reset: shouldReset });
+  (sessionId) => {
+    ++sessionConfigSeq;
+    activeSessionConfig.value = null;
+    if (!sessionId) void syncActiveSessionConfig(null);
   },
-  { immediate: true },
+  { immediate: true, flush: "sync" },
 );
 
 watch(
   () => activeThread.value?.thread_id || null,
   () => {
     // ThreadPanel loads thread detail immediately and emits config-resolved.
-    threadDefaultConfigProviderId.value = null;
+    threadConfig.value = null;
   },
-  { immediate: true },
+  { flush: "sync" },
 );
 
 function setReasoningEffort(effort: string) {
@@ -1561,7 +1559,6 @@ async function loadTokenProviders() {
   } catch (error) {
     console.error("Failed to load provider context metadata:", error);
   }
-  await syncActiveSessionConfig(currSessionId.value || null);
 }
 
 function readTokenCount(value: unknown) {
@@ -1785,15 +1782,14 @@ async function selectSession(sessionId: string, pushRoute = true) {
   currSessionId.value = sessionId;
   replyTarget.value = null;
   // Enter the loading state before route navigation can render an empty chat.
-  const messagesReady = loadedSessions[sessionId]
-    ? Promise.resolve()
-    : loadSessionMessages(sessionId);
-  const configReady = syncActiveSessionConfig(sessionId, { reset: true });
+  const configReady = syncActiveSessionConfig(sessionId, {
+    loadHistory: !loadedSessions[sessionId],
+  });
   if (pushRoute && route.path !== `${basePath()}/${sessionId}`) {
     await router.push(`${basePath()}/${sessionId}`);
     if (currSessionId.value !== sessionId) return;
   }
-  await Promise.all([messagesReady, configReady]);
+  await configReady;
   if (currSessionId.value !== sessionId) return;
   const storedSelection = readSessionProviderSelection(sessionId);
   setProviderSelection(
@@ -1836,7 +1832,7 @@ async function sendCurrentMessage(viewText?: string) {
       sessionId = await newSession();
       await nextTick();
       draft.value = draftText;
-      await syncActiveSessionConfig(sessionId, { reset: true });
+      await syncActiveSessionConfig(sessionId);
       if (targetProjectId) {
         await addSessionToProject(sessionId, targetProjectId);
         sessionProjects[sessionId] = targetProject
@@ -2198,7 +2194,7 @@ async function retryCurrentSessionLoad() {
     await loadEarlierWithAnchor();
     return;
   }
-  await loadSessionMessages(sessionId, true, true);
+  await syncActiveSessionConfig(sessionId, { loadHistory: true });
 }
 
 async function deleteThread(thread: ChatThread) {

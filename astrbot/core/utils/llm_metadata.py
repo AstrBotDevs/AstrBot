@@ -133,7 +133,7 @@ def populate_llm_metadata(data: dict[str, Any]) -> int:
         if not isinstance(raw_models, dict):
             continue
 
-        direct_entries: list[tuple[dict[str, Any], tuple[str, ...], bool, bool]] = []
+        direct_entries: list[tuple[dict[str, Any], tuple[str, ...]]] = []
         for model in raw_models.values():
             if not isinstance(model, dict):
                 continue
@@ -143,7 +143,6 @@ def populate_llm_metadata(data: dict[str, Any]) -> int:
 
             options = model.get("reasoning_options")
             has_toggle = False
-            has_budget = False
             values: list[str] = []
             if isinstance(options, list):
                 for opt in options:
@@ -152,8 +151,6 @@ def populate_llm_metadata(data: dict[str, Any]) -> int:
                     opt_type = opt.get("type")
                     if opt_type == "toggle":
                         has_toggle = True
-                    elif opt_type == "budget_tokens":
-                        has_budget = True
                     elif opt_type == "effort" and isinstance(opt.get("values"), list):
                         values = [
                             v.strip().lower()
@@ -170,25 +167,22 @@ def populate_llm_metadata(data: dict[str, Any]) -> int:
                 values = ["none", *values]
             value_set = set(values)
             efforts = tuple(v for v in REASONING_EFFORT_ORDER if v in value_set)
-            direct_entries.append((model, efforts, has_toggle, has_budget))
+            direct_entries.append((model, efforts))
 
         # Inherit effort levels from the newest sibling in the same family when a
-        # newly listed reasoning model omits reasoning_options (excluding pure
-        # toggle or budget_tokens models).
+        # newly listed reasoning model omits reasoning_options.
         provider_efforts: dict[str, tuple[str, ...]] = {}
-        for model, efforts, has_toggle, has_budget in direct_entries:
+        for model, efforts in direct_entries:
             model_id = model["id"]
             if (
-                not efforts
+                "reasoning_options" not in model
                 and model.get("reasoning")
                 and model.get("family")
-                and not has_toggle
-                and not has_budget
             ):
                 family = model["family"]
                 release_date = str(model.get("release_date") or "")
                 best_key: tuple[str, str] | None = None
-                for kin, kin_efforts, _, _ in direct_entries:
+                for kin, kin_efforts in direct_entries:
                     if (
                         not kin_efforts
                         or kin.get("family") != family
