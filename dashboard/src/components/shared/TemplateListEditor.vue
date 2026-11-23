@@ -94,7 +94,7 @@
                 <div v-for="(childMeta, childKey, childIndex) in itemMeta.items" :key="childKey">
                   <template v-if="!childMeta?.invisible && shouldShowItem(childMeta, entry)">
                     <v-row class="config-row">
-                      <v-col cols="12" sm="6" class="property-info">
+                      <v-col cols="12" :sm="childMeta?.type === 'template_list' ? 12 : 6" class="property-info">
                         <v-list-item density="compact">
                           <v-list-item-title class="property-name">
                             {{ templateItemText(entry.__template_key, `${itemKey}.${childKey}`, 'description', childMeta?.description) || childKey }}
@@ -104,8 +104,17 @@
                           </v-list-item-subtitle>
                         </v-list-item>
                       </v-col>
-                      <v-col cols="12" sm="6" class="config-input">
+                      <v-col cols="12" :sm="childMeta?.type === 'template_list' ? 12 : 6" class="config-input">
+                        <TemplateListEditor
+                          v-if="childMeta?.type === 'template_list'"
+                          v-model="entry[itemKey][childKey]"
+                          :templates="childMeta.templates"
+                          :plugin-name="pluginName"
+                          :plugin-i18n="pluginI18n"
+                          :config-path="templateItemPath(entry.__template_key, `${itemKey}.${childKey}`)"
+                        />
                         <ConfigItemRenderer
+                          v-else
                           v-model="entry[itemKey][childKey]"
                           :item-meta="childMeta"
                           :plugin-name="pluginName"
@@ -125,7 +134,7 @@
               <!-- Regular Property -->
               <template v-else-if="!itemMeta?.invisible && shouldShowItem(itemMeta, entry)">
                 <v-row class="config-row">
-                  <v-col cols="12" sm="6" class="property-info">
+                  <v-col cols="12" :sm="itemMeta?.type === 'template_list' ? 12 : 6" class="property-info">
                     <v-list-item density="compact">
                       <v-list-item-title class="property-name">
                         <span v-if="itemMeta?.description">{{ templateItemText(entry.__template_key, itemKey, 'description', itemMeta?.description) }} <span class="property-key">({{ itemKey }})</span></span>
@@ -136,8 +145,17 @@
                       </v-list-item-subtitle>
                     </v-list-item>
                   </v-col>
-                  <v-col cols="12" sm="6" class="config-input">
+                  <v-col cols="12" :sm="itemMeta?.type === 'template_list' ? 12 : 6" class="config-input">
+                    <TemplateListEditor
+                      v-if="itemMeta?.type === 'template_list'"
+                      v-model="entry[itemKey]"
+                      :templates="itemMeta.templates"
+                      :plugin-name="pluginName"
+                      :plugin-i18n="pluginI18n"
+                      :config-path="templateItemPath(entry.__template_key, itemKey)"
+                    />
                     <ConfigItemRenderer
+                      v-else
                       v-model="entry[itemKey]"
                       :item-meta="itemMeta"
                       :plugin-name="pluginName"

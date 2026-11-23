@@ -389,6 +389,29 @@ class GreetingPlugin(Star):
 }
 ```
 
+#### 嵌套模板列表
+
+模板的 `items` 可以直接包含另一个 `template_list` 字段，也可以将它放在 `object` 字段中。每层列表定义自己的 `templates`，保存的每个子条目也保留自己的 `__template_key`。例如，在上方 schema 的 `templates.keyword.items` 中添加以下字段：
+
+```json
+{
+  "children": {
+    "type": "template_list",
+    "default": [],
+    "templates": {
+      "child": {
+        "name": "Child",
+        "items": {
+          "name": {"type": "string", "default": ""}
+        }
+      }
+    }
+  }
+}
+```
+
+在插件配置窗口中，展开父条目，在嵌套列表内添加条目并编辑字段，然后保存插件配置。重新打开配置后，嵌套条目会保留。更深层的模板列表也可以按相同步骤编辑。
+
 ### 模型选择器 {#provider}
 
 三种选择器分别列出已配置的对话、语音识别和语音合成模型，保存提供商 ID。截图展示对话模型选择菜单，候选项为演示数据。

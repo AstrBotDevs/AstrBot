@@ -389,6 +389,29 @@ Example of the saved `rules` value:
 }
 ```
 
+#### Nested template lists
+
+A template can contain another `template_list` field, either directly in its `items` or inside an `object` field. Each nested list defines its own `templates`, and each saved child entry keeps its own `__template_key`. For example, add this field to `templates.keyword.items` in the schema above:
+
+```json
+{
+  "children": {
+    "type": "template_list",
+    "default": [],
+    "templates": {
+      "child": {
+        "name": "Child",
+        "items": {
+          "name": {"type": "string", "default": ""}
+        }
+      }
+    }
+  }
+}
+```
+
+In the plugin configuration dialog, expand the parent entry, add an entry in the nested list, edit its fields, and save the plugin configuration. Expanding the configuration again preserves the nested entries. The same steps apply to deeper template lists.
+
 ### Model selectors {#provider}
 
 These selectors list configured chat, speech recognition, and speech synthesis models and save a provider ID. The screenshot shows the chat-model menu with demo entries.
