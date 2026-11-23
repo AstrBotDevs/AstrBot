@@ -10,12 +10,14 @@ OneBot 协议的 message 数组中。OneBot V11 标准只期望
 协议端（napcat/Lagrange）查找消息时失败。
 """
 
+import asyncio
 from unittest.mock import AsyncMock
 
 import pytest
 
 import astrbot.core.message.components as Comp
 from astrbot.core.message.message_event_result import MessageChain
+from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from astrbot.core.pipeline.respond.stage import (
     RespondStage,  # noqa: F401 — 预加载避免循环导入
 )
@@ -113,3 +115,81 @@ def test_reply_to_dict_matches_onebot_v11_format():
     assert actual == expected, (
         f"Reply.toDict() 输出不符合 OneBot V11 标准。\n期望: {expected}\n实际: {actual}"
     )
+
+
+@pytest.fixture
+def streaming_event(monkeypatch):
+    event = object.__new__(AiocqhttpMessageEvent)
+    event.send = AsyncMock()
+    monkeypatch.setattr(AstrMessageEvent, "send_streaming", AsyncMock())
+    monkeypatch.setattr(asyncio, "sleep", AsyncMock())
+    return event
+
+
+@pytest.mark.asyncio
+async def test_fallback_flushes_text_before_tool_status(streaming_event):
+    async def generator():
+        yield MessageChain([Comp.Plain("先行文本")])
+        yield MessageChain(type="break")
+        await streaming_event.send(MessageChain([Comp.Plain("调用工具")]))
+        yield MessageChain([Comp.Plain("后续文本")])
+
+    await streaming_event.send_streaming(generator(), use_fallback=True)
+
+    sent_text = [
+        call.args[0].chain[0].text
+        for call in streaming_event.send.await_args_list
+    ]
+    assert sent_text == ["先行文本", "调用工具", "后续文本"]
+
+
+@pytest.mark.asyncio
+async def test_fallback_flushes_text_before_media(streaming_event):
+    async def generator():
+        yield MessageChain([Comp.Plain("说明文字")])
+        yield MessageChain([Comp.Image(file="base64://c2FtcGxl")])
+
+    await streaming_event.send_streaming(generator(), use_fallback=True)
+
+    calls = streaming_event.send.await_args_list
+    assert len(calls) == 2
+    assert isinstance(calls[0].args[0].chain[0], Comp.Plain)
+    assert calls[0].args[0].chain[0].text == "说明文字"
+    assert isinstance(calls[1].args[0].chain[0], Comp.Image)
+
+
+@pytest.mark.asyncio
+async def test_fallback_pauses_after_break_and_pre_media_flushes(streaming_event):
+    actions = []
+
+    async def record_send(chain):
+        component = chain.chain[0]
+        label = (
+            component.text
+            if isinstance(component, Comp.Plain)
+            else type(component).__name__
+        )
+        actions.append(("send", label))
+
+    async def record_sleep(seconds):
+        actions.append(("sleep", seconds))
+
+    streaming_event.send.side_effect = record_send
+    asyncio.sleep.side_effect = record_sleep
+
+    async def generator():
+        yield MessageChain([Comp.Plain("先行文本")])
+        yield MessageChain(type="break")
+        yield MessageChain([Comp.Plain("后续文本")])
+        yield MessageChain([Comp.Image(file="base64://c2FtcGxl")])
+
+    await streaming_event.send_streaming(generator(), use_fallback=True)
+
+    assert actions == [
+        ("send", "先行文本"),
+        ("sleep", 1.5),
+        ("send", "后续文本"),
+        ("sleep", 1.5),
+        ("send", "Image"),
+        ("sleep", 1.5),
+    ]

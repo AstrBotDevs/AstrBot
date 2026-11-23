@@ -251,6 +251,7 @@ class AiocqhttpMessageEvent(AstrMessageEvent):
                     buffer = "".join(leading_punctuation + text_parts).strip()
                     if buffer:
                         await self.send(MessageChain([Plain(buffer)]))
+                        await asyncio.sleep(1.5)  # Rate limit.
                     text_parts.clear()
                     leading_punctuation.clear()
                     continue
@@ -278,6 +279,7 @@ class AiocqhttpMessageEvent(AstrMessageEvent):
                         buffer = "".join(leading_punctuation + text_parts).strip()
                         if buffer:
                             await self.send(MessageChain([Plain(buffer)]))
+                            await asyncio.sleep(1.5)  # Rate limit.
                         text_parts.clear()
                         leading_punctuation.clear()
                         await self.send(MessageChain(chain=[comp]))
