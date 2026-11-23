@@ -240,7 +240,6 @@ async def test_group_mentions_render_after_real_wake_prefixes(runtime, split_pre
     message.self_id = "bot"
     message.sender = MessageMember(user_id="alice", nickname="Alice")
     message.group = Group(group_id="grp-1")
-    message.ordered_mentions = True
     message.message = [
         Plain("astr /llm "),
         At(qq="member-1", name="小璃"),

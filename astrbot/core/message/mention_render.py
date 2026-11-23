@@ -1,11 +1,4 @@
-"""Render model-facing mention text from ordered message chains.
-
-Adapters that build Plain/At components at true mention positions mark their
-message with ``ordered_mentions``. The agent input boundary then derives the
-model body from that chain instead of the cleaned text, so each directed
-mention stays with its own clause. Platforms without the marker keep their
-existing text-based behavior.
-"""
+"""Render mention text from group message chains."""
 
 from __future__ import annotations
 
@@ -13,16 +6,11 @@ from typing import TYPE_CHECKING
 
 from astrbot.core.agent.message import TextPart
 from astrbot.core.message.components import At, AtAll, Plain
+from astrbot.core.platform.message_type import MessageType
 
 if TYPE_CHECKING:
     from astrbot.core.platform.astr_message_event import AstrMessageEvent
     from astrbot.core.provider.entities import ProviderRequest
-
-SELF_MENTION_POSITION_UNKNOWN = "_self_mention_position_unknown"
-"""Message attribute marking a wake-only bot At without a locatable tag."""
-
-SELF_MENTION_IDENTITY_CONFIRMED = "_self_mention_identity_confirmed"
-"""Message attribute confirming a position-less bot At with a reliable identity."""
 
 
 def render_mention_body(
@@ -36,17 +24,17 @@ def render_mention_body(
         prefixes: Prefix texts confirmed consumed from the cleaned message.
 
     Returns:
-        ``(body, self_label)`` with the label of the first rendered bot
-        mention (or None), or None when a confirmed prefix no longer matches
-        the chain and the cleaned text must be kept as-is.
+        ``(body, self_label)`` with the optional label of the first bot mention,
+        or None if the group message has no renderable mention or its
+        consumed prefixes do not match.
     """
+    if event.get_message_type() != MessageType.GROUP_MESSAGE:
+        return None
+
     components = getattr(event.message_obj, "message", None) or []
     self_id = str(event.get_self_id() or "")
-    skip_self = getattr(event.message_obj, SELF_MENTION_POSITION_UNKNOWN, False)
-    identity_confirmed = getattr(
-        event.message_obj, SELF_MENTION_IDENTITY_CONFIRMED, False
-    )
     parts: list[str] = []
+    has_mention = False
     self_label: str | None = None
     prefixes = [prefix for prefix in prefixes if prefix]
     for component in components:
@@ -63,18 +51,11 @@ def render_mention_body(
             if not label:
                 continue
             is_self = bool(self_id) and str(component.qq) == self_id
-            if skip_self and is_self:
-                # Wake-only fallback At: the bot was mentioned, but its
-                # original position is unavailable, so nothing is rendered.
-                # A confirmed identity still yields a self label so the model
-                # can be told this message is directed at it.
-                if identity_confirmed and self_label is None:
-                    self_label = label
-                continue
             parts.append(f"@{label}")
+            has_mention = True
             if self_label is None and is_self:
                 self_label = label
-    if prefixes:
+    if prefixes or not has_mention:
         return None
     return "".join(parts).strip(), self_label
 
@@ -103,8 +84,6 @@ def supplement_mention_display(
             message_str cannot decide this because it may still hold an
             already-consumed provider wake prefix.
     """
-    if not getattr(event.message_obj, "ordered_mentions", False):
-        return
     prefixes = [
         str(event.get_extra("_consumed_wake_prefix") or ""),
         str(event.get_extra("_consumed_provider_prefix") or ""),
@@ -138,9 +117,6 @@ def follow_up_text(event: AstrMessageEvent) -> tuple[str, str | None]:
         empty follow-up into a valid input.
     """
     message_str = event.get_message_str() or ""
-    if not getattr(event.message_obj, "ordered_mentions", False):
-        return message_str or event.get_message_outline(), None
-    message_str = message_str.strip()
     reminder = None
     rendered = render_mention_body(
         event,
@@ -154,7 +130,7 @@ def follow_up_text(event: AstrMessageEvent) -> tuple[str, str | None]:
         # every fallback text (message_str or the outline) either already
         # carries them or never had them, so appending again would
         # duplicate the recognized text.
-        if message_str and body:
+        if message_str.strip() and body:
             quoted = str(event.get_extra("_quoted_voice_transcript") or "")
             return body + quoted, reminder
     return message_str or event.get_message_outline(), reminder

@@ -26,6 +26,7 @@ from astrbot.core.exceptions import EmptyModelOutputError
 from astrbot.core.message.components import At, Plain
 from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.platform.astrbot_message import AstrBotMessage
+from astrbot.core.platform.message_type import MessageType
 from astrbot.core.provider.entities import LLMResponse, ProviderRequest, TokenUsage
 from astrbot.core.provider.provider import Provider
 
@@ -1691,7 +1692,6 @@ async def test_follow_up_temp_reminder_visible_to_model_but_not_saved(
         )
     )
     message = AstrBotMessage()
-    message.ordered_mentions = True
     message.message = [
         At(qq="member-1", name="小璃"),
         Plain(" 你总结一下，"),
@@ -1700,6 +1700,7 @@ async def test_follow_up_temp_reminder_visible_to_model_but_not_saved(
     ]
     event = SimpleNamespace(
         message_obj=message,
+        get_message_type=lambda: MessageType.GROUP_MESSAGE,
         get_self_id=lambda: "bot-1",
         get_message_str=lambda: "你总结一下， 你不用管",
         get_extra=lambda key, default=None: default,

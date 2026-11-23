@@ -257,27 +257,6 @@ async def test_parse_to_qqofficial_ignores_empty_at_component(qq: str | None):
 
 
 @pytest.mark.asyncio
-async def test_legacy_group_at_path_forces_bot_mention_when_mentions_missing():
-    message = botpy.message.GroupMessage(
-        None,
-        "event-legacy",
-        _make_group_payload(content="legacy text", mentions=[])["d"],
-    )
-
-    abm = await QQOfficialPlatformAdapter._parse_from_qqofficial(
-        message,
-        MessageType.GROUP_MESSAGE,
-        force_group_mention=True,
-    )
-
-    assert isinstance(abm.message[0], At)
-    assert abm.message[0].qq == "qq_official"
-    assert abm.self_id == "qq_official"
-    assert isinstance(abm.message[1], Plain)
-    assert abm.message[1].text == "legacy text"
-
-
-@pytest.mark.asyncio
 async def test_group_message_create_handler_maps_group_session_and_scene():
     _, message = _dispatch_group_message(_make_group_payload())
     committed: list = []
@@ -1133,8 +1112,9 @@ async def test_webhook_send_by_session_use_markdown_config_false_sends_content()
     assert "msg_type" not in kwargs
 
 
+@pytest.mark.parametrize("platform", ["qq_official", "qq_official_webhook"])
 @pytest.mark.asyncio
-async def test_group_message_keeps_ordered_mentions_and_legacy_message_str():
+async def test_group_message_keeps_ordered_mentions_and_legacy_message_str(platform):
     _, message = _dispatch_group_message(
         _make_group_payload(
             content="<@!member-alice> 你总结一下，<@bot-123> 你不用管",
@@ -1150,7 +1130,6 @@ async def test_group_message_keeps_ordered_mentions_and_legacy_message_str():
         MessageType.GROUP_MESSAGE,
     )
 
-    assert abm.ordered_mentions is True
     assert isinstance(abm.message[0], At)
     assert (abm.message[0].qq, abm.message[0].name) == ("member-alice", "小璃")
     assert isinstance(abm.message[1], Plain)
@@ -1159,60 +1138,56 @@ async def test_group_message_keeps_ordered_mentions_and_legacy_message_str():
     assert (abm.message[2].qq, abm.message[2].name) == ("bot-123", "清漪")
     assert isinstance(abm.message[3], Plain)
     assert abm.message[3].text == " 你不用管"
-    # 旧清洗结果保持不变：仅移除机器人标签，其他用户的标签保留在文本中
+    # Keep the existing command text, including other users' mention tags.
     assert abm.message_str == "<@!member-alice> 你总结一下， 你不用管"
 
-
-@pytest.mark.parametrize("is_you_event", [True, False], ids=["is_you", "legacy"])
-@pytest.mark.asyncio
-async def test_group_message_without_locatable_tag_keeps_wake_fallback(is_you_event):
-    if is_you_event:
-        _, message = _dispatch_group_message(
-            _make_group_payload(
-                content="帮我看下这个",
-                mentions=[{"id": "bot-123", "username": "清漪", "is_you": True}],
-            )
-        )
-        abm = await QQOfficialPlatformAdapter._parse_from_qqofficial(
-            message,
-            MessageType.GROUP_MESSAGE,
-        )
-        expected_self_id = "bot-123"
-    else:
-        message = botpy.message.GroupMessage(
-            None,
-            "event-legacy",
-            _make_group_payload(content="legacy text", mentions=[])["d"],
-        )
-        abm = await QQOfficialPlatformAdapter._parse_from_qqofficial(
-            message,
-            MessageType.GROUP_MESSAGE,
-            force_group_mention=True,
-        )
-        expected_self_id = "qq_official"
-
-    assert isinstance(abm.message[0], At)
-    assert abm.message[0].qq == expected_self_id
-    assert getattr(abm, "_self_mention_position_unknown") is True
-    assert getattr(abm, "_self_mention_identity_confirmed") is is_you_event
-    assert isinstance(abm.message[1], Plain)
-    assert abm.message[1].text == abm.message_str
-    # 唤醒兜底 At 只保留唤醒意义，不在模型正文中伪造句首 @
-    event = SimpleNamespace(
-        message_obj=abm,
-        message_str=abm.message_str,
-        get_self_id=lambda: abm.self_id,
-        get_message_str=lambda: abm.message_str,
-        get_message_outline=lambda: "",
-        get_extra=lambda key, default=None: default,
+    event = QQOfficialMessageEvent(
+        abm.message_str, abm, SimpleNamespace(name=platform, id=platform), "group-1", None
     )
-    text, reminder = follow_up_text(event)
-    assert text == abm.message_str
-    if is_you_event:
-        # 真实 is_you：@ 位置未知，但身份提醒仍然用真实 ID 生成
-        assert reminder == (
-            "<system_reminder>@清漪 refers to you (Your ID: bot-123).</system_reminder>"
-        )
-    else:
-        # 旧兜底没有可靠身份：不编造机器人 ID，也不伪造提醒
-        assert reminder is None
+    assert follow_up_text(event) == (
+        "@小璃 你总结一下，@清漪 你不用管",
+        "<system_reminder>@清漪 refers to you (Your ID: bot-123).</system_reminder>",
+    )
+
+
+@pytest.mark.parametrize("platform", ["qq_official", "qq_official_webhook"])
+@pytest.mark.parametrize("mentions", [[], [{"id": "bot-123", "is_you": True}]], ids=["legacy", "is_you"])
+@pytest.mark.asyncio
+async def test_group_message_without_tag_keeps_plain_text(platform, mentions):
+    _, message = _dispatch_group_message(
+        _make_group_payload(content="plain group text", mentions=mentions)
+    )
+    abm = await QQOfficialPlatformAdapter._parse_from_qqofficial(
+        message, MessageType.GROUP_MESSAGE
+    )
+
+    assert len(abm.message) == 1
+    assert isinstance(abm.message[0], Plain)
+    assert abm.message[0].text == "plain group text"
+    event = QQOfficialMessageEvent(
+        abm.message_str, abm, SimpleNamespace(name=platform, id=platform), "group-1", None
+    )
+    assert follow_up_text(event) == ("plain group text", None)
+
+
+@pytest.mark.asyncio
+async def test_guild_channel_does_not_generate_placeholder_mention():
+    message = botpy.message.Message(
+        None,
+        "event-channel",
+        {
+            "id": "channel-message",
+            "channel_id": "channel-1",
+            "content": "<@bot-123> channel text",
+            "author": {"id": "user-1", "username": "User"},
+            "mentions": [{"id": "bot-123", "username": "AstrBot"}],
+        },
+    )
+    abm = await QQOfficialPlatformAdapter._parse_from_qqofficial(
+        message, MessageType.GROUP_MESSAGE
+    )
+    assert abm.message == [Plain("channel text")]
+    event = QQOfficialMessageEvent(
+        abm.message_str, abm, SimpleNamespace(name="qq_official", id="qq"), "channel-1", None
+    )
+    assert follow_up_text(event) == ("channel text", None)

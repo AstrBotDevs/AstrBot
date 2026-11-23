@@ -38,6 +38,7 @@ from astrbot.core.pipeline.process_stage.method.agent_sub_stages import (
     webchat as webchat_build,
 )
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
+from astrbot.core.platform.message_type import MessageType
 from astrbot.core.platform.platform_metadata import PlatformMetadata
 from astrbot.core.provider import Provider
 from astrbot.core.provider.entities import ProviderRequest, ProviderType
@@ -3850,8 +3851,8 @@ async def test_file_default_prompt_survives_ordered_mention_display(
         extras["_consumed_provider_prefix"] = "/llm"
     chain.append(file)
     mock_event.message_obj.message = chain
-    mock_event.message_obj.ordered_mentions = True
-    mock_event.message_obj._self_mention_position_unknown = False
+    mock_event.get_platform_name.return_value = "aiocqhttp"
+    mock_event.get_message_type.return_value = MessageType.GROUP_MESSAGE
     mock_event.get_self_id.return_value = "bot-1"
     store = dict(extras)
     mock_event.get_extra.side_effect = lambda key, default=None: store.get(key, default)
