@@ -18,15 +18,21 @@ export default createVuetify({
   },
   defaults: {
     VBtn: {},
+    VBtnGroup: {
+      rounded: 'control'
+    },
+    VBtnToggle: {
+      rounded: 'control'
+    },
     VCard: {
-      rounded: 'lg'
+      rounded: 'card'
     },
     VSnackbar: {
       elevation: 6,
       rounded: 'lg'
     },
     VTextField: {
-      rounded: 'lg'
+      rounded: 'control'
     },
     VTooltip: {
       // set v-tooltip default location to top

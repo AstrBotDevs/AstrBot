@@ -12,11 +12,12 @@ from astrbot.core.agent.agent import Agent
 from astrbot.core.agent.handoff import HandoffTool
 from astrbot.core.agent.run_context import ContextWrapper
 from astrbot.core.agent.runners.tool_loop_agent_runner import ToolLoopAgentRunner
+from astrbot.core.agent.runtime import AgentPermissions, AgentRole, AgentSessionRef
 from astrbot.core.agent.tool import FunctionTool
 from astrbot.core.astr_agent_runtime.tool_executor import FunctionToolExecutor
-from astrbot.core.astr_agent_runtime.tools.computer_tools import ExecuteShellTool
 from astrbot.core.astr_agent_runtime.tools.computer_tools.shell import ShellSessionTool
 from astrbot.core.message.components import Image
+from astrbot.core.platform.platform_metadata import PlatformMetadata
 from astrbot.core.provider.func_tool_manager import (
     FunctionToolManager,
     _PermissionGuardedTool,
@@ -29,7 +30,13 @@ from astrbot.core.utils.active_event_registry import (
 class _DummyEvent:
     def __init__(self, message_components: list[object] | None = None) -> None:
         self.unified_msg_origin = "webchat:FriendMessage:webchat!user!session"
-        self.message_obj = SimpleNamespace(message=message_components or [])
+        self.message_obj = SimpleNamespace(
+            message=message_components or [],
+            sender=SimpleNamespace(user_id="alice", nickname="Alice"),
+            self_id="bot",
+            group=None,
+        )
+        self.plugins_name = None
         self.role = "member"
         self.extras: dict[str, object] = {}
 
@@ -53,6 +60,96 @@ def _build_run_context(message_components: list[object] | None = None):
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("kind", ["detach", "tool", "handoff"])
+@pytest.mark.parametrize("authorization", ["restricted_key", "runtime_member", "admin"])
+async def test_background_wakeup_preserves_effective_permissions(
+    monkeypatch, kind, authorization
+):
+    """Background completion must keep the initiating turn's permission ceiling."""
+    registry = ActiveEventRegistry()
+    monkeypatch.setattr(
+        "astrbot.core.astr_agent_runtime.tool_executor.active_event_registry", registry
+    )
+    run_context = _build_run_context()
+    context = run_context.context
+    event = context.event
+    event.message_obj.group = SimpleNamespace(group_id="group-id")
+    event.plugins_name = ["allowed_plugin"]
+    event.role = "admin"
+    if authorization == "restricted_key":
+        event.set_extra("_api_key_allow_admin_role", False)
+    elif authorization == "runtime_member":
+        context.permissions = AgentPermissions()
+    context.agent_session = AgentSessionRef("astrbot", "original")
+    queue = asyncio.Queue()
+    context.context = SimpleNamespace(
+        get_platform_inst=lambda _: SimpleNamespace(
+            meta=lambda: PlatformMetadata(
+                id="webchat", name="webchat", description="Test"
+            )
+        ),
+        get_event_queue=lambda: queue,
+    )
+
+    async def execute(*args, **kwargs):
+        # Another input may replace the live context before the tool finishes.
+        context.permissions = AgentPermissions(AgentRole.ADMIN)
+        event.set_extra("_api_key_allow_admin_role", True)
+        yield mcp.types.CallToolResult(
+            content=[
+                mcp.types.TextContent(type="text", text="first chunk"),
+                mcp.types.ImageContent(
+                    type="image", data="dGVzdA==", mimeType="image/png"
+                ),
+            ]
+        )
+        yield mcp.types.CallToolResult(
+            content=[mcp.types.TextContent(type="text", text="second chunk")],
+            structuredContent={"status": "done"},
+        )
+
+    if kind == "detach":
+        executor = execute()
+        pending = asyncio.create_task(anext(executor))
+        FunctionToolExecutor.detach(
+            tool=_DummyTool(),
+            run_context=run_context,
+            executor=executor,
+            pending_result=pending,
+            task_id="permission-test",
+            arguments={},
+        )
+    else:
+        monkeypatch.setattr(
+            FunctionToolExecutor,
+            "_execute_local" if kind == "tool" else "_execute_handoff",
+            execute,
+        )
+        method = (
+            FunctionToolExecutor._execute_background
+            if kind == "tool"
+            else FunctionToolExecutor._do_handoff_background
+        )
+        await method(_DummyTool(), run_context, "permission-test")
+
+    wakeup = await asyncio.wait_for(queue.get(), timeout=1)
+    expected = AgentRole.ADMIN if authorization == "admin" else AgentRole.MEMBER
+    assert AgentPermissions.from_event(wakeup).role == expected
+    assert wakeup.get_sender_id() == "alice"
+    assert wakeup.get_sender_name() == "Alice"
+    assert wakeup.get_group_id() == "group-id"
+    assert wakeup.plugins_name == ["allowed_plugin"]
+    name, result = wakeup.tool_result
+    assert name == _DummyTool().name
+    assert [block.type for block in result.content] == ["text", "image", "text"]
+    assert result.content[0].text == "first chunk"
+    assert result.content[1].data == "dGVzdA=="
+    assert result.content[2].text == "second chunk"
+    assert result.structuredContent == {"status": "done"}
+    assert "dGVzdA==" not in wakeup.message_str
+
+
+@pytest.mark.asyncio
 async def test_legacy_agent_registration_executes_nested_tool(monkeypatch):
     """An existing plugin can register an Agent and execute its nested tools."""
     from astrbot.api import agent
@@ -65,6 +162,7 @@ async def test_legacy_agent_registration_executes_nested_tool(monkeypatch):
     manager = FunctionToolManager()
     monkeypatch.setattr(registration, "llm_tools", manager)
     monkeypatch.setattr(executor, "llm_tools", manager)
+    monkeypatch.setattr(executor, "AstrAgentContext", SimpleNamespace)
 
     @agent(name="legacy_expert", instruction="Use the nested lookup tool.")
     async def legacy_expert():
@@ -249,11 +347,11 @@ def test_build_handoff_toolset_whitelist_warns_on_inactive_tool(monkeypatch, cap
 
     with caplog.at_level("WARNING"):
         toolset = FunctionToolExecutor._build_handoff_toolset(
-            _whitelist_run_context("none"), tools=["off_tool", "astrbot_grep_tool"]
+            _whitelist_run_context("local"), tools=["off_tool", "astrbot_grep_tool"]
         )
 
     # The inactive plugin tool is skipped with a warning, while an explicit
-    # builtin name still resolves through llm_tools.get_func.
+    # runtime tool name still resolves.
     assert toolset is not None
     assert toolset.get_tool("off_tool") is None
     assert toolset.get_tool("astrbot_grep_tool") is not None
@@ -283,32 +381,6 @@ def test_build_handoff_toolset_empty_whitelist_without_runtime_warns(caplog):
 
     assert toolset is None
     assert any("empty toolset" in rec.message for rec in caplog.records)
-
-
-def test_build_handoff_toolset_whitelist_skips_deactivated_runtime_tools(caplog):
-    mgr = FunctionToolManager()
-    mgr.get_builtin_tool(ExecuteShellTool).active = False
-
-    event = _DummyEvent()
-    context = SimpleNamespace(
-        get_config=lambda **_kwargs: {
-            "provider_settings": {"computer_use_runtime": "sandbox"}
-        },
-        get_llm_tool_manager=lambda: mgr,
-    )
-    run_context = ContextWrapper(context=SimpleNamespace(event=event, context=context))
-
-    with caplog.at_level("WARNING"):
-        toolset = FunctionToolExecutor._build_handoff_toolset(run_context, tools=[])
-
-    assert toolset is not None
-    assert toolset.get_tool("astrbot_execute_shell") is None
-    assert toolset.get_tool("astrbot_execute_ipython") is not None
-    assert any(
-        "deactivated runtime tools" in rec.message
-        and "astrbot_execute_shell" in rec.message
-        for rec in caplog.records
-    )
 
 
 @pytest.mark.parametrize(
@@ -482,9 +554,7 @@ async def test_do_handoff_background_reports_prepared_image_urls(
         classmethod(_fake_execute_handoff),
     )
     run_context = _build_run_context()
-    monkeypatch.setattr(
-        "astrbot.core.astr_agent_runtime.tool_executor.wake_main_agent", _fake_wake
-    )
+    monkeypatch.setattr("astrbot.core.astr_agent_runtime.tool_executor.wake_main_agent", _fake_wake)
     await FunctionToolExecutor._do_handoff_background(
         tool=_DummyTool(),
         run_context=run_context,
@@ -506,6 +576,9 @@ async def test_do_handoff_background_reports_prepared_image_urls(
 async def test_execute_handoff_skips_renormalize_when_image_urls_prepared(
     monkeypatch: pytest.MonkeyPatch,
 ):
+    monkeypatch.setattr(
+        "astrbot.core.astr_agent_runtime.tool_executor.AstrAgentContext", SimpleNamespace
+    )
     captured: dict = {}
 
     def _boom(_items):
@@ -538,8 +611,7 @@ async def test_execute_handoff_skips_renormalize_when_image_urls_prepared(
     )
 
     monkeypatch.setattr(
-        "astrbot.core.astr_agent_runtime.tool_executor.normalize_and_dedupe_strings",
-        _boom,
+        "astrbot.core.astr_agent_runtime.tool_executor.normalize_and_dedupe_strings", _boom
     )
 
     results = []
@@ -565,8 +637,7 @@ async def test_collect_handoff_image_urls_keeps_extensionless_existing_event_fil
 
     monkeypatch.setattr(Image, "convert_to_file_path", _fake_convert_to_file_path)
     monkeypatch.setattr(
-        "astrbot.core.astr_agent_runtime.tool_executor.get_astrbot_temp_path",
-        lambda: "/tmp",
+        "astrbot.core.astr_agent_runtime.tool_executor.get_astrbot_temp_path", lambda: "/tmp"
     )
     monkeypatch.setattr(
         "astrbot.core.utils.image_ref_utils.os.path.exists", lambda _: True
@@ -590,8 +661,7 @@ async def test_collect_handoff_image_urls_filters_extensionless_missing_event_fi
 
     monkeypatch.setattr(Image, "convert_to_file_path", _fake_convert_to_file_path)
     monkeypatch.setattr(
-        "astrbot.core.astr_agent_runtime.tool_executor.get_astrbot_temp_path",
-        lambda: "/tmp",
+        "astrbot.core.astr_agent_runtime.tool_executor.get_astrbot_temp_path", lambda: "/tmp"
     )
     monkeypatch.setattr(
         "astrbot.core.utils.image_ref_utils.os.path.exists", lambda _: False
@@ -610,6 +680,9 @@ async def test_collect_handoff_image_urls_filters_extensionless_missing_event_fi
 async def test_execute_handoff_passes_tool_call_timeout_to_tool_loop_agent(
     monkeypatch: pytest.MonkeyPatch,
 ):
+    monkeypatch.setattr(
+        "astrbot.core.astr_agent_runtime.tool_executor.AstrAgentContext", SimpleNamespace
+    )
     captured: dict = {}
 
     async def _fake_get_current_chat_provider_id(_umo):
@@ -664,8 +737,7 @@ async def test_collect_handoff_image_urls_filters_extensionless_file_outside_tem
 
     monkeypatch.setattr(Image, "convert_to_file_path", _fake_convert_to_file_path)
     monkeypatch.setattr(
-        "astrbot.core.astr_agent_runtime.tool_executor.get_astrbot_temp_path",
-        lambda: "/tmp",
+        "astrbot.core.astr_agent_runtime.tool_executor.get_astrbot_temp_path", lambda: "/tmp"
     )
     monkeypatch.setattr(
         "astrbot.core.utils.image_ref_utils.os.path.exists", lambda _: True
@@ -711,9 +783,7 @@ async def test_background_execution_lifecycle(
         delivered.set()
 
     wakeup = AsyncMock(side_effect=wake)
-    monkeypatch.setattr(
-        "astrbot.core.astr_agent_runtime.tool_executor.wake_main_agent", wakeup
-    )
+    monkeypatch.setattr("astrbot.core.astr_agent_runtime.tool_executor.wake_main_agent", wakeup)
     monkeypatch.setattr(
         FunctionToolExecutor,
         "_execute_local" if kind == "tool" else "_execute_handoff",
@@ -758,7 +828,9 @@ async def test_background_execution_lifecycle(
                 "\n</system_reminder>"
             )
         if phase == "failure":
-            assert "tool failed" in wakeup.call_args.kwargs["user_prompt"]
+            result = wakeup.call_args.kwargs["tool_result"][1]
+            assert result.isError
+            assert "tool failed" in result.content[0].text
         assert not registry._background_tasks
         if cancelled:
             assert [

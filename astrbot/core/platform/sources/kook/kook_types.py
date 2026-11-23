@@ -24,6 +24,7 @@ class KookApiPaths:
 
     # 消息相关
     ASSET_CREATE = f"{BASE_URL}{API_VERSION_PATH}/asset/create"
+    ASSET_VOICE_TOKEN = f"{BASE_URL}{API_VERSION_PATH}/asset/voice-token"
     ## 频道消息
     CHANNEL_MESSAGE_CREATE = f"{BASE_URL}{API_VERSION_PATH}/message/create"
     ## 私聊消息
@@ -65,6 +66,7 @@ class KookModuleType(str, Enum):
     DIVIDER = "divider"
     FILE = "file"
     AUDIO = "audio"
+    VOICE = "voice"
     VIDEO = "video"
     COUNTDOWN = "countdown"
     INVITE = "invite"
@@ -282,6 +284,11 @@ class FileModule(KookCardModelBase):
     """cover 仅音频有效, 是音频的封面图"""
 
 
+class VoiceModule(KookCardModelBase):
+    type: Literal[KookModuleType.VOICE] = KookModuleType.VOICE
+    media_id: int
+
+
 class CountdownModule(KookCardModelBase):
     """startTime 和 endTime 为毫秒时间戳，startTime 和 endTime 不能小于服务器当前时间戳。"""
 
@@ -310,6 +317,7 @@ AnyModule = Annotated[
     | ContextModule
     | DividerModule
     | FileModule
+    | VoiceModule
     | CountdownModule
     | InviteModule,
     Field(discriminator="type"),

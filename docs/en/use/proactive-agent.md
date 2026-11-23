@@ -41,7 +41,7 @@ You can also ask it to:
 - “Move my break reminder to 3 PM tomorrow.”
 - “Delete the news task I just created.”
 
-All group members can list **every task in the current group conversation**, including its creator. Regular members can only edit and delete tasks they created in that group. AstrBot admins can also delete other members' tasks in the current group, but editing remains limited to the creator. Tasks created in the WebUI without a recorded chat creator also appear in the corresponding group's list and can be deleted by AstrBot admins. These permissions stay within the current conversation and do not allow access across groups. In private chats, listing, editing, and deletion remain limited to tasks created by the current sender in the current conversation.
+All group members can list **every task in the current group conversation**, including its creator. Regular members can only edit and delete tasks they created in that group. AstrBot admins can edit or delete any task in the current group, including WebUI or legacy tasks without a recorded creator. Editing preserves the task’s original creator, including when no creator was recorded. These permissions stay within the current conversation and do not allow access across groups. In private chats, listing, editing, and deletion remain limited to tasks created by the current sender in the current conversation.
 
 ## Create and manage tasks in the WebUI
 

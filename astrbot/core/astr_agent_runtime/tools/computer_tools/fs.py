@@ -51,6 +51,7 @@ from astrbot.core.astr_agent_runtime.computer.local_file_security import (
     open_file_in_allowed_roots,
 )
 from astrbot.core.astr_agent_runtime.context import AstrAgentContext
+from astrbot.core.astr_agent_runtime.tools.output import prepare_tool_output
 from astrbot.core.message.components import File, Image
 from astrbot.core.utils.astrbot_path import (
     get_astrbot_builtin_plugin_path,
@@ -60,7 +61,6 @@ from astrbot.core.utils.astrbot_path import (
     get_astrbot_temp_path,
 )
 
-from ..registry import builtin_tool
 from . import util as computer_util
 from .util import (
     check_admin_permission,
@@ -71,12 +71,6 @@ from .util import (
     workspace_root_for_context,
 )
 
-_COMPUTER_RUNTIME_TOOL_CONFIG = {
-    "provider_settings.computer_use_runtime": ("local", "sandbox"),
-}
-_SANDBOX_RUNTIME_TOOL_CONFIG = {
-    "provider_settings.computer_use_runtime": "sandbox",
-}
 _IMAGE_FILE_SUFFIXES = {".bmp", ".gif", ".jpeg", ".jpg", ".png", ".webp"}
 
 
@@ -327,7 +321,6 @@ def _decode_escaped_text(value: str) -> str:
     )
 
 
-@builtin_tool(config=_COMPUTER_RUNTIME_TOOL_CONFIG)
 @dataclass
 class FileReadTool(FunctionTool):
     name: str = "astrbot_file_read_tool"
@@ -448,7 +441,6 @@ class FileReadTool(FunctionTool):
             return f"Error reading file: {exc}"
 
 
-@builtin_tool(config=_COMPUTER_RUNTIME_TOOL_CONFIG)
 @dataclass
 class FileWriteTool(FunctionTool):
     name: str = "astrbot_file_write_tool"
@@ -555,7 +547,6 @@ class FileWriteTool(FunctionTool):
             return f"Error writing file: {exc}"
 
 
-@builtin_tool(config=_COMPUTER_RUNTIME_TOOL_CONFIG)
 @dataclass
 class FileEditTool(FunctionTool):
     name: str = "astrbot_file_edit_tool"
@@ -688,7 +679,6 @@ class FileEditTool(FunctionTool):
             return f"Error editing file: {exc}"
 
 
-@builtin_tool(config=_COMPUTER_RUNTIME_TOOL_CONFIG)
 @dataclass
 class GrepTool(FunctionTool):
     name: str = "astrbot_grep_tool"
@@ -962,7 +952,6 @@ class GrepTool(FunctionTool):
             return f"Error searching files: {exc}"
 
 
-@builtin_tool(config=_SANDBOX_RUNTIME_TOOL_CONFIG)
 @dataclass
 class FileUploadTool(FunctionTool):
     name: str = "astrbot_upload_file"
@@ -1028,7 +1017,6 @@ class FileUploadTool(FunctionTool):
             return f"Error uploading file: {str(e)}"
 
 
-@builtin_tool(config=_SANDBOX_RUNTIME_TOOL_CONFIG)
 @dataclass
 class FileDownloadTool(FunctionTool):
     name: str = "astrbot_download_file"
@@ -1086,9 +1074,13 @@ class FileDownloadTool(FunctionTool):
                     else:
                         message_component = File(name=name, file=local_path)
                         sent_as = "file"
-                    await context.context.event.send(
-                        MessageChain(chain=[message_component])
-                    )
+                    message = MessageChain(chain=[message_component])
+                    if not prepare_tool_output(context.context, message):
+                        return (
+                            f"File downloaded successfully to {local_path} and prepared "
+                            f"as {sent_as} for caller delivery. It has not been sent."
+                        )
+                    await context.context.event.send(message)
                 except Exception as e:
                     logger.error(f"Error sending file message: {e}")
                     return (

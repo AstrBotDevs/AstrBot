@@ -9,6 +9,7 @@ from astrbot.core.agent_input import CollectedInput
 from astrbot.core.astr_agent_runtime.context import (
     AstrAgentContext,
 )
+from astrbot.core.astr_agent_runtime.history import ConversationHistoryObserver
 from astrbot.core.astr_agent_runtime.main_agent.providers import decoded_blocked
 from astrbot.core.astr_agent_runtime.runner import AgentRunner
 from astrbot.core.astr_agent_runtime.tools.cron_tools import FutureTaskTool
@@ -16,6 +17,7 @@ from astrbot.core.astr_agent_runtime.tools.message_tools import (
     GetGroupMessageHistoryTool,
     SendMessageToUserTool,
 )
+from astrbot.core.conversation_mgr import ConversationManager
 from astrbot.core.llm_error_messages import LLM_ERROR_MESSAGE_EXTRA_KEY
 from astrbot.core.pipeline.context_utils import call_event_hook
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
@@ -41,17 +43,9 @@ from . import (
 from .config import MainAgentBuildConfig
 
 if TYPE_CHECKING:
+    from astrbot.core.agent.conversation_events import ConversationEventWriter
     from astrbot.core.astr_agent_runtime.runtime import AstrAgentRuntime
-
-TOOL_CALL_PROMPT = (
-    "<tool_use_instructions>\n"
-    "When using tools: "
-    "never return an empty response; "
-    "briefly explain the purpose when starting a new type of task, but not before every tool call; "
-    "follow the tool schema exactly and do not invent parameters; "
-    "keep the conversation style consistent."
-    "\n</tool_use_instructions>"
-)
+    from astrbot.core.db.conversation import ConversationSnapshot
 
 TOOL_CALL_PROMPT_SKILLS_LIKE_MODE = (
     "<tool_use_instructions>\n"
@@ -87,6 +81,7 @@ class MainAgentBuildResult:
     agent_runner: AgentRunner
     provider_request: ProviderRequest
     provider: Provider
+    conversation_events: "ConversationEventWriter | None" = None
 
 
 async def build_main_agent(
@@ -100,6 +95,7 @@ async def build_main_agent(
     plugin_tools: ToolSet | None = None,
     plugin_skills: list[SkillInfo] | None = None,
     runtime: "AstrAgentRuntime | None" = None,
+    conversation_snapshot: "ConversationSnapshot | None" = None,
 ) -> MainAgentBuildResult | None:
     """Build a main agent through the same ordered stages for every trigger.
 
@@ -113,6 +109,7 @@ async def build_main_agent(
         plugin_tools: Core-authorized plugin tools, or None for legacy lookup.
         plugin_skills: Core-authorized plugin skills, or None for legacy lookup.
         runtime: Native session owner supplying internal agent services.
+        conversation_snapshot: Committed history already loaded by the session.
 
     Returns:
         An initialized runner with its request and provider, or None when the
@@ -133,11 +130,10 @@ async def build_main_agent(
     req = prepared.request
 
     # Seed caller capabilities before persona selection.
-    tool_mgr = plugin_context.get_llm_tool_manager()
     if config.enable_message_delivery:
         if req.func_tool is None:
             req.func_tool = ToolSet()
-        req.func_tool.add_tool(tool_mgr.get_builtin_tool(SendMessageToUserTool))
+        req.func_tool.add_tool(SendMessageToUserTool())
     await persona.apply_persona(
         req,
         config.provider_settings,
@@ -155,7 +151,7 @@ async def build_main_agent(
     if req.func_tool is not None:
         req.func_tool = plugins.filter_tools(event, req.func_tool)
     search_instructions = web_search.apply_web_search(
-        req, plugin_context, config.provider_settings, event
+        req, config.provider_settings, event
     )
     if config.llm_safety_mode:
         persona.apply_safety_instructions(config, req)
@@ -168,33 +164,32 @@ async def build_main_agent(
     )
     await computer_use.apply_computer_use(req, plugin_context, config, agent_context)
 
-    builtin_types = []
+    runtime_tool_types = []
     if config.add_cron_tools:
-        builtin_types.append(FutureTaskTool)
+        runtime_tool_types.append(FutureTaskTool)
     if event.platform_meta.support_proactive_message:
-        builtin_types.append(SendMessageToUserTool)
+        runtime_tool_types.append(SendMessageToUserTool)
     if (
         event.get_message_type() == MessageType.GROUP_MESSAGE
         and config.group_message_history_enabled
     ):
-        builtin_types.append(GetGroupMessageHistoryTool)
-    if builtin_types:
+        runtime_tool_types.append(GetGroupMessageHistoryTool)
+    if runtime_tool_types:
         if req.func_tool is None:
             req.func_tool = ToolSet()
-        for tool_type in builtin_types:
-            req.func_tool.add_tool(tool_mgr.get_builtin_tool(tool_type))
+        for tool_type in runtime_tool_types:
+            req.func_tool.add_tool(tool_type())
 
     if not await subagent.apply_subagents(req, plugin_context, event, runtime=runtime):
         return None
 
     # Final instructions describe the assembled capabilities and output mode.
-    if req.func_tool and req.func_tool.tools:
-        tool_prompt = (
-            TOOL_CALL_PROMPT
-            if config.tool_schema_mode == "full"
-            else TOOL_CALL_PROMPT_SKILLS_LIKE_MODE
-        )
-        req.system_prompt += f"\n{tool_prompt}\n"
+    if (
+        req.func_tool
+        and req.func_tool.tools
+        and config.tool_schema_mode == "skills_like"
+    ):
+        req.system_prompt += f"\n{TOOL_CALL_PROMPT_SKILLS_LIKE_MODE}\n"
     if event.get_extra("action_type") == "live":
         req.system_prompt += f"\n{LIVE_MODE_SYSTEM_PROMPT}\n"
     req.system_prompt += search_instructions
@@ -226,8 +221,25 @@ async def build_main_agent(
                 "Provider API base %s was blocked for security reasons", api_base
             )
             return None
+    writer = None
+    manager = plugin_context.conversation_manager
+    if req.conversation is not None and isinstance(manager, ConversationManager):
+        writer = await manager.create_event_writer(
+            req.conversation.cid,
+            unified_msg_origin=event.unified_msg_origin,
+            expected_revision=req.conversation.revision,
+            snapshot=conversation_snapshot,
+            link_display=event.get_platform_name() == "webchat",
+        )
     if config.call_request_hook:
-        if await call_event_hook(event, EventType.OnLLMRequestEvent, req):
+        if await call_event_hook(
+            event,
+            EventType.OnLLMRequestEvent,
+            req,
+            context_observer=ConversationHistoryObserver(writer, req)
+            if writer
+            else None,
+        ):
             return None
         # Hooks may add images; preserve the cache from input preparation.
         await prepare_request_images(
@@ -247,7 +259,11 @@ async def build_main_agent(
         config,
         agent_context,
         fallback_providers=fallbacks,
+        writer=writer,
     )
     return MainAgentBuildResult(
-        agent_runner=agent_runner, provider_request=req, provider=provider
+        agent_runner=agent_runner,
+        provider_request=req,
+        provider=provider,
+        conversation_events=writer,
     )

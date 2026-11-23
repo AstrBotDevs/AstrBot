@@ -1,4 +1,5 @@
 import { defineStore } from 'pinia';
+import { chatPreferences } from '@/utils/chatPreferences';
 import config, { type ThemeMode, resolveUiTheme } from '@/config';
 
 const DARK_THEMES: ReadonlySet<string> = new Set(['PurpleThemeDark']);
@@ -13,6 +14,7 @@ export const useCustomizerStore = defineStore('customizer', {
     uiTheme: config.uiTheme,
     themeMode: config.themeMode as ThemeMode,
     inputBg: config.inputBg,
+    chatNavigationInSidebar: chatPreferences().global.navigationInSidebar === true,
     chatSidebarOpen: false, // chat mode mobile sidebar state
     chatSidebarCollapsed: false, // chat mode desktop sidebar state
   }),
@@ -46,6 +48,11 @@ export const useCustomizerStore = defineStore('customizer', {
       const uiTheme = resolveUiTheme(mode);
       this.uiTheme = uiTheme;
       localStorage.setItem('uiTheme', uiTheme);
+    },
+
+    SET_CHAT_NAVIGATION_IN_SIDEBAR(payload: boolean) {
+      this.chatNavigationInSidebar = payload;
+      chatPreferences((preferences) => { preferences.global.navigationInSidebar = payload; });
     },
 
     TOGGLE_CHAT_SIDEBAR() {
