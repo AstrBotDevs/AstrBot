@@ -652,12 +652,44 @@ class MCPClient:
         await self.session.initialize()
 
     async def list_tools_and_save(self) -> mcp.ListToolsResult:
-        """List all tools from the server and save them to self.tools"""
+        """List all tools from the server and save them to self.tools.
+
+        Returns:
+            The combined result from all pages, preserving metadata from the first.
+
+        Raises:
+            RuntimeError: If the server repeats a pagination cursor.
+            ValueError: If tool names repeat or normalize to the same provider name.
+        """
         if not self.session:
             raise Exception("MCP Client is not initialized")
         response = await self.session.list_tools()
-        self.tools = response.tools
-        return response
+        tools = list(response.tools)
+        cursor = response.nextCursor
+        seen_cursors = set()
+        while cursor is not None:
+            if cursor in seen_cursors:
+                raise RuntimeError(f"MCP server repeated tools/list cursor: {cursor!r}")
+            seen_cursors.add(cursor)
+            page = await self.session.list_tools(cursor=cursor)
+            tools.extend(page.tools)
+            cursor = page.nextCursor
+
+        normalized_names: dict[str, str] = {}
+        for tool in tools:
+            # Match MCPTool's provider-facing name before publishing the cache.
+            normalized_name = re.sub(r"[^A-Za-z0-9_-]+", "_", tool.name)
+            previous_name = normalized_names.get(normalized_name)
+            if previous_name is not None:
+                raise ValueError(
+                    f"MCP tool names {previous_name!r} and {tool.name!r} "
+                    f"both normalize to {normalized_name!r}"
+                )
+            normalized_names[normalized_name] = tool.name
+
+        result = response.model_copy(update={"tools": tools, "nextCursor": None})
+        self.tools = tools
+        return result
 
     def _cancel_connection_task(self, task: asyncio.Task) -> None:
         """Cancel a connection owner task and track it until it finishes."""
