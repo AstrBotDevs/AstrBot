@@ -10,6 +10,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 from types import SimpleNamespace
+from typing import cast
 from unittest.mock import AsyncMock, Mock
 
 import httpx
@@ -23,6 +24,7 @@ from PIL import Image as PILImage
 import astrbot.dashboard.services.config_service as config_service
 import astrbot.dashboard.services.stat_service as stat_service
 from astrbot.core import file_token_service
+from astrbot.core.db import BaseDatabase
 from astrbot.core.utils import llm_metadata
 from astrbot.dashboard.api.app import create_dashboard_asgi_app
 from astrbot.dashboard.api.backups import download_backup as download_backup_route
@@ -36,7 +38,7 @@ from astrbot.dashboard.asgi_runtime import (
 from astrbot.dashboard.responses import ok
 from astrbot.dashboard.services.api_key_service import ApiKeyService
 from astrbot.dashboard.services.auth_service import DASHBOARD_JWT_COOKIE_NAME
-from astrbot.dashboard.services.backup_service import BackupDownload
+from astrbot.dashboard.services.backup_service import BackupDownload, BackupService
 from astrbot.dashboard.services.plugin_service import (
     PLUGIN_UPDATE_SOURCE_REQUIRED_MESSAGE,
     PluginServiceError,
@@ -96,6 +98,7 @@ class FakeDb:
         self.touched_key_ids: list[str] = []
         self.umo_ids = ["webchat:FriendMessage:webchat!user!session-1"]
         self.preferences: list[object] = []
+        self.get_umo_senders = AsyncMock(return_value=[])
 
     async def get_active_api_key_by_hash(self, key_hash: str) -> FakeApiKey | None:
         return self.api_keys.get(key_hash)
@@ -783,7 +786,7 @@ def fake_core_lifecycle():
 def asgi_app(fake_core_lifecycle, fake_db: FakeDb):
     app = create_dashboard_asgi_app(
         core_lifecycle=fake_core_lifecycle,
-        db=fake_db,
+        db=cast(BaseDatabase, fake_db),
         jwt_secret=JWT_SECRET,
     )
     app.state.dashboard_app_adapter = FastAPIAppAdapter(app)
@@ -922,7 +925,9 @@ async def test_version_routes_return_startup_runtime_snapshot(
         stat_service.StatService, "is_default_cred", AsyncMock(return_value=False)
     )
     app = create_dashboard_asgi_app(
-        core_lifecycle=fake_core_lifecycle, db=fake_db, jwt_secret=JWT_SECRET
+        core_lifecycle=fake_core_lifecycle,
+        db=cast(BaseDatabase, fake_db),
+        jwt_secret=JWT_SECRET,
     )
 
     # Environment changes take effect in this snapshot after restarting AstrBot.
@@ -976,7 +981,7 @@ async def test_public_versions_route_uses_static_folder(
 
     app = create_dashboard_asgi_app(
         core_lifecycle=fake_core_lifecycle,
-        db=fake_db,
+        db=cast(BaseDatabase, fake_db),
         jwt_secret=JWT_SECRET,
         static_folder=str(static_folder),
     )
@@ -1126,7 +1131,7 @@ async def test_dashboard_static_dist_files_are_served(
 
     app = create_dashboard_asgi_app(
         core_lifecycle=fake_core_lifecycle,
-        db=fake_db,
+        db=cast(BaseDatabase, fake_db),
         jwt_secret=JWT_SECRET,
         static_folder=str(static_folder),
     )
@@ -1209,7 +1214,7 @@ async def test_dashboard_index_clears_legacy_cache_only_for_desktop_bundle(
 
     app = create_dashboard_asgi_app(
         core_lifecycle=fake_core_lifecycle,
-        db=fake_db,
+        db=cast(BaseDatabase, fake_db),
         jwt_secret=JWT_SECRET,
         static_folder=str(static_folder),
     )
@@ -1242,7 +1247,8 @@ async def test_v1_backup_download_accepts_bearer_token(
     prepare_download = Mock(
         return_value=BackupDownload(path=str(backup_path), filename=filename)
     )
-    service = SimpleNamespace(
+    service = Mock(
+        spec=BackupService,
         config={"dashboard": {"jwt_secret": JWT_SECRET}},
         prepare_download=prepare_download,
     )
@@ -1616,16 +1622,22 @@ async def test_v1_active_umos_filters_by_exact_platform_instance(
 
 @pytest.mark.asyncio
 async def test_v1_sender_lookup_requires_auth_and_returns_source(
-    asgi_client: httpx.AsyncClient, fake_db: FakeDb,
+    asgi_client: httpx.AsyncClient,
+    fake_db: FakeDb,
 ):
     """Expose source session names without allowing unauthenticated lookup."""
-    fake_db.get_umo_senders = AsyncMock(return_value=[(
-        SimpleNamespace(umo="qq:GroupMessage:1000", sender_id="123", sender_name="Alice"),
-        None,
-    )])
+    fake_db.get_umo_senders.return_value = [
+        (
+            SimpleNamespace(
+                umo="qq:GroupMessage:1000", sender_id="123", sender_name="Alice"
+            ),
+            None,
+        )
+    ]
     assert (await asgi_client.get("/api/v1/sessions/senders")).status_code == 401
     response = await asgi_client.get(
-        "/api/v1/sessions/senders", params={"search": " Alice ", "limit": 10},
+        "/api/v1/sessions/senders",
+        params={"search": " Alice ", "limit": 10},
         headers=_jwt_headers(),
     )
     assert response.status_code == 200
@@ -1647,22 +1659,34 @@ async def test_v1_sender_lookup_requires_auth_and_returns_source(
     fake_db.get_umo_senders.assert_awaited_once_with("", 101, ["123", "456"], offset=0)
     for limit in (0, 101):
         response = await asgi_client.get(
-            "/api/v1/sessions/senders", params={"limit": limit}, headers=_jwt_headers(),
+            "/api/v1/sessions/senders",
+            params={"limit": limit},
+            headers=_jwt_headers(),
         )
         assert response.status_code == 422
 
 
 @pytest.mark.asyncio
 async def test_v1_sender_lookup_pages_results_and_validates_page(
-    asgi_client: httpx.AsyncClient, fake_db: FakeDb,
+    asgi_client: httpx.AsyncClient,
+    fake_db: FakeDb,
 ):
     """Pass page offsets through and hide the extra row used to detect the next page."""
-    fake_db.get_umo_senders = AsyncMock(return_value=[
-        (SimpleNamespace(umo="qq:GroupMessage:room", sender_id=str(index), sender_name=f"User {index}"), None)
+    fake_db.get_umo_senders.return_value = [
+        (
+            SimpleNamespace(
+                umo="qq:GroupMessage:room",
+                sender_id=str(index),
+                sender_name=f"User {index}",
+            ),
+            None,
+        )
         for index in range(3)
-    ])
+    ]
     response = await asgi_client.get(
-        "/api/v1/sessions/senders", params={"page": 2, "limit": 2}, headers=_jwt_headers(),
+        "/api/v1/sessions/senders",
+        params={"page": 2, "limit": 2},
+        headers=_jwt_headers(),
     )
     assert response.status_code == 200
     data = response.json()["data"]
@@ -1672,7 +1696,9 @@ async def test_v1_sender_lookup_pages_results_and_validates_page(
     fake_db.get_umo_senders.assert_awaited_once_with("", 3, None, offset=2)
     for page in (0, -1):
         response = await asgi_client.get(
-            "/api/v1/sessions/senders", params={"page": page}, headers=_jwt_headers(),
+            "/api/v1/sessions/senders",
+            params={"page": page},
+            headers=_jwt_headers(),
         )
         assert response.status_code == 422
 
@@ -1726,8 +1752,13 @@ async def test_v1_system_config_update_preserves_independent_bot_provider_sectio
 async def test_config_update_revokes_only_affected_shell_sessions(
     asgi_app, fake_core_lifecycle, monkeypatch, tmp_path, change
 ):
+    from astrbot.core.agent.run_context import ContextWrapper
     from astrbot.core.astr_agent_runtime.computer import computer_client
-    from astrbot.core.astr_agent_runtime.computer.booters.local import LocalBooter
+    from astrbot.core.astr_agent_runtime.computer.booters.local import (
+        LocalBooter,
+        LocalShellComponent,
+    )
+    from astrbot.core.astr_agent_runtime.context import AstrAgentContext
     from astrbot.core.astr_agent_runtime.tools.computer_tools import (
         shell as shell_tools,
     )
@@ -1752,7 +1783,10 @@ async def test_config_update_revokes_only_affected_shell_sessions(
     monkeypatch.setattr(
         shell_tools, "workspace_root_for_context", AsyncMock(return_value=tmp_path)
     )
+    shell = booter.shell
+    assert isinstance(shell, LocalShellComponent)
     sessions = []
+    admin_context = None
     try:
         for role, profile, sender_id in (
             ("member", config, "member"),
@@ -1760,22 +1794,20 @@ async def test_config_update_revokes_only_affected_shell_sessions(
             ("admin", other_config, "creator"),
             ("admin", config, "other-admin"),
         ):
-            context = SimpleNamespace(
-                context=SimpleNamespace(
-                    context=SimpleNamespace(get_config=lambda umo, p=profile: p),
-                    event=SimpleNamespace(
-                        role=role,
-                        unified_msg_origin="test:friend:revocation",
-                        get_sender_id=lambda sender_id=sender_id: sender_id,
-                    ),
-                )
+            agent_context = SimpleNamespace(
+                context=SimpleNamespace(get_config=lambda umo, p=profile: p),
+                event=SimpleNamespace(
+                    role=role,
+                    unified_msg_origin="test:friend:revocation",
+                    get_sender_id=lambda sender_id=sender_id: sender_id,
+                ),
             )
-            result = json.loads(
-                await shell_tools.LocalExecuteShellTool().call(
-                    context, command='python -u -c "input()"', yield_time_ms=0
-                )
+            context = ContextWrapper(context=cast(AstrAgentContext, agent_context))
+            result = await shell_tools.LocalExecuteShellTool().call(
+                context, command='python -u -c "input()"', yield_time_ms=0
             )
-            sessions.append(booter.shell._sessions[result["session_id"]])
+            assert isinstance(result, str)
+            sessions.append(shell._sessions[json.loads(result)["session_id"]])
             if profile is config and sender_id == "creator":
                 admin_context = context
 
@@ -1801,14 +1833,16 @@ async def test_config_update_revokes_only_affected_shell_sessions(
             for index, session in enumerate(sessions)
             if index != revoked_index
         )
-        assert sessions[revoked_index].session_id not in booter.shell._sessions
+        assert sessions[revoked_index].session_id not in shell._sessions
         if change == "admin_removal":
+            assert admin_context is not None
             assert admin_context.context.event.role == "admin"
             result = await shell_tools.LocalExecuteShellTool().call(
                 admin_context, command="echo unexpected", yield_time_ms=0
             )
+            assert isinstance(result, str)
             assert "permissions changed" in result
-            assert len(booter.shell._sessions) == 3
+            assert len(shell._sessions) == 3
 
         # Pre-upgrade sessions must not acquire a grant from the current config.
         sessions[2].permission_check = None
@@ -1816,9 +1850,9 @@ async def test_config_update_revokes_only_affected_shell_sessions(
         payload["provider_settings"]["computer_use_runtime"] = "none"
         await service.update_profile("default", payload)
         assert all(session.process.returncode is not None for session in sessions)
-        assert not booter.shell._sessions
+        assert not shell._sessions
     finally:
-        await booter.shell.shutdown_sessions()
+        await booter.shutdown()
 
 
 @pytest.mark.asyncio
@@ -2225,12 +2259,16 @@ async def test_v1_safe_provider_routes_accept_slash_ids(
     assert get_response.json()["data"]["provider"]["id"] == provider_id
     assert schema_response.status_code == 200
     config_schema = schema_response.json()["data"]["config_schema"]
-    presets = config_schema["provider"]["items"]["custom_extra_body"][
-        "template_schema"
-    ]
-    assert set(presets) == {"reasoning_effort"}
+    provider_fields = config_schema["provider"]["items"]
+    thinking_fields = provider_fields["gm_thinking_config"]["items"]
+    assert thinking_fields["level"] == {"invisible": True}
+    presets = provider_fields["custom_extra_body"]["template_schema"]
+    assert set(presets) == {"reasoning_effort", "max_tokens", "temperature", "top_p"}
     assert presets["reasoning_effort"]["type"] == "string"
-    assert "default" not in presets["reasoning_effort"]
+    assert presets["reasoning_effort"]["default"] == "high"
+    assert presets["max_tokens"]["default"] == 8192
+    assert presets["temperature"]["default"] == 0.6
+    assert presets["top_p"]["default"] == 1.0
     assert path_test_response.status_code == 200
     assert path_test_response.json()["data"]["status"] == "available"
     assert safe_test_response.status_code == 200
@@ -3401,11 +3439,11 @@ async def test_multipart_parts_preserves_duplicate_form_values():
 
     from astrbot.dashboard.api.multipart import multipart_parts
 
-    class FakeRequest:
-        async def form(self):
-            return FormData([("tag", "one"), ("tag", "two")])
-
-    form, files = await multipart_parts(FakeRequest())
+    request = Mock(
+        spec=Request,
+        form=AsyncMock(return_value=FormData([("tag", "one"), ("tag", "two")])),
+    )
+    form, files = await multipart_parts(request)
 
     assert form.getlist("tag") == ["one", "two"]
     assert not files
@@ -5092,17 +5130,30 @@ async def test_bot_delete_cleanup_query_is_validated(asgi_app, asgi_client, rout
 
 
 @pytest.mark.asyncio
-async def test_session_binding_distinguishes_follow_from_omitted_profile(asgi_client, monkeypatch):
-    from astrbot.dashboard.services.session_management_service import SessionManagementService
+async def test_session_binding_distinguishes_follow_from_omitted_profile(
+    asgi_client, monkeypatch
+):
+    from astrbot.dashboard.services.session_management_service import (
+        SessionManagementService,
+    )
 
     update = AsyncMock(return_value={})
     monkeypatch.setattr(SessionManagementService, "update_session_rule", update)
-    payload = {"umo": "test:GroupMessage:42", "rule_key": "config_overrides", "rule_value": {}}
+    payload = {
+        "umo": "test:GroupMessage:42",
+        "rule_key": "config_overrides",
+        "rule_value": {},
+    }
     for selection in ({}, {"profile_id": None}, {"profile_id": "default"}):
-        response = await asgi_client.post("/api/v1/sessions/rules", headers=_jwt_headers(), json={**payload, **selection})
+        response = await asgi_client.post(
+            "/api/v1/sessions/rules",
+            headers=_jwt_headers(),
+            json={**payload, **selection},
+        )
         assert response.status_code == 200
         assert response.json()["status"] == "ok"
-        assert update.await_args.args[0] == {**payload, **selection}
+        update.assert_awaited_once_with({**payload, **selection})
+        update.reset_mock()
 
 
 @pytest.mark.asyncio

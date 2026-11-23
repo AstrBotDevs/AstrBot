@@ -3,7 +3,7 @@
     <template v-if="slider">
       <span>{{ slider.min ?? 0 }}</span>
       <v-slider
-        :model-value="Number(modelValue) || 0"
+        :model-value="Number(modelValue === '' || modelValue == null ? sliderPreview : modelValue) || 0"
         @update:model-value="value => { badInput = false; numericTemp = null; emit('update:modelValue', value) }"
         :min="slider.min ?? 0"
         :max="slider.max ?? 100"
@@ -50,6 +50,7 @@ import { useI18n } from '@/i18n/composables'
 const props = defineProps({
   modelValue: { type: [Number, String], default: '' },
   slider: { type: Object, default: null },
+  sliderPreview: { type: Number, default: undefined },
   min: { type: Number, default: undefined },
   max: { type: Number, default: undefined },
   integer: { type: Boolean, default: false },

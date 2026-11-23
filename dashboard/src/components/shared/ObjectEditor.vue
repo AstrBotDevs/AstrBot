@@ -39,6 +39,7 @@
                   <ReasoningEffortInput
                     v-if="template.render_type === 'reasoning_effort'"
                     :model-value="getTemplateValue(templateKey)"
+                    :suggested-value="template.default"
                     @update:model-value="updateTemplateValue(templateKey, $event)"
                   />
                   <v-select
@@ -68,11 +69,12 @@
                     :model-value="getTemplateValue(templateKey)"
                     @update:model-value="updateTemplateValue(templateKey, $event)"
                     :slider="template.slider"
+                    :slider-preview="inline ? template.default : undefined"
                     :min="template.min"
                     :max="template.max"
                     :integer="template.integer"
                     :aria-label="getTemplateTitle(template, templateKey)"
-                    :placeholder="inline ? t('core.common.objectEditor.omitWhenEmpty') : t('core.common.objectEditor.placeholders.numberValue')"
+                    :placeholder="inline ? String(template.default ?? t('core.common.objectEditor.omitWhenEmpty')) : t('core.common.objectEditor.placeholders.numberValue')"
                   />
                   <v-switch
                     v-else-if="template.type === 'boolean' || template.type === 'bool'"
@@ -473,6 +475,7 @@ function getTemplateValue(templateKey) {
   if (pair) {
     return pair.value
   }
+  if (props.inline) return ''
   const template = templateSchema.value[templateKey]
   return template?.default ?? ''
 }

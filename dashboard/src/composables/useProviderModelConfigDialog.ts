@@ -11,14 +11,29 @@ interface UseProviderModelConfigDialogOptions {
   showMessage: (message: string, color?: string) => void
 }
 
-// Fallback for Gemini 4 models without a known list of reasoning levels.
-const GEMINI_4_DEFAULT_REASONING_LEVELS = ['auto', 'low', 'medium', 'high', 'xhigh']
+const GEMINI_3_DEFAULT_REASONING_LEVELS = ['auto', 'minimal', 'low', 'medium', 'high']
+const GEMINI_3_REASONING_LEVELS = {
+  'gemini-3.1-pro-preview': ['auto', 'low', 'medium', 'high'],
+  'gemini-3.5-flash-lite': ['auto', 'minimal', 'low', 'medium', 'high'],
+  'gemini-3.8-flash': ['auto', 'low', 'medium', 'high']
+}
 
+const GEMINI_4_DEFAULT_REASONING_LEVELS = ['auto', 'low', 'medium', 'high', 'xhigh']
 const GEMINI_4_REASONING_LEVELS = {
   'gemini-4-carbon': ['auto', 'low', 'medium', 'high'],
   'gemini-4-argon': ['auto', 'low', 'medium', 'high'],
   'gemini-4-neon': ['auto', 'low', 'medium', 'high', 'xhigh'],
   'gemini-4-hydrogen': ['auto', 'low', 'medium', 'high', 'xhigh']
+}
+
+function geminiReasoningLevels(modelName: string) {
+  const isGemini4 = modelName.startsWith('gemini-4')
+  if (!isGemini4 && !modelName.startsWith('gemini-3') && !modelName.startsWith('gemini-3.')) return
+
+  const modelLevels = isGemini4 ? GEMINI_4_REASONING_LEVELS : GEMINI_3_REASONING_LEVELS
+  return Object.entries(modelLevels).find(([modelId]) =>
+    modelName === modelId || modelName.startsWith(`${modelId}-`)
+  )?.[1] ?? (isGemini4 ? GEMINI_4_DEFAULT_REASONING_LEVELS : GEMINI_3_DEFAULT_REASONING_LEVELS)
 }
 
 export function useProviderModelConfigDialog(options: UseProviderModelConfigDialogOptions) {
@@ -56,22 +71,21 @@ export function useProviderModelConfigDialog(options: UseProviderModelConfigDial
     }
 
     const extraBody = schema.provider.items.custom_extra_body
+    const adapterType = selectedProviderSource.value?.type || providerEditData.value?.type
     if (extraBody?.template_schema) {
       extraBody.render_type = 'inline'
-      if (selectedProviderSource.value?.type === 'googlegenai_chat_completion') {
-        const { reasoning_effort } = extraBody.template_schema
-        extraBody.template_schema = {}
-        if (modelName.startsWith('gemini-4')) {
-          const modelLevels = Object.entries(GEMINI_4_REASONING_LEVELS).find(([modelId]) =>
-            modelName === modelId || modelName.startsWith(`${modelId}-`)
-          )?.[1]
-          extraBody.template_schema.reasoning_effort = {
-            ...reasoning_effort,
-            name: 'Reasoning Effort',
-            type: 'string',
-            options: modelLevels ?? GEMINI_4_DEFAULT_REASONING_LEVELS
-          }
+      if (adapterType === 'googlegenai_chat_completion') {
+        const { reasoning_effort, max_tokens, temperature, top_p } = extraBody.template_schema
+        const options = geminiReasoningLevels(modelName)
+        const geminiTemplates: Record<string, any> = {}
+        if (options) {
+          geminiTemplates.reasoning_effort = { ...reasoning_effort, default: undefined, options }
         }
+        // The Gemini SDK accepts max_output_tokens instead of max_tokens.
+        geminiTemplates.max_output_tokens = { ...max_tokens, name: 'Max Output Tokens' }
+        geminiTemplates.temperature = { ...temperature, default: 1 }
+        geminiTemplates.top_p = top_p
+        extraBody.template_schema = geminiTemplates
       } else if (extraBody.template_schema.reasoning_effort) {
         if (modelName.startsWith('gemini-')) {
           delete extraBody.template_schema.reasoning_effort.default
@@ -107,8 +121,6 @@ export function useProviderModelConfigDialog(options: UseProviderModelConfigDial
     if (providerType === 'chat_completion') {
       // Omitted values still need an editable field when the dialog is reopened.
       editableProvider.max_context_tokens ??= ''
-    }
-    if (selectedProviderSource.value?.type === 'googlegenai_chat_completion') {
       editableProvider.custom_extra_body ??= {}
     }
     // Keep model fields together without introducing fields on other provider types.

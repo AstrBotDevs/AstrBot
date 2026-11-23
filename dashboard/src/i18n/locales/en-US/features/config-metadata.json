@@ -1591,6 +1591,26 @@
         "description": "Custom request body parameters",
         "hint": "Add extra request parameters supported by the provider.",
         "template_schema": {
+          "temperature": {
+            "description": "Temperature",
+            "hint": "Controls output randomness, typically from 0 to 2. Higher values make low-probability tokens more likely to appear. Manual adjustment is not recommended.",
+            "name": "Temperature"
+          },
+          "top_p": {
+            "description": "Top-p sampling",
+            "hint": "Nucleus sampling parameter, typically from 0 to 1. Controls how the model filters out low-probability tokens. Manual adjustment is not recommended.",
+            "name": "Top-p"
+          },
+          "max_tokens": {
+            "description": "Max output tokens",
+            "hint": "Maximum number of output tokens allowed, including reasoning tokens. Manual adjustment is not recommended.",
+            "name": "Max Tokens"
+          },
+          "max_output_tokens": {
+            "description": "Max output tokens",
+            "hint": "Maximum number of output tokens allowed, including reasoning tokens. Manual adjustment is not recommended.",
+            "name": "Max Output Tokens"
+          },
           "reasoning_effort": {
             "description": "Reasoning effort",
             "hint": "Supported effort levels vary by model, and some options may have no effect.",
@@ -1808,10 +1828,6 @@
         "budget": {
           "description": "Thinking Budget",
           "hint": "Thinking token budget for Gemini 2.5. Leave blank to use the model default. See https://ai.google.dev/gemini-api/docs/thinking#set-budget"
-        },
-        "level": {
-          "description": "Thinking Level",
-          "hint": "See https://ai.google.dev/gemini-api/docs/thinking#thinking-levels"
         }
       },
       "anth_thinking_config": {

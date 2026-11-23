@@ -31,6 +31,13 @@ from ..register import register_provider_adapter
 from .gemini_api_common import gemini_api_version
 from .request_retry import retry_provider_request
 
+GEMINI_3_FALLBACK_THINKING_LEVELS = ("MINIMAL", "LOW", "MEDIUM", "HIGH")
+GEMINI_3_THINKING_LEVELS = {
+    "gemini-3.1-pro-preview": ("LOW", "MEDIUM", "HIGH"),
+    "gemini-3.5-flash-lite": ("MINIMAL", "LOW", "MEDIUM", "HIGH"),
+    "gemini-3.8-flash": ("LOW", "MEDIUM", "HIGH"),
+}
+
 GEMINI_4_FALLBACK_THINKING_LEVELS = ("LOW", "MEDIUM", "HIGH", "XHIGH")
 
 GEMINI_4_THINKING_LEVELS = {
@@ -130,7 +137,11 @@ class ProviderGoogleGenAI(Provider):
             http_options=http_options,
         ).aio
         # Keep only AstrBot's UA across SDK versions that merge header case variants.
-        headers = self.client._api_client._http_options.headers
+        http_options = self.client._api_client._http_options
+        headers = http_options.headers
+        if headers is None:
+            headers = {}
+            http_options.headers = headers
         headers["user-agent"] = self.request_headers["User-Agent"]
         headers.pop("User-Agent", None)
 
@@ -237,6 +248,7 @@ class ProviderGoogleGenAI(Provider):
         """
         model = cast(str, payloads.get("model", self.get_model()))
         model_name = model.rsplit("/", 1)[-1].lower()
+        is_gemini_3 = model_name.startswith("gemini-3")
         is_gemini_4 = model_name.startswith("gemini-4")
         if not modalities or is_gemini_4:
             modalities = ["TEXT"]
@@ -298,7 +310,6 @@ class ProviderGoogleGenAI(Provider):
             raise ValueError("Gemini custom_extra_body must be a JSON object.")
 
         thinking_config = None
-        thinking_settings = self.provider_config.get("gm_thinking_config") or {}
         if model_name in [
             "gemini-2.5-pro",
             "gemini-2.5-pro-preview",
@@ -310,36 +321,27 @@ class ProviderGoogleGenAI(Provider):
             "gemini-live-2.5-flash-preview-native-audio-09-2025",
         ]:
             # The thinkingBudget parameter, introduced with the Gemini 2.5 series
+            thinking_settings = self.provider_config.get("gm_thinking_config") or {}
             thinking_budget = thinking_settings.get("budget")
             if thinking_budget not in (None, ""):
                 thinking_config = types.ThinkingConfig(
                     thinking_budget=thinking_budget,
                 )
-        # TODO: Drop legacy models support.
-        # We have too much fragile legacy workaround here.
-        elif is_gemini_4 or model_name.startswith(("gemini-3-", "gemini-3.")):
-            thinking_level = (
-                extra_body.get("reasoning_effort")
+        elif is_gemini_3 or is_gemini_4:
+            thinking_level = extra_body.get("reasoning_effort")
+            model_levels, fallback_levels = (
+                (GEMINI_4_THINKING_LEVELS, GEMINI_4_FALLBACK_THINKING_LEVELS)
                 if is_gemini_4
-                else thinking_settings.get("level")
+                else (GEMINI_3_THINKING_LEVELS, GEMINI_3_FALLBACK_THINKING_LEVELS)
             )
-
-            if is_gemini_4:
-                allowed_levels = next(
-                    (
-                        levels
-                        for model_id, levels in GEMINI_4_THINKING_LEVELS.items()
-                        if model_name == model_id
-                        or model_name.startswith(f"{model_id}-")
-                    ),
-                    GEMINI_4_FALLBACK_THINKING_LEVELS,
-                )
-
-            # Workaround. Recommended to drop support after Gemini 4 Neon release.
-            elif model_name.startswith(("gemini-3.7", "gemini-3.8")):
-                allowed_levels = ("LOW", "MEDIUM", "HIGH")
-            else:
-                allowed_levels = ("MINIMAL", "LOW", "MEDIUM", "HIGH")
+            allowed_levels = next(
+                (
+                    levels
+                    for model_id, levels in model_levels.items()
+                    if model_name == model_id or model_name.startswith(f"{model_id}-")
+                ),
+                fallback_levels,
+            )
             if isinstance(thinking_level, str) and (
                 thinking_level := thinking_level.strip().upper()
             ) not in {"", "AUTO"}:
@@ -358,7 +360,7 @@ class ProviderGoogleGenAI(Provider):
         generation_config = extra_body | {
             key: value for key, value in payloads.items() if key in sdk_fields
         }
-        if is_gemini_4:
+        if is_gemini_3 or is_gemini_4:
             generation_config.pop("reasoning_effort", None)
 
         # The adapter owns transport settings and expects a parsed SDK response.
@@ -701,6 +703,9 @@ class ProviderGoogleGenAI(Provider):
         conversation_id: str | None = None,
     ) -> LLMResponse:
         """非流式请求 Gemini API"""
+        client = self.client
+        if client is None:
+            raise RuntimeError("Gemini client is closed.")
         system_instruction = next(
             (msg["content"] for msg in payloads["messages"] if msg["role"] == "system"),
             None,
@@ -728,7 +733,7 @@ class ProviderGoogleGenAI(Provider):
                 async with self._conversation_header(conversation_id):
                     result = await retry_provider_request(
                         "Gemini",
-                        lambda: self.client.models.generate_content(
+                        lambda: client.models.generate_content(
                             model=model,
                             contents=cast(types.ContentListUnion, conversation),
                             config=config,
@@ -804,6 +809,9 @@ class ProviderGoogleGenAI(Provider):
         conversation_id: str | None = None,
     ) -> AsyncGenerator[LLMResponse, None]:
         """流式请求 Gemini API"""
+        client = self.client
+        if client is None:
+            raise RuntimeError("Gemini client is closed.")
         system_instruction = next(
             (msg["content"] for msg in payloads["messages"] if msg["role"] == "system"),
             None,
@@ -823,7 +831,7 @@ class ProviderGoogleGenAI(Provider):
                 async with self._conversation_header(conversation_id):
                     result = await retry_provider_request(
                         "Gemini",
-                        lambda: self.client.models.generate_content_stream(
+                        lambda: client.models.generate_content_stream(
                             model=model,
                             contents=cast(types.ContentListUnion, conversation),
                             config=config,
@@ -1035,9 +1043,10 @@ class ProviderGoogleGenAI(Provider):
         system_prompt=None,
         tool_calls_result=None,
         model=None,
-        extra_user_content_parts=None,
         tool_choice: Literal["auto", "required"] = "auto",
         request_max_retries: int | None = None,
+        *,
+        extra_user_content_parts=None,
         **kwargs,
     ) -> AsyncGenerator[LLMResponse, None]:
         conversation_id = kwargs.pop("conversation_id", None)
@@ -1097,10 +1106,13 @@ class ProviderGoogleGenAI(Provider):
                 break
 
     async def get_models(self):
+        client = self.client
+        if client is None:
+            raise RuntimeError("Gemini client is closed.")
         try:
             models = await retry_provider_request(
                 "Gemini",
-                lambda: self.client.models.list(),
+                lambda: client.models.list(),
             )
             return [
                 m.name.replace("models/", "")

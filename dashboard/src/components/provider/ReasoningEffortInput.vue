@@ -28,7 +28,8 @@ import { computed, ref, watch } from 'vue'
 import { useI18n } from '@/i18n/composables'
 
 const props = defineProps({
-  modelValue: { type: String, default: '' }
+  modelValue: { type: String, default: '' },
+  suggestedValue: { type: String, default: '' }
 })
 const emit = defineEmits(['update:modelValue'])
 const { t } = useI18n()
@@ -41,7 +42,7 @@ const selection = computed(() => customMode.value || (props.modelValue && !prese
   ? customOption
   : props.modelValue || '')
 const items = computed(() => [
-  { title: 'Default', value: '' },
+  { title: props.suggestedValue ? `Default (${props.suggestedValue})` : 'Default', value: '' },
   { title: 'Custom', value: customOption },
   ...presets.map(value => ({ title: value, value }))
 ])
