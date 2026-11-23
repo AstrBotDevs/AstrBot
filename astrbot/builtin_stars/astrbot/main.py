@@ -88,6 +88,19 @@ class Main(star.Star):
                             )
                         )
 
+                    # This handler stops the event before on_message runs, so a
+                    # bare @ is never recorded. Without a record id on_req_llm
+                    # skips injecting the group messages sent since the bot's
+                    # last reply, so record it here.
+                    if (
+                        self.group_chat_context
+                        and cfg["provider_ltm_settings"]["group_icl_enable"]
+                    ):
+                        try:
+                            await self.group_chat_context.handle_message(event)
+                        except Exception as e:
+                            logger.error(f"group chat context: {e}")
+
                     yield event.request_llm(
                         prompt=(
                             "注意，你正在社交媒体上中与用户进行聊天，用户只是通过@来唤醒你，但并未在这条消息中输入内容，他可能会在接下来一条发送他想发送的内容。"
