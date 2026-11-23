@@ -1292,6 +1292,13 @@ class PluginManager:
                                 metadata.star_cls,
                             )
 
+                    # resolve_view() below reads `activated` to decide whether the
+                    # plugin is available, but that flag is only refreshed from
+                    # `inactivated_plugins` further down in this function. Sync it
+                    # first, otherwise the "disable then enable" path still sees the
+                    # previous False and rejects the view as unavailable.
+                    metadata.activated = not plugin_disabled
+
                     if not plugin_disabled and metadata.star_cls is not None:
                         from astrbot.core.chatui import resolve_view
                         from astrbot.core.star.filter.ui_action import UIActionFilter
