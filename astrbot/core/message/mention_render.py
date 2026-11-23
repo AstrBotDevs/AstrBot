@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING
 from astrbot.core.agent.message import TextPart
 from astrbot.core.message.components import At, AtAll, Plain
 from astrbot.core.platform.message_type import MessageType
+from astrbot.core.utils.quoted_message.chain_parser import ReplyChainParser
 
 if TYPE_CHECKING:
     from astrbot.core.platform.astr_message_event import AstrMessageEvent
@@ -126,11 +127,8 @@ def follow_up_text(event: AstrMessageEvent) -> tuple[str, str | None]:
         body, self_label = rendered
         if self_label:
             reminder = _self_reminder_text(event, self_label)
-        # Quoted voice transcripts are only appended to a rendered body:
-        # every fallback text (message_str or the outline) either already
-        # carries them or never had them, so appending again would
-        # duplicate the recognized text.
         if message_str.strip() and body:
-            quoted = str(event.get_extra("_quoted_voice_transcript") or "")
-            return body + quoted, reminder
+            message_str = body
+    if quoted := ReplyChainParser().format_embedded_replies(event):
+        message_str = f"{message_str}\n\n{quoted}" if message_str.strip() else quoted
     return message_str or event.get_message_outline(), reminder
