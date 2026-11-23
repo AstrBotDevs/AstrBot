@@ -273,6 +273,50 @@ async def test_native_tool_selection_preserves_guards_and_scope_restrictions(
 
 
 @pytest.mark.asyncio
+async def test_skills_like_delegation_keeps_parent_runtime_tool(environment, monkeypatch):
+    from astrbot.core.astr_agent_runtime import delegated_session
+    from astrbot.core.astr_agent_runtime.execution import create_native_runner
+    from astrbot.core.astr_agent_runtime.main_agent.config import MainAgentBuildConfig
+    from astrbot.core.astr_agent_runtime.tools.computer_tools.shell import (
+        LocalExecuteShellTool,
+    )
+    from astrbot.core.db.po import Conversation
+    from astrbot.core.provider.entities import ProviderRequest
+
+    env = environment
+    shell = LocalExecuteShellTool()
+    env.root.plugin_tools = ToolSet(
+        [FunctionTool(name=shell.name, description="Plugin shell", parameters={})]
+    )
+    request = ProviderRequest(
+        func_tool=ToolSet([shell]),
+        conversation=Conversation("test", env.scope.umo, env.scope.conversation_id),
+    )
+    runner = await create_native_runner(
+        env.context,
+        env.provider,
+        request,
+        MainAgentBuildConfig(tool_call_timeout=60, tool_schema_mode="skills_like"),
+        env.root,
+    )
+    assert request.func_tool.get_tool(shell.name) is shell
+    assert type(runner._func_tool_for_provider().get_tool(shell.name)) is FunctionTool
+    await runner.agent_hooks.on_agent_begin(runner.run_context)
+
+    create_worker_runner = AsyncMock(wraps=delegated_session.create_native_runner)
+    monkeypatch.setattr(delegated_session, "create_native_runner", create_worker_runner)
+    selected = await env.save_agent("expert", tools=[shell.name])
+    root = runner.run_context.context
+    agent = await env.native.spawn_agent(
+        root, [{"type": "plain", "text": "Task"}], config_id=selected.config_id
+    )
+    await env.service.wait(root, [agent["agent_id"]], 2000, "all")
+
+    worker_tools = create_worker_runner.call_args.args[2].func_tool
+    assert worker_tools.get_tool(shell.name) is shell
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize("selection", [None, ["hidden"]])
 async def test_expert_and_parent_tools_cannot_expand_core_plugin_contributions(
     environment, selection, monkeypatch

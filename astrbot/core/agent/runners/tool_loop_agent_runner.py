@@ -363,6 +363,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         self.run_context = run_context
         self.run_context.run_end_reason = None
         self.run_context.run_error = None
+        self.run_context.tools = request.func_tool
         self._done_hook_called = False
         self._aborted = False
         self._abort_signal = asyncio.Event()
@@ -376,25 +377,9 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         self._step_budget_used = 0
         self._step_budget_notified: set[int] = set()
 
-        # These two are used for tool schema mode handling
-        # We now have two modes:
-        # - "full": use full tool schema for LLM calls, default.
-        # - "skills_like": use light tool schema for LLM calls, and re-query with param-only schema when needed.
-        #   Light tool schema does not include tool parameters.
-        #   This can reduce token usage when tools have large descriptions.
-        # See #4681
         self.tool_schema_mode = tool_schema_mode
-        self._tool_schema_param_set = None
-        self._skill_like_raw_tool_set = None
-        if tool_schema_mode == "skills_like":
-            tool_set = self.req.func_tool
-            if not tool_set:
-                return
-            self._skill_like_raw_tool_set = tool_set
-            light_set = tool_set.get_light_tool_set()
-            self._tool_schema_param_set = tool_set.get_param_only_tool_set()
-            # MODIFIE the req.func_tool to use light tool schemas
-            self.req.func_tool = light_set
+        self._light_tool_set: ToolSet | None = None
+        self._tool_schema_param_set: ToolSet | None = None
 
         # append existing messages in the run context
         messages = load_messages(request.contexts or [])
@@ -920,7 +905,8 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         return sanitized_contexts
 
     def _func_tool_for_provider(self) -> ToolSet | None:
-        if not self.req.func_tool:
+        tool_set = self.req.func_tool
+        if not tool_set:
             return None
         modalities = self.provider.provider_config.get("modalities", None)
         if isinstance(modalities, list) and modalities and "tool_use" not in modalities:
@@ -929,7 +915,11 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                 self.provider,
             )
             return None
-        return self.req.func_tool
+        if self.tool_schema_mode == "skills_like":
+            if self._light_tool_set is None:
+                self._light_tool_set = tool_set.get_light_tool_set()
+            return self._light_tool_set or None
+        return tool_set
 
     def _simple_print_message_role(self, tag: str, messages: list):
         roles = [m.role for m in messages]
@@ -1512,6 +1502,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             # 拔掉所有工具
             if self.req:
                 self.req.func_tool = None
+                self.run_context.tools = None
             # 注入提示词
             await self._append_context_messages(
                 [Message(role="user", content=self.MAX_STEPS_REACHED_PROMPT)]
@@ -1693,24 +1684,17 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                         )
                     return
 
-                if (
-                    self.tool_schema_mode == "skills_like"
-                    and self._skill_like_raw_tool_set
-                ):
-                    # in 'skills_like' mode, raw.func_tool is light schema, does not have handler
-                    # so we need to get the tool from the raw tool set
-                    func_tool = self._skill_like_raw_tool_set.get_tool(func_tool_name)
-                    available_tools = self._skill_like_raw_tool_set.names()
-                else:
-                    func_tool = req.func_tool.get_tool(func_tool_name)
-                    available_tools = req.func_tool.names()
+                func_tool = req.func_tool.get_tool(func_tool_name)
 
                 #  Some API may return None for tools with no parameters
                 if func_tool_args is None:
                     func_tool_args = {}
                 logger.info(f"使用工具：{func_tool_name}，参数：{func_tool_args}")
 
-                if not func_tool:
+                if not func_tool or not func_tool.active:
+                    available_tools = [
+                        tool.name for tool in req.func_tool if tool.active
+                    ]
                     logger.warning(f"未找到指定的工具: {func_tool_name}，将跳过。")
                     if self._events.active:
                         await self._events.emit(
@@ -1921,7 +1905,9 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         if not subset.tools:
             return llm_resp, full_tool_set
 
-        if isinstance(self._tool_schema_param_set, ToolSet):
+        if self._tool_schema_param_set is None:
+            self._tool_schema_param_set = full_tool_set.get_param_only_tool_set()
+        if self._tool_schema_param_set:
             param_subset = self._build_tool_subset(
                 self._tool_schema_param_set, tool_names
             )

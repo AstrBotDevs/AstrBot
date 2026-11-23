@@ -174,12 +174,6 @@ class FakeLlmTools:
     async def disable_mcp_server(self, name: str, *, timeout: int) -> None:
         self.disabled_servers.append(name)
 
-    def iter_builtin_tools(self) -> list:
-        return []
-
-    def is_builtin_tool(self, _tool_name: str) -> bool:
-        return False
-
     def activate_llm_tool(self, _tool_name: str, *, star_map) -> bool:
         return True
 

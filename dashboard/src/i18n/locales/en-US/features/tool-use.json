@@ -57,32 +57,17 @@
     "description": "Function Description",
     "parameters": "Parameter List",
     "noParameters": "This tool has no parameters",
-    "filter": {
-      "showBuiltin": "Show builtin tools"
-    },
     "table": {
       "paramName": "Parameter Name",
       "type": "Type",
       "description": "Description",
       "required": "Required",
-      "origin": "Origin",
       "originName": "Origin Name",
-      "readonly": "Read-only",
       "permission": "Permission",
       "permissionAdmin": "Admin",
       "permissionMember": "All Users",
       "permissionEveryone": "All Users",
-      "permissionBuiltin": "System Builtin",
       "actions": "Actions"
-    },
-    "configTags": {
-      "tooltipTitle": "This tool is enabled in config file {config} because:",
-      "conditions": {
-        "truthy": "{key} is enabled",
-        "equals": "{key} = {expected}",
-        "in": "{key} matched {expected}",
-        "fallback": "{key} is currently {actual}"
-      }
     },
     "summary": {
       "total": "Total",
@@ -196,11 +181,9 @@
     "configParseError": "Configuration parse error: {error}",
     "noAvailableConfig": "No available configuration",
     "toggleToolSuccess": "Tool status toggled successfully!",
-    "toggleToolReadonly": "Builtin tools are read-only and cannot be enabled or disabled.",
     "toggleToolError": "Failed to toggle tool status: {error}",
     "updateToolPermissionSuccess": "Permission for {name} updated",
     "updateToolPermissionFailed": "Failed to update tool permission",
-    "updateToolPermissionBuiltin": "Builtin tools do not support per-tool permission configuration.",
     "testError": "Test connection failed: {error}"
   }
 }
