@@ -1,5 +1,6 @@
 """Tests for per-tool permission management."""
 
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -66,15 +67,15 @@ def _make_tools_service(
         tool_mgr: Optional tool manager to attach to the service.
 
     Returns:
-        A ToolsService with mocked lifecycle config access.
+        A ToolsService backed by the selected tool manager.
     """
-    service = ToolsService.__new__(ToolsService)
-    service.core_lifecycle = MagicMock()
-    service.core_lifecycle.astrbot_config_mgr = MagicMock()
-    service.core_lifecycle.astrbot_config_mgr.get_conf_list.return_value = []
-    service.core_lifecycle.astrbot_config_mgr.confs = {}
-    service.tool_mgr = tool_mgr or FunctionToolManager()
-    return service
+    return ToolsService(
+        SimpleNamespace(
+            provider_manager=SimpleNamespace(
+                llm_tools=tool_mgr or FunctionToolManager()
+            )
+        )
+    )
 
 
 # ── _default_permission ──────────────────────────────────────────────
@@ -300,19 +301,16 @@ async def test_guarded_tool_handles_async_generator_handler():
 # ── get_full_tool_set ────────────────────────────────────────────────
 
 
-def test_get_full_tool_set_excludes_builtin_tools():
-    """Builtin tools are added separately by astr_main_agent.py, not through
-    get_full_tool_set()."""
+def test_get_full_tool_set_excludes_runtime_tools():
+    """The runtime adds its tools directly to its request."""
     mgr = FunctionToolManager()
     tool_set = mgr.get_full_tool_set()
 
     names = {t.name for t in tool_set.tools}
-    # Builtin tools are injected individually by the agent builder —
-    # they must NOT appear in the generic tool set.
     assert "astrbot_execute_shell" not in names
 
 
-def test_get_full_tool_set_wraps_non_builtin():
+def test_get_full_tool_set_wraps_plugin_tools():
     mgr = FunctionToolManager()
 
     mgr.func_list.append(_dummy_tool("my_plugin_tool"))
@@ -321,7 +319,7 @@ def test_get_full_tool_set_wraps_non_builtin():
     plugin_tools = [t for t in tool_set.tools if t.name == "my_plugin_tool"]
     assert plugin_tools
     assert isinstance(plugin_tools[0], _PermissionGuardedTool), (
-        "non-builtin tools must be wrapped"
+        "plugin tools must be wrapped"
     )
 
 
@@ -330,32 +328,36 @@ def test_get_full_tool_set_wraps_non_builtin():
 
 class TestGetToolListPermission:
     @pytest.mark.asyncio
-    async def test_list_includes_permission_fields_for_non_builtin(self):
+    async def test_list_includes_plugin_tool_permission(self, monkeypatch):
         service = _make_tools_service()
+        tool = _dummy_tool("my_plugin_tool")
+        tool.handler_module_path = "plugins.test"
+        monkeypatch.setattr(
+            "astrbot.dashboard.services.tools_service.star_map",
+            {"plugins.test": SimpleNamespace(name="test", display_name="Test")},
+        )
         await sp.global_put(
             "tool_permissions",
             {"_default": {"my_plugin_tool": "admin"}},
         )
         try:
-            service.tool_mgr.func_list.append(_dummy_tool("my_plugin_tool"))
+            service.tool_mgr.func_list.append(tool)
             tools = await service.get_tool_list()
 
             target = next(t for t in tools if t["name"] == "my_plugin_tool")
+            assert target["origin"] == "plugin"
+            assert target["origin_name"] == "test"
             assert target["permission"] == "admin"
             assert target["permission_configured"] is True
-            assert target["readonly"] is False
         finally:
             await _clear_tool_permissions()
 
     @pytest.mark.asyncio
-    async def test_list_no_permission_fields_for_builtin(self):
+    async def test_list_excludes_runtime_tools(self):
         service = _make_tools_service()
         tools = await service.get_tool_list()
 
-        target = next(t for t in tools if t["name"] == "astrbot_execute_shell")
-        assert "permission" not in target
-        assert "permission_configured" not in target
-        assert target["readonly"] is True
+        assert all(tool["name"] != "astrbot_execute_shell" for tool in tools)
 
     @pytest.mark.asyncio
     async def test_list_reads_permission_store_once(self, monkeypatch):
@@ -406,10 +408,10 @@ class TestUpdateToolPermission:
         assert stored["_default"]["target_tool"] == "admin"
 
     @pytest.mark.asyncio
-    async def test_reject_builtin_tool(self):
+    async def test_reject_runtime_tool(self):
         service = _make_tools_service()
 
-        with pytest.raises(ToolsServiceError, match="Builtin"):
+        with pytest.raises(ToolsServiceError, match="not found"):
             await service.update_tool_permission(
                 {"name": "astrbot_execute_shell", "permission": "admin"}
             )

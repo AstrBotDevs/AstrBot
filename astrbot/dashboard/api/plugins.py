@@ -354,7 +354,7 @@ async def _list_plugins(
             or request.query_params.get("plugin_id"),
             logo_token_resolver=service.get_plugin_logo_token,
             installed_at_resolver=service.get_plugin_installed_at,
-            discover_pages=page_service.discover_plugin_pages,
+            serialize_pages=page_service.serialize_plugin_pages,
         ),
         log_label="/api/plugin/get",
     )

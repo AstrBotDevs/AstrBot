@@ -1032,6 +1032,14 @@
     "general": {
       "description": "基本",
       "platform_settings": {
+        "locale": {
+          "description": "系统语言",
+          "hint": "设置系统的语言，用于插件、错误信息回复等地方。不会改变模型回答或 WebUI 的语言。",
+          "labels": [
+            "🇨🇳 简体中文",
+            "🇺🇸 English"
+          ]
+        },
         "unique_session": {
           "description": "隔离对话",
           "hint": "启用后，支持隔离的渠道会为每位群成员使用独立上下文。指令权限请在「管理行为 → 指令」中设置。"
@@ -1169,6 +1177,15 @@
     }
   },
   "access_group": {
+    "blacklist": {
+      "description": "黑名单",
+      "platform_settings": {
+        "id_blacklist": {
+          "description": "黑名单 ID 列表",
+          "hint": "停止处理这些会话的消息。黑名单优先于白名单，管理员也不会豁免。"
+        }
+      }
+    },
     "name": "访问控制",
     "admins": {
       "description": "管理员",
@@ -1737,6 +1754,9 @@
       "dashscope_embedding": {
         "hint": "阿里云百炼 Embedding，默认地址为 https://dashscope.aliyuncs.com/api/v1。"
       },
+      "volcengine_embedding": {
+        "hint": "火山引擎 Embedding，默认地址为 https://ark.cn-beijing.volces.com/api/v3。Agent Plan 为 https://ark.cn-beijing.volces.com/api/plan/v3。"
+      },
       "volcengine_cluster": {
         "description": "火山引擎集群",
         "hint": "若使用语音复刻大模型，可选volcano_icl或volcano_icl_concurr，默认使用volcano_tts"
@@ -1784,6 +1804,10 @@
       "dashscope_tts_voice": {
         "description": "音色"
       },
+      "dashscope_tts_websocket_url": {
+        "description": "WebSocket 接口地址",
+        "hint": "可选，使用 Qwen-Audio-TTS 模型时填写。留空使用 DashScope SDK 默认地址。请填写完整 WebSocket 地址，例如 wss://{WorkspaceId}.cn-beijing.maas.aliyuncs.com/api-ws/v1/inference，并将 {WorkspaceId} 替换为实际业务空间 ID。"
+      },
       "gm_resp_image_modal": {
         "description": "启用图片模态",
         "hint": "启用后，将支持返回图片内容。需要模型支持，否则会报错。具体支持模型请查看 Google Gemini 官方网站。温馨提示，如果您需要生成图片，请关闭 `启用群员识别` 配置获得更好的效果。"
@@ -1824,11 +1848,11 @@
         "description": "思考配置",
         "budget": {
           "description": "思考预算",
-          "hint": "用于指定模型推理时使用的思考 token 数量上限。参见: https://ai.google.dev/gemini-api/docs/thinking#set-budget"
+          "hint": "设置Gemini 2.5的推理词元预算。留空时使用模型默认值。参见 https://ai.google.dev/gemini-api/docs/thinking#set-budget"
         },
         "level": {
           "description": "思考级别",
-          "hint": "推荐用于 Gemini 3 及以上模型，可控制推理行为。参见: https://ai.google.dev/gemini-api/docs/thinking#thinking-levels"
+          "hint": "参见 https://ai.google.dev/gemini-api/docs/thinking#thinking-levels"
         }
       },
       "anth_thinking_config": {
@@ -1933,6 +1957,15 @@
       "openai-tts-voice": {
         "description": "voice",
         "hint": "OpenAI TTS 的声音。OpenAI 默认支持：'alloy', 'echo', 'fable', 'onyx', 'nova', 'shimmer'"
+      },
+      "deepseek-tts-voice": {
+        "description": "音色",
+        "hint": "DeepSeek TTS 音色，实际请求使用对应的 voice_id。",
+        "labels": ["海星（女声，默认）", "暗潮（男声）"]
+      },
+      "deepseek-tts-filter-markdown": {
+        "description": "过滤 Markdown",
+        "hint": "朗读前移除 Markdown 格式，默认启用。"
       },
       "elevenlabs-tts-voice-id": {
         "description": "音色 ID",

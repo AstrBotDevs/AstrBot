@@ -172,6 +172,11 @@ Use chat capabilities and manage ChatUI sessions and projects.
 | `GET` | `/api/v1/chat/threads/{thread_id}` | — |
 | `DELETE` | `/api/v1/chat/threads/{thread_id}` | — |
 | `POST` | `/api/v1/chat/threads/{thread_id}/messages` | — |
+| `GET` | `/api/v1/chat/views/{view_id}` | — |
+| `POST` | `/api/v1/chat/views/{view_id}/actions` | — |
+| `GET` | `/api/v1/chat/views/{view_id}/actions/{interaction_id}` | — |
+| `GET` | `/api/v1/chat/workbench/views` | — |
+| `GET` | `/api/v1/chat/workbench/views/{plugin_name}/{view_name}` | — |
 | `GET` | `/api/v1/chat/ws` | `chat:admin` |
 
 ## `data`
@@ -192,14 +197,12 @@ Manage conversations and platform-session data.
 | `POST` | `/api/v1/session-groups` | — |
 | `PUT` | `/api/v1/session-groups/{group_id}` | — |
 | `DELETE` | `/api/v1/session-groups/{group_id}` | — |
-| `GET` | `/api/v1/sessions` | — |
 | `GET` | `/api/v1/sessions/active-umos` | — |
-| `PATCH` | `/api/v1/sessions/provider` | — |
+| `GET` | `/api/v1/sessions/overrides` | — |
 | `GET` | `/api/v1/sessions/rules` | — |
 | `POST` | `/api/v1/sessions/rules` | — |
 | `POST` | `/api/v1/sessions/rules/delete` | — |
 | `GET` | `/api/v1/sessions/senders` | — |
-| `PATCH` | `/api/v1/sessions/service` | — |
 
 ## `file`
 
