@@ -146,6 +146,11 @@ async def test_opencode_go_one_off_requests_use_stable_session_id(
             ]
             assert all(session_ids)
             assert session_ids[0] == session_ids[1]
+            assert requests[0].headers["x-opencode-request"] == "msg_1"
+            assert requests[1].headers["x-opencode-request"] == "msg_2"
+            for request in requests:
+                assert request.headers["x-opencode-client"] == "cli"
+                assert request.headers["x-opencode-project"] == "global"
         finally:
             await provider.terminate()
     finally:

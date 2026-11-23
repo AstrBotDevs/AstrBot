@@ -26,6 +26,9 @@ from .request_retry import retry_provider_request
 OPENCODE_GO_API_BASE = "https://opencode.ai/inference/go/v1"
 OPENCODE_GO_USER_AGENT = f"astrbot/{__version__}"
 OPENCODE_SESSION_HEADER = "x-opencode-session"
+OPENCODE_REQUEST_HEADER = "x-opencode-request"
+OPENCODE_CLIENT_HEADER = "x-opencode-client"
+OPENCODE_PROJECT_HEADER = "x-opencode-project"
 
 
 @register_provider_adapter(
@@ -56,6 +59,8 @@ class ProviderOpenCodeGo(ProviderOpenAIOfficial):
         # WebUI model test or model listing) still need a stable routing identity.
         # Keep one per provider instance so OpenCode can cache prompts for it.
         self._fallback_session_id = uuid.uuid4().hex
+        # Per-session request counter used for the x-opencode-request header.
+        self._session_request_counts: dict[str, int] = {}
 
     async def _prepare_opencode_request(
         self, payloads: dict, tools: ToolSet | None
@@ -171,22 +176,31 @@ class ProviderOpenCodeGo(ProviderOpenAIOfficial):
         raise RuntimeError("OpenCode Go request failed after all retries.")
 
     def _opencode_session_headers(self, conversation_id: str | None) -> dict[str, str]:
-        """Build the OpenCode Go routing header for one request.
+        """Build the OpenCode Go routing headers for one request.
 
         OpenCode rejects inference requests without ``x-opencode-session``. AstrBot
         conversations supply the value when one is bound; otherwise the stable
         per-provider fallback keeps one-off calls routable and cache-friendly.
+        The remaining headers mirror the OpenCode client so the gateway can treat
+        AstrBot as a first-class CLI client.
 
         Args:
             conversation_id: Bound AstrBot conversation ID, or None for one-off calls.
 
         Returns:
-            A header mapping that always contains the session ID.
+            A header mapping that always contains the OpenCode session identity.
         """
         session_id = (
             str(conversation_id) if conversation_id else self._fallback_session_id
         )
-        return {OPENCODE_SESSION_HEADER: session_id}
+        request_number = self._session_request_counts.get(session_id, 0) + 1
+        self._session_request_counts[session_id] = request_number
+        return {
+            OPENCODE_SESSION_HEADER: session_id,
+            OPENCODE_REQUEST_HEADER: f"msg_{request_number}",
+            OPENCODE_CLIENT_HEADER: "cli",
+            OPENCODE_PROJECT_HEADER: "global",
+        }
 
     async def get_models(self) -> list[str]:
         """List models exposed by OpenCode Go with the routing header attached.
