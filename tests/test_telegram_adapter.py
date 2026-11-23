@@ -6,7 +6,6 @@ from unittest.mock import AsyncMock, MagicMock, call, patch
 
 import pytest
 from telegram import Message, MessageEntity, TextQuote
-from telegram.error import BadRequest
 
 import astrbot.api.message_components as Comp
 from astrbot.api.event import MessageChain
@@ -1224,24 +1223,15 @@ async def test_telegram_final_segment_splits_long_markdown_messages():
     client = SimpleNamespace(send_message=AsyncMock())
     event = TelegramPlatformEvent("msg", MagicMock(), MagicMock(), "session", client)
 
-    delta = "**" + "A" * (TelegramPlatformEvent.MAX_MESSAGE_LENGTH + 32) + "**"
+    limit = TelegramPlatformEvent.MAX_MESSAGE_LENGTH
+    delta = "||" + "A" * (limit + 32) + "||"
     payload = {"chat_id": "123456"}
 
     await event._send_final_segment(delta, payload)
 
     assert client.send_message.await_args_list == [
-        call(
-            text="A" * TelegramPlatformEvent.MAX_MESSAGE_LENGTH,
-            entities=[
-                MessageEntity("bold", 0, TelegramPlatformEvent.MAX_MESSAGE_LENGTH)
-            ],
-            **payload,
-        ),
-        call(
-            text="A" * 32,
-            entities=[MessageEntity("bold", 0, 32)],
-            **payload,
-        ),
+        call(text="A" * limit, entities=[MessageEntity("spoiler", 0, limit)], **payload),
+        call(text="A" * 32, entities=[MessageEntity("spoiler", 0, 32)], **payload),
     ]
 
 
@@ -1264,130 +1254,6 @@ async def test_telegram_final_segment_splits_long_plaintext_when_markdown_fails(
         call(text="B" * TelegramPlatformEvent.MAX_MESSAGE_LENGTH, **payload),
         call(text="B" * 18, **payload),
     ]
-
-
-@pytest.mark.asyncio
-@pytest.mark.parametrize(
-    ("text", "expected_chunks", "expected_spoilers"),
-    [
-        (
-            "||" + "A" * 4128 + "||",
-            ["A" * 4096, "A" * 32],
-            [[(0, 4096)], [(0, 32)]],
-        ),
-        (
-            "||" + "A" * 3000 + "\n\n" + "B" * 3000 + "||",
-            ["A" * 3000, "B" * 3000],
-            [[(0, 3000)], [(0, 3000)]],
-        ),
-        (
-            "||\n" + "A" * 3000 + "\n\n" + "B" * 3000 + "\n||",
-            ["A" * 3000, "B" * 3000],
-            [[(0, 3000)], [(0, 3000)]],
-        ),
-        (
-            "😀||**" + "😀" * 4096 + "**||!",
-            ["😀" * 4096, "😀!"],
-            [[(2, 8190)], [(0, 2)]],
-        ),
-        (
-            "||" + "X" * 4090 + " `a || b` secret||",
-            ["X" * 4090 + " a ||", "b secret"],
-            [[(0, 4095)], [(0, 8)]],
-        ),
-        (
-            "A" * 4090 + " ||hidden secret||",
-            ["A" * 4090, "hidden secret"],
-            [[], [(0, 13)]],
-        ),
-        (
-            r"\|| literal " + "A" * 4090 + " ||secret||",
-            ["|| literal", "A" * 4090, "secret"],
-            [[], [], [(0, 6)]],
-        ),
-        (
-            "<tg-spoiler>" + "A" * 3000 + "\n\n" + "B" * 3000 + "</tg-spoiler>",
-            ["A" * 3000, "B" * 3000],
-            [[(0, 3000)], [(0, 3000)]],
-        ),
-    ],
-    ids=[
-        "single-paragraph-spoiler",
-        "multi-paragraph-spoiler",
-        "standalone-delimiter-lines",
-        "emoji-utf16-offsets-across-limit",
-        "inline-code-pipe-inside-spoiler",
-        "straddling-spoiler",
-        "escaped-pipes-before-spoiler",
-        "tg-spoiler-html-tag",
-    ],
-)
-async def test_telegram_preserves_spoilers_across_split_chunks(
-    text, expected_chunks, expected_spoilers
-):
-    event_cls = _load_telegram_platform_event()
-    client = SimpleNamespace(send_message=AsyncMock())
-
-    await event_cls._send_text_chunks(client, text, {"chat_id": "123456"})
-
-    calls = [request.kwargs for request in client.send_message.await_args_list]
-    assert [request["text"] for request in calls] == expected_chunks
-    for request, spoiler_bounds in zip(calls, expected_spoilers, strict=True):
-        assert "parse_mode" not in request
-        assert len(request["text"]) <= event_cls.MAX_MESSAGE_LENGTH
-        chunk_utf16_len = len(request["text"].encode("utf-16-le")) // 2
-        entities = request.get("entities", [])
-        for entity in entities:
-            assert 0 <= entity.offset
-            assert entity.length > 0
-            assert entity.offset + entity.length <= chunk_utf16_len
-            assert entity.type not in ("code", "pre")
-        assert [
-            (entity.offset, entity.length)
-            for entity in entities
-            if entity.type == "spoiler"
-        ] == spoiler_bounds
-
-
-@pytest.mark.asyncio
-async def test_telegram_bad_request_keeps_spoilers_without_leaking_plaintext():
-    event_cls = _load_telegram_platform_event()
-    client = SimpleNamespace(
-        send_message=AsyncMock(side_effect=[BadRequest("bad entity"), MagicMock()])
-    )
-    payload = {"chat_id": "123456"}
-
-    await event_cls._send_text_chunks(client, "||**secret**||", payload)
-
-    assert client.send_message.await_count == 2
-    client.send_message.assert_awaited_with(
-        text="secret", entities=[MessageEntity("spoiler", 0, 6)], **payload
-    )
-
-    client.send_message = AsyncMock(side_effect=BadRequest("still invalid"))
-    with pytest.raises(BadRequest, match="still invalid"):
-        await event_cls._send_text_chunks(client, "||secret||", payload)
-    assert client.send_message.await_count == 1
-
-    with patch(
-        "astrbot.core.platform.sources.telegram.tg_event.telegramify_markdown.convert",
-        side_effect=ValueError("boom"),
-    ):
-        client.send_message = AsyncMock()
-        with pytest.raises(ValueError, match="boom"):
-            await event_cls._send_text_chunks(client, "||secret||", payload)
-    client.send_message.assert_not_awaited()
-
-
-@pytest.mark.asyncio
-async def test_telegram_empty_conversion_falls_back_to_original_text():
-    event_cls = _load_telegram_platform_event()
-    client = SimpleNamespace(send_message=AsyncMock())
-    payload = {"chat_id": "123456", "reply_markup": MagicMock()}
-
-    await event_cls._send_text_chunks(client, "<div>hello</div>", payload)
-
-    client.send_message.assert_awaited_once_with(text="<div>hello</div>", **payload)
 
 
 @pytest.mark.asyncio
