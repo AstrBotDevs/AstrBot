@@ -10,13 +10,20 @@ import sqlite3
 import threading
 import time
 import weakref
+from contextlib import suppress
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 from opentelemetry.sdk.trace import Span, TracerProvider
 from opentelemetry.trace import format_span_id, get_current_span, get_tracer_provider
 
+from astrbot.core.event_bus import EventBus
 from astrbot.core.log import LogBroker, LogManager
+from astrbot.core.platform.astr_message_event import AstrMessageEvent
+from astrbot.core.platform.astrbot_message import AstrBotMessage, MessageMember
+from astrbot.core.platform.message_type import MessageType
+from astrbot.core.platform.platform_metadata import PlatformMetadata
 from astrbot.core.utils import trace as trace_module
 from astrbot.core.utils.migra_helper import migrate_config_on_load
 from astrbot.core.utils.storage_cleaner import StorageCleaner
@@ -349,6 +356,86 @@ def persisted(tmp_path, capture):
     store.close()
 
 
+@pytest.mark.asyncio
+@pytest.mark.parametrize("reroute", [False, True], ids=["initial", "after-isolation"])
+async def test_discarded_message_finishes_trace(persisted, monkeypatch, reroute):
+    """Close and persist dropped traces while continuing to dispatch other messages.
+
+    Args:
+        persisted: Isolated trace database.
+        monkeypatch: Pytest patch manager.
+        reroute: Whether the missing scheduler is selected after session isolation.
+    """
+    live = []
+    monkeypatch.setattr(trace_module, "get_trace_store", lambda *_: persisted)
+    monkeypatch.setattr(
+        trace_module, "_get_log_broker", lambda: SimpleNamespace(publish=live.append)
+    )
+    message = AstrBotMessage()
+    message.type = MessageType.GROUP_MESSAGE
+    message.group_id = "room"
+    message.sender = MessageMember(user_id="alice")
+    platform = PlatformMetadata("aiocqhttp", "Test adapter", "qq")
+    dropped = AstrMessageEvent("", message, platform, "room")
+    healthy = AstrMessageEvent("", message, platform, "other-room")
+    routes = {
+        dropped.unified_msg_origin: {"id": "isolate" if reroute else "missing"},
+        "qq:GroupMessage:alice_room": {"id": "missing"},
+        healthy.unified_msg_origin: {"id": "healthy"},
+    }
+    processed = asyncio.Event()
+    executed = []
+
+    async def execute(event):
+        executed.append(event)
+        processed.set()
+
+    schedulers = {
+        "isolate": SimpleNamespace(
+            ctx=SimpleNamespace(
+                astrbot_config={"platform_settings": {"unique_session": True}}
+            ),
+            execute=execute,
+        ),
+        "healthy": SimpleNamespace(
+            ctx=SimpleNamespace(astrbot_config={}), execute=execute
+        ),
+    }
+    queue = asyncio.Queue()
+    bus = EventBus(queue, schedulers, SimpleNamespace(get_conf_info=routes.__getitem__))
+    queue.put_nowait(dropped)
+    queue.put_nowait(healthy)
+    dispatch = asyncio.create_task(bus.dispatch())
+    try:
+        await asyncio.wait_for(processed.wait(), timeout=2)
+    finally:
+        dispatch.cancel()
+        with suppress(asyncio.CancelledError):
+            await dispatch
+
+    assert executed == [healthy]
+    assert dropped.session_id == ("alice_room" if reroute else "room")
+    frames = [
+        frame for frame in live if frame["trace"]["trace_id"] == dropped.trace.trace_id
+    ]
+    assert frames[0]["trace"]["state"] == "running"
+    assert frames[-1]["trace"]["state"] == "completed"
+    assert await asyncio.to_thread(persisted.flush)
+    stored = persisted.get_trace(dropped.trace.trace_id)
+    assert stored is not None
+    assert stored["trace"] == frames[-1]["trace"]
+    root = frames[-1]["span"]
+    stored_root = next(
+        span for span in stored["spans"] if span["span_id"] == dropped.trace.span_id
+    )
+    assert stored_root == root
+    assert frames[-1]["trace"]["has_errors"] is True
+    assert root["end_time_unix_nano"] is not None
+    assert root["status"]["code"] == 2
+    assert "no pipeline scheduler" in root["status"]["message"]
+    assert root["attributes"]["astrbot.error"] == root["status"]["message"]
+
+
 def test_trace_cleanup_matches_exact_adapter(persisted, capture):
     """Remove a complete trace and its children without SQL wildcard matching."""
     ids = ["bot_%", "BOT_%", "bot_ab", "bot_%-other"]
@@ -368,9 +455,13 @@ def test_trace_cleanup_matches_exact_adapter(persisted, capture):
     assert all(persisted.get_trace(trace.trace_id) for trace in traces[1:])
     with sqlite3.connect(persisted.path) as connection:
         for table in ("spans", "events"):
-            assert connection.execute(
-                f"SELECT COUNT(*) FROM {table} WHERE trace_id = ?", (traces[0].trace_id,)
-            ).fetchone()[0] == 0
+            assert (
+                connection.execute(
+                    f"SELECT COUNT(*) FROM {table} WHERE trace_id = ?",
+                    (traces[0].trace_id,),
+                ).fetchone()[0]
+                == 0
+            )
 
 
 def test_database_pages_filters_details_and_restart(persisted, capture):
@@ -493,7 +584,9 @@ def test_oversized_queue_records_are_rejected(persisted):
     assert persisted._pending_bytes == 0
 
 
-def test_orphan_cleanup_preserves_live_and_pending_traces(persisted, capture, monkeypatch):
+def test_orphan_cleanup_preserves_live_and_pending_traces(
+    persisted, capture, monkeypatch
+):
     """Recover dropped completion frames without retaining dead trace objects.
 
     Args:
@@ -537,7 +630,8 @@ def test_orphan_cleanup_preserves_live_and_pending_traces(persisted, capture, mo
         with sqlite3.connect(persisted.path) as connection:
             persisted._interrupt_inactive(connection)
             assert connection.execute(
-                "SELECT trace_id FROM protected_traces WHERE trace_id=?", (lost.trace_id,)
+                "SELECT trace_id FROM protected_traces WHERE trace_id=?",
+                (lost.trace_id,),
             ).fetchone()
         assert persisted.get_trace(live.trace_id)["trace"]["state"] == "running"
         release.set()
@@ -723,7 +817,10 @@ def test_trace_usage_and_cleanup_preserve_running_traces(
         running.record("event_received")
         for frame in capture:
             assert store.append(
-                frame, owner=running if frame["trace"]["trace_id"] == running.trace_id else finished
+                frame,
+                owner=running
+                if frame["trace"]["trace_id"] == running.trace_id
+                else finished,
             )
         assert store.flush()
         log = tmp_path / "logs" / "astrbot.log"
