@@ -5,6 +5,7 @@ import uuid
 from collections.abc import Sequence
 from collections.abc import Set as AbstractSet
 from contextlib import aclosing
+from copy import copy
 
 import mcp
 
@@ -373,6 +374,20 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
         run_context: ContextWrapper[AstrAgentContext],
         tools: list[str | FunctionTool] | None,
     ) -> ToolSet | None:
+        toolset = ToolSet()
+        if tools is not None:
+            available_tools = run_context.tools
+            for tool in tools:
+                if isinstance(tool, str):
+                    resolved = (
+                        available_tools.get_tool(tool) if available_tools else None
+                    )
+                    if resolved is not None and resolved.active:
+                        toolset.add_tool(resolved)
+                elif isinstance(tool, FunctionTool):
+                    toolset.add_tool(tool)
+            return None if toolset.empty() else toolset
+
         ctx = run_context.context.context
         event = run_context.context.event
         cfg = ctx.get_config(umo=event.unified_msg_origin)
@@ -390,37 +405,14 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
 
         # Keep persona semantics aligned with the main agent: tools=None means
         # "all tools", including runtime computer-use tools.
-        if tools is None:
-            toolset = ToolSet()
-            handoff_names = {
-                tool.name
-                for tool in tool_mgr.func_list
-                if isinstance(tool, HandoffTool)
-            }
-            for registered_tool in tool_mgr.get_full_tool_set():
-                if registered_tool.name in handoff_names:
-                    continue
-                if registered_tool.active:
-                    toolset.add_tool(registered_tool)
-            for runtime_tool in runtime_computer_tools.values():
-                toolset.add_tool(runtime_tool)
-            return None if toolset.empty() else toolset
-
-        if not tools:
-            return None
-
-        toolset = ToolSet()
-        for tool_name_or_obj in tools:
-            if isinstance(tool_name_or_obj, str):
-                registered_tool = llm_tools.get_func(tool_name_or_obj)
-                if registered_tool and registered_tool.active:
-                    toolset.add_tool(registered_tool)
-                    continue
-                runtime_tool = runtime_computer_tools.get(tool_name_or_obj)
-                if runtime_tool:
-                    toolset.add_tool(runtime_tool)
-            elif isinstance(tool_name_or_obj, FunctionTool):
-                toolset.add_tool(tool_name_or_obj)
+        handoff_names = {
+            tool.name for tool in tool_mgr.func_list if isinstance(tool, HandoffTool)
+        }
+        for registered_tool in tool_mgr.get_full_tool_set():
+            if registered_tool.name not in handoff_names and registered_tool.active:
+                toolset.add_tool(registered_tool)
+        for runtime_tool in runtime_computer_tools.values():
+            toolset.add_tool(runtime_tool)
         return None if toolset.empty() else toolset
 
     @classmethod
@@ -432,6 +424,7 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
         image_urls_prepared: bool = False,
         **tool_args: T.Any,
     ):
+        toolset = cls._build_handoff_toolset(run_context, tool.agent.tools)
         tool_args = dict(tool_args)
         input_ = tool_args.get("input")
         if image_urls_prepared:
@@ -450,9 +443,6 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
                 tool_args.get("image_urls"),
             )
         tool_args["image_urls"] = image_urls
-
-        # Build handoff toolset from registered tools plus runtime computer tools.
-        toolset = cls._build_handoff_toolset(run_context, tool.agent.tools)
 
         ctx = run_context.context.context
         event = run_context.context.event
@@ -530,6 +520,8 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
         if active_event_registry.get_background_stop_signal(event).is_set():
             return
         task_id = uuid.uuid4().hex
+        # The SDK may reuse the run context before the background handoff starts.
+        run_context = copy(run_context)
 
         async def _run_handoff_in_background() -> None:
             try:

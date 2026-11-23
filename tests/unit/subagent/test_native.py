@@ -299,7 +299,8 @@ async def test_skills_like_delegation_keeps_parent_runtime_tool(environment, mon
         MainAgentBuildConfig(tool_call_timeout=60, tool_schema_mode="skills_like"),
         env.root,
     )
-    assert type(request.func_tool.get_tool(shell.name)) is FunctionTool
+    assert request.func_tool.get_tool(shell.name) is shell
+    assert type(runner._func_tool_for_provider().get_tool(shell.name)) is FunctionTool
     await runner.agent_hooks.on_agent_begin(runner.run_context)
 
     create_worker_runner = AsyncMock(wraps=delegated_session.create_native_runner)
