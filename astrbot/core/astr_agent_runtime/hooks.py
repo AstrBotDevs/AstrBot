@@ -28,6 +28,8 @@ class MainAgentHooks(BaseAgentRunHooks[AstrAgentContext]):
             context_observer: Host observer for plugin context mutations.
         """
         self._request = request
+        # The runner may replace the request's tools with schema-only copies.
+        self._delegable_tools = request.func_tool if request is not None else None
         self._context_observer = context_observer
 
     async def on_agent_begin(
@@ -40,7 +42,7 @@ class MainAgentHooks(BaseAgentRunHooks[AstrAgentContext]):
             await subagent.begin_main_agent(
                 run_context,
                 conversation_id=conversation.cid if conversation is not None else None,
-                tools=self._request.func_tool,
+                tools=self._delegable_tools,
             )
         await call_event_hook(
             run_context.context.event,

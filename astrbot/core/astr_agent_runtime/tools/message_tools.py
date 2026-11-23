@@ -24,7 +24,6 @@ from astrbot.core.astr_agent_runtime.tools.computer_tools.util import (
     workspace_root_for_context,
 )
 from astrbot.core.astr_agent_runtime.tools.output import prepare_tool_output
-from astrbot.core.astr_agent_runtime.tools.registry import builtin_tool
 from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.platform.message_session import MessageSession
 from astrbot.core.platform.message_type import MessageType
@@ -72,7 +71,6 @@ def _can_send_local_file(
     return is_local_runtime(context) and not _is_restricted_local_env(context)
 
 
-@builtin_tool
 @dataclass
 class SendMessageToUserTool(FunctionTool[AstrAgentContext]):
     name: str = "send_message_to_user"
@@ -376,9 +374,6 @@ class SendMessageToUserTool(FunctionTool[AstrAgentContext]):
         return f"Message sent to session {target_session}"
 
 
-@builtin_tool(
-    config={"provider_ltm_settings.group_message_history_enable": True},
-)
 @dataclass
 class GetGroupMessageHistoryTool(FunctionTool[AstrAgentContext]):
     name: str = "get_group_message_history"

@@ -5,9 +5,6 @@ from typing import Any
 
 from astrbot.core import logger, sp
 from astrbot.core.agent.mcp_client import MCPTool, validate_mcp_stdio_config
-from astrbot.core.astr_agent_runtime.tools.registry import (
-    get_builtin_tool_config_statuses,
-)
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
 from astrbot.core.star import star_map
 
@@ -37,7 +34,6 @@ def extract_mcp_server_config(mcp_servers_value: object) -> dict:
 
 class ToolsService:
     def __init__(self, core_lifecycle: AstrBotCoreLifecycle) -> None:
-        self.core_lifecycle = core_lifecycle
         self.tool_mgr = core_lifecycle.provider_manager.llm_tools
 
     def rollback_mcp_server(self, name: str) -> bool:
@@ -252,23 +248,10 @@ class ToolsService:
     async def get_tool_list(self) -> list[dict]:
         try:
             tools = list(self.tool_mgr.func_list)
-            existing_names = {tool.name for tool in tools}
-            for tool in self.tool_mgr.iter_builtin_tools():
-                if tool.name not in existing_names:
-                    tools.append(tool)
-
-            config_entries = self._get_config_entries()
-            perms_store = (
-                await sp.global_get("tool_permissions", {})
-                if any(not self.tool_mgr.is_builtin_tool(tool.name) for tool in tools)
-                else {}
-            )
-            tools_dict = []
-            for tool in tools:
-                tools_dict.append(
-                    self._serialize_tool(tool, config_entries, perms_store)
-                )
-            return tools_dict
+            if not tools:
+                return []
+            perms_store = await sp.global_get("tool_permissions", {})
+            return [self._serialize_tool(tool, perms_store) for tool in tools]
         except Exception as exc:
             logger.error(traceback.format_exc())
             raise ToolsServiceError(f"Failed to get tool list: {exc!s}") from exc
@@ -293,11 +276,6 @@ class ToolsService:
             if not tool_name or permission not in ("admin", "member"):
                 raise ToolsServiceError(
                     "name and permission (admin or member) are required"
-                )
-
-            if self.tool_mgr.is_builtin_tool(tool_name):
-                raise ToolsServiceError(
-                    "Builtin tools do not support per-tool permission configuration."
                 )
 
             if not any(t.name == tool_name for t in self.tool_mgr.func_list):
@@ -340,11 +318,6 @@ class ToolsService:
 
             if not tool_name or action is None:
                 raise ToolsServiceError("Missing required parameters: name or activate")
-
-            if self.tool_mgr.is_builtin_tool(tool_name):
-                raise ToolsServiceError(
-                    "Builtin tools are read-only and cannot be toggled."
-                )
 
             if action:
                 try:
@@ -529,42 +502,12 @@ class ToolsService:
                 f"Failed to disable MCP server {name}: {exc!s}"
             ) from exc
 
-    def _get_config_entries(self) -> list[dict]:
-        conf_list = self.core_lifecycle.astrbot_config_mgr.get_conf_list()
-        conf_name_map = {conf["id"]: conf["name"] for conf in conf_list}
-        config_entries = []
-        for conf_id, conf in self.core_lifecycle.astrbot_config_mgr.confs.items():
-            config_entries.append(
-                {
-                    "conf_id": conf_id,
-                    "conf_name": conf_name_map.get(conf_id, conf_id),
-                    "config": conf,
-                }
-            )
-        return config_entries
-
     def _serialize_tool(
         self,
         tool,
-        config_entries: list[dict],
         perms_store: object,
     ) -> dict:
-        readonly = False
-        builtin_config_statuses = []
-        builtin_config_tags = []
-        if self.tool_mgr.is_builtin_tool(tool.name):
-            origin = "builtin"
-            origin_name = "AstrBot Core"
-            origin_display_name = origin_name
-            readonly = True
-            builtin_config_statuses = get_builtin_tool_config_statuses(
-                tool.name,
-                config_entries,
-            )
-            builtin_config_tags = [
-                status for status in builtin_config_statuses if status["enabled"]
-            ]
-        elif isinstance(tool, MCPTool):
+        if isinstance(tool, MCPTool):
             origin = "mcp"
             origin_name = tool.mcp_server_name
             origin_display_name = origin_name
@@ -578,7 +521,12 @@ class ToolsService:
             origin_name = "unknown"
             origin_display_name = origin_name
 
-        tool_info = {
+        defaults = (
+            perms_store.get("_default", {}) if isinstance(perms_store, dict) else {}
+        )
+        if not isinstance(defaults, dict):
+            defaults = {}
+        return {
             "name": tool.name,
             "description": tool.description,
             "parameters": tool.parameters,
@@ -586,16 +534,6 @@ class ToolsService:
             "origin": origin,
             "origin_name": origin_name,
             "origin_display_name": origin_display_name,
-            "readonly": readonly,
-            "builtin_config_statuses": builtin_config_statuses,
-            "builtin_config_tags": builtin_config_tags,
+            "permission": defaults.get(tool.name, "member"),
+            "permission_configured": tool.name in defaults,
         }
-        if not readonly:
-            defaults = (
-                perms_store.get("_default", {}) if isinstance(perms_store, dict) else {}
-            )
-            configured = tool.name in defaults
-            permission = defaults[tool.name] if configured else "member"
-            tool_info["permission"] = permission
-            tool_info["permission_configured"] = configured
-        return tool_info

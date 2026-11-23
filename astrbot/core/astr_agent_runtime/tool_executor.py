@@ -314,19 +314,18 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
     def _get_runtime_computer_tools(
         cls,
         runtime: str,
-        tool_mgr,
         booter: str | None = None,
     ) -> dict[str, FunctionTool]:
         booter = "" if booter is None else str(booter).lower()
         if runtime == "sandbox":
-            shell_tool = tool_mgr.get_builtin_tool(ExecuteShellTool)
-            python_tool = tool_mgr.get_builtin_tool(PythonTool)
-            upload_tool = tool_mgr.get_builtin_tool(FileUploadTool)
-            download_tool = tool_mgr.get_builtin_tool(FileDownloadTool)
-            read_tool = tool_mgr.get_builtin_tool(FileReadTool)
-            write_tool = tool_mgr.get_builtin_tool(FileWriteTool)
-            edit_tool = tool_mgr.get_builtin_tool(FileEditTool)
-            grep_tool = tool_mgr.get_builtin_tool(GrepTool)
+            shell_tool = ExecuteShellTool()
+            python_tool = PythonTool()
+            upload_tool = FileUploadTool()
+            download_tool = FileDownloadTool()
+            read_tool = FileReadTool()
+            write_tool = FileWriteTool()
+            edit_tool = FileEditTool()
+            grep_tool = GrepTool()
             tools = {
                 shell_tool.name: shell_tool,
                 python_tool.name: python_tool,
@@ -338,9 +337,9 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
                 grep_tool.name: grep_tool,
             }
             if booter == "cua":
-                screenshot_tool = tool_mgr.get_builtin_tool(CuaScreenshotTool)
-                mouse_click_tool = tool_mgr.get_builtin_tool(CuaMouseClickTool)
-                keyboard_type_tool = tool_mgr.get_builtin_tool(CuaKeyboardTypeTool)
+                screenshot_tool = CuaScreenshotTool()
+                mouse_click_tool = CuaMouseClickTool()
+                keyboard_type_tool = CuaKeyboardTypeTool()
                 tools.update(
                     {
                         screenshot_tool.name: screenshot_tool,
@@ -351,12 +350,12 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
             return tools
         if runtime == "local":
             shell_tool = LocalExecuteShellTool()
-            shell_session_tool = tool_mgr.get_builtin_tool(ShellSessionTool)
-            python_tool = tool_mgr.get_builtin_tool(LocalPythonTool)
-            read_tool = tool_mgr.get_builtin_tool(FileReadTool)
-            write_tool = tool_mgr.get_builtin_tool(FileWriteTool)
-            edit_tool = tool_mgr.get_builtin_tool(FileEditTool)
-            grep_tool = tool_mgr.get_builtin_tool(GrepTool)
+            shell_session_tool = ShellSessionTool()
+            python_tool = LocalPythonTool()
+            read_tool = FileReadTool()
+            write_tool = FileWriteTool()
+            edit_tool = FileEditTool()
+            grep_tool = GrepTool()
             return {
                 shell_tool.name: shell_tool,
                 shell_session_tool.name: shell_session_tool,
@@ -386,7 +385,6 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
         )
         runtime_computer_tools = cls._get_runtime_computer_tools(
             runtime,
-            tool_mgr,
             provider_settings.get("sandbox", {}).get("booter"),
         )
 
