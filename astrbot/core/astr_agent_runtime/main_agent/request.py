@@ -33,6 +33,10 @@ from astrbot.core.utils.media_utils import (
     is_file_uri,
     is_recoverable_image_error,
 )
+from astrbot.core.utils.quoted_message.forward_extractor import (
+    has_forward_components,
+    is_forward_content_injected,
+)
 from astrbot.core.utils.quoted_message_parser import extract_quoted_message_images
 from astrbot.core.utils.string_utils import normalize_and_dedupe_strings
 
@@ -69,6 +73,10 @@ async def collect_initial_request(
         quoted_image_refs = set()
     attachment_paths: list[str] = []
     if req is None:
+        quoted_message_settings = media.get_quoted_message_settings(
+            config.provider_settings
+        )
+        fallback_quoted_image_count = 0
         if event.get_extra("provider_request"):
             req = event.get_extra("provider_request")
             assert isinstance(req, ProviderRequest), (
@@ -163,10 +171,6 @@ async def collect_initial_request(
             reply_comps = [
                 comp for comp in event.message_obj.message if isinstance(comp, Reply)
             ]
-            quoted_message_settings = media.get_quoted_message_settings(
-                config.provider_settings
-            )
-            fallback_quoted_image_count = 0
             for comp in reply_comps:
                 has_embedded_image = False
                 if comp.chain:
@@ -282,6 +286,17 @@ async def collect_initial_request(
             if consumed_provider_prefix:
                 event.set_extra("_consumed_provider_prefix", consumed_provider_prefix)
             event.set_extra("_default_event_prompt", True)
+
+        # top-level forwarded message attachments
+        await media.append_forward_content(
+            event,
+            req,
+            quoted_message_settings,
+            max_fallback_images=max(
+                config.max_quoted_fallback_images - fallback_quoted_image_count,
+                0,
+            ),
+        )
     req.image_urls = normalize_and_dedupe_strings(req.image_urls)
     quote_image_ref = None
     quote = next(
@@ -350,10 +365,17 @@ async def prepare_request(
     """
     explicit = req is not None or collected_input is not None
     collected = req is None or (
-        any(isinstance(part, Reply) for part in event.message_obj.message)
-        and not any(
-            isinstance(part, TextPart) and part.text.startswith("<Quoted Message>\n")
-            for part in req.extra_user_content_parts
+        (
+            any(isinstance(part, Reply) for part in event.message_obj.message)
+            and not any(
+                isinstance(part, TextPart)
+                and part.text.startswith("<Quoted Message>\n")
+                for part in req.extra_user_content_parts
+            )
+        )
+        or (
+            has_forward_components(event)
+            and not is_forward_content_injected(event, req.extra_user_content_parts)
         )
     )
     quote_ref = None

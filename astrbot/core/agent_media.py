@@ -11,6 +11,13 @@ from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from astrbot.core.provider import Provider
 from astrbot.core.provider.entities import ProviderRequest
 from astrbot.core.star.context import Context
+from astrbot.core.utils.quoted_message.forward_extractor import (
+    FORWARD_CONTENT_UNAVAILABLE,
+    extract_forward_messages,
+    format_forward_content_part,
+    has_forward_components,
+    is_forward_content_injected,
+)
 from astrbot.core.utils.quoted_message.settings import (
     SETTINGS as DEFAULT_QUOTED_MESSAGE_SETTINGS,
 )
@@ -20,6 +27,7 @@ from astrbot.core.utils.quoted_message.settings import (
 from astrbot.core.utils.quoted_message_parser import (
     extract_quoted_message_text,
 )
+from astrbot.core.utils.string_utils import normalize_and_dedupe_strings
 
 ANIMATION_CAPTION_NOTICE = (
     "\n<system_notice>\n"
@@ -284,3 +292,75 @@ async def append_quoted_content(
     quoted_text = f"<Quoted Message>\n{quoted_content}\n</Quoted Message>"
     req.extra_user_content_parts.append(TextPart(text=quoted_text))
     return captioned_ref
+
+
+async def append_forward_content(
+    event: AstrMessageEvent,
+    req: ProviderRequest,
+    quoted_message_settings: QuotedMessageParserSettings = DEFAULT_QUOTED_MESSAGE_SETTINGS,
+    *,
+    max_fallback_images: int = 20,
+) -> int:
+    """Append top-level forwarded chat logs and bounded image references to ``req``.
+
+    Respects cross-plugin coordination extras:
+    - Skips both RPC and injection when ``_companion_forward_injected`` is truthy
+      or forward text is already present in ``req.extra_user_content_parts``.
+    - Reuses ``_astrbot_parsed_forwards`` when pre-populated to avoid duplicate RPCs.
+
+    Returns:
+        The number of new image references appended to ``req.image_urls``.
+    """
+    if is_forward_content_injected(event, req.extra_user_content_parts):
+        return 0
+    if not has_forward_components(event):
+        return 0
+
+    try:
+        parsed = await extract_forward_messages(
+            event,
+            settings=quoted_message_settings,
+        )
+    except Exception as exc:  # noqa: BLE001
+        logger.warning(
+            "Failed to extract top-level forward messages for umo=%s: %s",
+            getattr(event, "unified_msg_origin", ""),
+            exc,
+            exc_info=True,
+        )
+        req.extra_user_content_parts.append(TextPart(text=FORWARD_CONTENT_UNAVAILABLE))
+        return 0
+
+    if parsed is None:
+        return 0
+
+    req.extra_user_content_parts.append(
+        TextPart(text=format_forward_content_part(parsed))
+    )
+
+    forward_images = normalize_and_dedupe_strings(parsed.get("image_urls") or [])
+    if not forward_images:
+        return 0
+
+    remaining_limit = max(max_fallback_images, 0)
+    if remaining_limit <= 0:
+        logger.warning(
+            "Skip forward fallback images due to limit=%d for umo=%s",
+            max_fallback_images,
+            getattr(event, "unified_msg_origin", ""),
+        )
+        return 0
+
+    existing = set(req.image_urls)
+    new_images = [ref for ref in forward_images if ref not in existing]
+    if len(new_images) > remaining_limit:
+        logger.warning(
+            "Truncate forward fallback images for umo=%s from %d to %d",
+            getattr(event, "unified_msg_origin", ""),
+            len(new_images),
+            remaining_limit,
+        )
+        new_images = new_images[:remaining_limit]
+
+    req.image_urls.extend(new_images)
+    return len(new_images)

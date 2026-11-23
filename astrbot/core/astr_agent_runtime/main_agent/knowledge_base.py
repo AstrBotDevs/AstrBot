@@ -33,7 +33,11 @@ async def apply_knowledge_base(
             req.func_tool = ToolSet()
         req.func_tool.add_tool(KnowledgeBaseQueryTool())
     else:
-        if req.prompt is None or not req.prompt.strip():
+        if (
+            req.prompt is None
+            or not req.prompt.strip()
+            or req.prompt.strip() == "<attachment>"
+        ):
             return
         try:
             kb_result = await retrieve_knowledge_base(

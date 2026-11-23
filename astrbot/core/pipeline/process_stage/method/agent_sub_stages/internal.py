@@ -18,7 +18,17 @@ from astrbot.core.llm_error_messages import (
     LLM_ERROR_CODE_EXTRA_KEY,
     LLM_ERROR_MESSAGE_EXTRA_KEY,
 )
-from astrbot.core.message.components import File, Image, Json, Record, Reply, Video
+from astrbot.core.message.components import (
+    File,
+    Forward,
+    Image,
+    Json,
+    Node,
+    Nodes,
+    Record,
+    Reply,
+    Video,
+)
 from astrbot.core.message.message_event_result import (
     MessageChain,
     MessageEventResult,
@@ -93,7 +103,10 @@ class InternalAgentSubStage(Stage):
             ):
                 raise asyncio.CancelledError()
             has_input = bool(event.message_str and event.message_str.strip()) or any(
-                isinstance(component, (Image, File, Record, Video, Reply))
+                isinstance(
+                    component,
+                    (Image, File, Record, Video, Reply, Forward, Node, Nodes),
+                )
                 for component in event.message_obj.message
             )
             if not has_input and event.get_extra("provider_request") is None:

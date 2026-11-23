@@ -7,12 +7,14 @@ from typing import Any, TypedDict
 from astrbot.core.message.components import (
     At,
     AtAll,
+    Face,
     File,
     Forward,
     Image,
     Node,
     Nodes,
     Plain,
+    Record,
     Reply,
     Video,
 )
@@ -137,6 +139,10 @@ def _extract_text_from_component_chain(
             parts.append("[Image]")
         elif isinstance(seg, Video):
             parts.append("[Video]")
+        elif isinstance(seg, Record):
+            parts.append("[Audio]")
+        elif isinstance(seg, Face):
+            parts.append("[Face]")
         elif isinstance(seg, File):
             file_name = seg.name or "file"
             parts.append(f"[File:{file_name}]")
@@ -158,8 +164,11 @@ def _extract_text_from_component_chain(
                 settings=settings,
             )
             if node_text:
+                if parts and not parts[-1].endswith("\n"):
+                    parts.append("\n")
                 parts.append(f"{node_sender}: {node_text}")
         elif isinstance(seg, Nodes):
+            node_lines: list[str] = []
             for node in seg.nodes:
                 node_sender = node.name or node.uin or "Unknown User"
                 node_text = _extract_text_from_component_chain(
@@ -168,7 +177,11 @@ def _extract_text_from_component_chain(
                     settings=settings,
                 )
                 if node_text:
-                    parts.append(f"{node_sender}: {node_text}")
+                    node_lines.append(f"{node_sender}: {node_text}")
+            if node_lines:
+                if parts and not parts[-1].endswith("\n"):
+                    parts.append("\n")
+                parts.append("\n".join(node_lines))
 
     return _join_text_parts(parts)
 
@@ -261,9 +274,10 @@ def _extract_text_from_multimsg_json(raw_json: str) -> str | None:
     return "\n".join(texts).strip() or None
 
 
-def _parse_onebot_segments(
+def parse_onebot_segments(
     segments: list[Any],
     *,
+    depth: int = 0,
     settings: QuotedMessageParserSettings = SETTINGS,
 ) -> ParsedOneBotPayload:
     text_parts: list[str] = []
@@ -281,6 +295,15 @@ def _parse_onebot_segments(
             text = seg_data.get("text")
             if isinstance(text, str) and text:
                 text_parts.append(text)
+        elif seg_type == "at":
+            qq = seg_data.get("qq")
+            name = seg_data.get("name")
+            if str(qq) == "all":
+                text_parts.append("@all")
+            elif isinstance(name, str) and name.strip():
+                text_parts.append(f"@{name.strip()}")
+            elif qq is not None and str(qq).strip():
+                text_parts.append(f"@{str(qq).strip()}")
         elif seg_type == "image":
             text_parts.append("[Image]")
             candidate = seg_data.get("url") or seg_data.get("file")
@@ -288,6 +311,17 @@ def _parse_onebot_segments(
                 image_refs.append(candidate.strip())
         elif seg_type == "video":
             text_parts.append("[Video]")
+        elif seg_type == "record":
+            text_parts.append("[Audio]")
+        elif seg_type == "face":
+            text_parts.append("[Face]")
+        elif seg_type == "mface":
+            summary = seg_data.get("summary")
+            text_parts.append(
+                summary.strip()
+                if isinstance(summary, str) and summary.strip()
+                else "[Sticker]"
+            )
         elif seg_type == "file":
             file_name = (
                 seg_data.get("name")
@@ -313,15 +347,12 @@ def _parse_onebot_segments(
             ):
                 image_refs.append(candidate_file.strip())
         elif seg_type in ("forward", "forward_msg", "nodes"):
-            fid = seg_data.get("id") or seg_data.get("message_id")
-            if isinstance(fid, (str, int)) and str(fid):
-                forward_ids.append(str(fid))
-            else:
-                nested_nodes = seg_data.get("content")
+            nested_nodes = seg_data.get("content")
+            if isinstance(nested_nodes, list) and nested_nodes:
                 nested_text, nested_forward_ids, nested_images = (
                     _extract_text_forward_ids_and_images_from_forward_nodes(
-                        nested_nodes if isinstance(nested_nodes, list) else [],
-                        depth=1,
+                        nested_nodes,
+                        depth=depth + 1,
                         settings=settings,
                     )
                 )
@@ -331,6 +362,10 @@ def _parse_onebot_segments(
                     forward_ids.extend(nested_forward_ids)
                 if nested_images:
                     image_refs.extend(nested_images)
+            else:
+                fid = seg_data.get("id") or seg_data.get("message_id")
+                if isinstance(fid, (str, int)) and str(fid).strip():
+                    forward_ids.append(str(fid).strip())
         elif seg_type == "json":
             raw_json = seg_data.get("data")
             if isinstance(raw_json, str) and raw_json.strip():
@@ -344,6 +379,70 @@ def _parse_onebot_segments(
         forward_ids,
         normalize_and_dedupe_strings(image_refs),
     )
+
+
+_parse_onebot_segments = parse_onebot_segments
+
+
+def extract_onebot_forward_nodes(payload: dict[str, Any]) -> list[Any]:
+    """Unwrap a OneBot ``get_forward_msg`` payload into its raw node list."""
+    data = _unwrap_onebot_data(payload)
+    nodes = (
+        data.get("messages")
+        or data.get("message")
+        or data.get("nodes")
+        or data.get("nodeList")
+    )
+    return nodes if isinstance(nodes, list) else []
+
+
+def extract_onebot_node_fields(node: dict[str, Any]) -> tuple[str, list[Any]]:
+    """Extract normalized ``(sender_name, segments)`` from one OneBot forward node.
+
+    Supports both flat message dicts (``{"sender": ..., "message": ...}``) and
+    OneBot v11 node segment dicts (``{"type": "node", "data": {...}}``).
+    """
+    node_data = node.get("data") if isinstance(node.get("data"), dict) else node
+    sender = node.get("sender") if isinstance(node.get("sender"), dict) else None
+    if sender is None and isinstance(node_data.get("sender"), dict):
+        sender = node_data.get("sender")
+    if not isinstance(sender, dict):
+        sender = {}
+
+    sender_name = str(
+        sender.get("nickname")
+        or sender.get("card")
+        or sender.get("user_id")
+        or node_data.get("nickname")
+        or node_data.get("name")
+        or node_data.get("user_id")
+        or node_data.get("uin")
+        or "Unknown User"
+    )
+
+    raw_content = (
+        node.get("message")
+        or node.get("content")
+        or node_data.get("message")
+        or node_data.get("content")
+        or []
+    )
+    chain: list[Any] = []
+    if isinstance(raw_content, list):
+        chain = raw_content
+    elif isinstance(raw_content, str):
+        raw_content = raw_content.strip()
+        if raw_content:
+            try:
+                parsed = json.loads(raw_content)
+            except Exception:
+                parsed = None
+            if isinstance(parsed, list):
+                chain = parsed
+            else:
+                chain = [{"type": "text", "data": {"text": raw_content}}]
+
+    return sender_name, chain
 
 
 def _extract_text_forward_ids_and_images_from_forward_nodes(
@@ -364,33 +463,12 @@ def _extract_text_forward_ids_and_images_from_forward_nodes(
         if not isinstance(node, dict):
             continue
 
-        sender = node.get("sender")
-        if not isinstance(sender, dict):
-            sender = {}
-        sender_name = (
-            sender.get("nickname")
-            or sender.get("card")
-            or sender.get("user_id")
-            or "Unknown User"
+        sender_name, chain = extract_onebot_node_fields(node)
+        parsed_segments = parse_onebot_segments(
+            chain,
+            depth=depth,
+            settings=settings,
         )
-
-        raw_content = node.get("message") or node.get("content") or []
-        chain: list[Any] = []
-        if isinstance(raw_content, list):
-            chain = raw_content
-        elif isinstance(raw_content, str):
-            raw_content = raw_content.strip()
-            if raw_content:
-                try:
-                    parsed = json.loads(raw_content)
-                except Exception:
-                    parsed = None
-                if isinstance(parsed, list):
-                    chain = parsed
-                else:
-                    chain = [{"type": "text", "data": {"text": raw_content}}]
-
-        parsed_segments = _parse_onebot_segments(chain, settings=settings)
         node_text = parsed_segments["text"]
         node_forward_ids = parsed_segments["forward_ids"]
         node_images = parsed_segments["image_refs"]
@@ -416,7 +494,7 @@ def _parse_onebot_get_msg_payload(
     data = _unwrap_onebot_data(payload)
     segments = data.get("message") or data.get("messages")
     if isinstance(segments, list):
-        return _parse_onebot_segments(segments, settings=settings)
+        return parse_onebot_segments(segments, settings=settings)
 
     text: str | None = None
     if isinstance(segments, str) and segments.strip():
@@ -433,14 +511,8 @@ def _parse_onebot_get_forward_payload(
     *,
     settings: QuotedMessageParserSettings = SETTINGS,
 ) -> ParsedOneBotPayload:
-    data = _unwrap_onebot_data(payload)
-    nodes = (
-        data.get("messages")
-        or data.get("message")
-        or data.get("nodes")
-        or data.get("nodeList")
-    )
-    if not isinstance(nodes, list):
+    nodes = extract_onebot_forward_nodes(payload)
+    if not nodes:
         return _build_parsed_payload(None)
 
     text, forward_ids, image_refs = (

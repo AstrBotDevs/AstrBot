@@ -23,6 +23,7 @@ from astrbot.core.utils.media_utils import (
     IMAGE_COMPRESS_DEFAULT_MAX_SIZE,
     normalize_model_image_max_size,
 )
+from astrbot.core.utils.quoted_message.forward_extractor import has_forward_components
 from astrbot.core.utils.string_utils import normalize_and_dedupe_strings
 
 if TYPE_CHECKING:
@@ -253,6 +254,13 @@ async def prepare_input_content(
         return None
 
     cfg = config.provider_settings
+    if collected_request and has_forward_components(event):
+        await media.append_forward_content(
+            event,
+            req,
+            media.get_quoted_message_settings(cfg),
+            max_fallback_images=config.max_quoted_fallback_images,
+        )
     options = cfg.get("image_compress_options", {})
     max_size = normalize_model_image_max_size(
         options.get("max_size") if isinstance(options, dict) else None
@@ -303,9 +311,10 @@ async def prepare_input_content(
             logger.error("Error occurred while applying file extract: %s", exc)
 
     has_reply = any(isinstance(comp, Reply) for comp in event.message_obj.message)
+    has_forward = has_forward_components(event)
 
     if not req.prompt and not req.image_urls and not req.audio_urls:
-        if has_reply or req.extra_user_content_parts:
+        if has_reply or has_forward or req.extra_user_content_parts:
             req.prompt = "<attachment>"
         else:
             return None
