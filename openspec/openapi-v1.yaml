@@ -2432,6 +2432,12 @@ paths:
           schema:
             type: string
           description: Optional URL-prefix mirror for reaching GitHub raw files.
+        - name: repo
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Preferred repository URL of the pending update source.
       responses:
         "200":
           $ref: "#/components/responses/Text"

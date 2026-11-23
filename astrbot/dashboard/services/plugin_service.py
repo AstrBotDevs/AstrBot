@@ -10,6 +10,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlparse
 
 import aiohttp
 import certifi
@@ -2027,24 +2028,29 @@ class PluginService:
         self,
         plugin_name: str | None,
         proxy: str = "",
+        repo: str = "",
     ) -> tuple[dict, str]:
         """Fetch the latest CHANGELOG.md from the plugin's source repository.
 
         Reads the raw file at the repository HEAD so the changelog can be
-        reviewed before deciding whether to update the plugin. The user-selected
-        proxy (or a direct connection) is tried first; curated fallback mirrors
-        are only used when the previous bases are unreachable.
+        reviewed before deciding whether to update the plugin. The
+        caller-provided repo is preferred over the persisted install-source
+        repository so the changelog matches the marketplace entry the pending
+        update will actually use. Bases are tried in order: the user-selected
+        proxy, a direct connection, then curated fallback mirrors that are
+        only reached when the previous bases cannot serve the file.
 
         Args:
             plugin_name: Installed plugin metadata name.
             proxy: Optional URL-prefix mirror for reaching GitHub raw files.
+            repo: Preferred repository URL of the pending update source.
 
         Returns:
             Changelog content from the remote repository.
 
         Raises:
-            PluginServiceError: If the plugin does not exist or every base is
-                unreachable.
+            PluginServiceError: If the plugin does not exist, the proxy is
+                invalid, or every base is unreachable.
         """
         logger.debug(f"Getting the remote changelog for plugin {plugin_name}")
         if not plugin_name:
@@ -2055,27 +2061,57 @@ class PluginService:
         if not plugin:
             raise PluginServiceError("插件不存在")
 
-        records = await self.get_plugin_install_sources()
-        record = self.resolve_effective_plugin_install_source(plugin, records)
-        repo_url = str((record or {}).get("repo") or plugin.repo or "").strip()
-        if not repo_url:
-            return {"content": None}, "该插件缺少仓库地址，无法在线获取更新日志"
-
-        try:
-            repository = GitHubRepository.parse(normalize_repository_url(repo_url))
-        except ValueError:
-            return {"content": None}, "暂不支持从该代码托管平台在线获取更新日志"
+        repository = None
+        caller_repo = str(repo or "").strip()
+        if caller_repo:
+            try:
+                repository = GitHubRepository.parse(
+                    normalize_repository_url(caller_repo)
+                )
+            except ValueError:
+                repository = None
+        if repository is None:
+            records = await self.get_plugin_install_sources()
+            record = self.resolve_effective_plugin_install_source(plugin, records)
+            repo_url = str((record or {}).get("repo") or plugin.repo or "").strip()
+            if not repo_url:
+                return {"content": None}, "该插件缺少仓库地址，无法在线获取更新日志"
+            try:
+                repository = GitHubRepository.parse(normalize_repository_url(repo_url))
+            except ValueError:
+                return {"content": None}, "暂不支持从该代码托管平台在线获取更新日志"
 
         proxy = proxy.strip().removesuffix("/")
+        if proxy:
+            # Plain http(s) URL-prefix mirrors only: no credentials (they
+            # would leak into logs), no query or fragment (they could turn
+            # the concatenated path into a request to another resource).
+            parsed_proxy = urlparse(proxy)
+            if (
+                parsed_proxy.scheme not in {"http", "https"}
+                or not parsed_proxy.hostname
+                or parsed_proxy.username
+                or parsed_proxy.password
+                or parsed_proxy.query
+                or parsed_proxy.fragment
+            ):
+                raise PluginServiceError(
+                    "代理地址无效，仅支持不含凭据与查询参数的 http/https 镜像地址",
+                    public_message="代理地址无效，仅支持不含凭据与查询参数的 http/https 镜像地址",
+                )
+
         bases = (
-            (proxy,) if proxy else ("",)
-        ) + PLUGIN_REMOTE_CHANGELOG_FALLBACK_PROXIES
+            ((proxy,) if proxy else ())
+            + ("",)
+            + PLUGIN_REMOTE_CHANGELOG_FALLBACK_PROXIES
+        )
         async with httpx.AsyncClient(
             timeout=PLUGIN_REMOTE_CHANGELOG_TIMEOUT_SECONDS,
             verify=certifi.where(),
             follow_redirects=True,
             trust_env=True,
         ) as client:
+            saw_reachable_base = False
             for base in bases:
                 base_broken = False
                 for filename in PLUGIN_REMOTE_CHANGELOG_FILENAMES:
@@ -2100,6 +2136,8 @@ class PluginService:
                                         public_message=f"{filename} 超过 1MB。",
                                     )
                     except httpx.HTTPError as exc:
+                        # Proxy validation above rejects userinfo, so this URL
+                        # never embeds credentials and is safe to log.
                         logger.warning(
                             f"Failed to fetch remote changelog for plugin "
                             f"{plugin_name} from {request_url}: {exc}"
@@ -2118,9 +2156,14 @@ class PluginService:
                         ) from exc
                     return {"content": content}, "成功获取更新日志"
                 else:
-                    # Every filename returned 404 at this base, so the
-                    # repository is reachable but has no changelog file.
-                    return {"content": None}, "该插件仓库中没有更新日志文件"
+                    # Every filename returned 404 at this base, so it is
+                    # reachable but served no changelog; keep trying the
+                    # remaining bases so a broken mirror cannot mask a real
+                    # changelog available through another base.
+                    saw_reachable_base = True
+
+            if saw_reachable_base:
+                return {"content": None}, "该插件仓库中没有更新日志文件"
 
         raise PluginServiceError(
             "在线获取更新日志失败，请检查网络或代理设置",

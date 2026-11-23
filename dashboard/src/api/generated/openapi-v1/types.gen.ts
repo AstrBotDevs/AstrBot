@@ -2212,6 +2212,10 @@ export type GetPluginChangelogRemoteData = {
          * Optional URL-prefix mirror for reaching GitHub raw files.
          */
         proxy?: string;
+        /**
+         * Preferred repository URL of the pending update source.
+         */
+        repo?: string;
     };
 };
 

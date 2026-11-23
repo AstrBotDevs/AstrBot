@@ -320,6 +320,9 @@ async function fetchContent() {
       res = props.remote
         ? await pluginApi.changelogRemote(props.pluginName, {
             proxy: props.proxy,
+            // Prefer the marketplace repo of the pending update source; the
+            // backend falls back to the persisted install-source repo.
+            repo: props.repoUrl || "",
           })
         : await pluginApi.changelog(props.pluginName);
     } else if (props.mode === "readme") {

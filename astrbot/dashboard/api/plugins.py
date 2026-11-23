@@ -1107,11 +1107,12 @@ async def get_plugin_changelog(
 async def get_plugin_changelog_remote(
     plugin_id: str,
     proxy: str = Query(""),
+    repo: str = Query(""),
     _auth: AuthContext = Depends(require_plugin_scope),
     service: PluginService = Depends(get_service),
 ):
     return await _run_service(
-        lambda: service.get_plugin_changelog_remote(plugin_id, proxy=proxy),
+        lambda: service.get_plugin_changelog_remote(plugin_id, proxy=proxy, repo=repo),
         log_label="/api/plugin/changelog/remote",
     )
 

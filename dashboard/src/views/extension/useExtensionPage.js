@@ -134,7 +134,8 @@ export const useExtensionPage = (initialTab = "installed") => {
     show: false,
   });
 
-  // 插件更新日志对话框（复用 ReadmeDialog；remote 时拉取仓库最新版日志）
+  // Changelog dialog (reuses ReadmeDialog); remote mode fetches the latest
+  // changelog from the plugin's source repository.
   const changelogDialog = reactive({
     show: false,
     pluginName: "",
@@ -1015,7 +1016,7 @@ export const useExtensionPage = (initialTab = "installed") => {
     }
   };
 
-  // 更新前查看仓库最新版的更新日志
+  // View the latest changelog from the repository before updating.
   const viewUpdateChangelog = () => {
     const ext = selectedUpdateExtension.value;
     if (!ext) return;
