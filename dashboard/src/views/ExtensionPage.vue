@@ -141,6 +141,7 @@ const {
   reloadPlugin,
   viewReadme,
   viewChangelog,
+  viewUpdateChangelog,
   openInstallDialog,
   closeInstallDialog,
   handleInstallPlugin,
@@ -533,6 +534,8 @@ const updateDialogPluginLogo = computed(() => {
     v-model:show="changelogDialog.show"
     :plugin-name="changelogDialog.pluginName"
     :repo-url="changelogDialog.repoUrl"
+    :remote="changelogDialog.remote"
+    :proxy="changelogDialog.proxy"
     mode="changelog"
   />
 
@@ -1237,6 +1240,14 @@ const updateDialogPluginLogo = computed(() => {
         </div>
       </v-card-text>
       <v-card-actions>
+        <v-btn
+          color="grey"
+          variant="text"
+          prepend-icon="mdi-history"
+          @click="viewUpdateChangelog"
+        >
+          {{ tm("pluginChangelog.menuTitle") }}
+        </v-btn>
         <v-spacer></v-spacer>
         <v-btn color="grey" variant="text" @click="closeUpdateConfirmDialog">
           {{ tm("buttons.cancel") }}

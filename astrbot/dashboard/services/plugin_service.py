@@ -13,6 +13,7 @@ from typing import Any
 
 import aiohttp
 import certifi
+import httpx
 
 from astrbot.api import sp
 from astrbot.core import DEMO_MODE, file_token_service, logger
@@ -20,6 +21,7 @@ from astrbot.core.astr_agent_runtime.computer.computer_client import (
     sync_skills_to_active_sandboxes,
 )
 from astrbot.core.repository import (
+    GitHubRepository,
     GitUnavailableError,
     normalize_repository_url,
     parse_repository_url,
@@ -44,6 +46,21 @@ PLUGIN_INSTALL_SOURCES_KEY = "plugin_install_sources"
 PLUGIN_DEFAULT_REGISTRY_NAME = "Default"
 PLUGIN_UPDATE_DISABLED_MESSAGE = "该插件不是通过插件市场安装，无法检测或执行更新。"
 PLUGIN_UPDATE_SOURCE_REQUIRED_MESSAGE = "请先选择插件安装源后再更新。"
+# Mirrors tried only when the direct GitHub connection is unreachable, so
+# users behind network blocks can still read a plugin changelog.
+PLUGIN_REMOTE_CHANGELOG_FALLBACK_PROXIES = (
+    "https://gh.dpik.top",
+    "https://gh-proxy.com",
+    "https://edgeone.gh-proxy.com",
+)
+PLUGIN_REMOTE_CHANGELOG_FILENAMES = (
+    "CHANGELOG.md",
+    "changelog.md",
+    "CHANGELOG",
+    "changelog",
+)
+PLUGIN_REMOTE_CHANGELOG_MAX_BYTES = 1024 * 1024
+PLUGIN_REMOTE_CHANGELOG_TIMEOUT_SECONDS = 15
 PLUGIN_COMPONENT_TYPE_ORDER = {
     "page": 0,
     "skill": 1,
@@ -2005,6 +2022,110 @@ class PluginService:
         plugin_name: str | None,
     ) -> tuple[dict, str]:
         return self.get_plugin_changelog(plugin_name)
+
+    async def get_plugin_changelog_remote(
+        self,
+        plugin_name: str | None,
+        proxy: str = "",
+    ) -> tuple[dict, str]:
+        """Fetch the latest CHANGELOG.md from the plugin's source repository.
+
+        Reads the raw file at the repository HEAD so the changelog can be
+        reviewed before deciding whether to update the plugin. The user-selected
+        proxy (or a direct connection) is tried first; curated fallback mirrors
+        are only used when the previous bases are unreachable.
+
+        Args:
+            plugin_name: Installed plugin metadata name.
+            proxy: Optional URL-prefix mirror for reaching GitHub raw files.
+
+        Returns:
+            Changelog content from the remote repository.
+
+        Raises:
+            PluginServiceError: If the plugin does not exist or every base is
+                unreachable.
+        """
+        logger.debug(f"Getting the remote changelog for plugin {plugin_name}")
+        if not plugin_name:
+            logger.warning("The plugin name is empty.")
+            raise PluginServiceError("插件名称不能为空")
+
+        plugin = self.find_plugin_by_name(plugin_name)
+        if not plugin:
+            raise PluginServiceError("插件不存在")
+
+        records = await self.get_plugin_install_sources()
+        record = self.resolve_effective_plugin_install_source(plugin, records)
+        repo_url = str((record or {}).get("repo") or plugin.repo or "").strip()
+        if not repo_url:
+            return {"content": None}, "该插件缺少仓库地址，无法在线获取更新日志"
+
+        try:
+            repository = GitHubRepository.parse(normalize_repository_url(repo_url))
+        except ValueError:
+            return {"content": None}, "暂不支持从该代码托管平台在线获取更新日志"
+
+        proxy = proxy.strip().removesuffix("/")
+        bases = (
+            (proxy,) if proxy else ("",)
+        ) + PLUGIN_REMOTE_CHANGELOG_FALLBACK_PROXIES
+        async with httpx.AsyncClient(
+            timeout=PLUGIN_REMOTE_CHANGELOG_TIMEOUT_SECONDS,
+            verify=certifi.where(),
+            follow_redirects=True,
+            trust_env=True,
+        ) as client:
+            for base in bases:
+                base_broken = False
+                for filename in PLUGIN_REMOTE_CHANGELOG_FILENAMES:
+                    raw_url = repository.raw_file_url(filename)
+                    request_url = f"{base}/{raw_url}" if base else raw_url
+                    try:
+                        async with client.stream("GET", request_url) as response:
+                            if response.status_code == 404:
+                                continue
+                            if response.status_code != 200:
+                                base_broken = True
+                                break
+                            changelog_bytes = bytearray()
+                            async for chunk in response.aiter_bytes():
+                                changelog_bytes.extend(chunk)
+                                if (
+                                    len(changelog_bytes)
+                                    > PLUGIN_REMOTE_CHANGELOG_MAX_BYTES
+                                ):
+                                    raise PluginServiceError(
+                                        f"{filename} 超过 1MB。",
+                                        public_message=f"{filename} 超过 1MB。",
+                                    )
+                    except httpx.HTTPError as exc:
+                        logger.warning(
+                            f"Failed to fetch remote changelog for plugin "
+                            f"{plugin_name} from {request_url}: {exc}"
+                        )
+                        base_broken = True
+
+                    if base_broken:
+                        break
+
+                    try:
+                        content = bytes(changelog_bytes).decode("utf-8")
+                    except UnicodeDecodeError as exc:
+                        raise PluginServiceError(
+                            f"{filename} 必须使用 UTF-8 编码。",
+                            public_message=f"{filename} 必须使用 UTF-8 编码。",
+                        ) from exc
+                    return {"content": content}, "成功获取更新日志"
+                else:
+                    # Every filename returned 404 at this base, so the
+                    # repository is reachable but has no changelog file.
+                    return {"content": None}, "该插件仓库中没有更新日志文件"
+
+        raise PluginServiceError(
+            "在线获取更新日志失败，请检查网络或代理设置",
+            public_message="在线获取更新日志失败，请检查网络或代理设置",
+        )
 
     @staticmethod
     async def get_custom_sources() -> list:

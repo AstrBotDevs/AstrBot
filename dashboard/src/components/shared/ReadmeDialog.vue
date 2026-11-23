@@ -43,6 +43,10 @@ const props = defineProps({
     default: "readme",
     validator: (value) => ["readme", "changelog", "first-notice"].includes(value),
   },
+  // Fetch the latest changelog from the plugin's source repository instead of
+  // reading the locally installed CHANGELOG.md.
+  remote: { type: Boolean, default: false },
+  proxy: { type: String, default: "" },
 });
 
 const emit = defineEmits(["update:show"]);
@@ -313,7 +317,11 @@ async function fetchContent() {
   try {
     let res;
     if (props.mode === "changelog") {
-      res = await pluginApi.changelog(props.pluginName);
+      res = props.remote
+        ? await pluginApi.changelogRemote(props.pluginName, {
+            proxy: props.proxy,
+          })
+        : await pluginApi.changelog(props.pluginName);
     } else if (props.mode === "readme") {
       res = await pluginApi.readme(props.pluginName);
     } else if (props.mode === "first-notice") {
@@ -335,7 +343,13 @@ async function fetchContent() {
 }
 
 watch(
-  [() => props.show, () => props.pluginName, () => props.mode],
+  [
+    () => props.show,
+    () => props.pluginName,
+    () => props.mode,
+    () => props.remote,
+    () => props.proxy,
+  ],
   ([show, name]) => {
     if (!show) return;
     if (requiresPluginName.value && !name) return;

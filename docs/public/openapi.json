@@ -3665,6 +3665,36 @@
         "description": "**Required scope:** `plugin`"
       }
     },
+    "/api/v1/plugins/{plugin_id}/changelog/remote": {
+      "get": {
+        "tags": [
+          "Plugins"
+        ],
+        "summary": "Get the latest CHANGELOG content from the plugin's source repository",
+        "operationId": "getPluginChangelogRemote",
+        "x-astrbot-scope": "plugin",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/PluginId"
+          },
+          {
+            "name": "proxy",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Optional URL-prefix mirror for reaching GitHub raw files."
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Text"
+          }
+        },
+        "description": "**Required scope:** `plugin`"
+      }
+    },
     "/api/v1/plugins/{plugin_id}/reload": {
       "post": {
         "tags": [

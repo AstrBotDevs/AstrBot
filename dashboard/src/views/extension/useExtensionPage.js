@@ -134,11 +134,13 @@ export const useExtensionPage = (initialTab = "installed") => {
     show: false,
   });
 
-  // 插件更新日志对话框（复用 ReadmeDialog）
+  // 插件更新日志对话框（复用 ReadmeDialog；remote 时拉取仓库最新版日志）
   const changelogDialog = reactive({
     show: false,
     pluginName: "",
     repoUrl: null,
+    remote: false,
+    proxy: "",
   });
 
   const pluginSearch = ref("");
@@ -1002,12 +1004,6 @@ export const useExtensionPage = (initialTab = "installed") => {
         try {
           await getExtensions();
           toast(tm("messages.refreshSuccess"), "success");
-
-          // 更新完成后弹出更新日志
-          viewChangelog({
-            name: extensionName,
-            repo: ext?.repo || null,
-          });
         } catch (error) {
           const errorMsg =
             error.response?.data?.message || error.message || String(error);
@@ -1017,6 +1013,19 @@ export const useExtensionPage = (initialTab = "installed") => {
     } catch (err) {
       toast(err, "error");
     }
+  };
+
+  // 更新前查看仓库最新版的更新日志
+  const viewUpdateChangelog = () => {
+    const ext = selectedUpdateExtension.value;
+    if (!ext) return;
+    const repo = String(
+      selectedUpdateMarketPlugin.value?.repo || ext.repo || "",
+    ).trim();
+    viewChangelog(
+      { name: ext.name, repo },
+      { remote: true, proxy: getRepositoryProxy(repo) },
+    );
   };
 
   // 确认强制更新
@@ -1271,9 +1280,11 @@ export const useExtensionPage = (initialTab = "installed") => {
   };
 
   // 查看更新日志
-  const viewChangelog = (plugin) => {
+  const viewChangelog = (plugin, opts) => {
     changelogDialog.pluginName = plugin.name;
     changelogDialog.repoUrl = plugin.repo;
+    changelogDialog.remote = Boolean(opts?.remote);
+    changelogDialog.proxy = String(opts?.proxy || "");
     changelogDialog.show = true;
   };
 
@@ -2638,6 +2649,7 @@ export const useExtensionPage = (initialTab = "installed") => {
     reloadPlugin,
     viewReadme,
     viewChangelog,
+    viewUpdateChangelog,
     openInstallDialog,
     closeInstallDialog,
     handleInstallPlugin,
