@@ -3,6 +3,8 @@ import json
 import re
 from collections.abc import Awaitable, Callable
 
+from pydantic import ValidationError
+
 from astrbot import logger
 from astrbot.api.event import MessageChain
 from astrbot.api.message_components import At, AtAll, Image, Plain, Reply
@@ -407,14 +409,18 @@ class KookPlatformAdapter(Platform):
         )
 
     async def _parse_card_message(
-        self, data: KookMessageEventData
+        self, data: KookMessageEventData, *, quoted: bool = False
     ) -> tuple[list[BaseMessageComponent], str]:
-        content = data.content
-        if not isinstance(content, str):
-            content = str(content)
-        guild_id = data.extra.guild_id
+        """Convert a KOOK card into AstrBot components and readable text.
 
-        card_list = KookCardMessageContainer.from_dict(json.loads(content))
+        Args:
+            data: Card message with its original message ID and conversation.
+            quoted: Keep quoted audio as a remote reference for request collection.
+
+        Returns:
+            Message components and their text summary.
+        """
+        card_list = KookCardMessageContainer.from_dict(json.loads(str(data.content)))
 
         text_parts: list[str] = []
         images: list[str] = []
@@ -435,14 +441,20 @@ class KookPlatformAdapter(Platform):
                     case HeaderModule():
                         text_parts.append(module.text.content)
 
-                    case FileModule():
+                    case FileModule() if module.src.startswith(("http://", "https://")):
                         files.append((module.type, module.title, module.src))
                         text_parts.append(f" [{module.type.value}]")
 
-                    case VoiceModule():
+                    case VoiceModule(media_id=int()):
                         files.append(
                             _KookVoiceRecord(self.client, data, module.media_id)
                         )
+                        text_parts.append(" [voice]")
+
+                    case VoiceModule(src=str(url)) if url.startswith(
+                        ("http://", "https://")
+                    ):
+                        files.append((module.type, "", url))
                         text_parts.append(" [voice]")
 
                     case _:
@@ -453,7 +465,7 @@ class KookPlatformAdapter(Platform):
 
         if text:
             component_parts, text = await self._convert_text_message_to_component(
-                text, text, guild_id=guild_id
+                text, text, guild_id=data.extra.guild_id
             )
             message.extend(component_parts)
 
@@ -468,6 +480,10 @@ class KookPlatformAdapter(Platform):
                 message.append(File(name=file_name, url=file_url))
             elif file_type == KookModuleType.VIDEO:
                 message.append(Video(file=file_url))
+            elif file_type == KookModuleType.VOICE or (
+                quoted and file_type == KookModuleType.AUDIO
+            ):
+                message.append(Record(file=file_url, url=file_url))
             elif file_type == KookModuleType.AUDIO:
                 path_wav = await MediaResolver(
                     file_url,
@@ -658,9 +674,23 @@ class KookPlatformAdapter(Platform):
         quote = data.extra.quote
         if quote is not None:
             quoted_chain: list[BaseMessageComponent] = []
+            quoted_text = quote.content
             match quote.type:
                 case KookMessageType.TEXT | KookMessageType.KMARKDOWN:
                     quoted_chain.append(Plain(text=quote.content))
+                case KookMessageType.CARD:
+                    try:
+                        quoted_chain, summary = await self._parse_card_message(
+                            data.model_copy(
+                                update={"msg_id": quote.id, "content": quote.content}
+                            ),
+                            quoted=True,
+                        )
+                        quoted_text = summary or quote.content
+                    except (json.JSONDecodeError, ValidationError) as exc:
+                        logger.debug(
+                            "Could not parse quoted KOOK card %s: %s", quote.id, exc
+                        )
                 case KookMessageType.IMAGE:
                     quoted_chain.append(Image(file=quote.content))
                 case KookMessageType.AUDIO:
@@ -676,7 +706,7 @@ class KookPlatformAdapter(Platform):
                     sender_id=quote.author.id,
                     sender_nickname=quote.author.nickname,
                     time=quote.create_at // 1000,
-                    message_str=quote.content,
+                    message_str=quoted_text,
                     chain=quoted_chain,
                 ),
             )

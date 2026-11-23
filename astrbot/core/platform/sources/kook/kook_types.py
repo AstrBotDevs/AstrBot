@@ -277,16 +277,19 @@ class DividerModule(KookCardModelBase):
 class FileModule(KookCardModelBase):
     src: str
     title: str = ""
-    type: Literal[KookModuleType.FILE, KookModuleType.AUDIO, KookModuleType.VIDEO] = (
-        KookModuleType.FILE
-    )
+    type: Literal[
+        KookModuleType.FILE,
+        KookModuleType.AUDIO,
+        KookModuleType.VIDEO,
+    ] = KookModuleType.FILE
     cover: str | None = None
     """cover 仅音频有效, 是音频的封面图"""
 
 
 class VoiceModule(KookCardModelBase):
     type: Literal[KookModuleType.VOICE] = KookModuleType.VOICE
-    media_id: int
+    media_id: int | None = None
+    src: str | None = None
 
 
 class CountdownModule(KookCardModelBase):
