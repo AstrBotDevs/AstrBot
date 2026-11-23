@@ -21,7 +21,7 @@ from astrbot.core.agent.runtime import (
     AgentSessionRef,
     AgentTurn,
 )
-from astrbot.core.agent.tool import FunctionTool, ToolSet
+from astrbot.core.agent.tool import ToolSet
 from astrbot.core.astr_agent_runtime.execution import create_native_runner
 from astrbot.core.astr_agent_runtime.main_agent.builder import MainAgentBuildResult
 from astrbot.core.astr_agent_runtime.main_agent.config import MainAgentBuildConfig
@@ -336,18 +336,8 @@ class DelegatedAgentSession(NativeAgentSession):
             else list(manager.get_full_tool_set().tools)
         )
         for tool in caller.tools:
-            if request.plugin_tools is not None and not manager.is_builtin_tool(
-                tool.name
-            ):
-                continue
-            if (
-                manager.is_builtin_tool(tool.name)
-                and type(tool) is FunctionTool
-                and tool.handler is None
-            ):
-                # skills_like mode hands the caller handler-less light copies.
-                tool = manager.get_builtin_tool(tool.name)
-            available.add_tool(available.get_tool(tool.name) or tool)
+            if request.plugin_tools is None or manager.is_builtin_tool(tool.name):
+                available.add_tool(available.get_tool(tool.name) or tool)
         selected = (
             available.tools
             if conversation.tools is None
