@@ -1,9 +1,8 @@
 from __future__ import annotations
 
-import asyncio
 import copy
-import random
 import uuid
+from collections import OrderedDict
 from collections.abc import AsyncGenerator
 from typing import Any
 
@@ -17,7 +16,6 @@ from astrbot.core.agent.tool import ToolSet
 from astrbot.core.exceptions import EmptyModelOutputError
 from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.provider.entities import LLMResponse
-from astrbot.core.utils.network_utils import is_connection_error, log_connection_failure
 
 from ..register import register_provider_adapter
 from .openai_source import ProviderOpenAIOfficial
@@ -29,6 +27,9 @@ OPENCODE_SESSION_HEADER = "x-opencode-session"
 OPENCODE_REQUEST_HEADER = "x-opencode-request"
 OPENCODE_CLIENT_HEADER = "x-opencode-client"
 OPENCODE_PROJECT_HEADER = "x-opencode-project"
+# Bound the per-session request counters so a long-lived provider instance that
+# serves many short conversations cannot grow without limit.
+_MAX_TRACKED_SESSIONS = 256
 
 
 @register_provider_adapter(
@@ -46,7 +47,8 @@ class ProviderOpenCodeGo(ProviderOpenAIOfficial):
             provider_settings: Global provider settings.
         """
         merged_provider_config = dict(provider_config)
-        merged_provider_config.setdefault("api_base", OPENCODE_GO_API_BASE)
+        api_base = str(merged_provider_config.get("api_base") or "").strip()
+        merged_provider_config["api_base"] = api_base or OPENCODE_GO_API_BASE
         configured_headers = merged_provider_config.get("custom_headers")
         custom_headers = (
             dict(configured_headers) if isinstance(configured_headers, dict) else {}
@@ -60,12 +62,20 @@ class ProviderOpenCodeGo(ProviderOpenAIOfficial):
         # Keep one per provider instance so OpenCode can cache prompts for it.
         self._fallback_session_id = uuid.uuid4().hex
         # Per-session request counter used for the x-opencode-request header.
-        self._session_request_counts: dict[str, int] = {}
+        self._session_request_counts: OrderedDict[str, int] = OrderedDict()
 
     async def _prepare_opencode_request(
         self, payloads: dict, tools: ToolSet | None
     ) -> dict[str, Any]:
-        """Prepare request body fields using the OpenAI-compatible provider rules."""
+        """Prepare request body fields using the OpenAI-compatible provider rules.
+
+        Args:
+            payloads: Mutable request payload owned by this call.
+            tools: Available function tools.
+
+        Returns:
+            The extra body fields that the SDK does not accept directly.
+        """
         if tools:
             model = payloads.get("model", "").lower()
             tool_list = tools.get_func_desc_openai_style(
@@ -100,80 +110,38 @@ class ProviderOpenCodeGo(ProviderOpenAIOfficial):
         request_max_retries: int | None,
         conversation_id: str | None,
     ) -> Any:
-        """Send one OpenCode Go request with routing and retry metadata."""
-        extra_body = await self._prepare_opencode_request(payloads, tools)
+        """Send one OpenCode Go request with routing and retry metadata.
+
+        The payload and the routing headers are prepared once per logical request,
+        so transport-level retries reuse the same request identity instead of
+        looking like new traffic to OpenCode.
+
+        Args:
+            payloads: OpenAI Chat Completions request payload. Not mutated.
+            tools: Available function tools.
+            stream: Whether to request a streaming response.
+            request_max_retries: Maximum transport attempts.
+            conversation_id: Bound AstrBot conversation ID, if any.
+
+        Returns:
+            The SDK completion or stream object.
+        """
+        request_payloads = copy.deepcopy(payloads)
+        extra_body = await self._prepare_opencode_request(request_payloads, tools)
+        extra_headers = self._opencode_session_headers(conversation_id)
+        stream_options = {"stream_options": {"include_usage": True}} if stream else {}
+
         return await retry_provider_request(
             "OpenCode Go",
             lambda: self.client.chat.completions.create(
-                **payloads,
+                **request_payloads,
                 stream=stream,
                 extra_body=extra_body,
-                extra_headers=self._opencode_session_headers(conversation_id),
-                **({"stream_options": {"include_usage": True}} if stream else {}),
+                extra_headers=extra_headers,
+                **stream_options,
             ),
             max_attempts=request_max_retries,
         )
-
-    async def _request_with_key_fallback(
-        self,
-        payloads: dict,
-        contexts: list,
-        tools: ToolSet | None,
-        *,
-        stream: bool,
-        request_max_retries: int | None,
-        conversation_id: str | None,
-    ) -> Any:
-        """Rotate API keys on rate limits while preserving provider fallback rules."""
-        available_api_keys = self.api_keys.copy()
-        if not available_api_keys:
-            available_api_keys = [self.client.api_key or ""]
-        chosen_key = random.choice(available_api_keys)
-        max_retries = 10
-        current_payloads = copy.deepcopy(payloads)
-        for retry_count in range(max_retries):
-            try:
-                self.client.api_key = chosen_key
-                return await self._send_opencode_request(
-                    current_payloads,
-                    tools,
-                    stream=stream,
-                    request_max_retries=request_max_retries,
-                    conversation_id=conversation_id,
-                )
-            except Exception as exc:
-                if "429" in str(exc) and len(available_api_keys) > 1:
-                    if chosen_key in available_api_keys:
-                        available_api_keys.remove(chosen_key)
-                    chosen_key = random.choice(available_api_keys)
-                    if retry_count < max_retries - 1:
-                        await asyncio.sleep(1)
-                    continue
-                if is_connection_error(exc):
-                    log_connection_failure(
-                        "OpenCode Go", exc, self.provider_config.get("proxy", "")
-                    )
-                (
-                    recovered,
-                    chosen_key,
-                    available_api_keys,
-                    current_payloads,
-                    contexts,
-                    tools,
-                    _image_fallback_used,
-                ) = await self._handle_api_error(
-                    exc,
-                    current_payloads,
-                    contexts,
-                    tools,
-                    chosen_key,
-                    available_api_keys,
-                    retry_count,
-                    max_retries,
-                )
-                if recovered:
-                    continue
-        raise RuntimeError("OpenCode Go request failed after all retries.")
 
     def _opencode_session_headers(self, conversation_id: str | None) -> dict[str, str]:
         """Build the OpenCode Go routing headers for one request.
@@ -181,8 +149,8 @@ class ProviderOpenCodeGo(ProviderOpenAIOfficial):
         OpenCode rejects inference requests without ``x-opencode-session``. AstrBot
         conversations supply the value when one is bound; otherwise the stable
         per-provider fallback keeps one-off calls routable and cache-friendly.
-        The remaining headers mirror the OpenCode client so the gateway can treat
-        AstrBot as a first-class CLI client.
+        The remaining headers mirror the OpenCode client so the gateway can route
+        AstrBot like a first-class CLI client.
 
         Args:
             conversation_id: Bound AstrBot conversation ID, or None for one-off calls.
@@ -195,6 +163,9 @@ class ProviderOpenCodeGo(ProviderOpenAIOfficial):
         )
         request_number = self._session_request_counts.get(session_id, 0) + 1
         self._session_request_counts[session_id] = request_number
+        self._session_request_counts.move_to_end(session_id)
+        while len(self._session_request_counts) > _MAX_TRACKED_SESSIONS:
+            self._session_request_counts.popitem(last=False)
         return {
             OPENCODE_SESSION_HEADER: session_id,
             OPENCODE_REQUEST_HEADER: f"msg_{request_number}",
@@ -211,11 +182,10 @@ class ProviderOpenCodeGo(ProviderOpenAIOfficial):
         Raises:
             Exception: If the model list request fails.
         """
+        extra_headers = self._opencode_session_headers(None)
         models = await retry_provider_request(
             "OpenCode Go",
-            lambda: self.client.models.list(
-                extra_headers=self._opencode_session_headers(None),
-            ),
+            lambda: self.client.models.list(extra_headers=extra_headers),
         )
         return sorted(model.id for model in models.data)
 
@@ -241,9 +211,8 @@ class ProviderOpenCodeGo(ProviderOpenAIOfficial):
         Raises:
             TypeError: If the SDK returns an unexpected response object.
         """
-        completion = await self._request_with_key_fallback(
+        completion = await self._send_opencode_request(
             payloads,
-            payloads["messages"],
             tools,
             stream=False,
             request_max_retries=request_max_retries,
@@ -278,9 +247,8 @@ class ProviderOpenCodeGo(ProviderOpenAIOfficial):
         Raises:
             EmptyModelOutputError: If the stream ends without usable model output.
         """
-        stream = await self._request_with_key_fallback(
+        stream = await self._send_opencode_request(
             payloads,
-            payloads["messages"],
             tools,
             stream=True,
             request_max_retries=request_max_retries,
@@ -297,20 +265,25 @@ class ProviderOpenCodeGo(ProviderOpenAIOfficial):
                 )
             choice = chunk.choices[0] if chunk.choices else None
             delta = choice.delta if choice else None
-            if delta is not None or chunk.usage:
-                try:
-                    state.handle_chunk(chunk)
-                except Exception as exc:
-                    logger.error("OpenCode Go stream state error: %s", exc)
-            if delta and (tool_calls := delta.tool_calls):
+            # Some OpenAI-compatible gateways omit tool-call indices; repair them
+            # before the stream state consumes the chunk.
+            if delta is not None and (tool_calls := delta.tool_calls):
                 for index, tool_call in enumerate(tool_calls):
                     if not hasattr(tool_call, "index") or tool_call.index is None:
                         tool_call.index = index
                     if tool_call.function and tool_call.function.arguments:
                         tool_call.type = "function"
+            if delta is not None or chunk.usage:
+                try:
+                    state.handle_chunk(chunk)
+                except Exception as exc:
+                    logger.error("OpenCode Go stream state error: %s", exc)
             reasoning = self._extract_reasoning_content(chunk)
+            # Reset per-chunk fields so a chunk never repeats the previous one.
             llm_response.id = chunk.id
             llm_response.reasoning_content = reasoning
+            llm_response.result_chain = None
+            llm_response.completion_text = ""
             should_yield = reasoning is not None
             if delta and delta.content:
                 chunk_text = self._normalize_content(delta.content, strip=False)
