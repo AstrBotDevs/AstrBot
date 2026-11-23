@@ -1,0 +1,43 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none">
+  <!-- Hard 45° Neo-Brutalist offset shadow -->
+  <rect x="7.5" y="7.5" width="52" height="52" rx="13" fill="#141111" />
+
+  <!-- Tactile Sunburst Keycap Face -->
+  <rect x="4" y="4" width="52" height="52" rx="13" fill="#FFD440" stroke="#141111" stroke-width="3.5" />
+
+  <!-- bfloat16 Tensor Register Strip: 1-bit Sign | 8-bit Exponent | 7-bit Mantissa -->
+  <rect x="10" y="10" width="6.5" height="6" rx="1.6" fill="#FE7DA8" stroke="#141111" stroke-width="1.8" />
+  <rect x="19" y="10" width="18" height="6" rx="1.6" fill="#FAF7F0" stroke="#141111" stroke-width="1.8" />
+  <rect x="39.5" y="10" width="11.5" height="6" rx="1.6" fill="#5EEAD4" stroke="#141111" stroke-width="1.8" />
+
+  <!-- Custom Geometric 'b' (x=9.5..20.5, y=21..49) -->
+  <path fill-rule="evenodd" clip-rule="evenodd" d="
+    M9.5 21 H14 V30.2
+    H16.2 C18.8 30.2 20.6 32.0 20.6 34.6
+    V44.6 C20.6 47.2 18.8 49 16.2 49
+    H9.5 V21 Z
+    M14 34.2 V45 H15.8 C16.3 45 16.6 44.7 16.6 44.2
+    V35.0 C16.6 34.5 16.3 34.2 15.8 34.2 H14 Z
+  " fill="#141111" />
+
+  <!-- Custom Geometric 'f' (x=21.5..29.5, y=21..49) -->
+  <path d="
+    M23.2 25.4 C23.2 22.6 25.0 21 27.8 21 H29.6 V24.8 H28.1
+    C27.5 24.8 27.3 25.1 27.3 25.8 V30.2 H29.5 V34.0 H27.3 V49 H23.2 V34.0 H21.4 V30.2 H23.2 V25.4 Z
+  " fill="#141111" />
+
+  <!-- Inverted Obsidian '[16]' Precision Module (x=31..51.5, y=23..49) -->
+  <rect x="31" y="23" width="20.5" height="26" rx="5.5" fill="#141111" />
+
+  <!-- Numeral '1' in Sunburst (#FFD440) -->
+  <path d="M34.0 30.2 L36.8 28.2 H39.2 V44.0 H36.0 V32.0 L34.0 33.2 V30.2 Z" fill="#FFD440" />
+
+  <!-- Numeral '6' in Sunburst (#FFD440) -->
+  <path fill-rule="evenodd" clip-rule="evenodd" d="
+    M44.2 28.2 H48.4 V31.2 H44.6 C43.9 31.2 43.6 31.6 43.6 32.3 V34.6
+    H46.4 C48.2 34.6 49.4 35.8 49.4 37.6 V41.0 C49.4 42.8 48.2 44.0 46.4 44.0
+    H43.4 C41.6 44.0 40.4 42.8 40.4 41.0 V32.0 C40.4 29.7 41.9 28.2 44.2 28.2 Z
+    M43.6 37.4 V40.7 C43.6 41.1 43.9 41.3 44.3 41.3 H45.7 C46.1 41.3 46.3 41.1 46.3 40.7
+    V37.8 C46.3 37.4 46.1 37.2 45.7 37.2 H43.6 Z
+  " fill="#FFD440" />
+</svg>

@@ -1682,6 +1682,18 @@ CONFIG_METADATA_2 = {
                         "proxy": "",
                         "custom_headers": {},
                     },
+                    "bf16.ai": {
+                        "id": "bf16",
+                        "provider": "bf16",
+                        "type": "openai_chat_completion",
+                        "provider_type": "chat_completion",
+                        "enable": True,
+                        "key": [],
+                        "api_base": "https://api.bf16.ai/v1",
+                        "timeout": 120,
+                        "proxy": "",
+                        "custom_headers": {},
+                    },
                     "Compshare": {
                         "id": "compshare",
                         "provider": "compshare",

@@ -1,4 +1,5 @@
 import mirarouterIcon from '@/assets/images/provider_logos/mirarouter.svg?no-inline';
+import bf16Icon from '@/assets/images/provider_logos/bf16.svg?no-inline';
 
 /**
  * 提供商相关的工具函数
@@ -12,6 +13,7 @@ import mirarouterIcon from '@/assets/images/provider_logos/mirarouter.svg?no-inl
 export function getProviderIcon(type) {
   const icons = {
     'mirarouter': mirarouterIcon,
+    'bf16': bf16Icon,
     'openai': 'https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@latest/icons/openai.svg',
     'azure': 'https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@latest/icons/azure.svg',
     'xai': 'https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@latest/icons/xai.svg',
