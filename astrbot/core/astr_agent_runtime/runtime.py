@@ -8,7 +8,6 @@ from typing import TYPE_CHECKING
 
 from astrbot import logger
 from astrbot.core.agent.runtime import AgentInput, AgentRuntime, AgentSession, AgentTurn
-from astrbot.core.astr_agent_runtime.main_agent.request import _get_session_conv
 from astrbot.core.platform.agent_wakeup_event import AgentWakeupEvent
 
 from .delegated_session import DelegatedAgentInput, DelegatedAgentSession
@@ -176,15 +175,17 @@ class AstrAgentRuntime(AgentRuntime):
                 if session_id is not None and session_id != target.session_id:
                     raise ValueError("Wakeup and runtime session targets differ")
                 session_id = target.session_id
+        manager = self.context.conversation_manager
+        conversation = None
         profile = (options or {}).get("profile", "main")
         if session_id is not None and "profile" not in (options or {}):
             if ("subagent", session_id) in self._sessions:
                 profile = "subagent"
             else:
-                conversation = await self.context.conversation_manager.get_conversation(
-                    umo, session_id
+                conversation = await manager.db.conversation_store.get_metadata(
+                    session_id
                 )
-                if conversation is None or conversation.cid != session_id:
+                if conversation is None or conversation.conversation_id != session_id:
                     profile = "subagent"
         if profile == "subagent":
             async with self._opening:
@@ -217,40 +218,43 @@ class AstrAgentRuntime(AgentRuntime):
                 return session
         if profile != "main":
             raise ValueError(f"Unknown built-in agent session profile: {profile}")
+        select_current = session_id is None
+        if select_current and input is not None:
+            request = input.event.get_extra("provider_request")
+            if request is not None and request.conversation is not None:
+                session_id = request.conversation.cid
+                select_current = False
+        if select_current:
+            session_id = await manager.get_curr_conversation_id(umo)
+        if conversation is None and session_id is not None:
+            conversation = await manager.db.conversation_store.get_metadata(session_id)
+        if conversation is None and select_current:
+            # Only first creation needs serialization; recheck after acquiring the
+            # lock so concurrent first messages cannot create competing sessions.
+            async with self._opening:
+                if self._closed:
+                    raise ValueError("AstrBot agent runtime is closed")
+                session_id = await manager.get_curr_conversation_id(umo)
+                conversation = (
+                    await manager.db.conversation_store.get_metadata(session_id)
+                    if session_id is not None
+                    else None
+                )
+                if conversation is None:
+                    session_id = await manager.new_conversation(
+                        umo,
+                        platform_id=input.event.get_platform_id() if input else None,
+                    )
+                    conversation = await manager.db.conversation_store.get_metadata(
+                        session_id
+                    )
+        if conversation is None or conversation.umo != umo:
+            raise ValueError("Agent conversation is missing or belongs to another UMO")
+        # Existing conversations perform all database reads outside this registry
+        # lock. Their execution lock controls when fresh history is loaded.
         async with self._opening:
             if self._closed:
-                raise ValueError("AstrBot agent runtime is closed")
-            if session_id is None:
-                if input is None:
-                    session_id = await self.context.conversation_manager.get_curr_conversation_id(
-                        umo
-                    )
-                    if session_id is None:
-                        session_id = (
-                            await self.context.conversation_manager.new_conversation(
-                                umo
-                            )
-                        )
-                else:
-                    request = input.event.get_extra("provider_request")
-                    if request is not None and request.conversation is not None:
-                        session_id = request.conversation.cid
-                    else:
-                        conversation = await _get_session_conv(
-                            input.event, self.context
-                        )
-                        session_id = conversation.cid
-            if session_id is None:
-                raise ValueError("Unable to resolve the main agent conversation")
-            conversation = await self.context.conversation_manager.get_conversation(
-                umo, session_id
-            )
-            if self._closed:
                 raise ValueError("AstrBot agent runtime closed during session creation")
-            if conversation is None or conversation.user_id != umo:
-                raise ValueError(
-                    "Agent conversation is missing or belongs to another UMO"
-                )
             session = self._sessions.get((profile, session_id))
             if session is None or session.closed:
                 if session is not None:

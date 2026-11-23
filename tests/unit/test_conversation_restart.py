@@ -72,6 +72,7 @@ def restart(monkeypatch):
         "platform_settings": {},
     }
     context.get_config.return_value = config
+    context.locale.return_value = "en-US"
     manager = SimpleNamespace(
         get_curr_conversation_id=AsyncMock(return_value="old-id"),
         get_conversation=AsyncMock(return_value=SimpleNamespace(persona_id="persona")),
@@ -177,11 +178,6 @@ async def test_restart_permissions_follow_pipeline_isolation(
             "star_map",
             {handler.handler_module_path: StarMetadata(name="builtin_commands")},
         )
-    monkeypatch.setattr(
-        waking.SessionPluginManager,
-        "filter_handlers_by_session",
-        AsyncMock(side_effect=lambda event, handlers: handlers),
-    )
     profiles = {}
     # Interleave profiles and reload one of them, without changing global filters.
     for profile, enabled in [
@@ -204,6 +200,9 @@ async def test_restart_permissions_follow_pipeline_isolation(
                     astrbot_config_id=profile,
                     db_helper=MagicMock(),
                 )
+            )
+            stage.ctx.plugin_manager = SimpleNamespace(
+                context=SimpleNamespace(get_config=lambda stage=stage, **_: stage.ctx.astrbot_config)
             )
             stage._umo_auto_name_recorder = MagicMock()
             profiles[profile] = stage

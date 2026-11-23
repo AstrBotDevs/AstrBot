@@ -6,49 +6,14 @@ from unittest.mock import ANY, AsyncMock
 
 import pytest
 
-from astrbot.core import sp
 from astrbot.core.astr_agent_runtime.computer.booters.local import LocalShellComponent
 from astrbot.core.astr_agent_runtime.tools.computer_tools.shell import (
     ExecuteShellTool,
     LocalExecuteShellTool,
     ShellSessionTool,
 )
-from astrbot.core.astr_agent_runtime.tools.message_tools import SendMessageToUserTool
-from astrbot.core.astr_agent_runtime.tools.web_search_tools import (
-    DeepSeekFetchWebPageTool,
-    DeepSeekWebSearchTool,
-    FirecrawlExtractWebPageTool,
-    FirecrawlWebSearchTool,
-)
 from astrbot.core.provider import func_tool_manager as ftm
 from astrbot.core.provider.func_tool_manager import FunctionToolManager
-
-
-def test_get_builtin_tool_by_class_returns_cached_instance():
-    manager = FunctionToolManager()
-
-    tool_by_class = manager.get_builtin_tool(SendMessageToUserTool)
-    tool_by_name = manager.get_builtin_tool("send_message_to_user")
-
-    assert tool_by_class is tool_by_name
-    assert manager.get_func("send_message_to_user") is tool_by_class
-    assert tool_by_class.name == "send_message_to_user"
-
-
-def test_builtin_tool_ignores_inactivated_llm_tools():
-    manager = FunctionToolManager()
-    sp.put(
-        "inactivated_llm_tools",
-        ["send_message_to_user"],
-        scope="global",
-        scope_id="global",
-    )
-
-    try:
-        tool = manager.get_builtin_tool(SendMessageToUserTool)
-        assert tool.active is True
-    finally:
-        sp.put("inactivated_llm_tools", [], scope="global", scope_id="global")
 
 
 @pytest.mark.asyncio
@@ -86,15 +51,11 @@ async def test_async_tool_toggle_waits_for_preference_persistence(monkeypatch):
     )
 
 
-def test_computer_tools_are_registered_as_builtin_tools():
-    manager = FunctionToolManager()
-
-    tool = manager.get_builtin_tool(ExecuteShellTool)
+def test_sandbox_execute_shell_schema_supports_background():
+    tool = ExecuteShellTool()
 
     assert tool.name == "astrbot_execute_shell"
     assert tool.parameters["properties"]["background"]["default"] is False
-    assert manager.is_builtin_tool("astrbot_execute_shell") is True
-    assert manager.is_builtin_tool("astrbot_shell_session") is True
 
 
 def test_local_execute_shell_schema_replaces_background_with_yield():
@@ -905,39 +866,6 @@ async def test_execute_shell_reports_blank_exception_type(monkeypatch):
     result = await ExecuteShellTool().call(FakeWrapper(), command="firefox")
 
     assert result == "Error executing command: BlankError"
-
-
-@pytest.mark.parametrize(
-    ("search_class", "extract_class", "search_name", "extract_name"),
-    [
-        (
-            FirecrawlWebSearchTool,
-            FirecrawlExtractWebPageTool,
-            "web_search_firecrawl",
-            "firecrawl_extract_web_page",
-        ),
-        (
-            DeepSeekWebSearchTool,
-            DeepSeekFetchWebPageTool,
-            "web_search_deepseek",
-            "deepseek_fetch_web_page",
-        ),
-    ],
-)
-def test_search_tools_are_registered_as_builtin_tools(
-    search_class, extract_class, search_name, extract_name
-):
-    manager = FunctionToolManager()
-
-    search_tool = manager.get_builtin_tool(search_class)
-    extract_tool = manager.get_builtin_tool(extract_class)
-
-    assert search_tool.name == search_name
-    assert extract_tool.name == extract_name
-    assert manager.is_builtin_tool(search_name) is True
-    assert manager.is_builtin_tool(extract_name) is True
-    assert manager.get_func(search_name) is search_tool
-    assert manager.get_func(extract_name) is extract_tool
 
 
 @pytest.mark.asyncio

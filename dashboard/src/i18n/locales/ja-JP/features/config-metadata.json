@@ -1116,6 +1116,14 @@
     "general": {
       "description": "基本設定",
       "platform_settings": {
+        "locale": {
+          "description": "システム言語",
+          "hint": "プラグインやエラーメッセージなどで使用するシステムの言語を設定します。モデルの回答や WebUI の言語は変更しません。",
+          "labels": [
+            "🇨🇳 简体中文",
+            "🇺🇸 English"
+          ]
+        },
         "unique_session": {
           "description": "会話を分離",
           "hint": "有効にすると、会話の分離に対応するプラットフォームでは、グループメンバーごとに独立したコンテキストを使用します。コマンドの権限はコマンド管理で設定してください。"
@@ -1253,6 +1261,15 @@
     }
   },
   "access_group": {
+    "blacklist": {
+      "description": "Blacklist",
+      "platform_settings": {
+        "id_blacklist": {
+          "description": "Blocked session IDs",
+          "hint": "Stop processing these sessions. Blacklist takes priority over whitelist, including administrators."
+        }
+      }
+    },
     "name": "アクセス制御",
     "admins": {
       "description": "管理者",
@@ -1820,6 +1837,9 @@
       "dashscope_embedding": {
         "hint": "Alibaba Cloud BailianEmbedding のデフォルトアドレスは https://dashscope.aliyuncs.com/api/v1 です。"
       },
+      "volcengine_embedding": {
+        "hint": "Volcengine Embedding、デフォルトのアドレスは https://ark.cn-beijing.volces.com/api/v3 です。Agent Plan は https://ark.cn-beijing.volces.com/api/plan/v3 です。"
+      },
       "volcengine_cluster": {
         "description": "Volcengine クラスター",
         "hint": "音声クローンモデルを使用する場合は volcano_icl または volcano_icl_concurr を選択できます。デフォルトは volcano_tts です。"
@@ -1867,6 +1887,10 @@
       "dashscope_tts_voice": {
         "description": "ボイス"
       },
+      "dashscope_tts_websocket_url": {
+        "description": "WebSocket エンドポイント",
+        "hint": "任意。Qwen-Audio-TTS モデルを使用する場合に入力してください。空欄の場合は DashScope SDK のデフォルトアドレスを使用します。wss://{WorkspaceId}.cn-beijing.maas.aliyuncs.com/api-ws/v1/inference などの完全な WebSocket URL を入力し、{WorkspaceId} を実際のワークスペース ID に置き換えてください。"
+      },
       "gm_resp_image_modal": {
         "description": "画像モダリティを有効化",
         "hint": "有効にすると、画像コンテンツを返せるようになります。モデルが対応していない場合はエラーになります。対応モデルは Google Gemini の公式ウェブサイトを確認してください。画像を生成する場合は、より良い結果を得るために `メンバー認識を有効化` 設定を無効にしてください。"
@@ -1907,11 +1931,11 @@
         "description": "思考設定",
         "budget": {
           "description": "思考予算",
-          "hint": "モデルの推論で使用する思考トークン数の上限を指定します。参照：https://ai.google.dev/gemini-api/docs/thinking#set-budget"
+          "hint": "Gemini 2.5の思考トークン予算を設定します。空欄の場合はモデルの既定値を使用します。参照 https://ai.google.dev/gemini-api/docs/thinking#set-budget"
         },
         "level": {
           "description": "思考レベル",
-          "hint": "Gemini 3 以降のモデルでの使用を推奨します。推論動作を制御できます。参照: https://ai.google.dev/gemini-api/docs/thinking#thinking-levels"
+          "hint": "参照 https://ai.google.dev/gemini-api/docs/thinking#thinking-levels"
         }
       },
       "anth_thinking_config": {
@@ -2016,6 +2040,15 @@
       "openai-tts-voice": {
         "description": "voice",
         "hint": "OpenAI TTS のボイスです。OpenAI のデフォルト対応値: 'alloy', 'echo', 'fable', 'onyx', 'nova', 'shimmer'"
+      },
+      "deepseek-tts-voice": {
+        "description": "ボイス",
+        "hint": "DeepSeek TTS のボイスです。対応する voice_id が API に送信されます。",
+        "labels": ["Stella（女性、デフォルト）", "Tide（男性）"]
+      },
+      "deepseek-tts-filter-markdown": {
+        "description": "Markdown をフィルター",
+        "hint": "合成前に Markdown 書式を削除します。デフォルトで有効です。"
       },
       "elevenlabs-tts-voice-id": {
         "description": "ボイス ID",

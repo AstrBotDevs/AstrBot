@@ -8,7 +8,6 @@ from typing import TYPE_CHECKING, Any
 
 from astrbot.core.agent.tool import FunctionTool
 from astrbot.core.astr_agent_runtime.subagents.messages import SUBAGENT_MESSAGES_SCHEMA
-from astrbot.core.astr_agent_runtime.tools.registry import builtin_tool
 
 if TYPE_CHECKING:
     from astrbot.core.agent.run_context import ContextWrapper
@@ -49,7 +48,6 @@ def get_subagent_service(context: ContextWrapper[SubAgentContext]) -> SubAgentSe
     return runtime.subagents
 
 
-@builtin_tool(config={"agent.config.subagents.enabled": True})
 class SpawnAgentTool(FunctionTool):
     name = "spawn_agent"
 
@@ -124,7 +122,6 @@ class SpawnAgentTool(FunctionTool):
         )
 
 
-@builtin_tool(config={"agent.config.subagents.enabled": True})
 class ListAgentsTool(FunctionTool):
     name = "list_agents"
 
@@ -151,7 +148,6 @@ class ListAgentsTool(FunctionTool):
         )
 
 
-@builtin_tool(config={"agent.config.subagents.enabled": True})
 class GetAgentResultTool(FunctionTool):
     name = "get_agent_result"
 
@@ -182,7 +178,6 @@ class GetAgentResultTool(FunctionTool):
         )
 
 
-@builtin_tool(config={"agent.config.subagents.enabled": True})
 class WaitAgentTool(FunctionTool):
     name = "wait_agent"
 
@@ -237,7 +232,6 @@ class WaitAgentTool(FunctionTool):
         )
 
 
-@builtin_tool(config={"agent.config.subagents.enabled": True})
 class SendAgentMessageTool(FunctionTool):
     name = "send_message"
 
@@ -278,7 +272,6 @@ class SendAgentMessageTool(FunctionTool):
         )
 
 
-@builtin_tool(config={"agent.config.subagents.enabled": True})
 class CancelAgentTool(FunctionTool):
     name = "cancel_agent"
 

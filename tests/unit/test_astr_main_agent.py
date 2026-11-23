@@ -13,7 +13,7 @@ import pytest
 from astrbot.core import agent_input as core_input
 from astrbot.core import llm_error_messages as agent_errors
 from astrbot.core.agent.mcp_client import MCPTool
-from astrbot.core.agent.message import Message, dump_messages_with_checkpoints
+from astrbot.core.agent.message import Message, dump_messages
 from astrbot.core.agent.runners.base import AgentState
 from astrbot.core.agent.tool import FunctionTool, ToolSet
 from astrbot.core.agent_wakeup import wake_main_agent
@@ -43,7 +43,6 @@ from astrbot.core.platform.message_session import MessageSession
 from astrbot.core.platform.message_type import MessageType
 from astrbot.core.platform.platform_metadata import PlatformMetadata
 from astrbot.core.provider import Provider
-from astrbot.core.provider import manager as provider_manager_module
 from astrbot.core.provider.entities import ProviderRequest, ProviderType
 from astrbot.core.provider.manager import ProviderManager
 from astrbot.core.skills.skill_manager import SkillInfo
@@ -94,14 +93,14 @@ def mock_context():
         side_effect=lambda *args, **kwargs: ctx.get_using_provider(*args, **kwargs)
     )
     ctx.conversation_manager = MagicMock()
+    ctx.conversation_manager.to_legacy_conversation.side_effect = lambda record: record
     ctx.persona_manager = MagicMock()
     ctx.persona_manager.personas_v3 = []
     ctx.persona_manager.resolve_selected_persona = AsyncMock(
-        return_value=(None, None, None, False)
+        return_value=(None, None, False)
     )
     ctx.persona_manager.get_persona_v3_by_id = MagicMock(return_value=None)
     tool_mgr = MagicMock()
-    tool_mgr.get_builtin_tool.side_effect = lambda cls, **kwargs: cls(**kwargs)
     ctx.get_llm_tool_manager.return_value = tool_mgr
     return ctx
 
@@ -143,6 +142,7 @@ def mock_conversation():
     conv.cid = "conv-id"
     conv.persona_id = None
     conv.history = "[]"
+    conv.content = []
     return conv
 
 
@@ -179,6 +179,7 @@ def _new_mock_conversation(cid: str = "conv-id") -> MagicMock:
     conv.cid = cid
     conv.persona_id = None
     conv.history = "[]"
+    conv.content = []
     return conv
 
 
@@ -186,7 +187,7 @@ def _setup_conversation_for_build(conv_mgr, cid: str = "conv-id") -> MagicMock:
     conv_mgr.get_curr_conversation_id = AsyncMock(return_value=None)
     conv_mgr.new_conversation = AsyncMock(return_value=cid)
     conversation = _new_mock_conversation(cid=cid)
-    conv_mgr.get_conversation = AsyncMock(return_value=conversation)
+    conv_mgr.db.get_conversation_by_id = AsyncMock(return_value=conversation)
     return conversation
 
 
@@ -435,27 +436,21 @@ class TestSelectProvider:
 
 
 @pytest.mark.asyncio
-async def test_provider_manager_async_selection_uses_session_preference(monkeypatch):
+async def test_provider_manager_async_selection_uses_effective_config():
     preferred_provider = object()
     manager = ProviderManager.__new__(ProviderManager)
     manager.inst_map = {"preferred": preferred_provider}
     manager.acm = MagicMock()
-
-    get_async = AsyncMock(return_value="preferred")
-    monkeypatch.setattr(provider_manager_module.sp, "get_async", get_async)
+    manager.acm.get_conf.return_value = {
+        "agent": {"runtime": "astrbot", "config": {"model": {"provider_id": "preferred"}}}
+    }
 
     result = await manager.get_using_provider_async(
-        ProviderType.CHAT_COMPLETION,
-        "session-1",
+        ProviderType.CHAT_COMPLETION, "session-1"
     )
 
     assert result is preferred_provider
-    get_async.assert_awaited_once_with(
-        "umo",
-        "session-1",
-        "provider_perf_chat_completion",
-        None,
-    )
+    manager.acm.get_conf.assert_called_once_with("session-1")
 
 
 class TestGetSessionConv:
@@ -468,7 +463,7 @@ class TestGetSessionConv:
         """Test getting existing conversation."""
         conv_mgr = mock_context.conversation_manager
         conv_mgr.get_curr_conversation_id = AsyncMock(return_value="existing-conv-id")
-        conv_mgr.get_conversation = AsyncMock(return_value=mock_conversation)
+        conv_mgr.db.get_conversation_by_id = AsyncMock(return_value=mock_conversation)
 
         result = await request_build._get_session_conv(mock_event, mock_context)
 
@@ -476,8 +471,8 @@ class TestGetSessionConv:
         conv_mgr.get_curr_conversation_id.assert_called_once_with(
             mock_event.unified_msg_origin
         )
-        conv_mgr.get_conversation.assert_called_once_with(
-            mock_event.unified_msg_origin, "existing-conv-id"
+        conv_mgr.db.get_conversation_by_id.assert_called_once_with(
+            "existing-conv-id"
         )
 
     @pytest.mark.asyncio
@@ -490,7 +485,7 @@ class TestGetSessionConv:
         mock_conversation.cid = "new-conv-id"
         mock_conversation.persona_id = None
         mock_conversation.history = "[]"
-        conv_mgr.get_conversation = AsyncMock(return_value=mock_conversation)
+        conv_mgr.db.get_conversation_by_id = AsyncMock(return_value=mock_conversation)
 
         result = await request_build._get_session_conv(mock_event, mock_context)
 
@@ -504,19 +499,19 @@ class TestGetSessionConv:
         """Test retrying conversation creation after failure."""
         conv_mgr = mock_context.conversation_manager
         conv_mgr.get_curr_conversation_id = AsyncMock(return_value="conv-id")
-        conv_mgr.get_conversation = AsyncMock(return_value=None)
+        conv_mgr.db.get_conversation_by_id = AsyncMock(return_value=None)
         conv_mgr.new_conversation = AsyncMock(return_value="retry-conv-id")
         mock_conversation = MagicMock(spec=Conversation)
         mock_conversation.cid = "retry-conv-id"
         mock_conversation.persona_id = None
         mock_conversation.history = "[]"
-        conv_mgr.get_conversation.side_effect = [None, mock_conversation]
+        conv_mgr.db.get_conversation_by_id.side_effect = [None, mock_conversation]
 
         result = await request_build._get_session_conv(mock_event, mock_context)
 
         assert result == mock_conversation
         assert conv_mgr.new_conversation.call_count == 1
-        assert conv_mgr.get_conversation.call_count == 2
+        assert conv_mgr.db.get_conversation_by_id.call_count == 2
 
     @pytest.mark.asyncio
     async def test_get_session_conv_failure(self, mock_event, mock_context):
@@ -524,7 +519,7 @@ class TestGetSessionConv:
         conv_mgr = mock_context.conversation_manager
         conv_mgr.get_curr_conversation_id = AsyncMock(return_value=None)
         conv_mgr.new_conversation = AsyncMock(return_value="new-conv-id")
-        conv_mgr.get_conversation = AsyncMock(return_value=None)
+        conv_mgr.db.get_conversation_by_id = AsyncMock(return_value=None)
 
         with pytest.raises(RuntimeError, match="无法创建新的对话。"):
             await request_build._get_session_conv(mock_event, mock_context)
@@ -557,7 +552,7 @@ class TestApplyKb:
         assert isinstance(message.content, list)
         assert message.content[0].text == "test question"
         assert message.content[1].text == "[Related Knowledge Base Results]:\nKB result"
-        assert dump_messages_with_checkpoints([message]) == [
+        assert dump_messages([message]) == [
             {"role": "user", "content": [{"type": "text", "text": "test question"}]}
         ]
 
@@ -639,8 +634,8 @@ class TestApplyKb:
         assert req.func_tool is not None
 
 
-class TestBuiltinToolInjection:
-    """Tests for builtin tool injection paths."""
+class TestRuntimeToolInjection:
+    """Tests for runtime tool injection paths."""
 
     @pytest.mark.asyncio
     async def test_serpapi_injects_all_search_tools(self, mock_event, mock_context):
@@ -652,7 +647,6 @@ class TestBuiltinToolInjection:
 
         web_search_build.apply_web_search(
             req,
-            mock_context,
             mock_context.get_config()["provider_settings"],
             mock_event,
         )
@@ -674,10 +668,10 @@ class TestBuiltinToolInjection:
         )
 
     @pytest.mark.asyncio
-    async def test_apply_web_search_tools_uses_builtin_tool_manager(
+    async def test_apply_web_search_tools_adds_baidu_tool(
         self, mock_event, mock_context
     ):
-        """Test web search tool injection through the builtin tool manager."""
+        """Verify the selected Baidu search tool reaches the model request."""
         req = ProviderRequest()
         mock_context.get_config.return_value = {
             "provider_settings": {
@@ -685,24 +679,16 @@ class TestBuiltinToolInjection:
                 "websearch_provider": "baidu_ai_search",
             }
         }
-        builtin_tool = MagicMock(spec=FunctionTool)
-        builtin_tool.name = "web_search_baidu"
-        tool_mgr = MagicMock()
-        tool_mgr.get_builtin_tool.return_value = builtin_tool
-        mock_context.get_llm_tool_manager.return_value = tool_mgr
-
         web_search_build.apply_web_search(
             req,
-            mock_context,
             mock_context.get_config()["provider_settings"],
             mock_event,
         )
 
-        tool_mgr.get_builtin_tool.assert_called_once_with(
-            web_search_build.BaiduWebSearchTool
-        )
         assert req.func_tool is not None
-        assert req.func_tool.get_tool("web_search_baidu") is builtin_tool
+        assert isinstance(
+            req.func_tool.get_tool("web_search_baidu"), web_search_build.BaiduWebSearchTool
+        )
 
     @pytest.mark.asyncio
     @pytest.mark.parametrize(
@@ -742,28 +728,15 @@ class TestBuiltinToolInjection:
                 "websearch_provider": provider,
             }
         }
-        search_tool = MagicMock(spec=FunctionTool)
-        search_tool.name = search_name
-        extract_tool = MagicMock(spec=FunctionTool)
-        extract_tool.name = extract_name
-        tool_mgr = MagicMock()
-        tool_mgr.get_builtin_tool.side_effect = [search_tool, extract_tool]
-        mock_context.get_llm_tool_manager.return_value = tool_mgr
-
         web_search_build.apply_web_search(
             req,
-            mock_context,
             mock_context.get_config()["provider_settings"],
             mock_event,
         )
 
-        assert tool_mgr.get_builtin_tool.call_args_list == [
-            ((search_class,),),
-            ((extract_class,),),
-        ]
         assert req.func_tool is not None
-        assert req.func_tool.get_tool(search_name) is search_tool
-        assert req.func_tool.get_tool(extract_name) is extract_tool
+        assert isinstance(req.func_tool.get_tool(search_name), search_class)
+        assert isinstance(req.func_tool.get_tool(extract_name), extract_class)
 
     @pytest.mark.parametrize(
         "tool_name",
@@ -823,19 +796,12 @@ class TestBuiltinToolInjection:
         assert web_search_build.WEB_SEARCH_CITATION_PROMPT not in req.system_prompt
 
     @pytest.mark.asyncio
-    async def test_proactive_cron_job_tools_uses_builtin_tool_manager(
+    async def test_runtime_adds_proactive_cron_job_tool(
         self, mock_context, mock_event, mock_provider
     ):
-        """Test cron tool injection through the builtin tool manager."""
+        """Verify the runtime adds the scheduled task tool."""
         mock_event.platform_meta.support_proactive_message = False
         req = ProviderRequest()
-        tool_mgr = MagicMock()
-
-        future_task_tool = MagicMock(spec=FunctionTool)
-        future_task_tool.name = "future_task"
-        tool_mgr.get_builtin_tool.return_value = future_task_tool
-        mock_context.get_llm_tool_manager.return_value = tool_mgr
-
         req.prompt = "Run task"
         with (
             patch.object(native_execution, "AgentRunner") as runner,
@@ -854,9 +820,8 @@ class TestBuiltinToolInjection:
                 req=req,
             )
 
-        tool_mgr.get_builtin_tool.assert_called_once_with(builder_build.FutureTaskTool)
         assert req.func_tool is not None
-        assert req.func_tool.get_tool("future_task") is future_task_tool
+        assert isinstance(req.func_tool.get_tool("future_task"), builder_build.FutureTaskTool)
 
 
 class TestApplyFileExtract:
@@ -1031,7 +996,7 @@ class TestEnsurePersonaAndSkills:
         persona = {"name": "test-persona", "prompt": "You are helpful."}
         mock_context.persona_manager.personas_v3 = [persona]
         mock_context.persona_manager.resolve_selected_persona = AsyncMock(
-            return_value=("test-persona", persona, "test-persona", False)
+            return_value=("test-persona", persona, False)
         )
         mock_event.trace = MagicMock(record=MagicMock())
         req = ProviderRequest()
@@ -1056,7 +1021,7 @@ class TestEnsurePersonaAndSkills:
         persona = {"name": "conv-persona", "prompt": "Custom persona."}
         mock_context.persona_manager.personas_v3 = [persona]
         mock_context.persona_manager.resolve_selected_persona = AsyncMock(
-            return_value=("conv-persona", persona, None, False)
+            return_value=("conv-persona", persona, False)
         )
         req = ProviderRequest()
         req.conversation = MagicMock(persona_id="conv-persona")
@@ -1073,7 +1038,7 @@ class TestEnsurePersonaAndSkills:
         """Test inline GenUI instructions are independent of persona selection."""
         persona = {"name": "conv-persona", "prompt": "Custom persona."}
         mock_context.persona_manager.resolve_selected_persona = AsyncMock(
-            return_value=("conv-persona", persona, None, False)
+            return_value=("conv-persona", persona, False)
         )
         mock_event.get_extra.side_effect = lambda key: key == "enable_inline_genui"
         req = ProviderRequest()
@@ -1106,7 +1071,7 @@ class TestEnsurePersonaAndSkills:
     ):
         """Test the default ChatUI persona prompt honors its request flag."""
         mock_context.persona_manager.resolve_selected_persona = AsyncMock(
-            return_value=("_chatui_default_", None, None, True)
+            return_value=("_chatui_default_", None, True)
         )
         mock_event.get_extra.side_effect = lambda key: {
             "enable_inline_genui": False,
@@ -1128,7 +1093,7 @@ class TestEnsurePersonaAndSkills:
     ):
         """WebChat implicit default uses the ChatUI prompt, not the DB persona."""
         mock_context.persona_manager.resolve_selected_persona = AsyncMock(
-            return_value=("_chatui_default_", None, None, True)
+            return_value=("_chatui_default_", None, True)
         )
         mock_event.get_platform_name.return_value = "webchat"
         mock_event.get_extra.side_effect = lambda key: {
@@ -1152,7 +1117,7 @@ class TestEnsurePersonaAndSkills:
         """Non-WebChat implicit default injects the editable DB default persona."""
         persona = {"name": "default", "prompt": "EDITED DEFAULT"}
         mock_context.persona_manager.resolve_selected_persona = AsyncMock(
-            return_value=("default", persona, None, False)
+            return_value=("default", persona, False)
         )
         mock_event.get_extra.side_effect = lambda key: None
         req = ProviderRequest()
@@ -1172,7 +1137,7 @@ class TestEnsurePersonaAndSkills:
         """Explicitly selecting the default persona uses the record even when the flag is off."""
         persona = {"name": "default", "prompt": "EDITED DEFAULT"}
         mock_context.persona_manager.resolve_selected_persona = AsyncMock(
-            return_value=("default", persona, None, False)
+            return_value=("default", persona, False)
         )
         mock_event.get_platform_name.return_value = "webchat"
         mock_event.get_extra.side_effect = lambda key: {
@@ -1236,7 +1201,7 @@ class TestEnsurePersonaAndSkills:
         req = ProviderRequest()
         req.conversation = MagicMock(persona_id=None)
 
-        with patch.object(pm.sp, "get_async", new=AsyncMock(return_value={})):
+        with patch.object(pm, "get_overrides", new=AsyncMock(return_value={})):
             await _apply_persona_capabilities(req, {}, mock_context, mock_event)
 
         assert persona_build.CHATUI_SPECIAL_DEFAULT_PERSONA_PROMPT in req.system_prompt
@@ -1247,7 +1212,7 @@ class TestEnsurePersonaAndSkills:
         """Test that [%None] persona is explicitly set to no persona."""
         mock_context.persona_manager.personas_v3 = []
         mock_context.persona_manager.resolve_selected_persona = AsyncMock(
-            return_value=("[%None]", None, None, False)
+            return_value=("[%None]", None, False)
         )
         req = ProviderRequest()
         req.conversation = MagicMock(persona_id="[%None]")
@@ -1275,7 +1240,6 @@ class TestEnsurePersonaAndSkills:
         mock_context.persona_manager.resolve_selected_persona.return_value = (
             "persona",
             selected,
-            None,
             False,
         )
         req = ProviderRequest(conversation=MagicMock(persona_id="persona"))
@@ -1420,7 +1384,7 @@ class TestEnsurePersonaAndSkills:
 
         persona = {"name": "no-skills", "prompt": "", "skills": []}
         mock_context.persona_manager.resolve_selected_persona = AsyncMock(
-            return_value=("no-skills", persona, None, False)
+            return_value=("no-skills", persona, False)
         )
         req = ProviderRequest()
         req.conversation = MagicMock(persona_id="no-skills")
@@ -1503,7 +1467,7 @@ class TestEnsurePersonaAndSkills:
         persona = {"name": "persona", "prompt": "Test", "tools": ["test_tool"]}
         mock_context.persona_manager.personas_v3 = [persona]
         mock_context.persona_manager.resolve_selected_persona = AsyncMock(
-            return_value=("persona", persona, None, False)
+            return_value=("persona", persona, False)
         )
         tmgr = mock_context.get_llm_tool_manager.return_value
         tmgr.get_func.return_value = mock_tool
@@ -1532,12 +1496,12 @@ class TestEnsurePersonaAndSkills:
             ),
         ],
     )
-    async def test_persona_empty_tools_keeps_late_builtin_tools(
+    async def test_persona_empty_tools_keeps_runtime_search_tools(
         self, mock_event, mock_context, mock_provider, provider, tool_names
     ):
         persona = {"name": "locked", "prompt": "No tools.", "tools": []}
         mock_context.persona_manager.resolve_selected_persona = AsyncMock(
-            return_value=("locked", persona, None, False)
+            return_value=("locked", persona, False)
         )
         mock_event.platform_meta.support_proactive_message = False
         mock_context.get_config.return_value = {
@@ -1581,7 +1545,6 @@ class TestEnsurePersonaAndSkills:
         assert result.provider_request.func_tool is not None
         assert result.provider_request.func_tool.names() == tool_names
         assert "<execution_environment" not in result.provider_request.system_prompt
-        assert "<tool_use_instructions>" in result.provider_request.system_prompt
 
     @pytest.mark.asyncio
     @pytest.mark.parametrize("role", ["admin", "member"])
@@ -1592,7 +1555,7 @@ class TestEnsurePersonaAndSkills:
         ("allow_execution", "allow_network"),
         [(True, False), (True, True), (False, False)],
     )
-    async def test_persona_empty_tools_keeps_local_runtime_builtin_tools(
+    async def test_persona_empty_tools_keeps_local_runtime_tools(
         self,
         monkeypatch,
         mock_event,
@@ -1609,7 +1572,7 @@ class TestEnsurePersonaAndSkills:
         )
         persona = {"name": "locked", "prompt": "No tools.", "tools": []}
         mock_context.persona_manager.resolve_selected_persona = AsyncMock(
-            return_value=("locked", persona, None, False)
+            return_value=("locked", persona, False)
         )
         mock_event.platform_meta.support_proactive_message = False
         mock_event.role = role
@@ -1682,7 +1645,7 @@ class TestEnsurePersonaAndSkills:
     ):
         """The plugin compatibility entry does not activate native main routing."""
         mock_context.persona_manager.resolve_selected_persona = AsyncMock(
-            return_value=(None, None, None, False)
+            return_value=(None, None, False)
         )
         mock_context.persona_manager.get_persona_v3_by_id = MagicMock(
             return_value={"name": "default", "tools": ["tool_a"]}
@@ -1848,7 +1811,7 @@ class TestBuildMainAgent:
         mock_context.mock_add_spec(Context)
         req = ProviderRequest(prompt="Original input")
 
-        async def hook(event, kind, request):
+        async def hook(event, kind, request, *, context_observer=None):
             request.prompt = "Plugin input"
             request.system_prompt = "Plugin instructions"
             return False
@@ -1934,7 +1897,6 @@ class TestBuildMainAgent:
             return_value=(
                 "locked",
                 {"name": "locked", "prompt": "No tools.", "tools": []},
-                None,
                 False,
             )
         )
@@ -1999,7 +1961,6 @@ class TestBuildMainAgent:
             return_value=(
                 "locked",
                 {"name": "locked", "prompt": "No tools.", "tools": []},
-                None,
                 False,
             )
         )
@@ -2969,7 +2930,7 @@ class TestBuildMainAgent:
         conv_mgr = mock_context.conversation_manager
         _setup_conversation_for_build(conv_mgr)
 
-        async def request_hook(event, kind, req):
+        async def request_hook(event, kind, req, *, context_observer=None):
             assert kind is builder_build.EventType.OnLLMRequestEvent
             mock_runner.reset.assert_not_called()
             req.prompt = "Changed by the plugin"
@@ -3687,7 +3648,6 @@ async def test_feature_composition_preserves_tool_scope_and_instruction_order(
     mock_context.persona_manager.resolve_selected_persona.return_value = (
         "persona",
         selected,
-        None,
         False,
     )
     mock_event.plugins_name = []
@@ -3825,12 +3785,6 @@ async def test_feature_composition_preserves_tool_scope_and_instruction_order(
         assert (
             req.system_prompt.count(computer_use_build.LOCAL_NETWORK_POLICY_NOTICE) == 1
         )
-    tool_prompt = (
-        builder_build.TOOL_CALL_PROMPT
-        if tool_schema_mode == "full"
-        else builder_build.TOOL_CALL_PROMPT_SKILLS_LIKE_MODE
-    )
-    markers.append(tool_prompt)
     markers.append(web_search_build.WEB_SEARCH_CITATION_PROMPT)
     positions = [req.system_prompt.index(marker) for marker in markers]
     assert positions == sorted(positions)
@@ -3851,18 +3805,7 @@ async def test_feature_composition_preserves_tool_scope_and_instruction_order(
     environment = req.system_prompt.split(environment_start, 1)[1].split(
         "</execution_environment>", 1
     )[0]
-    instructions = req.system_prompt.split("<tool_use_instructions>", 1)[1].split(
-        "</tool_use_instructions>", 1
-    )[0]
-    assert (
-        f"<tool_use_instructions>{instructions}</tool_use_instructions>" == tool_prompt
-    )
     assert req.system_prompt.count("</execution_environment>") == 1
-    assert req.system_prompt.count("<tool_use_instructions>") == 1
-    assert req.system_prompt.count("</tool_use_instructions>") == 1
-    assert req.system_prompt.index(
-        "</execution_environment>"
-    ) < req.system_prompt.index("<tool_use_instructions>")
     assert "Persona marker" not in environment
     assert "Workspace marker" not in environment
     if runtime == "local":
@@ -3923,10 +3866,11 @@ async def test_wakeup_collects_current_conversation_without_an_explicit_request(
     from astrbot.core.platform.message_session import MessageSession
 
     history = [{"role": "user", "content": "Existing context"}]
-    conversation = SimpleNamespace(cid="conversation", history=json.dumps(history))
+    conversation = SimpleNamespace(cid="conversation", history=json.dumps(history), content=history)
     manager = SimpleNamespace(
         get_curr_conversation_id=AsyncMock(return_value="conversation"),
-        get_conversation=AsyncMock(return_value=conversation),
+        db=SimpleNamespace(get_conversation_by_id=AsyncMock(return_value=conversation)),
+        to_legacy_conversation=lambda record: record,
     )
     context = SimpleNamespace(conversation_manager=manager)
     event = AgentWakeupEvent(
@@ -3952,6 +3896,4 @@ async def test_wakeup_collects_current_conversation_without_an_explicit_request(
     assert request.contexts == history
     assert request.session_id == event.unified_msg_origin
     manager.get_curr_conversation_id.assert_awaited_once_with(event.unified_msg_origin)
-    manager.get_conversation.assert_awaited_once_with(
-        event.unified_msg_origin, "conversation"
-    )
+    manager.db.get_conversation_by_id.assert_awaited_once_with("conversation")

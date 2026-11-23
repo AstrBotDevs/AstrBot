@@ -1,3 +1,5 @@
+import logging
+
 import httpx
 import pytest
 
@@ -6,7 +8,8 @@ from astrbot.core.provider.sources.request_retry import retry_provider_request
 
 
 @pytest.mark.asyncio
-async def test_retry_provider_request_uses_configured_max_retries(monkeypatch):
+async def test_retry_provider_request_uses_configured_max_retries(monkeypatch, caplog):
+    caplog.set_level(logging.WARNING, logger="astrbot")
     monkeypatch.setattr(request_retry, "REQUEST_RETRY_WAIT_MIN_S", 0)
     monkeypatch.setattr(request_retry, "REQUEST_RETRY_WAIT_MAX_S", 0)
 
@@ -25,3 +28,5 @@ async def test_retry_provider_request_uses_configured_max_retries(monkeypatch):
         )
 
     assert calls == 2
+
+    assert "temporary connection failure" in caplog.text
