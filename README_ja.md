@@ -152,6 +152,7 @@ AstrBot をよく使うチャットプラットフォームに接続できます
 | Ollama (セルフホスト) | 大規模言語モデルサービス |
 | LM Studio (セルフホスト) | 大規模言語モデルサービス |
 | [MiraRouter](https://mirarouter.com/) | 大規模言語モデルサービス（APIゲートウェイ、全モデル対応） |
+| [勝算雲](https://www.shengsuanyun.com/?from=CH_T70U2X9L) | 大規模言語モデルサービス |
 | [AIHubMix](https://aihubmix.com/?aff=4bfH) | 大規模言語モデルサービス（APIゲートウェイ、全モデル対応） |
 | [優云智算](https://www.compshare.cn/?ytag=GPU_YY-gh_astrbot&referral_code=FV7DcGowN4hB5UuXKgpE74) | 大規模言語モデルサービス |
 | [302.AI](https://share.302.ai/rr1M3l) | 大規模言語モデルサービス |
@@ -166,7 +167,9 @@ AstrBot をよく使うチャットプラットフォームに接続できます
 | OpenAI Whisper | 音声認識サービス |
 | SenseVoice | 音声認識サービス |
 | Xiaomi MiMo Omni | 音声認識サービス |
+| [DeepSeek STT](https://api-docs.deepseek.com/zh-cn/guides/asr/) | 音声認識サービス |
 | OpenAI TTS | 音声合成サービス |
+| [DeepSeek TTS](https://api-docs.deepseek.com/zh-cn/guides/tts/) | 音声合成サービス |
 | Gemini TTS | 音声合成サービス |
 | GPT-Sovits-Inference | 音声合成サービス |
 | GPT-Sovits | 音声合成サービス |

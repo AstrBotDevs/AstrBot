@@ -5,9 +5,9 @@ from enum import Enum, auto
 from astrbot import logger
 from astrbot.core.provider.entities import LLMResponse
 
-from ..hooks import BaseAgentRunHooks
+from ..events import RunnerEventPayload
 from ..response import AgentResponse
-from ..run_context import ContextWrapper, TContext
+from ..run_context import TContext
 
 
 class AgentState(Enum):
@@ -21,26 +21,21 @@ class AgentState(Enum):
 
 class BaseAgentRunner(T.Generic[TContext]):
     @abc.abstractmethod
-    async def reset(
-        self,
-        run_context: ContextWrapper[TContext],
-        agent_hooks: BaseAgentRunHooks[TContext],
-        **kwargs: T.Any,
-    ) -> None:
+    async def reset(self, *args: T.Any, **kwargs: T.Any) -> None:
         """Reset the agent to its initial state.
         This method should be called before starting a new run.
         """
         ...
 
     @abc.abstractmethod
-    async def step(self) -> T.AsyncGenerator[AgentResponse, None]:
+    def step(self) -> T.AsyncGenerator[AgentResponse | RunnerEventPayload, None]:
         """Process a single step of the agent."""
         ...
 
     @abc.abstractmethod
-    async def step_until_done(
+    def step_until_done(
         self, max_step: int
-    ) -> T.AsyncGenerator[AgentResponse, None]:
+    ) -> T.AsyncGenerator[AgentResponse | RunnerEventPayload, None]:
         """Process steps until the agent is done."""
         ...
 

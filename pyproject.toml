@@ -1,9 +1,9 @@
 [project]
 name = "AstrBot"
-version = "4.29.3"
+version = "4.30.0-beta.1"
 description = "Easy-to-use multi-platform LLM chatbot and development framework"
 readme = "README.md"
-license = { text = "AGPL-3.0-or-later" }
+license = "AGPL-3.0-or-later"
 requires-python = ">=3.12"
 
 keywords = ["AstrBot", "Agent", "Chatbot", "IM"]
@@ -26,7 +26,7 @@ dependencies = [
   "faiss-cpu>=1.14.3",
   "fastapi>=0.124.0",
   "filelock>=3.18.0",
-  "google-genai>=1.56.0",
+  "google-genai>=1.56.0", # bump to >=3.4.0 at some point
   "httpx[socks]>=0.28.1",
   "lark-oapi>=1.4.15",
   "mcp>=1.8.0,<2",
@@ -69,6 +69,7 @@ dependencies = [
   "packaging>=24.2",
   "python-ripgrep==0.0.8 ; python_version < '3.14'",
   "python-docx>=1.2.0",
+  "pywin32>=306 ; sys_platform == 'win32'",
   "pyotp>=2.9.0",
   "reportlab>=5.0.0",
   "xlrd>=2.0.2",

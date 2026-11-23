@@ -147,9 +147,17 @@
                 </div>
               </template>
 
-              <template v-else>
+              <MessageWork
+                v-else
+                :blocks="renderBlocks(msg)"
+                :is-user="isUserMessage(msg)"
+                :is-streaming="isMessageStreaming(msg, msgIndex)"
+                :stats="messageContent(msg).agentStats"
+                :created-at="msg.created_at"
+                v-slot="{ blocks, offset }"
+              >
                 <template
-                  v-for="(block, blockIndex) in renderBlocks(msg)"
+                  v-for="(block, blockIndex) in blocks"
                   :key="`${msgIndex}-block-${blockIndex}-${block.kind}`"
                 >
                   <ReasoningBlock
@@ -159,10 +167,8 @@
                     :initial-expanded="false"
                     :is-streaming="isMessageStreaming(msg, msgIndex)"
                     :has-non-reasoning-content="
-                      hasFollowingContentBlock(msg, blockIndex)
+                      hasFollowingContentBlock(msg, blockIndex + offset)
                     "
-                    :open-in-sidebar="variant === 'main'"
-                    @open="emit('openReasoning', { message: msg, blockIndex })"
                   />
 
                   <template v-else>
@@ -206,6 +212,13 @@
                         />
                       </div>
 
+                      <ChatErrorCard
+                        v-else-if="part.type === 'error'"
+                        :code="part.code"
+                        :message="part.message"
+                        @configure-models="emit('configureModels')"
+                      />
+
                       <MarkdownMessagePart
                         v-else-if="part.type === 'plain'"
                         :content="part.text || ''"
@@ -226,6 +239,17 @@
                           :alt="part.filename || 'image'"
                         />
                       </button>
+
+                      <ButtonActionRow
+                        v-else-if="part.type === 'actionrow'"
+                        :part="part"
+                        @callback="
+                          emit('buttonClick', {
+                            message: msg,
+                            callbackData: $event,
+                          })
+                        "
+                      />
 
                       <audio
                         v-else-if="part.type === 'record'"
@@ -279,6 +303,11 @@
                         />
                       </div>
 
+                      <PluginViewMessage
+                        v-else-if="part.type === 'view'"
+                        :part="part"
+                        :is-dark="isDark"
+                      />
                       <div
                         v-else-if="part.type === 'tool_call'"
                         class="tool-call-block"
@@ -292,7 +321,7 @@
                             :is-dark="isDark"
                           >
                             <template #label>
-                              <v-icon size="16">mdi-code-json</v-icon>
+                              <CodeXml :size="16" aria-hidden="true" />
                               <span>{{ tool.name || "python" }}</span>
                               <span class="tool-call-inline-status">
                                 {{ toolCallStatusText(tool) }}
@@ -321,7 +350,7 @@
                     </template>
                   </template>
                 </template>
-              </template>
+              </MessageWork>
             </MessageContentTransition>
           </div>
 
@@ -329,17 +358,49 @@
             <span v-if="isUserMessage(msg) && msg.created_at">{{
               formatTime(msg.created_at)
             }}</span>
-            <v-btn
+            <span
               v-if="canEditMessage(msg, msgIndex)"
-              icon
-              size="x-small"
-              variant="text"
-              @click="emit('openEdit', msg)"
+              :title="
+                msg.can_edit === false
+                  ? tm(
+                      `history.${
+                        msg.edit_unavailable_reason || 'context_unavailable'
+                      }`,
+                    )
+                  : tm('history.edit')
+              "
             >
-              <SquarePen :size="14" :stroke-width="2" />
-            </v-btn>
+              <v-btn
+                icon
+                size="x-small"
+                variant="text"
+                :disabled="msg.can_edit === false"
+                :aria-label="
+                  msg.can_edit === false
+                    ? tm(
+                        `history.${
+                          msg.edit_unavailable_reason || 'context_unavailable'
+                        }`,
+                      )
+                    : tm('history.edit')
+                "
+                @click="emit('openEdit', msg)"
+              >
+                <SquarePen :size="14" :stroke-width="2" />
+              </v-btn>
+            </span>
             <RegenerateMenu
               v-if="canRegenerateMessage(msg, msgIndex)"
+              :disabled="msg.can_retry === false"
+              :unavailable-reason="
+                msg.can_retry === false
+                  ? tm(
+                      `history.${
+                        msg.retry_unavailable_reason || 'context_unavailable'
+                      }`,
+                    )
+                  : ''
+              "
               @retry="emit('regenerate', msg)"
               @retry-with-model="emit('regenerateWithModel', msg, $event)"
             />
@@ -473,21 +534,25 @@
 </template>
 
 <script setup lang="ts">
+import ChatErrorCard from "@/components/chat/message_list_comps/ChatErrorCard.vue";
+import PluginViewMessage from "@/components/chat/message_list_comps/PluginViewMessage.vue";
 import MessageContentTransition from "@/components/chat/MessageContentTransition.vue";
 import { computed, nextTick, reactive, ref } from "vue";
-import { Copy, Info, SquarePen } from "@lucide/vue";
+import { Copy, Info, SquarePen, CodeXml } from "@lucide/vue";
 import axios from "axios";
 import { fileApi } from "@/api/v1";
 import RegenerateMenu, {
   type RegenerateModelSelection,
 } from "@/components/chat/RegenerateMenu.vue";
 import ThreadedMarkdownMessagePart from "@/components/chat/ThreadedMarkdownMessagePart.vue";
+import MessageWork from "@/components/chat/message_list_comps/MessageWork.vue";
 import ReasoningBlock from "@/components/chat/message_list_comps/ReasoningBlock.vue";
 import ToolCallCard from "@/components/chat/message_list_comps/ToolCallCard.vue";
 import ToolCallItem from "@/components/chat/message_list_comps/ToolCallItem.vue";
 import IPythonToolBlock from "@/components/chat/message_list_comps/IPythonToolBlock.vue";
 import RefsSidebar from "@/components/chat/message_list_comps/RefsSidebar.vue";
 import ActionRef from "@/components/chat/message_list_comps/ActionRef.vue";
+import ButtonActionRow from "@/components/chat/ButtonActionRow.vue";
 import MarkdownMessagePart from "@/components/chat/message_list_comps/MarkdownMessagePart.vue";
 import StyledMenu from "@/components/shared/StyledMenu.vue";
 import {
@@ -516,7 +581,7 @@ const props = withDefaults(
   defineProps<{
     messages: ChatRecord[];
     isDark?: boolean;
-    isStreaming?: boolean;
+    isMessageStreaming?: (message: ChatRecord, index: number) => boolean;
     variant?: "main" | "thread";
     enableEdit?: boolean;
     enableRegenerate?: boolean;
@@ -529,7 +594,6 @@ const props = withDefaults(
   }>(),
   {
     isDark: false,
-    isStreaming: false,
     variant: "main",
     enableEdit: false,
     enableRegenerate: false,
@@ -543,6 +607,7 @@ const props = withDefaults(
 );
 
 const emit = defineEmits<{
+  configureModels: [];
   "update:editDraft": [value: string];
   openEdit: [message: ChatRecord];
   cancelEdit: [];
@@ -554,8 +619,8 @@ const emit = defineEmits<{
   ];
   selectBotText: [event: MouseEvent, message: ChatRecord];
   openThread: [thread: ChatThread];
-  openReasoning: [payload: { message: ChatRecord; blockIndex: number }];
   openRefs: [refs: unknown];
+  buttonClick: [payload: { message: ChatRecord; callbackData: string }];
 }>();
 
 registerChatMarkdownComponents();
@@ -617,11 +682,7 @@ function shouldShowMessageBubble(message: ChatRecord) {
 }
 
 function isMessageStreaming(message: ChatRecord, messageIndex: number) {
-  return (
-    props.isStreaming &&
-    !isUserMessage(message) &&
-    messageIndex === props.messages.length - 1
-  );
+  return props.isMessageStreaming?.(message, messageIndex) ?? false;
 }
 
 function isEditingMessage(message: ChatRecord) {
@@ -632,37 +693,22 @@ function isEditingMessage(message: ChatRecord) {
   );
 }
 
-function canEditMessage(message: ChatRecord, messageIndex: number) {
+function canEditMessage(message: ChatRecord, _messageIndex: number) {
   return (
     props.enableEdit &&
     isUserMessage(message) &&
-    messageIndex === latestEditableUserIndex() &&
+    Boolean(message.turn_id) &&
     message.id != null &&
     !String(message.id).startsWith("local-")
   );
-}
-
-function latestEditableUserIndex() {
-  for (let index = props.messages.length - 1; index >= 0; index -= 1) {
-    const message = props.messages[index];
-    if (
-      isUserMessage(message) &&
-      message.id != null &&
-      !String(message.id).startsWith("local-")
-    ) {
-      return index;
-    }
-  }
-  return -1;
 }
 
 function canRegenerateMessage(message: ChatRecord, messageIndex: number) {
   return (
     props.enableRegenerate &&
     !isUserMessage(message) &&
-    messageIndex === props.messages.length - 1 &&
     !isMessageStreaming(message, messageIndex) &&
-    Boolean(message.llm_checkpoint_id)
+    Boolean(message.turn_id)
   );
 }
 
