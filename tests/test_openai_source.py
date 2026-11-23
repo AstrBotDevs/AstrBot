@@ -1,5 +1,6 @@
 import base64
 import builtins
+import json
 from io import BytesIO
 from pathlib import Path
 from types import SimpleNamespace
@@ -7,12 +8,14 @@ from types import SimpleNamespace
 import httpx
 import pytest
 from openai import AsyncAzureOpenAI, AsyncOpenAI
+from openai._models import construct_type
 from openai.types.chat.chat_completion import ChatCompletion
 from openai.types.chat.chat_completion_chunk import ChatCompletionChunk
 from PIL import Image as PILImage
 
 import astrbot.core.provider.sources.openai_source as openai_source_module
 import astrbot.core.provider.sources.request_retry as request_retry
+from astrbot.core.agent.tool import FunctionTool, ToolSet
 from astrbot.core.exceptions import EmptyModelOutputError
 from astrbot.core.provider.entities import LLMResponse
 from astrbot.core.provider.sources.groq_source import ProviderGroq
@@ -1561,6 +1564,58 @@ async def test_parse_openai_completion_reads_nested_data_choices():
         assert response.usage is not None
         assert response.usage.input_other == 12
         assert response.usage.output == 38
+    finally:
+        await provider.terminate()
+
+
+@pytest.mark.asyncio
+async def test_parse_openai_completion_accepts_json_string_tool_call():
+    """Some OpenAI-compatible APIs return each tool call as a JSON string (#1359)."""
+    provider = _make_provider()
+    tools = ToolSet(
+        [
+            FunctionTool(
+                name="get_time",
+                description="Get the current time.",
+                parameters={"type": "object", "properties": {"tz": {"type": "string"}}},
+            )
+        ]
+    )
+    raw_tool_call = json.dumps(
+        {
+            "id": "call_1",
+            "type": "function",
+            "function": {"name": "get_time", "arguments": '{"tz": "UTC"}'},
+        }
+    )
+    # The SDK builds responses without strict validation, so the string is kept.
+    completion = construct_type(
+        type_=ChatCompletion,
+        value={
+            "id": "chatcmpl-string-tool-call",
+            "object": "chat.completion",
+            "created": 0,
+            "model": "generalv3.5",
+            "choices": [
+                {
+                    "index": 0,
+                    "message": {
+                        "role": "assistant",
+                        "content": None,
+                        "tool_calls": [raw_tool_call],
+                    },
+                    "finish_reason": "tool_calls",
+                }
+            ],
+        },
+    )
+    try:
+        response = await provider._parse_openai_completion(completion, tools)
+
+        assert response.role == "tool"
+        assert response.tools_call_name == ["get_time"]
+        assert response.tools_call_args == [{"tz": "UTC"}]
+        assert response.tools_call_ids == ["call_1"]
     finally:
         await provider.terminate()
 

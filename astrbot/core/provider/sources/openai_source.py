@@ -11,6 +11,7 @@ import httpx
 from openai import AsyncAzureOpenAI, AsyncOpenAI
 from openai._exceptions import NotFoundError
 from openai.lib.streaming.chat._completions import ChatCompletionStreamState
+from openai.types.chat import ChatCompletionMessageToolCall
 from openai.types.chat.chat_completion import ChatCompletion
 from openai.types.chat.chat_completion_chunk import ChatCompletionChunk
 from openai.types.completion_usage import CompletionUsage
@@ -893,7 +894,9 @@ class ProviderOpenAIOfficial(Provider):
             for tool_call in choice.message.tool_calls:
                 if isinstance(tool_call, str):
                     # workaround for #1359
-                    tool_call = json.loads(tool_call)
+                    tool_call = ChatCompletionMessageToolCall.model_validate(
+                        json.loads(tool_call)
+                    )
                 if tools is None:
                     # 工具集未提供
                     # Should be unreachable
