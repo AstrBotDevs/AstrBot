@@ -432,7 +432,9 @@ async def test_discarded_message_finishes_trace(persisted, monkeypatch, reroute)
     assert frames[-1]["trace"]["has_errors"] is True
     assert root["end_time_unix_nano"] is not None
     assert root["status"]["code"] == 2
-    assert "no pipeline scheduler" in root["status"]["message"]
+    assert root["status"]["message"] == (
+        "Message discarded: no pipeline scheduler for the selected profile."
+    )
     assert root["attributes"]["astrbot.error"] == root["status"]["message"]
 
 
