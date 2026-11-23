@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import asyncio
 import os
-import uuid
+import secrets
 from pathlib import Path
 from typing import Any
 
@@ -51,16 +51,25 @@ async def save_upload_stream(
         UploadTooLargeError: The upload exceeded ``max_bytes``.
     """
     path = Path(dest)
-    # Keep the sibling name bounded even when the destination reaches NAME_MAX.
-    temp_path = path.with_name(f".upload-{uuid.uuid4().hex}.tmp")
     try:
         await upload.seek(0)
     except Exception:
         pass
 
     written = 0
+    # Use an 8.3 sibling name so staging also works on short-name filesystems.
+    while True:
+        temp_path = path.with_name(f"{secrets.token_hex(4)}.tmp")
+        if temp_path.name == path.name.casefold():
+            continue
+        try:
+            output = temp_path.open("xb")
+            break
+        except FileExistsError:
+            continue
+
     try:
-        with temp_path.open("wb") as output:
+        with output:
             while True:
                 block = await upload.read(COPY_BLOCK_SIZE)
                 if not block:
