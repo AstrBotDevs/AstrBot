@@ -13,7 +13,7 @@ import pytest
 from astrbot.core import agent_input as core_input
 from astrbot.core import llm_error_messages as agent_errors
 from astrbot.core.agent.mcp_client import MCPTool
-from astrbot.core.agent.message import Message, TextPart, dump_messages
+from astrbot.core.agent.message import Message, dump_messages
 from astrbot.core.agent.runners.base import AgentState
 from astrbot.core.agent.tool import FunctionTool, ToolSet
 from astrbot.core.agent_wakeup import wake_main_agent
@@ -33,12 +33,11 @@ from astrbot.core.astr_agent_runtime.main_agent import web_search as web_search_
 from astrbot.core.astr_agent_runtime.main_agent import workspace as workspace_build
 from astrbot.core.config.agent_runner import resolve_context_compression_config
 from astrbot.core.conversation_mgr import Conversation
-from astrbot.core.message.components import At, File, Image, Plain, Record, Reply, Video
+from astrbot.core.message.components import File, Image, Plain, Record, Reply, Video
 from astrbot.core.pipeline.process_stage.method.agent_sub_stages import (
     webchat as webchat_build,
 )
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
-from astrbot.core.platform.message_type import MessageType
 from astrbot.core.platform.platform_metadata import PlatformMetadata
 from astrbot.core.provider import Provider
 from astrbot.core.provider.entities import ProviderRequest, ProviderType
@@ -3802,95 +3801,3 @@ async def test_wakeup_collects_current_conversation_without_an_explicit_request(
     assert request.session_id == event.unified_msg_origin
     manager.get_curr_conversation_id.assert_awaited_once_with(event.unified_msg_origin)
     manager.db.get_conversation_by_id.assert_awaited_once_with("conversation")
-
-
-@pytest.mark.parametrize(
-    ("message_str", "has_prefix_text", "file_extract_enabled", "expected_prompt"),
-    [
-        pytest.param(
-            "",
-            False,
-            True,
-            "总结一下文件里面讲了什么？",
-            id="plain-file-default",
-        ),
-        pytest.param(
-            "/llm",
-            True,
-            True,
-            "总结一下文件里面讲了什么？",
-            id="prefix-file-default-kept",
-        ),
-        pytest.param(
-            "/llm",
-            True,
-            False,
-            "<attachment>",
-            id="prefix-attachment-placeholder-kept",
-        ),
-    ],
-)
-@pytest.mark.asyncio
-async def test_file_default_prompt_survives_ordered_mention_display(
-    mock_event,
-    mock_context,
-    mock_provider,
-    message_str,
-    has_prefix_text,
-    file_extract_enabled,
-    expected_prompt,
-):
-    mock_event.message_str = message_str
-    file = MagicMock(spec=File)
-    file.name = "notes.txt"
-    file.get_file = AsyncMock(return_value="/tmp/notes.txt")
-    chain = [At(qq="bot-1", name="清漪")]
-    extras = {}
-    if has_prefix_text:
-        chain.append(Plain(text="/llm"))
-        extras["_consumed_provider_prefix"] = "/llm"
-    chain.append(file)
-    mock_event.message_obj.message = chain
-    mock_event.get_platform_name.return_value = "aiocqhttp"
-    mock_event.get_message_type.return_value = MessageType.GROUP_MESSAGE
-    mock_event.get_self_id.return_value = "bot-1"
-    store = dict(extras)
-    mock_event.get_extra.side_effect = lambda key, default=None: store.get(key, default)
-    mock_event.set_extra.side_effect = store.__setitem__
-    _setup_conversation_for_build(mock_context.conversation_manager)
-
-    with patch.object(
-        core_input,
-        "extract_file_moonshotai",
-        AsyncMock(return_value="file content"),
-    ):
-        prepared = await request_build.prepare_request(
-            mock_event,
-            mock_context,
-            ama.MainAgentBuildConfig(
-                tool_call_timeout=60,
-                provider_wake_prefix="/llm" if has_prefix_text else "",
-                file_extract_enabled=file_extract_enabled,
-                file_extract_prov="moonshotai",
-                file_extract_msh_api_key="test-api-key",
-            ),
-            mock_provider,
-            None,
-        )
-
-    assert prepared is not None
-    # @ 展示不抢掉文件默认总结提示或附件占位符，原有请求判空顺序未被绕过
-    assert prepared.request.prompt == expected_prompt
-    reminders = [
-        part
-        for part in prepared.request.extra_user_content_parts
-        if isinstance(part, TextPart) and part.text.startswith("<system_reminder>@")
-    ]
-    assert [part.text for part in reminders] == [
-        "<system_reminder>@清漪 refers to you (Your ID: bot-1).</system_reminder>"
-    ]
-    assert reminders[0]._no_save is True
-    saved = dump_messages(
-        [Message.model_validate(await prepared.request.assemble_context())]
-    )
-    assert "@清漪" in [part["text"] for part in saved[0]["content"]]

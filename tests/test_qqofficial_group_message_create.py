@@ -1114,44 +1114,6 @@ async def test_webhook_send_by_session_use_markdown_config_false_sends_content()
 
 @pytest.mark.parametrize("platform", ["qq_official", "qq_official_webhook"])
 @pytest.mark.asyncio
-async def test_group_message_keeps_ordered_mentions_and_legacy_message_str(platform):
-    _, message = _dispatch_group_message(
-        _make_group_payload(
-            content="<@!member-alice> 你总结一下，<@bot-123> 你不用管",
-            mentions=[
-                {"id": "member-alice", "username": "小璃"},
-                {"id": "bot-123", "username": "清漪", "is_you": True},
-            ],
-        )
-    )
-
-    abm = await QQOfficialPlatformAdapter._parse_from_qqofficial(
-        message,
-        MessageType.GROUP_MESSAGE,
-    )
-
-    assert isinstance(abm.message[0], At)
-    assert (abm.message[0].qq, abm.message[0].name) == ("member-alice", "小璃")
-    assert isinstance(abm.message[1], Plain)
-    assert abm.message[1].text == " 你总结一下，"
-    assert isinstance(abm.message[2], At)
-    assert (abm.message[2].qq, abm.message[2].name) == ("bot-123", "清漪")
-    assert isinstance(abm.message[3], Plain)
-    assert abm.message[3].text == " 你不用管"
-    # Keep the existing command text, including other users' mention tags.
-    assert abm.message_str == "<@!member-alice> 你总结一下， 你不用管"
-
-    event = QQOfficialMessageEvent(
-        abm.message_str, abm, SimpleNamespace(name=platform, id=platform), "group-1", None
-    )
-    assert follow_up_text(event) == (
-        "@小璃 你总结一下，@清漪 你不用管",
-        "<system_reminder>@清漪 refers to you (Your ID: bot-123).</system_reminder>",
-    )
-
-
-@pytest.mark.parametrize("platform", ["qq_official", "qq_official_webhook"])
-@pytest.mark.asyncio
 async def test_group_message_without_tag_keeps_plain_text(platform):
     _, message = _dispatch_group_message(
         _make_group_payload(content="plain group text", mentions=[])

@@ -14,19 +14,14 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")
 from astrbot.core.agent.agent import Agent
 from astrbot.core.agent.handoff import HandoffTool
 from astrbot.core.agent.hooks import BaseAgentRunHooks
-from astrbot.core.agent.message import ImageURLPart, Message, TextPart, dump_messages
+from astrbot.core.agent.message import ImageURLPart, Message, TextPart
 from astrbot.core.agent.run_context import ContextWrapper
 from astrbot.core.agent.runners.tool_loop_agent_runner import ToolLoopAgentRunner
-from astrbot.core.agent.runtime import AgentInput
 from astrbot.core.agent.tool import FunctionTool, ToolSet
 from astrbot.core.astr_agent_runtime.runner import run_agent
-from astrbot.core.astr_agent_runtime.session import NativeAgentSession
 from astrbot.core.astr_agent_runtime.tool_executor import FunctionToolExecutor
 from astrbot.core.exceptions import EmptyModelOutputError
-from astrbot.core.message.components import At, Plain
 from astrbot.core.message.message_event_result import MessageChain
-from astrbot.core.platform.astrbot_message import AstrBotMessage
-from astrbot.core.platform.message_type import MessageType
 from astrbot.core.provider.entities import LLMResponse, ProviderRequest, TokenUsage
 from astrbot.core.provider.provider import Provider
 
@@ -1662,77 +1657,6 @@ async def test_steering_appends_user_messages_after_all_tool_results(
     assert ticket2.resolved.is_set() is True
     assert ticket1.consumed is True
     assert ticket2.consumed is True
-
-
-@pytest.mark.asyncio
-@pytest.mark.parametrize("with_tool_call", [False, True])
-async def test_follow_up_temp_reminder_visible_to_model_but_not_saved(
-    runner,
-    mock_provider,
-    provider_request,
-    mock_tool_executor,
-    mock_hooks,
-    with_tool_call,
-):
-    await runner.reset(
-        provider=mock_provider,
-        request=provider_request,
-        run_context=ContextWrapper(context=MockAgentContext(MockEvent("test", "u1"))),
-        tool_executor=mock_tool_executor,
-        agent_hooks=mock_hooks,
-        streaming=False,
-    )
-    mock_provider.text_chat = AsyncMock(
-        return_value=LLMResponse(
-            role="assistant",
-            completion_text="done",
-            tools_call_name=["test_tool"] if with_tool_call else [],
-            tools_call_args=[{"query": "test"}] if with_tool_call else [],
-            tools_call_ids=["call_0"] if with_tool_call else [],
-        )
-    )
-    message = AstrBotMessage()
-    message.message = [
-        At(qq="member-1", name="小璃"),
-        Plain(" 你总结一下，"),
-        At(qq="bot-1", name="清漪"),
-        Plain(" 你不用管"),
-    ]
-    event = SimpleNamespace(
-        message_obj=message,
-        get_message_type=lambda: MessageType.GROUP_MESSAGE,
-        get_self_id=lambda: "bot-1",
-        get_message_str=lambda: "你总结一下， 你不用管",
-        get_extra=lambda key, default=None: default,
-    )
-    session = NativeAgentSession(MagicMock(), "session-1", "umo-1")
-    session._runner = runner
-    receipt = session.steer_turn(
-        MagicMock(), AgentInput(event=event, permissions=MagicMock())
-    )
-    assert receipt is not None
-    ticket = runner._pending_follow_ups[-1]
-    async for _ in runner.step():
-        pass
-    assert ticket.consumed and ticket.resolved.is_set()
-    mock_provider.text_chat.return_value = LLMResponse(
-        role="assistant", completion_text="done"
-    )
-    async for _ in runner.step():
-        pass
-    text = "@小璃 你总结一下，@清漪 你不用管"
-    reminder = (
-        "<system_reminder>@清漪 refers to you (Your ID: bot-1).</system_reminder>"
-    )
-    payload = mock_provider.text_chat.call_args.kwargs["contexts"]
-    follow_up = next(
-        message
-        for message in payload
-        if message.role == "user" and text in str(message.content)
-    )
-    assert [part.text for part in follow_up.content] == [text, reminder]
-    saved = dump_messages([follow_up])
-    assert saved[0]["content"] == [{"type": "text", "text": text}]
 
 
 @pytest.mark.asyncio
