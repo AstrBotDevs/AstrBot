@@ -283,14 +283,3 @@ class PreProcessStage(Stage):
                             plain_comp = await _stt_record(reply_comp, is_reply=True)
                             if plain_comp:
                                 component.chain[idx] = plain_comp
-                                event.message_str += plain_comp.text
-                                event.message_obj.message_str += plain_comp.text
-                                # Keep the recognized quoted voice as a simple
-                                # fact: in-run follow-ups render from the
-                                # top-level chain and skip Reply, so they need
-                                # this text back when composing their body.
-                                event.set_extra(
-                                    "_quoted_voice_transcript",
-                                    (event.get_extra("_quoted_voice_transcript") or "")
-                                    + plain_comp.text,
-                                )
