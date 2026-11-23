@@ -469,9 +469,7 @@ def test_trace_reads_use_indexed_state_and_flags(persisted, capture):
             (trace.trace_id,),
         )
         # Each decoy is missing one predicate. Ignoring any filter must fail.
-        for other, flags in zip(
-            nonmatching, ((0, 1, 1), (1, 0, 1), (1, 1, 0))
-        ):
+        for other, flags in zip(nonmatching, ((0, 1, 1), (1, 0, 1), (1, 1, 0))):
             connection.execute(
                 "UPDATE traces SET has_errors=?, has_models=?, has_plugins=? "
                 "WHERE trace_id=?",
