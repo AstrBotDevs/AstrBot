@@ -1,6 +1,12 @@
 packages:
   - .
 
+strictDepBuilds: true
+
+allowBuilds:
+  "@parcel/watcher@2.6.0": true
+  "vue-demi@0.14.10": true
+
 overrides:
   "@hey-api/json-schema-ref-parser>js-yaml": "4.3.2"
   immutable: "4.3.8"
