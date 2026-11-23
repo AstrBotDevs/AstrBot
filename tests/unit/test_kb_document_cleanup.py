@@ -20,9 +20,12 @@ async def kb_db(tmp_path):
     """Create a real KBSQLiteDatabase backed by a temporary file."""
     db_path = str(tmp_path / "test_kb.db")
     db = KBSQLiteDatabase(db_path)
-    await db.initialize()
-    await db.migrate_to_v1()
-    return db
+    try:
+        await db.initialize()
+        await db.migrate_to_v1()
+        yield db
+    finally:
+        await db.close()
 
 
 @pytest_asyncio.fixture
@@ -197,3 +200,7 @@ async def test_update_kb_stats_counts_chunks_for_single_kb(kb_db, seeded_kb):
     mock_vec_db.count_documents.assert_awaited_once_with(
         metadata_filter={"kb_id": kb_id1},
     )
+    updated = await kb_db.get_kb_by_id(kb_id1)
+    untouched = await kb_db.get_kb_by_id(kb_id2)
+    assert updated.chunk_count == 5
+    assert untouched.chunk_count == 0

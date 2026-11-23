@@ -26,8 +26,7 @@ _FOOTNOTE_LABEL_RE = re.compile(
     re.IGNORECASE,
 )
 _FOOTNOTE_HREF_RE = re.compile(
-    r"(?:^#|[#/_-](?:fn|footnote|note|noteref|backlink|return|filepos)\b)",
-    re.IGNORECASE,
+    r"[#/_-](?:fn|footnote|note|noteref|backlink|return|filepos)\b", re.I
 )
 _DOTTED_TOC_RE = re.compile(r"^\s*.+?\.{2,}\s*(?:\d+|[ivxlcdm]+)\s*$", re.IGNORECASE)
 _SEP_RE = re.compile(r"^\s*(?:[-=*_]){3,}\s*$")

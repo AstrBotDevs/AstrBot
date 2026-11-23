@@ -8,7 +8,7 @@ outline: deep
 
 ## 快速开始
 
-1. 在 WebUI - 设置中创建 API Key。
+1. 在 WebUI 的 `设置 → OpenAPI` 中点击 `创建 API Key`。
 2. 在请求头中携带 API Key：
 
 ```http
@@ -71,6 +71,58 @@ X-API-Key: abk_xxx
 
 - `POST /api/v1/im/message`：按 UMO 主动发消息
 - `GET /api/v1/im/bots`：获取 bot/platform ID 列表
+
+## 筛选示例
+
+请将 `abk_xxx` 和示例 ID 替换为当前部署中的实际值。
+
+### 会话历史
+
+`GET /api/v1/conversations` 需要 `data` scope。`platform_id` 精确匹配存储的平台 ID；`user_id` 精确匹配完整的统一消息来源（UMO），例如 `webchat:FriendMessage:openapi_probe`。
+
+```bash
+curl --get 'http://localhost:6185/api/v1/conversations' \
+  -H 'Authorization: Bearer abk_xxx' \
+  --data-urlencode 'platform_id=webchat' \
+  --data-urlencode 'user_id=webchat:FriendMessage:openapi_probe' \
+  --data-urlencode 'page=1' \
+  --data-urlencode 'page_size=20'
+```
+
+省略某个身份参数时，不按该身份筛选。传入 `platform_id=` 或 `user_id=` 时，会精确匹配空值，而不是取消筛选。`user_id` 必须是完整 UMO，不能只传用户名或部分字符串；其中的 `%` 和 `_` 按字面字符匹配。另一个参数 `umo` 用于子串搜索。所有传入的筛选条件会在计数、分组和分页前共同生效。没有匹配项时，返回 HTTP `200`，其中 `data.conversations` 为空列表，`data.pagination.total` 为 `0`。
+
+### Skills
+
+`GET /api/v1/skills` 需要单数的 `skill` scope。
+
+```bash
+curl --get 'http://localhost:6185/api/v1/skills' \
+  -H 'Authorization: Bearer abk_xxx' \
+  --data-urlencode 'enabled=true' \
+  --data-urlencode 'source=plugin'
+```
+
+`enabled=true` 或 `enabled=false` 按技能自身的 `active` 标志筛选；省略 `enabled` 时包含两种状态。该标志与 `plugin_active` 相互独立，也不保证当前人格或运行时能够使用该技能。
+
+`source` 精确匹配 `source_type`，当前值为 `local_only`、`both`、`plugin`、`sandbox_only`。省略时包含此清单中的所有来源；传入空值或未知值时，返回 HTTP `200`，其中 `data.skills` 为空列表。同时传入 `enabled` 和 `source` 时，技能必须满足两个条件；响应仍保留 `runtime` 和 `sandbox_cache` 元数据。工作区技能不属于此清单，因此这里没有 `workspace` 来源值。
+
+### 提供商源的模型目录
+
+`GET /api/v1/provider-sources/models` 需要 `provider` scope，并且必须通过查询参数 `source_id` 指定一个已配置的提供商源。
+
+```bash
+curl --get 'http://localhost:6185/api/v1/provider-sources/models' \
+  -H 'Authorization: Bearer abk_xxx' \
+  --data-urlencode 'source_id=my_source'
+```
+
+等价的路径形式为 `GET /api/v1/provider-sources/{source_id}/models`。这两个模型目录接口不支持 `capability` 筛选。提供商配置列表接口仍支持各自文档中列出的 `capability` 筛选。
+
+### 响应处理
+
+- 缺少 API Key 或 Key 无效时，返回 HTTP `401`；scope 权限不足时，返回 HTTP `403`。
+- 查询参数不符合声明的类型时，返回 HTTP `422`，包括无法识别或为空的 `enabled` 值。省略模型目录接口必填的 `source_id` 查询参数也会返回 `422`。
+- 会话服务错误，以及提供商源不存在等模型目录错误，返回 HTTP `400`。Skills 服务失败时可能返回 HTTP `200`，但响应中的 `status` 为 `"error"`；应同时检查 HTTP 状态、`status` 和 `message`。
 
 ## `message` 字段格式（重点）
 

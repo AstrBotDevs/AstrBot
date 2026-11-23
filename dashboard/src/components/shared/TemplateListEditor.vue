@@ -3,22 +3,12 @@
     <div class="top-bar d-flex align-center justify-end mb-3">
       <v-menu transition="fade-transition">
         <template #activator="{ props: menuProps }">
-          <v-btn
-            color="primary"
-            variant="tonal"
-            size="small"
-            v-bind="menuProps"
-            prepend-icon="mdi-plus"
-          >
+          <v-btn color="primary" variant="tonal" size="small" v-bind="menuProps" prepend-icon="mdi-plus">
             {{ addButtonText }}
           </v-btn>
         </template>
         <v-list density="compact">
-          <v-list-item
-            v-for="option in templateOptions"
-            :key="option.value"
-            @click="addEntry(option.value)"
-          >
+          <v-list-item v-for="option in templateOptions" :key="option.value" @click="addEntry(option.value)">
             <v-list-item-title>{{ option.label }}</v-list-item-title>
             <v-list-item-subtitle v-if="option.hint">{{ option.hint }}</v-list-item-subtitle>
           </v-list-item>
@@ -26,26 +16,12 @@
       </v-menu>
     </div>
 
-    <v-alert
-      v-if="!modelValue || modelValue.length === 0"
-      type="info"
-      variant="tonal"
-      density="compact"
-      class="mb-3"
-    >
+    <v-alert v-if="!modelValue || modelValue.length === 0" type="info" variant="tonal" density="compact" class="mb-3">
       {{ emptyHintText }}
     </v-alert>
 
-    <v-card
-      v-for="(entry, entryIndex) in modelValue"
-      :key="entryIndex"
-      variant="outlined"
-      class="mb-3"
-    >
-      <v-card-title 
-        class="d-flex align-center justify-space-between entry-header"
-        @click="toggleEntry(entryIndex)"
-      >
+    <v-card v-for="(entry, entryIndex) in modelValue" :key="entryIndex" variant="outlined" class="mb-3">
+      <v-card-title class="d-flex align-center justify-space-between entry-header" @click="toggleEntry(entryIndex)">
         <div class="d-flex align-center ga-2">
           <v-btn
             icon
@@ -74,7 +50,9 @@
       <v-expand-transition>
         <v-card-text v-show="expandedEntries[entryIndex]" class="px-0 py-1">
           <div v-if="!getTemplate(entry)" class="px-4 py-2">
-            <v-alert type="error" variant="tonal" density="compact">{{ t('core.common.templateList.missingTemplate') || '找不到对应模板，请删除后重新添加。' }}</v-alert>
+            <v-alert type="error" variant="tonal" density="compact"
+              >{{ t('core.common.templateList.missingTemplate') || '找不到对应模板，请删除后重新添加。' }}</v-alert
+            >
           </div>
           <div v-else class="template-entry-body">
             <template v-for="(itemMeta, itemKey, metaIndex) in getTemplate(entry).items" :key="itemKey">
@@ -128,7 +106,10 @@
                   <v-col cols="12" sm="6" class="property-info">
                     <v-list-item density="compact">
                       <v-list-item-title class="property-name">
-                        <span v-if="itemMeta?.description">{{ templateItemText(entry.__template_key, itemKey, 'description', itemMeta?.description) }} <span class="property-key">({{ itemKey }})</span></span>
+                        <span v-if="itemMeta?.description"
+                          >{{ templateItemText(entry.__template_key, itemKey, 'description', itemMeta?.description) }}
+                          <span class="property-key">({{ itemKey }})</span></span
+                        >
                         <span v-else>{{ itemKey }}</span>
                       </v-list-item-title>
                       <v-list-item-subtitle class="property-hint">
@@ -206,6 +187,7 @@ const defaultValueMap = {
   list: [],
   file: [],
   object: {},
+  dict: {},
   template_list: [],
 };
 

@@ -1,11 +1,12 @@
 from __future__ import annotations
 
-from typing import Any
-
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import FileResponse
 
 from astrbot.core import logger
+from astrbot.dashboard.api.payloads import json_or_empty as _json_or_empty
+from astrbot.dashboard.api.payloads import model_dict as _model_dict
+from astrbot.dashboard.api.payloads import required_text as _required_text
 from astrbot.dashboard.async_utils import run_maybe_async
 from astrbot.dashboard.responses import error, ok
 from astrbot.dashboard.schemas import (
@@ -37,29 +38,6 @@ def get_service(request: Request) -> SkillsService:
 
 
 require_skill_scope = ScopeDependency("skill")
-
-
-async def _json_or_empty(request: Request) -> dict[str, Any]:
-    try:
-        data = await request.json()
-    except Exception:
-        return {}
-    return data if isinstance(data, dict) else {}
-
-
-def _required_text(value: object, name: str) -> str:
-    text = str(value or "").strip()
-    if not text:
-        raise ValueError(f"Missing key: {name}")
-    return text
-
-
-def _model_dict(payload) -> dict[str, Any]:
-    if payload is None:
-        return {}
-    if hasattr(payload, "model_dump"):
-        return payload.model_dump(exclude_none=True)
-    return payload if isinstance(payload, dict) else {}
 
 
 def _serialize_result(result: SkillsOperationResult):
@@ -105,10 +83,33 @@ async def _download_skill(service: SkillsService, name: str):
 
 @router.get("/skills")
 async def list_skills(
+    enabled: bool | None = Query(
+        default=None,
+        description="Filter by the skill's active flag, independently of plugin_active.",
+    ),
+    source: str | None = Query(
+        default=None,
+        description="Exact source_type: local_only, both, plugin, or sandbox_only.",
+    ),
     _auth: AuthContext = Depends(require_skill_scope),
     service: SkillsService = Depends(get_service),
 ):
-    return await _run(service.get_skills)
+    response = await _run(service.get_skills)
+    if response["status"] != "ok" or (enabled is None and source is None):
+        return response
+    data = response["data"]
+    return {
+        **response,
+        "data": {
+            **data,
+            "skills": [
+                skill
+                for skill in data["skills"]
+                if (enabled is None or skill["active"] == enabled)
+                and (source is None or skill["source_type"] == source)
+            ],
+        },
+    }
 
 
 @router.post("/skills")

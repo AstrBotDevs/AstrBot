@@ -55,9 +55,11 @@ def test_build_payload_includes_configurable_runtime_overrides_and_legacy_contex
 async def test_build_user_content_resolved_supports_base64_scheme(
     tmp_path, monkeypatch
 ):
+    media_directory = tmp_path / "media"
+    media_directory.mkdir()
     monkeypatch.setattr(
         "astrbot.core.utils.media_utils.get_astrbot_temp_path",
-        lambda: str(tmp_path),
+        lambda: str(media_directory),
     )
     image_base64 = _png_base64()
 
@@ -73,7 +75,7 @@ async def test_build_user_content_resolved_supports_base64_scheme(
             "image_url": {"url": f"data:image/png;base64,{image_base64}"},
         },
     ]
-    assert not list(tmp_path.iterdir())
+    assert not list(media_directory.iterdir())
 
 
 @pytest.mark.asyncio

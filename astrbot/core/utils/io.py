@@ -110,6 +110,88 @@ def save_temp_img(img: Image.Image | bytes) -> str:
     return p
 
 
+async def _save_image_response(resp: aiohttp.ClientResponse, path: str | None) -> str:
+    """Persist image bytes from either request method and TLS path."""
+    if not path:
+        return save_temp_img(await resp.read())
+    async with await anyio.open_file(path, "wb") as stream:
+        await stream.write(await resp.read())
+    return path
+
+
+async def _save_download_response(
+    resp: aiohttp.ClientResponse,
+    url: str,
+    path: str,
+    show_progress: bool,
+    progress_callback,
+    *,
+    fallback: bool = False,
+) -> None:
+    """Stream a checked response and report consistent download progress."""
+    _raise_for_download_status(resp, url)
+    total_size = int(resp.headers.get("content-length", 0))
+    downloaded_size = 0
+    start_time = time.time()
+    if show_progress:
+        if fallback:
+            logger.info(
+                "Size: %.2f KB | URL: %s", total_size / 1024, _safe_url_for_log(url)
+            )
+        else:
+            logger.info(
+                "Downloading: %s | Size: %.2f KB",
+                _safe_url_for_log(url),
+                total_size / 1024,
+            )
+    await _emit_download_progress(
+        progress_callback,
+        {
+            "url": url,
+            "downloaded": 0,
+            "total": total_size,
+            "percent": 0,
+            "speed": 0,
+        },
+    )
+    async with await anyio.open_file(path, "wb") as f:
+        while True:
+            chunk = await resp.content.read(8192)
+            if not chunk:
+                break
+            await f.write(chunk)
+            downloaded_size += len(chunk)
+            elapsed_time = (
+                time.time() - start_time if time.time() - start_time > 0 else 1
+            )
+            speed = downloaded_size / 1024 / elapsed_time  # KB/s
+            percent = downloaded_size / total_size if total_size > 0 else 0
+            await _emit_download_progress(
+                progress_callback,
+                {
+                    "url": url,
+                    "downloaded": downloaded_size,
+                    "total": total_size,
+                    "percent": percent,
+                    "speed": speed,
+                },
+            )
+            if show_progress:
+                logger.info(
+                    f"Progress: {percent:.2%} Speed: {speed:.2f} KB/s",
+                )
+    await _emit_download_progress(
+        progress_callback,
+        {
+            "url": url,
+            "downloaded": downloaded_size,
+            "total": total_size,
+            "percent": 1,
+            "speed": 0,
+        },
+    )
+
+
 async def download_image_by_url(
     url: str,
     post: bool = False,
@@ -129,18 +211,10 @@ async def download_image_by_url(
         ) as session:
             if post:
                 async with session.post(url, json=post_data) as resp:
-                    if not path:
-                        return save_temp_img(await resp.read())
-                    async with await anyio.open_file(path, "wb") as f:
-                        await f.write(await resp.read())
-                    return path
+                    return await _save_image_response(resp, path)
             else:
                 async with session.get(url) as resp:
-                    if not path:
-                        return save_temp_img(await resp.read())
-                    async with await anyio.open_file(path, "wb") as f:
-                        await f.write(await resp.read())
-                    return path
+                    return await _save_image_response(resp, path)
     except (aiohttp.ClientConnectorSSLError, aiohttp.ClientConnectorCertificateError):
         # 关闭SSL验证(仅在证书验证失败时作为fallback)
         logger.warning(
@@ -155,28 +229,24 @@ async def download_image_by_url(
         async with aiohttp.ClientSession() as session:
             if post:
                 async with session.post(url, json=post_data, ssl=ssl_context) as resp:
-                    if not path:
-                        return save_temp_img(await resp.read())
-                    async with await anyio.open_file(path, "wb") as f:
-                        await f.write(await resp.read())
-                    return path
+                    return await _save_image_response(resp, path)
             else:
                 async with session.get(url, ssl=ssl_context) as resp:
-                    if not path:
-                        return save_temp_img(await resp.read())
-                    async with await anyio.open_file(path, "wb") as f:
-                        await f.write(await resp.read())
-                    return path
+                    return await _save_image_response(resp, path)
     except Exception as e:
         raise e
 
 
-async def _emit_download_progress(progress_callback, payload: dict) -> None:
+async def emit_download_progress(progress_callback, payload: dict) -> None:
+    """Notify either a synchronous or asynchronous download progress listener."""
     if not progress_callback:
         return
     result = progress_callback(payload)
     if inspect.isawaitable(result):
         await result
+
+
+_emit_download_progress = emit_download_progress
 
 
 class DownloadFileHTTPError(RuntimeError):
@@ -219,63 +289,8 @@ async def download_file(
                 url,
                 timeout=aiohttp.ClientTimeout(total=1800),
             ) as resp:
-                _raise_for_download_status(resp, url)
-                total_size = int(resp.headers.get("content-length", 0))
-                downloaded_size = 0
-                start_time = time.time()
-                if show_progress:
-                    logger.info(
-                        "Downloading: %s | Size: %.2f KB",
-                        _safe_url_for_log(url),
-                        total_size / 1024,
-                    )
-                await _emit_download_progress(
-                    progress_callback,
-                    {
-                        "url": url,
-                        "downloaded": 0,
-                        "total": total_size,
-                        "percent": 0,
-                        "speed": 0,
-                    },
-                )
-                async with await anyio.open_file(path, "wb") as f:
-                    while True:
-                        chunk = await resp.content.read(8192)
-                        if not chunk:
-                            break
-                        await f.write(chunk)
-                        downloaded_size += len(chunk)
-                        elapsed_time = (
-                            time.time() - start_time
-                            if time.time() - start_time > 0
-                            else 1
-                        )
-                        speed = downloaded_size / 1024 / elapsed_time  # KB/s
-                        percent = downloaded_size / total_size if total_size > 0 else 0
-                        await _emit_download_progress(
-                            progress_callback,
-                            {
-                                "url": url,
-                                "downloaded": downloaded_size,
-                                "total": total_size,
-                                "percent": percent,
-                                "speed": speed,
-                            },
-                        )
-                        if show_progress:
-                            logger.info(
-                                f"Progress: {percent:.2%} Speed: {speed:.2f} KB/s",
-                            )
-                await _emit_download_progress(
-                    progress_callback,
-                    {
-                        "url": url,
-                        "downloaded": downloaded_size,
-                        "total": total_size,
-                        "percent": 1,
-                        "speed": 0,
-                    },
+                await _save_download_response(
+                    resp, url, path, show_progress, progress_callback
                 )
     except (aiohttp.ClientConnectorSSLError, aiohttp.ClientConnectorCertificateError):
         if not allow_insecure_ssl_fallback:
@@ -298,61 +313,8 @@ async def download_file(
                 timeout=aiohttp.ClientTimeout(total=120),
             ) as resp,
         ):
-            _raise_for_download_status(resp, url)
-            total_size = int(resp.headers.get("content-length", 0))
-            downloaded_size = 0
-            start_time = time.time()
-            if show_progress:
-                logger.info(
-                    "Size: %.2f KB | URL: %s",
-                    total_size / 1024,
-                    _safe_url_for_log(url),
-                )
-            await _emit_download_progress(
-                progress_callback,
-                {
-                    "url": url,
-                    "downloaded": 0,
-                    "total": total_size,
-                    "percent": 0,
-                    "speed": 0,
-                },
-            )
-            async with await anyio.open_file(path, "wb") as f:
-                while True:
-                    chunk = await resp.content.read(8192)
-                    if not chunk:
-                        break
-                    await f.write(chunk)
-                    downloaded_size += len(chunk)
-                    elapsed_time = (
-                        time.time() - start_time if time.time() - start_time > 0 else 1
-                    )
-                    speed = downloaded_size / 1024 / elapsed_time  # KB/s
-                    percent = downloaded_size / total_size if total_size > 0 else 0
-                    await _emit_download_progress(
-                        progress_callback,
-                        {
-                            "url": url,
-                            "downloaded": downloaded_size,
-                            "total": total_size,
-                            "percent": percent,
-                            "speed": speed,
-                        },
-                    )
-                    if show_progress:
-                        logger.info(
-                            f"Progress: {percent:.2%} Speed: {speed:.2f} KB/s",
-                        )
-            await _emit_download_progress(
-                progress_callback,
-                {
-                    "url": url,
-                    "downloaded": downloaded_size,
-                    "total": total_size,
-                    "percent": 1,
-                    "speed": 0,
-                },
+            await _save_download_response(
+                resp, url, path, show_progress, progress_callback, fallback=True
             )
     if show_progress:
         logger.info("下载完成")

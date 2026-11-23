@@ -1,7 +1,14 @@
+from typing import Literal, overload
+
 from quart import g, request
 
 from astrbot.core.db import BaseDatabase
+from astrbot.core.db.po import ChatUIProject, PlatformSession
 from astrbot.core.utils.datetime_utils import to_utc_isoformat
+from astrbot.dashboard.services.chatui_project_service import (
+    ChatUIProjectService,
+    ChatUIProjectServiceError,
+)
 
 from .route import Response, Route, RouteContext
 
@@ -24,6 +31,32 @@ class ChatUIProjectRoute(Route):
         }
         self.db = db
         self.register_routes()
+
+    @overload
+    async def _owned_resource(
+        self, kind: Literal["project"], resource_id: str | None
+    ) -> tuple[ChatUIProject, None] | tuple[None, dict]: ...
+
+    @overload
+    async def _owned_resource(
+        self, kind: Literal["session"], resource_id: str | None
+    ) -> tuple[PlatformSession, None] | tuple[None, dict]: ...
+
+    async def _owned_resource(self, kind: str, resource_id: str | None):
+        """Use the common ownership checks while retaining legacy error envelopes."""
+        if not resource_id:
+            return None, Response().error(f"Missing key: {kind}_id").to_json()
+        service = ChatUIProjectService(self.db)
+        getter = (
+            service._get_owned_project
+            if kind == "project"
+            else service._get_owned_session
+        )
+        try:
+            resource = await getter(g.get("username", "guest"), resource_id)
+        except ChatUIProjectServiceError as exc:
+            return None, Response().error(str(exc)).to_json()
+        return resource, None
 
     async def create_project(self):
         """Create a new ChatUI project."""
@@ -82,18 +115,9 @@ class ChatUIProjectRoute(Route):
     async def get_project(self):
         """Get a specific ChatUI project."""
         project_id = request.args.get("project_id")
-        if not project_id:
-            return Response().error("Missing key: project_id").to_json()
-
-        username = g.get("username", "guest")
-
-        project = await self.db.get_chatui_project_by_id(project_id)
-        if not project:
-            return Response().error(f"Project {project_id} not found").to_json()
-
-        # Verify ownership
-        if project.creator != username:
-            return Response().error("Permission denied").to_json()
+        project, access_error = await self._owned_resource("project", project_id)
+        if project is None:
+            return access_error
 
         return (
             Response()
@@ -119,17 +143,9 @@ class ChatUIProjectRoute(Route):
         emoji = post_data.get("emoji")
         description = post_data.get("description")
 
-        if not project_id:
-            return Response().error("Missing key: project_id").to_json()
-
-        username = g.get("username", "guest")
-
-        # Verify ownership
-        project = await self.db.get_chatui_project_by_id(project_id)
-        if not project:
-            return Response().error(f"Project {project_id} not found").to_json()
-        if project.creator != username:
-            return Response().error("Permission denied").to_json()
+        _, access_error = await self._owned_resource("project", project_id)
+        if access_error is not None:
+            return access_error
 
         await self.db.update_chatui_project(
             project_id=project_id,
@@ -142,18 +158,10 @@ class ChatUIProjectRoute(Route):
 
     async def delete_project(self):
         """Delete a ChatUI project."""
-        project_id = request.args.get("project_id")
-        if not project_id:
-            return Response().error("Missing key: project_id").to_json()
-
-        username = g.get("username", "guest")
-
-        # Verify ownership
-        project = await self.db.get_chatui_project_by_id(project_id)
-        if not project:
-            return Response().error(f"Project {project_id} not found").to_json()
-        if project.creator != username:
-            return Response().error("Permission denied").to_json()
+        project_id = request.args.get("project_id", "")
+        _, access_error = await self._owned_resource("project", project_id)
+        if access_error is not None:
+            return access_error
 
         await self.db.delete_chatui_project(project_id)
 
@@ -168,24 +176,14 @@ class ChatUIProjectRoute(Route):
 
         if not session_id:
             return Response().error("Missing key: session_id").to_json()
-        if not project_id:
-            return Response().error("Missing key: project_id").to_json()
-
-        username = g.get("username", "guest")
-
-        # Verify project ownership
-        project = await self.db.get_chatui_project_by_id(project_id)
-        if not project:
-            return Response().error(f"Project {project_id} not found").to_json()
-        if project.creator != username:
-            return Response().error("Permission denied").to_json()
+        _, access_error = await self._owned_resource("project", project_id)
+        if access_error is not None:
+            return access_error
 
         # Verify session ownership
-        session = await self.db.get_platform_session_by_id(session_id)
-        if not session:
-            return Response().error(f"Session {session_id} not found").to_json()
-        if session.creator != username:
-            return Response().error("Permission denied").to_json()
+        _, access_error = await self._owned_resource("session", session_id)
+        if access_error is not None:
+            return access_error
 
         await self.db.add_session_to_project(session_id, project_id)
 
@@ -197,17 +195,9 @@ class ChatUIProjectRoute(Route):
 
         session_id = post_data.get("session_id")
 
-        if not session_id:
-            return Response().error("Missing key: session_id").to_json()
-
-        username = g.get("username", "guest")
-
-        # Verify session ownership
-        session = await self.db.get_platform_session_by_id(session_id)
-        if not session:
-            return Response().error(f"Session {session_id} not found").to_json()
-        if session.creator != username:
-            return Response().error("Permission denied").to_json()
+        _, access_error = await self._owned_resource("session", session_id)
+        if access_error is not None:
+            return access_error
 
         await self.db.remove_session_from_project(session_id)
 
@@ -215,18 +205,10 @@ class ChatUIProjectRoute(Route):
 
     async def get_project_sessions(self):
         """Get all sessions in a project."""
-        project_id = request.args.get("project_id")
-        if not project_id:
-            return Response().error("Missing key: project_id").to_json()
-
-        username = g.get("username", "guest")
-
-        # Verify project ownership
-        project = await self.db.get_chatui_project_by_id(project_id)
-        if not project:
-            return Response().error(f"Project {project_id} not found").to_json()
-        if project.creator != username:
-            return Response().error("Permission denied").to_json()
+        project_id = request.args.get("project_id", "")
+        _, access_error = await self._owned_resource("project", project_id)
+        if access_error is not None:
+            return access_error
 
         sessions = await self.db.get_project_sessions(project_id)
 

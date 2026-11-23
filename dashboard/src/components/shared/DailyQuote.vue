@@ -27,7 +27,7 @@ interface Quote {
   author: string;
 }
 
-const quotes: Record<Locale, Quote[]> = {
+const quotes: Partial<Record<Locale, Quote[]>> & Record<"en-US", Quote[]> = {
   "en-US": [
     {
       text: "The best way to predict the future is to create it.",
@@ -74,6 +74,10 @@ const quotes: Record<Locale, Quote[]> = {
       text: "The most disastrous thing you can learn is your first programming language.",
       author: "Alan Kay",
     },
+  ],
+  "ja-JP": [
+    { text: "まず動かし、次に正しくし、そして速くする。", author: "Kent Beck" },
+    { text: "単純さは効率の魂である。", author: "Austin Freeman" },
   ],
   "zh-CN": [
     { text: "预测未来的最好方式是创造未来。", author: "彼得·德鲁克" },

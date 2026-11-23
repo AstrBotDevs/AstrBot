@@ -1,4 +1,5 @@
 from types import SimpleNamespace
+from unittest.mock import AsyncMock, Mock
 
 import pytest
 
@@ -17,8 +18,8 @@ async def test_clear_third_party_agent_runner_state_deletes_deerflow_thread_befo
         def __init__(self, **kwargs):
             calls.append(("init", kwargs))
 
-        async def delete_thread(self, thread_id: str, timeout: float = 20):
-            calls.append(("delete", thread_id, timeout))
+        async def delete_thread(self, thread_id: str):
+            calls.append(("delete", thread_id))
 
         async def close(self):
             calls.append(("close",))
@@ -32,23 +33,16 @@ async def test_clear_third_party_agent_runner_state_deletes_deerflow_thread_befo
 
     context = SimpleNamespace(
         get_config=lambda **kwargs: {
-            "provider_settings": {
-                "deerflow_agent_runner_provider_id": "deerflow-runner"
-            }
-        },
-        provider_manager=SimpleNamespace(
-            get_provider_config_by_id=lambda provider_id, merged=False: (
-                {
-                    "id": provider_id,
+            "agent": {
+                "runtime": "deerflow",
+                "config": {
                     "deerflow_api_base": "http://127.0.0.1:2026",
                     "deerflow_api_key": "token",
                     "deerflow_auth_header": "",
                     "proxy": "",
-                }
-                if merged
-                else {"id": provider_id}
-            ),
-        ),
+                },
+            }
+        },
     )
 
     monkeypatch.setattr(conversation_module, "DeerFlowAPIClient", FakeClient)
@@ -61,14 +55,14 @@ async def test_clear_third_party_agent_runner_state_deletes_deerflow_thread_befo
         conversation_module.DEERFLOW_PROVIDER_TYPE,
     )
 
-    assert ("delete", "thread-123", 20) in calls
+    assert ("delete", "thread-123") in calls
     assert (
         "remove",
         "umo",
         "umo-1",
         conversation_module.DEERFLOW_THREAD_ID_KEY,
     ) in calls
-    assert calls.index(("delete", "thread-123", 20)) < calls.index(
+    assert calls.index(("delete", "thread-123")) < calls.index(
         ("remove", "umo", "umo-1", conversation_module.DEERFLOW_THREAD_ID_KEY)
     )
 
@@ -83,8 +77,8 @@ async def test_clear_third_party_agent_runner_state_removes_local_state_when_dee
         def __init__(self, **kwargs):
             _ = kwargs
 
-        async def delete_thread(self, thread_id: str, timeout: float = 20):
-            _ = thread_id, timeout
+        async def delete_thread(self, thread_id: str):
+            _ = thread_id
             raise RuntimeError("gateway down")
 
         async def close(self):
@@ -99,23 +93,16 @@ async def test_clear_third_party_agent_runner_state_removes_local_state_when_dee
 
     context = SimpleNamespace(
         get_config=lambda **kwargs: {
-            "provider_settings": {
-                "deerflow_agent_runner_provider_id": "deerflow-runner"
-            }
-        },
-        provider_manager=SimpleNamespace(
-            get_provider_config_by_id=lambda provider_id, merged=False: (
-                {
-                    "id": provider_id,
+            "agent": {
+                "runtime": "deerflow",
+                "config": {
                     "deerflow_api_base": "http://127.0.0.1:2026",
                     "deerflow_api_key": "",
                     "deerflow_auth_header": "",
                     "proxy": "",
-                }
-                if merged
-                else {"id": provider_id}
-            ),
-        ),
+                },
+            }
+        },
     )
 
     monkeypatch.setattr(conversation_module, "DeerFlowAPIClient", FakeClient)
@@ -156,23 +143,16 @@ async def test_clear_third_party_agent_runner_state_removes_local_state_when_dee
 
     context = SimpleNamespace(
         get_config=lambda **kwargs: {
-            "provider_settings": {
-                "deerflow_agent_runner_provider_id": "deerflow-runner"
-            }
-        },
-        provider_manager=SimpleNamespace(
-            get_provider_config_by_id=lambda provider_id, merged=False: (
-                {
-                    "id": provider_id,
+            "agent": {
+                "runtime": "deerflow",
+                "config": {
                     "deerflow_api_base": "http://127.0.0.1:2026",
                     "deerflow_api_key": "",
                     "deerflow_auth_header": "",
                     "proxy": "",
-                }
-                if merged
-                else {"id": provider_id}
-            ),
-        ),
+                },
+            }
+        },
     )
 
     monkeypatch.setattr(conversation_module, "DeerFlowAPIClient", FakeClient)
@@ -193,14 +173,79 @@ async def test_clear_third_party_agent_runner_state_removes_local_state_when_dee
     ) in calls
 
 
-def test_conversation_commands_imported():
-    assert conversation_module.ConversationCommands is not None
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("runtime", "key"),
+    [
+        ("dify", "dify_conversation_id"),
+        ("coze", "coze_conversation_id"),
+        ("dashscope", "dashscope_conversation_id"),
+    ],
+)
+async def test_external_runtime_cleanup_only_removes_the_selected_session_key(
+    shared_preferences, monkeypatch, runtime, key
+):
+    target = "bot:FriendMessage:alice"
+    other = "bot:FriendMessage:bob"
+    await shared_preferences.session_put(target, key, "target-thread")
+    await shared_preferences.session_put(other, key, "other-thread")
+    await shared_preferences.session_put(target, "sel_conv_id", "local-conversation")
+    monkeypatch.setattr(conversation_module, "sp", shared_preferences)
+    context = SimpleNamespace(get_config=Mock())
+
+    await conversation_module._clear_third_party_agent_runner_state(
+        context, target, runtime
+    )
+
+    assert await shared_preferences.session_get(target, key) is None
+    assert await shared_preferences.session_get(other, key) == "other-thread"
+    assert (
+        await shared_preferences.session_get(target, "sel_conv_id")
+        == "local-conversation"
+    )
+    context.get_config.assert_not_called()
 
 
-def test_conversation_commands_class():
-    assert issubclass(conversation_module.ConversationCommands, object)
+@pytest.mark.asyncio
+async def test_unknown_runtime_leaves_all_session_state_intact(
+    shared_preferences, monkeypatch
+):
+    umo = "bot:FriendMessage:alice"
+    await shared_preferences.session_put(umo, "dify_conversation_id", "keep")
+    monkeypatch.setattr(conversation_module, "sp", shared_preferences)
+    context = SimpleNamespace(get_config=Mock())
+
+    await conversation_module._clear_third_party_agent_runner_state(
+        context, umo, "unregistered-runtime"
+    )
+
+    assert await shared_preferences.session_get(umo, "dify_conversation_id") == "keep"
+    context.get_config.assert_not_called()
 
 
-def test_conversation_commands_constants():
-    assert isinstance(conversation_module.THIRD_PARTY_AGENT_RUNNER_KEY, dict)
-    assert "dify" in conversation_module.THIRD_PARTY_AGENT_RUNNER_KEY
+@pytest.mark.asyncio
+@pytest.mark.parametrize("selection", [None, "missing-conversation", "current"])
+async def test_current_persona_lookup_handles_no_selection_missing_and_existing_conversations(
+    selection,
+):
+    manager = SimpleNamespace(
+        get_curr_conversation_id=AsyncMock(return_value=selection),
+        get_conversation=AsyncMock(
+            return_value=SimpleNamespace(persona_id="persona")
+            if selection == "current"
+            else None
+        ),
+    )
+    commands = conversation_module.ConversationCommands(
+        SimpleNamespace(conversation_manager=manager)
+    )
+    result = await commands._get_current_persona_id("bot:FriendMessage:alice")
+
+    assert result == ("persona" if selection == "current" else None)
+    manager.get_curr_conversation_id.assert_awaited_once_with("bot:FriendMessage:alice")
+    if selection is None:
+        manager.get_conversation.assert_not_awaited()
+    else:
+        manager.get_conversation.assert_awaited_once_with(
+            "bot:FriendMessage:alice", selection
+        )

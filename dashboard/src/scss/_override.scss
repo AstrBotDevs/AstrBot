@@ -108,9 +108,14 @@ pre, code, .markdown pre, .markdown code, .release-notes pre, .release-notes cod
 }
 
 .v-overlay.v-menu {
+  .v-overlay__content {
+    border-radius: var(--astrbot-radius-menu);
+  }
+
   .v-overlay__content > .v-card,
   .v-overlay__content > .v-list {
     border: 0 !important;
+    border-radius: inherit !important;
     box-shadow: var(--astrbot-menu-shadow) !important;
   }
 
@@ -120,12 +125,54 @@ pre, code, .markdown pre, .markdown code, .release-notes pre, .release-notes cod
   }
 }
 
+// Material dialog containers use extra-large corners; action buttons use full corners.
+.v-dialog {
+  --astrbot-dialog-radius: var(--astrbot-radius-dialog);
+  --astrbot-dialog-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
+
+  > .v-overlay__content {
+    > .v-card,
+    > .v-sheet,
+    > form > .v-card,
+    > form > .v-sheet {
+      border-radius: var(--astrbot-dialog-radius) !important;
+      border: 0 !important;
+      box-shadow: var(--astrbot-dialog-shadow) !important;
+
+      > .v-card-title,
+      > .v-card-item {
+        padding-top: 24px !important;
+      }
+
+      > .v-card-title,
+      > .v-card-item .v-card-title {
+        font-weight: 400 !important;
+      }
+
+      > .v-card-actions,
+      > .project-dialog-actions {
+        padding: 16px 24px 24px !important;
+      }
+    }
+  }
+
+  .v-card-actions .v-btn,
+  .dialog-action {
+    border-radius: var(--astrbot-radius-pill) !important;
+  }
+}
+
+.v-dialog--fullscreen {
+  --astrbot-dialog-radius: 0px;
+  --astrbot-dialog-shadow: none;
+}
+
 /* ============================================================
    REACTOR FORM CONTROLS — Dark mode industrial overrides
    ============================================================ */
 
 // Global dark mode — forces visible text on dark bubbles
-.v-theme--bluebusinessdarktheme {
+.v-theme--BlueBusinessDarkTheme {
   /* === App bar / header glassmorphism === */
   .v-app-bar {
     background: rgba(15, 15, 18, 0.8) !important;
@@ -148,7 +195,7 @@ pre, code, .markdown pre, .markdown code, .release-notes pre, .release-notes cod
   }
 }
 
-.v-theme--bluebusinessdarktheme {
+.v-theme--BlueBusinessDarkTheme {
   /* === Switch: MD3 rectangle with Cherenkov glow === */
   .v-switch {
     .v-switch__track {
@@ -406,7 +453,7 @@ pre, code, .markdown pre, .markdown code, .release-notes pre, .release-notes cod
   }
 
   /* === Installed status toggle: outlined pills === */
-  .installed-status-toggle ::v-deep(.v-btn) {
+  .installed-status-toggle .v-btn {
     min-height: 32px !important;
     font-family: "JetBrains Mono", monospace !important;
     font-size: 11px !important;
@@ -461,7 +508,7 @@ pre, code, .markdown pre, .markdown code, .release-notes pre, .release-notes cod
   }
 
   /* === Settings / v-list items: opaque dark glass (fixes switch track bleed-through) === */
-  .v-theme--bluebusinessdarktheme {
+  .v-theme--BlueBusinessDarkTheme {
     .v-list-item {
       background: rgba(15, 15, 22, 0.3) !important;
       &:hover {
@@ -535,8 +582,8 @@ pre, code, .markdown pre, .markdown code, .release-notes pre, .release-notes cod
 
   /* === Welcome resource cards: glass + industrial === */
   .welcome-card {
-    // Use :deep() to pierce into nested v-card components
-    :deep(.v-card) {
+    // Global theme rules apply directly to nested card components.
+    .v-card {
       background: rgba(15, 15, 22, 0.5) !important;
       backdrop-filter: blur(16px) saturate(1.2) !important;
       border: 1px solid rgba(0, 242, 255, 0.08) !important;
@@ -676,7 +723,7 @@ pre, code, .markdown pre, .markdown code, .release-notes pre, .release-notes cod
    Deep indigo (#1A2B3C) replaces Cherenkov blue (#00F2FF)
    ============================================================ */
 
-.v-theme--bluebusinesstheme {
+.v-theme--BlueBusinessTheme {
   /* === App-bar: pure white === */
   .v-app-bar {
     background: #FFFFFF !important;
@@ -820,7 +867,7 @@ pre, code, .markdown pre, .markdown code, .release-notes pre, .release-notes cod
   }
 
   /* === Welcome resource cards: white with indigo icon === */
-  .welcome-card :deep(.v-card) {
+  .welcome-card .v-card {
     background: #FFFFFF !important;
     border: 1px solid rgba(0, 49, 83, 0.1) !important;
     border-radius: 12px !important;
@@ -862,12 +909,12 @@ pre, code, .markdown pre, .markdown code, .release-notes pre, .release-notes cod
   }
 
   /* === Global text colors: deep indigo for readability === */
-  .v-theme--bluebusinesstheme {
+  .v-theme--BlueBusinessTheme {
     color: #1A2B3C !important;
   }
 
   /* === Force dark text in all components === */
-  .v-theme--bluebusinesstheme {
+  .v-theme--BlueBusinessTheme {
     .v-list-item {
       color: #1A2B3C !important;
     }
@@ -1061,7 +1108,7 @@ pre, code, .markdown pre, .markdown code, .release-notes pre, .release-notes cod
   }
 
   /* === Installed status toggle: outlined pills === */
-  .installed-status-toggle ::v-deep(.v-btn) {
+  .installed-status-toggle .v-btn {
     min-height: 32px !important;
     font-family: "JetBrains Mono", monospace !important;
     font-size: 11px !important;
@@ -1230,4 +1277,23 @@ pre, code, .markdown pre, .markdown code, .release-notes pre, .release-notes cod
   }
 }
 
+.v-theme--BlueBusinessDarkTheme .provider-icon--monochrome {
+  filter: brightness(0) invert(1);
+}
 
+// Preserve the two-tone cat details when adapting the logo to dark surfaces.
+.v-theme--BlueBusinessDarkTheme img[src*="/mirarouter"] {
+  filter: invert(1);
+}
+
+// Invert the black Mattermost and Matrix logos on dark surfaces.
+// The leading slash keeps these selectors from matching inline SVG data URIs,
+// where words like "matrix" also appear in transform functions.
+.v-theme--BlueBusinessDarkTheme img[src*="/mattermost"],
+.v-theme--BlueBusinessDarkTheme img[src*="/matrix"] {
+  filter: brightness(0) invert(1);
+}
+
+.v-theme--BlueBusinessDarkTheme {
+  --astrbot-code-color: rgb(var(--v-theme-on-surface-variant));
+}

@@ -13,7 +13,6 @@ from .route import Response, RouteContext
 from .session_management import SessionManagementRoute
 from .skills import SkillsRoute
 from .static_file import StaticFileRoute
-from .subagent import SubAgentRoute
 from .t2i import T2iRoute
 from .tools import ToolsRoute
 from .update import UpdateRoute
@@ -35,7 +34,6 @@ __all__ = [
     "SessionManagementRoute",
     "SkillsRoute",
     "StaticFileRoute",
-    "SubAgentRoute",
     "T2iRoute",
     "ToolsRoute",
     "UpdateRoute",

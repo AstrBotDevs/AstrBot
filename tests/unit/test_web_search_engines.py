@@ -42,7 +42,9 @@ async def test_base_search_allows_engine_without_text_selector() -> None:
 
 
 @pytest.mark.asyncio
-async def test_duckduckgo_get_next_page_urlencodes_query(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_duckduckgo_get_next_page_urlencodes_query(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     engine = DuckDuckGo()
     captured: dict[str, str] = {}
 
@@ -60,7 +62,9 @@ async def test_duckduckgo_get_next_page_urlencodes_query(monkeypatch: pytest.Mon
 
 
 @pytest.mark.asyncio
-async def test_comet_get_next_page_urlencodes_query(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_comet_get_next_page_urlencodes_query(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     engine = Comet()
     captured: dict[str, str] = {}
 
@@ -77,7 +81,9 @@ async def test_comet_get_next_page_urlencodes_query(monkeypatch: pytest.MonkeyPa
 
 
 @pytest.mark.asyncio
-async def test_google_get_next_page_urlencodes_query(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_google_get_next_page_urlencodes_query(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     engine = Google()
     captured: dict[str, str] = {}
 
@@ -101,9 +107,9 @@ def test_comet_get_url_prefers_href_and_supports_scheme_relative() -> None:
         '<a href="https://example.com/result">Title</a>',
         "html.parser",
     ).find("a")
-    rel_tag = BeautifulSoup('<a href="//example.org/path">Title</a>', "html.parser").find(
-        "a"
-    )
+    rel_tag = BeautifulSoup(
+        '<a href="//example.org/path">Title</a>', "html.parser"
+    ).find("a")
     assert http_tag is not None
     assert rel_tag is not None
 
@@ -123,7 +129,9 @@ async def test_comet_search_filters_internal_and_non_content_links(
         num_results: int,
     ) -> list[SearchResult]:
         return [
-            SearchResult(title="internal", url="https://www.perplexity.ai/search?q=a", snippet=""),
+            SearchResult(
+                title="internal", url="https://www.perplexity.ai/search?q=a", snippet=""
+            ),
             SearchResult(title="anchor", url="#section", snippet=""),
             SearchResult(title="js", url="javascript:void(0)", snippet=""),
             SearchResult(title="mailto", url="mailto:a@example.com", snippet=""),

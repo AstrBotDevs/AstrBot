@@ -4,7 +4,6 @@
 from __future__ import annotations
 
 import argparse
-import csv
 import json
 import zipfile
 from pathlib import Path
@@ -12,6 +11,17 @@ from pathlib import Path
 import chardet
 import xlrd
 from openpyxl import load_workbook
+
+if __package__:
+    from astrbot.builtin_stars.astrbot.skills._astrbot_skill_support.cli import (
+        parse_input_path,
+    )
+    from astrbot.builtin_stars.astrbot.skills._astrbot_skill_support.csv_data import (
+        parse_delimited_rows,
+    )
+else:
+    from _astrbot_skill_support.cli import parse_input_path
+    from _astrbot_skill_support.csv_data import parse_delimited_rows
 
 _EXCEL_ERRORS = {
     "#NULL!",
@@ -40,12 +50,7 @@ def _inspect_delimited(path: Path, sample_rows: int, sample_cols: int) -> dict:
     detected = chardet.detect(content)
     encoding = str(detected.get("encoding") or "utf-8")
     text = content.decode(encoding)
-    try:
-        dialect = csv.Sniffer().sniff(text[:8192], delimiters=",\t;|")
-        delimiter = dialect.delimiter
-    except csv.Error:
-        delimiter = "\t" if path.suffix.lower() == ".tsv" else ","
-    rows = list(csv.reader(text.splitlines(), delimiter=delimiter))
+    delimiter, rows = parse_delimited_rows(text, suffix=path.suffix)
     return {
         "kind": "delimited",
         "encoding": encoding,
@@ -67,7 +72,7 @@ def _inspect_xls(path: Path, sample_rows: int, sample_cols: int) -> dict:
     Returns:
         JSON-serializable inspection data.
     """
-    workbook = xlrd.open_workbook(path, on_demand=True)
+    workbook = xlrd.open_workbook(str(path), on_demand=True)
     sheets = []
     for name in workbook.sheet_names():
         sheet = workbook.sheet_by_name(name)
@@ -166,10 +171,7 @@ def main() -> int:
     parser.add_argument("input", type=Path, help="Workbook, CSV, or TSV file")
     parser.add_argument("--sample-rows", type=int, default=6)
     parser.add_argument("--sample-cols", type=int, default=10)
-    args = parser.parse_args()
-    path = args.input.expanduser().resolve(strict=False)
-    if not path.is_file():
-        parser.error(f"Input file not found: {path}")
+    args, path = parse_input_path(parser)
     if args.sample_rows < 0 or args.sample_cols < 0:
         parser.error("Sample limits must be non-negative.")
 

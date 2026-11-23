@@ -30,6 +30,7 @@ from astrbot.dashboard.services.chat_service import (
     BotMessageAccumulator,
     collect_plain_text_from_message_parts,
 )
+from astrbot.dashboard.validation import is_json_object
 
 SendJson = Callable[[dict], Awaitable[None]]
 ReceiveJson = Callable[[], Awaitable[Any]]
@@ -493,13 +494,20 @@ class OpenApiService:
                         chain_type=chain_type,
                         streaming=streaming,
                     )
+                elif msg_type == "error":
+                    error = (
+                        result_text
+                        if isinstance(result_text, dict)
+                        else {"code": "agent_error", "message": str(result_text)}
+                    )
+                    message_accumulator.add_part({**error, "type": "error"})
                 elif msg_type in {"image", "record", "file", "video"}:
                     filename = str(result_text).replace(f"[{msg_type.upper()}]", "")
                     part = await chat_bridge.create_attachment_from_file(
                         filename,
                         msg_type,
                     )
-                    message_accumulator.add_attachment(part)
+                    message_accumulator.add_part(part)
 
                 should_save = False
                 if msg_type == "end":
@@ -644,7 +652,7 @@ class OpenApiService:
         )
 
     async def send_message(self, post_data: object) -> None:
-        payload = post_data if isinstance(post_data, dict) else {}
+        payload = post_data if is_json_object(post_data) else {}
         message_payload = payload.get("message", {})
         umo = payload.get("umo")
 
@@ -673,6 +681,8 @@ class OpenApiService:
             )
 
         try:
+            if not isinstance(message_payload, (str, list)):
+                raise ValueError("message must be a string or list")
             message_chain = await self.build_message_chain_from_payload(message_payload)
             await platform_inst.send_by_session(session, message_chain)
         except OpenApiServiceError:

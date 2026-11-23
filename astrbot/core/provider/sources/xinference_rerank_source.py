@@ -8,6 +8,8 @@ from astrbot.core.provider import RerankProvider
 from astrbot.core.provider.entities import ProviderType, RerankResult
 from astrbot.core.provider.register import register_provider_adapter
 
+from .xinference_common import find_running_model
+
 
 @register_provider_adapter(
     "xinference_rerank",
@@ -40,15 +42,11 @@ class XinferenceRerankProvider(RerankProvider):
             logger.info("Xinference Rerank: No API key provided.")
             client = Client(self.base_url)
         self.client = client
+        client._headers.update(self.request_headers)
         try:
-            running_models = await client.list_models()
-            for uid, model_spec in running_models.items():
-                if model_spec.get("model_name") == self.model_name:
-                    logger.info(
-                        f"Model '{self.model_name}' is already running with UID: {uid}",
-                    )
-                    self.model_uid = uid
-                    break
+            self.model_uid = await find_running_model(
+                client, self.model_name, self.model_uid
+            )
             if self.model_uid is None:
                 if self.launch_model_if_not_running:
                     logger.info(f"Launching {self.model_name} model...")
@@ -81,10 +79,9 @@ class XinferenceRerankProvider(RerankProvider):
         top_n: int | None = None,
     ) -> list[RerankResult]:
         if not self.model:
-            logger.error("Xinference rerank model is not initialized.")
-            return []
+            raise RuntimeError("Xinference rerank model is not initialized")
         try:
-            response = await self.model.rerank(documents, query, top_n)
+            response = await self.model.rerank([*documents], query, top_n)
             results = response.get("results", [])
             logger.debug(f"Rerank API response: {response}")
             if not results:
@@ -99,9 +96,12 @@ class XinferenceRerankProvider(RerankProvider):
                 for result in results
             ]
         except Exception as e:
+            # An empty list reads as a legitimate empty rerank to the caller,
+            # which would overwrite the fused candidates with nothing (#10000).
+            # Propagate so the retrieval manager keeps the unreranked results.
             logger.error(f"Xinference rerank failed: {e}")
             logger.debug(f"Xinference rerank failed with exception: {e}", exc_info=True)
-            return []
+            raise
 
     async def terminate(self) -> None:
         """关闭客户端会话"""

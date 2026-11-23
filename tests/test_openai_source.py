@@ -1,10 +1,11 @@
 import base64
-import builtins
 from io import BytesIO
+from pathlib import Path
 from types import SimpleNamespace
 
 import httpx
 import pytest
+from openai import AsyncAzureOpenAI, AsyncOpenAI, DefaultAsyncHttpxClient
 from openai.types.chat.chat_completion import ChatCompletion
 from openai.types.chat.chat_completion_chunk import ChatCompletionChunk
 from PIL import Image as PILImage
@@ -15,6 +16,7 @@ from astrbot.core.exceptions import EmptyModelOutputError
 from astrbot.core.provider.entities import LLMResponse
 from astrbot.core.provider.sources.groq_source import ProviderGroq
 from astrbot.core.provider.sources.openai_source import ProviderOpenAIOfficial
+from astrbot.core.utils import network_utils
 from astrbot.core.utils.media_utils import ResolvedMediaData, file_uri_to_path
 
 
@@ -60,72 +62,117 @@ def _make_groq_provider(overrides: dict | None = None) -> ProviderGroq:
     )
 
 
-def test_create_http_client_uses_openai_httpx_module(monkeypatch):
-    captured: dict[str, object] = {}
-    fake_httpx_module = object()
+@pytest.mark.parametrize(
+    ("overrides", "expected_client"),
+    [
+        ({}, AsyncOpenAI),
+        (
+            {
+                "api_version": "2024-02-01",
+                "api_base": "https://example.openai.azure.com/openai",
+            },
+            AsyncAzureOpenAI,
+        ),
+    ],
+)
+@pytest.mark.asyncio
+async def test_provider_client_disables_sdk_builtin_retries(overrides, expected_client):
+    provider = _make_provider(overrides)
+    try:
+        assert isinstance(provider.client, expected_client)
+        assert provider.client.max_retries == 0
+    finally:
+        await provider.terminate()
 
-    from openai import _base_client as openai_base_client
+
+@pytest.mark.asyncio
+async def test_query_attempts_exactly_request_max_retries_times(monkeypatch):
+    monkeypatch.setattr(request_retry, "REQUEST_RETRY_WAIT_MIN_S", 0)
+    monkeypatch.setattr(request_retry, "REQUEST_RETRY_WAIT_MAX_S", 0)
+
+    provider = _make_provider()
+    try:
+        calls = 0
+
+        async def failing_create(**kwargs):
+            nonlocal calls
+            calls += 1
+            raise httpx.ConnectError("temporary connection failure")
+
+        monkeypatch.setattr(provider.client.chat.completions, "create", failing_create)
+
+        with pytest.raises(httpx.ConnectError):
+            await provider._query(
+                payloads={
+                    "model": "gpt-4o-mini",
+                    "messages": [{"role": "user", "content": "hi"}],
+                },
+                tools=None,
+                request_max_retries=2,
+            )
+
+        assert calls == 2
+    finally:
+        await provider.terminate()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("proxy", ["", "http://127.0.0.1:7890"])
+async def test_create_http_client_preserves_options_and_is_accepted_by_sdk(
+    monkeypatch, proxy
+):
+    constructed_options = []
+
+    def sdk_client_factory(**options):
+        constructed_options.append(options)
+        return DefaultAsyncHttpxClient(**options)
 
     monkeypatch.setattr(
-        openai_base_client,
-        "httpx",
-        fake_httpx_module,
-        raising=False,
+        openai_source_module, "DefaultAsyncHttpxClient", sdk_client_factory
     )
-
-    def fake_create_proxy_client(
-        provider_label: str,
-        proxy: str | None = None,
-        headers: dict[str, str] | None = None,
-        verify=None,
-        httpx_module=None,
-    ):
-        captured["httpx_module"] = httpx_module
-        return object()
-
-    monkeypatch.setattr(
-        openai_source_module,
-        "create_proxy_client",
-        fake_create_proxy_client,
-    )
-
     provider = ProviderOpenAIOfficial.__new__(ProviderOpenAIOfficial)
-    provider._create_http_client({"proxy": ""})
+    client = provider._create_http_client({"proxy": proxy})
+    try:
+        assert isinstance(client, DefaultAsyncHttpxClient)
+        assert len(constructed_options) == 1
+        options = constructed_options[0]
+        assert options["verify"] is network_utils._SYSTEM_SSL_CTX
+        assert options["headers"] is None
+        if proxy:
+            assert options["proxy"] == proxy
+        else:
+            assert "proxy" not in options
+        sdk = AsyncOpenAI(api_key="test-key", http_client=client)
+        assert sdk._client is client
+        await sdk.close()
+        assert client.is_closed
+    finally:
+        await client.aclose()
 
-    assert captured["httpx_module"] is fake_httpx_module
 
-
-def test_create_http_client_falls_back_to_global_httpx_module(monkeypatch):
-    captured: dict[str, object] = {}
-
-    def fake_create_proxy_client(
-        provider_label: str,
-        proxy: str | None = None,
-        headers: dict[str, str] | None = None,
-        verify=None,
-        httpx_module=None,
-    ):
-        captured["httpx_module"] = httpx_module
-        return object()
-
-    real_import = builtins.__import__
-
-    def fake_import(name, globals=None, locals=None, fromlist=(), level=0):
-        if name == "openai" and fromlist:
-            raise ImportError("missing openai._base_client")
-        return real_import(name, globals, locals, fromlist, level)
-
-    monkeypatch.setattr(
-        openai_source_module,
-        "create_proxy_client",
-        fake_create_proxy_client,
+@pytest.mark.asyncio
+@pytest.mark.parametrize("api_base", [None, "", "http://127.0.0.1:6185/custom/"])
+async def test_azure_optional_endpoint_keeps_sdk_environment_fallback(
+    monkeypatch, api_base
+):
+    monkeypatch.setenv("AZURE_OPENAI_ENDPOINT", "http://127.0.0.1:6185")
+    provider = ProviderOpenAIOfficial(
+        {
+            "id": "azure-type-contract",
+            "key": ["test-key"],
+            "model": "test-model",
+            "api_version": "2024-02-01",
+            "api_base": api_base,
+        },
+        {},
     )
-    monkeypatch.setattr(builtins, "__import__", fake_import)
-
-    provider = ProviderOpenAIOfficial.__new__(ProviderOpenAIOfficial)
-    provider._create_http_client({"proxy": ""})
-
-    assert captured["httpx_module"] is openai_source_module.httpx
+    try:
+        assert isinstance(provider.client, AsyncAzureOpenAI)
+        assert str(provider.client.base_url) == (
+            api_base or "http://127.0.0.1:6185/openai/"
+        )
+    finally:
+        await provider.terminate()
 
 
 @pytest.mark.asyncio
@@ -940,19 +987,21 @@ async def test_prepare_chat_payload_materializes_context_file_uri_image_urls(tmp
 
 
 def test_file_uri_to_path_preserves_windows_drive_letter():
-    assert file_uri_to_path("file:///C:/tmp/quoted-image.png") == (
+    # Compare as Path objects so the assertion is independent of the host
+    # path separator convention.
+    assert Path(file_uri_to_path("file:///C:/tmp/quoted-image.png")) == Path(
         "C:/tmp/quoted-image.png"
     )
 
 
 def test_file_uri_to_path_preserves_windows_netloc_drive_letter():
-    assert file_uri_to_path("file://C:/tmp/quoted-image.png") == (
+    assert Path(file_uri_to_path("file://C:/tmp/quoted-image.png")) == Path(
         "C:/tmp/quoted-image.png"
     )
 
 
 def test_file_uri_to_path_preserves_remote_netloc_as_unc_path():
-    assert file_uri_to_path("file://server/share/quoted-image.png") == (
+    assert Path(file_uri_to_path("file://server/share/quoted-image.png")) == Path(
         "//server/share/quoted-image.png"
     )
 
@@ -1171,9 +1220,11 @@ async def test_prepare_chat_payload_materializes_context_localhost_file_uri_imag
 
 @pytest.mark.asyncio
 async def test_resolve_audio_part_supports_data_audio_uri(tmp_path, monkeypatch):
+    output = tmp_path / "media-output"
+    output.mkdir()
     monkeypatch.setattr(
         "astrbot.core.utils.media_utils.get_astrbot_temp_path",
-        lambda: str(tmp_path),
+        lambda: str(output),
     )
     provider = _make_provider()
     try:
@@ -1189,16 +1240,18 @@ async def test_resolve_audio_part_supports_data_audio_uri(tmp_path, monkeypatch)
                 "format": "wav",
             },
         }
-        assert not list(tmp_path.iterdir())
+        assert list(output.iterdir()) == []
     finally:
         await provider.terminate()
 
 
 @pytest.mark.asyncio
 async def test_resolve_audio_part_supports_base64_scheme(tmp_path, monkeypatch):
+    output = tmp_path / "media-output"
+    output.mkdir()
     monkeypatch.setattr(
         "astrbot.core.utils.media_utils.get_astrbot_temp_path",
-        lambda: str(tmp_path),
+        lambda: str(output),
     )
     provider = _make_provider()
     try:
@@ -1214,7 +1267,7 @@ async def test_resolve_audio_part_supports_base64_scheme(tmp_path, monkeypatch):
                 "format": "wav",
             },
         }
-        assert not list(tmp_path.iterdir())
+        assert list(output.iterdir()) == []
     finally:
         await provider.terminate()
 

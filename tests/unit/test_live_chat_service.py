@@ -1,12 +1,14 @@
 import asyncio
+import json
 from datetime import UTC, datetime
 from types import SimpleNamespace
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, Mock
 
 import pytest
 from starlette.websockets import WebSocketDisconnect
 
 from astrbot.core.platform.sources.webchat.webchat_queue_mgr import webchat_queue_mgr
+from astrbot.dashboard.services.chat_service import ChatService, ChatServiceError
 from astrbot.dashboard.services.live_chat_service import LiveChatService
 
 
@@ -14,9 +16,18 @@ def _service() -> LiveChatService:
     core_lifecycle = SimpleNamespace(
         astrbot_config={"dashboard": {"jwt_secret": "test-secret"}},
         plugin_manager=SimpleNamespace(),
+        conversation_manager=Mock(),
+        umop_config_router=Mock(),
         platform_message_history_manager=SimpleNamespace(),
     )
-    return LiveChatService(SimpleNamespace(), core_lifecycle)
+    db = SimpleNamespace(
+        get_platform_session_by_id=AsyncMock(
+            return_value=SimpleNamespace(creator="alice")
+        ),
+        get_attachment_by_id=AsyncMock(),
+    )
+    chat_service = ChatService(db, core_lifecycle)
+    return LiveChatService(db, core_lifecycle, chat_service)
 
 
 @pytest.mark.asyncio
@@ -272,15 +283,15 @@ async def test_handle_chat_message_scopes_events_to_request_by_default():
 
     try:
         input_queue = webchat_queue_mgr.get_or_create_queue(session_id)
-        await asyncio.wait_for(input_queue.get(), timeout=1)
+        _, _, request = await asyncio.wait_for(input_queue.get(), timeout=1)
 
         await webchat_queue_mgr.put_back_queue(
-            message_id,
+            request["message_id"],
             {
                 "type": "end",
                 "data": "",
                 "streaming": False,
-                "message_id": message_id,
+                "message_id": request["message_id"],
             },
         )
         await asyncio.wait_for(task, timeout=1)
@@ -295,3 +306,206 @@ async def test_handle_chat_message_scopes_events_to_request_by_default():
             await asyncio.gather(task, return_exceptions=True)
         await service.cleanup_session(session)
         webchat_queue_mgr.remove_queues(session_id)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("resume_before_completion", [True, False])
+@pytest.mark.parametrize("disconnect_on_send", [True, False])
+async def test_websocket_refresh_preserves_run_and_final_history(
+    monkeypatch, resume_before_completion, disconnect_on_send
+):
+    service = _service()
+    chat = service.chat_service
+    session_id = "refresh-during-tool"
+    tool_seen = asyncio.Event()
+    sent = []
+    records = []
+
+    async def insert(**record):
+        records.append(record)
+        return SimpleNamespace(id=len(records), created_at=datetime.now(UTC))
+
+    service.platform_history_mgr.insert = insert
+    monkeypatch.setattr(service, "authenticate_token", lambda _token: "alice")
+    request_sent = False
+
+    async def receive_json():
+        nonlocal request_sent
+        if not request_sent:
+            request_sent = True
+            return {
+                "ct": "chat",
+                "t": "send",
+                "session_id": session_id,
+                "message_id": "client-request",
+                "message": [{"type": "plain", "text": "hello"}],
+                "selected_stt_provider": "stt",
+                "selected_tts_provider": "tts",
+                "persona_prompt": "persona",
+                "show_reasoning": True,
+                "enable_streaming": False,
+            }
+        await tool_seen.wait()
+        if disconnect_on_send:
+            await asyncio.Event().wait()
+        raise WebSocketDisconnect(1000)
+
+    async def send_json(payload):
+        if payload.get("chain_type") == "tool_call":
+            tool_seen.set()
+            if disconnect_on_send:
+                raise WebSocketDisconnect(1000)
+        sent.append(payload)
+
+    socket_task = asyncio.create_task(
+        service.run_websocket_session(
+            token="valid",
+            force_ct=None,
+            receive_json=receive_json,
+            send_json=send_json,
+            close=AsyncMock(),
+        )
+    )
+    run = None
+    resumed = None
+    try:
+        _, _, request = await asyncio.wait_for(
+            webchat_queue_mgr.get_or_create_queue(session_id).get(), timeout=1
+        )
+        assert request["selected_stt_provider"] == "stt"
+        assert request["selected_tts_provider"] == "tts"
+        assert request["persona_prompt"] == "persona"
+        assert request["show_reasoning"] is True
+        assert request["flags"]["enable_streaming"] is False
+        run = chat.chat_runs[request["message_id"]]
+        await webchat_queue_mgr.put_back_queue(
+            run.run_id,
+            {
+                "type": "plain",
+                "chain_type": "tool_call",
+                "data": json.dumps({"id": "tool-1", "name": "shell", "args": {}}),
+                "streaming": True,
+                "message_id": run.run_id,
+            },
+        )
+        await asyncio.wait_for(tool_seen.wait(), timeout=1)
+        if disconnect_on_send:
+            # A failed write drops the forwarding task before the receive loop exits.
+            forwarding = next(iter(service.sessions.values())).chat_request_tasks
+            await asyncio.wait_for(asyncio.gather(*forwarding.values()), timeout=1)
+            socket_task.cancel()
+            await asyncio.gather(socket_task, return_exceptions=True)
+        else:
+            await asyncio.wait_for(socket_task, timeout=1)
+        assert service.sessions == {}
+        assert not run.task.done()
+        assert not run.subscribers
+        snapshots = chat.get_active_chat_runs("alice", session_id)
+        assert len(snapshots) == 1
+        assert snapshots[0]["content"]["message"][0]["type"] == "tool_call"
+
+        if resume_before_completion:
+            resumed = await chat.build_chat_run_stream("alice", run.run_id)
+            snapshot = json.loads((await anext(resumed)).removeprefix("data: "))
+            assert snapshot["type"] == "run_snapshot"
+            assert snapshot["data"]["turn_id"] == records[0]["turn_id"]
+
+        for payload in [
+            {
+                "type": "plain",
+                "chain_type": "tool_call_result",
+                "data": json.dumps({"id": "tool-1", "result": "tool finished"}),
+                "streaming": True,
+            },
+            {"type": "plain", "data": "Final answer after refresh", "streaming": True},
+            {"type": "complete", "data": "", "streaming": True},
+            {"type": "end", "data": "", "streaming": False},
+        ]:
+            await webchat_queue_mgr.put_back_queue(
+                run.run_id, {**payload, "message_id": run.run_id}
+            )
+        await asyncio.wait_for(run.task, timeout=1)
+
+        if resumed is not None:
+            events = [
+                json.loads(event.removeprefix("data: ")) async for event in resumed
+            ]
+            assert any(
+                event.get("data") == "Final answer after refresh" for event in events
+            )
+            assert any(event.get("type") == "end" for event in events)
+        else:
+            with pytest.raises(ChatServiceError):
+                await chat.build_chat_run_stream("alice", run.run_id)
+        bot_parts = [
+            part
+            for record in records
+            if record["sender_id"] == "bot"
+            for part in record["content"]["message"]
+        ]
+        assert {"type": "plain", "text": "Final answer after refresh"} in bot_parts
+        tool = next(part for part in bot_parts if part["type"] == "tool_call")
+        assert tool["tool_calls"][0]["result"] == "tool finished"
+        assert chat.get_active_chat_runs("alice", session_id) == []
+        assert not chat.running_convs
+        assert not run.subscribers
+        assert webchat_queue_mgr.list_back_request_ids(session_id) == []
+        assert all(event["message_id"] == "client-request" for event in sent)
+    finally:
+        if resumed is not None:
+            await resumed.aclose()
+        if run is not None and not run.task.done():
+            run.task.cancel()
+            await asyncio.gather(run.task, return_exceptions=True)
+        if not socket_task.done():
+            socket_task.cancel()
+            await asyncio.gather(socket_task, return_exceptions=True)
+        webchat_queue_mgr.remove_queues(session_id)
+
+
+@pytest.mark.asyncio
+async def test_scoped_plugin_asset_token_cannot_open_a_live_chat_session():
+    from astrbot.dashboard.services.plugin_page_service import PluginPageService
+
+    service = _service()
+    service.config["dashboard"]["jwt_secret"] = "live-chat-regression-secret-32-bytes"
+    pages = PluginPageService(SimpleNamespace(), config=service.config)
+    token = pages.issue_plugin_page_asset_token(
+        plugin_name="demo", view_name="settings", username="alice", locale="en-US"
+    )
+    receive = AsyncMock()
+    send = AsyncMock()
+    close = AsyncMock()
+
+    await service.run_websocket_session(
+        token=token, force_ct=None, receive_json=receive, send_json=send, close=close
+    )
+
+    close.assert_awaited_once_with(1008, "Invalid token")
+    receive.assert_not_awaited()
+    send.assert_not_awaited()
+    assert service.sessions == {}
+
+
+@pytest.mark.parametrize("username", [None, "", "   ", 7, False, {}])
+def test_live_chat_rejects_invalid_username_claims(username):
+    import jwt
+
+    from astrbot.dashboard.services.live_chat_service import LiveChatAuthError
+
+    service = _service()
+    secret = "live-chat-regression-secret-32-bytes"
+    service.config["dashboard"]["jwt_secret"] = secret
+    token = jwt.encode({"username": username}, secret, algorithm="HS256")
+    with pytest.raises(LiveChatAuthError, match="Invalid token"):
+        service.authenticate_token(token)
+
+
+def test_live_chat_accepts_normal_dashboard_login_token():
+    import jwt
+
+    service = _service()
+    secret = "live-chat-regression-secret-32-bytes"
+    service.config["dashboard"]["jwt_secret"] = secret
+    token = jwt.encode({"username": "alice"}, secret, algorithm="HS256")
+    assert service.authenticate_token(token) == "alice"

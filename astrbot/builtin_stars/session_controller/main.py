@@ -1,10 +1,12 @@
-import copy
 from sys import maxsize
 
 import astrbot.api.message_components as Comp
 from astrbot.api import logger
 from astrbot.api.event import AstrMessageEvent, filter
 from astrbot.api.star import Context, Star
+from astrbot.builtin_stars.session_controller.follow_up import (
+    enqueue_mentioned_followup,
+)
 from astrbot.core.utils.session_waiter import (
     FILTERS,
     USER_SESSIONS,
@@ -16,6 +18,8 @@ from astrbot.core.utils.session_waiter import (
 
 class Main(Star):
     """会话控制"""
+
+    context: Context
 
     def __init__(self, context: Context) -> None:
         super().__init__(context)
@@ -91,17 +95,7 @@ class Main(Star):
                         controller: SessionController,
                         event: AstrMessageEvent,
                     ) -> None:
-                        if not event.message_str or not event.message_str.strip():
-                            return
-                        event.message_obj.message.insert(
-                            0,
-                            Comp.At(qq=event.get_self_id(), name=event.get_self_id()),
-                        )
-                        new_event = copy.copy(event)
-                        # 重新推入事件队列
-                        self.context.get_event_queue().put_nowait(new_event)
-                        event.stop_event()
-                        controller.stop()
+                        enqueue_mentioned_followup(self.context, controller, event)
 
                     try:
                         await empty_mention_waiter(event)

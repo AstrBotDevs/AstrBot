@@ -27,6 +27,9 @@
 - [ ] 👀 My changes have been well-tested, **and "Verification Steps" and "Screenshots" have been provided above**.
   / 我的更改经过了良好的测试，**并已在上方提供了“验证步骤”和“运行截图”**。
 
+- [ ] 📚 I checked the affected WebUI instructions and screenshots in `docs/zh` and `docs/en` against the changed navigation, page structure, and labels, and updated them in this PR (or explained why no documentation update is needed). For renamed, moved, or merged entry points, I included an **old entry → new entry** mapping in the documentation and changelog.
+  / 我已对照变化后的 WebUI 入口、页面结构和术语，核对并在本 PR 中更新 `docs/zh` 和 `docs/en` 的相关操作说明与截图（或说明无需更新文档的原因）。入口改名、移动或合并时，已在文档和 changelog 中补充 **旧入口 → 新入口** 对照。
+
 - [ ] 🤓 I have ensured that no new dependencies are introduced, OR if new dependencies are introduced, they have been added to the appropriate locations in `requirements.txt` and `pyproject.toml`.
   / 我确保没有引入新依赖库，或者引入了新依赖库的同时将其添加到 `requirements.txt` 和 `pyproject.toml` 文件相应位置。
 

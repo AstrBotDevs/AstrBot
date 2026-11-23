@@ -2,6 +2,8 @@ from astrbot.api import star
 from astrbot.api.event import AstrMessageEvent, MessageChain, MessageEventResult
 from astrbot.core.updater import AstrBotUpdater
 
+from ..i18n import translate
+
 
 class AdminCommands:
     def __init__(self, context: star.Context) -> None:
@@ -71,6 +73,9 @@ class AdminCommands:
 
     async def update_dashboard(self, event: AstrMessageEvent) -> None:
         """更新管理面板"""
-        await event.send(MessageChain().message("正在尝试更新管理面板..."))
+        locale = self.context.locale(event.unified_msg_origin)
+        await event.send(
+            MessageChain().message(translate("dashboard_updating", locale))
+        )
         await AstrBotUpdater().ensure_dashboard()
-        await event.send(MessageChain().message("管理面板更新完成｡"))
+        await event.send(MessageChain().message(translate("dashboard_updated", locale)))

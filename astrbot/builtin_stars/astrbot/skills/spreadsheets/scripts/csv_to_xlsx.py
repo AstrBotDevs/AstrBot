@@ -4,7 +4,6 @@
 from __future__ import annotations
 
 import argparse
-import csv
 import re
 import unicodedata
 from datetime import date, datetime
@@ -13,7 +12,20 @@ from pathlib import Path
 import chardet
 from openpyxl import Workbook, load_workbook
 from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
+from openpyxl.utils import get_column_letter
 from openpyxl.worksheet.table import Table, TableStyleInfo
+from openpyxl.worksheet.worksheet import Worksheet
+
+if __package__:
+    from astrbot.builtin_stars.astrbot.skills._astrbot_skill_support.cli import (
+        parse_conversion_paths,
+    )
+    from astrbot.builtin_stars.astrbot.skills._astrbot_skill_support.csv_data import (
+        parse_delimited_rows,
+    )
+else:
+    from _astrbot_skill_support.cli import parse_conversion_paths
+    from _astrbot_skill_support.csv_data import parse_delimited_rows
 
 _INTEGER_RE = re.compile(r"^[+-]?(?:0|[1-9]\d*)$")
 _FLOAT_RE = re.compile(r"^[+-]?(?:(?:\d+\.\d*)|(?:\d*\.\d+)|(?:\d+))(?:[eE][+-]?\d+)?$")
@@ -114,14 +126,7 @@ def convert_csv_to_xlsx(
     text = _decode_source(input_path)
     if not text.strip():
         raise ValueError("Delimited input is empty.")
-    if delimiter is None:
-        try:
-            dialect = csv.Sniffer().sniff(text[:8192], delimiters=",\t;|")
-            delimiter = dialect.delimiter
-        except csv.Error:
-            delimiter = "\t" if input_path.suffix.lower() == ".tsv" else ","
-
-    rows = list(csv.reader(text.splitlines(), delimiter=delimiter))
+    _, rows = parse_delimited_rows(text, suffix=input_path.suffix, delimiter=delimiter)
     if not rows or not any(rows):
         raise ValueError("Delimited input contains no cells.")
     column_count = max(len(row) for row in rows)
@@ -146,6 +151,8 @@ def convert_csv_to_xlsx(
 
     workbook = Workbook()
     worksheet = workbook.active
+    if not isinstance(worksheet, Worksheet):
+        raise ValueError("The new workbook has no editable worksheet.")
     worksheet.title = sheet_name[:31]
     worksheet.sheet_view.showGridLines = False
     worksheet.freeze_panes = "A2"
@@ -199,9 +206,9 @@ def convert_csv_to_xlsx(
             _display_width(worksheet.cell(row=row_index, column=column_index).value)
             for row_index in range(1, worksheet.max_row + 1)
         )
-        worksheet.column_dimensions[
-            worksheet.cell(row=1, column=column_index).column_letter
-        ].width = min(max(width + 2, 10), 48)
+        worksheet.column_dimensions[get_column_letter(column_index)].width = min(
+            max(width + 2, 10), 48
+        )
 
     worksheet.auto_filter.ref = worksheet.dimensions
     workbook.calculation.fullCalcOnLoad = True
@@ -231,12 +238,7 @@ def main() -> int:
         action="store_true",
         help="Treat the first source row as data",
     )
-    args = parser.parse_args()
-
-    input_path = args.input.expanduser().resolve(strict=False)
-    output_path = args.output.expanduser().resolve(strict=False)
-    if not input_path.is_file():
-        parser.error(f"Input file not found: {input_path}")
+    args, input_path, output_path = parse_conversion_paths(parser)
     if output_path.suffix.lower() != ".xlsx":
         parser.error("Output path must end with .xlsx")
     if input_path == output_path:

@@ -1,0 +1,89 @@
+// Assembled translations for zh-CN (lazy-loaded per locale)
+
+import zhCNActions from "./core/actions.json";
+import zhCNCommon from "./core/common.json";
+import zhCNHeader from "./core/header.json";
+import zhCNNavigation from "./core/navigation.json";
+import zhCNShared from "./core/shared.json";
+import zhCNStatus from "./core/status.json";
+import zhCNAbout from "./features/about.json";
+import zhCNAlkaidIndex from "./features/alkaid/index.json";
+import zhCNAlkaidKnowledgeBase from "./features/alkaid/knowledge-base.json";
+import zhCNAlkaidMemory from "./features/alkaid/memory.json";
+import zhCNAuth from "./features/auth.json";
+import zhCNChart from "./features/chart.json";
+import zhCNChat from "./features/chat.json";
+import zhCNCommand from "./features/command.json";
+import zhCNConfig from "./features/config.json";
+import zhCNConfigMetadata from "./features/config-metadata.json";
+import zhCNConsole from "./features/console.json";
+import zhCNConversation from "./features/conversation.json";
+import zhCNCron from "./features/cron.json";
+import zhCNDashboard from "./features/dashboard.json";
+import zhCNExtension from "./features/extension.json";
+import zhCNKnowledgeBaseDetail from "./features/knowledge-base/detail.json";
+import zhCNKnowledgeBaseDocument from "./features/knowledge-base/document.json";
+import zhCNKnowledgeBaseIndex from "./features/knowledge-base/index.json";
+import zhCNMigration from "./features/migration.json";
+import zhCNPersona from "./features/persona.json";
+import zhCNPlatform from "./features/platform.json";
+import zhCNProvider from "./features/provider.json";
+import zhCNSettings from "./features/settings.json";
+import zhCNStats from "./features/stats.json";
+import zhCNSubagent from "./features/subagent.json";
+import zhCNToolUse from "./features/tool-use.json";
+import zhCNTrace from "./features/trace.json";
+import zhCNWelcome from "./features/welcome.json";
+import zhCNErrors from "./messages/errors.json";
+import zhCNSuccess from "./messages/success.json";
+import zhCNValidation from "./messages/validation.json";
+
+export default {
+  core: {
+    common: zhCNCommon,
+    actions: zhCNActions,
+    status: zhCNStatus,
+    navigation: zhCNNavigation,
+    header: zhCNHeader,
+    shared: zhCNShared,
+  },
+  features: {
+    chat: zhCNChat,
+    extension: zhCNExtension,
+    conversation: zhCNConversation,
+    tooluse: zhCNToolUse,
+    provider: zhCNProvider,
+    platform: zhCNPlatform,
+    config: zhCNConfig,
+    "config-metadata": zhCNConfigMetadata,
+    console: zhCNConsole,
+    trace: zhCNTrace,
+    about: zhCNAbout,
+    settings: zhCNSettings,
+    auth: zhCNAuth,
+    chart: zhCNChart,
+    dashboard: zhCNDashboard,
+    cron: zhCNCron,
+    stats: zhCNStats,
+    alkaid: {
+      index: zhCNAlkaidIndex,
+      "knowledge-base": zhCNAlkaidKnowledgeBase,
+      memory: zhCNAlkaidMemory,
+    },
+    "knowledge-base": {
+      index: zhCNKnowledgeBaseIndex,
+      detail: zhCNKnowledgeBaseDetail,
+      document: zhCNKnowledgeBaseDocument,
+    },
+    persona: zhCNPersona,
+    command: zhCNCommand,
+    subagent: zhCNSubagent,
+    welcome: zhCNWelcome,
+    migration: zhCNMigration,
+  },
+  messages: {
+    errors: zhCNErrors,
+    success: zhCNSuccess,
+    validation: zhCNValidation,
+  },
+};

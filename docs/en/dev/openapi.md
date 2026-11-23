@@ -8,7 +8,7 @@ Starting from v4.18.0, AstrBot provides API Key based HTTP APIs for programmatic
 
 ## Quick Start
 
-1. Create an API key in WebUI - Settings.
+1. Open `Settings → OpenAPI` in the WebUI and click `Create API Key`.
 2. Include the API key in request headers:
 
 ```http
@@ -71,6 +71,58 @@ Interact with AstrBot's built-in Agent. Supports plugin calls, tool calls, and o
 
 - `POST /api/v1/im/message`: send a proactive message via UMO
 - `GET /api/v1/im/bots`: list bot/platform IDs
+
+## Filter Examples
+
+Replace `abk_xxx` and the example IDs with values from your deployment.
+
+### Conversation History
+
+`GET /api/v1/conversations` requires the `data` scope. `platform_id` matches the stored platform ID exactly; `user_id` matches the complete unified message origin (UMO), such as `webchat:FriendMessage:openapi_probe`.
+
+```bash
+curl --get 'http://localhost:6185/api/v1/conversations' \
+  -H 'Authorization: Bearer abk_xxx' \
+  --data-urlencode 'platform_id=webchat' \
+  --data-urlencode 'user_id=webchat:FriendMessage:openapi_probe' \
+  --data-urlencode 'page=1' \
+  --data-urlencode 'page_size=20'
+```
+
+Omitting either identity parameter leaves that identity unrestricted. Sending `platform_id=` or `user_id=` applies an exact empty-value filter; it does not remove the filter. `user_id` requires the full UMO rather than a username or substring, and `%` and `_` are literal characters. The separate `umo` parameter performs a substring search. All supplied filters are combined before counting, grouping, and pagination. No matches return HTTP `200` with an empty `data.conversations` list and `data.pagination.total` of `0`.
+
+### Skills
+
+`GET /api/v1/skills` requires the singular `skill` scope.
+
+```bash
+curl --get 'http://localhost:6185/api/v1/skills' \
+  -H 'Authorization: Bearer abk_xxx' \
+  --data-urlencode 'enabled=true' \
+  --data-urlencode 'source=plugin'
+```
+
+`enabled=true` or `enabled=false` filters the skill's own `active` flag; omitting `enabled` includes both states. This flag is independent of `plugin_active` and does not guarantee that the current persona or runtime can use the skill.
+
+`source` exactly matches `source_type`: `local_only`, `both`, `plugin`, or `sandbox_only`. Omitting it includes all sources in this inventory. An empty or unknown value returns HTTP `200` with an empty `data.skills` list. Combining `enabled` and `source` requires both to match; the response retains `runtime` and `sandbox_cache` metadata. Workspace skills are outside this inventory, so `workspace` is not a source value here.
+
+### Provider Source Model Catalog
+
+`GET /api/v1/provider-sources/models` requires the `provider` scope and a `source_id` query parameter identifying a configured provider source.
+
+```bash
+curl --get 'http://localhost:6185/api/v1/provider-sources/models' \
+  -H 'Authorization: Bearer abk_xxx' \
+  --data-urlencode 'source_id=my_source'
+```
+
+The equivalent path form is `GET /api/v1/provider-sources/{source_id}/models`. These model-catalog endpoints do not support a `capability` filter. Provider-configuration list endpoints retain their documented `capability` filters.
+
+### Response Handling
+
+- Missing or invalid API keys return HTTP `401`; insufficient scope returns HTTP `403`.
+- Invalid typed query values return HTTP `422`, including an unrecognized or empty `enabled` value. Omitting the required model-catalog `source_id` query parameter also returns `422`.
+- Conversation service errors and model-catalog errors such as an unknown provider source return HTTP `400`. Skills service failures can return HTTP `200` with `status: "error"`; inspect `status` and `message` as well as the HTTP status.
 
 ## `message` Field Format (Important)
 

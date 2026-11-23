@@ -3,12 +3,12 @@ import inspect
 from collections.abc import AsyncGenerator, Awaitable, Callable
 from typing import TYPE_CHECKING
 
-from astrbot.core import astrbot_config, logger
-from astrbot.core.agent.runners.deerflow.constants import (
-    DEERFLOW_AGENT_RUNNER_PROVIDER_ID_KEY,
-    DEERFLOW_PROVIDER_TYPE,
-)
-from astrbot.core.astr_agent_hooks import MAIN_AGENT_HOOKS
+from astrbot.core import logger
+from astrbot.core.agent.runners.deerflow.constants import DEERFLOW_PROVIDER_TYPE
+from astrbot.core.agent_input import matches_provider_wake_prefix
+from astrbot.core.astr_agent_runtime.history import ConversationHistoryObserver
+from astrbot.core.astr_agent_runtime.hooks import MainAgentHooks
+from astrbot.core.conversation_mgr import ConversationManager
 from astrbot.core.message.components import Image, Record
 from astrbot.core.message.message_event_result import (
     MessageChain,
@@ -16,7 +16,6 @@ from astrbot.core.message.message_event_result import (
     ResultContentType,
 )
 from astrbot.core.persona_error_reply import (
-    resolve_event_conversation_persona_id,
     resolve_persona_custom_error_message,
     set_persona_custom_error_message_on_event,
 )
@@ -32,15 +31,12 @@ from astrbot.core.provider.entities import (
     ProviderRequest,
 )
 from astrbot.core.star.star_handler import EventType
+from astrbot.core.utils.active_event_registry import active_event_registry
 from astrbot.core.utils.config_number import coerce_int_config
+from astrbot.core.utils.media_utils import describe_media_ref
 from astrbot.core.utils.metrics import Metric
+from astrbot.core.utils.quoted_message.chain_parser import ReplyChainParser
 
-AGENT_RUNNER_TYPE_KEY = {
-    "dify": "dify_agent_runner_provider_id",
-    "coze": "coze_agent_runner_provider_id",
-    "dashscope": "dashscope_agent_runner_provider_id",
-    DEERFLOW_PROVIDER_TYPE: DEERFLOW_AGENT_RUNNER_PROVIDER_ID_KEY,
-}
 THIRD_PARTY_RUNNER_ERROR_EXTRA_KEY = "_third_party_runner_error"
 STREAM_CONSUMPTION_CLOSE_TIMEOUT_SEC = 30
 RUNNER_NO_RESULT_FALLBACK_MESSAGE = "Agent Runner did not return any result."
@@ -59,7 +55,7 @@ async def run_third_party_agent(
     类似于 run_agent 函数,但专门处理第三方 agent runner
     """
     try:
-        async for resp in runner.step_until_done(max_step=30):
+        async for resp in runner.step_until_done(max_step=128):
             if resp.type == "streaming_delta":
                 if stream_to_general:
                     continue
@@ -154,15 +150,8 @@ async def _close_runner_if_supported(runner: "BaseAgentRunner") -> None:
 class ThirdPartyAgentSubStage(Stage):
     async def initialize(self, ctx: PipelineContext) -> None:
         self.ctx = ctx
-        self.provider_wake_prefix: str = ctx.astrbot_config["provider_settings"][
-            "wake_prefix"
-        ]
-        self.conf = ctx.astrbot_config
-        self.runner_type = self.conf["provider_settings"]["agent_runner_type"]
-        self.prov_id = self.conf["provider_settings"].get(
-            AGENT_RUNNER_TYPE_KEY.get(self.runner_type, ""),
-            "",
-        )
+        agent_runner = ctx.astrbot_config["agent"]
+        self.runner_type = agent_runner["runtime"]
         settings = ctx.astrbot_config["provider_settings"]
         self.streaming_response: bool = settings["streaming_response"]
         self.unsupported_streaming_strategy: str = settings[
@@ -184,15 +173,9 @@ class ThirdPartyAgentSubStage(Stage):
         event: AstrMessageEvent,
     ) -> str | None:
         try:
-            conversation_persona_id = await resolve_event_conversation_persona_id(
-                event,
-                self.ctx.plugin_manager.context.conversation_manager,
-            )
             return await resolve_persona_custom_error_message(
                 event=event,
                 persona_manager=self.ctx.plugin_manager.context.persona_manager,
-                provider_settings=self.conf["provider_settings"],
-                conversation_persona_id=conversation_persona_id,
             )
         except Exception as e:
             logger.debug("Failed to resolve persona custom error message: %s", e)
@@ -210,21 +193,24 @@ class ThirdPartyAgentSubStage(Stage):
         aggregator = _RunnerResultAggregator()
 
         async def _stream_runner_chain() -> AsyncGenerator[MessageChain, None]:
-            mark_stream_consumed()
+            responses = run_third_party_agent(
+                runner,
+                stream_to_general=False,
+                custom_error_message=custom_error_message,
+            )
             try:
-                async for chain, is_error in run_third_party_agent(
-                    runner,
-                    stream_to_general=False,
-                    custom_error_message=custom_error_message,
-                ):
+                mark_stream_consumed()
+                async for chain, is_error in responses:
                     aggregator.add_chunk(chain, is_error)
                     if is_error:
                         event.set_extra(THIRD_PARTY_RUNNER_ERROR_EXTRA_KEY, True)
                     yield chain
             finally:
-                # Streaming runner cleanup must happen after consumer
-                # finishes iterating to avoid tearing down active streams.
-                await close_runner_once()
+                # Close the response iterator before settling its owning runner.
+                try:
+                    await responses.aclose()
+                finally:
+                    await close_runner_once()
 
         event.set_result(
             MessageEventResult()
@@ -283,51 +269,83 @@ class ThirdPartyAgentSubStage(Stage):
     async def process(
         self,
         event: AstrMessageEvent,
+        provider_wake_prefix: str = "",
     ) -> AsyncGenerator[None, None]:
         req: ProviderRequest | None = None
 
-        if self.provider_wake_prefix and not event.message_str.startswith(
-            self.provider_wake_prefix,
+        if not matches_provider_wake_prefix(
+            event,
+            provider_wake_prefix,
         ):
-            return
-
-        self.prov_cfg: dict = next(
-            (p for p in astrbot_config["provider"] if p["id"] == self.prov_id),
-            {},
-        )
-        if not self.prov_id:
-            logger.error(
-                "No Agent Runner provider ID is configured. Configure one on the "
-                "settings page."
-            )
-            return
-        if not self.prov_cfg:
-            logger.error(
-                f"Configuration for Agent Runner provider {self.prov_id} does not "
-                "exist. Update it on the settings page."
-            )
             return
 
         # make provider request
         req = ProviderRequest()
         req.session_id = event.unified_msg_origin
-        req.prompt = event.message_str[len(self.provider_wake_prefix) :]
+        req.prompt = event.message_str
+        prefix_text = event.message_str
+        if event.get_platform_name() == "lark":
+            prefix_text = prefix_text.lstrip()
+        if provider_wake_prefix and prefix_text.startswith(provider_wake_prefix):
+            req.prompt = prefix_text[len(provider_wake_prefix) :]
         for comp in event.message_obj.message:
             if isinstance(comp, Image):
-                image_path = await comp.convert_to_base64()
+                try:
+                    image_path = await comp.convert_to_base64()
+                except Exception as exc:  # noqa: BLE001
+                    logger.warning(
+                        "Image attachment is unavailable (%s): %s",
+                        type(exc).__name__,
+                        describe_media_ref(comp.url or comp.file),
+                    )
+                    continue
                 req.image_urls.append(image_path)
             elif isinstance(comp, Record):
-                audio_path = await comp.convert_to_file_path()
+                try:
+                    audio_path = await comp.convert_to_file_path()
+                except Exception as exc:  # noqa: BLE001
+                    logger.warning(
+                        "Voice attachment is unavailable (%s).",
+                        type(exc).__name__,
+                    )
+                    continue
                 req.audio_urls.append(audio_path)
 
-        if not req.prompt and not req.image_urls and not req.audio_urls:
+        if quoted := ReplyChainParser().format_embedded_replies(event):
+            prompt = req.prompt or ""
+            req.prompt = f"{prompt}\n\n{quoted}" if prompt.strip() else quoted
+
+        empty_prompt = not req.prompt or (
+            event.get_platform_name() == "lark" and not req.prompt.strip()
+        )
+        if empty_prompt and not req.image_urls and not req.audio_urls:
             return
 
         custom_error_message = await self._resolve_persona_custom_error_message(event)
         set_persona_custom_error_message_on_event(event, custom_error_message)
 
+        event_writer = None
+        manager = self.ctx.plugin_manager.context.conversation_manager
+        if isinstance(manager, ConversationManager):
+            cid = await manager.get_curr_conversation_id(event.unified_msg_origin)
+            if not cid:
+                cid = await manager.new_conversation(
+                    event.unified_msg_origin, event.get_platform_id()
+                )
+            event_writer = await manager.create_event_writer(
+                cid,
+                unified_msg_origin=event.unified_msg_origin,
+                link_display=event.get_platform_name() == "webchat",
+            )
+
+        context_observer = (
+            ConversationHistoryObserver(event_writer, req) if event_writer else None
+        )
+
         # call event hook
-        if await call_event_hook(event, EventType.OnLLMRequestEvent, req):
+        if await call_event_hook(
+            event, EventType.OnLLMRequestEvent, req, context_observer=context_observer
+        ):
             return
         sdk_plugin_bridge = getattr(
             self.ctx.plugin_manager.context,
@@ -341,7 +359,10 @@ class ThirdPartyAgentSubStage(Stage):
                     event,
                     {
                         "prompt": req.prompt,
-                        "provider_id": self.prov_id,
+                        "provider_id": self.ctx.astrbot_config["agent"]["config"].get(
+                            "provider_id", ""
+                        ),
+                        "runner_type": self.runner_type,
                     },
                     provider_request=req,
                 )
@@ -403,7 +424,28 @@ class ThirdPartyAgentSubStage(Stage):
             if runner_closed:
                 return
             runner_closed = True
-            await _close_runner_if_supported(runner)
+            try:
+                if event_writer and event_writer.turn_id:
+                    final = runner.get_final_llm_resp()
+                    status = (
+                        "completed" if final and final.role == "assistant" else "failed"
+                    )
+                    if event.is_stopped() or not runner.done():
+                        status = "cancelled"
+                    if status == "completed" and final is not None:
+                        history = event_writer.get_messages()
+                        history.append(await req.assemble_context())
+                        if final.completion_text:
+                            history.append(
+                                {
+                                    "role": "assistant",
+                                    "content": final.completion_text,
+                                }
+                            )
+                        await event_writer.save_history(history)
+                    await event_writer.finish_turn(status)
+            finally:
+                await _close_runner_if_supported(runner)
 
         def mark_stream_consumed() -> None:
             nonlocal stream_consumed
@@ -411,27 +453,31 @@ class ThirdPartyAgentSubStage(Stage):
             if stream_watchdog_task and not stream_watchdog_task.done():
                 stream_watchdog_task.cancel()
 
+        active_event_registry.register_agent_stop_callback(event, event.stop_event)
         try:
-            from astrbot.core.astr_agent_tool_exec import FunctionToolExecutor
-
-            provider = self.ctx.plugin_manager.context.get_using_provider(
-                umo=event.unified_msg_origin,
-            )
-            if provider is None:
-                raise ValueError(
-                    "No active provider is available for third-party runner",
+            if active_event_registry.get_background_stop_signal(event).is_set():
+                return
+            if event_writer:
+                turn_id = event.get_extra("turn_id")
+                await event_writer.start_turn(
+                    {
+                        "kind": "im_wake",
+                        "umo": event.unified_msg_origin,
+                        "runner": self.runner_type,
+                        "context_mode": "transcript_only",
+                    },
+                    event_id=turn_id if isinstance(turn_id, str) else None,
                 )
-
             await runner.reset(
-                provider=provider,
+                provider=None,
+                tool_executor=None,
                 request=req,
                 run_context=AgentContextWrapper(
                     context=astr_agent_ctx,
                     tool_call_timeout=120,
                 ),
-                tool_executor=FunctionToolExecutor(),
-                agent_hooks=MAIN_AGENT_HOOKS,
-                provider_config=self.prov_cfg,
+                agent_hooks=MainAgentHooks(context_observer=context_observer),
+                provider_config=self.ctx.astrbot_config["agent"]["config"],
                 streaming=streaming_response,
             )
 
@@ -458,6 +504,9 @@ class ThirdPartyAgentSubStage(Stage):
                 ):
                     yield None
         finally:
+            active_event_registry.unregister_agent_stop_callback(
+                event, event.stop_event
+            )
             if (
                 stream_watchdog_task
                 and not stream_watchdog_task.done()

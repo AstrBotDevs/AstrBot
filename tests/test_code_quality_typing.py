@@ -1,127 +1,261 @@
+"""Strict source quality gate with inspectable diagnostics and clone locations.
+
+Clones are identical contiguous AST statement sequences with at least five
+distinct source lines starting executable statements. Identifiers and literal
+values remain significant; comments and docstrings do not. Imports, signatures,
+literal data declarations and formatting cannot supply the five required lines.
+The longest matches are selected first. The legacy score charges two points
+per additional non-overlapping copy. V2 measures the eligible AST statements in
+each extra copy, with the same two-point minimum. Neither score double charges
+overlapping windows or nested copies. An incomplete scan has no valid V2 score.
 """
-Code Quality Test: Type Safety Scoring
 
-Scores the codebase based on type safety patterns:
-- cast(Any, ...) usage (too many casts indicate type safety issues)
-- # type: ignore comments (越多表示类型问题越多)
-
-Perfect score: 100
-"""
-
+import ast
+import io
+import os
 import re
+import tokenize
+from collections import Counter, defaultdict
+from collections.abc import Iterable, Mapping
+from dataclasses import dataclass, field
+from itertools import combinations
 from pathlib import Path
-from typing import cast
-
-import pytest
+from typing import Literal
 
 ASTRBOT_ROOT = Path(__file__).parent.parent / "astrbot"
-
-
-def _scan_for_patterns() -> dict[str, int | set[str] | list[tuple[str, str]]]:
-    """Scan astrbot source for type-unsafe patterns."""
-    counts: dict[str, int | set[str] | list[tuple[str, str]]] = {
-        "cast_any": 0,
-        "type_ignore": 0,
-        "bad_type_ignore": 0,
-        "bare_except": 0,
-        "duplicate_blocks": 0,
-        "cast_any_files": set(),
-        "type_ignore_files": set(),
-        "bad_type_ignore_files": set(),
-        "bare_except_files": set(),
-        "dup_files": [],
+MIN_CLONE_LINES = 5
+MIN_SCORE = 80
+MAX_DEBT_UNITS = 200
+BAD_IGNORE_CODES = frozenset(
+    {
+        "import",
+        "import-not-found",
+        "import-untyped",
+        "unresolved-import",
+        "class-alias",
+        "no-name-module",
+        "attr-defined",
+        "class-var",
+        "assignment",
+        "type-var",
+        "misc",
     }
+)
+IGNORE_DIRECTIVE = re.compile(r"#\s*type:\s*ignore\b(?:\s*\[([^\]]*)\])?")
+DiagnosticKind = Literal["cast_any", "type_ignore", "bad_type_ignore", "bare_except"]
 
-    # Patterns to detect
-    cast_any_re = re.compile(r"cast\s*\(\s*Any\s*,", re.MULTILINE)
-    type_ignore_re = re.compile(r"#\s*type:\s*ignore", re.MULTILINE)
-    bare_except_re = re.compile(
-        r"except\s*:\s*$", re.MULTILINE
+
+@dataclass(frozen=True, order=True)
+class SourceLocation:
+    path: str
+    line: int
+    end_line: int
+
+
+@dataclass(frozen=True)
+class Diagnostic:
+    kind: DiagnosticKind
+    location: SourceLocation
+    detail: str = ""
+
+
+@dataclass(frozen=True)
+class ScanError:
+    path: str
+    message: str
+
+
+@dataclass(frozen=True)
+class PatternCounts:
+    cast_any: int
+    type_ignore: int
+    bad_type_ignore: int
+    bare_except: int
+    duplicate_blocks: int
+
+
+def _require_count(name: str, value: int) -> None:
+    if type(value) is not int or value < 0:
+        raise ValueError(f"{name} must be a non-negative integer")
+
+
+@dataclass(frozen=True)
+class ScanCoverage:
+    discovered_files: int = 0
+    read_files: int = 0
+    parsed_files: int = 0
+    tokenized_files: int = 0
+    executable_statements: int = 0
+    discovery_complete: bool = True
+
+    def __post_init__(self) -> None:
+        for name in (
+            "discovered_files",
+            "read_files",
+            "parsed_files",
+            "tokenized_files",
+            "executable_statements",
+        ):
+            _require_count(name, getattr(self, name))
+        if not (
+            self.tokenized_files
+            <= self.parsed_files
+            <= self.read_files
+            <= self.discovered_files
+        ):
+            raise ValueError(
+                "File counts must satisfy tokenized <= parsed <= read <= discovered"
+            )
+        if not self.tokenized_files and self.executable_statements:
+            raise ValueError("Executable statements require a fully scanned source")
+        if type(self.discovery_complete) is not bool:
+            raise ValueError("discovery_complete must be a boolean")
+
+    @property
+    def complete(self) -> bool:
+        return (
+            self.discovery_complete
+            and self.discovered_files > 0
+            and self.discovered_files
+            == self.read_files
+            == self.parsed_files
+            == self.tokenized_files
+            and self.executable_statements > 0
+        )
+
+
+@dataclass(frozen=True)
+class QualityDebt:
+    units: int
+    executable_statements: int
+
+    def __post_init__(self) -> None:
+        _require_count("units", self.units)
+        _require_count("executable_statements", self.executable_statements)
+        if not self.executable_statements:
+            raise ValueError("A valid score requires executable source statements")
+
+    @property
+    def debt(self) -> float:
+        return self.units / 10
+
+    @property
+    def score(self) -> float:
+        return 80000 / (800 + self.units)
+
+    @property
+    def density(self) -> float:
+        """Debt per 1,000 executable statements, for diagnosis only."""
+        return 1000 * self.debt / self.executable_statements
+
+    @property
+    def passes(self) -> bool:
+        return self.units <= MAX_DEBT_UNITS
+
+
+@dataclass(frozen=True)
+class DuplicateBlock:
+    locations: tuple[SourceLocation, ...]
+    executable_lines: int
+    executable_statements: int
+
+    def __post_init__(self) -> None:
+        _require_count("executable_lines", self.executable_lines)
+        _require_count("executable_statements", self.executable_statements)
+        if not MIN_CLONE_LINES <= self.executable_lines <= self.executable_statements:
+            raise ValueError(
+                "A clone needs five executable start lines backed by AST statements"
+            )
+        if len(self.locations) < 2 or any(
+            _overlap(first, second) for first, second in combinations(self.locations, 2)
+        ):
+            raise ValueError("A clone needs at least two non-overlapping locations")
+
+    @property
+    def redundant_statements(self) -> int:
+        # Admission already implies k >= five distinct starting lines. Keep the
+        # explicit floor so no future statement-count convention weakens it.
+        return (len(self.locations) - 1) * max(
+            MIN_CLONE_LINES, self.executable_statements
+        )
+
+
+@dataclass(frozen=True)
+class ScanResult:
+    diagnostics: tuple[Diagnostic, ...]
+    duplicates: tuple[DuplicateBlock, ...]
+    errors: tuple[ScanError, ...]
+    coverage: ScanCoverage = field(default_factory=ScanCoverage)
+
+    @property
+    def counts(self) -> PatternCounts:
+        counts = Counter(diagnostic.kind for diagnostic in self.diagnostics)
+        return PatternCounts(
+            cast_any=counts["cast_any"],
+            type_ignore=counts["type_ignore"],
+            bad_type_ignore=counts["bad_type_ignore"],
+            bare_except=counts["bare_except"],
+            duplicate_blocks=sum(len(block.locations) - 1 for block in self.duplicates),
+        )
+
+    @property
+    def score(self) -> float:
+        counts = self.counts
+        return _calculate_score(
+            counts.cast_any,
+            counts.type_ignore,
+            counts.bad_type_ignore,
+            counts.bare_except,
+            counts.duplicate_blocks,
+        )
+
+    @property
+    def redundant_statements(self) -> int:
+        return sum(block.redundant_statements for block in self.duplicates)
+
+    @property
+    def assessment(self) -> QualityDebt | None:
+        if self.errors or not self.coverage.complete:
+            return None
+        if self.redundant_statements > self.coverage.executable_statements:
+            raise ValueError(
+                "Non-overlapping clone debt cannot exceed scanned statements"
+            )
+        return QualityDebt(
+            _calculate_debt_units(self.counts, self.redundant_statements),
+            self.coverage.executable_statements,
+        )
+
+    @property
+    def score_v2(self) -> float | None:
+        assessment = self.assessment
+        return assessment.score if assessment is not None else None
+
+
+def _calculate_debt_units(counts: PatternCounts, redundant_statements: int) -> int:
+    """Calculate integer tenths of debt without a source-size denominator."""
+    for name in (
+        "cast_any",
+        "type_ignore",
+        "bad_type_ignore",
+        "bare_except",
+        "duplicate_blocks",
+    ):
+        _require_count(name, getattr(counts, name))
+    _require_count("redundant_statements", redundant_statements)
+    if counts.bad_type_ignore > counts.type_ignore:
+        raise ValueError("Bad ignores must be a subset of all ignores")
+    if redundant_statements < MIN_CLONE_LINES * counts.duplicate_blocks:
+        raise ValueError("Every extra clone must contribute at least five statements")
+    if not counts.duplicate_blocks and redundant_statements:
+        raise ValueError("Redundant statements require an extra clone")
+    return (
+        10 * counts.cast_any
+        + 5 * (counts.type_ignore - counts.bad_type_ignore)
+        + 35 * counts.bad_type_ignore
+        + 20 * counts.bare_except
+        + 4 * redundant_statements
     )
-
-    # Bad type: ignore patterns (unresolved-import, class-alias, etc.)
-    bad_ignore_re = re.compile(
-        r"#\s*type:\s*ignore"
-        r"\[[\w-]*(?:import|no-name-module|attr-defined|class-var|assignment|type-var|misc)[\w-]*\]",
-        re.MULTILINE,
-    )
-
-    for py_file in ASTRBOT_ROOT.rglob("*.py"):
-        try:
-            content = py_file.read_text(encoding="utf-8")
-        except Exception:
-            continue
-
-        if py_file.suffix == ".pyi":
-            continue
-
-        rel = str(py_file.relative_to(ASTRBOT_ROOT.parent))
-
-        cast_matches = cast_any_re.findall(content)
-        ignore_matches = type_ignore_re.findall(content)
-        bad_ignore_matches = bad_ignore_re.findall(content)
-        # Only count bare `except:` (no specific exception type), not `except Exception:`
-        bare_except_matches = bare_except_re.findall(content)
-
-        if cast_matches:
-            counts["cast_any"] += len(cast_matches)
-            counts["cast_any_files"].add(rel)
-
-        if ignore_matches:
-            counts["type_ignore"] += len(ignore_matches)
-            counts["type_ignore_files"].add(rel)
-
-        if bad_ignore_matches:
-            counts["bad_type_ignore"] += len(bad_ignore_matches)
-            counts["bad_type_ignore_files"].add(rel)
-
-        if bare_except_matches:
-            counts["bare_except"] += len(bare_except_matches)
-            counts["bare_except_files"].add(rel)
-
-    # --- Phase 2: duplicate code blocks (5+ identical lines) ---
-    # key: block text -> list of (file, start_line-end_line)
-    dup_blocks: dict[str, list[tuple[str, str]]] = {}
-    WINDOW = 5
-    for py_file in ASTRBOT_ROOT.rglob("*.py"):
-        if py_file.suffix == ".pyi":
-            continue
-        try:
-            raw_lines = py_file.read_text(encoding="utf-8").splitlines()
-        except Exception:
-            continue
-        rel = str(py_file.relative_to(ASTRBOT_ROOT.parent))
-        # Build mapping: cleaned_idx -> original_line_number (1-indexed)
-        cleaned_to_orig: dict[int, int] = {}
-        cleaned: list[str] = []
-        for idx, ln in enumerate(raw_lines):
-            stripped = ln.strip()
-            if len(stripped) > 2:
-                cleaned.append(stripped)
-                cleaned_to_orig[len(cleaned) - 1] = idx + 1  # 1-indexed
-        n = len(cleaned)
-        seen: dict[str, list[int]] = {}
-        for i in range(n - WINDOW + 1):
-            block = "\n".join(cleaned[i : i + WINDOW])
-            if block not in seen:
-                seen[block] = []
-            seen[block].append(i)
-        for block, positions in seen.items():
-            if len(positions) >= 2:
-                key = block[:60] + "..." if len(block) > 60 else block
-                if key not in dup_blocks:
-                    dup_blocks[key] = []
-                for pos in positions:
-                    start = cleaned_to_orig.get(pos, 0)
-                    end = cleaned_to_orig.get(pos + WINDOW - 1, start)
-                    dup_blocks[key].append((rel, f"{start}-{end}"))
-
-    counts["duplicate_blocks"] = sum(
-        max(0, len(locs) - 1) for locs in dup_blocks.values()
-    )
-    counts["dup_files"] = list(dup_blocks.items())[:20]  # type: ignore[index]
-
-    return counts
 
 
 def _calculate_score(
@@ -130,142 +264,652 @@ def _calculate_score(
     bad_type_ignore: int,
     bare_except: int,
     dup_blocks: int,
-) -> int:
-    """
-    Calculate type safety score out of 100.
-
-    Deductions:
-    - Each cast(Any, ...) costs 1 point
-    - Each # type: ignore costs 0.5 points
-    - Each bad # type: ignore (unresolved-import, class-alias, ...) costs 3 points
-    - Each bare except: costs 0.5 points
-    - Each duplicate block costs 2 points
-    - Floor at 0
-    """
-    deduction = (
-        cast_any
-        + type_ignore * 0.5
-        + bad_type_ignore * 3
-        + bare_except * 0.5
-        + dup_blocks * 0.001
+) -> float:
+    """Apply the documented costs, including both costs for a bad ignore."""
+    return max(
+        0.0,
+        100
+        - cast_any
+        - type_ignore * 0.5
+        - bad_type_ignore * 3
+        - bare_except * 0.5
+        - dup_blocks * 2,
     )
-    score = max(0, int(100 - deduction))
-    return score
 
 
-def _get_grade(score: int) -> str:
-    if score >= 90:
-        return "A"
-    elif score >= 80:
-        return "B"
-    elif score >= 70:
-        return "C"
-    elif score >= 60:
-        return "D"
-    else:
-        return "F"
+def _location(
+    path: str, node: ast.stmt | ast.expr | ast.ExceptHandler
+) -> SourceLocation:
+    return SourceLocation(path, node.lineno, node.end_lineno or node.lineno)
+
+
+class _LocalBindings(ast.NodeVisitor):
+    """Find lexical locals without entering a nested function or class."""
+
+    def __init__(self) -> None:
+        self.names: set[str] = set()
+        self.globals: set[str] = set()
+        self.nonlocals: set[str] = set()
+
+    def visit_Name(self, node: ast.Name) -> None:
+        if isinstance(node.ctx, (ast.Store, ast.Del)):
+            self.names.add(node.id)
+
+    def visit_Import(self, node: ast.Import) -> None:
+        self.names.update(
+            alias.asname or alias.name.split(".")[0] for alias in node.names
+        )
+
+    def visit_ImportFrom(self, node: ast.ImportFrom) -> None:
+        self.names.update(alias.asname or alias.name for alias in node.names)
+
+    def visit_FunctionDef(self, node: ast.FunctionDef | ast.AsyncFunctionDef) -> None:
+        self.names.add(node.name)
+
+    visit_AsyncFunctionDef = visit_FunctionDef
+
+    def visit_ClassDef(self, node: ast.ClassDef) -> None:
+        self.names.add(node.name)
+
+    def visit_Lambda(self, node: ast.Lambda) -> None:
+        pass
+
+    def visit_Global(self, node: ast.Global) -> None:
+        self.globals.update(node.names)
+
+    def visit_Nonlocal(self, node: ast.Nonlocal) -> None:
+        self.nonlocals.update(node.names)
+
+    def visit_ExceptHandler(self, node: ast.ExceptHandler) -> None:
+        if node.name:
+            self.names.add(node.name)
+        self.generic_visit(node)
+
+    def visit_comprehension(self, node: ast.comprehension) -> None:
+        self.visit(node.iter)
+        for condition in node.ifs:
+            self.visit(condition)
+
+
+@dataclass
+class _Scope:
+    kind: str
+    bindings: dict[str, str | None] = field(default_factory=dict)
+    globals: set[str] = field(default_factory=set)
+    nonlocals: set[str] = field(default_factory=set)
+
+
+class _PatternVisitor(ast.NodeVisitor):
+    """Resolve imported typing symbols and ordinary lexical rebinding."""
+
+    def __init__(self, path: str) -> None:
+        self.path = path
+        self.diagnostics: list[Diagnostic] = []
+        self.scopes = [_Scope("module")]
+
+    def _lookup(self, name: str) -> str | None:
+        current = self.scopes[-1]
+        if name in current.globals:
+            return self.scopes[0].bindings.get(name)
+        for index in range(len(self.scopes) - 1, -1, -1):
+            scope = self.scopes[index]
+            if scope.kind == "class" and index != len(self.scopes) - 1:
+                continue
+            if name in scope.bindings:
+                return scope.bindings[name]
+        return None
+
+    def _resolve(self, node: ast.expr) -> str | None:
+        if isinstance(node, ast.Name):
+            return self._lookup(node.id)
+        if isinstance(node, ast.Attribute):
+            base = self._resolve(node.value)
+            return f"{base}.{node.attr}" if base else None
+        return None
+
+    def _bind(self, name: str, symbol: str | None = None) -> None:
+        scope = self.scopes[-1]
+        if name in scope.globals:
+            scope = self.scopes[0]
+        elif name in scope.nonlocals:
+            scope = next(
+                (
+                    outer
+                    for outer in reversed(self.scopes[:-1])
+                    if outer.kind == "function" and name in outer.bindings
+                ),
+                scope,
+            )
+        scope.bindings[name] = symbol
+
+    def _bind_target(self, target: ast.expr, symbol: str | None = None) -> None:
+        if isinstance(target, ast.Name):
+            self._bind(target.id, symbol)
+        elif isinstance(target, (ast.Tuple, ast.List)):
+            for item in target.elts:
+                self._bind_target(item)
+        elif isinstance(target, ast.Starred):
+            self._bind_target(target.value)
+
+    def visit_Import(self, node: ast.Import) -> None:
+        for alias in node.names:
+            symbol = "typing" if alias.name in {"typing", "typing_extensions"} else None
+            self._bind(alias.asname or alias.name.split(".")[0], symbol)
+
+    def visit_ImportFrom(self, node: ast.ImportFrom) -> None:
+        for alias in node.names:
+            symbol = (
+                f"typing.{alias.name}"
+                if node.level == 0 and node.module in {"typing", "typing_extensions"}
+                else None
+            )
+            self._bind(alias.asname or alias.name, symbol)
+
+    def visit_Assign(self, node: ast.Assign) -> None:
+        self.visit(node.value)
+        symbol = self._resolve(node.value)
+        for target in node.targets:
+            self.visit(target)
+            self._bind_target(target, symbol)
+
+    def visit_AnnAssign(self, node: ast.AnnAssign) -> None:
+        self.visit(node.annotation)
+        if node.value is not None:
+            self.visit(node.value)
+        self.visit(node.target)
+        self._bind_target(
+            node.target, self._resolve(node.value) if node.value else None
+        )
+
+    def visit_AugAssign(self, node: ast.AugAssign) -> None:
+        self.generic_visit(node)
+        self._bind_target(node.target)
+
+    def visit_NamedExpr(self, node: ast.NamedExpr) -> None:
+        self.visit(node.value)
+        self._bind_target(node.target, self._resolve(node.value))
+
+    def visit_Delete(self, node: ast.Delete) -> None:
+        self.generic_visit(node)
+        for target in node.targets:
+            self._bind_target(target)
+
+    def visit_For(self, node: ast.For | ast.AsyncFor) -> None:
+        self.visit(node.iter)
+        self._bind_target(node.target)
+        for statement in [*node.body, *node.orelse]:
+            self.visit(statement)
+
+    visit_AsyncFor = visit_For
+
+    def visit_With(self, node: ast.With | ast.AsyncWith) -> None:
+        for item in node.items:
+            self.visit(item.context_expr)
+            if item.optional_vars:
+                self._bind_target(item.optional_vars)
+        for statement in node.body:
+            self.visit(statement)
+
+    visit_AsyncWith = visit_With
+
+    def visit_ExceptHandler(self, node: ast.ExceptHandler) -> None:
+        if node.type is None:
+            self.diagnostics.append(
+                Diagnostic("bare_except", _location(self.path, node))
+            )
+        else:
+            self.visit(node.type)
+        if node.name:
+            self._bind(node.name)
+        for statement in node.body:
+            self.visit(statement)
+
+    def visit_Call(self, node: ast.Call) -> None:
+        if (
+            self._resolve(node.func) == "typing.cast"
+            and node.args
+            and self._resolve(node.args[0]) == "typing.Any"
+        ):
+            self.diagnostics.append(Diagnostic("cast_any", _location(self.path, node)))
+        self.generic_visit(node)
+
+    def _function_scope(self, args: ast.arguments, body: Iterable[ast.AST]) -> _Scope:
+        locals_ = _LocalBindings()
+        for node in body:
+            locals_.visit(node)
+        parameters = [*args.posonlyargs, *args.args, *args.kwonlyargs]
+        if args.vararg:
+            parameters.append(args.vararg)
+        if args.kwarg:
+            parameters.append(args.kwarg)
+        names = locals_.names | {parameter.arg for parameter in parameters}
+        return _Scope(
+            "function",
+            dict.fromkeys(names - locals_.globals - locals_.nonlocals),
+            locals_.globals,
+            locals_.nonlocals,
+        )
+
+    def visit_FunctionDef(self, node: ast.FunctionDef | ast.AsyncFunctionDef) -> None:
+        for value in [*node.decorator_list, node.args, node.returns, *node.type_params]:
+            if value is not None:
+                self.visit(value)
+        self._bind(node.name)
+        self.scopes.append(self._function_scope(node.args, node.body))
+        for statement in node.body:
+            self.visit(statement)
+        self.scopes.pop()
+
+    visit_AsyncFunctionDef = visit_FunctionDef
+
+    def visit_Lambda(self, node: ast.Lambda) -> None:
+        self.visit(node.args)
+        self.scopes.append(self._function_scope(node.args, [node.body]))
+        self.visit(node.body)
+        self.scopes.pop()
+
+    def visit_ClassDef(self, node: ast.ClassDef) -> None:
+        for value in [
+            *node.decorator_list,
+            *node.bases,
+            *node.keywords,
+            *node.type_params,
+        ]:
+            self.visit(value)
+        self._bind(node.name)
+        self.scopes.append(_Scope("class"))
+        for statement in node.body:
+            self.visit(statement)
+        self.scopes.pop()
+
+    def _visit_comprehension(
+        self, node: ast.ListComp | ast.SetComp | ast.DictComp | ast.GeneratorExp
+    ) -> None:
+        self.visit(node.generators[0].iter)
+        self.scopes.append(_Scope("function"))
+        for index, generator in enumerate(node.generators):
+            if index:
+                self.visit(generator.iter)
+            self._bind_target(generator.target)
+            for condition in generator.ifs:
+                self.visit(condition)
+        if isinstance(node, ast.DictComp):
+            self.visit(node.key)
+            self.visit(node.value)
+        else:
+            self.visit(node.elt)
+        self.scopes.pop()
+
+    visit_ListComp = _visit_comprehension
+    visit_SetComp = _visit_comprehension
+    visit_DictComp = _visit_comprehension
+    visit_GeneratorExp = _visit_comprehension
+
+
+class _WithoutDocstrings(ast.NodeTransformer):
+    def visit_Expr(self, node: ast.Expr) -> ast.Expr | None:
+        return None if isinstance(node.value, ast.Constant) else node
+
+
+def _literal_data(node: ast.expr) -> bool:
+    """Recognize literal declarations without evaluating source code."""
+    if isinstance(node, ast.Constant):
+        return True
+    if isinstance(node, (ast.Tuple, ast.List, ast.Set)):
+        return all(_literal_data(item) for item in node.elts)
+    if isinstance(node, ast.Dict):
+        return all(key is not None and _literal_data(key) for key in node.keys) and all(
+            _literal_data(value) for value in node.values
+        )
+    return (
+        isinstance(node, ast.UnaryOp)
+        and isinstance(node.op, (ast.UAdd, ast.USub, ast.Invert))
+        and _literal_data(node.operand)
+    )
+
+
+_DEFINITIONS = (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)
+_SCAFFOLDING = (
+    ast.Import,
+    ast.ImportFrom,
+    ast.Pass,
+    ast.Global,
+    ast.Nonlocal,
+    ast.TypeAlias,
+)
+
+
+def _executable_nodes(node: ast.AST) -> Iterable[ast.stmt]:
+    if isinstance(node, (*_DEFINITIONS, *_SCAFFOLDING)):
+        return
+    if isinstance(node, ast.Assign) and _literal_data(node.value):
+        return
+    if isinstance(node, ast.AnnAssign) and (
+        node.value is None or _literal_data(node.value)
+    ):
+        return
+    if isinstance(node, ast.stmt):
+        yield node
+    for child in ast.iter_child_nodes(node):
+        yield from _executable_nodes(child)
+
+
+@dataclass(frozen=True)
+class _Statement:
+    fingerprint: str
+    location: SourceLocation
+    lines: frozenset[int]
+    weight: int
+
+
+def _statement_suites(path: str, tree: ast.AST) -> Iterable[tuple[_Statement, ...]]:
+    """Keep suite boundaries: a match cannot cross functions or branches."""
+    for _, value in ast.iter_fields(tree):
+        if isinstance(value, list):
+            statements: list[_Statement] = []
+            for item in value:
+                if not isinstance(item, ast.AST):
+                    continue
+                if isinstance(item, _DEFINITIONS) or not isinstance(item, ast.stmt):
+                    if statements:
+                        yield tuple(statements)
+                        statements = []
+                else:
+                    executable = tuple(_executable_nodes(item))
+                    statements.append(
+                        _Statement(
+                            ast.dump(item, include_attributes=False),
+                            _location(path, item),
+                            frozenset(statement.lineno for statement in executable),
+                            len(executable),
+                        )
+                    )
+                yield from _statement_suites(path, item)
+            if statements:
+                yield tuple(statements)
+        elif isinstance(value, ast.AST):
+            yield from _statement_suites(path, value)
+
+
+def _overlap(first: SourceLocation, second: SourceLocation) -> bool:
+    return first.path == second.path and (
+        first.line <= second.end_line and second.line <= first.end_line
+    )
+
+
+def _span(suite: tuple[_Statement, ...], start: int, end: int) -> SourceLocation:
+    return SourceLocation(
+        suite[start].location.path,
+        suite[start].location.line,
+        suite[end - 1].location.end_line,
+    )
+
+
+def _find_duplicates(
+    suites: list[tuple[_Statement, ...]],
+) -> tuple[DuplicateBlock, ...]:
+    # Node-count seeds are invariant to line wrapping. Actual occurrences must
+    # still contain five distinct executable source lines before being charged.
+    seeds: dict[tuple[str, ...], list[tuple[int, int, int]]] = defaultdict(list)
+    for suite_index, suite in enumerate(suites):
+        for start, statement in enumerate(suite):
+            if not statement.weight:
+                continue
+            weight = 0
+            for end in range(start, len(suite)):
+                weight += suite[end].weight
+                if weight >= MIN_CLONE_LINES:
+                    key = tuple(item.fingerprint for item in suite[start : end + 1])
+                    seeds[key].append((suite_index, start, end + 1))
+                    break
+
+    matches: dict[tuple[str, ...], dict[SourceLocation, int]] = defaultdict(dict)
+    statement_counts: dict[tuple[str, ...], int] = {}
+    for occurrences in seeds.values():
+        for first, second in combinations(occurrences, 2):
+            left, right = suites[first[0]], suites[second[0]]
+            a, b, c, d = first[1], first[2], second[1], second[2]
+            if _overlap(_span(left, a, b), _span(right, c, d)):
+                continue
+            while (
+                a > 0 and c > 0 and left[a - 1].fingerprint == right[c - 1].fingerprint
+            ):
+                if _overlap(_span(left, a - 1, b), _span(right, c - 1, d)):
+                    break
+                a -= 1
+                c -= 1
+            while (
+                b < len(left)
+                and d < len(right)
+                and left[b].fingerprint == right[d].fingerprint
+            ):
+                if _overlap(_span(left, a, b + 1), _span(right, c, d + 1)):
+                    break
+                b += 1
+                d += 1
+            while not left[a].weight:
+                a += 1
+                c += 1
+            while not left[b - 1].weight:
+                b -= 1
+                d -= 1
+            first_lines = len(set().union(*(item.lines for item in left[a:b])))
+            second_lines = len(set().union(*(item.lines for item in right[c:d])))
+            if min(first_lines, second_lines) < MIN_CLONE_LINES:
+                continue
+            key = tuple(item.fingerprint for item in left[a:b])
+            matches[key][_span(left, a, b)] = first_lines
+            matches[key][_span(right, c, d)] = second_lines
+            statement_counts[key] = sum(item.weight for item in left[a:b])
+
+    # A previously selected block may anchor a shorter match in a new location,
+    # but only previously uncovered, non-overlapping copies incur another cost.
+    covered: dict[str, list[SourceLocation]] = defaultdict(list)
+    result: list[DuplicateBlock] = []
+    ordered = sorted(
+        matches.items(),
+        key=lambda item: (
+            -min(item[1].values()),
+            -len(item[0]),
+            tuple(sorted(item[1])),
+        ),
+    )
+    for key, occurrences in ordered:
+        locations: list[SourceLocation] = []
+        for location in sorted(occurrences):
+            if not any(_overlap(location, previous) for previous in locations):
+                locations.append(location)
+        fresh = [
+            location
+            for location in locations
+            if not any(
+                _overlap(location, previous) for previous in covered[location.path]
+            )
+        ]
+        anchor = next(
+            (location for location in locations if location not in fresh), None
+        )
+        selected = ([anchor] if anchor else []) + fresh
+        if len(selected) < 2:
+            continue
+        result.append(
+            DuplicateBlock(
+                tuple(selected),
+                min(occurrences[location] for location in selected),
+                statement_counts[key],
+            )
+        )
+        for location in fresh:
+            covered[location.path].append(location)
+    return tuple(result)
+
+
+def scan_sources(sources: Mapping[str, str]) -> ScanResult:
+    """Scan supplied Python sources without importing or executing them."""
+    diagnostics: list[Diagnostic] = []
+    errors: list[ScanError] = []
+    suites: list[tuple[_Statement, ...]] = []
+    parsed_files = 0
+    tokenized_files = 0
+    executable_statements = 0
+    for path, source in sorted(sources.items()):
+        try:
+            tree = ast.parse(source, filename=path)
+            parsed_files += 1
+            for token in tokenize.generate_tokens(io.StringIO(source).readline):
+                if token.type != tokenize.COMMENT:
+                    continue
+                match = IGNORE_DIRECTIVE.match(token.string)
+                if match is None:
+                    continue
+                location = SourceLocation(path, token.start[0], token.end[0])
+                diagnostics.append(Diagnostic("type_ignore", location, token.string))
+                codes = {code.strip() for code in (match[1] or "").split(",")}
+                if codes & BAD_IGNORE_CODES:
+                    diagnostics.append(
+                        Diagnostic("bad_type_ignore", location, token.string)
+                    )
+            tokenized_files += 1
+        except (SyntaxError, tokenize.TokenError, ValueError) as error:
+            errors.append(ScanError(path, str(error)))
+            continue
+        visitor = _PatternVisitor(path)
+        visitor.visit(tree)
+        diagnostics.extend(visitor.diagnostics)
+        _WithoutDocstrings().visit(tree)
+        # ast.walk visits each statement once, including bodies of definitions.
+        # Eligibility is exactly the predicate already used by clone matching.
+        executable_statements += sum(
+            1
+            for node in ast.walk(tree)
+            if isinstance(node, ast.stmt)
+            and next(iter(_executable_nodes(node)), None) is node
+        )
+        suites.extend(_statement_suites(path, tree))
+    return ScanResult(
+        tuple(sorted(diagnostics, key=lambda item: (item.location, item.kind))),
+        _find_duplicates(suites),
+        tuple(errors),
+        ScanCoverage(
+            discovered_files=len(sources),
+            read_files=len(sources),
+            parsed_files=parsed_files,
+            tokenized_files=tokenized_files,
+            executable_statements=executable_statements,
+        ),
+    )
+
+
+def _scan_for_patterns() -> ScanResult:
+    sources: dict[str, str] = {}
+    errors: list[ScanError] = []
+    discovered: list[Path] = []
+    discovery_complete = True
+
+    def discovery_error(error: OSError) -> None:
+        nonlocal discovery_complete
+        discovery_complete = False
+        errors.append(ScanError(str(error.filename or ASTRBOT_ROOT), str(error)))
+
+    # Path.rglob can silently suppress directory discovery failures. The same
+    # Python file scope is walked without following directory symlinks, and its
+    # onerror callback makes an inaccessible subtree invalidate the whole scan.
+    try:
+        for directory, _, files in os.walk(
+            ASTRBOT_ROOT, onerror=discovery_error, followlinks=False
+        ):
+            discovered.extend(
+                Path(directory) / name for name in files if Path(name).match("*.py")
+            )
+    except OSError as error:
+        discovery_error(error)
+    for path in sorted(discovered):
+        relative = path.relative_to(ASTRBOT_ROOT.parent).as_posix()
+        try:
+            with tokenize.open(path) as source_file:
+                sources[relative] = source_file.read()
+        except (OSError, UnicodeError, SyntaxError) as error:
+            errors.append(ScanError(relative, str(error)))
+    if not sources:
+        errors.append(ScanError(str(ASTRBOT_ROOT), "No Python sources found"))
+    result = scan_sources(sources)
+    return ScanResult(
+        result.diagnostics,
+        result.duplicates,
+        tuple(errors) + result.errors,
+        ScanCoverage(
+            discovered_files=len(discovered),
+            read_files=len(sources),
+            parsed_files=result.coverage.parsed_files,
+            tokenized_files=result.coverage.tokenized_files,
+            executable_statements=result.coverage.executable_statements,
+            discovery_complete=discovery_complete,
+        ),
+    )
+
+
+def _format_report(result: ScanResult) -> str:
+    counts = result.counts
+    coverage = result.coverage
+    assessment = result.assessment
+    lines = [
+        (
+            f"Source quality V2: {assessment.score:.3f}/100; "
+            f"debt={assessment.debt:g}; U={assessment.units}; "
+            f"required: U <= {MAX_DEBT_UNITS}"
+            if assessment is not None
+            else "Source quality V2: INVALID (score=None); gate FAIL"
+        ),
+        (
+            f"Legacy source quality score: {result.score:g}/100; "
+            f"separate required minimum: {MIN_SCORE}"
+            if assessment is not None
+            else "Legacy gate: INVALID; partial counts cannot establish a passing score"
+        ),
+        f"Coverage: discovered={coverage.discovered_files}; read={coverage.read_files}; "
+        f"parsed={coverage.parsed_files}; tokenized={coverage.tokenized_files}; "
+        f"executable statements={coverage.executable_statements}; "
+        f"discovery complete={coverage.discovery_complete}",
+        f"cast(Any): {counts.cast_any}; type ignores: {counts.type_ignore}; "
+        f"bad ignores: {counts.bad_type_ignore}; bare except: {counts.bare_except}; "
+        f"duplicate copies: {counts.duplicate_blocks}; "
+        f"redundant statements R: {result.redundant_statements}",
+    ]
+    if assessment is not None:
+        lines.append(
+            f"Debt density: {assessment.density:.3f} per 1,000 executable statements "
+            "(diagnostic only; never used by either gate)"
+        )
+    elif not coverage.complete:
+        lines.append(
+            "INVALID: complete, non-empty executable source coverage is required"
+        )
+    lines.extend(f"ERROR {error.path}: {error.message}" for error in result.errors)
+    for diagnostic in result.diagnostics:
+        location = diagnostic.location
+        lines.append(
+            f"{diagnostic.kind}: {location.path}:{location.line} {diagnostic.detail}"
+        )
+    for block in result.duplicates:
+        locations = ", ".join(
+            f"{location.path}:{location.line}-{location.end_line}"
+            for location in block.locations
+        )
+        lines.append(
+            f"clone ({block.executable_lines} executable lines; "
+            f"{block.executable_statements} AST statements per copy; "
+            f"R={block.redundant_statements}): {locations}"
+        )
+    return "\n".join(lines)
 
 
 class TestCodeQualityTyping:
-    """Test suite for type safety scoring."""
-
-    def test_type_safety_score(self):
-        """
-        Type safety score based on cast(Any, ...) and # type: ignore usage.
-
-        Score = 100 - (cast_any_count * 1) - (type_ignore_count * 0.5)
-        Minimum score: 0
-        """
-        counts = _scan_for_patterns()
-        cast_any = cast(int, counts["cast_any"])
-        type_ignore = cast(int, counts["type_ignore"])
-        bad_type_ignore = cast(int, counts["bad_type_ignore"])
-        bare_except = cast(int, counts["bare_except"])
-        dup_blocks = cast(int, counts["duplicate_blocks"])
-        cast_any_files = cast("set[str]", counts["cast_any_files"])
-        type_ignore_files = cast("set[str]", counts["type_ignore_files"])
-        bad_type_ignore_files = cast("set[str]", counts["bad_type_ignore_files"])
-        bare_except_files = cast("set[str]", counts["bare_except_files"])
-        dup_files = cast("list[tuple[str, str]]", counts["dup_files"])
-        score = _calculate_score(
-            cast_any, type_ignore, bad_type_ignore, bare_except, dup_blocks
-        )
-
-        print(f"\n{'=' * 60}")
-        print("  Type Safety Score Report")
-        print(f"{'=' * 60}")
-        print(f"  cast(Any, ...) count:  {cast_any:>4}  (cost: {cast_any} pts)")
-        print(
-            f"  # type: ignore count:   {type_ignore:>4}  (cost: {type_ignore * 0.5:.1f} pts)"
-        )
-        print(
-            f"  bad type: ignore:      {bad_type_ignore:>4}  (cost: {bad_type_ignore * 3} pts)"
-        )
-        print(
-            f"  bare except: count:   {bare_except:>4}  (cost: {bare_except * 0.5:.1f} pts)"
-        )
-        print(f"  duplicate blocks:     {dup_blocks:>4}  (cost: {dup_blocks * 0.001:.1f} pts)")
-        print(f"  {'-' * 60}")
-        print(f"  Score: {score}/100  (Grade: {_get_grade(score)})")
-        print(f"{'=' * 60}")
-
-        if cast_any_files:
-            print("\n  Files with cast(Any, ...):")
-            for f in sorted(cast_any_files)[:10]:
-                print(f"    - {f}")
-            if len(cast_any_files) > 10:
-                print(f"    ... and {len(cast_any_files) - 10} more")
-            print()
-
-        if type_ignore_files:
-            print("  Files with # type: ignore:")
-            for f in sorted(type_ignore_files)[:10]:
-                print(f"    - {f}")
-            if len(type_ignore_files) > 10:
-                print(f"    ... and {len(type_ignore_files) - 10} more")
-            print()
-
-        if bad_type_ignore_files:
-            print("  Files with BAD type: ignore (import/alias/...):")
-            for f in sorted(bad_type_ignore_files)[:10]:
-                print(f"    - {f}")
-            if len(bad_type_ignore_files) > 10:
-                print(f"    ... and {len(bad_type_ignore_files) - 10} more")
-            print()
-
-        if bare_except_files:
-            print("  Files with bare except:")
-            for f in sorted(bare_except_files)[:10]:
-                print(f"    - {f}")
-            if len(bare_except_files) > 10:
-                print(f"    ... and {len(bare_except_files) - 10} more")
-            print()
-
-        if dup_files:
-            print("  Duplicate code blocks (top 10):")
-            for block_preview, locations in dup_files[:10]:
-                # Group by file
-                by_file: dict[str, list[str]] = {}
-                for f, rng in locations:
-                    if f not in by_file:
-                        by_file[f] = []
-                    by_file[f].append(rng)
-                parts = [f"{f}: {', '.join(rngs)}" for f, rngs in by_file.items()]
-                print(f"    - [{block_preview}]")
-                for part in parts:
-                    print(f"        {part}")
-            print()
-
-        print("  WARNING: This is a custom heuristic. Score may not reflect")
-        print("           actual type safety. Review individual cases manually.")
-        print(f"{'=' * 60}\n")
-
-        # Emit warning level based on score
-        if score < 60:
-            pytest.fail(
-                f"Type safety score too low: {score}/100 (Grade: {_get_grade(score)})"
-            )
-        elif score < 80:
-            pytest.skip(
-                f"Type safety score below target: {score}/100 (Grade: {_get_grade(score)})"
-            )
+    def test_type_safety_score(self) -> None:
+        result = _scan_for_patterns()
+        report = _format_report(result)
+        print(report)
+        assert not result.errors, report
+        assessment = result.assessment
+        assert assessment is not None, report
+        assert result.score >= MIN_SCORE, report
+        assert assessment.passes, report

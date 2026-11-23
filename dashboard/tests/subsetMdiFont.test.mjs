@@ -1,18 +1,37 @@
+// @vitest-environment node
 import assert from "node:assert/strict";
-import { mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import test from "node:test";
+import { test } from "vitest";
 
 import {
   collectFiles,
   extractUtilityCss,
+  formatGeneratedCss,
   ICON_CLASS_PATTERN,
   parseIconCodepoints,
   REQUIRED_ICONS,
   resolveUsedIcons,
   scanUsedIcons,
 } from "../scripts/subset-mdi-font.mjs";
+
+test("generated CSS formatting preserves glyphs, font sources, and utility rules", () => {
+  const css = `@font-face { font-family: "Material Design Icons"; src: url("./font.woff2") format("woff2"), url("./font.woff") format("woff"); }
+.mdi-home::before { content: "\\F02DC"; }
+.mdi-close::before { content: "\\F0156"; }
+.mdi-18px.mdi-set, .mdi-18px.mdi:before { font-size: 18px; }
+@keyframes mdi-spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+`;
+  const formatted = formatGeneratedCss(css);
+  assert.notEqual(formatted, css);
+  assert.equal(formatGeneratedCss(formatted), formatted);
+  assert.deepEqual(parseIconCodepoints(formatted), parseIconCodepoints(css));
+  assert.match(formatted, /url\("\.\/font\.woff2"\) format\("woff2"\)/);
+  assert.match(formatted, /url\("\.\/font\.woff"\) format\("woff"\)/);
+  assert.match(formatted, /\.mdi-18px\.mdi-set,\s*\.mdi-18px\.mdi:before\s*\{\s*font-size: 18px;/);
+  assert.match(formatted, /transform: rotate\(360deg\)/);
+});
 
 // ── Helper: create a temporary directory tree for file-system tests ─────────
 
@@ -195,30 +214,7 @@ test("resolveUsedIcons returns all missing when iconMap is empty", () => {
 // ── extractUtilityCss ───────────────────────────────────────────────────────
 
 test("extractUtilityCss removes icon definitions and keeps utility rules", () => {
-  const css = `
-@font-face {
-  font-family: "Material Design Icons";
-  src: url("../fonts/materialdesignicons-webfont.woff2") format("woff2");
-}
-
-.mdi:before,
-.mdi-set {
-  display: inline-block;
-  font: normal normal normal 24px/1 "Material Design Icons";
-}
-
-.mdi-home::before { content: "\\F02DC"; }
-.mdi-close::before { content: "\\F0156"; }
-
-.mdi-spin:before {
-  animation: mdi-spin 2s infinite linear;
-}
-
-.mdi-18px.mdi-set, .mdi-18px.mdi:before {
-  font-size: 18px;
-}
-/*# sourceMappingURL=materialdesignicons.css.map */
-`;
+  const css = readFileSync(new URL("./fixtures/mdi-with-source-map.css.txt", import.meta.url), "utf8");
 
   const result = extractUtilityCss(css, ICON_CLASS_PATTERN);
 

@@ -2,6 +2,9 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Depends, Query, Request
 
+from astrbot.dashboard.api.payloads import json_or_empty as _json_or_empty
+from astrbot.dashboard.api.payloads import model_dict as _model_dict
+from astrbot.dashboard.api.payloads import required_text as _required_text
 from astrbot.dashboard.responses import error, ok
 from astrbot.dashboard.schemas import (
     EnabledPatch,
@@ -25,29 +28,6 @@ require_provider_scope = ScopeDependency("provider")
 
 def get_service(request: Request) -> ProviderConfigService:
     return request.app.state.services.providers
-
-
-async def _json_or_empty(request: Request) -> dict:
-    try:
-        data = await request.json()
-    except Exception:
-        return {}
-    return data if isinstance(data, dict) else {}
-
-
-def _required_text(value: object, name: str) -> str:
-    text = str(value or "").strip()
-    if not text:
-        raise ValueError(f"Missing key: {name}")
-    return text
-
-
-def _model_dict(payload) -> dict:
-    if payload is None:
-        return {}
-    if hasattr(payload, "model_dump"):
-        return payload.model_dump(exclude_none=True)
-    return payload if isinstance(payload, dict) else {}
 
 
 def _config_from_body(body: dict) -> dict:

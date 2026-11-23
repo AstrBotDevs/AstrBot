@@ -1,7 +1,6 @@
 import asyncio
 import base64
 import binascii
-import copy
 import inspect
 import json
 import random
@@ -10,14 +9,14 @@ import uuid
 from collections.abc import AsyncGenerator
 from io import BytesIO
 from pathlib import Path, PurePath
-from typing import Any, Literal, cast
+from typing import Any, Literal, TypedDict, cast
 from urllib.parse import unquote, urlparse
 
 import anyio
-import httpx
-from openai import AsyncAzureOpenAI, AsyncOpenAI
+from openai import AsyncAzureOpenAI, AsyncOpenAI, DefaultAsyncHttpxClient
 from openai._exceptions import NotFoundError
 from openai.lib.streaming.chat._completions import ChatCompletionStreamState
+from openai.types.chat import ChatCompletionMessageFunctionToolCall
 from openai.types.chat.chat_completion import ChatCompletion
 from openai.types.chat.chat_completion_chunk import ChatCompletionChunk
 from openai.types.completion_usage import CompletionUsage
@@ -38,6 +37,7 @@ from astrbot.core.agent.tool import ToolSet
 from astrbot.core.exceptions import EmptyModelOutputError
 from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.provider.entities import LLMResponse, TokenUsage, ToolCallsResult
+from astrbot.core.provider.media import initial_text_content
 from astrbot.core.provider.register import register_provider_adapter
 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
 from astrbot.core.utils.io import download_file
@@ -49,7 +49,12 @@ from astrbot.core.utils.network_utils import (
 )
 from astrbot.core.utils.string_utils import normalize_and_dedupe_strings
 
+from ..headers import build_conversation_headers
 from .request_retry import retry_provider_request
+
+
+class _AzureEndpointOptions(TypedDict, total=False):
+    base_url: str
 
 
 @register_provider_adapter(
@@ -464,17 +469,12 @@ class ProviderOpenAIOfficial(Provider):
             image_fallback_used,
         )
 
-    def _create_http_client(self, provider_config: dict) -> httpx.AsyncClient:
-        """创建带代理的 HTTP 客户端"""
+    def _create_http_client(self, provider_config: dict) -> DefaultAsyncHttpxClient:
+        """Use the SDK's HTTP backend while retaining shared TLS/proxy options."""
         proxy = provider_config.get("proxy", "")
-        httpx_module: Any = httpx
-        try:
-            from openai import _base_client as openai_base_client
-
-            httpx_module = getattr(openai_base_client, "httpx", httpx)
-        except ImportError:
-            pass
-        return create_proxy_client("OpenAI", proxy, httpx_module=httpx_module)
+        return create_proxy_client(
+            "OpenAI", proxy, client_factory=DefaultAsyncHttpxClient
+        )
 
     def __init__(self, provider_config, provider_settings) -> None:
         super().__init__(provider_config, provider_settings)
@@ -482,34 +482,37 @@ class ProviderOpenAIOfficial(Provider):
         self.api_keys: list = super().get_keys()
         self.chosen_api_key = self.api_keys[0] if len(self.api_keys) > 0 else None
         self.timeout = provider_config.get("timeout", 120)
-        self.custom_headers = provider_config.get("custom_headers", {})
+        self.custom_headers = self.request_headers
         if isinstance(self.timeout, str):
             self.timeout = int(self.timeout)
-
-        if not isinstance(self.custom_headers, dict) or not self.custom_headers:
-            self.custom_headers = None
-        else:
-            for key in self.custom_headers:
-                self.custom_headers[key] = str(self.custom_headers[key])
 
         self.client: AsyncAzureOpenAI | AsyncOpenAI
         if "api_version" in provider_config:
             # Using Azure OpenAI API
+            azure_options: _AzureEndpointOptions = {}
+            if api_base := provider_config.get("api_base"):
+                azure_options["base_url"] = api_base
             self.client = AsyncAzureOpenAI(
                 api_key=self.chosen_api_key,
                 api_version=provider_config.get("api_version", None),
                 default_headers=self.custom_headers,
-                base_url=provider_config.get("api_base", ""),
                 timeout=self.timeout,
+                # Retry is handled by retry_provider_request(); disable the
+                # SDK built-in retry to avoid stacking request attempts.
+                max_retries=0,
                 http_client=self._create_http_client(provider_config),
+                **azure_options,
             )
         else:
             # Using OpenAI Official API
             self.client = AsyncOpenAI(
                 api_key=self.chosen_api_key,
-                base_url=provider_config.get("api_base", None),
+                base_url=provider_config.get("api_base") or None,
                 default_headers=self.custom_headers,
                 timeout=self.timeout,
+                # Retry is handled by retry_provider_request(); disable the
+                # SDK built-in retry to avoid stacking request attempts.
+                max_retries=0,
                 http_client=self._create_http_client(provider_config),
             )
 
@@ -656,13 +659,9 @@ class ProviderOpenAIOfficial(Provider):
             )
         payloads["messages"] = final
 
-    async def _query(
-        self,
-        payloads: dict,
-        tools: ToolSet | None,
-        *,
-        request_max_retries: int | None = None,
-    ) -> LLMResponse:
+    @staticmethod
+    def _apply_chat_tools(payloads: dict, tools: ToolSet | None) -> None:
+        """Attach function definitions with model-specific parameter handling."""
         if tools:
             model = payloads.get("model", "").lower()
             omit_empty_param_field = "gemini" in model
@@ -673,23 +672,33 @@ class ProviderOpenAIOfficial(Provider):
                 payloads["tools"] = tool_list
                 payloads["tool_choice"] = payloads.get("tool_choice", "auto")
 
+    def _extract_extra_body(self, payloads: dict) -> dict:
+        """Move non-SDK parameters out of the request keyword arguments."""
+        extra_body = {}
+        for key in list(payloads):
+            if key not in self.default_params:
+                extra_body[key] = payloads.pop(key)
+        return extra_body
+
+    async def _query(
+        self,
+        payloads: dict,
+        tools: ToolSet | None,
+        *,
+        request_max_retries: int | None = None,
+        conversation_id: str | None = None,
+    ) -> LLMResponse:
+        self._apply_chat_tools(payloads, tools)
+
         # 不在默认参数中的参数放在 extra_body 中
         extra_body = {}
-        to_del = []
-        for key in payloads:
-            if key not in self.default_params:
-                extra_body[key] = payloads[key]
-                to_del.append(key)
-        for key in to_del:
-            del payloads[key]
+        extra_body.update(self._extract_extra_body(payloads))
 
         # 读取并合并 custom_extra_body 配置
         custom_extra_body = self.provider_config.get("custom_extra_body", {})
         if isinstance(custom_extra_body, dict):
             extra_body.update(custom_extra_body)
         self._apply_provider_specific_request_overrides(payloads, extra_body)
-
-        model = payloads.get("model", "").lower()
 
         self._sanitize_assistant_messages(payloads)
 
@@ -699,6 +708,7 @@ class ProviderOpenAIOfficial(Provider):
                 **payloads,
                 stream=False,
                 extra_body=extra_body,
+                extra_headers=build_conversation_headers(conversation_id),
             ),
             retry_rate_limits=False,
             max_attempts=request_max_retries,
@@ -721,17 +731,10 @@ class ProviderOpenAIOfficial(Provider):
         tools: ToolSet | None,
         *,
         request_max_retries: int | None = None,
+        conversation_id: str | None = None,
     ) -> AsyncGenerator[LLMResponse, None]:
         """流式查询API,逐步返回结果"""
-        if tools:
-            model = payloads.get("model", "").lower()
-            omit_empty_param_field = "gemini" in model
-            tool_list = tools.get_func_desc_openai_style(
-                omit_empty_parameter_field=omit_empty_param_field,
-            )
-            if tool_list:
-                payloads["tools"] = tool_list
-                payloads["tool_choice"] = payloads.get("tool_choice", "auto")
+        self._apply_chat_tools(payloads, tools)
 
         # 不在默认参数中的参数放在 extra_body 中
         extra_body = {}
@@ -741,13 +744,7 @@ class ProviderOpenAIOfficial(Provider):
         if isinstance(custom_extra_body, dict):
             extra_body.update(custom_extra_body)
 
-        to_del = []
-        for key in payloads:
-            if key not in self.default_params:
-                extra_body[key] = payloads[key]
-                to_del.append(key)
-        for key in to_del:
-            del payloads[key]
+        extra_body.update(self._extract_extra_body(payloads))
         self._apply_provider_specific_request_overrides(payloads, extra_body)
 
         self._sanitize_assistant_messages(payloads)
@@ -758,6 +755,7 @@ class ProviderOpenAIOfficial(Provider):
                 **payloads,
                 stream=True,
                 extra_body=extra_body,
+                extra_headers=build_conversation_headers(conversation_id),
                 stream_options={"include_usage": True},
             ),
             retry_rate_limits=False,
@@ -987,17 +985,19 @@ class ProviderOpenAIOfficial(Provider):
         # parse the text completion
         if choice.message.content is not None:
             completion_text = self._normalize_content(choice.message.content)
-            # specially, some providers may set <think> tags around reasoning content in the completion text,
+            # Some compatible providers wrap reasoning in <think> or <thinking> tags.
             # we use regex to remove them, and store then in reasoning_content field
-            reasoning_pattern = re.compile(r"<think>(.*?)</think>", re.DOTALL)
+            reasoning_pattern = re.compile(r"<(think|thinking)>(.*?)</\1>", re.DOTALL)
             matches = reasoning_pattern.findall(completion_text)
             if matches:
                 llm_response.reasoning_content = "\n".join(
-                    [match.strip() for match in matches],
+                    [match[1].strip() for match in matches],
                 )
                 completion_text = reasoning_pattern.sub("", completion_text).strip()
-            # Also clean up orphan </think> tags that may leak from some models
-            completion_text = re.sub(r"</think>\s*$", "", completion_text).strip()
+            # Also clean up trailing reasoning closing tags from some models.
+            completion_text = re.sub(
+                r"</(?:think|thinking)>\s*$", "", completion_text
+            ).strip()
             llm_response.result_chain = MessageChain().message(completion_text)
         elif refusal := getattr(choice.message, "refusal", None):
             refusal_text = self._normalize_content(refusal)
@@ -1019,15 +1019,19 @@ class ProviderOpenAIOfficial(Provider):
             for tool_call in choice.message.tool_calls:
                 if isinstance(tool_call, str):
                     # workaround for #1359
-                    tool_call = json.loads(tool_call)
+                    tool_call = (
+                        ChatCompletionMessageFunctionToolCall.model_validate_json(
+                            tool_call
+                        )
+                    )
                 if tools is None:
                     # 工具集未提供
                     # Should be unreachable
                     raise Exception("工具集未提供")
 
-                if tool_call.type == "function":
+                if isinstance(tool_call, ChatCompletionMessageFunctionToolCall):
                     # workaround for #1454
-                    func = tool_call.function  # type: ignore[union-attr]
+                    func = tool_call.function
                     if isinstance(func.arguments, str):
                         try:
                             args = json.loads(func.arguments)
@@ -1093,33 +1097,17 @@ class ProviderOpenAIOfficial(Provider):
         **kwargs,
     ) -> tuple:
         """准备聊天所需的有效载荷和上下文"""
-        if contexts is None:
-            contexts = []
-        new_record = None
-        if prompt is not None:
-            new_record = await self.assemble_context(
-                prompt or "",
-                image_urls,
-                audio_urls,
-                extra_user_content_parts,
-            )
-        context_query = copy.deepcopy(self._ensure_message_to_dicts(contexts))
-        if new_record:
-            context_query.append(new_record)
-        if system_prompt:
-            context_query.insert(0, {"role": "system", "content": system_prompt})
-
-        for part in context_query:
-            if "_no_save" in part:
-                del part["_no_save"]
-
-        # tool calls result
-        if tool_calls_result:
-            if isinstance(tool_calls_result, ToolCallsResult):
-                context_query.extend(tool_calls_result.to_openai_messages())
-            else:
-                for tcr in tool_calls_result:
-                    context_query.extend(tcr.to_openai_messages())
+        context_query = await self._prepare_chat_history(
+            self.assemble_context,
+            prompt,
+            image_urls,
+            audio_urls,
+            contexts,
+            system_prompt,
+            tool_calls_result,
+            extra_user_content_parts,
+            deep_copy=True,
+        )
 
         if self._context_contains_image(context_query):
             context_query = await self._materialize_context_image_parts(context_query)
@@ -1336,6 +1324,7 @@ class ProviderOpenAIOfficial(Provider):
         request_max_retries: int | None = None,
         **kwargs,
     ) -> LLMResponse:
+        conversation_id = kwargs.pop("conversation_id", None)
         payloads, context_query = await self._prepare_chat_payload(
             prompt,
             image_urls,
@@ -1361,10 +1350,11 @@ class ProviderOpenAIOfficial(Provider):
         for retry_cnt in range(max_retries):
             try:
                 self.client.api_key = chosen_key
+                query_kwargs = self._query_options(request_max_retries, conversation_id)
                 llm_response = await self._query(
                     payloads,
                     func_tool,
-                    request_max_retries=request_max_retries,
+                    **query_kwargs,
                 )
                 break
             except Exception as e:
@@ -1391,8 +1381,8 @@ class ProviderOpenAIOfficial(Provider):
                 if success:
                     break
 
-        if retry_cnt == max_retries - 1 or llm_response is None:
-            logger.error(f"API 调用失败,重试 {max_retries} 次仍然失败｡")
+        if llm_response is None:
+            logger.error(f"API 调用失败，重试 {max_retries} 次仍然失败。")
             if last_exception is None:
                 raise Exception("未知错误")
             raise last_exception
@@ -1414,7 +1404,8 @@ class ProviderOpenAIOfficial(Provider):
         request_max_retries: int | None = None,
         **kwargs,
     ) -> AsyncGenerator[LLMResponse, None]:
-        """流式对话,与服务商交互并逐步返回结果"""
+        """流式对话，与服务商交互并逐步返回结果"""
+        conversation_id = kwargs.pop("conversation_id", None)
         payloads, context_query = await self._prepare_chat_payload(
             prompt,
             image_urls,
@@ -1438,10 +1429,11 @@ class ProviderOpenAIOfficial(Provider):
         for retry_cnt in range(max_retries):
             try:
                 self.client.api_key = chosen_key
+                query_kwargs = self._query_options(request_max_retries, conversation_id)
                 async for response in self._query_stream(
                     payloads,
                     func_tool,
-                    request_max_retries=request_max_retries,
+                    **query_kwargs,
                 ):
                     yield response
                 break
@@ -1512,21 +1504,12 @@ class ProviderOpenAIOfficial(Provider):
     ) -> dict:
         """组装成符合 OpenAI 格式的 role 为 user 的消息段"""
         # 构建内容块列表
-        content_blocks = []
-
-        # 1. 用户原始发言(OpenAI 建议:用户发言在前)
-        if text:
-            content_blocks.append({"type": "text", "text": text})
-        elif image_urls:
-            # 如果没有文本但有图片，添加占位文本
-            content_blocks.append({"type": "text", "text": "[Image]"})
-        elif audio_urls:
-            content_blocks.append({"type": "text", "text": "[Audio]"})
-        elif extra_user_content_parts:
-            # 如果只有额外内容块,也需要添加占位文本
-            content_blocks.append({"type": "text", "text": " "})
-
-        # 2. 额外的内容块(系统提醒､指令等)
+        content_blocks = initial_text_content(
+            text,
+            has_images=bool(image_urls),
+            has_audio=bool(audio_urls),
+            has_extra_parts=bool(extra_user_content_parts),
+        )
         if extra_user_content_parts:
             for part in extra_user_content_parts:
                 if isinstance(part, TextPart):

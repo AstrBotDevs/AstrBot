@@ -5,21 +5,20 @@ get_using_provider, _resolve_env_key_list, get_provider_config_by_id,
 and related helper methods.
 """
 
-import os
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
 from astrbot.core.provider.entities import ProviderType
 from astrbot.core.provider.manager import ProviderManager
 from astrbot.core.provider.provider import (
+    DecisionProvider,
     EmbeddingProvider,
     Provider,
     RerankProvider,
     STTProvider,
     TTSProvider,
 )
-
 
 # =========================================================================
 # Fixtures
@@ -34,6 +33,7 @@ def mock_acm():
         "default": {
             "provider": [],
             "provider_sources": [],
+            "agent": {"runtime": "astrbot", "config": {"model": {"provider_id": ""}}},
             "provider_settings": {"default_provider_id": ""},
             "provider_stt_settings": {},
             "provider_tts_settings": {},
@@ -61,7 +61,7 @@ def mock_persona_mgr():
 
 @pytest.fixture
 def manager(mock_acm, mock_db, mock_persona_mgr):
-    with patch("astrbot.core.provider.manager.llm_tools") as mock_llm_tools:
+    with patch("astrbot.core.provider.manager.llm_tools"):
         mgr = ProviderManager(
             acm=mock_acm,
             db_helper=mock_db,
@@ -87,6 +87,7 @@ class TestProviderManagerInit:
         assert manager.tts_provider_insts == []
         assert manager.embedding_provider_insts == []
         assert manager.rerank_provider_insts == []
+        assert manager.decision_provider_insts == []
         assert manager.inst_map == {}
         assert manager.curr_provider_inst is None
         assert manager._provider_change_callback is None
@@ -150,10 +151,15 @@ class TestProviderManagerCallbacks:
         cb.assert_called_once_with("p1", ProviderType.CHAT_COMPLETION, "umo_1")
 
     def test_notify_provider_changed_swallows_callback_error(self, manager):
-        cb = MagicMock(side_effect=ValueError("oops"))
-        manager.set_provider_change_callback(cb)
-        # Should not raise
+        callback = MagicMock(side_effect=ValueError("callback failed"))
+        hook = MagicMock()
+        manager.set_provider_change_callback(callback)
+        manager.register_provider_change_hook(hook)
+
         manager._notify_provider_changed("p1", ProviderType.CHAT_COMPLETION, None)
+
+        callback.assert_called_once_with("p1", ProviderType.CHAT_COMPLETION, None)
+        hook.assert_called_once_with("p1", ProviderType.CHAT_COMPLETION, None)
 
     def test_notify_provider_changed_calls_hooks(self, manager):
         hook1 = MagicMock()
@@ -173,10 +179,15 @@ class TestProviderManagerCallbacks:
         assert fn.call_count == 1
 
     def test_notify_provider_changed_swallows_hook_error(self, manager):
-        hook = MagicMock(side_effect=RuntimeError("hook failed"))
-        manager.register_provider_change_hook(hook)
-        # Should not raise
+        first = MagicMock(side_effect=RuntimeError("hook failed"))
+        second = MagicMock()
+        manager.register_provider_change_hook(first)
+        manager.register_provider_change_hook(second)
+
         manager._notify_provider_changed("p1", ProviderType.CHAT_COMPLETION, None)
+
+        first.assert_called_once_with("p1", ProviderType.CHAT_COMPLETION, None)
+        second.assert_called_once_with("p1", ProviderType.CHAT_COMPLETION, None)
 
 
 # =========================================================================
@@ -206,14 +217,21 @@ class TestProviderManagerLookups:
         result = manager.get_using_provider(ProviderType.CHAT_COMPLETION)
         assert result is fake_provider
 
-    def test_get_using_provider_chat_completion_by_id(self, manager, mock_acm):
+    @pytest.mark.asyncio
+    async def test_get_using_provider_chat_completion_by_id(self, manager, mock_acm):
         fake_provider = MagicMock(spec=Provider)
         manager.inst_map["default_prov"] = fake_provider
         mock_acm.get_conf.return_value = {
-            "provider_settings": {"default_provider_id": "default_prov"}
+            "agent": {
+                "runtime": "astrbot",
+                "config": {"model": {"provider_id": "default_prov"}},
+            }
         }
-        result = manager.get_using_provider(ProviderType.CHAT_COMPLETION)
+
+        result = await manager.get_using_provider_async(ProviderType.CHAT_COMPLETION)
+
         assert result is fake_provider
+        mock_acm.get_conf.assert_called_once_with(None)
 
     def test_get_using_provider_chat_completion_no_instances(self, manager, mock_acm):
         mock_acm.get_conf.return_value = {
@@ -223,16 +241,12 @@ class TestProviderManagerLookups:
         assert result is None
 
     def test_get_using_provider_stt_disabled_returns_none(self, manager, mock_acm):
-        mock_acm.get_conf.return_value = {
-            "provider_stt_settings": {"enable": False}
-        }
+        mock_acm.get_conf.return_value = {"provider_stt_settings": {"enable": False}}
         result = manager.get_using_provider(ProviderType.SPEECH_TO_TEXT)
         assert result is None
 
     def test_get_using_provider_tts_disabled_returns_none(self, manager, mock_acm):
-        mock_acm.get_conf.return_value = {
-            "provider_tts_settings": {"enable": False}
-        }
+        mock_acm.get_conf.return_value = {"provider_tts_settings": {"enable": False}}
         result = manager.get_using_provider(ProviderType.TEXT_TO_SPEECH)
         assert result is None
 
@@ -240,19 +254,23 @@ class TestProviderManagerLookups:
         with pytest.raises(ValueError, match="Unknown provider type"):
             manager.get_using_provider(ProviderType.EMBEDDING)
 
-    def test_get_using_provider_with_umo(self, manager, mock_acm):
+    @pytest.mark.asyncio
+    async def test_get_using_provider_with_umo(self, manager, mock_acm):
         fake_provider = MagicMock(spec=Provider)
         manager.inst_map["umo_prov"] = fake_provider
         mock_acm.get_conf.return_value = {
-            "provider_settings": {"default_provider_id": None}
+            "agent": {
+                "runtime": "astrbot",
+                "config": {"model": {"provider_id": "umo_prov"}},
+            }
         }
-        with patch("astrbot.core.provider.manager.sp") as mock_sp:
-            mock_sp.get.return_value = "umo_prov"
-            result = manager.get_using_provider(
-                ProviderType.CHAT_COMPLETION, umo="session_1"
-            )
-            assert result is fake_provider
-            mock_sp.get.assert_called_once()
+
+        result = await manager.get_using_provider_async(
+            ProviderType.CHAT_COMPLETION, umo="session_1"
+        )
+
+        assert result is fake_provider
+        mock_acm.get_conf.assert_called_once_with("session_1")
 
 
 # =========================================================================
@@ -266,35 +284,38 @@ class TestResolveEnvKeyList:
         result = manager._resolve_env_key_list(config)
         assert result["key"] == ["sk-abc", "sk-def"]
 
-    def test_env_var_resolved(self, manager):
-        os.environ["MY_API_KEY"] = "sk-from-env"
-        config = {"key": ["$MY_API_KEY"], "id": "prov1"}
+    def test_env_var_resolved(self, manager, monkeypatch):
+        monkeypatch.setenv("PROVIDER_TEST_API_KEY", "sk-from-env")
+        config = {"key": ["$PROVIDER_TEST_API_KEY"], "id": "prov1"}
+
         result = manager._resolve_env_key_list(config)
+
         assert result["key"] == ["sk-from-env"]
-        os.environ.pop("MY_API_KEY", None)
 
-    def test_env_var_braces(self, manager):
-        os.environ["SECRET"] = "very_secret"
-        config = {"key": ["${SECRET}"], "id": "prov1"}
+    def test_env_var_braces(self, manager, monkeypatch):
+        monkeypatch.setenv("PROVIDER_TEST_SECRET", "very_secret")
+        config = {"key": ["${PROVIDER_TEST_SECRET}"], "id": "prov1"}
+
         result = manager._resolve_env_key_list(config)
+
         assert result["key"] == ["very_secret"]
-        os.environ.pop("SECRET", None)
 
-    def test_env_var_not_set_logs_warning(self, manager):
-        # Ensure env var does not exist
-        os.environ.pop("UNSET_VAR", None)
-        config = {"key": ["$UNSET_VAR"], "id": "prov1"}
-        with patch("astrbot.core.provider.manager.logger") as mock_logger:
+    def test_env_var_not_set_logs_warning(self, manager, monkeypatch):
+        monkeypatch.delenv("PROVIDER_TEST_MISSING", raising=False)
+        config = {"key": ["$PROVIDER_TEST_MISSING"], "id": "prov1"}
+        with patch("astrbot.core.provider.manager.logger") as logger:
             result = manager._resolve_env_key_list(config)
-            assert result["key"] == [""]
-            mock_logger.warning.assert_called_once()
 
-    def test_env_var_mixed_list(self, manager):
-        os.environ["K1"] = "val1"
-        config = {"key": ["$K1", "static_key"], "id": "prov1"}
+        assert result["key"] == [""]
+        logger.warning.assert_called_once()
+
+    def test_env_var_mixed_list(self, manager, monkeypatch):
+        monkeypatch.setenv("PROVIDER_TEST_MIXED", "val1")
+        config = {"key": ["$PROVIDER_TEST_MIXED", "static_key"], "id": "prov1"}
+
         result = manager._resolve_env_key_list(config)
+
         assert result["key"] == ["val1", "static_key"]
-        os.environ.pop("K1", None)
 
     def test_non_list_key_passthrough(self, manager):
         config = {"key": "not_a_list"}
@@ -340,18 +361,29 @@ class TestGetProviderConfigById:
 
     def test_merged_flag(self, manager):
         manager.providers_config = [
-            {"id": "p1", "type": "openai", "provider_source_id": "src1"}
+            {"id": "p1", "provider_source_id": "src1", "model": "chosen-model"}
         ]
         manager.provider_sources_config = [
-            {"id": "src1", "base_url": "https://api.openai.com"}
+            {
+                "id": "src1",
+                "type": "openai",
+                "model": "source-model",
+                "base_url": "https://provider.invalid",
+            }
         ]
-        with patch.object(
-            manager,
-            "get_merged_provider_config",
-            return_value={"id": "p1", "type": "openai", "base_url": "https://api.openai.com"},
-        ):
-            result = manager.get_provider_config_by_id("p1", merged=True)
-            assert result["base_url"] == "https://api.openai.com"
+
+        result = manager.get_provider_config_by_id("p1", merged=True)
+
+        assert result == {
+            "id": "p1",
+            "provider_source_id": "src1",
+            "type": "openai",
+            "model": "chosen-model",
+            "base_url": "https://provider.invalid",
+        }
+        result["model"] = "caller-mutation"
+        assert manager.providers_config[0]["model"] == "chosen-model"
+        assert manager.provider_sources_config[0]["model"] == "source-model"
 
     def test_empty_configs(self, manager):
         result = manager.get_provider_config_by_id("p1")
@@ -379,18 +411,22 @@ class TestProviderManagerInstances:
         assert all_insts[0] is fp
 
     def test_get_all_provider_instances_returns_all_types(self, manager):
-        fp = MagicMock(spec=Provider)
-        stt = MagicMock(spec=STTProvider)
-        tts = MagicMock(spec=TTSProvider)
-        emb = MagicMock(spec=EmbeddingProvider)
-        rerank = MagicMock(spec=RerankProvider)
-        manager.provider_insts = [fp]
-        manager.stt_provider_insts = [stt]
-        manager.tts_provider_insts = [tts]
-        manager.embedding_provider_insts = [emb]
-        manager.rerank_provider_insts = [rerank]
-        all_insts = manager._get_all_provider_instances()
-        assert len(all_insts) == 5
+        pairs = [
+            ("provider_insts", Provider),
+            ("stt_provider_insts", STTProvider),
+            ("tts_provider_insts", TTSProvider),
+            ("embedding_provider_insts", EmbeddingProvider),
+            ("rerank_provider_insts", RerankProvider),
+            ("decision_provider_insts", DecisionProvider),
+        ]
+        expected = []
+        for index, (attribute, base) in enumerate(pairs):
+            instance = MagicMock(spec=base)
+            setattr(manager, attribute, [instance])
+            manager.inst_map[str(index)] = instance
+            expected.append(instance)
+
+        assert manager._get_all_provider_instances() == expected
 
     def test_clear_loaded_instances(self, manager):
         manager.provider_insts = [MagicMock(spec=Provider)]
@@ -404,6 +440,7 @@ class TestProviderManagerInstances:
         assert manager.tts_provider_insts == []
         assert manager.embedding_provider_insts == []
         assert manager.rerank_provider_insts == []
+        assert manager.decision_provider_insts == []
         assert manager.inst_map == {}
         assert manager.curr_provider_inst is None
         assert manager.curr_stt_provider_inst is None

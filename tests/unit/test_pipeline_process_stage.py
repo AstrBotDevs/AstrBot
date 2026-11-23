@@ -11,12 +11,11 @@ from astrbot.core.provider.entities import ProviderRequest
 
 
 @pytest.fixture(autouse=True)
-def _reload_stage_module():
-    """Reload the stage module to avoid stale imports from test_pipeline_bootstrap."""
-    import importlib
-    import astrbot.core.pipeline.process_stage.stage as stage_mod
-    importlib.reload(stage_mod)
-    globals()["ProcessStage"] = stage_mod.ProcessStage
+def isolated_session_waiters(monkeypatch):
+    from astrbot.core.pipeline.process_stage import stage as stage_module
+
+    monkeypatch.setattr(stage_module, "FILTERS", [])
+    monkeypatch.setattr(stage_module, "USER_SESSIONS", {})
 
 
 @pytest.fixture
@@ -24,7 +23,11 @@ def mock_context():
     """Create a mock PipelineContext."""
     ctx = MagicMock()
     ctx.astrbot_config = {
-        "provider_settings": {"enable": True, "wake_prefix": "", "agent_runner_type": "local"},
+        "provider_settings": {
+            "enable": True,
+            "wake_prefix": "",
+            "agent_runner_type": "local",
+        },
         "wake_prefix": ["bot"],
     }
     ctx.plugin_manager = MagicMock()
@@ -37,6 +40,7 @@ def mock_event():
     """Create a mock AstrMessageEvent."""
     event = MagicMock()
     event.get_extra.return_value = None
+    event.get_ui_interaction.return_value = None
     event.is_stopped.return_value = False
     event._has_send_oper = False
     event.is_at_or_wake_command = True
@@ -61,7 +65,6 @@ def stage(mock_context):
     stage.star_request_sub_stage.process = _empty_async_gen
 
     stage.ctx = mock_context
-    stage.config = mock_context.astrbot_config
     stage.plugin_manager = mock_context.plugin_manager
     stage.sdk_plugin_bridge = None
     return stage
@@ -91,7 +94,7 @@ class TestProcessStageInitialize:
             await stage.initialize(mock_context)
 
         assert stage.ctx is mock_context
-        assert stage.config is mock_context.astrbot_config
+        assert stage.ctx.astrbot_config is mock_context.astrbot_config
         assert stage.plugin_manager is mock_context.plugin_manager
 
     @pytest.mark.asyncio
@@ -114,10 +117,10 @@ class TestProcessStageInitialize:
             mock_star_cls.return_value = mock_star
             await stage.initialize(mock_context)
 
-        assert hasattr(stage, "agent_sub_stage")
-        assert hasattr(stage, "star_request_sub_stage")
-        assert stage.agent_sub_stage is not None
-        assert stage.star_request_sub_stage is not None
+        assert stage.agent_sub_stage is mock_agent
+        assert stage.star_request_sub_stage is mock_star
+        mock_agent.initialize.assert_awaited_once_with(mock_context)
+        mock_star.initialize.assert_awaited_once_with(mock_context)
 
     @pytest.mark.asyncio
     async def test_initialize_sdk_plugin_bridge_present(self, mock_context):
@@ -140,7 +143,10 @@ class TestProcessStageInitialize:
             mock_star_cls.return_value = mock_star
             await stage.initialize(mock_context)
 
-        assert stage.sdk_plugin_bridge is mock_context.plugin_manager.context.sdk_plugin_bridge
+        assert (
+            stage.sdk_plugin_bridge
+            is mock_context.plugin_manager.context.sdk_plugin_bridge
+        )
 
     @pytest.mark.asyncio
     async def test_initialize_sdk_plugin_bridge_absent(self, mock_context):
@@ -178,7 +184,9 @@ class TestProcessStageProcess:
 
     @pytest.mark.asyncio
     async def test_process_no_activated_handlers_and_no_sdk_bridge(
-        self, stage, mock_event,
+        self,
+        stage,
+        mock_event,
     ):
         """When activated_handlers is None and no sdk bridge, LLM path is reached."""
         mock_event.get_extra.return_value = None
@@ -200,7 +208,9 @@ class TestProcessStageProcess:
 
     @pytest.mark.asyncio
     async def test_process_activated_handlers_with_provider_request(
-        self, stage, mock_event,
+        self,
+        stage,
+        mock_event,
     ):
         """When star_request yields a ProviderRequest, agent_sub_stage is called."""
         mock_event.get_extra.return_value = [MagicMock()]
@@ -223,11 +233,13 @@ class TestProcessStageProcess:
 
         assert len(agent_calls) == 1
         mock_event.set_extra.assert_any_call("provider_request", pr)
-        assert len(results) >= 1
+        assert results == [None]
 
     @pytest.mark.asyncio
     async def test_process_activated_handlers_with_non_provider_request(
-        self, stage, mock_event,
+        self,
+        stage,
+        mock_event,
     ):
         """When star_request yields a non-ProviderRequest, yield directly."""
         mock_event.get_extra.return_value = [MagicMock()]
@@ -240,11 +252,13 @@ class TestProcessStageProcess:
 
         results = await self._collect(stage.process(mock_event))
 
-        assert len(results) >= 1
+        assert results == [None]
 
     @pytest.mark.asyncio
     async def test_process_activated_handlers_provider_request_empty_agent(
-        self, stage, mock_event,
+        self,
+        stage,
+        mock_event,
     ):
         """When agent_sub_stage yields nothing, should still yield once."""
         mock_event.get_extra.return_value = [MagicMock()]
@@ -263,7 +277,7 @@ class TestProcessStageProcess:
 
         results = await self._collect(stage.process(mock_event))
 
-        assert len(results) >= 1
+        assert results == [None]
 
     @pytest.mark.asyncio
     async def test_process_sdk_plugin_bridge_sent_message(self, stage, mock_event):
@@ -278,7 +292,7 @@ class TestProcessStageProcess:
         results = await self._collect(stage.process(mock_event))
 
         # Should have yielded due to sent_message
-        assert len(results) >= 1
+        assert results == [None]
 
     @pytest.mark.asyncio
     async def test_process_sdk_plugin_bridge_stopped(self, stage, mock_event):
@@ -293,11 +307,13 @@ class TestProcessStageProcess:
         results = await self._collect(stage.process(mock_event))
 
         # Should have yielded due to stopped
-        assert len(results) >= 1
+        assert results == [None]
 
     @pytest.mark.asyncio
     async def test_process_sdk_plugin_bridge_none_and_event_has_send_oper(
-        self, stage, mock_event,
+        self,
+        stage,
+        mock_event,
     ):
         """When sdk bridge is None and _has_send_oper is True, skip LLM call."""
         stage.sdk_plugin_bridge = None
@@ -336,7 +352,7 @@ class TestProcessStageProcess:
         results = await self._collect(stage.process(mock_event))
 
         assert len(agent_calls) == 1
-        assert len(results) >= 1
+        assert results == [None]
 
     @pytest.mark.asyncio
     async def test_process_llm_skipped_not_at_wake(self, stage, mock_event):
@@ -350,7 +366,9 @@ class TestProcessStageProcess:
 
     @pytest.mark.asyncio
     async def test_process_llm_skipped_event_stopped_with_result(
-        self, stage, mock_event,
+        self,
+        stage,
+        mock_event,
     ):
         """When event is stopped and effective_result exists, skip LLM call."""
         stage.sdk_plugin_bridge = None
@@ -368,7 +386,9 @@ class TestProcessStageProcess:
 
     @pytest.mark.asyncio
     async def test_process_sdk_bridge_with_effective_methods(
-        self, stage, mock_event,
+        self,
+        stage,
+        mock_event,
     ):
         """When sdk_plugin_bridge has get_effective_* methods, they are used."""
         mock_bridge = MagicMock()
@@ -386,7 +406,9 @@ class TestProcessStageProcess:
 
     @pytest.mark.asyncio
     async def test_process_with_activated_handlers_and_stopped(
-        self, stage, mock_event,
+        self,
+        stage,
+        mock_event,
     ):
         """When event is stopped after star_request processing, stop propagation."""
         mock_event.get_extra.return_value = [MagicMock()]
@@ -405,7 +427,7 @@ class TestProcessStageProcess:
 
         results = await self._collect(stage.process(mock_event))
 
-        assert len(results) >= 1
+        assert results == [None]
 
     @pytest.mark.asyncio
     async def test_process_event_call_llm_false(self, stage, mock_event):
@@ -426,4 +448,4 @@ class TestProcessStageProcess:
 
         # event.call_llm is False, and no sdk_bridge -> should_call_llm = not False = True
         assert agent_called is True
-        assert len(results) >= 1
+        assert results == [None]

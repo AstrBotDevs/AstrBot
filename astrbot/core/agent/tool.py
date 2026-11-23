@@ -1,16 +1,21 @@
 import copy
+import json
 from collections.abc import AsyncGenerator, Awaitable, Callable
-from typing import Any, Generic, TypedDict
+from typing import TYPE_CHECKING, Any, Generic, TypedDict
 
 import jsonschema
 import mcp
 from deprecated import deprecated
 from pydantic import Field, model_validator
 from pydantic.dataclasses import dataclass
+from typing_extensions import TypeVar
 
 from astrbot.core.message.message_event_result import MessageEventResult
 
-from .run_context import ContextWrapper, TContext
+if TYPE_CHECKING:
+    from .run_context import ContextWrapper
+
+TContext = TypeVar("TContext", default=Any)
 
 ParametersType = dict[str, Any]
 ToolExecResult = str | mcp.types.CallToolResult
@@ -33,10 +38,6 @@ class ToolSchema:
     """The description of the tool."""
 
     parameters: ParametersType | None = None
-    """The parameters of the tool, in JSON Schema format."""
-
-    active: bool = True
-    """Whether the tool is active."""
     """The parameters of the tool, in JSON Schema format."""
 
     @model_validator(mode="after")
@@ -76,22 +77,19 @@ class FunctionTool(ToolSchema, Generic[TContext]):
     with a task identifier while the real work continues asynchronously.
     """
     source: str = "plugin"
-    """
-    Origin of this tool: 'plugin' (from star plugins), 'internal' (AstrBot built-in),
-    or 'mcp' (from MCP servers). Used by WebUI for display grouping.
-    """
+    """Origin used to group native, plugin and MCP tools in the dashboard."""
+    execution_timeout: float | None = None
+    """Optional per-call timeout in seconds, overriding the runner's default."""
 
     def __repr__(self) -> str:
         return f"FuncTool(name={self.name}, parameters={self.parameters}, description={self.description})"
 
     async def call(
-        self,
-        context: ContextWrapper[TContext],
-        **kwargs: Any,
+        self, context: "ContextWrapper[TContext]", **kwargs
     ) -> ToolExecResult:
         """Run the tool with the given arguments. The handler field has priority."""
         raise NotImplementedError(
-            "FunctionTool.call() must be implemented by subclasses or set a handler.",
+            "FunctionTool.call() must be implemented by subclasses or set a handler."
         )
 
 
@@ -132,15 +130,6 @@ class ToolSet:
         """Remove a tool by its name."""
         self.tools = [tool for tool in self.tools if tool.name != name]
 
-    def normalize(self) -> None:
-        """Sort tools by name for deterministic serialization.
-
-        This ensures the serialized tool schema sent to the LLM is
-        identical across requests regardless of registration/injection
-        order, enabling LLM provider prefix cache hits.
-        """
-        self.tools.sort(key=lambda t: t.name)
-
     def get_tool(self, name: str) -> FunctionTool | None:
         """Get a tool by its name."""
         for tool in self.tools:
@@ -151,9 +140,9 @@ class ToolSet:
 
     def get_light_tool_set(self) -> "ToolSet":
         """Return a light tool set with only name/description."""
-        light_tools: list[ToolSchema] = []
+        light_tools = []
         for tool in self.tools:
-            if hasattr(tool, "active") and not tool.active:
+            if not getattr(tool, "active", True):
                 continue
             light_params = {
                 "type": "object",
@@ -162,18 +151,18 @@ class ToolSet:
             light_tools.append(
                 FunctionTool(
                     name=tool.name,
-                    description=tool.description,
                     parameters=light_params,
+                    description=tool.description,
                     handler=None,
-                ),
+                )
             )
         return ToolSet(light_tools)
 
     def get_param_only_tool_set(self) -> "ToolSet":
         """Return a tool set with name/parameters only (no description)."""
-        param_tools: list[ToolSchema] = []
+        param_tools = []
         for tool in self.tools:
-            if hasattr(tool, "active") and not tool.active:
+            if not getattr(tool, "active", True):
                 continue
             params = (
                 copy.deepcopy(tool.parameters)
@@ -183,10 +172,10 @@ class ToolSet:
             param_tools.append(
                 FunctionTool(
                     name=tool.name,
-                    description="",
                     parameters=params,
+                    description="",
                     handler=None,
-                ),
+                )
             )
         return ToolSet(param_tools)
 
@@ -194,18 +183,17 @@ class ToolSet:
     def add_func(
         self,
         name: str,
-        func_args: list[ToolArgumentSpec],
+        func_args: list,
         desc: str,
         handler: Callable[..., Awaitable[Any]],
     ) -> None:
         """Add a function tool to the set."""
-        properties: dict[str, dict[str, str]] = {}
         params = {
             "type": "object",  # hard-coded here
-            "properties": properties,
+            "properties": {},
         }
         for param in func_args:
-            properties[param["name"]] = {
+            params["properties"][param["name"]] = {
                 "type": param["type"],
                 "description": param["description"],
             }
@@ -232,37 +220,45 @@ class ToolSet:
         """Get the list of function tools."""
         return [t for t in self.tools if isinstance(t, FunctionTool)]
 
-    def list_tools(self) -> list[FunctionTool]:
-        """Get the list of function tools (alias for func_list)."""
-        return [t for t in self.tools if isinstance(t, FunctionTool)]
-
     def openai_schema(self, omit_empty_parameter_field: bool = False) -> list[dict]:
         """Convert tools to OpenAI API function calling schema format."""
         result = []
-        for tool in self.tools:
-            function_dict: dict[str, Any] = {"name": tool.name}
+        # Stable ordering preserves prompt-cache prefixes for compatible providers.
+        for tool in sorted(self.tools, key=lambda tool: tool.name):
+            func_def = {"type": "function", "function": {"name": tool.name}}
             if tool.description:
-                function_dict["description"] = tool.description
+                func_def["function"]["description"] = tool.description
+
             if tool.parameters is not None:
                 if (
                     tool.parameters and tool.parameters.get("properties")
                 ) or not omit_empty_parameter_field:
-                    function_dict["parameters"] = tool.parameters
-            func_def: dict[str, Any] = {
-                "type": "function",
-                "function": function_dict,
-            }
+                    func_def["function"]["parameters"] = tool.parameters
+
             result.append(func_def)
         return result
 
     def anthropic_schema(self) -> list[dict]:
-        """Convert tools to Anthropic API format."""
+        """Convert tools to Anthropic API format.
+
+        Returns:
+            Tool definitions with object input schemas.
+
+        Raises:
+            ValueError: If a tool explicitly declares a non-object root type.
+        """
         result = []
         for tool in self.tools:
-            input_schema = {"type": "object"}
+            input_schema: dict[str, object] = {"type": "object"}
             if tool.parameters:
-                input_schema["properties"] = tool.parameters.get("properties", {})
-                input_schema["required"] = tool.parameters.get("required", [])
+                if tool.parameters.get("type", "object") != "object":
+                    raise ValueError(
+                        f"Anthropic tool '{tool.name}' input schema must have an object root."
+                    )
+                # Preserve reference targets and all other JSON Schema constraints.
+                input_schema.update(copy.deepcopy(tool.parameters))
+                input_schema.setdefault("properties", {})
+                input_schema.setdefault("required", [])
             tool_def = {"name": tool.name, "input_schema": input_schema}
             if tool.description:
                 tool_def["description"] = tool.description
@@ -326,6 +322,25 @@ class ToolSet:
                 "required",
             }
             result.update({k: schema[k] for k in support_fields if k in schema})
+
+            # Gemini only accepts string enums ("enum: only allowed for STRING
+            # type"). Other fields keep their type, so the model still sends
+            # e.g. an integer, and list the allowed values in the description.
+            if "enum" in result:
+                enum = result.pop("enum")
+                values = [v for v in enum if v is not None]
+                if None in enum:
+                    result["nullable"] = True
+                if result["type"] == "string":
+                    result["enum"] = [
+                        v if isinstance(v, str) else json.dumps(v) for v in values
+                    ]
+                else:
+                    allowed = ", ".join(json.dumps(v) for v in values)
+                    description = result.get("description", "")
+                    result["description"] = (
+                        f"{description}\nAllowed values: {allowed}".strip()
+                    )
 
             if "properties" in schema:
                 properties = {}
@@ -402,3 +417,16 @@ class ToolSet:
 
     def __str__(self) -> str:
         return f"ToolSet(tools={self.tools})"
+
+    def normalize(self) -> None:
+        """Sort tools by name for deterministic serialization.
+
+        This ensures the serialized tool schema sent to the LLM is
+        identical across requests regardless of registration/injection
+        order, enabling LLM provider prefix cache hits.
+        """
+        self.tools.sort(key=lambda t: t.name)
+
+    def list_tools(self) -> list[FunctionTool]:
+        """Get the list of function tools (alias for func_list)."""
+        return [t for t in self.tools if isinstance(t, FunctionTool)]

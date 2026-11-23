@@ -3,10 +3,13 @@
 from __future__ import annotations
 
 import json
+from datetime import UTC
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from astrbot.core import conversation_mgr as conversation_module
+from astrbot.core import session_overrides
 from astrbot.core.conversation_mgr import ConversationManager
 from astrbot.core.db.po import Conversation, ConversationV2
 
@@ -25,7 +28,7 @@ def _make_conv_v2(
     token_usage=None,
 ):
     """Factory for ConversationV2 with sensible defaults."""
-    from datetime import datetime, timezone
+    from datetime import datetime
 
     return ConversationV2(
         conversation_id=conversation_id,
@@ -35,8 +38,8 @@ def _make_conv_v2(
         persona_id=persona_id,
         content=content or [],
         token_usage=token_usage,
-        created_at=datetime.now(timezone.utc),
-        updated_at=datetime.now(timezone.utc),
+        created_at=datetime(2026, 1, 1, tzinfo=UTC),
+        updated_at=datetime(2026, 1, 1, tzinfo=UTC),
     )
 
 
@@ -60,9 +63,23 @@ def mock_db():
 
 
 @pytest.fixture
-def mgr(mock_db):
-    """Create a ConversationManager with mocked database."""
+def manager_preferences(shared_preferences, monkeypatch):
+    """Keep preference writes local even when testing a database boundary."""
+    monkeypatch.setattr(conversation_module, "sp", shared_preferences)
+    monkeypatch.setattr(session_overrides, "sp", shared_preferences)
+    return shared_preferences
+
+
+@pytest.fixture
+def mgr(mock_db, manager_preferences):
+    """Create a manager with explicit database and preference boundaries."""
     return ConversationManager(mock_db)
+
+
+@pytest.fixture
+def persisted_manager(database, manager_preferences):
+    """Use the real event store for message and projection behavior."""
+    return ConversationManager(database)
 
 
 # ---------------------------------------------------------------------------
@@ -83,6 +100,7 @@ class TestConversationManagerInit:
 
     def test_register_on_session_deleted(self, mgr):
         """Verify register_on_session_deleted adds callback."""
+
         async def callback(_umo: str):
             pass
 
@@ -91,7 +109,7 @@ class TestConversationManagerInit:
 
 
 class TestConversationManagerConvertV2ToV1:
-    """Tests for _convert_conv_from_v2_to_v1()."""
+    """Tests for to_legacy_conversation()."""
 
     def test_converts_v2_to_v1(self, mgr):
         """Verify basic conversion of ConversationV2 to Conversation."""
@@ -104,7 +122,7 @@ class TestConversationManagerConvertV2ToV1:
             content=[{"role": "user", "content": "hi"}],
             token_usage=100,
         )
-        conv = mgr._convert_conv_from_v2_to_v1(conv_v2)
+        conv = mgr.to_legacy_conversation(conv_v2)
         assert isinstance(conv, Conversation)
         assert conv.cid == "c1"
         assert conv.platform_id == "qq"
@@ -117,7 +135,7 @@ class TestConversationManagerConvertV2ToV1:
     def test_converts_empty_content(self, mgr):
         """Verify conversion handles None content."""
         conv_v2 = _make_conv_v2(content=None)
-        conv = mgr._convert_conv_from_v2_to_v1(conv_v2)
+        conv = mgr.to_legacy_conversation(conv_v2)
         assert json.loads(conv.history) == []
 
     def test_converts_null_timestamps(self, mgr):
@@ -125,7 +143,7 @@ class TestConversationManagerConvertV2ToV1:
         conv_v2 = _make_conv_v2()
         conv_v2.created_at = None
         conv_v2.updated_at = None
-        conv = mgr._convert_conv_from_v2_to_v1(conv_v2)
+        conv = mgr.to_legacy_conversation(conv_v2)
         assert conv.created_at == 0
         assert conv.updated_at == 0
 
@@ -139,7 +157,9 @@ class TestConversationManagerNewConversation:
         created_conv = _make_conv_v2(conversation_id="new-conv")
         mock_db.create_conversation.return_value = created_conv
 
-        with patch("astrbot.core.conversation_mgr.sp.session_put", AsyncMock()) as sp_put:
+        with patch(
+            "astrbot.core.conversation_mgr.sp.session_put", AsyncMock()
+        ) as sp_put:
             cid = await mgr.new_conversation(
                 "qq:group:123",
                 platform_id="qq",
@@ -204,7 +224,9 @@ class TestConversationManagerSwitchConversation:
         """Verify switch updates cache and persists to session prefs."""
         mgr.session_conversations["origin:1"] = "old-id"
 
-        with patch("astrbot.core.conversation_mgr.sp.session_put", AsyncMock()) as sp_put:
+        with patch(
+            "astrbot.core.conversation_mgr.sp.session_put", AsyncMock()
+        ) as sp_put:
             await mgr.switch_conversation("origin:1", "new-id")
 
         assert mgr.session_conversations["origin:1"] == "new-id"
@@ -311,7 +333,9 @@ class TestConversationManagerGetCurrConversationId:
         """Verify returns cached conversation ID without hitting session prefs."""
         mgr.session_conversations["origin:1"] = "cached-id"
 
-        with patch("astrbot.core.conversation_mgr.sp.session_get", AsyncMock()) as sp_get:
+        with patch(
+            "astrbot.core.conversation_mgr.sp.session_get", AsyncMock()
+        ) as sp_get:
             cid = await mgr.get_curr_conversation_id("origin:1")
 
         assert cid == "cached-id"
@@ -330,6 +354,7 @@ class TestConversationManagerGetCurrConversationId:
 
         assert cid == "pref-id"
         assert mgr.session_conversations["origin:1"] == "pref-id"
+        sp_get.assert_awaited_once_with("origin:1", "sel_conv_id", None)
 
     @pytest.mark.asyncio
     async def test_returns_none_when_not_found(self, mgr):
@@ -556,204 +581,163 @@ class TestConversationManagerUnsetConversationPersona:
 
 
 class TestConversationManagerAddMessagePair:
-    """Tests for add_message_pair()."""
+    """Append complete pairs through ConversationV3 and reject stale snapshots."""
 
     @pytest.mark.asyncio
-    async def test_add_message_pair_dicts(self, mgr, mock_db):
-        """Verify adding message pair using plain dicts."""
-        conv_v2 = _make_conv_v2(content=[])
-        mock_db.get_conversation_by_id.return_value = conv_v2
-
-        await mgr.add_message_pair(
-            "c1",
-            {"role": "user", "content": "hello"},
-            {"role": "assistant", "content": "hi there"},
-        )
-
-        mock_db.update_conversation.assert_awaited_once_with(
-            cid="c1",
-            content=[
-                {"role": "user", "content": "hello"},
-                {"role": "assistant", "content": "hi there"},
-            ],
-        )
-
-    @pytest.mark.asyncio
-    async def test_add_message_pair_appends_to_existing(self, mgr, mock_db):
-        """Verify adding message pair appends to existing history."""
-        conv_v2 = _make_conv_v2(content=[{"role": "user", "content": "prev"}])
-        mock_db.get_conversation_by_id.return_value = conv_v2
-
-        await mgr.add_message_pair(
-            "c1",
-            {"role": "user", "content": "q2"},
-            {"role": "assistant", "content": "a2"},
-        )
-
-        mock_db.update_conversation.assert_awaited_once_with(
-            cid="c1",
-            content=[
-                {"role": "user", "content": "prev"},
-                {"role": "user", "content": "q2"},
-                {"role": "assistant", "content": "a2"},
-            ],
-        )
-
-    @pytest.mark.asyncio
-    async def test_add_message_pair_conv_not_found(self, mgr, mock_db):
-        """Verify raises when conversation is not found."""
-        mock_db.get_conversation_by_id.return_value = None
-
-        with pytest.raises(Exception, match="Conversation with id nonexistent not found"):
-            await mgr.add_message_pair(
-                "nonexistent",
-                {"role": "user", "content": "hi"},
-                {"role": "assistant", "content": "hello"},
-            )
-
-    @pytest.mark.asyncio
-    async def test_add_message_pair_segment_objects(self, mgr, mock_db):
-        """Verify adding message pair using UserMessageSegment / AssistantMessageSegment."""
+    @pytest.mark.parametrize("with_existing", [False, True])
+    @pytest.mark.parametrize("segments", [False, True])
+    async def test_add_message_pair_preserves_existing_history(
+        self, persisted_manager, database, with_existing, segments
+    ):
         from astrbot.core.agent.message import (
             AssistantMessageSegment,
             UserMessageSegment,
         )
 
-        conv_v2 = _make_conv_v2(content=[])
-        mock_db.get_conversation_by_id.return_value = conv_v2
+        initial = [{"role": "user", "content": "previous"}] if with_existing else []
+        conv = await database.create_conversation("owner", "test", content=initial)
+        user = {"role": "user", "content": "hello"}
+        assistant = {"role": "assistant", "content": "world"}
+        await persisted_manager.add_message_pair(
+            conv.conversation_id,
+            UserMessageSegment(content="hello") if segments else user,
+            AssistantMessageSegment(content="world") if segments else assistant,
+        )
 
-        user_msg = MagicMock(spec=UserMessageSegment)
-        user_msg.role = "user"
-        user_msg.model_dump.return_value = {"role": "user", "content": "hello"}
+        snapshot = await database.conversation_store.read(conv.conversation_id)
+        assert [
+            {"role": message["role"], "content": message["content"]}
+            for message in snapshot.messages
+        ] == [*initial, user, assistant]
+        appended = [
+            event
+            for event in await database.conversation_store.events(conv.conversation_id)
+            if event.type == "message.appended"
+        ]
+        assert [event.payload["message"]["content"] for event in appended[-2:]] == [
+            "hello",
+            "world",
+        ]
 
-        assistant_msg = MagicMock(spec=AssistantMessageSegment)
-        assistant_msg.role = "assistant"
-        assistant_msg.model_dump.return_value = {
-            "role": "assistant",
-            "content": "world",
-        }
-
-        await mgr.add_message_pair("c1", user_msg, assistant_msg)
-
-        mock_db.update_conversation.assert_awaited_once_with(
-            cid="c1",
-            content=[
+    @pytest.mark.asyncio
+    async def test_add_message_pair_missing_conversation_raises(
+        self, persisted_manager
+    ):
+        with pytest.raises(ValueError, match="Conversation with id missing not found"):
+            await persisted_manager.add_message_pair(
+                "missing",
                 {"role": "user", "content": "hello"},
                 {"role": "assistant", "content": "world"},
-            ],
-        )
+            )
+
+    @pytest.mark.asyncio
+    async def test_concurrent_background_append_cannot_be_overwritten_by_a_stale_pair(
+        self, persisted_manager, database, monkeypatch
+    ):
+        from astrbot.core.db.conversation import ConversationConflictError
+
+        store = database.conversation_store
+        conv = await store.create(umo="owner", platform_id="test")
+        append = store.append
+        background = {"role": "user", "content": "background result"}
+        pair = [
+            {"role": "user", "content": "foreground input"},
+            {"role": "assistant", "content": "foreground reply"},
+        ]
+
+        async def append_background_before_pair(cid, drafts, **kwargs):
+            await append(
+                cid,
+                [{"type": "message.appended", "payload": {"message": background}}],
+                expected_leaf=kwargs["expected_leaf"],
+            )
+            return await append(cid, drafts, **kwargs)
+
+        with monkeypatch.context() as patch:
+            patch.setattr(store, "append", append_background_before_pair)
+            with pytest.raises(ConversationConflictError):
+                await persisted_manager.add_message_pair(conv.conversation_id, *pair)
+
+        assert (await store.read(conv.conversation_id)).messages == [background]
+        await persisted_manager.add_message_pair(conv.conversation_id, *pair)
+        assert (await store.read(conv.conversation_id)).messages == [background, *pair]
 
 
 class TestConversationManagerGetHumanReadableContext:
-    """Tests for get_human_readable_context()."""
+    """Render persisted histories and paginate the newest complete pairs first."""
 
     @pytest.mark.asyncio
-    async def test_get_context(self, mgr):
-        """Verify basic context formatting."""
-        mgr._convert_conv_from_v2_to_v1 = MagicMock(
-            return_value=Conversation(
-                platform_id="qq",
-                user_id="user:1",
-                cid="c1",
-                history=json.dumps([
-                    {"role": "user", "content": "hello"},
-                    {"role": "assistant", "content": "world"},
-                    {"role": "user", "content": "how are you"},
-                    {"role": "assistant", "content": "fine"},
-                ]),
-                title="Chat",
-                created_at=1000,
-                updated_at=1001,
-            ),
+    async def test_get_context(self, persisted_manager, database):
+        conv = await database.create_conversation(
+            "owner",
+            "test",
+            content=[
+                {"role": "user", "content": "hello"},
+                {"role": "assistant", "content": "world"},
+                {"role": "user", "content": "how are you"},
+                {"role": "assistant", "content": "fine"},
+            ],
         )
-
-        contexts, total_pages = await mgr.get_human_readable_context(
-            "origin:1",
-            "c1",
-            page=1,
-            page_size=10,
+        contexts, pages = await persisted_manager.get_human_readable_context(
+            "owner", conv.conversation_id
         )
-
-        # Order: most recent pair first
         assert contexts == [
             "User: how are you",
             "Assistant: fine",
             "User: hello",
             "Assistant: world",
         ]
-        assert total_pages == 1
+        assert pages == 1
 
     @pytest.mark.asyncio
-    async def test_get_context_no_conversation(self, mgr):
-        """Verify returns empty when conversation not found."""
-        with patch.object(
-            mgr,
-            "get_conversation",
-            AsyncMock(return_value=None),
-        ):
-            contexts, total_pages = await mgr.get_human_readable_context(
-                "origin:1",
-                "nonexistent",
-            )
-
-        assert contexts == []
-        assert total_pages == 0
+    async def test_get_context_no_conversation(self, persisted_manager):
+        assert await persisted_manager.get_human_readable_context(
+            "owner", "missing"
+        ) == ([], 0)
 
     @pytest.mark.asyncio
-    async def test_get_context_pagination(self, mgr):
-        """Verify context pagination."""
+    @pytest.mark.parametrize("page", [1, 3, 5, 6])
+    async def test_get_context_pagination(self, persisted_manager, database, page):
         records = []
-        for i in range(5):
-            records.append({"role": "user", "content": f"q{i}"})
-            records.append({"role": "assistant", "content": f"a{i}"})
-
-        mgr._convert_conv_from_v2_to_v1 = MagicMock(
-            return_value=Conversation(
-                platform_id="qq",
-                user_id="user:1",
-                cid="c1",
-                history=json.dumps(records),
-                title="Chat",
-                created_at=1000,
-                updated_at=1001,
-            ),
+        for index in range(5):
+            records.extend(
+                [
+                    {"role": "user", "content": f"q{index}"},
+                    {"role": "assistant", "content": f"a{index}"},
+                ]
+            )
+        conv = await database.create_conversation("owner", "test", content=records)
+        contexts, pages = await persisted_manager.get_human_readable_context(
+            "owner", conv.conversation_id, page=page, page_size=2
         )
-
-        contexts, total_pages = await mgr.get_human_readable_context(
-            "origin:1",
-            "c1",
-            page=1,
-            page_size=2,
+        assert pages == 5
+        assert contexts == (
+            [f"User: q{5 - page}", f"Assistant: a{5 - page}"] if page <= 5 else []
         )
-
-        # 5 pairs = 10 records, reversed, page_size=2
-        assert len(contexts) == 2
-        assert total_pages == 5
 
     @pytest.mark.asyncio
-    async def test_get_context_with_tool_calls(self, mgr):
-        """Verify context handles tool_calls in assistant messages."""
-        mgr._convert_conv_from_v2_to_v1 = MagicMock(
-            return_value=Conversation(
-                platform_id="qq",
-                user_id="user:1",
-                cid="c1",
-                history=json.dumps([
-                    {"role": "user", "content": "search weather"},
-                    {
-                        "role": "assistant",
-                        "tool_calls": [{"function": {"name": "get_weather"}}],
-                    },
-                ]),
-                title="Chat",
-                created_at=1000,
-                updated_at=1001,
-            ),
+    async def test_get_context_with_tool_calls(self, persisted_manager, database):
+        tool = {
+            "id": "call-1",
+            "type": "function",
+            "function": {"name": "get_weather", "arguments": "{}"},
+        }
+        conv = await database.create_conversation(
+            "owner",
+            "test",
+            content=[
+                {"role": "user", "content": "search weather"},
+                {"role": "assistant", "tool_calls": [tool]},
+            ],
         )
-
-        contexts, _ = await mgr.get_human_readable_context("origin:1", "c1")
-
-        assert "Assistant: [函数调用]" in contexts[1]
+        contexts, pages = await persisted_manager.get_human_readable_context(
+            "owner", conv.conversation_id
+        )
+        assert contexts == [
+            "User: search weather",
+            f"Assistant: [函数调用] {json.dumps([tool], ensure_ascii=False)}",
+        ]
+        assert pages == 1
 
 
 class TestConversationManagerTriggerSessionDeleted:

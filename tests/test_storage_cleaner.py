@@ -13,7 +13,9 @@ def _write_bytes(path: Path, size: int) -> None:
 
 def _assert_file_size(path: Path, expected_size: int) -> None:
     assert path.exists(), f"Expected file {path} to exist"
-    assert path.stat().st_size == expected_size, f"{path} size should be {expected_size}"
+    assert path.stat().st_size == expected_size, (
+        f"{path} size should be {expected_size}"
+    )
 
 
 def _assert_not_exists(path: Path) -> None:
@@ -98,7 +100,11 @@ def test_storage_cleaner_cleanup_truncates_active_log_and_removes_cache(tmp_path
     result = cleaner.cleanup("all")
 
     expected_removed = (
-        ACTIVE_LOG_SIZE + ROTATED_LOG_SIZE + TRACE_LOG_SIZE + TEMP_FILE_SIZE + REGISTRY_CACHE_SIZE
+        ACTIVE_LOG_SIZE
+        + ROTATED_LOG_SIZE
+        + TRACE_LOG_SIZE
+        + TEMP_FILE_SIZE
+        + REGISTRY_CACHE_SIZE
     )
     # sanity checks for counts that are implied by the inputs
     assert result["removed_bytes"] == expected_removed

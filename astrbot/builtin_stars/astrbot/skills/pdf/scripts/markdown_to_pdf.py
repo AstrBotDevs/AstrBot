@@ -7,9 +7,11 @@ import argparse
 import html
 import os
 import re
+from collections.abc import Sequence
 from dataclasses import dataclass
 from io import BytesIO
 from pathlib import Path
+from typing import Protocol, TypedDict, Unpack, cast
 from urllib.parse import urlparse
 
 from pypdf import PdfReader, PdfWriter
@@ -31,6 +33,13 @@ from reportlab.platypus import (
     Spacer,
 )
 
+if __package__:
+    from astrbot.builtin_stars.astrbot.skills._astrbot_skill_support.cli import (
+        parse_conversion_paths,
+    )
+else:
+    from _astrbot_skill_support.cli import parse_conversion_paths
+
 _HEADING_RE = re.compile(r"^(#{1,6})\s+(.+?)\s*$")
 _ORDERED_LIST_RE = re.compile(r"^\s*(\d+)[.)]\s+(.+)$")
 _UNORDERED_LIST_RE = re.compile(r"^\s*[-+*]\s+(.+)$")
@@ -43,6 +52,29 @@ _SUPPORTED_CJK_RANGES = (
     (0xF900, 0xFAFF),
     (0xFF00, 0xFFEF),
 )
+
+
+class _ListFlowableOptions(TypedDict):
+    bulletType: str
+    start: int | str
+    leftIndent: int
+    bulletFontName: str
+    bulletFontSize: float
+    spaceAfter: int
+
+
+class _ListFlowableFactory(Protocol):
+    """Describe ReportLab's ListItem support omitted from its bundled stubs."""
+
+    def __call__(
+        self,
+        flowables: Sequence[ListItem],
+        /,
+        **options: Unpack[_ListFlowableOptions],
+    ) -> ListFlowable: ...
+
+
+_list_flowable = cast("_ListFlowableFactory", ListFlowable)
 
 
 @dataclass(frozen=True)
@@ -296,7 +328,8 @@ def _register_fonts(font_path: Path | None, source: str) -> tuple[str, str]:
         if not resolved.is_file():
             raise FileNotFoundError(f"Font not found: {resolved}")
         try:
-            pdfmetrics.registerFont(TTFont("AstrBotPDF", str(resolved)))
+            font = TTFont("AstrBotPDF", str(resolved))
+            pdfmetrics.registerFont(font)
         except Exception as exc:
             raise ValueError(f"Unable to load TrueType font {resolved}: {exc}") from exc
         pdfmetrics.registerFontFamily(
@@ -306,7 +339,7 @@ def _register_fonts(font_path: Path | None, source: str) -> tuple[str, str]:
             italic="AstrBotPDF",
             boldItalic="AstrBotPDF",
         )
-        glyphs = pdfmetrics.getFont("AstrBotPDF").face.charToGlyph
+        glyphs = font.face.charToGlyph
         for character in source:
             if character not in "\n\r\t" and ord(character) not in glyphs:
                 raise ValueError(
@@ -335,10 +368,11 @@ def _register_fonts(font_path: Path | None, source: str) -> tuple[str, str]:
             continue
         font_name = f"AstrBotPDFSystem{index}"
         try:
-            pdfmetrics.registerFont(TTFont(font_name, str(candidate)))
+            font = TTFont(font_name, str(candidate))
+            pdfmetrics.registerFont(font)
         except Exception:
             continue
-        glyphs = pdfmetrics.getFont(font_name).face.charToGlyph
+        glyphs = font.face.charToGlyph
         if any(
             character not in "\n\r\t" and ord(character) not in glyphs
             for character in source
@@ -531,7 +565,7 @@ def _build_story(
                 )
                 index += 1
             story.append(
-                ListFlowable(
+                _list_flowable(
                     items,
                     bulletType="1" if list_kind == "ordered-list" else "bullet",
                     start=start if list_kind == "ordered-list" else "bulletchar",
@@ -656,12 +690,7 @@ def main() -> int:
         type=Path,
         help="Optional TrueType or TrueType Collection font for document text",
     )
-    args = parser.parse_args()
-
-    input_path = args.input.expanduser().resolve(strict=False)
-    output_path = args.output.expanduser().resolve(strict=False)
-    if not input_path.is_file():
-        parser.error(f"Input file not found: {input_path}")
+    args, input_path, output_path = parse_conversion_paths(parser)
     if input_path == output_path:
         parser.error("Input and output paths must be different.")
     if output_path.suffix.lower() != ".pdf":

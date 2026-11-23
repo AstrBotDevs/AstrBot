@@ -102,9 +102,9 @@ export default {
       stat: {},
       noticeTitle: "",
       noticeContent: "",
-      noticeType: "",
+      noticeType: "info" as "info" | "success" | "warning" | "error",
       lastUpdated: "",
-      refreshInterval: null,
+      refreshInterval: null as ReturnType<typeof setInterval> | null,
       isRefreshing: false,
     };
   },

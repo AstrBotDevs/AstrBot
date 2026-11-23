@@ -5,6 +5,7 @@ import traceback
 from collections.abc import AsyncGenerator
 
 from astrbot.core import file_token_service, html_renderer, logger
+from astrbot.core.i18n import get_config_locale, translate
 from astrbot.core.message.components import (
     At,
     BaseMessageComponent,
@@ -21,7 +22,6 @@ from astrbot.core.pipeline.context import PipelineContext
 from astrbot.core.pipeline.stage import Stage, register_stage, registered_stages
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from astrbot.core.platform.message_type import MessageType
-from astrbot.core.star.session_llm_manager import SessionServiceManager
 from astrbot.core.star.star import star_map
 from astrbot.core.star.star_handler import EventType, star_handlers_registry
 
@@ -278,9 +278,12 @@ class ResultDecorateStage(Stage):
             )
 
             tts_requested = (
-                bool(self.ctx.astrbot_config["provider_tts_settings"]["enable"])
+                bool(
+                    self.ctx.plugin_manager.context.get_config(
+                        umo=event.unified_msg_origin
+                    )["provider_tts_settings"]["enable"]
+                )
                 and result.is_llm_result()
-                and await SessionServiceManager.should_process_tts_request(event)
                 and random.random() <= self.tts_trigger_probability
             )
             if tts_requested and tts_provider is None:
@@ -290,9 +293,13 @@ class ResultDecorateStage(Stage):
                 )
             should_tts = tts_requested and tts_provider is not None
 
+            show_reasoning = self.show_reasoning
+            if (enable_reasoning := event.get_extra("enable_reasoning")) is not None:
+                show_reasoning = bool(enable_reasoning)
+
             if (
                 not should_tts
-                and self.show_reasoning
+                and show_reasoning
                 and event.get_extra("_llm_reasoning_content")
             ):
                 # inject reasoning content to chain
@@ -312,7 +319,13 @@ class ResultDecorateStage(Stage):
                 else:
                     result.chain.insert(
                         0,
-                        Plain(f"🤔 思考: {reasoning_content}\n\n────\n"),
+                        Plain(
+                            translate(
+                                "reasoning",
+                                get_config_locale(self.ctx.astrbot_config),
+                                content=reasoning_content,
+                            )
+                        ),
                     )
 
             if should_tts and tts_provider:
@@ -385,6 +398,8 @@ class ResultDecorateStage(Stage):
                             return_url=True,
                             use_network=self.t2i_use_network,
                             template_name=self.t2i_active_template,
+                            endpoint=self.ctx.astrbot_config.get("t2i_endpoint")
+                            or None,
                         )
                     except BaseException:
                         logger.error(

@@ -1,120 +1,57 @@
-"""Telegram 模块 Mock 工具｡
+"""Keep real Telegram SDK types while replacing network client construction."""
 
-提供统一的 Telegram 相关模块 mock 设置,避免在测试文件中重复定义｡
-"""
-
-import sys
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
+from telegram.error import Forbidden, InvalidToken, NetworkError
 
-
-class MockTelegramNetworkError(Exception):
-    """Mock telegram.error.NetworkError used in tests."""
-
-
-class MockTelegramForbidden(Exception):
-    """Mock telegram.error.Forbidden used in tests."""
-
-
-class MockTelegramInvalidToken(Exception):
-    """Mock telegram.error.InvalidToken used in tests."""
+MockTelegramNetworkError = NetworkError
+MockTelegramForbidden = Forbidden
+MockTelegramInvalidToken = InvalidToken
 
 
 def create_mock_telegram_modules():
-    """创建 Telegram 相关的 mock 模块｡
-
-    Returns:
-        dict: 包含 telegram 和相关模块的 mock 对象
-    """
-    mock_telegram = MagicMock()
-    mock_telegram.BotCommand = MagicMock
-    mock_telegram.Update = MagicMock
-    mock_telegram.constants = MagicMock()
-    mock_telegram.constants.ChatType = MagicMock()
-    mock_telegram.constants.ChatType.PRIVATE = "private"
-    mock_telegram.constants.ChatAction = MagicMock()
-    mock_telegram.constants.ChatAction.TYPING = "typing"
-    mock_telegram.constants.ChatAction.UPLOAD_VOICE = "upload_voice"
-    mock_telegram.constants.ChatAction.UPLOAD_DOCUMENT = "upload_document"
-    mock_telegram.constants.ChatAction.UPLOAD_PHOTO = "upload_photo"
-    mock_telegram.error = MagicMock()
-    mock_telegram.error.BadRequest = Exception
-    mock_telegram.error.Forbidden = MockTelegramForbidden
-    mock_telegram.error.InvalidToken = MockTelegramInvalidToken
-    mock_telegram.error.NetworkError = MockTelegramNetworkError
-    mock_telegram.ReactionTypeCustomEmoji = MagicMock
-    mock_telegram.ReactionTypeEmoji = MagicMock
-
-    mock_telegram_ext = MagicMock()
-    mock_telegram_ext.ApplicationBuilder = MagicMock
-    mock_telegram_ext.ContextTypes = MagicMock()
-    mock_telegram_ext.ContextTypes.DEFAULT_TYPE = MagicMock
-    mock_telegram_ext.ExtBot = MagicMock
-    mock_telegram_ext.filters = MagicMock()
-    mock_telegram_ext.filters.ALL = MagicMock()
-    mock_telegram_ext.MessageHandler = MagicMock
-
-    # Mock telegramify_markdown
-    mock_telegramify = MagicMock()
-    mock_telegramify.markdownify = lambda text, **kwargs: text
-
-    # Mock apscheduler
-    mock_apscheduler = MagicMock()
-    mock_apscheduler.schedulers = MagicMock()
-    mock_apscheduler.schedulers.asyncio = MagicMock()
-    mock_apscheduler.schedulers.asyncio.AsyncIOScheduler = MagicMock
-    mock_apscheduler.schedulers.background = MagicMock()
-    mock_apscheduler.schedulers.background.BackgroundScheduler = MagicMock
+    """Return real SDK modules for callers migrating from legacy module mocks."""
+    import apscheduler.schedulers.asyncio
+    import apscheduler.schedulers.background
+    import telegram
+    import telegram.ext
+    import telegramify_markdown
 
     return {
-        "telegram": mock_telegram,
-        "telegram.ext": mock_telegram_ext,
-        "telegramify_markdown": mock_telegramify,
-        "apscheduler": mock_apscheduler,
+        "telegram": telegram,
+        "telegram.ext": telegram.ext,
+        "telegramify_markdown": telegramify_markdown,
+        "apscheduler": apscheduler,
     }
 
 
-@pytest.fixture(scope="module", autouse=True)
-def mock_telegram_modules():
-    """Mock Telegram 相关模块的 fixture｡
+@pytest.fixture(autouse=True)
+def mock_telegram_modules(monkeypatch, isolated_runtime_config):
+    """Replace only adapter client and scheduler factories for this test."""
+    from astrbot.core.platform.sources.telegram import tg_adapter
 
-    自动应用于使用此 fixture 的测试模块｡
-    """
-    mocks = create_mock_telegram_modules()
-    monkeypatch = pytest.MonkeyPatch()
+    def application_builder():
+        builder = MagicMock()
+        builder.token.return_value = builder
+        builder.base_url.return_value = builder
+        builder.base_file_url.return_value = builder
+        builder.build.return_value = MockTelegramBuilder.create_application()
+        return builder
 
-    monkeypatch.setitem(sys.modules, "telegram", mocks["telegram"])
-    monkeypatch.setitem(sys.modules, "telegram.constants", mocks["telegram"].constants)
-    monkeypatch.setitem(sys.modules, "telegram.error", mocks["telegram"].error)
-    monkeypatch.setitem(sys.modules, "telegram.ext", mocks["telegram.ext"])
-    monkeypatch.setitem(
-        sys.modules, "telegramify_markdown", mocks["telegramify_markdown"]
+    monkeypatch.setattr(tg_adapter, "ApplicationBuilder", application_builder)
+    monkeypatch.setattr(
+        tg_adapter, "AsyncIOScheduler", MockTelegramBuilder.create_scheduler
     )
-    monkeypatch.setitem(sys.modules, "apscheduler", mocks["apscheduler"])
-    monkeypatch.setitem(
-        sys.modules, "apscheduler.schedulers", mocks["apscheduler"].schedulers
-    )
-    monkeypatch.setitem(
-        sys.modules,
-        "apscheduler.schedulers.asyncio",
-        mocks["apscheduler"].schedulers.asyncio,
-    )
-    monkeypatch.setitem(
-        sys.modules,
-        "apscheduler.schedulers.background",
-        mocks["apscheduler"].schedulers.background,
-    )
-    yield
-    monkeypatch.undo()
+    return application_builder
 
 
 class MockTelegramBuilder:
-    """构建 Telegram 测试 mock 对象的工具类｡"""
+    """Build isolated Telegram transport test doubles."""
 
     @staticmethod
     def create_bot():
-        """创建 mock Telegram bot 实例｡"""
+        """Create a bot with asynchronous network methods."""
         bot = MagicMock()
         bot.username = "test_bot"
         bot.id = 12345678
@@ -133,7 +70,7 @@ class MockTelegramBuilder:
 
     @staticmethod
     def create_application():
-        """创建 mock Telegram Application 实例｡"""
+        """Create an application whose lifecycle stays local."""
         from tests.fixtures.helpers import NoopAwaitable
 
         app = MagicMock()
@@ -151,7 +88,7 @@ class MockTelegramBuilder:
 
     @staticmethod
     def create_scheduler():
-        """创建 mock APScheduler 实例｡"""
+        """Create a scheduler without background jobs."""
         scheduler = MagicMock()
         scheduler.add_job = MagicMock()
         scheduler.start = MagicMock()

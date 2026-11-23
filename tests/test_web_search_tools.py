@@ -1,70 +1,85 @@
-"""Import smoke tests for web_search_tools module."""
+"""Native web-search configuration and key rotation use isolated state."""
+
+import asyncio
+from unittest.mock import Mock
 
 import pytest
 
+from astrbot.core.astr_agent_runtime.tools.web_search_tools import (
+    _KeyRotator,
+    normalize_legacy_web_search_config,
+)
 
-class TestWebSearchToolsImports:
-    """Verify web_search_tools.py module can be imported and key classes exist."""
 
-    def test_module_import(self):
-        """Import the module without error."""
-        from astrbot.core.tools import web_search_tools
-        assert web_search_tools is not None
+class Config(dict):
+    def __init__(self, values):
+        super().__init__(values)
+        self.save_config = Mock()
 
-    def test_search_result_class(self):
-        """SearchResult dataclass is present."""
-        from astrbot.core.tools.web_search_tools import SearchResult
-        assert SearchResult is not None
 
-    def test_tavily_web_search_tool(self):
-        """TavilyWebSearchTool is present."""
-        from astrbot.core.tools.web_search_tools import TavilyWebSearchTool
-        assert TavilyWebSearchTool is not None
-        assert TavilyWebSearchTool.name == "web_search_tavily"
+def test_legacy_search_configuration_is_migrated_once():
+    config = Config(
+        {
+            "provider_settings": {
+                "websearch_provider": "default",
+                "web_search": True,
+                "websearch_tavily_key": "example-key",
+                "websearch_bocha_key": "",
+            }
+        }
+    )
+    normalize_legacy_web_search_config(config)
+    assert config["provider_settings"] == {
+        "websearch_provider": "default",
+        "web_search": False,
+        "websearch_tavily_key": ["example-key"],
+        "websearch_bocha_key": [],
+    }
+    config.save_config.assert_called_once_with()
+    normalize_legacy_web_search_config(config)
+    config.save_config.assert_called_once_with()
 
-    def test_tavily_extract_web_page_tool(self):
-        """TavilyExtractWebPageTool is present."""
-        from astrbot.core.tools.web_search_tools import TavilyExtractWebPageTool
-        assert TavilyExtractWebPageTool is not None
-        assert TavilyExtractWebPageTool.name == "tavily_extract_web_page"
 
-    def test_bocha_web_search_tool(self):
-        """BochaWebSearchTool is present."""
-        from astrbot.core.tools.web_search_tools import BochaWebSearchTool
-        assert BochaWebSearchTool is not None
-        assert BochaWebSearchTool.name == "web_search_bocha"
+def test_canonical_provider_and_keys_are_preserved():
+    config = Config(
+        {
+            "provider_settings": {
+                "websearch_provider": "tavily",
+                "web_search": True,
+                "websearch_tavily_key": ["one", "two"],
+            }
+        }
+    )
+    normalize_legacy_web_search_config(config)
+    assert config["provider_settings"]["web_search"] is True
+    assert config["provider_settings"]["websearch_tavily_key"] == ["one", "two"]
+    config.save_config.assert_not_called()
 
-    def test_brave_web_search_tool(self):
-        """BraveWebSearchTool is present."""
-        from astrbot.core.tools.web_search_tools import BraveWebSearchTool
-        assert BraveWebSearchTool is not None
-        assert BraveWebSearchTool.name == "web_search_brave"
 
-    def test_firecrawl_web_search_tool(self):
-        """FirecrawlWebSearchTool is present."""
-        from astrbot.core.tools.web_search_tools import FirecrawlWebSearchTool
-        assert FirecrawlWebSearchTool is not None
-        assert FirecrawlWebSearchTool.name == "web_search_firecrawl"
+@pytest.mark.asyncio
+async def test_key_rotation_is_deterministic_across_concurrent_requests_and_reload():
+    rotator = _KeyRotator("keys", "Test")
+    settings = {"keys": ["one", "two", "three"]}
+    assert await asyncio.gather(*(rotator.get(settings) for _ in range(5))) == [
+        "one",
+        "two",
+        "three",
+        "one",
+        "two",
+    ]
+    assert await rotator.get({"keys": ["only"]}) == "only"
+    assert settings == {"keys": ["one", "two", "three"]}
 
-    def test_firecrawl_extract_web_page_tool(self):
-        """FirecrawlExtractWebPageTool is present."""
-        from astrbot.core.tools.web_search_tools import FirecrawlExtractWebPageTool
-        assert FirecrawlExtractWebPageTool is not None
-        assert FirecrawlExtractWebPageTool.name == "firecrawl_extract_web_page"
 
-    def test_baidu_web_search_tool(self):
-        """BaiduWebSearchTool is present."""
-        from astrbot.core.tools.web_search_tools import BaiduWebSearchTool
-        assert BaiduWebSearchTool is not None
-        assert BaiduWebSearchTool.name == "web_search_baidu"
-
-    def test_constant_names(self):
-        """WEB_SEARCH_TOOL_NAMES constant is present."""
-        from astrbot.core.tools.web_search_tools import WEB_SEARCH_TOOL_NAMES
-        assert isinstance(WEB_SEARCH_TOOL_NAMES, list)
-        assert len(WEB_SEARCH_TOOL_NAMES) > 0
-
-    def test_normalize_function(self):
-        """normalize_legacy_web_search_config is importable."""
-        from astrbot.core.tools.web_search_tools import normalize_legacy_web_search_config
-        assert callable(normalize_legacy_web_search_config)
+@pytest.mark.asyncio
+async def test_failed_keys_are_not_retried_within_one_request():
+    rotator = _KeyRotator("keys", "Test")
+    tried = set()
+    settings = {"keys": ["one", "one", "two"]}
+    assert await rotator.get(settings, tried) == "one"
+    assert await rotator.get(settings, tried) == "two"
+    with pytest.raises(ValueError, match="No untried"):
+        await rotator.get(settings, tried)
+    assert tried == {"one", "two"}
+    with pytest.raises(ValueError, match="not configured"):
+        await rotator.get({})

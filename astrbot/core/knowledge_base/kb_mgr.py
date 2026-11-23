@@ -3,7 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from sqlalchemy.exc import IntegrityError  # type: ignore
+from sqlalchemy.exc import IntegrityError
 
 from astrbot.core import logger
 from astrbot.core.provider.manager import ProviderManager
@@ -196,7 +196,7 @@ class KnowledgeBaseManager:
     async def update_kb(
         self,
         kb_id: str,
-        kb_name: str,
+        kb_name: str | None,
         description: str | None = None,
         emoji: str | None = None,
         embedding_provider_id: str | None = None,

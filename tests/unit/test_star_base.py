@@ -1,276 +1,202 @@
-"""Tests for astrbot.core.star.base module."""
+"""The plugin SDK delegates rendering and keeps registry state test-local."""
 
 import logging
-from unittest.mock import AsyncMock, MagicMock, patch
+from types import SimpleNamespace
+from unittest.mock import AsyncMock, Mock
 
 import pytest
 
-
-class TestStarBase:
-    """Test cases for the Star base class."""
-
-    def test_star_class_exists(self):
-        """Test that Star class can be imported."""
-        from astrbot.core.star import Star
-
-        assert Star is not None
-
-    def test_star_init_with_context(self):
-        """Test Star initialization with a context-like object."""
-        from astrbot.core.star import Star
-
-        # Create a mock context with get_config method
-        mock_context = MagicMock()
-        mock_context.get_config.return_value = MagicMock()
-
-        # Create a concrete Star subclass for testing
-        class TestStar(Star):
-            name = "test_star"
-            author = "test_author"
-
-        star = TestStar(context=mock_context)
-
-        assert star.context is mock_context
-
-    def test_star_init_logs_plugin_level(self):
-        """Test that Star initialization reports the effective plugin level."""
-        from astrbot.core.star import Star
-
-        mock_context = MagicMock()
-        plugin_logger = MagicMock(spec=logging.Logger)
-        plugin_logger.getEffectiveLevel.return_value = logging.WARNING
-
-        class TestLevelStar(Star):
-            name = "test_level_star"
-            author = "test_author"
-
-        with (
-            patch(
-                "astrbot.core.star.base.LogManager.get_plugin_logger",
-                return_value=plugin_logger,
-            ),
-            patch("astrbot.core.star.base.logger") as core_logger,
-        ):
-            TestLevelStar(context=mock_context)
-
-        core_logger.info.assert_called_once_with(
-            "Plugin %s log level: %s.",
-            "test_level_star",
-            "WARNING",
-        )
-
-    @pytest.mark.asyncio
-    async def test_text_to_image_with_config(self):
-        """Test text_to_image method with valid config."""
-        from astrbot.core.star import Star
-
-        mock_context = MagicMock()
-        mock_config = MagicMock()
-        mock_config.get.return_value = "default_template"
-        mock_context.get_config.return_value = mock_config
-
-        class TestStar(Star):
-            name = "test_star"
-            author = "test_author"
-
-        star = TestStar(context=mock_context)
-
-        with patch(
-            "astrbot.core.star.base.html_renderer.render_t2i",
-            new_callable=AsyncMock,
-        ) as mock_render:
-            mock_render.return_value = "http://example.com/image.png"
-            result = await star.text_to_image("test text", return_url=True)
-
-            mock_render.assert_called_once_with(
-                "test text",
-                return_url=True,
-                template_name="default_template",
-            )
-            assert result == "http://example.com/image.png"
-
-    @pytest.mark.asyncio
-    async def test_text_to_image_without_config(self):
-        """Test text_to_image method when get_config returns None."""
-        from astrbot.core.star import Star
-
-        mock_context = MagicMock()
-        mock_context.get_config.return_value = None
-
-        class TestStar(Star):
-            name = "test_star"
-            author = "test_author"
-
-        star = TestStar(context=mock_context)
-
-        with patch(
-            "astrbot.core.star.base.html_renderer.render_t2i",
-            new_callable=AsyncMock,
-        ) as mock_render:
-            mock_render.return_value = "http://example.com/image.png"
-            result = await star.text_to_image("test text", return_url=False)
-
-            mock_render.assert_called_once_with(
-                "test text",
-                return_url=False,
-                template_name=None,
-            )
-            assert result == "http://example.com/image.png"
-
-    @pytest.mark.asyncio
-    async def test_html_render(self):
-        """Test html_render method."""
-        from astrbot.core.star import Star
-
-        mock_context = MagicMock()
-
-        class TestStar(Star):
-            name = "test_star"
-            author = "test_author"
-
-        star = TestStar(context=mock_context)
-
-        with patch(
-            "astrbot.core.star.base.html_renderer.render_custom_template",
-            new_callable=AsyncMock,
-        ) as mock_render:
-            mock_render.return_value = "http://example.com/rendered.png"
-            result = await star.html_render(
-                "<html>{{ data }}</html>",
-                {"data": "test"},
-                return_url=True,
-            )
-
-            mock_render.assert_called_once_with(
-                "<html>{{ data }}</html>",
-                {"data": "test"},
-                return_url=True,
-                options=None,
-            )
-            assert result == "http://example.com/rendered.png"
-
-    @pytest.mark.asyncio
-    async def test_initialize_and_terminate(self):
-        """Test that initialize and terminate methods can be overridden."""
-        from astrbot.core.star import Star
-
-        class TestStar(Star):
-            name = "test_star"
-            author = "test_author"
-
-            async def initialize(self) -> None:
-                self.initialized = True
-
-            async def terminate(self) -> None:
-                self.terminated = True
-
-        mock_context = MagicMock()
-        star = TestStar(context=mock_context)
-
-        await star.initialize()
-        assert star.initialized is True
-
-        await star.terminate()
-        assert star.terminated is True
-
-    def test_star_metadata_registration(self):
-        """Test that Star subclass is automatically registered."""
-        from astrbot.core.star import star_registry
-
-        class UniqueTestStar:
-            """Not a Star subclass, should not be registered."""
-
-            pass
-
-        # Verify Star subclass gets registered
-        initial_count = len(star_registry)
-
-        # Note: This test verifies the __init_subclass__ mechanism
-        # The actual registration happens when a class inherits from Star
-        assert len(star_registry) >= initial_count
-
-
-class TestStarMetadataPluginId:
-    """Tests for StarMetadata.plugin_id derived view.
-
-    Regression: previously `plugin_id` was set in `__post_init__`, which only
-    fires at dataclass construction. The plugin load flow constructs
-    StarMetadata empty (no name/author) and fills them via attribute
-    assignment later, so `plugin_id` stayed None and crashed the downstream
-    `plugin_id.split("/")`. Now it's a property recomputed on every access.
-    """
-
-    def test_plugin_id_defaults_to_unknown_when_empty(self):
-        from astrbot.core.star.star import StarMetadata
-
-        assert StarMetadata().plugin_id == "unknown/unknown"
-
-    def test_plugin_id_uses_name_and_author(self):
-        from astrbot.core.star.star import StarMetadata
-
-        metadata = StarMetadata(name="Hello", author="AstrBot")
-        assert metadata.plugin_id == "astrbot/hello"
-
-    def test_plugin_id_recomputes_after_attribute_assignment(self):
-        from astrbot.core.star.star import StarMetadata
-
-        metadata = StarMetadata()
-        metadata.name = "A"
-        metadata.author = "B"
-        assert metadata.plugin_id == "b/a"
-
-    def test_plugin_id_lowercases_and_escapes_slash(self):
-        from astrbot.core.star.star import StarMetadata
-
-        metadata = StarMetadata(name="A/B", author="C")
-        assert metadata.plugin_id == "c/a_b"
-
-    def test_plugin_id_reflects_latest_name_after_change(self):
-        from astrbot.core.star.star import StarMetadata
-
-        metadata = StarMetadata(name="old", author="author")
-        assert metadata.plugin_id == "author/old"
-        metadata.name = "new"
-        assert metadata.plugin_id == "author/new"
-
-    def test_plugin_id_only_name_set(self):
-        from astrbot.core.star.star import StarMetadata
-
-        assert StarMetadata(name="OnlyName").plugin_id == "unknown/onlyname"
-
-    def test_plugin_id_only_author_set(self):
-        from astrbot.core.star.star import StarMetadata
-
-        assert StarMetadata(author="OnlyAuthor").plugin_id == "onlyauthor/unknown"
-
-
-class TestNoCircularImports:
-    """Test that there are no circular import issues."""
-
-    def test_import_star_module(self):
-        """Test that star module can be imported without circular import errors."""
-        import astrbot.core.star
-
-        assert astrbot.core.star is not None
-
-    def test_import_pipeline_module(self):
-        """Test that pipeline module can be imported without circular import errors."""
-        import astrbot.core.pipeline
-
-        assert astrbot.core.pipeline is not None
-
-    def test_import_both_modules(self):
-        """Test that both modules can be imported together."""
-
-        # Verify key exports are available
-        from astrbot.core.star import Context, PluginManager, Star
-
-        assert Context is not None
-        assert Star is not None
-        assert PluginManager is not None
-
-    def test_import_pipeline_context(self):
-        """Test that PipelineContext can be imported."""
-        from astrbot.core.pipeline.context import PipelineContext
-
-        assert PipelineContext is not None
+from astrbot.api.star import Context as PublicContext
+from astrbot.api.star import Star as PublicStar
+from astrbot.core.star import base
+from astrbot.core.star.context import Context
+from astrbot.core.star.star import StarMetadata
+
+
+@pytest.fixture(autouse=True)
+def isolated_registration(monkeypatch):
+    monkeypatch.setattr(base, "star_map", {})
+    monkeypatch.setattr(base, "star_registry", [])
+
+
+@pytest.fixture
+def context():
+    return SimpleNamespace(
+        get_config=Mock(
+            return_value={
+                "t2i_active_template": "default_template",
+                "t2i_endpoint": "https://renderer.invalid",
+            }
+        ),
+        html_renderer=SimpleNamespace(
+            render_t2i=AsyncMock(return_value="rendered.png"),
+            render_custom_template=AsyncMock(return_value="custom.png"),
+        ),
+    )
+
+
+@pytest.fixture
+def plugin(context):
+    class TestPlugin(base.Star):
+        name = "test_plugin"
+        author = "test_author"
+
+    return TestPlugin(context)
+
+
+def test_sdk_exports_reference_the_real_implementation():
+    assert PublicStar is base.Star
+    assert PublicContext is Context
+
+
+def test_plugin_initialization_registers_metadata_and_preserves_context(
+    plugin, context
+):
+    assert plugin.context is context
+    metadata = base.star_map[type(plugin).__module__]
+    assert metadata.star_cls_type is type(plugin)
+    assert base.star_registry == [metadata]
+
+
+def test_plugin_initialization_logs_the_effective_level(monkeypatch, context):
+    plugin_logger = Mock(spec=logging.Logger)
+    plugin_logger.getEffectiveLevel.return_value = logging.WARNING
+    factory, core_logger = Mock(return_value=plugin_logger), Mock()
+    monkeypatch.setattr(base.LogManager, "get_plugin_logger", factory)
+    monkeypatch.setattr(base, "logger", core_logger)
+
+    class LevelPlugin(base.Star):
+        name = "level_plugin"
+
+    plugin = LevelPlugin(context)
+    assert plugin.logger is plugin_logger
+    factory.assert_called_once_with("level_plugin")
+    core_logger.info.assert_called_once_with(
+        "Plugin %s log level: %s.", "level_plugin", "WARNING"
+    )
+
+
+def test_plugin_with_read_only_logger_keeps_its_logger(context):
+    custom_logger = logging.getLogger("test.read_only_plugin")
+
+    class CustomLoggerPlugin(base.Star):
+        @property
+        def logger(self):
+            return custom_logger
+
+    assert CustomLoggerPlugin(context).logger is custom_logger
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("config", "template", "expected_template", "expected_endpoint"),
+    [
+        (
+            {
+                "t2i_active_template": "default_template",
+                "t2i_endpoint": "https://renderer.invalid",
+            },
+            None,
+            "default_template",
+            "https://renderer.invalid",
+        ),
+        (
+            {
+                "t2i_active_template": "default_template",
+                "t2i_endpoint": "https://renderer.invalid",
+            },
+            "mine",
+            "mine",
+            "https://renderer.invalid",
+        ),
+        (None, None, None, None),
+        ({"t2i_endpoint": ""}, None, None, None),
+    ],
+)
+@pytest.mark.parametrize("return_url", [True, False])
+async def test_text_rendering_uses_session_configuration(
+    plugin, context, config, template, expected_template, expected_endpoint, return_url
+):
+    context.get_config.return_value = config
+    result = await plugin.text_to_image(
+        "text",
+        return_url=return_url,
+        template_name=template,
+        umo="test:GroupMessage:one",
+    )
+    assert result == "rendered.png"
+    context.get_config.assert_called_once_with("test:GroupMessage:one")
+    context.html_renderer.render_t2i.assert_awaited_once_with(
+        "text",
+        return_url=return_url,
+        template_name=expected_template,
+        endpoint=expected_endpoint,
+    )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("config", "endpoint"),
+    [
+        (None, None),
+        ({"t2i_endpoint": "https://renderer.invalid"}, "https://renderer.invalid"),
+    ],
+)
+async def test_html_renderer_receives_data_options_and_session_endpoint(
+    plugin, context, config, endpoint
+):
+    context.get_config.return_value = config
+    data, options = {"data": "text"}, {"width": 400}
+    result = await plugin.html_render(
+        "<p>{{ data }}</p>",
+        data,
+        return_url=False,
+        options=options,
+        umo="test:FriendMessage:one",
+    )
+    assert result == "custom.png"
+    context.get_config.assert_called_once_with("test:FriendMessage:one")
+    context.html_renderer.render_custom_template.assert_awaited_once_with(
+        "<p>{{ data }}</p>",
+        data,
+        return_url=False,
+        options=options,
+        endpoint=endpoint,
+    )
+
+
+@pytest.mark.asyncio
+async def test_base_lifecycle_is_awaitable_and_override_can_track_resources(context):
+    assert await base.Star(context).initialize() is None
+    assert await base.Star(context).terminate() is None
+    events = []
+
+    class LifecyclePlugin(base.Star):
+        async def initialize(self):
+            events.append("open")
+
+        async def terminate(self):
+            events.append("close")
+
+    plugin = LifecyclePlugin(context)
+    await plugin.initialize()
+    await plugin.terminate()
+    assert events == ["open", "close"]
+
+
+@pytest.mark.parametrize(
+    ("name", "author", "expected"),
+    [
+        (None, None, "unknown/unknown"),
+        ("Hello", "AstrBot", "astrbot/hello"),
+        ("A/B", "C", "c/a_b"),
+        ("OnlyName", None, "unknown/onlyname"),
+        (None, "OnlyAuthor", "onlyauthor/unknown"),
+    ],
+)
+def test_plugin_identity_is_computed_after_metadata_is_loaded(name, author, expected):
+    metadata = StarMetadata()
+    metadata.name, metadata.author = name, author
+    assert metadata.plugin_id == expected
+    metadata.name, metadata.author = "new", "author"
+    assert metadata.plugin_id == "author/new"

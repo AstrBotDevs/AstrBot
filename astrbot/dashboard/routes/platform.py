@@ -24,6 +24,12 @@ from astrbot.core.platform.sources.weixin_oc.login_registration import (
     poll_weixin_oc_login_once,
     request_weixin_oc_login_qr,
 )
+from astrbot.dashboard.services.platform_service import (
+    PlatformServiceError,
+    enrich_lark_registration_result,
+    find_unified_webhook_platform,
+    registration_request_details,
+)
 
 from .route import Response, Route, RouteContext
 
@@ -110,11 +116,9 @@ class PlatformRoute(Route):
         """
         if self.platform_manager is None:
             return None
-        for platform in self.platform_manager.platform_insts:
-            if platform.config.get("webhook_uuid") == webhook_uuid:
-                if platform.unified_webhook():
-                    return platform
-        return None
+        return find_unified_webhook_platform(
+            self.platform_manager.platform_insts, webhook_uuid
+        )
 
     async def get_platform_stats(self):
         """获取所有平台的统计信息
@@ -137,13 +141,7 @@ class PlatformRoute(Route):
         """Handle dashboard one-click platform registration actions."""
         try:
             payload = await request.get_json(silent=True) or {}
-            action = str(payload.get("action", "")).strip().lower()
-            if not action:
-                return Response().error("Missing action").__dict__, 400
-
-            platform_config = payload.get("platform_config")
-            if not isinstance(platform_config, dict):
-                platform_config = {}
+            action, platform_config = registration_request_details(payload)
 
             if platform_type == "lark":
                 return await self._handle_lark_registration(
@@ -163,6 +161,8 @@ class PlatformRoute(Route):
             return Response().error(
                 f"Unsupported platform registration: {platform_type}",
             ).__dict__, 404
+        except PlatformServiceError as exc:
+            return Response().error(str(exc)).__dict__, exc.status_code
         except Exception as e:
             logger.error(f"处理平台一键创建请求失败: {e}", exc_info=True)
             return Response().error(str(e)).__dict__, 500
@@ -204,19 +204,9 @@ class PlatformRoute(Route):
                 domain=domain,
                 device_code=device_code,
             )
-            if result.get("status") == "created":
-                try:
-                    bot_info = await request_lark_bot_info(
-                        domain=str(result.get("domain") or domain),
-                        app_id=str(result.get("app_id") or ""),
-                        app_secret=str(result.get("app_secret") or ""),
-                    )
-                    if bot_info.app_name:
-                        result["bot_name"] = bot_info.app_name
-                    if bot_info.open_id:
-                        result["bot_open_id"] = bot_info.open_id
-                except Exception as e:
-                    logger.error(f"获取飞书机器人信息失败: {e}", exc_info=True)
+            result = await enrich_lark_registration_result(
+                result, domain, request_lark_bot_info
+            )
             return Response().ok(result).__dict__
 
         return Response().error(f"Unsupported action: {action}").__dict__, 400

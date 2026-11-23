@@ -2,14 +2,15 @@ from __future__ import annotations
 
 import abc
 from collections.abc import AsyncGenerator, Awaitable
-from typing import Any, TypeAlias
+from typing import Any
 
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
 
 from .context import PipelineContext
 
 registered_stages: list[type[Stage]] = []  # 维护了所有已注册的 Stage 实现类类型
-StageProcessResult: TypeAlias = AsyncGenerator[Any, None] | Awaitable[None]
+# Keep the public return alias eagerly inspectable by plugin typing utilities.
+StageProcessResult = AsyncGenerator[Any, None] | Awaitable[None]
 
 
 def register_stage(cls):

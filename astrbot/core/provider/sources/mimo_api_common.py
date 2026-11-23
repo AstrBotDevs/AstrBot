@@ -38,6 +38,16 @@ def normalize_timeout(timeout: int | str | None) -> int | None:
     return timeout
 
 
+def mimo_connection_options(provider_config: dict) -> tuple[str, str, str, int | None]:
+    """Read shared authentication, endpoint, proxy, and timeout settings."""
+    return (
+        provider_config.get("api_key", ""),
+        provider_config.get("api_base", DEFAULT_MIMO_API_BASE),
+        provider_config.get("proxy", ""),
+        normalize_timeout(provider_config.get("timeout", 20)),
+    )
+
+
 def build_headers(api_key: str) -> dict[str, str]:
     headers = {"Content-Type": "application/json"}
     if api_key:

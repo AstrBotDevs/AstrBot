@@ -1,7 +1,7 @@
 import asyncio
 import json
 import time
-from typing import Any
+from typing import TYPE_CHECKING, Any
 from xml.etree import ElementTree as ET
 
 import websockets
@@ -12,6 +12,7 @@ from astrbot.api import logger
 from astrbot.api.event import MessageChain
 from astrbot.api.message_components import (
     At,
+    ButtonInteraction,
     File,
     Image,
     Plain,
@@ -20,6 +21,7 @@ from astrbot.api.message_components import (
 )
 from astrbot.api.platform import (
     AstrBotMessage,
+    Group,
     MessageMember,
     MessageType,
     Platform,
@@ -27,6 +29,11 @@ from astrbot.api.platform import (
     register_platform_adapter,
 )
 from astrbot.core.platform.astr_message_event import MessageSession
+from astrbot.core.platform.button_interaction import decode_button_callback
+from astrbot.core.utils.config_number import coerce_int_config
+
+if TYPE_CHECKING:
+    from .satori_event import SatoriPlatformEvent
 
 
 @register_platform_adapter(
@@ -54,8 +61,20 @@ class SatoriPlatformAdapter(Platform):
             "ws://localhost:5140/satori/v1/events",
         )
         self.auto_reconnect = self.config.get("satori_auto_reconnect", True)
-        self.heartbeat_interval = self.config.get("satori_heartbeat_interval", 10)
-        self.reconnect_delay = self.config.get("satori_reconnect_delay", 5)
+        self.heartbeat_interval = coerce_int_config(
+            self.config.get("satori_heartbeat_interval", 10),
+            default=10,
+            min_value=1,
+            field_name="satori_heartbeat_interval",
+            source="Satori config",
+        )
+        self.reconnect_delay = coerce_int_config(
+            self.config.get("satori_reconnect_delay", 5),
+            default=5,
+            min_value=1,
+            field_name="satori_reconnect_delay",
+            source="Satori config",
+        )
 
         self.metadata = PlatformMetadata(
             name="satori",
@@ -309,8 +328,97 @@ class SatoriPlatformAdapter(Platform):
                 if abm:
                     await self.handle_msg(abm)
 
+            elif event_type == "interaction/button":
+                abm = self.convert_satori_button_interaction(event_data)
+                if abm:
+                    await self.handle_msg(abm)
+
         except Exception as e:
             logger.error(f"处理事件失败: {e}")
+
+    def convert_satori_button_interaction(
+        self,
+        event_data: dict,
+    ) -> AstrBotMessage | None:
+        """Convert a Satori button event into a portable interaction.
+
+        Args:
+            event_data: Satori ``interaction/button`` event payload.
+
+        Returns:
+            A normalized AstrBot message, or ``None`` for malformed or foreign
+            button events.
+        """
+        button = event_data.get("button")
+        if not isinstance(button, dict):
+            logger.debug("[Satori] Ignored a button interaction without a button.")
+            return None
+        callback_payload = button.get("id")
+        if not isinstance(callback_payload, str):
+            logger.debug("[Satori] Ignored a button interaction without an id.")
+            return None
+        try:
+            action_id, callback_data = decode_button_callback(
+                callback_payload, allow_expired=True
+            )
+        except ValueError:
+            logger.debug("[Satori] Ignored a button not created by AstrBot.")
+            return None
+
+        operator = event_data.get("operator") or event_data.get("user") or {}
+        channel = event_data.get("channel") or {}
+        guild = event_data.get("guild")
+        login = event_data.get("login") or {}
+        if not isinstance(operator, dict) or not isinstance(channel, dict):
+            logger.debug("[Satori] Ignored an incomplete button interaction.")
+            return None
+
+        operator_id = str(operator.get("id") or "").strip()
+        channel_id = str(channel.get("id") or "").strip()
+        if not operator_id or not channel_id:
+            logger.debug("[Satori] Ignored a button interaction without a session.")
+            return None
+
+        timestamp = int(event_data.get("timestamp") or time.time())
+        sequence = event_data.get("sn")
+        interaction_id = (
+            str(sequence)
+            if sequence is not None
+            else f"{timestamp}:{operator_id}:{callback_payload}"
+        )
+        source_message = event_data.get("message")
+        source_message_id = (
+            str(source_message.get("id"))
+            if isinstance(source_message, dict) and source_message.get("id")
+            else None
+        )
+
+        abm = AstrBotMessage()
+        abm.raw_message = event_data
+        abm.self_id = str((login.get("user") or {}).get("id") or "")
+        abm.sender = MessageMember(
+            user_id=operator_id,
+            nickname=str(operator.get("nick") or operator.get("name") or operator_id),
+        )
+        abm.session_id = channel_id
+        abm.message_id = interaction_id
+        abm.timestamp = timestamp
+        if isinstance(guild, dict) and guild.get("id"):
+            abm.type = MessageType.GROUP_MESSAGE
+            abm.group_id = str(guild["id"])
+        else:
+            abm.type = MessageType.FRIEND_MESSAGE
+        abm.message_str = action_id
+        abm.message = [
+            ButtonInteraction(
+                action_id=action_id,
+                data=callback_data,
+                interaction_id=interaction_id,
+                source_message_id=source_message_id,
+                callback_data=callback_payload,
+            )
+        ]
+        return abm
 
     async def convert_satori_message(
         self,
@@ -334,7 +442,11 @@ class SatoriPlatformAdapter(Platform):
 
             if guild and guild.get("id"):
                 abm.type = MessageType.GROUP_MESSAGE
-                abm.group_id = guild.get("id", "")
+                abm.group = Group(
+                    group_id=str(guild["id"]),
+                    group_name=guild.get("name"),
+                    group_avatar=guild.get("avatar"),
+                )
                 abm.session_id = channel.get("id", "")
             else:
                 abm.type = MessageType.FRIEND_MESSAGE
@@ -460,30 +572,27 @@ class SatoriPlatformAdapter(Platform):
 
         return prefixes
 
+    def _parse_content_root(self, content: str) -> ET.Element:
+        processed_content = content
+        if ":" in content and not content.startswith("<root"):
+            prefixes = self._extract_namespace_prefixes(content)
+            # 构建命名空间声明
+            ns_declarations = " ".join(
+                [f'xmlns:{prefix}="http://temp.uri/{prefix}"' for prefix in prefixes],
+            )
+            # 包装内容
+            processed_content = f"<root {ns_declarations}>{content}</root>"
+        elif not content.startswith("<root"):
+            processed_content = f"<root>{content}</root>"
+        else:
+            processed_content = content
+        return ET.fromstring(processed_content)
+
     async def _extract_quote_element(self, content: str) -> dict | None:
         """提取<quote>标签信息"""
         try:
             # 处理命名空间前缀问题
-            processed_content = content
-            if ":" in content and not content.startswith("<root"):
-                prefixes = self._extract_namespace_prefixes(content)
-
-                # 构建命名空间声明
-                ns_declarations = " ".join(
-                    [
-                        f'xmlns:{prefix}="http://temp.uri/{prefix}"'
-                        for prefix in prefixes
-                    ],
-                )
-
-                # 包装内容
-                processed_content = f"<root {ns_declarations}>{content}</root>"
-            elif not content.startswith("<root"):
-                processed_content = f"<root>{content}</root>"
-            else:
-                processed_content = content
-
-            root = ET.fromstring(processed_content)
+            root = self._parse_content_root(content)
 
             # 查找<quote>标签
             quote_element = None
@@ -603,26 +712,7 @@ class SatoriPlatformAdapter(Platform):
 
         try:
             # 处理命名空间前缀问题
-            processed_content = content
-            if ":" in content and not content.startswith("<root"):
-                prefixes = self._extract_namespace_prefixes(content)
-
-                # 构建命名空间声明
-                ns_declarations = " ".join(
-                    [
-                        f'xmlns:{prefix}="http://temp.uri/{prefix}"'
-                        for prefix in prefixes
-                    ],
-                )
-
-                # 包装内容
-                processed_content = f"<root {ns_declarations}>{content}</root>"
-            elif not content.startswith("<root"):
-                processed_content = f"<root>{content}</root>"
-            else:
-                processed_content = content
-
-            root = ET.fromstring(processed_content)
+            root = self._parse_content_root(content)
             await self._parse_xml_node(root, elements)
         except ET.ParseError as e:
             logger.warning(f"解析 Satori 元素时发生解析错误: {e}, 错误内容: {content}")
@@ -799,3 +889,22 @@ class SatoriPlatformAdapter(Platform):
 
         if self.session:
             await self.session.close()
+
+    def create_event(self, message: AstrBotMessage) -> "SatoriPlatformEvent":
+        """Creates a Satori message event.
+
+        Args:
+            message: AstrBot message object to wrap.
+
+        Returns:
+            Created Satori message event.
+        """
+        from .satori_event import SatoriPlatformEvent
+
+        return SatoriPlatformEvent(
+            message_str=message.message_str,
+            message_obj=message,
+            platform_meta=self.meta(),
+            session_id=message.session_id,
+            adapter=self,
+        )

@@ -1,165 +1,126 @@
-"""Import smoke tests for astrbot.core.star.register.star_handler."""
-from astrbot.core.star.register.star_handler import (
-    register_command,
-    register_command_group,
-    register_custom_filter,
-    register_event_message_type,
-    register_platform_adapter_type,
-    register_regex,
-    register_permission_type,
-    register_on_astrbot_loaded,
-    register_on_platform_loaded,
-    register_on_plugin_loaded,
-    register_on_plugin_unloaded,
-    register_on_plugin_error,
-    register_on_llm_request,
-    register_on_llm_response,
-    register_on_waiting_llm_request,
-    register_on_agent_begin,
-    register_on_agent_done,
-    register_on_using_llm_tool,
-    register_on_llm_tool_respond,
-    register_llm_tool,
-    register_agent,
-    register_on_decorating_result,
-    register_after_message_sent,
-    RegisteringCommandable,
-    RegisteringAgent,
-    get_handler_full_name,
-    get_handler_or_create,
+"""Decorators register real handler metadata without leaking global registries."""
+
+from types import SimpleNamespace
+from unittest.mock import Mock
+
+import pytest
+
+from astrbot.core.star.filter.command import CommandFilter
+from astrbot.core.star.filter.permission import PermissionType, PermissionTypeFilter
+from astrbot.core.star.filter.regex import RegexFilter
+from astrbot.core.star.register import star_handler as registration
+from astrbot.core.star.star_handler import EventType, StarHandlerRegistry
+
+
+@pytest.fixture
+def registry(monkeypatch):
+    registry = StarHandlerRegistry()
+    monkeypatch.setattr(registration, "star_handlers_registry", registry)
+    return registry
+
+
+@pytest.mark.parametrize(
+    ("decorator", "event_type"),
+    [
+        ("register_on_astrbot_loaded", EventType.OnAstrBotLoadedEvent),
+        ("register_on_platform_loaded", EventType.OnPlatformLoadedEvent),
+        ("register_on_plugin_loaded", EventType.OnPluginLoadedEvent),
+        ("register_on_plugin_unloaded", EventType.OnPluginUnloadedEvent),
+        ("register_on_plugin_error", EventType.OnPluginErrorEvent),
+        ("register_on_waiting_llm_request", EventType.OnWaitingLLMRequestEvent),
+        ("register_on_llm_request", EventType.OnLLMRequestEvent),
+        ("register_on_llm_response", EventType.OnLLMResponseEvent),
+        ("register_on_agent_begin", EventType.OnAgentBeginEvent),
+        ("register_on_agent_done", EventType.OnAgentDoneEvent),
+        ("register_on_using_llm_tool", EventType.OnUsingLLMToolEvent),
+        ("register_on_llm_tool_respond", EventType.OnLLMToolRespondEvent),
+        ("register_on_decorating_result", EventType.OnDecoratingResultEvent),
+        ("register_after_message_sent", EventType.OnAfterMessageSentEvent),
+    ],
 )
+def test_lifecycle_decorator_preserves_function_and_event_contract(
+    registry, decorator, event_type
+):
+    async def hook(*args):
+        return args
+
+    result = getattr(registration, decorator)(priority=7, desc="Lifecycle hook")(hook)
+    assert result is hook
+    metadata = registry.get_handler_by_full_name(
+        registration.get_handler_full_name(hook)
+    )
+    assert metadata.handler is hook
+    assert metadata.event_type is event_type
+    assert metadata.desc == "Lifecycle hook"
+    assert metadata.extras_configs == {"priority": 7}
+    assert len(registry) == 1
 
 
-def test_register_command_is_callable():
-    """register_command is importable and callable."""
-    assert callable(register_command)
+def test_stacked_filters_share_one_handler(registry):
+    async def command(self, event, enabled: bool = False):
+        """Toggle a setting."""
+
+    assert registration.register_command("toggle", alias={"t"})(command) is command
+    registration.register_permission_type(PermissionType.ADMIN)(command)
+    registration.register_regex(r"^toggle")(command)
+    metadata = next(iter(registry))
+    assert len(registry) == 1
+    assert metadata.desc == "Toggle a setting."
+    assert [type(item) for item in metadata.event_filters] == [
+        CommandFilter,
+        PermissionTypeFilter,
+        RegexFilter,
+    ]
+    command_filter = metadata.event_filters[0]
+    assert command_filter.command_name == "toggle"
+    assert command_filter.alias == {"t"}
+    assert command_filter.get_handler_md() is metadata
+    assert command_filter.validate_and_convert_params(
+        ["false"], command_filter.handler_params
+    ) == {"enabled": False}
 
 
-def test_register_command_group_is_callable():
-    """register_command_group is importable and callable."""
-    assert callable(register_command_group)
+def test_metadata_can_be_prepared_without_registering(registry):
+    async def handler(event):
+        """Original description."""
+
+    metadata = registration.get_handler_or_create(
+        handler, EventType.AdapterMessageEvent, dont_add=True, desc="Override"
+    )
+    assert len(registry) == 0
+    assert metadata.desc == "Override"
+    assert metadata.handler is handler
+    registry.append(metadata)
+    assert (
+        registration.get_handler_or_create(handler, EventType.AdapterMessageEvent)
+        is metadata
+    )
+    assert len(registry) == 1
 
 
-def test_register_custom_filter_is_callable():
-    """register_custom_filter is importable and callable."""
-    assert callable(register_custom_filter)
+def test_tool_decorator_preserves_schema_and_calling_hook(registry, monkeypatch):
+    manager = SimpleNamespace(add_func=Mock())
+    monkeypatch.setattr(registration, "llm_tools", manager)
 
+    async def lookup(event, query: str, count: int):
+        """Search local records.
 
-def test_register_event_message_type_is_callable():
-    """register_event_message_type is importable and callable."""
-    assert callable(register_event_message_type)
+        Args:
+            query(string): Search text.
+            count(int): Maximum results.
+        """
 
-
-def test_register_platform_adapter_type_is_callable():
-    """register_platform_adapter_type is importable and callable."""
-    assert callable(register_platform_adapter_type)
-
-
-def test_register_regex_is_callable():
-    """register_regex is importable and callable."""
-    assert callable(register_regex)
-
-
-def test_register_permission_type_is_callable():
-    """register_permission_type is importable and callable."""
-    assert callable(register_permission_type)
-
-
-def test_register_on_astrbot_loaded_is_callable():
-    """register_on_astrbot_loaded is importable and callable."""
-    assert callable(register_on_astrbot_loaded)
-
-
-def test_register_on_platform_loaded_is_callable():
-    """register_on_platform_loaded is importable and callable."""
-    assert callable(register_on_platform_loaded)
-
-
-def test_register_on_plugin_loaded_is_callable():
-    """register_on_plugin_loaded is importable and callable."""
-    assert callable(register_on_plugin_loaded)
-
-
-def test_register_on_plugin_unloaded_is_callable():
-    """register_on_plugin_unloaded is importable and callable."""
-    assert callable(register_on_plugin_unloaded)
-
-
-def test_register_on_plugin_error_is_callable():
-    """register_on_plugin_error is importable and callable."""
-    assert callable(register_on_plugin_error)
-
-
-def test_register_on_llm_request_is_callable():
-    """register_on_llm_request is importable and callable."""
-    assert callable(register_on_llm_request)
-
-
-def test_register_on_llm_response_is_callable():
-    """register_on_llm_response is importable and callable."""
-    assert callable(register_on_llm_response)
-
-
-def test_register_on_waiting_llm_request_is_callable():
-    """register_on_waiting_llm_request is importable and callable."""
-    assert callable(register_on_waiting_llm_request)
-
-
-def test_register_on_agent_begin_is_callable():
-    """register_on_agent_begin is importable and callable."""
-    assert callable(register_on_agent_begin)
-
-
-def test_register_on_agent_done_is_callable():
-    """register_on_agent_done is importable and callable."""
-    assert callable(register_on_agent_done)
-
-
-def test_register_on_using_llm_tool_is_callable():
-    """register_on_using_llm_tool is importable and callable."""
-    assert callable(register_on_using_llm_tool)
-
-
-def test_register_on_llm_tool_respond_is_callable():
-    """register_on_llm_tool_respond is importable and callable."""
-    assert callable(register_on_llm_tool_respond)
-
-
-def test_register_llm_tool_is_callable():
-    """register_llm_tool is importable and callable."""
-    assert callable(register_llm_tool)
-
-
-def test_register_agent_is_callable():
-    """register_agent is importable and callable."""
-    assert callable(register_agent)
-
-
-def test_register_on_decorating_result_is_callable():
-    """register_on_decorating_result is importable and callable."""
-    assert callable(register_on_decorating_result)
-
-
-def test_register_after_message_sent_is_callable():
-    """register_after_message_sent is importable and callable."""
-    assert callable(register_after_message_sent)
-
-
-def test_registering_commandable_class():
-    """RegisteringCommandable is importable and is a class."""
-    assert isinstance(RegisteringCommandable, type)
-
-
-def test_registering_agent_class():
-    """RegisteringAgent is importable and is a class."""
-    assert isinstance(RegisteringAgent, type)
-
-
-def test_get_handler_full_name_is_callable():
-    """get_handler_full_name is importable and callable."""
-    assert callable(get_handler_full_name)
-
-
-def test_get_handler_or_create_is_callable():
-    """get_handler_or_create is importable and callable."""
-    assert callable(get_handler_or_create)
+    assert registration.register_llm_tool(name="local_lookup")(lookup) is lookup
+    metadata = next(iter(registry))
+    assert metadata.event_type is EventType.OnCallingFuncToolEvent
+    manager.add_func.assert_called_once()
+    name, arguments, description, handler = manager.add_func.call_args.args
+    assert (name, description, handler) == (
+        "local_lookup",
+        "Search local records.",
+        lookup,
+    )
+    assert arguments == [
+        {"type": "string", "name": "query", "description": "Search text."},
+        {"type": "number", "name": "count", "description": "Maximum results."},
+    ]

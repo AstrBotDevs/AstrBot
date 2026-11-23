@@ -10,19 +10,6 @@ export const router = createRouter({
   routes: [MainRoutes, AuthRoutes, ChatBoxRoutes],
 });
 
-interface AuthStore {
-  username: string;
-  returnUrl: string | null;
-  login(
-    username: string,
-    password: string,
-    code?: string,
-    trustDeviceToken?: boolean,
-  ): Promise<undefined | "totp_required" | "upgrade_recovery_required">;
-  logout(): void;
-  has_token(): boolean;
-}
-
 router.beforeEach(async (to, from) => {
   if (from.name && from.path !== to.path) {
     const loadingStore = useRouterLoadingStore();
@@ -32,7 +19,7 @@ router.beforeEach(async (to, from) => {
   const publicPages = ["/auth/login", "/auth/setup"];
 
   const authRequired = !publicPages.includes(to.path);
-  const auth: AuthStore = useAuthStore();
+  const auth = useAuthStore();
 
   // 如果用户已登录且试图访问登录页面，则重定向到首页
   if (to.path === "/auth/login" && auth.has_token()) {

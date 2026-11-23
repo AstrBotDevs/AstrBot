@@ -1,29 +1,38 @@
 import abc
 import asyncio
+import copy
 import os
-from collections.abc import AsyncGenerator
+from collections.abc import AsyncGenerator, Awaitable, Callable, Mapping
 from typing import Literal, TypeAlias, Union
 
 import aiofiles
 import anyio
 
-from astrbot.core.agent.message import ContentPart, Message, is_checkpoint_message
+from astrbot import logger
+from astrbot.core.agent.message import ContentPart, Message
 from astrbot.core.agent.tool import ToolSet
 from astrbot.core.provider.entities import (
+    DecisionAnswer,
+    DecisionBooleanQuestion,
+    DecisionQuestion,
+    DecisionState,
     LLMResponse,
     ProviderMeta,
     RerankResult,
     ToolCallsResult,
 )
+from astrbot.core.provider.headers import build_provider_headers
 from astrbot.core.provider.register import provider_cls_map
 from astrbot.core.utils.astrbot_path import get_astrbot_path
 
-Providers: TypeAlias = Union[
+# Keep this union eager for runtime consumers and Pydantic v1.
+Providers: TypeAlias = Union[  # noqa: UP040
     "Provider",
     "STTProvider",
     "TTSProvider",
     "EmbeddingProvider",
     "RerankProvider",
+    "DecisionProvider",
 ]
 
 
@@ -34,6 +43,9 @@ class AbstractProvider(abc.ABC):
         super().__init__()
         self.model_name = ""
         self.provider_config = provider_config
+        self.request_headers = build_provider_headers(
+            provider_config.get("custom_headers")
+        )
 
     def set_model(self, model_name: str) -> None:
         """Set the current model name"""
@@ -106,6 +118,7 @@ class Provider(AbstractProvider):
         model: str | None = None,
         extra_user_content_parts: list[ContentPart] | None = None,
         tool_choice: Literal["auto", "required"] = "auto",
+        request_max_retries: int | None = None,
         **kwargs,
     ) -> LLMResponse:
         """获得 LLM 的文本对话结果｡会使用当前的模型进行对话｡
@@ -143,6 +156,7 @@ class Provider(AbstractProvider):
         model: str | None = None,
         extra_user_content_parts: list[ContentPart] | None = None,
         tool_choice: Literal["auto", "required"] = "auto",
+        request_max_retries: int | None = None,
         **kwargs,
     ) -> AsyncGenerator[LLMResponse, None]:
         """获得 LLM 的流式文本对话结果｡会使用当前的模型进行对话｡在生成的最后会返回一次完整的结果｡
@@ -192,16 +206,72 @@ class Provider(AbstractProvider):
             return []
         dicts: list[dict] = []
         for message in messages:
-            if is_checkpoint_message(message):
-                continue
             if isinstance(message, Message):
                 dicts.append(message.model_dump())
             else:
                 dicts.append(message)
         return dicts
 
-    async def test(self, test_timeout: float = 45.0) -> None:
-        with anyio.fail_after(test_timeout):
+    async def _prepare_chat_history(
+        self,
+        assemble_context: Callable[
+            [str, list[str] | None, list[str] | None, list[ContentPart] | None],
+            Awaitable[dict],
+        ],
+        prompt: str | None,
+        image_urls: list[str] | None,
+        audio_urls: list[str] | None,
+        contexts: list[dict] | list[Message] | None,
+        system_prompt: str | None,
+        tool_calls_result: ToolCallsResult | list[ToolCallsResult] | None,
+        extra_user_content_parts: list[ContentPart] | None,
+        *,
+        deep_copy: bool = False,
+    ) -> list[dict]:
+        """Build request history with the adapter's user-message formatter."""
+        new_record = None
+        if prompt is not None:
+            new_record = await assemble_context(
+                prompt or "", image_urls, audio_urls, extra_user_content_parts
+            )
+        context_query = self._ensure_message_to_dicts(contexts)
+        if deep_copy:
+            context_query = copy.deepcopy(context_query)
+        if new_record:
+            context_query.append(new_record)
+        if system_prompt:
+            context_query.insert(0, {"role": "system", "content": system_prompt})
+        for part in context_query:
+            part.pop("_no_save", None)
+        if tool_calls_result:
+            results = (
+                tool_calls_result
+                if isinstance(tool_calls_result, list)
+                else [tool_calls_result]
+            )
+            for result in results:
+                context_query.extend(result.to_openai_messages())
+        return context_query
+
+    @staticmethod
+    def _query_options(
+        request_max_retries: int | None, conversation_id: str | None
+    ) -> dict:
+        """Forward retry options and an available conversation identifier."""
+        options: dict[str, int | str | None] = {
+            "request_max_retries": request_max_retries
+        }
+        if conversation_id:
+            options["conversation_id"] = conversation_id
+        return options
+
+    async def test(
+        self,
+        timeout: float = 45.0,  # noqa: ASYNC109 - Public provider compatibility keyword.
+        *,
+        test_timeout: float | None = None,
+    ) -> None:
+        with anyio.fail_after(timeout if test_timeout is None else test_timeout):
             await self.text_chat(prompt="REPLY `PONG` ONLY")
 
 
@@ -321,6 +391,18 @@ class EmbeddingProvider(AbstractProvider):
         """获取向量的维度"""
         ...
 
+    def _configured_embedding_dimension(self) -> int:
+        """Read an optional embedding dimension, ignoring invalid values."""
+        if "embedding_dimensions" in self.provider_config:
+            try:
+                return int(self.provider_config["embedding_dimensions"])
+            except (ValueError, TypeError):
+                logger.warning(
+                    "embedding_dimensions in embedding configs is not a valid integer: "
+                    f"'{self.provider_config['embedding_dimensions']}', ignored."
+                )
+        return 0
+
     async def test(self) -> None:
         await self.get_embedding("astrbot")
 
@@ -409,3 +491,48 @@ class RerankProvider(AbstractProvider):
         result = await self.rerank("Apple", documents=["apple", "banana"])
         if not result:
             raise Exception("Rerank provider test failed, no results returned")
+
+
+class DecisionProvider(AbstractProvider):
+    """Provider for low-latency, structured decisions."""
+
+    def __init__(self, provider_config: dict, provider_settings: dict) -> None:
+        super().__init__(provider_config)
+        self.provider_config = provider_config
+        self.provider_settings = provider_settings
+
+    @abc.abstractmethod
+    async def ask(
+        self,
+        questions: Mapping[str, DecisionQuestion],
+        state: DecisionState | None = None,
+        *,
+        request_max_retries: int = 0,
+    ) -> Mapping[str, DecisionAnswer]:
+        """Answer multiple decision questions in one provider request.
+
+        Args:
+            questions: Question heads keyed by caller-defined identifiers.
+            state: Context evaluated by the model. Providers forward it as-is.
+            request_max_retries: Number of retries after the initial request.
+
+        Returns:
+            Answers keyed by the same identifiers as ``questions``.
+
+        Raises:
+            ValueError: The question or criteria are unusable.
+            DecisionError: The provider is unavailable, the request fails, or
+                the response violates the decision contract.
+        """
+        ...
+
+    async def test(self) -> None:
+        await self.ask(
+            {
+                "test": DecisionBooleanQuestion(
+                    "Is this provider available?", criteria={"true": "", "false": ""}
+                )
+            },
+            {},
+            request_max_retries=0,
+        )

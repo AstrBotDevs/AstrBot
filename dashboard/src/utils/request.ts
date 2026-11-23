@@ -1,4 +1,4 @@
-import axios, { type InternalAxiosRequestConfig } from "axios";
+import axios, { type AxiosError, type InternalAxiosRequestConfig } from "axios";
 
 const ABSOLUTE_URL_PATTERN = /^[a-zA-Z][a-zA-Z\d+\-.]*:\/\//;
 
@@ -67,11 +67,11 @@ function normalizeBaseUrl(baseUrl: string | null | undefined): string {
 
 export function normalizeConfiguredApiBaseUrl(baseUrl: string | null | undefined): string {
   const cleaned = normalizeBaseUrl(baseUrl);
-  // Prepend https:// if it doesn't already have a protocol
-  if (cleaned && !/^https?:\/\//i.test(cleaned)) {
-    return `https://${cleaned}`;
-  }
-  return cleaned;
+  if (!cleaned || cleaned.startsWith("/")) return cleaned;
+  const hasScheme = /^[a-zA-Z][a-zA-Z\d+.-]*:/.test(cleaned);
+  const isHostWithPort = /^[a-zA-Z\d.-]+:\d+(?:[/?#]|$)/.test(cleaned);
+  if (hasScheme && !isHostWithPort) return cleaned;
+  return `https://${cleaned}`;
 }
 
 export function getApiBaseUrlValidationError(baseUrl: string | null | undefined): string {
@@ -81,10 +81,17 @@ export function getApiBaseUrlValidationError(baseUrl: string | null | undefined)
     return "";
   }
 
+  if (normalizedBaseUrl.startsWith("/") && !normalizedBaseUrl.startsWith("//")) {
+    return normalizedBaseUrl.includes("\\") ? "API Base URL must use forward slashes" : "";
+  }
+
   try {
     const parsedUrl = new URL(normalizedBaseUrl);
     if (!["http:", "https:"].includes(parsedUrl.protocol)) {
       return "API Base URL must use http:// or https://";
+    }
+    if (!/^https?:\/\//i.test(normalizedBaseUrl)) {
+      return "API Base URL must be a valid absolute URL";
     }
   } catch {
     return "API Base URL must be a valid absolute URL";
@@ -148,35 +155,87 @@ const service = axios.create({
   timeout: 10000,
 });
 
-service.interceptors.request.use((config: InternalAxiosRequestConfig) => {
-  const normalizedBaseUrl = normalizeBaseUrl(config.baseURL ?? service.defaults.baseURL);
+export const apiV1Client = axios.create({ baseURL: "/api/v1" });
 
-  if (typeof config.url === "string") {
-    config.url = normalizePathForBase(config.url, normalizedBaseUrl);
+/** Return the canonical API path only for the configured dashboard backend. */
+export function getApiRequestPath(requestUrl: string | URL): string | null {
+  try {
+    const target = new URL(requestUrl, window.location.href);
+    const apiRoot = new URL(resolveApiUrl("/api/"), window.location.href);
+    const prefix = apiRoot.pathname.replace(/\/+$/, "");
+    if (target.origin !== apiRoot.origin) return null;
+    if (target.pathname !== prefix && !target.pathname.startsWith(prefix + "/")) return null;
+    return "/api" + target.pathname.slice(prefix.length);
+  } catch {
+    return null;
   }
+}
 
-  const token = localStorage.getItem("token");
-  if (token) {
-    config.headers.set("Authorization", `Bearer ${token}`);
-  }
+function normalizeAxiosError(error: AxiosError) {
+  if (error.response?.status === 401) {
+    const requestPath = getApiRequestPath(axios.getUri(error.config ?? {})) ?? "";
+    const data = error.response.data as { data?: { totp_required?: boolean } } | undefined;
+    const isAuthChallenge =
+      [
+        "/api/auth/login",
+        "/api/auth/setup",
+        "/api/auth/setup-status",
+        "/api/v1/auth/login",
+        "/api/v1/auth/setup",
+        "/api/v1/auth/setup-status",
+      ].includes(requestPath) || Boolean(data?.data?.totp_required);
 
-  const locale = localStorage.getItem("astrbot-locale");
-  if (locale) {
-    config.headers.set("Accept-Language", locale);
-  }
-
-  return config;
-});
-
-service.interceptors.response.use(
-  (response) => response,
-  (error) => {
-    if (error.response?.status === 429 && error.response?.data?.message) {
-      return Promise.reject(error.response.data.message);
+    if (requestPath.startsWith("/api/") && !isAuthChallenge) {
+      for (const key of [
+        "user",
+        "token",
+        "change_pwd_hint",
+        "md5_pwd_hint",
+        "legacy_pwd_hint",
+        "password_upgrade_required",
+      ]) {
+        localStorage.removeItem(key);
+      }
+      if (!window.location.hash.startsWith("#/auth/login")) {
+        window.location.hash = "/auth/login";
+      }
     }
-    return Promise.reject(error);
-  },
-);
+  }
+  if (error.response?.status === 429) {
+    const data = error.response.data as { message?: string } | undefined;
+    if (data?.message) return Promise.reject(data.message);
+  }
+  return Promise.reject(error);
+}
 
+for (const instance of [service, apiV1Client]) {
+  instance.interceptors.request.use((config: InternalAxiosRequestConfig) => {
+    if (instance === apiV1Client) {
+      config.baseURL = resolveApiUrl("/api/v1");
+    } else if (typeof config.url === "string" && /^\/api(?:\/|$)/.test(config.url)) {
+      // Generated clients may provide an empty base URL; the selected backend still applies.
+      config.baseURL = service.defaults.baseURL;
+    }
+
+    const normalizedBaseUrl = normalizeBaseUrl(config.baseURL ?? service.defaults.baseURL);
+    if (typeof config.url === "string") {
+      config.url = normalizePathForBase(config.url, normalizedBaseUrl);
+    }
+    if (getApiRequestPath(axios.getUri(config)) === null) return config;
+
+    const token = localStorage.getItem("token");
+    if (token && !config.headers.has("Authorization")) {
+      config.headers.set("Authorization", `Bearer ${token}`);
+    }
+    const locale = localStorage.getItem("astrbot-locale");
+    if (locale && !config.headers.has("Accept-Language")) {
+      config.headers.set("Accept-Language", locale);
+    }
+    return config;
+  });
+  instance.interceptors.response.use((response) => response, normalizeAxiosError);
+}
+
+export { axios as axiosStatic };
 export default service;
 export * from "axios";

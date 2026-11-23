@@ -4,6 +4,8 @@ from urllib.parse import urlencode
 
 import aiohttp
 
+from astrbot.core.platform.registration import registration_int_field as _int_field
+
 DEFAULT_FEISHU_OPEN_DOMAIN = "https://open.feishu.cn"
 DEFAULT_LARK_OPEN_DOMAIN = "https://open.larksuite.com"
 APP_REGISTRATION_PATH = "/oauth/v1/app/registration"
@@ -59,15 +61,6 @@ def _string_field(data: dict[str, Any], key: str) -> str:
     if isinstance(value, str):
         return value
     return ""
-
-
-def _int_field(data: dict[str, Any], key: str, default: int) -> int:
-    value = data.get(key)
-    if isinstance(value, int):
-        return value
-    if isinstance(value, float):
-        return int(value)
-    return default
 
 
 async def _post_registration(

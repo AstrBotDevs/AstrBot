@@ -1,3 +1,9 @@
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from .vec_db import FaissVecDB as FaissVecDB
+
+
 def __getattr__(name: str):
     if name == "FaissVecDB":
         from .vec_db import FaissVecDB

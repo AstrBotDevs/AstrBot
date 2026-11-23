@@ -1,15 +1,18 @@
 import { defineStore } from "pinia";
-import { router } from "@/router";
+import { httpClient } from "@/api/http";
 import {
+  type ApiEnvelope,
   authApi,
   providerApi,
   systemConfigApi,
   UPGRADE_RECOVERY_EVENT,
   UPGRADE_RECOVERY_TOKEN_KEY,
-  type ApiEnvelope,
   type VersionData,
 } from "@/api/v1";
-import { httpClient } from "@/api/http";
+import { useProviderModelSelection } from "@/composables/useProviderModelSelection";
+import { router } from "@/router";
+import { useCustomizerStore } from "@/stores/customizer";
+import { chatPreferences } from "@/utils/chatPreferences";
 
 export const useAuthStore = defineStore("auth", {
   state: () => ({
@@ -21,6 +24,8 @@ export const useAuthStore = defineStore("auth", {
       this.username = data.username;
       localStorage.setItem("user", this.username);
       localStorage.setItem("token", data.token);
+      useProviderModelSelection();
+      useCustomizerStore().chatNavigationInSidebar = chatPreferences().global.navigationInSidebar === true;
       const passwordUpgradeRequired = !!data?.password_upgrade_required;
       const md5PwdHint = !!data?.md5_pwd_hint;
       const passwordWarning = !!data?.change_pwd_hint || (md5PwdHint && !passwordUpgradeRequired);
@@ -58,7 +63,7 @@ export const useAuthStore = defineStore("auth", {
       password: string,
       code?: string,
       trustDeviceToken = false,
-    ): Promise<"totp_required" | "upgrade_recovery_required" | void> {
+    ): Promise<"totp_required" | "upgrade_recovery_required" | undefined> {
       try {
         const res = await authApi.login({
           username,
@@ -73,15 +78,12 @@ export const useAuthStore = defineStore("auth", {
 
         const legacyToken = String(res.data.data?.token || "");
         if (res.legacyFallback && legacyToken) {
-          const versionRes = await httpClient.get<ApiEnvelope<VersionData>>(
-            "/api/stat/version",
-            {
-              headers: {
-                Authorization: `Bearer ${legacyToken}`,
-              },
-              validateStatus: () => true,
+          const versionRes = await httpClient.get<ApiEnvelope<VersionData>>("/api/stat/version", {
+            headers: {
+              Authorization: `Bearer ${legacyToken}`,
             },
-          );
+            validateStatus: () => true,
+          });
           const versionData = versionRes.data?.data || {};
           const coreVersion = String(versionData.version || "")
             .trim()
@@ -89,12 +91,7 @@ export const useAuthStore = defineStore("auth", {
           const dashboardVersion = String(versionData.dashboard_version || "")
             .trim()
             .replace(/^v/i, "");
-          if (
-            versionRes.status < 400 &&
-            coreVersion &&
-            dashboardVersion &&
-            coreVersion !== dashboardVersion
-          ) {
+          if (versionRes.status < 400 && coreVersion && dashboardVersion && coreVersion !== dashboardVersion) {
             sessionStorage.setItem(UPGRADE_RECOVERY_TOKEN_KEY, legacyToken);
             window.dispatchEvent(
               new CustomEvent(UPGRADE_RECOVERY_EVENT, {
@@ -117,11 +114,7 @@ export const useAuthStore = defineStore("auth", {
         return Promise.reject(error?.response?.data?.message || error);
       }
     },
-    async setup(
-      username: string,
-      password: string,
-      confirmPassword: string,
-    ): Promise<void> {
+    async setup(username: string, password: string, confirmPassword: string): Promise<void> {
       try {
         const res = await authApi.setup({
           username,
@@ -170,11 +163,17 @@ export const useAuthStore = defineStore("auth", {
     },
     logout() {
       this.username = "";
-      localStorage.removeItem("user");
-      localStorage.removeItem("token");
-      localStorage.removeItem("change_pwd_hint");
-      localStorage.removeItem("md5_pwd_hint");
-      localStorage.removeItem("password_upgrade_required");
+      useProviderModelSelection().resetSelection();
+      useCustomizerStore().chatNavigationInSidebar = false;
+      try {
+        localStorage.removeItem("user");
+        localStorage.removeItem("token");
+        localStorage.removeItem("change_pwd_hint");
+        localStorage.removeItem("md5_pwd_hint");
+        localStorage.removeItem("password_upgrade_required");
+      } catch {
+        // Storage availability must not prevent logout or the in-memory reset.
+      }
       void authApi.logout().catch(() => undefined);
       router.push("/auth/login");
     },

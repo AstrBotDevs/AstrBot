@@ -1,5 +1,5 @@
 from types import SimpleNamespace
-from unittest.mock import Mock
+from unittest.mock import AsyncMock, Mock
 
 import pytest
 
@@ -17,16 +17,18 @@ async def test_content_safety_checks_combined_message_text_once():
         get_message_str=lambda: "current message",
         get_messages=lambda: [Reply(id="1", message_str="quoted message")],
         stop_event=Mock(),
+        send=AsyncMock(),
     )
     stage = ContentSafetyCheckStage()
     stage.strategy_selector = SimpleNamespace(check=Mock(return_value=(True, "")))
 
-    async for _ in stage.process(event):
-        pass
+    assert await stage.process(event) is None
 
     stage.strategy_selector.check.assert_called_once_with(
         "current message\nquoted message"
     )
+    event.stop_event.assert_not_called()
+    event.send.assert_not_awaited()
 
 
 @pytest.mark.asyncio
@@ -76,6 +78,7 @@ async def test_content_safety_checks_quoted_text_only_for_inbound_messages(
         get_message_str=lambda: "你说呢",
         get_messages=lambda: [reply],
         stop_event=stop_event,
+        send=AsyncMock(),
     )
     stage = ContentSafetyCheckStage()
     stage.strategy_selector = StrategySelector(
@@ -88,7 +91,7 @@ async def test_content_safety_checks_quoted_text_only_for_inbound_messages(
         }
     )
 
-    async for _ in stage.process(event, check_text=check_text):
-        pass
+    assert await stage.process(event, check_text=check_text) is None
 
     assert stopped is expected_stopped
+    event.send.assert_not_awaited()

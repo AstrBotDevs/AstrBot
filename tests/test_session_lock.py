@@ -1,79 +1,128 @@
-"""Import smoke tests for astrbot.core.utils.session_lock."""
+"""Observable ordering, cancellation and reuse of per-session locks."""
 
 import asyncio
+from collections.abc import Coroutine
 
 import pytest
+import pytest_asyncio
 
-from astrbot.core.utils import session_lock as session_lock_module
 from astrbot.core.utils.session_lock import SessionLockManager, session_lock_manager
 
 
-class TestImports:
-    def test_module_importable(self):
-        assert session_lock_module is not None
+@pytest_asyncio.fixture
+async def spawn_task():
+    tasks: list[asyncio.Task[None]] = []
 
-    def test_session_lock_manager_class_exists(self):
-        assert SessionLockManager is not None
+    def spawn(coroutine: Coroutine[object, object, None]) -> asyncio.Task[None]:
+        task = asyncio.create_task(coroutine)
+        tasks.append(task)
+        return task
 
-    def test_session_lock_manager_instance_exists(self):
-        assert isinstance(session_lock_manager, SessionLockManager)
+    try:
+        yield spawn
+    finally:
+        for task in tasks:
+            if not task.done():
+                task.cancel()
+        await asyncio.gather(*tasks, return_exceptions=True)
 
 
-class TestSessionLockManagerSmoke:
-    @pytest.mark.asyncio
-    async def test_acquire_lock_basic(self):
-        manager = SessionLockManager()
-        async with manager.acquire_lock("test-session"):
-            pass
+@pytest.mark.asyncio
+async def test_same_session_holds_exclusive_access_until_owner_releases(spawn_task):
+    manager = SessionLockManager()
+    first_entered = asyncio.Event()
+    release_first = asyncio.Event()
+    second_attempted = asyncio.Event()
+    second_entered = asyncio.Event()
+    order: list[str] = []
 
-    @pytest.mark.asyncio
-    async def test_acquire_lock_multiple_sessions(self):
-        manager = SessionLockManager()
-        async with manager.acquire_lock("session-a"):
-            async with manager.acquire_lock("session-b"):
-                pass
+    async def first() -> None:
+        async with manager.acquire_lock("shared"):
+            order.append("first-enter")
+            first_entered.set()
+            await release_first.wait()
+            order.append("first-leave")
 
-    @pytest.mark.asyncio
-    async def test_acquire_lock_same_session_sequentially(self):
-        manager = SessionLockManager()
-        async with manager.acquire_lock("same"):
-            pass
-        async with manager.acquire_lock("same"):
-            pass
+    async def second() -> None:
+        second_attempted.set()
+        async with manager.acquire_lock("shared"):
+            order.append("second-enter")
+            second_entered.set()
 
-    @pytest.mark.asyncio
-    async def test_global_instance_acquire_lock(self):
-        async with session_lock_manager.acquire_lock("global-test"):
-            pass
+    owner = spawn_task(first())
+    async with asyncio.timeout(2):
+        await first_entered.wait()
+        waiter = spawn_task(second())
+        await second_attempted.wait()
+        assert not second_entered.is_set()
+        release_first.set()
+        await asyncio.gather(owner, waiter)
 
-    @pytest.mark.asyncio
-    async def test_concurrent_different_sessions(self):
-        manager = SessionLockManager()
+    assert order == ["first-enter", "first-leave", "second-enter"]
 
-        async def work(session_id: str):
-            async with manager.acquire_lock(session_id):
-                pass
 
-        await asyncio.gather(work("a"), work("b"), work("c"))
+@pytest.mark.asyncio
+async def test_different_sessions_enter_while_another_session_is_locked(spawn_task):
+    manager = SessionLockManager()
+    entered = asyncio.Event()
 
-    @pytest.mark.asyncio
-    async def test_concurrent_same_session_serialized(self):
-        manager = SessionLockManager()
-        order: list[str] = []
+    async def other_session() -> None:
+        async with manager.acquire_lock("other"):
+            entered.set()
 
-        async def work(name: str):
-            async with manager.acquire_lock("shared"):
-                order.append(name)
-                await asyncio.sleep(0.01)
+    async with manager.acquire_lock("busy"):
+        other = spawn_task(other_session())
+        async with asyncio.timeout(2):
+            await entered.wait()
+            await other
 
-        await asyncio.gather(work("first"), work("second"))
-        # Both should complete; order is deterministic due to asyncio.Lock
-        assert len(order) == 2
 
-    @pytest.mark.asyncio
-    async def test_smoke_release_cleanup(self):
-        manager = SessionLockManager()
-        async with manager.acquire_lock("temp"):
-            pass
-        # After context exit, the lock should be cleaned up internally.
-        # No assertion needed beyond not crashing.
+@pytest.mark.asyncio
+async def test_cancelled_waiter_does_not_release_the_active_owner(spawn_task):
+    manager = SessionLockManager()
+    attempted = asyncio.Event()
+    entered: list[str] = []
+
+    async def waiter() -> None:
+        attempted.set()
+        async with manager.acquire_lock("shared"):
+            entered.append("cancelled")
+
+    async with manager.acquire_lock("shared"):
+        waiting = spawn_task(waiter())
+        async with asyncio.timeout(2):
+            await attempted.wait()
+            waiting.cancel()
+            with pytest.raises(asyncio.CancelledError):
+                await waiting
+        assert entered == []
+
+    async with asyncio.timeout(2):
+        async with manager.acquire_lock("shared"):
+            entered.append("replacement")
+    assert entered == ["replacement"]
+
+
+@pytest.mark.asyncio
+async def test_exception_in_owner_releases_session_for_next_execution():
+    manager = SessionLockManager()
+    with pytest.raises(ValueError, match="failed execution"):
+        async with manager.acquire_lock("shared"):
+            raise ValueError("failed execution")
+
+    async with asyncio.timeout(2):
+        async with manager.acquire_lock("shared"):
+            acquired = True
+    assert acquired is True
+
+
+def test_global_manager_can_be_reused_by_successive_event_loops():
+    entered: list[int] = []
+
+    async def acquire(index: int) -> None:
+        async with session_lock_manager.acquire_lock("successive-loops"):
+            entered.append(index)
+
+    asyncio.run(acquire(1))
+    asyncio.run(acquire(2))
+    assert entered == [1, 2]

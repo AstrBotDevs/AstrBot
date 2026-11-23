@@ -10,140 +10,342 @@ AstrBot's configuration file is a JSON format file. AstrBot reads this file at s
 
 > Since AstrBot v4.0.0, we introduced the concept of [multiple configuration files](https://blog.astrbot.app/posts/what-is-changed-in-4.0.0/#%E5%A4%9A%E9%85%8D%E7%BD%AE%E6%96%87%E4%BB%B6). `data/cmd_config.json` serves as the default configuration `default`. Other configuration files you create in the WebUI are stored in the `data/config/` directory, starting with `abconf_`.
 
-The default AstrBot configuration is as follows:
+In the WebUI, manage bot and session behavior profiles (including text-to-image) under `Config`. Global runtime, logging, network, and WebUI security settings are under `System Settings`. Model connections and bot connections are managed under `Providers` and `Platforms`, respectively.
 
-```jsonc
+## Upgrade and Manual Editing {#agent-config-migration}
+
+The current configuration uses `config_version: 6`. Model, persona, context, and execution settings for built-in AI live under `agent.config`. When an older configuration without an `agent` section is first loaded, AstrBot migrates its settings automatically. The legacy `agent_runner` section becomes `agent`, and the built-in runtime name changes from `local` to `astrbot`. A normal upgrade does not require moving these fields manually.
+
+After migration, the existing `agent` section is the source of these settings. Use the new paths below when editing JSON or updating configuration scripts. Writing the old `provider_settings` keys again does not override `agent.config`; configuration loading removes those old keys.
+
+| Old path | Current path (AstrBot Built-in AI) |
+| --- | --- |
+| `provider_settings.default_provider_id` | `agent.config.model.provider_id` |
+| `provider_settings.default_personality` | `agent.config.persona.persona_id` |
+| `provider_settings.max_context_length` | `agent.config.compression.max_turns` |
+| `provider_settings.dequeue_context_length` | `agent.config.compression.trim_turns` |
+| `provider_settings.max_agent_step` | `agent.config.misc.max_steps` |
+| `provider_settings.tool_call_timeout` | `agent.config.misc.tool_call_timeout` |
+
+`provider_settings` still holds the AI switch and common message settings, including `enable`, `wake_prefix`, `web_search`, and `streaming_response`. These valid fields keep their existing paths.
+
+You can also edit them under **Config → AI**: use **Model** for chat models, **Persona** for the persona, and **Advanced** for context and execution settings. Click **Save Configuration** when finished. See [Agent Execution Mode](../use/agent-runner.md) for connecting external applications.
+
+## Default Configuration Example
+
+The following is the complete current source default configuration, with the built-in AI's `agent.config` expanded. It does not include authentication values generated during initialization. Merge the fields you need into your existing configuration when configuring an existing instance.
+
+```json
 {
-    "config_version": 2,
+    "config_version": 6,
     "platform_settings": {
-        "unique_session": False,
+        "locale": "zh-CN",
+        "unique_session": false,
         "rate_limit": {
             "time": 60,
             "count": 30,
-            "strategy": "stall",  # stall, discard
+            "strategy": "stall"
         },
         "reply_prefix": "",
         "forward_threshold": 1500,
-        "enable_id_white_list": True,
+        "enable_id_white_list": true,
         "id_whitelist": [],
-        "id_whitelist_log": True,
-        "wl_ignore_admin_on_group": True,
-        "wl_ignore_admin_on_friend": True,
-        "reply_with_mention": False,
-        "reply_with_quote": False,
+        "id_blacklist": [],
+        "id_whitelist_log": true,
+        "wl_ignore_admin_on_group": true,
+        "wl_ignore_admin_on_friend": true,
+        "reply_with_mention": false,
+        "reply_with_quote": false,
         "path_mapping": [],
         "segmented_reply": {
-            "enable": False,
-            "only_llm_result": True,
+            "enable": false,
+            "only_llm_result": true,
             "interval_method": "random",
             "interval": "1.5,3.5",
             "log_base": 2.6,
             "words_count_threshold": 150,
+            "split_mode": "regex",
             "regex": ".*?[。？！~…]+|.+$",
-            "content_cleanup_rule": "",
+            "split_words": [
+                "。",
+                "？",
+                "！",
+                "~",
+                "…"
+            ],
+            "content_cleanup_rule": ""
         },
-        "no_permission_reply": True,
-        "empty_mention_waiting": True,
-        "empty_mention_waiting_need_reply": True,
-        "friend_message_needs_wake_prefix": False,
-        "ignore_bot_self_message": False,
-        "ignore_at_all": False,
+        "no_permission_reply": true,
+        "empty_mention_waiting": true,
+        "empty_mention_waiting_need_reply": true,
+        "friend_message_needs_wake_prefix": false,
+        "ignore_bot_self_message": false,
+        "ignore_at_all": false
     },
+    "provider_sources": [],
     "provider": [],
     "provider_settings": {
-        "enable": True,
-        "default_provider_id": "",
+        "enable": true,
         "default_image_caption_provider_id": "",
         "image_caption_prompt": "Please describe the image using Chinese.",
-        "provider_pool": ["*"],  # "*" means use all available providers
+        "provider_pool": [
+            "*"
+        ],
         "wake_prefix": "",
-        "web_search": False,
+        "web_search": false,
         "websearch_provider": "tavily",
         "websearch_tavily_key": [],
         "websearch_bocha_key": [],
         "websearch_brave_key": [],
-        "web_search_link": False,
-        "display_reasoning_text": False,
-        "identifier": False,
-        "group_name_display": False,
-        "datetime_system_prompt": True,
-        "default_personality": "default",
-        "persona_pool": ["*"],
+        "websearch_baidu_app_builder_key": "",
+        "websearch_firecrawl_key": [],
+        "websearch_exa_key": [],
+        "websearch_anysearch_key": [],
+        "websearch_deepseek_key": [],
+        "websearch_serpapi_key": [],
+        "web_search_link": false,
+        "display_reasoning_text": false,
+        "identifier": false,
+        "group_name_display": false,
+        "datetime_system_prompt": true,
+        "persona_pool": [
+            "*"
+        ],
         "prompt_prefix": "{{prompt}}",
-        "max_context_length": -1,
-        "dequeue_context_length": 1,
-        "streaming_response": False,
-        "show_tool_use_status": False,
-        "streaming_segmented": False,
-        "max_agent_step": 30,
-        "tool_call_timeout": 120,
+        "streaming_response": false,
+        "show_tool_use_status": false,
+        "show_tool_call_result": false,
+        "buffer_intermediate_messages": false,
+        "max_quoted_fallback_images": 20,
+        "quoted_message_parser": {
+            "max_component_chain_depth": 4,
+            "max_forward_node_depth": 6,
+            "max_forward_fetch": 32,
+            "warn_on_action_failure": false
+        },
+        "unsupported_streaming_strategy": "realtime_segmenting",
+        "reachability_check": false,
+        "file_extract": {
+            "enable": false,
+            "provider": "moonshotai",
+            "moonshotai_api_key": ""
+        },
+        "proactive_capability": {
+            "add_cron_tools": true
+        },
+        "computer_use_runtime": "none",
+        "computer_use_local_permissions": {
+            "member": {
+                "allow_execution": false,
+                "allow_network": false,
+                "filesystem_scope": "workspace"
+            },
+            "admin": {
+                "allow_execution": true,
+                "allow_network": true,
+                "filesystem_scope": "host"
+            }
+        },
+        "computer_use_require_admin": true,
+        "sandbox": {
+            "booter": "shipyard_neo",
+            "shipyard_endpoint": "",
+            "shipyard_access_token": "",
+            "shipyard_ttl": 3600,
+            "shipyard_max_sessions": 10,
+            "shipyard_neo_endpoint": "",
+            "shipyard_neo_access_token": "",
+            "shipyard_neo_profile": "python-default",
+            "shipyard_neo_ttl": 3600,
+            "cua_image": "linux",
+            "cua_os_type": "linux",
+            "cua_idle_timeout": 0,
+            "cua_telemetry_enabled": false,
+            "cua_local": true,
+            "cua_api_key": ""
+        },
+        "image_compress_options": {
+            "max_size": 1280
+        }
+    },
+    "agent": {
+        "runtime": "astrbot",
+        "config": {
+            "model": {
+                "provider_id": "",
+                "fallback_provider_ids": [],
+                "request_max_retries": 5
+            },
+            "persona": {
+                "persona_id": "default",
+                "safety_mode": true,
+                "safety_mode_strategy": "system_prompt",
+                "system_prompt": "",
+                "tools": null,
+                "skills": null
+            },
+            "compression": {
+                "max_turns": -1,
+                "trim_turns": 1,
+                "overflow_strategy": "llm_compress",
+                "instruction": "",
+                "keep_recent_ratio": 0.15,
+                "provider_id": "",
+                "fallback_max_tokens": 128000
+            },
+            "misc": {
+                "max_steps": 128,
+                "tool_schema_mode": "full",
+                "tool_call_timeout": 120,
+                "sanitize_context_by_modalities": false
+            },
+            "subagents": {
+                "enabled": false,
+                "config_ids": [],
+                "max_concurrent_agents": 3,
+                "task_timeout": 600
+            }
+        }
     },
     "provider_stt_settings": {
-        "enable": False,
-        "provider_id": "",
+        "enable": false,
+        "provider_id": ""
     },
     "provider_tts_settings": {
-        "enable": False,
+        "enable": false,
         "provider_id": "",
-        "dual_output": False,
-        "use_file_service": False,
+        "dual_output": false,
+        "use_file_service": false,
+        "trigger_probability": 1.0
     },
     "provider_ltm_settings": {
-        "group_icl_enable": False,
+        "group_icl_enable": false,
         "group_message_max_cnt": 1000,
-        "image_caption": False,
+        "image_caption": false,
+        "image_caption_provider_id": "",
+        "group_message_history_enable": false,
+        "group_message_history_max_cnt": 700,
         "active_reply": {
-            "enable": False,
+            "enable": false,
             "method": "possibility_reply",
             "possibility_reply": 0.1,
-            "whitelist": [],
-        },
+            "whitelist": []
+        }
     },
     "content_safety": {
-        "also_use_in_response": False,
-        "internal_keywords": {"enable": True, "extra_keywords": []},
-        "baidu_aip": {"enable": False, "app_id": "", "api_key": "", "secret_key": ""},
+        "also_use_in_response": false,
+        "internal_keywords": {
+            "enable": true,
+            "extra_keywords": []
+        },
+        "baidu_aip": {
+            "enable": false,
+            "app_id": "",
+            "api_key": "",
+            "secret_key": ""
+        }
     },
-    "admins_id": ["astrbot"],
-    "t2i": False,
+    "admins_id": [
+        "astrbot"
+    ],
+    "t2i": false,
     "t2i_word_threshold": 150,
     "t2i_strategy": "remote",
     "t2i_endpoint": "",
-    "t2i_use_file_service": False,
+    "t2i_use_file_service": false,
     "t2i_active_template": "base",
     "http_proxy": "",
-    "no_proxy": ["localhost", "127.0.0.1", "::1"],
+    "no_proxy": [
+        "localhost",
+        "127.0.0.1",
+        "::1",
+        "10.*",
+        "192.168.*"
+    ],
     "dashboard": {
-        "enable": True,
+        "enable": true,
         "username": "astrbot",
-        "password": "<your_password_md5>",
+        "password": "",
+        "pbkdf2_password": "",
+        "password_storage_upgraded": false,
+        "password_change_required": false,
         "jwt_secret": "",
         "host": "0.0.0.0",
         "port": 6185,
+        "disable_access_log": true,
+        "trust_proxy_headers": false,
+        "auth_rate_limit": {
+            "enable": true,
+            "average_interval": 1.0,
+            "max_burst": 3
+        },
+        "totp": {
+            "enable": false,
+            "secret": "",
+            "recovery_code_hash": ""
+        },
+        "ssl": {
+            "enable": false,
+            "cert_file": "",
+            "key_file": "",
+            "ca_certs": ""
+        }
     },
     "platform": [],
     "platform_specific": {
-        # Platform-specific settings: categorized by platform, then by feature group
         "lark": {
-            "pre_ack_emoji": {"enable": False, "emojis": ["Typing"]},
+            "pre_ack_emoji": {
+                "enable": false,
+                "emojis": [
+                    "Typing"
+                ]
+            }
         },
         "telegram": {
-            "pre_ack_emoji": {"enable": False, "emojis": ["✍️"]},
+            "pre_ack_emoji": {
+                "enable": false,
+                "emojis": [
+                    "✍️"
+                ]
+            }
         },
         "discord": {
-            "pre_ack_emoji": {"enable": False, "emojis": ["🤔"]},
-        },
+            "pre_ack_emoji": {
+                "enable": false,
+                "emojis": [
+                    "🤔"
+                ]
+            }
+        }
     },
-    "wake_prefix": ["/"],
+    "wake_prefix": [
+        "/"
+    ],
     "log_level": "INFO",
-    "trace_enable": False,
+    "log_file_enable": false,
+    "log_file_path": "logs/astrbot.log",
+    "log_file_max_mb": 20,
+    "temp_dir_max_size": 1024,
+    "trace_enable": false,
+    "trace_db_path": "logs/traces.db",
+    "trace_db_max_mb": 80,
+    "trace_retention_days": 7,
     "pip_install_arg": "",
     "pypi_index_url": "https://mirrors.aliyun.com/pypi/simple/",
-    "persona": [],  # deprecated
+    "persona": [],
     "timezone": "Asia/Shanghai",
     "callback_api_base": "",
-    "default_kb_collection": "",  # Default knowledge base name
-    "plugin_set": ["*"],  # "*" means use all available plugins, empty list means none
+    "default_kb_collection": "",
+    "disabled_plugins": [],
+    "plugin_set": [
+        "*"
+    ],
+    "kb_names": [],
+    "kb_fusion_top_k": 20,
+    "kb_final_top_k": 5,
+    "kb_agentic_mode": false,
+    "disable_builtin_commands": false,
+    "disable_metrics": false
 }
 ```
 
@@ -151,7 +353,7 @@ The default AstrBot configuration is as follows:
 
 ### `config_version`
 
-Configuration version, do not modify.
+The current value is `6`. AstrBot maintains it during configuration migration; do not edit it manually.
 
 ### `platform_settings`
 
@@ -159,7 +361,7 @@ General settings for message platform adapters.
 
 #### `platform_settings.unique_session`
 
-Whether to enable session isolation. Default is `false`. When enabled, each person's conversation context in groups or channels is independent.
+Whether to enable **Isolate Conversation**. Defaults to `false`. On supported platforms, each group member has a separate conversation context when enabled. Unsupported platforms retain their existing context. Access to `/new` and `/reset` is controlled by [command permissions](../use/command.md), which follow conversation isolation by default.
 
 #### `platform_settings.rate_limit`
 
@@ -174,6 +376,8 @@ Fixed prefix string when replying to messages. Default is empty.
 > Currently only applicable to the QQ platform adapter.
 
 Message forwarding threshold. When the reply content exceeds a certain number of characters, the bot will fold the message into a QQ group "forwarded message" to prevent spamming.
+
+In WebUI, select the profile used by your bot and open `Access Control → Whitelist` to manage the following whitelist settings.
 
 #### `platform_settings.enable_id_white_list`
 
@@ -260,10 +464,6 @@ General settings for LLM providers.
 
 Whether to enable LLM chat. Default is `true`.
 
-#### `provider_settings.default_provider_id`
-
-Default conversation model provider ID. Must be a provider ID already configured in the `provider` list. If empty, the first provider in the list is used.
-
 #### `provider_settings.default_image_caption_provider_id`
 
 Default image captioning model provider ID. Must be a provider ID already configured in the `provider` list. If empty, image captioning is disabled.
@@ -288,13 +488,17 @@ Whether to enable AstrBot's built-in web search capability. Default is `false`. 
 
 #### `provider_settings.websearch_provider`
 
-Web search provider type. Default is `tavily`. Currently supports `tavily`, `bocha`, `baidu_ai_search`, `brave`, and `firecrawl`.
+Web search provider type. Default is `tavily`. Currently supports `serpapi`, `deepseek`, `tavily`, `bocha`, `baidu_ai_search`, `brave`, `firecrawl`, `exa`, and `anysearch`.
 
+- `serpapi`: Uses SerpApi Google Search, Google News, Google Images Light, Google Finance, and Google Scholar.
+- `deepseek`: Uses the DeepSeek Search API.
 - `tavily`: Uses the Tavily search engine.
 - `bocha`: Uses the BoCha search engine.
 - `baidu_ai_search`: Uses Baidu AI Search (MCP).
 - `brave`: Uses Brave Search API.
 - `firecrawl`: Uses the Firecrawl Search API.
+- `exa`: Uses the Exa Search API.
+- `anysearch`: Uses the AnySearch API.
 
 #### `provider_settings.websearch_tavily_key`
 
@@ -311,6 +515,14 @@ API Key list for the Brave search engine. Required when using `brave` as the web
 #### `provider_settings.websearch_firecrawl_key`
 
 API Key list for the Firecrawl search engine. Required when using `firecrawl` as the web search provider.
+
+#### `provider_settings.websearch_deepseek_key`
+
+API Key list for the DeepSeek search engine. Required when using `deepseek` as the web search provider. Can use the same API key as the chat model, but must be configured separately. Multiple keys under the same account share rate limits.
+
+#### `provider_settings.websearch_serpapi_key`
+
+API Key list shared by SerpApi Google Search, Google News, Google Images Light, Google Finance, and Google Scholar. Required when using `serpapi` as the web search provider. Obtain a key at [SerpApi](https://serpapi.com/manage-api-key). Multiple keys rotate, with failover on authentication and quota errors.
 
 #### `provider_settings.web_search_link`
 
@@ -332,10 +544,6 @@ Whether to let the model know the name of the group it's in. Default is `false`.
 
 Whether to include the current machine date and time in the system prompt. Default is `true`.
 
-#### `provider_settings.default_personality`
-
-ID of the default personality to use. Configure personalities in the WebUI.
-
 #### `provider_settings.persona_pool`
 
 *This configuration item is not yet in actual use.*
@@ -344,37 +552,55 @@ ID of the default personality to use. Configure personalities in the WebUI.
 
 User prompt. You can use `{{prompt}}` as a placeholder for user input. If no placeholder is provided, it's prepended to the user input.
 
-#### `provider_settings.max_context_length`
-
-When the conversation context exceeds this number, the oldest parts are discarded. One round of chat counts as 1. -1 means no limit.
-
-#### `provider_settings.dequeue_context_length`
-
-The number of conversation rounds to discard each time the `max_context_length` limit is triggered.
-
 #### `provider_settings.streaming_response`
 
-Whether to enable streaming responses. Default is `false`. When enabled, the model's reply is sent to the user in real-time with a typewriter effect. This only takes effect on WebChat, Telegram, and Lark platforms.
+Whether to enable streaming responses. Defaults to `false`. Platforms with native streaming support display the reply progressively; other platforms use `provider_settings.unsupported_streaming_strategy`.
 
 #### `provider_settings.show_tool_use_status`
 
 Whether to show tool usage status. Default is `false`. When enabled, the model displays the tool name and input parameters when using a tool.
 
-#### `provider_settings.streaming_segmented`
+#### `provider_settings.unsupported_streaming_strategy`
 
-Whether platforms that don't support streaming responses should fall back to segmented replies. Default is `false`. This means if streaming is enabled but the platform doesn't support it, segmented multiple replies are used instead.
+Controls delivery on platforms without native streaming support. The default, `"realtime_segmenting"`, sends the streamed content in segments. `"turn_off"` disables streaming on those platforms.
 
-#### `provider_settings.max_agent_step`
+### `agent`
 
-Limit on the maximum number of Agent steps. Default is `30`. Each tool call by the model counts as one step.
+`agent.runtime` selects the execution mode, and `agent.config` stores that mode's parameters. The fields below apply to the default `astrbot` runtime. External execution modes use their own configuration structures; see [Agent Execution Mode](../use/agent-runner.md).
 
-#### `provider_settings.tool_call_timeout`
+#### `agent.runtime`
 
-Added in `v4.3.5`
+Defaults to `"astrbot"`. Other standard choices include `"dify"`, `"coze"`, `"dashscope"`, and `"deerflow"`. In the WebUI, open **Config → AI → More actions (…) → Change Agent Runtime**. Switching replaces `agent.config` with the selected mode's defaults. Copy the configuration profile first if you need to retain the original settings.
 
-Maximum timeout for tool calls (seconds), default is `60` seconds.
+#### `agent.config.model.provider_id`
 
-#### `provider_stt_settings`
+The default chat model ID, empty by default. Select a chat model configured in the `provider` list, or use **Config → AI → Model**. In the same group, `fallback_provider_ids` defaults to an empty list and `request_max_retries` defaults to `5`.
+
+#### `agent.config.persona.persona_id`
+
+The default persona ID, which defaults to `"default"`. Select it under **Config → AI → Persona**.
+
+#### `agent.config.compression.max_turns`
+
+The context's turn limit. Defaults to `-1`, which adds no turn-based limit. A positive value limits retained history turns. `-1` does not disable context processing triggered by token usage.
+
+#### `agent.config.compression.trim_turns`
+
+The number of oldest turns to remove at once when the turn limit is reached. Defaults to `1`. The group's `overflow_strategy` selects the context-processing strategy and defaults to `"llm_compress"`. See [Context Compression](../use/context-compress.md) for the other compression settings and WebUI instructions.
+
+#### `agent.config.misc.max_steps`
+
+The Agent's execution step limit, which defaults to `128`. Adjust it under **Config → AI → Advanced → Execution**.
+
+#### `agent.config.misc.tool_call_timeout`
+
+The tool-call timeout in seconds, which defaults to `120`. Configure it alongside the step limit under **Execution**.
+
+#### `agent.config.subagents`
+
+Subagent settings for the current profile. `enabled` defaults to `false`, `config_ids` to an empty list, `max_concurrent_agents` to `3`, and `task_timeout` to `600` seconds. Open **Config → AI → Capabilities → Subagents**; see [Subagents](../use/subagent.md).
+
+### `provider_stt_settings`
 
 General settings for Speech-to-Text (STT) providers.
 
@@ -386,7 +612,7 @@ Whether to enable STT services. Default is `false`.
 
 STT provider ID. Must be an STT provider ID already configured in the `provider` list.
 
-#### `provider_tts_settings`
+### `provider_tts_settings`
 
 General settings for Text-to-Speech (TTS) providers.
 
@@ -406,7 +632,7 @@ Whether to enable dual output. Default is `false`. When enabled, the bot sends b
 
 Whether to enable the file service. Default is `false`. When enabled, the bot provides the output voice file as an external HTTP link to the message platform. This depends on the `callback_api_base` configuration.
 
-#### `provider_ltm_settings`
+### `provider_ltm_settings`
 
 General settings for group chat context awareness providers.
 
@@ -462,6 +688,8 @@ Baidu AI content moderation settings.
 
 List of administrator IDs. Additionally, you can use `/op` and `/deop` commands to add or remove admins.
 
+In WebUI, select the profile used by your bot under `Config`, then open `Access Control → Administrators → Administrator IDs`. Send `/sid` to the bot to get your `UID`.
+
 ### `t2i`
 
 Whether to enable Text-to-Image (T2I) functionality. Default is `false`. When enabled, if a user's message exceeds a certain character count, the bot renders the message as an image to improve readability and prevent spamming. Supports Markdown rendering.
@@ -487,7 +715,7 @@ Whether to enable the file service. Default is `false`. When enabled, the bot pr
 
 ### `http_proxy`
 
-HTTP proxy. E.g., `http://localhost:7890`.
+HTTP proxy. E.g., `http://localhost:7890`. When AstrBot runs in Docker, use an address reachable from the AstrBot container. See [Deploy with Docker](/en/deploy/astrbot/docker.md).
 
 ### `no_proxy`
 
@@ -548,7 +776,30 @@ Log level. Default is `INFO`. Can be set to `DEBUG`, `INFO`, `WARNING`, `ERROR`,
 
 ### `trace_enable`
 
-Whether to enable trace recording. Default is `false`. When enabled, AstrBot records execution traces, which can be viewed on the Trace page of the admin panel.
+Whether to enable trace recording. Default is `false`. Toggle it under `Settings → General → Logs → Enable Trace Recording`; this is the same setting as the trace page’s start/pause button. When enabled, AstrBot records execution traces, which can be viewed under `Data & Logs → Trace` in the admin panel.
+
+Enabling recording also persists traces. Pausing preserves history and lets existing traces finish. The OpenTelemetry API and SDK manage span IDs, parent relationships, timestamps, status, events, and active context. Logs correlate with the active `trace_id` / `span_id`; plugins continue using `astrbot.api.logger`. AstrBot uses its own TracerProvider without replacing the global provider, adding exporters, or enabling automatic instrumentation. SQLite persistence and JSON API/SSE remain unchanged; existing history stays readable. No OTLP export is enabled. The standard `OTEL_SDK_DISABLED=true` environment variable also disables SDK tracing.
+
+Framework entry points compose `log_context(...)`, `event_context(event)`, and the independent `trace_execution(event.trace)` scope. Only the outermost trace execution scope completes the trace after awaited processing, delivery, and history saving; failures and cancellations mark it errored and propagate unchanged. `event_context(event)` only binds the current event, registers active execution, and cleans up temporary files. `TraceSpan.context()` only binds the root span without completing it. Plugins do not need to wrap their handlers in these framework-owned execution scopes.
+
+### `trace_db_path`
+
+Dedicated SQLite path, default `logs/traces.db`, relative to `data`. Restart after changing the path. Log cleanup protects the database, WAL, and SHM. Trace content may contain messages, plugin arguments, and tool results; restrict file access accordingly.
+
+### `trace_db_max_mb` / `trace_retention_days`
+
+Positive integers, default 80 MB capacity target and 7-day retention; unlimited capacity is not supported. Expired or oldest traces are evicted as complete units. WAL, checkpoints, and page reclamation may temporarily add disk usage, so this is not an instantaneous hard limit. Per-trace content, span, and event limits also apply; detail shows truncation warnings.
+
+Legacy settings migrate on load, with new settings taking precedence. Existing JSONL files remain untouched and are neither appended nor automatically imported:
+
+| Old setting | New setting/behavior |
+| --- | --- |
+| `trace_enable` | Unchanged; controls recording and persistence of new traces |
+| `trace_log_enable` | Removed; no separate JSONL toggle |
+| `trace_log_path` | Removed; replaced by `trace_db_path: logs/traces.db` by default |
+| `trace_log_max_mb` | When new capacity is absent, a positive integer is multiplied by 4 for `trace_db_max_mb`, approximating the old current file plus 3 backups; invalid values fall back to 80 MB |
+
+The new `trace_retention_days` defaults to 7 days.
 
 ### `pip_install_arg`
 

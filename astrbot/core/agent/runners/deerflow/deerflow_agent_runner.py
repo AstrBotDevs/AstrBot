@@ -13,7 +13,8 @@ from astrbot.core import sp
 from astrbot.core.agent.hooks import BaseAgentRunHooks
 from astrbot.core.agent.response import AgentResponse, AgentResponseData
 from astrbot.core.agent.run_context import ContextWrapper, TContext
-from astrbot.core.agent.runners.base import AgentState, BaseAgentRunner
+from astrbot.core.agent.runners.base import AgentState
+from astrbot.core.agent.runners.remote import RemoteAgentRunner
 from astrbot.core.agent.tool_executor import BaseFunctionToolExecutor
 from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.provider.entities import (
@@ -44,7 +45,7 @@ from .deerflow_stream_utils import (
 )
 
 
-class DeerFlowAgentRunner(BaseAgentRunner[TContext]):
+class DeerFlowAgentRunner(RemoteAgentRunner[TContext]):
     """DeerFlow Agent Runner via LangGraph HTTP API."""
 
     _MAX_VALUES_HISTORY = 200
@@ -119,30 +120,6 @@ class DeerFlowAgentRunner(BaseAgentRunner[TContext]):
                     e,
                     exc_info=True,
                 )
-
-    async def _notify_agent_done_hook(self) -> None:
-        if not self.final_llm_resp:
-            return
-        try:
-            await self.agent_hooks.on_agent_done(self.run_context, self.final_llm_resp)
-        except Exception as e:
-            logger.error(f"Error in on_agent_done hook: {e}", exc_info=True)
-
-    async def _finish_with_result(
-        self,
-        chain: MessageChain,
-        role: str,
-    ) -> AgentResponse:
-        self.final_llm_resp = LLMResponse(
-            role=role,
-            result_chain=chain,
-        )
-        self._transition_state(AgentState.DONE)
-        await self._notify_agent_done_hook()
-        return AgentResponse(
-            type="llm_result",
-            data=AgentResponseData(chain=chain),
-        )
 
     async def _finish_with_error(self, err_msg: str) -> AgentResponse:
         err_text = f"DeerFlow request failed: {err_msg}"
@@ -262,10 +239,10 @@ class DeerFlowAgentRunner(BaseAgentRunner[TContext]):
     @override
     async def reset(
         self,
-        provider: Provider,
+        provider: Provider | None,
         request: ProviderRequest,
         run_context: ContextWrapper[TContext],
-        tool_executor: BaseFunctionToolExecutor[TContext],
+        tool_executor: BaseFunctionToolExecutor[TContext] | None,
         agent_hooks: BaseAgentRunHooks[TContext],
         streaming: bool = False,
         enforce_max_turns: int = -1,
@@ -280,12 +257,7 @@ class DeerFlowAgentRunner(BaseAgentRunner[TContext]):
         provider_config: dict | None = None,
         **kwargs: Any,
     ) -> None:
-        self.req = request
-        self.streaming = streaming
-        self.final_llm_resp = None
-        self._state = AgentState.IDLE
-        self.agent_hooks = agent_hooks
-        self.run_context = run_context
+        self._reset_request(request, run_context, agent_hooks, streaming)
 
         await self._load_config_and_client(provider_config or {})
 
@@ -296,13 +268,7 @@ class DeerFlowAgentRunner(BaseAgentRunner[TContext]):
         if self.done():
             return
 
-        if self._state == AgentState.IDLE:
-            try:
-                await self.agent_hooks.on_agent_begin(self.run_context)
-            except Exception as e:
-                logger.error(f"Error in on_agent_begin hook: {e}", exc_info=True)
-
-        self._transition_state(AgentState.RUNNING)
+        await self._begin_agent_run()
 
         try:
             async for response in self._execute_deerflow_request():
@@ -316,7 +282,9 @@ class DeerFlowAgentRunner(BaseAgentRunner[TContext]):
             yield await self._finish_with_error(err_msg)
 
     @override
-    async def step_until_done(self, max_step: int):
+    async def step_until_done(
+        self, max_step: int = 128
+    ) -> T.AsyncGenerator[AgentResponse, None]:
         if max_step <= 0:
             raise ValueError("max_step must be greater than 0")
 

@@ -3,8 +3,9 @@ from __future__ import annotations
 import base64
 import enum
 import json
+from collections.abc import Mapping
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, TypeAlias
 
 import aiofiles
 from anthropic.types import Message as AnthropicMessage
@@ -20,12 +21,16 @@ from astrbot.core.agent.message import (
     ContentPart,
     ToolCall,
     ToolCallMessageSegment,
-    is_checkpoint_message,
 )
 from astrbot.core.agent.tool import ToolSet
 from astrbot.core.db.po import Conversation
 from astrbot.core.message.message_event_result import MessageChain
-from astrbot.core.utils.media_utils import MediaResolver
+from astrbot.core.provider.media import image_data_url
+from astrbot.core.utils.media_utils import (
+    MediaResolver,
+    is_recoverable_image_error,
+    resolve_image_ref_to_base64_data,
+)
 
 
 class ProviderType(enum.Enum):
@@ -34,6 +39,109 @@ class ProviderType(enum.Enum):
     TEXT_TO_SPEECH = "text_to_speech"
     EMBEDDING = "embedding"
     RERANK = "rerank"
+    DECISION = "decision"
+
+
+@dataclass(frozen=True, slots=True)
+class DecisionChoiceQuestion:
+    """A decision question with a fixed set of choices.
+
+    Attributes:
+        instructions: The question or instruction evaluated by the model.
+        criteria: Mapping of option IDs to descriptions. At least two entries are required.
+    """
+
+    instructions: str
+    criteria: Mapping[str, str]
+
+
+@dataclass(frozen=True, slots=True)
+class DecisionBooleanQuestion:
+    """A decision question that asks for the probability of a statement being true.
+
+    Attributes:
+        instructions: The statement or question evaluated by the model.
+        criteria: Optional descriptions for the "true" and/or "false" outcomes.
+    """
+
+    instructions: str
+    criteria: Mapping[str, str] | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class DecisionScoreQuestion:
+    """A decision question scored against ordered levels.
+
+    Attributes:
+        instructions: The question or instruction evaluated by the model.
+        criteria: Two to ten level descriptions, ordered from lowest to highest.
+    """
+
+    instructions: str
+    criteria: list[str]
+
+
+# Keep this union eager for runtime consumers and Pydantic v1.
+DecisionQuestion: TypeAlias = (  # noqa: UP040
+    DecisionChoiceQuestion | DecisionBooleanQuestion | DecisionScoreQuestion
+)
+# Keep this union eager for runtime consumers and Pydantic v1.
+DecisionState: TypeAlias = str | list[Any] | dict[str, Any]  # noqa: UP040
+
+
+@dataclass(frozen=True, slots=True)
+class DecisionChoiceAnswer:
+    """The normalized answer for a choice question.
+
+    Attributes:
+        choice: Selected option ID.
+        probability: Probability of the selected option.
+        probabilities: Full probability distribution over option IDs.
+        confidence: Model confidence in the selected option.
+    """
+
+    choice: str
+    probability: float
+    probabilities: Mapping[str, float]
+    confidence: float
+
+
+@dataclass(frozen=True, slots=True)
+class DecisionBooleanAnswer:
+    """The normalized answer for a boolean question.
+
+    Attributes:
+        probability: Probability of the statement being true.
+    """
+
+    probability: float
+
+
+@dataclass(frozen=True, slots=True)
+class DecisionScoreAnswer:
+    """The normalized answer for a score question.
+
+    Attributes:
+        score: Probability-weighted level number, possibly fractional.
+        legend: Mapping of string level numbers to descriptions.
+        probabilities: Full probability distribution over string level numbers.
+        confidence: Model confidence in the score.
+    """
+
+    score: float
+    legend: Mapping[str, str]
+    probabilities: Mapping[str, float]
+    confidence: float
+
+
+# Keep this union eager for runtime consumers and Pydantic v1.
+DecisionAnswer: TypeAlias = (  # noqa: UP040
+    DecisionChoiceAnswer | DecisionBooleanAnswer | DecisionScoreAnswer
+)
+
+
+class DecisionError(RuntimeError):
+    """Raised when a decision provider is unavailable or returns an invalid answer."""
 
 
 @dataclass
@@ -150,8 +258,6 @@ class ProviderRequest:
         result_parts = []
 
         for ctx in self.contexts:
-            if is_checkpoint_message(ctx):
-                continue
             role = ctx.get("role", "unknown")
             content = ctx.get("content", "")
 
@@ -188,9 +294,14 @@ class ProviderRequest:
         return "\n".join(result_parts)
 
     async def assemble_context(self) -> dict:
-        """将请求(prompt、image_urls 和 audio_urls)包装成统一消息格式。"""
+        """Serialize current media references without transforming image content.
+
+        Returns:
+            A user message containing encoded media, text or a failure placeholder.
+        """
         # 构建内容块列表
         content_blocks = []
+        image_capture_failed = False
 
         # 1. 用户原始发言（OpenAI 建议：用户发言在前）
         if self.prompt and self.prompt.strip():
@@ -205,21 +316,60 @@ class ProviderRequest:
         # 2. 额外的内容块（系统提醒、指令等）
         if self.extra_user_content_parts:
             for part in self.extra_user_content_parts:
-                content_blocks.append(part.model_dump_for_context())
+                dumped = (
+                    part if isinstance(part, dict) else part.model_dump_for_context()
+                )
+                # Capture bytes before event cleanup. Extra image paths must also
+                # reach providers and persisted history as portable data URIs.
+                if isinstance(dumped, dict) and dumped.get("type") == "image_url":
+                    image_url = dumped.get("image_url")
+                    url = image_url.get("url") if isinstance(image_url, dict) else None
+                    if isinstance(image_url, dict) and isinstance(url, str) and url:
+                        try:
+                            resolved = await resolve_image_ref_to_base64_data(url)
+                        except Exception as exc:
+                            if not is_recoverable_image_error(exc):
+                                raise
+                            logger.warning(
+                                "Image source capture failed; skipping image (%s).",
+                                type(exc).__name__,
+                            )
+                            image_capture_failed = True
+                            continue
+                        if resolved is None:
+                            logger.warning(
+                                "Image source capture returned no data; skipping image."
+                            )
+                            image_capture_failed = True
+                            continue
+                        dumped = {
+                            **dumped,
+                            "image_url": {
+                                **image_url,
+                                "url": resolved.to_data_url(),
+                            },
+                        }
+                content_blocks.append(dumped)
 
-        # 3. 图片内容
+        # 3. Read image references without resizing or transcoding.
         if self.image_urls:
             for image_url in self.image_urls:
                 try:
-                    image_data = await MediaResolver(
-                        image_url,
-                        media_type="image",
-                    ).to_base64_data(strict=True)
+                    image_data = await resolve_image_ref_to_base64_data(image_url)
                 except Exception as exc:
-                    logger.warning("图片预处理失败，将忽略。错误: %s", exc)
+                    if not is_recoverable_image_error(exc):
+                        raise
+                    logger.warning(
+                        "Image source capture failed; skipping image (%s).",
+                        type(exc).__name__,
+                    )
+                    image_capture_failed = True
                     continue
-                if not image_data:
-                    logger.warning("图片预处理结果为空，将忽略。")
+                if image_data is None:
+                    logger.warning(
+                        "Image source capture returned no data; skipping image."
+                    )
+                    image_capture_failed = True
                     continue
                 content_blocks.append(
                     {
@@ -253,6 +403,12 @@ class ProviderRequest:
                     },
                 )
 
+        if image_capture_failed and not any(
+            block.get("type") != "text" or block.get("text", "").strip()
+            for block in content_blocks
+        ):
+            content_blocks = [{"type": "text", "text": "[Image unavailable]"}]
+
         # 只有当只有一个来自 prompt 的文本块且没有额外内容块时，才降级为简单格式以保持向后兼容
         if (
             len(content_blocks) == 1
@@ -267,12 +423,8 @@ class ProviderRequest:
         return {"role": "user", "content": content_blocks}
 
     async def _encode_image_bs64(self, image_url: str) -> str:
-        """将图片转换为 base64"""
-        if image_url.startswith("base64://"):
-            return image_url.replace("base64://", "data:image/jpeg;base64,")
-        async with aiofiles.open(image_url, "rb") as f:
-            image_bs64 = base64.b64encode(await f.read()).decode("utf-8")
-            return "data:image/jpeg;base64," + image_bs64
+        """Encode a local or base64 image reference as a data URL."""
+        return await image_data_url(image_url)
 
     async def _encode_audio_bs64(
         self,
@@ -413,6 +565,15 @@ class LLMResponse:
             self.id = id
         if usage is not None:
             self.usage = usage
+
+    @property
+    def has_text_or_tool_output(self) -> bool:
+        """Whether text, reasoning, or tool arguments provide usable output."""
+        return bool(
+            (self.completion_text or "").strip()
+            or (self.reasoning_content or "").strip()
+            or self.tools_call_args
+        )
 
     @property
     def completion_text(self):

@@ -62,7 +62,7 @@ const selectionDialog = ref({
   selectedNames: [],
 });
 
-const selectableTools = computed(() => props.availableTools.filter((tool) => tool.origin !== "builtin"));
+const selectableTools = computed(() => props.availableTools);
 const selectableToolNames = computed(() =>
   selectableTools.value.filter((tool) => tool.active !== false).map((tool) => tool.name),
 );
@@ -363,28 +363,15 @@ async function saveSelectionDialog() {
       @configure="openSelectionDialog('skills', $event, $event.skills)"
     />
 
-    <v-dialog
-      v-model="selectionDialog.show"
-      max-width="640"
-      scrollable
-      :persistent="Boolean(saving)"
-    >
+    <v-dialog v-model="selectionDialog.show" max-width="640" scrollable :persistent="Boolean(saving)">
       <v-card>
         <v-card-title class="text-h3 pa-4 pb-0 pl-6">
           {{ tm(selectionDialog.titleKey, { name: selectionDialog.name }) }}
         </v-card-title>
         <v-card-text class="pa-6">
-          <div class="capability-dialog__hint">
-            {{ tm(selectionDialog.hintKey) }}
-          </div>
+          <div class="capability-dialog__hint"> {{ tm(selectionDialog.hintKey) }} </div>
 
-          <v-alert
-            v-if="error"
-            type="error"
-            variant="tonal"
-            density="compact"
-            class="mb-3"
-          >
+          <v-alert v-if="error" type="error" variant="tonal" density="compact" class="mb-3">
             {{ tm("personaQuickPreview.saveFailed", { message: error }) }}
           </v-alert>
 
@@ -420,23 +407,15 @@ async function saveSelectionDialog() {
                 />
               </template>
               <v-list-item-title>{{ item.name }}</v-list-item-title>
-              <v-list-item-subtitle v-if="item.description">
-                {{ item.description }}
-              </v-list-item-subtitle>
+              <v-list-item-subtitle v-if="item.description"> {{ item.description }} </v-list-item-subtitle>
               <template v-if="item.active === false" #append>
-                <v-chip size="x-small" variant="tonal" color="warning">
-                  {{ tm(selectionDialog.inactiveKey) }}
-                </v-chip>
+                <v-chip size="x-small" variant="tonal" color="warning"> {{ tm(selectionDialog.inactiveKey) }} </v-chip>
               </template>
             </v-list-item>
           </v-list>
         </v-card-text>
         <v-card-actions class="justify-end px-6 pb-4">
-          <v-btn
-            variant="text"
-            :disabled="Boolean(saving)"
-            @click="closeSelectionDialog"
-          >
+          <v-btn variant="text" :disabled="Boolean(saving)" @click="closeSelectionDialog">
             {{ t("core.common.cancel") }}
           </v-btn>
           <v-btn

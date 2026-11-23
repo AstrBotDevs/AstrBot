@@ -32,7 +32,7 @@ const props = defineProps({
 
 const emit = defineEmits(["update:modelValue", "update:order"]);
 
-const updateSortBy = (value) => {
+const updateSortBy = (value: unknown) => {
   emit("update:modelValue", value);
 };
 

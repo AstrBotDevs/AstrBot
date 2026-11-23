@@ -28,6 +28,16 @@ paru -S astrbot-git
 > Use `astrbot run` to run the bot.
 > However, it is highly recommended to use `systemctl` for starting, as it provides features like automatic restart and log rotation.
 
+Before the first service start, initialize its data directory once:
+
+```bash
+mkdir -p "$HOME/.local/share/astrbot"
+cd "$HOME/.local/share/astrbot"
+astrbot init
+```
+
+After initialization, start the user service:
+
 ```bash
 systemctl --user start astrbot.service
 ```

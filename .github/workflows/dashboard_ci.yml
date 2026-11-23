@@ -2,22 +2,21 @@ name: AstrBot Dashboard CI
 
 on:
   push:
-    branches: [ "master" ]
+    branches: [ "master", "dev" ]
   pull_request:
-    branches: [ "master" ]
+    branches: [ "master", "dev" ]
 
 jobs:
   build:
-    if: github.repository == 'AstrBotDevs/AstrBot'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
         uses: actions/checkout@v7
 
       - name: Setup pnpm
-        uses: pnpm/action-setup@v6.0.10
+        uses: pnpm/action-setup@v6.1.1
         with:
-          version: 10.28.2
+          version: 11.4.0
 
       - name: Setup Node.js
         uses: actions/setup-node@v7
@@ -26,19 +25,29 @@ jobs:
           cache: "pnpm"
           cache-dependency-path: dashboard/pnpm-lock.yaml
 
-      - name: Install and Build
+      - name: Install dependencies
+        working-directory: dashboard
+        run: pnpm install --frozen-lockfile
+
+      - name: Check i18n keys
+        working-directory: dashboard
+        run: pnpm run i18n:check
+
+      - name: Lint, test, and build
         working-directory: dashboard
         run: |
-          pnpm install --frozen-lockfile
+          pnpm typecheck:config
           pnpm lint:check
+          pnpm test:unit
           pnpm run build
 
       - name: Inject Commit SHA
         id: get_sha
         run: |
-          echo "COMMIT_SHA=$(git rev-parse HEAD)" >> $GITHUB_ENV
+          COMMIT_SHA="$(git rev-parse HEAD)"
+          printf 'COMMIT_SHA=%s\n' "$COMMIT_SHA" >> "$GITHUB_ENV"
           mkdir -p dashboard/dist/assets
-          echo $COMMIT_SHA > dashboard/dist/assets/version
+          printf '%s\n' "$COMMIT_SHA" > dashboard/dist/assets/version
           cd dashboard
           zip -r dist.zip dist
 
@@ -48,10 +57,10 @@ jobs:
           name: dist-without-markdown
           path: |
             dashboard/dist
-            !dist/**/*.md
+            !dashboard/dist/**/*.md
 
       - name: Create GitHub Release
-        if: github.event_name == 'push'
+        if: github.event_name == 'push' && github.ref == 'refs/heads/master' && github.repository == 'AstrBotDevs/AstrBot'
         uses: ncipollo/release-action@v1.21.0
         with:
           tag: release-${{ github.sha }}

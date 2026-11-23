@@ -5,6 +5,7 @@ import os
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import FileResponse
 
+from astrbot.dashboard.api.payloads import json_or_empty as _json_or_empty
 from astrbot.dashboard.async_utils import run_maybe_async
 from astrbot.dashboard.responses import error, ok
 from astrbot.dashboard.schemas import ChatProjectRequest
@@ -28,14 +29,6 @@ def get_service(request: Request) -> ChatUIProjectService:
 
 
 require_chat_scope = ScopeDependency("chat")
-
-
-async def _json_or_empty(request: Request) -> dict:
-    try:
-        data = await request.json()
-    except Exception:
-        return {}
-    return data if isinstance(data, dict) else {}
 
 
 def _model_dict(payload) -> dict:
@@ -161,11 +154,14 @@ async def list_chat_project_sessions(
 async def list_chat_project_workspace_files(
     project_id: str,
     path: str = Query(default=""),
+    session_id: str | None = Query(default=None),
     auth: AuthContext = Depends(require_chat_scope),
     service: ChatUIProjectService = Depends(get_service),
 ):
     return await _run(
-        lambda: service.list_workspace_files(auth.username, project_id, path)
+        lambda: service.list_workspace_files(
+            auth.username, project_id, path, session_id
+        )
     )
 
 
@@ -173,11 +169,12 @@ async def list_chat_project_workspace_files(
 async def get_chat_project_workspace_file(
     project_id: str,
     path: str,
+    session_id: str | None = Query(default=None),
     auth: AuthContext = Depends(require_chat_scope),
     service: ChatUIProjectService = Depends(get_service),
 ):
     return await _run(
-        lambda: service.get_workspace_file(auth.username, project_id, path)
+        lambda: service.get_workspace_file(auth.username, project_id, path, session_id)
     )
 
 
@@ -185,6 +182,7 @@ async def get_chat_project_workspace_file(
 async def download_chat_project_workspace_file(
     project_id: str,
     path: str,
+    session_id: str | None = Query(default=None),
     auth: AuthContext = Depends(require_chat_scope),
     service: ChatUIProjectService = Depends(get_service),
 ):
@@ -193,6 +191,7 @@ async def download_chat_project_workspace_file(
             auth.username,
             project_id,
             path,
+            session_id,
         )
     except ChatUIProjectServiceError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc

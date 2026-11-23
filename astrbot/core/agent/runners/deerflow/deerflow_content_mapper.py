@@ -31,6 +31,27 @@ def is_likely_base64_image(value: str) -> bool:
     return True
 
 
+def _add_invalid_image_notice(
+    content: list[dict[str, Any]], skipped_invalid_images: int, any_valid_image: bool
+) -> None:
+    note_text = (
+        "Note: some images could not be processed and were ignored."
+        if any_valid_image
+        else "Note: none of the provided images could be processed."
+    )
+    content.insert(0, {"type": "text", "text": note_text})
+    if not any_valid_image:
+        logger.warning(
+            "All %d provided DeerFlow image inputs were rejected as invalid or unsupported.",
+            skipped_invalid_images,
+        )
+    else:
+        logger.info(
+            "%d DeerFlow image input(s) were rejected as invalid or unsupported.",
+            skipped_invalid_images,
+        )
+
+
 def build_user_content(prompt: str, image_urls: list[str]) -> Any:
     if not image_urls:
         return prompt
@@ -75,22 +96,7 @@ def build_user_content(prompt: str, image_urls: list[str]) -> Any:
         any_valid_image = True
 
     if skipped_invalid_images:
-        note_text = (
-            "Note: some images could not be processed and were ignored."
-            if any_valid_image
-            else "Note: none of the provided images could be processed."
-        )
-        content.insert(0, {"type": "text", "text": note_text})
-        if not any_valid_image:
-            logger.warning(
-                "All %d provided DeerFlow image inputs were rejected as invalid or unsupported.",
-                skipped_invalid_images,
-            )
-        else:
-            logger.info(
-                "%d DeerFlow image input(s) were rejected as invalid or unsupported.",
-                skipped_invalid_images,
-            )
+        _add_invalid_image_notice(content, skipped_invalid_images, any_valid_image)
         logger.debug(
             "Skipped %d DeerFlow image inputs that were neither URL/data URI nor valid base64.",
             skipped_invalid_images,
@@ -161,22 +167,7 @@ async def build_user_content_resolved(prompt: str, image_urls: list[str]) -> Any
         any_valid_image = True
 
     if skipped_invalid_images:
-        note_text = (
-            "Note: some images could not be processed and were ignored."
-            if any_valid_image
-            else "Note: none of the provided images could be processed."
-        )
-        content.insert(0, {"type": "text", "text": note_text})
-        if not any_valid_image:
-            logger.warning(
-                "All %d provided DeerFlow image inputs were rejected as invalid or unsupported.",
-                skipped_invalid_images,
-            )
-        else:
-            logger.info(
-                "%d DeerFlow image input(s) were rejected as invalid or unsupported.",
-                skipped_invalid_images,
-            )
+        _add_invalid_image_notice(content, skipped_invalid_images, any_valid_image)
     return content
 
 

@@ -41,7 +41,7 @@ class OllamaEmbeddingProvider(EmbeddingProvider):
             }
             timeout = aiohttp.ClientTimeout(total=self.timeout)
             self.client = aiohttp.ClientSession(
-                headers=headers,
+                headers={**self.request_headers, **headers},
                 timeout=timeout,
             )
         return self.client
@@ -105,15 +105,8 @@ class OllamaEmbeddingProvider(EmbeddingProvider):
             raise
 
     def get_dim(self) -> int:
-        if "embedding_dimensions" in self.provider_config:
-            try:
-                return int(self.provider_config["embedding_dimensions"])
-            except (ValueError, TypeError):
-                logger.warning(
-                    f"embedding_dimensions in embedding configs is not a valid integer: "
-                    f"'{self.provider_config['embedding_dimensions']}', ignored.",
-                )
-        return 0
+        """Get the configured embedding dimension."""
+        return self._configured_embedding_dimension()
 
     async def terminate(self):
         if self.client and not self.client.closed:

@@ -5,6 +5,7 @@ ProviderMeta, ProviderMetaData, and RerankResult construction and edge cases.
 """
 
 import json
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -26,7 +27,6 @@ from astrbot.core.provider.entities import (
     TokenUsage,
     ToolCallsResult,
 )
-
 
 # =========================================================================
 # ProviderMeta / ProviderMetaData
@@ -243,16 +243,18 @@ class TestProviderRequest:
 
     def test_append_tool_calls_result_list(self):
         tcr1 = MagicMock(spec=ToolCallsResult)
-        tcr2 = MagicMock(spec=ToolCallsResult)
         req = ProviderRequest(tool_calls_result=[tcr1])
         tcr3 = MagicMock(spec=ToolCallsResult)
         req.append_tool_calls_result(tcr3)
         from typing import cast
+
         result = cast(list, req.tool_calls_result)
-        assert len(result) == 2
+        assert result == [tcr1, tcr3]
 
     def test_print_friendly_context_no_contexts(self):
-        req = ProviderRequest(prompt="hello", image_urls=["a.png"], audio_urls=["b.wav"])
+        req = ProviderRequest(
+            prompt="hello", image_urls=["a.png"], audio_urls=["b.wav"]
+        )
         result = req._print_friendly_context()
         assert "prompt: hello" in result
         assert "image_count: 1" in result
@@ -263,20 +265,20 @@ class TestProviderRequest:
         result = req._print_friendly_context()
         assert "user: hello" in result
 
-    def test_print_friendly_context_filters_checkpoints(self):
-        req = ProviderRequest(
-            contexts=[
-                {"role": "user", "content": "hi", "checkpoint": True},
-                {"role": "assistant", "content": "hello"},
-            ]
-        )
-        with patch(
-            "astrbot.core.provider.entities.is_checkpoint_message",
-            side_effect=lambda c: c.get("checkpoint", False),
-        ):
-            result = req._print_friendly_context()
-            assert "user: hi" not in result
-            assert "assistant: hello" in result
+    def test_print_friendly_context_preserves_role_order_without_mutating_history(self):
+        history = [
+            {"role": "user", "content": "hi"},
+            {"role": "assistant", "content": "hello"},
+        ]
+        req = ProviderRequest(contexts=history)
+
+        result = req._print_friendly_context()
+
+        assert result.index("user: hi") < result.index("assistant: hello")
+        assert history == [
+            {"role": "user", "content": "hi"},
+            {"role": "assistant", "content": "hello"},
+        ]
 
     def test_print_friendly_context_multimodal(self):
         req = ProviderRequest(
@@ -303,18 +305,28 @@ class TestProviderRequest:
         ctx = asyncio.run(req.assemble_context())
         assert ctx == {"role": "user", "content": "hello world"}
 
-    def test_assemble_context_empty_prompt_with_images_adds_placeholder(self):
-        req = ProviderRequest(prompt="", image_urls=[])
-        import asyncio
+    @pytest.mark.asyncio
+    async def test_assemble_context_empty_prompt_with_images_adds_placeholder(
+        self, monkeypatch
+    ):
+        reference = "https://image.invalid/input.png"
+        data_url = "data:image/png;base64,aW1hZ2U="
+        resolver = AsyncMock(return_value=SimpleNamespace(to_data_url=lambda: data_url))
+        monkeypatch.setattr(
+            "astrbot.core.provider.entities.resolve_image_ref_to_base64_data", resolver
+        )
+        req = ProviderRequest(prompt="", image_urls=[reference])
 
-        with patch.object(req, "_encode_image_bs64", return_value="data:image/jpeg;base64,abc"):
-            req.image_urls = ["http://example.com/img.png"]
-            ctx = asyncio.run(req.assemble_context())
-            assert ctx["role"] == "user"
-            # Should include "[图片]" placeholder
-            content = ctx["content"]
-            assert isinstance(content, list)
-            assert any(b.get("text") == "[图片]" for b in content)
+        context = await req.assemble_context()
+
+        assert context == {
+            "role": "user",
+            "content": [
+                {"type": "text", "text": "[图片]"},
+                {"type": "image_url", "image_url": {"url": data_url}},
+            ],
+        }
+        resolver.assert_awaited_once_with(reference)
 
     def test_assemble_context_empty_prompt_with_audio_adds_placeholder(self):
         req = ProviderRequest(prompt="", audio_urls=["http://example.com/a.wav"])

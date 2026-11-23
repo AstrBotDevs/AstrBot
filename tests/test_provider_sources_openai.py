@@ -1,10 +1,13 @@
-"""Smoke tests for ProviderOpenAIOfficial and its subclasses (openrouter, groq, zhipu, xai)."""
-from unittest.mock import MagicMock, patch
+"""OpenAI-compatible adapter payload, reasoning, and header contracts."""
 
+from unittest.mock import patch
+
+import pytest
+from openai.types.chat import ChatCompletion
+
+from astrbot.core.provider.sources.groq_source import ProviderGroq
 from astrbot.core.provider.sources.openai_source import ProviderOpenAIOfficial
 from astrbot.core.provider.sources.openrouter_source import ProviderOpenRouter
-from astrbot.core.provider.sources.groq_source import ProviderGroq
-from astrbot.core.provider.sources.zhipu_source import ProviderZhipu
 from astrbot.core.provider.sources.xai_source import ProviderXAI
 
 
@@ -17,18 +20,27 @@ def test_openai_construction(mock_async_openai, mock_create_proxy):
     )
     assert provider.get_model() == "gpt-4"
     assert provider.chosen_api_key == "test-key"
+    assert mock_async_openai.call_args.kwargs["api_key"] == "test-key"
+    assert mock_async_openai.call_args.kwargs["max_retries"] == 0
 
 
 @patch("astrbot.core.provider.sources.openai_source.create_proxy_client")
 @patch("astrbot.core.provider.sources.openai_source.AsyncOpenAI")
 def test_openrouter_injects_default_headers(mock_async_openai, mock_create_proxy):
-    provider = ProviderOpenRouter(
-        provider_config={"key": ["test-key"], "model": "openrouter-model"},
+    ProviderOpenRouter(
+        provider_config={
+            "key": ["test-key"],
+            "model": "openrouter-model",
+            "custom_headers": {"X-Local": "keep"},
+        },
         provider_settings={},
     )
-    assert provider.custom_headers is not None
-    assert "HTTP-Referer" in provider.custom_headers
-    assert "X-OpenRouter-Title" in provider.custom_headers
+
+    headers = mock_async_openai.call_args.kwargs["default_headers"]
+    assert headers["HTTP-Referer"] == "https://github.com/AstrBotDevs/AstrBot"
+    assert headers["X-OpenRouter-Title"] == "AstrBot"
+    assert headers["X-OpenRouter-Categories"] == "general-chat,personal-agent"
+    assert headers["X-Local"] == "keep"
 
 
 @patch("astrbot.core.provider.sources.openai_source.create_proxy_client")
@@ -117,3 +129,60 @@ def test_truncate_error_text_candidate():
 def test_safe_json_dump():
     result = ProviderOpenAIOfficial._safe_json_dump({"key": "value"})
     assert result == '{"key": "value"}'
+
+
+@pytest.mark.parametrize(
+    ("details", "expected"),
+    [
+        (
+            [
+                {"type": "reasoning.summary", "summary": "Summary"},
+                {"type": "reasoning.text", "text": "Details"},
+            ],
+            "Summary\n\nDetails",
+        ),
+        (
+            [
+                {"type": "reasoning.text", "text": "First "},
+                {"type": "reasoning.text", "text": "second"},
+            ],
+            "First second",
+        ),
+        (
+            [
+                None,
+                {},
+                {"type": "reasoning.encrypted", "data": "opaque"},
+                {"type": "reasoning.summary", "summary": "Visible"},
+            ],
+            "Visible",
+        ),
+    ],
+)
+@patch("astrbot.core.provider.sources.openai_source.create_proxy_client")
+@patch("astrbot.core.provider.sources.openai_source.AsyncOpenAI")
+def test_openrouter_replays_supported_reasoning_details_in_order(
+    mock_async_openai, mock_create_proxy, details, expected
+):
+    provider = ProviderOpenRouter({"key": ["test-key"], "model": "router-model"}, {})
+    completion = ChatCompletion.model_validate(
+        {
+            "id": "local-response",
+            "object": "chat.completion",
+            "created": 0,
+            "model": "router-model",
+            "choices": [
+                {
+                    "index": 0,
+                    "finish_reason": "stop",
+                    "message": {
+                        "role": "assistant",
+                        "content": "answer",
+                        "reasoning_details": details,
+                    },
+                }
+            ],
+        }
+    )
+
+    assert provider._extract_reasoning_content(completion) == expected

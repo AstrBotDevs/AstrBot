@@ -4,7 +4,7 @@ These tests verify construction, field defaults, and type correctness
 for all model classes defined in ``astrbot.core.db.po``.
 """
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import pytest
 
@@ -197,7 +197,9 @@ class TestPersonaFolder:
 
     def test_nested_folder(self):
         """PersonaFolder can have a parent_id."""
-        child = PersonaFolder(name="Child", parent_id="parent-uuid", description="Nested")
+        child = PersonaFolder(
+            name="Child", parent_id="parent-uuid", description="Nested"
+        )
         assert child.parent_id == "parent-uuid"
         assert child.description == "Nested"
 
@@ -225,7 +227,7 @@ class TestApiKey:
 
     def test_with_scopes(self):
         """ApiKey can have scopes and expiry."""
-        expires = datetime.now(timezone.utc)
+        expires = datetime.now(UTC)
         key = ApiKey(
             name="scoped-key",
             key_hash="sha256:xyz",
@@ -243,7 +245,7 @@ class TestPlatformStat:
 
     def test_construction(self):
         """PlatformStat with all fields."""
-        ts = datetime.now(timezone.utc)
+        ts = datetime.now(UTC)
         stat = PlatformStat(
             timestamp=ts,
             platform_id="qq_bot",
@@ -258,7 +260,7 @@ class TestPlatformStat:
     def test_default_count(self):
         """PlatformStat defaults count to 0."""
         stat = PlatformStat(
-            timestamp=datetime.now(timezone.utc),
+            timestamp=datetime.now(UTC),
             platform_id="test",
             platform_type="test",
         )
@@ -333,21 +335,28 @@ class TestOtherModels:
         assert att.mime_type == "image/png"
         assert att.attachment_id is not None
 
-    def test_webchat_thread(self):
-        """WebChatThread model construction."""
+    @pytest.mark.asyncio
+    async def test_webchat_thread(self, database):
+        """A side thread retains the selected event identity after persistence."""
         thread = WebChatThread(
             creator="user-1",
             parent_session_id="session-1",
             parent_message_id=42,
-            base_checkpoint_id="ckpt-1",
+            base_event_id="event-1",
             selected_text="selected text",
         )
-        assert thread.creator == "user-1"
-        assert thread.parent_session_id == "session-1"
-        assert thread.parent_message_id == 42
-        assert thread.base_checkpoint_id == "ckpt-1"
-        assert thread.selected_text == "selected text"
-        assert thread.thread_id is not None
+        async with database.get_db() as session:
+            session.add(thread)
+            await session.commit()
+        async with database.get_db() as session:
+            persisted = await session.get(WebChatThread, thread.id)
+            assert persisted is not None
+            assert persisted.creator == "user-1"
+            assert persisted.parent_session_id == "session-1"
+            assert persisted.parent_message_id == 42
+            assert persisted.base_event_id == "event-1"
+            assert persisted.selected_text == "selected text"
+            assert persisted.thread_id == thread.thread_id
 
     def test_platform_session(self):
         """PlatformSession model construction."""
@@ -410,23 +419,34 @@ class TestOtherModels:
         assert cf.status == "pending"
         assert cf.auto_generated is False
 
-    def test_platform_message_history(self):
-        """PlatformMessageHistory model construction."""
+    @pytest.mark.asyncio
+    async def test_platform_message_history(self, database):
+        """Message persistence keeps turn and context event identities distinct."""
         pmh = PlatformMessageHistory(
             platform_id="qq",
             user_id="user-1",
             content={"text": "hello"},
+            turn_id="turn-1",
+            context_event_id="context-1",
+            is_active=False,
         )
-        assert pmh.platform_id == "qq"
-        assert pmh.user_id == "user-1"
-        assert pmh.content == {"text": "hello"}
-        assert pmh.sender_id is None
-        assert pmh.sender_name is None
-        assert pmh.llm_checkpoint_id is None
+        async with database.get_db() as session:
+            session.add(pmh)
+            await session.commit()
+        async with database.get_db() as session:
+            persisted = await session.get(PlatformMessageHistory, pmh.id)
+            assert persisted is not None
+            assert persisted.platform_id == "qq"
+            assert persisted.user_id == "user-1"
+            assert persisted.content == {"text": "hello"}
+            assert persisted.sender_id is None
+            assert persisted.sender_name is None
+            assert persisted.turn_id == "turn-1"
+            assert persisted.context_event_id == "context-1"
+            assert persisted.is_active is False
 
     def test_timestamp_mixin_fields(self):
         """TimestampMixin provides created_at and updated_at."""
-        ts = datetime.now(timezone.utc)
         mixin = TimestampMixin()
         # created_at and updated_at have default factories
         assert isinstance(mixin.created_at, datetime)

@@ -34,6 +34,7 @@ class WecomAIBotLongConnectionClient:
         self._send_lock = asyncio.Lock()
         self._command_lock = asyncio.Lock()
         self._response_waiters: dict[str, asyncio.Future[dict[str, Any]]] = {}
+        self._message_handler_tasks: set[asyncio.Task[None]] = set()
 
     @staticmethod
     def gen_req_id() -> str:
@@ -140,7 +141,11 @@ class WecomAIBotLongConnectionClient:
 
         cmd = payload.get("cmd")
         if cmd in {"aibot_msg_callback", "aibot_event_callback"}:
-            await self.message_handler(payload)
+            # Keep the receive loop available for command acknowledgements sent by
+            # the callback handler, such as the configured initial response.
+            task = asyncio.create_task(self._dispatch_message(payload))
+            self._message_handler_tasks.add(task)
+            task.add_done_callback(self._on_message_handler_done)
             return
 
         if payload.get("errcode") not in (None, 0):
@@ -148,6 +153,21 @@ class WecomAIBotLongConnectionClient:
                 "[WecomAI][LongConn] 服务端返回错误: errcode=%s errmsg=%s",
                 payload.get("errcode"),
                 payload.get("errmsg"),
+            )
+
+    async def _dispatch_message(self, payload: dict[str, Any]) -> None:
+        """Adapt the configured callback's awaitable to an owned coroutine task."""
+        await self.message_handler(payload)
+
+    def _on_message_handler_done(self, task: asyncio.Task[None]) -> None:
+        """Release a completed callback task and report its exception."""
+        self._message_handler_tasks.discard(task)
+        if task.cancelled():
+            return
+        if exception := task.exception():
+            logger.error(
+                "[WecomAI][LongConn] 处理回调消息失败",
+                exc_info=exception,
             )
 
     async def send_command(
@@ -202,14 +222,14 @@ class WecomAIBotLongConnectionClient:
         self,
         req_id: str,
         payload: dict[str, Any],
-        timeout: float = 10.0,
+        response_timeout: float = 10.0,
     ) -> dict[str, Any] | None:
         loop = asyncio.get_running_loop()
         waiter: asyncio.Future[dict[str, Any]] = loop.create_future()
         self._response_waiters[req_id] = waiter
         try:
             await self._send_json(payload)
-            return await asyncio.wait_for(waiter, timeout=timeout)
+            return await asyncio.wait_for(waiter, timeout=response_timeout)
         except TimeoutError:
             logger.warning(
                 "[WecomAI][LongConn] 等待命令响应超时: cmd=%s req_id=%s",

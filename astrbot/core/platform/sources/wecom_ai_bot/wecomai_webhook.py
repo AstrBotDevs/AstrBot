@@ -14,8 +14,18 @@ import anyio
 
 from astrbot.api import logger
 from astrbot.api.event import MessageChain
-from astrbot.api.message_components import At, File, Image, Plain, Record, Video
+from astrbot.api.message_components import (
+    ActionRow,
+    At,
+    File,
+    Image,
+    Plain,
+    Record,
+    Video,
+)
 from astrbot.core.utils.media_utils import convert_audio_format
+
+from .wecomai_buttons import build_wecom_button_card
 
 
 class WecomAIBotWebhookError(RuntimeError):
@@ -162,7 +172,7 @@ class WecomAIBotWebhookClient:
 
     @staticmethod
     def is_stream_supported_component(component: Any) -> bool:
-        return isinstance(component, Plain | Image | At)
+        return isinstance(component, Plain | Image | At | ActionRow)
 
     async def send_message_chain(
         self,
@@ -222,6 +232,16 @@ class WecomAIBotWebhookClient:
                                 target_voice_path,
                                 e,
                             )
+            elif isinstance(component, ActionRow):
+                await flush_markdown_buffer(markdown_buffer)
+                template_card = build_wecom_button_card([component])
+                if template_card:
+                    await self.send_payload(
+                        {
+                            "msgtype": "template_card",
+                            "template_card": template_card,
+                        }
+                    )
             else:
                 logger.warning(
                     "企业微信消息推送暂不支持组件类型 %s,已跳过",

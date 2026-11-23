@@ -10,6 +10,11 @@ from astrbot.core.db import BaseDatabase
 from astrbot.core.db.po import ConversationV2, Preference
 from astrbot.core.provider.entities import ProviderType
 from astrbot.core.umo_alias import build_umo_alias_map, parse_umo, serialize_umo_alias
+from astrbot.dashboard.services.session_management_service import (
+    filter_umos_by_scope,
+    paginate_umo_rules,
+    update_session_group,
+)
 
 from .route import Response, Route, RouteContext
 
@@ -99,13 +104,27 @@ class SessionManagementRoute(Route):
             return groups[group_id].get("umos", [])
 
         all_umos = await self._list_known_umos()
-        if scope == "group":
-            return [umo for umo in all_umos if self._is_group_umo(umo)]
-        if scope == "private":
-            return [umo for umo in all_umos if self._is_private_umo(umo)]
-        if scope == "all":
-            return all_umos
-        return []
+        return filter_umos_by_scope(
+            all_umos,
+            scope,
+            is_group=self._is_group_umo,
+            is_private=self._is_private_umo,
+        )
+
+    async def _get_batch_umos(
+        self,
+        umos: list[str],
+        scope: str,
+        group_id: str,
+        *,
+        empty_message: str = "没有找到符合条件的会话",
+    ) -> list[str]:
+        """Resolve batch targets at the caller's existing validation boundary."""
+        if scope and not umos:
+            umos = await self._get_umos_by_scope(scope, group_id)
+        if not umos:
+            raise ValueError(empty_message)
+        return umos
 
     async def _get_umo_rules(
         self,
@@ -172,13 +191,7 @@ class SessionManagementRoute(Route):
                 ):
                     filtered_rules[umo_id] = rules
             umo_rules = filtered_rules
-        total = len(umo_rules)
-        all_umo_ids = list(umo_rules.keys())
-        start_idx = (page - 1) * page_size
-        end_idx = start_idx + page_size
-        paginated_umo_ids = all_umo_ids[start_idx:end_idx]
-        paginated_rules = {umo_id: umo_rules[umo_id] for umo_id in paginated_umo_ids}
-        return (paginated_rules, total)
+        return paginate_umo_rules(umo_rules, page, page_size)
 
     async def list_session_rule(self):
         """获取所有自定义的规则（支持分页和搜索）
@@ -361,13 +374,15 @@ class SessionManagementRoute(Route):
             group_id = data.get("group_id", "")
             rule_key = data.get("rule_key")
 
-            if scope and not umos:
-                try:
-                    umos = await self._get_umos_by_scope(scope, group_id)
-                except ValueError as e:
-                    return Response().error(str(e)).to_json()
-            if not umos:
-                return Response().error("缺少必要参数: umos 或有效的 scope").to_json()
+            try:
+                umos = await self._get_batch_umos(
+                    umos,
+                    scope,
+                    group_id,
+                    empty_message="缺少必要参数: umos 或有效的 scope",
+                )
+            except ValueError as e:
+                return Response().error(str(e)).to_json()
             if not isinstance(umos, list):
                 return Response().error("参数 umos 必须是数组").to_json()
             if rule_key and rule_key not in AVAILABLE_SESSION_RULE_KEYS:
@@ -580,13 +595,10 @@ class SessionManagementRoute(Route):
             if llm_enabled is None and tts_enabled is None and session_enabled is None:
                 return Response().error("至少需要指定一个要修改的状态").to_json()
 
-            if scope and not umos:
-                try:
-                    umos = await self._get_umos_by_scope(scope, group_id)
-                except ValueError as e:
-                    return Response().error(str(e)).to_json()
-            if not umos:
-                return Response().error("没有找到符合条件的会话").to_json()
+            try:
+                umos = await self._get_batch_umos(umos, scope, group_id)
+            except ValueError as e:
+                return Response().error(str(e)).to_json()
             success_count = 0
             failed_umos = []
             for umo in umos:
@@ -670,13 +682,10 @@ class SessionManagementRoute(Route):
                 )
             provider_type_enum = provider_type_map[provider_type]
             group_id = data.get("group_id", "")
-            if scope and not umos:
-                try:
-                    umos = await self._get_umos_by_scope(scope, group_id)
-                except ValueError as e:
-                    return Response().error(str(e)).to_json()
-            if not umos:
-                return Response().error("没有找到符合条件的会话").to_json()
+            try:
+                umos = await self._get_batch_umos(umos, scope, group_id)
+            except ValueError as e:
+                return Response().error(str(e)).to_json()
             success_count = 0
             failed_umos = []
             provider_manager = self.core_lifecycle.provider_manager
@@ -712,6 +721,15 @@ class SessionManagementRoute(Route):
     def _get_groups(self) -> dict[str, Any]:
         """获取所有分组"""
         return sp.get("session_groups", {})
+
+    def _load_existing_groups(self, group_id: object) -> tuple[dict, str | None]:
+        """Return groups or a legacy validation error without wrapping storage errors."""
+        if not group_id:
+            return {}, "分组 ID 不能为空"
+        groups = self._get_groups()
+        if group_id not in groups:
+            return groups, f"分组 '{group_id}' 不存在"
+        return groups, None
 
     def _save_groups(self, groups: dict) -> None:
         """保存分组"""
@@ -778,23 +796,17 @@ class SessionManagementRoute(Route):
             umos = data.get("umos")
             add_umos = data.get("add_umos", [])
             remove_umos = data.get("remove_umos", [])
-            if not group_id:
-                return Response().error("分组 ID 不能为空").to_json()
-            groups = self._get_groups()
-            if group_id not in groups:
-                return Response().error(f"分组 '{group_id}' 不存在").to_json()
+            groups, error = self._load_existing_groups(group_id)
+            if error:
+                return Response().error(error).to_json()
             group = groups[group_id]
-            if name is not None:
-                group["name"] = name.strip()
-            if umos is not None:
-                group["umos"] = umos
-            else:
-                current_umos = set(group.get("umos", []))
-                if add_umos:
-                    current_umos.update(add_umos)
-                if remove_umos:
-                    current_umos.difference_update(remove_umos)
-                group["umos"] = list(current_umos)
+            update_session_group(
+                group,
+                name=name,
+                umos=umos,
+                add_umos=add_umos,
+                remove_umos=remove_umos,
+            )
             self._save_groups(groups)
             return (
                 Response()
@@ -820,11 +832,9 @@ class SessionManagementRoute(Route):
         try:
             data = await request.json
             group_id = data.get("id")
-            if not group_id:
-                return Response().error("分组 ID 不能为空").to_json()
-            groups = self._get_groups()
-            if group_id not in groups:
-                return Response().error(f"分组 '{group_id}' 不存在").to_json()
+            groups, error = self._load_existing_groups(group_id)
+            if error:
+                return Response().error(error).to_json()
             group_name = groups[group_id].get("name", group_id)
             del groups[group_id]
             self._save_groups(groups)

@@ -1,8 +1,17 @@
 import json
-from enum import Enum, IntEnum
+from enum import Enum, IntEnum, StrEnum
 from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+
+
+class _KookStringEnum(StrEnum):
+    """Keep public enum display and formatting compatible with earlier releases."""
+
+    __str__ = Enum.__str__
+
+    def __format__(self, format_spec: str) -> str:
+        return Enum.__format__(self, format_spec)
 
 
 class KookApiPaths:
@@ -16,15 +25,22 @@ class KookApiPaths:
     USER_VIEW = f"{BASE_URL}{API_VERSION_PATH}/user/view"
     GATEWAY_INDEX = f"{BASE_URL}{API_VERSION_PATH}/gateway/index"
 
+    # Channel and guild information
+    CHANNEL_VIEW = f"{BASE_URL}{API_VERSION_PATH}/channel/view"
+    GUILD_VIEW = f"{BASE_URL}{API_VERSION_PATH}/guild/view"
+    GUILD_USER_LIST = f"{BASE_URL}{API_VERSION_PATH}/guild/user-list"
+    GUILD_ROLE_LIST = f"{BASE_URL}{API_VERSION_PATH}/guild-role/list"
+
     # 消息相关
     ASSET_CREATE = f"{BASE_URL}{API_VERSION_PATH}/asset/create"
+    ASSET_VOICE_TOKEN = f"{BASE_URL}{API_VERSION_PATH}/asset/voice-token"
     ## 频道消息
     CHANNEL_MESSAGE_CREATE = f"{BASE_URL}{API_VERSION_PATH}/message/create"
     ## 私聊消息
     DIRECT_MESSAGE_CREATE = f"{BASE_URL}{API_VERSION_PATH}/direct-message/create"
 
 
-class KookMentionTagName(str, Enum):
+class KookMentionTagName(_KookStringEnum):
     """用来匹配 `(tagName)value(tagName)` 格式里的tagName , 例如: `(met)all(met)`
     定义参见KMarkdown语法文档: https://developer.kookapp.cn/doc/kmarkdown
     """
@@ -46,7 +62,7 @@ class KookMessageType(IntEnum):
     SYSTEM = 255
 
 
-class KookModuleType(str, Enum):
+class KookModuleType(_KookStringEnum):
     PLAIN_TEXT = "plain-text"
     KMARKDOWN = "kmarkdown"
     IMAGE = "image"
@@ -60,13 +76,14 @@ class KookModuleType(str, Enum):
     DIVIDER = "divider"
     FILE = "file"
     AUDIO = "audio"
+    VOICE = "voice"
     VIDEO = "video"
     COUNTDOWN = "countdown"
     INVITE = "invite"
     CARD = "card"
 
 
-class KookRoleExtraType(str, Enum):
+class KookRoleExtraType(_KookStringEnum):
     """定义参见kook事件结构文档: https://developer.kookapp.cn/doc/event/event-introduction"""
 
     ADDED_ROLE = "added_role"
@@ -288,6 +305,11 @@ class FileModule(KookCardModelBase):
     """cover 仅音频有效, 是音频的封面图"""
 
 
+class VoiceModule(KookCardModelBase):
+    type: Literal[KookModuleType.VOICE] = KookModuleType.VOICE
+    media_id: int
+
+
 class CountdownModule(KookCardModelBase):
     """startTime 和 endTime 为毫秒时间戳,startTime 和 endTime 不能小于服务器当前时间戳｡"""
 
@@ -316,6 +338,7 @@ AnyModule = Annotated[
     | ContextModule
     | DividerModule
     | FileModule
+    | VoiceModule
     | CountdownModule
     | InviteModule,
     Field(discriminator="type"),
@@ -462,7 +485,7 @@ class KookMessageSignal(IntEnum):
     """server->client  resume ack"""
 
 
-class KookChannelType(str, Enum):
+class KookChannelType(_KookStringEnum):
     GROUP = "GROUP"
     PERSON = "PERSON"
     BROADCAST = "BROADCAST"

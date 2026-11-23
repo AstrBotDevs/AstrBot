@@ -1,4 +1,4 @@
-# CLI 指令
+# AstrBot CLI {#cli-指令}
 
 AstrBot CLI 用于初始化实例、启动 AstrBot、安装后台服务、查看日志、修改常用配置和管理插件。
 

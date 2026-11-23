@@ -7,14 +7,11 @@ separators, and edge cases with chunk_size/overlap validation).
 All tests isolate the chunker from any external dependencies.
 """
 
-from unittest.mock import MagicMock, patch
-
 import pytest
 
 from astrbot.core.knowledge_base.chunking.recursive import (
     RecursiveCharacterChunker,
 )
-
 
 # ---------------------------------------------------------------
 # Construction
@@ -79,8 +76,7 @@ class TestRecursiveCharacterChunkerChunkBasic:
         """Test that whitespace-only text is handled."""
         chunker = RecursiveCharacterChunker()
         result = await chunker.chunk("   \n\n  ")
-        # Depends on separator logic; should not crash
-        assert isinstance(result, list)
+        assert result == ["   \n\n  "]
 
     @pytest.mark.asyncio
     async def test_short_text_returns_single_chunk(self):
@@ -113,24 +109,19 @@ class TestRecursiveCharacterChunkerSeparator:
         chunker = RecursiveCharacterChunker(chunk_size=10, chunk_overlap=0)
         text = "para1\n\npara2\n\npara3"
         result = await chunker.chunk(text)
-        # Each paragraph is <= chunk_size, so each should be a separate chunk
-        assert len(result) >= 1
-        # All chunks should be non-empty strings
-        assert all(isinstance(c, str) and c for c in result)
+        assert result == ["para1\n\n", "para2\n\n", "para3"]
 
     @pytest.mark.asyncio
     async def test_splits_by_newline_when_double_newline_not_found(self):
         """Test fallback to single newline when double newline is absent."""
         chunker = RecursiveCharacterChunker(
-            chunk_size=50,
+            chunk_size=8,
             chunk_overlap=0,
             separators=["\n\n", "\n"],
         )
         text = "line1\nline2\nline3"
         result = await chunker.chunk(text)
-        # Without overlap and small lines, each line should be separate if lines fit
-        assert isinstance(result, list)
-        assert all(isinstance(c, str) for c in result)
+        assert result == ["line1\n", "line2\n", "line3"]
 
     @pytest.mark.asyncio
     async def test_falls_back_to_character_splitting(self):
@@ -149,15 +140,13 @@ class TestRecursiveCharacterChunkerSeparator:
     async def test_custom_separator(self):
         """Test that a custom separator is used for splitting."""
         chunker = RecursiveCharacterChunker(
-            chunk_size=100,
+            chunk_size=7,
             chunk_overlap=0,
             separators=["|"],
         )
         text = "part1|part2|part3"
         result = await chunker.chunk(text)
-        # With chunk_size=100, all parts fit in a single chunk
-        assert len(result) == 1
-        assert result[0] == "part1|part2|part3"
+        assert result == ["part1|", "part2|", "part3"]
 
 
 # ---------------------------------------------------------------
@@ -244,10 +233,8 @@ class TestRecursiveCharacterChunkerRecursive:
         # First paragraph fits, second paragraph is oversized, third fits
         text = "short" + "\n\n" + ("a" * 25) + "\n\n" + "tiny"
         result = await chunker.chunk(text)
-        # short\n\n + a*10 + a*10 + a*5 + \n\n + tiny  -> should be 4 chunks
-        # Note: the separator is included in each split
-        assert len(result) >= 3
-        assert all(isinstance(c, str) and c for c in result)
+        assert "".join(result) == text
+        assert all(0 < len(chunk) <= 10 for chunk in result)
 
 
 # ---------------------------------------------------------------
@@ -297,7 +284,9 @@ class TestRecursiveCharacterChunkerSplitByCharacter:
     def test_split_by_character_raises_on_overlap_ge_chunk_size(self):
         """Test that overlap >= chunk_size raises ValueError."""
         chunker = RecursiveCharacterChunker()
-        with pytest.raises(ValueError, match="chunk_overlap must be less than chunk_size"):
+        with pytest.raises(
+            ValueError, match="chunk_overlap must be less than chunk_size"
+        ):
             chunker._split_by_character("test", chunk_size=5, overlap=5)
 
     def test_single_character_chunks(self):
@@ -329,9 +318,8 @@ class TestRecursiveCharacterChunkerIntegration:
         lines = ["A" * 30, "short", "B" * 30]
         text = "\n".join(lines)
         result = await chunker.chunk(text)
-        # Should split the oversized lines but keep short lines as-is
-        assert all(isinstance(c, str) and c for c in result)
-        assert len(result) >= 3
+        assert "".join(result) == text
+        assert all(0 < len(chunk) <= 20 for chunk in result)
 
     @pytest.mark.asyncio
     async def test_separator_in_text_but_not_at_separator_boundary(self):
@@ -344,8 +332,7 @@ class TestRecursiveCharacterChunkerIntegration:
         # Has both double-newline and single-newline; prefer double-newline
         text = "aaaa\n\nbbbb\ncccc"
         result = await chunker.chunk(text)
-        # Should split on \n\n first, then possibly \n for remaining
-        assert isinstance(result, list)
+        assert result == ["aaaa\n\n", "bbbb\ncccc"]
 
     @pytest.mark.asyncio
     async def test_text_preserves_ordering(self):
@@ -353,10 +340,8 @@ class TestRecursiveCharacterChunkerIntegration:
         chunker = RecursiveCharacterChunker(chunk_size=10, chunk_overlap=0)
         text = "first\n\nsecond\n\nthird\n\nfourth"
         result = await chunker.chunk(text)
-        # Concatenation of all chunks should contain all words in order
-        combined = "".join(result)
-        for word in ["first", "second", "third", "fourth"]:
-            assert word in combined
+        assert "".join(result) == text
+        assert all(0 < len(chunk) <= 10 for chunk in result)
 
     @pytest.mark.asyncio
     async def test_no_duplicate_chunks(self):
@@ -368,6 +353,4 @@ class TestRecursiveCharacterChunkerIntegration:
         )
         text = "abcdefghij"
         result = await chunker.chunk(text)
-        combined = "".join(result)
-        # Combined length should equal original length (no overlap)
-        assert len(combined) == len(text)
+        assert result == [text]

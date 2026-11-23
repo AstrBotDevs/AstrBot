@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import asyncio
 import copy
+import hashlib
+import inspect
 import json
 import os
 import threading
@@ -16,14 +18,8 @@ from deprecated import deprecated
 
 from astrbot import logger
 from astrbot.core import sp
-from astrbot.core.agent.mcp_client import MCPClient, MCPTool
-from astrbot.core.agent.tool import FunctionTool, ToolSet
-from astrbot.core.tools.registry import (
-    ensure_builtin_tools_loaded,
-    get_builtin_tool_class,
-    get_builtin_tool_name,
-    iter_builtin_tool_classes,
-)
+from astrbot.core.agent.mcp_client import MCPClient, MCPTool, _prepare_config
+from astrbot.core.agent.tool import FunctionTool, ToolSchema, ToolSet
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 
 DEFAULT_MCP_CONFIG = {"mcpServers": {}}
@@ -147,15 +143,6 @@ PY_TO_JSON_TYPE = {
 FuncTool = FunctionTool
 
 
-def _prepare_config(config: dict) -> dict:
-    """准备配置，处理嵌套格式"""
-    if config.get("mcpServers"):
-        first_key = next(iter(config["mcpServers"]))
-        config = config["mcpServers"][first_key]
-    config.pop("active", None)
-    return config
-
-
 async def _quick_test_mcp_connection(config: dict) -> tuple[bool, str]:
     """快速测试 MCP 服务器可达性"""
     import aiohttp
@@ -214,9 +201,7 @@ async def _quick_test_mcp_connection(config: dict) -> tuple[bool, str]:
 class _PermissionGuardedTool(FunctionTool):
     """Transparent proxy that checks per-tool permissions before delegating.
 
-    Only wraps non-builtin tools. Builtin tools are added to the tool set
-    without wrapping, so their existing hardcoded permission logic
-    (``check_admin_permission`` / ``_is_restricted_env``) is unaffected.
+    Only wraps tools contributed to the manager by plugins and MCP servers.
 
     The ``handler`` field is intentionally kept ``None`` so that
     ``FunctionToolExecutor._execute_local`` falls through to the
@@ -236,6 +221,7 @@ class _PermissionGuardedTool(FunctionTool):
             name=tool.name,
             description=tool.description,
             parameters=getattr(tool, "parameters", {}),
+            execution_timeout=tool.execution_timeout,
         )
         self._wrapped = tool
         self._mgr = manager
@@ -243,25 +229,33 @@ class _PermissionGuardedTool(FunctionTool):
         self.active = getattr(tool, "active", True)
         self.handler_module_path = getattr(tool, "handler_module_path", None)
 
-    async def call(self, context: Any, **kwargs: Any) -> Any:
-        import inspect as _inspect
+    @staticmethod
+    async def _invoke_handler(
+        handler: Callable[..., Any], event: Any, /, **kwargs: Any
+    ) -> Any:
+        """Complete synchronous, awaitable, or streamed legacy handler results."""
+        result = handler(event, **kwargs)
+        if inspect.isasyncgen(result):
+            last: Any = None
+            async for item in result:
+                last = item
+            return last
+        if inspect.isawaitable(result):
+            return await result
+        return result
 
-        error = await self._mgr._check_tool_permission(self.name, context)
+    async def call(self, context: Any, **kwargs: Any) -> Any:
+        error = await self._mgr._check_tool_permission(
+            self.name, context, tool_key=self._mgr.get_tool_key(self._wrapped)
+        )
         if error is not None:
             return error
 
         # @filter.llm_tool decorated tools have a handler attribute, which is the actual callable.
         if self._wrapped.handler is not None:
-            event = context.context.event
-            result = self._wrapped.handler(event, **kwargs)
-            if _inspect.isasyncgen(result):
-                last: Any = None
-                async for item in result:
-                    last = item
-                return last
-            if _inspect.isawaitable(result):
-                return await result
-            return result
+            return await self._invoke_handler(
+                self._wrapped.handler, context.context.event, **kwargs
+            )
 
         # If the tool has a "call" method that is not the default FunctionTool.call, invoke it.
         call_override = getattr(type(self._wrapped), "call", None)
@@ -271,16 +265,7 @@ class _PermissionGuardedTool(FunctionTool):
         # Compatibility fallback: if the tool has a "run" method, invoke it. This is for legacy tools that don't use the new handler/call interface.
         run = getattr(self._wrapped, "run", None)
         if run is not None:
-            event = context.context.event
-            result = run(event, **kwargs)
-            if _inspect.isasyncgen(result):
-                last: Any = None
-                async for item in result:
-                    last = item
-                return last
-            if _inspect.isawaitable(result):
-                return await result
-            return result
+            return await self._invoke_handler(run, context.context.event, **kwargs)
 
         return "error: tool has no callable handler"
 
@@ -288,9 +273,7 @@ class _PermissionGuardedTool(FunctionTool):
 class FunctionToolManager:
     def __init__(self) -> None:
         self.func_list: list[FuncTool] = []
-        """All tools include mcp tools and plugin tools, except astrbot builtin tools."""
-        self.builtin_func_list: dict[type[FuncTool], FuncTool] = {}
-        """All astrbot builtin tools, keyed by their class. Values are instantiated tool objects, created on demand."""
+        """Tools contributed by plugins and MCP servers."""
 
         self._mcp_server_runtime: dict[str, _MCPServerRuntime] = {}
         """MCP runtime metadata, keyed by server name. Updated atomically on MCP lifecycle changes."""
@@ -299,6 +282,7 @@ class FunctionToolManager:
         self._timeout_mismatch_warned = False
         self._timeout_warn_lock = threading.Lock()
         self._runtime_lock = asyncio.Lock()
+        self._tool_state_lock = asyncio.Lock()
         self._mcp_starting: set[str] = set()
         self._init_timeout_default = _resolve_timeout(
             timeout=None,
@@ -406,65 +390,95 @@ class FunctionToolManager:
         for f in reversed(self.func_list):
             if f.name == name:
                 return f
-        if isinstance(name, str):
-            try:
-                builtin_tool = self.get_builtin_tool(name)
-            except KeyError:
-                return None
-            if getattr(builtin_tool, "active", True):
-                return builtin_tool
-            return builtin_tool
         return None
 
-    def get_builtin_tool(self, tool: str | type[FuncTool]) -> FuncTool:
-        ensure_builtin_tools_loaded()
-
-        if isinstance(tool, str):
-            tool_cls = get_builtin_tool_class(tool)
-            if tool_cls is None:
-                raise KeyError(f"Builtin tool {tool} is not registered.")
-        elif isinstance(tool, type) and issubclass(tool, FunctionTool):
-            tool_cls = tool
-            if get_builtin_tool_name(tool_cls) is None:
-                raise KeyError(
-                    f"Builtin tool class {tool_cls.__module__}.{tool_cls.__name__} is not registered.",
-                )
+    @staticmethod
+    def get_tool_key(tool: FuncTool) -> str:
+        """Build a stable identity from the registered tool's source and owner."""
+        source = "mcp" if isinstance(tool, MCPTool) else tool.source
+        if isinstance(tool, MCPTool):
+            owner = tool.mcp_server_name
         else:
-            raise TypeError("tool must be a builtin tool name or FunctionTool class.")
+            owner = (
+                tool.handler_module_path
+                or getattr(tool.handler, "__module__", None)
+                or f"{type(tool).__module__}.{type(tool).__qualname__}"
+            )
+        identity = json.dumps(
+            [source, owner, tool.name], ensure_ascii=False, separators=(",", ":")
+        )
+        return "tool:" + hashlib.sha256(identity.encode("utf-8")).hexdigest()
 
-        cached_tool = self.builtin_func_list.get(tool_cls)
-        if cached_tool is not None:
-            return cached_tool
-
-        builtin_tool = tool_cls()  # type: ignore
-        self.builtin_func_list[tool_cls] = builtin_tool
-        return builtin_tool
-
-    def iter_builtin_tools(self) -> list[FuncTool]:
-        ensure_builtin_tools_loaded()
-        return [
-            self.get_builtin_tool(tool_cls) for tool_cls in iter_builtin_tool_classes()
+    def resolve_tool(
+        self, name: str | None = None, *, tool_key: str | None = None
+    ) -> FuncTool | None:
+        """Resolve a management selector without runtime name precedence."""
+        if name and name.startswith("tool:") and tool_key is None:
+            tool_key, name = name, None
+        if not name and not tool_key:
+            return None
+        matches = [
+            tool
+            for tool in self.func_list
+            if (name is None or tool.name == name)
+            and (tool_key is None or self.get_tool_key(tool) == tool_key)
         ]
+        if len(matches) > 1:
+            raise ValueError("Ambiguous tool identity; provide a unique tool_key")
+        return matches[0] if matches else None
 
-    def is_builtin_tool(self, name: str) -> bool:
-        ensure_builtin_tools_loaded()
-        return get_builtin_tool_class(name) is not None
+    @classmethod
+    def is_tool_active(
+        cls, tool: FuncTool, inactivated_llm_tools: list, tool_states: object
+    ) -> bool:
+        """Apply exact state overrides before the legacy name blacklist."""
+        override = (
+            tool_states.get(cls.get_tool_key(tool))
+            if isinstance(tool_states, dict)
+            else None
+        )
+        if isinstance(override, bool):
+            return override
+        return tool.name not in inactivated_llm_tools
+
+    async def set_tool_active(
+        self, tool_key: str, active: bool, star_map: dict
+    ) -> bool:
+        """Persist an exact tool state before changing the registered object."""
+        async with self._tool_state_lock:
+            tool = self.resolve_tool(tool_key=tool_key)
+            if tool is None:
+                return False
+            if tool.source in ("native", "internal"):
+                raise ValueError("Native and internal tools are managed by the runtime")
+            plugin = star_map.get(tool.handler_module_path)
+            if active and plugin is not None and not plugin.activated:
+                raise ValueError(
+                    f"Plugin {plugin.name} is disabled; enable it before its tool"
+                )
+            stored = await sp.global_get("llm_tool_states", {})
+            states = dict(stored) if isinstance(stored, dict) else {}
+            states[tool_key] = active
+            await sp.global_put("llm_tool_states", states)
+            tool.active = active
+            return True
 
     def _default_permission(self, tool_name: str) -> str:
-        """Compute the fallback permission for a non-builtin tool.
+        """Compute the fallback permission for a plugin or MCP tool.
 
-        All non-builtin tools default to ``"member"`` (no restriction).
-        Builtin tools are never routed through this method."""
+        Tools default to ``"member"`` when no restriction is configured."""
         return "member"
 
     async def _check_tool_permission(
         self,
         tool_name: str,
         context: Any,
+        *,
+        tool_key: str | None = None,
     ) -> str | None:
         """Return an error string if the caller lacks permission, or None.
 
-        Only non-builtin tools are guarded. Permission is resolved from
+        Permission is resolved from
         ``tool_permissions`` in SharedPreferences (``_default`` key). When
         no explicit entry exists the tool inherits the fallback
         ``_default_permission``."""
@@ -473,7 +487,9 @@ class FunctionToolManager:
         except Exception:
             perms_raw = {}
         defaults = perms_raw.get("_default", {}) if isinstance(perms_raw, dict) else {}
-        effective = defaults.get(tool_name)
+        if not isinstance(defaults, dict):
+            defaults = {}
+        effective = defaults.get(tool_key, defaults.get(tool_name))
         if effective is None:
             effective = self._default_permission(tool_name)
 
@@ -484,7 +500,9 @@ class FunctionToolManager:
             event = context.context.event
         except AttributeError:
             event = None
-        if event is None or not event.is_admin():
+        from astrbot.core.agent.runtime import get_agent_permissions
+
+        if event is None or not get_agent_permissions(context).is_admin:
             sender_id = getattr(event, "get_sender_id", lambda: "unknown")()
             return (
                 f"error: Permission denied. The tool '{tool_name}' requires admin "
@@ -494,18 +512,11 @@ class FunctionToolManager:
         return None
 
     def get_full_tool_set(self) -> ToolSet:
-        """获取完整工具集
+        """Return the registered plugin and MCP tools with permission checks.
 
-        使用 ToolSet.add_tool 进行填充。对于同名工具，去重规则为：
-        - 优先保留 active=True 的工具；
-        - 当 active 状态相同时，后加载的工具会覆盖前面的工具。
-
-        因此，后加载的 inactive 工具不会覆盖已激活的工具；
-        同时，MCP 工具在需要时仍可覆盖被禁用的内置工具。
-
-        Non-builtin tools are wrapped with ``_PermissionGuardedTool`` so that
-        every invocation checks the per-tool permission configured via the
-        dashboard.
+        Returns:
+            A tool set that prefers active tools and uses the latest registration
+            when tools with the same name have the same active state.
         """
         tool_set = ToolSet()
         for tool in self.func_list:
@@ -595,7 +606,7 @@ class FunctionToolManager:
                     name=name,
                     cfg=cfg,
                     shutdown_event=shutdown_event,
-                    timeout=init_timeout,
+                    timeout_seconds=init_timeout,
                 ),
                 name=f"mcp-init:{name}",
             )
@@ -647,7 +658,7 @@ class FunctionToolManager:
         cfg: dict,
         *,
         shutdown_event: asyncio.Event | None = None,
-        timeout: float,
+        timeout_seconds: float,
     ) -> None:
         """Initialize MCP server with timeout and register task/event together.
 
@@ -657,7 +668,7 @@ class FunctionToolManager:
         async with self._runtime_lock:
             if name in self._mcp_server_runtime or name in self._mcp_starting:
                 logger.warning(
-                    f"Connected to MCP server {name}, ignoring this startup request (timeout={timeout:g})."
+                    f"Connected to MCP server {name}, ignoring this startup request (timeout={timeout_seconds:g})."
                 )
                 self._log_safe_mcp_debug_config(cfg)
                 return
@@ -701,11 +712,18 @@ class FunctionToolManager:
                 for f in self.func_list
                 if not (isinstance(f, MCPTool) and f.mcp_server_name == name)
             ]
+            inactivated = await sp.global_get("inactivated_llm_tools", [])
+            if not isinstance(inactivated, list):
+                inactivated = []
+            tool_states = await sp.global_get("llm_tool_states", {})
             for tool in mcp_client.tools:
                 func_tool = MCPTool(
                     mcp_tool=tool,
                     mcp_client=mcp_client,
                     mcp_server_name=name,
+                )
+                func_tool.active = self.is_tool_active(
+                    func_tool, inactivated, tool_states
                 )
                 self.func_list.append(func_tool)
 
@@ -752,7 +770,7 @@ class FunctionToolManager:
             self._mcp_starting.discard(name)
 
         try:
-            await asyncio.wait_for(connect_done.wait(), timeout=timeout)
+            await asyncio.wait_for(connect_done.wait(), timeout=timeout_seconds)
         except (TimeoutError, asyncio.CancelledError) as e:
             lifecycle_task.cancel()
             await asyncio.gather(lifecycle_task, return_exceptions=True)
@@ -761,7 +779,7 @@ class FunctionToolManager:
                 self._mcp_server_runtime.pop(name, None)
             if isinstance(e, asyncio.TimeoutError):
                 raise MCPInitTimeoutError(
-                    f"Connected to MCP server {name} timeout ({timeout:g} seconds)"
+                    f"Connected to MCP server {name} timeout ({timeout_seconds:g} seconds)"
                 ) from e
             raise
 
@@ -774,7 +792,7 @@ class FunctionToolManager:
     async def _shutdown_runtimes(
         self,
         runtimes: list[_MCPServerRuntime],
-        timeout: float,
+        timeout_seconds: float,
         *,
         strict: bool = True,
     ) -> list[str]:
@@ -793,7 +811,7 @@ class FunctionToolManager:
         try:
             results = await asyncio.wait_for(
                 asyncio.gather(*lifecycle_tasks, return_exceptions=True),
-                timeout=timeout,
+                timeout=timeout_seconds,
             )
         except TimeoutError:
             pending_names = [
@@ -806,10 +824,10 @@ class FunctionToolManager:
                     task.cancel()
             await asyncio.gather(*lifecycle_tasks, return_exceptions=True)
             if strict:
-                raise MCPShutdownTimeoutError(pending_names, timeout)
+                raise MCPShutdownTimeoutError(pending_names, timeout_seconds)
             logger.warning(
                 "MCP server shutdown timeout (%s seconds), the following servers were not fully closed: %s",
-                f"{timeout:g}",
+                f"{timeout_seconds:g}",
                 ", ".join(pending_names),
             )
             return pending_names
@@ -887,7 +905,7 @@ class FunctionToolManager:
         name: str,
         config: dict,
         shutdown_event: asyncio.Event | None = None,
-        timeout: float | int | str | None = None,
+        timeout: float | int | str | None = None,  # noqa: ASYNC109 - Preserve the public MCP timeout keyword.
     ) -> None:
         """Enable a new MCP server and initialize it.
 
@@ -914,13 +932,13 @@ class FunctionToolManager:
             name=name,
             cfg=config,
             shutdown_event=shutdown_event,
-            timeout=timeout_value,
+            timeout_seconds=timeout_value,
         )
 
     async def disable_mcp_server(
         self,
         name: str | None = None,
-        timeout: float = 10,
+        timeout: float = 10,  # noqa: ASYNC109 - Preserve the public MCP timeout keyword.
     ) -> None:
         """Disable an MCP server by its name.
 
@@ -965,7 +983,7 @@ class FunctionToolManager:
 
     def get_func_desc_openai_style(self, omit_empty_parameter_field=False) -> list:
         """获得 OpenAI API 风格的**已经激活**的工具描述"""
-        tools = [f for f in self.func_list if f.active]
+        tools: list[ToolSchema] = [f for f in self.func_list if f.active]
         toolset = ToolSet(tools)
         return toolset.openai_schema(
             omit_empty_parameter_field=omit_empty_parameter_field,
@@ -973,13 +991,13 @@ class FunctionToolManager:
 
     def get_func_desc_anthropic_style(self) -> list:
         """获得 Anthropic API 风格的**已经激活**的工具描述"""
-        tools = [f for f in self.func_list if f.active]
+        tools: list[ToolSchema] = [f for f in self.func_list if f.active]
         toolset = ToolSet(tools)
         return toolset.anthropic_schema()
 
     def get_func_desc_google_genai_style(self) -> dict:
         """获得 Google GenAI API 风格的**已经激活**的工具描述"""
-        tools = [f for f in self.func_list if f.active]
+        tools: list[ToolSchema] = [f for f in self.func_list if f.active]
         toolset = ToolSet(tools)
         return toolset.google_schema()
 

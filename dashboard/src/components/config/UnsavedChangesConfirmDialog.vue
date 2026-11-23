@@ -42,9 +42,17 @@ const message = ref("");
 const confirmHint = ref("");
 const cancelHint = ref("");
 const closeHint = ref("");
-let resolvePromise = null;
+type ConfirmResult = boolean | "close";
+interface ConfirmOptions {
+  title?: string;
+  message?: string;
+  confirmHint?: string;
+  cancelHint?: string;
+  closeHint?: string;
+}
+let resolvePromise: ((result: ConfirmResult) => void) | null = null;
 
-const open = (options) => {
+const open = (options: ConfirmOptions): Promise<ConfirmResult> => {
   title.value = options.title || t("core.common.dialog.confirmTitle");
   message.value = options.message || t("core.common.dialog.confirmMessage");
   confirmHint.value = options.confirmHint || "";
@@ -52,7 +60,7 @@ const open = (options) => {
   closeHint.value = options.closeHint || "";
   isOpen.value = true;
 
-  return new Promise((resolve) => {
+  return new Promise<ConfirmResult>((resolve) => {
     resolvePromise = resolve;
   });
 };

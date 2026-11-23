@@ -5,6 +5,7 @@ from contextlib import asynccontextmanager
 from dataclasses import dataclass
 
 from deprecated import deprecated
+from sqlalchemy import text
 from sqlalchemy.engine import make_url
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
@@ -14,7 +15,7 @@ from astrbot.core.db.po import (
     ChatUIProject,
     CommandConfig,
     CommandConflict,
-    ConversationV2,
+    ConversationRead,
     CronJob,
     Persona,
     PersonaFolder,
@@ -26,6 +27,7 @@ from astrbot.core.db.po import (
     SessionProjectRelation,
     Stats,
     UmoAlias,
+    UmoSender,
     WebChatThread,
 )
 from astrbot.core.sentinels import NOT_GIVEN
@@ -53,6 +55,9 @@ class BaseDatabase(abc.ABC):
             future=True,
             connect_args=connect_args,
         )
+        from astrbot.core.db.conversation import ConversationStore
+
+        self.conversation_store = ConversationStore(self)
         self.AsyncSessionLocal = async_sessionmaker(
             self.engine,
             class_=AsyncSession,
@@ -64,12 +69,24 @@ class BaseDatabase(abc.ABC):
         """初始化数据库连接"""
 
     @asynccontextmanager
-    async def get_db(self) -> T.AsyncGenerator[AsyncSession, None]:
-        """Get a database session."""
+    async def get_db(
+        self, *, consistent_read: bool = False
+    ) -> T.AsyncGenerator[AsyncSession, None]:
+        """Get a session, optionally preserving a multi-query read view.
+
+        Args:
+            consistent_read: Keep metadata, baseline and events in one database
+                snapshot while concurrent writers may reclaim old payloads.
+
+        Yields:
+            A session whose uncommitted transaction is rolled back on exit.
+        """
         if not self.inited:
             await self.initialize()
             self.inited = True
         async with self.AsyncSessionLocal() as session:
+            if consistent_read:
+                await session.execute(text("BEGIN"))
             yield session
 
     @deprecated(version="4.0.0", reason="Use get_platform_stats instead")
@@ -133,7 +150,7 @@ class BaseDatabase(abc.ABC):
         self,
         user_id: str | None = None,
         platform_id: str | None = None,
-    ) -> list[ConversationV2]:
+    ) -> list[ConversationRead]:
         """Get all conversations for a specific user and platform_id(optional).
 
         content is not included in the result.
@@ -141,7 +158,7 @@ class BaseDatabase(abc.ABC):
         ...
 
     @abc.abstractmethod
-    async def get_conversation_by_id(self, cid: str) -> ConversationV2:
+    async def get_conversation_by_id(self, cid: str) -> ConversationRead | None:
         """Get a specific conversation by its ID."""
         ...
 
@@ -150,7 +167,7 @@ class BaseDatabase(abc.ABC):
         self,
         page: int = 1,
         page_size: int = 20,
-    ) -> list[ConversationV2]:
+    ) -> list[ConversationRead]:
         """Get all conversations with pagination."""
         ...
 
@@ -163,7 +180,7 @@ class BaseDatabase(abc.ABC):
         search_query: str = "",
         include_history: bool = True,
         **kwargs,
-    ) -> tuple[list[ConversationV2], int]:
+    ) -> tuple[list[ConversationRead], int]:
         """Filter conversations by platform IDs and search text.
 
         Args:
@@ -173,6 +190,15 @@ class BaseDatabase(abc.ABC):
             search_query: Search text, if any.
             include_history: Whether to load the full history for returned rows.
             **kwargs: Additional filters supported by the database backend.
+        """
+        ...
+
+    @abc.abstractmethod
+    async def get_conversation_platform_ids(self) -> list[str]:
+        """Return distinct platform IDs referenced by conversation history.
+
+        Returns:
+            Sorted platform IDs that have at least one conversation.
         """
         ...
 
@@ -187,7 +213,7 @@ class BaseDatabase(abc.ABC):
         cid: str | None = None,
         created_at: datetime.datetime | None = None,
         updated_at: datetime.datetime | None = None,
-    ) -> ConversationV2:
+    ) -> ConversationRead:
         """Create a new conversation."""
         ...
 
@@ -197,9 +223,10 @@ class BaseDatabase(abc.ABC):
         cid: str,
         title: str | None = None,
         persona_id: str | None = None,
-        clear_persona: bool = False,
         content: list[dict] | None = None,
         token_usage: int | None = None,
+        *,
+        clear_persona: bool = False,
     ) -> None:
         """Update a conversation's history."""
         ...
@@ -222,7 +249,7 @@ class BaseDatabase(abc.ABC):
         content: dict,
         sender_id: str | None = None,
         sender_name: str | None = None,
-        llm_checkpoint_id: str | None = None,
+        turn_id: str | None = None,
         max_messages: int | None = None,
     ) -> PlatformMessageHistory:
         """Insert a new platform message history record."""
@@ -233,7 +260,7 @@ class BaseDatabase(abc.ABC):
         self,
         message_id: int,
         content: dict | None = None,
-        llm_checkpoint_id: str | None = None,
+        turn_id: str | None = None,
     ) -> None:
         """Update a platform message history record."""
         ...
@@ -316,6 +343,23 @@ class BaseDatabase(abc.ABC):
         ...
 
     @abc.abstractmethod
+    async def count_platform_message_history(
+        self,
+        platform_id: str,
+        user_id: str,
+    ) -> int:
+        """Count platform message history records for a scope.
+
+        Args:
+            platform_id: Platform identifier used to partition history.
+            user_id: Platform user or session identifier.
+
+        Returns:
+            Number of records belonging to the platform/user scope.
+        """
+        ...
+
+    @abc.abstractmethod
     async def get_platform_message_history_by_id(
         self,
         message_id: int,
@@ -329,7 +373,7 @@ class BaseDatabase(abc.ABC):
         creator: str,
         parent_session_id: str,
         parent_message_id: int,
-        base_checkpoint_id: str,
+        base_event_id: str,
         selected_text: str,
     ) -> WebChatThread:
         """Create a WebChat side thread."""
@@ -907,6 +951,22 @@ class BaseDatabase(abc.ABC):
         ...
 
     @abc.abstractmethod
+    async def upsert_umo_auto_name(
+        self,
+        umo: str,
+        creator_sender_id: str,
+        auto_name: str,
+    ) -> None:
+        """Create or update only the automatically discovered UMO name.
+
+        Args:
+            umo: Unified message origin to name.
+            creator_sender_id: Sender that first caused the UMO to be recorded.
+            auto_name: Name discovered from the inbound platform message.
+        """
+        ...
+
+    @abc.abstractmethod
     async def get_umo_alias(self, umo: str) -> UmoAlias | None:
         """Get alias metadata for one UMO."""
         ...
@@ -914,6 +974,46 @@ class BaseDatabase(abc.ABC):
     @abc.abstractmethod
     async def get_umo_aliases(self, umos: list[str] | None = None) -> list[UmoAlias]:
         """Get alias metadata, optionally restricted to the given UMO list."""
+        ...
+
+    # ====
+    # UMO Sender Management
+    # ====
+
+    @abc.abstractmethod
+    async def upsert_umo_sender(
+        self, umo: str, sender_id: str, sender_name: str
+    ) -> None:
+        """Persist a sender's latest nonempty name within a session.
+
+        Args:
+            umo: Unified message origin containing the sender.
+            sender_id: Sender identifier reported by the platform.
+            sender_name: Display name, or an empty string if unavailable.
+        """
+        ...
+
+    @abc.abstractmethod
+    async def get_umo_senders(
+        self,
+        search: str = "",
+        limit: int = 50,
+        sender_ids: list[str] | None = None,
+        offset: int = 0,
+    ) -> list[tuple[UmoSender, UmoAlias | None]]:
+        """Search senders with optional session alias metadata.
+
+        Args:
+            search: Substring matched against sender and session names or IDs.
+            limit: Maximum number of results to return.
+            sender_ids: Resolve the latest record per exact sender ID when provided.
+            offset: Number of deduplicated results to skip.
+
+        Returns:
+            Latest matching sender and optional alias pairs per platform and
+            sender ID, most recently updated first. Exact ID resolution returns
+            one record per ID instead.
+        """
         ...
 
     # ====

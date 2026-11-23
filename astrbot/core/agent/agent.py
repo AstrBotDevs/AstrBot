@@ -7,7 +7,7 @@ from .tool import FunctionTool
 
 
 @dataclass
-class Agent(Generic[TContext]):
+class Agent(Generic[TContext]):  # noqa: UP046 - The shared TypeVar default requires Python 3.12 compatibility.
     name: str
     instructions: str | None = None
     tools: list[str | FunctionTool] | None = None

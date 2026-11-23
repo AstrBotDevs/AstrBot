@@ -1,45 +1,92 @@
-"""Tests for astrbot.core.conversation_mgr module."""
+"""Conversation selection and deletion against real temporary persistence."""
 
-from unittest.mock import MagicMock
+import json
 
 import pytest
 
-from astrbot.core.conversation_mgr import ConversationManager
-from astrbot.core.db import BaseDatabase
+from astrbot.core import conversation_mgr
 
 
-class TestConversationManager:
-    """Smoke tests for ConversationManager."""
+@pytest.fixture
+def manager(monkeypatch, database, shared_preferences):
+    monkeypatch.setattr(conversation_mgr, "sp", shared_preferences)
+    return conversation_mgr.ConversationManager(database)
 
-    def test_module_import(self):
-        """Verify the conversation_mgr module can be imported."""
-        import astrbot.core.conversation_mgr  # noqa: F811
-        assert hasattr(
-            astrbot.core.conversation_mgr,
-            "ConversationManager",
+
+@pytest.mark.asyncio
+async def test_new_conversation_preserves_history_and_selection_after_restart(
+    manager, database
+):
+    umo = "test:FriendMessage:alice"
+    history = [
+        {"role": "user", "content": "question"},
+        {"role": "assistant", "content": "answer"},
+    ]
+    cid = await manager.new_conversation(umo, content=history, title="Saved topic")
+    restarted = conversation_mgr.ConversationManager(database)
+
+    assert await restarted.get_curr_conversation_id(umo) == cid
+    conversation = await restarted.get_conversation(umo, cid)
+    assert conversation is not None
+    assert conversation.title == "Saved topic"
+    assert conversation.platform_id == "test"
+    assert json.loads(conversation.history) == history
+    assert await restarted.get_curr_conversation_id("test:FriendMessage:bob") is None
+
+
+@pytest.mark.asyncio
+async def test_switch_and_delete_noncurrent_conversation_keep_current_selection(
+    manager, database
+):
+    umo = "test:FriendMessage:alice"
+    first = await manager.new_conversation(umo, title="first")
+    second = await manager.new_conversation(umo, title="second")
+    await manager.switch_conversation(umo, first)
+    restarted = conversation_mgr.ConversationManager(database)
+    assert await restarted.get_curr_conversation_id(umo) == first
+
+    await restarted.delete_conversation(umo, second)
+    assert await restarted.get_conversation(umo, second) is None
+    assert await restarted.get_curr_conversation_id(umo) == first
+    await restarted.delete_conversation(umo)
+    assert await restarted.get_conversation(umo, first) is None
+    assert await restarted.get_curr_conversation_id(umo) is None
+
+
+@pytest.mark.asyncio
+async def test_delete_all_clears_selection_and_runs_remaining_callbacks_on_failure(
+    manager, database
+):
+    umo = "test:GroupMessage:room"
+    first = await manager.new_conversation(umo)
+    second = await manager.new_conversation(umo)
+    observed: list[tuple[str, str]] = []
+
+    async def failing_callback(session: str) -> None:
+        observed.append(("first", session))
+        raise ValueError("callback failed")
+
+    async def remaining_callback(session: str) -> None:
+        observed.append(("second", session))
+
+    manager.register_on_session_deleted(failing_callback)
+    manager.register_on_session_deleted(remaining_callback)
+    await manager.delete_conversations_by_user_id(umo)
+
+    assert observed == [("first", umo), ("second", umo)]
+    assert await manager.get_conversations(umo) == []
+    restarted = conversation_mgr.ConversationManager(database)
+    assert await restarted.get_curr_conversation_id(umo) is None
+    assert await restarted.get_conversation(umo, first) is None
+    assert await restarted.get_conversation(umo, second) is None
+
+
+@pytest.mark.asyncio
+async def test_event_writer_rejects_a_different_session_owner(manager):
+    owner = "test:FriendMessage:alice"
+    cid = await manager.new_conversation(owner)
+    with pytest.raises(ValueError, match="not accessible"):
+        await manager.create_event_writer(
+            cid, unified_msg_origin="test:FriendMessage:bob"
         )
-
-    def test_class_exists(self):
-        """Verify ConversationManager class exists."""
-        assert ConversationManager.__name__ == "ConversationManager"
-
-    def test_init_requires_db_helper(self):
-        """Verify ConversationManager init requires BaseDatabase."""
-        db = MagicMock(spec=BaseDatabase)
-        mgr = ConversationManager(db)
-        assert mgr.db is db
-        assert mgr.session_conversations == {}
-        assert mgr.save_interval == 60
-
-    def test_register_on_session_deleted_adds_callback(self):
-        """Verify register_on_session_deleted adds a callback."""
-        db = MagicMock(spec=BaseDatabase)
-        mgr = ConversationManager(db)
-
-        async def dummy_callback(unified_msg_origin: str) -> None:
-            pass
-
-        assert len(mgr._on_session_deleted_callbacks) == 0
-        mgr.register_on_session_deleted(dummy_callback)
-        assert len(mgr._on_session_deleted_callbacks) == 1
-        assert mgr._on_session_deleted_callbacks[0] is dummy_callback
+    assert await manager.get_conversation(owner, cid) is not None

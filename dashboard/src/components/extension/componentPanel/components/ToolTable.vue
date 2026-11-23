@@ -11,38 +11,40 @@ const props = defineProps<{
   loading?: boolean;
 }>();
 
-const emit = defineEmits<(e: "toggle-tool", tool: ToolItem) => void>();
+const emit = defineEmits<{
+  "toggle-tool": [tool: ToolItem];
+  "update-permission": [tool: ToolItem, permission: "admin" | "member"];
+}>();
 
 const toolHeaders = computed(() => [
-  { title: tmTool("functionTools.title"), key: "name", minWidth: "160px" },
+  { title: tmTool("functionTools.title"), key: "name", minWidth: "320px" },
   { title: tmTool("functionTools.description"), key: "description" },
-  {
-    title: tmTool("functionTools.table.origin"),
-    key: "origin",
-    sortable: false,
-    width: "120px",
-  },
-  {
-    title: tmTool("functionTools.table.originName"),
-    key: "origin_name",
-    sortable: false,
-    width: "160px",
-  },
-  {
-    title: tmCommand("status.enabled"),
-    key: "active",
-    sortable: false,
-    width: "120px",
-  },
-  {
-    title: tmTool("functionTools.table.actions"),
-    key: "actions",
-    sortable: false,
-    width: "120px",
-  },
+  { title: tmTool("functionTools.table.originName"), key: "origin_name", sortable: false, width: "140px" },
+  { title: tmTool("functionTools.table.permission"), key: "permission", sortable: false, width: "110px" },
+  { title: tmTool("functionTools.table.actions"), key: "actions", sortable: false, width: "100px" },
 ]);
 
 const parameterEntries = (tool: ToolItem) => Object.entries(tool.parameters?.properties || {});
+
+const getPermissionColor = (permission?: string): string => {
+  switch (permission) {
+    case "admin":
+      return "error";
+    default:
+      return "success";
+  }
+};
+
+const getPermissionLabel = (permission?: string): string => {
+  switch (permission) {
+    case "admin":
+      return tmTool("functionTools.table.permissionAdmin");
+    default:
+      return tmTool("functionTools.table.permissionEveryone");
+  }
+};
+
+const toolIdentity = (tool: ToolItem) => tool.tool_key || tool.name;
 const isInternal = (tool: ToolItem) => tool.source === "internal";
 </script>
 
@@ -51,7 +53,7 @@ const isInternal = (tool: ToolItem) => tool.source === "internal";
     <v-data-table
       :headers="toolHeaders"
       :items="items"
-      item-value="tool_key"
+      :item-value="toolIdentity"
       hover
       show-expand
       class="tool-table"
@@ -97,17 +99,6 @@ const isInternal = (tool: ToolItem) => tool.source === "internal";
         </div>
       </template>
 
-      <template #item.origin="{ item }">
-        <v-chip
-          size="small"
-          variant="tonal"
-          color="info"
-          class="text-caption font-weight-medium"
-        >
-          {{ item.origin || "-" }}
-        </v-chip>
-      </template>
-
       <template #item.origin_name="{ item }">
         <div
           class="text-body-2 text-medium-emphasis"
@@ -122,29 +113,37 @@ const isInternal = (tool: ToolItem) => tool.source === "internal";
         </div>
       </template>
 
-      <template #item.active="{ item }">
-        <v-chip
-          v-if="isInternal(item)"
-          color="grey"
-          size="small"
-          class="font-weight-medium"
-          variant="tonal"
-        >
-          内置
-        </v-chip>
-        <v-chip
-          v-else
-          :color="item.active ? 'success' : 'error'"
-          size="small"
-          class="font-weight-medium"
-          :variant="item.active ? 'flat' : 'outlined'"
-        >
-          {{
-            item.active
-              ? tmCommand("status.enabled")
-              : tmCommand("status.disabled")
-          }}
-        </v-chip>
+      <template #item.permission="{ item }">
+        <v-menu location="bottom">
+          <template v-slot:activator="{ props: menuProps }">
+            <v-chip
+              v-bind="menuProps"
+              :color="getPermissionColor(item.permission)"
+              size="small"
+              class="font-weight-medium cursor-pointer"
+              link
+            >
+              {{ getPermissionLabel(item.permission) }}
+              <v-icon end size="14">mdi-chevron-down</v-icon>
+            </v-chip>
+          </template>
+          <v-list density="compact">
+            <v-list-item
+              :value="'member'"
+              @click="emit('update-permission', item, 'member')"
+              :active="item.permission !== 'admin'"
+            >
+              <v-list-item-title>{{ tmTool('functionTools.table.permissionEveryone') }}</v-list-item-title>
+            </v-list-item>
+            <v-list-item
+              :value="'admin'"
+              @click="emit('update-permission', item, 'admin')"
+              :active="item.permission === 'admin'"
+            >
+              <v-list-item-title>{{ tmTool('functionTools.table.permissionAdmin') }}</v-list-item-title>
+            </v-list-item>
+          </v-list>
+        </v-menu>
       </template>
 
       <template #item.actions="{ item }">
@@ -241,6 +240,11 @@ const isInternal = (tool: ToolItem) => tool.source === "internal";
 
 .tool-table ::v-deep(.v-data-table__td) {
   vertical-align: middle;
+}
+
+.tool-name {
+  font-size: 0.9rem;
+  line-height: 1.35;
 }
 
 .internal-tool-row {

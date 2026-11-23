@@ -156,20 +156,7 @@ class ContextTruncator:
         else:
             truncated_contexts = non_system_messages[-num_to_keep * 2 :]
 
-        # Find the first user message
-        index = next(
-            (i for i, item in enumerate(truncated_contexts) if item.role == "user"),
-            None,
-        )
-        if index is not None and index > 0:
-            truncated_contexts = truncated_contexts[index:]
-
-        result = self._ensure_user_message(
-            system_messages,
-            truncated_contexts,
-            messages,
-        )
-        return self.fix_messages(result)
+        return self._finish_truncation(system_messages, truncated_contexts, messages)
 
     def truncate_by_dropping_oldest_turns(
         self,
@@ -187,20 +174,7 @@ class ContextTruncator:
         else:
             truncated_non_system = non_system_messages[drop_turns * 2 :]
 
-        # Find the first user message
-        index = next(
-            (i for i, item in enumerate(truncated_non_system) if item.role == "user"),
-            None,
-        )
-        if index is not None:
-            truncated_non_system = truncated_non_system[index:]
-
-        result = self._ensure_user_message(
-            system_messages,
-            truncated_non_system,
-            messages,
-        )
-        return self.fix_messages(result)
+        return self._finish_truncation(system_messages, truncated_non_system, messages)
 
     def truncate_by_halving(
         self,
@@ -218,7 +192,15 @@ class ContextTruncator:
 
         truncated_non_system = non_system_messages[messages_to_delete:]
 
-        # Find the first user message
+        return self._finish_truncation(system_messages, truncated_non_system, messages)
+
+    def _finish_truncation(
+        self,
+        system_messages: list[Message],
+        truncated_non_system: list[Message],
+        messages: list[Message],
+    ) -> list[Message]:
+        # Keep a user message at the start of the retained conversation.
         index = next(
             (i for i, item in enumerate(truncated_non_system) if item.role == "user"),
             None,

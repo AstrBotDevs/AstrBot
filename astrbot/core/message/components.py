@@ -26,18 +26,36 @@ import base64
 import json
 import os
 import sys
+import time
 import uuid
-from enum import Enum
+from collections.abc import Awaitable, Callable
+from enum import Enum, StrEnum
 from pathlib import Path, PurePosixPath
-from typing import Any
+from typing import Any, Literal
 
 import anyio
 from deprecated import deprecated
 
 if sys.version_info >= (3, 14):
-    from pydantic import BaseModel
+    from pydantic import (
+        BaseModel,
+        Field,
+        PrivateAttr,
+        StrictBool,
+        StrictFloat,
+        StrictInt,
+        StrictStr,
+    )
 else:
-    from pydantic.v1 import BaseModel
+    from pydantic.v1 import (
+        BaseModel,
+        Field,
+        PrivateAttr,
+        StrictBool,
+        StrictFloat,
+        StrictInt,
+        StrictStr,
+    )
 
 from astrbot.core import astrbot_config, file_token_service, logger
 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
@@ -45,13 +63,48 @@ from astrbot.core.utils.io import download_file
 from astrbot.core.utils.media_utils import MediaResolver, file_uri_to_path, is_file_uri
 
 
-class ComponentType(str, Enum):
+async def _register_media_file(resolve_path: Callable[[], Awaitable[str]]) -> str:
+    """Resolve and register media only after the callback service is configured."""
+    callback_host = astrbot_config.get("callback_api_base")
+    if not callback_host:
+        raise Exception("未配置 callback_api_base,文件服务不可用")
+    file_path = await resolve_path()
+    token = await file_token_service.register_file(file_path)
+    logger.debug(f"已注册:{callback_host}/api/file/{token}")
+    return f"{callback_host}/api/file/{token}"
+
+
+def _fallback_media_source(path: str | None, file: str | None, url: str | None) -> str:
+    """Use an existing explicit path or retain the original unresolved source."""
+    if path:
+        try:
+            if os.path.exists(path):
+                return path
+        except OSError:
+            pass
+    return file or url or ""
+
+
+class _MessageStringEnum(StrEnum):
+    """Retain the public string/format representation used by message enums."""
+
+    __str__ = Enum.__str__
+
+    def __format__(self, format_spec: str) -> str:
+        return Enum.__format__(self, format_spec)
+
+
+class ComponentType(_MessageStringEnum):
     # Basic Segment Types
     Plain = "Plain"  # plain text message
     Image = "Image"  # image
     Record = "Record"  # audio
     Video = "Video"  # video
     File = "File"  # file attachment
+    ActionRow = "ActionRow"  # a row of interactive controls
+    Button = "Button"  # an interactive button
+    ButtonInteraction = "ButtonInteraction"  # an inbound button click
+    UIInteraction = "UIInteraction"  # an inbound plugin view action
 
     # IM-specific Segment Types
     Face = "Face"  # Emoji segment for Tencent QQ platform
@@ -97,6 +150,25 @@ class BaseMessageComponent(BaseModel):
         # 默认情况下,回退到旧的同步 toDict()
         return self.toDict()
 
+    def __repr_args__(self):
+        """截断超长 / base64 字段值，避免 repr() 与日志输出被 base64 正文污染。
+
+        覆盖 pydantic 默认 repr，作用于所有消息组件（Image/Record/Video/File 等），
+        因此任何 logger、异常信息中的组件输出都自动安全，无需在调用点单独处理。
+        """
+        max_len = 64
+
+        def truncate(value):
+            if isinstance(value, str):
+                if value.startswith("base64://"):
+                    return f"base64://<{len(value) - 9} chars>"
+                if len(value) > max_len:
+                    return f"{value[:max_len]}...<{len(value)} chars>"
+            return value
+
+        for key, value in super().__repr_args__():
+            yield key, truncate(value)
+
 
 class Plain(BaseMessageComponent):
     type: ComponentType = ComponentType.Plain
@@ -110,6 +182,143 @@ class Plain(BaseMessageComponent):
 
     async def to_dict(self) -> dict:
         return {"type": "text", "data": {"text": self.text}}
+
+
+# Pydantic v1 resolves this eager union at runtime; PEP 695 lazy aliases are unsupported.
+JSONValue = (
+    StrictStr | StrictInt | StrictFloat | StrictBool | None | list[Any] | dict[str, Any]
+)
+
+
+class Button(BaseMessageComponent):
+    """A portable interactive button."""
+
+    class Style(_MessageStringEnum):
+        """Portable visual intent for a button."""
+
+        DEFAULT = "default"
+        PRIMARY = "primary"
+        SUCCESS = "success"
+        DANGER = "danger"
+
+    class CallbackAction(BaseModel):
+        """Run bot-side logic when a button is clicked."""
+
+        type: Literal["callback"] = "callback"
+        data: JSONValue | None = None
+
+        def __init__(self, **values) -> None:
+            """Validate callback context when the component is constructed.
+
+            Args:
+                **values: Pydantic field values for the callback action.
+
+            Raises:
+                ValueError: If data is not valid JSON.
+            """
+            super().__init__(**values)
+            try:
+                json.dumps(self.data, allow_nan=False)
+            except (TypeError, ValueError) as exc:
+                raise ValueError(
+                    "Button callback data must be JSON-compatible."
+                ) from exc
+
+    class UrlAction(BaseModel):
+        """Open a URL when a button is clicked."""
+
+        type: Literal["url"] = "url"
+        url: str = Field(min_length=1)
+
+    type: ComponentType = ComponentType.Button
+    id: str = Field(min_length=1)
+    label: str = Field(min_length=1)
+    action: CallbackAction | UrlAction = Field(discriminator="type")
+    style: Style = Style.DEFAULT
+
+    def toDict(self) -> dict:
+        """Serialize the button using the public message component format."""
+        action: dict[str, object] = {"type": self.action.type}
+        if isinstance(self.action, Button.CallbackAction):
+            if self.action.data is not None:
+                action["data"] = self.action.data
+        else:
+            action["url"] = self.action.url
+        return {
+            "type": "button",
+            "data": {
+                "id": self.id,
+                "label": self.label,
+                "action": action,
+                "style": self.style.value,
+            },
+        }
+
+
+class ActionRow(BaseMessageComponent):
+    """A group of buttons that should be displayed on one row when possible."""
+
+    type: ComponentType = ComponentType.ActionRow
+    buttons: list[Button]
+    fallback_text: str | None = None
+    action_timeout: float | None = Field(default=None, gt=0, allow_inf_nan=False)
+    _action_expires_at: float | None = PrivateAttr(default=None)
+
+    @property
+    def action_expires_at(self) -> float | None:
+        """Get the shared callback deadline, starting on first rendering.
+
+        Returns:
+            Unix timestamp for this row's callback expiry, or None if unlimited.
+        """
+        if self.action_timeout is not None and self._action_expires_at is None:
+            self._action_expires_at = time.time() + self.action_timeout
+        return self._action_expires_at
+
+    def toDict(self) -> dict:
+        """Serialize the row using the public message component format."""
+        data: dict = {
+            "buttons": [button.toDict()["data"] for button in self.buttons],
+        }
+        if self.fallback_text is not None:
+            data["fallback_text"] = self.fallback_text
+        if self.action_timeout is not None:
+            data["action_timeout"] = self.action_timeout
+        return {"type": "actionrow", "data": data}
+
+
+class ButtonInteraction(BaseMessageComponent):
+    """Normalized inbound event produced by a callback button click."""
+
+    type: ComponentType = ComponentType.ButtonInteraction
+    action_id: str
+    data: JSONValue | None = None
+    interaction_id: str
+    source_message_id: str | None = None
+    # Retain the opaque token for expiry validation before plugin dispatch.
+    callback_data: str | None = None
+
+
+class ViewContext(BaseModel):
+    """Persisted snapshot of the card that initiated an interaction."""
+
+    id: str
+    name: str
+    version: int
+    revision: int
+    data: dict[str, Any]
+
+
+class UIInteraction(BaseMessageComponent):
+    """Authenticated user input from a plugin-owned chat view."""
+
+    type: ComponentType = ComponentType.UIInteraction
+    action_id: str
+    interaction_id: str
+    data: JSONValue | None = None
+    source: Literal["view"] = "view"
+    source_message_id: str | None = None
+    view: ViewContext
 
 
 class Face(BaseMessageComponent):
@@ -207,15 +416,7 @@ class Record(BaseMessageComponent):
                 return self.url
 
         # 3) 尝试 path（可能是 Windows 绝对路径如 C:\Users\...）
-        if self.path:
-            try:
-                if os.path.exists(self.path):
-                    return self.path
-            except OSError:
-                pass
-
-        # 4) 最后裸返回 file（即使不行也要让调用方看到原始内容）
-        return self.file or self.url or ""
+        return _fallback_media_source(self.path, self.file, self.url)
 
     async def convert_to_file_path(self) -> str:
         """将这个语音统一转换为本地文件路径｡这个方法避免了手动判断语音数据类型,直接返回语音数据的本地路径(如果是网络 URL, 则会自动进行下载)｡
@@ -259,18 +460,7 @@ class Record(BaseMessageComponent):
             Exception: 如果未配置 callback_api_base
 
         """
-        callback_host = astrbot_config.get("callback_api_base")
-
-        if not callback_host:
-            raise Exception("未配置 callback_api_base,文件服务不可用")
-
-        file_path = await self.convert_to_file_path()
-
-        token = await file_token_service.register_file(file_path)
-
-        logger.debug(f"已注册:{callback_host}/api/file/{token}")
-
-        return f"{callback_host}/api/file/{token}"
+        return await _register_media_file(self.convert_to_file_path)
 
 
 class Video(BaseMessageComponent):
@@ -317,14 +507,7 @@ class Video(BaseMessageComponent):
             ):
                 return candidate
 
-        if self.path:
-            try:
-                if os.path.exists(self.path):
-                    return self.path
-            except OSError:
-                pass
-
-        return self.file or self.url or ""
+        return _fallback_media_source(self.path, self.file, self.url)
 
     async def convert_to_file_path(self) -> str:
         """将这个视频统一转换为本地文件路径｡这个方法避免了手动判断视频数据类型,直接返回视频数据的本地路径(如果是网络 URL,则会自动进行下载)｡
@@ -362,18 +545,7 @@ class Video(BaseMessageComponent):
             Exception: 如果未配置 callback_api_base
 
         """
-        callback_host = astrbot_config.get("callback_api_base")
-
-        if not callback_host:
-            raise Exception("未配置 callback_api_base,文件服务不可用")
-
-        file_path = await self.convert_to_file_path()
-
-        token = await file_token_service.register_file(file_path)
-
-        logger.debug(f"已注册:{callback_host}/api/file/{token}")
-
-        return f"{callback_host}/api/file/{token}"
+        return await _register_media_file(self.convert_to_file_path)
 
     async def to_dict(self):
         """需要和 toDict 区分开,toDict 是同步方法"""
@@ -526,6 +698,12 @@ class Image(BaseMessageComponent):
         Returns:
             str: 图片的本地路径,以绝对路径表示｡
 
+        Raises:
+            FileNotFoundError: 图片引用既不是存在的本地文件，也不是可下载的 URL
+                或合法的 base64 数据。
+            ValueError: 图片引用指向已存在但非普通文件的路径（例如目录），
+                或者 url/file 均为空。
+
         """
         url = self.url or self.file
         if not url:
@@ -555,18 +733,7 @@ class Image(BaseMessageComponent):
             Exception: 如果未配置 callback_api_base
 
         """
-        callback_host = astrbot_config.get("callback_api_base")
-
-        if not callback_host:
-            raise Exception("未配置 callback_api_base,文件服务不可用")
-
-        file_path = await self.convert_to_file_path()
-
-        token = await file_token_service.register_file(file_path)
-
-        logger.debug(f"已注册:{callback_host}/api/file/{token}")
-
-        return f"{callback_host}/api/file/{token}"
+        return await _register_media_file(self.convert_to_file_path)
 
 
 class Reply(BaseMessageComponent):
@@ -912,6 +1079,9 @@ ComponentTypes = {
     "record": Record,
     "video": Video,
     "file": File,
+    "actionrow": ActionRow,
+    "button": Button,
+    "buttoninteraction": ButtonInteraction,
     # IM-specific Message Segments
     "face": Face,
     "at": At,

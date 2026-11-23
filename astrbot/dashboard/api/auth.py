@@ -124,7 +124,11 @@ async def require_dashboard_user(request: Request) -> str:
         raise ApiError("Token 无效", status_code=401) from exc
 
     username = payload.get("username")
-    if not isinstance(username, str) or not username.strip():
+    if (
+        payload.get("token_type") is not None
+        or not isinstance(username, str)
+        or not username.strip()
+    ):
         raise ApiError("Token 无效", status_code=401)
     return username
 
@@ -190,7 +194,11 @@ async def require_scope(request: Request, scope: str) -> AuthContext:
         raise ApiError("Invalid token", status_code=401) from exc
 
     username = payload.get("username")
-    if not isinstance(username, str) or not username.strip():
+    if (
+        payload.get("token_type") is not None
+        or not isinstance(username, str)
+        or not username.strip()
+    ):
         raise ApiError("Invalid token", status_code=401)
     return AuthContext(username=username, scopes=["*"], via="jwt")
 

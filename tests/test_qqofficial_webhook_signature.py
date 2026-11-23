@@ -1,6 +1,8 @@
 import asyncio
 import json
+from unittest.mock import Mock
 
+import botpy
 import pytest
 
 from astrbot.core.platform.sources.qqofficial_webhook.qo_webhook_server import (
@@ -10,23 +12,7 @@ from astrbot.core.platform.sources.qqofficial_webhook.qo_webhook_server import (
     _sign_qq_webhook_payload,
     _verify_qq_webhook_signature,
 )
-
-
-class FakeRequest:
-    def __init__(self, body: bytes, headers: dict[str, str] | None = None) -> None:
-        self._body = body
-        self.headers = headers or {}
-
-    async def get_data(self) -> bytes:
-        return self._body
-
-
-class FakeBotpyClient:
-    api = None
-    http = None
-
-    def ws_dispatch(self, *_args, **_kwargs) -> None:
-        return None
+from tests.test_platform_regressions import make_webhook_request
 
 
 def test_qq_webhook_signature_verification_accepts_valid_signature():
@@ -57,7 +43,7 @@ async def test_qq_webhook_callback_rejects_missing_signature():
     webhook = object.__new__(QQOfficialWebhook)
     webhook.secret = "test-secret"
 
-    result = await webhook.handle_callback(FakeRequest(b'{"op":12,"d":0}'))
+    result = await webhook.handle_callback(make_webhook_request(b'{"op":12,"d":0}'))
 
     assert result == ({"error": "Invalid signature"}, 401)
 
@@ -74,7 +60,7 @@ async def test_qq_webhook_callback_accepts_unsigned_validation():
     webhook = object.__new__(QQOfficialWebhook)
     webhook.secret = secret
 
-    result = await webhook.handle_callback(FakeRequest(body))
+    result = await webhook.handle_callback(make_webhook_request(body))
 
     assert result == {
         "plain_token": plain_token,
@@ -94,11 +80,11 @@ async def test_qq_webhook_callback_lazily_creates_botpy_connection():
     webhook = QQOfficialWebhook(
         {"appid": "123", "secret": secret},
         asyncio.Queue(),
-        FakeBotpyClient(),
+        Mock(spec=botpy.Client, api=None, http=None),
     )
 
     result = await webhook.handle_callback(
-        FakeRequest(
+        make_webhook_request(
             body,
             {
                 _SIGNATURE_TIMESTAMP_HEADER: timestamp,

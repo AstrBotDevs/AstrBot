@@ -421,6 +421,7 @@ def test_build_skills_prompt_no_custom_fields():
 
 
 def test_list_skills_parses_description_from_local(monkeypatch, tmp_path: Path):
+    monkeypatch.setattr("astrbot.core.star.star.star_registry", [])
     data_dir = tmp_path / "data"
     temp_dir = tmp_path / "temp"
     skills_root = tmp_path / "skills"
@@ -687,6 +688,7 @@ def test_list_skills_includes_inactive_plugin_provided_skills_for_inventory(
     monkeypatch,
     tmp_path: Path,
 ):
+    monkeypatch.setattr("astrbot.core.star.star.star_registry", [])
     data_dir = tmp_path / "data"
     skills_root = tmp_path / "skills"
     plugins_root = tmp_path / "plugins"
@@ -713,6 +715,7 @@ def test_list_skills_includes_inactive_plugin_provided_skills_for_inventory(
 
 
 def test_list_skills_description_from_sandbox_cache(monkeypatch, tmp_path: Path):
+    monkeypatch.setattr("astrbot.core.star.star.star_registry", [])
     data_dir = tmp_path / "data"
     temp_dir = tmp_path / "temp"
     skills_root = tmp_path / "skills"

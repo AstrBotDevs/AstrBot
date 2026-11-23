@@ -59,7 +59,6 @@ class PersonaCommands:
         default_persona = await self.context.persona_manager.get_default_persona_v3(
             umo=umo,
         )
-        force_applied_persona_id = None
 
         curr_cid_title = "无"
         if cid:
@@ -76,29 +75,19 @@ class PersonaCommands:
                 )
                 return
 
-            provider_settings = self.context.get_config(umo=umo).get(
-                "provider_settings",
-                {},
-            )
             (
                 persona_id,
                 _,
-                force_applied_persona_id,
                 _,
             ) = await self.context.persona_manager.resolve_selected_persona(
                 umo=umo,
-                conversation_persona_id=conv.persona_id,
                 platform_name=message.get_platform_name(),
-                provider_settings=provider_settings,
             )
 
             if persona_id == "[%None]":
                 curr_persona_name = "无"
             elif persona_id:
                 curr_persona_name = persona_id
-
-            if force_applied_persona_id:
-                curr_persona_name = f"{curr_persona_name} (自定义规则)"
 
             curr_cid_title = conv.title or "新对话"
             curr_cid_title += f"({cid[:4]})"
@@ -125,7 +114,7 @@ class PersonaCommands:
         elif parts[1] == "list":
             # 获取文件夹树和所有人格
             folder_tree = await self.context.persona_manager.get_folder_tree()
-            all_personas = self.context.persona_manager.personas
+            all_personas = await self.context.persona_manager.get_all_personas()
 
             lines = ["📂 人格列表:\n"]
 
@@ -157,7 +146,7 @@ class PersonaCommands:
             if persona_info := next(
                 builtins.filter(
                     lambda persona: persona["name"] == ps,
-                    self.context.provider_manager.personas,
+                    self.context.persona_manager.personas_v3,
                 ),
                 None,
             ):
@@ -189,7 +178,7 @@ class PersonaCommands:
             if persona_info := next(
                 builtins.filter(
                     lambda persona: persona["name"] == ps,
-                    self.context.provider_manager.personas,
+                    self.context.persona_manager.personas_v3,
                 ),
                 None,
             ):
@@ -197,13 +186,9 @@ class PersonaCommands:
                     message.unified_msg_origin,
                     ps,
                 )
-                force_warn_msg = ""
-                if force_applied_persona_id:
-                    force_warn_msg = "提醒:由于自定义规则,您现在切换的人格将不会生效｡"
-
                 message.set_result(
                     MessageEventResult().message(
-                        f"设置成功｡如果您正在切换到不同的人格,请注意使用 /reset 来清空上下文,防止原人格对话影响现人格｡{force_warn_msg}",
+                        "设置成功｡如果您正在切换到不同的人格,请注意使用 /reset 来清空上下文,防止原人格对话影响现人格｡",
                     ),
                 )
             else:

@@ -28,8 +28,7 @@ class NvidiaEmbeddingProvider(EmbeddingProvider):
         )
         self.timeout = int(provider_config.get("timeout", 20))
         self.model = provider_config.get(
-            "embedding_model",
-            "nvidia/llama-nemotron-embed-1b-v2",
+            "embedding_model", "nvidia/nemotron-3-embed-1b"
         )
         self.input_type = provider_config.get("input_type", "passage")
 
@@ -50,7 +49,7 @@ class NvidiaEmbeddingProvider(EmbeddingProvider):
             }
             timeout = aiohttp.ClientTimeout(total=self.timeout)
             self.client = aiohttp.ClientSession(
-                headers=headers,
+                headers={**self.request_headers, **headers},
                 timeout=timeout,
             )
         return self.client
@@ -121,15 +120,8 @@ class NvidiaEmbeddingProvider(EmbeddingProvider):
             raise
 
     def get_dim(self) -> int:
-        if "embedding_dimensions" in self.provider_config:
-            try:
-                return int(self.provider_config["embedding_dimensions"])
-            except (ValueError, TypeError):
-                logger.warning(
-                    f"embedding_dimensions in embedding configs is not a valid integer: "
-                    f"'{self.provider_config['embedding_dimensions']}', ignored.",
-                )
-        return 0
+        """Get the configured embedding dimension."""
+        return self._configured_embedding_dimension()
 
     async def terminate(self):
         if self.client and not self.client.closed:

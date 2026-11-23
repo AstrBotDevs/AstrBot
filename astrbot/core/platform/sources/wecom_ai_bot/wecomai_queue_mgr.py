@@ -9,6 +9,10 @@ from collections.abc import Awaitable, Callable
 from typing import Any
 
 from astrbot.api import logger
+from astrbot.core.platform.queue_listener import (
+    discard_finished_listener,
+    listen_to_queue,
+)
 
 
 class WecomAIQueueMgr:
@@ -217,7 +221,11 @@ class WecomAIQueueMgr:
             name=f"wecomai_listener_{session_id}",
         )
         self._listener_tasks[session_id] = task
-        task.add_done_callback(lambda _: self._listener_tasks.pop(session_id, None))
+        task.add_done_callback(
+            lambda finished: discard_finished_listener(
+                self._listener_tasks, session_id, finished
+            )
+        )
         logger.debug(f"[WecomAI] 为会话启动监听器: {session_id}")
 
     async def _listen_to_queue(
@@ -226,32 +234,14 @@ class WecomAIQueueMgr:
         queue: asyncio.Queue,
         close_event: asyncio.Event,
     ):
-        while True:
-            get_task = asyncio.create_task(queue.get())
-            close_task = asyncio.create_task(close_event.wait())
-            try:
-                done, pending = await asyncio.wait(
-                    {get_task, close_task},
-                    return_when=asyncio.FIRST_COMPLETED,
-                )
-                for task in pending:
-                    task.cancel()
-                if close_task in done:
-                    break
-                data = get_task.result()
-                if self._listener_callback is None:
-                    continue
-                try:
-                    await self._listener_callback(data)
-                except Exception as e:
-                    logger.error(f"处理会话 {session_id} 消息时发生错误: {e}")
-            except asyncio.CancelledError:
-                break
-            finally:
-                if not get_task.done():
-                    get_task.cancel()
-                if not close_task.done():
-                    close_task.cancel()
+        await listen_to_queue(
+            queue,
+            close_event,
+            lambda: self._listener_callback,
+            lambda error: logger.error(
+                f"Error processing WeCom AI message from session {session_id}: {error}"
+            ),
+        )
 
     def get_stats(self) -> dict[str, int]:
         """获取队列统计信息

@@ -14,9 +14,17 @@ declare global {
     reason?: string | null;
   }
 
+  interface AstrBotDesktopAppUpdateProgress {
+    phase: "downloading" | "verifying" | "installing";
+    downloadedBytes: number;
+    totalBytes?: number | null;
+  }
+
   interface AstrBotAppUpdaterBridge {
     checkForAppUpdate: () => Promise<AstrBotDesktopAppUpdateCheckResult>;
-    installAppUpdate: () => Promise<AstrBotDesktopAppUpdateResult>;
+    installAppUpdate: (
+      onProgress?: (progress: AstrBotDesktopAppUpdateProgress) => void,
+    ) => Promise<AstrBotDesktopAppUpdateResult>;
   }
 
   interface Window {
@@ -35,6 +43,23 @@ declare global {
         reason: string | null;
       }>;
       stopBackend: () => Promise<{
+        ok: boolean;
+        reason: string | null;
+      }>;
+      pickDirectory?: (defaultPath?: string | null) => Promise<string | null>;
+      setWindowTheme?: (theme: "dark" | "light" | null) => Promise<{
+        ok: boolean;
+        reason: string | null;
+      }>;
+      minimizeWindow?: () => Promise<{
+        ok: boolean;
+        reason: string | null;
+      }>;
+      toggleMaximizeWindow?: () => Promise<{
+        ok: boolean;
+        reason: string | null;
+      }>;
+      closeWindow?: () => Promise<{
         ok: boolean;
         reason: string | null;
       }>;

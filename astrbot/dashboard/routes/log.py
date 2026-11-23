@@ -101,6 +101,8 @@ class LogRoute(Route):
                 "Transfer-Encoding": "chunked",
             },
         )
+        if not isinstance(response, QuartResponse):
+            raise TypeError("The log stream requires a Quart response")
         response.timeout = None
         return response
 

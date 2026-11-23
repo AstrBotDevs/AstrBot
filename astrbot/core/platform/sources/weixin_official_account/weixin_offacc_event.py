@@ -8,8 +8,15 @@ from wechatpy.replies import ImageReply, VoiceReply
 
 from astrbot.api import logger
 from astrbot.api.event import AstrMessageEvent, MessageChain
-from astrbot.api.message_components import Image, Plain, Record
+from astrbot.api.message_components import (
+    ActionRow,
+    Button,
+    Image,
+    Plain,
+    Record,
+)
 from astrbot.api.platform import AstrBotMessage, PlatformMetadata
+from astrbot.core.platform.sources.weixin_shared import split_weixin_text
 from astrbot.core.utils.media_utils import convert_audio_to_amr
 
 
@@ -36,48 +43,35 @@ class WeixinOfficialAccountPlatformEvent(AstrMessageEvent):
         pass
 
     async def split_plain(self, plain: str, max_length: int = 1024) -> list[str]:
-        """将长文本分割成多个小文本, 每个小文本长度不超过 max_length 字符
-
-        Args:
-            plain (str): 要分割的长文本
-        Returns:
-            list[str]: 分割后的文本列表
-
-        """
-        if len(plain) <= max_length:
-            return [plain]
-        result = []
-        start = 0
-        while start < len(plain):
-            if start + max_length >= len(plain):
-                result.append(plain[start:])
-                break
-            end = min(start + max_length, len(plain))
-            cut_position = end
-            for i in range(end, start, -1):
-                if i < len(plain) and plain[i - 1] in [
-                    "｡",
-                    "!",
-                    "?",
-                    ".",
-                    "!",
-                    "?",
-                    "\n",
-                    ";",
-                    ";",
-                ]:
-                    cut_position = i
-                    break
-            if cut_position == end and end < len(plain):
-                cut_position = end
-            result.append(plain[start:cut_position])
-            start = cut_position
-        return result
+        return split_weixin_text(plain, max_length)
 
     async def send(self, message: MessageChain) -> None:
         message_obj = self.message_obj
         active_send_mode = message_obj.raw_message.get("active_send_mode", False)
         for comp in message.chain:
+            if isinstance(comp, ActionRow):
+                fallback_parts = [
+                    f"{button.label}: {button.action.url}"
+                    for button in comp.buttons
+                    if isinstance(button.action, Button.UrlAction)
+                ]
+                callback_labels = [
+                    button.label
+                    for button in comp.buttons
+                    if isinstance(button.action, Button.CallbackAction)
+                ]
+                if callback_labels:
+                    fallback_parts.append(
+                        comp.fallback_text
+                        or (
+                            f"可选操作：{' / '.join(callback_labels)}"
+                            "（当前平台不支持按钮，请发送选项名称）"
+                        )
+                    )
+                if not fallback_parts:
+                    continue
+                comp = Plain("\n".join(fallback_parts))
+
             if isinstance(comp, Plain):
                 plain_chunks = await self.split_plain(comp.text)
                 if active_send_mode:
@@ -87,7 +81,7 @@ class WeixinOfficialAccountPlatformEvent(AstrMessageEvent):
                     logger.debug(
                         f"split plain into {len(plain_chunks)} chunks for passive reply. Message not sent.",
                     )
-                    self.message_out["cached_xml"] = plain_chunks
+                    self.message_out.setdefault("cached_xml", []).extend(plain_chunks)
             elif isinstance(comp, Image):
                 img_path = await comp.convert_to_file_path()
                 async with aiofiles.open(img_path, "rb") as f:
@@ -158,14 +152,6 @@ class WeixinOfficialAccountPlatformEvent(AstrMessageEvent):
         await super().send(message)
 
     async def send_streaming(self, generator, use_fallback: bool = False):
-        buffer = None
-        async for chain in generator:
-            if not buffer:
-                buffer = chain
-            else:
-                buffer.chain.extend(chain.chain)
-        if not buffer:
-            return None
-        buffer.squash_plain()
-        await self.send(buffer)
-        return await super().send_streaming(generator, use_fallback)
+        return await self._send_buffered_stream(
+            generator, use_fallback, super().send_streaming
+        )

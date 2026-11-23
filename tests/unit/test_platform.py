@@ -1,6 +1,5 @@
 """Tests for astrbot.core.platform.platform — Platform ABC."""
 
-import asyncio
 from asyncio import Queue
 from datetime import datetime
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -33,6 +32,7 @@ class ConcretePlatform(Platform):
 # Fixtures
 # ---------------------------------------------------------------------------
 
+
 @pytest.fixture
 def config() -> dict:
     return {
@@ -54,6 +54,7 @@ def platform(config: dict, event_queue: Queue) -> ConcretePlatform:
 # ===================================================================
 # Construction
 # ===================================================================
+
 
 class TestConstruction:
     """Platform.__init__ stores constructor arguments and sets defaults."""
@@ -81,6 +82,7 @@ class TestConstruction:
 # Status property
 # ===================================================================
 
+
 class TestStatus:
     """Platform.status getter/setter and side-effects."""
 
@@ -106,6 +108,7 @@ class TestStatus:
 # ===================================================================
 # Error paths
 # ===================================================================
+
 
 class TestErrors:
     """record_error, last_error, clear_errors."""
@@ -148,15 +151,14 @@ class TestErrors:
 # unified_webhook
 # ===================================================================
 
+
 class TestUnifiedWebhook:
     """Platform.unified_webhook() logic."""
 
     def test_disabled_by_default(self, platform: ConcretePlatform):
         assert platform.unified_webhook() is False
 
-    def test_enabled_when_both_config_present(
-        self, config: dict, event_queue: Queue
-    ):
+    def test_enabled_when_both_config_present(self, config: dict, event_queue: Queue):
         config["unified_webhook_mode"] = True
         config["webhook_uuid"] = "abc123"
         p = ConcretePlatform(config, event_queue)
@@ -179,14 +181,22 @@ class TestUnifiedWebhook:
 # get_stats
 # ===================================================================
 
+
 class TestGetStats:
     """Platform.get_stats() structure and content."""
 
     def test_stats_contains_expected_keys(self, platform: ConcretePlatform):
         stats = platform.get_stats()
         expected_keys = {
-            "id", "type", "display_name", "status", "started_at",
-            "error_count", "last_error", "unified_webhook", "meta",
+            "id",
+            "type",
+            "display_name",
+            "status",
+            "started_at",
+            "error_count",
+            "last_error",
+            "unified_webhook",
+            "meta",
         }
         assert expected_keys.issubset(stats.keys())
 
@@ -215,6 +225,7 @@ class TestGetStats:
 # ===================================================================
 # Instance methods
 # ===================================================================
+
 
 class TestMethods:
     """terminate, get_client, commit_event, webhook_callback, send_by_session."""
@@ -264,6 +275,7 @@ class TestMethods:
 # Abstract-method detection (cannot instantiate ABC directly)
 # ===================================================================
 
+
 class TestAbstractDetection:
     """Verify the ABC enforces that run() and meta() are implemented."""
 
@@ -291,6 +303,7 @@ class TestAbstractDetection:
 # ===================================================================
 # PlatformError dataclass
 # ===================================================================
+
 
 class TestPlatformErrorDataclass:
     """PlatformError construction and defaults."""

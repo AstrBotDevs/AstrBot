@@ -1,11 +1,12 @@
 import base64
+import builtins
 import json
 from collections.abc import AsyncGenerator
 from typing import Any, Literal
 
 import aiofiles
 import httpx
-from anthropic import AsyncAnthropic
+from anthropic import AsyncAnthropic, DefaultAsyncHttpxClient
 from anthropic.types import (
     InputJSONDelta,
     Message,
@@ -17,7 +18,6 @@ from anthropic.types import (
     SignatureDelta,
     TextDelta,
     ThinkingDelta,
-    ToolUseBlock,
 )
 from anthropic.types.message_delta_usage import MessageDeltaUsage
 from anthropic.types.usage import Usage
@@ -25,8 +25,9 @@ from anthropic.types.usage import Usage
 from astrbot import logger
 from astrbot.api.provider import Provider
 from astrbot.core.agent.message import AudioURLPart, ContentPart, ImageURLPart, TextPart
+from astrbot.core.agent.message import Message as AgentMessage
 from astrbot.core.exceptions import EmptyModelOutputError
-from astrbot.core.provider.entities import LLMResponse, TokenUsage
+from astrbot.core.provider.entities import LLMResponse, TokenUsage, ToolCallsResult
 from astrbot.core.provider.func_tool_manager import ToolSet
 from astrbot.core.provider.register import register_provider_adapter
 from astrbot.core.provider.sources.request_retry import retry_provider_request
@@ -36,6 +37,9 @@ from astrbot.core.utils.network_utils import (
     is_connection_error,
     log_connection_failure,
 )
+
+from ..headers import build_conversation_headers, build_provider_headers
+from .request_retry import retry_provider_request_context
 
 
 @register_provider_adapter(
@@ -52,10 +56,7 @@ class ProviderAnthropic(Provider):
         completion_id: str | None = None,
         stop_reason: str | None = None,
     ) -> None:
-        has_text_output = bool((llm_response.completion_text or "").strip())
-        has_reasoning_output = bool((llm_response.reasoning_content or "").strip())
-        has_tool_output = bool(llm_response.tools_call_args)
-        if has_text_output or has_reasoning_output or has_tool_output:
+        if llm_response.has_text_or_tool_output:
             return
         raise EmptyModelOutputError(
             "Anthropic completion has no usable output. "
@@ -79,12 +80,14 @@ class ProviderAnthropic(Provider):
         *,
         required_headers: dict[str, str] | None = None,
     ) -> dict[str, str] | None:
-        merged_headers = cls._normalize_custom_headers(provider_config) or {}
+        merged_headers = build_provider_headers(
+            cls._normalize_custom_headers(provider_config)
+        )
         if required_headers:
             for header_name, header_value in required_headers.items():
                 if not merged_headers.get(header_name, "").strip():
                     merged_headers[header_name] = header_value
-        return merged_headers or None
+        return merged_headers
 
     def __init__(
         self,
@@ -98,7 +101,9 @@ class ProviderAnthropic(Provider):
             provider_settings,
         )
 
-        self.base_url = provider_config.get("api_base", "https://api.anthropic.com")
+        api_base = str(provider_config.get("api_base", "") or "").strip()
+        self.base_url = (api_base or "https://api.anthropic.com").rstrip("/")
+        self.base_url = self.base_url.removesuffix("/v1")
         self.timeout = provider_config.get("timeout", 120)
         if isinstance(self.timeout, str):
             self.timeout = int(self.timeout)
@@ -114,39 +119,32 @@ class ProviderAnthropic(Provider):
         self.chosen_api_key: str = ""
         self.api_keys: list = super().get_keys()
         self.chosen_api_key = self.api_keys[0] if len(self.api_keys) > 0 else ""
+        # SDK 2.x uses Bearer auth; compatible endpoints may require X-Api-Key.
+        default_headers = {"X-Api-Key": self.chosen_api_key}
+        for name, value in (self.custom_headers or {}).items():
+            # Match older SDK casing to avoid duplicate API key headers.
+            name = "X-Api-Key" if name.lower() == "x-api-key" else name
+            default_headers[name] = value
         self.client = AsyncAnthropic(
             api_key=self.chosen_api_key,
             timeout=self.timeout,
             base_url=self.base_url,
-            default_headers=self.custom_headers,
+            default_headers=default_headers,
             http_client=self._create_http_client(provider_config),
         )
 
-    def _create_http_client(self, provider_config: dict) -> httpx.AsyncClient | None:
-        """Create an HTTP client with optional proxy and system SSL trust store.
-
-        The Anthropic SDK validates ``http_client`` with
-        ``isinstance(..., httpx.AsyncClient)`` against its own ``httpx`` import.
-        When multiple ``httpx`` installations are present on ``sys.path``
-        (e.g. bundled Python + system Python), constructing the client from a
-        different ``httpx`` module makes that check fail. We therefore prefer
-        the SDK's own ``httpx`` module when available.
-        """
+    def _create_http_client(
+        self, provider_config: dict
+    ) -> DefaultAsyncHttpxClient | None:
+        """Create an SDK-compatible proxy client with the shared SSL trust store."""
         proxy = provider_config.get("proxy", "")
         if not proxy:
             return None
-        httpx_module: Any = httpx
-        try:
-            from anthropic import _base_client as anthropic_base_client
-
-            httpx_module = getattr(anthropic_base_client, "httpx", httpx)
-        except ImportError:
-            pass
         return create_proxy_client(
             "Anthropic",
             proxy,
             headers=self.custom_headers,
-            httpx_module=httpx_module,
+            client_factory=DefaultAsyncHttpxClient,
         )
 
     def _apply_thinking_config(self, payloads: dict) -> None:
@@ -240,7 +238,7 @@ class ProviderAnthropic(Provider):
                     if isinstance(last_message, dict)
                     else None
                 )
-                can_append_to_previous_tool_results = (
+                if (
                     last_message is not None
                     and last_message.get("role") == "user"
                     and isinstance(last_content, list)
@@ -249,10 +247,8 @@ class ProviderAnthropic(Provider):
                         isinstance(block, dict) and block.get("type") == "tool_result"
                         for block in last_content
                     )
-                )
-
-                if can_append_to_previous_tool_results:
-                    last_content.append(tool_result_block)  # type: ignore[union-attr]
+                ):
+                    last_content.append(tool_result_block)
                 else:
                     new_messages.append(
                         {
@@ -445,15 +441,21 @@ class ProviderAnthropic(Provider):
         if usage is None:
             return TokenUsage()
         # https://docs.claude.com/en/docs/build-with-claude/prompt-caching#tracking-cache-performance
+        # Anthropic's input_tokens excludes cache served reads AND writes, so
+        # cache_creation_input_tokens must be added back into input_other to
+        # keep total input (and context-occupancy stats) accurate.
         return TokenUsage(
-            input_other=usage.input_tokens or 0,
+            input_other=(usage.input_tokens or 0)
+            + (usage.cache_creation_input_tokens or 0),
             input_cached=usage.cache_read_input_tokens or 0,
             output=usage.output_tokens or 0,
         )
 
     def _update_usage(self, token_usage: TokenUsage, usage: MessageDeltaUsage) -> None:
         if usage.input_tokens is not None:
-            token_usage.input_other = usage.input_tokens
+            token_usage.input_other = usage.input_tokens + (
+                usage.cache_creation_input_tokens or 0
+            )
         if usage.cache_read_input_tokens is not None:
             token_usage.input_cached = usage.cache_read_input_tokens
         if usage.output_tokens is not None:
@@ -501,7 +503,14 @@ class ProviderAnthropic(Provider):
         if isinstance(last_block, dict) and "cache_control" not in last_block:
             last_block["cache_control"] = dict(cls._PROMPT_CACHE_CONTROL)
 
-    async def _query(self, payloads: dict, tools: ToolSet | None) -> LLMResponse:
+    async def _query(
+        self,
+        payloads: dict,
+        tools: ToolSet | None,
+        *,
+        request_max_retries: int | None = None,
+        conversation_id: str | None = None,
+    ) -> LLMResponse:
         if tools:
             if tool_list := tools.get_func_desc_anthropic_style():
                 payloads["tools"] = tool_list
@@ -509,7 +518,25 @@ class ProviderAnthropic(Provider):
                     payloads.get("tool_choice", "auto"),
                 )
 
-        extra_body = self.provider_config.get("custom_extra_body", {})
+        extra_body = self.provider_config.get("custom_extra_body") or {}
+        if not isinstance(extra_body, dict):
+            # An explicit null or malformed custom body carries nothing to merge.
+            extra_body = {}
+        # Server-side tools declared in the custom body (e.g. web search on
+        # Anthropic-compatible endpoints) must coexist with the registered
+        # function tools: extra_body replaces same-named top-level keys,
+        # which would silently drop them. Tool definitions get the same
+        # override semantics: a custom tool replaces a registered tool of
+        # the same name instead of duplicating it (the API rejects duplicate
+        # tool names).
+        custom_tools = extra_body.get("tools")
+        if isinstance(custom_tools, list) and isinstance(payloads.get("tools"), list):
+            merged = {}
+            for tool in [*payloads["tools"], *custom_tools]:
+                key = tool.get("name") if isinstance(tool, dict) else None
+                merged[key if key else ("_", id(tool))] = tool
+            payloads["tools"] = list(merged.values())
+            extra_body = {k: v for k, v in extra_body.items() if k != "tools"}
 
         if "max_tokens" not in payloads:
             payloads["max_tokens"] = 65536
@@ -518,10 +545,15 @@ class ProviderAnthropic(Provider):
         self._sanitize_assistant_messages(payloads)
 
         try:
-            completion = await self.client.messages.create(
-                **payloads,
-                stream=False,
-                extra_body=extra_body,
+            completion = await retry_provider_request(
+                "Anthropic",
+                lambda: self.client.messages.create(
+                    **payloads,
+                    stream=False,
+                    extra_body=extra_body,
+                    extra_headers=build_conversation_headers(conversation_id),
+                ),
+                max_attempts=request_max_retries,
             )
         except httpx.RequestError as e:
             proxy = self.provider_config.get("proxy", "")
@@ -543,10 +575,12 @@ class ProviderAnthropic(Provider):
 
         llm_response = LLMResponse(role="assistant")
 
+        text_parts: list[str] = []
         for content_block in completion.content:
             if content_block.type == "text":
-                completion_text = str(content_block.text).strip()
-                llm_response.completion_text = completion_text
+                # Responses with web search/citations carry several text blocks;
+                # concatenate them like the streaming path does.
+                text_parts.append(str(content_block.text))
 
             if content_block.type == "thinking":
                 reasoning_content = str(content_block.thinking).strip()
@@ -554,9 +588,14 @@ class ProviderAnthropic(Provider):
                 llm_response.reasoning_signature = content_block.signature
 
             if content_block.type == "tool_use":
+                if not isinstance(content_block.input, dict):
+                    raise ValueError("Anthropic tool call input must be a JSON object.")
                 llm_response.tools_call_args.append(content_block.input)
                 llm_response.tools_call_name.append(content_block.name)
                 llm_response.tools_call_ids.append(content_block.id)
+
+        if text_parts:
+            llm_response.completion_text = "".join(text_parts).strip()
 
         llm_response.id = completion.id
         llm_response.usage = self._extract_usage(completion.usage)
@@ -590,6 +629,9 @@ class ProviderAnthropic(Provider):
         self,
         payloads: dict,
         tools: ToolSet | None,
+        *,
+        request_max_retries: int | None = None,
+        conversation_id: str | None = None,
     ) -> AsyncGenerator[LLMResponse, None]:
         if tools:
             if tool_list := tools.get_func_desc_anthropic_style():
@@ -605,7 +647,20 @@ class ProviderAnthropic(Provider):
         final_tool_calls: list[dict[str, Any]] = []
         id = None
         usage = TokenUsage()
-        extra_body = self.provider_config.get("custom_extra_body", {})
+        extra_body = self.provider_config.get("custom_extra_body") or {}
+        if not isinstance(extra_body, dict):
+            extra_body = {}
+        # See _query: custom server-side tools must not replace the
+        # registered function tools, and a name collision overrides
+        # instead of duplicating.
+        custom_tools = extra_body.get("tools")
+        if isinstance(custom_tools, list) and isinstance(payloads.get("tools"), list):
+            merged = {}
+            for tool in [*payloads["tools"], *custom_tools]:
+                key = tool.get("name") if isinstance(tool, dict) else None
+                merged[key if key else ("_", builtins.id(tool))] = tool
+            payloads["tools"] = list(merged.values())
+            extra_body = {k: v for k, v in extra_body.items() if k != "tools"}
         reasoning_content = ""
         reasoning_signature = ""
 
@@ -615,9 +670,14 @@ class ProviderAnthropic(Provider):
         self._apply_thinking_config(payloads)
         self._sanitize_assistant_messages(payloads)
 
-        async with self.client.messages.stream(
-            **payloads,
-            extra_body=extra_body,
+        async with retry_provider_request_context(
+            "Anthropic",
+            lambda: self.client.messages.stream(
+                **payloads,
+                extra_body=extra_body,
+                extra_headers=build_conversation_headers(conversation_id),
+            ),
+            max_attempts=request_max_retries,
         ) as stream:
             async for event in stream:
                 if isinstance(event, RawMessageStartEvent):
@@ -633,11 +693,17 @@ class ProviderAnthropic(Provider):
                             usage=usage,
                             id=id,
                         )
-                    elif isinstance(content_block, ToolUseBlock):
+                    elif event.content_block.type == "tool_use":
+                        # 工具使用块开始，初始化缓冲区
+                        # Keep the input from the start event; streamed deltas
+                        # replace it only when they carry JSON.
+                        start_input = event.content_block.input
                         tool_use_buffer[event.index] = {
-                            "id": content_block.id,
-                            "name": content_block.name,
-                            "input": {},
+                            "id": event.content_block.id,
+                            "name": event.content_block.name,
+                            "input": start_input
+                            if isinstance(start_input, dict)
+                            else {},
                         }
                 elif isinstance(event, RawContentBlockDeltaEvent):
                     delta = event.delta
@@ -681,7 +747,8 @@ class ProviderAnthropic(Provider):
                     if event.index in tool_use_buffer:
                         tool_info = tool_use_buffer[event.index]
                         try:
-                            if "input_json" in tool_info:
+                            # 无参数的工具只会收到一个空的 partial_json
+                            if tool_info.get("input_json"):
                                 tool_info["input"] = json.loads(tool_info["input_json"])
 
                             final_tool_calls.append(
@@ -735,6 +802,42 @@ class ProviderAnthropic(Provider):
         )
         yield final_response
 
+    async def _prepare_chat_payload(
+        self,
+        prompt: str | None,
+        image_urls: list[str] | None,
+        audio_urls: list[str] | None,
+        contexts: list[dict] | list[AgentMessage] | None,
+        system_prompt: str | None,
+        tool_calls_result: ToolCallsResult | list[ToolCallsResult] | None,
+        model: str | None,
+        extra_user_content_parts: list[ContentPart] | None,
+        func_tool: ToolSet | None,
+        tool_choice: str | dict[str, str],
+    ) -> dict:
+        """Prepare the common payload for complete and streaming requests."""
+        context_query = await self._prepare_chat_history(
+            self.assemble_context,
+            prompt,
+            image_urls,
+            audio_urls,
+            contexts,
+            system_prompt,
+            tool_calls_result,
+            extra_user_content_parts,
+        )
+        system_prompt, new_messages = self._prepare_payload(context_query)
+        payloads = {"messages": new_messages, "model": model or self.get_model()}
+        if func_tool and not func_tool.empty():
+            payloads["tool_choice"] = tool_choice
+        if system_prompt:
+            payloads["system"] = (
+                [{"type": "text", "text": system_prompt}]
+                if isinstance(system_prompt, str)
+                else system_prompt
+            )
+        return payloads
+
     async def text_chat(
         self,
         prompt=None,
@@ -748,56 +851,31 @@ class ProviderAnthropic(Provider):
         model=None,
         extra_user_content_parts=None,
         tool_choice: Literal["auto", "any", "tool", "none"] | dict[str, str] = "auto",
+        request_max_retries: int | None = None,
         **kwargs,
     ) -> LLMResponse:
-        if contexts is None:
-            contexts = []
-        new_record = None
-        if prompt is not None:
-            new_record = await self.assemble_context(
-                prompt or "",
-                image_urls,
-                audio_urls,
-                extra_user_content_parts,
-            )
-        context_query = self._ensure_message_to_dicts(contexts)
-        if new_record:
-            context_query.append(new_record)
-
-        if system_prompt:
-            context_query.insert(0, {"role": "system", "content": system_prompt})
-
-        for part in context_query:
-            if "_no_save" in part:
-                del part["_no_save"]
-
-        # tool calls result
-        if tool_calls_result:
-            if not isinstance(tool_calls_result, list):
-                context_query.extend(tool_calls_result.to_openai_messages())
-            else:
-                for tool_call_result in tool_calls_result:
-                    context_query.extend(tool_call_result.to_openai_messages())
-
-        system_prompt, new_messages = self._prepare_payload(context_query)
-
-        model = model or self.get_model()
-
-        payloads = {"messages": new_messages, "model": model}
-        if func_tool and not func_tool.empty():
-            payloads["tool_choice"] = tool_choice
-
-        # Anthropic has a different way of handling system prompts
-        if system_prompt:
-            payloads["system"] = (
-                [{"type": "text", "text": system_prompt}]
-                if isinstance(system_prompt, str)
-                else system_prompt
-            )
+        conversation_id = kwargs.pop("conversation_id", None)
+        payloads = await self._prepare_chat_payload(
+            prompt,
+            image_urls,
+            audio_urls,
+            contexts,
+            system_prompt,
+            tool_calls_result,
+            model,
+            extra_user_content_parts,
+            func_tool,
+            tool_choice,
+        )
 
         llm_response = None
         try:
-            llm_response = await self._query(payloads, func_tool)
+            query_kwargs = self._query_options(request_max_retries, conversation_id)
+            llm_response = await self._query(
+                payloads,
+                func_tool,
+                **query_kwargs,
+            )
         except Exception as e:
             raise e
 
@@ -816,53 +894,29 @@ class ProviderAnthropic(Provider):
         model=None,
         extra_user_content_parts=None,
         tool_choice: Literal["auto", "any", "tool", "none"] | dict[str, str] = "auto",
+        request_max_retries: int | None = None,
         **kwargs,
     ):
-        if contexts is None:
-            contexts = []
-        new_record = None
-        if prompt is not None:
-            new_record = await self.assemble_context(
-                prompt or "",
-                image_urls,
-                audio_urls,
-                extra_user_content_parts,
-            )
-        context_query = self._ensure_message_to_dicts(contexts)
-        if new_record:
-            context_query.append(new_record)
-        if system_prompt:
-            context_query.insert(0, {"role": "system", "content": system_prompt})
+        conversation_id = kwargs.pop("conversation_id", None)
+        payloads = await self._prepare_chat_payload(
+            prompt,
+            image_urls,
+            audio_urls,
+            contexts,
+            system_prompt,
+            tool_calls_result,
+            model,
+            extra_user_content_parts,
+            func_tool,
+            tool_choice,
+        )
 
-        for part in context_query:
-            if "_no_save" in part:
-                del part["_no_save"]
-
-        # tool calls result
-        if tool_calls_result:
-            if not isinstance(tool_calls_result, list):
-                context_query.extend(tool_calls_result.to_openai_messages())
-            else:
-                for tool_call_result in tool_calls_result:
-                    context_query.extend(tool_call_result.to_openai_messages())
-
-        system_prompt, new_messages = self._prepare_payload(context_query)
-
-        model = model or self.get_model()
-
-        payloads = {"messages": new_messages, "model": model}
-        if func_tool and not func_tool.empty():
-            payloads["tool_choice"] = tool_choice
-
-        # Anthropic has a different way of handling system prompts
-        if system_prompt:
-            payloads["system"] = (
-                [{"type": "text", "text": system_prompt}]
-                if isinstance(system_prompt, str)
-                else system_prompt
-            )
-
-        async for llm_response in self._query_stream(payloads, func_tool):
+        query_kwargs = self._query_options(request_max_retries, conversation_id)
+        async for llm_response in self._query_stream(
+            payloads,
+            func_tool,
+            **query_kwargs,
+        ):
             yield llm_response
 
     def _detect_image_mime_type(self, data: bytes) -> str:

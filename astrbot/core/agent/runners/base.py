@@ -1,16 +1,14 @@
 import abc
 import asyncio
-from collections.abc import AsyncGenerator
+import typing as T
 from enum import Enum, auto
-from typing import Any, Generic
 
 from astrbot import logger
-from astrbot.core.agent.hooks import BaseAgentRunHooks
-from astrbot.core.agent.response import AgentResponse
-from astrbot.core.agent.run_context import ContextWrapper, TContext
-from astrbot.core.agent.tool_executor import BaseFunctionToolExecutor
-from astrbot.core.provider.entities import LLMResponse, ProviderRequest
-from astrbot.core.provider.provider import Provider
+from astrbot.core.provider.entities import LLMResponse
+
+from ..events import RunnerEventPayload
+from ..response import AgentResponse
+from ..run_context import TContext
 
 
 class AgentState(Enum):
@@ -22,46 +20,27 @@ class AgentState(Enum):
     ERROR = auto()  # Error state
 
 
-class BaseAgentRunner(Generic[TContext]):
-    def __init__(
-        self,
-    ):
+class BaseAgentRunner(T.Generic[TContext]):  # noqa: UP046 - The shared TypeVar default requires Python 3.12 compatibility.
+    def __init__(self) -> None:
         self.tasks: set[asyncio.Task[object]] = set()
         self._state = AgentState.IDLE
 
     @abc.abstractmethod
-    async def reset(
-        self,
-        provider: Provider,
-        request: ProviderRequest,
-        run_context: ContextWrapper[TContext],
-        tool_executor: BaseFunctionToolExecutor[TContext],
-        agent_hooks: BaseAgentRunHooks[TContext],
-        streaming: bool = False,
-        enforce_max_turns: int = -1,
-        llm_compress_instruction: str | None = None,
-        llm_compress_keep_recent: int = 0,
-        llm_compress_provider: Provider | None = None,
-        truncate_turns: int = 1,
-        custom_token_counter: Any = None,
-        custom_compressor: Any = None,
-        tool_schema_mode: str | None = "full",
-        fallback_providers: list[Provider] | None = None,
-        provider_config: dict | None = None,
-        **kwargs: Any,
-    ) -> None:
+    async def reset(self, *args: T.Any, **kwargs: T.Any) -> None:
         """Reset the agent to its initial state.
         This method should be called before starting a new run.
         """
         ...
 
     @abc.abstractmethod
-    def step(self) -> AsyncGenerator[AgentResponse, None]:
+    def step(self) -> T.AsyncGenerator[AgentResponse | RunnerEventPayload, None]:
         """Process a single step of the agent."""
         ...
 
     @abc.abstractmethod
-    def step_until_done(self, max_step: int) -> AsyncGenerator[AgentResponse, None]:
+    def step_until_done(
+        self, max_step: int
+    ) -> T.AsyncGenerator[AgentResponse | RunnerEventPayload, None]:
         """Process steps until the agent is done."""
         ...
 
@@ -78,6 +57,12 @@ class BaseAgentRunner(Generic[TContext]):
         This method should be called after the agent is done.
         """
         ...
+
+    @property
+    def state(self) -> AgentState:
+        """The current agent state (read-only; transitions go through
+        `_transition_state`)."""
+        return self._state
 
     def _transition_state(self, new_state: AgentState) -> None:
         """Transition the agent state."""

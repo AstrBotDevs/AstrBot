@@ -1,13 +1,15 @@
 from __future__ import annotations
 
 import traceback
+from collections.abc import Callable
 from typing import Any
 
 from astrbot.core import logger, sp
 from astrbot.core.agent.mcp_client import MCPTool, validate_mcp_stdio_config
+from astrbot.core.agent.tool import FunctionTool
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
 from astrbot.core.star import star_map
-from astrbot.core.tools.registry import get_builtin_tool_config_statuses
+from astrbot.dashboard.validation import is_json_object
 
 
 class ToolsServiceError(Exception):
@@ -19,13 +21,13 @@ class EmptyMcpServersError(ValueError):
 
 
 def extract_mcp_server_config(mcp_servers_value: object) -> dict:
-    if not isinstance(mcp_servers_value, dict):
+    if not is_json_object(mcp_servers_value):
         raise ValueError("mcpServers must be a JSON object")
     if not mcp_servers_value:
         raise EmptyMcpServersError("mcpServers configuration cannot be empty")
     key_0 = next(iter(mcp_servers_value))
     extracted = mcp_servers_value[key_0]
-    if not isinstance(extracted, dict):
+    if not is_json_object(extracted):
         raise ValueError(
             "Invalid mcpServers format. Ensure each key in mcpServers is a server name, "
             "and each value is an object containing fields like command/url."
@@ -33,61 +35,82 @@ def extract_mcp_server_config(mcp_servers_value: object) -> dict:
     return extracted
 
 
+def rollback_mcp_server_config(tool_mgr, name: str) -> bool:
+    """Remove one saved server after its runtime failed to start."""
+    try:
+        config = tool_mgr.load_mcp_config()
+        if name in config["mcpServers"]:
+            config["mcpServers"].pop(name)
+            return tool_mgr.save_mcp_config(config)
+        return True
+    except Exception:
+        logger.error(traceback.format_exc())
+        return False
+
+
+def describe_mcp_servers(tool_mgr, *, include_connected: bool) -> list[dict]:
+    """Merge persisted server settings with the current runtime view."""
+    config = tool_mgr.load_mcp_config()
+    servers = []
+    mcp_servers = config.get("mcpServers", {})
+    if not isinstance(mcp_servers, dict):
+        logger.warning(
+            f"Invalid MCP server config type: {type(mcp_servers).__name__}. Expected object/dict; skipped all MCP servers."
+        )
+        mcp_servers = {}
+    for name, server_config in mcp_servers.items():
+        if not isinstance(server_config, dict):
+            logger.warning(
+                f"Invalid config for MCP server '{name}' (type: {type(server_config).__name__}); skipped."
+            )
+            continue
+        server_info = {"name": name, "active": server_config.get("active", True)}
+        for key, value in server_config.items():
+            if key != "active":
+                server_info[key] = value
+        runtime = tool_mgr.mcp_server_runtime_view.get(name)
+        if include_connected:
+            server_info["connected"] = runtime is not None
+        if runtime is None:
+            server_info["tools"] = []
+        else:
+            server_info["tools"] = [tool.name for tool in runtime.client.tools]
+            server_info["errlogs"] = runtime.client.server_errlogs
+        servers.append(server_info)
+    return servers
+
+
+def merge_mcp_server_config(
+    server_data: dict,
+    active: object,
+    *,
+    excluded_keys: tuple[str, ...],
+    extract_config: Callable[[object], dict],
+) -> tuple[bool, dict]:
+    """Collect submitted settings while preserving each adapter's accepted fields."""
+    has_config = False
+    server_config = {"active": active}
+    for key, value in server_data.items():
+        if key in excluded_keys:
+            continue
+        if key == "mcpServers":
+            server_config = extract_config(value)
+        else:
+            server_config[key] = value
+        has_config = True
+    return has_config, server_config
+
+
 class ToolsService:
     def __init__(self, core_lifecycle: AstrBotCoreLifecycle) -> None:
-        self.core_lifecycle = core_lifecycle
         self.tool_mgr = core_lifecycle.provider_manager.llm_tools
 
     def rollback_mcp_server(self, name: str) -> bool:
-        try:
-            rollback_config = self.tool_mgr.load_mcp_config()
-            if name in rollback_config["mcpServers"]:
-                rollback_config["mcpServers"].pop(name)
-                return self.tool_mgr.save_mcp_config(rollback_config)
-            return True
-        except Exception:
-            logger.error(traceback.format_exc())
-            return False
+        return rollback_mcp_server_config(self.tool_mgr, name)
 
     def get_mcp_servers(self) -> list[dict]:
         try:
-            config = self.tool_mgr.load_mcp_config()
-            servers = []
-            mcp_servers = config.get("mcpServers", {})
-
-            if not isinstance(mcp_servers, dict):
-                logger.warning(
-                    f"Invalid MCP server config type: {type(mcp_servers).__name__}. Expected object/dict; skipped all MCP servers."
-                )
-                mcp_servers = {}
-
-            for name, server_config in mcp_servers.items():
-                if not isinstance(server_config, dict):
-                    logger.warning(
-                        f"Invalid config for MCP server '{name}' (type: {type(server_config).__name__}); skipped."
-                    )
-                    continue
-
-                server_info = {
-                    "name": name,
-                    "active": server_config.get("active", True),
-                }
-                for key, value in server_config.items():
-                    if key != "active":
-                        server_info[key] = value
-
-                runtime = self.tool_mgr.mcp_server_runtime_view.get(name)
-                server_info["connected"] = runtime is not None
-                if runtime is None:
-                    server_info["tools"] = []
-                else:
-                    mcp_client = runtime.client
-                    server_info["tools"] = [tool.name for tool in mcp_client.tools]
-                    server_info["errlogs"] = mcp_client.server_errlogs
-
-                servers.append(server_info)
-
-            return servers
+            return describe_mcp_servers(self.tool_mgr, include_connected=True)
         except Exception as exc:
             logger.error(traceback.format_exc())
             raise ToolsServiceError(f"Failed to get MCP server list: {exc!s}") from exc
@@ -250,68 +273,79 @@ class ToolsService:
     async def get_tool_list(self) -> list[dict]:
         try:
             tools = list(self.tool_mgr.func_list)
-            existing_names = {tool.name for tool in tools}
-            for tool in self.tool_mgr.iter_builtin_tools():
-                if tool.name not in existing_names:
-                    tools.append(tool)
-
-            config_entries = self._get_config_entries()
-            perms_store = (
-                await sp.global_get("tool_permissions", {})
-                if any(not self.tool_mgr.is_builtin_tool(tool.name) for tool in tools)
-                else {}
-            )
-            tools_dict = []
-            for tool in tools:
-                tools_dict.append(
-                    self._serialize_tool(tool, config_entries, perms_store)
-                )
-            return tools_dict
+            if not tools:
+                return []
+            perms_store = await sp.global_get("tool_permissions", {})
+            return [self._serialize_tool(tool, perms_store) for tool in tools]
         except Exception as exc:
             logger.error(traceback.format_exc())
             raise ToolsServiceError(f"Failed to get tool list: {exc!s}") from exc
 
-    async def update_tool_permission(self, data: Any) -> str:
-        """Set a tool permission level.
+    def _resolve_managed_tool(self, data: object) -> FunctionTool:
+        """Validate a management identity and resolve exactly one tool.
 
         Args:
-            data: Legacy dashboard payload with ``name`` and ``permission``.
+            data: Dashboard selector with a name or opaque tool key.
 
         Returns:
-            A success message for the response body.
+            The registered tool selected by all supplied identity fields.
 
         Raises:
-            ToolsServiceError: If the payload is invalid, the tool is unknown,
-                or permission storage cannot be updated.
+            ToolsServiceError: If any selector is unsupported or ambiguous.
         """
+        if not isinstance(data, dict):
+            raise ToolsServiceError("Tool payload must be a JSON object")
+        for field in ("name", "tool_key", "runtime_kind", "plugin_id", "source"):
+            value = data.get(field)
+            if value is not None and (not isinstance(value, str) or not value):
+                raise ToolsServiceError(f"{field} must be a nonempty string")
+        if data.get("runtime_kind") not in (None, "legacy"):
+            raise ToolsServiceError("Unsupported tool runtime identity")
+        name = data.get("name")
+        tool_key = data.get("tool_key")
+        if name is None and tool_key is None:
+            raise ToolsServiceError("name or tool_key is required")
         try:
-            tool_name = data.get("name") if isinstance(data, dict) else None
-            permission = data.get("permission") if isinstance(data, dict) else None
+            tool = self.tool_mgr.resolve_tool(name, tool_key=tool_key)
+        except ValueError as exc:
+            raise ToolsServiceError(str(exc)) from exc
+        if tool is None:
+            raise ToolsServiceError("Tool identity was not found")
+        source = "mcp" if isinstance(tool, MCPTool) else tool.source
+        if data.get("source") is not None and data["source"] != source:
+            raise ToolsServiceError(
+                "Tool source does not match the registered identity"
+            )
+        module_path = tool.handler_module_path
+        plugin = star_map.get(module_path) if module_path is not None else None
+        plugin_id = plugin.name if plugin is not None else None
+        if data.get("plugin_id") is not None and data["plugin_id"] != plugin_id:
+            raise ToolsServiceError(
+                "Tool plugin does not match the registered identity"
+            )
+        if source in ("native", "internal"):
+            raise ToolsServiceError(
+                "Native and internal tools are managed by the runtime"
+            )
+        return tool
 
-            if not tool_name or permission not in ("admin", "member"):
-                raise ToolsServiceError(
-                    "name and permission (admin or member) are required"
-                )
-
-            if self.tool_mgr.is_builtin_tool(tool_name):
-                raise ToolsServiceError(
-                    "Builtin tools do not support per-tool permission configuration."
-                )
-
-            if not any(t.name == tool_name for t in self.tool_mgr.func_list):
-                raise ToolsServiceError(f"Tool '{tool_name}' not found")
-
-            perms_store = await sp.global_get("tool_permissions", {})
-            if not isinstance(perms_store, dict):
-                perms_store = {}
+    async def update_tool_permission(self, data: Any) -> str:
+        """Persist a permission for one exact registered tool."""
+        try:
+            tool = self._resolve_managed_tool(data)
+            permission = data.get("permission")
+            if permission not in ("admin", "member"):
+                raise ToolsServiceError("permission must be admin or member")
+            stored = await sp.global_get("tool_permissions", {})
+            perms_store = dict(stored) if isinstance(stored, dict) else {}
             defaults = perms_store.get("_default", {})
-            if not isinstance(defaults, dict):
-                defaults = {}
-            defaults[tool_name] = permission
+            defaults = dict(defaults) if isinstance(defaults, dict) else {}
+            defaults[self.tool_mgr.get_tool_key(tool)] = permission
+            if data.get("tool_key") is None and data.get("name") == tool.name:
+                defaults[tool.name] = permission
             perms_store["_default"] = defaults
             await sp.global_put("tool_permissions", perms_store)
-
-            return f"Tool '{tool_name}' permission set to {permission}"
+            return f"Tool '{tool.name}' permission set to {permission}"
         except ToolsServiceError:
             raise
         except Exception as exc:
@@ -321,47 +355,18 @@ class ToolsService:
             ) from exc
 
     async def toggle_tool(self, data: Any) -> str:
-        """Toggle a tool and wait for its preference change to persist.
-
-        Args:
-            data: Mapping containing the tool name and activation state.
-
-        Returns:
-            Operation result message.
-
-        Raises:
-            ToolsServiceError: If validation or the tool operation fails.
-        """
+        """Toggle one registered tool and await its exact persisted state."""
         try:
-            tool_name = data.get("name")
+            tool = self._resolve_managed_tool(data)
             action = data.get("activate")
-
-            if not tool_name or action is None:
-                raise ToolsServiceError("Missing required parameters: name or activate")
-
-            if self.tool_mgr.is_builtin_tool(tool_name):
-                raise ToolsServiceError(
-                    "Builtin tools are read-only and cannot be toggled."
-                )
-
-            if action:
-                try:
-                    ok = await self.tool_mgr.activate_llm_tool_async(
-                        tool_name,
-                        star_map=star_map,
-                    )
-                except ValueError as exc:
-                    raise ToolsServiceError(
-                        f"Failed to activate tool: {exc!s}"
-                    ) from exc
-            else:
-                ok = await self.tool_mgr.deactivate_llm_tool_async(tool_name)
-
+            if not isinstance(action, bool):
+                raise ToolsServiceError("activate must be a boolean")
+            ok = await self.tool_mgr.set_tool_active(
+                self.tool_mgr.get_tool_key(tool), action, star_map
+            )
             if ok:
                 return "Operation successful."
-            raise ToolsServiceError(
-                f"Tool {tool_name} does not exist or the operation failed."
-            )
+            raise ToolsServiceError("Tool identity no longer exists")
         except ToolsServiceError:
             raise
         except Exception as exc:
@@ -387,22 +392,15 @@ class ToolsService:
 
     @staticmethod
     def _build_server_config(server_data: dict) -> tuple[bool, dict]:
-        has_valid_config = False
-        server_config = {"active": server_data.get("active", True)}
-
-        for key, value in server_data.items():
-            if key in ["name", "active", "tools", "errlogs"]:
-                continue
-            if key == "mcpServers":
-                try:
-                    server_config = extract_mcp_server_config(server_data["mcpServers"])
-                except ValueError as exc:
-                    raise ToolsServiceError(f"{exc!s}") from exc
-            else:
-                server_config[key] = value
-            has_valid_config = True
-
-        return has_valid_config, server_config
+        try:
+            return merge_mcp_server_config(
+                server_data,
+                server_data.get("active", True),
+                excluded_keys=("name", "active", "tools", "errlogs"),
+                extract_config=extract_mcp_server_config,
+            )
+        except ValueError as exc:
+            raise ToolsServiceError(f"{exc!s}") from exc
 
     @staticmethod
     def _build_updated_server_config(
@@ -410,33 +408,27 @@ class ToolsService:
         old_config: object,
         active: bool,
     ) -> tuple[bool, dict]:
-        server_config = {"active": active}
-        only_update_active = True
-
-        for key, value in server_data.items():
-            if key in [
-                "name",
-                "active",
-                "connected",
-                "tools",
-                "errlogs",
-                "oldName",
-            ]:
-                continue
-            if key == "mcpServers":
-                try:
-                    server_config = extract_mcp_server_config(server_data["mcpServers"])
-                except ValueError as exc:
-                    raise ToolsServiceError(f"{exc!s}") from exc
-            else:
-                server_config[key] = value
-            only_update_active = False
-
-        if only_update_active and isinstance(old_config, dict):
+        try:
+            has_config, server_config = merge_mcp_server_config(
+                server_data,
+                active,
+                excluded_keys=(
+                    "name",
+                    "active",
+                    "connected",
+                    "tools",
+                    "errlogs",
+                    "oldName",
+                ),
+                extract_config=extract_mcp_server_config,
+            )
+        except ValueError as exc:
+            raise ToolsServiceError(f"{exc!s}") from exc
+        only_update_active = not has_config
+        if only_update_active and is_json_object(old_config):
             for key, value in old_config.items():
                 if key != "active":
                     server_config[key] = value
-
         return only_update_active, server_config
 
     @staticmethod
@@ -527,42 +519,12 @@ class ToolsService:
                 f"Failed to disable MCP server {name}: {exc!s}"
             ) from exc
 
-    def _get_config_entries(self) -> list[dict]:
-        conf_list = self.core_lifecycle.astrbot_config_mgr.get_conf_list()
-        conf_name_map = {conf["id"]: conf["name"] for conf in conf_list}
-        config_entries = []
-        for conf_id, conf in self.core_lifecycle.astrbot_config_mgr.confs.items():
-            config_entries.append(
-                {
-                    "conf_id": conf_id,
-                    "conf_name": conf_name_map.get(conf_id, conf_id),
-                    "config": conf,
-                }
-            )
-        return config_entries
-
     def _serialize_tool(
         self,
         tool,
-        config_entries: list[dict],
         perms_store: object,
     ) -> dict:
-        readonly = False
-        builtin_config_statuses = []
-        builtin_config_tags = []
-        if self.tool_mgr.is_builtin_tool(tool.name):
-            origin = "builtin"
-            origin_name = "AstrBot Core"
-            origin_display_name = origin_name
-            readonly = True
-            builtin_config_statuses = get_builtin_tool_config_statuses(
-                tool.name,
-                config_entries,
-            )
-            builtin_config_tags = [
-                status for status in builtin_config_statuses if status["enabled"]
-            ]
-        elif isinstance(tool, MCPTool):
+        if isinstance(tool, MCPTool):
             origin = "mcp"
             origin_name = tool.mcp_server_name
             origin_display_name = origin_name
@@ -576,24 +538,24 @@ class ToolsService:
             origin_name = "unknown"
             origin_display_name = origin_name
 
-        tool_info = {
+        defaults = (
+            perms_store.get("_default", {}) if isinstance(perms_store, dict) else {}
+        )
+        if not isinstance(defaults, dict):
+            defaults = {}
+        tool_key = self.tool_mgr.get_tool_key(tool)
+        return {
             "name": tool.name,
+            "tool_key": tool_key,
+            "runtime_kind": "legacy",
+            "plugin_id": origin_name if origin == "plugin" else None,
+            "source": "mcp" if isinstance(tool, MCPTool) else tool.source,
             "description": tool.description,
             "parameters": tool.parameters,
             "active": tool.active,
             "origin": origin,
             "origin_name": origin_name,
             "origin_display_name": origin_display_name,
-            "readonly": readonly,
-            "builtin_config_statuses": builtin_config_statuses,
-            "builtin_config_tags": builtin_config_tags,
+            "permission": defaults.get(tool_key, defaults.get(tool.name, "member")),
+            "permission_configured": tool_key in defaults or tool.name in defaults,
         }
-        if not readonly:
-            defaults = (
-                perms_store.get("_default", {}) if isinstance(perms_store, dict) else {}
-            )
-            configured = tool.name in defaults
-            permission = defaults[tool.name] if configured else "member"
-            tool_info["permission"] = permission
-            tool_info["permission_configured"] = configured
-        return tool_info

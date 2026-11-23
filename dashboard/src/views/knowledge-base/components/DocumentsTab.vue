@@ -25,6 +25,7 @@
     <!-- 文档列表 -->
     <v-card variant="outlined">
       <v-data-table-server
+        :items-per-page-options="[10, 25, 50, 100]"
         :headers="headers"
         :items="documents"
         :loading="loading"
@@ -411,11 +412,12 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 import { useRouter } from "vue-router";
-import { useModuleI18n } from "@/i18n/composables";
+import { useI18n, useModuleI18n } from "@/i18n/composables";
 import axios from "@/utils/request";
 import TavilyKeyDialog from "./TavilyKeyDialog.vue";
 
 const { tm: t } = useModuleI18n("features/knowledge-base/detail");
+const { locale } = useI18n();
 const router = useRouter();
 
 const props = defineProps<{
@@ -448,6 +450,8 @@ const progressPollingInterval = ref<number | null>(null);
 const tavilyConfigStatus = ref("loading"); // 'loading', 'configured', 'not_configured', 'error'
 const showTavilyDialog = ref(false);
 let documentsRequestId = 0;
+let progressPollingGeneration = 0;
+let isUnmounted = false;
 
 const snackbar = ref({
   show: false,
@@ -748,16 +752,18 @@ const uploadFromUrl = async () => {
 
 // 开始轮询进度
 const startProgressPolling = (taskId: string) => {
-  // 如果已经在轮询，先停止
-  if (progressPollingInterval.value) {
-    stopProgressPolling();
-  }
-
+  stopProgressPolling();
+  if (isUnmounted) return;
+  const generation = progressPollingGeneration;
+  let requestInFlight = false;
   progressPollingInterval.value = window.setInterval(async () => {
+    if (requestInFlight || isUnmounted || generation !== progressPollingGeneration) return;
+    requestInFlight = true;
     try {
       const response = await axios.get("/api/kb/document/upload/progress", {
         params: { task_id: taskId },
       });
+      if (isUnmounted || generation !== progressPollingGeneration) return;
 
       if (response.data.status === "ok") {
         const data = response.data.data;
@@ -796,8 +802,10 @@ const startProgressPolling = (taskId: string) => {
           // 移除上传中的占位文档
           documents.value = documents.value.filter((doc) => doc.taskId !== taskId);
 
-          // 重新加载文档列表
+          // Reload only while this completed task still owns the view.
+          const completionGeneration = progressPollingGeneration;
           await loadDocuments();
+          if (isUnmounted || completionGeneration !== progressPollingGeneration) return;
           emit("refresh");
 
           if (failedCount === 0) {
@@ -820,14 +828,20 @@ const startProgressPolling = (taskId: string) => {
         documents.value = documents.value.filter((doc) => doc.taskId !== taskId);
       }
     } catch (error) {
+      if (isUnmounted || generation !== progressPollingGeneration) return;
+      stopProgressPolling();
+      documents.value = documents.value.filter((doc) => doc.taskId !== taskId);
       console.error("Failed to fetch progress:", error);
-      // 不立即停止，允许重试
+      showSnackbar(t("documents.uploadFailed"), "error");
+    } finally {
+      requestInFlight = false;
     }
   }, 500); // 每500ms轮询一次
 };
 
 // 停止轮询进度
 const stopProgressPolling = () => {
+  progressPollingGeneration += 1;
   if (progressPollingInterval.value) {
     clearInterval(progressPollingInterval.value);
     progressPollingInterval.value = null;
@@ -945,7 +959,7 @@ const formatFileSize = (bytes: number) => {
 
 const formatDate = (dateStr: string) => {
   if (!dateStr) return "-";
-  return new Date(dateStr).toLocaleString("zh-CN", {
+  return new Date(dateStr).toLocaleString(locale.value, {
     year: "numeric",
     month: "2-digit",
     day: "2-digit",
@@ -997,6 +1011,14 @@ const onTavilyKeySet = () => {
   checkTavilyConfig();
 };
 
+watch(
+  () => props.kbId,
+  () => {
+    documentsRequestId += 1;
+    stopProgressPolling();
+  },
+);
+
 watch(searchQuery, (_value, _oldValue, onCleanup) => {
   page.value = 1;
   documentsRequestId += 1;
@@ -1011,6 +1033,7 @@ onMounted(() => {
 });
 
 onUnmounted(() => {
+  isUnmounted = true;
   documentsRequestId += 1;
   stopProgressPolling();
 });

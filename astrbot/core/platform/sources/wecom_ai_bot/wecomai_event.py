@@ -3,12 +3,14 @@
 from __future__ import annotations
 
 import asyncio
-from collections.abc import Awaitable, Callable
+from collections.abc import AsyncGenerator, Awaitable, Callable
 from typing import TYPE_CHECKING
 
 from astrbot.api import logger
 from astrbot.api.event import AstrMessageEvent, MessageChain
-from astrbot.api.message_components import At, Image, Plain
+from astrbot.api.message_components import ActionRow, At, Image, Plain
+
+from .wecomai_buttons import build_wecom_button_card
 
 if TYPE_CHECKING:
     from .wecomai_api import WecomAIBotAPIClient
@@ -31,7 +33,10 @@ class WecomAIBotMessageEvent(AstrMessageEvent):
         queue_mgr: WecomAIQueueMgr,
         webhook_client: WecomAIBotWebhookClient | None = None,
         only_use_webhook_url_to_send: bool = False,
-        long_connection_sender: Callable[[str, dict], Awaitable[bool]] | None = None,
+        long_connection_sender: (Callable[[str, dict], Awaitable[bool]] | None) = None,
+        long_connection_update_sender: (
+            Callable[[str, dict], Awaitable[bool]] | None
+        ) = None,
     ) -> None:
         """初始化消息事件
 
@@ -41,6 +46,11 @@ class WecomAIBotMessageEvent(AstrMessageEvent):
             platform_meta: 平台元数据
             session_id: 会话 ID
             api_client: API 客户端
+            queue_mgr: Queue manager used by HTTP streaming replies.
+            webhook_client: Optional proactive-message webhook client.
+            only_use_webhook_url_to_send: Whether all output uses the webhook client.
+            long_connection_sender: Sender for normal long-connection replies.
+            long_connection_update_sender: Sender for template-card replacements.
 
         """
         super().__init__(message_str, message_obj, platform_meta, session_id)
@@ -49,6 +59,7 @@ class WecomAIBotMessageEvent(AstrMessageEvent):
         self.webhook_client = webhook_client
         self.only_use_webhook_url_to_send = only_use_webhook_url_to_send
         self.long_connection_sender = long_connection_sender
+        self.long_connection_update_sender = long_connection_update_sender
 
     async def _mark_stream_complete(self, stream_id: str) -> None:
         back_queue = self.queue_mgr.get_or_create_back_queue(stream_id)
@@ -74,6 +85,22 @@ class WecomAIBotMessageEvent(AstrMessageEvent):
             await back_queue.put({"type": "end", "data": "", "streaming": False})
             return ""
         data = ""
+        action_rows = [
+            component
+            for component in message_chain.chain
+            if isinstance(component, ActionRow)
+        ]
+        template_card = build_wecom_button_card(action_rows)
+        if template_card:
+            await back_queue.put(
+                {
+                    "type": "template_card",
+                    "template_card": template_card,
+                    "streaming": streaming,
+                    "session_id": stream_id,
+                },
+            )
+
         for comp in message_chain.chain:
             if isinstance(comp, At):
                 data = f"@{comp.name} "
@@ -111,8 +138,14 @@ class WecomAIBotMessageEvent(AstrMessageEvent):
                         logger.warning("图片数据为空,跳过")
                 except Exception as e:
                     logger.error("处理图片消息失败: %s", e)
-            elif not suppress_unsupported_log:
-                logger.warning(f"[WecomAI] 不支持的消息组件类型: {type(comp)}, 跳过")
+            elif isinstance(comp, ActionRow):
+                continue
+            else:
+                if not suppress_unsupported_log:
+                    logger.warning(
+                        f"[WecomAI] 不支持的消息组件类型: {type(comp)}, 跳过"
+                    )
+
         return data
 
     @staticmethod
@@ -138,21 +171,77 @@ class WecomAIBotMessageEvent(AstrMessageEvent):
         result = "".join(plain_parts)
         return result.strip() if strip_result else result
 
-    async def send(self, message: MessageChain | None) -> None:
-        """发送消息"""
-        if message is None:
-            return
+    def _stream_callback_params(self) -> tuple[str, dict[str, str]]:
         raw = self.message_obj.raw_message
         assert isinstance(raw, dict), (
             "wecom_ai_bot platform event raw_message should be a dict"
         )
-        raw = raw
         stream_id = raw.get("stream_id", self.session_id)
         pending_response = self.queue_mgr.get_pending_response(stream_id) or {}
-        connection_mode = pending_response.get("callback_params", {}).get(
-            "connection_mode",
-        )
-        req_id = pending_response.get("callback_params", {}).get("req_id")
+        return stream_id, pending_response.get("callback_params", {})
+
+    async def _send_stream_to_webhook(
+        self, generator: AsyncGenerator[MessageChain]
+    ) -> None:
+        assert self.webhook_client is not None
+        merged_chain = MessageChain([])
+        async for chain in generator:
+            merged_chain.chain.extend(chain.chain)
+        merged_chain.squash_plain()
+        await self.webhook_client.send_message_chain(merged_chain)
+
+    async def send(self, message: MessageChain | None) -> None:
+        """发送消息"""
+        if message is None:
+            return
+        stream_id, callback_params = self._stream_callback_params()
+        connection_mode = callback_params.get("connection_mode")
+        req_id = callback_params.get("req_id")
+
+        if callback_params.get("button_interaction") == "true":
+            action_rows = [
+                component
+                for component in message.chain
+                if isinstance(component, ActionRow)
+            ]
+            task_id = callback_params.get("task_id")
+            template_card = build_wecom_button_card(action_rows, task_id=task_id)
+            if template_card is None:
+                content = self._extract_plain_text_from_chain(message) or "Done"
+                template_card = {
+                    "card_type": "text_notice",
+                    "main_title": {"title": content[:26]},
+                    "card_action": {"type": 0},
+                    "task_id": task_id,
+                }
+                if len(content) > 26:
+                    template_card["sub_title_text"] = content[26:138]
+
+            update_body = {
+                "response_type": "update_template_card",
+                "template_card": template_card,
+            }
+            if (
+                connection_mode == "long_connection"
+                and self.long_connection_update_sender
+                and isinstance(req_id, str)
+                and req_id
+            ):
+                accepted = await self.long_connection_update_sender(req_id, update_body)
+                if accepted:
+                    self.queue_mgr.remove_queues(stream_id)
+            else:
+                back_queue = self.queue_mgr.get_or_create_back_queue(stream_id)
+                await back_queue.put(
+                    {
+                        "type": "template_card_update",
+                        "body": update_body,
+                        "session_id": stream_id,
+                    },
+                )
+            await super().send(MessageChain([]))
+            return
+
         if (
             connection_mode == "long_connection"
             and self.long_connection_sender
@@ -161,7 +250,7 @@ class WecomAIBotMessageEvent(AstrMessageEvent):
         ):
             if self.only_use_webhook_url_to_send and self.webhook_client and message:
                 await self.webhook_client.send_message_chain(message)
-                await super().send(MessageChain([]))
+                await super().send(message)
                 return
             if self.webhook_client and message:
                 await self.webhook_client.send_message_chain(
@@ -169,19 +258,41 @@ class WecomAIBotMessageEvent(AstrMessageEvent):
                     unsupported_only=True,
                 )
             content = self._extract_plain_text_from_chain(message)
+            action_rows = [
+                component
+                for component in message.chain
+                if isinstance(component, ActionRow)
+            ]
+            template_card = build_wecom_button_card(action_rows)
+            if template_card:
+                body = {
+                    "msgtype": "stream_with_template_card",
+                    "stream": {
+                        "id": stream_id,
+                        "finish": True,
+                        "content": content,
+                    },
+                    "template_card": template_card,
+                }
+            else:
+                body = {
+                    "msgtype": "stream",
+                    "stream": {
+                        "id": stream_id,
+                        "finish": True,
+                        "content": content,
+                    },
+                }
             await self.long_connection_sender(
                 req_id,
-                {
-                    "msgtype": "stream",
-                    "stream": {"id": stream_id, "finish": True, "content": content},
-                },
+                body,
             )
-            await super().send(MessageChain([]))
+            await super().send(message)
             return
         if self.only_use_webhook_url_to_send and self.webhook_client and message:
             await self.webhook_client.send_message_chain(message)
             await self._mark_stream_complete(stream_id)
-            await super().send(MessageChain([]))
+            await super().send(message)
             return
         if self.webhook_client and message:
             await self.webhook_client.send_message_chain(message, unsupported_only=True)
@@ -191,23 +302,22 @@ class WecomAIBotMessageEvent(AstrMessageEvent):
             self.queue_mgr,
             suppress_unsupported_log=self.webhook_client is not None,
         )
-        await super().send(MessageChain([]))
+        await super().send(message)
 
     async def send_streaming(self, generator, use_fallback=False) -> None:
         """流式发送消息,参考webchat的send_streaming设计"""
         final_data = ""
-        raw = self.message_obj.raw_message
-        assert isinstance(raw, dict), (
-            "wecom_ai_bot platform event raw_message should be a dict"
-        )
-        raw = raw
-        stream_id = raw.get("stream_id", self.session_id)
-        pending_response = self.queue_mgr.get_pending_response(stream_id) or {}
-        connection_mode = pending_response.get("callback_params", {}).get(
-            "connection_mode",
-        )
-        req_id = pending_response.get("callback_params", {}).get("req_id")
+        stream_id, callback_params = self._stream_callback_params()
+        connection_mode = callback_params.get("connection_mode")
+        req_id = callback_params.get("req_id")
         back_queue = self.queue_mgr.get_or_create_back_queue(stream_id)
+        if callback_params.get("button_interaction") == "true":
+            merged_chain = MessageChain([])
+            async for chain in generator:
+                merged_chain.chain.extend(chain.chain)
+            await self.send(merged_chain)
+            return
+
         if (
             connection_mode == "long_connection"
             and self.long_connection_sender
@@ -215,11 +325,7 @@ class WecomAIBotMessageEvent(AstrMessageEvent):
             and req_id
         ):
             if self.only_use_webhook_url_to_send and self.webhook_client:
-                merged_chain = MessageChain([])
-                async for chain in generator:
-                    merged_chain.chain.extend(chain.chain)
-                merged_chain.squash_plain()
-                await self.webhook_client.send_message_chain(merged_chain)
+                await self._send_stream_to_webhook(generator)
                 await self.long_connection_sender(
                     req_id,
                     {
@@ -230,6 +336,7 @@ class WecomAIBotMessageEvent(AstrMessageEvent):
                 await super().send_streaming(generator, use_fallback)
                 return
             increment_plain = ""
+            action_rows: list[ActionRow] = []
             last_stream_update_time = 0.0
             async for chain in generator:
                 if self.webhook_client:
@@ -238,6 +345,11 @@ class WecomAIBotMessageEvent(AstrMessageEvent):
                         unsupported_only=True,
                     )
                 chain.squash_plain()
+                action_rows.extend(
+                    component
+                    for component in chain.chain
+                    if isinstance(component, ActionRow)
+                )
                 # 流式输出不 strip，保留换行等格式字符
                 chunk_text = self._extract_plain_text_from_chain(
                     chain, strip_result=False
@@ -258,25 +370,32 @@ class WecomAIBotMessageEvent(AstrMessageEvent):
                         },
                     )
                     last_stream_update_time = now
-            await self.long_connection_sender(
-                req_id,
-                {
+
+            template_card = build_wecom_button_card(action_rows)
+            if template_card:
+                body = {
+                    "msgtype": "stream_with_template_card",
+                    "stream": {
+                        "id": stream_id,
+                        "finish": True,
+                        "content": increment_plain,
+                    },
+                    "template_card": template_card,
+                }
+            else:
+                body = {
                     "msgtype": "stream",
                     "stream": {
                         "id": stream_id,
                         "finish": True,
                         "content": increment_plain,
                     },
-                },
-            )
+                }
+            await self.long_connection_sender(req_id, body)
             await super().send_streaming(generator, use_fallback)
             return
         if self.only_use_webhook_url_to_send and self.webhook_client:
-            merged_chain = MessageChain([])
-            async for chain in generator:
-                merged_chain.chain.extend(chain.chain)
-            merged_chain.squash_plain()
-            await self.webhook_client.send_message_chain(merged_chain)
+            await self._send_stream_to_webhook(generator)
             await self._mark_stream_complete(stream_id)
             await super().send_streaming(generator, use_fallback)
             return

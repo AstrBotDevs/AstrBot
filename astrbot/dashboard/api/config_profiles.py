@@ -4,6 +4,7 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, Query, Request
 
+from astrbot.dashboard.api.payloads import json_or_empty as _json_or_empty
 from astrbot.dashboard.responses import error, ok
 from astrbot.dashboard.schemas import (
     ConfigContentRequest,
@@ -48,14 +49,6 @@ def get_display_service(request: Request) -> ConfigDisplayService:
 
 def get_file_service(request: Request) -> ConfigFileService:
     return request.app.state.services.config_files
-
-
-async def _json_or_empty(request: Request) -> dict:
-    try:
-        data = await request.json()
-    except Exception:
-        return {}
-    return data if isinstance(data, dict) else {}
 
 
 def _alias_error(message: str):
@@ -120,10 +113,11 @@ async def create_config_profile(
 @router.get("/config-profiles/{config_id}")
 async def get_config_profile(
     config_id: str,
+    reload_from_file: bool = False,
     _auth: AuthContext = Depends(require_config_scope),
     service: ConfigProfileService = Depends(get_service),
 ):
-    return ok(service.get_profile(config_id))
+    return ok(service.get_profile(config_id, reload_from_file=reload_from_file))
 
 
 @router.put(
@@ -177,10 +171,11 @@ async def get_system_config_schema(
 
 @router.get("/system-config")
 async def get_system_config(
+    reload_from_file: bool = False,
     _auth: AuthContext = Depends(require_config_scope),
     service: ConfigProfileService = Depends(get_service),
 ):
-    return ok(service.get_system_config())
+    return ok(service.get_system_config(reload_from_file=reload_from_file))
 
 
 @router.get("/system-config/runtime")
@@ -289,15 +284,16 @@ async def create_dashboard_alias_config_profile(
 async def get_dashboard_alias_config_profile(
     id: str | None = Query(default=None),
     system_config: str = Query(default="0"),
+    reload_from_file: bool = False,
     _auth: AuthContext = Depends(require_config_scope),
     service: ConfigProfileService = Depends(get_service),
 ):
-    if system_config.lower() == "1":
-        return ok(service.get_system_schema())
-    if not id:
-        return _alias_error("缺少配置文件 ID")
     try:
-        return ok(service.get_profile(id))
+        if system_config.lower() == "1":
+            return ok(service.get_system_schema(reload_from_file=reload_from_file))
+        if not id:
+            return _alias_error("缺少配置文件 ID")
+        return ok(service.get_profile(id, reload_from_file=reload_from_file))
     except ValueError as exc:
         return _alias_error(str(exc))
 

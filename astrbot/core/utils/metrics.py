@@ -1,5 +1,6 @@
 import asyncio
 import os
+import platform
 import socket
 import sys
 import uuid
@@ -25,8 +26,11 @@ class Metric:
 
     @staticmethod
     def _is_disabled() -> bool:
-        """检查是否禁用指标上传（配置或环境变量）"""
-        if os.environ.get("ASTRBOT_DISABLE_METRICS", "0") == "1":
+        """Disable telemetry during tests or when explicitly opted out."""
+        if any(
+            os.environ.get(name, "").strip().lower() in {"1", "true", "yes", "on"}
+            for name in ("ASTRBOT_TEST_MODE", "ASTRBOT_DISABLE_METRICS")
+        ):
             return True
         try:
             from astrbot.core import astrbot_config
@@ -192,6 +196,7 @@ class Metric:
         payload_metrics = dict(metrics_data)
         payload_metrics["v"] = VERSION
         payload_metrics["os"] = sys.platform
+        payload_metrics["python_version"] = platform.python_version()
         try:
             payload_metrics["hn"] = socket.gethostname()
         except Exception:
@@ -204,7 +209,9 @@ class Metric:
 
         try:
             async with aiohttp.ClientSession(trust_env=True) as session:
-                async with session.post(base_url, json=payload, timeout=3) as response:
+                async with session.post(
+                    base_url, json=payload, timeout=aiohttp.ClientTimeout(total=3)
+                ) as response:
                     if response.status != 200:
                         pass
         except Exception:

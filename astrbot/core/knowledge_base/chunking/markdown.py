@@ -125,15 +125,21 @@ class MarkdownChunker(BaseChunker):
             if len(full_text) <= chunk_size:
                 raw_chunks.append((full_text.strip(), has_body))
             else:
-                # 章节过长，内部递归分割
-                # 扣除前缀长度，确保添加前缀后不超过 chunk_size
+                # Reserve room for the heading context before splitting the body.
                 prefix_len = self._estimate_prefix_length(heading_path)
-                effective_chunk_size = max(chunk_size // 4, chunk_size - prefix_len)
+                if prefix_len >= chunk_size:
+                    # Original headings have their own sections. Only omit the
+                    # repeated context when it leaves no room for section text.
+                    heading_path = []
+                    prefix_len = 0
+                effective_chunk_size = chunk_size - prefix_len
+                # The reserved context can leave less room than the requested overlap.
+                effective_overlap = min(chunk_overlap, effective_chunk_size - 1)
 
                 sub_chunks = await self._fallback_chunker.chunk(
                     section_text,
                     chunk_size=effective_chunk_size,
-                    chunk_overlap=chunk_overlap,
+                    chunk_overlap=effective_overlap,
                 )
                 for i, sub_chunk in enumerate(sub_chunks):
                     chunk_text = self._apply_heading_context(

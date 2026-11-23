@@ -7,7 +7,7 @@ import os
 import ssl
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -16,24 +16,26 @@ import certifi
 
 from astrbot.api import sp
 from astrbot.core import DEMO_MODE, file_token_service, logger
-from astrbot.core.computer.computer_client import sync_skills_to_active_sandboxes
+from astrbot.core.astr_agent_runtime.computer.computer_client import (
+    sync_skills_to_active_sandboxes,
+)
 from astrbot.core.repository import (
     GitUnavailableError,
     normalize_repository_url,
     parse_repository_url,
 )
-from astrbot.core.skills.skill_manager import SkillManager
 from astrbot.core.star.filter.command import CommandFilter
 from astrbot.core.star.filter.command_group import CommandGroupFilter
-from astrbot.core.star.filter.permission import PermissionTypeFilter
-from astrbot.core.star.filter.regex import RegexFilter
 from astrbot.core.star.star import StarMetadata
-from astrbot.core.star.star_handler import EventType, star_handlers_registry
+from astrbot.core.star.star_handler import EventType
 from astrbot.core.star.star_manager import (
     PluginManager,
     PluginVersionUnsupportedError,
 )
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path, get_astrbot_temp_path
+from astrbot.dashboard.async_utils import run_maybe_async
+from astrbot.dashboard.services.plugin_components import PluginComponentMixin
+from astrbot.dashboard.validation import is_json_object, is_string_list, string_field
 
 PLUGIN_UPDATE_CONCURRENCY = 3
 PLUGIN_OPERATION_FAILED_MESSAGE = "插件操作失败，请查看服务端日志。"
@@ -53,7 +55,6 @@ PLUGIN_COMPONENT_TYPE_ORDER = {
 
 LogoTokenResolver = Callable[[str], Awaitable[str | None]]
 InstalledAtResolver = Callable[[StarMetadata], str | None]
-PluginPagesResolver = Callable[[StarMetadata], Awaitable[list]]
 PluginPagesSerializer = Callable[[StarMetadata], Awaitable[list[dict]]]
 
 
@@ -88,7 +89,7 @@ class PluginServiceWarning(Exception):
         self.data = data
 
 
-class PluginService:
+class PluginService(PluginComponentMixin):
     def __init__(
         self,
         core_lifecycle,
@@ -110,8 +111,15 @@ class PluginService:
         self._logo_cache: dict[str, str] = {}
 
     @staticmethod
-    def _payload(data: object) -> dict[str, Any]:
-        return data if isinstance(data, dict) else {}
+    def _payload(data: object) -> dict[str, object]:
+        return data if is_json_object(data) else {}
+
+    @staticmethod
+    def _plugin_name(payload: dict[str, object]) -> str:
+        name = payload.get("name")
+        if not isinstance(name, str):
+            raise PluginServiceError("Invalid plugin name")
+        return name
 
     @staticmethod
     def _ensure_not_demo() -> None:
@@ -128,7 +136,7 @@ class PluginService:
 
     async def check_plugin_version_support(self, data: object) -> dict:
         payload = self._payload(data)
-        version_spec = payload.get("astrbot_version", "")
+        version_spec = string_field(payload, "astrbot_version", "")
         is_valid, message = self.plugin_manager._validate_astrbot_version_specifier(
             version_spec
         )
@@ -140,9 +148,9 @@ class PluginService:
 
     async def reload_failed_plugin(self, data: object) -> tuple[None, str]:
         self._ensure_not_demo()
-        payload = data if isinstance(data, dict) else {}
+        payload = data if is_json_object(data) else {}
         dir_name = payload.get("dir_name")
-        if not dir_name:
+        if not isinstance(dir_name, str) or not dir_name:
             raise PluginServiceError("缺少插件目录名")
 
         success, err = await self.plugin_manager.reload_failed_plugin(dir_name)
@@ -153,8 +161,8 @@ class PluginService:
 
     async def reload_plugin(self, data: object) -> tuple[None, str]:
         self._ensure_not_demo()
-        payload = data if isinstance(data, dict) else {}
-        plugin_name = payload.get("name", None)
+        payload = data if is_json_object(data) else {}
+        plugin_name = string_field(payload, "name")
         success, message = await self.plugin_manager.reload(plugin_name)
         if not success:
             raise PluginServiceError(
@@ -170,7 +178,7 @@ class PluginService:
         plugin_name: str | None,
         logo_token_resolver: LogoTokenResolver,
         installed_at_resolver: InstalledAtResolver,
-        discover_pages: PluginPagesResolver,
+        serialize_pages: PluginPagesSerializer,
     ) -> tuple[list[dict], str | None]:
         plugins = [
             plugin
@@ -181,7 +189,7 @@ class PluginService:
 
         async def process_plugin(plugin: StarMetadata):
             logo_url = await self.resolve_plugin_logo_url(plugin, logo_token_resolver)
-            pages = await discover_pages(plugin)
+            pages = await serialize_pages(plugin)
             return plugin, logo_url, pages
 
         results = await asyncio.gather(*(process_plugin(plugin) for plugin in plugins))
@@ -200,7 +208,8 @@ class PluginService:
                             install_sources,
                         ),
                     ),
-                    "pages": [page.name for page in pages],
+                    "pages": [page["name"] for page in pages],
+                    "views": pages,
                 }
             )
         return payload, getattr(self.plugin_manager, "failed_plugin_info", None)
@@ -211,13 +220,13 @@ class PluginService:
         plugin_name: str | None,
         logo_token_resolver: LogoTokenResolver,
         installed_at_resolver: InstalledAtResolver,
-        discover_pages: PluginPagesResolver,
+        serialize_pages: PluginPagesSerializer,
     ) -> tuple[list[dict], str | None]:
         return await self.list_plugins(
             plugin_name=plugin_name,
             logo_token_resolver=logo_token_resolver,
             installed_at_resolver=installed_at_resolver,
-            discover_pages=discover_pages,
+            serialize_pages=serialize_pages,
         )
 
     async def get_plugin_detail(
@@ -281,30 +290,47 @@ class PluginService:
         return f"/api/file/{logo_token}" if logo_token else None
 
     async def get_plugin_logo_token(self, logo_path: str) -> str | None:
+        """Get a reusable logo token, replacing expired cached tokens.
+
+        Args:
+            logo_path: The local path to the plugin logo.
+
+        Returns:
+            An active file token, or None if the file cannot be registered.
+        """
         try:
             if token := self._logo_cache.get(logo_path):
                 if not await file_token_service.check_token_expired(token):
                     return token
-            token = await file_token_service.register_file(logo_path, timeout=300)
+            token = await file_token_service.register_file(
+                logo_path, timeout=300, single_use=False
+            )
             self._logo_cache[logo_path] = token
             return token
         except Exception as exc:
             logger.warning(f"Failed to get the plugin logo: {exc}")
             return None
 
-    def resolve_plugin_metadata_dir(self, plugin: StarMetadata) -> Path | None:
+    @staticmethod
+    def resolve_metadata_directory(
+        plugin_manager: PluginManager, plugin: StarMetadata
+    ) -> Path | None:
+        """Locate an existing plugin metadata directory for either HTTP adapter."""
         if not plugin.root_dir_name:
             return None
 
         base_dir = Path(
-            self.plugin_manager.reserved_plugin_path
+            plugin_manager.reserved_plugin_path
             if plugin.reserved
-            else self.plugin_manager.plugin_store_path
+            else plugin_manager.plugin_store_path
         )
         plugin_dir = base_dir / plugin.root_dir_name
         if not plugin_dir.is_dir():
             return None
         return plugin_dir
+
+    def resolve_plugin_metadata_dir(self, plugin: StarMetadata) -> Path | None:
+        return self.resolve_metadata_directory(self.plugin_manager, plugin)
 
     def get_plugin_installed_at(self, plugin: StarMetadata) -> str | None:
         plugin_dir = self.resolve_plugin_metadata_dir(plugin)
@@ -314,7 +340,7 @@ class PluginService:
         try:
             return datetime.fromtimestamp(
                 plugin_dir.stat().st_mtime,
-                timezone.utc,
+                UTC,
             ).isoformat()
         except OSError as exc:
             logger.warning(
@@ -542,7 +568,7 @@ class PluginService:
             "download_url": str(
                 download_url or payload.get("download_url") or ""
             ).strip(),
-            "installed_at": datetime.now(timezone.utc).isoformat(),
+            "installed_at": datetime.now(UTC).isoformat(),
         }
 
         market_plugin_id = self.get_market_plugin_id(payload)
@@ -643,7 +669,7 @@ class PluginService:
             "version": plugin.version,
             "reserved": plugin.reserved,
             "activated": plugin.activated,
-            "online_vesion": "",
+            "online_version": "",
             "display_name": plugin.display_name,
             "logo": logo_url,
             "support_platforms": plugin.support_platforms,
@@ -689,154 +715,12 @@ class PluginService:
                 "title": page["title"],
                 "page_name": page["name"],
                 "i18n_key": page["i18n_key"],
-                "description": "Plugin Page entry",
+                "description": page.get("description", ""),
                 "plugin_name": plugin.name,
                 "plugin_marketplace_name": (plugin.name or "").replace("_", "-"),
             }
             for page in pages
         ]
-
-    async def get_plugin_handler_components(
-        self,
-        handler_full_names: list[str],
-    ) -> list[dict]:
-        components = []
-
-        for handler_full_name in handler_full_names:
-            info = {}
-            handler = star_handlers_registry.star_handlers_map.get(
-                handler_full_name,
-                None,
-            )
-            if handler is None:
-                continue
-            info["event_type"] = handler.event_type.name
-            info["event_type_h"] = self.translated_event_type.get(
-                handler.event_type,
-                handler.event_type.name,
-            )
-            info["handler_full_name"] = handler.handler_full_name
-            info["description"] = handler.desc or "无描述"
-            info["handler_name"] = handler.handler_name
-
-            component_type = "hook"
-            component: dict[str, Any] | None = None
-            if handler.event_type == EventType.AdapterMessageEvent:
-                has_admin = False
-                for event_filter in handler.event_filters:
-                    if isinstance(event_filter, CommandFilter):
-                        component_type = "command"
-                        info["display_type"] = "指令"
-                        info["cmd"] = self._get_command_filter_display_name(
-                            event_filter
-                        )
-                        component = self._build_command_filter_component(
-                            event_filter,
-                            handler.desc,
-                        )
-                    elif isinstance(event_filter, CommandGroupFilter):
-                        component_type = "command"
-                        info["display_type"] = "指令组"
-                        info["cmd"] = event_filter.get_complete_command_names()[
-                            0
-                        ].strip()
-                        component = self._build_command_group_component(
-                            event_filter,
-                            handler.desc,
-                        )
-                    elif isinstance(event_filter, RegexFilter):
-                        component_type = "command"
-                        info["display_type"] = "正则匹配"
-                        info["cmd"] = event_filter.regex_str
-                        component = {
-                            "type": "command",
-                            "name": event_filter.regex_str,
-                            "description": handler.desc or "无描述",
-                            "match": "regex",
-                        }
-                    elif isinstance(event_filter, PermissionTypeFilter):
-                        has_admin = True
-                info["has_admin"] = has_admin
-                if "cmd" not in info:
-                    info["cmd"] = "未知"
-                if "display_type" not in info:
-                    info["display_type"] = "事件监听器"
-                    component_type = "listener"
-            else:
-                info["cmd"] = "自动触发"
-                info["display_type"] = "无"
-                if handler.event_type == EventType.OnCallingFuncToolEvent:
-                    component_type = "llm_tool"
-
-            if component is None:
-                component = {
-                    "type": component_type,
-                    "name": handler.handler_name or handler.event_type.name,
-                    "description": handler.desc or "无描述",
-                }
-            else:
-                component["type"] = component_type
-
-            if component_type == "command":
-                component["event_type"] = info["event_type"]
-                component["event_type_h"] = info["event_type_h"]
-                component["handler_name"] = info["handler_name"]
-                component["has_admin"] = info.get("has_admin", False)
-                if "display_type" in info:
-                    component["display_type"] = info["display_type"]
-                if "cmd" in info:
-                    component["command"] = info["cmd"]
-            else:
-                component.update(info)
-            components.append(component)
-
-        return self._merge_command_components(components)
-
-    def get_plugin_skill_components(self, plugin: StarMetadata) -> list[dict]:
-        plugin_names = {
-            str(name)
-            for name in (plugin.root_dir_name, plugin.name)
-            if str(name or "").strip()
-        }
-        if not plugin_names:
-            return []
-
-        try:
-            skills = SkillManager().list_skills(
-                active_only=False,
-                runtime="local",
-                show_sandbox_path=False,
-            )
-        except Exception as exc:
-            logger.warning(f"Failed to get skills for plugin {plugin.name}: {exc!s}")
-            return []
-
-        components = []
-        for skill in skills:
-            if skill.source_type != "plugin" or skill.plugin_name not in plugin_names:
-                continue
-            components.append(
-                {
-                    "type": "skill",
-                    "name": skill.name,
-                    "description": skill.description or "无描述",
-                    "path": skill.path,
-                }
-            )
-        return components
-
-    @staticmethod
-    def _get_command_filter_display_name(command_filter: CommandFilter) -> str:
-        return command_filter.get_complete_command_names()[0].strip()
-
-    @staticmethod
-    def _get_command_description(
-        command_filter: CommandFilter | CommandGroupFilter,
-        fallback: str = "",
-    ) -> str:
-        handler_md = getattr(command_filter, "handler_md", None)
-        desc = getattr(handler_md, "desc", "") if handler_md else ""
-        return desc or fallback or "无描述"
 
     def _build_command_filter_component(
         self,
@@ -854,30 +738,10 @@ class PluginService:
                 fallback_desc,
             ),
         }
-        return self._wrap_command_component(parts[:-1], component)
-
-    def _build_command_group_component(
-        self,
-        command_group_filter: CommandGroupFilter,
-        fallback_desc: str = "",
-    ) -> dict:
-        parts = command_group_filter.get_complete_command_names()[0].strip().split()
-        if not parts:
-            parts = [command_group_filter.group_name]
-        subcommands = [
-            self._build_command_group_child(sub_filter)
-            for sub_filter in command_group_filter.sub_command_filters
-        ]
-        component: dict[str, Any] = {
-            "type": "command",
-            "name": parts[-1],
-            "description": self._get_command_description(
-                command_group_filter,
-                fallback_desc,
-            ),
-        }
-        if subcommands:
-            component["subcommands"] = subcommands
+        handler_md = getattr(command_filter, "handler_md", None)
+        if handler_md:
+            component["handler_full_name"] = handler_md.handler_full_name
+            component["handler_name"] = handler_md.handler_name
         return self._wrap_command_component(parts[:-1], component)
 
     def _build_command_group_child(
@@ -897,72 +761,15 @@ class PluginService:
                 component["subcommands"] = subcommands
             return component
 
-        return {
+        component = {
             "name": command_filter.command_name,
             "description": self._get_command_description(command_filter),
         }
-
-    @staticmethod
-    def _wrap_command_component(parent_names: list[str], component: dict) -> dict:
-        for parent_name in reversed(parent_names):
-            component = {
-                "type": "command",
-                "name": parent_name,
-                "description": "无描述",
-                "subcommands": [component],
-            }
+        handler_md = getattr(command_filter, "handler_md", None)
+        if handler_md:
+            component["handler_full_name"] = handler_md.handler_full_name
+            component["handler_name"] = handler_md.handler_name
         return component
-
-    def _merge_command_components(self, components: list[dict]) -> list[dict]:
-        merged: list[dict] = []
-        for component in components:
-            if component.get("type") != "command":
-                merged.append(component)
-                continue
-            existing = next(
-                (
-                    item
-                    for item in merged
-                    if item.get("type") == "command"
-                    and item.get("name") == component.get("name")
-                    and item.get("match") == component.get("match")
-                ),
-                None,
-            )
-            if existing is None:
-                merged.append(component)
-                continue
-            self._merge_command_component(existing, component)
-        return merged
-
-    def _merge_command_component(self, target: dict, source: dict) -> None:
-        if target.get("description") == "无描述" and source.get("description"):
-            target["description"] = source["description"]
-        for key, value in source.items():
-            if key in {"subcommands", "description"}:
-                continue
-            target.setdefault(key, value)
-
-        source_subcommands = source.get("subcommands")
-        if not isinstance(source_subcommands, list):
-            return
-        target_subcommands = target.setdefault("subcommands", [])
-        for source_subcommand in source_subcommands:
-            if not isinstance(source_subcommand, dict):
-                continue
-            existing = next(
-                (
-                    item
-                    for item in target_subcommands
-                    if isinstance(item, dict)
-                    and item.get("name") == source_subcommand.get("name")
-                ),
-                None,
-            )
-            if existing is None:
-                target_subcommands.append(source_subcommand)
-                continue
-            self._merge_command_component(existing, source_subcommand)
 
     async def get_online_plugins(
         self,
@@ -1105,14 +912,21 @@ class PluginService:
             logger.debug(f"Failed to fetch remote MD5: {exc}")
         return None
 
-    async def is_cache_valid(self, source: RegistrySource) -> bool:
+    @staticmethod
+    async def validate_registry_cache(
+        cache_file: str,
+        md5_url: str | None,
+        load_cached_md5: Callable[[str], str | None | Awaitable[str | None]],
+        fetch_remote_md5: Callable[[str | None], Awaitable[str | None]],
+    ) -> bool:
+        """Apply one cache policy while retaining each adapter's loading hooks."""
         try:
-            cached_md5 = self.load_cached_md5(source.cache_file)
+            cached_md5 = await run_maybe_async(lambda: load_cached_md5(cache_file))
             if not cached_md5:
                 logger.debug("MD5 not found in cache, treating cache as invalid")
                 return False
 
-            remote_md5 = await self.fetch_remote_md5(source.md5_url)
+            remote_md5 = await fetch_remote_md5(md5_url)
             if remote_md5 is None:
                 logger.warning(
                     "Cannot fetch remote MD5, using cache without validation"
@@ -1128,6 +942,14 @@ class PluginService:
         except Exception as exc:
             logger.warning(f"Failed to validate the plugin marketplace cache: {exc}")
             return False
+
+    async def is_cache_valid(self, source: RegistrySource) -> bool:
+        return await self.validate_registry_cache(
+            source.cache_file,
+            source.md5_url,
+            self.load_cached_md5,
+            self.fetch_remote_md5,
+        )
 
     @staticmethod
     def load_plugin_cache(cache_file: str):
@@ -1171,11 +993,11 @@ class PluginService:
         Yields:
             Tuples of market identifier and plugin entry.
         """
-        if isinstance(market_data, dict):
+        if is_json_object(market_data):
             for key, value in market_data.items():
                 if key == "$meta":
                     continue
-                if isinstance(value, dict):
+                if is_json_object(value):
                     entry = value
                     if "/" not in str(key) and not str(value.get("name") or "").strip():
                         entry = {**value, "name": str(key)}
@@ -1183,7 +1005,7 @@ class PluginService:
             return
         if isinstance(market_data, list):
             for value in market_data:
-                if not isinstance(value, dict):
+                if not is_json_object(value):
                     continue
                 identifier = PluginService.get_market_plugin_id(value)
                 yield identifier, value
@@ -1387,7 +1209,7 @@ class PluginService:
             PluginServiceError: If the plugin or marketplace entry cannot be matched.
         """
         self._ensure_not_demo()
-        payload = data if isinstance(data, dict) else {}
+        payload = data if is_json_object(data) else {}
         plugin_name = str(payload.get("name") or "").strip()
         plugin = self.find_plugin_by_name(plugin_name)
         if not plugin or not plugin.root_dir_name:
@@ -1411,7 +1233,7 @@ class PluginService:
                 old_record.get("installed_at")
                 if isinstance(old_record, dict) and old_record.get("installed_at")
                 else self.get_plugin_installed_at(plugin)
-                or datetime.now(timezone.utc).isoformat()
+                or datetime.now(UTC).isoformat()
             )
             record = {
                 "schema_version": 1,
@@ -1422,19 +1244,14 @@ class PluginService:
                 "repo": plugin_repo,
                 "download_url": "",
                 "installed_at": installed_at,
-                "updated_at": datetime.now(timezone.utc).isoformat(),
+                "updated_at": datetime.now(UTC).isoformat(),
             }
             plugin_name_value = str(plugin.name or "").strip()
             if plugin_name_value:
                 record["name"] = plugin_name_value
                 record["marketplace_name"] = plugin_name_value.replace("_", "-")
 
-            for key in (plugin.root_dir_name, plugin.name):
-                if key:
-                    records.pop(key, None)
-            records[plugin.root_dir_name] = record
-            await self.save_plugin_install_sources(records)
-            return record, "插件源已更新。"
+            return await self._store_bound_plugin_source(records, plugin, record)
 
         if install_method != "market":
             raise PluginServiceError(
@@ -1497,8 +1314,7 @@ class PluginService:
         installed_at = (
             old_record.get("installed_at")
             if isinstance(old_record, dict) and old_record.get("installed_at")
-            else self.get_plugin_installed_at(plugin)
-            or datetime.now(timezone.utc).isoformat()
+            else self.get_plugin_installed_at(plugin) or datetime.now(UTC).isoformat()
         )
         record = {
             "schema_version": 1,
@@ -1510,9 +1326,15 @@ class PluginService:
             "repo": repo_url,
             "download_url": str(market_plugin.get("download_url") or "").strip(),
             "installed_at": installed_at,
-            "updated_at": datetime.now(timezone.utc).isoformat(),
+            "updated_at": datetime.now(UTC).isoformat(),
         }
 
+        return await self._store_bound_plugin_source(records, plugin, record)
+
+    async def _store_bound_plugin_source(
+        self, records: dict, plugin, record: dict
+    ) -> tuple[dict, str]:
+        """Replace legacy aliases and persist one canonical plugin source record."""
         for key in (plugin.root_dir_name, plugin.name):
             if key:
                 records.pop(key, None)
@@ -1556,13 +1378,13 @@ class PluginService:
                 or ""
             ).strip()
         record["root_dir_name"] = plugin.root_dir_name
-        record["updated_at"] = datetime.now(timezone.utc).isoformat()
+        record["updated_at"] = datetime.now(UTC).isoformat()
         records[plugin.root_dir_name] = record
         await self.save_plugin_install_sources(records)
 
     async def install_plugin(self, data: object) -> tuple[dict, str]:
         self._ensure_not_demo()
-        payload = data if isinstance(data, dict) else {}
+        payload = data if is_json_object(data) else {}
         repo_url = str(payload.get("url") or "").strip()
         download_url = str(payload.get("download_url") or "").strip()
         ignore_version_check = bool(payload.get("ignore_version_check", False))
@@ -1601,7 +1423,7 @@ class PluginService:
                 public_message="该地址应通过 GitHub 仓库安装入口处理。",
             )
 
-        proxy: str | None = payload.get("proxy", None)
+        proxy = string_field(payload, "proxy")
         if proxy:
             proxy = proxy.removesuffix("/")
 
@@ -1736,10 +1558,10 @@ class PluginService:
 
     async def uninstall_plugin(self, data: object) -> tuple[None, str]:
         self._ensure_not_demo()
-        payload = data if isinstance(data, dict) else {}
-        plugin_name = payload["name"]
-        delete_config = payload.get("delete_config", False)
-        delete_data = payload.get("delete_data", False)
+        payload = data if is_json_object(data) else {}
+        plugin_name = self._plugin_name(payload)
+        delete_config = bool(payload.get("delete_config", False))
+        delete_data = bool(payload.get("delete_data", False))
         logger.info(f"Uninstalling plugin {plugin_name}")
         plugin = self.find_plugin_by_name(plugin_name)
         root_dir_name = plugin.root_dir_name if plugin else None
@@ -1755,11 +1577,11 @@ class PluginService:
 
     async def uninstall_failed_plugin(self, data: object) -> tuple[None, str]:
         self._ensure_not_demo()
-        payload = data if isinstance(data, dict) else {}
+        payload = data if is_json_object(data) else {}
         dir_name = payload.get("dir_name", "")
-        delete_config = payload.get("delete_config", False)
-        delete_data = payload.get("delete_data", False)
-        if not dir_name:
+        delete_config = bool(payload.get("delete_config", False))
+        delete_data = bool(payload.get("delete_data", False))
+        if not isinstance(dir_name, str) or not dir_name:
             raise PluginServiceError("缺少失败插件目录名")
 
         logger.info(f"Uninstalling failed plugin {dir_name}")
@@ -1774,9 +1596,9 @@ class PluginService:
 
     async def update_plugin(self, data: object) -> tuple[None, str]:
         self._ensure_not_demo()
-        payload = data if isinstance(data, dict) else {}
-        plugin_name = payload["name"]
-        proxy: str | None = payload.get("proxy", None)
+        payload = data if is_json_object(data) else {}
+        plugin_name = self._plugin_name(payload)
+        proxy = string_field(payload, "proxy")
         update_info = await self.resolve_market_update_info(plugin_name)
         download_url = str(update_info.get("download_url") or "").strip()
         repo_url = str(update_info.get("repo") or "").strip()
@@ -1795,11 +1617,11 @@ class PluginService:
 
     async def update_all_plugins(self, data: object) -> tuple[dict, str]:
         self._ensure_not_demo()
-        payload = data if isinstance(data, dict) else {}
-        plugin_names: list[str] = payload.get("names") or []
-        proxy: str = payload.get("proxy", "")
+        payload = data if is_json_object(data) else {}
+        plugin_names = payload.get("names") or []
+        proxy = string_field(payload, "proxy", "") or ""
 
-        if not isinstance(plugin_names, list) or not plugin_names:
+        if not is_string_list(plugin_names) or not plugin_names:
             raise PluginServiceError("插件列表不能为空")
 
         results = []
@@ -1880,8 +1702,8 @@ class PluginService:
         self, data: object, *, enabled: bool
     ) -> tuple[None, str]:
         self._ensure_not_demo()
-        payload = data if isinstance(data, dict) else {}
-        plugin_name = payload["name"]
+        payload = data if is_json_object(data) else {}
+        plugin_name = self._plugin_name(payload)
         if enabled:
             await self.plugin_manager.turn_on_plugin(plugin_name)
             message = "启用成功。"
@@ -1993,7 +1815,7 @@ class PluginService:
 
     @staticmethod
     async def save_custom_sources(data: object) -> tuple[None, str]:
-        payload = data if isinstance(data, dict) else {}
+        payload = data if is_json_object(data) else {}
         sources = PluginService._custom_sources_from_payload(payload)
         await sp.global_put("custom_plugin_sources", sources)
         return None, "保存成功"
@@ -2011,7 +1833,7 @@ class PluginService:
 
     @staticmethod
     async def create_custom_source(data: object) -> list:
-        source = data if isinstance(data, dict) else {}
+        source = data if is_json_object(data) else {}
         sources = await PluginService.get_custom_sources()
         sources.append(source)
         await sp.global_put("custom_plugin_sources", sources)
@@ -2019,7 +1841,7 @@ class PluginService:
 
     @staticmethod
     async def replace_custom_sources(data: object) -> list:
-        payload = data if isinstance(data, dict) else {}
+        payload = data if is_json_object(data) else {}
         sources = PluginService._custom_sources_from_payload(payload)
         await sp.global_put("custom_plugin_sources", sources)
         return sources

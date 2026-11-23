@@ -4,10 +4,9 @@ from unittest.mock import MagicMock
 import pytest
 from sqlmodel import select
 
-from astrbot.core import db_helper
 from astrbot.core.agent.response import AgentStats
+from astrbot.core.astr_agent_runtime import history as native_history
 from astrbot.core.db.po import Conversation, ProviderStat
-from astrbot.core.pipeline.process_stage.method.agent_sub_stages import internal
 from astrbot.core.provider.entities import LLMResponse, ProviderRequest, TokenUsage
 
 
@@ -16,7 +15,8 @@ async def test_record_internal_agent_stats_persists_provider_stat(
     temp_db,
     monkeypatch: pytest.MonkeyPatch,
 ):
-    monkeypatch.setattr(db_helper, "insert_provider_stat", temp_db.insert_provider_stat)
+    await temp_db.initialize()
+    monkeypatch.setattr(native_history, "db_helper", temp_db)
 
     event = MagicMock(unified_msg_origin="webchat:FriendMessage:session-42")
     req = ProviderRequest(
@@ -39,7 +39,7 @@ async def test_record_internal_agent_stats_persists_provider_stat(
     agent_runner.was_aborted.return_value = False
     final_resp = LLMResponse(role="assistant")
 
-    await internal._record_internal_agent_stats(
+    await native_history.record_agent_stats(
         event,
         req,
         agent_runner,

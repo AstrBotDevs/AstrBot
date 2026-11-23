@@ -300,11 +300,12 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from "vue";
 import { useRoute } from "vue-router";
-import { useModuleI18n } from "@/i18n/composables";
+import { useI18n, useModuleI18n } from "@/i18n/composables";
 import { askForConfirmation, useConfirmDialog } from "@/utils/confirmDialog";
 import axios from "@/utils/request";
 
 const { tm: t } = useModuleI18n("features/knowledge-base/document");
+const { locale } = useI18n();
 const route = useRoute();
 
 const confirmDialog = useConfirmDialog();
@@ -477,7 +478,7 @@ const formatFileSize = (bytes: number) => {
 
 const formatDate = (dateStr: string) => {
   if (!dateStr) return "-";
-  return new Date(dateStr).toLocaleString("zh-CN", {
+  return new Date(dateStr).toLocaleString(locale.value, {
     year: "numeric",
     month: "2-digit",
     day: "2-digit",

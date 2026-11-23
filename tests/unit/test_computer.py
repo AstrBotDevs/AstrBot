@@ -1,33 +1,35 @@
-"""Tests for astrbot/core/computer module.
+"""Tests for the built-in runtime computer module.
 
 This module tests the ComputerClient, Booter implementations (local, shipyard, boxlite),
 filesystem operations, Python execution, shell execution, and security restrictions.
 """
 
+import json
 import os
 import shlex
 import shutil
 import subprocess
 import sys
-from unittest.mock import AsyncMock, MagicMock, patch
+from pathlib import Path
+from unittest.mock import AsyncMock, MagicMock, call, patch
+from uuid import uuid4
+from zipfile import ZipFile
 
 import pytest
 
-from astrbot.core.computer.booters.base import ComputerBooter
-from astrbot.core.computer.booters.local import (
+from astrbot.core.astr_agent_runtime.computer.booters.base import ComputerBooter
+from astrbot.core.astr_agent_runtime.computer.booters.bwrap import (
+    BwrapBooter,
+    BwrapConfig,
+    HostBackedFileSystemComponent,
+    build_bwrap_cmd,
+)
+from astrbot.core.astr_agent_runtime.computer.booters.local import (
     LocalBooter,
     LocalFileSystemComponent,
     LocalPythonComponent,
     LocalShellComponent,
     _is_safe_command,
-)
-from astrbot.core.computer.booters.bwrap import (
-    BwrapBooter,
-    BwrapConfig,
-    build_bwrap_cmd,
-    HostBackedFileSystemComponent,
-    BwrapPythonComponent,
-    BwrapShellComponent,
 )
 
 
@@ -170,12 +172,14 @@ class TestLocalShellComponent:
     async def test_exec_with_timeout(self):
         """Test command with timeout."""
         shell = LocalShellComponent()
+        permission_check = MagicMock(return_value=True)
         result = await shell.exec_managed(
             _python_command("import time; time.sleep(30)"),
             owner_id="owner-a",
             creator_id="sender-a",
             creator_is_admin=False,
             sandboxed=False,
+            permission_check=permission_check,
             timeout=1,
             yield_time_ms=0,
         )
@@ -208,6 +212,7 @@ class TestLocalShellComponent:
             assert timed_out["status"] == "timed_out"
             assert timed_out["exit_code"] is not None
             assert timed_out["session_closed"] is True
+            assert permission_check.call_count >= 2
         finally:
             await shell.shutdown_sessions()
 
@@ -221,6 +226,7 @@ class TestLocalShellComponent:
     async def test_exec_with_cwd(self, tmp_path):
         """Test command execution with custom working directory."""
         shell = LocalShellComponent()
+        permission_check = MagicMock(return_value=True)
 
         try:
             result = await shell.exec_managed(
@@ -229,6 +235,7 @@ class TestLocalShellComponent:
                 creator_id="sender-a",
                 creator_is_admin=False,
                 sandboxed=False,
+                permission_check=permission_check,
                 cwd=str(tmp_path),
                 yield_time_ms=5_000,
             )
@@ -237,6 +244,7 @@ class TestLocalShellComponent:
             assert result["exit_code"] == 0
             assert result["stdout"].strip() == str(tmp_path.resolve())
             assert result["session_closed"] is True
+            assert permission_check.call_count >= 2
         finally:
             await shell.shutdown_sessions()
 
@@ -244,6 +252,7 @@ class TestLocalShellComponent:
     async def test_exec_with_env(self):
         """Test command execution with custom environment variables."""
         shell = LocalShellComponent()
+        permission_check = MagicMock(return_value=True)
 
         try:
             result = await shell.exec_managed(
@@ -252,6 +261,7 @@ class TestLocalShellComponent:
                 creator_id="sender-a",
                 creator_is_admin=False,
                 sandboxed=False,
+                permission_check=permission_check,
                 env={"TEST_VAR": "test_value"},
                 yield_time_ms=5_000,
             )
@@ -260,6 +270,7 @@ class TestLocalShellComponent:
             assert result["exit_code"] == 0
             assert result["stdout"] == "test_value\n"
             assert result["session_closed"] is True
+            assert permission_check.call_count >= 2
         finally:
             await shell.shutdown_sessions()
 
@@ -315,7 +326,7 @@ class TestLocalFileSystemComponent:
 
         with (
             patch(
-                "astrbot.core.computer.booters.local.get_astrbot_root",
+                "astrbot.core.astr_agent_runtime.computer.booters.local.get_astrbot_root",
                 return_value=str(tmp_path),
             ),
         ):
@@ -333,7 +344,7 @@ class TestLocalFileSystemComponent:
 
         with (
             patch(
-                "astrbot.core.computer.booters.local.get_astrbot_root",
+                "astrbot.core.astr_agent_runtime.computer.booters.local.get_astrbot_root",
                 return_value=str(tmp_path),
             ),
         ):
@@ -349,7 +360,7 @@ class TestLocalFileSystemComponent:
 
         with (
             patch(
-                "astrbot.core.computer.booters.local.get_astrbot_root",
+                "astrbot.core.astr_agent_runtime.computer.booters.local.get_astrbot_root",
                 return_value=str(tmp_path),
             ),
         ):
@@ -366,7 +377,7 @@ class TestLocalFileSystemComponent:
 
         with (
             patch(
-                "astrbot.core.computer.booters.local.get_astrbot_root",
+                "astrbot.core.astr_agent_runtime.computer.booters.local.get_astrbot_root",
                 return_value=str(tmp_path),
             ),
         ):
@@ -384,7 +395,7 @@ class TestLocalFileSystemComponent:
 
         with (
             patch(
-                "astrbot.core.computer.booters.local.get_astrbot_root",
+                "astrbot.core.astr_agent_runtime.computer.booters.local.get_astrbot_root",
                 return_value=str(tmp_path),
             ),
         ):
@@ -403,7 +414,7 @@ class TestLocalFileSystemComponent:
 
         with (
             patch(
-                "astrbot.core.computer.booters.local.get_astrbot_root",
+                "astrbot.core.astr_agent_runtime.computer.booters.local.get_astrbot_root",
                 return_value=str(tmp_path),
             ),
         ):
@@ -425,7 +436,7 @@ class TestLocalFileSystemComponent:
 
         with (
             patch(
-                "astrbot.core.computer.booters.local.get_astrbot_root",
+                "astrbot.core.astr_agent_runtime.computer.booters.local.get_astrbot_root",
                 return_value=str(tmp_path),
             ),
         ):
@@ -454,10 +465,289 @@ class TestShipyardBooter:
     """Tests for ShipyardBooter."""
 
     @pytest.mark.asyncio
+    async def test_shipyard_shell_unwraps_bay_exec_response(self):
+        """Bay exec responses keep shell output under the data field."""
+        from astrbot.core.astr_agent_runtime.computer.booters.shipyard import (
+            ShipyardShellWrapper,
+        )
+
+        raw_shell = MagicMock()
+        raw_shell.exec = AsyncMock(
+            return_value={
+                "success": True,
+                "data": {
+                    "success": True,
+                    "return_code": 0,
+                    "stdout": "hello_from_shipyard_bay\n/workspace\n",
+                    "stderr": "",
+                    "pid": 16,
+                    "process_id": None,
+                    "error": None,
+                },
+                "error": None,
+            },
+        )
+
+        result = await ShipyardShellWrapper(raw_shell).exec(
+            "echo hello_from_shipyard_bay && pwd"
+        )
+
+        assert result["stdout"] == "hello_from_shipyard_bay\n/workspace\n"
+        assert result["stderr"] == ""
+        assert result["exit_code"] == 0
+        assert result["success"] is True
+
+    @pytest.mark.asyncio
+    async def test_shipyard_shell_keeps_flat_exec_response_compatible(self):
+        """Flat shell responses remain compatible with ShipyardShellWrapper."""
+        from astrbot.core.astr_agent_runtime.computer.booters.shipyard import (
+            ShipyardShellWrapper,
+        )
+
+        raw_shell = MagicMock()
+        raw_shell.exec = AsyncMock(
+            return_value={
+                "success": True,
+                "stdout": "hello_from_legacy_shell\n/workspace\n",
+                "stderr": "",
+                "exit_code": 0,
+                "execution_id": "exec-legacy",
+                "execution_time_ms": 45,
+                "command": "echo hello_from_legacy_shell && pwd",
+            },
+        )
+
+        result = await ShipyardShellWrapper(raw_shell).exec(
+            "echo hello_from_legacy_shell && pwd"
+        )
+
+        assert result == {
+            "stdout": "hello_from_legacy_shell\n/workspace\n",
+            "stderr": "",
+            "exit_code": 0,
+            "success": True,
+            "execution_id": "exec-legacy",
+            "execution_time_ms": 45,
+            "command": "echo hello_from_legacy_shell && pwd",
+        }
+
+    @pytest.mark.asyncio
+    async def test_shipyard_shell_maps_nonzero_return_code(self):
+        """A non-zero Bay return_code is exposed as exit_code and failure."""
+        from astrbot.core.astr_agent_runtime.computer.booters.shipyard import (
+            ShipyardShellWrapper,
+        )
+
+        raw_shell = MagicMock()
+        raw_shell.exec = AsyncMock(
+            return_value={
+                "success": True,
+                "data": {
+                    "success": False,
+                    "return_code": 3,
+                    "stdout": "",
+                    "stderr": "oops",
+                },
+                "error": None,
+            },
+        )
+
+        result = await ShipyardShellWrapper(raw_shell).exec("echo oops >&2; exit 3")
+
+        assert result["stdout"] == ""
+        assert result["stderr"] == "oops"
+        assert result["exit_code"] == 3
+        assert result["success"] is False
+
+    @pytest.mark.asyncio
+    async def test_shipyard_shell_failure_without_success_field(self):
+        """A nonzero return code without `success` is reported as a failure."""
+        from astrbot.core.astr_agent_runtime.computer.booters.shipyard import (
+            ShipyardShellWrapper,
+        )
+
+        raw_shell = MagicMock()
+        raw_shell.exec = AsyncMock(
+            return_value={"data": {"return_code": 1, "stdout": "", "stderr": ""}}
+        )
+
+        result = await ShipyardShellWrapper(raw_shell).exec("false")
+
+        assert result["exit_code"] == 1
+        assert result["success"] is False
+
+    @pytest.mark.asyncio
+    async def test_shipyard_shell_keeps_envelope_error(self):
+        """A nested `data.error = None` must not hide the envelope error."""
+        from astrbot.core.astr_agent_runtime.computer.booters.shipyard import (
+            ShipyardShellWrapper,
+        )
+
+        raw_shell = MagicMock()
+        raw_shell.exec = AsyncMock(
+            return_value={
+                "success": False,
+                "data": {
+                    "success": False,
+                    "return_code": 1,
+                    "stdout": "",
+                    "stderr": "",
+                    "error": None,
+                },
+                "error": "Ship returned 500: exec failed",
+            },
+        )
+
+        result = await ShipyardShellWrapper(raw_shell).exec("false")
+
+        assert result["stderr"] == "Ship returned 500: exec failed"
+        assert result["exit_code"] == 1
+        assert result["success"] is False
+
+    @pytest.mark.asyncio
+    async def test_shipyard_file_tools_unwrap_bay_exec_response(self):
+        """Bay file responses keep their payload under the data field too."""
+        from astrbot.core.astr_agent_runtime.computer.booters.shipyard import (
+            ShipyardFileSystemWrapper,
+        )
+
+        raw_fs = MagicMock()
+        raw_fs.read_file = AsyncMock(
+            return_value={
+                "success": True,
+                "data": {"content": "hello-file", "path": "probe.txt", "size": 10},
+                "error": None,
+            },
+        )
+        raw_fs.list_dir = AsyncMock(
+            return_value={
+                "success": True,
+                "data": {
+                    "files": [{"name": "probe.txt", "is_file": True}],
+                    "current_path": "/workspace",
+                },
+                "error": None,
+            },
+        )
+
+        wrapper = ShipyardFileSystemWrapper(raw_fs, MagicMock())
+
+        read_result = await wrapper.read_file("probe.txt")
+        assert read_result["content"] == "hello-file"
+        assert "data" not in read_result
+
+        list_result = await wrapper.list_dir(".")
+        assert list_result["files"] == [{"name": "probe.txt", "is_file": True}]
+        assert list_result["current_path"] == "/workspace"
+        assert "data" not in list_result
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        ("method", "kwargs", "inner"),
+        [
+            (
+                "create_file",
+                {"path": "probe.txt", "content": "hello-file"},
+                {"success": True, "path": "probe.txt", "size": 10},
+            ),
+            (
+                "write_file",
+                {"path": "probe.txt", "content": "hello-file"},
+                {"success": True, "path": "probe.txt", "bytes_written": 10},
+            ),
+            (
+                "delete_file",
+                {"path": "probe.txt"},
+                {"success": True, "path": "probe.txt"},
+            ),
+            (
+                "edit_file",
+                {"path": "probe.txt", "old_string": "a", "new_string": "b"},
+                {"success": True, "replacements": 1},
+            ),
+        ],
+    )
+    async def test_shipyard_remaining_file_tools_unwrap_bay_exec_response(
+        self, method, kwargs, inner
+    ):
+        """Every fs wrapper flattens the envelope, not only read_file/list_dir."""
+        from astrbot.core.astr_agent_runtime.computer.booters.shipyard import (
+            ShipyardFileSystemWrapper,
+        )
+
+        raw_fs = MagicMock()
+        setattr(
+            raw_fs,
+            method,
+            AsyncMock(return_value={"success": True, "data": inner, "error": None}),
+        )
+
+        wrapper = ShipyardFileSystemWrapper(raw_fs, MagicMock())
+        result = await getattr(wrapper, method)(**kwargs)
+
+        for key, value in inner.items():
+            assert result[key] == value
+        assert "data" not in result
+
+    @pytest.mark.asyncio
+    async def test_shipyard_shell_envelope_failure_wins_over_data_success(self):
+        """A failed request is not reported as a success by data.success."""
+        from astrbot.core.astr_agent_runtime.computer.booters.shipyard import (
+            ShipyardShellWrapper,
+        )
+
+        raw_shell = MagicMock()
+        raw_shell.exec = AsyncMock(
+            return_value={
+                "success": False,
+                "data": {
+                    "success": True,
+                    "return_code": 0,
+                    "stdout": "stale-body",
+                    "stderr": "",
+                    "error": None,
+                },
+                "error": "Ship returned 500: exec failed",
+            },
+        )
+
+        result = await ShipyardShellWrapper(raw_shell).exec("echo hi")
+
+        assert result["success"] is False
+        assert result["stderr"] == "Ship returned 500: exec failed"
+
+    @pytest.mark.asyncio
+    async def test_shipyard_shell_envelope_failure_without_data(self):
+        """A request-level failure carrying no `data` is still a failure."""
+        from astrbot.core.astr_agent_runtime.computer.booters.shipyard import (
+            ShipyardShellWrapper,
+        )
+
+        raw_shell = MagicMock()
+        raw_shell.exec = AsyncMock(
+            return_value={
+                "success": False,
+                "data": None,
+                "error": "Ship returned 500: exec failed",
+            },
+        )
+
+        result = await ShipyardShellWrapper(raw_shell).exec("echo hi")
+
+        assert result["stdout"] == ""
+        assert result["stderr"] == "Ship returned 500: exec failed"
+        assert result["exit_code"] is None
+        assert result["success"] is False
+
+    @pytest.mark.asyncio
     async def test_shipyard_booter_init(self):
         """Test ShipyardBooter initialization."""
-        with patch("astrbot.core.computer.booters.shipyard.ShipyardClient"):
-            from astrbot.core.computer.booters.shipyard import ShipyardBooter
+        with patch(
+            "astrbot.core.astr_agent_runtime.computer.booters.shipyard.ShipyardClient"
+        ):
+            from astrbot.core.astr_agent_runtime.computer.booters.shipyard import (
+                ShipyardBooter,
+            )
 
             booter = ShipyardBooter(
                 endpoint_url="http://localhost:8080",
@@ -481,10 +771,12 @@ class TestShipyardBooter:
         mock_client.create_ship = AsyncMock(return_value=mock_ship)
 
         with patch(
-            "astrbot.core.computer.booters.shipyard.ShipyardClient",
+            "astrbot.core.astr_agent_runtime.computer.booters.shipyard.ShipyardClient",
             return_value=mock_client,
         ):
-            from astrbot.core.computer.booters.shipyard import ShipyardBooter
+            from astrbot.core.astr_agent_runtime.computer.booters.shipyard import (
+                ShipyardBooter,
+            )
 
             booter = ShipyardBooter(
                 endpoint_url="http://localhost:8080",
@@ -503,10 +795,12 @@ class TestShipyardBooter:
         mock_client.get_ship = AsyncMock(return_value={"status": 1})
 
         with patch(
-            "astrbot.core.computer.booters.shipyard.ShipyardClient",
+            "astrbot.core.astr_agent_runtime.computer.booters.shipyard.ShipyardClient",
             return_value=mock_client,
         ):
-            from astrbot.core.computer.booters.shipyard import ShipyardBooter
+            from astrbot.core.astr_agent_runtime.computer.booters.shipyard import (
+                ShipyardBooter,
+            )
 
             booter = ShipyardBooter(
                 endpoint_url="http://localhost:8080",
@@ -528,10 +822,12 @@ class TestShipyardBooter:
         mock_client.get_ship = AsyncMock(return_value={"status": 0})
 
         with patch(
-            "astrbot.core.computer.booters.shipyard.ShipyardClient",
+            "astrbot.core.astr_agent_runtime.computer.booters.shipyard.ShipyardClient",
             return_value=mock_client,
         ):
-            from astrbot.core.computer.booters.shipyard import ShipyardBooter
+            from astrbot.core.astr_agent_runtime.computer.booters.shipyard import (
+                ShipyardBooter,
+            )
 
             booter = ShipyardBooter(
                 endpoint_url="http://localhost:8080",
@@ -544,33 +840,34 @@ class TestShipyardBooter:
             assert result is False
 
 
-class TestBoxliteBooter:
-    """Tests for BoxliteBooter."""
-
-    @pytest.mark.skip(
-        reason="BoxliteBooter is now abstract and requires boxlite module"
-    )
-    @pytest.mark.asyncio
-    async def test_boxlite_booter_init(self):
-        """Test BoxliteBooter can be instantiated via __new__."""
-        # Need to mock boxlite module before importing
-        mock_boxlite = MagicMock()
-        mock_boxlite.SimpleBox = MagicMock()
-
-        with patch.dict(sys.modules, {"boxlite": mock_boxlite}):
-            from astrbot.core.computer.booters.boxlite import BoxliteBooter
-
-            # BoxliteBooter is abstract now, cannot instantiate
-            # This test is skipped
-            pass
-
-
 class TestComputerClient:
     """Tests for computer_client module functions."""
 
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("runtime", [None, "none", "local"])
+    async def test_get_booter_requires_explicit_runtime(self, runtime):
+        """An omitted runtime must not start or reuse a computer environment."""
+        from astrbot.core.astr_agent_runtime.computer import computer_client
+
+        provider_settings = {} if runtime is None else {"computer_use_runtime": runtime}
+        context = MagicMock()
+        context.get_config.return_value = {"provider_settings": provider_settings}
+        with (
+            patch.object(computer_client, "get_local_booter") as get_local_booter,
+            patch.object(computer_client, "session_booter", {"session": MagicMock()}),
+        ):
+            if runtime == "local":
+                result = await computer_client.get_booter(context, "session")
+                assert result is get_local_booter.return_value
+                get_local_booter.assert_called_once_with()
+            else:
+                with pytest.raises(RuntimeError, match="disabled by configuration"):
+                    await computer_client.get_booter(context, "session")
+                get_local_booter.assert_not_called()
+
     def test_get_local_booter(self):
         """Test get_local_booter returns singleton LocalBooter."""
-        from astrbot.core.computer import computer_client
+        from astrbot.core.astr_agent_runtime.computer import computer_client
 
         # Clear the global booter to test singleton
         computer_client.local_booter = None
@@ -587,7 +884,7 @@ class TestComputerClient:
     @pytest.mark.asyncio
     async def test_shutdown_local_booter_clears_singleton(self):
         """Test local managed resources are released during lifecycle shutdown."""
-        from astrbot.core.computer import computer_client
+        from astrbot.core.astr_agent_runtime.computer import computer_client
 
         booter = MagicMock(spec=LocalBooter)
         booter.shutdown = AsyncMock()
@@ -601,8 +898,10 @@ class TestComputerClient:
     @pytest.mark.asyncio
     async def test_get_booter_shipyard(self):
         """Test get_booter with shipyard type."""
-        from astrbot.core.computer import computer_client
-        from astrbot.core.computer.booters.shipyard import ShipyardBooter
+        from astrbot.core.astr_agent_runtime.computer import computer_client
+        from astrbot.core.astr_agent_runtime.computer.booters.shipyard import (
+            ShipyardBooter,
+        )
 
         # Clear session booter
         computer_client.session_booter.clear()
@@ -639,7 +938,7 @@ class TestComputerClient:
         with (
             patch.object(ShipyardBooter, "boot", new=AsyncMock()),
             patch(
-                "astrbot.core.computer.computer_client._sync_skills_to_sandbox",
+                "astrbot.core.astr_agent_runtime.computer.computer_client._sync_skills_to_sandbox",
                 AsyncMock(),
             ),
         ):
@@ -655,7 +954,7 @@ class TestComputerClient:
     @pytest.mark.asyncio
     async def test_get_booter_unknown_type(self):
         """Test get_booter with unknown booter type raises ValueError."""
-        from astrbot.core.computer import computer_client
+        from astrbot.core.astr_agent_runtime.computer import computer_client
 
         computer_client.session_booter.clear()
 
@@ -678,8 +977,10 @@ class TestComputerClient:
     @pytest.mark.asyncio
     async def test_get_booter_reuses_existing(self):
         """Test get_booter reuses existing booter for same session."""
-        from astrbot.core.computer import computer_client
-        from astrbot.core.computer.booters.shipyard import ShipyardBooter
+        from astrbot.core.astr_agent_runtime.computer import computer_client
+        from astrbot.core.astr_agent_runtime.computer.booters.shipyard import (
+            ShipyardBooter,
+        )
 
         computer_client.session_booter.clear()
 
@@ -706,7 +1007,7 @@ class TestComputerClient:
         with (
             patch.object(ShipyardBooter, "boot", new=AsyncMock()),
             patch(
-                "astrbot.core.computer.computer_client._sync_skills_to_sandbox",
+                "astrbot.core.astr_agent_runtime.computer.computer_client._sync_skills_to_sandbox",
                 AsyncMock(),
             ),
         ):
@@ -723,8 +1024,10 @@ class TestComputerClient:
     @pytest.mark.asyncio
     async def test_get_booter_rebuild_unavailable(self):
         """Test get_booter rebuilds when existing booter is unavailable."""
-        from astrbot.core.computer import computer_client
-        from astrbot.core.computer.booters.shipyard import ShipyardBooter
+        from astrbot.core.astr_agent_runtime.computer import computer_client
+        from astrbot.core.astr_agent_runtime.computer.booters.shipyard import (
+            ShipyardBooter,
+        )
 
         computer_client.session_booter.clear()
 
@@ -750,11 +1053,11 @@ class TestComputerClient:
 
         with (
             patch(
-                "astrbot.core.computer.booters.shipyard.ShipyardBooter",
+                "astrbot.core.astr_agent_runtime.computer.booters.shipyard.ShipyardBooter",
                 return_value=mock_new_booter,
             ) as mock_booter_cls,
             patch(
-                "astrbot.core.computer.computer_client._sync_skills_to_sandbox",
+                "astrbot.core.astr_agent_runtime.computer.computer_client._sync_skills_to_sandbox",
                 AsyncMock(),
             ),
         ):
@@ -783,7 +1086,7 @@ class TestSyncSkillsToSandbox:
     @pytest.mark.asyncio
     async def test_sync_skills_no_skills_dir(self):
         """Test sync does nothing when skills directory doesn't exist."""
-        from astrbot.core.computer import computer_client
+        from astrbot.core.astr_agent_runtime.computer import computer_client
 
         mock_booter = MagicMock()
         mock_booter.shell.exec = AsyncMock()
@@ -791,11 +1094,11 @@ class TestSyncSkillsToSandbox:
 
         with (
             patch(
-                "astrbot.core.computer.computer_client.get_astrbot_skills_path",
+                "astrbot.core.astr_agent_runtime.computer.computer_client.get_astrbot_skills_path",
                 return_value="/nonexistent/path",
             ),
             patch(
-                "astrbot.core.computer.computer_client.os.path.isdir",
+                "astrbot.core.astr_agent_runtime.computer.computer_client.os.path.isdir",
                 return_value=False,
             ),
         ):
@@ -805,7 +1108,7 @@ class TestSyncSkillsToSandbox:
     @pytest.mark.asyncio
     async def test_sync_skills_empty_dir(self):
         """Test sync does nothing when skills directory is empty."""
-        from astrbot.core.computer import computer_client
+        from astrbot.core.astr_agent_runtime.computer import computer_client
 
         mock_booter = MagicMock()
         mock_booter.shell.exec = AsyncMock()
@@ -813,15 +1116,15 @@ class TestSyncSkillsToSandbox:
 
         with (
             patch(
-                "astrbot.core.computer.computer_client.get_astrbot_skills_path",
+                "astrbot.core.astr_agent_runtime.computer.computer_client.get_astrbot_skills_path",
                 return_value="/tmp/empty",
             ),
             patch(
-                "astrbot.core.computer.computer_client.os.path.isdir",
+                "astrbot.core.astr_agent_runtime.computer.computer_client.os.path.isdir",
                 return_value=True,
             ),
             patch(
-                "astrbot.core.computer.computer_client.Path.iterdir",
+                "astrbot.core.astr_agent_runtime.computer.computer_client.Path.iterdir",
                 return_value=iter([]),
             ),
         ):
@@ -829,48 +1132,69 @@ class TestSyncSkillsToSandbox:
             mock_booter.upload_file.assert_not_called()
 
     @pytest.mark.asyncio
-    async def test_sync_skills_success(self):
-        """Test successful skills sync."""
-        from astrbot.core.computer import computer_client
+    async def test_sync_skills_success(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        """Upload a real skill bundle, refresh metadata, and remove local staging."""
+        from astrbot.core.astr_agent_runtime.computer import computer_client
+
+        skills_root = tmp_path / "skills"
+        skill_dir = skills_root / "demo"
+        skill_dir.mkdir(parents=True)
+        skill_text = "---\nname: demo\ndescription: Demo skill\n---\n# Demo\n"
+        skill_dir.joinpath("SKILL.md").write_text(skill_text, encoding="utf-8")
+        temp_root = tmp_path / "sync-temp"
+        monkeypatch.setattr(
+            computer_client, "get_astrbot_skills_path", lambda: str(skills_root)
+        )
+        monkeypatch.setattr(
+            computer_client, "get_astrbot_temp_path", lambda: str(temp_root)
+        )
+        monkeypatch.setattr("astrbot.core.star.star.star_registry", [])
+        sandbox_skills = [
+            {
+                "name": "demo",
+                "description": "Demo skill",
+                "path": "/workspace/skills/demo/SKILL.md",
+            }
+        ]
+        uploaded_files: dict[str, bytes] = {}
+
+        async def capture_upload(path: str, file_name: str) -> dict[str, bool]:
+            assert file_name == "skills/skills.zip"
+            with ZipFile(path) as archive:
+                uploaded_files.update(
+                    (name, archive.read(name))
+                    for name in archive.namelist()
+                    if not name.endswith("/")
+                )
+            return {"success": True}
 
         mock_booter = MagicMock()
-        mock_booter.shell.exec = AsyncMock(return_value={"exit_code": 0})
-        mock_booter.upload_file = AsyncMock(return_value={"success": True})
+        mock_booter.upload_file = AsyncMock(side_effect=capture_upload)
+        mock_booter.shell.exec = AsyncMock(
+            side_effect=[
+                {"exit_code": 0},
+                {"exit_code": 0, "stdout": '{"managed_skills": ["demo"]}'},
+                {"exit_code": 0, "stdout": json.dumps({"skills": sandbox_skills})},
+            ]
+        )
 
-        mock_skill_file = MagicMock()
-        mock_skill_file.name = "skill.py"
-        mock_skill_file.__str__ = lambda: "/tmp/skills/skill.py"
+        await computer_client._sync_skills_to_sandbox(mock_booter)
 
-        with (
-            patch(
-                "astrbot.core.computer.computer_client.get_astrbot_skills_path",
-                return_value="/tmp/skills",
-            ),
-            patch(
-                "astrbot.core.computer.computer_client.os.path.isdir",
-                return_value=True,
-            ),
-            patch(
-                "astrbot.core.computer.computer_client.Path.iterdir",
-                return_value=iter([mock_skill_file]),
-            ),
-            patch(
-                "astrbot.core.computer.computer_client.get_astrbot_temp_path",
-                return_value="/tmp",
-            ),
-            patch(
-                "astrbot.core.computer.computer_client.shutil.make_archive",
-            ),
-            patch(
-                "astrbot.core.computer.computer_client.os.path.exists",
-                return_value=True,
-            ),
-            patch(
-                "astrbot.core.computer.computer_client.os.remove",
-            ),
-        ):
-            # Should not raise
-            await computer_client._sync_skills_to_sandbox(mock_booter)
+        mock_booter.upload_file.assert_awaited_once_with(
+            str(temp_root / "skills_bundle.zip"), "skills/skills.zip"
+        )
+        assert uploaded_files == {"demo/SKILL.md": skill_text.encode("utf-8")}
+        assert mock_booter.shell.exec.await_args_list == [
+            call("mkdir -p skills"),
+            call(computer_client._build_apply_sync_command()),
+            call(computer_client._build_scan_command()),
+        ]
+        manager = computer_client.SkillManager()
+        cache = json.loads(Path(manager.sandbox_skills_cache_path).read_text("utf-8"))
+        assert cache["skills"] == sandbox_skills
+        assert not list(temp_root.iterdir())
 
 
 class TestBwrapConfigAndBuilder:
@@ -896,6 +1220,37 @@ class TestBwrapConfigAndBuilder:
         assert "--" in cmd
         assert "echo" == cmd[-2]
         assert "hello" == cmd[-1]
+
+    def test_readonly_root_preserves_private_temp_and_explicit_writable_mounts(
+        self, tmp_path: Path
+    ) -> None:
+        shared = tmp_path / "shared"
+        shared.mkdir()
+        workspace = tmp_path / "workspace"
+        workspace.mkdir()
+        config = BwrapConfig(
+            workspace_dir=str(workspace),
+            ro_binds=["/"],
+            rw_binds=["/", "/root", str(shared)],
+        )
+        cmd = build_bwrap_cmd(config, ["true"])
+        readonly = [
+            cmd[i + 1 : i + 3] for i, arg in enumerate(cmd) if arg == "--ro-bind"
+        ]
+        writable = [cmd[i + 1 : i + 3] for i, arg in enumerate(cmd) if arg == "--bind"]
+
+        assert readonly == [["/", "/"]]
+        assert writable == [
+            [str(shared), str(shared)],
+            [str(workspace), str(workspace)],
+        ]
+        temporary = [cmd[i + 1] for i, arg in enumerate(cmd) if arg == "--tmpfs"]
+        assert set(temporary) == {
+            str(Path("/tmp").resolve()),
+            str(Path("/var/tmp").resolve()),
+        }
+        assert len(temporary) == len(set(temporary))
+        assert cmd.index("--ro-bind") < cmd.index("--tmpfs") < cmd.index("--bind")
 
 
 @pytest.mark.skipif(shutil.which("bwrap") is None, reason="bwrap is not installed")
@@ -952,24 +1307,37 @@ class TestBwrapShellComponent:
         await booter.shutdown()
 
     @pytest.mark.asyncio
-    async def test_bwrap_shell_ro_slash(self):
-        # Testing the system-first + ro root order you mentioned
-        booter = BwrapBooter(ro_binds=["/"])
-        await booter.boot("test_shell_ro")
+    async def test_bwrap_shell_ro_slash(self, tmp_path: Path) -> None:
+        """Keep root read-only while private temp and explicit shares are writable."""
+        shared = tmp_path / "shared"
+        shared.mkdir()
+        booter = BwrapBooter(ro_binds=["/"], rw_binds=[str(shared)])
+        try:
+            await booter.boot("test_shell_ro")
+            res = await booter.shell.exec("echo xxx > /dev/null && echo success")
+            assert res["exit_code"] == 0, res
+            assert "success" in res["stdout"]
 
-        # Will it write to /dev/null correctly despite ro /?
-        res = await booter.shell.exec("echo xxx > /dev/null && echo success")
-        assert res["exit_code"] == 0
-        assert "success" in res["stdout"]
+            private_name = f"astrbot-private-{uuid4().hex}"
+            for directory in ("/tmp", "/var/tmp"):
+                private_file = Path(directory) / private_name
+                res = await booter.shell.exec(
+                    f"echo private > {shlex.quote(str(private_file))}"
+                )
+                assert res["exit_code"] == 0, res
+                assert not private_file.exists()
 
-        # Will it fail to write to ro /tmp?
-        res2 = await booter.shell.exec("echo yyy > /tmp/test_write.txt", shell=True)
-        # /tmp in bwrap is tmpfs by default from our flags, so this might actually succeed.
-        # Let's try writing to /usr instead
-        res3 = await booter.shell.exec("echo yyy > /usr/test_write.txt", shell=True)
-        assert res3["exit_code"] != 0
+            shared_file = shared / "shared.txt"
+            res = await booter.shell.exec(
+                f"echo shared > {shlex.quote(str(shared_file))}"
+            )
+            assert res["exit_code"] == 0, res
+            assert shared_file.read_text(encoding="utf-8") == "shared\n"
 
-        await booter.shutdown()
+            res = await booter.shell.exec("echo yyy > /usr/test_write.txt", shell=True)
+            assert res["exit_code"] != 0, res
+        finally:
+            await booter.shutdown()
 
 
 @pytest.mark.skipif(shutil.which("bwrap") is None, reason="bwrap is not installed")

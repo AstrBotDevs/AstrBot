@@ -165,9 +165,7 @@ class TestLogConnectionFailure:
 
     @patch("astrbot.core.utils.network_utils.logger.error")
     @patch.dict(os.environ, {"http_proxy": "http://env-proxy:3128"}, clear=False)
-    def test_falls_back_to_env_http_proxy(
-        self, mock_log_error: MagicMock
-    ):
+    def test_falls_back_to_env_http_proxy(self, mock_log_error: MagicMock):
         log_connection_failure("GPT", Exception("fail"))
         mock_log_error.assert_called_once()
         msg = mock_log_error.call_args[0][0]
@@ -184,18 +182,14 @@ class TestLogConnectionFailure:
         },
         clear=False,
     )
-    def test_falls_back_to_env_https_proxy(
-        self, mock_log_error: MagicMock
-    ):
+    def test_falls_back_to_env_https_proxy(self, mock_log_error: MagicMock):
         log_connection_failure("GPT", Exception("fail"))
         mock_log_error.assert_called_once()
         msg = mock_log_error.call_args[0][0]
         assert "https://secure-proxy:8443" in msg
 
     @patch("astrbot.core.utils.network_utils.logger.error")
-    def test_empty_proxy_string_uses_no_proxy_message(
-        self, mock_log_error: MagicMock
-    ):
+    def test_empty_proxy_string_uses_no_proxy_message(self, mock_log_error: MagicMock):
         """Empty-string proxy should not trigger the proxy-specific log line."""
         with patch.dict(os.environ, {"http_proxy": "", "https_proxy": ""}):
             log_connection_failure("GPT", Exception("fail"), proxy="")
@@ -205,9 +199,7 @@ class TestLogConnectionFailure:
 
     @patch("astrbot.core.utils.network_utils.logger.error")
     def test_error_type_name_in_message(self, mock_log_error: MagicMock):
-        log_connection_failure(
-            "GPT", httpx.ConnectTimeout("upstream timed out")
-        )
+        log_connection_failure("GPT", httpx.ConnectTimeout("upstream timed out"))
         mock_log_error.assert_called_once()
         msg = mock_log_error.call_args[0][0]
         assert "ConnectTimeout" in msg
@@ -221,29 +213,39 @@ class TestLogConnectionFailure:
 class TestCreateProxyClientIntegration:
     """Integration-style smoke tests against the real httpx.AsyncClient."""
 
-    def test_returns_async_client_without_proxy(self):
+    @pytest.mark.asyncio
+    async def test_returns_async_client_without_proxy(self):
         client = create_proxy_client("Test")
         assert isinstance(client, httpx.AsyncClient)
-        client.aclose()
+        await client.aclose()
+        assert client.is_closed
 
-    def test_returns_async_client_with_proxy(self):
+    @pytest.mark.asyncio
+    async def test_returns_async_client_with_proxy(self):
         client = create_proxy_client("Test", proxy="http://127.0.0.1:7890")
         assert isinstance(client, httpx.AsyncClient)
-        client.aclose()
+        await client.aclose()
+        assert client.is_closed
 
-    def test_with_custom_headers(self):
+    @pytest.mark.asyncio
+    async def test_with_custom_headers(self):
         headers = {"Authorization": "Bearer token"}
         client = create_proxy_client("Test", headers=headers)
         assert isinstance(client, httpx.AsyncClient)
-        client.aclose()
+        await client.aclose()
+        assert client.is_closed
 
-    def test_with_explicit_ssl_context(self):
+    @pytest.mark.asyncio
+    async def test_with_explicit_ssl_context(self):
         ctx = ssl.create_default_context()
         client = create_proxy_client("Test", verify=ctx)
         assert isinstance(client, httpx.AsyncClient)
-        client.aclose()
+        await client.aclose()
+        assert client.is_closed
 
-    def test_with_verify_disabled(self):
+    @pytest.mark.asyncio
+    async def test_with_verify_disabled(self):
         client = create_proxy_client("Test", verify=False)
         assert isinstance(client, httpx.AsyncClient)
-        client.aclose()
+        await client.aclose()
+        assert client.is_closed

@@ -1,12 +1,11 @@
 import { computed, nextTick, onMounted, ref, watch } from "vue";
+import { providerApi } from "@/api/v1";
+import { useI18n } from "@/i18n/composables";
 import { askForConfirmation as askForConfirmationDialog, useConfirmDialog } from "@/utils/confirmDialog";
 import { normalizeTextInput } from "@/utils/inputValue";
-import type {
-  ProviderMetadataSource,
-  ProviderModelMetadata,
-} from "@/utils/providerMetadata";
-import { getProviderIcon } from "@/utils/providerUtils";
-import axios from "@/utils/request";
+import type { ProviderMetadataSource, ProviderModelMetadata } from "@/utils/providerMetadata";
+import { getProviderIcon, isMonochromeProviderIcon } from "@/utils/providerUtils";
+import { loadSponsorCatalog, sponsorCatalog } from "@/utils/sponsorCatalog";
 
 export interface UseProviderSourcesOptions {
   defaultTab?: string;
@@ -14,12 +13,22 @@ export interface UseProviderSourcesOptions {
   showMessage: (message: string, color?: string) => void;
 }
 
+interface ProviderSourceType {
+  value: string;
+  label: string;
+  icon: string;
+  isMonochrome: boolean;
+  isSponsor?: boolean;
+  subtitle?: string;
+  website_url?: string;
+}
+
+interface ProviderIconSource {
+  provider?: string;
+}
+
 export function resolveDefaultTab(value?: string) {
   const normalized = (value || "").toLowerCase();
-
-  if (normalized.startsWith("select_agent_runner_provider") || normalized === "agent_runner") {
-    return "agent_runner";
-  }
 
   if (normalized === "select_provider_stt" || normalized === "speech_to_text" || normalized.includes("stt")) {
     return "speech_to_text";
@@ -37,11 +46,16 @@ export function resolveDefaultTab(value?: string) {
     return "rerank";
   }
 
+  if (normalized.includes("decision")) {
+    return "decision";
+  }
+
   return "chat_completion";
 }
 
 export function useProviderSources(options: UseProviderSourcesOptions) {
   const { tm, showMessage } = options;
+  const { locale } = useI18n();
 
   const confirmDialog = useConfirmDialog();
 
@@ -60,6 +74,7 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
   const editableProviderSource = ref<any | null>(null);
   const availableModels = ref<any[]>([]);
   const modelMetadata = ref<Record<string, any>>({});
+  const loadingSources = ref(true);
   const loadingModels = ref(false);
   const savingSource = ref(false);
   const testingProviders = ref<string[]>([]);
@@ -73,36 +88,12 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
   const unsavedProviderSourceMarker = Symbol("unsavedProviderSource");
 
   const providerTypes = computed(() => [
-    {
-      value: "chat_completion",
-      label: tm("providers.tabs.chatCompletion"),
-      icon: "mdi-message-text",
-    },
-    {
-      value: "agent_runner",
-      label: tm("providers.tabs.agentRunner"),
-      icon: "mdi-robot",
-    },
-    {
-      value: "speech_to_text",
-      label: tm("providers.tabs.speechToText"),
-      icon: "mdi-microphone-message",
-    },
-    {
-      value: "text_to_speech",
-      label: tm("providers.tabs.textToSpeech"),
-      icon: "mdi-volume-high",
-    },
-    {
-      value: "embedding",
-      label: tm("providers.tabs.embedding"),
-      icon: "mdi-code-json",
-    },
-    {
-      value: "rerank",
-      label: tm("providers.tabs.rerank"),
-      icon: "mdi-compare-vertical",
-    },
+    { value: "chat_completion", label: tm("providers.tabs.chatCompletion"), icon: "mdi-message-text" },
+    { value: "speech_to_text", label: tm("providers.tabs.speechToText"), icon: "mdi-microphone-message" },
+    { value: "text_to_speech", label: tm("providers.tabs.textToSpeech"), icon: "mdi-volume-high" },
+    { value: "decision", label: tm("providers.tabs.decision"), icon: "mdi-scale-balance" },
+    { value: "embedding", label: tm("providers.tabs.embedding"), icon: "mdi-code-json" },
+    { value: "rerank", label: tm("providers.tabs.rerank"), icon: "mdi-compare-vertical" },
   ]);
 
   // ===== Computed =====
@@ -111,18 +102,48 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
       return [];
     }
 
-    const types: Array<{ value: string; label: string; icon: string }> = [];
+    const types: ProviderSourceType[] = [];
+    const builtInSponsors = ["MiraRouter", "SSYCloud(胜算云)"];
+    if (selectedProviderType.value === "chat_completion" && sponsorCatalog.value) {
+      for (const sponsor of sponsorCatalog.value.sponsors) {
+        if (providerTemplates.value[sponsor.template]?.provider_type !== "chat_completion") continue;
+        const translation = sponsor.i18n?.[locale.value];
+        types.push({
+          value: `sponsor:${sponsor.id}`,
+          label: translation?.title || sponsor.title,
+          icon: sponsor.logo,
+          website_url: sponsor.website_url,
+          subtitle: translation?.subtitle || sponsor.subtitle,
+          isMonochrome: false,
+          isSponsor: true,
+        });
+      }
+    }
     for (const [templateName, template] of Object.entries(providerTemplates.value)) {
+      if (templateName === "AIHubMix") continue;
+      if (sponsorCatalog.value && builtInSponsors.includes(templateName)) continue;
       if (template.provider_type === selectedProviderType.value) {
         types.push({
           value: templateName,
           label: templateName,
           icon: getProviderIcon(template.provider),
+          isMonochrome: isMonochromeProviderIcon(template.provider),
+          isSponsor: builtInSponsors.includes(templateName),
         });
       }
     }
 
     return types;
+  });
+
+  const selectedSponsor = computed(() => {
+    const source = selectedProviderSource.value;
+    if (!source?.api_base) return undefined;
+    return sponsorCatalog.value?.sponsors.find(
+      (sponsor) =>
+        sponsor.api_base.replace(/\/+$/, "") === source.api_base.replace(/\/+$/, "") &&
+        providerTemplates.value[sponsor.template]?.type === source.type,
+    );
   });
 
   const filteredProviderSources = computed(() => {
@@ -166,10 +187,17 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
   const mergedModelEntries = computed(() => {
     const configuredEntries = (sourceProviders.value || []).map((provider: any) => {
       const metadata = getModelMetadata(provider.model);
+      let displayMetadata = metadata || buildMetadataFromProvider(provider);
+      if (provider.max_context_tokens > 0) {
+        displayMetadata = {
+          ...displayMetadata,
+          limit: { ...displayMetadata?.limit, context: provider.max_context_tokens },
+        };
+      }
       return {
         type: "configured",
         provider,
-        metadata: metadata || buildMetadataFromProvider(provider),
+        metadata: displayMetadata,
         hasModelMetadata: Boolean(metadata),
       };
     });
@@ -185,9 +213,7 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
           type: "available",
           model: name,
           metadata: typeof item === "object" ? item?.metadata : getModelMetadata(name),
-          hasModelMetadata: Boolean(
-            typeof item === "object" ? item?.metadata : getModelMetadata(name),
-          ),
+          hasModelMetadata: Boolean(typeof item === "object" ? item?.metadata : getModelMetadata(name)),
         };
       });
 
@@ -310,9 +336,13 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
     return type.includes(providerType);
   }
 
-  function resolveSourceIcon(source: any) {
+  function resolveSourceIcon(source: ProviderIconSource | null | undefined) {
     if (!source) return "";
-    return getProviderIcon(source.provider) || "";
+    return getProviderIcon(source.provider || "") || "";
+  }
+
+  function isMonochromeSourceIcon(source: ProviderIconSource | null | undefined) {
+    return Boolean(source && isMonochromeProviderIcon(source.provider || ""));
   }
 
   function getSourceDisplayName(source: any) {
@@ -324,25 +354,21 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
 
   function getModelMetadata(modelName?: string) {
     if (!modelName) return null;
-    return modelMetadata.value?.[modelName] || null;
+    // Schema refreshes only include configured models; retain fetched candidate metadata.
+    const availableModel = availableModels.value.find((item) => item?.name === modelName);
+    return availableModel?.metadata || modelMetadata.value?.[modelName] || null;
   }
 
-  function buildMetadataFromProvider(
-    provider: ProviderMetadataSource,
-  ): ProviderModelMetadata {
+  function buildMetadataFromProvider(provider: ProviderMetadataSource): ProviderModelMetadata {
     const inputs = Array.isArray(provider.modalities)
-      ? provider.modalities.filter(
-          (modality): modality is string => typeof modality === "string",
-        )
+      ? provider.modalities.filter((modality): modality is string => typeof modality === "string")
       : [];
     const context = Number(provider.max_context_tokens || 0);
 
     return {
       modalities: { input: inputs },
       tool_call: inputs.includes("tool_use"),
-      ...(Number.isFinite(context) && context > 0
-        ? { limit: { context } }
-        : {}),
+      ...(Number.isFinite(context) && context > 0 ? { limit: { context } } : {}),
     };
   }
 
@@ -383,8 +409,6 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
       anthropic_chat_completion: "chat_completion",
       googlegenai_chat_completion: "chat_completion",
       zhipu_chat_completion: "chat_completion",
-      dify: "agent_runner",
-      coze: "agent_runner",
       dashscope: "chat_completion",
       openai_whisper_api: "speech_to_text",
       mimo_stt_api: "speech_to_text",
@@ -399,6 +423,8 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
       azure_tts: "text_to_speech",
       minimax_tts_api: "text_to_speech",
       volcengine_tts: "text_to_speech",
+      system_one_decision: "decision",
+      openai_decision: "decision",
     };
     return oldVersionProviderTypeMapping[provider.type];
   }
@@ -417,7 +443,6 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
       suppressSourceWatch = false;
     });
     availableModels.value = [];
-    modelMetadata.value = {};
     isSourceModified.value = false;
   }
 
@@ -462,18 +487,13 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
 
   function removeProviderSourceFromLocalState(sourceId: string) {
     providers.value = providers.value.filter(
-      (provider) =>
-        provider.provider_source_id == null ||
-        String(provider.provider_source_id) !== sourceId,
+      (provider) => provider.provider_source_id == null || String(provider.provider_source_id) !== sourceId,
     );
     providerSources.value = providerSources.value.filter(
       (source) => source.id == null || String(source.id) !== sourceId,
     );
 
-    if (
-      selectedProviderSource.value?.id != null &&
-      String(selectedProviderSource.value.id) === sourceId
-    ) {
+    if (selectedProviderSource.value?.id != null && String(selectedProviderSource.value.id) === sourceId) {
       selectedProviderSource.value = null;
       selectedProviderSourceOriginalId.value = null;
       editableProviderSource.value = null;
@@ -484,7 +504,12 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
   }
 
   function addProviderSource(templateKey: string) {
-    const template = providerTemplates.value[templateKey];
+    const sponsor = templateKey.startsWith("sponsor:")
+      ? sponsorCatalog.value?.sponsors.find((item) => `sponsor:${item.id}` === templateKey)
+      : null;
+    const baseTemplate = providerTemplates.value[sponsor?.template || templateKey];
+    const template =
+      sponsor && baseTemplate ? { ...baseTemplate, id: sponsor.id, api_base: sponsor.api_base } : baseTemplate;
     if (!template) {
       showMessage("未找到对应的模板配置", "error");
       return;
@@ -522,9 +547,7 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
     }
 
     try {
-      await axios.post("/api/config/provider_sources/delete", {
-        id: sourceId,
-      });
+      await providerApi.deleteSource(sourceId);
       removeProviderSourceFromLocalState(sourceId);
       showMessage(tm("providerSources.deleteSuccess"));
     } catch (error: any) {
@@ -541,13 +564,10 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
     const sourceBeingSaved = selectedProviderSource.value;
     const originalId = selectedProviderSourceOriginalId.value || sourceBeingSaved.id;
     try {
-      const response = await axios.post("/api/config/provider_sources/update", {
-        config: editableProviderSource.value,
-        original_id: originalId,
-      });
+      const response = await providerApi.upsertSource(String(originalId), editableProviderSource.value);
 
       if (response.data.status !== "ok") {
-        throw new Error(response.data.message);
+        throw new Error(response.data.message ?? undefined);
       }
 
       if (editableProviderSource.value!.id !== originalId) {
@@ -595,12 +615,10 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
     loadingModels.value = true;
     try {
       const sourceId = editableProviderSource.value?.id || selectedProviderSource.value.id;
-      const response = await axios.get("/api/config/provider_sources/models", {
-        params: { source_id: sourceId },
-      });
+      const response = await providerApi.sourceModels(String(sourceId));
       if (response.data.status === "ok") {
-        const metadataMap = response.data.data.model_metadata || {};
-        modelMetadata.value = metadataMap;
+        const metadataMap = (response.data.data.model_metadata || {}) as Record<string, ProviderModelMetadata>;
+        modelMetadata.value = { ...modelMetadata.value, ...metadataMap };
         availableModels.value = (response.data.data.models || []).map((model: string) => ({
           name: model,
           metadata: metadataMap?.[model] || null,
@@ -609,10 +627,9 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
           showMessage(tm("models.noModelsFound"), "info");
         }
       } else {
-        throw new Error(response.data.message);
+        throw new Error(response.data.message ?? undefined);
       }
     } catch (error: any) {
-      modelMetadata.value = {};
       showMessage(error.response?.data?.message || error.message || tm("models.fetchError"), "error");
     } finally {
       loadingModels.value = false;
@@ -664,9 +681,9 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
     if (!newProvider) return;
 
     try {
-      const res = await axios.post("/api/config/provider/new", newProvider);
+      const res = await providerApi.createInSource(String(newProvider.provider_source_id), newProvider);
       if (res.data.status === "error") {
-        throw new Error(res.data.message);
+        throw new Error(res.data.message ?? undefined);
       }
       providers.value.push(newProvider);
       showMessage(res.data.message || tm("models.addSuccess", { model: modelName }));
@@ -683,14 +700,16 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
 
   async function deleteProvider(provider: any) {
     const confirmed = await askForConfirmation(tm("models.deleteConfirm", { id: provider.id }));
-    if (!confirmed) return;
+    if (!confirmed) return false;
 
     try {
-      await axios.post("/api/config/provider/delete", { id: provider.id });
+      await providerApi.delete(String(provider.id));
       providers.value = providers.value.filter((p) => p.id !== provider.id);
       showMessage(tm("models.deleteSuccess"));
+      return true;
     } catch (error: any) {
       showMessage(error.message || tm("models.deleteError"), "error");
+      return false;
     } finally {
       await loadConfig();
     }
@@ -700,9 +719,7 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
     testingProviders.value.push(provider.id);
     try {
       const startTime = performance.now();
-      const response = await axios.get("/api/config/provider/check_one", {
-        params: { id: provider.id },
-      });
+      const response = await providerApi.test(String(provider.id));
       if (response.data.status === "ok" && response.data.data.error === null) {
         const latency = Math.max(0, Math.round(performance.now() - startTime));
         showMessage(tm("models.testSuccessWithLatency", { id: provider.id, latency }));
@@ -721,8 +738,9 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
   }
 
   async function loadProviderTemplate() {
+    loadingSources.value = true;
     try {
-      const response = await axios.get("/api/config/provider/template");
+      const response = await providerApi.schema();
       if (response.data.status === "ok") {
         configSchema.value = response.data.data.config_schema || {};
         if (configSchema.value.provider?.config_template) {
@@ -734,6 +752,8 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
       }
     } catch (error) {
       console.warn("Failed to load provider template:", error);
+    } finally {
+      loadingSources.value = false;
     }
   }
 
@@ -742,6 +762,7 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
   }
 
   onMounted(async () => {
+    void loadSponsorCatalog();
     await loadProviderTemplate();
   });
 
@@ -757,6 +778,7 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
     editableProviderSource,
     availableModels,
     modelMetadata,
+    loadingSources,
     loadingModels,
     savingSource,
     testingProviders,
@@ -769,6 +791,7 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
     // computed
     providerTypes,
     availableSourceTypes,
+    selectedSponsor,
     displayedProviderSources,
     sourceProviders,
     mergedModelEntries,
@@ -781,6 +804,7 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
 
     // helpers
     resolveSourceIcon,
+    isMonochromeSourceIcon,
     getSourceDisplayName,
     getModelMetadata,
     supportsImageInput,

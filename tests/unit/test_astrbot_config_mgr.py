@@ -27,6 +27,7 @@ def mock_ucr():
 @pytest.fixture
 def mock_sp():
     sp = MagicMock()
+    sp.get.return_value = {}
     sp.global_get = AsyncMock(return_value={})
     sp.global_put = AsyncMock()
     return sp

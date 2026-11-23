@@ -4,14 +4,13 @@ Covers validation branches, interval-based jobs, run-once auto-cleanup,
 and failure paths not covered by the main test suite.
 """
 
-from datetime import datetime, timedelta, timezone
+import asyncio
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
 from astrbot.core.cron.manager import CronJobManager, CronJobSchedulingError
 from astrbot.core.db.po import CronJob
-
 
 # ---- Fixtures (self-contained) ----
 
@@ -77,7 +76,9 @@ class TestAddBasicJobEdgeCases:
         assert call_payload["interval_seconds"] == 300
 
     @pytest.mark.asyncio
-    async def test_add_basic_job_both_cron_and_interval_raises(self, cron_manager, mock_db):
+    async def test_add_basic_job_both_cron_and_interval_raises(
+        self, cron_manager, mock_db
+    ):
         """Providing both cron_expression and interval_seconds raises ValueError."""
         handler = MagicMock()
         with pytest.raises(ValueError, match="must have exactly one value"):
@@ -89,7 +90,9 @@ class TestAddBasicJobEdgeCases:
             )
 
     @pytest.mark.asyncio
-    async def test_add_basic_job_neither_cron_nor_interval_raises(self, cron_manager, mock_db):
+    async def test_add_basic_job_neither_cron_nor_interval_raises(
+        self, cron_manager, mock_db
+    ):
         """Providing neither cron_expression nor interval_seconds raises ValueError."""
         handler = MagicMock()
         with pytest.raises(ValueError, match="must have exactly one value"):
@@ -125,7 +128,9 @@ class TestAddBasicJobEdgeCases:
         assert call_payload["custom_key"] == "custom_value"
 
     @pytest.mark.asyncio
-    async def test_add_basic_job_non_persistent_not_scheduled(self, cron_manager, mock_db):
+    async def test_add_basic_job_non_persistent_not_scheduled(
+        self, cron_manager, mock_db
+    ):
         """A disabled non-persistent job is stored but not scheduled."""
         job = CronJob(
             job_id="np-job", name="NonPersist", job_type="basic", enabled=False
@@ -170,17 +175,11 @@ class TestRunJobEdgeCases:
         await cron_manager._run_job("basic-done")
 
         # Status should be updated twice: running -> completed
-        update_calls = [
-            c for c in mock_db.update_cron_job.call_args_list
-        ]
+        update_calls = list(mock_db.update_cron_job.call_args_list)
         # At minimum one call with status="running" and one with status="completed"
-        running_calls = [
-            c for c in update_calls
-            if c.kwargs.get("status") == "running"
-        ]
+        running_calls = [c for c in update_calls if c.kwargs.get("status") == "running"]
         completed_calls = [
-            c for c in update_calls
-            if c.kwargs.get("status") == "completed"
+            c for c in update_calls if c.kwargs.get("status") == "completed"
         ]
         assert len(running_calls) >= 1, "Expected a 'running' status update"
         assert len(completed_calls) >= 1, "Expected a 'completed' status update"
@@ -208,7 +207,9 @@ class TestRunJobEdgeCases:
         assert last_call.kwargs["last_error"] is not None
 
     @pytest.mark.asyncio
-    async def test_run_job_run_once_deletes_after_completion(self, cron_manager, mock_db):
+    async def test_run_job_run_once_deletes_after_completion(
+        self, cron_manager, mock_db
+    ):
         """A run_once job is deleted after it completes successfully."""
         job = CronJob(
             job_id="once-job",
@@ -229,32 +230,28 @@ class TestRunJobEdgeCases:
         mock_delete.assert_awaited_once_with("once-job")
 
     @pytest.mark.asyncio
-    async def test_run_job_active_agent_uses_synthetic_session_when_missing(self, cron_manager, mock_db):
-        """An active-agent job without a delivery session uses its cron session."""
+    async def test_run_job_active_agent_records_failure_when_target_session_is_missing(
+        self, cron_manager, mock_db
+    ):
+        """A scheduled wakeup requires a real target and never invents a session."""
         job = CronJob(
             job_id="aa-no-session",
             name="NoSession",
             job_type="active_agent",
             enabled=True,
             cron_expression="0 9 * * *",
-            payload={},  # No "session" key
+            payload={},
         )
         mock_db.get_cron_job.return_value = job
-
-        with patch.object(
-            cron_manager,
-            "_woke_main_agent",
-            new_callable=AsyncMock,
-        ) as woke_main_agent:
+        with patch(
+            "astrbot.core.agent_wakeup.wake_main_agent", new_callable=AsyncMock
+        ) as wake_main_agent:
             await cron_manager._run_job("aa-no-session")
-
-        last_call = mock_db.update_cron_job.call_args_list[-1]
-        assert last_call.kwargs["status"] == "completed"
-        woke_main_agent.assert_awaited_once()
-        assert woke_main_agent.await_args.kwargs["session_str"] == (
-            "cron:OtherMessage:aa-no-session"
-        )
-        assert woke_main_agent.await_args.kwargs["delivery_session_str"] == ""
+        last_call = mock_db.update_cron_job.await_args_list[-1]
+        assert last_call.kwargs["status"] == "failed"
+        assert "no target UMO" in last_call.kwargs["last_error"]
+        wake_main_agent.assert_not_awaited()
+        mock_db.delete_cron_job.assert_not_awaited()
 
 
 # ---- update_job and sync_from_db ----
@@ -274,16 +271,23 @@ class TestUpdateAndSyncEdgeCases:
             cron_expression="0 9 * * *",
             enabled=True,  # Now enabled
         )
+        previous_job = updated_job.model_copy(update={"enabled": False})
+        mock_db.get_cron_job.return_value = previous_job
         mock_db.update_cron_job.return_value = updated_job
 
         with patch.object(cron_manager, "_schedule_job") as mock_schedule:
             result = await cron_manager.update_job(job_id, enabled=True)
 
         assert result == updated_job
+        mock_db.get_cron_job.assert_awaited_once_with(job_id)
+        mock_db.update_cron_job.assert_awaited_once_with(job_id, enabled=True)
+        assert previous_job.enabled is False
         mock_schedule.assert_called_once_with(updated_job)
 
     @pytest.mark.asyncio
-    async def test_update_job_removes_scheduled_when_disabled(self, cron_manager, mock_db):
+    async def test_update_job_removes_scheduled_when_disabled(
+        self, cron_manager, mock_db
+    ):
         """update_job removes the job from the scheduler when disabled."""
         job_id = "disable-job"
         updated_job = CronJob(
@@ -293,6 +297,8 @@ class TestUpdateAndSyncEdgeCases:
             cron_expression="0 9 * * *",
             enabled=False,  # Now disabled, should not schedule
         )
+        previous_job = updated_job.model_copy(update={"enabled": True})
+        mock_db.get_cron_job.return_value = previous_job
         mock_db.update_cron_job.return_value = updated_job
 
         with patch.object(cron_manager, "_remove_scheduled") as mock_remove:
@@ -300,11 +306,16 @@ class TestUpdateAndSyncEdgeCases:
                 result = await cron_manager.update_job(job_id, enabled=False)
 
         assert result == updated_job
+        mock_db.get_cron_job.assert_awaited_once_with(job_id)
+        mock_db.update_cron_job.assert_awaited_once_with(job_id, enabled=False)
+        assert previous_job.enabled is True
         mock_remove.assert_called_once_with(job_id)
         mock_schedule.assert_not_called()
 
     @pytest.mark.asyncio
-    async def test_sync_from_db_schedules_basic_with_handler(self, cron_manager, mock_db):
+    async def test_sync_from_db_schedules_basic_with_handler(
+        self, cron_manager, mock_db
+    ):
         """sync_from_db schedules basic jobs when their handler is registered."""
         job = CronJob(
             job_id="sync-basic",
@@ -323,7 +334,9 @@ class TestUpdateAndSyncEdgeCases:
         mock_schedule.assert_called_once_with(job)
 
     @pytest.mark.asyncio
-    async def test_sync_from_db_skips_basic_without_handler(self, cron_manager, mock_db):
+    async def test_sync_from_db_skips_basic_without_handler(
+        self, cron_manager, mock_db
+    ):
         """sync_from_db skips basic jobs that have no registered handler."""
         job = CronJob(
             job_id="orphan-basic",
@@ -341,7 +354,9 @@ class TestUpdateAndSyncEdgeCases:
         mock_schedule.assert_not_called()
 
     @pytest.mark.asyncio
-    async def test_sync_from_db_schedules_active_agent_without_handler(self, cron_manager, mock_db):
+    async def test_sync_from_db_schedules_active_agent_without_handler(
+        self, cron_manager, mock_db
+    ):
         """Active-agent jobs are scheduled regardless of handler registration."""
         job = CronJob(
             job_id="sync-active",
@@ -392,7 +407,9 @@ class TestScheduleJobTriggers:
         assert aps_job.trigger.interval.total_seconds() == 600
 
     @pytest.mark.asyncio
-    async def test_schedule_invalid_cron_raises_scheduling_error(self, cron_manager, mock_context):
+    async def test_schedule_invalid_cron_raises_scheduling_error(
+        self, cron_manager, mock_context
+    ):
         """An invalid cron expression raises CronJobSchedulingError."""
         job = CronJob(
             job_id="bad-cron",
@@ -410,7 +427,9 @@ class TestScheduleJobTriggers:
             cron_manager._schedule_job(job)
 
     @pytest.mark.asyncio
-    async def test_schedule_run_once_without_run_at_raises(self, cron_manager, mock_context):
+    async def test_schedule_run_once_without_run_at_raises(
+        self, cron_manager, mock_context
+    ):
         """A run_once job without run_at in payload or expression raises CronJobSchedulingError."""
         job = CronJob(
             job_id="no-run-at",
@@ -448,3 +467,76 @@ class TestScheduleJobTriggers:
 
         assert cron_manager._started is True
         assert cron_manager.scheduler.get_job("auto-start") is not None
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("cancel_mode", ["task", "shutdown"])
+async def test_cancelled_one_shot_is_retained_with_cancelled_status(
+    temp_db, cancel_mode
+):
+    """Both cancellation paths drain cleanup and retain the cancelled one-shot."""
+    manager = CronJobManager(temp_db)
+    entered = asyncio.Event()
+    cleanup_entered = asyncio.Event()
+    allow_cleanup = asyncio.Event()
+    cleaned = asyncio.Event()
+    runs = []
+
+    async def handler(**payload):
+        assert payload == {"session": "bot:FriendMessage:alice"}
+        runs.append(payload)
+        entered.set()
+        try:
+            await asyncio.Event().wait()
+        finally:
+            cleanup_entered.set()
+            await allow_cleanup.wait()
+            cleaned.set()
+
+    job = await temp_db.create_cron_job(
+        name="Cancelled one-shot",
+        job_type="basic",
+        cron_expression=None,
+        payload={"session": "bot:FriendMessage:alice"},
+        enabled=True,
+        run_once=True,
+    )
+    manager._basic_handlers[job.job_id] = handler
+    task = asyncio.create_task(manager._run_job(job.job_id))
+    stopping = None
+    try:
+        await asyncio.wait_for(entered.wait(), 2)
+        if cancel_mode == "shutdown":
+            stopping = asyncio.create_task(manager.shutdown())
+        else:
+            task.cancel()
+        await asyncio.wait_for(cleanup_entered.wait(), 2)
+        assert not task.done()
+        assert not cleaned.is_set()
+        if stopping is not None:
+            assert not stopping.done()
+            await asyncio.wait_for(manager._run_job(job.job_id), 2)
+            assert len(runs) == 1
+        assert (await temp_db.get_cron_job(job.job_id)).status == "running"
+        allow_cleanup.set()
+        if stopping is not None:
+            await asyncio.wait_for(stopping, 2)
+        with pytest.raises(asyncio.CancelledError):
+            await asyncio.wait_for(task, 2)
+    finally:
+        allow_cleanup.set()
+        if stopping is not None:
+            await asyncio.gather(stopping, return_exceptions=True)
+        if not task.done():
+            task.cancel()
+        await asyncio.gather(task, return_exceptions=True)
+
+    saved = await temp_db.get_cron_job(job.job_id)
+    assert cleaned.is_set()
+    assert saved is not None
+    assert saved.status == "cancelled"
+    assert saved.run_once is True
+    assert saved.last_error is None
+    assert saved.last_run_at is not None
+    assert manager._running_tasks == {}
+    assert manager._basic_handlers[job.job_id] is handler

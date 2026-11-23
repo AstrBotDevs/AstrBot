@@ -1,6 +1,6 @@
 <script setup>
 import DOMPurify from "dompurify";
-import MarkdownIt from "markdown-it";
+import MarkdownIt from "markdown-it-ts";
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import PluginPlatformChip from "@/components/shared/PluginPlatformChip.vue";
 import { useI18n } from "@/i18n/composables";
@@ -29,7 +29,7 @@ const props = defineProps({
 
 const { tm, router } = props.state;
 const { locale } = useI18n();
-const { pluginName, pluginDesc: resolvePluginDesc, pluginPageTitle, pluginPageDescription } = usePluginI18n();
+const { pluginName, pluginDesc: resolvePluginDesc, pluginViewTitle, pluginViewDescription } = usePluginI18n();
 
 const markdown = new MarkdownIt({
   html: true,
@@ -380,7 +380,7 @@ const getHandlerCommand = (handler) =>
 
 const getHandlerDisplayName = (handler, groupKey) => {
   if (groupKey === "page") {
-    return pluginPageTitle(
+    return pluginViewTitle(
       pluginData.value,
       handler,
       handler?.title || handler?.name || handler?.page_name || tm("status.unknown"),
@@ -412,7 +412,7 @@ const toggleCommandGroup = (key) => {
 const getComponentDescription = (component) => {
   const fallback = component?.description || component?.desc || tm("status.unknown");
   if (getComponentGroupKey(component) === "page") {
-    return String(pluginPageDescription(pluginData.value, component, fallback)).trim();
+    return String(pluginViewDescription(pluginData.value, component, fallback)).trim();
   }
   return String(fallback).trim();
 };
@@ -422,7 +422,7 @@ const openComponentPage = (component) => {
   const targetPageName = component?.page_name || component?.name;
   if (!targetPluginName || !targetPageName) return;
   router.push({
-    name: "PluginPage",
+    name: "PluginView",
     params: {
       pluginName: targetPluginName,
       pageName: targetPageName,
@@ -480,6 +480,36 @@ const renderMarkdown = (source) => {
   const container = document.createElement("div");
   container.innerHTML = cleanHtml;
 
+  // Generate heading ids so README table-of-contents anchors can resolve.
+  const usedIds = new Set();
+  container.querySelectorAll("h1, h2, h3, h4, h5, h6").forEach((heading) => {
+    if (heading.id) {
+      usedIds.add(heading.id);
+      return;
+    }
+
+    const base = (heading.textContent || "")
+      .trim()
+      .toLowerCase()
+      .normalize("NFKD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .replace(/[^\p{Letter}\p{Number}\s-]/gu, "")
+      .replace(/\s+/g, "-")
+      .replace(/-+/g, "-");
+    if (!base) return;
+
+    // Increment the suffix until the candidate no longer collides with any
+    // previously assigned id (including ids coming from raw HTML headings).
+    let slug = base;
+    let suffix = 1;
+    while (usedIds.has(slug)) {
+      slug = `${base}-${suffix}`;
+      suffix += 1;
+    }
+    usedIds.add(slug);
+    heading.id = slug;
+  });
+
   container.querySelectorAll("a").forEach((link) => {
     const href = link.getAttribute("href") || "";
     if (href.startsWith("http") || href.startsWith("//")) {
@@ -489,6 +519,31 @@ const renderMarkdown = (source) => {
   });
 
   return container.innerHTML;
+};
+
+const handleDocsClick = (event) => {
+  const target = event.target instanceof Element ? event.target : null;
+  const anchor = target?.closest('a[href^="#"]');
+  if (!anchor) return;
+
+  // Never let a local hash link reach the hash-mode router, even when the
+  // fragment is empty, malformed, or has no matching heading.
+  event.preventDefault();
+
+  const rawHref = anchor.getAttribute("href") || "";
+  let targetId = "";
+  try {
+    targetId = decodeURIComponent(rawHref.slice(1));
+  } catch {
+    return;
+  }
+  if (!targetId) return;
+
+  // Scope lookup to the rendered container so the hash router is never touched.
+  const scrollTarget = event.currentTarget.querySelector(`#${CSS.escape(targetId)}`);
+  if (!scrollTarget) return;
+
+  scrollTarget.scrollIntoView({ behavior: "smooth", block: "start" });
 };
 
 const updateHeaderStuckState = () => {
@@ -701,14 +756,9 @@ onBeforeUnmount(() => {
 
 <template>
   <div ref="detailPageRef" class="plugin-detail-page">
-    <div
-      class="detail-header"
-      :class="{ 'detail-header--stuck': isHeaderStuck }"
-    >
+    <div class="detail-header" :class="{ 'detail-header--stuck': isHeaderStuck }">
       <h2 class="detail-title">
-        <button class="detail-title__parent" type="button" @click="goBack">
-          {{ detailParentTitle }}
-        </button>
+        <button class="detail-title__parent" type="button" @click="goBack"> {{ detailParentTitle }} </button>
         <v-icon icon="mdi-chevron-right" size="24" class="mx-1" />
         <span class="detail-title__current">{{ displayName }}</span>
       </h2>
@@ -716,43 +766,23 @@ onBeforeUnmount(() => {
 
     <v-card class="plugin-summary-card rounded-lg" variant="outlined">
       <v-card-text class="plugin-summary-card__body">
-        <img
-          :src="logoSrc"
-          :alt="displayName"
-          class="plugin-summary-card__icon"
-          @error="logoLoadFailed = true"
-        />
+        <img :src="logoSrc" :alt="displayName" class="plugin-summary-card__icon" @error="logoLoadFailed = true">
         <h1 class="plugin-summary-card__title">{{ displayName }}</h1>
-        <p v-if="pluginDesc" class="plugin-summary-card__desc">
-          {{ pluginDesc }}
-        </p>
+        <p v-if="pluginDesc" class="plugin-summary-card__desc"> {{ pluginDesc }} </p>
       </v-card-text>
     </v-card>
 
-    <section
-      v-if="groupedComponentSections.length"
-      id="plugin-components"
-      class="detail-section"
-    >
+    <section v-if="groupedComponentSections.length" id="plugin-components" class="detail-section">
       <h3 class="detail-section__title">{{ tm("detail.contents") }}</h3>
       <div class="handler-groups">
-        <div
-          v-for="group in groupedComponentSections"
-          :key="group.key"
-          class="handler-group"
-        >
+        <div v-for="group in groupedComponentSections" :key="group.key" class="handler-group">
           <div class="handler-group__title">
             <v-icon :icon="group.icon" size="20" />
             {{ group.title }}
-            <span class="handler-group__count">{{
-              group.components.length
-            }}</span>
+            <span class="handler-group__count">{{ group.components.length }}</span>
           </div>
           <v-card class="rounded-lg handler-card" variant="outlined">
-            <v-table
-              v-if="group.key === 'command'"
-              class="detail-info-table detail-handler-table"
-            >
+            <v-table v-if="group.key === 'command'" class="detail-info-table detail-handler-table">
               <tbody>
                 <tr
                   v-for="item in buildCommandComponentRows(group.components)"
@@ -762,13 +792,8 @@ onBeforeUnmount(() => {
                     'command-row--sub': item.kind === 'subCommand',
                   }"
                 >
-                  <td
-                    class="detail-info-table__label detail-handler-table__name"
-                  >
-                    <div
-                      class="command-cell"
-                      :style="{ paddingLeft: `${item.depth * 18}px` }"
-                    >
+                  <td class="detail-info-table__label detail-handler-table__name">
+                    <div class="command-cell" :style="{ paddingLeft: `${item.depth * 18}px` }">
                       <v-btn
                         v-if="item.kind === 'group'"
                         icon
@@ -778,17 +803,12 @@ onBeforeUnmount(() => {
                         @click="toggleCommandGroup(item.key)"
                       >
                         <v-icon size="18">
-                          {{
-                            isCommandGroupExpanded(item.key)
+                          {{ isCommandGroupExpanded(item.key)
                               ? "mdi-chevron-down"
-                              : "mdi-chevron-right"
-                          }}
+                              : "mdi-chevron-right" }}
                         </v-icon>
                       </v-btn>
-                      <span
-                        v-else-if="item.kind === 'subCommand'"
-                        class="command-cell__indent"
-                      ></span>
+                      <span v-else-if="item.kind === 'subCommand'" class="command-cell__indent"></span>
                       <code
                         :class="{
                           'command-code--group': item.kind === 'group',
@@ -802,20 +822,14 @@ onBeforeUnmount(() => {
                   <td>
                     <div class="handler-row__desc">
                       <template v-if="item.kind === 'group'">
-                        <span>{{
-                          getComponentDescription(item.component)
-                        }}</span>
+                        <span>{{ getComponentDescription(item.component) }}</span>
                         <span class="handler-row__timing">
-                          {{
-                            tm("detail.subCommandsCount", {
+                          {{ tm("detail.subCommandsCount", {
                               count: item.children.length,
-                            })
-                          }}
+                            }) }}
                         </span>
                       </template>
-                      <template v-else>
-                        {{ getComponentDescription(item.component) }}
-                      </template>
+                      <template v-else> {{ getComponentDescription(item.component) }} </template>
                     </div>
                   </td>
                 </tr>
@@ -834,12 +848,8 @@ onBeforeUnmount(() => {
                     component.cmd
                   "
                 >
-                  <td
-                    class="detail-info-table__label detail-handler-table__name"
-                  >
-                    <div>
-                      {{ getHandlerDisplayName(component, group.key) }}
-                    </div>
+                  <td class="detail-info-table__label detail-handler-table__name">
+                    <div> {{ getHandlerDisplayName(component, group.key) }} </div>
                   </td>
                   <td>
                     <div class="handler-row__desc">
@@ -906,12 +916,7 @@ onBeforeUnmount(() => {
                 <div v-else-if="row.kind === 'platforms'" class="detail-tags">
                   <PluginPlatformChip :platforms="row.value" />
                 </div>
-                <button
-                  v-else-if="row.href"
-                  class="detail-link"
-                  type="button"
-                  @click="openExternal(row.href)"
-                >
+                <button v-else-if="row.href" class="detail-link" type="button" @click="openExternal(row.href)">
                   <span>{{ row.value }}</span>
                   <v-icon icon="mdi-open-in-new" size="16" />
                 </button>
@@ -927,36 +932,22 @@ onBeforeUnmount(() => {
       <h3 class="detail-section__title">{{ tm("detail.docsTitle") }}</h3>
       <v-card class="rounded-lg docs-card" variant="outlined">
         <v-card-text>
-          <div v-if="readmeLoading" class="docs-state">
-            <v-progress-circular indeterminate color="primary" />
-          </div>
-          <v-alert v-else-if="readmeError" type="error" variant="tonal">
-            {{ readmeError }}
-          </v-alert>
-          <div v-else-if="readmeEmpty" class="text-medium-emphasis">
-            {{ tm("detail.docsEmpty") }}
-          </div>
-          <div v-else class="docs-markdown" v-html="renderedReadme"></div>
+          <div v-if="readmeLoading" class="docs-state"> <v-progress-circular indeterminate color="primary" /> </div>
+          <v-alert v-else-if="readmeError" type="error" variant="tonal"> {{ readmeError }} </v-alert>
+          <div v-else-if="readmeEmpty" class="text-medium-emphasis"> {{ tm("detail.docsEmpty") }} </div>
+          <div v-else class="docs-markdown" v-html="renderedReadme" @click="handleDocsClick"></div>
         </v-card-text>
       </v-card>
     </section>
 
     <section v-if="showChangelogSection" class="detail-section">
-      <h3 class="detail-section__title">
-        {{ tm("detail.changelogTitle") }}
-      </h3>
+      <h3 class="detail-section__title"> {{ tm("detail.changelogTitle") }} </h3>
       <v-card class="rounded-lg docs-card" variant="outlined">
         <v-card-text>
-          <div v-if="changelogLoading" class="docs-state">
-            <v-progress-circular indeterminate color="primary" />
-          </div>
-          <v-alert v-else-if="changelogError" type="error" variant="tonal">
-            {{ changelogError }}
-          </v-alert>
-          <div v-else-if="changelogEmpty" class="text-medium-emphasis">
-            {{ tm("detail.changelogEmpty") }}
-          </div>
-          <div v-else class="docs-markdown" v-html="renderedChangelog"></div>
+          <div v-if="changelogLoading" class="docs-state"> <v-progress-circular indeterminate color="primary" /> </div>
+          <v-alert v-else-if="changelogError" type="error" variant="tonal"> {{ changelogError }} </v-alert>
+          <div v-else-if="changelogEmpty" class="text-medium-emphasis"> {{ tm("detail.changelogEmpty") }} </div>
+          <div v-else class="docs-markdown" v-html="renderedChangelog" @click="handleDocsClick"></div>
         </v-card-text>
       </v-card>
     </section>
@@ -1158,10 +1149,10 @@ onBeforeUnmount(() => {
   background-color: rgba(var(--v-theme-primary), 0.1);
   border-radius: 4px;
   font-size: 0.9em;
-  overflow: hidden;
+  min-width: 0;
+  overflow-wrap: anywhere;
   padding: 2px 6px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  white-space: normal;
 }
 
 .command-cell code.command-code--group {
@@ -1221,6 +1212,7 @@ onBeforeUnmount(() => {
   font-weight: 700;
   line-height: 1.3;
   margin: 1.4em 0 0.6em;
+  scroll-margin-top: calc(var(--v-layout-top, 64px) + 24px);
 }
 
 .docs-markdown :deep(h1:first-child),

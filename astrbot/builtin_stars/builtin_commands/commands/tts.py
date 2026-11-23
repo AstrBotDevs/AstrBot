@@ -2,7 +2,7 @@
 
 from astrbot.api import star
 from astrbot.api.event import AstrMessageEvent, MessageEventResult
-from astrbot.core.star.session_llm_manager import SessionServiceManager
+from astrbot.core.session_overrides import update_overrides
 
 
 class TTSCommand:
@@ -14,23 +14,10 @@ class TTSCommand:
     async def tts(self, event: AstrMessageEvent) -> None:
         """开关文本转语音(会话级别)"""
         umo = event.unified_msg_origin
-        ses_tts = await SessionServiceManager.is_tts_enabled_for_session(umo)
         cfg = self.context.get_config(umo=umo)
-        tts_enable = cfg["provider_tts_settings"]["enable"]
-
-        # 切换状态
-        new_status = not ses_tts
-        await SessionServiceManager.set_tts_status_for_session(umo, new_status)
-
+        new_status = not bool(cfg["provider_tts_settings"]["enable"])
+        await update_overrides(umo, {"provider_tts_settings.enable": new_status})
         status_text = "已开启" if new_status else "已关闭"
-
-        if new_status and not tts_enable:
-            event.set_result(
-                MessageEventResult().message(
-                    f"{status_text}当前会话的文本转语音｡但 TTS 功能在配置中未启用,请前往 WebUI 开启｡",
-                ),
-            )
-        else:
-            event.set_result(
-                MessageEventResult().message(f"{status_text}当前会话的文本转语音｡"),
-            )
+        event.set_result(
+            MessageEventResult().message(f"{status_text}当前会话的文本转语音。")
+        )

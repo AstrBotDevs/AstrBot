@@ -1,6 +1,5 @@
 import asyncio
-from typing import Any
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, patch
 
 import pytest
 import pytest_asyncio
@@ -9,6 +8,7 @@ from astrbot.core import LogBroker
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle, LifecycleState
 from astrbot.core.db.sqlite import SQLiteDatabase
 from astrbot.core.exceptions import KnowledgeBaseUploadError
+from astrbot.core.knowledge_base.kb_helper import KBHelper
 from astrbot.core.knowledge_base.models import KBDocument
 from astrbot.core.utils.auth_password import (
     hash_dashboard_password,
@@ -22,34 +22,17 @@ _TEST_DASHBOARD_PASSWORD = "AstrbotTest123"
 
 
 @pytest_asyncio.fixture(scope="module")
-async def core_lifecycle_td(tmp_path_factory):
+async def core_lifecycle_td(tmp_path_factory, dashboard_test_config):
     """Creates and initializes a core lifecycle instance with a temporary database."""
     tmp_db_path = tmp_path_factory.mktemp("data") / "test_data_kb.db"
     db = SQLiteDatabase(str(tmp_db_path))
     log_broker = LogBroker()
     core_lifecycle = AstrBotCoreLifecycle(log_broker, db)
-    await core_lifecycle.initialize()
-
-    # Override the dashboard password with a known test value so that
-    # _resolve_dashboard_password can return "astrbot-test-password"
-    # and the login endpoint will verify correctly regardless of what
-    # the real config file contains.
-    core_lifecycle.astrbot_config["dashboard"]["password"] = hash_dashboard_password(
-        "astrbot-test-password"
-    )
-
-    # Mark runtime as ready so the dashboard's runtime guard allows
-    # API requests through.  The full initialize() path only reaches
-    # CORE_READY; the test mocks kb_manager and does not need the
-    # heavy bootstrap_runtime() step.
+    core_lifecycle.astrbot_config = dashboard_test_config
+    await core_lifecycle.initialize_core()
     core_lifecycle._set_lifecycle_state(LifecycleState.RUNTIME_READY)
 
-    # Mock kb_manager and kb_helper
-    kb_manager: Any = MagicMock()
-    kb_helper: Any = AsyncMock()
-
-    # Configure get_kb to be an async mock that returns kb_helper
-    kb_manager.get_kb = AsyncMock(return_value=kb_helper)
+    kb_helper = AsyncMock(spec=KBHelper)
 
     # Mock upload_document return value
     mock_doc = KBDocument(
@@ -64,8 +47,6 @@ async def core_lifecycle_td(tmp_path_factory):
     )
     kb_helper.upload_document.return_value = mock_doc
 
-    # kb_manager.get_kb.return_value = kb_helper # Removed this line as it's handled above
-    core_lifecycle.kb_manager = kb_manager
     generated_password = getattr(
         core_lifecycle.astrbot_config,
         "_generated_dashboard_password",
@@ -86,14 +67,10 @@ async def core_lifecycle_td(tmp_path_factory):
     )
 
     try:
-        yield core_lifecycle
+        with patch.object(core_lifecycle.kb_manager, "get_kb", return_value=kb_helper):
+            yield core_lifecycle
     finally:
-        try:
-            _stop_res = core_lifecycle.stop()
-            if asyncio.iscoroutine(_stop_res):
-                await _stop_res
-        except Exception:
-            pass
+        await core_lifecycle.stop()
 
 
 @pytest.fixture(scope="module")
@@ -141,7 +118,7 @@ async def test_import_documents(
 ):
     """Tests the import documents functionality."""
     test_client = app.test_client()
-    kb_helper: Any = await core_lifecycle_td.kb_manager.get_kb("test_kb_id")
+    kb_helper: KBHelper = await core_lifecycle_td.kb_manager.get_kb("test_kb_id")
     kb_helper.upload_document.reset_mock()
     kb_helper.upload_document.side_effect = None
 
@@ -206,7 +183,7 @@ async def test_import_documents(
 async def test_import_documents_returns_friendly_failure_message(
     core_lifecycle_td: AstrBotCoreLifecycle,
 ):
-    kb_helper: Any = await core_lifecycle_td.kb_manager.get_kb("test_kb_id")
+    kb_helper: KBHelper = await core_lifecycle_td.kb_manager.get_kb("test_kb_id")
     kb_helper.upload_document.reset_mock()
     kb_helper.upload_document.side_effect = KnowledgeBaseUploadError(
         stage="embedding",
@@ -354,7 +331,9 @@ async def test_list_documents_trims_search_and_turns_empty_to_none():
     await service.list_documents(kb_id="kb1", page=1, page_size=10, search="   ")
 
     kb_helper.list_documents.assert_awaited_once_with(
-        offset=0, limit=10, search=None,
+        offset=0,
+        limit=10,
+        search=None,
     )
 
 
@@ -366,7 +345,10 @@ async def test_list_documents_total_comes_from_count_documents():
     kb_helper.count_documents.return_value = 42
 
     result = await service.list_documents(
-        kb_id="kb1", page=1, page_size=10, search="  foo  ",
+        kb_id="kb1",
+        page=1,
+        page_size=10,
+        search="  foo  ",
     )
 
     assert result["total"] == 42

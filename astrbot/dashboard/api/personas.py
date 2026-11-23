@@ -4,6 +4,7 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, Query, Request
 
+from astrbot.dashboard.api.payloads import json_or_empty as _json_or_empty
 from astrbot.dashboard.async_utils import run_maybe_async
 from astrbot.dashboard.responses import ApiError, ok
 from astrbot.dashboard.schemas import (
@@ -33,14 +34,6 @@ def get_service(request: Request) -> PersonaService:
 
 
 require_persona_scope = ScopeDependency("persona")
-
-
-async def _json_or_empty(request: Request) -> dict[str, Any]:
-    try:
-        data = await request.json()
-    except Exception:
-        return {}
-    return data if isinstance(data, dict) else {}
 
 
 def _model_dict(payload) -> dict[str, Any]:

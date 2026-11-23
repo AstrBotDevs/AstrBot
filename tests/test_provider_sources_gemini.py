@@ -1,6 +1,9 @@
-"""Smoke tests for ProviderGoogleGenAI."""
+"""Gemini warning filtering, client configuration, and response contracts."""
+
+import logging
+from unittest.mock import patch
+
 import pytest
-from unittest.mock import patch, MagicMock
 
 from astrbot.core.exceptions import EmptyModelOutputError
 from astrbot.core.provider.entities import LLMResponse
@@ -10,18 +13,21 @@ from astrbot.core.provider.sources.gemini_source import (
 )
 
 
-def test_gemini_import():
-    assert ProviderGoogleGenAI is not None
+@pytest.mark.parametrize(
+    ("message", "expected"),
+    [
+        ("there are non-text parts in the response", False),
+        ("there are non-text parts in the response: image", False),
+        ("some other warning", True),
+        ("request failed with HTTP 503", True),
+    ],
+)
+def test_suppress_non_text_parts_warning_filter(message, expected):
+    record = logging.LogRecord(
+        "google.genai", logging.WARNING, __file__, 1, message, (), None
+    )
 
-
-def test_suppress_non_text_parts_warning_filter():
-    flt = SuppressNonTextPartsWarning()
-    record = MagicMock()
-    record.getMessage.return_value = "there are non-text parts in the response"
-    assert flt.filter(record) is False
-
-    record.getMessage.return_value = "some other warning"
-    assert flt.filter(record) is True
+    assert SuppressNonTextPartsWarning().filter(record) is expected
 
 
 def test_gemini_categories_and_thresholds():

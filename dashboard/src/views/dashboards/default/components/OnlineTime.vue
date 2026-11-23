@@ -9,10 +9,10 @@
 
           <div class="stat-content">
             <div class="stat-title">
-              {{ tm("features.dashboard.status.uptime") }}
+              {{ tm("status.uptime") }}
             </div>
             <h3 class="uptime-value">
-              {{ stat.running || tm("features.dashboard.status.loading") }}
+              {{ stat.running || tm("status.loading") }}
             </h3>
           </div>
 
@@ -26,7 +26,7 @@
               class="blink-animation"
             />
             <span class="status-text">{{
-              tm("features.dashboard.status.online")
+              tm("status.online")
             }}</span>
           </div>
         </div>
@@ -42,7 +42,7 @@
 
           <div class="stat-content">
             <div class="stat-title">
-              {{ tm("features.dashboard.status.memoryUsage") }}
+              {{ tm("status.memoryUsage") }}
             </div>
             <div class="memory-values">
               <h3 class="memory-value">

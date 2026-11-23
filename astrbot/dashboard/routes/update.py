@@ -9,13 +9,14 @@ from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
 from astrbot.core.dashboard_assets import get_dashboard_version
 from astrbot.core.db.migration.helper import check_migration_needed_v4, do_migration_v4
 from astrbot.core.updater import AstrBotUpdater, UpdateProgress
+from astrbot.dashboard.services.task_progress import UpdateProgressMixin
 
 from .route import Response, Route, RouteContext
 
 CLEAR_SITE_DATA_HEADERS = {"Clear-Site-Data": '"cache"'}
 
 
-class UpdateRoute(Route):
+class UpdateRoute(Route, UpdateProgressMixin):
     def __init__(
         self,
         context: RouteContext,
@@ -36,48 +37,6 @@ class UpdateRoute(Route):
         self.core_lifecycle = core_lifecycle
         self.update_progress: dict[str, dict] = {}
         self.register_routes()
-
-    def _init_update_progress(self, progress_id: str, version: str) -> None:
-        self.update_progress[progress_id] = {
-            "id": progress_id,
-            "status": "running",
-            "stage": "preparing",
-            "version": version or "latest",
-            "message": "正在准备更新...",
-            "overall_percent": 0,
-            "stages": {
-                "dashboard": self._empty_stage("pending"),
-                "core": self._empty_stage("pending"),
-            },
-        }
-
-    @staticmethod
-    def _empty_stage(status: str = "pending") -> dict:
-        return {
-            "status": status,
-            "downloaded": 0,
-            "total": 0,
-            "percent": 0,
-            "speed": 0,
-        }
-
-    def _set_update_stage(
-        self,
-        progress_id: str,
-        stage: str,
-        status: str,
-        message: str,
-        overall_percent: int | None = None,
-    ) -> None:
-        progress = self.update_progress.get(progress_id)
-        if not progress:
-            return
-        progress["stage"] = stage
-        progress["message"] = message
-        progress["stages"].setdefault(stage, self._empty_stage())
-        progress["stages"][stage]["status"] = status
-        if overall_percent is not None:
-            progress["overall_percent"] = overall_percent
 
     @staticmethod
     def _normalize_percent(value) -> int:

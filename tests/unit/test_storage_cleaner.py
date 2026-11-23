@@ -5,7 +5,7 @@ Uses tmp_path for filesystem-level assertions.
 
 import os
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -225,19 +225,20 @@ class TestStorageCleanerEdgeCases:
         good = MagicMock()
         good.exists.return_value = True
         good.is_file.return_value = True
-        good.stat.return_value = os.stat_result(
-            [0, 0, 0, 0, 0, 0, 200, 0, 0, 0]
-        )
+        good.stat.return_value = os.stat_result([0, 0, 0, 0, 0, 0, 200, 0, 0, 0])
 
         size, count = StorageCleaner._summarize_files([bad, good])
         assert size == 200
         assert count == 1
 
-    def test_cleanup_handles_unlink_os_error(self, tmp_path: Path):
-        """_cleanup_target catches OSError from unlink() via mocked file."""
+    def test_cleanup_handles_unlink_os_error(self, tmp_path: Path, monkeypatch):
+        """A failed unlink preserves that file and does not stop later cleanup."""
         data = tmp_path / "data"
         logs = data / "logs"
-        _make_file(logs / "astrbot.log", 50)
+        blocked = logs / "a-blocked.log"
+        removable = logs / "z-removable.log"
+        _make_file(blocked, 50)
+        _make_file(removable, 100)
 
         cleaner = StorageCleaner(
             {"log_file_enable": False},
@@ -245,17 +246,19 @@ class TestStorageCleanerEdgeCases:
             temp_dir=data / "temp",
         )
 
-        bad_file = MagicMock()
-        bad_file.exists.return_value = True
-        bad_file.is_file.return_value = True
-        bad_file.stat.return_value = os.stat_result(
-            [0, 0, 0, 0, 0, 0, 100, 0, 0, 0]
-        )
-        bad_file.unlink.side_effect = OSError(13, "Permission denied")
-        bad_file.__eq__ = lambda self, other: False  # never in active_log_files
+        original_unlink = Path.unlink
 
-        with patch.object(cleaner, "_collect_log_files", return_value={bad_file}):
-            result = cleaner.cleanup("logs")
+        def unlink(path: Path, missing_ok: bool = False) -> None:
+            if path == blocked:
+                raise PermissionError(13, "Permission denied")
+            original_unlink(path, missing_ok=missing_ok)
+
+        monkeypatch.setattr(Path, "unlink", unlink)
+        result = cleaner.cleanup("logs")
 
         assert result["results"]["logs"]["failed_files"] == 1
-        assert result["results"]["logs"]["deleted_files"] == 0
+        assert result["results"]["logs"]["deleted_files"] == 1
+        assert result["removed_bytes"] == 100
+        assert result["status"]["logs"]["size_bytes"] == 50
+        _assert_exists(blocked, 50)
+        _assert_missing(removable)

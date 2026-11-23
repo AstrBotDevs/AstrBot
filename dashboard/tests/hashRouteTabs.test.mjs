@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import test from "node:test";
+import { test } from "vitest";
 import { EXTENSION_ROUTE_NAME } from "../src/router/routeConstants.mjs";
 import * as hashRouteTabs from "../src/utils/hashRouteTabs.mjs";
 

@@ -2,12 +2,15 @@ from __future__ import annotations
 
 import inspect
 from collections.abc import Callable
-from typing import Any
+from typing import Any, cast
 
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse, Response
 from hypercorn.asyncio import serve
 from hypercorn.config import Config as HyperConfig
+from hypercorn.typing import ASGIFramework
+
+from astrbot.core.utils.http_json import read_request_json
 
 
 class WebhookRequest:
@@ -25,12 +28,7 @@ class WebhookRequest:
         return await self._request.body()
 
     async def get_json(self, *, force: bool = False, silent: bool = False):
-        try:
-            return await self._request.json()
-        except Exception:
-            if silent:
-                return None
-            raise
+        return await read_request_json(self._request, silent=silent)
 
 
 def webhook_response_from_result(result: Any):
@@ -114,7 +112,10 @@ class FastAPIWebhookServer:
     ) -> None:
         config = HyperConfig()
         config.bind = [f"{host}:{port}"]
-        await serve(self.app, config, shutdown_trigger=shutdown_trigger)
+        # Both libraries implement ASGI; Hypercorn models its message dictionaries
+        # with TypedDicts, while Starlette uses mutable mappings in its annotations.
+        asgi_app = cast(ASGIFramework, self.app)
+        await serve(asgi_app, config, shutdown_trigger=shutdown_trigger)
 
     async def shutdown(self) -> None:
         return None

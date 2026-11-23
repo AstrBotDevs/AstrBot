@@ -4,6 +4,7 @@
 """
 
 import io
+from collections.abc import Mapping
 
 from pypdf import PdfReader
 
@@ -52,7 +53,7 @@ class PDFParser(BaseParser):
                     continue
 
                 resources = page["/Resources"]
-                if not resources:
+                if not isinstance(resources, Mapping) or not resources:
                     continue
 
                 xobject_ref = resources.get("/XObject")

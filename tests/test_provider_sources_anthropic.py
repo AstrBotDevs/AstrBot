@@ -1,14 +1,21 @@
-"""Smoke tests for ProviderAnthropic."""
-import pytest
+"""Anthropic configuration, header normalization, and response contracts."""
+
 from unittest.mock import patch
+
+import pytest
 
 from astrbot.core.exceptions import EmptyModelOutputError
 from astrbot.core.provider.entities import LLMResponse
 from astrbot.core.provider.sources.anthropic_source import ProviderAnthropic
 
 
-def test_anthropic_import():
-    assert ProviderAnthropic is not None
+def test_header_normalization_keeps_the_callers_configuration_unchanged():
+    configuration = {"custom_headers": {"X-Count": 42}}
+    normalized = ProviderAnthropic._normalize_custom_headers(configuration)
+
+    assert normalized == {"X-Count": "42"}
+    normalized["X-New"] = "local"
+    assert configuration == {"custom_headers": {"X-Count": 42}}
 
 
 @patch("astrbot.core.provider.sources.anthropic_source.create_proxy_client")
@@ -24,6 +31,7 @@ def test_anthropic_construction(mock_async_anthropic, mock_create_proxy):
     )
     assert provider.get_model() == "claude-sonnet-4-20250514"
     assert provider.base_url == "https://api.anthropic.com"
+    mock_async_anthropic.assert_not_called()
 
 
 @patch("astrbot.core.provider.sources.anthropic_source.create_proxy_client")
@@ -37,6 +45,7 @@ def test_anthropic_construction_with_api_key(mock_async_anthropic, mock_create_p
         provider_settings={},
     )
     assert provider.chosen_api_key == "test-key"
+    mock_async_anthropic.assert_called_once()
 
 
 def test_anthropic_empty_output_raises_error():

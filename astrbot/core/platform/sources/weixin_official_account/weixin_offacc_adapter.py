@@ -5,7 +5,6 @@ from collections.abc import Callable, Coroutine
 from typing import Any, override
 
 import aiofiles
-import quart
 from requests import Response
 from wechatpy import WeChatClient, create_reply, parse_message
 from wechatpy.crypto import WeChatCrypto
@@ -14,7 +13,7 @@ from wechatpy.messages import BaseMessage, ImageMessage, TextMessage, VoiceMessa
 from wechatpy.utils import check_signature
 
 from astrbot.api.event import MessageChain
-from astrbot.api.message_components import Image, Plain, Record
+from astrbot.api.message_components import BaseMessageComponent, Image, Plain, Record
 from astrbot.api.platform import (
     AstrBotMessage,
     MessageMember,
@@ -25,6 +24,9 @@ from astrbot.api.platform import (
 )
 from astrbot.core import logger
 from astrbot.core.platform.astr_message_event import MessageSesion
+from astrbot.core.platform.sources.wechatpy_utils import message_text
+from astrbot.core.platform.sources.weixin_shared import normalize_weixin_api_base
+from astrbot.core.platform.webhook_server import FastAPIWebhookServer
 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
 from astrbot.core.utils.media_utils import convert_audio_to_wav
 from astrbot.core.utils.webhook_utils import log_webhook_info
@@ -39,8 +41,11 @@ class WeixinOfficialAccountServer:
         config: dict,
         user_buffer: dict[Any, dict[str, Any]],
     ) -> None:
-        self.server = quart.Quart(__name__)
-        self.port = int(config.get("port"))
+        self.server = FastAPIWebhookServer("weixin-official-account-webhook")
+        configured_port = config.get("port")
+        if configured_port is None:
+            raise ValueError("Weixin Official Account callback port is required")
+        self.port = int(configured_port)
         self.callback_server_host = config.get("callback_server_host", "0.0.0.0")
         self.token = config.get("token")
         self.encoding_aes_key = config.get("encoding_aes_key")
@@ -65,15 +70,15 @@ class WeixinOfficialAccountServer:
         self.user_buffer: dict[str, dict[str, Any]] = user_buffer
         self.active_send_mode = False
 
-    async def verify(self):
+    async def verify(self, request):
         """内部服务器的 GET 验证入口"""
-        return await self.handle_verify(quart.request)
+        return await self.handle_verify(request)
 
     async def handle_verify(self, request) -> str:
         """处理验证请求,可被统一 webhook 入口复用
 
         Args:
-            request: Quart 请求对象
+            request: Webhook 请求对象
 
         Returns:
             验证响应
@@ -97,9 +102,9 @@ class WeixinOfficialAccountServer:
             logger.error("验证请求有效性失败,签名异常,请检查配置｡")
             return "err"
 
-    async def callback_command(self):
+    async def callback_command(self, request):
         """内部服务器的 POST 回调入口"""
-        return await self.handle_callback(quart.request)
+        return await self.handle_callback(request)
 
     def _maybe_encrypt(self, xml: str, nonce: str | None, timestamp: str | None) -> str:
         if xml and "<Encrypt>" not in xml and nonce and timestamp:
@@ -109,7 +114,7 @@ class WeixinOfficialAccountServer:
     def _preview(self, msg: BaseMessage, limit: int = 24) -> str:
         """生成消息预览文本,供占位符使用"""
         if isinstance(msg, TextMessage):
-            t = msg.content.strip()
+            t = message_text(msg, "content", "Content").strip()
             return t[:limit] + "..." if len(t) > limit else t or "空消息"
         if isinstance(msg, ImageMessage):
             return "图片"
@@ -121,7 +126,7 @@ class WeixinOfficialAccountServer:
         """处理回调请求,可被统一 webhook 入口复用
 
         Args:
-            request: Quart 请求对象
+            request: Webhook 请求对象
 
         Returns:
             响应内容
@@ -159,18 +164,21 @@ class WeixinOfficialAccountServer:
                 reply_xml = reply_obj if isinstance(reply_obj, str) else str(reply_obj)
                 return self._maybe_encrypt(reply_xml, nonce, timestamp)
 
+            def _reply_cached(cached: list[str]) -> str:
+                cached_xml = cached.pop(0)
+                if not cached:
+                    self.user_buffer.pop(from_user, None)
+                    return _reply_text(cached_xml)
+                return _reply_text(
+                    cached_xml + "\n【后续消息还在缓冲中,回复任意文字继续获取】"
+                )
+
             if state:
                 logger.debug(f"用户消息缓冲状态: user={from_user} state={state}")
                 cached = state.get("cached_xml")
                 if cached and len(cached) > 0:
                     logger.info(f"wx buffer hit on trigger: user={from_user}")
-                    cached_xml = cached.pop(0)
-                    if len(cached) == 0:
-                        self.user_buffer.pop(from_user, None)
-                        return _reply_text(cached_xml)
-                    return _reply_text(
-                        cached_xml + "\n【后续消息还在缓冲中,回复任意文字继续获取】",
-                    )
+                    return _reply_cached(cached)
                 task: asyncio.Task | None = state.get("task")
                 placeholder = f"【正在思考'{state.get('preview', '...')}'中,已思考{int(time.monotonic() - state.get('started_at', time.monotonic()))}s,回复任意文字尝试获取回复】"
                 if task and state.get("msg_id") == msg_id:
@@ -243,14 +251,7 @@ class WeixinOfficialAccountServer:
                     cached = state.get("cached_xml")
                     if cached and isinstance(cached, list) and (len(cached) > 0):
                         logger.info(f"wx buffer hit immediately: user={from_user}")
-                        cached_xml = cached.pop(0)
-                        if len(cached) == 0:
-                            self.user_buffer.pop(from_user, None)
-                            return _reply_text(cached_xml)
-                        return _reply_text(
-                            cached_xml
-                            + "\n【后续消息还在缓冲中,回复任意文字继续获取】",
-                        )
+                        return _reply_cached(cached)
                     logger.info(
                         f"wx not finished in first window; return placeholder: user={from_user} msg_id={msg_id} ",
                     )
@@ -298,11 +299,7 @@ class WeixinOfficialAccountPlatformAdapter(Platform):
         self.unified_webhook_mode = platform_config.get("unified_webhook_mode", False)
         if not self.api_base_url:
             self.api_base_url = "https://api.weixin.qq.com/cgi-bin/"
-        self.api_base_url = self.api_base_url.removesuffix("/")
-        if not self.api_base_url.endswith("/cgi-bin"):
-            self.api_base_url += "/cgi-bin"
-        if not self.api_base_url.endswith("/"):
-            self.api_base_url += "/"
+        self.api_base_url = normalize_weixin_api_base(self.api_base_url)
         self.user_buffer: dict[str, dict[str, Any]] = {}
         self.server = WeixinOfficialAccountServer(
             self._event_queue,
@@ -384,25 +381,17 @@ class WeixinOfficialAccountPlatformAdapter(Platform):
         future: asyncio.Future | None = None,
     ) -> AstrBotMessage | None:
         abm = AstrBotMessage()
+        components: list[BaseMessageComponent]
         if isinstance(msg, TextMessage):
-            abm.message_str = msg.content
+            abm.message_str = message_text(msg, "content", "Content")
             abm.self_id = str(msg.target)
-            abm.message = [Plain(msg.content)]
-            abm.type = MessageType.FRIEND_MESSAGE
-            abm.sender = MessageMember(msg.source, msg.source)
-            abm.message_id = str(msg.id)
-            abm.timestamp = msg.time
-            abm.session_id = abm.sender.user_id
+            components = [Plain(abm.message_str)]
         elif msg.type == "image":
             assert isinstance(msg, ImageMessage)
             abm.message_str = "[图片]"
             abm.self_id = str(msg.target)
-            abm.message = [Image(file=msg.image, url=msg.image)]
-            abm.type = MessageType.FRIEND_MESSAGE
-            abm.sender = MessageMember(msg.source, msg.source)
-            abm.message_id = str(msg.id)
-            abm.timestamp = msg.time
-            abm.session_id = abm.sender.user_id
+            image_url = message_text(msg, "image", "PicUrl")
+            components = [Image(file=image_url, url=image_url)]
         elif msg.type == "voice":
             assert isinstance(msg, VoiceMessage)
             resp: Response = await asyncio.get_running_loop().run_in_executor(
@@ -423,17 +412,19 @@ class WeixinOfficialAccountPlatformAdapter(Platform):
                 return None
             abm.message_str = ""
             abm.self_id = str(msg.target)
-            abm.message = [Record(file=path_wav, url=path_wav)]
-            abm.type = MessageType.FRIEND_MESSAGE
-            abm.sender = MessageMember(msg.source, msg.source)
-            abm.message_id = str(msg.id)
-            abm.timestamp = msg.time
-            abm.session_id = abm.sender.user_id
+            components = [Record(file=path_wav, url=path_wav)]
         else:
             logger.warning(f"暂未实现的事件: {msg.type}")
             if future:
                 future.set_result(None)
             return None
+        abm.message = components
+        abm.type = MessageType.FRIEND_MESSAGE
+        source_id = message_text(msg, "source", "FromUserName")
+        abm.sender = MessageMember(source_id, source_id)
+        abm.message_id = str(msg.id)
+        abm.timestamp = int(message_text(msg, "time", "CreateTime"))
+        abm.session_id = abm.sender.user_id
         abm.raw_message = {
             "message": msg,
             "future": future,
@@ -470,3 +461,33 @@ class WeixinOfficialAccountPlatformAdapter(Platform):
         except Exception as _:
             pass
         logger.info("微信公众平台 适配器已被关闭")
+
+    def create_event(
+        self, message: AstrBotMessage
+    ) -> WeixinOfficialAccountPlatformEvent:
+        """Creates a Weixin Official Account message event.
+
+        Args:
+            message: AstrBot message object to wrap.
+
+        Returns:
+            Created Weixin Official Account message event.
+
+        Raises:
+            ValueError: If the message output buffer cannot be resolved.
+        """
+        sender_id = getattr(getattr(message, "sender", None), "user_id", "")
+        buffer = self.user_buffer.get(sender_id, None)
+        if buffer is None:
+            raise ValueError(
+                "User message buffer not found: "
+                f"user={sender_id} message_id={message.message_id}"
+            )
+        return WeixinOfficialAccountPlatformEvent(
+            message_str=message.message_str,
+            message_obj=message,
+            platform_meta=self.meta(),
+            session_id=message.session_id,
+            client=self.client,
+            message_out=buffer,
+        )

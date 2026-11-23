@@ -1,47 +1,53 @@
+import wave
+from types import SimpleNamespace
+
 import pytest
 
 from astrbot.api.event import MessageChain
 from astrbot.api.message_components import Record
-from astrbot.core.platform.sources.lark import lark_adapter
 from astrbot.core.platform.sources.lark.lark_adapter import LarkPlatformAdapter
-from astrbot.core.platform.sources.line import line_adapter
 from astrbot.core.platform.sources.line.line_adapter import LinePlatformAdapter
-from astrbot.core.platform.sources.misskey import misskey_utils
 from astrbot.core.platform.sources.misskey.misskey_utils import create_file_component
-from astrbot.core.platform.sources.qqofficial import (
-    qqofficial_message_event,
-    qqofficial_platform_adapter,
-)
 from astrbot.core.platform.sources.qqofficial.qqofficial_message_event import (
     QQOfficialMessageEvent,
 )
 from astrbot.core.platform.sources.qqofficial.qqofficial_platform_adapter import (
     QQOfficialPlatformAdapter,
 )
+from astrbot.core.utils.media_utils import MediaResolver
 
-WAV_PATH = "/tmp/astrbot-platform-audio.wav"
 
-
-class FakeMediaResolver:
+@pytest.fixture
+def media_resolution(monkeypatch, tmp_path):
+    """Keep real resolver construction and isolate the media conversion boundary."""
+    destination = tmp_path / "resolved.wav"
+    with wave.open(str(destination), "wb") as output:
+        output.setparams((1, 2, 8000, 0, "NONE", "not compressed"))
+        output.writeframes(b"\x00\x00" * 80)
     calls = []
 
-    def __init__(self, media_ref: str, **kwargs) -> None:
-        self.media_ref = media_ref
-        self.kwargs = kwargs
-        self.calls.append((media_ref, kwargs))
+    async def resolve(resolver, **kwargs) -> str:
+        assert isinstance(resolver, MediaResolver)
+        calls.append(
+            (
+                resolver.media_ref,
+                {
+                    "media_type": resolver.media_type,
+                    "default_suffix": resolver.default_suffix,
+                },
+                kwargs,
+            )
+        )
+        return str(destination)
 
-    async def to_path(self, **kwargs) -> str:
-        self.calls[-1] = (*self.calls[-1], kwargs)
-        return WAV_PATH
-
-
-def _patch_resolver(monkeypatch, module) -> None:
-    FakeMediaResolver.calls = []
-    monkeypatch.setattr(module, "MediaResolver", FakeMediaResolver)
+    monkeypatch.setattr(MediaResolver, "to_path", resolve)
+    return SimpleNamespace(path=str(destination), calls=calls)
 
 
 @pytest.mark.asyncio
-async def test_line_audio_component_defers_external_conversion_to_preprocess():
+async def test_line_audio_component_defers_external_conversion_to_preprocess(
+    media_resolution,
+):
     adapter = LinePlatformAdapter.__new__(LinePlatformAdapter)
 
     record = await adapter._build_audio_component(
@@ -57,21 +63,25 @@ async def test_line_audio_component_defers_external_conversion_to_preprocess():
     assert isinstance(record, Record)
     assert record.file == "https://example.test/voice.m4a"
     assert record.url == "https://example.test/voice.m4a"
+    assert media_resolution.calls == []
 
 
 @pytest.mark.asyncio
-async def test_lark_audio_component_retains_download_for_event_cleanup(monkeypatch):
+async def test_lark_audio_component_retains_download_for_event_cleanup(
+    monkeypatch,
+    tmp_path,
+    media_resolution,
+):
     adapter = LarkPlatformAdapter.__new__(LarkPlatformAdapter)
+    source = tmp_path / "lark-source.opus"
 
-    async def fake_download_file_resource_to_temp(**kwargs):
+    async def download_resource(**kwargs):
         assert kwargs["message_type"] == "audio"
-        return "/tmp/lark-source.opus"
+        assert kwargs["message_id"] == "msg-1"
+        source.write_bytes(b"downloaded-audio-payload")
+        return str(source)
 
-    monkeypatch.setattr(
-        adapter,
-        "_download_file_resource_to_temp",
-        fake_download_file_resource_to_temp,
-    )
+    monkeypatch.setattr(adapter, "_download_file_resource_to_temp", download_resource)
 
     records = await adapter._parse_message_components(
         message_id="msg-1",
@@ -82,12 +92,16 @@ async def test_lark_audio_component_retains_download_for_event_cleanup(monkeypat
 
     assert len(records) == 1
     assert isinstance(records[0], Record)
-    assert records[0].file == "/tmp/lark-source.opus"
-    assert records[0].url == "/tmp/lark-source.opus"
+    assert records[0].file == str(source)
+    assert records[0].url == str(source)
+    assert source.read_bytes() == b"downloaded-audio-payload"
+    assert media_resolution.calls == []
 
 
 @pytest.mark.asyncio
-async def test_qqofficial_audio_attachment_defers_conversion_to_preprocess():
+async def test_qqofficial_audio_attachment_defers_conversion_to_preprocess(
+    media_resolution,
+):
     record = await QQOfficialPlatformAdapter._prepare_audio_attachment(
         "https://example.test/voice.amr",
         "voice.amr",
@@ -96,18 +110,17 @@ async def test_qqofficial_audio_attachment_defers_conversion_to_preprocess():
     assert isinstance(record, Record)
     assert record.file == "https://example.test/voice.amr"
     assert record.url == "https://example.test/voice.amr"
+    assert media_resolution.calls == []
 
 
 @pytest.mark.asyncio
-async def test_qqofficial_send_record_resolves_to_tencent_silk(monkeypatch):
-    _patch_resolver(monkeypatch, qqofficial_message_event)
-
+async def test_qqofficial_send_record_resolves_to_tencent_silk(media_resolution):
     parsed = await QQOfficialMessageEvent._parse_to_qqofficial(
         MessageChain([Record(file="voice.amr", url="https://example.test/voice.amr")])
     )
 
-    assert parsed[3] == WAV_PATH
-    assert FakeMediaResolver.calls == [
+    assert parsed[3] == media_resolution.path
+    assert media_resolution.calls == [
         (
             "https://example.test/voice.amr",
             {"media_type": "audio", "default_suffix": ".wav"},
@@ -117,9 +130,7 @@ async def test_qqofficial_send_record_resolves_to_tencent_silk(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_misskey_audio_file_component_uses_media_resolver(monkeypatch):
-    _patch_resolver(monkeypatch, misskey_utils)
-
+async def test_misskey_audio_file_component_uses_media_resolver(media_resolution):
     record, part_text = await create_file_component(
         {
             "url": "https://example.test/voice.ogg",
@@ -129,10 +140,10 @@ async def test_misskey_audio_file_component_uses_media_resolver(monkeypatch):
     )
 
     assert isinstance(record, Record)
-    assert record.file == WAV_PATH
-    assert record.url == WAV_PATH
+    assert record.file == media_resolution.path
+    assert record.url == media_resolution.path
     assert part_text == "音频[voice.ogg]"
-    assert FakeMediaResolver.calls == [
+    assert media_resolution.calls == [
         (
             "https://example.test/voice.ogg",
             {"media_type": "audio", "default_suffix": ".wav"},

@@ -1,7 +1,7 @@
 <script setup>
-import { VueMonacoEditor } from "@guolao/vue-monaco-editor";
-import MarkdownIt from "markdown-it";
+import MarkdownIt from "markdown-it-ts";
 import { computed, ref } from "vue";
+import { LazyMonacoEditor as VueMonacoEditor } from "@/components/shared/LazyMonacoEditor";
 import { useConfigTextResolver } from "@/composables/useConfigTextResolver";
 import { useI18n, useModuleI18n } from "@/i18n/composables";
 import ConfigItemRenderer from "./ConfigItemRenderer.vue";
@@ -48,6 +48,12 @@ const hintMarkdown = new MarkdownIt({
   linkify: true,
   breaks: true,
 });
+
+hintMarkdown.renderer.rules.link_open = (tokens, index, options, env, renderer) => {
+  tokens[index].attrSet("target", "_blank");
+  tokens[index].attrSet("rel", "noopener noreferrer");
+  return renderer.renderToken(tokens, index, options);
+};
 
 const renderHint = (value) => {
   const text = translateIfKey(value);
@@ -188,7 +194,7 @@ function getVisibleItemEntries(collapsed = false) {
   const sectionItems = props.metadata?.[props.metadataKey]?.items || {};
   return Object.entries(sectionItems).filter(([itemKey, itemMeta]) => {
     const isCollapsed = Boolean(itemMeta?.collapsed);
-    return isCollapsed === collapsed && shouldShowItem(itemMeta, itemKey);
+    return isCollapsed === collapsed && !itemMeta?.invisible && shouldShowItem(itemMeta, itemKey);
   });
 }
 
@@ -289,11 +295,11 @@ function getSpecialSubtype(value) {
         class="config-item"
       >
         <v-row v-if="!itemMeta?.invisible" class="config-row">
-          <v-col cols="12" sm="6" class="property-info">
+          <v-col cols="12" :sm="itemMeta?.full_width ? 12 : 6" class="property-info">
             <v-list-item density="compact">
               <v-list-item-title class="property-name">
                 {{ getItemDescription(itemKey, itemMeta) }}
-                <span class="property-key">({{ itemKey }})</span>
+                <span v-if="itemMeta?.show_key" class="property-key">({{ itemKey }})</span>
               </v-list-item-title>
 
               <v-list-item-subtitle class="property-hint">
@@ -302,7 +308,7 @@ function getSpecialSubtype(value) {
               </v-list-item-subtitle>
             </v-list-item>
           </v-col>
-          <v-col cols="12" sm="6" class="config-input">
+          <v-col cols="12" :sm="itemMeta?.full_width ? 12 : 6" class="config-input">
             <TemplateListEditor
               v-if="itemMeta?.type === 'template_list'"
               v-model="createSelectorModel(itemKey).value"
@@ -345,7 +351,7 @@ function getSpecialSubtype(value) {
         </v-row>
 
         <v-row
-          v-if="!itemMeta?.invisible && itemMeta?._special === 'select_persona' && itemKey === 'provider_settings.default_personality'"
+          v-if="!itemMeta?.invisible && itemMeta?._special === 'select_persona'"
           class="persona-preview-row"
         >
           <v-col cols="12" class="persona-preview-display">
@@ -380,7 +386,7 @@ function getSpecialSubtype(value) {
                   <v-list-item density="compact">
                     <v-list-item-title class="property-name">
                       {{ getItemDescription(itemKey, itemMeta) }}
-                      <span class="property-key">({{ itemKey }})</span>
+                      <span v-if="itemMeta?.show_key" class="property-key">({{ itemKey }})</span>
                     </v-list-item-title>
 
                     <v-list-item-subtitle class="property-hint">
@@ -432,7 +438,7 @@ function getSpecialSubtype(value) {
               </v-row>
 
               <v-row
-                v-if="!itemMeta?.invisible && itemMeta?._special === 'select_persona' && itemKey === 'provider_settings.default_personality'"
+                v-if="!itemMeta?.invisible && itemMeta?._special === 'select_persona'"
                 class="persona-preview-row"
               >
                 <v-col cols="12" class="persona-preview-display">
@@ -498,10 +504,10 @@ function getSpecialSubtype(value) {
 
 .metadata-key,
 .property-key {
-  font-size: 0.85em;
-  opacity: 0.7;
+  color: rgba(var(--v-theme-on-surface), 0.45);
+  font-size: 0.82em;
   font-weight: normal;
-  display: none;
+  margin-left: 4px;
 }
 
 .important-hint {

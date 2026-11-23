@@ -8,6 +8,7 @@ import json
 import keyword
 import logging
 import os
+import shutil
 import sys
 import tempfile
 import traceback
@@ -39,6 +40,7 @@ from astrbot.core.utils.astrbot_path import (
     get_astrbot_config_path,
     get_astrbot_path,
     get_astrbot_plugin_path,
+    get_astrbot_system_tmp_path,
     get_astrbot_temp_path,
 )
 from astrbot.core.utils.io import remove_dir
@@ -52,7 +54,7 @@ from . import StarMetadata
 from .command_management import sync_command_configs
 from .context import Context
 from .error_messages import format_plugin_error
-from .filter.permission import PermissionType, PermissionTypeFilter
+from .filter.permission import COMMAND_PERMISSION_TYPES, PermissionTypeFilter
 from .star import star_map, star_registry
 from .star_handler import EventType, star_handlers_registry
 from .updater import PLUGIN_METADATA_FILENAMES, _PluginUpdater
@@ -313,6 +315,9 @@ class PluginManager:
         dirs = os.listdir(path)
         # 遍历文件夹，找到 main.py 或者和文件夹同名的文件
         for d in dirs:
+            # Staged installs and rollback backups are not discoverable plugins.
+            if d.startswith((".plugin-install-", ".plugin-upload-", ".plugin-backup-")):
+                continue
             if os.path.isdir(os.path.join(path, d)):
                 if os.path.exists(os.path.join(path, d, "main.py")):
                     module_str = "main"
@@ -361,7 +366,8 @@ class PluginManager:
             to_update.append(target_plugin)
         else:
             for p in self.context.get_all_stars():
-                to_update.append(p.root_dir_name)
+                if p.root_dir_name is not None:
+                    to_update.append(p.root_dir_name)
         for p in to_update:
             plugin_path = os.path.join(plugin_dir, p)
             await self._ensure_plugin_requirements(plugin_path, p)
@@ -548,6 +554,14 @@ class PluginManager:
                 )
             except ValueError as exc:
                 raise Exception(f"插件元数据校验失败：{exc!s}") from exc
+            from astrbot.core.chatui import ViewSpec
+
+            raw_views = raw_metadata.get("views", raw_metadata.get("pages", []))
+            if not isinstance(raw_views, list):
+                raise ValueError("Plugin views must be a list of declarations.")
+            views = [ViewSpec.model_validate(view) for view in raw_views]
+            if len({view.name for view in views}) != len(views):
+                raise ValueError("Plugin view names must be unique.")
             metadata = StarMetadata(
                 name=raw_metadata["name"],
                 author=raw_metadata["author"],
@@ -574,9 +588,7 @@ class PluginManager:
                     if isinstance(raw_metadata.get("astrbot_version"), str)
                     else None
                 ),
-                pages=raw_metadata["pages"]
-                if isinstance(raw_metadata.get("pages"), list)
-                else [],
+                views=views,
                 i18n=PluginManager._load_plugin_i18n(plugin_path),
             )
 
@@ -1111,6 +1123,7 @@ class PluginManager:
         inactivated_llm_tools = await _get_global_list_preference(
             "inactivated_llm_tools",
         )
+        tool_states = await sp.global_get("llm_tool_states", {})
         alter_cmd = await _get_global_dict_preference("alter_cmd")
 
         plugin_modules = self._get_plugin_modules()
@@ -1121,6 +1134,7 @@ class PluginManager:
 
         # 导入插件模块，并尝试实例化插件类
         for plugin_module in plugin_modules:
+            plugin_logger = logger
             try:
                 module_str = plugin_module["module"]
                 # module_path = plugin_module['module_path']
@@ -1145,7 +1159,11 @@ class PluginManager:
                 if specified_dir_name and root_dir_name != specified_dir_name:
                     continue
 
-                logger.info("Loading plugin %s ...", root_dir_name)
+                # Use the directory name until plugin metadata is available.
+                plugin_logger = logging.LoggerAdapter(
+                    logger, {"plugin_name": root_dir_name}
+                )
+                plugin_logger.info("Loading plugin %s ...", root_dir_name)
 
                 # 尝试导入模块
                 try:
@@ -1158,8 +1176,10 @@ class PluginManager:
                     )
                 except Exception as e:
                     error_trace = traceback.format_exc()
-                    logger.error(error_trace)
-                    logger.error(f"Failed to import plugin {root_dir_name}: {e!s}")
+                    plugin_logger.error(error_trace)
+                    plugin_logger.error(
+                        f"Failed to import plugin {root_dir_name}: {e!s}"
+                    )
                     has_load_error = True
                     self.failed_plugin_dict[root_dir_name] = (
                         self._build_failed_plugin_record(
@@ -1209,13 +1229,17 @@ class PluginManager:
                             metadata.display_name = metadata_yaml.display_name
                             metadata.support_platforms = metadata_yaml.support_platforms
                             metadata.astrbot_version = metadata_yaml.astrbot_version
-                            metadata.pages = metadata_yaml.pages
+                            metadata.views = metadata_yaml.views
                             metadata.i18n = metadata_yaml.i18n
                     except Exception as e:
-                        logger.warning(
+                        plugin_logger.warning(
                             f"Failed to load metadata for plugin {root_dir_name}: "
                             f"{e!s}. Using default metadata.",
                         )
+
+                    plugin_logger = logging.LoggerAdapter(
+                        logger, {"plugin_name": metadata.name or root_dir_name}
+                    )
 
                     if not ignore_version_check:
                         is_valid, error_message = (
@@ -1229,7 +1253,7 @@ class PluginManager:
                                 or "The plugin is not compatible with the current AstrBot version.",
                             )
 
-                    logger.info(metadata)
+                    plugin_logger.info(metadata)
                     metadata.config = plugin_config
                     plugin_id = metadata.plugin_id
 
@@ -1263,7 +1287,7 @@ class PluginManager:
                             metadata.star_cls.plugin_id = plugin_id
                     else:
                         metadata.star_cls = None
-                        logger.info("Plugin %s is disabled.", metadata.name)
+                        plugin_logger.info("Plugin %s is disabled.", metadata.name)
 
                     metadata.module = module
                     metadata.root_dir_name = root_dir_name
@@ -1295,6 +1319,36 @@ class PluginManager:
                                 metadata.star_cls,
                             )
 
+                    # resolve_view() below reads `activated` to decide whether the
+                    # plugin is available, but that flag is only refreshed from
+                    # `inactivated_plugins` further down in this function. Sync it
+                    # first, otherwise the "disable then enable" path still sees the
+                    # previous False and rejects the view as unavailable.
+                    metadata.activated = not plugin_disabled
+
+                    if not plugin_disabled and metadata.star_cls is not None:
+                        from astrbot.core.chatui import resolve_view
+                        from astrbot.core.star.filter.ui_action import UIActionFilter
+
+                        action_filters = [
+                            item
+                            for handler in related_handlers
+                            for item in handler.event_filters
+                            if isinstance(item, UIActionFilter)
+                        ]
+                        for spec in metadata.views:
+                            resolve_view(
+                                metadata.module_path, spec.name, target=spec.target
+                            )
+                            for action in spec.actions:
+                                if not any(
+                                    item.action_id in (None, action)
+                                    for item in action_filters
+                                ):
+                                    raise ValueError(
+                                        f"No UI handler registered for {action}."
+                                    )
+
                     # Apply the same idempotent binding lifecycle to LLM tools.
                     for func_tool in llm_tools.func_list:
                         for ft in self._iter_concrete_llm_tools(func_tool):
@@ -1324,12 +1378,14 @@ class PluginManager:
                             if self._is_plugin_llm_tool(ft, metadata.module_path):
                                 ft.active = (
                                     not plugin_disabled
-                                    and ft.name not in inactivated_llm_tools
+                                    and llm_tools.is_tool_active(
+                                        ft, inactivated_llm_tools, tool_states
+                                    )
                                 )
 
                 else:
                     # v3.4.0 以前的方式注册插件
-                    logger.debug(
+                    plugin_logger.debug(
                         f"Plugin {path} was not registered with the decorator; "
                         "attempting the legacy loading method.",
                     )
@@ -1366,6 +1422,10 @@ class PluginManager:
                     )
                     if not metadata:
                         raise Exception(f"无法找到插件 {plugin_dir_path} 的元数据。")
+
+                    plugin_logger = logging.LoggerAdapter(
+                        logger, {"plugin_name": metadata.name or root_dir_name}
+                    )
 
                     if not ignore_version_check:
                         is_valid, error_message = (
@@ -1404,7 +1464,7 @@ class PluginManager:
                 ):
                     full_names.append(handler.handler_full_name)
 
-                    # 检查并且植入自定义的权限过滤器（alter_cmd）
+                    # Apply only explicitly saved, valid command permissions.
                     if (
                         metadata.name is not None
                         and metadata.name in alter_cmd
@@ -1412,27 +1472,25 @@ class PluginManager:
                     ):
                         cmd_type = alter_cmd[metadata.name][handler.handler_name].get(
                             "permission",
-                            "member",
                         )
+                        if cmd_type not in COMMAND_PERMISSION_TYPES:
+                            continue
                         found_permission_filter = False
                         for filter_ in handler.event_filters:
                             if isinstance(filter_, PermissionTypeFilter):
-                                if cmd_type == "admin":
-                                    filter_.permission_type = PermissionType.ADMIN
-                                else:
-                                    filter_.permission_type = PermissionType.MEMBER
+                                filter_.permission_type = COMMAND_PERMISSION_TYPES[
+                                    cmd_type
+                                ]
                                 found_permission_filter = True
                                 break
                         if not found_permission_filter:
                             handler.event_filters.append(
                                 PermissionTypeFilter(
-                                    PermissionType.ADMIN
-                                    if cmd_type == "admin"
-                                    else PermissionType.MEMBER,
+                                    COMMAND_PERMISSION_TYPES[cmd_type],
                                 ),
                             )
 
-                        logger.debug(
+                        plugin_logger.debug(
                             f"Inserted permission filter {cmd_type} into "
                             f"{metadata.name}.{handler.handler_name}.",
                         )
@@ -1448,20 +1506,30 @@ class PluginManager:
                     EventType.OnPluginLoadedEvent,
                 )
                 for handler in handlers:
+                    handler_plugin = star_map.get(handler.handler_module_path)
+                    handler_plugin_name = (
+                        handler_plugin.name if handler_plugin else None
+                    ) or handler.handler_module_path
                     try:
                         logger.info(
-                            f"hook(on_plugin_loaded) -> {star_map[handler.handler_module_path].name} - {handler.handler_name}",
+                            f"hook(on_plugin_loaded) -> {handler_plugin_name} - {handler.handler_name}",
+                            extra={"plugin_name": handler_plugin_name},
                         )
                         await handler.handler(metadata)
                     except Exception:
-                        logger.error(traceback.format_exc())
+                        logger.error(
+                            traceback.format_exc(),
+                            extra={"plugin_name": handler_plugin_name},
+                        )
 
             except BaseException as e:
-                logger.error(f"----- Failed to load plugin {root_dir_name} -----")
+                plugin_logger.error(
+                    f"----- Failed to load plugin {root_dir_name} -----"
+                )
                 errors = traceback.format_exc()
                 for line in errors.split("\n"):
-                    logger.error(f"| {line}")
-                logger.error("----------------------------------")
+                    plugin_logger.error(f"| {line}")
+                plugin_logger.error("----------------------------------")
                 has_load_error = True
                 self.failed_plugin_dict[root_dir_name] = (
                     self._build_failed_plugin_record(
@@ -1481,10 +1549,11 @@ class PluginManager:
                     inactivated_plugins,
                 )
             )
-            inactive_tool_names = set(inactivated_llm_tools)
             for func_tool in llm_tools.func_list:
                 for concrete_tool in self._iter_concrete_llm_tools(func_tool):
-                    if concrete_tool.name in inactive_tool_names:
+                    if not llm_tools.is_tool_active(
+                        concrete_tool, inactivated_llm_tools, tool_states
+                    ):
                         concrete_tool.active = False
 
         # 清除 pip.main 导致的多余的 logging handlers
@@ -1644,118 +1713,36 @@ class PluginManager:
         ignore_version_check: bool = False,
         download_url: str = "",
     ) -> dict[str, Any] | None:
-        """从仓库 URL 安装插件
-
-        从指定的仓库 URL 下载并安装插件，然后加载该插件到系统中
+        """Install or update a plugin from a repository URL.
 
         Args:
-            repo_url (str): 要安装的插件仓库 URL
-            proxy (str, optional): 用于下载的代理服务器。默认为空字符串。
-            download_url (str, optional): 插件压缩包下载地址。提供时优先从此地址下载安装包。
+            repo_url: Plugin repository URL.
+            proxy: Optional proxy prefix for repository downloads.
+            ignore_version_check: Whether to bypass AstrBot version compatibility.
+            download_url: Optional archive URL to download instead of the repository.
 
         Returns:
-            dict | None: 安装成功时返回包含插件信息的字典:
-                - repo: 插件的仓库 URL
-                - readme: README.md 文件的内容(如果存在)
-                如果找不到插件元数据则返回 None。
+            Installed plugin repository, README, and name, if registered.
 
+        Raises:
+            Exception: If downloading, validation, or loading fails.
         """
-        # this metric is for displaying plugins installation count in pages
-        asyncio.create_task(
-            Metric.upload(
-                et="install_star",
-                repo=repo_url,
-            ),
-        )
-
+        asyncio.create_task(Metric.upload(et="install_star", repo=repo_url))
         async with self._pm_lock:
-            plugin_path = ""
-            dir_name = ""
-            try:
-                if download_url:
-                    plugin_path = await self._updater.install(
-                        repo_url,
-                        proxy,
-                        download_url=download_url,
-                    )
-                else:
-                    plugin_path = await self._updater.install(repo_url, proxy)
-
-                # reload the plugin
-                dir_name = os.path.basename(plugin_path)
-                metadata_dir_name = self._get_plugin_dir_name_from_metadata(plugin_path)
-                target_plugin_path = os.path.join(
-                    self.plugin_store_path,
-                    metadata_dir_name,
+            temp_root = Path(get_astrbot_system_tmp_path())
+            temp_root.mkdir(parents=True, exist_ok=True)
+            with tempfile.TemporaryDirectory(
+                dir=temp_root, prefix=".plugin-install-"
+            ) as staging_dir:
+                plugin_path = await self._updater.install(
+                    repo_url,
+                    proxy,
+                    download_url=download_url,
+                    target_dir=Path(staging_dir) / "plugin",
                 )
-                if target_plugin_path != plugin_path and await asyncio.to_thread(
-                    os.path.exists,
-                    target_plugin_path,
-                ):
-                    raise Exception(f"安装失败：目录 {metadata_dir_name} 已存在。")
-                if target_plugin_path != plugin_path:
-                    os.rename(plugin_path, target_plugin_path)
-                    plugin_path = target_plugin_path
-                    dir_name = metadata_dir_name
-                await self._ensure_plugin_requirements(
-                    plugin_path,
-                    dir_name,
+                return await self._install_plugin_from_directory(
+                    plugin_path, ignore_version_check=ignore_version_check
                 )
-                success, error_message = await self.load(
-                    specified_dir_name=dir_name,
-                    ignore_version_check=ignore_version_check,
-                )
-                if not success:
-                    raise Exception(
-                        error_message
-                        or f"安装插件 {dir_name} 失败，请检查插件依赖或兼容性。",
-                    )
-
-                # Get the plugin metadata to return repo info
-                plugin = self.context.get_registered_star(dir_name)
-                if not plugin:
-                    # Try to find by other name if directory name doesn't match plugin name
-                    for star in self.context.get_all_stars():
-                        if star.root_dir_name == dir_name:
-                            plugin = star
-                            break
-
-                # Extract README.md content if exists
-                readme_content = None
-                readme_path = os.path.join(plugin_path, "README.md")
-                if not await asyncio.to_thread(os.path.exists, readme_path):
-                    readme_path = os.path.join(plugin_path, "readme.md")
-
-                if await asyncio.to_thread(os.path.exists, readme_path):
-                    try:
-                        async with aiofiles.open(readme_path, encoding="utf-8") as f:
-                            readme_content = await f.read()
-                    except Exception as e:
-                        logger.warning(
-                            f"Failed to read README.md for plugin {dir_name}: {e!s}",
-                        )
-
-                plugin_info = None
-                if plugin:
-                    plugin_info = {
-                        "repo": plugin.repo,
-                        "readme": readme_content,
-                        "name": plugin.name,
-                    }
-
-                return plugin_info
-            except Exception as e:
-                self._track_failed_install_dir(
-                    dir_name=dir_name,
-                    plugin_path=plugin_path,
-                    error=e,
-                )
-                if dir_name and plugin_path:
-                    logger.warning(
-                        f"Failed to install plugin {dir_name}; installation "
-                        f"directory: {plugin_path}",
-                    )
-                raise
 
     async def inspect_plugin_repository(
         self,
@@ -2099,8 +2086,11 @@ class PluginManager:
             inactivated_plugins.remove(plugin.module_path)
         await sp.global_put("inactivated_plugins", inactivated_plugins)
 
+        tool_states = await sp.global_get("llm_tool_states", {})
         for func_tool in self._iter_plugin_llm_tools(plugin.module_path):
-            func_tool.active = func_tool.name not in inactivated_llm_tools
+            func_tool.active = llm_tools.is_tool_active(
+                func_tool, inactivated_llm_tools, tool_states
+            )
 
         success, error = await self.reload(plugin_name)
         if not success:
@@ -2114,49 +2104,195 @@ class PluginManager:
         zip_file_path: str,
         ignore_version_check: bool = False,
     ):
-        dir_name = os.path.splitext(os.path.basename(zip_file_path))[0]
-        desti_dir = tempfile.mkdtemp(
-            dir=self.plugin_store_path,
-            prefix="plugin_upload_",
-        )
-        temp_desti_dir = desti_dir
-        skip_failed_tracking = False
+        """Install an uploaded archive or replace the same installed plugin.
 
-        try:
-            self._updater._extract_plugin_archive(zip_file_path, desti_dir)
-            metadata_dir_name = self._get_plugin_dir_name_from_metadata(desti_dir)
-            target_plugin_path = os.path.join(
-                self.plugin_store_path,
-                metadata_dir_name,
-            )
-            if target_plugin_path != desti_dir and await asyncio.to_thread(
-                os.path.exists,
-                target_plugin_path,
-            ):
-                skip_failed_tracking = True
-                raise Exception(f"安装失败：目录 {metadata_dir_name} 已存在。")
-            if target_plugin_path != desti_dir:
-                os.rename(desti_dir, target_plugin_path)
-                dir_name = metadata_dir_name
-                desti_dir = target_plugin_path
+        Args:
+            zip_file_path: Path to the uploaded plugin archive.
+            ignore_version_check: Whether to bypass AstrBot version compatibility.
 
-            # remove the zip
-            try:
-                os.remove(zip_file_path)
-            except BaseException as e:
-                logger.warning(f"Failed to delete the plugin archive: {e!s}")
-            await self._ensure_plugin_requirements(desti_dir, dir_name)
-            # await self.reload()
-            success, error_message = await self.load(
-                specified_dir_name=dir_name,
-                ignore_version_check=ignore_version_check,
-            )
-            if not success:
-                raise Exception(
-                    error_message
-                    or f"安装插件 {dir_name} 失败，请检查插件依赖或兼容性。",
+        Returns:
+            Installed plugin repository, README, and name, if registered.
+
+        Raises:
+            Exception: If validation, dependency installation, or loading fails.
+        """
+        async with self._pm_lock:
+            temp_root = Path(get_astrbot_system_tmp_path())
+            temp_root.mkdir(parents=True, exist_ok=True)
+            with tempfile.TemporaryDirectory(
+                dir=temp_root, prefix=".plugin-upload-"
+            ) as staging_dir:
+                plugin_path = Path(staging_dir) / "plugin"
+                self._updater._extract_plugin_archive(zip_file_path, str(plugin_path))
+                plugin_info = await self._install_plugin_from_directory(
+                    str(plugin_path), ignore_version_check=ignore_version_check
                 )
+            try:
+                Path(zip_file_path).unlink(missing_ok=True)
+            except OSError as exc:
+                logger.warning("Failed to delete the plugin archive: %s", exc)
+            if plugin_info and plugin_info.get("repo"):
+                asyncio.create_task(
+                    Metric.upload(et="install_star_f", repo=plugin_info["repo"])
+                )
+            return plugin_info
 
+    async def _install_plugin_from_directory(
+        self, plugin_path: str, ignore_version_check: bool = False
+    ):
+        """Install a staged plugin directory, restoring old code on update failure.
+
+        The caller holds the plugin manager lock and owns the staging directory.
+        Only failed first installs moved to a permanent directory are tracked.
+
+        Args:
+            plugin_path: Extracted or cloned plugin in a temporary directory.
+            ignore_version_check: Whether to bypass AstrBot version compatibility.
+
+        Returns:
+            Installed plugin repository, README, and name, if registered.
+
+        Raises:
+            Exception: If validation, dependency installation, or loading fails.
+        """
+        desti_dir = plugin_path
+        dir_name = Path(plugin_path).name
+        track_failed_install = False
+        try:
+            metadata_dir_name = self._get_plugin_dir_name_from_metadata(desti_dir)
+            plugin = next(
+                (
+                    star
+                    for star in self.context.get_all_stars()
+                    if star.name == metadata_dir_name
+                ),
+                None,
+            )
+            target_plugin_path = Path(self.plugin_store_path) / (
+                plugin.root_dir_name
+                if plugin and plugin.root_dir_name
+                else metadata_dir_name
+            )
+            if plugin and plugin.reserved:
+                raise Exception("该插件是 AstrBot 保留插件，无法更新。")
+            if target_plugin_path.exists():
+                # Only replace a directory whose metadata identifies the same plugin.
+                if (
+                    target_plugin_path.is_symlink()
+                    or not target_plugin_path.is_dir()
+                    or self._get_plugin_dir_name_from_metadata(str(target_plugin_path))
+                    != metadata_dir_name
+                ):
+                    raise Exception(
+                        f"安装失败：目录 {target_plugin_path.name} 已存在。"
+                    )
+
+                metadata = self._load_plugin_metadata(desti_dir)
+                if metadata and not ignore_version_check:
+                    is_valid, error_message = self._validate_astrbot_version_specifier(
+                        metadata.astrbot_version
+                    )
+                    if not is_valid:
+                        raise PluginVersionUnsupportedError(error_message)
+                dir_name = target_plugin_path.name
+                await self._ensure_plugin_requirements(desti_dir, dir_name)
+
+                # Finish copying the backup before removing any installed files.
+                # The system temporary directory may be on a different filesystem.
+                backup_dir = Path(
+                    tempfile.mkdtemp(
+                        dir=get_astrbot_system_tmp_path(), prefix=".plugin-backup-"
+                    )
+                )
+                backup_path = backup_dir / dir_name
+                backup_complete = False
+                keep_backup = False
+                try:
+                    if plugin:
+                        try:
+                            await self._terminate_plugin(plugin)
+                        except Exception:
+                            logger.warning(
+                                "Plugin %s did not terminate cleanly",
+                                dir_name,
+                                exc_info=True,
+                            )
+                    self._cleanup_plugin_state(dir_name)
+                    shutil.copytree(target_plugin_path, backup_path, symlinks=True)
+                    backup_complete = True
+                    keep_backup = True
+                    remove_dir(str(target_plugin_path))
+                    shutil.move(desti_dir, str(target_plugin_path))
+                    desti_dir = str(target_plugin_path)
+                    success, error_message = await self.load(
+                        specified_dir_name=dir_name,
+                        ignore_version_check=ignore_version_check,
+                    )
+                    if not success:
+                        raise Exception(error_message or f"更新插件 {dir_name} 失败。")
+                    keep_backup = False
+                except BaseException:
+                    try:
+                        self._cleanup_plugin_state(dir_name)
+                        if backup_complete:
+                            if target_plugin_path.exists():
+                                remove_dir(str(target_plugin_path))
+                            shutil.copytree(
+                                backup_path, target_plugin_path, symlinks=True
+                            )
+                        restored, restore_error = await self.load(
+                            specified_dir_name=dir_name,
+                            ignore_version_check=True,
+                        )
+                        if not restored:
+                            logger.error(
+                                "Failed to reload restored plugin %s: %s",
+                                dir_name,
+                                restore_error,
+                            )
+                        else:
+                            keep_backup = False
+                            self.failed_plugin_dict.pop(dir_name, None)
+                            self._rebuild_failed_plugin_info()
+                    except Exception:
+                        logger.exception(
+                            "Failed to restore plugin %s; backup: %s",
+                            dir_name,
+                            backup_path,
+                        )
+                    raise
+                finally:
+                    if not keep_backup:
+                        try:
+                            remove_dir(str(backup_dir))
+                        except Exception:
+                            logger.warning(
+                                "Failed to remove plugin backup %s",
+                                backup_dir,
+                                exc_info=True,
+                            )
+                    else:
+                        logger.warning(
+                            "Retained plugin backup for recovery: %s", backup_path
+                        )
+            else:
+                track_failed_install = True
+                dir_name = target_plugin_path.name
+                desti_dir = str(target_plugin_path)
+                shutil.move(plugin_path, desti_dir)
+                await self._ensure_plugin_requirements(desti_dir, dir_name)
+                success, error_message = await self.load(
+                    specified_dir_name=dir_name,
+                    ignore_version_check=ignore_version_check,
+                )
+                if not success:
+                    raise Exception(
+                        error_message
+                        or f"安装插件 {dir_name} 失败，请检查插件依赖或兼容性。"
+                    )
+
+            self.failed_plugin_dict.pop(dir_name, None)
+            self._rebuild_failed_plugin_info()
             # Get the plugin metadata to return repo info
             plugin = self.context.get_registered_star(dir_name)
             if not plugin:
@@ -2189,17 +2325,9 @@ class PluginManager:
                     "name": plugin.name,
                 }
 
-                if plugin.repo:
-                    asyncio.create_task(
-                        Metric.upload(
-                            et="install_star_f",  # install star
-                            repo=plugin.repo,
-                        ),
-                    )
-
             return plugin_info
         except Exception as e:
-            if not skip_failed_tracking:
+            if track_failed_install:
                 self._track_failed_install_dir(
                     dir_name=dir_name,
                     plugin_path=desti_dir,
@@ -2210,17 +2338,3 @@ class PluginManager:
                 f"{desti_dir}",
             )
             raise
-        finally:
-            if (
-                skip_failed_tracking or temp_desti_dir != desti_dir
-            ) and await asyncio.to_thread(
-                os.path.isdir,
-                temp_desti_dir,
-            ):
-                try:
-                    remove_dir(temp_desti_dir)
-                except Exception as e:
-                    logger.warning(
-                        "Failed to remove the temporary plugin extraction directory "
-                        f"{temp_desti_dir}: {e!s}",
-                    )

@@ -5,7 +5,7 @@
         <div class="logo-glow-ring" />
         <img
           width="110"
-          src="@/assets/images/astrbot_logo_mini.webp"
+          src="/favicon.svg"
           alt="AstrBot Logo"
           class="logo-img"
         />
@@ -124,7 +124,7 @@ const formatTitle = (title: string) => {
 }
 
 /* Dark mode: cyan glow */
-.v-theme--bluebusinessdarktheme .logo-title {
+.v-theme--BlueBusinessDarkTheme .logo-title {
   color: rgba(0, 242, 255, 0.95) !important;
   text-shadow:
     0 0 12px rgba(0, 242, 255, 0.5),
@@ -132,7 +132,7 @@ const formatTitle = (title: string) => {
 }
 
 /* Light mode: prussian blue, subtle shadow */
-.v-theme--bluebusinesstheme .logo-title {
+.v-theme--BlueBusinessTheme .logo-title {
   color: #003153 !important;
   text-shadow: 0 0 8px rgba(0, 49, 83, 0.2);
 }
@@ -146,11 +146,11 @@ const formatTitle = (title: string) => {
 }
 
 /* Dark: faint gray text; Light: dark prussian */
-.v-theme--bluebusinessdarktheme .hint-text {
+.v-theme--BlueBusinessDarkTheme .hint-text {
   color: rgba(228, 225, 230, 0.45) !important;
 }
 
-.v-theme--bluebusinesstheme .hint-text {
+.v-theme--BlueBusinessTheme .hint-text {
   color: rgba(0, 49, 83, 0.5) !important;
 }
 

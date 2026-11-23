@@ -2,15 +2,14 @@
   <BaseFolderItemSelector
     :model-value="modelValue"
     :folder-tree="folderTree"
-    :items="currentPersonas as any"
+    :items="selectablePersonas as any"
     :tree-loading="treeLoading"
     :items-loading="itemsLoading"
     :labels="labels"
     :show-create-button="true"
     :show-edit-button="true"
-    :default-item="defaultPersona"
     item-id-field="persona_id"
-    item-name-field="persona_id"
+    item-name-field="name"
     item-description-field="system_prompt"
     :display-value-formatter="formatDisplayValue"
     @update:model-value="handleUpdate"
@@ -32,10 +31,10 @@
 
 <script setup lang="ts">
 import { computed, onMounted, ref } from "vue";
+import { personaApi } from "@/api/v1";
 import BaseFolderItemSelector from "@/components/folder/BaseFolderItemSelector.vue";
 import type { FolderTreeNode, SelectableItem } from "@/components/folder/types";
 import { useI18n, useModuleI18n } from "@/i18n/composables";
-import axios from "@/utils/request";
 import PersonaForm from "./PersonaForm.vue";
 
 interface Persona {
@@ -70,13 +69,22 @@ const showPersonaDialog = ref(false);
 const editingPersona = ref<Persona | null>(null);
 const currentFolderId = ref<string | null>(null);
 
-// 默认人格
-const defaultPersona: SelectableItem = {
-  id: "default",
-  persona_id: "default",
-  name: tm("personaSelector.defaultPersona"),
-  system_prompt: "You are a helpful and friendly assistant.",
-};
+// 默认人格：映射显示名，并在根目录保持置顶（与旧版选择器行为一致）
+const selectablePersonas = computed(() => {
+  const personas = currentPersonas.value.map((persona) => ({
+    ...persona,
+    name: formatDisplayValue(persona.persona_id),
+  }));
+  if (currentFolderId.value !== null) {
+    return personas;
+  }
+  const defaultIndex = personas.findIndex((persona) => persona.persona_id === "default");
+  if (defaultIndex <= 0) {
+    return personas;
+  }
+  const [defaultPersona] = personas.splice(defaultIndex, 1);
+  return [defaultPersona, ...personas];
+});
 
 // 递归查找文件夹名称
 function findFolderName(nodes: FolderTreeNode[], folderId: string): string | null {
@@ -133,7 +141,7 @@ function handleUpdate(value: string) {
 async function loadFolderTree() {
   treeLoading.value = true;
   try {
-    const response = await axios.get("/api/persona/folder/tree");
+    const response = await personaApi.tree();
     if (response.data.status === "ok") {
       folderTree.value = response.data.data || [];
     }
@@ -157,7 +165,7 @@ async function loadPersonasInFolder(folderId: string | null) {
       // 根目录：folder_id 为空字符串表示获取根目录下的人格
       params.set("folder_id", "");
     }
-    const response = await axios.get(`/api/persona/list?${params.toString()}`);
+    const response = await personaApi.list(folderId);
     if (response.data.status === "ok") {
       currentPersonas.value = response.data.data || [];
     }

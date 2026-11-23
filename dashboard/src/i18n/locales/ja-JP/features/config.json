@@ -1,0 +1,364 @@
+{
+  "title": "設定ファイル",
+  "subtitle": "システム設定を管理します。",
+  "editor": {
+    "visual": "ビジュアル編集",
+    "code": "コード編集",
+    "revertCode": "変更前のコードに戻す",
+    "applyConfig": "この設定を適用",
+    "applyTip": "`この設定を適用` をクリックすると、設定が一時保存されてビジュアル編集に反映されます。保存するには、右下の保存ボタンをクリックしてください。"
+  },
+  "actions": {
+    "save": "設定を保存",
+    "delete": "この項目を削除",
+    "add": "追加",
+    "reset": "デフォルトに戻す",
+    "export": "設定をエクスポート",
+    "import": "設定をインポート",
+    "validate": "設定を検証",
+    "refresh": "ファイルから再読み込み"
+  },
+  "help": {
+    "documentation": "公式ドキュメント",
+    "support": "サポートコミュニティ",
+    "helpText": "設定について不明な点がある場合は、{documentation} または {support} をご覧ください。",
+    "helpPrefix": "設定について不明な点がある場合は、",
+    "helpMiddle": "または",
+    "helpSuffix": "をご覧ください。"
+  },
+  "messages": {
+    "configApplied": "設定を適用しました。保存するには、右下の保存ボタンをクリックしてください。",
+    "configApplyError": "設定を適用できませんでした。JSON の形式が正しくありません。",
+    "unsavedChangesNotice": "まだ保存されていません。右下のボタンをクリックして保存してください。",
+    "saveSuccess": "設定を保存しました。",
+    "saveError": "設定を保存できませんでした。",
+    "loadError": "設定を読み込めませんでした。",
+    "deleteSuccess": "削除しました。",
+    "deleteError": "削除できませんでした。",
+    "updateSuccess": "更新しました。",
+    "updateError": "更新できませんでした。",
+    "refreshSuccess": "ファイルから設定を再読み込みしました",
+    "refreshError": "ファイルから設定を再読み込みできませんでした"
+  },
+  "sections": {
+    "general": "一般設定",
+    "advanced": "詳細設定",
+    "security": "セキュリティ設定",
+    "appearance": "外観設定",
+    "notification": "通知設定",
+    "moreConfig": "その他の設定"
+  },
+  "general": {
+    "botName": "ボット名",
+    "language": "インターフェース言語",
+    "timezone": "タイムゾーン",
+    "autoSave": "自動保存",
+    "debugMode": "デバッグモード"
+  },
+  "advanced": {
+    "logLevel": "ログレベル",
+    "maxConnections": "最大接続数",
+    "timeout": "タイムアウト",
+    "retryAttempts": "再試行回数",
+    "cacheSize": "キャッシュサイズ"
+  },
+  "security": {
+    "apiKey": "API キー",
+    "allowedHosts": "許可するホスト",
+    "rateLimit": "レート制限",
+    "encryption": "暗号化設定"
+  },
+  "aiSettings": {
+    "title": "AI",
+    "enable": "AI を有効化",
+    "more": "その他の操作",
+    "changeRunner": "実行方式を変更",
+    "localSettingsTitle": "AstrBot 組み込み AI",
+    "settingsSuffix": "設定",
+    "tabs": {
+      "model": "モデル",
+      "persona": "ペルソナ",
+      "capabilities": "機能",
+      "advanced": "詳細設定"
+    },
+    "groups": {
+      "model": "モデル",
+      "modelHint": "組み込み AI で使用する会話モデルと再試行ポリシーを選択します。",
+      "execution": "実行設定",
+      "executionHint": "ツール呼び出しループと実行プロセスを設定します。",
+      "media": "画像と音声",
+      "mediaHint": "画像認識、音声認識、音声合成を設定します。",
+      "behavior": "メッセージ処理",
+      "behaviorHint": "これらの設定は、現在の設定ファイル内のすべての実行方式に適用されます。"
+    },
+    "common": {
+      "title": "共通設定",
+      "subtitle": "これらの設定は実行方式を切り替えても変更されません。"
+    },
+    "disabled": {
+      "title": "AI は無効です",
+      "subtitle": "モデルを必要とするメッセージを処理するには、AI を有効にしてください。"
+    },
+    "runnerDialog": {
+      "title": "実行方式を変更",
+      "subtitle": "外部 AI アプリケーションに接続する場合にのみ変更してください。ほとんどのユーザーには組み込み AI が適しています。",
+      "warningPrefix": "切り替えると、新しい実行方式のデフォルト設定が使用されます。現在の実行方式の設定は",
+      "warningEmphasis": "引き継がれません",
+      "warningSuffix": "。",
+      "confirm": "この方式を使用"
+    },
+    "runners": {
+      "astrbot": {
+        "title": "組み込み AI",
+        "summary": "モデル、ペルソナ、ナレッジベース、ツールなど、AstrBot の AI 機能を設定します。",
+        "description": "モデル、ペルソナ、ナレッジベース、ツールに対応した AstrBot 組み込み AI を使用します。"
+      },
+      "dify": {
+        "title": "Dify",
+        "summary": "現在、AI 会話は Dify アプリケーションによって処理されています。",
+        "description": "Dify アプリケーションに接続し、アクセス設定を行います。"
+      },
+      "coze": {
+        "title": "Coze",
+        "summary": "現在、AI 会話は Coze Bot によって処理されています。",
+        "description": "Coze Bot に接続し、アクセス設定を行います。"
+      },
+      "dashscope": {
+        "title": "Alibaba Cloud Model Studio",
+        "summary": "現在、AI 会話は Alibaba Cloud Model Studio アプリケーションによって処理されています。",
+        "description": "Alibaba Cloud Model Studio アプリケーションに接続し、アクセス設定を行います。"
+      },
+      "deerflow": {
+        "title": "DeerFlow",
+        "summary": "現在、AI 会話は DeerFlow によって処理されています。",
+        "description": "DeerFlow サービスに接続し、実行設定を行います。"
+      }
+    }
+  },
+  "configSelection": {
+    "selectConfig": "設定ファイルを選択",
+    "defaultConfig": "デフォルト設定ファイル",
+    "search": "設定ファイルを検索",
+    "noResults": "一致する設定ファイルがありません",
+    "normalConfig": "一般",
+    "systemConfig": "システム"
+  },
+  "search": {
+    "placeholder": "設定項目を検索（フィールド名／説明／ヒント）",
+    "noResult": "一致する設定項目が見つかりません"
+  },
+  "configManagement": {
+    "title": "設定ファイル管理",
+    "description": "AstrBot では、ボットごとに個別の設定ファイルを使用できます。デフォルトでは `default` 設定が使用されます。",
+    "newConfig": "設定ファイルを新規作成",
+    "copyConfig": "設定ファイルをコピー",
+    "editConfig": "設定ファイルを編集",
+    "manageConfigs": "設定ファイルを管理…",
+    "configName": "名前",
+    "fillConfigName": "設定ファイル名を入力",
+    "confirmDelete": "設定ファイル「{name}」を削除しますか？この操作は元に戻せません。",
+    "pleaseEnterName": "設定名を入力してください。",
+    "nameExists": "同じ名前の設定ファイルがすでに存在します。別の名前を使用してください。",
+    "createFailed": "設定ファイルを新規作成できませんでした。",
+    "copyFailed": "設定ファイルをコピーできませんでした。",
+    "deleteFailed": "設定ファイルを削除できませんでした。",
+    "updateFailed": "設定ファイルを更新できませんでした。"
+  },
+  "buttons": {
+    "cancel": "キャンセル",
+    "create": "作成",
+    "update": "更新"
+  },
+  "codeEditor": {
+    "title": "設定ファイルを編集"
+  },
+  "fileUpload": {
+    "button": "ファイルを管理",
+    "dialogTitle": "アップロード済みファイル",
+    "dropzone": "新しいファイルをアップロード",
+    "allowedTypes": "許可される形式：{types}",
+    "empty": "アップロード済みのファイルはありません",
+    "statusMissing": "ファイルが見つかりません",
+    "statusUnconfigured": "設定に追加されていません",
+    "uploadSuccess": "{count} 個のファイルをアップロードしました。",
+    "uploadFailed": "アップロードできませんでした。",
+    "loadFailed": "ファイル一覧を取得できませんでした。",
+    "fileTooLarge": "ファイルが大きすぎます（上限 {max} MB）：{name}",
+    "deleteSuccess": "ファイルを削除しました。",
+    "deleteFailed": "削除できませんでした。",
+    "addToConfig": "設定に追加しました。",
+    "fileCount": "ファイル：{count}",
+    "done": "完了"
+  },
+  "unsavedChangesWarning": {
+    "dialogTitle": "未保存の変更",
+    "leavePage": "現在の設定に未保存の変更があります。移動する前に保存しますか？",
+    "switchConfig": "設定ファイルを切り替えると、現在の未保存の変更は失われます。先に保存しますか？",
+    "options": {
+      "save": "保存",
+      "saveAndSwitch": "保存して切り替える",
+      "discardAndSwitch": "変更を破棄して切り替える",
+      "closeCard": "ポップアップを閉じる",
+      "confirm": "確定",
+      "cancel": "キャンセル",
+      "cancelReload": "再読み込みをキャンセル"
+    },
+    "reloadConfig": "ファイルから再読み込みすると、保存していない変更は失われます。続行しますか？"
+  },
+  "mappings": {
+    "source": "Session / route",
+    "perPage": "Rows per page",
+    "pageText": "{start}–{end} of {total}",
+    "title": "Manage session mappings",
+    "add": "Add mapping",
+    "back": "Back",
+    "close": "Close",
+    "search": "Search sessions, rules or profiles",
+    "groups": "Manage groups",
+    "empty": "No configuration mappings",
+    "target": "Session / group",
+    "profile": "Configuration profile",
+    "overrides": "Overrides",
+    "routeOrder": "Routing rule · #{order}",
+    "follows": "Follow routing · {name}",
+    "overrideCount": "{count} overrides",
+    "addOverride": "Add overrides",
+    "remove": "Remove mapping for {name}",
+    "session": "Session",
+    "group": "Existing group",
+    "chooseSession": "Select a session",
+    "chooseGroup": "Select a group",
+    "groupHint": "Apply the mapping to the {count} current members of this group.",
+    "destination": "Mapping destination",
+    "next": "Next",
+    "groupTargets": "{name} · {count} sessions",
+    "followRouting": "Follow configuration routing",
+    "profileHint": "Existing field overrides are preserved when selecting a profile.",
+    "batchHint": "Apply only these changes to {count} sessions and preserve other settings.",
+    "save": "Save mapping",
+    "discard": "Discard unsaved changes?",
+    "removeConfirm": "Remove the mapping for \"{name}\"? Sessions will use the remaining routing rules.",
+    "error": "Operation failed. Please try again.",
+    "selectedCount": "{count} 件のセッションを選択中",
+    "selectTargetsHint": "左側でセッションまたはグループを選択してください",
+    "addTargets": "セッション・グループを追加",
+    "groupCount": "グループ · {count} 件のセッション",
+    "removeTarget": "{name} を削除",
+    "description": "セッションごとに設定ファイルを選択したり、モデル、人格、セッションの有効・停止などを個別に設定できます。個別設定は設定ファイルより優先されます。旧「カスタムルール」はここに統合されました。"
+  },
+  "overrides": {
+    "baseProfile": "Base configuration",
+    "followsRouting": "Follow routing · {name}",
+    "moreActions": "More actions",
+    "valueCustom": "{value} · Session override",
+    "valueFollowing": "Follow profile · {value}",
+    "setForSession": "Set for this session",
+    "workspaceHint": "Set shared defaults, then make exceptions for individual sessions.",
+    "profiles": "Profiles",
+    "sessionScope": "Session overrides",
+    "sessions": "Sessions",
+    "refresh": "Refresh",
+    "intro": "Change only what this session needs. Everything else follows its profile.",
+    "chooseSession": "Choose a session",
+    "search": "Search session or alias",
+    "groups": "Session groups",
+    "allOverrides": "Configured sessions",
+    "count": "{count} overrides",
+    "noSessions": "No matching overrides. Choose a session to create one.",
+    "commandsHint": "Model and persona changes made in chat use these same overrides.",
+    "alias": "Edit alias",
+    "inherits": "Inherits from {name}",
+    "inheritanceHint": "Explicit values apply only to this session. Profile changes flow through all inherited fields.",
+    "ai": "AI & chat",
+    "plugins": "Plugins",
+    "access": "Access",
+    "onlyOverrides": "Only overridden",
+    "inheritedValue": "Profile",
+    "custom": "Overridden",
+    "follow": "Follow profile",
+    "following": "Following profile",
+    "customize": "Change",
+    "listHint": "This list replaces the profile list. An empty list clears it; use Follow profile to inherit.",
+    "noOverridesHere": "No overridden settings.",
+    "unsaved": "Unsaved changes",
+    "saved": "Up to date",
+    "saveHint": "Changes apply to new messages after saving.",
+    "resetAll": "Restore all inheritance",
+    "applyGroup": "Apply changes to group ({count})",
+    "save": "Save changes",
+    "emptyTitle": "A different setup for one session",
+    "emptyHint": "Choose a chat to adjust its model, persona or plugins. Other settings follow its configuration profile.",
+    "aliasHint": "This alias is shared across AstrBot. Save changes in the editor to apply it.",
+    "done": "Done",
+    "groupHint": "Groups organize sessions for filtering and batch updates. Membership does not create configuration inheritance.",
+    "members": "{count} sessions",
+    "edit": "Edit",
+    "delete": "Delete",
+    "groupName": "Group name",
+    "newGroup": "New group",
+    "cancel": "Cancel",
+    "saveSuccess": "Changes saved",
+    "on": "On",
+    "off": "Off",
+    "emptyValue": "Not set",
+    "allPlugins": "All available plugins",
+    "discardConfirm": "Discard unsaved changes?",
+    "resetConfirm": "Restore all fields to the profile? This takes effect when you save.",
+    "groupConfirm": "Apply only the changed fields to {count} sessions? Other overrides and aliases will be kept.",
+    "deleteGroupConfirm": "Delete group “{name}”? Sessions and their overrides will be kept.",
+    "error": "Unable to complete the request.",
+    "disabledPluginsHint": "Exclude these plugins from the allowed set. An empty list adds no restrictions.",
+    "fields": {
+      "aiEnabled": "AI replies",
+      "chatModel": "Chat model",
+      "persona": "Persona",
+      "sttEnabled": "Speech recognition",
+      "sttModel": "Speech recognition model",
+      "ttsEnabled": "Speech output",
+      "ttsModel": "Speech synthesis model",
+      "knowledgeBases": "Knowledge bases",
+      "retrievalCount": "Retrieved results",
+      "allowedPlugins": "Allowed plugins",
+      "disabledPlugins": "Disabled plugins",
+      "sessionStatus": "セッションの有効・停止",
+      "wakePrefix": "起動プレフィックス"
+    },
+    "followShort": "Inherit",
+    "otherSession": "Choose another session",
+    "showAll": "Show all settings",
+    "sections": {
+      "conversation": {
+        "title": "Conversation",
+        "hint": "Model and persona"
+      },
+      "voice": {
+        "title": "Voice",
+        "hint": "Recognition and synthesis"
+      },
+      "knowledge": {
+        "title": "Knowledge",
+        "hint": "Sources and retrieval"
+      },
+      "plugins": {
+        "title": "Plugins",
+        "hint": "Availability and exclusions"
+      },
+      "access": {
+        "title": "Access",
+        "hint": "Control session responses"
+      }
+    },
+    "batchUnchanged": "各セッションの現在の設定を維持",
+    "sessionEnabled": "有効",
+    "sessionStopped": "停止",
+    "sessionStatusHint": "停止すると、AI の返信やプラグインを含め、選択したセッションのメッセージ処理を停止します。有効にしても他のアクセスルールは適用されます。",
+    "fieldGroups": {
+      "session": "セッション",
+      "ai": "AI と会話",
+      "voice": "音声",
+      "knowledge": "ナレッジベース",
+      "plugins": "プラグイン"
+    },
+    "wakePrefixHint": "このセッションでボットを起動するメッセージの接頭辞（/ など）を設定します。設定ファイルの一覧を置き換えます。空の一覧では接頭辞で起動しませんが、メンションなどは引き続き使えます。個人チャットで接頭辞が必要かどうかは設定ファイルに従います。"
+  }
+}

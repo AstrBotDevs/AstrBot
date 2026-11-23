@@ -1,0 +1,23 @@
+
+@font-face {
+  font-family: "Material Design Icons";
+  src: url("../fonts/materialdesignicons-webfont.woff2") format("woff2");
+}
+
+.mdi:before,
+.mdi-set {
+  display: inline-block;
+  font: normal normal normal 24px/1 "Material Design Icons";
+}
+
+.mdi-home::before { content: "\F02DC"; }
+.mdi-close::before { content: "\F0156"; }
+
+.mdi-spin:before {
+  animation: mdi-spin 2s infinite linear;
+}
+
+.mdi-18px.mdi-set, .mdi-18px.mdi:before {
+  font-size: 18px;
+}
+/*# sourceMappingURL=materialdesignicons.css.map */

@@ -12,6 +12,17 @@ from astrbot.core.utils import pip_installer as pip_installer_module
 from astrbot.core.utils import requirements_utils
 from astrbot.core.utils.pip_installer import PipInstaller
 
+
+@pytest.fixture(autouse=True)
+def forbid_live_pip(monkeypatch):
+    """Require every installation path to provide an explicit local pip double."""
+
+    def reject_live_pip():
+        pytest.fail("Pip execution must be replaced by a local test double")
+
+    monkeypatch.setattr(pip_installer_module, "_get_pip_main", reject_live_pip)
+
+
 WINDOWS_RUNTIME_ROOT = ntpath.join(r"C:\astrbot-test", "backend", "python")
 WINDOWS_RUNTIME_EXECUTABLE = ntpath.join(WINDOWS_RUNTIME_ROOT, "python.exe")
 WINDOWS_PACKAGED_RUNTIME_EXECUTABLE = f"\\\\?\\{WINDOWS_RUNTIME_EXECUTABLE}"
@@ -796,7 +807,7 @@ def test_find_missing_requirements_honors_version_specifiers(monkeypatch, tmp_pa
 def test_find_missing_requirements_skips_unmatched_markers(monkeypatch, tmp_path):
     requirements_path = tmp_path / "requirements.txt"
     requirements_path.write_text(
-        'demo-package; sys_platform == "win32"\n',
+        'demo-package; sys_platform == "nonexistent_platform"\n',
         encoding="utf-8",
     )
 
@@ -1844,7 +1855,7 @@ async def test_install_logs_redacted_pip_argv_when_credentials_present(monkeypat
 
 
 @pytest.mark.asyncio
-async def test_install_does_not_add_aliyun_trusted_host_for_default_index(monkeypatch):
+async def test_install_does_not_add_trusted_host_for_default_index(monkeypatch):
     run_pip = _make_run_pip_mock()
 
     monkeypatch.setattr(PipInstaller, "_run_pip_in_process", run_pip)
@@ -1855,13 +1866,17 @@ async def test_install_does_not_add_aliyun_trusted_host_for_default_index(monkey
     run_pip.assert_awaited_once()
     recorded_args = run_pip.await_args_list[0].args[0]
 
-    assert "-i" in recorded_args
-    assert "https://pypi.org/simple" in recorded_args
-    assert "--trusted-host" not in recorded_args
+    assert recorded_args.count("-i") == 1
+    index_option = recorded_args.index("-i")
+    assert recorded_args[index_option + 1] == "https://pypi.org/simple"
+    assert not any(
+        arg == "--trusted-host" or arg.startswith("--trusted-host=")
+        for arg in recorded_args
+    )
 
 
 @pytest.mark.asyncio
-async def test_install_adds_aliyun_trusted_host_only_for_aliyun_index(monkeypatch):
+async def test_install_does_not_add_trusted_host_for_aliyun_index(monkeypatch):
     run_pip = _make_run_pip_mock()
 
     monkeypatch.setattr(PipInstaller, "_run_pip_in_process", run_pip)
@@ -1872,8 +1887,30 @@ async def test_install_adds_aliyun_trusted_host_only_for_aliyun_index(monkeypatc
     run_pip.assert_awaited_once()
     recorded_args = run_pip.await_args_list[0].args[0]
 
-    assert "-i" in recorded_args
-    assert "https://mirrors.aliyun.com/simple" in recorded_args
+    assert recorded_args.count("-i") == 1
+    index_option = recorded_args.index("-i")
+    assert recorded_args[index_option + 1] == "https://mirrors.aliyun.com/simple"
+    assert not any(
+        arg == "--trusted-host" or arg.startswith("--trusted-host=")
+        for arg in recorded_args
+    )
+
+
+@pytest.mark.asyncio
+async def test_install_keeps_explicit_trusted_host_from_pip_install_arg(monkeypatch):
+    run_pip = _make_run_pip_mock()
+
+    monkeypatch.setattr(PipInstaller, "_run_pip_in_process", run_pip)
+
+    installer = PipInstaller(
+        "--trusted-host mirrors.aliyun.com",
+        pypi_index_url="https://mirrors.aliyun.com/simple",
+    )
+    await installer.install(package_name="demo-package")
+
+    run_pip.assert_awaited_once()
+    recorded_args = run_pip.await_args_list[0].args[0]
+
     trusted_host_index = recorded_args.index("--trusted-host")
     assert recorded_args[trusted_host_index + 1] == "mirrors.aliyun.com"
 
@@ -1902,36 +1939,50 @@ class TestHasLoadedCExtension:
 
     def test_detects_pyd_extension(self, monkeypatch):
         """已加载子模块的 __file__ 为 .pyd 时应返回 True。"""
-        _set_modules(monkeypatch, {
-            "pikepdf": _make_fake_module("/site-packages/pikepdf/__init__.py"),
-            "pikepdf._core": _make_fake_module("/site-packages/pikepdf/_core.pyd"),
-        })
+        _set_modules(
+            monkeypatch,
+            {
+                "pikepdf": _make_fake_module("/site-packages/pikepdf/__init__.py"),
+                "pikepdf._core": _make_fake_module("/site-packages/pikepdf/_core.pyd"),
+            },
+        )
         assert pip_installer_module._has_loaded_c_extension("pikepdf") is True
 
     def test_detects_so_extension(self, monkeypatch):
         """已加载子模块的 __file__ 为 .so 时应返回 True。"""
-        _set_modules(monkeypatch, {
-            "pikepdf": _make_fake_module("/site-packages/pikepdf/__init__.py"),
-            "pikepdf._core": _make_fake_module("/site-packages/pikepdf/_core.cpython-311-x86_64-linux-gnu.so"),
-        })
+        _set_modules(
+            monkeypatch,
+            {
+                "pikepdf": _make_fake_module("/site-packages/pikepdf/__init__.py"),
+                "pikepdf._core": _make_fake_module(
+                    "/site-packages/pikepdf/_core.cpython-311-x86_64-linux-gnu.so"
+                ),
+            },
+        )
         assert pip_installer_module._has_loaded_c_extension("pikepdf") is True
 
     def test_detects_extension_case_insensitive(self, monkeypatch):
         """后缀比较应忽略大小写（.PYD / .SO 也视为 C 扩展）。"""
-        _set_modules(monkeypatch, {
-            "pikepdf": _make_fake_module("/site-packages/pikepdf/__init__.py"),
-            "pikepdf._core": _make_fake_module("/site-packages/pikepdf/_core.PYD"),
-        })
+        _set_modules(
+            monkeypatch,
+            {
+                "pikepdf": _make_fake_module("/site-packages/pikepdf/__init__.py"),
+                "pikepdf._core": _make_fake_module("/site-packages/pikepdf/_core.PYD"),
+            },
+        )
         assert pip_installer_module._has_loaded_c_extension("pikepdf") is True
 
     # ── 纯 Python 不受影响 ──
 
     def test_returns_false_for_pure_python(self, monkeypatch):
         """不含任何 C 扩展时应返回 False，保留原重载路径。"""
-        _set_modules(monkeypatch, {
-            "img2pdf": _make_fake_module("/site-packages/img2pdf/__init__.py"),
-            "img2pdf.core": _make_fake_module("/site-packages/img2pdf/core.py"),
-        })
+        _set_modules(
+            monkeypatch,
+            {
+                "img2pdf": _make_fake_module("/site-packages/img2pdf/__init__.py"),
+                "img2pdf.core": _make_fake_module("/site-packages/img2pdf/core.py"),
+            },
+        )
         assert pip_installer_module._has_loaded_c_extension("img2pdf") is False
 
     def test_module_not_in_sys_modules(self, monkeypatch):
@@ -1956,17 +2007,23 @@ class TestHasLoadedCExtension:
 
     def test_no_matching_keys(self, monkeypatch):
         """sys.modules 键名完全不匹配时返回 False。"""
-        _set_modules(monkeypatch, {
-            "other": _make_fake_module("/.../other.pyd"),
-        })
+        _set_modules(
+            monkeypatch,
+            {
+                "other": _make_fake_module("/.../other.pyd"),
+            },
+        )
         assert pip_installer_module._has_loaded_c_extension("target") is False
 
     def test_extension_in_parent_not_submodule(self, monkeypatch):
         """C 扩展不在 target 的子树下时不触发。"""
-        _set_modules(monkeypatch, {
-            "other.core": _make_fake_module("/.../core.pyd"),
-            "target": _make_fake_module("/.../target/__init__.py"),
-        })
+        _set_modules(
+            monkeypatch,
+            {
+                "other.core": _make_fake_module("/.../core.pyd"),
+                "target": _make_fake_module("/.../target/__init__.py"),
+            },
+        )
         assert pip_installer_module._has_loaded_c_extension("target") is False
 
     def test_empty_sys_modules(self, monkeypatch):

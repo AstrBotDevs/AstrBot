@@ -288,6 +288,8 @@ class QQOfficialChunkedUploader:
                 raise QQOfficialChunkedUploadError(f"Invalid upload part: {part!r}")
             raw_index = part.get("index") if "index" in part else part.get("part_index")
             try:
+                if raw_index is None:
+                    raise TypeError("Upload part index is missing")
                 part_indexes.append(int(raw_index))
             except (TypeError, ValueError) as exc:
                 raise QQOfficialChunkedUploadError(
@@ -317,10 +319,11 @@ class QQOfficialChunkedUploader:
                 ),
                 _MAX_RETRY_TIMEOUT_SECONDS,
             )
+            raw_retry_delay = upload_config.get("retry_delay")
             retry_delay = max(
                 float(
-                    upload_config.get("retry_delay")
-                    if upload_config.get("retry_delay") is not None
+                    raw_retry_delay
+                    if raw_retry_delay is not None
                     else _DEFAULT_RETRY_DELAY_SECONDS
                 ),
                 0.0,
@@ -412,6 +415,8 @@ class QQOfficialChunkedUploader:
         """
         raw_index = part.get("index") if "index" in part else part.get("part_index")
         try:
+            if raw_index is None:
+                raise TypeError("Upload part index is missing")
             part_index = int(raw_index)
             part_size = int(part.get("block_size") or session.block_size)
         except (TypeError, ValueError) as exc:
@@ -487,7 +492,7 @@ class QQOfficialChunkedUploader:
                     last_error = RuntimeError(
                         f"COS returned HTTP {response.status}: {response_text}"
                     )
-            except (aiohttp.ClientError, asyncio.TimeoutError, OSError) as exc:
+            except (aiohttp.ClientError, TimeoutError, OSError) as exc:
                 last_error = exc
             if attempt < _PART_PUT_ATTEMPTS - 1:
                 await asyncio.sleep(session.retry_delay)
@@ -571,7 +576,8 @@ class QQOfficialChunkedUploader:
                 route = Route(
                     method,
                     path,
-                    is_sandbox=self._http.is_sandbox,
+                    # qq-botpy types this flag as str and selects URLs by truthiness.
+                    is_sandbox="sandbox" if self._http.is_sandbox else "",
                 )
                 async with http_session.request(
                     method,
@@ -610,7 +616,7 @@ class QQOfficialChunkedUploader:
                 raise
             except QQOfficialChunkedUploadError:
                 raise
-            except (aiohttp.ClientError, asyncio.TimeoutError, OSError) as exc:
+            except (aiohttp.ClientError, TimeoutError, OSError) as exc:
                 last_error = exc
                 if attempt < _API_TRANSPORT_ATTEMPTS - 1:
                     await asyncio.sleep(min(2**attempt, 8))

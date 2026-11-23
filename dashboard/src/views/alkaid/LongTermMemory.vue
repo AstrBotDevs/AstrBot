@@ -443,22 +443,17 @@ interface RawEdgeData {
   [key: string]: unknown;
 }
 
-interface GraphNode {
+type RawGraphNode = [id: string, data: RawNodeData];
+type RawGraphEdge = [source: string, target: string, data: RawEdgeData];
+
+interface GraphNode extends d3.SimulationNodeDatum {
   id: string;
   label: string;
   color: string;
   originalData: RawNodeData;
-  // D3 simulation assigns these at runtime
-  index?: number;
-  x?: number;
-  y?: number;
-  vx?: number;
-  vy?: number;
-  fx?: number | null;
-  fy?: number | null;
 }
 
-interface GraphLink {
+interface GraphLink extends d3.SimulationLinkDatum<GraphNode> {
   source: string | GraphNode;
   target: string | GraphNode;
   color: string;
@@ -494,8 +489,8 @@ interface ApiResponse<T = unknown> {
 }
 
 interface GraphResponseData {
-  nodes?: Array<[string, RawNodeData]>;
-  edges?: Array<[string, string, RawEdgeData]>;
+  nodes?: RawGraphNode[];
+  edges?: RawGraphEdge[];
 }
 
 interface SearchResponseData {
@@ -517,8 +512,8 @@ export default defineComponent({
       svg: null as d3.Selection<SVGSVGElement, unknown, null, undefined> | null,
       zoom: null as d3.ZoomBehavior<SVGSVGElement, unknown> | null,
       g: null as d3.Selection<SVGGElement, unknown, null, undefined> | null,
-      node_data: [] as RawNodeData[],
-      edge_data: [] as RawEdgeData[],
+      node_data: [] as RawGraphNode[],
+      edge_data: [] as RawGraphEdge[],
       nodes: [] as GraphNode[],
       links: [] as GraphLink[],
       searchUserId: null as string | null,
@@ -694,16 +689,14 @@ export default defineComponent({
         .get<ApiResponse<GraphResponseData>>("/api/plug/alkaid/ltm/graph", { params })
         .then((response) => {
           const data = response.data.data || {};
-          const nodesRaw: Array<[string, RawNodeData]> = data && Array.isArray(data.nodes) ? data.nodes : [];
-          const edgesRaw: Array<[string, string, RawEdgeData]> = data && Array.isArray(data.edges) ? data.edges : [];
+          const nodesRaw = Array.isArray(data.nodes) ? data.nodes : [];
+          const edgesRaw = Array.isArray(data.edges) ? data.edges : [];
 
           this.node_data = nodesRaw;
           this.edge_data = edgesRaw;
 
           // 转换为D3所需的数据格式
-          this.nodes = nodesRaw.map((node: [string, RawNodeData]) => {
-            const nodeId = node[0];
-            const nodeData = node[1];
+          this.nodes = nodesRaw.map(([nodeId, nodeData]): GraphNode => {
             const nodeType = nodeData._label || "default";
             const color = this.nodeColors[nodeType] || this.nodeColors.default;
 
@@ -712,13 +705,10 @@ export default defineComponent({
               label: nodeData.name || nodeId.split("_")[0],
               color: color,
               originalData: nodeData,
-            } as GraphNode;
+            };
           });
 
-          this.links = edgesRaw.map((edge: [string, string, RawEdgeData]) => {
-            const sourceId = edge[0];
-            const targetId = edge[1];
-            const edgeData = edge[2];
+          this.links = edgesRaw.map(([sourceId, targetId, edgeData]): GraphLink => {
             const relationType = edgeData.relation_type || "default";
             const color = this.edgeColors[relationType] || this.edgeColors.default;
 
@@ -728,7 +718,7 @@ export default defineComponent({
               color: color,
               originalData: edgeData,
               label: relationType,
-            } as GraphLink;
+            };
           });
 
           this.updateD3Graph();
@@ -886,23 +876,23 @@ export default defineComponent({
       const width = container.clientWidth || 800;
       const height = container.clientHeight || 600;
       const svg = d3
-        .select("#graph-container")
+        .select(container)
         .append("svg")
         .attr("width", "100%")
         .attr("height", "100%")
-        .attr("viewBox", [0, 0, width, height])
-        .classed("d3-graph", true) as d3.Selection<SVGSVGElement, unknown, null, undefined>;
+        .attr("viewBox", `0 0 ${width} ${height}`)
+        .classed("d3-graph", true);
       const g = svg.append("g");
       const zoom = d3
         .zoom<SVGSVGElement, unknown>()
         .scaleExtent([0.1, 10])
         .on("zoom", (event: d3.D3ZoomEvent<SVGSVGElement, unknown>) => {
-          g.attr("transform", event.transform);
+          g.attr("transform", event.transform.toString());
         });
 
       svg.call(zoom);
       const simulation = d3
-        .forceSimulation<GraphNode>()
+        .forceSimulation<GraphNode, GraphLink>()
         .force(
           "link",
           d3
@@ -910,9 +900,9 @@ export default defineComponent({
             .id((d: GraphNode) => d.id)
             .distance(100),
         )
-        .force("charge", d3.forceManyBody().strength(-300))
-        .force("center", d3.forceCenter(width / 2, height / 2))
-        .force("collision", d3.forceCollide().radius(30));
+        .force("charge", d3.forceManyBody<GraphNode>().strength(-300))
+        .force("center", d3.forceCenter<GraphNode>(width / 2, height / 2))
+        .force("collision", d3.forceCollide<GraphNode>().radius(30));
 
       this.svg = svg;
       this.g = g;
@@ -993,7 +983,7 @@ export default defineComponent({
       // 节点绘制部分保持不变
       const node = g
         .append("g")
-        .selectAll("circle")
+        .selectAll<SVGCircleElement, GraphNode>("circle")
         .data(this.nodes)
         .join("circle")
         .attr("r", 8)
@@ -1213,7 +1203,8 @@ export default defineComponent({
 
     dragBehavior(): d3.DragBehavior<SVGCircleElement, GraphNode, GraphNode> {
       return d3
-        .drag<SVGCircleElement, GraphNode>()
+        .drag<SVGCircleElement, GraphNode, GraphNode>()
+        .subject((_event, node) => node)
         .on("start", (event: d3.D3DragEvent<SVGCircleElement, GraphNode, GraphNode>, d: GraphNode) => {
           if (!event.active) this.simulation!.alphaTarget(0.3).restart();
           d.fx = d.x;

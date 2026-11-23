@@ -1,8 +1,8 @@
 <template>
-  <MarkdownCodeBlockNode
-    :key="themeRenderKey"
+  <CodeBlockNode
     v-bind="forwardedBindings"
-    @copy="handleCopy"
+    :clipboard-writer="writeCodeToClipboard"
+    @copy="emit('copy', $event)"
   >
     <template
       v-for="(_, slotName) in $slots"
@@ -10,12 +10,12 @@
     >
       <slot :name="slotName" v-bind="slotProps || {}" />
     </template>
-  </MarkdownCodeBlockNode>
+  </CodeBlockNode>
 </template>
 
 <script setup lang="ts">
+import { CodeBlockNode, type CodeBlockNodeProps } from "markstream-vue";
 import { computed, inject, type Ref, useAttrs } from "vue";
-import { MarkdownCodeBlockNode } from "markstream-vue";
 import { copyToClipboard } from "@/utils/clipboard";
 
 defineOptions({
@@ -27,25 +27,17 @@ type MarkdownCodeBlockEmits = {
 };
 
 const props = defineProps<{
-  node: Record<string, unknown>;
+  node: CodeBlockNodeProps["node"];
   isDark?: boolean;
+  codeBlockOptions?: CodeBlockNodeProps["codeBlockOptions"];
 }>();
 
 const emit = defineEmits<MarkdownCodeBlockEmits>();
 
-const shouldUseClipboardFallback =
-  typeof window !== "undefined" &&
-  (!window.isSecureContext ||
-    typeof navigator === "undefined" ||
-    !navigator.clipboard?.writeText);
-
-function handleCopy(payload: MarkdownCodeBlockEmits["copy"][0]) {
-  if (typeof payload !== "string") return;
-
-  if (shouldUseClipboardFallback) {
-    void copyToClipboard(payload);
+async function writeCodeToClipboard(code: string) {
+  if (!(await copyToClipboard(code))) {
+    throw new Error("Failed to copy code to the clipboard");
   }
-  emit("copy", payload);
 }
 
 const injectedIsDark = inject<Ref<boolean> | boolean>("isDark");
@@ -61,6 +53,12 @@ const forwardedBindings = computed(() => ({
   ...attrs,
   ...props,
   isDark: effectiveIsDark.value,
+  codeBlockOptions: {
+    fontSize: 14,
+    overflow: "scroll",
+    diffStyle: "unified",
+    disableLineNumbers: !props.node.diff,
+    ...props.codeBlockOptions,
+  } satisfies CodeBlockNodeProps["codeBlockOptions"],
 }));
-const themeRenderKey = computed(() => (effectiveIsDark.value ? "dark" : "light"));
 </script>

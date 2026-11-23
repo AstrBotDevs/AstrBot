@@ -1,19 +1,48 @@
 import uuid
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import ClassVar, TypedDict
 
 from deprecated import deprecated
-from sqlalchemy import Index, desc
+from sqlalchemy import (
+    BigInteger,
+    CheckConstraint,
+    Column,
+    DateTime,
+    Index,
+    String,
+    desc,
+    text,
+)
 from sqlmodel import JSON, Field, SQLModel, Text, UniqueConstraint
+
+from astrbot.core.utils.event_id import new_event_id
 
 
 class TimestampMixin(SQLModel):
-    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
-    updated_at: datetime = Field(
-        default_factory=lambda: datetime.now(timezone.utc),
-        sa_column_kwargs={"onupdate": lambda: datetime.now(timezone.utc)},
+    # Preserve legacy storage instead of SQLModel's inferred UTCDateTime type.
+    created_at: datetime = Field(
+        default_factory=lambda: datetime.now(UTC),
+        sa_type=DateTime(timezone=False),
     )
+    updated_at: datetime = Field(
+        default_factory=lambda: datetime.now(UTC),
+        sa_type=DateTime(timezone=False),
+        sa_column_kwargs={"onupdate": lambda: datetime.now(UTC)},
+    )
+
+
+class AgentConfigRecord(TimestampMixin, SQLModel, table=True):
+    """Reusable agent configuration; session state is stored by its runtime."""
+
+    __tablename__: str = "agent_configs"
+
+    config_id: str = Field(default_factory=lambda: str(uuid.uuid4()), primary_key=True)
+    name: str = Field(max_length=128, nullable=False)
+    description: str = Field(default="", sa_type=Text)
+    enabled: bool = True
+    runtime: str = Field(nullable=False)
+    config: dict = Field(default_factory=dict, sa_type=JSON)
 
 
 class PlatformStat(SQLModel, table=True):
@@ -25,7 +54,7 @@ class PlatformStat(SQLModel, table=True):
     __tablename__: ClassVar[str] = "platform_stats"
 
     id: int = Field(primary_key=True, sa_column_kwargs={"autoincrement": True})
-    timestamp: datetime = Field(nullable=False)
+    timestamp: datetime = Field(nullable=False, sa_type=DateTime(timezone=False))
     platform_id: str = Field(nullable=False)
     platform_type: str = Field(nullable=False)  # such as "aiocqhttp", "slack", etc.
     count: int = Field(default=0, nullable=False)
@@ -64,8 +93,16 @@ class ProviderStat(TimestampMixin, SQLModel, table=True):
     time_to_first_token: float = Field(default=0.0, nullable=False)
 
 
-class ConversationV2(TimestampMixin, SQLModel, table=True):
-    __tablename__: ClassVar[str] = "conversations"
+@dataclass(frozen=True, slots=True)
+class ConversationRevision:
+    """Derived event head and context position observed by a reader."""
+
+    head_seq: int
+    leaf_event_id: str | None
+
+
+class ConversationData(TimestampMixin):
+    """Conversation fields retained by the legacy plugin-facing read API."""
 
     inner_conversation_id: int | None = Field(
         default=None,
@@ -90,6 +127,18 @@ class ConversationV2(TimestampMixin, SQLModel, table=True):
     when 0, will use estimated token counter.
     """
 
+
+class ConversationRead(ConversationData):
+    """Detached read result; content is None when history was not requested."""
+
+    revision: ConversationRevision
+
+
+class ConversationV2(ConversationData, table=True):
+    """Legacy table mapping used only to migrate existing data and backups."""
+
+    __tablename__: str = "conversations"
+
     __table_args__ = (
         Index(
             "ix_conversations_created_at_inner_id",
@@ -105,6 +154,57 @@ class ConversationV2(TimestampMixin, SQLModel, table=True):
         UniqueConstraint(
             "conversation_id",
             name="uix_conversation_id",
+        ),
+    )
+
+
+class ConversationV3(TimestampMixin, SQLModel, table=True):
+    """Conversation metadata; event positions are derived from the journal."""
+
+    __tablename__: str = "conversations_v3"
+
+    id: int | None = Field(default=None, primary_key=True)
+    conversation_id: str = Field(default_factory=lambda: str(uuid.uuid4()), unique=True)
+    platform_id: str
+    umo: str = Field(index=True)
+    title: str | None = None
+    persona_id: str | None = None
+
+    __table_args__ = (
+        Index("ix_conversations_v3_created_id", "created_at", "id"),
+        Index(
+            "ix_conversations_v3_platform_created_id", "platform_id", "created_at", "id"
+        ),
+    )
+
+
+class ConversationEvent(SQLModel, table=True):
+    """A context or execution record with reclaimable plugin rebase bodies."""
+
+    __tablename__: str = "conversation_events"
+
+    conversation_ref: int = Field(foreign_key="conversations_v3.id", primary_key=True)
+    seq: int = Field(primary_key=True, sa_type=BigInteger)
+    event_id: str = Field(default_factory=new_event_id, unique=True)
+    type: str
+    version: int = Field(default=1)
+    payload: dict | None = Field(
+        default_factory=dict, sa_column=Column(JSON(none_as_null=True), nullable=True)
+    )
+    created_at: datetime = Field(
+        default_factory=lambda: datetime.now(UTC),
+        sa_type=DateTime(timezone=False),
+    )
+
+    __table_args__ = (
+        CheckConstraint("seq > 0"),
+        CheckConstraint("version > 0"),
+        Index("ix_conversation_events_type_seq", "conversation_ref", "type", "seq"),
+        Index(
+            "ix_conversation_events_context_seq",
+            "conversation_ref",
+            "seq",
+            sqlite_where=text("type IN ('message.appended', 'context.rebased')"),
         ),
     )
 
@@ -204,8 +304,10 @@ class CronJob(TimestampMixin, SQLModel, table=True):
     persistent: bool = Field(default=True)
     run_once: bool = Field(default=False)
     status: str = Field(default="scheduled", max_length=32)
-    last_run_at: datetime | None = Field(default=None)
-    next_run_time: datetime | None = Field(default=None)
+    last_run_at: datetime | None = Field(default=None, sa_type=DateTime(timezone=False))
+    next_run_time: datetime | None = Field(
+        default=None, sa_type=DateTime(timezone=False)
+    )
     last_error: str | None = Field(default=None, sa_type=Text)
 
 
@@ -240,7 +342,7 @@ class PlatformMessageHistory(TimestampMixin, SQLModel, table=True):
     """This class represents the message history for a specific platform.
 
     It stores user, bot, and platform-specific messages independently from LLM
-    conversation checkpoints.
+    conversation events.
     """
 
     __tablename__: ClassVar[str] = "platform_message_history"
@@ -257,7 +359,10 @@ class PlatformMessageHistory(TimestampMixin, SQLModel, table=True):
         default=None,
     )  # Name of the sender in the platform
     content: dict = Field(sa_type=JSON, nullable=False)  # a message chain list
-    llm_checkpoint_id: str | None = Field(default=None, index=True)
+    turn_id: str | None = Field(default=None, index=True)
+    context_event_id: str | None = Field(default=None, index=True)
+    idempotency_key: str | None = Field(default=None, index=True)
+    is_active: bool = Field(default=True)
 
     __table_args__ = (
         Index(
@@ -288,10 +393,18 @@ class WebChatThread(TimestampMixin, SQLModel, table=True):
     creator: str = Field(nullable=False, index=True)
     parent_session_id: str = Field(nullable=False, index=True)
     parent_message_id: int = Field(nullable=False, index=True)
-    base_checkpoint_id: str = Field(nullable=False, index=True)
+    base_event_id: str = Field(nullable=False, index=True)
     selected_text: str = Field(sa_type=Text, nullable=False)
 
     __table_args__ = (
+        # Keep inserts compatible with legacy NOT NULL constraints without
+        # exposing the storage alias as a public SQLModel field.
+        Column(
+            "base_checkpoint_id",
+            String,
+            nullable=True,
+            default=lambda context: context.get_current_parameters()["base_event_id"],
+        ),
         UniqueConstraint(
             "thread_id",
             name="uix_webchat_thread_id",
@@ -346,7 +459,7 @@ class UmoAlias(TimestampMixin, SQLModel, table=True):
         sa_column_kwargs={"autoincrement": True},
         default=None,
     )
-    umo: str = Field(nullable=False, max_length=512, unique=True, index=True)
+    umo: str = Field(nullable=False, max_length=512)
     creator_sender_id: str = Field(nullable=False, max_length=255)
     auto_name: str | None = Field(default=None, max_length=255)
     user_alias: str | None = Field(default=None, max_length=255)
@@ -357,6 +470,19 @@ class UmoAlias(TimestampMixin, SQLModel, table=True):
             name="uix_umo_alias_umo",
         ),
     )
+
+
+class UmoSender(TimestampMixin, SQLModel, table=True):
+    """Latest sender names observed within each unified message origin."""
+
+    __tablename__: str = "umo_senders"
+
+    id: int | None = Field(default=None, primary_key=True)
+    umo: str = Field(nullable=False, max_length=512)
+    sender_id: str = Field(nullable=False, max_length=255)
+    sender_name: str = Field(default="", nullable=False, max_length=255)
+
+    __table_args__ = (UniqueConstraint("umo", "sender_id", name="uix_umo_sender"),)
 
 
 class Attachment(TimestampMixin, SQLModel, table=True):
@@ -411,9 +537,11 @@ class ApiKey(TimestampMixin, SQLModel, table=True):
     key_prefix: str = Field(max_length=24, nullable=False)
     scopes: list | None = Field(default=None, sa_type=JSON)
     created_by: str = Field(max_length=255, nullable=False)
-    last_used_at: datetime | None = Field(default=None)
-    expires_at: datetime | None = Field(default=None)
-    revoked_at: datetime | None = Field(default=None)
+    last_used_at: datetime | None = Field(
+        default=None, sa_type=DateTime(timezone=False)
+    )
+    expires_at: datetime | None = Field(default=None, sa_type=DateTime(timezone=False))
+    revoked_at: datetime | None = Field(default=None, sa_type=DateTime(timezone=False))
 
     __table_args__ = (
         UniqueConstraint(
@@ -439,7 +567,9 @@ class DashboardTrustedDevice(TimestampMixin, SQLModel, table=True):
     )
     token_hash: str = Field(max_length=64, nullable=False, unique=True, index=True)
     totp_secret_hash: str = Field(max_length=64, nullable=False, index=True)
-    expires_at: datetime = Field(nullable=False, index=True)
+    expires_at: datetime = Field(
+        nullable=False, index=True, sa_type=DateTime(timezone=False)
+    )
 
 
 class ChatUIProject(TimestampMixin, SQLModel, table=True):
@@ -508,7 +638,7 @@ class SessionProjectRelation(SQLModel, table=True):
 class CommandConfig(TimestampMixin, SQLModel, table=True):
     """Per-command configuration overrides for dashboard management."""
 
-    __tablename__ = "command_configs"
+    __tablename__: ClassVar[str] = "command_configs"
 
     handler_full_name: str = Field(
         primary_key=True,
@@ -530,7 +660,7 @@ class CommandConfig(TimestampMixin, SQLModel, table=True):
 class CommandConflict(TimestampMixin, SQLModel, table=True):
     """Conflict tracking for duplicated command names."""
 
-    __tablename__ = "command_conflicts"
+    __tablename__: ClassVar[str] = "command_conflicts"
 
     id: int | None = Field(
         default=None,
@@ -577,7 +707,9 @@ class Conversation:
     created_at: int = 0
     updated_at: int = 0
     token_usage: int = 0
-    """对话的总 token 数量｡AstrBot 会保留最近一次 LLM 请求返回的总 token 数,方便统计｡token_usage 可能为 0,表示未知｡"""
+    """对话的总 token 数量。AstrBot 会保留最近一次 LLM 请求返回的总 token 数，方便统计。token_usage 可能为 0，表示未知。"""
+    revision: ConversationRevision | None = None
+    """Read revision, absent for conversations constructed by legacy plugins."""
 
 
 class Personality(TypedDict):

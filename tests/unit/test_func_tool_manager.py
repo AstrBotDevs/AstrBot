@@ -1,89 +1,36 @@
 import asyncio
 import inspect
 import json
-from unittest.mock import AsyncMock
+import os
+from types import SimpleNamespace
+from unittest.mock import ANY, AsyncMock
 
 import pytest
 
-from astrbot.core import sp
-from astrbot.core.computer.booters.local import LocalShellComponent
-from astrbot.core.computer.computer_tool_provider import get_all_tools
-from astrbot.core.provider import func_tool_manager as ftm
-from astrbot.core.provider.func_tool_manager import FunctionToolManager
-from astrbot.core.tools.computer_tools.shell import (
+from astrbot.core.astr_agent_runtime.computer.booters.local import LocalShellComponent
+from astrbot.core.astr_agent_runtime.computer.computer_tool_provider import (
+    ComputerToolProvider,
+    get_all_tools,
+)
+from astrbot.core.astr_agent_runtime.tools.computer_tools.shell import (
     ExecuteShellTool,
     LocalExecuteShellTool,
     ShellSessionTool,
 )
-from astrbot.core.tools.message_tools import SendMessageToUserTool
-from astrbot.core.tools.web_search_tools import (
-    FirecrawlExtractWebPageTool,
-    FirecrawlWebSearchTool,
-    TavilyExtractWebPageTool,
-    TavilyWebSearchTool,
-)
+from astrbot.core.provider import func_tool_manager as ftm
+from astrbot.core.provider.func_tool_manager import FunctionToolManager
 
 
-def test_computer_tool_provider_exposes_shell_tool():
-    tools = get_all_tools()
-
-    assert "astrbot_execute_shell" in {tool.name for tool in tools}
-
-
-def test_function_tool_manager_keeps_non_builtin_list_empty():
-    manager = FunctionToolManager()
-
-    assert manager.func_list == []
-
-
-def test_function_tool_manager_resolves_cached_shell_builtin():
-    manager = FunctionToolManager()
-
-    first_tool = manager.get_func("astrbot_execute_shell")
-    second_tool = manager.get_func("astrbot_execute_shell")
-
-    assert first_tool is not None
-    assert second_tool is first_tool
-    assert manager.is_builtin_tool("astrbot_execute_shell") is True
-
-
-def test_tavily_tools_are_registered_as_builtin_tools():
-    manager = FunctionToolManager()
-
-    search_tool = manager.get_builtin_tool(TavilyWebSearchTool)
-    extract_tool = manager.get_builtin_tool(TavilyExtractWebPageTool)
-
-    assert search_tool.name == "web_search_tavily"
-    assert extract_tool.name == "tavily_extract_web_page"
-    assert manager.is_builtin_tool("web_search_tavily") is True
-    assert manager.is_builtin_tool("tavily_extract_web_page") is True
-
-
-def test_get_builtin_tool_by_class_returns_cached_instance():
-    manager = FunctionToolManager()
-
-    tool_by_class = manager.get_builtin_tool(SendMessageToUserTool)
-    tool_by_name = manager.get_builtin_tool("send_message_to_user")
-
-    assert tool_by_class is tool_by_name
-    assert manager.get_func("send_message_to_user") is tool_by_class
-    assert tool_by_class.name == "send_message_to_user"
-
-
-def test_builtin_tool_ignores_inactivated_llm_tools():
-    manager = FunctionToolManager()
-    sp.put(
-        "inactivated_llm_tools",
-        ["send_message_to_user"],
-        scope="global",
-        scope_id="global",
+@pytest.fixture
+def available_local_process_isolation(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Model isolation availability for tests with mocked shell operations."""
+    from astrbot.core.astr_agent_runtime.tools.computer_tools import (
+        util as computer_util,
     )
 
-    try:
-        tool = manager.get_builtin_tool(SendMessageToUserTool)
-        assert tool.active is True
-    finally:
-        sp.put("inactivated_llm_tools", [], scope="global", scope_id="global")
+    monkeypatch.setattr(
+        computer_util, "get_process_sandbox_status", lambda: {"status": "detected"}
+    )
 
 
 @pytest.mark.asyncio
@@ -121,15 +68,11 @@ async def test_async_tool_toggle_waits_for_preference_persistence(monkeypatch):
     )
 
 
-def test_computer_tools_are_registered_as_builtin_tools():
-    manager = FunctionToolManager()
-
-    tool = manager.get_builtin_tool(ExecuteShellTool)
+def test_sandbox_execute_shell_schema_supports_background():
+    tool = ExecuteShellTool()
 
     assert tool.name == "astrbot_execute_shell"
     assert tool.parameters["properties"]["background"]["default"] is False
-    assert manager.is_builtin_tool("astrbot_execute_shell") is True
-    assert manager.is_builtin_tool("astrbot_shell_session") is True
 
 
 def test_local_execute_shell_schema_replaces_background_with_yield():
@@ -145,6 +88,7 @@ def test_shell_session_schema_supports_line_writes():
     tool = ShellSessionTool()
 
     assert "write_line" in tool.parameters["properties"]["action"]["enum"]
+    assert tool.parameters["properties"]["yield_time_ms"]["maximum"] == 300_000
     assert (
         "LF is appended automatically"
         in tool.parameters["properties"]["chars"]["description"]
@@ -152,11 +96,17 @@ def test_shell_session_schema_supports_line_writes():
 
 
 @pytest.mark.asyncio
+@pytest.mark.skipif(os.name == "nt", reason="Restricted execution needs POSIX.")
+@pytest.mark.parametrize("allow_network", [False, True])
+@pytest.mark.usefixtures("available_local_process_isolation")
 async def test_local_execute_shell_manages_running_and_closed_results(
     monkeypatch,
     tmp_path,
+    allow_network,
 ):
-    from astrbot.core.tools.computer_tools import shell as shell_tools
+    from astrbot.core.astr_agent_runtime.tools.computer_tools import (
+        shell as shell_tools,
+    )
 
     shell = LocalShellComponent()
     shell.exec_managed = AsyncMock(
@@ -177,7 +127,17 @@ async def test_local_execute_shell_manages_running_and_closed_results(
 
     class FakeConfig:
         def get_config(self, umo):
-            return {"provider_settings": {"computer_use_runtime": "local"}}
+            return {
+                "provider_settings": {
+                    "computer_use_runtime": "local",
+                    "computer_use_local_permissions": {
+                        "admin": {
+                            "allow_network": allow_network,
+                            "filesystem_scope": "workspace",
+                        }
+                    },
+                }
+            }
 
     class FakeEvent:
         unified_msg_origin = "umo"
@@ -213,15 +173,21 @@ async def test_local_execute_shell_manages_running_and_closed_results(
     )
 
     assert json.loads(result)["session_id"] == "sh_test"
+    assert "policy_notice" not in json.loads(result)
     shell.exec_managed.assert_awaited_once_with(
         "python server.py",
         owner_id="umo",
         creator_id="admin-user",
         creator_is_admin=True,
-        sandboxed=False,
+        sandboxed=True,
+        permission_check=ANY,
+        allow_network=allow_network,
+        filesystem_scope="workspace",
+        readable_roots=ANY,
+        writable_roots=ANY,
         cwd=str(tmp_path),
         env={},
-        timeout=None,
+        timeout=300,
         yield_time_ms=250,
     )
     for status, exit_code, wall_time in (
@@ -250,13 +216,21 @@ async def test_local_execute_shell_manages_running_and_closed_results(
             f"(wall time: {wall_time}s).\nOutput:\ndone\n"
         )
 
+    monkeypatch.setattr(shell_tools, "monotonic", lambda: 0)
+    shell.exec_managed.side_effect = RuntimeError("execution failed")
+    result = await LocalExecuteShellTool().call(FakeWrapper(), command="echo done")
+    assert result == "Error executing command: execution failed"
+
 
 @pytest.mark.asyncio
+@pytest.mark.skipif(os.name == "nt", reason="Restricted execution needs POSIX.")
 async def test_local_shell_tools_fail_closed_without_sender_identity(
     monkeypatch,
     tmp_path,
 ):
-    from astrbot.core.tools.computer_tools import shell as shell_tools
+    from astrbot.core.astr_agent_runtime.tools.computer_tools import (
+        shell as shell_tools,
+    )
 
     shell = LocalShellComponent()
     shell.exec_managed = AsyncMock()
@@ -313,8 +287,150 @@ async def test_local_shell_tools_fail_closed_without_sender_identity(
 
 
 @pytest.mark.asyncio
+@pytest.mark.skipif(os.name == "nt", reason="Restricted execution needs POSIX.")
+async def test_local_member_shell_uses_sandbox_backend(
+    monkeypatch,
+    tmp_path,
+):
+    from astrbot.core.astr_agent_runtime.tools.computer_tools import (
+        shell as shell_tools,
+    )
+    from astrbot.core.astr_agent_runtime.tools.computer_tools import (
+        util as computer_util,
+    )
+
+    shell = LocalShellComponent()
+    shell.exec_managed = AsyncMock(
+        return_value={
+            "session_id": "sh_test",
+            "status": "running",
+            "stdout": "",
+            "stderr": "",
+            "exit_code": None,
+        }
+    )
+    booter = type("FakeBooter", (), {"shell": shell})()
+
+    class FakeConfig:
+        def get_config(self, umo):
+            return {
+                "provider_settings": {
+                    "computer_use_runtime": "local",
+                    "computer_use_require_admin": False,
+                }
+            }
+
+    class FakeEvent:
+        unified_msg_origin = "umo"
+        role = "member"
+
+        @staticmethod
+        def get_sender_id():
+            return "member-user"
+
+    wrapper = type(
+        "FakeWrapper",
+        (),
+        {
+            "context": type(
+                "FakeAstrContext", (), {"context": FakeConfig(), "event": FakeEvent()}
+            )()
+        },
+    )()
+
+    async def fake_get_booter(context, session_id):
+        return booter
+
+    monkeypatch.setattr(
+        computer_util, "get_process_sandbox_status", lambda: {"status": "detected"}
+    )
+    monkeypatch.setattr(shell_tools, "get_booter", fake_get_booter)
+    monkeypatch.setattr(
+        shell_tools,
+        "workspace_root_for_context",
+        AsyncMock(return_value=tmp_path),
+    )
+
+    result = await LocalExecuteShellTool().call(
+        wrapper,
+        command="python server.py",
+        yield_time_ms=250,
+    )
+
+    assert json.loads(result)["session_id"] == "sh_test"
+    shell.exec_managed.assert_awaited_once_with(
+        "python server.py",
+        owner_id="umo",
+        creator_id="member-user",
+        creator_is_admin=False,
+        cwd=str(tmp_path),
+        env={},
+        timeout=300,
+        yield_time_ms=250,
+        sandboxed=True,
+        permission_check=ANY,
+        allow_network=False,
+        filesystem_scope="workspace",
+        readable_roots=ANY,
+        writable_roots=ANY,
+    )
+
+
+@pytest.mark.asyncio
+async def test_local_member_shell_is_denied_without_supported_sandbox(monkeypatch):
+    from astrbot.core.astr_agent_runtime.tools.computer_tools import (
+        util as computer_util,
+    )
+
+    class FakeConfig:
+        def get_config(self, umo):
+            return {
+                "provider_settings": {
+                    "computer_use_runtime": "local",
+                    "computer_use_local_permissions": {
+                        "member": {
+                            "filesystem_scope": "workspace",
+                            "allow_execution": True,
+                        }
+                    },
+                }
+            }
+
+    class FakeEvent:
+        unified_msg_origin = "umo"
+        role = "member"
+
+    wrapper = type(
+        "FakeWrapper",
+        (),
+        {
+            "context": type(
+                "FakeAstrContext", (), {"context": FakeConfig(), "event": FakeEvent()}
+            )()
+        },
+    )()
+
+    monkeypatch.setattr(
+        computer_util, "get_process_sandbox_status", lambda: {"status": "unsupported"}
+    )
+
+    result = await LocalExecuteShellTool().call(wrapper, command="pwd")
+
+    assert "Local isolation unavailable" in result
+    assert "not supported on this platform" in result
+    assert "Shell execution was blocked" in result
+    assert "1. Keep the configured restrictions:" in result
+    assert "2. Allow execution without Local isolation:" in result
+    assert "Local Permission Policies" in result
+    assert "Do not bypass" not in result
+
+
+@pytest.mark.asyncio
+@pytest.mark.skipif(os.name == "nt", reason="Restricted execution needs POSIX.")
 async def test_shell_session_tool_lists_sessions_for_current_owner(monkeypatch):
-    from astrbot.core.tools.computer_tools import shell as shell_tools
+    from astrbot.core.astr_agent_runtime.tools.computer_tools import (
+        shell as shell_tools,
+    )
 
     shell = LocalShellComponent()
     shell.list_sessions = AsyncMock(
@@ -346,10 +462,7 @@ async def test_shell_session_tool_lists_sessions_for_current_owner(monkeypatch):
     class FakeWrapper:
         context = FakeAstrContext()
 
-    async def fake_get_booter(context, session_id):
-        return booter
-
-    monkeypatch.setattr(shell_tools, "get_booter", fake_get_booter)
+    monkeypatch.setattr(shell_tools, "get_local_booter", lambda: booter)
 
     result = await ShellSessionTool().call(FakeWrapper(), action="list")
 
@@ -362,6 +475,7 @@ async def test_shell_session_tool_lists_sessions_for_current_owner(monkeypatch):
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("yield_time_ms", [0, 5_000, 300_000])
 @pytest.mark.parametrize(
     ("action", "component_action"),
     [
@@ -372,16 +486,32 @@ async def test_shell_session_tool_lists_sessions_for_current_owner(monkeypatch):
         ("terminate", "terminate"),
     ],
 )
+@pytest.mark.skipif(os.name == "nt", reason="Restricted execution needs POSIX.")
+@pytest.mark.usefixtures("available_local_process_isolation")
 async def test_shell_session_tool_passes_member_identity_to_session_actions(
     monkeypatch,
     action,
     component_action,
+    yield_time_ms,
 ):
-    from astrbot.core.tools.computer_tools import shell as shell_tools
+    from astrbot.core.astr_agent_runtime.tools.computer_tools import (
+        shell as shell_tools,
+    )
 
     shell = LocalShellComponent()
     operation = AsyncMock(return_value={"session_id": "sh_test", "status": "running"})
     setattr(shell, f"{component_action}_session", operation)
+    if component_action == "write":
+        operation.return_value["written_chars"] = len("input") + (
+            action == "write_line"
+        )
+        shell.poll_session = AsyncMock(
+            return_value={
+                "session_id": "sh_test",
+                "stdout": "reply",
+                "status": "running",
+            }
+        )
 
     class FakeBooter:
         pass
@@ -413,16 +543,16 @@ async def test_shell_session_tool_passes_member_identity_to_session_actions(
     class FakeWrapper:
         context = FakeAstrContext()
 
-    async def fake_get_booter(context, session_id):
-        return booter
-
-    monkeypatch.setattr(shell_tools, "get_booter", fake_get_booter)
+    monkeypatch.setattr(shell_tools, "get_local_booter", lambda: booter)
 
     result = await ShellSessionTool().call(
         FakeWrapper(),
         action=action,
         session_id="sh_test",
         chars="input",
+        yield_time_ms=yield_time_ms,
+        cursor=7,
+        max_output_chars=42,
     )
 
     assert json.loads(result)["session_id"] == "sh_test"
@@ -432,17 +562,54 @@ async def test_shell_session_tool_passes_member_identity_to_session_actions(
     if component_action == "write":
         expected_chars = "input\n" if action == "write_line" else "input"
         assert operation.await_args.kwargs["chars"] == expected_chars
+        assert json.loads(result)["written_chars"] == len(expected_chars)
+        assert json.loads(result)["stdout"] == "reply"
+    if component_action in {"poll", "write"}:
+        shell.poll_session.assert_awaited_once_with(
+            owner_id="group-umo",
+            requester_id="member-user",
+            requester_is_admin=False,
+            session_id="sh_test",
+            cursor=7,
+            yield_time_ms=yield_time_ms,
+            max_output_chars=42,
+        )
+
+    if component_action == "write":
+        operation.reset_mock()
+        for invalid_args in (
+            {"yield_time_ms": -1},
+            {"yield_time_ms": 300_001},
+            {"max_output_chars": 0},
+            {"cursor": -1},
+        ):
+            result = await ShellSessionTool().call(
+                FakeWrapper(),
+                action=action,
+                session_id="sh_test",
+                chars="input",
+                **invalid_args,
+            )
+            assert result.startswith("Error managing shell session:")
+        operation.assert_not_awaited()
 
 
 @pytest.mark.asyncio
 async def test_execute_shell_defaults_to_foreground(monkeypatch):
-    from astrbot.core.tools.computer_tools import shell as shell_tools
+    from astrbot.core.astr_agent_runtime.tools.computer_tools import (
+        shell as shell_tools,
+    )
 
     calls = []
 
     class FakeShell:
         async def exec(
-            self, command, cwd=None, background=False, env=None, timeout=None
+            self,
+            command,
+            cwd=None,
+            background=False,
+            env=None,
+            timeout=None,  # noqa: ASYNC109 - Match the production SDK timeout keyword.
         ):
             calls.append({"command": command, "background": background})
             return {"success": True, "stdout": "", "stderr": "", "exit_code": 0}
@@ -480,13 +647,20 @@ async def test_execute_shell_defaults_to_foreground(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_execute_shell_uses_fresh_default_env_per_call(monkeypatch):
-    from astrbot.core.tools.computer_tools import shell as shell_tools
+    from astrbot.core.astr_agent_runtime.tools.computer_tools import (
+        shell as shell_tools,
+    )
 
     calls = []
 
     class FakeShell:
         async def exec(
-            self, command, cwd=None, background=False, env=None, timeout=None
+            self,
+            command,
+            cwd=None,
+            background=False,
+            env=None,
+            timeout=None,  # noqa: ASYNC109 - Match the production SDK timeout keyword.
         ):
             env["MUTATED_BY_FAKE_SHELL"] = command
             calls.append(env)
@@ -526,13 +700,20 @@ async def test_execute_shell_uses_fresh_default_env_per_call(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_execute_shell_copies_user_env_before_execution(monkeypatch):
-    from astrbot.core.tools.computer_tools import shell as shell_tools
+    from astrbot.core.astr_agent_runtime.tools.computer_tools import (
+        shell as shell_tools,
+    )
 
     calls = []
 
     class FakeShell:
         async def exec(
-            self, command, cwd=None, background=False, env=None, timeout=None
+            self,
+            command,
+            cwd=None,
+            background=False,
+            env=None,
+            timeout=None,  # noqa: ASYNC109 - Match the production SDK timeout keyword.
         ):
             env["MUTATED_BY_FAKE_SHELL"] = command
             calls.append(env)
@@ -572,13 +753,20 @@ async def test_execute_shell_copies_user_env_before_execution(monkeypatch):
 async def test_execute_shell_avoids_double_background_for_detached_commands(
     monkeypatch,
 ):
-    from astrbot.core.tools.computer_tools import shell as shell_tools
+    from astrbot.core.astr_agent_runtime.tools.computer_tools import (
+        shell as shell_tools,
+    )
 
     calls = []
 
     class FakeShell:
         async def exec(
-            self, command, cwd=None, background=False, env=None, timeout=None
+            self,
+            command,
+            cwd=None,
+            background=False,
+            env=None,
+            timeout=None,  # noqa: ASYNC109 - Match the production SDK timeout keyword.
         ):
             calls.append({"command": command, "background": background})
             return {"success": True, "stdout": "", "stderr": "", "exit_code": 0}
@@ -617,13 +805,20 @@ async def test_execute_shell_avoids_double_background_for_detached_commands(
 
 @pytest.mark.asyncio
 async def test_execute_shell_recognizes_commented_background_command(monkeypatch):
-    from astrbot.core.tools.computer_tools import shell as shell_tools
+    from astrbot.core.astr_agent_runtime.tools.computer_tools import (
+        shell as shell_tools,
+    )
 
     calls = []
 
     class FakeShell:
         async def exec(
-            self, command, cwd=None, background=False, env=None, timeout=None
+            self,
+            command,
+            cwd=None,
+            background=False,
+            env=None,
+            timeout=None,  # noqa: ASYNC109 - Match the production SDK timeout keyword.
         ):
             calls.append({"command": command, "background": background})
             return {"success": True, "stdout": "", "stderr": "", "exit_code": 0}
@@ -673,14 +868,18 @@ async def test_execute_shell_recognizes_commented_background_command(monkeypatch
     ],
 )
 def test_is_self_detached_command_handles_quotes_and_comments(command, expected):
-    from astrbot.core.tools.computer_tools.shell import _is_self_detached_command
+    from astrbot.core.astr_agent_runtime.tools.computer_tools.shell import (
+        _is_self_detached_command,
+    )
 
     assert _is_self_detached_command(command) is expected
 
 
 @pytest.mark.asyncio
 async def test_execute_shell_reports_blank_exception_type(monkeypatch):
-    from astrbot.core.tools.computer_tools import shell as shell_tools
+    from astrbot.core.astr_agent_runtime.tools.computer_tools import (
+        shell as shell_tools,
+    )
 
     class BlankError(Exception):
         def __str__(self):
@@ -688,7 +887,12 @@ async def test_execute_shell_reports_blank_exception_type(monkeypatch):
 
     class FakeShell:
         async def exec(
-            self, command, cwd=None, background=False, env=None, timeout=None
+            self,
+            command,
+            cwd=None,
+            background=False,
+            env=None,
+            timeout=None,  # noqa: ASYNC109 - Match the production SDK timeout keyword.
         ):
             raise BlankError()
 
@@ -718,18 +922,6 @@ async def test_execute_shell_reports_blank_exception_type(monkeypatch):
     result = await ExecuteShellTool().call(FakeWrapper(), command="firefox")
 
     assert result == "Error executing command: BlankError"
-
-
-def test_firecrawl_tools_are_registered_as_builtin_tools():
-    manager = FunctionToolManager()
-
-    search_tool = manager.get_builtin_tool(FirecrawlWebSearchTool)
-    extract_tool = manager.get_builtin_tool(FirecrawlExtractWebPageTool)
-
-    assert search_tool.name == "web_search_firecrawl"
-    assert extract_tool.name == "firecrawl_extract_web_page"
-    assert manager.is_builtin_tool("web_search_firecrawl") is True
-    assert manager.is_builtin_tool("firecrawl_extract_web_page") is True
 
 
 @pytest.mark.asyncio
@@ -866,3 +1058,30 @@ async def test_modelscope_sync_enables_only_synced_servers(monkeypatch):
             },
         )
     ]
+
+
+def test_computer_tool_catalog_exposes_shell_without_mutating_runtime_instances():
+    catalog = get_all_tools()
+    runtime_tools = ComputerToolProvider().get_tools(
+        SimpleNamespace(computer_use_runtime="local")
+    )
+    catalog_shell = next(
+        tool for tool in catalog if tool.name == "astrbot_execute_shell"
+    )
+    runtime_shell = next(
+        tool for tool in runtime_tools if tool.name == catalog_shell.name
+    )
+
+    assert len({tool.name for tool in catalog}) == len(catalog)
+    assert all(tool.active is False for tool in catalog)
+    assert runtime_shell.active is True
+    assert runtime_shell is not catalog_shell
+    catalog_shell.description = "Changed catalog metadata"
+    assert runtime_shell.description != catalog_shell.description
+
+
+def test_function_tool_manager_keeps_runtime_tools_out_of_plugin_registry():
+    manager = FunctionToolManager()
+
+    assert manager.func_list == []
+    assert manager.get_func("astrbot_execute_shell") is None

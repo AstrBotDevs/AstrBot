@@ -3,6 +3,7 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import JSONResponse
 
+from astrbot.dashboard.api.payloads import json_or_empty as _json_or_empty
 from astrbot.dashboard.async_utils import run_maybe_async
 from astrbot.dashboard.responses import ApiError, ok
 from astrbot.dashboard.schemas import T2iActiveTemplateRequest, T2iTemplateRequest
@@ -23,14 +24,6 @@ def get_service(request: Request) -> T2iService:
 
 
 require_config_scope = ScopeDependency("config")
-
-
-async def _json_or_empty(request: Request) -> dict:
-    try:
-        data = await request.json()
-    except Exception:
-        return {}
-    return data if isinstance(data, dict) else {}
 
 
 def _raise_t2i_error(exc: T2iServiceError) -> None:

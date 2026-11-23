@@ -1,0 +1,18 @@
+"""Python/IPython component"""
+
+from typing import Any, Protocol
+
+
+class PythonComponent(Protocol):
+    """Python/IPython operations component"""
+
+    async def exec(
+        self,
+        code: str,
+        kernel_id: str | None = None,
+        timeout: int = 30,  # noqa: ASYNC109 - Preserve the existing timeout keyword contract.
+        silent: bool = False,
+        cwd: str | None = None,
+    ) -> dict[str, Any]:
+        """Execute Python code"""
+        ...

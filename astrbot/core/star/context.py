@@ -1,32 +1,44 @@
 from __future__ import annotations
 
+import inspect
 import logging
 from asyncio import Queue
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Sequence
 from typing import TYPE_CHECKING, Any, Protocol
 
 from deprecated import deprecated
 
 from astrbot.core.agent.hooks import BaseAgentRunHooks
-from astrbot.core.agent.message import Message
+from astrbot.core.agent.message import ContentPart, Message
+from astrbot.core.agent.run_context import ContextWrapper
 from astrbot.core.agent.runners.tool_loop_agent_runner import ToolLoopAgentRunner
 from astrbot.core.agent.tool import ToolSet
+from astrbot.core.agent_service import AgentService
 from astrbot.core.astrbot_config_mgr import AstrBotConfigManager
 from astrbot.core.config.astrbot_config import AstrBotConfig
 from astrbot.core.conversation_mgr import ConversationManager
 from astrbot.core.db import BaseDatabase
 from astrbot.core.exceptions import ProviderNotFoundError
+from astrbot.core.i18n import get_config_locale
 from astrbot.core.knowledge_base.kb_mgr import KnowledgeBaseManager
+from astrbot.core.llm_error_messages import LLM_ERROR_MESSAGES
 from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.persona_mgr import PersonaManager
 from astrbot.core.platform import Platform
-from astrbot.core.platform.astr_message_event import AstrMessageEvent, MessageSesion
+from astrbot.core.platform.astr_message_event import (
+    AstrMessageEvent,
+    MessageSesion,
+    current_message_event,
+    streaming_response_event,
+)
 from astrbot.core.platform.message_type import MessageType
 from astrbot.core.platform_message_history_mgr import PlatformMessageHistoryManager
+from astrbot.core.provider.decision import DecisionService
 from astrbot.core.provider.entities import LLMResponse, ProviderRequest, ProviderType
 from astrbot.core.provider.func_tool_manager import FunctionTool, FunctionToolManager
 from astrbot.core.provider.manager import ProviderManager
 from astrbot.core.provider.provider import (
+    DecisionProvider,
     EmbeddingProvider,
     Provider,
     RerankProvider,
@@ -45,13 +57,15 @@ from astrbot.core.star.star_handler import (
     StarHandlerMetadata,
     star_handlers_registry,
 )
-from astrbot.core.subagent_orchestrator import SubAgentOrchestrator
 from astrbot.core.utils.astrbot_path import get_astrbot_system_tmp_path
 
 logger = logging.getLogger("astrbot")
 
 if TYPE_CHECKING:
+    from astrbot.core.agent.runtime import AgentRuntime
     from astrbot.core.cron.manager import CronJobManager
+    from astrbot.core.star.star_manager import PluginManager
+    from astrbot.core.utils.t2i.renderer import HtmlRenderer
 
 WebApiHandler = Callable[..., Awaitable[Any]]
 RegisteredWebApi = tuple[str, WebApiHandler, list[str], str]
@@ -126,11 +140,13 @@ class PlatformManagerProtocol(Protocol):
 class Context:
     """暴露给插件的接口上下文。"""
 
-    _registered_web_apis: list[RegisteredWebApi] = []
+    _registered_web_apis: list[RegisteredWebApi]
+    html_renderer: HtmlRenderer
+    """Text-to-image renderer, injected by the core lifecycle after creation."""
 
-    # 向后兼容的变量
-    _register_tasks: list[Awaitable] = []
-    _star_manager = None
+    # Backward-compatible task registration stays local to this context.
+    _register_tasks: list[Awaitable]
+    _star_manager: PluginManager | None = None
 
     @property
     def registered_web_apis(self) -> list[RegisteredWebApi]:
@@ -139,6 +155,17 @@ class Context:
     @registered_web_apis.setter
     def registered_web_apis(self, value: list[RegisteredWebApi]) -> None:
         self._registered_web_apis = value
+
+    def reset_runtime_registrations(self) -> None:
+        """Discard plugin registrations and close coroutines that never started."""
+        self._registered_web_apis.clear()
+        for task in self._register_tasks:
+            if (
+                inspect.iscoroutine(task)
+                and inspect.getcoroutinestate(task) == inspect.CORO_CREATED
+            ):
+                task.close()
+        self._register_tasks.clear()
 
     def __init__(
         self,
@@ -153,8 +180,10 @@ class Context:
         astrbot_config_mgr: AstrBotConfigManager,
         knowledge_base_manager: KnowledgeBaseManager,
         cron_manager: CronJobManager,
-        subagent_orchestrator: SubAgentOrchestrator | None = None,
+        agent_runtimes: dict[str, AgentRuntime] | None = None,
     ) -> None:
+        self._registered_web_apis = []
+        self._register_tasks = []
         self._event_queue = event_queue
         """事件队列。消息平台通过事件队列传递消息事件。"""
         self._config = config
@@ -165,8 +194,10 @@ class Context:
         """模型提供商管理器"""
         self.platform_manager = platform_manager
         """平台适配器管理器"""
-        self.conversation_manager = conversation_manager
-        """会话管理器"""
+        self.conversations = conversation_manager
+        """Conversation operations available to plugins."""
+        self.conversation_manager = self.conversations
+        """Compatibility alias for plugins using the previous entry point."""
         self.message_history_manager = message_history_manager
         """平台消息历史管理器"""
         self.persona_manager = persona_manager
@@ -177,7 +208,12 @@ class Context:
         """知识库管理器"""
         self.cron_manager = cron_manager
         """Cron job manager, initialized by core lifecycle."""
-        self.subagent_orchestrator = subagent_orchestrator
+        self.decision = DecisionService(provider_manager)
+        """Decision service backed by the configured decision provider."""
+        self.agent = AgentService(
+            self, agent_runtimes if agent_runtimes is not None else {}
+        )
+        """Programmatic agent integration; closed by the core lifecycle."""
 
     async def llm_generate(
         self,
@@ -232,10 +268,11 @@ class Context:
         prompt: str | None = None,
         image_urls: list[str] | None = None,
         audio_urls: list[str] | None = None,
+        extra_user_content_parts: list[ContentPart] | None = None,
         tools: ToolSet | None = None,
         system_prompt: str | None = None,
-        contexts: list[Message] | None = None,
-        max_steps: int = 30,
+        contexts: Sequence[Message | dict[str, Any]] | None = None,
+        max_steps: int = 128,
         tool_call_timeout: int = 120,
         **kwargs: Any,
     ) -> LLMResponse:
@@ -249,6 +286,7 @@ class Context:
             prompt: The prompt to send to the LLM, if `contexts` and `prompt` are both provided, `prompt` will be appended as the last user message
             image_urls: List of image URLs to include in the prompt, if `contexts` and `prompt` are both provided, `image_urls` will be appended to the last user message
             audio_urls: List of audio URLs or local paths to include in the prompt, if `contexts` and `prompt` are both provided, `audio_urls` will be appended to the last user message
+            extra_user_content_parts: Extra content parts appended to the user message. Use this for per-turn context that must not be persisted into the conversation history (e.g. `TextPart(text=...).mark_as_temp()`)
             tools: ToolSet of tools available to the LLM
             system_prompt: System prompt to guide the LLM's behavior, if provided, it will always insert as the first system message in the context
             contexts: context messages for the LLM
@@ -257,6 +295,7 @@ class Context:
                 stream: bool - whether to stream the LLM response
                 agent_hooks: BaseAgentRunHooks[AstrAgentContext] - hooks to run during agent execution
                 agent_context: AstrAgentContext - context to use for the agent
+                run_context: ContextWrapper - reuse caller-owned state for this Context and event
 
                 other kwargs will be DIRECTLY passed to the runner.reset() method
 
@@ -269,11 +308,16 @@ class Context:
 
         """
         # Import here to avoid circular imports
-        from astrbot.core.astr_agent_context import (
+        from astrbot.core.astr_agent_runtime.context import (
             AgentContextWrapper,
             AstrAgentContext,
         )
-        from astrbot.core.astr_agent_tool_exec import FunctionToolExecutor
+        from astrbot.core.astr_agent_runtime.tool_executor import FunctionToolExecutor
+        from astrbot.core.astr_agent_runtime.tools.computer_tools.util import (
+            LOCAL_NETWORK_POLICY_NOTICE,
+            get_local_permission_policy,
+            is_local_runtime,
+        )
 
         prov = await self.provider_manager.get_provider_by_id(chat_provider_id)
         if not prov or not isinstance(prov, Provider):
@@ -293,6 +337,7 @@ class Context:
             prompt=prompt,
             image_urls=image_urls or [],
             audio_urls=audio_urls or [],
+            extra_user_content_parts=extra_user_content_parts or [],
             func_tool=tools,
             contexts=context_,
             system_prompt=system_prompt or "",
@@ -302,6 +347,37 @@ class Context:
                 context=self,
                 event=event,
             )
+        run_context = kwargs.get("run_context")
+        if run_context is None:
+            run_context = AgentContextWrapper(
+                context=agent_context,
+                tool_call_timeout=tool_call_timeout,
+            )
+        elif (
+            not isinstance(run_context, ContextWrapper)
+            or run_context.context.context is not self
+            or run_context.context.event is not event
+        ):
+            raise ValueError("run_context must belong to this Context and event")
+        if (
+            tools
+            and any(
+                (tool := tools.get_tool(name)) is not None and tool.active
+                for name in (
+                    "astrbot_execute_shell",
+                    "astrbot_shell_session",
+                    "astrbot_execute_python",
+                )
+            )
+            and is_local_runtime(run_context)
+        ):
+            local_policy = get_local_permission_policy(run_context)
+            if (
+                local_policy.allow_execution
+                and not local_policy.allow_network
+                and LOCAL_NETWORK_POLICY_NOTICE not in request.system_prompt
+            ):
+                request.system_prompt += f"\n{LOCAL_NETWORK_POLICY_NOTICE}\n"
         agent_runner = ToolLoopAgentRunner()
         tool_executor = FunctionToolExecutor()
 
@@ -310,7 +386,7 @@ class Context:
         other_kwargs = {
             k: v
             for k, v in kwargs.items()
-            if k not in ["stream", "agent_hooks", "agent_context"]
+            if k not in ["stream", "agent_hooks", "agent_context", "run_context"]
         }
         if request.func_tool and request.func_tool.get_tool("astrbot_file_read_tool"):
             other_kwargs.setdefault(
@@ -325,10 +401,7 @@ class Context:
         await agent_runner.reset(
             provider=prov,
             request=request,
-            run_context=AgentContextWrapper(
-                context=agent_context,
-                tool_call_timeout=tool_call_timeout,
-            ),
+            run_context=run_context,
             tool_executor=tool_executor,
             agent_hooks=agent_hooks,
             streaming=streaming,
@@ -434,7 +507,13 @@ class Context:
         self,
         provider_id: str,
     ) -> (
-        Provider | TTSProvider | STTProvider | EmbeddingProvider | RerankProvider | None
+        Provider
+        | TTSProvider
+        | STTProvider
+        | EmbeddingProvider
+        | RerankProvider
+        | DecisionProvider
+        | None
     ):
         """通过 ID 获取对应的 LLM Provider。
 
@@ -502,11 +581,14 @@ class Context:
     async def get_using_provider_async(
         self,
         umo: str | None = None,
+        *,
+        locale: str = "zh-CN",
     ) -> Provider | None:
         """Asynchronously get the current text-generation provider.
 
         Args:
             umo: Unified message origin used for session-specific preferences.
+            locale: Language for the built-in provider type error.
 
         Returns:
             Current chat provider, or None if no provider is available.
@@ -521,8 +603,9 @@ class Context:
         if prov is None:
             return None
         if not isinstance(prov, Provider):
+            messages = LLM_ERROR_MESSAGES.get(locale, LLM_ERROR_MESSAGES["zh-CN"])
             raise ValueError(
-                f"该会话来源的对话模型（提供商）的类型不正确: {type(prov)}"
+                messages["invalidSessionProviderType"].format(provider_type=type(prov))
             )
         return prov
 
@@ -544,7 +627,7 @@ class Context:
             provider_type=ProviderType.TEXT_TO_SPEECH,
             umo=umo,
         )
-        if prov and not isinstance(prov, TTSProvider):
+        if prov is not None and not isinstance(prov, TTSProvider):
             raise ValueError("返回的 Provider 不是 TTSProvider 类型")
         return prov
 
@@ -567,7 +650,7 @@ class Context:
             provider_type=ProviderType.TEXT_TO_SPEECH,
             umo=umo,
         )
-        if prov and not isinstance(prov, TTSProvider):
+        if prov is not None and not isinstance(prov, TTSProvider):
             raise ValueError("返回的 Provider 不是 TTSProvider 类型")
         return prov
 
@@ -589,7 +672,7 @@ class Context:
             provider_type=ProviderType.SPEECH_TO_TEXT,
             umo=umo,
         )
-        if prov and not isinstance(prov, STTProvider):
+        if prov is not None and not isinstance(prov, STTProvider):
             raise ValueError("返回的 Provider 不是 STTProvider 类型")
         return prov
 
@@ -612,27 +695,39 @@ class Context:
             provider_type=ProviderType.SPEECH_TO_TEXT,
             umo=umo,
         )
-        if prov and not isinstance(prov, STTProvider):
+        if prov is not None and not isinstance(prov, STTProvider):
             raise ValueError("返回的 Provider 不是 STTProvider 类型")
         return prov
 
     def get_config(self, umo: str | None = None) -> AstrBotConfig:
-        """获取 AstrBot 的配置。
+        """Read the default profile or a session's effective configuration.
 
         Args:
-            umo: unified_message_origin 值，用于获取特定会话的配置。
+            umo: Unified message origin of the session to resolve.
 
         Returns:
-            AstrBot 配置对象。
-
-        Note:
-            如果不提供 umo 参数，将返回默认配置。
+            The shared default profile when umo is omitted. For the active
+            message's UMO, returns its pipeline configuration snapshot; other
+            sessions resolve their current profiles and overrides normally.
 
         """
         if not umo:
             # 使用默认配置
             return self._config
         return self.astrbot_config_mgr.get_conf(umo)
+
+    def locale(self, umo: str | None = None) -> str:
+        """Resolve the bot reply language for a session.
+
+        Args:
+            umo: Unified message origin. Omit to use the default profile.
+
+        Returns:
+            ``zh-CN`` or ``en-US`` from the effective configuration, falling
+            back to ``zh-CN`` when missing or unsupported. This is independent
+            of the WebUI display language.
+        """
+        return get_config_locale(self.get_config(umo=umo))
 
     async def send_message(
         self,
@@ -665,6 +760,24 @@ class Context:
         for platform in self.platform_manager.platform_insts:
             if platform.meta().id == session.platform_name:
                 await platform.send_by_session(session, message_chain)
+                event = current_message_event.get()
+                if (
+                    event is not None
+                    and event._execution_active
+                    and message_chain.chain
+                    and streaming_response_event.get() is not event
+                ):
+                    event.trace.record(
+                        "response_sent",
+                        kind="response",
+                        message=event._outline_chain(message_chain.chain),
+                        component_types=[
+                            str(component.type) for component in message_chain.chain
+                        ],
+                        component_count=len(message_chain.chain),
+                        message_type=message_chain.type,
+                        target_umo=str(session),
+                    )
                 settings = self.get_config(umo=str(session)).get(
                     "provider_ltm_settings",
                     {},
@@ -842,10 +955,11 @@ class Context:
             该方法已弃用，请使用新的注册方式。
 
         """
+        handler_name = getattr(func_obj, "__name__", type(func_obj).__name__)
         md = StarHandlerMetadata(
             event_type=EventType.OnLLMRequestEvent,
-            handler_full_name=func_obj.__module__ + "_" + func_obj.__name__,
-            handler_name=func_obj.__name__,
+            handler_full_name=func_obj.__module__ + "_" + handler_name,
+            handler_name=handler_name,
             handler_module_path=func_obj.__module__,
             handler=func_obj,
             event_filters=[],
@@ -894,10 +1008,11 @@ class Context:
             推荐使用装饰器注册指令。该方法将在未来的版本中被移除。
 
         """
+        handler_name = getattr(awaitable, "__name__", type(awaitable).__name__)
         md = StarHandlerMetadata(
             event_type=EventType.AdapterMessageEvent,
-            handler_full_name=awaitable.__module__ + "_" + awaitable.__name__,
-            handler_name=awaitable.__name__,
+            handler_full_name=awaitable.__module__ + "_" + handler_name,
+            handler_name=handler_name,
             handler_module_path=awaitable.__module__,
             handler=awaitable,
             event_filters=[],

@@ -43,11 +43,12 @@ async def _create_api_key(
 
 
 @pytest_asyncio.fixture(scope="module")
-async def core_lifecycle_td(tmp_path_factory):
+async def core_lifecycle_td(tmp_path_factory, dashboard_test_config):
     tmp_db_path = tmp_path_factory.mktemp("data") / "test_data_api_key.db"
     db = SQLiteDatabase(str(tmp_db_path))
     log_broker = LogBroker()
     core_lifecycle = AstrBotCoreLifecycle(log_broker, db)
+    core_lifecycle.astrbot_config = dashboard_test_config
     await core_lifecycle.initialize()
     core_lifecycle.astrbot_config["admins_id"] = ["api-key-test-admin"]
     generated_password = getattr(
@@ -75,8 +76,8 @@ async def core_lifecycle_td(tmp_path_factory):
             stop_result = core_lifecycle.stop()
             if asyncio.iscoroutine(stop_result):
                 await stop_result
-        except Exception:
-            pass
+        finally:
+            await db.engine.dispose()
 
 
 @pytest.fixture(scope="module")

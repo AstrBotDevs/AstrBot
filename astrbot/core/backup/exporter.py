@@ -8,12 +8,12 @@ import hashlib
 import json
 import os
 import zipfile
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 import anyio
-from sqlalchemy import select
+from sqlalchemy import select, text
 
 from astrbot.core import logger
 from astrbot.core.config.default import VERSION
@@ -188,6 +188,11 @@ class AstrBotExporter:
                         config_content = await f.read()
                     zf.writestr("config/cmd_config.json", config_content)
                     self._add_checksum("config/cmd_config.json", config_content)
+                mcp_config_path = Path(get_astrbot_data_path()) / "mcp_server.json"
+                if mcp_config_path.is_file():
+                    mcp_content = mcp_config_path.read_bytes()
+                    zf.writestr("config/mcp_server.json", mcp_content)
+                    self._add_checksum("config/mcp_server.json", mcp_content)
                 if progress_callback:
                     await progress_callback("config", 100, 100, "配置文件导出完成")
 
@@ -234,6 +239,7 @@ class AstrBotExporter:
         export_data: dict[str, list[dict]] = {}
 
         async with self.main_db.get_db() as session:
+            await session.execute(text("BEGIN"))
             for table_name, model_class in MAIN_DB_MODELS.items():
                 try:
                     result = await session.execute(select(model_class))
@@ -479,7 +485,7 @@ class AstrBotExporter:
         manifest = {
             "version": BACKUP_MANIFEST_VERSION,
             "astrbot_version": VERSION,
-            "exported_at": datetime.now(timezone.utc).isoformat(),
+            "exported_at": datetime.now(UTC).isoformat(),
             "origin": "exported",  # 标记备份来源:exported=本实例导出, uploaded=用户上传
             "schema_version": {
                 "main_db": "v4",

@@ -15,9 +15,7 @@ VoceChat 是一个开源的支持多平台、搭建简单的即时通讯平台�
 
 ## 安装 astrbot_plugin_vocechat 插件
 
-进入 AstrBot 仪表盘的插件市场，搜索 `astrbot_plugin_vocechat`，点击安装。
-
-![image](https://files.astrbot.app/docs/source/images/vocechat/image.png)
+进入 AstrBot WebUI 的 `插件 → 插件市场`，搜索 `astrbot_plugin_vocechat`，点击安装。
 
 安装完成后，前往 `机器人` → `+ 创建机器人` → 选择 VoceChat（若选项缺失，尝试重启 AstrBot 或检查插件安装状态）。
 

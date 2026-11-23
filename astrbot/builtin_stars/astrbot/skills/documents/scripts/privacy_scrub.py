@@ -12,6 +12,13 @@ from xml.etree import ElementTree
 
 from docx import Document
 
+if __package__:
+    from astrbot.builtin_stars.astrbot.skills._astrbot_skill_support.cli import (
+        parse_conversion_paths,
+    )
+else:
+    from _astrbot_skill_support.cli import parse_conversion_paths
+
 _CP = "{http://schemas.openxmlformats.org/package/2006/metadata/core-properties}"
 _DC = "{http://purl.org/dc/elements/1.1/}"
 _DCTERMS = "{http://purl.org/dc/terms/}"
@@ -99,7 +106,7 @@ def scrub_docx(input_path: Path, output_path: Path) -> None:
                 if info.filename.endswith(".xml"):
                     content = _scrub_xml(info.filename, content)
                 destination.writestr(info, content)
-        Document(temporary_path)
+        Document(str(temporary_path))
         shutil.move(temporary_path, output_path)
     finally:
         if temporary_path.exists():
@@ -115,11 +122,7 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("input", type=Path, help="Source DOCX")
     parser.add_argument("output", type=Path, help="Destination DOCX")
-    args = parser.parse_args()
-    input_path = args.input.expanduser().resolve(strict=False)
-    output_path = args.output.expanduser().resolve(strict=False)
-    if not input_path.is_file():
-        parser.error(f"Input file not found: {input_path}")
+    _, input_path, output_path = parse_conversion_paths(parser)
     if input_path.suffix.lower() != ".docx" or output_path.suffix.lower() != ".docx":
         parser.error("Input and output paths must end with .docx")
     if input_path == output_path:

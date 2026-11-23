@@ -25,7 +25,7 @@
           single-line
           @update:model-value="fetchMessageSeries"
         >
-          <template #selection="{ item }">
+          <template #selection="{ internalItem: item }">
             <div class="d-flex align-center">
               <v-icon start size="small"> mdi-calendar-range </v-icon>
               {{ item.raw?.label }}
@@ -165,7 +165,7 @@ export default {
           },
           y: {
             title: {
-              formatter: () => "",
+              formatter: (): string => "",
             },
           },
         },
@@ -256,10 +256,8 @@ export default {
         const response = await axios.get(`/api/stat/get?offset_sec=${offsetSec}`);
         const data = response.data.data;
 
-        if (data && data.message_time_series) {
-          this.messageTimeSeries = data.message_time_series;
-          this.processTimeSeriesData();
-        }
+        this.messageTimeSeries = Array.isArray(data?.message_time_series) ? data.message_time_series : [];
+        this.processTimeSeriesData();
       } catch (error) {
         console.error(this.t("status.dataError"), error);
       } finally {
@@ -285,6 +283,8 @@ export default {
       if (this.messageTimeSeries.length > 0) {
         const daysSpan = (this.selectedTimeRange?.value ?? 86400) / 86400; // 将秒转换为天数
         this.dailyAverage = this.formatNumber(Math.round(total / daysSpan));
+      } else {
+        this.dailyAverage = "0";
       }
 
       // 计算增长率

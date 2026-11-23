@@ -4,6 +4,7 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, Query, Request
 
+from astrbot.dashboard.api.payloads import json_or_empty as _json_or_empty
 from astrbot.dashboard.async_utils import run_maybe_async
 from astrbot.dashboard.responses import ApiError, ok
 from astrbot.dashboard.schemas import (
@@ -12,6 +13,7 @@ from astrbot.dashboard.schemas import (
     ModelScopeSyncRequest,
     ToolEnabledRequest,
     ToolPermissionRequest,
+    ToolToggleRequest,
 )
 from astrbot.dashboard.services.tools_service import ToolsService, ToolsServiceError
 
@@ -34,14 +36,6 @@ async def require_tool_scope(request: Request) -> AuthContext:
 
 
 require_mcp_scope = ScopeDependency("mcp")
-
-
-async def _json_or_empty(request: Request) -> dict[str, Any]:
-    try:
-        data = await request.json()
-    except Exception:
-        return {}
-    return data if isinstance(data, dict) else {}
 
 
 def _required_text(value: object, name: str) -> str:
@@ -187,7 +181,7 @@ async def list_tools(
 @router.patch("/tools/{tool_id:path}/enabled")
 async def set_tool_enabled(
     tool_id: str,
-    payload: ToolEnabledRequest,
+    payload: ToolToggleRequest,
     _auth: AuthContext = Depends(require_tool_scope),
     service: ToolsService = Depends(get_service),
 ):
@@ -335,8 +329,7 @@ async def toggle_dashboard_tool(
     service: ToolsService = Depends(get_service),
 ):
     body = await _json_or_empty(request)
-    tool_id = _required_text(body.get("name"), "name")
-    return await _toggle_tool(tool_id, bool(body.get("activate")), service)
+    return await _run(lambda: service.toggle_tool(body), result_as_message=True)
 
 
 @legacy_router.post("/tools/permission")
@@ -346,12 +339,8 @@ async def update_dashboard_tool_permission(
     service: ToolsService = Depends(get_service),
 ):
     body = await _json_or_empty(request)
-    tool_id = _required_text(body.get("name"), "name")
     return await _run(
-        lambda: service.update_tool_permission(
-            {"name": tool_id, "permission": body.get("permission")}
-        ),
-        result_as_message=True,
+        lambda: service.update_tool_permission(body), result_as_message=True
     )
 
 

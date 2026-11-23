@@ -152,7 +152,7 @@ export default {
       get() {
         return this.show;
       },
-      set(value) {
+      set(value: boolean) {
         this.$emit("update:show", value);
       },
     },

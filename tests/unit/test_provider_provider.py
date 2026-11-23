@@ -4,7 +4,8 @@ Covers AbstractProvider, Provider, STTProvider, TTSProvider,
 EmbeddingProvider, and RerankProvider abstract/concrete methods.
 """
 
-from unittest.mock import AsyncMock, MagicMock, patch
+import asyncio
+from unittest.mock import AsyncMock, call, patch
 
 import pytest
 
@@ -23,7 +24,6 @@ from astrbot.core.provider.provider import (
     STTProvider,
     TTSProvider,
 )
-
 
 # =========================================================================
 # AbstractProvider
@@ -64,7 +64,9 @@ class TestAbstractProvider:
             "astrbot.core.provider.provider.provider_cls_map",
             {"test_type": pmd},
         ):
-            ap = _ConcreteAbstractProvider(provider_config={"type": "test_type", "id": "myid"})
+            ap = _ConcreteAbstractProvider(
+                provider_config={"type": "test_type", "id": "myid"}
+            )
             meta = ap.meta()
             assert isinstance(meta, ProviderMeta)
             assert meta.id == "myid"
@@ -78,7 +80,10 @@ class TestAbstractProvider:
 
     def test_meta_no_provider_config_id_falls_back_to_default(self):
         pmd = ProviderMetaData(
-            id="default", model=None, type="test_type", provider_type=ProviderType.EMBEDDING
+            id="default",
+            model=None,
+            type="test_type",
+            provider_type=ProviderType.EMBEDDING,
         )
         with patch(
             "astrbot.core.provider.provider.provider_cls_map",
@@ -88,10 +93,9 @@ class TestAbstractProvider:
             meta = ap.meta()
             assert meta.id == "default"
 
-    @pytest.mark.asyncio
-    async def test_test_does_not_raise(self):
-        ap = _ConcreteAbstractProvider(provider_config={"type": "test"})
-        await ap.test()
+    def test_abstract_provider_requires_a_healthcheck(self):
+        with pytest.raises(TypeError, match="abstract"):
+            AbstractProvider(provider_config={"type": "test"})
 
     def test_constructor_sets_provider_config(self):
         config = {"type": "myprovider", "key": ["sk-abc"]}
@@ -174,6 +178,7 @@ class TestProvider:
 
     def test_text_chat_abstract_prevents_instantiation(self):
         """Provider subclasses must override text_chat; can't instantiate without it."""
+
         class IncompleteProvider(Provider):
             def get_current_key(self) -> str:
                 return ""
@@ -248,7 +253,9 @@ class TestProvider:
     @pytest.mark.asyncio
     async def test_test(self):
         p = _ConcreteProvider(provider_config={}, provider_settings={})
-        with patch.object(p, "text_chat", AsyncMock(return_value=LLMResponse(role="assistant"))):
+        with patch.object(
+            p, "text_chat", AsyncMock(return_value=LLMResponse(role="assistant"))
+        ):
             await p.test(test_timeout=5.0)
 
     def test_ensure_message_to_dicts_none(self):
@@ -261,25 +268,27 @@ class TestProvider:
         result = p._ensure_message_to_dicts([])
         assert result == []
 
-    def test_ensure_message_to_dicts_skips_checkpoint(self):
-        p = _ConcreteProvider(provider_config={}, provider_settings={})
-        checkpoint = {"role": "user", "content": "check", "checkpoint": True}
-        normal = {"role": "user", "content": "normal"}
-        with patch(
-            "astrbot.core.provider.provider.is_checkpoint_message",
-            side_effect=lambda m: m.get("checkpoint", False),
-        ):
-            result = p._ensure_message_to_dicts([checkpoint, normal])
-            assert len(result) == 1
-            assert result[0] == {"role": "user", "content": "normal"}
+    def test_ensure_message_to_dicts_preserves_mixed_message_order(self):
+        provider = _ConcreteProvider(provider_config={}, provider_settings={})
+        user = {"role": "user", "content": "request"}
+        assistant = Message(role="assistant", content="reply")
+
+        result = provider._ensure_message_to_dicts([user, assistant])
+
+        assert result[0] is user
+        assert result[0] == {"role": "user", "content": "request"}
+        assert result[1]["role"] == "assistant"
+        assert result[1]["content"] == "reply"
+        assert assistant.content == "reply"
 
     def test_ensure_message_to_dicts_converts_message_objects(self):
-        p = _ConcreteProvider(provider_config={}, provider_settings={})
-        msg = MagicMock(spec=Message)
-        msg.role = "user"
-        msg.model_dump.return_value = {"role": "user", "content": "from pydantic"}
-        result = p._ensure_message_to_dicts([msg])
+        provider = _ConcreteProvider(provider_config={}, provider_settings={})
+        message = Message(role="user", content="from pydantic")
+
+        result = provider._ensure_message_to_dicts([message])
+
         assert result == [{"role": "user", "content": "from pydantic"}]
+        assert isinstance(message, Message)
 
     def test_ensure_message_to_dicts_passes_through_dicts(self):
         p = _ConcreteProvider(provider_config={}, provider_settings={})
@@ -333,7 +342,9 @@ class _ConcreteTTSProvider(TTSProvider):
 
 class TestTTSProvider:
     def test_construction(self):
-        p = _ConcreteTTSProvider(provider_config={"type": "tts_test"}, provider_settings={})
+        p = _ConcreteTTSProvider(
+            provider_config={"type": "tts_test"}, provider_settings={}
+        )
         assert p.provider_config["type"] == "tts_test"
 
     def test_get_audio(self):
@@ -347,34 +358,24 @@ class TestTTSProvider:
         p = _ConcreteTTSProvider(provider_config={}, provider_settings={})
         assert p.support_stream() is False
 
-    def test_get_audio_stream_default_implementation(self):
-        p = _ConcreteTTSProvider(provider_config={}, provider_settings={})
-        import asyncio
+    @pytest.mark.asyncio
+    async def test_get_audio_stream_default_implementation(self, tmp_path):
+        provider = _ConcreteTTSProvider(provider_config={}, provider_settings={})
+        output = tmp_path / "generated.wav"
+        output.write_bytes(b"RIFF-local-audio")
+        provider.get_audio = AsyncMock(return_value=str(output))
+        text_queue = asyncio.Queue()
+        audio_queue = asyncio.Queue()
+        for part in ["hello ", "world", None]:
+            text_queue.put_nowait(part)
 
-        text_queue: asyncio.Queue[str | None] = asyncio.Queue()
-        audio_queue: asyncio.Queue = asyncio.Queue()
+        await provider.get_audio_stream(text_queue, audio_queue)
 
-        async def run_stream():
-            # Send some text, then None to signal end
-            await text_queue.put("hello ")
-            await text_queue.put("world")
-            await text_queue.put(None)
-            await p.get_audio_stream(text_queue, audio_queue)
-
-        with patch("aiofiles.open") as mock_aio_open:
-            mock_file = AsyncMock()
-            mock_file.read.return_value = b"fake_audio_data"
-            mock_aio_open.return_value.__aenter__.return_value = mock_file
-            asyncio.run(run_stream())
-
-        result = asyncio.run(audio_queue.get())
-        assert result is not None
-        text_part, audio_data = result
-        assert text_part == "hello world"
-        assert isinstance(audio_data, bytes)
-        # The None sentinel should follow
-        end = asyncio.run(audio_queue.get())
-        assert end is None
+        provider.get_audio.assert_awaited_once_with("hello world")
+        assert audio_queue.qsize() == 2
+        assert audio_queue.get_nowait() == ("hello world", b"RIFF-local-audio")
+        assert audio_queue.get_nowait() is None
+        assert text_queue.empty()
 
 
 # =========================================================================
@@ -426,25 +427,51 @@ class TestEmbeddingProvider:
         embs = asyncio.run(p.get_embeddings_batch(["hello", "world"], batch_size=10))
         assert len(embs) == 2
 
-    def test_get_embeddings_batch_multiple_batches(self):
-        p = _ConcreteEmbeddingProvider(provider_config={}, provider_settings={})
-        import asyncio
+    @pytest.mark.asyncio
+    async def test_get_embeddings_batch_multiple_batches(self):
+        provider = _ConcreteEmbeddingProvider(provider_config={}, provider_settings={})
+        release_first = asyncio.Event()
+        later_completed = asyncio.Event()
 
-        texts = [f"text_{i}" for i in range(5)]
-        embs = asyncio.run(p.get_embeddings_batch(texts, batch_size=2, tasks_limit=5))
-        assert len(embs) == 5
+        async def embed(texts):
+            if texts[0] == "text_0":
+                await release_first.wait()
+            else:
+                later_completed.set()
+            return [[float(text.rsplit("_", 1)[1])] for text in texts]
 
-    def test_get_embeddings_batch_with_progress_callback(self):
-        p = _ConcreteEmbeddingProvider(provider_config={}, provider_settings={})
-        import asyncio
-
-        progress = AsyncMock()
-        texts = [f"t{i}" for i in range(3)]
-        embs = asyncio.run(
-            p.get_embeddings_batch(texts, batch_size=2, tasks_limit=5, progress_callback=progress)
+        provider.get_embeddings = AsyncMock(side_effect=embed)
+        texts = [f"text_{index}" for index in range(5)]
+        task = asyncio.create_task(
+            provider.get_embeddings_batch(texts, batch_size=2, tasks_limit=2)
         )
-        assert len(embs) == 3
-        assert progress.await_count >= 1
+        try:
+            await asyncio.wait_for(later_completed.wait(), 3)
+            release_first.set()
+            result = await asyncio.wait_for(task, 3)
+        finally:
+            release_first.set()
+            if not task.done():
+                task.cancel()
+            await asyncio.gather(task, return_exceptions=True)
+
+        assert result == [[0.0], [1.0], [2.0], [3.0], [4.0]]
+        assert provider.get_embeddings.await_count == 3
+
+    @pytest.mark.asyncio
+    async def test_get_embeddings_batch_with_progress_callback(self):
+        provider = _ConcreteEmbeddingProvider(provider_config={}, provider_settings={})
+        progress = AsyncMock()
+
+        result = await provider.get_embeddings_batch(
+            ["first", "second", "third"],
+            batch_size=2,
+            tasks_limit=1,
+            progress_callback=progress,
+        )
+
+        assert result == [[0.1, 0.2, 0.3]] * 3
+        assert progress.await_args_list == [call(2, 3), call(3, 3)]
 
 
 # =========================================================================
@@ -490,3 +517,56 @@ class TestRerankProvider:
 
         results = asyncio.run(p.rerank("test query", ["doc1", "doc2", "doc3"], top_n=1))
         assert len(results) == 1
+
+
+@pytest.mark.asyncio
+async def test_embedding_batch_retry_budget_propagates_terminal_failure(monkeypatch):
+    provider = _ConcreteEmbeddingProvider(provider_config={}, provider_settings={})
+    provider.get_embeddings = AsyncMock(
+        side_effect=RuntimeError("embedding unavailable")
+    )
+    wait = AsyncMock()
+    monkeypatch.setattr("astrbot.core.provider.provider.asyncio.sleep", wait)
+
+    with pytest.raises(Exception, match="embedding unavailable"):
+        await provider.get_embeddings_batch(["first"], max_retries=3)
+
+    assert provider.get_embeddings.await_count == 3
+    assert wait.await_args_list == [call(1), call(2)]
+
+
+@pytest.mark.asyncio
+async def test_embedding_batch_cancellation_drains_in_flight_requests():
+    provider = _ConcreteEmbeddingProvider(provider_config={}, provider_settings={})
+    started = 0
+    stopped = 0
+    both_started = asyncio.Event()
+
+    async def embed(texts):
+        nonlocal started, stopped
+        started += 1
+        if started == 2:
+            both_started.set()
+        try:
+            await asyncio.Event().wait()
+        finally:
+            stopped += 1
+
+    provider.get_embeddings = AsyncMock(side_effect=embed)
+    task = asyncio.create_task(
+        provider.get_embeddings_batch(
+            ["one", "two", "three"], batch_size=1, tasks_limit=2
+        )
+    )
+    try:
+        await asyncio.wait_for(both_started.wait(), 3)
+        task.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await task
+    finally:
+        if not task.done():
+            task.cancel()
+        await asyncio.gather(task, return_exceptions=True)
+
+    assert started == stopped == 2
+    assert provider.get_embeddings.await_count == 2

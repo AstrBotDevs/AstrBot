@@ -2,16 +2,14 @@
   <div class="d-flex align-center justify-space-between" style="gap: 8px">
     <div style="flex: 1; min-width: 0; overflow: hidden">
       <span
-        v-if="
-          !modelValue || (Array.isArray(modelValue) && modelValue.length === 0)
-        "
+        v-if="configuredKnowledgeBases.length === 0"
         style="color: rgb(var(--v-theme-primaryText))"
       >
         {{ tm("knowledgeBaseSelector.notSelected") }}
       </span>
       <div v-else class="d-flex flex-wrap gap-1">
         <v-chip
-          v-for="name in modelValue"
+          v-for="name in configuredKnowledgeBases"
           :key="name"
           size="small"
           color="primary"
@@ -52,10 +50,10 @@
             v-for="kb in knowledgeBaseList"
             :key="kb.kb_id"
             :value="kb.kb_name"
-            :active="isSelected(kb.kb_name)"
+            @click="selectKnowledgeBase(kb)"
+            :active="isSelected(kb)"
             rounded="md"
             class="ma-1"
-            @click="selectKnowledgeBase(kb.kb_name)"
           >
             <template #prepend>
               <span class="emoji-icon">{{ kb.emoji || "📚" }}</span>
@@ -81,8 +79,8 @@
               >
             </v-list-item-subtitle>
 
-            <template #append>
-              <v-icon v-if="isSelected(kb.kb_name)" color="primary">
+            <template v-slot:append>
+              <v-icon v-if="isSelected(kb)" color="primary">
                 mdi-checkbox-marked
               </v-icon>
               <v-icon v-else color="grey-lighten-1">
@@ -132,14 +130,23 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch } from "vue";
+import { computed, type PropType, ref, watch } from "vue";
 import { useRouter } from "vue-router";
+import { knowledgeApi } from "@/api/v1";
 import { useModuleI18n } from "@/i18n/composables";
-import axios from "@/utils/request";
+
+interface KnowledgeBaseItem {
+  kb_id: string;
+  kb_name: string;
+  emoji?: string | null;
+  description?: string | null;
+  doc_count?: number;
+  chunk_count?: number;
+}
 
 const props = defineProps({
   modelValue: {
-    type: Array,
+    type: Array as PropType<unknown[]>,
     default: () => [],
   },
   buttonText: {
@@ -153,22 +160,25 @@ const router = useRouter();
 const { tm } = useModuleI18n("core.shared");
 
 const dialog = ref(false);
-const knowledgeBaseList = ref([]);
+const knowledgeBaseList = ref<KnowledgeBaseItem[]>([]);
 const loading = ref(false);
-const selectedKnowledgeBases = ref([]);
+const selectedKnowledgeBases = ref<string[]>([]);
+const configuredKnowledgeBases = computed(() =>
+  Array.isArray(props.modelValue) ? props.modelValue.filter((value): value is string => typeof value === "string") : [],
+);
 
 // 监听 modelValue 变化，同步到 selectedKnowledgeBases
 watch(
-  () => props.modelValue,
+  configuredKnowledgeBases,
   (newValue) => {
-    selectedKnowledgeBases.value = Array.isArray(newValue) ? [...newValue] : [];
+    selectedKnowledgeBases.value = [...newValue];
   },
   { immediate: true },
 );
 
 async function openDialog() {
   // 初始化选中状态
-  selectedKnowledgeBases.value = Array.isArray(props.modelValue) ? [...props.modelValue] : [];
+  selectedKnowledgeBases.value = [...configuredKnowledgeBases.value];
 
   dialog.value = true;
   await loadKnowledgeBases();
@@ -177,11 +187,9 @@ async function openDialog() {
 async function loadKnowledgeBases() {
   loading.value = true;
   try {
-    const response = await axios.get("/api/kb/list", {
-      params: {
-        page: 1,
-        page_size: 100,
-      },
+    const response = await knowledgeApi.list({
+      page: 1,
+      page_size: 100,
     });
 
     if (response.data.status === "ok") {
@@ -198,21 +206,22 @@ async function loadKnowledgeBases() {
   }
 }
 
-function isSelected(kbName) {
-  return selectedKnowledgeBases.value.includes(kbName);
+function isSelected(kb: KnowledgeBaseItem) {
+  return selectedKnowledgeBases.value.includes(kb.kb_name) || selectedKnowledgeBases.value.includes(kb.kb_id);
 }
 
-function selectKnowledgeBase(kbName) {
-  // 多选模式：切换选中状态
-  const index = selectedKnowledgeBases.value.indexOf(kbName);
-  if (index > -1) {
-    selectedKnowledgeBases.value.splice(index, 1);
+function selectKnowledgeBase(kb: KnowledgeBaseItem) {
+  // Preserve stored IDs and recognize both representations when toggling.
+  if (isSelected(kb)) {
+    selectedKnowledgeBases.value = selectedKnowledgeBases.value.filter(
+      (value) => value !== kb.kb_name && value !== kb.kb_id,
+    );
   } else {
-    selectedKnowledgeBases.value.push(kbName);
+    selectedKnowledgeBases.value.push(kb.kb_name);
   }
 }
 
-function removeKnowledgeBase(kbName) {
+function removeKnowledgeBase(kbName: string) {
   const index = selectedKnowledgeBases.value.indexOf(kbName);
   if (index > -1) {
     selectedKnowledgeBases.value.splice(index, 1);
@@ -229,7 +238,7 @@ function confirmSelection() {
 
 function cancelSelection() {
   // 恢复到原始值
-  selectedKnowledgeBases.value = Array.isArray(props.modelValue) ? [...props.modelValue] : [];
+  selectedKnowledgeBases.value = [...configuredKnowledgeBases.value];
   dialog.value = false;
 }
 

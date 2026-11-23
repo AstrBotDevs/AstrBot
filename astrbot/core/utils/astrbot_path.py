@@ -187,7 +187,7 @@ astrbot_paths = AstrbotPaths()
 
 def get_astrbot_path() -> str:
     """获取Astrbot项目路径"""
-    return str(astrbot_paths.project_root)
+    return os.path.realpath(str(astrbot_paths.project_root.parent))
 
 
 def get_astrbot_root() -> str:
@@ -258,8 +258,11 @@ def get_astrbot_backups_path() -> str:
 
 
 def get_astrbot_system_tmp_path() -> str:
-    """获取当前平台的 AstrBot 系统临时目录路径。"""
-    return os.path.realpath(os.path.join(tempfile.gettempdir(), ".astrbot"))
+    """Return a temporary directory path without reusing the root marker file."""
+    path = Path(tempfile.gettempdir()) / ".astrbot"
+    if path.exists() and not path.is_dir():
+        path = path.with_name(".astrbot-tmp")
+    return str(path.resolve())
 
 
 def get_astrbot_workspaces_path() -> str:

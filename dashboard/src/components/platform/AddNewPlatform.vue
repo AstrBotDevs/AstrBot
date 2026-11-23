@@ -45,7 +45,7 @@
                   hide-details
                   class="mt-6 platform-type-field"
                 >
-                  <template #item="{ props: itemProps, item }">
+                  <template #item="{ props: itemProps, internalItem: item }">
                     <v-list-item v-bind="itemProps">
                       <template #prepend>
                         <img
@@ -64,12 +64,12 @@
                             'qq_official_webhook',
                             'aiocqhttp',
                             'weixin_oc',
-                          ].includes(platformTemplates[item.raw].type)
+                          ].includes(getPlatformTemplateType(item.raw))
                         "
                         activator="parent"
                         :text="
                           tm(
-                            `createDialog.platformTooltips.${platformTemplates[item.raw].type}`,
+                            `createDialog.platformTooltips.${getPlatformTemplateType(item.raw)}`,
                           )
                         "
                         location="end"
@@ -78,7 +78,7 @@
                       />
                     </v-list-item>
                   </template>
-                  <template #selection="{ item }">
+                  <template #selection="{ internalItem: item }">
                     <div class="d-flex align-center ga-2">
                       <img
                         v-if="getPlatformOptionIcon(item)"
@@ -524,59 +524,14 @@
                           'route-source-field--editing': isEditingRoutes,
                         }"
                       >
-                        <v-autocomplete
-                          v-if="
-                            isEditingRoutes &&
-                            updatingMode &&
-                            getRouteSourceMode(item) === 'known'
-                          "
-                          v-model="item.sourceUmo"
-                          :items="filteredKnownRouteUmoItems"
-                          :loading="loadingKnownRouteUmos"
-                          variant="outlined"
-                          density="compact"
-                          hide-details
-                          clearable
-                          :placeholder="
-                            tm('createDialog.routeSource.selectPlaceholder')
-                          "
-                          :no-data-text="tm('createDialog.routeSource.noData')"
-                          class="route-known-source-field"
-                          @update:model-value="
-                            applyKnownRouteSource(item, $event)
-                          "
-                          @focus="loadKnownRouteUmos"
-                        >
-                          <template #item="{ props, item: sourceItem }">
-                            <v-list-item v-bind="props">
-                              <template #title>
-                                <UmoDisplay
-                                  v-bind="
-                                    getKnownRouteUmoDisplayProps(sourceItem)
-                                  "
-                                  compact
-                                  :show-info="false"
-                                />
-                              </template>
-                            </v-list-item>
-                          </template>
-                          <template #selection="{ item: sourceItem }">
-                            <v-chip
-                              v-if="
-                                sourceItem &&
-                                getKnownRouteUmoSelectionText(sourceItem)
-                              "
-                              size="small"
-                              variant="tonal"
-                              color="primary"
-                              class="umo-selection-chip"
-                            >
-                              {{
-                                getKnownRouteUmoSelectionText(sourceItem)
-                              }}
-                            </v-chip>
-                          </template>
-                        </v-autocomplete>
+                        <UmoSelector
+                          v-if="isEditingRoutes && updatingMode && getRouteSourceMode(item) === 'known'"
+                          :model-value="item.sourceUmo ?? undefined"
+                          :platform-id="routePlatformId"
+                          :allow-manual="false"
+                          :label="tm('createDialog.routeSource.selectPlaceholder')"
+                          @update:model-value="applyKnownRouteSource(item, $event)"
+                        />
                         <template v-else>
                           <v-select
                             v-if="isEditingRoutes"
@@ -789,53 +744,28 @@
     </v-card>
   </v-dialog>
 
-  <v-overlay
+  <ConfigProfileDrawer
     v-model="showConfigDrawer"
-    class="config-drawer-overlay"
-    location="right"
-    transition="slide-x-reverse-transition"
-    :scrim="true"
-    @click:outside="closeConfigDrawer"
-  >
-    <v-card class="config-drawer-card" elevation="12">
-      <div class="config-drawer-header">
-        <div>
-          <span class="text-h6">{{
-            tm("createDialog.configDrawerTitle")
-          }}</span>
-          <div v-if="configDrawerTargetId" class="text-caption text-grey">
-            {{ tm("createDialog.configDrawerIdLabel") }}:
-            {{ configDrawerTargetId }}
-          </div>
-        </div>
-        <v-btn icon variant="text" @click="closeConfigDrawer">
-          <v-icon>mdi-close</v-icon>
-        </v-btn>
-      </div>
-      <v-divider />
-      <div class="config-drawer-content">
-        <ConfigPage
-          v-if="showConfigDrawer"
-          :initial-config-id="configDrawerTargetId ?? undefined"
-        />
-      </div>
-    </v-card>
-  </v-overlay>
+    :config-id="configDrawerTargetId || ''"
+  />
 </template>
 
 <script lang="ts">
+import { botApi, configProfileApi, configRouteApi, fileApi } from "@/api/v1";
 import AstrBotCoreConfigWrapper from "@/components/config/AstrBotCoreConfigWrapper.vue";
+import ConfigProfileDrawer from "@/components/config/ConfigProfileDrawer.vue";
 import PlatformRegistrationAction from "@/components/platform/PlatformRegistrationAction.vue";
 import AstrBotConfig from "@/components/shared/AstrBotConfig.vue";
-import UmoDisplay from "@/components/shared/UmoDisplay.vue";
+import UmoSelector from "@/components/shared/UmoSelector.vue";
 import { useModuleI18n } from "@/i18n/composables";
+import { readConfigInfoList, requireConfigProfile } from "@/utils/configProfile";
 import {
   getPlatformIcon as getPlatformBuiltInIcon,
   getPlatformDescription,
   getTutorialLink,
 } from "@/utils/platformUtils";
-import axios, { resolveApiUrl } from "@/utils/request";
-import ConfigPage from "@/views/ConfigPage.vue";
+import { resolveApiUrl } from "@/utils/request";
+import { isRecord } from "@/utils/typeGuards";
 
 interface RouteEntry {
   umop: string | null;
@@ -845,17 +775,6 @@ interface RouteEntry {
   configId: string;
   sourceUmo?: string | null;
   sourceMode?: "known" | "manual";
-}
-
-interface KnownRouteUmoInfo {
-  umo: string;
-  platform?: string;
-  message_type?: string;
-  session_id?: string;
-  auto_name?: string;
-  user_alias?: string;
-  display_name?: string;
-  [key: string]: unknown;
 }
 
 interface ConfigInfo {
@@ -873,9 +792,9 @@ export default {
   components: {
     AstrBotConfig,
     AstrBotCoreConfigWrapper,
-    ConfigPage,
+    ConfigProfileDrawer,
     PlatformRegistrationAction,
-    UmoDisplay,
+    UmoSelector,
   },
   emits: ["update:show", "show-toast", "refresh-config"],
   props: {
@@ -933,9 +852,6 @@ export default {
       // 平台路由表
       platformRoutes: [] as RouteEntry[],
       isEditingRoutes: false, // 编辑模式开关
-      knownRouteUmos: [] as string[],
-      knownRouteUmoInfoMap: {} as Record<string, KnownRouteUmoInfo>,
-      loadingKnownRouteUmos: false,
 
       // ID冲突确认对话框
       showIdConflictDialog: false,
@@ -1078,13 +994,6 @@ export default {
       }
       return String(this.selectedPlatformConfig?.id || "");
     },
-    filteredKnownRouteUmoItems(): string[] {
-      const platformId = this.routePlatformId;
-      return this.knownRouteUmos.filter((umo: string) => {
-        const parsed = this.parseUmo(umo);
-        return Boolean(parsed && parsed.platform === platformId);
-      });
-    },
     isLarkPlatform(): boolean {
       return this.selectedPlatformConfig?.type === "lark";
     },
@@ -1191,6 +1100,10 @@ export default {
     },
   },
   methods: {
+    getPlatformTemplateType(key: string): string {
+      const template = this.platformTemplates[key];
+      return isRecord(template) && typeof template.type === "string" ? template.type : "";
+    },
     getPlatformTemplateByName(platformName: string | null | undefined): Record<string, unknown> | null {
       if (!platformName) {
         return null;
@@ -1247,10 +1160,7 @@ export default {
       this.newConfigLoading = false;
 
       this.showConfigSection = false;
-      this.isEditingRoutes = false;
-      this.knownRouteUmos = [];
-      this.knownRouteUmoInfoMap = {};
-      this.loadingKnownRouteUmos = false;
+      this.isEditingRoutes = false; // 重置编辑模式
 
       this.showConfigDrawer = false;
       this.configDrawerTargetId = null;
@@ -1262,8 +1172,8 @@ export default {
       this.showDialog = false;
     },
     async getConfigInfoList(): Promise<void> {
-      const res = await axios.get("/api/config/abconfs");
-      this.configInfoList = res.data.data.info_list;
+      const res = await configProfileApi.list();
+      this.configInfoList = readConfigInfoList(res.data.data.info_list);
     },
 
     async getConfigForPreview(configId: string | null): Promise<void> {
@@ -1275,11 +1185,10 @@ export default {
 
       this.configPreviewLoading = true;
       try {
-        const response = await axios.get("/api/config/abconf", {
-          params: { id: configId },
-        });
-        this.selectedConfigData = response.data.data.config;
-        this.selectedConfigMetadata = response.data.data.metadata;
+        const response = await configProfileApi.get(configId);
+        const profile = requireConfigProfile(response.data.data);
+        this.selectedConfigData = profile.config;
+        this.selectedConfigMetadata = profile.metadata;
       } catch (_err) {
         console.error("获取配置文件预览数据失败:", _err);
         this.selectedConfigData = null;
@@ -1292,9 +1201,10 @@ export default {
     async getDefaultConfigTemplate(): Promise<void> {
       this.newConfigLoading = true;
       try {
-        const response = await axios.get("/api/config/default");
-        this.newConfigData = response.data.data.config;
-        this.newConfigMetadata = response.data.data.metadata;
+        const response = await configProfileApi.schema();
+        const profile = requireConfigProfile(response.data.data);
+        this.newConfigData = profile.config;
+        this.newConfigMetadata = profile.metadata;
       } catch (_err) {
         console.error("获取默认配置模板失败:", _err);
         this.newConfigData = null;
@@ -1317,9 +1227,6 @@ export default {
 
       this.configDrawerTargetId = targetId;
       this.showConfigDrawer = true;
-    },
-    closeConfigDrawer(): void {
-      this.showConfigDrawer = false;
     },
     newPlatform(): void {
       this.loading = true;
@@ -1359,10 +1266,7 @@ export default {
       }
 
       try {
-        const resp = await axios.post("/api/config/platform/update", {
-          id: id,
-          config: config,
-        });
+        const resp = await botApi.update(id, this.updatingPlatformConfig);
 
         if (resp.data.status === "error") {
           throw new Error(resp.data.message || this.tm("messages.platformUpdateFailed"));
@@ -1383,7 +1287,7 @@ export default {
     async savePlatform(): Promise<void> {
       const config = this.selectedPlatformConfig as Record<string, unknown> | null;
 
-      if (!this.isPlatformIdValid(config?.id as string | undefined)) {
+      if (!config || !this.isPlatformIdValid(typeof config.id === "string" ? config.id : undefined)) {
         this.loading = false;
         this.showError(this.tm("dialog.invalidPlatformId"));
         return;
@@ -1412,18 +1316,20 @@ export default {
       }
 
       try {
-        const res = await axios.post("/api/config/platform/new", config);
+        const createdPlatformId = config.id;
+        // 先保存平台配置
+        const res = await botApi.create(config);
 
         await this.handleConfigFile();
 
         this.loading = false;
         this.showDialog = false;
         this.resetForm();
-        this.$emit("refresh-config");
+        this.$emit("refresh-config", createdPlatformId);
         this.showSuccess(res.data.message || this.tm("messages.addSuccessWithConfig"));
-      } catch (_err) {
+      } catch (err) {
         this.loading = false;
-        this.showError(this.getErrorMessage(_err));
+        this.showError(this.getErrorMessage(err));
       }
     },
 
@@ -1453,10 +1359,7 @@ export default {
 
     async updateRoutingTable(umop: string, configId: string): Promise<void> {
       try {
-        await axios.post("/api/config/umo_abconf_route/update", {
-          umo: umop,
-          conf_id: configId,
-        });
+        await configRouteApi.upsert(umop, { config_id: configId });
 
         console.info(`成功更新路由表: ${umop} -> ${configId}`);
       } catch (_err) {
@@ -1469,9 +1372,9 @@ export default {
       try {
         const configData = this.aBConfigRadioVal === "1" && this.newConfigData ? this.newConfigData : undefined;
 
-        const createRes = await axios.post("/api/config/abconf/new", {
+        const createRes = await configProfileApi.create({
           name: configName,
-          config: configData,
+          config: configData, // 传入用户配置的数据
         });
 
         const newConfigId: string = createRes.data.data.conf_id;
@@ -1601,7 +1504,7 @@ export default {
       }
 
       try {
-        const routesRes = await axios.get("/api/config/umo_abconf_routes");
+        const routesRes = await configRouteApi.list();
         const routingTable = routesRes.data.data.routing as Record<string, string>;
 
         const routes: RouteEntry[] = [];
@@ -1641,7 +1544,38 @@ export default {
       }
     },
 
-    addNewRoute(): void {
+    getRouteSourceMode(route: RouteEntry) {
+      return route.sourceMode || "manual";
+    },
+
+    getRouteSourceModeLinkText(route: RouteEntry) {
+      return this.getRouteSourceMode(route) === "known"
+        ? this.tm("createDialog.routeSource.switchToManual")
+        : this.tm("createDialog.routeSource.switchToKnown");
+    },
+
+    toggleRouteSourceMode(route: RouteEntry) {
+      const nextMode = this.getRouteSourceMode(route) === "known" ? "manual" : "known";
+      route.sourceMode = nextMode;
+    },
+
+    applyKnownRouteSource(route: RouteEntry, umo: unknown) {
+      if (typeof umo !== "string" || !umo) {
+        route.sourceUmo = "";
+        return;
+      }
+
+      const parsed = this.parseUmop(umo);
+      if (!parsed) {
+        return;
+      }
+      route.sourceUmo = umo;
+      route.messageType = parsed.messageType || "*";
+      route.sessionId = parsed.sessionId || "*";
+    },
+
+    // 添加新路由
+    addNewRoute() {
       this.platformRoutes.push({
         umop: null,
         originalUmop: null,
@@ -1685,7 +1619,7 @@ export default {
       }
 
       try {
-        const routesRes = await axios.get("/api/config/umo_abconf_routes");
+        const routesRes = await configRouteApi.list();
         const fullRoutingTable = routesRes.data.data.routing as Record<string, string>;
 
         for (const umop in fullRoutingTable) {
@@ -1708,7 +1642,7 @@ export default {
           }
         }
 
-        await axios.post("/api/config/umo_abconf_route/update_all", {
+        await configRouteApi.replace({
           routing: fullRoutingTable,
         });
       } catch (_err) {
@@ -1719,9 +1653,6 @@ export default {
 
     toggleEditMode(): void {
       this.isEditingRoutes = !this.isEditingRoutes;
-      if (this.isEditingRoutes) {
-        this.loadKnownRouteUmos();
-      }
     },
     toggleConfigSection(): void {
       this.showConfigSection = !this.showConfigSection;
@@ -1732,14 +1663,40 @@ export default {
       return config ? config.name : configId;
     },
 
-    isUmopMatchPlatform(umop: string, platformId: string): boolean {
-      if (!umop) return false;
-      const parts = umop.split(":");
-      if (parts.length !== 3) return false;
-      const platform = parts[0];
-      return platform === platformId || platform === "" || platform === "*";
+    isUmopMatchPlatform(umop: string | null, platformId: string) {
+      const parsedUmop = this.parseUmop(umop);
+      return this.isParsedUmopMatchPlatform(parsedUmop, platformId);
     },
 
+    sanitizePlatformIdPart(value: unknown) {
+      return String(value || "")
+        .trim()
+        .replace(/\s+/g, "")
+        .replace(/[!:]/g, "_");
+    },
+
+    isParsedUmopMatchPlatform(parsedUmop: { platform: string } | null, platformId: string) {
+      if (!parsedUmop) return false;
+      return parsedUmop.platform === platformId || parsedUmop.platform === "" || parsedUmop.platform === "*";
+    },
+
+    parseUmop(umop: string | null | undefined) {
+      if (!umop) return null;
+
+      const firstSeparatorIndex = umop.indexOf(":");
+      if (firstSeparatorIndex === -1) return null;
+
+      const secondSeparatorIndex = umop.indexOf(":", firstSeparatorIndex + 1);
+      if (secondSeparatorIndex === -1) return null;
+
+      return {
+        platform: umop.slice(0, firstSeparatorIndex),
+        messageType: umop.slice(firstSeparatorIndex + 1, secondSeparatorIndex),
+        sessionId: umop.slice(secondSeparatorIndex + 1),
+      };
+    },
+
+    // 获取消息类型标签
     getMessageTypeLabel(messageType: string): string {
       const typeMap: Record<string, string> = {
         "*": this.tm("createDialog.messageTypeLabels.all"),
@@ -1748,106 +1705,6 @@ export default {
         FriendMessage: this.tm("createDialog.messageTypeLabels.friend"),
       };
       return typeMap[messageType] || messageType;
-    },
-
-    parseUmo(umo: string | null | undefined): KnownRouteUmoInfo | null {
-      if (!umo) return null;
-      const parts = umo.split(":");
-      if (parts.length < 3) {
-        return { umo };
-      }
-      return {
-        umo,
-        platform: parts[0] || "",
-        message_type: parts[1] || "",
-        session_id: parts.slice(2).join(":"),
-      };
-    },
-
-    normalizeKnownRouteUmos(umos: Array<string | KnownRouteUmoInfo>): string[] {
-      const result: string[] = [];
-      const infoMap: Record<string, KnownRouteUmoInfo> = {};
-      for (const entry of umos) {
-        const info =
-          typeof entry === "string"
-            ? this.parseUmo(entry)
-            : {
-                ...(this.parseUmo(entry.umo) || { umo: entry.umo }),
-                ...entry,
-              };
-        if (!info?.umo) continue;
-        result.push(info.umo);
-        infoMap[info.umo] = info;
-      }
-      this.knownRouteUmoInfoMap = {
-        ...this.knownRouteUmoInfoMap,
-        ...infoMap,
-      };
-      return result;
-    },
-
-    async loadKnownRouteUmos(): Promise<void> {
-      if (this.loadingKnownRouteUmos || this.knownRouteUmos.length > 0) {
-        return;
-      }
-      this.loadingKnownRouteUmos = true;
-      try {
-        const response = await axios.get("/api/session/active-umos");
-        const data = response.data?.data || {};
-        this.knownRouteUmos = this.normalizeKnownRouteUmos(data.umos || []);
-      } catch (_err) {
-        console.error("加载已知会话来源失败:", _err);
-      } finally {
-        this.loadingKnownRouteUmos = false;
-      }
-    },
-
-    getKnownRouteUmoInfo(umo: string): KnownRouteUmoInfo {
-      return this.knownRouteUmoInfoMap[umo] || this.parseUmo(umo) || { umo };
-    },
-
-    getKnownRouteUmoDisplayProps(umo: string) {
-      const info = this.getKnownRouteUmoInfo(umo);
-      return {
-        umo: info.umo,
-        platform: info.platform,
-        messageType: info.message_type,
-        sessionId: info.session_id,
-        autoName: info.auto_name,
-        userAlias: info.user_alias,
-      };
-    },
-
-    getKnownRouteUmoSelectionText(umo: string): string {
-      const info = this.getKnownRouteUmoInfo(umo);
-      return info.user_alias || info.auto_name || info.display_name || umo;
-    },
-
-    getRouteSourceMode(route: RouteEntry): "known" | "manual" {
-      return route.sourceMode || "manual";
-    },
-
-    toggleRouteSourceMode(route: RouteEntry): void {
-      route.sourceMode = this.getRouteSourceMode(route) === "known" ? "manual" : "known";
-      if (route.sourceMode === "known") {
-        this.loadKnownRouteUmos();
-      }
-    },
-
-    getRouteSourceModeLinkText(route: RouteEntry): string {
-      return this.getRouteSourceMode(route) === "known"
-        ? this.tm("createDialog.routeSource.switchToManual")
-        : this.tm("createDialog.routeSource.switchToKnown");
-    },
-
-    applyKnownRouteSource(route: RouteEntry, umo: string | null): void {
-      route.sourceUmo = umo;
-      const parsed = this.parseUmo(umo);
-      if (!parsed) {
-        return;
-      }
-      route.messageType = parsed.message_type || "*";
-      route.sessionId = parsed.session_id || "*";
     },
 
     toggleShowConfigSection(): void {
@@ -2006,6 +1863,32 @@ export default {
   font-weight: 600;
   color: rgba(var(--v-theme-on-surface), 0.88);
 }
+
+.route-source-cell {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  min-width: 260px;
+}
+
+.route-source-input-row--editing {
+  padding-top: 20px;
+}
+
+.route-source-mode-link {
+  color: #0000ee;
+  cursor: pointer;
+  font-size: 12px;
+  line-height: 1;
+  padding: 2px 0;
+  text-decoration: underline;
+}
+
+.route-source-mode-link:hover {
+  text-decoration: underline;
+}
+
 
 .registration-inline {
   display: flex;

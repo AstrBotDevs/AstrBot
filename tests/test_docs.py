@@ -6,10 +6,13 @@ import re
 from pathlib import Path
 
 import pytest
+import yaml
 
 # Project root is 2 levels up from tests/
 PROJECT_ROOT = Path(__file__).parent.parent.resolve()
 DOCS_ROOT = PROJECT_ROOT / "docs"
+BUILTIN_SKILLS_ROOT = PROJECT_ROOT / "astrbot" / "builtin_stars" / "astrbot" / "skills"
+BUILTIN_SKILLS = ("documents", "pdf", "skill-creator", "spreadsheets")
 
 
 class TestDocStructure:
@@ -90,8 +93,9 @@ class TestCoreDocs:
         ]
         for readme in readme_files:
             content = readme.read_text(encoding="utf-8")
-            assert "Sponsors" in content or "sponsors" in content.lower(), \
+            assert "Sponsors" in content or "sponsors" in content.lower(), (
                 f"{readme.name} missing Sponsors section"
+            )
 
     def test_agents_md_exists(self):
         """AGENTS.md should exist."""
@@ -102,30 +106,40 @@ class TestCoreDocs:
     def test_claude_md_exists(self):
         """AGENTS.md should exist and contain AI coding guidelines (merged from CLAUDE.md)."""
         agents_md = PROJECT_ROOT / "AGENTS.md"
-        assert agents_md.exists(), "AGENTS.md not found (CLAUDE.md content was merged into AGENTS.md)"
+        assert agents_md.exists(), (
+            "AGENTS.md not found (CLAUDE.md content was merged into AGENTS.md)"
+        )
         assert agents_md.stat().st_size > 0, "AGENTS.md is empty"
         content = agents_md.read_text(encoding="utf-8")
         assert "AstrBot" in content, "AGENTS.md should contain project guidelines"
 
-    def test_startup_guide_exists(self):
-        """Startup guide should exist in both languages."""
-        startup_zh = DOCS_ROOT / "zh" / "startup.md"
-        startup_en = DOCS_ROOT / "en" / "startup.md"
-        assert startup_zh.exists(), "docs/zh/startup.md not found"
-        assert startup_en.exists(), "docs/en/startup.md not found"
+    @pytest.mark.parametrize("language", ["zh", "en"])
+    def test_getting_started_guides_exist(self, language):
+        """The current introduction and CLI deployment routes must resolve."""
+        for route in ("what-is-astrbot.md", "deploy/astrbot/cli.md"):
+            guide = DOCS_ROOT / language / route
+            assert guide.is_file(), f"{guide.relative_to(PROJECT_ROOT)} not found"
 
     def test_core_docs_have_content(self):
         """Core documentation files should have minimum content."""
         min_lines = 10
         core_docs = [
-            DOCS_ROOT / "zh" / "startup.md",
-            DOCS_ROOT / "en" / "startup.md",
+            DOCS_ROOT / "zh" / "what-is-astrbot.md",
+            DOCS_ROOT / "en" / "what-is-astrbot.md",
+            DOCS_ROOT / "zh" / "deploy" / "astrbot" / "cli.md",
+            DOCS_ROOT / "en" / "deploy" / "astrbot" / "cli.md",
             PROJECT_ROOT / "AGENTS.md",
         ]
         for doc in core_docs:
-            if doc.exists():
-                lines = [l for l in doc.read_text(encoding="utf-8").splitlines() if l.strip()]
-                assert len(lines) >= min_lines, f"{doc.name} has less than {min_lines} lines"
+            assert doc.is_file(), f"{doc.name} not found"
+            lines = [
+                line
+                for line in doc.read_text(encoding="utf-8").splitlines()
+                if line.strip()
+            ]
+            assert len(lines) >= min_lines, (
+                f"{doc.name} has less than {min_lines} lines"
+            )
 
 
 class TestDocLinks:
@@ -134,8 +148,7 @@ class TestDocLinks:
     def test_no_broken_internal_links_readme(self):
         """README.md should not have obviously broken internal links."""
         readme = PROJECT_ROOT / "README.md"
-        if not readme.exists():
-            pytest.skip("README.md not found")
+        assert readme.is_file(), "README.md not found"
 
         content = readme.read_text(encoding="utf-8")
 
@@ -152,8 +165,7 @@ class TestDocLinks:
     def test_readme_has_valid_structure(self):
         """README.md should have key sections."""
         readme = PROJECT_ROOT / "README.md"
-        if not readme.exists():
-            pytest.skip("README.md not found")
+        assert readme.is_file(), "README.md not found"
 
         content = readme.read_text(encoding="utf-8")
 
@@ -172,9 +184,8 @@ class TestDocFormatting:
 
     def test_markdown_files_have_no_trailing_whitespace(self):
         """Markdown files should not have trailing whitespace on lines."""
-        md_files = list(DOCS_ROOT.glob("**/*.md"))
-        if not md_files:
-            pytest.skip("No markdown files found in docs/")
+        md_files = sorted(DOCS_ROOT.glob("**/*.md"))
+        assert md_files, "No markdown files found in docs/"
 
         files_with_issues = []
         for md_file in md_files[:20]:  # Check first 20 files
@@ -185,8 +196,9 @@ class TestDocFormatting:
                     files_with_issues.append(f"{md_file.relative_to(PROJECT_ROOT)}:{i}")
                     break
 
-        assert not files_with_issues, \
+        assert not files_with_issues, (
             f"Files with trailing whitespace: {files_with_issues}"
+        )
 
     def test_readme_files_end_with_newline(self):
         """README files should end with a newline."""
@@ -198,33 +210,41 @@ class TestDocFormatting:
             if content and not content.endswith("\n"):
                 files_without_newline.append(readme.name)
 
-        assert not files_without_newline, \
+        assert not files_without_newline, (
             f"Files without trailing newline: {files_without_newline}"
+        )
 
 
 class TestSkillDocs:
-    """Test that skill documentation exists."""
+    """Validate the instruction documents shipped with the built-in plugin."""
 
-    def test_dev_guide_skill_exists(self):
-        """Developer guide skill should exist in docs/skills."""
-        skill_doc = DOCS_ROOT / "skills" / "astrbot-dev-guide.md"
-        assert skill_doc.exists(), "docs/skills/astrbot-dev-guide.md not found"
+    @pytest.mark.parametrize("skill_name", BUILTIN_SKILLS)
+    def test_builtin_skill_document_exists(self, skill_name):
+        """Each supported built-in skill must ship substantive instructions."""
+        skill_doc = BUILTIN_SKILLS_ROOT / skill_name / "SKILL.md"
+        assert skill_doc.is_file(), f"{skill_doc.relative_to(PROJECT_ROOT)} not found"
         content = skill_doc.read_text(encoding="utf-8")
         assert len(content) > 100, "Skill doc is too short"
 
-    def test_skill_doc_has_frontmatter(self):
-        """Skill doc should have frontmatter with name and description."""
-        skill_doc = DOCS_ROOT / "skills" / "astrbot-dev-guide.md"
-        if not skill_doc.exists():
-            pytest.skip("Skill doc not found")
-
+    @pytest.mark.parametrize("skill_name", BUILTIN_SKILLS)
+    def test_skill_doc_has_frontmatter(self, skill_name):
+        """Parse actual YAML metadata and check the skill discovery fields."""
+        skill_doc = BUILTIN_SKILLS_ROOT / skill_name / "SKILL.md"
+        assert skill_doc.is_file(), "Skill doc not found"
         content = skill_doc.read_text(encoding="utf-8")
-        assert "---" in content, "Skill doc missing frontmatter delimiter"
-        assert "name:" in content, "Skill doc missing 'name' in frontmatter"
-        assert "description:" in content, "Skill doc missing 'description' in frontmatter"
+        frontmatter = re.match(
+            r"\A---\r?\n(.*?)\r?\n---(?:\r?\n|\Z)", content, re.DOTALL
+        )
+        assert frontmatter is not None, "Skill doc missing leading YAML frontmatter"
+        metadata = yaml.safe_load(frontmatter.group(1))
+        assert isinstance(metadata, dict)
+        assert metadata.get("name") == skill_name
+        assert isinstance(metadata.get("description"), str)
+        assert metadata["description"].strip(), "Skill description must not be empty"
 
 
 # Helper functions
+
 
 def _get_all_dirs(root: Path) -> list[Path]:
     """Get all directories under root, including root itself."""

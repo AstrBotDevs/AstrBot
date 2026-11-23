@@ -10,9 +10,23 @@ from pathlib import Path
 from xml.etree import ElementTree
 
 from docx import Document
+from docx.text.paragraph import Paragraph
+
+if __package__:
+    from astrbot.builtin_stars.astrbot.skills._astrbot_skill_support.cli import (
+        parse_input_path,
+    )
+else:
+    from _astrbot_skill_support.cli import parse_input_path
 
 _W = "{http://schemas.openxmlformats.org/wordprocessingml/2006/main}"
 _REL = "{http://schemas.openxmlformats.org/package/2006/relationships}"
+
+
+def _paragraph_style_name(paragraph: Paragraph) -> str | None:
+    """Return optional paragraph style metadata without requiring a style name."""
+    style = paragraph.style
+    return style.name if style is not None else None
 
 
 def inspect_docx(path: Path, sample_paragraphs: int) -> dict:
@@ -25,14 +39,15 @@ def inspect_docx(path: Path, sample_paragraphs: int) -> dict:
     Returns:
         JSON-serializable inspection data.
     """
-    document = Document(path)
+    document = Document(str(path))
     paragraphs = [
         paragraph for paragraph in document.paragraphs if paragraph.text.strip()
     ]
     headings = [
-        {"style": paragraph.style.name, "text": paragraph.text}
+        {"style": style_name, "text": paragraph.text}
         for paragraph in paragraphs
-        if paragraph.style and paragraph.style.name.startswith("Heading")
+        if (style_name := _paragraph_style_name(paragraph))
+        and style_name.startswith("Heading")
     ]
     tables = [
         {
@@ -92,7 +107,7 @@ def inspect_docx(path: Path, sample_paragraphs: int) -> dict:
         "paragraphs": len(document.paragraphs),
         "nonempty_paragraphs": len(paragraphs),
         "paragraph_sample": [
-            {"style": paragraph.style.name, "text": paragraph.text}
+            {"style": _paragraph_style_name(paragraph), "text": paragraph.text}
             for paragraph in paragraphs[:sample_paragraphs]
         ],
         "headings": headings,
@@ -134,12 +149,7 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("input", type=Path, help="DOCX input")
     parser.add_argument("--sample-paragraphs", type=int, default=12)
-    args = parser.parse_args()
-    path = args.input.expanduser().resolve(strict=False)
-    if not path.is_file():
-        parser.error(f"Input file not found: {path}")
-    if path.suffix.lower() != ".docx":
-        parser.error("Input path must end with .docx")
+    args, path = parse_input_path(parser, suffix=".docx")
     if args.sample_paragraphs < 0:
         parser.error("Sample limit must be non-negative.")
     try:

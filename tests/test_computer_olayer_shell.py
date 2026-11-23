@@ -1,22 +1,36 @@
-"""Import smoke tests for Shell component (olayer/shell.py)."""
+"""A concrete shell adapter obeys the shared component calling convention."""
+
+from types import SimpleNamespace
+from unittest.mock import AsyncMock
 
 import pytest
 
+from astrbot.core.astr_agent_runtime.computer.booters.cua import CuaShellComponent
+from astrbot.core.astr_agent_runtime.computer.olayer.shell import ShellComponent
 
-class TestShellComponentImports:
-    """Verify shell.py module can be imported and the protocol class exists."""
 
-    def test_module_import(self):
-        """Import the module without error."""
-        from astrbot.core.computer.olayer import shell
-        assert shell is not None
+@pytest.mark.asyncio
+async def test_shell_forwards_execution_options_and_normalizes_result():
+    transport = AsyncMock(return_value={"stdout": "done", "stderr": "", "exit_code": 0})
+    component: ShellComponent = CuaShellComponent(
+        SimpleNamespace(shell=SimpleNamespace(exec=transport))
+    )
+    result = await component.exec(
+        "echo done", cwd="/work", env={"LANG": "C"}, timeout=7, session_id="test"
+    )
+    transport.assert_awaited_once_with(
+        "echo done", cwd="/work", env={"LANG": "C"}, timeout=7
+    )
+    assert result == {"stdout": "done", "stderr": "", "exit_code": 0, "success": True}
 
-    def test_shell_component_protocol(self):
-        """ShellComponent protocol is present."""
-        from astrbot.core.computer.olayer.shell import ShellComponent
-        assert ShellComponent is not None
 
-    def test_shell_component_has_exec(self):
-        """ShellComponent defines the exec method."""
-        from astrbot.core.computer.olayer.shell import ShellComponent
-        assert hasattr(ShellComponent, "exec")
+@pytest.mark.asyncio
+async def test_non_shell_mode_fails_before_transport():
+    transport = AsyncMock()
+    component: ShellComponent = CuaShellComponent(
+        SimpleNamespace(shell=SimpleNamespace(exec=transport))
+    )
+    result = await component.exec("echo done", shell=False)
+    assert result["exit_code"] == 2 and result["success"] is False
+    assert "only shell mode" in result["stderr"]
+    transport.assert_not_awaited()

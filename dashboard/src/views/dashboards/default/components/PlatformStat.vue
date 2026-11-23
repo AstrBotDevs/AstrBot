@@ -117,7 +117,7 @@ export default {
   },
   data() {
     return {
-      platforms: [],
+      platforms: [] as Array<{ name: string; count: number }>,
     };
   },
   computed: {
@@ -146,7 +146,7 @@ export default {
     },
   },
   methods: {
-    getPercentage(count) {
+    getPercentage(count: number) {
       return this.totalCount ? (count / this.totalCount) * 100 : 0;
     },
   },

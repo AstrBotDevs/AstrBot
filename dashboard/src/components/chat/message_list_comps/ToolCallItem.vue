@@ -1,15 +1,19 @@
 <template>
   <div class="tool-call-item">
-    <div
+    <button
       class="tool-call-line"
-      role="button"
-      tabindex="0"
+      type="button"
+      :aria-expanded="isExpanded"
       @click="toggleExpanded"
-      @keydown.enter="toggleExpanded"
-      @keydown.space.prevent="toggleExpanded"
     >
       <slot name="label" :expanded="isExpanded" />
-    </div>
+      <ChevronRight
+        :size="22"
+        class="process-chevron"
+        :class="{ 'is-expanded': isExpanded }"
+        aria-hidden="true"
+      />
+    </button>
     <transition name="tool-call-fade">
       <div
         v-if="isExpanded"
@@ -23,7 +27,9 @@
 </template>
 
 <script setup lang="ts">
+import { ChevronRight } from "@lucide/vue";
 import { ref } from "vue";
+import "@/components/chat/message_list_comps/processCollapse.css";
 
 const props = withDefaults(
   defineProps<{
@@ -43,9 +49,12 @@ const toggleExpanded = () => {
 
 <style scoped>
 .tool-call-line {
-  font-size: 14px;
-  color: var(--v-theme-secondaryText);
-  opacity: 0.85;
+  border: 0;
+  padding: 0;
+  background: transparent;
+  font: inherit;
+  line-height: inherit;
+  color: rgba(var(--v-theme-on-surface), 0.7);
   cursor: pointer;
   user-select: none;
   transition:
@@ -53,11 +62,11 @@ const toggleExpanded = () => {
     opacity 0.2s ease;
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
 }
 
 .tool-call-line:hover {
-  color: var(--v-theme-secondary);
+  color: rgba(var(--v-theme-on-surface), 0.88);
   opacity: 1;
 }
 
@@ -67,6 +76,8 @@ const toggleExpanded = () => {
   border-left: 2px solid var(--v-theme-border);
   border-radius: 6px;
   background-color: rgba(0, 0, 0, 0.02);
+  font-size: inherit;
+  line-height: inherit;
 }
 
 .tool-call-inline-details.is-dark {

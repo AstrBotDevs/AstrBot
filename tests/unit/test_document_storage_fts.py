@@ -1,13 +1,22 @@
 import sqlite3
 
 import pytest
+import pytest_asyncio
 
 from astrbot.core.db.vec_db.faiss_impl.document_storage import DocumentStorage
 
 
+@pytest_asyncio.fixture
+async def storage(tmp_path):
+    instance = DocumentStorage(str(tmp_path / "doc.db"))
+    try:
+        yield instance
+    finally:
+        await instance.close()
+
+
 @pytest.mark.asyncio
-async def test_document_storage_fts_insert_search_and_delete(tmp_path):
-    storage = DocumentStorage(str(tmp_path / "doc.db"))
+async def test_document_storage_fts_insert_search_and_delete(storage):
     await storage.initialize()
 
     assert storage.fts5_available is True
@@ -31,12 +40,9 @@ async def test_document_storage_fts_insert_search_and_delete(tmp_path):
 
     assert results == []
 
-    await storage.close()
-
 
 @pytest.mark.asyncio
-async def test_document_storage_fts_rebuilds_existing_documents(tmp_path):
-    storage = DocumentStorage(str(tmp_path / "doc.db"))
+async def test_document_storage_fts_rebuilds_existing_documents(storage):
     await storage.initialize()
 
     storage.fts5_available = False
@@ -54,12 +60,9 @@ async def test_document_storage_fts_rebuilds_existing_documents(tmp_path):
     assert results is not None
     assert [result["doc_id"] for result in results] == ["legacy-chunk"]
 
-    await storage.close()
-
 
 @pytest.mark.asyncio
-async def test_document_storage_fts_delete_skips_missing_fts_row(tmp_path):
-    storage = DocumentStorage(str(tmp_path / "doc.db"))
+async def test_document_storage_fts_delete_skips_missing_fts_row(storage):
     await storage.initialize()
 
     storage.fts5_available = False
@@ -74,18 +77,15 @@ async def test_document_storage_fts_delete_skips_missing_fts_row(tmp_path):
 
     assert await storage.get_document_by_doc_id("legacy-chunk") is None
 
-    await storage.close()
-
 
 @pytest.mark.asyncio
-async def test_document_storage_fts_recovers_from_legacy_non_fts_table(tmp_path):
-    db_path = tmp_path / "doc.db"
+async def test_document_storage_fts_recovers_from_legacy_non_fts_table(storage):
+    db_path = storage.db_path
     conn = sqlite3.connect(db_path)
     conn.execute("CREATE TABLE documents_fts (rowid INTEGER PRIMARY KEY)")
     conn.commit()
     conn.close()
 
-    storage = DocumentStorage(str(db_path))
     await storage.initialize()
 
     assert storage.fts5_available is True
@@ -99,5 +99,3 @@ async def test_document_storage_fts_recovers_from_legacy_non_fts_table(tmp_path)
 
     assert results is not None
     assert [result["doc_id"] for result in results] == ["legacy-fix"]
-
-    await storage.close()

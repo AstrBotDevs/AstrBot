@@ -1,20 +1,72 @@
 import asyncio
 import os
 import re
-from collections.abc import Callable
-from typing import Any, ClassVar
+from collections.abc import AsyncIterator, Awaitable, Callable, Sequence
+from functools import partial
+from typing import ClassVar, NotRequired, Protocol, TypedDict, runtime_checkable
 
 import telegramify_markdown
-from telegram import ReactionTypeCustomEmoji, ReactionTypeEmoji
+from telegram import (
+    InlineKeyboardButton,
+    InlineKeyboardMarkup,
+    Message,
+    ReactionTypeCustomEmoji,
+    ReactionTypeEmoji,
+)
 from telegram.constants import ChatAction
 from telegram.error import BadRequest
 from telegram.ext import ExtBot
 
 from astrbot import logger
 from astrbot.api.event import AstrMessageEvent, MessageChain
-from astrbot.api.message_components import At, File, Image, Plain, Record, Reply, Video
-from astrbot.api.platform import AstrBotMessage, MessageType, PlatformMetadata
+from astrbot.api.message_components import (
+    ActionRow,
+    At,
+    Button,
+    File,
+    Image,
+    Plain,
+    Record,
+    Reply,
+    Video,
+)
+from astrbot.api.platform import AstrBotMessage, Group, MessageType, PlatformMetadata
+from astrbot.core.message.components import BaseMessageComponent
+from astrbot.core.platform.button_interaction import encode_button_callback
 from astrbot.core.utils.metrics import Metric
+
+
+class DeliveryPayload(TypedDict):
+    """Routing fields accepted by each Telegram delivery method used here."""
+
+    chat_id: str | int
+    message_thread_id: NotRequired[int]
+    reply_to_message_id: NotRequired[int]
+    reply_markup: NotRequired[InlineKeyboardMarkup]
+
+
+class ChatActionPayload(TypedDict):
+    chat_id: str
+    action: str
+    message_thread_id: NotRequired[int]
+
+
+class DraftOptions(TypedDict, total=False):
+    message_thread_id: int
+    parse_mode: str
+
+
+class EditPayload(TypedDict):
+    chat_id: str | int
+    message_id: int
+    parse_mode: NotRequired[str]
+
+
+@runtime_checkable
+class ClosableStream(Protocol):
+    """The optional asynchronous cleanup contract of a message source."""
+
+    def aclose(self) -> Awaitable[None]: ...
 
 
 def _is_gif(path: str) -> bool:
@@ -87,25 +139,93 @@ class TelegramPlatformEvent(AstrMessageEvent):
             text = text[split_point:].lstrip()
         return chunks
 
+    @staticmethod
+    def _normalize_delivery_payload(payload: DeliveryPayload) -> DeliveryPayload:
+        """Copy routing fields into the integer form required by the Telegram SDK."""
+        normalized = payload.copy()
+        if (thread_id := payload.get("message_thread_id")) is not None:
+            normalized["message_thread_id"] = int(thread_id)
+        if (reply_id := payload.get("reply_to_message_id")) is not None:
+            normalized["reply_to_message_id"] = int(reply_id)
+        return normalized
+
     @classmethod
     async def _send_text_chunks(
         cls,
         client: ExtBot,
         text: str,
-        payload: dict[str, Any],
+        payload: DeliveryPayload,
     ) -> None:
-        """Split text at Telegram's limit and send every chunk."""
-        for chunk in cls._split_message(text):
+        """按 Telegram 限制切分文本后逐段发送。"""
+        payload = cls._normalize_delivery_payload(payload)
+        chunks = cls._split_message(text)
+        for index, chunk in enumerate(chunks):
+            chunk_payload = payload.copy()
+            if index < len(chunks) - 1:
+                chunk_payload.pop("reply_markup", None)
             try:
                 markdown_text = telegramify_markdown.markdownify(chunk)
+            except Exception as error:
+                logger.warning("Telegram Markdown conversion failed: %s", error)
+                await client.send_message(text=chunk, **chunk_payload)
+                continue
+            try:
                 await client.send_message(
                     text=markdown_text,
                     parse_mode="MarkdownV2",
-                    **payload,
+                    **chunk_payload,
                 )
-            except Exception as e:
-                logger.warning(f"Markdown转换失败,使用普通文本: {e!s}")
-                await client.send_message(text=chunk, **payload)
+            except BadRequest as e:
+                logger.warning(
+                    f"Telegram rejected Markdown; retrying as plain text: {e!s}"
+                )
+                await client.send_message(text=chunk, **chunk_payload)
+
+    @classmethod
+    def _build_inline_keyboard(
+        cls,
+        rows: list[ActionRow],
+    ) -> InlineKeyboardMarkup | None:
+        """Render common button rows as a Telegram inline keyboard.
+
+        Args:
+            rows: Common action rows to render.
+
+        Returns:
+            Telegram markup, or ``None`` when no valid buttons remain.
+        """
+        keyboard: list[list[InlineKeyboardButton]] = []
+        for row in rows:
+            telegram_row: list[InlineKeyboardButton] = []
+            for button in row.buttons:
+                if isinstance(button.action, Button.UrlAction):
+                    telegram_row.append(
+                        InlineKeyboardButton(button.label, url=button.action.url)
+                    )
+                    continue
+
+                if not isinstance(button.action, Button.CallbackAction):
+                    continue
+                callback_data = encode_button_callback(
+                    button.id, button.action.data, expires_at=row.action_expires_at
+                )
+                if len(callback_data.encode("utf-8")) > 64:
+                    logger.warning(
+                        "Skipping Telegram button %r because its callback token "
+                        "exceeds 64 bytes.",
+                        button.id,
+                    )
+                    continue
+                telegram_row.append(
+                    InlineKeyboardButton(
+                        button.label,
+                        callback_data=callback_data,
+                    )
+                )
+            if telegram_row:
+                keyboard.append(telegram_row)
+
+        return InlineKeyboardMarkup(keyboard) if keyboard else None
 
     @classmethod
     async def _send_chat_action(
@@ -113,19 +233,21 @@ class TelegramPlatformEvent(AstrMessageEvent):
         client: ExtBot,
         chat_id: str,
         action: ChatAction | str,
-        message_thread_id: str | None = None,
+        message_thread_id: str | int | None = None,
     ) -> None:
         """发送聊天状态动作"""
         try:
-            payload: dict[str, Any] = {"chat_id": chat_id, "action": action}
+            payload: ChatActionPayload = {"chat_id": chat_id, "action": action}
             if message_thread_id:
-                payload["message_thread_id"] = message_thread_id
+                payload["message_thread_id"] = int(message_thread_id)
             await client.send_chat_action(**payload)
         except Exception as e:
             logger.warning(f"[Telegram] 发送 chat action 失败: {e}")
 
     @classmethod
-    def _get_chat_action_for_chain(cls, chain: list[Any]) -> ChatAction | str:
+    def _get_chat_action_for_chain(
+        cls, chain: Sequence[BaseMessageComponent]
+    ) -> ChatAction | str:
         """根据消息链中的组件类型确定合适的 chat action(按优先级)"""
         for seg_type, action in cls.ACTION_BY_TYPE.items():
             if any(isinstance(seg, seg_type) for seg in chain):
@@ -137,29 +259,24 @@ class TelegramPlatformEvent(AstrMessageEvent):
         cls,
         client: ExtBot,
         upload_action: ChatAction | str,
-        send_coro,
+        send_coro: Callable[[], Awaitable[Message]],
         *,
         user_name: str,
-        message_thread_id: str | None = None,
-        **payload: Any,
+        message_thread_id: str | int | None = None,
     ) -> None:
         """发送媒体时显示 upload action,发送完成后恢复 typing"""
-        effective_thread_id = message_thread_id or payload.get("message_thread_id")
         await cls._send_chat_action(
             client,
             user_name,
             upload_action,
-            effective_thread_id,
+            message_thread_id,
         )
-        send_payload = dict(payload)
-        if effective_thread_id and "message_thread_id" not in send_payload:
-            send_payload["message_thread_id"] = effective_thread_id
-        await send_coro(**send_payload)
+        await send_coro()
         await cls._send_chat_action(
             client,
             user_name,
             ChatAction.TYPING,
-            effective_thread_id,
+            message_thread_id,
         )
 
     @classmethod
@@ -167,7 +284,7 @@ class TelegramPlatformEvent(AstrMessageEvent):
         cls,
         client: ExtBot,
         path: str,
-        payload: dict[str, Any],
+        payload: DeliveryPayload,
         *,
         caption: str | None = None,
         user_name: str = "",
@@ -181,42 +298,43 @@ class TelegramPlatformEvent(AstrMessageEvent):
         When *use_media_action* is ``True`` the helper wraps the send calls
         with ``_send_media_with_action`` (used by the streaming path).
         """
+        media_payload = cls._normalize_delivery_payload(payload)
+        if message_thread_id and "message_thread_id" not in media_payload:
+            media_payload["message_thread_id"] = int(message_thread_id)
         try:
             if use_media_action:
-                media_payload = dict(payload)
-                if message_thread_id and "message_thread_id" not in media_payload:
-                    media_payload["message_thread_id"] = message_thread_id
                 await cls._send_media_with_action(
                     client,
                     ChatAction.UPLOAD_VOICE,
-                    client.send_voice,
+                    partial(client.send_voice, voice=path, **media_payload),
                     user_name=user_name,
-                    voice=path,
-                    **media_payload,
+                    message_thread_id=media_payload.get("message_thread_id"),
                 )
             else:
-                await client.send_voice(voice=path, **payload)
+                await client.send_voice(voice=path, **media_payload)
         except BadRequest as e:
-            if "Voice_messages_forbidden" not in e.message:
+            if "Voice_messages_forbidden" not in str(e):
                 raise
             logger.warning(
                 "User privacy settings prevent receiving voice messages, falling back to sending an audio file. To enable voice messages, go to Telegram Settings ￫ Privacy and Security ￫ Voice Messages ￫ set to 'Everyone'.",
             )
             if use_media_action:
-                media_payload = dict(payload)
-                if message_thread_id and "message_thread_id" not in media_payload:
-                    media_payload["message_thread_id"] = message_thread_id
                 await cls._send_media_with_action(
                     client,
                     ChatAction.UPLOAD_DOCUMENT,
-                    client.send_document,
+                    partial(
+                        client.send_document,
+                        document=path,
+                        caption=caption,
+                        **media_payload,
+                    ),
                     user_name=user_name,
-                    document=path,
-                    caption=caption,
-                    **media_payload,
+                    message_thread_id=media_payload.get("message_thread_id"),
                 )
             else:
-                await client.send_document(document=path, caption=caption, **payload)
+                await client.send_document(
+                    document=path, caption=caption, **media_payload
+                )
 
     async def _ensure_typing(
         self,
@@ -231,7 +349,7 @@ class TelegramPlatformEvent(AstrMessageEvent):
             message_thread_id,
         )
 
-    async def send_typing(self) -> None:
+    def _message_target(self) -> tuple[str, str | None]:
         message_thread_id = None
         if self.get_message_type() == MessageType.GROUP_MESSAGE:
             user_name = self.message_obj.group_id
@@ -239,6 +357,10 @@ class TelegramPlatformEvent(AstrMessageEvent):
             user_name = self.get_sender_id()
         if "#" in user_name:
             user_name, message_thread_id = user_name.split("#")
+        return user_name, message_thread_id
+
+    async def send_typing(self) -> None:
+        user_name, message_thread_id = self._message_target()
         await self._ensure_typing(user_name, message_thread_id)
 
     @classmethod
@@ -249,6 +371,16 @@ class TelegramPlatformEvent(AstrMessageEvent):
         user_name: str,
     ) -> None:
         image_path = None
+
+        action_rows = [i for i in message.chain if isinstance(i, ActionRow)]
+        reply_markup = cls._build_inline_keyboard(action_rows)
+        renderable_indexes = [
+            index
+            for index, component in enumerate(message.chain)
+            if isinstance(component, (Plain, Image, File, Record, Video))
+        ]
+        last_renderable_index = renderable_indexes[-1] if renderable_indexes else None
+
         has_reply = False
         reply_message_id = None
         at_user_id = None
@@ -264,39 +396,29 @@ class TelegramPlatformEvent(AstrMessageEvent):
             user_name, message_thread_id = user_name.split("#")
         action = cls._get_chat_action_for_chain(message.chain)
         await cls._send_chat_action(client, user_name, action, message_thread_id)
-        for i in message.chain:
-            payload = {"chat_id": user_name}
-            if has_reply:
-                payload["reply_to_message_id"] = str(reply_message_id)
+
+        for index, i in enumerate(message.chain):
+            payload: DeliveryPayload = {
+                "chat_id": user_name,
+            }
+            if has_reply and reply_message_id is not None:
+                payload["reply_to_message_id"] = int(reply_message_id)
             if message_thread_id:
-                payload["message_thread_id"] = message_thread_id
+                payload["message_thread_id"] = int(message_thread_id)
+            if reply_markup is not None and index == last_renderable_index:
+                payload["reply_markup"] = reply_markup
+
             if isinstance(i, Plain):
                 if at_user_id and (not at_flag):
                     i.text = f"@{at_user_id} {i.text}"
                     at_flag = True
-                chunks = cls._split_message(i.text)
-                for chunk in chunks:
-                    try:
-                        md_text = telegramify_markdown.markdownify(chunk)
-                        await client.send_message(
-                            text=md_text,
-                            parse_mode="MarkdownV2",
-                            **payload,
-                        )
-                    except Exception as e:
-                        logger.warning(
-                            f"MarkdownV2 send failed: {e}. Using plain text instead.",
-                        )
-                        await client.send_message(text=chunk, **payload)
+                await cls._send_text_chunks(client, i.text, payload)
             elif isinstance(i, Image):
                 image_path = await i.convert_to_file_path()
                 if _is_gif(image_path):
-                    send_coro = client.send_animation
-                    media_kwarg = {"animation": image_path}
+                    await client.send_animation(animation=image_path, **payload)
                 else:
-                    send_coro = client.send_photo
-                    media_kwarg = {"photo": image_path}
-                await send_coro(**media_kwarg, **payload)
+                    await client.send_photo(photo=image_path, **payload)
             elif isinstance(i, File):
                 path = await i.get_file()
                 name = i.name or os.path.basename(path)
@@ -318,12 +440,115 @@ class TelegramPlatformEvent(AstrMessageEvent):
                     **payload,
                 )
 
+        if action_rows and last_renderable_index is None:
+            fallback_text = next(
+                (row.fallback_text for row in action_rows if row.fallback_text),
+                "Choose an option:",
+            )
+            payload = {"chat_id": user_name}
+            if reply_markup is not None:
+                payload["reply_markup"] = reply_markup
+            if has_reply and reply_message_id is not None:
+                payload["reply_to_message_id"] = int(reply_message_id)
+            if message_thread_id:
+                payload["message_thread_id"] = int(message_thread_id)
+            await cls._send_text_chunks(client, fallback_text, payload)
+
     async def send(self, message: MessageChain) -> None:
         if self.get_message_type() == MessageType.GROUP_MESSAGE:
             await self.send_with_client(self.client, message, self.message_obj.group_id)
         else:
             await self.send_with_client(self.client, message, self.get_sender_id())
         await super().send(message)
+
+    async def get_group(
+        self, group_id: str | None = None, **kwargs: object
+    ) -> Group | None:
+        """Get Telegram group metadata available to the bot.
+
+        Telegram topics use ``<chat_id>#<thread_id>`` inside AstrBot. The Bot API
+        calls target the parent chat while the returned group keeps the topic-aware ID.
+
+        Args:
+            group_id: AstrBot group ID to query. Defaults to the current group.
+            **kwargs: Reserved for compatibility with the platform event interface.
+
+        Returns:
+            Enriched group metadata, or ``None`` when no group ID is available.
+        """
+        requested_group_id = str(group_id or self.get_group_id())
+        if not requested_group_id:
+            return None
+
+        current_group = self.message_obj.group
+        group = self._group_lookup_snapshot(requested_group_id)
+        topic_name = (
+            getattr(self.message_obj, "_telegram_topic_name", None)
+            if current_group and current_group.group_id == requested_group_id
+            else None
+        )
+        chat_id = requested_group_id.split("#", 1)[0]
+        api_chat_id: str | int = (
+            int(chat_id) if chat_id.lstrip("-").isdigit() else chat_id
+        )
+
+        try:
+            chat = await self.client.get_chat(chat_id=api_chat_id)
+            title = getattr(chat, "title", None)
+            if isinstance(title, str):
+                group.group_name = (
+                    f"{title}-{topic_name}"
+                    if isinstance(topic_name, str) and topic_name
+                    else title
+                )
+
+            photo = getattr(chat, "photo", None)
+            file_id = getattr(photo, "big_file_id", None) if photo else None
+            if file_id:
+                try:
+                    photo_file = await self.client.get_file(file_id=file_id)
+                    file_path = getattr(photo_file, "file_path", None)
+                    if file_path:
+                        group.group_avatar = str(file_path)
+                except Exception as exc:
+                    logger.warning(
+                        f"[Telegram] Failed to get group photo for {chat_id}: {exc}"
+                    )
+        except Exception as exc:
+            logger.warning(
+                f"[Telegram] Failed to get group information for {chat_id}: {exc}"
+            )
+
+        try:
+            group.member_count = await self.client.get_chat_member_count(
+                chat_id=api_chat_id
+            )
+        except Exception as exc:
+            logger.warning(
+                f"[Telegram] Failed to get group member count for {chat_id}: {exc}"
+            )
+
+        try:
+            administrators = await self.client.get_chat_administrators(
+                chat_id=api_chat_id
+            )
+            group.group_admins = []
+            for administrator in administrators:
+                status = getattr(administrator, "status", None)
+                user = getattr(administrator, "user", None)
+                user_id = getattr(user, "id", None)
+                if user_id is None:
+                    continue
+                if status == "creator":
+                    group.group_owner = str(user_id)
+                elif status == "administrator":
+                    group.group_admins.append(str(user_id))
+        except Exception as exc:
+            logger.warning(
+                f"[Telegram] Failed to get group administrators for {chat_id}: {exc}"
+            )
+
+        return group
 
     async def react(self, emoji: str | None, big: bool = False) -> None:
         """给原消息添加 Telegram 反应:
@@ -375,7 +600,7 @@ class TelegramPlatformEvent(AstrMessageEvent):
         if not text or not text.strip():
             return
 
-        kwargs: dict[str, Any] = {}
+        kwargs: DraftOptions = {}
         if message_thread_id:
             kwargs["message_thread_id"] = int(message_thread_id)
         if parse_mode:
@@ -396,7 +621,7 @@ class TelegramPlatformEvent(AstrMessageEvent):
     async def _process_chain_items(
         self,
         chain: MessageChain,
-        payload: dict[str, Any],
+        payload: DeliveryPayload,
         user_name: str,
         message_thread_id: str | None,
         on_text: Callable[[str], None],
@@ -409,19 +634,20 @@ class TelegramPlatformEvent(AstrMessageEvent):
                 image_path = await i.convert_to_file_path()
                 if _is_gif(image_path):
                     action = ChatAction.UPLOAD_VIDEO
-                    send_coro = self.client.send_animation
-                    media_kwarg = {"animation": image_path}
+                    send_coro = partial(
+                        self.client.send_animation, animation=image_path, **payload
+                    )
                 else:
                     action = ChatAction.UPLOAD_PHOTO
-                    send_coro = self.client.send_photo
-                    media_kwarg = {"photo": image_path}
+                    send_coro = partial(
+                        self.client.send_photo, photo=image_path, **payload
+                    )
                 await self._send_media_with_action(
                     self.client,
                     action,
                     send_coro,
                     user_name=user_name,
-                    **media_kwarg,
-                    **payload,
+                    message_thread_id=payload.get("message_thread_id"),
                 )
             elif isinstance(i, File):
                 path = await i.get_file()
@@ -429,11 +655,14 @@ class TelegramPlatformEvent(AstrMessageEvent):
                 await self._send_media_with_action(
                     self.client,
                     ChatAction.UPLOAD_DOCUMENT,
-                    self.client.send_document,
+                    partial(
+                        self.client.send_document,
+                        document=path,
+                        filename=name,
+                        **payload,
+                    ),
                     user_name=user_name,
-                    document=path,
-                    filename=name,
-                    **payload,
+                    message_thread_id=payload.get("message_thread_id"),
                 )
             elif isinstance(i, Record):
                 path = await i.convert_to_file_path()
@@ -451,46 +680,60 @@ class TelegramPlatformEvent(AstrMessageEvent):
                 await self._send_media_with_action(
                     self.client,
                     ChatAction.UPLOAD_VIDEO,
-                    self.client.send_video,
+                    partial(self.client.send_video, video=path, **payload),
                     user_name=user_name,
-                    video=path,
-                    **payload,
+                    message_thread_id=payload.get("message_thread_id"),
                 )
             else:
                 logger.warning(f"不支持的消息类型: {type(i)}")
 
-    async def _send_final_segment(self, delta: str, payload: dict[str, Any]) -> None:
+    async def _send_final_segment(self, delta: str, payload: DeliveryPayload) -> None:
         """将累积文本作为 MarkdownV2 真实消息发送,失败时回退到纯文本｡"""
         await self._send_text_chunks(self.client, delta, payload)
 
-    async def send_streaming(self, generator, use_fallback: bool = False):
-        message_thread_id = None
-        if self.get_message_type() == MessageType.GROUP_MESSAGE:
-            user_name = self.message_obj.group_id
-        else:
-            user_name = self.get_sender_id()
-        if "#" in user_name:
-            user_name, message_thread_id = user_name.split("#")
-        payload = {"chat_id": user_name}
+    async def send_streaming(
+        self, generator: AsyncIterator[MessageChain], use_fallback: bool = False
+    ) -> None:
+        user_name, message_thread_id = self._message_target()
+        payload: DeliveryPayload = {"chat_id": user_name}
         if message_thread_id:
-            payload["message_thread_id"] = message_thread_id
-        is_private = self.get_message_type() == MessageType.FRIEND_MESSAGE
-        if is_private:
-            logger.info("[Telegram] 流式输出: 使用 sendMessageDraft (私聊)")
-            await self._send_streaming_draft(
-                user_name,
-                message_thread_id,
-                payload,
-                generator,
-            )
-        else:
-            logger.info("[Telegram] 流式输出: 使用 edit_message_text fallback (群聊)")
-            await self._send_streaming_edit(
-                user_name,
-                message_thread_id,
-                payload,
-                generator,
-            )
+            payload["message_thread_id"] = int(message_thread_id)
+        stream_error: BaseException | None = None
+        try:
+            is_private = self.get_message_type() == MessageType.FRIEND_MESSAGE
+            if is_private:
+                logger.info("[Telegram] 流式输出: 使用 sendMessageDraft (私聊)")
+                await self._send_streaming_draft(
+                    user_name,
+                    message_thread_id,
+                    payload,
+                    generator,
+                )
+            else:
+                logger.info(
+                    "[Telegram] 流式输出: 使用 edit_message_text fallback (群聊)"
+                )
+                await self._send_streaming_edit(
+                    user_name,
+                    message_thread_id,
+                    payload,
+                    generator,
+                )
+        except BaseException as error:
+            stream_error = error
+            raise
+        finally:
+            if isinstance(generator, ClosableStream) and callable(generator.aclose):
+                try:
+                    await generator.aclose()
+                except BaseException as cleanup_error:
+                    if stream_error is None:
+                        raise
+                    # Keep the original delivery or cancellation exception intact.
+                    logger.warning(
+                        "Telegram stream cleanup failed after a delivery error: %s",
+                        cleanup_error,
+                    )
         asyncio.create_task(
             Metric.upload(msg_event_tick=1, adapter_name=self.platform_meta.name),
         )
@@ -500,8 +743,8 @@ class TelegramPlatformEvent(AstrMessageEvent):
         self,
         user_name: str,
         message_thread_id: str | None,
-        payload: dict[str, Any],
-        generator,
+        payload: DeliveryPayload,
+        generator: AsyncIterator[MessageChain],
     ) -> None:
         """使用 sendMessageDraft API 进行流式推送(私聊专用)｡
 
@@ -561,7 +804,7 @@ class TelegramPlatformEvent(AstrMessageEvent):
                 if not isinstance(chain, MessageChain):
                     continue
                 if chain.type == "break":
-                    if delta:
+                    if delta.strip():
                         await self._send_message_draft(
                             user_name,
                             draft_id,
@@ -584,7 +827,7 @@ class TelegramPlatformEvent(AstrMessageEvent):
             done = True
             text_changed.set()
             await sender_task
-        if delta:
+        if delta.strip():
             await self._send_message_draft(user_name, draft_id, "⏳", message_thread_id)
             await self._send_final_segment(delta, payload)
 
@@ -592,10 +835,11 @@ class TelegramPlatformEvent(AstrMessageEvent):
         self,
         user_name: str,
         message_thread_id: str | None,
-        payload: dict[str, Any],
-        generator,
+        payload: DeliveryPayload,
+        generator: AsyncIterator[MessageChain],
     ) -> None:
         """使用 send_message + edit_message_text 进行流式推送(群聊 fallback)｡"""
+        payload = self._normalize_delivery_payload(payload)
         delta = ""
         current_content = ""
         message_id = None
@@ -614,17 +858,18 @@ class TelegramPlatformEvent(AstrMessageEvent):
             if not isinstance(chain, MessageChain):
                 continue
             if chain.type == "break":
-                if message_id:
+                if message_id and delta != current_content:
                     try:
                         await self.client.edit_message_text(
                             text=delta,
                             chat_id=payload["chat_id"],
                             message_id=message_id,
                         )
-                    except Exception as e:
+                    except BadRequest as e:
                         logger.warning(f"编辑消息失败(streaming-break): {e!s}")
                 message_id = None
                 delta = ""
+                current_content = ""
                 continue
             await self._process_chain_items(
                 chain,
@@ -633,6 +878,8 @@ class TelegramPlatformEvent(AstrMessageEvent):
                 message_thread_id,
                 _append_text,
             )
+            if not delta.strip() or delta == current_content:
+                continue
             if message_id and len(delta) <= self.MAX_MESSAGE_LENGTH:
                 current_time = asyncio.get_running_loop().time()
                 time_since_last_edit = current_time - last_edit_time
@@ -648,7 +895,7 @@ class TelegramPlatformEvent(AstrMessageEvent):
                             message_id=message_id,
                         )
                         current_content = delta
-                    except Exception as e:
+                    except BadRequest as e:
                         logger.warning(f"编辑消息失败(streaming): {e!s}")
                     last_edit_time = asyncio.get_running_loop().time()
             else:
@@ -659,26 +906,35 @@ class TelegramPlatformEvent(AstrMessageEvent):
                 try:
                     msg = await self.client.send_message(text=delta, **payload)
                     current_content = delta
+                    message_id = msg.message_id
                 except Exception as e:
-                    logger.warning(f"发送消息失败(streaming): {e!s}")
-                message_id = msg.message_id
+                    logger.warning("Telegram initial stream send failed: %s", e)
+                    raise
                 last_edit_time = asyncio.get_running_loop().time()
         try:
-            if delta and current_content != delta:
+            if message_id and current_content != delta:
+                edit_payload: EditPayload = {
+                    "chat_id": payload["chat_id"],
+                    "message_id": message_id,
+                }
                 try:
                     markdown_text = telegramify_markdown.markdownify(delta)
+                except Exception as error:
+                    logger.warning("Telegram Markdown conversion failed: %s", error)
+                    markdown_text = delta
+                else:
+                    edit_payload["parse_mode"] = "MarkdownV2"
+                try:
                     await self.client.edit_message_text(
-                        text=markdown_text,
-                        chat_id=payload["chat_id"],
-                        message_id=message_id,
-                        parse_mode="MarkdownV2",
+                        text=markdown_text, **edit_payload
                     )
-                except Exception as e:
-                    logger.warning(f"Markdown转换失败,使用普通文本: {e!s}")
-                    await self.client.edit_message_text(
-                        text=delta,
-                        chat_id=payload["chat_id"],
-                        message_id=message_id,
+                except BadRequest as error:
+                    if "parse_mode" not in edit_payload:
+                        raise
+                    logger.warning(
+                        "Telegram rejected Markdown; retrying as plain text: %s", error
                     )
-        except Exception as e:
+                    edit_payload.pop("parse_mode")
+                    await self.client.edit_message_text(text=delta, **edit_payload)
+        except BadRequest as e:
             logger.warning(f"编辑消息失败(streaming): {e!s}")

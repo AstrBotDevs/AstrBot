@@ -1,28 +1,38 @@
 import { defineStore } from "pinia";
-import config from "@/config";
+import config, { resolveUiTheme, type ThemeMode } from "@/config";
 import vuetify from "@/plugins/vuetify";
-import { DARK_THEME_NAME, LIGHT_THEME_NAME } from "@/theme/constants";
+import { DARK_THEME_NAME } from "@/theme/constants";
+import { chatPreferences } from "@/utils/chatPreferences";
 
-const DARK_THEMES: ReadonlySet<string> = new Set([DARK_THEME_NAME]);
+function applyUiTheme(theme: string) {
+  if (typeof vuetify.theme.change === "function") {
+    vuetify.theme.change(theme);
+  } else {
+    vuetify.theme.global.name.value = theme;
+  }
+}
 
 export const useCustomizerStore = defineStore("customizer", {
   state: () => ({
     Sidebar_drawer: config.Sidebar_drawer,
     Customizer_drawer: config.Customizer_drawer,
     mini_sidebar: config.mini_sidebar,
-    fontTheme: "Poppins",
+    fontTheme: config.fontTheme,
     uiTheme: config.uiTheme,
+    themeMode: config.themeMode as ThemeMode,
     inputBg: config.inputBg,
-    viewMode: (localStorage.getItem("viewMode") as "bot" | "chat") || "bot", // 'bot' 或 'chat'
-    chatSidebarOpen: false, // chat mode mobile sidebar state
-    chatSidebarCollapsed: false, // chat mode desktop sidebar state
-    autoSwitchTheme: localStorage.getItem("autoSwitchTheme") === "true", // 自动同步主题
+    viewMode: localStorage.getItem("viewMode") === "chat" ? ("chat" as const) : ("bot" as const),
+    autoSwitchTheme: config.themeMode === "system",
+    chatNavigationInSidebar: chatPreferences().global.navigationInSidebar === true,
+    chatSidebarOpen: false,
+    chatSidebarCollapsed: false,
   }),
 
   getters: {
+    isDark: (state) => state.uiTheme === DARK_THEME_NAME,
     isDarkTheme: (state) => state.uiTheme === DARK_THEME_NAME,
-    isDark: (state) => (state.uiTheme ? DARK_THEMES.has(state.uiTheme) : false),
   },
+
   actions: {
     SET_SIDEBAR_DRAWER() {
       this.Sidebar_drawer = !this.Sidebar_drawer;
@@ -34,34 +44,38 @@ export const useCustomizerStore = defineStore("customizer", {
       this.fontTheme = payload;
     },
     SET_UI_THEME(payload: string) {
-      this.uiTheme = payload;
-      localStorage.setItem("uiTheme", payload);
-
-      if (typeof vuetify.theme?.change === "function") {
-        vuetify.theme.change(payload);
-      } else if (vuetify.theme?.global) {
-        vuetify.theme.global.name.value = payload;
-      }
+      this.SET_THEME_MODE(payload === DARK_THEME_NAME ? "dark" : "light");
+    },
+    SET_THEME_MODE(mode: ThemeMode) {
+      this.themeMode = mode;
+      this.autoSwitchTheme = mode === "system";
+      localStorage.setItem("themeMode", mode);
+      localStorage.setItem("autoSwitchTheme", String(this.autoSwitchTheme));
+      this.uiTheme = resolveUiTheme(mode);
+      localStorage.setItem("uiTheme", this.uiTheme);
+      applyUiTheme(this.uiTheme);
     },
     SET_VIEW_MODE(payload: "bot" | "chat") {
       this.viewMode = payload;
       localStorage.setItem("viewMode", payload);
     },
     SET_AUTO_SYNC(payload: boolean) {
-      this.autoSwitchTheme = payload;
-      localStorage.setItem("autoSwitchTheme", String(payload));
+      this.SET_THEME_MODE(payload ? "system" : this.isDark ? "dark" : "light");
     },
-    // 手动切换主题（同时关闭自动同步）
     TOGGLE_DARK_MODE() {
-      this.SET_AUTO_SYNC(false);
-      const newTheme = this.isDarkTheme ? LIGHT_THEME_NAME : DARK_THEME_NAME;
-      this.SET_UI_THEME(newTheme);
+      this.SET_THEME_MODE(this.isDark ? "light" : "dark");
     },
-    // 应用系统主题（用于自动同步）
     APPLY_SYSTEM_THEME() {
-      if (typeof window === "undefined") return;
-      const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
-      this.SET_UI_THEME(prefersDark ? DARK_THEME_NAME : LIGHT_THEME_NAME);
+      if (this.themeMode !== "system" || typeof window === "undefined") return;
+      this.uiTheme = resolveUiTheme("system");
+      localStorage.setItem("uiTheme", this.uiTheme);
+      applyUiTheme(this.uiTheme);
+    },
+    SET_CHAT_NAVIGATION_IN_SIDEBAR(payload: boolean) {
+      this.chatNavigationInSidebar = payload;
+      chatPreferences((preferences) => {
+        preferences.global.navigationInSidebar = payload;
+      });
     },
     TOGGLE_CHAT_SIDEBAR() {
       this.chatSidebarOpen = !this.chatSidebarOpen;

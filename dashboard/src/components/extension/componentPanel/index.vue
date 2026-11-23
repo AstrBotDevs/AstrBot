@@ -12,10 +12,10 @@
  * - components/RenameDialog.vue: 重命名对话框
  * - components/DetailsDialog.vue: 详情对话框
  */
-import { computed, onActivated, onMounted, ref, watch } from "vue";
+import { onMounted, ref, watch } from "vue";
 import { useModuleI18n } from "@/i18n/composables";
+// Composables
 import { normalizeTextInput } from "@/utils/inputValue";
-import axios from "@/utils/request";
 // Components
 import CommandFilters from "./components/CommandFilters.vue";
 import CommandTable from "./components/CommandTable.vue";
@@ -24,11 +24,11 @@ import RenameDialog from "./components/RenameDialog.vue";
 import ToolTable from "./components/ToolTable.vue";
 import { useCommandActions } from "./composables/useCommandActions";
 import { useCommandFilters } from "./composables/useCommandFilters";
-// Composables
 import { useComponentData } from "./composables/useComponentData";
+import { useToolActions } from "./composables/useToolActions";
 
 // Types
-import type { CommandItem, ToolItem } from "./types";
+import type { CommandItem, CommandPermission, ToolItem } from "./types";
 
 defineOptions({ name: "ComponentPanel" });
 const props = withDefaults(defineProps<{ active?: boolean }>(), {
@@ -39,7 +39,6 @@ const { tm } = useModuleI18n("features/command");
 const { tm: tmTool } = useModuleI18n("features/tooluse");
 
 const viewMode = ref<"commands" | "tools">("commands");
-const toolSearch = ref("");
 
 // 数据管理
 const { loading, commands, tools, toolsLoading, summary, snackbar, toast, fetchCommands, fetchTools } =
@@ -72,47 +71,29 @@ const {
   openDetailsDialog,
 } = useCommandActions(toast, () => fetchCommands(tm("messages.loadFailed")));
 
-const filteredTools = computed(() => {
-  const query = normalizeTextInput(toolSearch.value).trim().toLowerCase();
-  if (!query) return tools.value;
-  return tools.value.filter(
-    (tool) => tool.name?.toLowerCase().includes(query) || tool.description?.toLowerCase().includes(query),
-  );
-});
+// 工具操作方法
+const { toolSearch, filteredTools, toolSummary, toggleTool, updateToolPermission } = useToolActions(tools, toast);
 
 // 处理切换指令状态
 const handleToggleCommand = async (cmd: CommandItem) => {
   await toggleCommand(cmd, tm("messages.toggleSuccess"), tm("messages.toggleFailed"));
 };
 
-const handleUpdatePermission = async (cmd: CommandItem, permission: "admin" | "member") => {
+const handleUpdatePermission = async (cmd: CommandItem, permission: CommandPermission) => {
   await updatePermission(cmd, permission, tm("messages.updateSuccess"), tm("messages.updateFailed"));
 };
 
 const handleToggleTool = async (tool: ToolItem) => {
-  const previous = tool.active;
-  tool.active = !tool.active;
-  try {
-    const res = await axios.post("/api/tools/toggle-tool", {
-      tool_key: tool.tool_key,
-      name: tool.name,
-      activate: tool.active,
-      runtime_kind: tool.runtime_kind,
-      plugin_id: tool.plugin_id,
-    });
-    if (res.data.status === "ok") {
-      toast(res.data.message || tmTool("messages.toggleToolSuccess"));
-    } else {
-      tool.active = previous;
-      toast(res.data.message || tmTool("messages.toggleToolError", { error: "" }), "error");
-    }
-  } catch (error: any) {
-    tool.active = previous;
-    toast(
-      error?.response?.data?.message || error?.message || tmTool("messages.toggleToolError", { error: "" }),
-      "error",
-    );
-  }
+  await toggleTool(tool, tmTool("messages.toggleToolSuccess"), tmTool("messages.toggleToolError", { error: "" }));
+};
+
+const handleUpdateToolPermission = async (tool: ToolItem, permission: "admin" | "member") => {
+  await updateToolPermission(
+    tool,
+    permission,
+    tmTool("messages.updateToolPermissionSuccess", { name: tool.name }),
+    tmTool("messages.updateToolPermissionFailed"),
+  );
 };
 
 // 处理确认重命名
@@ -306,6 +287,12 @@ watch(viewMode, async (mode) => {
                   <span class="text-body-1 font-weight-bold text-success">{{
                     filteredTools.filter((t) => t.active).length
                   }}</span>
+                </div>
+                <v-divider vertical class="mx-1" style="height: 20px;" />
+                <div class="d-flex align-center">
+                  <v-icon size="18" color="error" class="mr-1">mdi-close-circle-outline</v-icon>
+                  <span class="text-body-2 text-medium-emphasis mr-1">{{ tmTool('functionTools.summary.inactive') }}:</span>
+                  <span class="text-body-1 font-weight-bold text-error">{{ toolSummary.inactive }}</span>
                 </div>
               </div>
             </div>

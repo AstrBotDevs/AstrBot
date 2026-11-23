@@ -3,7 +3,6 @@ from astrbot.core.provider.provider import STTProvider
 from astrbot.core.provider.register import register_provider_adapter
 
 from .mimo_api_common import (
-    DEFAULT_MIMO_API_BASE,
     DEFAULT_MIMO_STT_MODEL,
     DEFAULT_MIMO_STT_SYSTEM_PROMPT,
     DEFAULT_MIMO_STT_USER_PROMPT,
@@ -12,7 +11,7 @@ from .mimo_api_common import (
     build_headers,
     cleanup_files,
     create_http_client,
-    normalize_timeout,
+    mimo_connection_options,
     prepare_audio_input,
 )
 
@@ -29,10 +28,9 @@ class ProviderMiMoSTTAPI(STTProvider):
         provider_settings: dict,
     ) -> None:
         super().__init__(provider_config, provider_settings)
-        self.chosen_api_key = provider_config.get("api_key", "")
-        self.api_base = provider_config.get("api_base", DEFAULT_MIMO_API_BASE)
-        self.proxy = provider_config.get("proxy", "")
-        self.timeout = normalize_timeout(provider_config.get("timeout", 20))
+        self.chosen_api_key, self.api_base, self.proxy, self.timeout = (
+            mimo_connection_options(provider_config)
+        )
         self.set_model(provider_config.get("model", DEFAULT_MIMO_STT_MODEL))
         self.client = create_http_client(self.timeout, self.proxy)
 
@@ -85,7 +83,7 @@ class ProviderMiMoSTTAPI(STTProvider):
         try:
             response = await self.client.post(
                 build_api_url(self.api_base),
-                headers=build_headers(self.chosen_api_key),
+                headers={**build_headers(self.chosen_api_key), **self.request_headers},
                 json=payload,
             )
             try:

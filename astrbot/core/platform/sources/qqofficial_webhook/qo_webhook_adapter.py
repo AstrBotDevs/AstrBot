@@ -5,6 +5,7 @@ from typing import Any
 import botpy
 import botpy.message
 from botpy import Client
+from botpy.interaction import Interaction
 
 from astrbot import logger
 from astrbot.api.event import MessageChain
@@ -13,6 +14,8 @@ from astrbot.core.platform.astr_message_event import MessageSesion
 from astrbot.core.platform.register import register_platform_adapter
 from astrbot.core.platform.sources.qqofficial.qqofficial_platform_adapter import (
     QQOfficialPlatformAdapter,
+    _ensure_group_message_create_parser,
+    _handle_interaction_create,
 )
 from astrbot.core.utils.webhook_utils import log_webhook_info
 
@@ -28,12 +31,21 @@ class botClient(Client):
         self.platform = platform
 
     async def on_group_at_message_create(
+        self, message: botpy.message.GroupMessage
+    ) -> None:
+        await self.on_group_message_create(message, force_group_mention=True)
+
+    async def on_group_message_create(
         self,
         message: botpy.message.GroupMessage,
+        *,
+        force_group_mention: bool = False,
     ) -> None:
         abm = await QQOfficialPlatformAdapter._parse_from_qqofficial(
             message,
             MessageType.GROUP_MESSAGE,
+            bot=self,
+            force_group_mention=force_group_mention,
         )
         abm.group_id = message.group_openid
         abm.session_id = abm.group_id
@@ -71,6 +83,14 @@ class botClient(Client):
         self.platform.remember_session_scene(abm.session_id, "friend")
         self._commit(abm)
 
+    async def on_interaction_create(self, interaction: Interaction) -> None:
+        """Handle a QQ inline-keyboard click delivered by webhook.
+
+        Args:
+            interaction: QQ interaction payload parsed by qq-botpy.
+        """
+        await _handle_interaction_create(self, interaction)
+
     def _commit(self, abm: AstrBotMessage) -> None:
         self.platform.remember_session_message_id(abm.session_id, abm.message_id)
         event = QQOfficialWebhookMessageEvent(
@@ -101,11 +121,16 @@ class QQOfficialWebhookPlatformAdapter(Platform):
         self.appid = platform_config["appid"]
         self.secret = platform_config["secret"]
         self.unified_webhook_mode = platform_config.get("unified_webhook_mode", False)
+        # 与 QQOfficialPlatformAdapter 相同：旧存档配置缺键时视为启用 Markdown
+        self.use_markdown_default = platform_config.get("use_markdown", True)
+
         intents = botpy.Intents(
             public_messages=True,
             public_guild_messages=True,
             direct_message=True,
+            interaction=True,
         )
+        _ensure_group_message_create_parser()
         self.client = botClient(intents=intents, bot_log=False, timeout=20)
         self.client.set_platform(self)
         self.webhook_helper = None
@@ -146,7 +171,7 @@ class QQOfficialWebhookPlatformAdapter(Platform):
         return PlatformMetadata(
             name="qq_official_webhook",
             description="QQ 机器人官方 API 适配器",
-            id=self.config.get("id"),
+            id=self.config.get("id") or "",
             support_proactive_message=True,
         )
 
@@ -186,3 +211,26 @@ class QQOfficialWebhookPlatformAdapter(Platform):
                     exc_info=True,
                 )
         logger.info("QQ 机器人官方 API 适配器已经被关闭")
+
+    def create_event(self, message: AstrBotMessage) -> QQOfficialWebhookMessageEvent:
+        """Creates a QQ Official webhook message event.
+
+        Args:
+            message: AstrBot message object to wrap.
+
+        Returns:
+            Created QQ Official webhook message event.
+        """
+        event = QQOfficialWebhookMessageEvent(
+            message.message_str,
+            message,
+            self.meta(),
+            message.session_id,
+            self.client,
+        )
+        webhook_helper = getattr(self, "webhook_helper", None)
+        if webhook_helper and message.message_id:
+            extra_data = webhook_helper.pop_extra_data(message.message_id)
+            for key, val in extra_data.items():
+                event.set_extra(key, val)
+        return event

@@ -1,8 +1,7 @@
 import re
 from urllib.parse import urlparse
 
-import httpx
-from openai import AsyncOpenAI
+from openai import AsyncOpenAI, DefaultAsyncHttpxClient
 
 from astrbot import logger
 from astrbot.core.provider.entities import ProviderType
@@ -32,12 +31,13 @@ class OpenAIEmbeddingProvider(EmbeddingProvider):
         http_client = None
         if proxy:
             logger.info(f"[OpenAI Embedding] {provider_id} Using proxy: {proxy}")
-            http_client = httpx.AsyncClient(proxy=proxy)
+            http_client = DefaultAsyncHttpxClient(proxy=proxy)
         api_base = _normalize_api_base(
             provider_config.get("embedding_api_base", "https://api.openai.com/v1")
         )
         logger.info(f"[OpenAI Embedding] {provider_id} Using API Base: {api_base}")
         self.client = AsyncOpenAI(
+            default_headers=self.request_headers,
             api_key=provider_config.get("embedding_api_key"),
             base_url=api_base,
             timeout=int(provider_config.get("timeout", 20)),
@@ -110,15 +110,8 @@ class OpenAIEmbeddingProvider(EmbeddingProvider):
         return kwargs
 
     def get_dim(self) -> int:
-        """获取向量的维度"""
-        if "embedding_dimensions" in self.provider_config:
-            try:
-                return int(self.provider_config["embedding_dimensions"])
-            except (ValueError, TypeError):
-                logger.warning(
-                    f"embedding_dimensions in embedding configs is not a valid integer: '{self.provider_config['embedding_dimensions']}', ignored.",
-                )
-        return 0
+        """Get the configured embedding dimension."""
+        return self._configured_embedding_dimension()
 
     async def terminate(self):
         if self.client:

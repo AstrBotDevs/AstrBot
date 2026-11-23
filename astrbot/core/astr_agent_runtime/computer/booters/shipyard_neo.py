@@ -1,0 +1,747 @@
+from __future__ import annotations
+
+import asyncio
+import functools
+import os
+from typing import TYPE_CHECKING, Any
+
+import anyio
+
+from astrbot.api import logger
+from astrbot.core.astr_agent_runtime.computer.booters.shipyard_payload import (
+    maybe_model_dump,
+)
+from astrbot.core.astr_agent_runtime.computer.file_edit_utils import (
+    edit_file_by_replacement,
+)
+
+if TYPE_CHECKING:
+    from astrbot.core.agent.tool import ToolSchema
+from astrbot.core.astr_agent_runtime.computer.booters.base import ComputerBooter
+from astrbot.core.astr_agent_runtime.computer.booters.shell_background import (
+    prepare_shell_command,
+)
+from astrbot.core.astr_agent_runtime.computer.olayer import (
+    BrowserComponent,
+    FileSystemComponent,
+    PythonComponent,
+    ShellComponent,
+)
+
+from .shipyard_search_file_util import search_files_via_shell
+
+try:
+    from shipyard_neo import BayClient  # noqa: F401
+    from shipyard_neo.sandbox import Sandbox
+except ImportError:
+    logger.warning(
+        "shipyard_neo_sdk is not installed. ShipyardNeoBooter will not work without it.",
+    )
+
+
+def _maybe_model_dump(value: object) -> dict[str, Any]:
+    return maybe_model_dump(value, copy_mapping=True)
+
+
+class NeoPythonComponent(PythonComponent):
+    def __init__(self, sandbox: Any) -> None:
+        self._sandbox = sandbox
+
+    async def exec(
+        self,
+        code: str,
+        kernel_id: str | None = None,
+        timeout: int = 30,  # noqa: ASYNC109
+        silent: bool = False,
+        cwd: str | None = None,
+    ) -> dict[str, Any]:
+        if cwd is not None:
+            raise NotImplementedError(
+                "Shipyard Neo Python does not support an explicit working directory."
+            )
+        _ = kernel_id
+        with anyio.fail_after(timeout):
+            result = await self._sandbox.python.exec(code)
+        payload = _maybe_model_dump(result)
+        output_text = payload.get("output", "") or ""
+        error_text = payload.get("error", "") or ""
+        data = payload.get("data") if isinstance(payload.get("data"), dict) else {}
+        rich_output = data.get("output") or {} if isinstance(data, dict) else {}
+        if not isinstance(rich_output.get("images"), list):
+            rich_output["images"] = []
+        if "text" not in rich_output:
+            rich_output["text"] = output_text
+        if silent:
+            rich_output["text"] = ""
+        return {
+            "success": bool(payload.get("success", error_text == "")),
+            "data": {"output": rich_output, "error": error_text},
+            "execution_id": payload.get("execution_id"),
+            "execution_time_ms": payload.get("execution_time_ms"),
+            "code": payload.get("code"),
+            "output": output_text,
+            "error": error_text,
+        }
+
+
+class NeoShellComponent(ShellComponent):
+    def __init__(self, sandbox: Any) -> None:
+        self._sandbox = sandbox
+
+    async def exec(
+        self,
+        command: str,
+        cwd: str | None = None,
+        env: dict[str, str] | None = None,
+        timeout: int | None = 300,  # noqa: ASYNC109
+        shell: bool = True,
+        background: bool = False,
+        session_id: str | None = None,
+    ) -> dict[str, Any]:
+        _ = session_id
+        if not shell:
+            return {
+                "stdout": "",
+                "stderr": "error: only shell mode is supported in shipyard_neo booter.",
+                "exit_code": 2,
+                "success": False,
+            }
+        run_command = prepare_shell_command(command, env, background)
+
+        result = await self._sandbox.shell.exec(
+            run_command,
+            timeout=timeout or 300,
+            cwd=cwd,
+        )
+        payload = _maybe_model_dump(result)
+        stdout = payload.get("output", "") or ""
+        stderr = payload.get("error", "") or ""
+        exit_code = payload.get("exit_code")
+        if background:
+            pid: int | None = None
+            try:
+                pid = int(stdout.strip().splitlines()[-1])
+            except Exception:
+                pid = None
+            return {
+                "pid": pid,
+                "stdout": (
+                    f"Command is running in the background. pid={pid}"
+                    if pid is not None
+                    else "Command was submitted in the background."
+                ),
+                "stderr": stderr,
+                "exit_code": exit_code,
+                "success": bool(payload.get("success", not stderr)),
+                "execution_id": payload.get("execution_id"),
+                "execution_time_ms": payload.get("execution_time_ms"),
+                "command": payload.get("command"),
+            }
+        return {
+            "stdout": stdout,
+            "stderr": stderr,
+            "exit_code": exit_code,
+            "success": bool(payload.get("success", not stderr)),
+            "execution_id": payload.get("execution_id"),
+            "execution_time_ms": payload.get("execution_time_ms"),
+            "command": payload.get("command"),
+        }
+
+
+class NeoFileSystemComponent(FileSystemComponent):
+    def __init__(self, sandbox: Any, shell: Any | None = None) -> None:
+        self._sandbox = sandbox
+        self._shell = shell
+
+    async def create_file(
+        self,
+        path: str,
+        content: str = "",
+        mode: int = 420,
+    ) -> dict[str, Any]:
+        _ = mode
+        await self._sandbox.filesystem.write_file(path, content)
+        return {"success": True, "path": path}
+
+    async def read_file(
+        self,
+        path: str,
+        encoding: str = "utf-8",
+        offset: int | None = None,
+        limit: int | None = None,
+    ) -> dict[str, Any]:
+        _ = encoding
+        content = await self._sandbox.filesystem.read_file(path)
+        text = str(content)
+        if offset is not None or limit is not None:
+            lines = text.splitlines(keepends=True)
+            start = 0 if offset is None else offset
+            selected = lines[start:] if limit is None else lines[start : start + limit]
+            text = "".join(selected)
+        return {"success": True, "path": path, "content": text}
+
+    async def write_file(
+        self,
+        path: str,
+        content: str,
+        mode: str = "w",
+        encoding: str = "utf-8",
+    ) -> dict[str, Any]:
+        _ = mode
+        _ = encoding
+        await self._sandbox.filesystem.write_file(path, content)
+        return {"success": True, "path": path}
+
+    async def delete_file(self, path: str) -> dict[str, Any]:
+        await self._sandbox.filesystem.delete(path)
+        return {"success": True, "path": path}
+
+    async def list_dir(
+        self,
+        path: str = ".",
+        show_hidden: bool = False,
+    ) -> dict[str, Any]:
+        entries = await self._sandbox.filesystem.list_dir(path)
+        data = []
+        for entry in entries:
+            item = _maybe_model_dump(entry)
+            if not show_hidden and str(item.get("name", "")).startswith("."):
+                continue
+            data.append(item)
+        return {"success": True, "path": path, "entries": data}
+
+    async def search_files(
+        self,
+        pattern: str,
+        path: str | None = None,
+        glob: str | None = None,
+        after_context: int | None = None,
+        before_context: int | None = None,
+    ) -> dict[str, Any]:
+        if self._shell is None:
+            raise RuntimeError(
+                "NeoFileSystemComponent requires a shell for search_files.",
+            )
+        return await search_files_via_shell(
+            self._shell,
+            pattern=pattern,
+            path=path,
+            glob=glob,
+            after_context=after_context,
+            before_context=before_context,
+        )
+
+    async def edit_file(
+        self,
+        path: str,
+        old_string: str,
+        new_string: str,
+        replace_all: bool = False,
+        encoding: str = "utf-8",
+    ) -> dict[str, Any]:
+        return await edit_file_by_replacement(
+            self,
+            path,
+            old_string,
+            new_string,
+            replace_all,
+            encoding,
+        )
+
+
+class NeoBrowserComponent(BrowserComponent):
+    def __init__(self, sandbox: Any) -> None:
+        self._sandbox = sandbox
+
+    async def exec(
+        self,
+        cmd: str,
+        timeout_seconds: int = 30,
+        description: str | None = None,
+        tags: str | None = None,
+        learn: bool = False,
+        include_trace: bool = False,
+    ) -> dict[str, Any]:
+        result = await self._sandbox.browser.exec(
+            cmd,
+            timeout_seconds=timeout_seconds,
+            description=description,
+            tags=tags,
+            learn=learn,
+            include_trace=include_trace,
+        )
+        return _maybe_model_dump(result)
+
+    async def exec_batch(
+        self,
+        commands: list[str],
+        timeout_seconds: int = 60,
+        stop_on_error: bool = True,
+        description: str | None = None,
+        tags: str | None = None,
+        learn: bool = False,
+        include_trace: bool = False,
+    ) -> dict[str, Any]:
+        result = await self._sandbox.browser.exec_batch(
+            commands,
+            timeout_seconds=timeout_seconds,
+            stop_on_error=stop_on_error,
+            description=description,
+            tags=tags,
+            learn=learn,
+            include_trace=include_trace,
+        )
+        return _maybe_model_dump(result)
+
+    async def run_skill(
+        self,
+        skill_key: str,
+        timeout_seconds: int = 60,
+        stop_on_error: bool = True,
+        include_trace: bool = False,
+        description: str | None = None,
+        tags: str | None = None,
+    ) -> dict[str, Any]:
+        result = await self._sandbox.browser.run_skill(
+            skill_key=skill_key,
+            timeout_seconds=timeout_seconds,
+            stop_on_error=stop_on_error,
+            include_trace=include_trace,
+            description=description,
+            tags=tags,
+        )
+        return _maybe_model_dump(result)
+
+
+class ShipyardNeoBooter(ComputerBooter):
+    """Booter backed by Shipyard Neo (Bay).
+
+    If *endpoint_url* is empty or set to ``"__auto__"``, Bay will be
+    started automatically as a Docker container (like Boxlite does for
+    Ship containers).
+    """
+
+    AUTO_SENTINEL = "__auto__"
+    DEFAULT_PROFILE = "python-default"
+
+    def __init__(
+        self,
+        endpoint_url: str,
+        access_token: str,
+        profile: str = "",
+        ttl: int = 3600,
+    ) -> None:
+        self._endpoint_url = endpoint_url
+        self._access_token = access_token
+        self._profile = profile.strip() if profile else ""
+        self._ttl = ttl
+        self._client: Any = None
+        self._sandbox: Any = None
+        self._bay_manager: Any = None
+        self._fs: FileSystemComponent | None = None
+        self._python: PythonComponent | None = None
+        self._shell: ShellComponent | None = None
+        self._browser: BrowserComponent | None = None
+
+    @property
+    def bay_client(self) -> Any:
+        return self._client
+
+    @property
+    def sandbox(self) -> Any:
+        return self._sandbox
+
+    @property
+    def capabilities(self) -> tuple[str, ...] | None:
+        """Sandbox capabilities from the Bay profile.
+
+        Returns an immutable tuple after :meth:`boot`; ``None`` before boot.
+        """
+        if self._sandbox is None:
+            return None
+        caps = getattr(self._sandbox, "capabilities", None)
+        return tuple(caps) if caps is not None else None
+
+    @property
+    def is_auto_mode(self) -> bool:
+        """True when Bay should be auto-started."""
+        ep = (self._endpoint_url or "").strip()
+        return not ep or ep == self.AUTO_SENTINEL
+
+    async def boot(self, session_id: str) -> None:
+        _ = session_id
+        if self.is_auto_mode:
+            from .bay_manager import BayContainerManager
+
+            if self._bay_manager is not None:
+                await self._bay_manager.close_client()
+            logger.info("[Computer] bay_autostart status=starting")
+            self._bay_manager = BayContainerManager()
+            self._endpoint_url = await self._bay_manager.ensure_running()
+            await self._bay_manager.wait_healthy()
+            if not self._access_token:
+                self._access_token = await self._bay_manager.read_credentials()
+            logger.info(
+                "[Computer] bay_autostart status=ready endpoint=%s",
+                self._endpoint_url,
+            )
+        if not self._endpoint_url or not self._access_token:
+            if self._bay_manager is not None:
+                raise ValueError(
+                    "Bay container started but credentials could not be read. Ensure Bay generated credentials.json, or set access_token manually.",
+                )
+            raise ValueError(
+                "Shipyard Neo sandbox configuration is incomplete. Set endpoint (default http://127.0.0.1:8114) and access token, or ensure Bay's credentials.json is accessible for auto-discovery.",
+            )
+        from shipyard_neo import BayClient
+
+        self._client = BayClient(
+            endpoint_url=self._endpoint_url,
+            access_token=self._access_token,
+        )
+        await self._client.__aenter__()
+
+        # Resolve profile: user-specified > smart selection > default.
+        # An empty profile means auto-select; any non-empty profile must be
+        # honoured as an explicit choice, including "python-default".
+        resolved_profile = await self._resolve_profile(self._client)
+        self._sandbox = await self._client.create_sandbox(
+            profile=resolved_profile,
+            ttl=self._ttl,
+        )
+        # --- Readiness gate: wait until sandbox session is READY ---
+        await self._wait_until_ready(self._sandbox)
+
+        self._shell = NeoShellComponent(self._sandbox)
+        self._fs = NeoFileSystemComponent(self._sandbox, self._shell)
+        self._python = NeoPythonComponent(self._sandbox)
+        self._shell = NeoShellComponent(self._sandbox)
+        caps = self.capabilities or ()
+        self._browser = (
+            NeoBrowserComponent(self._sandbox) if "browser" in caps else None
+        )
+        logger.info(
+            "[Computer] sandbox_created booter=shipyard_neo sandbox_id=%s profile=%s capabilities=%s auto=%s",
+            self._sandbox.id,
+            resolved_profile,
+            list(caps),
+            bool(self._bay_manager),
+        )
+
+    async def _wait_until_ready(self, sandbox: Sandbox) -> None:
+        """Poll sandbox status until READY, or raise on FAILED / timeout.
+
+        Covers both warm-pool hits (near-instant) and cold starts (up to 180s).
+        On FAILED, EXPIRED, or timeout the sandbox is deleted before raising
+        so no orphan resources leak on Bay.
+        """
+        READINESS_TIMEOUT = 180  # seconds
+        POLL_INTERVAL = 2  # seconds
+
+        sandbox_id = sandbox.id
+        deadline = asyncio.get_running_loop().time() + READINESS_TIMEOUT
+
+        while True:
+            await sandbox.refresh()
+            status = getattr(sandbox.status, "value", str(sandbox.status))
+
+            if status == "ready":
+                logger.info(
+                    "[Computer] Sandbox %s is ready (profile=%s)",
+                    sandbox_id,
+                    sandbox.profile,
+                )
+                return
+
+            if status in {"failed", "expired"}:
+                logger.error(
+                    "[Computer] Sandbox %s reached terminal state: %s",
+                    sandbox_id,
+                    status,
+                )
+                try:
+                    await sandbox.delete()
+                except Exception as del_err:
+                    logger.warning(
+                        "[Computer] Failed to delete failed sandbox %s: %s",
+                        sandbox_id,
+                        del_err,
+                    )
+                raise RuntimeError(
+                    f"Sandbox {sandbox_id} is in terminal state: {status}",
+                )
+
+            remaining = deadline - asyncio.get_running_loop().time()
+            if remaining <= 0:
+                logger.error(
+                    "[Computer] Sandbox %s did not become ready within %ds "
+                    "(last status: %s)",
+                    sandbox_id,
+                    READINESS_TIMEOUT,
+                    status,
+                )
+                try:
+                    await sandbox.delete()
+                except Exception as del_err:
+                    logger.warning(
+                        "[Computer] Failed to delete timed-out sandbox %s: %s",
+                        sandbox_id,
+                        del_err,
+                    )
+                raise TimeoutError(
+                    f"Sandbox {sandbox_id} did not become ready within "
+                    f"{READINESS_TIMEOUT}s (last status: {status})",
+                )
+
+            logger.debug(
+                "[Computer] Sandbox %s status=%s, waiting...",
+                sandbox_id,
+                status,
+            )
+            await asyncio.sleep(POLL_INTERVAL)
+
+    async def _resolve_profile(self, client: Any) -> str:
+        """Pick the best profile for this session.
+
+        Resolution order:
+        1. User-specified profile (non-empty) → use as-is.
+        2. Query ``GET /v1/profiles`` and pick the profile with the most
+           capabilities, preferring profiles that include ``"browser"``.
+        3. Fall back to :attr:`DEFAULT_PROFILE`.
+
+        Auth errors (401/403) are re-raised immediately — they indicate a
+        misconfigured token, and silently falling back would just delay the
+        real failure to ``create_sandbox``.
+        """
+        # User explicitly set a profile → honour it.
+        if self._profile:
+            logger.info("[Computer] Using user-specified profile: %s", self._profile)
+            return self._profile
+        from shipyard_neo.errors import ForbiddenError, UnauthorizedError
+
+        try:
+            profile_list = await client.list_profiles()
+            profiles = profile_list.items
+        except (UnauthorizedError, ForbiddenError):
+            raise
+        except Exception as exc:
+            logger.warning(
+                "[Computer] profile_selection_fallback reason=query_failed fallback=%s error=%s",
+                self.DEFAULT_PROFILE,
+                exc,
+            )
+            return self.DEFAULT_PROFILE
+        if not profiles:
+            return self.DEFAULT_PROFILE
+
+        def _score(p: Any) -> tuple[int, int]:
+            """(has_browser, capability_count) — higher is better."""
+            caps = getattr(p, "capabilities", []) or []
+            return (1 if "browser" in caps else 0, len(caps))
+
+        best = max(profiles, key=_score)
+        chosen = getattr(best, "id", self.DEFAULT_PROFILE)
+        if chosen != self.DEFAULT_PROFILE:
+            caps = getattr(best, "capabilities", [])
+            logger.info(
+                "[Computer] profile_selected mode=auto profile=%s capabilities=%s",
+                chosen,
+                caps,
+            )
+        return chosen
+
+    async def shutdown(self, **kwargs) -> None:
+        delete_sandbox = bool(kwargs.get("delete_sandbox", False))
+        if self._client is not None:
+            sandbox_id = getattr(self._sandbox, "id", "unknown")
+
+            # Delete sandbox on Bay BEFORE closing the HTTP client.
+            # This is critical for cleanup — calling delete after
+            # __aexit__ would fail because the httpx session is already
+            # torn down.
+            if delete_sandbox and self._sandbox is not None:
+                try:
+                    logger.info(
+                        "[Computer] Deleting Shipyard Neo sandbox: id=%s",
+                        sandbox_id,
+                    )
+                    await self._sandbox.delete()
+                    logger.info(
+                        "[Computer] Shipyard Neo sandbox deleted: id=%s",
+                        sandbox_id,
+                    )
+                except Exception as e:
+                    logger.warning(
+                        "[Computer] Failed to delete sandbox %s (may already be "
+                        "cleaned up by Bay GC): %s",
+                        sandbox_id,
+                        e,
+                    )
+
+            logger.info(
+                "[Computer] booter_shutdown booter=shipyard_neo sandbox_id=%s status=starting",
+                sandbox_id,
+            )
+            await self._client.__aexit__(None, None, None)
+            self._client = None
+            self._sandbox = None
+            logger.info(
+                "[Computer] booter_shutdown booter=shipyard_neo sandbox_id=%s status=done",
+                sandbox_id,
+            )
+
+        # NOTE: We intentionally do NOT stop the Bay container here.
+        # It stays running for reuse by future sessions.  The user can
+        # stop it manually or via ``BayContainerManager.stop()``.
+        if self._bay_manager is not None:
+            await self._bay_manager.close_client()
+
+    @property
+    def fs(self) -> FileSystemComponent:
+        if self._fs is None:
+            raise RuntimeError("ShipyardNeoBooter is not initialized.")
+        return self._fs
+
+    @property
+    def python(self) -> PythonComponent:
+        if self._python is None:
+            raise RuntimeError("ShipyardNeoBooter is not initialized.")
+        return self._python
+
+    @property
+    def shell(self) -> ShellComponent:
+        if self._shell is None:
+            raise RuntimeError("ShipyardNeoBooter is not initialized.")
+        return self._shell
+
+    @property
+    def browser(self) -> BrowserComponent | None:
+        return self._browser
+
+    async def upload_file(self, path: str, file_name: str) -> dict:
+        if self._sandbox is None:
+            raise RuntimeError("ShipyardNeoBooter is not initialized.")
+        async with await anyio.open_file(path, "rb") as f:
+            content = await f.read()
+        remote_path = file_name.lstrip("/")
+        await self._sandbox.filesystem.upload(remote_path, content)
+        logger.info(
+            "[Computer] file_upload booter=shipyard_neo remote_path=%s",
+            remote_path,
+        )
+        return {
+            "success": True,
+            "message": "File uploaded successfully",
+            "file_path": remote_path,
+        }
+
+    async def download_file(self, remote_path: str, local_path: str) -> None:
+        if self._sandbox is None:
+            raise RuntimeError("ShipyardNeoBooter is not initialized.")
+        content = await self._sandbox.filesystem.download(remote_path.lstrip("/"))
+        local_dir = os.path.dirname(local_path)
+        if local_dir:
+            await anyio.Path(local_dir).mkdir(parents=True, exist_ok=True)
+        async with await anyio.open_file(local_path, "wb") as f:
+            await f.write(content)
+        logger.info(
+            "[Computer] file_download booter=shipyard_neo remote_path=%s local_path=%s",
+            remote_path,
+            local_path,
+        )
+
+    async def available(self) -> bool:
+        if self._sandbox is None:
+            return False
+        try:
+            await self._sandbox.refresh()
+            status = getattr(self._sandbox.status, "value", str(self._sandbox.status))
+            healthy = status not in {"failed", "expired"}
+            logger.debug(
+                "[Computer] health_check booter=shipyard_neo sandbox_id=%s status=%s healthy=%s",
+                getattr(self._sandbox, "id", "unknown"),
+                status,
+                healthy,
+            )
+            return healthy
+        except Exception:
+            logger.exception(
+                "[Computer] health_check_failed booter=shipyard_neo sandbox_id=%s",
+                getattr(self._sandbox, "id", "unknown"),
+            )
+            return False
+
+    @classmethod
+    @functools.cache
+    def _base_tools(cls) -> tuple[ToolSchema, ...]:
+        """4 base + 11 Neo lifecycle = 15 tools (all Neo profiles)."""
+        from astrbot.core.astr_agent_runtime.tools.computer_tools import (
+            AnnotateExecutionTool,
+            CreateSkillCandidateTool,
+            CreateSkillPayloadTool,
+            EvaluateSkillCandidateTool,
+            ExecuteShellTool,
+            FileDownloadTool,
+            FileUploadTool,
+            GetExecutionHistoryTool,
+            GetSkillPayloadTool,
+            ListSkillCandidatesTool,
+            ListSkillReleasesTool,
+            PromoteSkillCandidateTool,
+            PythonTool,
+            RollbackSkillReleaseTool,
+            SyncSkillReleaseTool,
+        )
+
+        return (
+            ExecuteShellTool(),
+            PythonTool(),
+            FileUploadTool(),
+            FileDownloadTool(),
+            GetExecutionHistoryTool(),
+            AnnotateExecutionTool(),
+            CreateSkillPayloadTool(),
+            GetSkillPayloadTool(),
+            CreateSkillCandidateTool(),
+            ListSkillCandidatesTool(),
+            EvaluateSkillCandidateTool(),
+            PromoteSkillCandidateTool(),
+            ListSkillReleasesTool(),
+            RollbackSkillReleaseTool(),
+            SyncSkillReleaseTool(),
+        )
+
+    @classmethod
+    @functools.cache
+    def _browser_tools(cls) -> tuple[ToolSchema, ...]:
+        from astrbot.core.astr_agent_runtime.tools.computer_tools import (
+            BrowserBatchExecTool,
+            BrowserExecTool,
+            RunBrowserSkillTool,
+        )
+
+        return (BrowserExecTool(), BrowserBatchExecTool(), RunBrowserSkillTool())
+
+    @classmethod
+    def get_default_tools(cls) -> list[ToolSchema]:
+        """Pre-boot: conservative full list (including browser)."""
+        return list(cls._base_tools()) + list(cls._browser_tools())
+
+    def get_tools(self) -> list[ToolSchema]:
+        """Post-boot: capability-filtered list."""
+        caps = self.capabilities
+        if caps is None:
+            return self.__class__.get_default_tools()
+        tools: list[ToolSchema] = list(self._base_tools())
+        if "browser" in caps:
+            tools.extend(self._browser_tools())
+        return tools
+
+    @classmethod
+    def get_system_prompt_parts(cls) -> list[str]:
+        from astrbot.core.astr_agent_runtime.computer.prompts import (
+            NEO_FILE_PATH_PROMPT,
+            NEO_SKILL_LIFECYCLE_PROMPT,
+        )
+
+        return [NEO_FILE_PATH_PROMPT, NEO_SKILL_LIFECYCLE_PROMPT]

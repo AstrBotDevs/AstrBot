@@ -1,0 +1,12 @@
+diff --git a/dist/index.d.mts b/dist/index.d.mts
+--- a/dist/index.d.mts
++++ b/dist/index.d.mts
+@@ -3190,7 +3190,7 @@
+     plugin: PluginInstance<T>;
+   }) => void;
+   imports?: ((plugin: PluginInstance<T>) => T["imports"]) | undefined;
+-  symbolMeta?: (symbol: Omit<log, "name">) => log;
++  symbolMeta?: Plugin.Config<T>["symbolMeta"];
+   tags?: ReadonlyArray<PluginTag>;
+ };
+ interface PluginResolutionInput {

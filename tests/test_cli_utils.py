@@ -1,8 +1,9 @@
 """Comprehensive tests for CLI utilities."""
 
+import sys
+from unittest.mock import AsyncMock, Mock
+
 import pytest
-from unittest.mock import MagicMock, patch, AsyncMock
-from pathlib import Path
 
 from astrbot.cli.utils.version_comparator import VersionComparator
 
@@ -71,22 +72,45 @@ class TestDashboardManager:
     """Tests for DashboardManager."""
 
     @pytest.mark.asyncio
-    async def test_ensure_installed_bundled(self):
+    async def test_ensure_installed_bundled(self, monkeypatch, tmp_path):
         """Test dashboard installation when bundled."""
         from astrbot.cli.utils.dashboard import DashboardManager
+        from astrbot.core import dashboard_assets, updater
 
-        with patch.object(DashboardManager, '_bundled_dist', Path(__file__).parent):
-            manager = DashboardManager()
-            # Should not raise and should return early
-            await manager.ensure_installed(Path("/tmp"))
+        download = AsyncMock()
+        version = AsyncMock()
+        monkeypatch.setattr(DashboardManager, "_bundled_dist", tmp_path)
+        monkeypatch.setattr(updater.AstrBotUpdater, "ensure_dashboard", download)
+        monkeypatch.setattr(dashboard_assets, "get_dashboard_version", version)
+
+        await DashboardManager().ensure_installed(tmp_path)
+
+        version.assert_not_awaited()
+        download.assert_not_awaited()
 
     @pytest.mark.asyncio
-    async def test_ensure_installed_no_bundled(self):
-        """Test dashboard installation when not bundled."""
-        from astrbot.cli.utils.dashboard import DashboardManager
+    @pytest.mark.parametrize("interactive", [False, True])
+    @pytest.mark.parametrize("accept", [False, True])
+    async def test_ensure_installed_no_bundled(
+        self, monkeypatch, tmp_path, interactive, accept
+    ):
+        """Only an accepted interactive prompt invokes the mocked downloader."""
+        import click
 
-        with patch.object(DashboardManager, '_bundled_dist', Path("/nonexistent")):
-            with patch("os.environ.get", return_value="1"):  # systemd mode
-                manager = DashboardManager()
-                await manager.ensure_installed(Path("/tmp"))
-                # Should skip in systemd mode
+        from astrbot.cli.utils.dashboard import DashboardManager
+        from astrbot.core import dashboard_assets, updater
+
+        download = AsyncMock()
+        prompt = Mock(return_value=accept)
+        monkeypatch.setattr(DashboardManager, "_bundled_dist", tmp_path / "missing")
+        monkeypatch.setattr(
+            dashboard_assets, "get_dashboard_version", AsyncMock(return_value=None)
+        )
+        monkeypatch.setattr(updater.AstrBotUpdater, "ensure_dashboard", download)
+        monkeypatch.setattr(sys.stdin, "isatty", lambda: interactive)
+        monkeypatch.setattr(click, "confirm", prompt)
+
+        await DashboardManager().ensure_installed(tmp_path)
+
+        assert prompt.call_count == int(interactive)
+        assert download.await_count == int(interactive and accept)

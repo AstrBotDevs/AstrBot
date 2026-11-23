@@ -1,4 +1,18 @@
-allowBuilds:
-  '@parcel/watcher': false
-  esbuild: true
-  vue-demi: true
+packages:
+  - .
+
+overrides:
+  "@hey-api/json-schema-ref-parser>js-yaml": "4.3.2"
+  immutable: "4.3.8"
+  lodash-es: "4.18.1"
+
+packageExtensions:
+  "@hey-api/shared@0.5.0":
+    dependencies:
+      "@types/semver": "7.7.1"
+
+patchedDependencies:
+  "@hey-api/openapi-ts@0.99.0": patches/hey-api-openapi-ts-0.99.0.patch
+  "@hey-api/shared@0.5.0": patches/hey-api-shared-0.5.0.patch
+  "@vue/runtime-core@3.5.31": patches/vue-runtime-core-3.5.31.patch
+  "vuetify@4.0.4": patches/vuetify-4.0.4.patch

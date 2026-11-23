@@ -8,21 +8,25 @@
     @update:model-value="handleMenuToggle"
   >
     <template #activator="{ props: menuProps }">
-      <v-btn
-        v-bind="menuProps"
-        icon="mdi-refresh"
-        size="x-small"
-        variant="text"
-      />
+      <span :title="unavailableReason || tm('actions.retry')">
+        <v-btn
+          v-bind="menuProps"
+          icon
+          size="x-small"
+          variant="text"
+          :disabled="disabled"
+          :aria-label="unavailableReason || tm('actions.retry')"
+        >
+          <RotateCw :size="14" :stroke-width="2" />
+        </v-btn>
+      </span>
     </template>
 
-    <v-list-item
-      class="styled-menu-item"
-      rounded="md"
-      @click="emit('retry')"
-    >
+    <v-list-item class="styled-menu-item" rounded="md" @click="emit('retry')">
       <template #prepend>
-        <v-icon size="18">mdi-refresh</v-icon>
+        <v-icon size="18">
+          <RotateCw :size="18" :stroke-width="2" />
+        </v-icon>
       </template>
       <v-list-item-title>{{ tm("actions.retry") }}</v-list-item-title>
     </v-list-item>
@@ -44,7 +48,9 @@
           <template #prepend>
             <v-icon size="18">mdi-creation</v-icon>
           </template>
-          <v-list-item-title>{{ tm("actions.retryWithModel") }}</v-list-item-title>
+          <v-list-item-title>{{
+            tm("actions.retryWithModel")
+          }}</v-list-item-title>
           <template #append>
             <v-progress-circular
               v-if="loadingProviders"
@@ -97,7 +103,9 @@
                   <span>{{ item.tooltip }}</span>
                 </v-tooltip>
                 <v-tooltip
-                  v-if="formatContextLimit(provider, metadataForProvider(provider))"
+                  v-if="
+                    formatContextLimit(provider, metadataForProvider(provider))
+                  "
                   location="top"
                   max-width="320"
                 >
@@ -107,7 +115,12 @@
                       class="regenerate-model-context-badge"
                       @click.stop
                     >
-                      {{ formatContextLimit(provider, metadataForProvider(provider)) }}
+                      {{
+                        formatContextLimit(
+                          provider,
+                          metadataForProvider(provider),
+                        )
+                      }}
                     </span>
                   </template>
                   <span>{{
@@ -123,7 +136,10 @@
             </v-list-item-subtitle>
           </v-list-item>
 
-          <div v-if="!loadingProviders && !providerConfigs.length" class="regenerate-empty">
+          <div
+            v-if="!loadingProviders && !providerConfigs.length"
+            class="regenerate-empty"
+          >
             {{ tm("actions.noAvailableModels") }}
           </div>
         </v-list>
@@ -133,15 +149,16 @@
 </template>
 
 <script setup lang="ts">
-import axios from "axios";
+import { RotateCw } from "@lucide/vue";
 import { ref } from "vue";
+import { providerApi } from "@/api/v1";
 import StyledMenu from "@/components/shared/StyledMenu.vue";
 import { useModuleI18n } from "@/i18n/composables";
 import {
   formatContextLimit,
-  providerCapabilityBadges,
-  type ProviderModelMetadata,
   type ProviderMetadataSource,
+  type ProviderModelMetadata,
+  providerCapabilityBadges,
 } from "@/utils/providerMetadata";
 
 interface ProviderConfig extends ProviderMetadataSource {
@@ -154,6 +171,11 @@ export interface RegenerateModelSelection {
   providerId: string;
   modelName: string;
 }
+
+withDefaults(defineProps<{ disabled?: boolean; unavailableReason?: string }>(), {
+  disabled: false,
+  unavailableReason: "",
+});
 
 const emit = defineEmits<{
   retry: [];
@@ -171,16 +193,12 @@ async function loadProviderConfigs(force = false) {
   if (loadingProviders.value || (providersLoaded.value && !force)) return;
   loadingProviders.value = true;
   try {
-    const response = await axios.get("/api/config/provider/list", {
-      params: { provider_type: "chat_completion" },
-    });
+    const response = await providerApi.listByProviderType("chat_completion");
     if (response.data.status === "ok") {
-      modelMetadata.value = (
-        response.data.model_metadata || {}
-      ) as Record<string, ProviderModelMetadata>;
-      providerConfigs.value = (
-        (response.data.data || []) as unknown as ProviderConfig[]
-      ).filter((provider: ProviderConfig) => provider.enable !== false);
+      modelMetadata.value = (response.data.model_metadata || {}) as Record<string, ProviderModelMetadata>;
+      providerConfigs.value = ((response.data.data || []) as unknown as ProviderConfig[]).filter(
+        (provider: ProviderConfig) => provider.enable !== false,
+      );
       providersLoaded.value = true;
     }
   } catch (error) {
@@ -210,11 +228,7 @@ function retryWithModel(provider: ProviderConfig) {
 }
 
 function capabilityBadges(provider: ProviderConfig) {
-  return providerCapabilityBadges(
-    provider,
-    metadataForProvider(provider),
-    providerTm,
-  );
+  return providerCapabilityBadges(provider, metadataForProvider(provider), providerTm);
 }
 
 function metadataForProvider(provider: ProviderConfig) {

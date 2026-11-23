@@ -65,6 +65,7 @@ class ProviderFishAudioTTSAPI(TTSProvider):
         if self.proxy:
             logger.info(f"[FishAudio TTS] 使用代理: {self.proxy}")
         self.headers = {
+            **self.request_headers,
             "Authorization": f"Bearer {self.chosen_api_key}",
         }
         # FishAudio API 要求 model 作为 HTTP header 发送，而非请求体字段
@@ -158,16 +159,21 @@ class ProviderFishAudioTTSAPI(TTSProvider):
         )
         self.headers["content-type"] = "application/msgpack"
         request = await self._generate_request(text)
-        async with AsyncClient(
-            base_url=self.api_base,
-            timeout=self.timeout,
-            proxy=self.proxy or None,
-        ).stream(
-            "POST",
-            "/tts",
-            headers=self.headers,
-            content=ormsgpack.packb(request, option=ormsgpack.OPT_SERIALIZE_PYDANTIC),
-        ) as response:
+        async with (
+            AsyncClient(
+                base_url=self.api_base,
+                timeout=self.timeout,
+                proxy=self.proxy if self.proxy else None,
+            ) as client,
+            client.stream(
+                "POST",
+                "/tts",
+                headers=self.headers,
+                content=ormsgpack.packb(
+                    request, option=ormsgpack.OPT_SERIALIZE_PYDANTIC
+                ),
+            ) as response,
+        ):
             if response.status_code == 200 and response.headers.get(
                 "content-type",
                 "",

@@ -112,7 +112,8 @@
       "moveError": "Failed to move persona",
       "exportError": "Failed to export persona",
       "exportSuccess": "Exported successfully(excluding skills and tools)",
-      "importError": "Failed to import persona"
+      "importError": "Failed to import persona",
+      "importNetworkError": "The server did not respond. Check your connection."
     }
   },
   "folder": {

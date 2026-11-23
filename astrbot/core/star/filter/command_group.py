@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+import re
+
 from astrbot.core.config import AstrBotConfig
+from astrbot.core.i18n import get_config_locale, translate
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
 
 from . import HandlerFilter
@@ -79,7 +82,13 @@ class CommandGroupFilter(HandlerFilter):
                     if cmd_th:
                         line += f" ({cmd_th})"
                     else:
-                        line += " (无参数指令)"
+                        line += (
+                            " ("
+                            + translate(
+                                "command_no_params", get_config_locale(cfg or {})
+                            )
+                            + ")"
+                        )
 
                     if sub_filter.handler_md and sub_filter.handler_md.desc:
                         line += f": {sub_filter.handler_md.desc}"
@@ -109,9 +118,16 @@ class CommandGroupFilter(HandlerFilter):
         return True
 
     def startswith(self, message_str: str) -> bool:
-        return message_str.startswith(tuple(self.get_complete_command_names()))
+        # Match whole words only, like CommandFilter, so that "mathematics"
+        # does not match the "math" group.
+        message_str = re.sub(r"\s+", " ", message_str.strip())
+        return any(
+            message_str == name or message_str.startswith(f"{name} ")
+            for name in self.get_complete_command_names()
+        )
 
     def equals(self, message_str: str) -> bool:
+        message_str = re.sub(r"\s+", " ", message_str.strip())
         return message_str in self.get_complete_command_names()
 
     def filter(self, event: AstrMessageEvent, cfg: AstrBotConfig) -> bool:
@@ -129,7 +145,12 @@ class CommandGroupFilter(HandlerFilter):
                 + self.print_cmd_tree(self.sub_command_filters, event=event, cfg=cfg)
             )
             raise ValueError(
-                f"参数不足｡{self.group_name} 指令组下有如下指令,请参考:\n" + tree,
+                translate(
+                    "command_group_help",
+                    get_config_locale(cfg),
+                    group=self.group_name,
+                    tree=tree,
+                ),
             )
 
         return self.startswith(event.message_str)

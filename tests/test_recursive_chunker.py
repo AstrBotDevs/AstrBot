@@ -1,16 +1,28 @@
-"""Import smoke tests for the recursive character chunker module."""
+"""Recursive splitting preserves separators, ordering, and call isolation."""
 
-from __future__ import annotations
+import pytest
 
-from astrbot.core.knowledge_base.chunking.recursive import (
-    RecursiveCharacterChunker,
+from astrbot.core.knowledge_base.chunking.recursive import RecursiveCharacterChunker
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "text",
+    ["", "alpha\n\nbeta\n\ngamma", "unbrokencharacters", "甲乙丙\n丁戊己", "  \n\t  "],
 )
+async def test_nonoverlapping_chunks_preserve_source_order(text):
+    chunks = await RecursiveCharacterChunker(chunk_size=6, chunk_overlap=0).chunk(text)
+    assert "".join(chunks) == text
+    assert all(0 < len(chunk) <= 6 for chunk in chunks)
 
 
-class TestRecursiveChunkerImports:
-    """Verify that the main class from recursive can be imported."""
-
-    def test_import_recursive_character_chunker(self):
-        assert RecursiveCharacterChunker is not None
-        assert hasattr(RecursiveCharacterChunker, "chunk")
-        assert hasattr(RecursiveCharacterChunker, "_split_by_character")
+@pytest.mark.asyncio
+async def test_overrides_leave_instance_configuration_unchanged():
+    chunker = RecursiveCharacterChunker(chunk_size=4, chunk_overlap=1, separators=[""])
+    assert await chunker.chunk("abcdefgh", chunk_size=3, chunk_overlap=0) == [
+        "abc",
+        "def",
+        "gh",
+    ]
+    assert await chunker.chunk("abcdefgh") == ["abcd", "defg", "gh"]
+    assert (chunker.chunk_size, chunker.chunk_overlap) == (4, 1)

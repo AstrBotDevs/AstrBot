@@ -12,7 +12,7 @@ import os
 import shutil
 import zipfile
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -31,6 +31,7 @@ from astrbot.core.utils.version_comparator import VersionComparator
 
 # 从共享常量模块导入
 from .constants import (
+    EXCLUDED_MAIN_DB_MODELS,
     KB_METADATA_MODELS,
     MAIN_DB_MODELS,
     get_backup_directories,
@@ -74,6 +75,17 @@ def _validate_path_within(target_path: Path, base_dir: Path) -> bool:
         return resolved.is_relative_to(base_resolved)
     except (OSError, ValueError):
         return False
+
+
+async def _write_archive_member(
+    archive: zipfile.ZipFile, member: str, destination: Path
+) -> None:
+    """Write a member to a destination already validated by its import policy."""
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    with archive.open(member) as source:
+        content = source.read()
+    async with await anyio.open_file(destination, "wb") as target:
+        await target.write(content)
 
 
 CMD_CONFIG_FILE_PATH = os.path.join(get_astrbot_data_path(), "cmd_config.json")
@@ -476,6 +488,22 @@ class AstrBotImporter:
                     except Exception as e:
                         result.add_warning(f"导入配置文件失败: {e}")
 
+                if "config/mcp_server.json" in zf.namelist():
+                    try:
+                        mcp_config_path = (
+                            Path(get_astrbot_data_path()) / "mcp_server.json"
+                        )
+                        mcp_config_path.parent.mkdir(parents=True, exist_ok=True)
+                        if mcp_config_path.exists():
+                            shutil.copy2(
+                                mcp_config_path,
+                                mcp_config_path.with_suffix(".json.bak"),
+                            )
+                        mcp_config_path.write_bytes(zf.read("config/mcp_server.json"))
+                        result.imported_files["mcp_config"] = 1
+                    except Exception as e:
+                        result.add_warning(f"Failed to restore MCP configuration: {e}")
+
                 if progress_callback:
                     await progress_callback("config", 100, 100, "配置文件导入完成")
 
@@ -539,15 +567,19 @@ class AstrBotImporter:
 
     async def _clear_main_db(self) -> None:
         """清空主数据库所有表"""
-        async with self.main_db.get_db() as session, session.begin():
-            for table_name, model_class in MAIN_DB_MODELS.items():
-                try:
-                    await session.execute(delete(model_class))
-                    logger.debug(f"已清空表 {table_name}")
-                except Exception as e:
-                    raise DatabaseClearError(
-                        f"清空表 {table_name} 失败: {e}",
-                    ) from e
+        async with self.main_db.get_db() as session:
+            async with session.begin():
+                # Replace restores also invalidate device trust on the target instance.
+                for table_name, model_class in reversed(
+                    (MAIN_DB_MODELS | EXCLUDED_MAIN_DB_MODELS).items()
+                ):
+                    try:
+                        await session.execute(delete(model_class))
+                        logger.debug(f"已清空表 {table_name}")
+                    except Exception as e:
+                        raise DatabaseClearError(
+                            f"清空表 {table_name} 失败: {e}"
+                        ) from e
 
     async def _clear_kb_data(self) -> None:
         """清空知识库数据"""
@@ -582,27 +614,141 @@ class AstrBotImporter:
         """导入主数据库数据"""
         imported: dict[str, int] = {}
 
-        async with self.main_db.get_db() as session, session.begin():
-            for table_name, rows in data.items():
-                model_class = MAIN_DB_MODELS.get(table_name)
-                if not model_class:
-                    logger.warning(f"未知的表: {table_name}")
-                    continue
-                normalized_rows = self._preprocess_main_table_rows(table_name, rows)
+        from sqlalchemy import text
 
-                count = 0
-                for row in normalized_rows:
-                    try:
-                        # 转换 datetime 字符串为 datetime 对象
-                        row = self._convert_datetime_fields(row, model_class)
-                        obj = model_class(**row)
-                        session.add(obj)
-                        count += 1
-                    except Exception as e:
-                        logger.warning(f"导入记录到 {table_name} 失败: {e}")
+        from astrbot.core.db.migration.migra_conversation_events import (
+            linearize_legacy_events,
+            migrate_conversations,
+        )
+        from astrbot.core.db.po import ConversationV2
 
-                imported[table_name] = count
-                logger.debug(f"导入表 {table_name}: {count} 条记录")
+        if data.get("conversations") and data.get("conversations_v3"):
+            raise ValueError("Backup contains ambiguous V2 and V3 conversations")
+
+        if any("parent_event_id" in row for row in data.get("conversation_events", [])):
+            conversations, events = linearize_legacy_events(
+                data.get("conversations_v3", []), data["conversation_events"]
+            )
+            data = {
+                **data,
+                "conversations_v3": conversations,
+                "conversation_events": events,
+            }
+
+        # A recycled baseline is valid; a missing baseline or an empty message
+        # payload is not. Validate historical targets as well as the active leaf.
+        event_rows = {
+            row["event_id"]: row for row in data.get("conversation_events", [])
+        }
+        baselines = {}
+        latest_context = {}
+        latest_seq = {}
+        for event in sorted(
+            event_rows.values(), key=lambda row: (row["conversation_ref"], row["seq"])
+        ):
+            kind = event["type"]
+            owner = event["conversation_ref"]
+            latest_seq[owner] = event["seq"]
+            if event.get("payload") is None and kind != "context.rebased":
+                raise ValueError("Only a rebase may have a recycled payload")
+            if kind == "context.rebased":
+                baselines[owner] = event["event_id"]
+            # Validate legacy pointers before discarding them. New backups derive
+            # recovery boundaries solely from the ordered rebase events.
+            if "replay_from_event_id" in event and event["replay_from_event_id"] != (
+                baselines.get(owner)
+                if kind in {"message.appended", "context.rebased"}
+                else None
+            ):
+                raise ValueError("Invalid conversation recovery baseline in backup")
+            if kind in {"message.appended", "context.rebased"}:
+                latest_context[owner] = event["event_id"]
+
+        for conv in data.get("conversations_v3", []):
+            baseline_id = baselines.get(conv["id"])
+            if (
+                (
+                    "leaf_event_id" in conv
+                    and conv["leaf_event_id"] != latest_context.get(conv["id"])
+                )
+                or (
+                    "head_seq" in conv
+                    and conv["head_seq"] != latest_seq.get(conv["id"], 0)
+                )
+                or (
+                    "replay_from_event_id" in conv
+                    and conv["replay_from_event_id"] != baseline_id
+                )
+                or (baseline_id and event_rows[baseline_id]["payload"] is None)
+            ):
+                raise ValueError("Invalid current conversation context in backup")
+
+        async with self.main_db.get_db() as session:
+            async with session.begin():
+                await session.execute(text("BEGIN IMMEDIATE"))
+                await session.execute(text("PRAGMA defer_foreign_keys=ON"))
+                if "conversations" in data:
+                    connection = await session.connection()
+                    await connection.run_sync(
+                        lambda conn: ConversationV2.metadata.tables[
+                            ConversationV2.__tablename__
+                        ].create(conn, checkfirst=True)
+                    )
+                for table_name, rows in data.items():
+                    model_class = (
+                        ConversationV2
+                        if table_name == "conversations"
+                        else MAIN_DB_MODELS.get(table_name)
+                    )
+                    if not model_class:
+                        logger.warning(f"未知的表: {table_name}")
+                        continue
+                    normalized_rows = self._preprocess_main_table_rows(table_name, rows)
+
+                    count = 0
+                    for row in normalized_rows:
+                        try:
+                            row = dict(row)
+                            # Canonical values, including empty strings, take precedence.
+                            if (
+                                table_name == "platform_message_history"
+                                and "llm_checkpoint_id" in row
+                            ):
+                                legacy_turn_id = row.pop("llm_checkpoint_id")
+                                if row.get("turn_id") is None:
+                                    row["turn_id"] = legacy_turn_id
+                            if (
+                                table_name == "webchat_threads"
+                                and "base_checkpoint_id" in row
+                            ):
+                                legacy_base_event_id = row.pop("base_checkpoint_id")
+                                if row.get("base_event_id") is None:
+                                    row["base_event_id"] = legacy_base_event_id
+                            # 转换 datetime 字符串为 datetime 对象
+                            row = self._convert_datetime_fields(row, model_class)
+                            obj = model_class(**row)
+                            session.add(obj)
+                            count += 1
+                        except Exception as e:
+                            if table_name in {
+                                "conversations",
+                                "conversations_v3",
+                                "conversation_events",
+                                "platform_message_history",
+                                "webchat_threads",
+                            }:
+                                raise ValueError(
+                                    f"Invalid conversation backup row in {table_name}"
+                                ) from e
+                            logger.warning(f"导入记录到 {table_name} 失败: {e}")
+
+                    imported[table_name] = count
+                    logger.debug(f"导入表 {table_name}: {count} 条记录")
+                await session.flush()
+                if "conversations" in data:
+                    await migrate_conversations(
+                        self.main_db.conversation_store, session=session
+                    )
 
         return imported
 
@@ -701,9 +847,9 @@ class AstrBotImporter:
         if isinstance(value, datetime):
             dt = value
             if dt.tzinfo is None:
-                dt = dt.replace(tzinfo=timezone.utc)
+                dt = dt.replace(tzinfo=UTC)
             else:
-                dt = dt.astimezone(timezone.utc)
+                dt = dt.astimezone(UTC)
             return dt.isoformat()
         if isinstance(value, str):
             timestamp = value.strip()
@@ -714,9 +860,9 @@ class AstrBotImporter:
             try:
                 dt = datetime.fromisoformat(timestamp)
                 if dt.tzinfo is None:
-                    dt = dt.replace(tzinfo=timezone.utc)
+                    dt = dt.replace(tzinfo=UTC)
                 else:
-                    dt = dt.astimezone(timezone.utc)
+                    dt = dt.astimezone(UTC)
                 return dt.isoformat()
             except ValueError:
                 return None
@@ -796,11 +942,7 @@ class AstrBotImporter:
                         if not _validate_path_within(target_path, kb_dir):
                             logger.warning(f"媒体文件路径越界，已跳过: {target_path}")
                             continue
-                        target_path.parent.mkdir(parents=True, exist_ok=True)
-                        with zf.open(name) as src:
-                            content = src.read()
-                        async with await anyio.open_file(target_path, "wb") as dst:
-                            await dst.write(content)
+                        await _write_archive_member(zf, name, target_path)
                     except Exception as e:
                         result.add_warning(f"导入媒体文件 {name} 失败: {e}")
 
@@ -865,11 +1007,7 @@ class AstrBotImporter:
                         logger.warning(f"附件路径越界，已跳过: {target_path}")
                         continue
 
-                    target_path.parent.mkdir(parents=True, exist_ok=True)
-                    with zf.open(name) as src:
-                        content = src.read()
-                    async with await anyio.open_file(target_path, "wb") as dst:
-                        await dst.write(content)
+                    await _write_archive_member(zf, name, target_path)
                     count += 1
                 except Exception as e:
                     logger.warning(f"导入附件 {name} 失败: {e}")
@@ -954,12 +1092,7 @@ class AstrBotImporter:
                             ensure_dir(target_path)
                             continue
 
-                        target_path.parent.mkdir(parents=True, exist_ok=True)
-
-                        with zf.open(name) as src:
-                            content = src.read()
-                        async with await anyio.open_file(target_path, "wb") as dst:
-                            await dst.write(content)
+                        await _write_archive_member(zf, name, target_path)
                         file_count += 1
                     except Exception as e:
                         result.add_warning(f"导入文件 {name} 失败: {e}")

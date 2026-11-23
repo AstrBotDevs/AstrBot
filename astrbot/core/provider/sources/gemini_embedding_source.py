@@ -3,9 +3,11 @@ from google.genai import types
 from google.genai.errors import APIError
 
 from astrbot import logger
-from astrbot.core.provider.entities import ProviderType
-from astrbot.core.provider.provider import EmbeddingProvider
-from astrbot.core.provider.register import register_provider_adapter
+
+from ..entities import ProviderType
+from ..provider import EmbeddingProvider
+from ..register import register_provider_adapter
+from .gemini_api_common import build_gemini_http_options, set_gemini_user_agent
 
 
 @register_provider_adapter(
@@ -21,18 +23,22 @@ class GeminiEmbeddingProvider(EmbeddingProvider):
         api_key: str = provider_config["embedding_api_key"]
         api_base: str = provider_config["embedding_api_base"]
         timeout: int = int(provider_config.get("timeout", 20))
-        http_options = types.HttpOptions(timeout=timeout * 1000)
-        if api_base:
-            api_base = api_base.removesuffix("/")
-            http_options.base_url = api_base
+
+        http_options = build_gemini_http_options(
+            api_base, timeout, self.request_headers
+        )
         proxy = provider_config.get("proxy", "")
         if proxy:
             http_options.async_client_args = {"proxy": proxy}
             logger.info(f"[Gemini Embedding] 使用代理: {proxy}")
         self.client = genai.Client(api_key=api_key, http_options=http_options).aio
+        set_gemini_user_agent(
+            self.client._api_client._http_options, self.request_headers["User-Agent"]
+        )
+
         self.model = provider_config.get(
             "embedding_model",
-            "gemini-embedding-exp-03-07",
+            "gemini-embedding-001",
         )
 
     async def get_embedding(self, text: str) -> list[float]:

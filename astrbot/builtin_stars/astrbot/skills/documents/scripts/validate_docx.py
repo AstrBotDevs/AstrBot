@@ -12,6 +12,13 @@ from xml.etree import ElementTree
 
 from docx import Document
 
+if __package__:
+    from astrbot.builtin_stars.astrbot.skills._astrbot_skill_support.cli import (
+        parse_input_path,
+    )
+else:
+    from _astrbot_skill_support.cli import parse_input_path
+
 _W = "{http://schemas.openxmlformats.org/wordprocessingml/2006/main}"
 _REL = "{http://schemas.openxmlformats.org/package/2006/relationships}"
 _REQUIRED_PARTS = {"[Content_Types].xml", "_rels/.rels", "word/document.xml"}
@@ -122,7 +129,7 @@ def validate_docx(path: Path) -> dict:
         )
 
     try:
-        document = Document(path)
+        document = Document(str(path))
         if not document.sections:
             errors.append("Document contains no section.")
         for index, section in enumerate(document.sections):
@@ -159,12 +166,7 @@ def main() -> int:
     """
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("input", type=Path, help="DOCX input")
-    args = parser.parse_args()
-    path = args.input.expanduser().resolve(strict=False)
-    if not path.is_file():
-        parser.error(f"Input file not found: {path}")
-    if path.suffix.lower() != ".docx":
-        parser.error("Input path must end with .docx")
+    _, path = parse_input_path(parser, suffix=".docx")
     try:
         result = validate_docx(path)
     except Exception as exc:

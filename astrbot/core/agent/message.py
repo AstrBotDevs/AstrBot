@@ -1,13 +1,12 @@
 # Inspired by MoonshotAI/kosong, credits to MoonshotAI/kosong authors for the original implementation.
 # License: Apache License 2.0
 
-from typing import Any, ClassVar, Literal, Self, TypeVar, cast
+from typing import Any, ClassVar, Literal, TypeVar, cast
 
 from pydantic import (
     BaseModel,
     GetCoreSchemaHandler,
     PrivateAttr,
-    ValidationError,
     model_serializer,
     model_validator,
 )
@@ -37,9 +36,7 @@ class ContentPart(BaseModel):
 
     @classmethod
     def __get_pydantic_core_schema__(
-        cls,
-        source_type: Any,
-        handler: GetCoreSchemaHandler,
+        cls, source_type: Any, handler: GetCoreSchemaHandler
     ) -> core_schema.CoreSchema:
         # If we're dealing with the base ContentPart class, use custom validation
         if cls.__name__ == "ContentPart":
@@ -51,12 +48,12 @@ class ContentPart(BaseModel):
 
                 # if it's a dict with a type field, dispatch to the appropriate subclass
                 if isinstance(value, dict) and "type" in value:
-                    type_value: Any | None = cast("dict[str, Any]", value).get("type")
+                    type_value: Any | None = cast(dict[str, Any], value).get("type")
                     if not isinstance(type_value, str):
                         raise ValueError(f"Cannot validate {value} as ContentPart")
                     target_class = cls.__content_part_registry[type_value]
                     part = target_class.model_validate(value)
-                    if cast("dict[str, Any]", value).get("_no_save"):
+                    if cast(dict[str, Any], value).get("_no_save"):
                         part._no_save = True
                     return part
 
@@ -67,8 +64,12 @@ class ContentPart(BaseModel):
         # for subclasses, use the default schema
         return handler(source_type)
 
-    def mark_as_temp(self) -> Self:
-        """Mark this content part as provider-facing only, not persisted."""
+    def mark_as_temp(self: ContentPartT) -> ContentPartT:
+        """Exclude this part from restored context while retaining its raw event.
+
+        Returns:
+            This content part with its runtime exclusion marker set.
+        """
         self._no_save = True
         return self
 
@@ -80,7 +81,8 @@ class ContentPart(BaseModel):
 
 
 class TextPart(ContentPart):
-    """TextPart(text="Hello, world!").model_dump()
+    """
+    >>> TextPart(text="Hello, world!").model_dump()
     {'type': 'text', 'text': 'Hello, world!'}
     """
 
@@ -89,7 +91,8 @@ class TextPart(ContentPart):
 
 
 class ThinkPart(ContentPart):
-    """ThinkPart(think="I think I need to think about this.").model_dump()
+    """
+    >>> ThinkPart(think="I think I need to think about this.").model_dump()
     {'type': 'think', 'think': 'I think I need to think about this.', 'encrypted': None}
     """
 
@@ -110,7 +113,8 @@ class ThinkPart(ContentPart):
 
 
 class ImageURLPart(ContentPart):
-    """ImageURLPart(image_url="http://example.com/image.jpg").model_dump()
+    """
+    >>> ImageURLPart(image_url="http://example.com/image.jpg").model_dump()
     {'type': 'image_url', 'image_url': 'http://example.com/image.jpg'}
     """
 
@@ -125,7 +129,8 @@ class ImageURLPart(ContentPart):
 
 
 class AudioURLPart(ContentPart):
-    """AudioURLPart(audio_url=AudioURLPart.AudioURL(url="https://example.com/audio.mp3")).model_dump()
+    """
+    >>> AudioURLPart(audio_url=AudioURLPart.AudioURL(url="https://example.com/audio.mp3")).model_dump()
     {'type': 'audio_url', 'audio_url': {'url': 'https://example.com/audio.mp3', 'id': None}}
     """
 
@@ -140,9 +145,10 @@ class AudioURLPart(ContentPart):
 
 
 class ToolCall(BaseModel):
-    """A tool call requested by the assistant.
+    """
+    A tool call requested by the assistant.
 
-    ToolCall(
+    >>> ToolCall(
     ...     id="123",
     ...     function=ToolCall.FunctionBody(
     ...         name="function",
@@ -180,15 +186,6 @@ class ToolCallPart(BaseModel):
     """A part of the arguments of the tool call."""
 
 
-class CheckpointData(BaseModel):
-    """Internal checkpoint data for linking LLM turns to platform history."""
-
-    id: str
-
-
-CHECKPOINT_ROLE = "_checkpoint"
-
-
 class Message(BaseModel):
     """A message in a conversation."""
 
@@ -197,10 +194,9 @@ class Message(BaseModel):
         "user",
         "assistant",
         "tool",
-        "_checkpoint",
     ]
 
-    content: str | list[ContentPart] | CheckpointData | None = None
+    content: str | list[ContentPart] | None = None
     """The content of the message."""
 
     tool_calls: list[ToolCall] | list[dict] | None = None
@@ -210,18 +206,9 @@ class Message(BaseModel):
     """The ID of the tool call."""
 
     _no_save: bool = PrivateAttr(default=False)
-    _checkpoint_after: CheckpointData | None = PrivateAttr(default=None)
 
     @model_validator(mode="after")
     def check_content_required(self):
-        if self.role == CHECKPOINT_ROLE:
-            if not isinstance(self.content, CheckpointData):
-                raise ValueError("checkpoint message content must be CheckpointData")
-            return self
-
-        if isinstance(self.content, CheckpointData):
-            raise ValueError("CheckpointData is only allowed for role='_checkpoint'")
-
         # assistant + tool_calls is not None: allow content to be None
         if self.role == "assistant" and self.tool_calls is not None:
             return self
@@ -229,7 +216,7 @@ class Message(BaseModel):
         # other all cases: content is required
         if self.content is None:
             raise ValueError(
-                "content is required unless role='assistant' and tool_calls is not None",
+                "content is required unless role='assistant' and tool_calls is not None"
             )
         return self
 
@@ -267,70 +254,20 @@ class SystemMessageSegment(Message):
     role: Literal["system"] = "system"
 
 
-class CheckpointMessageSegment(Message):
-    """Internal checkpoint segment for persisted conversation history."""
+def load_messages(history: list[dict]) -> list[Message]:
+    """Load working messages while restoring temporary-content markers.
 
-    role: Literal["_checkpoint"] = "_checkpoint"
-    content: CheckpointData | None = None
+    Args:
+        history: Serialized conversation messages.
 
+    Returns:
+        Validated messages with their temporary-content markers restored.
 
-def is_checkpoint_message(message: Message | dict) -> bool:
-    """Return whether a message is an internal checkpoint."""
-    if isinstance(message, Message):
-        return message.role == CHECKPOINT_ROLE
-    return isinstance(message, dict) and message.get("role") == CHECKPOINT_ROLE
-
-
-def get_checkpoint_id(message: Message | dict) -> str | None:
-    """Return the checkpoint id from an internal checkpoint message."""
-    if not is_checkpoint_message(message):
-        return None
-
-    content = (
-        message.content if isinstance(message, Message) else message.get("content")
-    )
-    if isinstance(content, CheckpointData):
-        return content.id
-    if isinstance(content, dict):
-        checkpoint_id = content.get("id")
-        return (
-            checkpoint_id if isinstance(checkpoint_id, str) and checkpoint_id else None
-        )
-    return None
-
-
-def strip_checkpoint_messages(history: list[dict]) -> list[dict]:
-    """Remove internal checkpoint messages from provider-facing history."""
-    return [message for message in history if not is_checkpoint_message(message)]
-
-
-def _get_checkpoint_data(message: Message | dict) -> CheckpointData | None:
-    if not is_checkpoint_message(message):
-        return None
-
-    content = (
-        message.content if isinstance(message, Message) else message.get("content")
-    )
-    if isinstance(content, CheckpointData):
-        return content
-    if isinstance(content, dict):
-        try:
-            return CheckpointData.model_validate(content)
-        except ValidationError:
-            return None
-    return None
-
-
-def bind_checkpoint_messages(history: list[dict]) -> list[Message]:
-    """Load persisted history and bind checkpoint segments to prior messages."""
+    Raises:
+        ValueError: A message has an invalid role or content.
+    """
     messages: list[Message] = []
     for item in history:
-        if is_checkpoint_message(item):
-            checkpoint = _get_checkpoint_data(item)
-            if checkpoint is not None and messages:
-                messages[-1]._checkpoint_after = checkpoint
-            continue
-
         message = Message.model_validate(item)
         if item.get("_no_save"):
             message._no_save = True
@@ -339,22 +276,30 @@ def bind_checkpoint_messages(history: list[dict]) -> list[Message]:
     return messages
 
 
-def dump_messages_with_checkpoints(messages: list[Message]) -> list[dict]:
-    """Dump runtime messages and reinsert bound checkpoint segments."""
+def dump_messages(
+    messages: list[Message], *, include_temporary: bool = False
+) -> list[dict]:
+    """Serialize working messages with optional temporary-content markers.
+
+    Args:
+        messages: Runtime working messages.
+        include_temporary: Preserve exclusion markers for the event journal.
+
+    Returns:
+        Serialized messages with optional temporary-content markers.
+    """
     dumped: list[dict] = []
     for message in messages:
         message_data = message.model_dump()
+        if include_temporary and message._no_save:
+            message_data["_no_save"] = True
         if isinstance(message.content, list):
             message_data["content"] = [
-                part.model_dump()
+                part.model_dump_for_context()
+                if include_temporary
+                else part.model_dump()
                 for part in message.content
-                if not getattr(part, "_no_save", False)
+                if include_temporary or not getattr(part, "_no_save", False)
             ]
         dumped.append(message_data)
-        if message._checkpoint_after is not None:
-            dumped.append(
-                CheckpointMessageSegment(
-                    content=message._checkpoint_after,
-                ).model_dump(),
-            )
     return dumped

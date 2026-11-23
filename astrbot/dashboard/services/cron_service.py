@@ -2,10 +2,11 @@ from __future__ import annotations
 
 import asyncio
 import traceback
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from astrbot.core import logger
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
+from astrbot.dashboard.validation import is_json_object, string_field
 
 
 class CronServiceError(Exception):
@@ -30,7 +31,7 @@ class CronService:
             value = data.get(key)
             if isinstance(value, datetime):
                 if value.tzinfo is None:
-                    value = value.replace(tzinfo=timezone.utc)
+                    value = value.replace(tzinfo=UTC)
                 data[key] = value.isoformat()
 
         payload = data.get("payload") or {}
@@ -54,12 +55,16 @@ class CronService:
     async def create_job(self, payload: object) -> dict:
         try:
             cron_mgr = self._get_cron_manager()
-            if not isinstance(payload, dict):
+            if not is_json_object(payload):
                 raise CronServiceError("Invalid payload")
 
-            name = payload.get("name") or "active_agent_task"
-            cron_expression = payload.get("cron_expression")
-            note = payload.get("note") or payload.get("description") or name
+            name = string_field(payload, "name") or "active_agent_task"
+            cron_expression = string_field(payload, "cron_expression")
+            note = (
+                string_field(payload, "note")
+                or string_field(payload, "description")
+                or name
+            )
             session = str(payload.get("session") or "").strip()
             persona_id = payload.get("persona_id")
             provider_id = payload.get("provider_id")
@@ -114,7 +119,7 @@ class CronService:
     async def update_job(self, job_id: str, payload: object) -> dict:
         try:
             cron_mgr = self._get_cron_manager()
-            if not isinstance(payload, dict):
+            if not is_json_object(payload):
                 raise CronServiceError("Invalid payload")
 
             job = await cron_mgr.db.get_cron_job(job_id)
@@ -193,7 +198,9 @@ class CronService:
         except Exception as exc:
             raise CronServiceError("run_at must be ISO datetime") from exc
 
-    def _merge_active_agent_updates(self, job, payload: dict, updates: dict) -> None:
+    @staticmethod
+    def merge_active_agent_payload(job, payload: dict) -> dict:
+        """Apply nested settings and an explicit session replacement in order."""
         merged_payload = dict(job.payload) if isinstance(job.payload, dict) else {}
         if "payload" in payload and isinstance(payload.get("payload"), dict):
             merged_payload.update(payload["payload"])
@@ -204,6 +211,10 @@ class CronService:
                 merged_payload["session"] = session
             else:
                 merged_payload.pop("session", None)
+        return merged_payload
+
+    def _merge_active_agent_updates(self, job, payload: dict, updates: dict) -> None:
+        merged_payload = self.merge_active_agent_payload(job, payload)
 
         self._merge_note(payload, job, merged_payload, updates)
 

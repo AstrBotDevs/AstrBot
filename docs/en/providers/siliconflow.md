@@ -8,8 +8,10 @@ Navigate to the SiliconFlow [API Keys](https://cloud.siliconflow.cn/me/account/a
 
 Visit the SiliconFlow [Models page](https://cloud.siliconflow.cn/me/models) to select your desired model. Note down the model name for later use.
 
-Open the AstrBot WebUI, click `Service Providers` in the left sidebar -> `Add Provider` -> select `SiliconFlow`.
+In the AstrBot WebUI, open **Providers → Chat Completion**, click **Add**, and select `SiliconFlow`.
 
-Paste the `API Key` and `Model Name` you obtained earlier, then click Save to complete the setup. You can click the `Refresh` button under `Service Provider Availability` to verify whether the configuration is successful.
+Enter the provider name and `API Key`, check the `API Base URL`, then click **Save and Fetch Models**. Click `+` beside the desired model and make sure it is enabled. Alternatively, click **Save Configuration**, then **Custom Model** and enter the exact model ID. Use **Test Model** beside the configured model to check availability.
 
-![Configuring Chat Model](https://files.astrbot.app/docs/source/images/siliconflow/image.png)
+## Applying the Chat Model
+
+Open **Config**, select the profile to use, and go to **AI → Model**. Set **Chat Model** to the model you just added, then click **Save Configuration** at the bottom right. This setting is for AstrBot built-in AI.

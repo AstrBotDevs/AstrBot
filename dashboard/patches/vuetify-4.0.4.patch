@@ -1,0 +1,24 @@
+diff --git a/lib/composables/list-items.d.ts b/lib/composables/list-items.d.ts
+--- a/lib/composables/list-items.d.ts
++++ b/lib/composables/list-items.d.ts
+@@ -103,6 +103,9 @@
+     };
+ };
+ export declare function transformItem(props: Pick<ItemProps, typeof transformItem.neededProps[number]>, item: any): ListItem;
++export declare namespace transformItem {
++    var neededProps: readonly ["itemTitle", "itemValue", "itemChildren", "itemProps", "itemType"];
++}
+ export declare function transformItems(props: Pick<ItemProps, typeof transformItem.neededProps[number]>, items: ItemProps['items']): ListItem<any>[];
+ export declare function useItems(props: ItemProps): {
+     items: import("vue").ComputedRef<ListItem<any>[]>;
+diff --git a/lib/util/index.d.ts b/lib/util/index.d.ts
+--- a/lib/util/index.d.ts
++++ b/lib/util/index.d.ts
+@@ -6,6 +6,7 @@
+ export * from './createSimpleFunctional.js';
+ export * from './deepEqual.js';
+ export * from './defineComponent.js';
++export type { Slot } from './defineComponent.js';
+ export * from './dom.js';
+ export * from './easing.js';
+ export * from './events.js';

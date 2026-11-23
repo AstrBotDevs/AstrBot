@@ -6,9 +6,11 @@ import type { editor } from "monaco-editor";
  * - Cherenkov blue accents for UI elements
  * - Industrial precision aesthetic
  */
-export function defineReactorMonacoTheme() {
-  // Access monaco via the global
-  const monaco = (window as any).monaco;
+type Monaco = typeof import("monaco-editor");
+
+export function defineReactorMonacoTheme(monacoInstance?: Monaco) {
+  const monaco =
+    monacoInstance ?? (typeof window !== "undefined" ? (window as Window & { monaco?: Monaco }).monaco : undefined);
   if (!monaco) return;
 
   monaco.editor.defineTheme("reactor-dark", {

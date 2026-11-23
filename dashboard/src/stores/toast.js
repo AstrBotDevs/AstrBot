@@ -1,21 +1,15 @@
 import { defineStore } from "pinia";
 import { computed, ref } from "vue";
 
-/**
- * @typedef {Object} ToastItem
- * @property {string} message
- * @property {string} color
- * @property {number} timeout
- * @property {boolean} closable
- * @property {boolean} multiLine
- * @property {string} location
- */
+/** @typedef {"top" | "bottom" | "start" | "end" | "center" | "center center" | "top center" | "top start" | "top end" | "bottom center" | "bottom start" | "bottom end"} ToastLocation */
+/** @typedef {{label: string, onClick: () => void}} ToastAction */
+/** @typedef {{message: string, color: string, timeout: number, closable: boolean, multiLine: boolean, location: ToastLocation, action: ToastAction | null}} Toast */
 
 export const useToastStore = defineStore("toast", () => {
-  /** @type {import('vue').Ref<ToastItem[]>} */
-  const queue = ref([]);
+  const queue = ref(/** @type {Toast[]} */ ([]));
   const current = computed(() => queue.value[0]);
 
+  /** @param {Pick<Toast, "message"> & Partial<Omit<Toast, "message">>} options */
   function add({
     message,
     color = "info", // Vuetify 颜色
@@ -23,6 +17,7 @@ export const useToastStore = defineStore("toast", () => {
     closable = true,
     multiLine = false,
     location = "top center",
+    action = null,
   }) {
     queue.value.push({
       message,
@@ -31,6 +26,7 @@ export const useToastStore = defineStore("toast", () => {
       closable,
       multiLine,
       location,
+      action,
     });
   }
 

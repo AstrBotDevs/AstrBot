@@ -1,16 +1,19 @@
 <script setup lang="ts">
 import { enableKatex, enableMermaid, MarkdownRender } from "markstream-vue";
 import { computed, ref, watch } from "vue";
+import { useTheme } from "vuetify";
+import { changelogApi, statsApi } from "@/api/v1";
 import { useI18n } from "@/i18n/composables";
-import axios from "@/utils/request";
+import { isAxiosError } from "@/utils/request";
+import { stringArray } from "@/utils/typeGuards";
 import "markstream-vue/index.css";
 import "katex/dist/katex.min.css";
-import "highlight.js/styles/github.css";
 
 enableKatex();
 enableMermaid();
 
 const { t } = useI18n();
+const theme = useTheme();
 
 const props = defineProps({
   modelValue: {
@@ -31,13 +34,13 @@ const changelogLoading = ref(false);
 const changelogError = ref("");
 const changelogVersion = ref("");
 const selectedVersion = ref("");
-const availableVersions = ref([]);
+const availableVersions = ref<string[]>([]);
 const loadingVersions = ref(false);
 
 // 获取当前版本号（从版本信息中提取）
 async function getCurrentVersion() {
   try {
-    const res = await axios.get("/api/stat/version");
+    const res = await statsApi.version();
     const version = res.data.data?.version || "";
     changelogVersion.value = version;
     selectedVersion.value = version;
@@ -49,7 +52,7 @@ async function getCurrentVersion() {
 }
 
 // 加载更新日志
-async function loadChangelog(version) {
+async function loadChangelog(version?: string) {
   const targetVersion = version || selectedVersion.value || changelogVersion.value;
   if (!targetVersion) {
     changelogError.value = t("core.navigation.changelogDialog.selectVersion");
@@ -61,19 +64,20 @@ async function loadChangelog(version) {
   changelogContent.value = "";
 
   try {
-    const res = await axios.get("/api/stat/changelog", {
-      params: { version: targetVersion },
-    });
+    const res = await changelogApi.get(targetVersion);
 
     if (res.data.status === "ok") {
-      changelogContent.value = res.data.data.content;
+      changelogContent.value = typeof res.data.data.content === "string" ? res.data.data.content : "";
       selectedVersion.value = targetVersion;
     } else {
       changelogError.value = res.data.message || t("core.navigation.changelogDialog.error");
     }
   } catch (err) {
     console.error("Failed to load changelog:", err);
-    if (err.response?.status === 404 || err.response?.data?.message?.includes("not found")) {
+    if (
+      isAxiosError<{ message?: string }>(err) &&
+      (err.response?.status === 404 || err.response?.data?.message?.includes("not found"))
+    ) {
       changelogError.value = t("core.navigation.changelogDialog.notFound");
     } else {
       changelogError.value = t("core.navigation.changelogDialog.error");
@@ -87,9 +91,9 @@ async function loadChangelog(version) {
 async function loadAvailableVersions() {
   loadingVersions.value = true;
   try {
-    const res = await axios.get("/api/stat/changelog/list");
+    const res = await changelogApi.listVersions();
     if (res.data.status === "ok") {
-      availableVersions.value = res.data.data.versions || [];
+      availableVersions.value = stringArray(res.data.data.versions);
     }
   } catch (err) {
     console.error("Failed to load versions:", err);
@@ -165,7 +169,7 @@ getCurrentVersion();
             density="compact"
             @update:model-value="onVersionChange"
           >
-            <template #item="{ item, props }">
+            <template #item="{ internalItem: item, props }">
               <v-list-item v-bind="props" :title="`v${item.value}`">
                 <template v-if="item.value === changelogVersion" #append>
                   <v-chip size="x-small" color="primary" variant="tonal">
@@ -174,7 +178,7 @@ getCurrentVersion();
                 </template>
               </v-list-item>
             </template>
-            <template #selection="{ item }">
+            <template #selection="{ internalItem: item }">
               <span>v{{ item.value }}</span>
             </template>
           </v-select>
@@ -197,9 +201,7 @@ getCurrentVersion();
             {{ changelogError }}
           </v-alert>
           <div v-else-if="changelogContent" class="changelog-content">
-            <div class="markdown-content">
-              <MarkdownRender :content="changelogContent" :typewriter="false" />
-            </div>
+            <MarkdownRender :content="changelogContent" :is-dark="theme.global.current.value.dark" :typewriter="false" class="markdown-content" />
           </div>
         </div>
       </v-card-text>

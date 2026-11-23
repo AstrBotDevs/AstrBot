@@ -7,6 +7,11 @@ from astrbot.core import logger
 from astrbot.core.agent.mcp_client import MCPTool
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
 from astrbot.core.star import star_map
+from astrbot.dashboard.services.tools_service import (
+    describe_mcp_servers,
+    merge_mcp_server_config,
+    rollback_mcp_server_config,
+)
 
 from .route import Response, Route, RouteContext
 
@@ -61,48 +66,11 @@ class ToolsRoute(Route):
         self.tool_mgr = provider_mgr.llm_tools
 
     def _rollback_mcp_server(self, name: str) -> bool:
-        try:
-            rollback_config = self.tool_mgr.load_mcp_config()
-            if name in rollback_config["mcpServers"]:
-                rollback_config["mcpServers"].pop(name)
-                return self.tool_mgr.save_mcp_config(rollback_config)
-            return True
-        except Exception:
-            logger.error(traceback.format_exc())
-            return False
+        return rollback_mcp_server_config(self.tool_mgr, name)
 
     async def get_mcp_servers(self):
         try:
-            config = self.tool_mgr.load_mcp_config()
-            servers = []
-            mcp_servers = config.get("mcpServers", {})
-            if not isinstance(mcp_servers, dict):
-                logger.warning(
-                    f"Invalid MCP server config type: {type(mcp_servers).__name__}. Expected object/dict; skipped all MCP servers.",
-                )
-                mcp_servers = {}
-            for name, server_config in mcp_servers.items():
-                if not isinstance(server_config, dict):
-                    logger.warning(
-                        f"Invalid config for MCP server '{name}' (type: {type(server_config).__name__}); skipped.",
-                    )
-                    continue
-                server_info = {
-                    "name": name,
-                    "active": server_config.get("active", True),
-                }
-                for key, value in server_config.items():
-                    if key != "active":
-                        server_info[key] = value
-                for name_key, runtime in self.tool_mgr.mcp_server_runtime_view.items():
-                    if name_key == name:
-                        mcp_client = runtime.client
-                        server_info["tools"] = [tool.name for tool in mcp_client.tools]
-                        server_info["errlogs"] = mcp_client.server_errlogs
-                        break
-                else:
-                    server_info["tools"] = []
-                servers.append(server_info)
+            servers = describe_mcp_servers(self.tool_mgr, include_connected=False)
             return Response().ok(servers).to_json()
         except Exception as e:
             logger.error(traceback.format_exc())
@@ -114,20 +82,15 @@ class ToolsRoute(Route):
             name = server_data.get("name", "")
             if not name:
                 return Response().error("Server name cannot be empty").to_json()
-            has_valid_config = False
-            server_config = {"active": server_data.get("active", True)}
-            for key, value in server_data.items():
-                if key not in ["name", "active", "tools", "errlogs"]:
-                    if key == "mcpServers":
-                        try:
-                            server_config = _extract_mcp_server_config(
-                                server_data["mcpServers"],
-                            )
-                        except ValueError as e:
-                            return Response().error(f"{e!s}").to_json()
-                    else:
-                        server_config[key] = value
-                    has_valid_config = True
+            try:
+                has_valid_config, server_config = merge_mcp_server_config(
+                    server_data,
+                    server_data.get("active", True),
+                    excluded_keys=("name", "active", "tools", "errlogs"),
+                    extract_config=_extract_mcp_server_config,
+                )
+            except ValueError as e:
+                return Response().error(f"{e!s}").to_json()
             if not has_valid_config:
                 return (
                     Response()
@@ -192,20 +155,16 @@ class ToolsRoute(Route):
             else:
                 old_active = True
             active = server_data.get("active", old_active)
-            server_config = {"active": active}
-            only_update_active = True
-            for key, value in server_data.items():
-                if key not in ["name", "active", "tools", "errlogs", "oldName"]:
-                    if key == "mcpServers":
-                        try:
-                            server_config = _extract_mcp_server_config(
-                                server_data["mcpServers"],
-                            )
-                        except ValueError as e:
-                            return Response().error(f"{e!s}").to_json()
-                    else:
-                        server_config[key] = value
-                    only_update_active = False
+            try:
+                has_config, server_config = merge_mcp_server_config(
+                    server_data,
+                    active,
+                    excluded_keys=("name", "active", "tools", "errlogs", "oldName"),
+                    extract_config=_extract_mcp_server_config,
+                )
+            except ValueError as e:
+                return Response().error(f"{e!s}").to_json()
+            only_update_active = not has_config
             if only_update_active and isinstance(old_config, dict):
                 for key, value in old_config.items():
                     if key != "active":

@@ -133,7 +133,7 @@ let energyLoopId: number;
 const isPlaying = ref(false); // UI 状态：是否正在播放
 
 // 音频播放队列管理
-const rawAudioQueue: Uint8Array[] = []; // 待解码队列
+const rawAudioQueue: Uint8Array<ArrayBuffer>[] = []; // 待解码队列
 const audioBufferQueue: AudioBuffer[] = []; // 待播放队列
 let isDecoding = false;
 let isPlayingAudio = false; // 内部状态：是否正在播放音频
@@ -453,7 +453,7 @@ async function processRawAudioQueue() {
 
       try {
         // 解码
-        const audioBuffer = await audioContext.decodeAudioData(bytes.buffer as ArrayBuffer);
+        const audioBuffer = await audioContext.decodeAudioData(bytes.buffer);
         audioBufferQueue.push(audioBuffer);
 
         // 如果当前没有播放，立即开始播放

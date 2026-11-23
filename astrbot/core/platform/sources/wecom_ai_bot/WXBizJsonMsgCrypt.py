@@ -14,7 +14,7 @@ import secrets
 import socket
 import struct
 import time
-from typing import NoReturn
+from typing import Literal, NoReturn
 
 from Crypto.Cipher import AES
 
@@ -148,7 +148,7 @@ class Prpcrypt:
         # self.key = base64.b64decode(key+"=")
         self.key = key
         # 设置加解密模式为AES的CBC模式
-        self.mode = AES.MODE_CBC
+        self.mode: Literal[2] = AES.MODE_CBC
 
     def encrypt(self, text, receiveid):
         """对明文进行加密
@@ -234,16 +234,22 @@ class WXBizJsonMsgCrypt:
     # @param sReplyEchoStr: 解密之后的echostr,当return返回0时有效
     # @return:成功0,失败返回对应的错误码
 
-    def VerifyURL(self, sMsgSignature, sTimeStamp, sNonce, sEchoStr):
+    def _decrypt_authenticated(
+        self, encrypted: object, signature: str, timestamp: str, nonce: str
+    ) -> tuple[int, str | None]:
+        """Validate the complete callback signature before decrypting its payload."""
+        if not isinstance(encrypted, str):
+            return ierror.WXBizMsgCrypt_ComputeSignature_Error, None
         sha1 = SHA1()
-        ret, signature = sha1.getSHA1(self.m_sToken, sTimeStamp, sNonce, sEchoStr)
+        ret, expected = sha1.getSHA1(self.m_sToken, timestamp, nonce, encrypted)
         if ret != 0:
             return ret, None
-        if not signature == sMsgSignature:
+        if expected != signature:
             return ierror.WXBizMsgCrypt_ValidateSignature_Error, None
-        pc = Prpcrypt(self.key)
-        ret, sReplyEchoStr = pc.decrypt(sEchoStr, self.m_sReceiveId)
-        return ret, sReplyEchoStr
+        return Prpcrypt(self.key).decrypt(encrypted, self.m_sReceiveId)
+
+    def VerifyURL(self, sMsgSignature, sTimeStamp, sNonce, sEchoStr):
+        return self._decrypt_authenticated(sEchoStr, sMsgSignature, sTimeStamp, sNonce)
 
     def EncryptMsg(self, sReplyMsg, sNonce, timestamp=None):
         # 将企业回复用户的消息加密打包
@@ -254,9 +260,11 @@ class WXBizJsonMsgCrypt:
         # return:成功0,sEncryptMsg,失败返回对应的错误码None
         pc = Prpcrypt(self.key)
         ret, encrypt = pc.encrypt(sReplyMsg, self.m_sReceiveId)
-        encrypt = encrypt.decode("utf-8")
         if ret != 0:
             return ret, None
+        if encrypt is None:
+            return ierror.WXBizMsgCrypt_EncryptAES_Error, None
+        encrypt = encrypt.decode("utf-8")
         if timestamp is None:
             timestamp = str(int(time.time()))
         # 生成安全签名
@@ -280,12 +288,4 @@ class WXBizJsonMsgCrypt:
         ret, encrypt = jsonParse.extract(sPostData)
         if ret != 0:
             return ret, None
-        sha1 = SHA1()
-        ret, signature = sha1.getSHA1(self.m_sToken, sTimeStamp, sNonce, encrypt)
-        if ret != 0:
-            return ret, None
-        if not signature == sMsgSignature:
-            return ierror.WXBizMsgCrypt_ValidateSignature_Error, None
-        pc = Prpcrypt(self.key)
-        ret, json_content = pc.decrypt(encrypt, self.m_sReceiveId)
-        return ret, json_content
+        return self._decrypt_authenticated(encrypt, sMsgSignature, sTimeStamp, sNonce)

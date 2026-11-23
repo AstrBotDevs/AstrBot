@@ -1,8 +1,4 @@
-"""TDD tests for booter decoupling refactoring.
-
-Tests written BEFORE implementation — all should initially FAIL (red).
-After each implementation step, the corresponding tests should turn green.
-"""
+"""Behavior contracts for computer booters, tool selection, and capability gates."""
 
 from __future__ import annotations
 
@@ -16,7 +12,7 @@ import pytest
 
 class TestBooterConstants:
     def test_constants_exist(self):
-        from astrbot.core.computer.booters.constants import (
+        from astrbot.core.astr_agent_runtime.computer.booters.constants import (
             BOOTER_BOXLITE,
             BOOTER_SHIPYARD,
             BOOTER_SHIPYARD_NEO,
@@ -32,13 +28,17 @@ class TestBooterConstants:
 
 class TestNeoPromptConstants:
     def test_neo_file_path_prompt_exists(self):
-        from astrbot.core.computer.prompts import NEO_FILE_PATH_PROMPT
+        from astrbot.core.astr_agent_runtime.computer.prompts import (
+            NEO_FILE_PATH_PROMPT,
+        )
 
         assert "relative" in NEO_FILE_PATH_PROMPT.lower()
         assert "workspace" in NEO_FILE_PATH_PROMPT.lower()
 
     def test_neo_skill_lifecycle_prompt_exists(self):
-        from astrbot.core.computer.prompts import NEO_SKILL_LIFECYCLE_PROMPT
+        from astrbot.core.astr_agent_runtime.computer.prompts import (
+            NEO_SKILL_LIFECYCLE_PROMPT,
+        )
 
         assert "astrbot_create_skill_payload" in NEO_SKILL_LIFECYCLE_PROMPT
         assert "astrbot_promote_skill_candidate" in NEO_SKILL_LIFECYCLE_PROMPT
@@ -49,12 +49,12 @@ class TestNeoPromptConstants:
 
 class TestComputerBooterBaseInterface:
     def test_get_default_tools_returns_empty(self):
-        from astrbot.core.computer.booters.base import ComputerBooter
+        from astrbot.core.astr_agent_runtime.computer.booters.base import ComputerBooter
 
         assert ComputerBooter.get_default_tools() == []
 
     def test_get_system_prompt_parts_returns_empty(self):
-        from astrbot.core.computer.booters.base import ComputerBooter
+        from astrbot.core.astr_agent_runtime.computer.booters.base import ComputerBooter
 
         assert ComputerBooter.get_system_prompt_parts() == []
 
@@ -64,7 +64,9 @@ class TestComputerBooterBaseInterface:
 
 class TestShipyardBooterTools:
     def test_get_default_tools_returns_4(self):
-        from astrbot.core.computer.booters.shipyard import ShipyardBooter
+        from astrbot.core.astr_agent_runtime.computer.booters.shipyard import (
+            ShipyardBooter,
+        )
 
         tools = ShipyardBooter.get_default_tools()
         assert len(tools) == 4
@@ -75,14 +77,18 @@ class TestShipyardBooterTools:
         assert "astrbot_download_file" in names
 
     def test_get_system_prompt_parts_empty(self):
-        from astrbot.core.computer.booters.shipyard import ShipyardBooter
+        from astrbot.core.astr_agent_runtime.computer.booters.shipyard import (
+            ShipyardBooter,
+        )
 
         assert ShipyardBooter.get_system_prompt_parts() == []
 
 
 class TestShipyardNeoBooterTools:
     def _make_booter(self, caps=None):
-        from astrbot.core.computer.booters.shipyard_neo import ShipyardNeoBooter
+        from astrbot.core.astr_agent_runtime.computer.booters.shipyard_neo import (
+            ShipyardNeoBooter,
+        )
 
         booter = ShipyardNeoBooter(
             endpoint_url="http://localhost:8114",
@@ -93,7 +99,9 @@ class TestShipyardNeoBooterTools:
         return booter
 
     def test_get_default_tools_returns_18(self):
-        from astrbot.core.computer.booters.shipyard_neo import ShipyardNeoBooter
+        from astrbot.core.astr_agent_runtime.computer.booters.shipyard_neo import (
+            ShipyardNeoBooter,
+        )
 
         tools = ShipyardNeoBooter.get_default_tools()
         assert len(tools) == 18  # 4 base + 11 Neo + 3 browser
@@ -123,7 +131,9 @@ class TestShipyardNeoBooterTools:
         assert "astrbot_create_skill_candidate" in names
 
     def test_get_system_prompt_parts_has_neo_prompts(self):
-        from astrbot.core.computer.booters.shipyard_neo import ShipyardNeoBooter
+        from astrbot.core.astr_agent_runtime.computer.booters.shipyard_neo import (
+            ShipyardNeoBooter,
+        )
 
         parts = ShipyardNeoBooter.get_system_prompt_parts()
         assert len(parts) == 2
@@ -135,7 +145,9 @@ class TestShipyardNeoBooterTools:
 class TestBoxliteBooterTools:
     def test_get_default_tools_returns_4(self):
         pytest.importorskip("boxlite")
-        from astrbot.core.computer.booters.boxlite import BoxliteBooter
+        from astrbot.core.astr_agent_runtime.computer.booters.boxlite import (
+            BoxliteBooter,
+        )
 
         tools = BoxliteBooter.get_default_tools()
         assert len(tools) == 4
@@ -144,7 +156,9 @@ class TestBoxliteBooterTools:
 
     def test_get_system_prompt_parts_empty(self):
         pytest.importorskip("boxlite")
-        from astrbot.core.computer.booters.boxlite import BoxliteBooter
+        from astrbot.core.astr_agent_runtime.computer.booters.boxlite import (
+            BoxliteBooter,
+        )
 
         assert BoxliteBooter.get_system_prompt_parts() == []
 
@@ -154,56 +168,75 @@ class TestBoxliteBooterTools:
 
 class TestComputerClientAPI:
     def test_get_sandbox_tools_unknown_session(self):
-        from astrbot.core.computer.computer_client import get_sandbox_tools
+        from astrbot.core.astr_agent_runtime.computer.computer_client import (
+            get_sandbox_tools,
+        )
 
-        with patch("astrbot.core.computer.computer_client.session_booter", {}):
+        with patch(
+            "astrbot.core.astr_agent_runtime.computer.computer_client.session_booter",
+            {},
+        ):
             assert get_sandbox_tools("unknown") == []
 
     def test_get_sandbox_tools_with_booted_session(self):
-        from astrbot.core.computer.computer_client import get_sandbox_tools
+        from astrbot.core.astr_agent_runtime.computer.computer_client import (
+            get_sandbox_tools,
+        )
 
         fake_booter = SimpleNamespace(
             get_tools=lambda: ["tool1", "tool2"],
         )
         with patch(
-            "astrbot.core.computer.computer_client.session_booter",
+            "astrbot.core.astr_agent_runtime.computer.computer_client.session_booter",
             {"s1": fake_booter},
         ):
             assert get_sandbox_tools("s1") == ["tool1", "tool2"]
 
     def test_get_default_sandbox_tools_neo(self):
-        from astrbot.core.computer.computer_client import get_default_sandbox_tools
+        from astrbot.core.astr_agent_runtime.computer.computer_client import (
+            get_default_sandbox_tools,
+        )
 
         tools = get_default_sandbox_tools({"booter": "shipyard_neo"})
         assert len(tools) == 18
 
     def test_get_default_sandbox_tools_shipyard(self):
-        from astrbot.core.computer.computer_client import get_default_sandbox_tools
+        from astrbot.core.astr_agent_runtime.computer.computer_client import (
+            get_default_sandbox_tools,
+        )
 
         tools = get_default_sandbox_tools({"booter": "shipyard"})
         assert len(tools) == 4
 
     def test_get_default_sandbox_tools_boxlite(self):
         pytest.importorskip("boxlite")
-        from astrbot.core.computer.computer_client import get_default_sandbox_tools
+        from astrbot.core.astr_agent_runtime.computer.computer_client import (
+            get_default_sandbox_tools,
+        )
 
         tools = get_default_sandbox_tools({"booter": "boxlite"})
         assert len(tools) == 4
 
     def test_get_default_sandbox_tools_unknown_type(self):
-        from astrbot.core.computer.computer_client import get_default_sandbox_tools
+        from astrbot.core.astr_agent_runtime.computer.computer_client import (
+            get_default_sandbox_tools,
+        )
 
         tools = get_default_sandbox_tools({"booter": "nonexistent"})
         assert tools == []
 
     def test_get_sandbox_prompt_parts_neo(self):
-        from astrbot.core.computer.computer_client import get_sandbox_prompt_parts
+        from astrbot.core.astr_agent_runtime.computer.computer_client import (
+            get_sandbox_prompt_parts,
+        )
 
         parts = get_sandbox_prompt_parts({"booter": "shipyard_neo"})
         assert len(parts) == 2
 
     def test_get_sandbox_prompt_parts_shipyard(self):
-        from astrbot.core.computer.computer_client import get_sandbox_prompt_parts
+        from astrbot.core.astr_agent_runtime.computer.computer_client import (
+            get_sandbox_prompt_parts,
+        )
 
         parts = get_sandbox_prompt_parts({"booter": "shipyard"})
         assert parts == []
@@ -224,13 +257,11 @@ class TestApplySandboxToolsRefactored:
 
     def test_neo_tools_registered_via_provider(self):
         """get_tools() returns full neo tool set (18 tools) for sandbox/neo config."""
-        try:
-            from astrbot.core.computer.computer_tool_provider import (
-                ComputerToolProvider,
-            )
-            from astrbot.core.tool_provider import ToolProviderContext
-        except ImportError:
-            pytest.skip("circular import")
+        from astrbot.core.astr_agent_runtime.computer.computer_tool_provider import (
+            ComputerToolProvider,
+        )
+        from astrbot.core.tool_provider import ToolProviderContext
+
         ctx = ToolProviderContext(
             computer_use_runtime="sandbox",
             sandbox_cfg={"booter": "shipyard_neo"},
@@ -238,20 +269,20 @@ class TestApplySandboxToolsRefactored:
         tools = ComputerToolProvider().get_tools(ctx)
         names = self._tool_names(tools)
         assert "astrbot_create_skill_candidate" in names, "neo skill tool missing"
-        assert "astrbot_execute_browser" in names, "browser tool missing from full schema"
+        assert "astrbot_execute_browser" in names, (
+            "browser tool missing from full schema"
+        )
         assert "astrbot_execute_shell" in names, "shell tool missing"
         assert "astrbot_execute_ipython" in names, "python tool missing"
         assert len(names) == 18, f"expected 18 tools, got {len(names)}: {sorted(names)}"
 
     def test_neo_prompt_injected_via_provider(self):
         """get_system_prompt_addon() includes sandbox hint and neo-specific fragments."""
-        try:
-            from astrbot.core.computer.computer_tool_provider import (
-                ComputerToolProvider,
-            )
-            from astrbot.core.tool_provider import ToolProviderContext
-        except ImportError:
-            pytest.skip("circular import")
+        from astrbot.core.astr_agent_runtime.computer.computer_tool_provider import (
+            ComputerToolProvider,
+        )
+        from astrbot.core.tool_provider import ToolProviderContext
+
         ctx = ToolProviderContext(
             computer_use_runtime="sandbox",
             sandbox_cfg={"booter": "shipyard_neo"},
@@ -266,13 +297,11 @@ class TestApplySandboxToolsRefactored:
 
     def test_shipyard_no_neo_prompt_via_provider(self):
         """Shipyard config: get_tools returns 4 tools, prompt has no neo lifecycle text."""
-        try:
-            from astrbot.core.computer.computer_tool_provider import (
-                ComputerToolProvider,
-            )
-            from astrbot.core.tool_provider import ToolProviderContext
-        except ImportError:
-            pytest.skip("circular import")
+        from astrbot.core.astr_agent_runtime.computer.computer_tool_provider import (
+            ComputerToolProvider,
+        )
+        from astrbot.core.tool_provider import ToolProviderContext
+
         ctx = ToolProviderContext(
             computer_use_runtime="sandbox",
             sandbox_cfg={
@@ -304,13 +333,11 @@ class TestApplySandboxToolsRefactored:
         entire conversation (enabling LLM provider prefix cache hits).
         The executor rejects browser calls when the capability is absent.
         """
-        try:
-            from astrbot.core.computer.computer_tool_provider import (
-                ComputerToolProvider,
-            )
-            from astrbot.core.tool_provider import ToolProviderContext
-        except ImportError:
-            pytest.skip("circular import")
+        from astrbot.core.astr_agent_runtime.computer.computer_tool_provider import (
+            ComputerToolProvider,
+        )
+        from astrbot.core.tool_provider import ToolProviderContext
+
         ctx = ToolProviderContext(
             computer_use_runtime="sandbox",
             sandbox_cfg={"booter": "shipyard_neo"},
@@ -330,26 +357,22 @@ class TestApplySandboxToolsRefactored:
 
     def test_none_runtime_returns_empty(self):
         """runtime='none' must return no tools and no prompt addon."""
-        try:
-            from astrbot.core.computer.computer_tool_provider import (
-                ComputerToolProvider,
-            )
-            from astrbot.core.tool_provider import ToolProviderContext
-        except ImportError:
-            pytest.skip("circular import")
+        from astrbot.core.astr_agent_runtime.computer.computer_tool_provider import (
+            ComputerToolProvider,
+        )
+        from astrbot.core.tool_provider import ToolProviderContext
+
         ctx = ToolProviderContext(computer_use_runtime="none", sandbox_cfg={})
         assert ComputerToolProvider().get_tools(ctx) == []
         assert ComputerToolProvider().get_system_prompt_addon(ctx) == ""
 
     def test_shipyard_missing_endpoint_returns_empty(self):
         """Shipyard config without endpoint/token must return [] (not crash)."""
-        try:
-            from astrbot.core.computer.computer_tool_provider import (
-                ComputerToolProvider,
-            )
-            from astrbot.core.tool_provider import ToolProviderContext
-        except ImportError:
-            pytest.skip("circular import")
+        from astrbot.core.astr_agent_runtime.computer.computer_tool_provider import (
+            ComputerToolProvider,
+        )
+        from astrbot.core.tool_provider import ToolProviderContext
+
         ctx = ToolProviderContext(
             computer_use_runtime="sandbox",
             sandbox_cfg={"booter": "shipyard"},  # no endpoint/token
@@ -363,13 +386,12 @@ class TestExecutorCapabilityGuard:
 
     def test_browser_tool_rejected_without_browser_cap(self):
         """Browser tool is rejected when booted session has no browser capability."""
-        try:
-            from astrbot.core.astr_agent_tool_exec import FunctionToolExecutor
-        except ImportError:
-            pytest.skip("circular import")
         from unittest.mock import MagicMock
 
-        from astrbot.core.computer.booters.shipyard_neo import ShipyardNeoBooter
+        from astrbot.core.astr_agent_runtime.computer.booters.shipyard_neo import (
+            ShipyardNeoBooter,
+        )
+        from astrbot.core.astr_agent_runtime.tool_executor import FunctionToolExecutor
 
         tool = MagicMock()
         tool.name = "astrbot_execute_browser"
@@ -385,25 +407,26 @@ class TestExecutorCapabilityGuard:
         )
 
         with patch(
-            "astrbot.core.computer.computer_client.session_booter",
+            "astrbot.core.astr_agent_runtime.computer.computer_client.session_booter",
             {"test-session-no-browser": fake_booter},
         ):
             result = FunctionToolExecutor._check_sandbox_capability(tool, run_context)
 
-        assert result is not None, "must return rejection for missing browser capability"
+        assert result is not None, (
+            "must return rejection for missing browser capability"
+        )
         assert result.isError is True
         assert "browser" in str(result.content).lower()
         assert "capability" in str(result.content).lower()
 
     def test_browser_tool_allowed_with_browser_cap(self):
         """Browser tool is allowed when booted session has browser capability."""
-        try:
-            from astrbot.core.astr_agent_tool_exec import FunctionToolExecutor
-        except ImportError:
-            pytest.skip("circular import")
         from unittest.mock import MagicMock
 
-        from astrbot.core.computer.booters.shipyard_neo import ShipyardNeoBooter
+        from astrbot.core.astr_agent_runtime.computer.booters.shipyard_neo import (
+            ShipyardNeoBooter,
+        )
+        from astrbot.core.astr_agent_runtime.tool_executor import FunctionToolExecutor
 
         tool = MagicMock()
         tool.name = "astrbot_execute_browser"
@@ -419,22 +442,23 @@ class TestExecutorCapabilityGuard:
         )
 
         with patch(
-            "astrbot.core.computer.computer_client.session_booter",
+            "astrbot.core.astr_agent_runtime.computer.computer_client.session_booter",
             {"test-session-browser": fake_booter},
         ):
             result = FunctionToolExecutor._check_sandbox_capability(tool, run_context)
 
-        assert result is None, "must allow browser tool when browser capability is present"
+        assert result is None, (
+            "must allow browser tool when browser capability is present"
+        )
 
     def test_all_browser_tool_names_are_rejected(self):
         """All 3 browser tool names are blocked when browser cap is absent."""
-        try:
-            from astrbot.core.astr_agent_tool_exec import FunctionToolExecutor
-        except ImportError:
-            pytest.skip("circular import")
         from unittest.mock import MagicMock
 
-        from astrbot.core.computer.booters.shipyard_neo import ShipyardNeoBooter
+        from astrbot.core.astr_agent_runtime.computer.booters.shipyard_neo import (
+            ShipyardNeoBooter,
+        )
+        from astrbot.core.astr_agent_runtime.tool_executor import FunctionToolExecutor
 
         fake_booter = ShipyardNeoBooter(
             endpoint_url="http://localhost:8114",
@@ -453,21 +477,21 @@ class TestExecutorCapabilityGuard:
             run_context = MagicMock()
             run_context.context.event.unified_msg_origin = "test-session"
             with patch(
-                "astrbot.core.computer.computer_client.session_booter",
+                "astrbot.core.astr_agent_runtime.computer.computer_client.session_booter",
                 {"test-session": fake_booter},
             ):
-                result = FunctionToolExecutor._check_sandbox_capability(tool, run_context)
+                result = FunctionToolExecutor._check_sandbox_capability(
+                    tool, run_context
+                )
             assert result is not None and result.isError is True, (
                 f"browser tool '{name}' must be rejected without browser cap"
             )
 
     def test_non_browser_tool_always_allowed(self):
         """Non-browser tools bypass capability check entirely."""
-        try:
-            from astrbot.core.astr_agent_tool_exec import FunctionToolExecutor
-        except ImportError:
-            pytest.skip("circular import")
         from unittest.mock import MagicMock
+
+        from astrbot.core.astr_agent_runtime.tool_executor import FunctionToolExecutor
 
         non_browser_names = [
             "astrbot_execute_shell",
@@ -484,11 +508,9 @@ class TestExecutorCapabilityGuard:
 
     def test_unbooted_session_allows_browser_tool(self):
         """Browser tool is allowed when sandbox is not yet booted (caps=None)."""
-        try:
-            from astrbot.core.astr_agent_tool_exec import FunctionToolExecutor
-        except ImportError:
-            pytest.skip("circular import")
         from unittest.mock import MagicMock
+
+        from astrbot.core.astr_agent_runtime.tool_executor import FunctionToolExecutor
 
         tool = MagicMock()
         tool.name = "astrbot_execute_browser"
@@ -496,7 +518,7 @@ class TestExecutorCapabilityGuard:
         run_context.context.event.unified_msg_origin = "unbooted-session"
 
         with patch(
-            "astrbot.core.computer.computer_client.session_booter",
+            "astrbot.core.astr_agent_runtime.computer.computer_client.session_booter",
             {},  # no booter registered ￫ caps=None ￫ allow through
         ):
             result = FunctionToolExecutor._check_sandbox_capability(tool, run_context)
@@ -507,60 +529,53 @@ class TestExecutorCapabilityGuard:
 
 
 class TestSubagentHandoffTools:
-    """Subagent should get same tools as main agent."""
+    """Delegated calls receive the runtime's execution and filesystem capabilities."""
 
-    def test_sandbox_runtime_gets_neo_tools(self):
-        try:
-            from astrbot.core.astr_agent_tool_exec import FunctionToolExecutor
-        except ImportError:
-            pytest.skip("circular import")
-        with patch("astrbot.core.computer.computer_client.session_booter", {}):
-            tools = FunctionToolExecutor._get_runtime_computer_tools(
-                "sandbox",
-                session_id=None,  # type: ignore[arg-type]
-                sandbox_cfg={"booter": "shipyard_neo"},
-            )
-        assert "astrbot_create_skill_candidate" in tools
-        assert len(tools) == 18
+    @pytest.mark.parametrize(
+        "sandbox_cfg,expected_count",
+        [
+            ({"booter": "shipyard_neo"}, 22),
+            ({"booter": "shipyard"}, 8),
+            ({}, 22),
+        ],
+    )
+    def test_sandbox_tools_include_filesystem(self, sandbox_cfg, expected_count):
+        from astrbot.core.astr_agent_runtime.tool_executor import FunctionToolExecutor
 
-    def test_sandbox_runtime_shipyard_only_4(self):
-        try:
-            from astrbot.core.astr_agent_tool_exec import FunctionToolExecutor
-        except ImportError:
-            pytest.skip("circular import")
-        with patch("astrbot.core.computer.computer_client.session_booter", {}):
-            tools = FunctionToolExecutor._get_runtime_computer_tools(
-                "sandbox",
-                session_id=None,  # type: ignore[arg-type]
-                sandbox_cfg={"booter": "shipyard"},
-            )
-        assert len(tools) == 0
-
-    def test_sandbox_runtime_empty_config_still_gets_default_tools(self):
-        try:
-            from astrbot.core.astr_agent_tool_exec import FunctionToolExecutor
-        except ImportError:
-            pytest.skip("circular import")
         tools = FunctionToolExecutor._get_runtime_computer_tools(
             "sandbox",
-            session_id=None,  # type: ignore[arg-type]
-            sandbox_cfg={},
+            session_id="",
+            sandbox_cfg=sandbox_cfg,
         )
-        assert "astrbot_create_skill_candidate" in tools
-        assert len(tools) == 18
+        assert len(tools) == expected_count
+        assert {
+            "astrbot_execute_shell",
+            "astrbot_execute_ipython",
+            "astrbot_upload_file",
+            "astrbot_download_file",
+            "astrbot_file_read_tool",
+            "astrbot_file_write_tool",
+            "astrbot_file_edit_tool",
+            "astrbot_grep_tool",
+        } <= tools.keys()
+        if sandbox_cfg.get("booter", "shipyard_neo") == "shipyard_neo":
+            assert "astrbot_create_skill_candidate" in tools
+            assert "astrbot_execute_browser" in tools
+        else:
+            assert "astrbot_create_skill_candidate" not in tools
 
-    def test_local_runtime_unchanged(self):
-        try:
-            from astrbot.core.astr_agent_tool_exec import FunctionToolExecutor
-        except ImportError:
-            pytest.skip("circular import")
+    def test_local_runtime_includes_managed_shell_and_filesystem(self):
+        from astrbot.core.astr_agent_runtime.tool_executor import FunctionToolExecutor
+
         tools = FunctionToolExecutor._get_runtime_computer_tools(
-            "local",
-            session_id=None,  # type: ignore[arg-type]
-            sandbox_cfg={},
+            "local", session_id="", sandbox_cfg={}
         )
         assert set(tools) == {
             "astrbot_execute_python",
             "astrbot_execute_shell",
             "astrbot_shell_session",
+            "astrbot_file_read_tool",
+            "astrbot_file_write_tool",
+            "astrbot_file_edit_tool",
+            "astrbot_grep_tool",
         }

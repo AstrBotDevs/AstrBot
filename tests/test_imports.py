@@ -1,48 +1,95 @@
-"""Lightweight import smoke test.
+"""Public startup imports and runtime contracts for the current architecture."""
 
-Matches the checks in ``PKGBUILD check()`` plus extra guards for imports
-that have broken in past merges.
-"""
+import inspect
+import json
 
-# ---------------------------------------------------------------------------
-# PKGBUILD check() — mirrors ``python -c "from ... import ..."`` verbatim
-# ---------------------------------------------------------------------------
-from astrbot.core.astr_main_agent_resources import (
-    BACKGROUND_TASK_RESULT_WOKE_SYSTEM_PROMPT,   # noqa: F401
-    BACKGROUND_TASK_WOKE_USER_PROMPT,             # noqa: F401
-    CONVERSATION_HISTORY_INJECT_PREFIX,           # noqa: F401
-)
-from astrbot.dashboard.server import AstrBotDashboard  # noqa: F401
-import astrbot.core.pipeline.process_stage.stage  # noqa: F401
+import pytest
 
 
-# ---------------------------------------------------------------------------
-# Extra guards —曾炸过的 import 路径
-# ---------------------------------------------------------------------------
-from astrbot.core.astr_agent_tool_exec import FunctionToolExecutor  # noqa: F401
-from astrbot.dashboard.api.chat import router as chat_router  # noqa: F401
-from astrbot.dashboard.api.live_chat import router as live_chat_router  # noqa: F401
-from astrbot.core.pipeline.scheduler import PipelineScheduler  # noqa: F401
-from astrbot.core.utils.auth_password import (
-    hash_dashboard_password,        # noqa: F401
-    validate_dashboard_password,     # noqa: F401
-    verify_dashboard_password,       # noqa: F401
-    is_default_dashboard_password,   # noqa: F401
-)
+def test_public_config_round_trip_keeps_storage_metadata_private(tmp_path) -> None:
+    from astrbot.api import AstrBotConfig
+
+    path = tmp_path / "plugin.json"
+    defaults = {"title": "original", "choices": ["first"]}
+    config = AstrBotConfig(str(path), default_config=defaults)
+    config["title"] = "updated"
+    config["choices"].append("second")
+    config.save_config()
+
+    stored = json.loads(path.read_text(encoding="utf-8-sig"))
+    reloaded = AstrBotConfig(str(path), default_config=defaults)
+    assert stored["title"] == reloaded["title"] == "updated"
+    assert stored["choices"] == reloaded["choices"] == ["first", "second"]
+    assert defaults == {"title": "original", "choices": ["first"]}
+    assert "config_path" not in stored
+    assert "default_config" not in stored
 
 
-# ---------------------------------------------------------------------------
-# Abstract-method completeness
-# ---------------------------------------------------------------------------
-def test_platform_abstract_methods():
-    """Platform (ABC) has abstract methods (catches missing implementations)."""
+def test_native_runtime_implements_the_shared_runtime_contract() -> None:
+    from astrbot.core.agent.runtime import AgentRuntime
+    from astrbot.core.agent.tool_executor import BaseFunctionToolExecutor
+    from astrbot.core.astr_agent_runtime import AstrAgentRuntime
+    from astrbot.core.astr_agent_runtime.runtime import AstrAgentRuntime as Runtime
+    from astrbot.core.astr_agent_runtime.tool_executor import FunctionToolExecutor
+
+    assert AstrAgentRuntime is Runtime
+    assert issubclass(Runtime, AgentRuntime)
+    assert issubclass(FunctionToolExecutor, BaseFunctionToolExecutor)
+
+
+def test_platform_remains_abstract() -> None:
     from astrbot.core.platform.platform import Platform
 
-    assert len(Platform.__dict__.get('__abstractmethods__', frozenset())) > 0
+    assert inspect.isabstract(Platform)
+    with pytest.raises(TypeError, match="abstract"):
+        Platform({}, {})
 
 
-def test_live_chat_router():
-    """The FastAPI live-chat router can be imported without errors."""
+def test_public_chat_router_keeps_session_and_thread_http_contracts() -> None:
+    from fastapi import FastAPI
+
+    from astrbot.dashboard.api.chat import router
+
+    app = FastAPI()
+    app.include_router(router, prefix="/api/v1")
+    paths = app.openapi()["paths"]
+    assert {"get", "patch", "delete"}.issubset(
+        paths["/api/v1/chat/sessions/{session_id}"]
+    )
+    assert "post" in paths["/api/v1/chat/threads"]
+    assert "post" in paths["/api/v1/chat/threads/{thread_id}/messages"]
+    assert "get" in paths["/api/v1/chat/runs/{run_id}/stream"]
+
+
+@pytest.mark.parametrize(
+    ("path", "mode"),
+    [("/api/v1/live-chat/ws", "live"), ("/api/v1/unified-chat/ws", None)],
+)
+def test_public_live_chat_router_keeps_both_websocket_modes(path, mode) -> None:
+    from types import SimpleNamespace
+
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+
     from astrbot.dashboard.api.live_chat import router
 
-    assert router is not None
+    async def exchange(*, token, force_ct, receive_json, send_json, close):
+        message = await receive_json()
+        await send_json({"token": token, "mode": force_ct, "message": message})
+        await close()
+
+    app = FastAPI()
+    app.include_router(router, prefix="/api/v1")
+    app.state.services = SimpleNamespace(
+        live_chat=SimpleNamespace(run_websocket_session=exchange)
+    )
+    with (
+        TestClient(app) as client,
+        client.websocket_connect(path + "?token=fixture-token") as websocket,
+    ):
+        websocket.send_json({"text": "hello"})
+        assert websocket.receive_json() == {
+            "token": "fixture-token",
+            "mode": mode,
+            "message": {"text": "hello"},
+        }

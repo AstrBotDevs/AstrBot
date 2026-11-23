@@ -9,53 +9,20 @@ Covers:
 5. Real DocumentStorage + EmbeddingStorage leave no orphans on FAISS failure
 6. Dimension validation failures never write to DocumentStorage
 
-These tests use lazy imports and a ProviderManager stub to avoid circular
-import issues in the astrbot core module chain (same pattern as
-test_kb_manager_resilience.py).
+Real knowledge modules are imported without replacing the module registry.
 """
 
-import sys
-import types
 from contextlib import asynccontextmanager
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+import pytest_asyncio
 
 from astrbot.core.db.vec_db.faiss_impl.vec_db import FaissVecDB
 from astrbot.core.exceptions import KnowledgeBaseUploadError
+from astrbot.core.knowledge_base.kb_helper import KBHelper
 from astrbot.core.knowledge_base.models import KnowledgeBase
-
-
-@pytest.fixture
-def stub_provider_manager_module():
-    """Stub provider manager module to avoid circular imports in unit tests."""
-    original_module = sys.modules.get("astrbot.core.provider.manager")
-    stub_module = types.ModuleType("astrbot.core.provider.manager")
-
-    class ProviderManager: ...
-
-    setattr(stub_module, "ProviderManager", ProviderManager)
-    sys.modules["astrbot.core.provider.manager"] = stub_module
-
-    # Drop already-imported modules that transitively need ProviderManager so
-    # they re-import against the stub.
-    to_drop = [
-        name
-        for name in list(sys.modules)
-        if name.startswith("astrbot.core.knowledge_base.kb_helper")
-        or name.startswith("astrbot.core.knowledge_base.kb_mgr")
-    ]
-    for name in to_drop:
-        sys.modules.pop(name, None)
-
-    try:
-        yield
-    finally:
-        if original_module is not None:
-            sys.modules["astrbot.core.provider.manager"] = original_module
-        else:
-            sys.modules.pop("astrbot.core.provider.manager", None)
 
 
 def _make_vec_db() -> FaissVecDB:
@@ -65,12 +32,6 @@ def _make_vec_db() -> FaissVecDB:
     vec_db.embedding_storage = AsyncMock()
     vec_db.embedding_storage.dimension = 2
     return vec_db
-
-
-def _import_kb_helper():
-    from astrbot.core.knowledge_base.kb_helper import KBHelper
-
-    return KBHelper
 
 
 def _failing_get_db():
@@ -109,14 +70,15 @@ def _session_with_begin(execute_side_effect=None):
     return session
 
 
-async def _make_real_vec_db(tmp_path: Path, dim: int = 4) -> FaissVecDB:
+@pytest_asyncio.fixture
+async def real_vec_db(tmp_path: Path):
     """Build a FaissVecDB backed by real DocumentStorage + EmbeddingStorage."""
     doc_path = str(tmp_path / "doc.db")
     index_path = str(tmp_path / "index.faiss")
 
     embedding_provider = MagicMock()
     # get_dim is sync in EmbeddingProvider; must return a plain int for FAISS.
-    embedding_provider.get_dim = MagicMock(return_value=dim)
+    embedding_provider.get_dim = MagicMock(return_value=4)
     embedding_provider.get_embeddings_batch = AsyncMock()
     embedding_provider.get_embedding = AsyncMock()
 
@@ -125,8 +87,11 @@ async def _make_real_vec_db(tmp_path: Path, dim: int = 4) -> FaissVecDB:
         index_store_path=index_path,
         embedding_provider=embedding_provider,
     )
-    await vec_db.initialize()
-    return vec_db
+    try:
+        await vec_db.initialize()
+        yield vec_db
+    finally:
+        await vec_db.close()
 
 
 @pytest.mark.asyncio
@@ -205,23 +170,22 @@ async def test_insert_batch_dimension_mismatch_does_not_write_documents() -> Non
 
 @pytest.mark.asyncio
 async def test_insert_batch_real_storage_rolls_back_on_faiss_failure(
-    tmp_path: Path,
+    real_vec_db,
+    monkeypatch,
 ) -> None:
     """Real DocumentStorage must not keep orphan chunks when FAISS write fails."""
-    vec_db = await _make_real_vec_db(tmp_path, dim=4)
+    vec_db = real_vec_db
     vec_db.embedding_provider.get_embeddings_batch.return_value = [
         [0.1, 0.2, 0.3, 0.4],
         [0.5, 0.6, 0.7, 0.8],
     ]
-
-    original_insert = vec_db.embedding_storage.insert_batch
 
     async def boom(vectors, ids):
         # Simulate failure after in-memory add would happen: force raise before
         # success so DocumentStorage rows must be cleaned up.
         raise RuntimeError("simulated faiss disk write failure")
 
-    vec_db.embedding_storage.insert_batch = boom  # type: ignore[method-assign]
+    monkeypatch.setattr(vec_db.embedding_storage, "insert_batch", boom)
 
     kb_doc_id = "kb-doc-real-1"
     with pytest.raises(RuntimeError, match="simulated faiss"):
@@ -242,17 +206,13 @@ async def test_insert_batch_real_storage_rolls_back_on_faiss_failure(
     assert remaining == []
     assert await vec_db.count_documents(metadata_filter={"kb_doc_id": kb_doc_id}) == 0
 
-    # Restore for clean close; index should still be empty / consistent.
-    vec_db.embedding_storage.insert_batch = original_insert  # type: ignore[method-assign]
-    await vec_db.close()
-
 
 @pytest.mark.asyncio
 async def test_insert_batch_real_storage_dimension_mismatch_leaves_no_docs(
-    tmp_path: Path,
+    real_vec_db,
 ) -> None:
     """Real storage: wrong embedding dim must not leave any document rows."""
-    vec_db = await _make_real_vec_db(tmp_path, dim=4)
+    vec_db = real_vec_db
     vec_db.embedding_provider.get_embeddings_batch.return_value = [
         [0.1, 0.2],  # dim 2 != 4
         [0.3, 0.4],
@@ -274,16 +234,13 @@ async def test_insert_batch_real_storage_dimension_mismatch_leaves_no_docs(
         limit=None,
     )
     assert remaining == []
-    await vec_db.close()
 
 
 @pytest.mark.asyncio
 async def test_upload_document_cleans_up_on_storage_failure(
     tmp_path: Path,
-    stub_provider_manager_module,
 ) -> None:
     """Storage failure should clean media and request chunk/vector rollback."""
-    KBHelper = _import_kb_helper()
 
     helper = KBHelper.__new__(KBHelper)
     helper.kb = KnowledgeBase(
@@ -379,10 +336,8 @@ async def test_upload_document_preserves_markdown_heading_paths(
     file_name: str,
     file_type: str,
     tmp_path: Path,
-    stub_provider_manager_module,
 ) -> None:
     """Structured parser output should retain parent headings in embeddings."""
-    KBHelper = _import_kb_helper()
 
     helper = KBHelper.__new__(KBHelper)
     helper.kb = KnowledgeBase(
@@ -438,11 +393,8 @@ async def test_upload_document_preserves_markdown_heading_paths(
 
 
 @pytest.mark.asyncio
-async def test_upload_document_cleans_up_on_metadata_failure(
-    stub_provider_manager_module,
-) -> None:
+async def test_upload_document_cleans_up_on_metadata_failure() -> None:
     """Metadata commit failure after insert_batch should delete written chunks."""
-    KBHelper = _import_kb_helper()
 
     helper = KBHelper.__new__(KBHelper)
     helper.kb = KnowledgeBase(
@@ -484,11 +436,8 @@ async def test_upload_document_cleans_up_on_metadata_failure(
 
 
 @pytest.mark.asyncio
-async def test_upload_document_skips_rollback_after_metadata_commit(
-    stub_provider_manager_module,
-) -> None:
+async def test_upload_document_skips_rollback_after_metadata_commit() -> None:
     """Stats refresh failure after metadata commit must not roll back the doc."""
-    KBHelper = _import_kb_helper()
 
     helper = KBHelper.__new__(KBHelper)
     helper.kb = KnowledgeBase(
@@ -526,11 +475,8 @@ async def test_upload_document_skips_rollback_after_metadata_commit(
 
 
 @pytest.mark.asyncio
-async def test_upload_document_skips_rollback_when_refresh_fails_after_commit(
-    stub_provider_manager_module,
-) -> None:
+async def test_upload_document_skips_rollback_when_refresh_fails_after_commit() -> None:
     """If commit succeeds but session.refresh fails, do not roll back."""
-    KBHelper = _import_kb_helper()
 
     helper = KBHelper.__new__(KBHelper)
     helper.kb = KnowledgeBase(
@@ -568,10 +514,8 @@ async def test_upload_document_skips_rollback_when_refresh_fails_after_commit(
 @pytest.mark.asyncio
 async def test_cleanup_failed_upload_deletes_vectors_before_metadata(
     tmp_path: Path,
-    stub_provider_manager_module,
 ) -> None:
     """Rollback should delete vectors first, then metadata rows, then media."""
-    KBHelper = _import_kb_helper()
 
     helper = KBHelper.__new__(KBHelper)
     helper.vec_db = AsyncMock()
@@ -612,10 +556,8 @@ async def test_cleanup_failed_upload_deletes_vectors_before_metadata(
 @pytest.mark.asyncio
 async def test_cleanup_failed_upload_is_best_effort(
     tmp_path: Path,
-    stub_provider_manager_module,
 ) -> None:
     """Rollback path failures must not raise; media cleanup still runs."""
-    KBHelper = _import_kb_helper()
 
     helper = KBHelper.__new__(KBHelper)
     helper.kb_db = MagicMock()
@@ -637,11 +579,10 @@ async def test_cleanup_failed_upload_is_best_effort(
 @pytest.mark.asyncio
 async def test_cleanup_failed_upload_real_vec_db_by_kb_doc_id(
     tmp_path: Path,
-    stub_provider_manager_module,
+    real_vec_db,
 ) -> None:
     """Cleanup with a real vec_db removes chunks keyed by kb_doc_id."""
-    KBHelper = _import_kb_helper()
-    vec_db = await _make_real_vec_db(tmp_path, dim=4)
+    vec_db = real_vec_db
     vec_db.embedding_provider.get_embeddings_batch.return_value = [
         [0.1, 0.2, 0.3, 0.4],
         [0.5, 0.6, 0.7, 0.8],
@@ -667,4 +608,3 @@ async def test_cleanup_failed_upload_real_vec_db_by_kb_doc_id(
 
     await helper._cleanup_failed_upload(doc_id=kb_doc_id, media_paths=[])
     assert await vec_db.count_documents(metadata_filter={"kb_doc_id": kb_doc_id}) == 0
-    await vec_db.close()

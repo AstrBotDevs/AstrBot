@@ -112,7 +112,8 @@
       "moveError": "移动人格失败",
       "exportError": "导出人格失败",
       "exportSuccess": "导出成功(不包含 Skills 和工具)",
-      "importError": "导入失败"
+      "importError": "导入失败",
+      "importNetworkError": "服务器未响应，请检查网络连接。"
     }
   },
   "folder": {

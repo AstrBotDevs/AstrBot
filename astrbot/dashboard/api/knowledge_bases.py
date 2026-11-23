@@ -6,6 +6,7 @@ from typing import Any
 from fastapi import APIRouter, Depends, Request
 
 from astrbot.core import logger
+from astrbot.dashboard.api.payloads import json_or_empty as _json_or_empty
 from astrbot.dashboard.async_utils import run_maybe_async
 from astrbot.dashboard.responses import error, ok
 from astrbot.dashboard.schemas import (
@@ -37,14 +38,6 @@ def get_service(request: Request) -> KnowledgeBaseService:
 
 async def require_kb_scope(request: Request) -> AuthContext:
     return await require_scope(request, "kb")
-
-
-async def _json_or_empty(request: Request) -> dict[str, Any]:
-    try:
-        data = await request.json()
-    except Exception:
-        return {}
-    return data if isinstance(data, dict) else {}
 
 
 def _to_int(value: Any, default: int) -> int:

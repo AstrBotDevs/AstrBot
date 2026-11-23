@@ -8,6 +8,21 @@ class PersonaServiceError(Exception):
     pass
 
 
+def build_persona_update(payload: dict, custom_error_message: object) -> dict:
+    """Keep omitted optional fields distinct from explicit null updates."""
+    updates = {
+        "persona_id": payload.get("persona_id"),
+        "system_prompt": payload.get("system_prompt"),
+        "begin_dialogs": payload.get("begin_dialogs"),
+    }
+    for field in ("tools", "skills"):
+        if field in payload:
+            updates[field] = payload[field]
+    if "custom_error_message" in payload:
+        updates["custom_error_message"] = custom_error_message
+    return updates
+
+
 class PersonaService:
     def __init__(self, core_lifecycle: AstrBotCoreLifecycle) -> None:
         self.persona_mgr = core_lifecycle.persona_mgr
@@ -81,12 +96,7 @@ class PersonaService:
     async def update_persona(self, data: object) -> dict:
         payload = self._payload(data)
         persona_id = payload.get("persona_id")
-        system_prompt = payload.get("system_prompt")
         begin_dialogs = payload.get("begin_dialogs")
-        has_tools = "tools" in payload
-        tools = payload.get("tools")
-        has_skills = "skills" in payload
-        skills = payload.get("skills")
         has_custom_error_message = "custom_error_message" in payload
         custom_error_message = payload.get("custom_error_message")
 
@@ -101,17 +111,7 @@ class PersonaService:
         if begin_dialogs is not None:
             self._validate_begin_dialogs(begin_dialogs)
 
-        update_kwargs = {
-            "persona_id": persona_id,
-            "system_prompt": system_prompt,
-            "begin_dialogs": begin_dialogs,
-        }
-        if has_tools:
-            update_kwargs["tools"] = tools
-        if has_skills:
-            update_kwargs["skills"] = skills
-        if has_custom_error_message:
-            update_kwargs["custom_error_message"] = custom_error_message
+        update_kwargs = build_persona_update(payload, custom_error_message)
 
         await self.persona_mgr.update_persona(**update_kwargs)
         return {"message": "人格更新成功"}

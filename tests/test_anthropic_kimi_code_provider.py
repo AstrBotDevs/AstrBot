@@ -1,14 +1,15 @@
-import builtins
 from types import SimpleNamespace
 
 import httpx
 import pytest
+from anthropic import AsyncAnthropic, DefaultAsyncHttpxClient
 
 import astrbot.core.provider.sources.anthropic_source as anthropic_source
 import astrbot.core.provider.sources.kimi_code_source as kimi_code_source
 import astrbot.core.provider.sources.request_retry as request_retry
 from astrbot.core.exceptions import EmptyModelOutputError
 from astrbot.core.provider.entities import LLMResponse
+from astrbot.core.utils import network_utils
 
 
 class _FakeAsyncAnthropic:
@@ -17,6 +18,41 @@ class _FakeAsyncAnthropic:
 
     async def close(self):
         return None
+
+
+@pytest.mark.parametrize(
+    ("api_base", "expected_base_url"),
+    [
+        ("https://api.anthropic.com", "https://api.anthropic.com"),
+        ("https://api.anthropic.com/", "https://api.anthropic.com"),
+        ("https://api.anthropic.com/v1", "https://api.anthropic.com"),
+        ("https://api.anthropic.com/v1/", "https://api.anthropic.com"),
+        (
+            "https://gateway.example.com/anthropic",
+            "https://gateway.example.com/anthropic",
+        ),
+    ],
+)
+def test_anthropic_provider_normalizes_api_base(
+    monkeypatch,
+    api_base,
+    expected_base_url,
+):
+    monkeypatch.setattr(anthropic_source, "AsyncAnthropic", _FakeAsyncAnthropic)
+
+    provider = anthropic_source.ProviderAnthropic(
+        provider_config={
+            "id": "anthropic-test",
+            "type": "anthropic_chat_completion",
+            "model": "claude-test",
+            "key": ["test-key"],
+            "api_base": api_base,
+        },
+        provider_settings={},
+    )
+
+    assert provider.base_url == expected_base_url
+    assert provider.client.kwargs["base_url"] == expected_base_url
 
 
 def test_anthropic_provider_passes_custom_headers_via_default_headers(monkeypatch):
@@ -45,6 +81,7 @@ def test_anthropic_provider_passes_custom_headers_via_default_headers(monkeypatc
     assert provider.client.kwargs["default_headers"] == {
         "User-Agent": "custom-agent/1.0",
         "X-Test-Header": "123",
+        "X-Api-Key": "test-key",
     }
     assert provider.client.kwargs["http_client"] is None
 
@@ -71,6 +108,7 @@ def test_kimi_code_provider_sets_defaults_and_preserves_custom_headers(monkeypat
     assert provider.client.kwargs["default_headers"] == {
         "User-Agent": kimi_code_source.KIMI_CODE_USER_AGENT,
         "X-Trace-Id": "trace-1",
+        "X-Api-Key": "test-key",
     }
 
 
@@ -106,72 +144,40 @@ def test_create_http_client_returns_none_when_no_proxy(monkeypatch):
     assert provider._create_http_client({"proxy": ""}) is None
 
 
-def test_create_http_client_uses_anthropic_httpx_module(monkeypatch):
-    captured: dict[str, object] = {}
+@pytest.mark.asyncio
+@pytest.mark.parametrize("headers", [None, {"X-Trace-Id": "trace-1"}])
+async def test_proxy_http_client_preserves_options_and_is_accepted_by_sdk(
+    monkeypatch, headers
+):
+    constructed_options = []
 
-    def fake_create_proxy_client(
-        provider_label: str,
-        proxy: str | None = None,
-        headers: dict[str, str] | None = None,
-        verify=None,
-        httpx_module=None,
-    ):
-        captured["provider_label"] = provider_label
-        captured["proxy"] = proxy
-        captured["headers"] = headers
-        captured["httpx_module"] = httpx_module
-        return object()
+    def sdk_client_factory(**options):
+        constructed_options.append(options)
+        return DefaultAsyncHttpxClient(**options)
 
-    monkeypatch.setattr(
-        anthropic_source, "create_proxy_client", fake_create_proxy_client
-    )
-
+    monkeypatch.setattr(anthropic_source, "DefaultAsyncHttpxClient", sdk_client_factory)
     provider = anthropic_source.ProviderAnthropic.__new__(
         anthropic_source.ProviderAnthropic
     )
-    provider.custom_headers = {"X-Trace-Id": "trace-1"}
-    provider._create_http_client({"proxy": "http://127.0.0.1:7890"})
-
-    from anthropic import _base_client as anthropic_base_client
-
-    assert captured["provider_label"] == "Anthropic"
-    assert captured["proxy"] == "http://127.0.0.1:7890"
-    assert captured["headers"] == {"X-Trace-Id": "trace-1"}
-    assert captured["httpx_module"] is anthropic_base_client.httpx
-
-
-def test_create_http_client_falls_back_to_global_httpx_module(monkeypatch):
-    captured: dict[str, object] = {}
-
-    def fake_create_proxy_client(
-        provider_label: str,
-        proxy: str | None = None,
-        headers: dict[str, str] | None = None,
-        verify=None,
-        httpx_module=None,
-    ):
-        captured["httpx_module"] = httpx_module
-        return object()
-
-    real_import = builtins.__import__
-
-    def fake_import(name, globals=None, locals=None, fromlist=(), level=0):
-        if name == "anthropic" and fromlist:
-            raise ImportError("missing anthropic._base_client")
-        return real_import(name, globals, locals, fromlist, level)
-
-    monkeypatch.setattr(
-        anthropic_source, "create_proxy_client", fake_create_proxy_client
-    )
-    monkeypatch.setattr(builtins, "__import__", fake_import)
-
-    provider = anthropic_source.ProviderAnthropic.__new__(
-        anthropic_source.ProviderAnthropic
-    )
-    provider.custom_headers = None
-    provider._create_http_client({"proxy": "http://127.0.0.1:7890"})
-
-    assert captured["httpx_module"] is anthropic_source.httpx
+    provider.custom_headers = headers
+    client = provider._create_http_client({"proxy": "http://127.0.0.1:7890"})
+    assert client is not None
+    try:
+        assert isinstance(client, DefaultAsyncHttpxClient)
+        assert len(constructed_options) == 1
+        assert constructed_options[0] == {
+            "proxy": "http://127.0.0.1:7890",
+            "verify": network_utils._SYSTEM_SSL_CTX,
+            "headers": headers,
+        }
+        if headers:
+            assert client.headers["X-Trace-Id"] == "trace-1"
+        sdk = AsyncAnthropic(api_key="test-key", http_client=client)
+        assert sdk._client is client
+        await sdk.close()
+        assert client.is_closed
+    finally:
+        await client.aclose()
 
 
 @pytest.mark.asyncio

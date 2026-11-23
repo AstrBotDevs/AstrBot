@@ -1,9 +1,14 @@
+import html
+from collections.abc import Awaitable, Callable
 from typing import TYPE_CHECKING
 
 from astrbot.api import logger
 from astrbot.api.event import AstrMessageEvent, MessageChain
 from astrbot.api.message_components import (
+    ActionRow,
     At,
+    BaseMessageComponent,
+    Button,
     File,
     Forward,
     Image,
@@ -14,7 +19,8 @@ from astrbot.api.message_components import (
     Reply,
     Video,
 )
-from astrbot.api.platform import AstrBotMessage, PlatformMetadata
+from astrbot.api.platform import AstrBotMessage, Group, MessageMember, PlatformMetadata
+from astrbot.core.platform.button_interaction import encode_button_callback
 from astrbot.core.utils.media_utils import resolve_media_ref_to_base64_data
 
 if TYPE_CHECKING:
@@ -39,8 +45,8 @@ class SatoriPlatformEvent(AstrMessageEvent):
                 platform_meta.id = f"{platform_name}({user_id})"
         super().__init__(message_str, message_obj, platform_meta, session_id)
         self.adapter = adapter
-        self.platform = None
-        self.user_id = None
+        self.satori_platform: str | None = None
+        self.user_id: str | None = None
         if (
             hasattr(message_obj, "raw_message")
             and message_obj.raw_message
@@ -48,9 +54,130 @@ class SatoriPlatformEvent(AstrMessageEvent):
         ):
             raw_message = message_obj.raw_message
             login = raw_message.get("login", {})
-            self.platform = login.get("platform")
-            user = login.get("user", {})
-            self.user_id = user.get("id") if user else None
+            self.satori_platform = (
+                str(login["platform"]) if login.get("platform") else None
+            )
+            user = login.get("user") or {}
+            self.user_id = str(user["id"]) if user.get("id") else None
+
+    async def get_group(
+        self,
+        group_id: str | None = None,
+        **kwargs,
+    ) -> Group | None:
+        """Get Satori guild information and all available members.
+
+        Args:
+            group_id: Guild ID to query. Defaults to the current message guild.
+            **kwargs: Reserved for compatibility with the common event interface.
+
+        Returns:
+            Enriched guild information, a basic guild when APIs are unavailable,
+            or None when no guild ID is available.
+        """
+        del kwargs
+        target_id = str(group_id or self.get_group_id())
+        if not target_id:
+            return None
+
+        current_group = self.message_obj.group
+        if current_group and current_group.group_id == target_id:
+            group = Group(
+                group_id=target_id,
+                group_name=current_group.group_name,
+                group_avatar=current_group.group_avatar,
+                group_owner=current_group.group_owner,
+                group_admins=current_group.group_admins,
+                members=current_group.members,
+                member_count=current_group.member_count,
+            )
+        else:
+            group = Group(group_id=target_id)
+
+        features = None
+        for login in getattr(self.adapter, "logins", []):
+            login_user = login.get("user") or {}
+            if (
+                login.get("platform") == self.satori_platform
+                and login_user.get("id") == self.user_id
+            ):
+                features = login.get("features")
+                break
+
+        if features is None or "guild.get" in features:
+            try:
+                guild = await self.adapter.send_http_request(
+                    "POST",
+                    "/guild.get",
+                    {"guild_id": target_id},
+                    self.satori_platform,
+                    self.user_id,
+                )
+            except Exception as exc:
+                logger.warning(
+                    "[Satori] Failed to get guild %s: %s",
+                    target_id,
+                    exc,
+                )
+                guild = {}
+            if guild:
+                group.group_name = guild.get("name") or group.group_name
+                group.group_avatar = guild.get("avatar") or group.group_avatar
+
+        if features is not None and "guild.member.list" not in features:
+            return group
+
+        members: list[MessageMember] = []
+        member_count = 0
+        next_token = None
+        seen_tokens: set[str] = set()
+        while True:
+            data = {"guild_id": target_id}
+            if next_token:
+                data["next"] = next_token
+            try:
+                response = await self.adapter.send_http_request(
+                    "POST",
+                    "/guild.member.list",
+                    data,
+                    self.satori_platform,
+                    self.user_id,
+                )
+            except Exception as exc:
+                logger.warning(
+                    "[Satori] Failed to get members for guild %s: %s",
+                    target_id,
+                    exc,
+                )
+                break
+            if not response or not isinstance(response.get("data"), list):
+                break
+
+            member_count += len(response["data"])
+            for member in response["data"]:
+                user = member.get("user") or {}
+                user_id = user.get("id")
+                if not user_id:
+                    continue
+                members.append(
+                    MessageMember(
+                        user_id=str(user_id),
+                        nickname=member.get("nick")
+                        or user.get("nick")
+                        or user.get("name"),
+                    ),
+                )
+
+            next_token = response.get("next")
+            if not next_token:
+                group.members = members
+                group.member_count = member_count
+                break
+            if next_token in seen_tokens:
+                break
+            seen_tokens.add(next_token)
+
+        return group
 
     @staticmethod
     async def _image_to_data_url(component: Image) -> str | None:
@@ -121,7 +248,7 @@ class SatoriPlatformEvent(AstrMessageEvent):
             return None
 
     async def send(self, message: MessageChain) -> None:
-        platform = getattr(self, "platform", None)
+        platform = getattr(self, "satori_platform", None)
         user_id = getattr(self, "user_id", None)
         if not platform or not user_id:
             if hasattr(self.adapter, "logins") and self.adapter.logins:
@@ -205,7 +332,17 @@ class SatoriPlatformEvent(AstrMessageEvent):
             logger.error(f"Satori 流式消息发送异常: {e}")
         return await super().send_streaming(generator, use_fallback)
 
-    async def _convert_component_to_satori(self, component) -> str:
+    async def _convert_component_to_satori(
+        self, component: BaseMessageComponent
+    ) -> str:
+        """Render through the instance's MIME-aware image resolver."""
+        return await self._render_satori_component(component, self._image_to_data_url)
+
+    @staticmethod
+    async def _render_satori_component(
+        component: BaseMessageComponent,
+        image_to_data_url: Callable[[Image], Awaitable[str | None]],
+    ) -> str:
         """将单个消息组件转换为 Satori 格式"""
         try:
             if isinstance(component, Plain):
@@ -222,7 +359,7 @@ class SatoriPlatformEvent(AstrMessageEvent):
                     return f'<at name="{component.name}"/>'
             elif isinstance(component, Image):
                 try:
-                    image_data_url = await self._image_to_data_url(component)
+                    image_data_url = await image_to_data_url(component)
                     if image_data_url:
                         return f'<img src="{image_data_url}"/>'
                 except Exception as e:
@@ -247,18 +384,74 @@ class SatoriPlatformEvent(AstrMessageEvent):
                     logger.error(f"视频文件转换失败: {e}")
             elif isinstance(component, Forward):
                 return f'<message id="{component.id}" forward/>'
+
+            elif isinstance(component, (ActionRow, Button)):
+                buttons = (
+                    component.buttons
+                    if isinstance(component, ActionRow)
+                    else [component]
+                )
+                if not buttons:
+                    fallback_text = (
+                        component.fallback_text
+                        if isinstance(component, ActionRow)
+                        else ""
+                    )
+                    return html.escape(fallback_text or "")
+
+                theme_map = {
+                    Button.Style.DEFAULT: "secondary",
+                    Button.Style.PRIMARY: "primary",
+                    Button.Style.SUCCESS: "success",
+                    Button.Style.DANGER: "danger",
+                }
+                button_elements = []
+                for button in buttons:
+                    label = html.escape(button.label)
+                    theme = theme_map[button.style]
+                    if isinstance(button.action, Button.CallbackAction):
+                        callback_id = html.escape(
+                            encode_button_callback(
+                                button.id,
+                                button.action.data,
+                                expires_at=component.action_expires_at
+                                if isinstance(component, ActionRow)
+                                else None,
+                            ),
+                            quote=True,
+                        )
+                        button_elements.append(
+                            f'<button id="{callback_id}" type="action" '
+                            f'theme="{theme}">{label}</button>'
+                        )
+                    elif isinstance(button.action, Button.UrlAction):
+                        href = html.escape(button.action.url, quote=True)
+                        button_elements.append(
+                            f'<button type="link" href="{href}" '
+                            f'theme="{theme}">{label}</button>'
+                        )
+                return "".join(button_elements)
+
+            # 对于其他未处理的组件类型，返回空字符串
             return ""
         except Exception as e:
             logger.error(f"转换消息组件失败: {e}")
             return ""
 
     async def _convert_node_to_satori(self, node: Node) -> str:
+        """Render a forwarded node with instance component conversion."""
+        return await self._render_satori_node(node, self._convert_component_to_satori)
+
+    @staticmethod
+    async def _render_satori_node(
+        node: Node, convert_component: Callable[[BaseMessageComponent], Awaitable[str]]
+    ) -> str:
         """将单个转发节点转换为 Satori 格式"""
         try:
             content_parts = []
             if node.content:
                 for content_component in node.content:
-                    component_content = await self._convert_component_to_satori(
+                    component_content = await convert_component(
                         content_component,
                     )
                     if component_content:
@@ -278,78 +471,18 @@ class SatoriPlatformEvent(AstrMessageEvent):
             return ""
 
     @classmethod
-    async def _convert_component_to_satori_static(cls, component) -> str:
-        """将单个消息组件转换为 Satori 格式"""
-        try:
-            if isinstance(component, Plain):
-                text = (
-                    component.text.replace("&", "&amp;")
-                    .replace("<", "&lt;")
-                    .replace(">", "&gt;")
-                )
-                return text
-            if isinstance(component, At):
-                if component.qq:
-                    return f'<at id="{component.qq}"/>'
-                if component.name:
-                    return f'<at name="{component.name}"/>'
-            elif isinstance(component, Image):
-                try:
-                    image_data_url = await cls._image_to_data_url(component)
-                    if image_data_url:
-                        return f'<img src="{image_data_url}"/>'
-                except Exception as e:
-                    logger.error(f"图片转换为base64失败: {e}")
-            elif isinstance(component, File):
-                return f"""<file src="{component.file}" name="{component.name or "文件"}"/>"""
-            elif isinstance(component, Record):
-                try:
-                    record_base64 = await component.convert_to_base64()
-                    if record_base64:
-                        return f'<audio src="data:audio/wav;base64,{record_base64}"/>'
-                except Exception as e:
-                    logger.error(f"语音转换为base64失败: {e}")
-            elif isinstance(component, Reply):
-                return f'<reply id="{component.id}"/>'
-            elif isinstance(component, Video):
-                try:
-                    video_path_url = await component.convert_to_file_path()
-                    if video_path_url:
-                        return f'<video src="{video_path_url}"/>'
-                except Exception as e:
-                    logger.error(f"视频文件转换失败: {e}")
-            elif isinstance(component, Forward):
-                return f'<message id="{component.id}" forward/>'
-            return ""
-        except Exception as e:
-            logger.error(f"转换消息组件失败: {e}")
-            return ""
+    async def _convert_component_to_satori_static(
+        cls, component: BaseMessageComponent
+    ) -> str:
+        """Render proactive messages through the class image resolver."""
+        return await cls._render_satori_component(component, cls._image_to_data_url)
 
     @classmethod
     async def _convert_node_to_satori_static(cls, node: Node) -> str:
-        """将单个转发节点转换为 Satori 格式"""
-        try:
-            content_parts = []
-            if node.content:
-                for content_component in node.content:
-                    component_content = await cls._convert_component_to_satori_static(
-                        content_component,
-                    )
-                    if component_content:
-                        content_parts.append(component_content)
-            content = "".join(content_parts)
-            if not content.strip():
-                content = "[转发消息]"
-            author_attrs = []
-            if node.uin:
-                author_attrs.append(f'id="{node.uin}"')
-            if node.name:
-                author_attrs.append(f'name="{node.name}"')
-            author_attr_str = " ".join(author_attrs)
-            return f"<message><author {author_attr_str}/>{content}</message>"
-        except Exception as e:
-            logger.error(f"转换转发节点失败: {e}")
-            return ""
+        """Render a proactive forwarded node with class component conversion."""
+        return await cls._render_satori_node(
+            node, cls._convert_component_to_satori_static
+        )
 
     async def _convert_nodes_to_satori(self, nodes: Nodes) -> str:
         """将多个转发节点转换为 Satori 格式的合并转发"""

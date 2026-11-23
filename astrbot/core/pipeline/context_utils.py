@@ -1,8 +1,10 @@
 import inspect
 import traceback
 import typing as T
+from types import AsyncGeneratorType
 
 from astrbot import logger
+from astrbot.core.chatui import ViewResult, emit_view
 from astrbot.core.message.message_event_result import CommandResult, MessageEventResult
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from astrbot.core.star.star import star_map
@@ -44,13 +46,21 @@ async def call_handler(
     if not ready_to_call:
         return
 
-    if inspect.isasyncgen(ready_to_call):
+    if isinstance(ready_to_call, AsyncGeneratorType):
         _has_yielded = False
         try:
             async for ret in ready_to_call:
                 # 这里逐步执行异步生成器, 对于每个 yield 返回的 ret, 执行下面的代码
                 # 返回值只能是 MessageEventResult 或者 None(无返回值)
                 _has_yielded = True
+                if isinstance(ret, ViewResult) and ret.name is not None:
+                    await emit_view(
+                        event, getattr(handler, "func", handler).__module__, ret
+                    )
+                    if not event.platform_meta.support_ui_interaction:
+                        event.set_result(event.plain_result(ret.text))
+                    yield
+                    continue
                 if isinstance(ret, MessageEventResult | CommandResult):
                     # 如果返回值是 MessageEventResult, 设置结果并继续
                     event.set_result(ret)
@@ -68,6 +78,12 @@ async def call_handler(
     elif inspect.iscoroutine(ready_to_call):
         # 如果只是一个协程, 直接执行
         ret = await ready_to_call
+        if isinstance(ret, ViewResult) and ret.name is not None:
+            await emit_view(event, getattr(handler, "func", handler).__module__, ret)
+            if not event.platform_meta.support_ui_interaction:
+                event.set_result(event.plain_result(ret.text))
+            yield
+            return
         if isinstance(ret, MessageEventResult | CommandResult):
             event.set_result(ret)
             yield
@@ -79,34 +95,91 @@ async def call_event_hook(
     event: AstrMessageEvent,
     hook_type: EventType,
     *args,
+    context_observer: T.Callable[[str], None] | None = None,
     **kwargs,
 ) -> bool:
-    """调用事件钩子函数
+    """Invoke plugin hooks and record changes to this execution's working context.
+
+    Args:
+        event: Message used to select eligible plugin handlers.
+        hook_type: Hook to dispatch.
+        *args: Positional arguments passed to plugin handlers.
+        context_observer: Host callback observing working history before and after hooks.
+        **kwargs: Keyword arguments passed to plugin handlers.
 
     Returns:
-        bool: 如果事件被终止,返回 True
-    #
-
+        Whether a plugin stopped event propagation.
     """
     handlers = star_handlers_registry.get_handlers_by_event_type(
         hook_type,
         plugins_name=event.plugins_name,
     )
-    for handler in handlers:
-        try:
-            assert inspect.iscoroutinefunction(handler.handler)
-            logger.debug(
-                f"hook({hook_type.name}) -> {star_map[handler.handler_module_path].name} - {handler.handler_name}",
+    if handlers and context_observer is not None:
+        context_observer("unknown")
+    try:
+        for handler in handlers:
+            plugin = star_map.get(handler.handler_module_path)
+            plugin_name = plugin.name if plugin else handler.handler_module_path
+            plugin_display_name = plugin.display_name if plugin else None
+            handler_category = (
+                "llm_tool" if hook_type == EventType.OnCallingFuncToolEvent else "hook"
             )
-            await handler.handler(event, *args, **kwargs)
-        except BaseException:
-            logger.error(traceback.format_exc())
-
-        if event.is_stopped():
-            logger.info(
-                f"{star_map[handler.handler_module_path].name} - "
-                f"{handler.handler_name} stopped event propagation.",
+            event.trace.record(
+                "handler_start",
+                kind="plugin_handler",
+                status="running",
+                plugin=plugin_name,
+                plugin_display_name=plugin_display_name or plugin_name,
+                handler=handler.handler_name,
+                handler_full_name=handler.handler_full_name,
+                handler_type=handler.event_type.name,
+                handler_category=handler_category,
+                hook=hook_type.name,
             )
-            return True
+            try:
+                assert inspect.iscoroutinefunction(handler.handler)
+                logger.debug(
+                    f"hook({hook_type.name}) -> {plugin_name} - {handler.handler_name}",
+                )
+                await handler.handler(event, *args, **kwargs)
+            except BaseException as exc:
+                logger.error(traceback.format_exc(), extra={"plugin_name": plugin_name})
+                event.trace.record(
+                    "handler_end",
+                    kind="plugin_handler",
+                    status="error",
+                    plugin=plugin_name,
+                    plugin_display_name=plugin_display_name or plugin_name,
+                    handler=handler.handler_name,
+                    handler_full_name=handler.handler_full_name,
+                    handler_type=handler.event_type.name,
+                    handler_category=handler_category,
+                    hook=hook_type.name,
+                )
+                if not isinstance(exc, Exception):
+                    raise
+            else:
+                event.trace.record(
+                    "handler_end",
+                    kind="plugin_handler",
+                    status="success",
+                    plugin=plugin_name,
+                    plugin_display_name=plugin_display_name or plugin_name,
+                    handler=handler.handler_name,
+                    handler_full_name=handler.handler_full_name,
+                    handler_type=handler.event_type.name,
+                    handler_category=handler_category,
+                    hook=hook_type.name,
+                )
 
-    return event.is_stopped()
+            if event.is_stopped() and hook_type != EventType.OnAgentDoneEvent:
+                logger.info(
+                    f"{plugin_name} - {handler.handler_name} stopped event propagation.",
+                )
+                return True
+
+        return event.is_stopped()
+
+    finally:
+        if handlers and context_observer is not None:
+            context_observer("plugin")

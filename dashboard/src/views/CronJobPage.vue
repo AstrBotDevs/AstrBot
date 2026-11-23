@@ -20,37 +20,20 @@
           </div>
 
           <div class="cron-header-actions">
-            <v-btn
-              variant="text"
-              color="primary"
-              :loading="loading"
-              prepend-icon="mdi-refresh"
-              @click="loadJobs"
-            >
+            <v-btn variant="text" color="primary" :loading="loading" prepend-icon="mdi-refresh" @click="loadJobs">
               {{ tm("actions.refresh") }}
             </v-btn>
-            <v-btn
-              variant="tonal"
-              color="primary"
-              prepend-icon="mdi-plus"
-              @click="openCreate"
-            >
+            <v-btn variant="tonal" color="primary" prepend-icon="mdi-plus" @click="openCreate">
               {{ tm("actions.create") }}
             </v-btn>
           </div>
         </div>
 
         <section class="task-surface">
-          <v-progress-linear
-            v-if="loading && !jobs.length"
-            indeterminate
-            color="primary"
-          />
+          <v-progress-linear v-if="loading && !jobs.length" indeterminate color="primary" />
 
           <div v-else-if="!jobs.length" class="text-center pa-8">
-            <v-icon size="64" color="grey-lighten-1">
-              mdi-calendar-blank-outline
-            </v-icon>
+            <v-icon size="64" color="grey-lighten-1"> mdi-calendar-blank-outline </v-icon>
             <p class="text-grey mt-4">{{ tm("table.empty") }}</p>
           </div>
 
@@ -65,25 +48,28 @@
                 clearable
                 hide-details
               />
-              <v-autocomplete
-                v-model="selectedUmoFilter"
-                :items="jobUmoFilterOptions"
-                item-title="label"
-                item-value="value"
-                :label="tm('filters.umo')"
-                prepend-inner-icon="mdi-send-outline"
-                variant="solo-filled"
-                density="compact"
-                clearable
-                hide-details
-                :no-data-text="tm('filters.noUmos')"
-              />
+              <div class="d-flex align-center ga-2">
+                <UmoSelector
+                  :model-value="selectedUmoFilter === NO_DELIVERY_TARGET_FILTER ? '' : selectedUmoFilter || ''"
+                  :items="jobUmos"
+                  :allow-manual="false"
+                  :label="tm('filters.umo')"
+                  class="flex-grow-1"
+                  @update:model-value="value => selectedUmoFilter = String(value || '')"
+                />
+                <v-checkbox
+                  v-if="jobs.some(job => !getJobSession(job))"
+                  :model-value="selectedUmoFilter === NO_DELIVERY_TARGET_FILTER"
+                  :label="tm('filters.noDeliveryTarget')"
+                  hide-details
+                  density="compact"
+                  @update:model-value="value => selectedUmoFilter = value ? NO_DELIVERY_TARGET_FILTER : ''"
+                />
+              </div>
             </div>
 
             <div v-if="!sortedJobs.length" class="text-center pa-8">
-              <v-icon size="64" color="grey-lighten-1">
-                mdi-file-search-outline
-              </v-icon>
+              <v-icon size="64" color="grey-lighten-1"> mdi-file-search-outline </v-icon>
               <p class="text-grey mt-4">{{ tm("filters.noMatches") }}</p>
             </div>
 
@@ -96,18 +82,12 @@
                 @click="openEdit(item)"
               >
                 <template #title-extra>
-                  <v-chip
-                    size="x-small"
-                    :color="item.run_once ? 'orange' : 'primary'"
-                    variant="tonal"
-                  >
+                  <v-chip size="x-small" :color="item.run_once ? 'orange' : 'primary'" variant="tonal">
                     {{ scheduleProductLabel(item) }}
                   </v-chip>
                 </template>
 
-                <div class="task-description text-body-2 text-medium-emphasis">
-                  {{ taskPreview(item) }}
-                </div>
+                <div class="task-description text-body-2 text-medium-emphasis"> {{ taskPreview(item) }} </div>
 
                 <div class="task-meta text-caption text-medium-emphasis">
                   <span class="task-meta-item">
@@ -117,9 +97,7 @@
                   <v-tooltip :text="lastRunTooltipText(item)" location="top">
                     <template #activator="{ props }">
                       <span v-bind="props" class="task-meta-item">
-                        <v-icon size="small" class="me-1">
-                          mdi-clock-time-four-outline
-                        </v-icon>
+                        <v-icon size="small" class="me-1"> mdi-clock-time-four-outline </v-icon>
                         {{ nextRunText(item) }}
                       </span>
                     </template>
@@ -144,9 +122,7 @@
                       prepend-icon="mdi-pencil-outline"
                       @click.stop="openEdit(item)"
                     >
-                      <v-list-item-title>
-                        {{ tm("actions.edit") }}
-                      </v-list-item-title>
+                      <v-list-item-title> {{ tm("actions.edit") }} </v-list-item-title>
                     </v-list-item>
                     <v-list-item
                       class="styled-menu-item"
@@ -154,18 +130,14 @@
                       :disabled="runningJobIds.has(item.job_id)"
                       @click.stop="runJobNow(item)"
                     >
-                      <v-list-item-title>
-                        {{ tm("actions.runNow") }}
-                      </v-list-item-title>
+                      <v-list-item-title> {{ tm("actions.runNow") }} </v-list-item-title>
                     </v-list-item>
                     <v-list-item
                       class="styled-menu-item"
                       prepend-icon="mdi-delete-outline"
                       @click.stop="deleteJob(item)"
                     >
-                      <v-list-item-title class="text-error">
-                        {{ tm("actions.delete") }}
-                      </v-list-item-title>
+                      <v-list-item-title class="text-error"> {{ tm("actions.delete") }} </v-list-item-title>
                     </v-list-item>
                   </StyledMenu>
                 </template>
@@ -188,58 +160,31 @@
 
         <v-dialog v-model="platformDialog" max-width="520">
           <v-card class="dashboard-dialog-card">
-            <v-card-title class="text-h3 pa-4 pb-0 pl-6">
-              {{ tm("platformDialog.title") }}
-            </v-card-title>
+            <v-card-title class="text-h3 pa-4 pb-0 pl-6"> {{ tm("platformDialog.title") }} </v-card-title>
             <v-card-text class="px-5 pb-2">
-              <p class="platform-dialog-description">
-                {{ tm("platformDialog.description") }}
-              </p>
+              <p class="platform-dialog-description"> {{ tm("platformDialog.description") }} </p>
               <div v-if="proactivePlatforms.length" class="platform-list">
-                <div
-                  v-for="platform in proactivePlatforms"
-                  :key="platform.id"
-                  class="platform-list-item"
-                >
-                  <div class="platform-name">
-                    {{ platform.display_name || platform.name }}
-                  </div>
+                <div v-for="platform in proactivePlatforms" :key="platform.id" class="platform-list-item">
+                  <div class="platform-name"> {{ platform.display_name || platform.name }} </div>
                   <div class="platform-id">{{ platform.id }}</div>
                 </div>
               </div>
-              <div v-else class="dashboard-empty platform-dialog-empty">
-                {{ tm("page.proactive.unsupported") }}
-              </div>
+              <div v-else class="dashboard-empty platform-dialog-empty"> {{ tm("page.proactive.unsupported") }} </div>
             </v-card-text>
             <v-card-actions class="justify-end px-5 pb-5">
-              <v-btn variant="text" @click="platformDialog = false">
-                {{ tm("actions.close") }}
-              </v-btn>
+              <v-btn variant="text" @click="platformDialog = false"> {{ tm("actions.close") }} </v-btn>
             </v-card-actions>
           </v-card>
         </v-dialog>
 
-        <v-snackbar
-          v-model="snackbar.show"
-          :color="snackbar.color"
-          timeout="2600"
-        >
-          {{ snackbar.message }}
-        </v-snackbar>
+        <v-snackbar v-model="snackbar.show" :color="snackbar.color" timeout="2600"> {{ snackbar.message }} </v-snackbar>
 
         <v-dialog v-model="createDialog" max-width="620">
           <v-card class="dashboard-dialog-card">
-            <v-card-title class="text-h3 pa-4 pb-0 pl-6">{{
-              dialogTitle
-            }}</v-card-title>
+            <v-card-title class="text-h3 pa-4 pb-0 pl-6">{{ dialogTitle }}</v-card-title>
             <v-card-text class="px-5 pb-2">
               <div class="dashboard-form-grid dashboard-form-grid--single">
-                <v-text-field
-                  v-model="newJob.name"
-                  :label="tm('form.name')"
-                  variant="outlined"
-                  density="comfortable"
-                />
+                <v-text-field v-model="newJob.name" :label="tm('form.name')" variant="outlined" density="comfortable" />
                 <v-textarea
                   v-model="newJob.note"
                   :label="tm('form.note')"
@@ -271,10 +216,7 @@
                     hide-details
                   />
 
-                  <div
-                    v-else-if="newJob.schedule_mode === 'interval'"
-                    class="schedule-inline-fields"
-                  >
+                  <div v-else-if="newJob.schedule_mode === 'interval'" class="schedule-inline-fields">
                     <v-text-field
                       v-model.number="newJob.interval_value"
                       :label="tm('form.intervalEvery')"
@@ -306,10 +248,7 @@
                     hide-details
                   />
 
-                  <div
-                    v-else-if="newJob.schedule_mode === 'weekly'"
-                    class="schedule-inline-fields"
-                  >
+                  <div v-else-if="newJob.schedule_mode === 'weekly'" class="schedule-inline-fields">
                     <v-select
                       v-model="newJob.weekly_day"
                       :items="weekdayOptions"
@@ -330,10 +269,7 @@
                     />
                   </div>
 
-                  <div
-                    v-else-if="newJob.schedule_mode === 'monthly'"
-                    class="schedule-inline-fields"
-                  >
+                  <div v-else-if="newJob.schedule_mode === 'monthly'" class="schedule-inline-fields">
                     <v-text-field
                       v-model.number="newJob.monthly_day"
                       :label="tm('form.monthlyDay')"
@@ -365,66 +301,12 @@
                   />
                 </div>
 
-                <v-autocomplete
-                  v-model="newJob.session"
-                  :items="availableUmos"
-                  :loading="loadingUmos"
-                  :label="tm('form.session')"
-                  variant="outlined"
-                  density="comfortable"
-                  clearable
-                  hide-details
-                  :no-data-text="tm('form.noUmos')"
-                  @focus="loadUmos()"
-                >
-                  <template #item="{ props, item }">
-                    <v-list-item v-bind="props">
-                      <template #title>
-                        <UmoDisplay
-                          v-bind="getUmoDisplayProps(item.raw)"
-                          compact
-                          :show-info="false"
-                          :show-platform="false"
-                        />
-                      </template>
-                      <template #append>
-                        <v-chip
-                          v-if="getUmoInfo(item.raw).platform"
-                          size="x-small"
-                          :color="
-                            getPlatformColor(getUmoInfo(item.raw).platform)
-                          "
-                          class="cron-umo-platform"
-                        >
-                          {{ getUmoInfo(item.raw).platform }}
-                        </v-chip>
-                      </template>
-                    </v-list-item>
-                  </template>
-                  <template #selection="{ item }">
-                    <v-chip
-                      v-if="item && getUmoSelectionText(item.raw)"
-                      size="small"
-                      variant="tonal"
-                      color="primary"
-                      class="umo-selection-chip"
-                    >
-                      {{ getUmoSelectionText(item.raw) }}
-                    </v-chip>
-                  </template>
-                </v-autocomplete>
+                <UmoSelector v-model="newJob.session" :label="tm('form.session')" />
               </div>
             </v-card-text>
             <v-card-actions class="justify-end px-5 pb-5">
-              <v-btn variant="text" @click="createDialog = false">{{
-                tm("actions.cancel")
-              }}</v-btn>
-              <v-btn
-                variant="tonal"
-                color="primary"
-                :loading="creating"
-                @click="submitJob"
-              >
+              <v-btn variant="text" @click="createDialog = false">{{ tm("actions.cancel") }}</v-btn>
+              <v-btn variant="tonal" color="primary" :loading="creating" @click="submitJob">
                 {{ dialogSubmitText }}
               </v-btn>
             </v-card-actions>
@@ -436,12 +318,12 @@
 </template>
 
 <script setup lang="ts">
-import axios from "axios";
 import { computed, onMounted, ref } from "vue";
 import { useTheme } from "vuetify";
+import { botApi, cronApi } from "@/api/v1";
 import OutlinedActionListItem from "@/components/shared/OutlinedActionListItem.vue";
 import StyledMenu from "@/components/shared/StyledMenu.vue";
-import UmoDisplay from "@/components/shared/UmoDisplay.vue";
+import UmoSelector from "@/components/shared/UmoSelector.vue";
 import { useModuleI18n } from "@/i18n/composables";
 
 const { tm } = useModuleI18n("features/cron");
@@ -450,12 +332,9 @@ const theme = useTheme();
 const isDark = computed(() => theme.global.current.value.dark);
 const loading = ref(false);
 const jobs = ref<any[]>([]);
-const taskSearch = ref("");
+const taskSearch = ref<string | null>("");
 const selectedUmoFilter = ref<string | null>(null);
 const proactivePlatforms = ref<{ id: string; name: string; display_name?: string }[]>([]);
-const availableUmos = ref<string[]>([]);
-const availableUmoInfoMap = ref<Record<string, UmoInfo>>({});
-const loadingUmos = ref(false);
 const platformDialog = ref(false);
 const createDialog = ref(false);
 const creating = ref(false);
@@ -464,16 +343,6 @@ const runningJobIds = ref(new Set<string>());
 const NO_DELIVERY_TARGET_FILTER = "__astrbot_no_delivery_target__";
 type ScheduleMode = "once" | "interval" | "daily" | "weekly" | "monthly" | "cron";
 type IntervalUnit = "minutes" | "hours" | "days";
-type UmoInfo = {
-  umo: string;
-  platform?: string;
-  message_type?: string;
-  session_id?: string;
-  auto_name?: string;
-  user_alias?: string;
-  display_name?: string;
-};
-
 const newJob = ref({
   schedule_mode: "once" as ScheduleMode,
   name: "",
@@ -494,22 +363,10 @@ const newJob = ref({
 
 const snackbar = ref({ show: false, message: "", color: "success" });
 
-const jobUmoFilterOptions = computed(() => [
-  ...(jobs.value.some((job) => !getJobSession(job))
-    ? [
-        {
-          label: tm("filters.noDeliveryTarget"),
-          value: NO_DELIVERY_TARGET_FILTER,
-        },
-      ]
-    : []),
-  ...Array.from(new Set(jobs.value.map(getJobSession).filter(Boolean)))
-    .sort((a, b) => a.localeCompare(b))
-    .map((umo) => ({ label: umo, value: umo })),
-]);
+const jobUmos = computed(() => [...new Set(jobs.value.map(getJobSession).filter(Boolean))]);
 
 const filteredJobs = computed(() => {
-  const query = taskSearch.value.trim().toLowerCase();
+  const query = (taskSearch.value ?? "").trim().toLowerCase();
   const umo = selectedUmoFilter.value;
   return jobs.value.filter((job) => {
     const session = getJobSession(job);
@@ -694,95 +551,16 @@ function weekdayText(value: number): string {
   return tm(`form.weekdays.${keyMap[value]}`);
 }
 
-function parseUmoInfo(umo: string): UmoInfo {
-  const parts = umo.split(":");
-  return {
-    umo,
-    platform: parts[0] || "",
-    message_type: parts[1] || "",
-    session_id: parts.slice(2).join(":") || umo,
-    auto_name: "",
-    user_alias: "",
-    display_name: umo,
-  };
-}
-
-function mergeUmoInfos(infos: UmoInfo[] = []) {
-  const next = { ...availableUmoInfoMap.value };
-  for (const info of infos) {
-    if (info?.umo) {
-      next[info.umo] = { ...(next[info.umo] || {}), ...info };
-    }
-  }
-  availableUmoInfoMap.value = next;
-}
-
-function getUmoInfo(umo: string): UmoInfo {
-  return availableUmoInfoMap.value[umo] || parseUmoInfo(umo);
-}
-
-function getUmoDisplayProps(umo: string) {
-  const info = getUmoInfo(umo);
-  return {
-    umo,
-    platform: info.platform || "",
-    messageType: info.message_type || "",
-    sessionId: info.session_id || "",
-    autoName: info.auto_name || "",
-    userAlias: info.user_alias || "",
-  };
-}
-
-function getPlatformColor(platform = "") {
-  const colors: Record<string, string> = {
-    aiocqhttp: "blue",
-    qq_official: "purple",
-    telegram: "light-blue",
-    discord: "indigo",
-    webchat: "orange",
-  };
-  return colors[platform] || "grey";
-}
-
-function getUmoSelectionText(value?: string | null): string {
-  if (!value) return "";
-  const info = getUmoInfo(value);
-  const aliasName = info.user_alias || "";
-  const autoName = info.auto_name || "";
-  if (aliasName && autoName && aliasName !== autoName) {
-    return `${aliasName}（${autoName}）`;
-  }
-  return aliasName || autoName || value || info.display_name || "";
-}
-
-async function loadUmos(force = false) {
-  if (loadingUmos.value || (!force && availableUmos.value.length)) return;
-  loadingUmos.value = true;
-  try {
-    const res = await axios.get("/api/session/active-umos");
-    if (res.data.status === "ok") {
-      const loadedUmos = Array.isArray(res.data.data?.umos) ? res.data.data.umos : [];
-      mergeUmoInfos(res.data.data?.umo_infos || []);
-      availableUmos.value = Array.from(new Set([...availableUmos.value, ...loadedUmos]));
-    }
-  } catch {
-    // The field remains editable through free search only when a UMO list is available.
-  } finally {
-    loadingUmos.value = false;
-  }
-}
-
 async function loadJobs() {
   loading.value = true;
   try {
-    const res = await axios.get("/api/cron/jobs");
+    const res = await cronApi.list();
     if (res.data.status === "ok") {
       const data = Array.isArray(res.data.data) ? res.data.data : [];
       jobs.value = data.map((job: any) => ({
         ...job,
         session: job?.payload?.session || job?.session || "",
       }));
-      mergeUmoInfos(jobs.value.map(getJobSession).filter(Boolean).map(parseUmoInfo));
     } else {
       toast(res.data.message || tm("messages.loadFailed"), "error");
     }
@@ -795,7 +573,7 @@ async function loadJobs() {
 
 async function loadPlatforms() {
   try {
-    const res = await axios.get("/api/platform/stats");
+    const res = await botApi.stats();
     if (res.data.status === "ok" && Array.isArray(res.data.data?.platforms)) {
       proactivePlatforms.value = res.data.data.platforms
         .filter((p: any) => p?.meta?.support_proactive_message)
@@ -812,7 +590,7 @@ async function loadPlatforms() {
 
 async function toggleJob(job: any) {
   try {
-    const res = await axios.patch(`/api/cron/jobs/${job.job_id}`, {
+    const res = await cronApi.update(job.job_id, {
       enabled: job.enabled,
     });
     if (res.data.status !== "ok") {
@@ -827,7 +605,7 @@ async function toggleJob(job: any) {
 
 async function deleteJob(job: any) {
   try {
-    const res = await axios.delete(`/api/cron/jobs/${job.job_id}`);
+    const res = await cronApi.delete(job.job_id);
     if (res.data.status === "ok") {
       toast(tm("messages.deleteSuccess"));
       jobs.value = jobs.value.filter((item) => item.job_id !== job.job_id);
@@ -844,7 +622,7 @@ async function runJobNow(job: any) {
   if (!jobId || runningJobIds.value.has(jobId)) return;
   runningJobIds.value = new Set([...runningJobIds.value, jobId]);
   try {
-    const res = await axios.post(`/api/cron/jobs/${jobId}/run`);
+    const res = await cronApi.run(jobId);
     if (res.data.status === "ok") {
       toast(tm("messages.runStarted"));
       await loadJobs();
@@ -864,7 +642,6 @@ function openCreate() {
   editingJobId.value = "";
   resetNewJob();
   createDialog.value = true;
-  loadUmos();
 }
 
 function toDatetimeLocalValue(value: any): string {
@@ -905,10 +682,6 @@ function resetNewJob() {
 function openEdit(job: any) {
   editingJobId.value = job.job_id;
   const schedule = readScheduleFromJob(job);
-  if (job.session && !availableUmos.value.includes(job.session)) {
-    availableUmos.value = [job.session, ...availableUmos.value];
-    mergeUmoInfos([parseUmoInfo(job.session)]);
-  }
   newJob.value = {
     schedule_mode: schedule.schedule_mode,
     name: job.name || "",
@@ -927,7 +700,6 @@ function openEdit(job: any) {
     enabled: job.enabled !== false,
   };
   createDialog.value = true;
-  loadUmos(true);
 }
 
 function parseTimeParts(value: string): { hour: number; minute: number } | null {
@@ -1170,7 +942,7 @@ async function createJob() {
   creating.value = true;
   try {
     const payload = buildPayload();
-    const res = await axios.post("/api/cron/jobs", payload);
+    const res = await cronApi.create(payload);
     if (res.data.status === "ok") {
       toast(tm("messages.createSuccess"));
       createDialog.value = false;
@@ -1201,7 +973,7 @@ async function updateJob() {
       ...buildPayload(),
       description: newJob.value.note,
     };
-    const res = await axios.patch(`/api/cron/jobs/${editingJobId.value}`, payload);
+    const res = await cronApi.update(editingJobId.value, payload);
     if (res.data.status === "ok") {
       toast(tm("messages.updateSuccess"));
       createDialog.value = false;
@@ -1327,23 +1099,6 @@ onMounted(() => {
   min-width: 0;
   align-items: center;
   max-width: 100%;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.cron-umo-platform {
-  margin-inline-start: 12px;
-  max-width: 96px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.umo-selection-chip {
-  max-width: 100%;
-}
-
-.umo-selection-chip :deep(.v-chip__content) {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;

@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 from sqlmodel import col, desc
 
 from astrbot.core import logger
+from astrbot.core.db.sqlite_config import apply_sqlite_performance_pragmas
 from astrbot.core.knowledge_base.models import (
     BaseKBModel,
     KBDocument,
@@ -71,11 +72,7 @@ class KBSQLiteDatabase:
 
             # 配置 SQLite 性能优化参数
             await conn.execute(text("PRAGMA journal_mode=WAL"))
-            await conn.execute(text("PRAGMA synchronous=NORMAL"))
-            await conn.execute(text("PRAGMA cache_size=20000"))
-            await conn.execute(text("PRAGMA temp_store=MEMORY"))
-            await conn.execute(text("PRAGMA mmap_size=134217728"))
-            await conn.execute(text("PRAGMA optimize"))
+            await apply_sqlite_performance_pragmas(conn)
             await conn.commit()
 
         self.inited = True

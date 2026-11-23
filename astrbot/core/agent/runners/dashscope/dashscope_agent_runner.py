@@ -14,7 +14,8 @@ from astrbot.core import logger, sp
 from astrbot.core.agent.hooks import BaseAgentRunHooks
 from astrbot.core.agent.response import AgentResponseData
 from astrbot.core.agent.run_context import ContextWrapper, TContext
-from astrbot.core.agent.runners.base import AgentResponse, AgentState, BaseAgentRunner
+from astrbot.core.agent.runners.base import AgentResponse, AgentState
+from astrbot.core.agent.runners.remote import RemoteAgentRunner
 from astrbot.core.agent.tool_executor import BaseFunctionToolExecutor
 from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.provider.entities import (
@@ -24,16 +25,16 @@ from astrbot.core.provider.entities import (
 from astrbot.core.provider.provider import Provider
 
 
-class DashscopeAgentRunner(BaseAgentRunner[TContext]):
+class DashscopeAgentRunner(RemoteAgentRunner[TContext]):
     """Dashscope Agent Runner"""
 
     @override
     async def reset(
         self,
-        provider: Provider,
+        provider: Provider | None,
         request: ProviderRequest,
         run_context: ContextWrapper[TContext],
-        tool_executor: BaseFunctionToolExecutor[TContext],
+        tool_executor: BaseFunctionToolExecutor[TContext] | None,
         agent_hooks: BaseAgentRunHooks[TContext],
         streaming: bool = False,
         enforce_max_turns: int = -1,
@@ -48,12 +49,7 @@ class DashscopeAgentRunner(BaseAgentRunner[TContext]):
         provider_config: dict | None = None,
         **kwargs: Any,
     ) -> None:
-        self.req = request
-        self.streaming = streaming
-        self.final_llm_resp: LLMResponse | None = None
-        self._state = AgentState.IDLE
-        self.agent_hooks = agent_hooks
-        self.run_context = run_context
+        self._reset_request(request, run_context, agent_hooks, streaming)
 
         provider_config = provider_config or {}
         self.api_key = provider_config.get("dashscope_api_key", "")
@@ -93,17 +89,7 @@ class DashscopeAgentRunner(BaseAgentRunner[TContext]):
     @override
     async def step(self):
         """执行 Dashscope Agent 的一个步骤"""
-        if not self.req:
-            raise ValueError("Request is not set. Please call reset() first.")
-
-        if self._state == AgentState.IDLE:
-            try:
-                await self.agent_hooks.on_agent_begin(self.run_context)
-            except Exception as e:
-                logger.error(f"Error in on_agent_begin hook: {e}", exc_info=True)
-
-        # 开始处理,转换到运行状态
-        self._transition_state(AgentState.RUNNING)
+        await self._begin_agent_run()
 
         try:
             # 执行 Dashscope 请求并处理结果
@@ -124,7 +110,9 @@ class DashscopeAgentRunner(BaseAgentRunner[TContext]):
             )
 
     @override
-    async def step_until_done(self, max_step: int):
+    async def step_until_done(
+        self, max_step: int = 128
+    ) -> AsyncGenerator[AgentResponse, None]:
         while not self.done():
             async for resp in self.step():
                 yield resp
@@ -384,10 +372,7 @@ class DashscopeAgentRunner(BaseAgentRunner[TContext]):
         self.final_llm_resp = final_llm_resp
         self._transition_state(AgentState.DONE)
 
-        try:
-            await self.agent_hooks.on_agent_done(self.run_context, final_llm_resp)
-        except Exception as e:
-            logger.error(f"Error in on_agent_done hook: {e}", exc_info=True)
+        await self._notify_agent_done_hook(done_response=final_llm_resp)
 
         # 返回最终结果
         yield AgentResponse(
@@ -397,11 +382,7 @@ class DashscopeAgentRunner(BaseAgentRunner[TContext]):
 
     async def _execute_dashscope_request(self):
         """执行 Dashscope 请求的核心逻辑"""
-        prompt = self.req.prompt or ""
-        session_id = self.req.session_id or "unknown"
-        image_urls = self.req.image_urls or []
-        contexts = self.req.contexts or []
-        system_prompt = self.req.system_prompt
+        prompt, session_id, image_urls, contexts, system_prompt = self._request_inputs()
 
         # 检查图片输入
         if image_urls:
@@ -419,7 +400,9 @@ class DashscopeAgentRunner(BaseAgentRunner[TContext]):
             payload["incremental_output"] = False
 
         # 发起请求
-        partial = functools.partial(Application.call, **payload)
+        partial = functools.partial(
+            Application.call, request_timeout=self.timeout, **payload
+        )
         response = await asyncio.get_running_loop().run_in_executor(None, partial)
 
         async for resp in self._handle_streaming_response(response, session_id):

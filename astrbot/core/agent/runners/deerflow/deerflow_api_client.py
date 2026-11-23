@@ -1,7 +1,7 @@
 import codecs
 import json
 import types
-from collections.abc import AsyncGenerator
+from collections.abc import AsyncGenerator, Iterator
 from typing import Any, Self
 
 from aiohttp import ClientResponse, ClientSession, ClientTimeout
@@ -83,42 +83,50 @@ def _parse_sse_block(block: str) -> dict[str, Any] | None:
     return {"event": event_name, "data": _parse_sse_data_lines(data_lines)}
 
 
-async def _stream_sse(resp: ClientResponse) -> AsyncGenerator[dict[str, Any], None]:
-    """Parse SSE response blocks into event/data dictionaries."""
-    # Use a forgiving decoder at network boundaries so malformed bytes do not abort stream parsing.
-    decoder = codecs.getincrementaldecoder("utf-8")("replace")
-    buffer = ""
+class _SSEBuffer:
+    """Retain a partial event and lazily consume complete blocks in order."""
 
-    async for chunk in resp.content.iter_chunked(8192):
-        buffer += _normalize_sse_newlines(decoder.decode(chunk))
+    def __init__(self) -> None:
+        self.text = ""
 
-        while "\n\n" in buffer:
-            block, buffer = buffer.split("\n\n", 1)
+    def drain(self) -> Iterator[dict[str, Any]]:
+        while "\n\n" in self.text:
+            block, self.text = self.text.split("\n\n", 1)
             parsed = _parse_sse_block(block)
             if parsed is not None:
                 yield parsed
 
-        if len(buffer) > SSE_MAX_BUFFER_CHARS:
+
+async def _stream_sse(resp: ClientResponse) -> AsyncGenerator[dict[str, Any], None]:
+    """Parse SSE response blocks into event/data dictionaries."""
+    # Use a forgiving decoder at network boundaries so malformed bytes do not abort stream parsing.
+    decoder = codecs.getincrementaldecoder("utf-8")("replace")
+    pending = _SSEBuffer()
+
+    async for chunk in resp.content.iter_chunked(8192):
+        pending.text += _normalize_sse_newlines(decoder.decode(chunk))
+
+        for parsed in pending.drain():
+            yield parsed
+
+        if len(pending.text) > SSE_MAX_BUFFER_CHARS:
             logger.warning(
                 "DeerFlow SSE parser buffer exceeded %d chars without delimiter; "
                 "flushing oversized block to prevent unbounded memory growth.",
                 SSE_MAX_BUFFER_CHARS,
             )
-            parsed = _parse_sse_block(buffer)
+            parsed = _parse_sse_block(pending.text)
             if parsed is not None:
                 yield parsed
-            buffer = ""
+            pending.text = ""
 
     # flush any remaining buffered text
-    buffer += _normalize_sse_newlines(decoder.decode(b"", final=True))
-    while "\n\n" in buffer:
-        block, buffer = buffer.split("\n\n", 1)
-        parsed = _parse_sse_block(block)
-        if parsed is not None:
-            yield parsed
+    pending.text += _normalize_sse_newlines(decoder.decode(b"", final=True))
+    for parsed in pending.drain():
+        yield parsed
 
-    if buffer.strip():
-        parsed = _parse_sse_block(buffer)
+    if pending.text.strip():
+        parsed = _parse_sse_block(pending.text)
         if parsed is not None:
             yield parsed
 
@@ -167,7 +175,7 @@ class DeerFlowAPIClient:
     ) -> None:
         await self.close()
 
-    async def create_thread(self, timeout: float = 20) -> dict[str, Any]:
+    async def create_thread(self, timeout: float = 20) -> dict[str, Any]:  # noqa: ASYNC109 - Preserve the existing timeout keyword contract.
         session = self._get_session()
         url = f"{self.api_base}/api/langgraph/threads"
         payload: dict[str, dict[str, object]] = {"metadata": {}}
@@ -188,13 +196,13 @@ class DeerFlowAPIClient:
                 )
             return await resp.json()
 
-    async def delete_thread(self, thread_id: str, timeout: float = 20) -> None:
+    async def delete_thread(self, thread_id: str, timeout: float = 20) -> None:  # noqa: ASYNC109 - Preserve the existing timeout keyword contract.
         session = self._get_session()
         url = f"{self.api_base}/api/threads/{thread_id}"
         async with session.delete(
             url,
             headers=self.headers,
-            timeout=timeout,
+            timeout=ClientTimeout(total=timeout),
             proxy=self.proxy,
         ) as resp:
             if resp.status not in (200, 202, 204, 404):
@@ -211,7 +219,7 @@ class DeerFlowAPIClient:
         self,
         thread_id: str,
         payload: dict[str, Any],
-        timeout: float = 120,
+        timeout: float = 120,  # noqa: ASYNC109 - Preserve the existing timeout keyword contract.
     ) -> AsyncGenerator[dict[str, Any], None]:
         session = self._get_session()
         url = f"{self.api_base}/api/langgraph/threads/{thread_id}/runs/stream"

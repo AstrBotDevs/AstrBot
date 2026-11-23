@@ -14,30 +14,11 @@ import pytest
 
 DASHBOARD_SRC = Path(__file__).parent.parent.parent / "dashboard" / "src"
 
-# Files that are allowed to import axios directly (the wrapper itself).
+# Transport implementations own axios; application code uses the configured wrapper.
 AXIOS_ALLOWLIST: set[str] = {
     "dashboard/src/utils/request.ts",
-}
-
-# TODO: Migrate these files to @/utils/request instead of direct axios.
-# These are pre-existing violations discovered after merging origin/master.
-AXIOS_EXISTING_VIOLATIONS: set[str] = {
-    "dashboard/src/composables/useMessages.ts",
-    "dashboard/src/composables/useProviderModelConfigDialog.ts",
-    "dashboard/src/components/chat/Chat.vue",
-    "dashboard/src/components/chat/ChatMessageList.vue",
-    "dashboard/src/components/chat/MessageListDEPRECATED.vue",
-    "dashboard/src/components/chat/ProviderModelMenu.vue",
-    "dashboard/src/components/chat/RegenerateMenu.vue",
-    "dashboard/src/components/chat/ThreadPanel.vue",
-    "dashboard/src/components/platform/PlatformRegistrationAction.vue",
-    "dashboard/src/views/ConsolePage.vue",
-    "dashboard/src/views/CronJobPage.vue",
-    "dashboard/src/views/PluginPagePage.vue",
-    "dashboard/src/views/SubAgentPage.vue",
-    "dashboard/src/views/TracePage.vue",
-    "dashboard/src/views/authentication/auth/SetupPage.vue",
-    "dashboard/src/views/extension/PluginDetailPage.vue",
+    # Generated SDK transport receives openApiAxios from api/v1.ts.
+    "dashboard/src/api/generated/openapi-v1/client/client.gen.ts",
 }
 
 
@@ -60,7 +41,7 @@ class TestDashboardHttpClientConventions:
     """Prevent direct axios imports and bare API fetch URLs."""
 
     def test_no_direct_axios_imports(self) -> None:
-        """Source files (except the wrapper) must not import plain axios."""
+        """Application source outside transport implementations uses the wrapper."""
         direct_axios_pattern = re.compile(
             r"import\s+axios\s+from\s+['\"]axios['\"]",
             re.IGNORECASE,
@@ -69,7 +50,7 @@ class TestDashboardHttpClientConventions:
 
         for src in _iter_source_files():
             rel = _relative(src)
-            if rel in AXIOS_ALLOWLIST | AXIOS_EXISTING_VIOLATIONS:
+            if rel in AXIOS_ALLOWLIST:
                 continue
             text = src.read_text(encoding="utf-8")
             if direct_axios_pattern.search(text):
@@ -95,16 +76,11 @@ class TestDashboardHttpClientConventions:
             # main.ts may fetch runtime config before axios is configured.
             "dashboard/src/main.ts",
         }
-        # TODO: Migrate these bare fetch() calls to resolveApiUrl().
-        fetch_existing_violations: set[str] = {
-            "dashboard/src/composables/useMessages.ts",
-            "dashboard/src/components/chat/ThreadPanel.vue",
-        }
         violations: list[str] = []
 
         for src in _iter_source_files():
             rel = _relative(src)
-            if rel in fetch_allowlist | fetch_existing_violations:
+            if rel in fetch_allowlist:
                 continue
             text = src.read_text(encoding="utf-8")
             for match in bare_api_fetch_pattern.finditer(text):

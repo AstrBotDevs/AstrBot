@@ -476,6 +476,28 @@ class ReplyChainParser:
             settings=self._settings,
         )
 
+    def format_embedded_replies(self, event: AstrMessageEvent) -> str:
+        """Format locally available replies for text-only Agent input.
+
+        Args:
+            event: Message containing the quoted components.
+
+        Returns:
+            Quoted text with sender labels, or an empty string when unavailable.
+        """
+        quotes = []
+        for component in event.message_obj.message:
+            if isinstance(component, Reply) and (
+                text := self.extract_text_from_reply_component(component)
+            ):
+                sender = (
+                    f"({component.sender_nickname}): "
+                    if component.sender_nickname
+                    else ""
+                )
+                quotes.append(f"<Quoted Message>\n{sender}{text}\n</Quoted Message>")
+        return "\n\n".join(quotes)
+
     def extract_image_refs_from_reply_component(
         self,
         reply: Reply,

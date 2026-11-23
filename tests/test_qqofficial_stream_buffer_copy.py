@@ -10,20 +10,22 @@ reused/mutated that object. Fix: _append_stream_delta copies Plain text.
 
 from __future__ import annotations
 
+import asyncio
 from types import SimpleNamespace
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, Mock
 
 import botpy.message
 import pytest
 
 from astrbot.api.event import MessageChain
-from astrbot.api.message_components import Plain
+from astrbot.api.message_components import Plain, Reply
 from astrbot.api.platform import (
     AstrBotMessage,
     MessageMember,
     MessageType,
     PlatformMetadata,
 )
+from astrbot.core.platform.sources.qqofficial import qqofficial_message_event
 from astrbot.core.platform.sources.qqofficial.qqofficial_message_event import (
     QQOfficialMessageEvent,
 )
@@ -70,7 +72,7 @@ def _make_group_event() -> QQOfficialMessageEvent:
         message_obj=abm,
         platform_meta=meta,
         session_id="group-1",
-        bot=bot,  # type: ignore[arg-type]
+        bot=bot,
     )
 
 
@@ -95,14 +97,46 @@ def _make_c2c_event() -> QQOfficialMessageEvent:
     abm.message = []
     abm.raw_message = raw
     meta = PlatformMetadata(name="qq_official", description="t", id="qq_official")
-    bot = SimpleNamespace(api=SimpleNamespace())
+    bot = SimpleNamespace(
+        api=SimpleNamespace(
+            _http=SimpleNamespace(request=AsyncMock(return_value={"id": "stream-1"}))
+        )
+    )
     return QQOfficialMessageEvent(
         message_str="ping",
         message_obj=abm,
         platform_meta=meta,
         session_id="user-1",
-        bot=bot,  # type: ignore[arg-type]
+        bot=bot,
     )
+
+
+@pytest.fixture
+def stream_clock(monkeypatch):
+    """Control only this adapter's clock without changing asyncio globally."""
+
+    def set_ticks(*ticks: float) -> None:
+        clock = SimpleNamespace(time=Mock(side_effect=ticks))
+        local_asyncio = SimpleNamespace(
+            get_running_loop=lambda: clock,
+            TimeoutError=asyncio.TimeoutError,
+            wait_for=asyncio.wait_for,
+            sleep=asyncio.sleep,
+        )
+        monkeypatch.setattr(qqofficial_message_event, "asyncio", local_asyncio)
+
+    return set_ticks
+
+
+def _c2c_payloads(event: QQOfficialMessageEvent) -> list[dict]:
+    """Read the JSON submitted at the real adapter's HTTP boundary."""
+    payloads = [
+        call.kwargs["json"] for call in event.bot.api._http.request.await_args_list
+    ]
+    for payload in payloads:
+        assert payload["openid"] == "user-1"
+        assert payload["msg_id"] == "msg-1"
+    return payloads
 
 
 def test_append_stream_delta_copies_plain_and_survives_source_mutation() -> None:
@@ -121,34 +155,42 @@ def test_append_stream_delta_copies_plain_and_survives_source_mutation() -> None
     assert "".join(texts) == "不稀罕"
 
 
-def test_append_stream_delta_old_reference_style_loses_first_char() -> None:
-    """Document the broken pre-fix behavior (reference assign + extend)."""
-    event = _make_group_event()
-    shared = MessageChain(chain=[Plain("不")])
-
-    # Pre-fix group path:
-    #   if not send_buffer: send_buffer = chain
-    #   else: send_buffer.chain.extend(chain.chain)
-    event.send_buffer = shared
-    shared.chain[0].text = "稀"
-    event.send_buffer.chain.extend(shared.chain)
-
-    # After mutation + extend-on-self, leading "不" is gone.
-    joined = "".join(c.text for c in event.send_buffer.chain if isinstance(c, Plain))
-    assert "不" not in joined
-    assert joined.startswith("稀")
-
-
 @pytest.mark.asyncio
-async def test_event_contract_uses_only_current_group_metadata() -> None:
+async def test_event_contract_resolves_explicit_group_metadata_and_caches_current():
     group_event = _make_group_event()
     current_group = group_event.message_obj.group
+    request = AsyncMock(
+        side_effect=[
+            {"group_name": "Current Group", "group_member_num": 3},
+            {"group_name": "Requested Group", "member_count": 7},
+        ]
+    )
+    group_event.bot.api._http = SimpleNamespace(request=request)
 
     await group_event.send_typing()
     await group_event.stop_typing()
+    request.assert_not_awaited()
+
     assert await group_event.get_group() is current_group
+    assert current_group.group_name == "Current Group"
+    assert current_group.member_count == 3
     assert await group_event.get_group("group-1") is current_group
-    assert await group_event.get_group("different-group") is None
+    request.assert_awaited_once()
+
+    other_group = await group_event.get_group("different-group")
+    assert other_group is not current_group
+    assert other_group.group_id == "different-group"
+    assert other_group.group_name == "Requested Group"
+    assert other_group.member_count == 7
+    assert current_group.group_name == "Current Group"
+    assert request.await_count == 2
+    for call, group_id in zip(
+        request.await_args_list, ("group-1", "different-group"), strict=True
+    ):
+        route = call.args[0]
+        assert route.method == "GET"
+        assert route.path == "/v2/groups/{group_openid}/info"
+        assert route.url.endswith(f"/v2/groups/{group_id}/info")
 
     private_event = _make_c2c_event()
     assert await private_event.get_group() is None
@@ -179,8 +221,7 @@ async def test_group_stream_keeps_first_character_when_delta_reused() -> None:
     await event.send_streaming(gen())
 
     assert len(captured) == 1
-    assert captured[0].startswith("不稀罕？")
-    assert "不" in captured[0]
+    assert captured[0] == "不稀罕？"
 
 
 @pytest.mark.asyncio
@@ -204,7 +245,7 @@ async def test_group_stream_accumulates_independent_delta_chains() -> None:
     await event.send_streaming(gen())
 
     assert len(captured) == 1
-    assert captured[0].startswith("不稀罕？认识。")
+    assert captured[0] == "不稀罕？认识。"
 
 
 @pytest.mark.asyncio
@@ -220,6 +261,7 @@ async def test_group_stream_preserves_empty_and_multi_char_deltas() -> None:
 
     async def gen():
         yield MessageChain().message("你好")
+        yield MessageChain(chain=[Plain("")])
         yield MessageChain().message("\n\n")
         yield MessageChain().message("又来了？")
 
@@ -231,67 +273,96 @@ async def test_group_stream_preserves_empty_and_multi_char_deltas() -> None:
 
 @pytest.mark.asyncio
 async def test_group_stream_keeps_non_plain_components() -> None:
+    """A reused reply component must retain its original reference at send time."""
     event = _make_group_event()
-    captured_kwargs: list[dict] = []
-
-    async def capture(**kwargs):
-        captured_kwargs.append(kwargs)
-        return {"id": "out-1"}
-
-    event.bot.api.post_group_message = AsyncMock(side_effect=capture)
+    reply = Reply(id="REFIDX_original")
+    shared = MessageChain(chain=[Plain("前"), reply])
 
     async def gen():
-        yield MessageChain().message("前")
-        # Image may force media path; still ensure text buffer kept "前缀"
-        yield MessageChain(chain=[Plain("缀")])
+        yield shared
+        reply.id = "REFIDX_changed"
+        shared.chain[:] = [Plain("缀")]
+        yield shared
 
     await event.send_streaming(gen())
 
-    assert captured_kwargs
-    text = _extract_send_text(captured_kwargs[0])
-    assert text.startswith("前缀")
+    event.bot.api.post_group_message.assert_awaited_once()
+    payload = event.bot.api.post_group_message.await_args.kwargs
+    assert _extract_send_text(payload) == "前缀"
+    assert payload["message_reference"] == {"message_id": "REFIDX_original"}
 
 
 @pytest.mark.asyncio
-async def test_c2c_stream_append_keeps_first_char_before_throttle_flush() -> None:
-    """C2C also uses _append_stream_delta; keep time <1s so only final state=10 sends."""
+async def test_c2c_stream_append_keeps_first_char_before_throttle_flush(
+    stream_clock,
+) -> None:
+    """Buffer reused deltas and serialize one final frame before the throttle."""
     event = _make_c2c_event()
-    sent_texts: list[str] = []
-
-    async def fake_post_send(stream=None):
-        # Capture buffer text at send time (before _post_send clears it).
-        parts = []
-        if event.send_buffer:
-            for c in event.send_buffer.chain:
-                if isinstance(c, Plain) and c.text:
-                    parts.append(c.text)
-        sent_texts.append("".join(parts))
-        event.send_buffer = None
-        return {"id": f"stream-{len(sent_texts)}"}
-
+    stream_clock(0.5, 0.5, 0.5)
     shared = MessageChain(chain=[Plain("不")])
 
     async def gen():
-        shared.chain[0].text = "不"
-        yield shared
-        shared.chain[0].text = "稀"
-        yield shared
-        shared.chain[0].text = "罕"
-        yield shared
+        for text in ("不", "稀", "罕"):
+            shared.chain[0].text = text
+            yield shared
 
-    from unittest.mock import patch
+    await event.send_streaming(gen())
 
-    with (
-        patch.object(event, "_post_send", side_effect=fake_post_send),
-        patch("asyncio.get_running_loop") as mock_loop,
-    ):
-        # last_edit_time starts at 0; keep now < 1 so intermediate throttle never fires.
-        mock_loop.return_value.time.return_value = 0.5
-        await event.send_streaming(gen())
+    payloads = _c2c_payloads(event)
+    assert len(payloads) == 1
+    assert _extract_send_text(payloads[0]) == "不稀罕\n"
+    assert payloads[0]["stream"] == {"state": 10, "index": 0, "reset": False}
 
-    # Only final state=10 flush with full accumulated text.
-    assert len(sent_texts) == 1
-    assert sent_texts[0] == "不稀罕"
+
+@pytest.mark.asyncio
+async def test_c2c_stream_closes_with_state10_when_tail_buffer_empty(
+    stream_clock,
+) -> None:
+    """Close an open stream even when an intermediate frame consumed all text."""
+    event = _make_c2c_event()
+    stream_clock(0.5, 2.0, 2.0)
+
+    async def gen():
+        yield MessageChain().message("不")
+        yield MessageChain().message("稀")
+
+    await event.send_streaming(gen())
+
+    payloads = _c2c_payloads(event)
+    assert [
+        (payload["stream"]["state"], _extract_send_text(payload))
+        for payload in payloads
+    ] == [(1, "不稀"), (10, "\n")]
+    assert payloads[0]["stream"] == {"state": 1, "index": 0, "reset": False}
+    assert payloads[1]["stream"] == {
+        "state": 10,
+        "id": "stream-1",
+        "index": 1,
+        "reset": False,
+    }
+
+
+@pytest.mark.asyncio
+async def test_c2c_stream_break_closes_open_segment_with_empty_buffer(
+    stream_clock,
+) -> None:
+    """A tool-call break finalizes the open segment without an extra final frame."""
+    event = _make_c2c_event()
+    stream_clock(2.0, 2.0)
+
+    async def gen():
+        yield MessageChain().message("首段文本")
+        yield MessageChain(type="break")
+
+    await event.send_streaming(gen())
+
+    payloads = _c2c_payloads(event)
+    assert [
+        (payload["stream"]["state"], _extract_send_text(payload))
+        for payload in payloads
+    ] == [(1, "首段文本"), (10, "\n")]
+    assert payloads[1]["stream"]["id"] == "stream-1"
+    assert payloads[1]["stream"]["index"] == 1
 
 
 @pytest.mark.asyncio
@@ -312,3 +383,25 @@ async def test_group_stream_sends_once_after_all_deltas() -> None:
 
     await event.send_streaming(gen())
     assert calls == 1
+
+
+@pytest.mark.asyncio
+async def test_c2c_stream_closes_when_tail_is_empty_plain(stream_clock) -> None:
+    """An empty Plain delta still requires the final frame for an open stream."""
+    event = _make_c2c_event()
+    stream_clock(0.5, 2.0, 2.0, 2.0)
+
+    async def gen():
+        yield MessageChain().message("不")
+        yield MessageChain().message("稀")
+        yield MessageChain(chain=[Plain("")])
+
+    await event.send_streaming(gen())
+
+    payloads = _c2c_payloads(event)
+    assert [
+        (payload["stream"]["state"], _extract_send_text(payload))
+        for payload in payloads
+    ] == [(1, "不稀"), (10, "\n")]
+    assert payloads[1]["stream"]["id"] == "stream-1"
+    assert payloads[1]["stream"]["index"] == 1

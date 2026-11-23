@@ -6,6 +6,7 @@ from astrbot.core import logger
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
 from astrbot.core.db import BaseDatabase
 from astrbot.core.sentinels import NOT_GIVEN
+from astrbot.dashboard.services.persona_service import build_persona_update
 
 from .route import Response, Route, RouteContext
 
@@ -204,12 +205,7 @@ class PersonaRoute(Route):
         try:
             data = await request.get_json()
             persona_id = data.get("persona_id")
-            system_prompt = data.get("system_prompt")
             begin_dialogs = data.get("begin_dialogs")
-            has_tools = "tools" in data
-            tools = data.get("tools")
-            has_skills = "skills" in data
-            skills = data.get("skills")
             has_custom_error_message = "custom_error_message" in data
             custom_error_message = data.get("custom_error_message")
 
@@ -233,17 +229,7 @@ class PersonaRoute(Route):
                     .to_json()
                 )
 
-            update_kwargs = {
-                "persona_id": persona_id,
-                "system_prompt": system_prompt,
-                "begin_dialogs": begin_dialogs,
-            }
-            if has_tools:
-                update_kwargs["tools"] = tools
-            if has_skills:
-                update_kwargs["skills"] = skills
-            if has_custom_error_message:
-                update_kwargs["custom_error_message"] = custom_error_message
+            update_kwargs = build_persona_update(data, custom_error_message)
 
             if not self.persona_mgr:
                 return Response().error("Persona manager not available").to_json()
@@ -257,18 +243,20 @@ class PersonaRoute(Route):
             logger.error(f"更新人格失败: {e!s}\n{traceback.format_exc()}")
             return Response().error(f"更新人格失败: {e!s}").to_json()
 
+    def _get_persona_manager(self, persona_id):
+        if not persona_id:
+            raise ValueError("缺少必要参数: persona_id")
+        if self.persona_mgr is None:
+            raise ValueError("Persona manager not available")
+        return self.persona_mgr
+
     async def delete_persona(self):
         """删除人格"""
         try:
             data = await request.get_json()
             persona_id = data.get("persona_id")
 
-            if not persona_id:
-                return Response().error("缺少必要参数: persona_id").to_json()
-
-            mgr = self.persona_mgr
-            if mgr is None:
-                return Response().error("Persona manager not available").to_json()
+            mgr = self._get_persona_manager(persona_id)
             await mgr.delete_persona(persona_id)
 
             return Response().ok({"message": "人格删除成功"}).to_json()
@@ -337,12 +325,7 @@ class PersonaRoute(Route):
             persona_id = data.get("persona_id")
             folder_id = data.get("folder_id")  # None 表示移动到根目录
 
-            if not persona_id:
-                return Response().error("缺少必要参数: persona_id").to_json()
-
-            mgr = self.persona_mgr
-            if mgr is None:
-                return Response().error("Persona manager not available").to_json()
+            mgr = self._get_persona_manager(persona_id)
             await mgr.move_persona_to_folder(persona_id, folder_id)
 
             return Response().ok({"message": "人格移动成功"}).to_json()

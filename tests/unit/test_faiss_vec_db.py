@@ -12,13 +12,18 @@ from astrbot.core.provider.provider import EmbeddingProvider
 class DelayedEmbeddingProvider(EmbeddingProvider):
     def __init__(self) -> None:
         super().__init__({}, {})
+        self.second_batch_finished = asyncio.Event()
+        self.completed = []
 
     async def get_embedding(self, text: str) -> list[float]:
         return [float(text.removeprefix("chunk-"))]
 
     async def get_embeddings(self, text: list[str]) -> list[list[float]]:
         if text[0] == "chunk-0":
-            await asyncio.sleep(0.02)
+            await self.second_batch_finished.wait()
+        else:
+            self.second_batch_finished.set()
+        self.completed.append(text[0])
         return [[float(item.removeprefix("chunk-"))] for item in text]
 
     def get_dim(self) -> int:
@@ -158,10 +163,14 @@ def test_embedding_storage_accepts_a_valid_dimension_for_a_fresh_index() -> None
 async def test_get_embeddings_batch_preserves_input_order_when_batches_finish_out_of_order():
     provider = DelayedEmbeddingProvider()
 
-    embeddings = await provider.get_embeddings_batch(
-        ["chunk-0", "chunk-1", "chunk-2", "chunk-3"],
-        batch_size=2,
-        tasks_limit=2,
+    embeddings = await asyncio.wait_for(
+        provider.get_embeddings_batch(
+            ["chunk-0", "chunk-1", "chunk-2", "chunk-3"],
+            batch_size=2,
+            tasks_limit=2,
+        ),
+        timeout=2,
     )
 
+    assert provider.completed == ["chunk-2", "chunk-0"]
     assert embeddings == [[0.0], [1.0], [2.0], [3.0]]

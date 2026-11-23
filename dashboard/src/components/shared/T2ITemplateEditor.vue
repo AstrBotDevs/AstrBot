@@ -44,10 +44,10 @@
             :loading="loading"
           >
             <template #item="{ props, item }">
-              <v-list-item v-bind="props" :title="item.raw.name">
+              <v-list-item v-bind="props" :title="item.name">
                 <template #append>
                   <v-chip
-                    v-if="item.raw.name === activeTemplate"
+                    v-if="item.name === activeTemplate"
                     color="success"
                     variant="tonal"
                     size="small"
@@ -62,7 +62,7 @@
                     size="small"
                     class="ml-2"
                     :loading="applyLoading"
-                    @click.stop="setActiveTemplate(item.raw.name)"
+                    @click.stop="setActiveTemplate(item.name)"
                   >
                     {{ tm("t2iTemplateEditor.apply") }}
                   </v-btn>
@@ -238,7 +238,7 @@
         <v-card-text>
           {{
             tm("t2iTemplateEditor.confirmDeleteMessage", {
-              name: selectedTemplate,
+              name: selectedTemplate ?? "",
             })
           }}
         </v-card-text>
@@ -268,7 +268,7 @@
         <v-card-text>
           {{
             tm("t2iTemplateEditor.confirmApplyMessage", {
-              name: selectedTemplate,
+              name: selectedTemplate ?? "",
             })
           }}
         </v-card-text>
@@ -292,10 +292,10 @@
 </template>
 
 <script setup lang="ts">
-import { VueMonacoEditor } from "@guolao/vue-monaco-editor";
 import { computed, nextTick, ref, watch } from "vue";
+import { statsApi, t2iApi } from "@/api/v1";
+import { LazyMonacoEditor as VueMonacoEditor } from "@/components/shared/LazyMonacoEditor";
 import { useI18n, useModuleI18n } from "@/i18n/composables";
-import axios from "@/utils/request";
 import { useToast } from "@/utils/toast";
 
 const { t } = useI18n();
@@ -311,9 +311,14 @@ const previewLoading = ref(false);
 const applyLoading = ref(false);
 
 // 模板管理
-const templates = ref([]);
+interface TemplateListItem {
+  name: string;
+  is_default: boolean;
+}
+const templates = ref<TemplateListItem[]>([]);
 const activeTemplate = ref("base");
-const selectedTemplate = ref(null);
+const selectedTemplate = ref<string | null>(null);
+let templateContentRequestVersion = 0;
 const editingName = ref(""); // 用于新建模式下的名称输入
 const templateContent = ref("");
 const isCreatingNew = ref(false);
@@ -340,8 +345,9 @@ const editorOptions = {
 const previewVersion = ref("v4.0.0");
 const syncPreviewVersion = async () => {
   try {
-    const res = await axios.get("/api/stat/version");
-    const rawVersion = res?.data?.data?.version || res?.data?.version;
+    const res = await statsApi.version();
+    const legacyVersion = "version" in res.data && typeof res.data.version === "string" ? res.data.version : "";
+    const rawVersion = res.data.data?.version || legacyVersion;
     if (rawVersion) {
       previewVersion.value = rawVersion.startsWith("v") ? rawVersion : `v${rawVersion}`;
     }
@@ -373,19 +379,20 @@ const previewContent = computed(() => {
 const loadInitialData = async () => {
   loading.value = true;
   try {
-    const [listRes, activeRes] = await Promise.all([
-      axios.get("/api/t2i/templates"),
-      axios.get("/api/t2i/templates/active"),
-    ]);
+    const [listRes, activeRes] = await Promise.all([t2iApi.listTemplates(), t2iApi.getActiveTemplate()]);
 
     if (listRes.data.status === "ok") {
-      templates.value = listRes.data.data;
+      templates.value = listRes.data.data.flatMap((item) =>
+        typeof item.name === "string" && typeof item.is_default === "boolean"
+          ? [{ name: item.name, is_default: item.is_default }]
+          : [],
+      );
     } else {
       console.error("加载模板列表失败:", listRes.data.message);
     }
 
     if (activeRes.data.status === "ok") {
-      activeTemplate.value = activeRes.data.data.active_template;
+      activeTemplate.value = activeRes.data.data.active_template ?? "base";
     } else {
       console.error("加载活动模板失败:", activeRes.data.message);
     }
@@ -401,20 +408,23 @@ const loadInitialData = async () => {
   }
 };
 
-const loadTemplateContent = async (name) => {
+const loadTemplateContent = async (name: string) => {
   if (!name) return;
+  const requestVersion = ++templateContentRequestVersion;
   previewLoading.value = true;
   try {
-    const response = await axios.get(`/api/t2i/templates/${name}`);
+    const response = await t2iApi.getTemplate(name);
+    if (requestVersion !== templateContentRequestVersion || selectedTemplate.value !== name || !dialog.value) return;
     if (response.data.status === "ok") {
       templateContent.value = response.data.data.content;
     } else {
       console.error(`加载模板 '${name}' 失败:`, response.data.message);
     }
   } catch (error) {
+    if (requestVersion !== templateContentRequestVersion || selectedTemplate.value !== name || !dialog.value) return;
     console.error(`加载模板 '${name}' 失败:`, error);
   } finally {
-    previewLoading.value = false;
+    if (requestVersion === templateContentRequestVersion) previewLoading.value = false;
   }
 };
 
@@ -424,19 +434,21 @@ const saveTemplate = async () => {
     if (isCreatingNew.value) {
       // --- 创建新模板 ---
       if (!editingName.value) return;
-      const response = await axios.post("/api/t2i/templates/create", {
+      const response = await t2iApi.createTemplate({
         name: editingName.value,
         content: templateContent.value,
       });
+      const result = response.data;
+      if (result.status !== "ok") throw new Error(result.message ?? undefined);
+      const createdName = result.data.name;
+      if (typeof createdName !== "string") throw new TypeError("Created template response is missing its name");
       await loadInitialData(); // 重新加载所有数据
-      selectedTemplate.value = response.data.data.name;
+      selectedTemplate.value = createdName;
       isCreatingNew.value = false;
     } else {
       // --- 更新现有模板 ---
       if (!selectedTemplate.value) return;
-      await axios.put(`/api/t2i/templates/${selectedTemplate.value}`, {
-        content: templateContent.value,
-      });
+      await t2iApi.updateTemplate(selectedTemplate.value, templateContent.value);
     }
   } catch (error) {
     const msg = (error as any)?.response?.data?.message || (error as any)?.message || String(error);
@@ -447,10 +459,10 @@ const saveTemplate = async () => {
   }
 };
 
-const setActiveTemplate = async (name) => {
+const setActiveTemplate = async (name: string) => {
   applyLoading.value = true;
   try {
-    await axios.post("/api/t2i/templates/set_active", { name });
+    await t2iApi.setActiveTemplate(name);
     activeTemplate.value = name;
   } catch (error) {
     const msg = (error as any)?.response?.data?.message || (error as any)?.message || String(error);
@@ -466,7 +478,7 @@ const confirmDelete = async () => {
   saveLoading.value = true;
   try {
     const nameToDelete = selectedTemplate.value;
-    await axios.delete(`/api/t2i/templates/${nameToDelete}`);
+    await t2iApi.deleteTemplate(nameToDelete);
     deleteDialog.value = false;
 
     // 如果删除的是当前活动模板，则将活动模板重置为base
@@ -487,7 +499,7 @@ const confirmDelete = async () => {
 const confirmReset = async () => {
   resetLoading.value = true;
   try {
-    await axios.post("/api/t2i/templates/reset_default");
+    await t2iApi.resetDefaultTemplate();
     resetDialog.value = false;
     if (selectedTemplate.value === "base") {
       await loadTemplateContent("base");
@@ -541,10 +553,13 @@ const promptApplyAndClose = () => {
 };
 
 const confirmApplyAndClose = async () => {
-  if (isCreatingNew.value) return;
+  const name = selectedTemplate.value;
+  if (isCreatingNew.value || !name) return;
 
   await saveTemplate();
-  await setActiveTemplate(selectedTemplate.value);
+  if (!dialog.value || isCreatingNew.value || selectedTemplate.value !== name) return;
+  await setActiveTemplate(name);
+  if (!dialog.value || isCreatingNew.value || selectedTemplate.value !== name) return;
   applyAndCloseDialog.value = false;
   closeDialog();
 };
@@ -571,6 +586,8 @@ watch(dialog, (newVal) => {
     syncPreviewVersion();
     loadInitialData();
   } else {
+    ++templateContentRequestVersion;
+    previewLoading.value = false;
     // 关闭时重置状态
     selectedTemplate.value = null;
     templateContent.value = "";
@@ -582,6 +599,9 @@ watch(selectedTemplate, (newName) => {
   if (newName) {
     isCreatingNew.value = false;
     loadTemplateContent(newName);
+  } else {
+    ++templateContentRequestVersion;
+    previewLoading.value = false;
   }
 });
 

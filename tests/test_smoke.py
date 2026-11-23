@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import subprocess
 import sys
+import textwrap
 from pathlib import Path
 
 from astrbot.core.pipeline.bootstrap import ensure_builtin_stages_registered
@@ -20,12 +21,20 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 
 
 def _run_code_in_fresh_interpreter(code: str, failure_message: str) -> None:
+    guarded_code = (
+        "import tests.conftest as isolation\n"
+        "try:\n" + textwrap.indent(code, "    ") + "\nfinally:\n"
+        "    isolation.pytest_sessionfinish()\n"
+        "    isolation._test_root.cleanup()\n"
+        "    isolation._test_env.undo()\n"
+    )
     proc = subprocess.run(
-        [sys.executable, "-c", code],
+        [sys.executable, "-c", guarded_code],
         cwd=REPO_ROOT,
         capture_output=True,
         text=True,
         check=False,
+        timeout=30,
     )
     assert proc.returncode == 0, (
         f"{failure_message}\nstdout:\n{proc.stdout}\nstderr:\n{proc.stderr}\n"
@@ -37,7 +46,7 @@ def test_smoke_critical_imports_in_fresh_interpreter() -> None:
         "import importlib;"
         "mods=["
         "'astrbot.core.core_lifecycle',"
-        "'astrbot.core.astr_main_agent',"
+        "'astrbot.core.astr_agent_runtime.main_agent',"
         "'astrbot.core.pipeline.scheduler',"
         "'astrbot.core.pipeline.process_stage.method.agent_sub_stages.internal',"
         "'astrbot.core.pipeline.process_stage.method.agent_sub_stages.third_party'"
@@ -90,8 +99,3 @@ def test_builtin_stage_bootstrap_is_idempotent() -> None:
 
     ensure_builtin_stages_registered()
     assert len(registered_stages) == before_count
-
-
-# Note: test_pipeline_import_is_stable_with_mocked_apscheduler removed
-# as the test was flaky due to pipeline module actually importing apscheduler
-# during core initialization, which is by design.

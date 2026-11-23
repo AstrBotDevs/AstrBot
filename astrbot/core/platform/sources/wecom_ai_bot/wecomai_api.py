@@ -8,11 +8,13 @@ import json
 from typing import Any
 
 import aiohttp
-from Crypto.Cipher import AES
 
 from astrbot import logger
+from astrbot.core.platform.sources.wecom_ai_bot.wecomai_utils import (
+    WecomAIBotConstants,
+    decrypt_wecom_image,
+)
 
-from .wecomai_utils import WecomAIBotConstants
 from .WXBizJsonMsgCrypt import WXBizJsonMsgCrypt
 
 
@@ -168,7 +170,9 @@ class WecomAIBotAPIClient:
             logger.info(f"开始下载加密图片: {image_url}")
 
             async with aiohttp.ClientSession() as session:
-                async with session.get(image_url, timeout=15) as response:
+                async with session.get(
+                    image_url, timeout=aiohttp.ClientTimeout(total=15)
+                ) as response:
                     if response.status != 200:
                         error_msg = f"图片下载失败,状态码: {response.status}"
                         logger.error(error_msg)
@@ -191,18 +195,7 @@ class WecomAIBotAPIClient:
             if len(aes_key) != 32:
                 raise ValueError("无效的 AES 密钥长度: 应为 32 字节")
 
-            iv = aes_key[:16]  # 初始向量为密钥前 16 字节
-
-            # 解密图片数据
-            cipher = AES.new(aes_key, AES.MODE_CBC, iv)
-            decrypted_data = cipher.decrypt(encrypted_data)
-
-            # 去除 PKCS#7 填充
-            pad_len = decrypted_data[-1]
-            if pad_len > 32:  # AES-256 块大小为 32 字节
-                raise ValueError("无效的填充长度 (大于32字节)")
-
-            decrypted_data = decrypted_data[:-pad_len]
+            decrypted_data = decrypt_wecom_image(encrypted_data, aes_key)
             logger.info(f"图片解密成功,解密后大小: {len(decrypted_data)} 字节")
 
             return True, decrypted_data
@@ -306,6 +299,40 @@ class WecomAIBotStreamMessageBuilder:
         if content:
             plain["stream"]["content"] = content
         return json.dumps(plain, ensure_ascii=False)
+
+    @staticmethod
+    def make_stream_with_template_card(
+        stream_id: str,
+        content: str,
+        msg_items: list,
+        template_card: dict[str, Any],
+        finish: bool = False,
+    ) -> str:
+        """Build a stream response containing one template card.
+
+        Args:
+            stream_id: Stream identifier returned by AstrBot.
+            content: Accumulated Markdown content.
+            msg_items: Optional image message items.
+            template_card: WeCom template-card payload.
+            finish: Whether this is the final stream response.
+
+        Returns:
+            JSON-encoded stream-with-card response.
+        """
+        stream: dict[str, Any] = {"id": stream_id, "finish": finish}
+        if content:
+            stream["content"] = content
+        if msg_items:
+            stream["msg_item"] = msg_items
+        return json.dumps(
+            {
+                "msgtype": "stream_with_template_card",
+                "stream": stream,
+                "template_card": template_card,
+            },
+            ensure_ascii=False,
+        )
 
     @staticmethod
     def make_text(content: str) -> str:

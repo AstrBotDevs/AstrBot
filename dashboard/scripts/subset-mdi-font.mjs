@@ -11,7 +11,9 @@
  * Fallback: if any step fails, copies the original full @mdi/font CSS and fonts
  * so the build never breaks.
  */
+import { execFileSync } from "node:child_process";
 import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { createRequire } from "node:module";
 import { extname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -24,6 +26,20 @@ const MDI_TTF_PATH = join(ROOT, "node_modules/@mdi/font/fonts/materialdesignicon
 const MDI_WOFF2_PATH = join(ROOT, "node_modules/@mdi/font/fonts/materialdesignicons-webfont.woff2");
 const MDI_WOFF_PATH = join(ROOT, "node_modules/@mdi/font/fonts/materialdesignicons-webfont.woff");
 const OUT_DIR = join(ROOT, "src/assets/mdi-subset");
+const require = createRequire(import.meta.url);
+
+/** Keep generated CSS reproducible under the dashboard's formatter configuration. */
+export function formatGeneratedCss(css) {
+  return execFileSync(
+    process.execPath,
+    [
+      require.resolve("@biomejs/biome/bin/biome"),
+      "format",
+      `--stdin-file-path=${join(OUT_DIR, "materialdesignicons-subset.css")}`,
+    ],
+    { input: css, encoding: "utf8", cwd: ROOT, maxBuffer: 16 * 1024 * 1024, timeout: 20000 },
+  );
+}
 
 // Utility classes that should not be treated as icon names
 const UTILITY_CLASSES = new Set([
@@ -106,7 +122,8 @@ export function* collectFiles(dir, exts) {
 
 /** Scan source files and return a Set of used mdi-* icon names. */
 export function scanUsedIcons(sourceFiles) {
-  const iconPattern = /mdi-[a-z][a-z0-9-]*/g;
+  // TODO: Replace fragile regex-based scanning with a more robust approach.
+  const iconPattern = /(?<![\w/\\-])mdi-[a-z][a-z0-9-]*(?![\w./\\-])/g;
   const usedIcons = new Set(REQUIRED_ICONS);
   for (const file of sourceFiles) {
     const content = readFileSync(file, "utf-8");
@@ -196,7 +213,7 @@ function fallbackToFullFont(reason) {
     copyFileSync(MDI_WOFF_PATH, join(OUT_DIR, "materialdesignicons-webfont-subset.woff"));
   }
 
-  writeFileSync(join(OUT_DIR, "materialdesignicons-subset.css"), buildFallbackCss());
+  writeFileSync(join(OUT_DIR, "materialdesignicons-subset.css"), formatGeneratedCss(buildFallbackCss()));
 
   const size = existsSync(MDI_WOFF2_PATH) ? statSync(MDI_WOFF2_PATH).size : 0;
   console.warn(`⚠️  Fallback complete: using full font (${(size / 1024).toFixed(1)} KB woff2)`);
@@ -307,7 +324,7 @@ export async function runMdiSubset() {
     }
 
     const outCSS = join(OUT_DIR, "materialdesignicons-subset.css");
-    writeFileSync(outCSS, css);
+    writeFileSync(outCSS, formatGeneratedCss(css));
 
     // Report
     const _origSize = statSync(MDI_TTF_PATH).size;

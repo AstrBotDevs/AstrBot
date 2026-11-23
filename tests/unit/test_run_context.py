@@ -2,10 +2,8 @@
 
 from __future__ import annotations
 
-import pytest
-
-from astrbot.core.agent.run_context import ContextWrapper, NoContext
 from astrbot.core.agent.message import Message
+from astrbot.core.agent.run_context import ContextWrapper, NoContext
 
 
 class TestContextWrapper:
@@ -52,7 +50,10 @@ class TestContextWrapper:
 
     def test_messages_can_be_replaced(self):
         """messages field can be replaced with a new list."""
-        msgs = [Message(role="user", content="a"), Message(role="assistant", content="b")]
+        msgs = [
+            Message(role="user", content="a"),
+            Message(role="assistant", content="b"),
+        ]
         ctx = ContextWrapper(context="test", messages=msgs)
         assert len(ctx.messages) == 2
 
@@ -68,24 +69,24 @@ class TestContextWrapper:
 
 
 class TestNoContext:
-    """NoContext is a ContextWrapper[None] singleton-like pattern."""
+    """NoContext is the generic alias for an explicitly absent context."""
 
     def test_no_context_is_contextwrapper(self):
         """NoContext is an instance of ContextWrapper."""
-        nc = NoContext()
+        nc = NoContext(context=None)
         assert isinstance(nc, ContextWrapper)
 
     def test_no_context_context_is_none(self):
         """NoContext always carries context=None."""
-        nc = NoContext()
+        nc = NoContext(context=None)
         assert nc.context is None
 
     def test_no_context_messages_empty(self):
         """NoContext starts with empty messages."""
-        nc = NoContext()
+        nc = NoContext(context=None)
         assert nc.messages == []
 
     def test_no_context_default_timeout(self):
         """NoContext has the default 120s timeout."""
-        nc = NoContext()
+        nc = NoContext(context=None)
         assert nc.tool_call_timeout == 120

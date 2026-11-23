@@ -6,6 +6,8 @@ from astrbot.core.config.default import VERSION
 from astrbot.core.dashboard_assets import get_dashboard_version
 from astrbot.core.star import command_management
 
+from ..i18n import MESSAGES, translate
+
 
 class HelpCommand:
     def __init__(self, context: star.Context) -> None:
@@ -16,14 +18,21 @@ class HelpCommand:
             async with aiohttp.ClientSession(trust_env=True) as session:
                 async with session.get(
                     "https://astrbot.app/notice.json",
-                    timeout=2,
+                    timeout=aiohttp.ClientTimeout(total=2),
                 ) as resp:
                     return (await resp.json())["notice"]
         except BaseException:
             return ""
 
-    async def _build_reserved_command_lines(self) -> list[str]:
-        """使用实时指令配置生成内置指令清单,确保重命名/禁用后与实际生效状态保持一致｡"""
+    async def _build_reserved_command_lines(self, locale: str = "zh-CN") -> list[str]:
+        """Build localized help from the active command configuration.
+
+        Args:
+            locale: System language for built-in command descriptions.
+
+        Returns:
+            Help lines preserving command renames and enabled states.
+        """
         try:
             commands = await command_management.list_commands()
         except BaseException:
@@ -55,6 +64,13 @@ class HelpCommand:
                     continue
 
                 description = item.get("description") or ""
+                description_key = f"command.{item.get('handler_name')}"
+                if (
+                    item.get("module_path")
+                    == "astrbot.builtin_stars.builtin_commands.main"
+                    and description_key in MESSAGES["zh-CN"]
+                ):
+                    description = translate(description_key, locale)
                 desc_text = f" - {description}" if description else ""
                 indent_prefix = "  " * indent
                 lines.append(f"{indent_prefix}/{effective}{desc_text}")
@@ -71,11 +87,12 @@ class HelpCommand:
             pass
 
         dashboard_version = await get_dashboard_version()
-        command_lines = await self._build_reserved_command_lines()
+        locale = self.context.locale(event.unified_msg_origin)
+        command_lines = await self._build_reserved_command_lines(locale)
         commands_section = (
             "\n".join(command_lines)
             if command_lines
-            else "No enabled built-in commands."
+            else translate("no_commands", locale)
         )
 
         msg_parts = [

@@ -69,7 +69,10 @@ class DashScopeEmbeddingProvider(EmbeddingProvider):
             or self.model.startswith("tongyi-embedding-vision")
         )
 
-        kwargs: dict = {"base_address": self.base_url}
+        kwargs: dict = {
+            "base_address": self.base_url,
+            "headers": self.request_headers.copy(),
+        }
         if "embedding_dimensions" in self.provider_config:
             try:
                 dimensions = int(self.provider_config["embedding_dimensions"])
@@ -128,12 +131,4 @@ class DashScopeEmbeddingProvider(EmbeddingProvider):
 
     def get_dim(self) -> int:
         """Get the configured embedding dimension."""
-        if "embedding_dimensions" in self.provider_config:
-            try:
-                return int(self.provider_config["embedding_dimensions"])
-            except (ValueError, TypeError):
-                logger.warning(
-                    f"embedding_dimensions in embedding configs is not a valid integer: "
-                    f"'{self.provider_config['embedding_dimensions']}', ignored."
-                )
-        return 0
+        return self._configured_embedding_dimension()

@@ -1,10 +1,11 @@
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Literal
 
 from fastapi import APIRouter, Depends, Query, Request
 from fastapi.responses import StreamingResponse
 
+from astrbot.dashboard.api.payloads import json_or_empty as _json_or_empty
 from astrbot.dashboard.async_utils import run_maybe_async
 from astrbot.dashboard.responses import ApiError, ok
 from astrbot.dashboard.schemas import (
@@ -34,14 +35,6 @@ def get_service(request: Request) -> ConversationService:
 
 
 require_data_scope = ScopeDependency("data")
-
-
-async def _json_or_empty(request: Request) -> dict[str, Any]:
-    try:
-        data = await request.json()
-    except Exception:
-        return {}
-    return data if isinstance(data, dict) else {}
 
 
 def _model_dict(payload) -> dict[str, Any]:
@@ -94,7 +87,14 @@ async def _list_conversations(
     search: str,
     exclude_ids: str,
     exclude_platforms: str,
+    keyword: str,
+    umo: str,
+    sort_by: Literal["created_at", "updated_at"],
+    sort_order: Literal["asc", "desc"],
+    group_by_session: bool,
     include_history: bool,
+    platform_id: str | None = None,
+    user_id: str | None = None,
 ):
     return await _run(
         lambda: service.list_conversations(
@@ -105,7 +105,14 @@ async def _list_conversations(
             search_query=search,
             exclude_ids=exclude_ids,
             exclude_platforms=exclude_platforms,
+            keyword_query=keyword,
+            umo_query=umo,
+            sort_by=sort_by,
+            sort_order=sort_order,
+            group_by_session=group_by_session,
             include_history=include_history,
+            platform_id=platform_id,
+            user_id=user_id,
         )
     )
 
@@ -114,11 +121,24 @@ async def _list_conversations(
 async def list_conversations(
     page: int = Query(default=1),
     page_size: int = Query(default=20),
+    platform_id: str | None = Query(
+        default=None,
+        description="Exact platform ID, combined with all other filters before pagination.",
+    ),
+    user_id: str | None = Query(
+        default=None,
+        description="Exact unified message origin (UMO), without substring or wildcard matching.",
+    ),
     platforms: str = Query(default=""),
     message_types: str = Query(default=""),
     search: str = Query(default=""),
     exclude_ids: str = Query(default=""),
     exclude_platforms: str = Query(default=""),
+    keyword: str = Query(default=""),
+    umo: str = Query(default=""),
+    sort_by: Literal["created_at", "updated_at"] = Query(default="created_at"),
+    sort_order: Literal["asc", "desc"] = Query(default="desc"),
+    group_by_session: bool = Query(default=False),
     include_history: bool = Query(default=True),
     _auth: AuthContext = Depends(require_data_scope),
     service: ConversationService = Depends(get_service),
@@ -132,8 +152,23 @@ async def list_conversations(
         search=search,
         exclude_ids=exclude_ids,
         exclude_platforms=exclude_platforms,
+        keyword=keyword,
+        umo=umo,
+        sort_by=sort_by,
+        sort_order=sort_order,
+        group_by_session=group_by_session,
         include_history=include_history,
+        platform_id=platform_id,
+        user_id=user_id,
     )
+
+
+@router.get("/conversations/filter-options")
+async def get_conversation_filter_options(
+    _auth: AuthContext = Depends(require_data_scope),
+    service: ConversationService = Depends(get_service),
+):
+    return await _run(service.get_filter_options)
 
 
 @router.post("/conversations/export")
@@ -227,6 +262,11 @@ async def list_dashboard_conversations(
     search: str = Query(default=""),
     exclude_ids: str = Query(default=""),
     exclude_platforms: str = Query(default=""),
+    keyword: str = Query(default=""),
+    umo: str = Query(default=""),
+    sort_by: Literal["created_at", "updated_at"] = Query(default="created_at"),
+    sort_order: Literal["asc", "desc"] = Query(default="desc"),
+    group_by_session: bool = Query(default=False),
     include_history: bool = Query(default=True),
     _username: str = Depends(require_dashboard_user),
     service: ConversationService = Depends(get_service),
@@ -240,6 +280,11 @@ async def list_dashboard_conversations(
         search=search,
         exclude_ids=exclude_ids,
         exclude_platforms=exclude_platforms,
+        keyword=keyword,
+        umo=umo,
+        sort_by=sort_by,
+        sort_order=sort_order,
+        group_by_session=group_by_session,
         include_history=include_history,
     )
 

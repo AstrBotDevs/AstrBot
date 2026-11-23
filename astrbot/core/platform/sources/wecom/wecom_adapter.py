@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Any, cast, override
 from urllib.parse import unquote
 
-import quart
+from fastapi.responses import Response as FastAPIResponse
 from requests import Response
 from wechatpy.enterprise import WeChatClient, parse_message
 from wechatpy.enterprise.crypto import WeChatCrypto
@@ -16,7 +16,7 @@ from wechatpy.exceptions import InvalidSignatureException
 from wechatpy.messages import BaseMessage
 
 from astrbot.api.event import MessageChain
-from astrbot.api.message_components import File, Image, Plain, Record
+from astrbot.api.message_components import ButtonInteraction, File, Image, Plain, Record
 from astrbot.api.platform import (
     AstrBotMessage,
     MessageMember,
@@ -27,6 +27,10 @@ from astrbot.api.platform import (
 )
 from astrbot.core import logger
 from astrbot.core.platform.astr_message_event import MessageSesion
+from astrbot.core.platform.button_interaction import decode_button_callback
+from astrbot.core.platform.sources.wechatpy_utils import message_text
+from astrbot.core.platform.sources.weixin_shared import normalize_weixin_api_base
+from astrbot.core.platform.webhook_server import FastAPIWebhookServer
 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
 from astrbot.core.utils.media_utils import (
     MEDIA_MIME_EXTENSIONS,
@@ -63,7 +67,7 @@ def _extract_wecom_media_filename(disposition: str | None) -> str | None:
 
 class WecomServer:
     def __init__(self, event_queue: asyncio.Queue, config: dict) -> None:
-        self.server = quart.Quart(__name__)
+        self.server = FastAPIWebhookServer("wecom-webhook")
         self.port = int(cast("str", config.get("port")))
         self.callback_server_host = config.get("callback_server_host", "0.0.0.0")
         self.server.add_url_rule(
@@ -87,15 +91,15 @@ class WecomServer:
         self.callback: Callable[[BaseMessage], Awaitable[None]] | None = None
         self.shutdown_event = asyncio.Event()
 
-    async def verify(self):
+    async def verify(self, request):
         """内部服务器的 GET 验证入口"""
-        return await self.handle_verify(quart.request)
+        return await self.handle_verify(request)
 
-    async def handle_verify(self, request) -> quart.Response:
+    async def handle_verify(self, request) -> FastAPIResponse:
         """处理验证请求，可被统一 webhook 入口复用
 
         Args:
-            request: Quart 请求对象
+            request: Webhook 请求对象
 
         Returns:
             验证响应
@@ -111,20 +115,20 @@ class WecomServer:
                 args.get("echostr"),
             )
             logger.info("验证请求有效性成功。")
-            return quart.Response(echo_str, content_type="text/plain")
+            return FastAPIResponse(content=echo_str, media_type="text/plain")
         except InvalidSignatureException:
             logger.error("验证请求有效性失败，签名异常，请检查配置。")
             raise
 
-    async def callback_command(self):
+    async def callback_command(self, request):
         """内部服务器的 POST 回调入口"""
-        return await self.handle_callback(quart.request)
+        return await self.handle_callback(request)
 
     async def handle_callback(self, request) -> str:
         """处理回调请求，可被统一 webhook 入口复用
 
         Args:
-            request: Quart 请求对象
+            request: Webhook 请求对象
 
         Returns:
             响应内容
@@ -183,12 +187,7 @@ class WecomPlatformAdapter(Platform):
         if not self.api_base_url:
             self.api_base_url = "https://qyapi.weixin.qq.com/cgi-bin/"
 
-        self.api_base_url = self.api_base_url.removesuffix("/")
-        if not self.api_base_url.endswith("/cgi-bin"):
-            self.api_base_url += "/cgi-bin"
-
-        if not self.api_base_url.endswith("/"):
-            self.api_base_url += "/"
+        self.api_base_url = normalize_weixin_api_base(self.api_base_url)
 
         self.server = WecomServer(self._event_queue, self.config)
         self.agent_id: str | None = None
@@ -355,34 +354,70 @@ class WecomPlatformAdapter(Platform):
             return await self.server.handle_verify(request)
         return await self.server.handle_callback(request)
 
+    @staticmethod
+    def _set_message_metadata(abm: AstrBotMessage, msg: BaseMessage) -> None:
+        abm.type = MessageType.FRIEND_MESSAGE
+        abm.sender = MessageMember(
+            cast("str", msg.source),
+            cast("str", msg.source),
+        )
+        abm.message_id = str(msg.id)
+        abm.timestamp = int(cast("int | str", msg.time))
+        abm.session_id = abm.sender.user_id
+        abm.raw_message = msg
+
     async def convert_message(self, msg: BaseMessage) -> AstrBotMessage | None:
         abm = AstrBotMessage()
         if isinstance(msg, TextMessage):
-            abm.message_str = msg.content
+            abm.message_str = message_text(msg, "content", "Content")
             abm.self_id = str(msg.agent)
-            abm.message = [Plain(msg.content)]
+            abm.message = [Plain(abm.message_str)]
+            self._set_message_metadata(abm, msg)
+        elif msg.type == "unknown" and msg._data.get("Event") == "template_card_event":
+            callback_payload = msg._data.get("EventKey")
+            if not isinstance(callback_payload, str):
+                logger.debug("Ignored a WeCom template card callback without EventKey.")
+                return None
+            try:
+                action_id, data = decode_button_callback(
+                    callback_payload, allow_expired=True
+                )
+            except ValueError:
+                logger.debug("Ignored a template card callback not created by AstrBot.")
+                return None
+
+            sender_id = str(msg._data.get("FromUserName", ""))
+            if not sender_id:
+                logger.debug("Ignored a WeCom template card callback without a sender.")
+                return None
+            response_code = str(msg._data.get("ResponseCode") or "")
+            task_id = str(msg._data.get("TaskId") or "")
+            interaction_id = response_code or task_id or uuid.uuid4().hex
+            abm.message_str = action_id
+            abm.self_id = str(msg._data.get("AgentID", ""))
+            abm.message = [
+                ButtonInteraction(
+                    action_id=action_id,
+                    data=data,
+                    interaction_id=interaction_id,
+                    source_message_id=task_id or None,
+                    callback_data=callback_payload,
+                )
+            ]
             abm.type = MessageType.FRIEND_MESSAGE
-            abm.sender = MessageMember(
-                cast("str", msg.source),
-                cast("str", msg.source),
-            )
-            abm.message_id = str(msg.id)
-            abm.timestamp = int(cast("int | str", msg.time))
-            abm.session_id = abm.sender.user_id
+            abm.sender = MessageMember(sender_id, sender_id)
+            abm.message_id = interaction_id
+            create_time = msg._data.get("CreateTime")
+            if create_time:
+                abm.timestamp = int(cast(int | str, create_time))
+            abm.session_id = sender_id
             abm.raw_message = msg
         elif isinstance(msg, ImageMessage):
             abm.message_str = "[图片]"
             abm.self_id = str(msg.agent)
-            abm.message = [Image(file=msg.image, url=msg.image)]
-            abm.type = MessageType.FRIEND_MESSAGE
-            abm.sender = MessageMember(
-                cast("str", msg.source),
-                cast("str", msg.source),
-            )
-            abm.message_id = str(msg.id)
-            abm.timestamp = int(cast("int | str", msg.time))
-            abm.session_id = abm.sender.user_id
-            abm.raw_message = msg
+            image_url = message_text(msg, "image", "PicUrl")
+            abm.message = [Image(file=image_url, url=image_url)]
+            self._set_message_metadata(abm, msg)
         elif isinstance(msg, VoiceMessage):
             resp: Response = await asyncio.get_running_loop().run_in_executor(
                 None,
@@ -404,15 +439,7 @@ class WecomPlatformAdapter(Platform):
             abm.message_str = ""
             abm.self_id = str(msg.agent)
             abm.message = [Record(file=path_wav, url=path_wav)]
-            abm.type = MessageType.FRIEND_MESSAGE
-            abm.sender = MessageMember(
-                cast("str", msg.source),
-                cast("str", msg.source),
-            )
-            abm.message_id = str(msg.id)
-            abm.timestamp = int(cast("int | str", msg.time))
-            abm.session_id = abm.sender.user_id
-            abm.raw_message = msg
+            self._set_message_metadata(abm, msg)
         else:
             logger.warning(f"暂未实现的事件: {msg.type}")
             return
@@ -420,6 +447,7 @@ class WecomPlatformAdapter(Platform):
         self.agent_id = abm.self_id
         logger.info(f"abm: {abm}")
         await self.handle_msg(abm)
+        return abm
 
     async def convert_wechat_kf_message(self, msg: dict) -> AstrBotMessage | None:
         msgtype = msg.get("msgtype")
@@ -427,14 +455,44 @@ class WecomPlatformAdapter(Platform):
         abm = AstrBotMessage()
         abm.raw_message = msg
         abm.raw_message["_wechat_kf_flag"] = None  # 方便处理
-        abm.self_id = msg["open_kfid"]
+        abm.self_id = msg.get("open_kfid") or msg.get("OpenKfId") or ""
         abm.sender = MessageMember(external_userid, external_userid)
         abm.session_id = external_userid
         abm.type = MessageType.FRIEND_MESSAGE
         abm.message_id = msg.get("msgid", uuid.uuid4().hex[:8])
         abm.message_str = ""
         if msgtype == "text":
-            text = msg.get("text", {}).get("content", "").strip()
+            text_data = msg.get("text", {})
+            text = text_data.get("content", "").strip()
+            menu_id = text_data.get("menu_id")
+            if isinstance(menu_id, str) and menu_id:
+                try:
+                    action_id, data = decode_button_callback(
+                        menu_id, allow_expired=True
+                    )
+                except ValueError:
+                    if menu_id.startswith("astrbot:"):
+                        logger.debug(
+                            "Ignored an expired or invalid AstrBot menu action."
+                        )
+                        return None
+                    logger.debug(
+                        "Treating an unrecognized WeCom customer-service menu "
+                        "callback as a regular text message."
+                    )
+                else:
+                    abm.message = [
+                        ButtonInteraction(
+                            action_id=action_id,
+                            data=data,
+                            interaction_id=abm.message_id,
+                            source_message_id=None,
+                            callback_data=menu_id,
+                        )
+                    ]
+                    abm.message_str = action_id
+                    await self.handle_msg(abm)
+                    return abm
             if self._is_duplicate_wechat_kf_text_message(abm.session_id, text):
                 logger.debug(
                     "忽略 15 秒内重复微信客服文本消息 session_id=%s text=%s",
@@ -508,6 +566,7 @@ class WecomPlatformAdapter(Platform):
             logger.warning(f"未实现的微信客服消息事件: {msg}")
             return
         await self.handle_msg(abm)
+        return abm
 
     async def handle_msg(self, message: AstrBotMessage) -> None:
         message_event = WecomPlatformEvent(
@@ -529,3 +588,20 @@ class WecomPlatformAdapter(Platform):
         except Exception as _:
             pass
         logger.info("企业微信 适配器已被关闭")
+
+    def create_event(self, message: AstrBotMessage) -> WecomPlatformEvent:
+        """Creates a WeCom message event.
+
+        Args:
+            message: AstrBot message object to wrap.
+
+        Returns:
+            Created WeCom message event.
+        """
+        return WecomPlatformEvent(
+            message_str=message.message_str,
+            message_obj=message,
+            platform_meta=self.meta(),
+            session_id=message.session_id,
+            client=self.client,
+        )

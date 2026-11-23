@@ -7,11 +7,13 @@
   "buttons": {
     "update": "更新",
     "account": "账户",
+    "logout": "退出登录",
     "theme": {
       "light": "浅色模式",
-      "dark": "深色模式"
-    },
-    "logout": "退出登录"
+      "dark": "深色模式",
+      "title": "主题",
+      "system": "跟随系统"
+    }
   },
   "updateDialog": {
     "title": "更新 AstrBot",
@@ -59,7 +61,10 @@
       "restart": "正在准备重启...",
       "restarting": "正在重启 AstrBot",
       "completed": "更新完成",
-      "failed": "更新失败"
+      "failed": "更新失败",
+      "successReady": "更新成功",
+      "autoReloadIn": "将在 {seconds} 秒后自动刷新页面",
+      "reloadNow": "立即刷新"
     },
     "redirectConfirm": {
       "title": "即将跳转",
@@ -81,6 +86,9 @@
       "hasNewVersion": "发现新版本，可点击确认升级。",
       "isLatest": "已经是最新版本",
       "installing": "正在下载并安装更新，完成后将自动重启应用...",
+      "downloading": "正在下载更新…",
+      "verifying": "下载完成，正在校验更新包…",
+      "applying": "正在安装更新，完成后将自动重启应用…",
       "checkFailed": "检查更新失败，请稍后重试。",
       "installFailed": "升级失败，请稍后重试。"
     },
@@ -91,7 +99,9 @@
       "isLatest": "已经是最新版本了。",
       "fallback": "完整更新异常时，可仅重新下载 WebUI 作为兜底。",
       "downloadAndUpdate": "下载并更新"
-    }
+    },
+    "releases": "版本列表",
+    "showPreReleases": "显示预发布版本"
   },
   "accountDialog": {
     "title": "修改账户",
@@ -127,6 +137,7 @@
     },
     "messages": {
       "updateFailed": "修改失败，请重试"
-    }
+    },
+    "securityWarningMd5": "新的 AstrBot 版本强化了安全策略，请重新修改密码"
   }
 }

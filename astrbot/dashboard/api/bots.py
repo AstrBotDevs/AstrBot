@@ -2,8 +2,10 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Depends, Query, Request
 
+from astrbot.dashboard.api.payloads import json_or_empty as _json_or_empty
+from astrbot.dashboard.api.payloads import required_text as _required_text
 from astrbot.dashboard.responses import error, ok
-from astrbot.dashboard.schemas import BotConfigRequest, EnabledPatch
+from astrbot.dashboard.schemas import BotCleanupTarget, BotConfigRequest, EnabledPatch
 from astrbot.dashboard.services.config_service import BotConfigService
 
 from .auth import AuthContext, ScopeDependency
@@ -21,21 +23,6 @@ require_bot_scope = ScopeDependency("bot")
 
 def get_service(request: Request) -> BotConfigService:
     return request.app.state.services.bots
-
-
-async def _json_or_empty(request: Request) -> dict:
-    try:
-        data = await request.json()
-    except Exception:
-        return {}
-    return data if isinstance(data, dict) else {}
-
-
-def _required_text(value: object, name: str) -> str:
-    text = str(value or "").strip()
-    if not text:
-        raise ValueError(f"Missing key: {name}")
-    return text
 
 
 def _config_from_body(body: dict) -> dict:
@@ -115,10 +102,11 @@ async def update_bot_by_id(
 @router.delete("/bots/by-id")
 async def delete_bot_by_id(
     bot_id: str = Query(...),
+    cleanup: list[BotCleanupTarget] | None = Query(default=None),
     _auth: AuthContext = Depends(require_bot_scope),
     service: BotConfigService = Depends(get_service),
 ):
-    await service.delete_bot(bot_id)
+    await service.delete_bot(bot_id, cleanup=cleanup)
     return ok(message="删除平台配置成功~")
 
 
@@ -184,10 +172,11 @@ async def update_bot(
 @router.delete("/bots/{bot_id:path}")
 async def delete_bot(
     bot_id: str,
+    cleanup: list[BotCleanupTarget] | None = Query(default=None),
     _auth: AuthContext = Depends(require_bot_scope),
     service: BotConfigService = Depends(get_service),
 ):
-    await service.delete_bot(bot_id)
+    await service.delete_bot(bot_id, cleanup=cleanup)
     return ok(message="删除平台配置成功~")
 
 

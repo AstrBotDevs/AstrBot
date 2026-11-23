@@ -163,8 +163,11 @@ class TestCommandFilter:
     def test_validate_and_convert_params_bool_invalid(self):
         cf = CommandFilter(command_name="test")
         cf.handler_params = {"enabled": bool}
-        with pytest.raises(ValueError, match="必须是布尔值"):
+        with pytest.raises(ValueError, match="参数 enabled 类型错误") as error:
             cf.validate_and_convert_params(["invalid"], cf.handler_params)
+        assert "enabled(bool)" in str(error.value)
+        assert isinstance(error.value.__cause__, ValueError)
+        assert "必须是布尔值" in str(error.value.__cause__)
 
     def test_validate_and_convert_params_missing_required(self):
         cf = CommandFilter(command_name="test")

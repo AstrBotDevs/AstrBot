@@ -1,44 +1,25 @@
-"""Tests for astrbot.core.pipeline.bootstrap module."""
+"""Real stage imports register exactly one built-in class per stage."""
 
-import pytest
+from importlib import import_module
 
-from astrbot.core.pipeline.bootstrap import ensure_builtin_stages_registered
+from astrbot.core.pipeline import bootstrap
+from astrbot.core.pipeline.stage import registered_stages
 
 
-class TestPipelineBootstrap:
-    """Smoke tests for pipeline bootstrap utilities."""
-
-    def test_module_import(self):
-        """Verify the bootstrap module can be imported."""
-        import astrbot.core.pipeline.bootstrap  # noqa: F811
-        assert hasattr(astrbot.core.pipeline.bootstrap, "ensure_builtin_stages_registered")
-
-    def test_ensure_builtin_stages_registered_is_callable(self):
-        """Verify ensure_builtin_stages_registered is a function."""
-        assert callable(ensure_builtin_stages_registered)
-
-    def test_ensure_builtin_stages_registered_runs(self):
-        """Verify ensure_builtin_stages_registered runs without error."""
-        # Should be idempotent and not raise
-        ensure_builtin_stages_registered()
-
-    def test_registered_stages_contains_expected(self):
-        """Verify that after registration, expected stage names are present."""
-        from astrbot.core.pipeline.stage import registered_stages
-
-        ensure_builtin_stages_registered()
-        stage_names = {cls.__name__ for cls in registered_stages}
-        expected = {
-            "WakingCheckStage",
-            "WhitelistCheckStage",
-            "SessionStatusCheckStage",
-            "RateLimitStage",
-            "ContentSafetyCheckStage",
-            "PreProcessStage",
-            "ProcessStage",
-            "ResultDecorateStage",
-            "RespondStage",
-        }
-        assert expected.issubset(stage_names), (
-            f"Missing stages: {expected - stage_names}"
-        )
+def test_real_builtin_bootstrap_is_idempotent(monkeypatch):
+    monkeypatch.setattr(bootstrap, "_builtin_stages_registered", False)
+    bootstrap.ensure_builtin_stages_registered()
+    first = list(registered_stages)
+    bootstrap.ensure_builtin_stages_registered()
+    assert registered_stages == first
+    names = [stage.__name__ for stage in first]
+    assert bootstrap._EXPECTED_STAGE_NAMES.issubset(names)
+    for name in bootstrap._EXPECTED_STAGE_NAMES:
+        assert names.count(name) == 1
+    for module_path in bootstrap._BUILTIN_STAGE_MODULES:
+        module = import_module(module_path)
+        owned_classes = [
+            stage for stage in first if stage.__module__ == module.__name__
+        ]
+        assert len(owned_classes) == 1
+        assert getattr(module, owned_classes[0].__name__) is owned_classes[0]

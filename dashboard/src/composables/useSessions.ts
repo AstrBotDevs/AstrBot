@@ -1,4 +1,4 @@
-import { computed, ref } from "vue";
+import { computed, reactive, ref } from "vue";
 import { useRouter } from "vue-router";
 import { chatApi, configRouteApi } from "@/api/v1";
 import { buildWebchatUmoDetails, getStoredSelectedChatConfigId } from "@/utils/chatConfigBinding";
@@ -13,13 +13,20 @@ export interface Session {
   created_at: string;
 }
 
-export function useSessions(chatboxMode = false) {
+export function useSessions(chatboxMode: boolean = false) {
   const router = useRouter();
   const sessions = ref<Session[]>([]);
+  const sessionsPagination = reactive({
+    page: 0,
+    hasMore: false,
+    loading: false,
+    error: false,
+    append: false,
+  });
+  let sessionsRequestId = 0;
   const selectedSessions = ref<string[]>([]);
   const currSessionId = ref("");
   const pendingSessionId = ref<string | null>(null);
-
   // 编辑标题相关
   const editTitleDialog = ref(false);
   const editingTitle = ref("");
@@ -30,34 +37,41 @@ export function useSessions(chatboxMode = false) {
     return sessions.value.find((s) => s.session_id === currSessionId.value);
   });
 
-  async function getSessions() {
+  async function getSessions(append = false) {
+    if (append && (sessionsPagination.loading || !sessionsPagination.hasMore)) return;
+    const requestId = ++sessionsRequestId;
+    const lastPage = append ? sessionsPagination.page + 1 : Math.max(1, sessionsPagination.page);
+    const loaded = append ? [...sessions.value] : [];
+    sessionsPagination.loading = true;
+    sessionsPagination.error = false;
+    sessionsPagination.append = append;
     try {
-      const response = await chatApi.listSessions();
-      sessions.value = response.data.data;
-
-      // 处理待加载的会话
-      if (pendingSessionId.value) {
-        const session = sessions.value.find((s) => s.session_id === pendingSessionId.value);
-        if (session) {
-          selectedSessions.value = [pendingSessionId.value];
-          pendingSessionId.value = null;
+      // Refresh the loaded range after mutations so older visible sessions stay accessible.
+      for (let page = append ? lastPage : 1; page <= lastPage; page++) {
+        const response = await chatApi.listSessions({ page, page_size: 30 });
+        if (requestId !== sessionsRequestId) return;
+        if (response.data.status !== "ok") {
+          throw new Error(response.data.message || "Failed to load sessions");
         }
-      } else if (currSessionId.value) {
-        // 如果当前有选中的会话，确保它在列表中并被选中
-        const session = sessions.value.find((s) => s.session_id === currSessionId.value);
-        if (session) {
-          selectedSessions.value = [currSessionId.value];
+        const payload = response.data.data;
+        loaded.push(...payload.sessions);
+        const hasMore = page * payload.page_size < payload.total;
+        if (page === lastPage || !hasMore) {
+          sessions.value = [...new Map(loaded.map((session) => [session.session_id, session])).values()];
+          sessionsPagination.page = page;
+          sessionsPagination.hasMore = hasMore;
+          break;
         }
-      } else if (sessions.value.length > 0) {
-        // 默认选择第一个会话
-        const firstSession = sessions.value[0];
-        selectedSessions.value = [firstSession.session_id];
       }
     } catch (err: any) {
+      if (requestId !== sessionsRequestId) return;
+      sessionsPagination.error = true;
       if (err.response?.status === 401) {
         router.push("/auth/login?redirect=/chatbox");
       }
       console.error(err);
+    } finally {
+      if (requestId === sessionsRequestId) sessionsPagination.loading = false;
     }
   }
 
@@ -73,9 +87,7 @@ export function useSessions(chatboxMode = false) {
       if (selectedConfigId && selectedConfigId !== "default" && platformId === "webchat") {
         try {
           const umoDetails = buildWebchatUmoDetails(sessionId, false);
-          await configRouteApi.upsert(umoDetails.umo, {
-            config_id: selectedConfigId,
-          });
+          await configRouteApi.upsert(umoDetails.umo, { config_id: selectedConfigId });
         } catch (err) {
           console.error("Failed to bind config to session", err);
         }
@@ -137,9 +149,7 @@ export function useSessions(chatboxMode = false) {
   async function batchDeleteSessions(sessionIds: string[]): Promise<BatchDeleteResult> {
     try {
       const currentSessionId = currSessionId.value;
-      const response = await chatApi.batchDeleteSessions({
-        session_ids: sessionIds,
-      });
+      const response = await chatApi.batchDeleteSessions({ session_ids: sessionIds });
       if (response.data?.status !== "ok") {
         throw new Error(response.data?.message || "Failed to batch delete sessions");
       }
@@ -220,6 +230,7 @@ export function useSessions(chatboxMode = false) {
 
   return {
     sessions,
+    sessionsPagination,
     selectedSessions,
     currSessionId,
     pendingSessionId,

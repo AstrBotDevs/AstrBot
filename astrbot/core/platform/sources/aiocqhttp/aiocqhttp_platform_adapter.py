@@ -5,7 +5,7 @@ import logging
 import time
 import uuid
 from collections.abc import Awaitable, Coroutine
-from typing import Any, TypedDict
+from typing import Any, Required, TypedDict
 
 from aiocqhttp import CQHttp, Event
 from aiocqhttp.exceptions import ActionFailed
@@ -36,7 +36,7 @@ from .aiocqhttp_message_event import AiocqhttpMessageEvent
 
 
 class OneBotSenderPayload(TypedDict, total=False):
-    user_id: str | int
+    user_id: Required[str | int]
     card: str
     nickname: str
 
@@ -70,17 +70,17 @@ def _normalize_sender(raw: object) -> OneBotSenderPayload | None:
     if raw_sender is None:
         return None
 
-    sender: OneBotSenderPayload = {}
     user_id = raw_sender.get("user_id")
-    if isinstance(user_id, str | int):
-        sender["user_id"] = user_id
+    if not isinstance(user_id, str | int):
+        return None
+    sender: OneBotSenderPayload = {"user_id": user_id}
     card = raw_sender.get("card")
     if isinstance(card, str):
         sender["card"] = card
     nickname = raw_sender.get("nickname")
     if isinstance(nickname, str):
         sender["nickname"] = nickname
-    return sender if "user_id" in sender else None
+    return sender
 
 
 def _normalize_segment_data(raw: object) -> OneBotMessageSegmentData:
@@ -334,7 +334,7 @@ class AiocqhttpAdapter(Platform):
             abm.type = MessageType.GROUP_MESSAGE
             abm.group_id = str(event.group_id)
             abm.group = Group(str(event.group_id))
-            abm.group.group_name = event.get("group_name", "N/A")
+            abm.group.group_name = event.get("group_name")
         elif event["message_type"] == "private":
             abm.type = MessageType.FRIEND_MESSAGE
         abm.session_id = (
@@ -358,6 +358,7 @@ class AiocqhttpAdapter(Platform):
             for raw_segment in event.message
             if (segment := _normalize_segment(raw_segment)) is not None
         ]
+        routing_params = {"self_id": event.self_id} if event.self_id else {}
         for t, m_group in itertools.groupby(
             normalized_segments,
             key=lambda segment: segment["type"],
@@ -397,12 +398,14 @@ class AiocqhttpAdapter(Platform):
                                     action="get_group_file_url",
                                     file_id=file_id,
                                     group_id=event.group_id,
+                                    **routing_params,
                                 )
                                 ret_data = _normalize_object_dict(ret)
                             elif abm.type == MessageType.FRIEND_MESSAGE:
                                 ret = await self.bot.call_action(
                                     action="get_private_file_url",
                                     file_id=file_id,
+                                    **routing_params,
                                 )
                                 ret_data = _normalize_object_dict(ret)
                             resolved_url = _get_optional_str(ret_data, "url")
@@ -437,6 +440,7 @@ class AiocqhttpAdapter(Platform):
                             reply_event_data = await self.bot.call_action(
                                 action="get_msg",
                                 message_id=int(reply_message_id),
+                                **routing_params,
                             )
                             reply_event_payload = _normalize_object_dict(
                                 reply_event_data,
@@ -492,6 +496,7 @@ class AiocqhttpAdapter(Platform):
                             group_id=event.group_id,
                             user_id=int(qq),
                             no_cache=False,
+                            **routing_params,
                         )
                         at_info_data = _normalize_object_dict(at_info)
                         if at_info_data:
@@ -501,6 +506,7 @@ class AiocqhttpAdapter(Platform):
                                     action="get_stranger_info",
                                     user_id=int(qq),
                                     no_cache=False,
+                                    **routing_params,
                                 )
                                 at_info_data = _normalize_object_dict(at_info)
                                 nickname = _get_optional_str(
@@ -608,15 +614,25 @@ class AiocqhttpAdapter(Platform):
     def meta(self) -> PlatformMetadata:
         return self.metadata
 
-    async def handle_msg(self, message: AstrBotMessage) -> None:
-        message_event = AiocqhttpMessageEvent(
+    def create_event(self, message: AstrBotMessage) -> AiocqhttpMessageEvent:
+        """Creates an aiocqhttp message event.
+
+        Args:
+            message: AstrBot message object to wrap.
+
+        Returns:
+            Created aiocqhttp message event.
+        """
+        return AiocqhttpMessageEvent(
             message_str=message.message_str,
             message_obj=message,
             platform_meta=self.meta(),
             session_id=message.session_id,
             bot=self.bot,
         )
-        self.commit_event(message_event)
+
+    async def handle_msg(self, message: AstrBotMessage) -> None:
+        self.commit_event(self.create_event(message))
 
     def get_client(self) -> CQHttp:
         return self.bot

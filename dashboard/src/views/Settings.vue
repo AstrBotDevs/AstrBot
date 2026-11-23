@@ -1,449 +1,537 @@
 <template>
   <div class="settings-page">
-    <!-- Network Card -->
-    <v-card class="mb-4" variant="flat">
-      <v-card-title class="d-flex align-center">
-        <v-icon class="mr-2" size="20">mdi-earth</v-icon>
-        {{ tm("network.title") }}
-      </v-card-title>
-      <v-card-text>
-        <ProxySelector />
-      </v-card-text>
-    </v-card>
+    <header class="settings-page__header"> <h1 class="settings-page__title">{{ tm('page.title') }}</h1> <v-btn v-if="['general', 'network', 'security'].includes(activeSettingsSection)"
+  icon="mdi-refresh" variant="text" :aria-label="tmConfig('actions.refresh')"
+  :title="tmConfig('actions.refresh')" :loading="systemConfigLoading"
+  :disabled="systemConfigSaving || configSave2faDialogVisible"
+  @click="refreshSystemConfigFromFile" />
+</header>
 
-    <!-- Sidebar Card -->
-    <v-card class="mb-4" variant="flat">
-      <v-card-title class="d-flex align-center">
-        <v-icon class="mr-2" size="20">mdi-menu</v-icon>
-        {{ tm("sidebar.title") }}
-      </v-card-title>
-      <v-card-subtitle>{{ tm("sidebar.customize.subtitle") }}</v-card-subtitle>
-      <v-card-text>
-        <SidebarCustomizer />
-      </v-card-text>
-    </v-card>
+    <div class="settings-layout">
+      <nav class="settings-nav" :aria-label="tm('page.title')">
+        <button
+          v-for="item in settingsNavItems"
+          :key="item.id"
+          type="button"
+          class="settings-nav__item"
+          :class="{
+                        'settings-nav__item--active': activeSettingsSection === item.id,
+                        'settings-nav__item--divider': item.dividerBefore
+                    }"
+          :aria-pressed="activeSettingsSection === item.id"
+          @click="activeSettingsSection = item.id"
+        >
+          <span class="settings-nav__icon" :class="item.icon" aria-hidden="true"></span>
+          <span>{{ item.label }}</span>
+        </button>
+      </nav>
 
-    <!-- Theme Card -->
-    <v-card class="mb-4" variant="flat">
-      <v-card-title class="d-flex align-center">
-        <v-icon class="mr-2" size="20">mdi-palette</v-icon>
-        {{ tm("theme.customize.title") }}
-      </v-card-title>
-      <v-card-subtitle>{{ tm("theme.subtitle") }}</v-card-subtitle>
-      <v-card-text>
-        <!-- Row 1: Preset selector + theme mode -->
-        <div class="d-flex flex-wrap align-center ga-4 mb-4 ml-3">
-          <v-select
-            v-model="selectedThemePreset"
-            :items="presetOptions"
-            :label="tm('theme.customize.preset')"
-            hide-details
-            variant="outlined"
-            density="compact"
-            style="min-width: 200px; max-width: 280px"
-            @update:model-value="applyThemePreset"
-          />
-          <v-btn-toggle
-            v-model="themeMode"
-            mandatory
-            density="compact"
-            color="primary"
-          >
-            <v-btn value="light" size="small">
-              <v-icon class="mr-1" size="18">mdi-white-balance-sunny</v-icon>
-              {{ tm("theme.customize.light") }}
-            </v-btn>
-            <v-btn value="dark" size="small">
-              <v-icon class="mr-1" size="18">mdi-moon-waning-crescent</v-icon>
-              {{ tm("theme.customize.dark") }}
-            </v-btn>
-            <v-btn value="auto" size="small">
-              <v-icon class="mr-1" size="18">mdi-sync</v-icon>
-              {{ tm("theme.customize.auto") }}
-            </v-btn>
-          </v-btn-toggle>
-          <v-tooltip location="top">
-            <template #activator="{ props }">
-              <v-icon v-bind="props" size="16" color="primary" class="ml-1"
-                >mdi-help-circle-outline</v-icon
+      <main class="settings-main pe-3">
+        <v-slide-y-reverse-transition>
+          <div v-if="systemConfigRestartRequired" class="system-config-restart-bar" role="status">
+            <div class="system-config-restart-bar__inner">
+              <div class="system-config-restart-bar__message">
+                <v-icon size="18">mdi-alert-circle</v-icon>
+                <span>{{ tm('systemConfig.restartRequired') }}</span>
+              </div>
+              <v-btn size="small" variant="tonal" class="system-config-restart-bar__button" @click="restartAstrBot">
+                <v-icon class="mr-1" size="17">mdi-restart</v-icon>
+                {{ tm('system.restart.button') }}
+              </v-btn>
+            </div>
+          </div>
+        </v-slide-y-reverse-transition>
+
+        <v-progress-linear
+          v-if="systemConfigLoading || systemConfigSaving"
+          indeterminate
+          color="primary"
+          class="mb-4"
+        />
+
+        <section id="system-config" class="settings-section" v-show="activeSettingsSection === 'general'">
+          <div class="settings-section__heading">
+            <div class="settings-section__title">{{ tm('sections.general.title') }}</div>
+          </div>
+          <div class="settings-section__content">
+            <template v-if="!systemConfigLoading">
+              <div
+                v-for="group in generalSystemConfigGroups"
+                :key="group.key"
+                class="system-config-group config-form astrbot-config-form"
+                :class="{ 'system-config-group--with-cleanup': group.key === 'tempStorage' }"
+                @focusout.capture="scheduleSystemConfigAutoSave()"
               >
-            </template>
-            <span>{{ tm("theme.customize.autoSwitchDesc") }}</span>
-          </v-tooltip>
-        </div>
-
-        <!-- Row 2: Color pickers + reset -->
-        <v-card variant="outlined" class="pa-3">
-          <div class="text-body-2 text-medium-emphasis mb-3">
-            {{ tm("theme.customize.colors") }}
-          </div>
-          <div class="d-flex flex-wrap align-center ga-4">
-            <div class="d-flex align-center ga-3">
-              <v-text-field
-                v-model="primaryColor"
-                type="color"
-                :label="tm('theme.customize.primary')"
-                hide-details
-                variant="outlined"
-                density="compact"
-                style="width: 140px"
-              />
-              <div
-                class="color-preview"
-                :style="{ backgroundColor: primaryColor }"
-              />
-            </div>
-            <div class="d-flex align-center ga-3">
-              <v-text-field
-                v-model="secondaryColor"
-                type="color"
-                :label="tm('theme.customize.secondary')"
-                hide-details
-                variant="outlined"
-                density="compact"
-                style="width: 140px"
-              />
-              <div
-                class="color-preview"
-                :style="{ backgroundColor: secondaryColor }"
-              />
-            </div>
-            <v-btn
-              size="small"
-              variant="tonal"
-              color="primary"
-              @click="resetThemeColors"
-            >
-              <v-icon class="mr-1" size="16">mdi-restore</v-icon>
-              {{ tm("theme.customize.reset") }}
-            </v-btn>
-          </div>
-        </v-card>
-      </v-card-text>
-    </v-card>
-
-    <!-- System Card -->
-    <v-card class="mb-4" variant="flat">
-      <v-card-title class="d-flex align-center">
-        <v-icon class="mr-2" size="20">mdi-cog</v-icon>
-        {{ tm("system.title") }}
-      </v-card-title>
-      <v-card-text>
-        <div class="d-flex flex-wrap ga-3 mb-4">
-          <div>
-            <div class="text-body-2 mb-1">{{ tm("system.backup.title") }}</div>
-            <div class="text-caption text-medium-emphasis mb-2">
-              {{ tm("system.backup.subtitle") }}
-            </div>
-            <v-btn color="primary" size="small" @click="openBackupDialog">
-              <v-icon class="mr-1" size="16">mdi-backup-restore</v-icon>
-              {{ tm("system.backup.button") }}
-            </v-btn>
-          </div>
-          <v-divider vertical class="mx-2 mx-md-4" />
-          <div>
-            <div class="text-body-2 mb-1">{{ tm("system.restart.title") }}</div>
-            <div class="text-caption text-medium-emphasis mb-2">
-              {{ tm("system.restart.subtitle") }}
-            </div>
-            <v-btn color="error" size="small" @click="restartAstrBot">
-              <v-icon class="mr-1" size="16">mdi-restart</v-icon>
-              {{ tm("system.restart.button") }}
-            </v-btn>
-          </div>
-          <v-divider vertical class="mx-2 mx-md-4" />
-          <div>
-            <div class="text-body-2 mb-1">
-              {{ tm("system.migration.title") }}
-            </div>
-            <div class="text-caption text-medium-emphasis mb-2">
-              {{ tm("system.migration.subtitle") }}
-            </div>
-            <v-btn
-              color="primary"
-              size="small"
-              variant="outlined"
-              @click="startMigration"
-            >
-              <v-icon class="mr-1" size="16">mdi-database-import</v-icon>
-              {{ tm("system.migration.button") }}
-            </v-btn>
-          </div>
-        </div>
-        <StorageCleanupPanel />
-      </v-card-text>
-    </v-card>
-
-    <!-- API Key Card -->
-    <v-card class="mb-4" variant="flat">
-      <v-card-title class="d-flex align-center">
-        <v-icon class="mr-2" size="20">mdi-key</v-icon>
-        {{ tm("apiKey.manageTitle") }}
-        <v-tooltip location="top">
-          <template #activator="{ props }">
-            <v-btn
-              v-bind="props"
-              icon
-              size="x-small"
-              variant="text"
-              class="ml-2"
-              :aria-label="tm('apiKey.docsLink')"
-              href="https://docs.astrbot.app/dev/openapi.html"
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              <v-icon size="18">mdi-help-circle-outline</v-icon>
-            </v-btn>
-          </template>
-          <span>{{ tm("apiKey.docsLink") }}</span>
-        </v-tooltip>
-      </v-card-title>
-      <v-card-subtitle>{{ tm("apiKey.subtitle") }}</v-card-subtitle>
-      <v-card-text>
-        <v-row density="compact">
-          <v-col cols="12" md="4">
-            <v-text-field
-              v-model="newApiKeyName"
-              :label="tm('apiKey.name')"
-              variant="outlined"
-              density="compact"
-              hide-details
-            />
-          </v-col>
-          <v-col cols="12" md="3">
-            <v-select
-              v-model="newApiKeyExpiresInDays"
-              :items="apiKeyExpiryOptions"
-              :label="tm('apiKey.expiresInDays')"
-              variant="outlined"
-              density="compact"
-              hide-details
-            />
-          </v-col>
-          <v-col cols="12" md="5" class="d-flex align-center">
-            <v-btn
-              color="primary"
-              :loading="apiKeyCreating"
-              @click="createApiKey"
-            >
-              <v-icon class="mr-2">mdi-key-plus</v-icon>
-              {{ tm("apiKey.create") }}
-            </v-btn>
-          </v-col>
-          <v-col v-if="newApiKeyExpiresInDays === 'permanent'" cols="12">
-            <v-alert type="warning" variant="tonal" density="comfortable">
-              {{ tm("apiKey.permanentWarning") }}
-            </v-alert>
-          </v-col>
-          <v-col cols="12">
-            <div class="text-caption text-medium-emphasis mb-2">
-              {{ tm("apiKey.scopes") }}
-            </div>
-            <div class="api-key-scope-list mb-3">
-              <div
-                v-for="scope in availableScopes"
-                :key="scope.value"
-                class="api-key-scope-item"
-              >
-                <v-checkbox
-                  v-model="newApiKeyScopes"
-                  :value="scope.value"
-                  density="compact"
-                  hide-details
-                  color="primary"
-                >
-                  <template #label>
-                    <div class="api-key-scope-label">
-                      <code>{{ scope.label }}</code>
-                      <span>{{ tm(scope.descriptionKey) }}</span>
-                    </div>
-                  </template>
-                </v-checkbox>
-                <div
-                  v-if="scope.children?.length && newApiKeyScopes.includes(scope.value)"
-                  class="api-key-subscope-list"
-                >
-                  <div class="api-key-subscope-heading">
-                    {{ tm("apiKey.sensitiveSubscope") }}
+                <div class="system-config-group__heading">
+                  <div class="system-config-group__title">{{ group.title }}</div>
+                  <div v-if="group.key === 'runtime' && timezoneTimePreview" class="timezone-time-preview">
+                    <span class="timezone-time-preview__item">
+                      {{ tm('systemConfig.timePreview.label') }}
+                      ·
+                      {{ timezoneTimePreview.offsetLabel }} {{ timezoneTimePreview.localTime }}
+                    </span>
                   </div>
-                  <v-checkbox
-                    v-for="child in scope.children"
-                    :key="child.value"
-                    v-model="newApiKeyScopes"
-                    :value="child.value"
-                    density="compact"
+                </div>
+                <AstrBotConfigV4 :metadata="group.metadata" :iterable="systemConfigData" :metadata-key="group.key" />
+                <StorageCleanupPanel v-if="group.key === 'tempStorage'" class="storage-cleanup-panel--attached" />
+              </div>
+            </template>
+          </div>
+        </section>
+
+        <section id="settings-appearance" class="settings-section" v-show="activeSettingsSection === 'appearance'">
+          <div class="settings-section__heading">
+            <div class="settings-section__title">{{ tm('sections.appearance.title') }}</div>
+          </div>
+          <div class="settings-section__content">
+            <div class="settings-list-card">
+              <div class="settings-item">
+                <div class="settings-item__label">
+                  <div class="settings-item__title">{{ tm('chatNavigation.title') }}</div>
+                  <div class="settings-item__subtitle">{{ tm('chatNavigation.subtitle') }}</div>
+                </div>
+                <div class="settings-item__control">
+                  <v-switch
+                    :model-value="customizer.chatNavigationInSidebar"
+                    @update:model-value="customizer.SET_CHAT_NAVIGATION_IN_SIDEBAR(Boolean($event))"
+                    :aria-label="tm('chatNavigation.title')"
+                    color="primary"
+                    inset
                     hide-details
-                    color="warning"
-                  >
-                    <template #label>
-                      <div class="api-key-scope-label">
-                        <code>{{ child.label }}</code>
-                        <span>{{ tm(child.descriptionKey) }}</span>
-                      </div>
-                    </template>
-                  </v-checkbox>
+                    density="compact"
+                  />
+                </div>
+              </div>
+              <div class="settings-item settings-item--color">
+                <div class="settings-item__label">
+                  <div class="settings-item__title">{{ tm('theme.customize.title') }}</div>
+                  <div class="settings-item__subtitle">{{ tm('theme.subtitle') }}</div>
+                </div>
+                <div class="settings-item__control settings-item__control--wide">
+                  <div class="color-controls">
+                    <v-text-field
+                      v-model="primaryColor"
+                      type="color"
+                      :label="tm('theme.customize.primary')"
+                      hide-details
+                      variant="outlined"
+                      density="compact"
+                    />
+                    <v-text-field
+                      v-model="secondaryColor"
+                      type="color"
+                      :label="tm('theme.customize.secondary')"
+                      hide-details
+                      variant="outlined"
+                      density="compact"
+                    />
+                    <v-btn size="small" variant="tonal" color="primary" @click="resetThemeColors">
+                      <v-icon class="mr-2">mdi-restore</v-icon>
+                      {{ tm('theme.customize.reset') }}
+                    </v-btn>
+                  </div>
                 </div>
               </div>
             </div>
-            <v-alert
-              v-if="newApiKeyScopes.includes('chat:admin')"
-              type="warning"
-              variant="tonal"
-              density="compact"
-              class="mb-3"
-            >
-              {{ tm("apiKey.chatAdminWarning") }}
-            </v-alert>
-          </v-col>
-          <v-col v-if="createdApiKeyPlaintext" cols="12">
-            <v-alert type="warning" variant="tonal">
-              <div class="d-flex align-center justify-space-between flex-wrap">
-                <span>{{ tm("apiKey.plaintextHint") }}</span>
-                <v-btn
-                  size="small"
-                  variant="text"
-                  color="primary"
-                  @click="copyCreatedApiKey"
-                >
-                  <v-icon class="mr-1">mdi-content-copy</v-icon>
-                  {{ tm("apiKey.copy") }}
-                </v-btn>
-              </div>
-              <code style="word-break: break-all">{{
-                createdApiKeyPlaintext
-              }}</code>
-            </v-alert>
-          </v-col>
-          <v-col cols="12">
-            <v-table density="compact">
-              <thead>
-                <tr>
-                  <th>{{ tm("apiKey.table.name") }}</th>
-                  <th>{{ tm("apiKey.table.prefix") }}</th>
-                  <th>{{ tm("apiKey.table.scopes") }}</th>
-                  <th>{{ tm("apiKey.table.status") }}</th>
-                  <th>{{ tm("apiKey.table.lastUsed") }}</th>
-                  <th>{{ tm("apiKey.table.createdAt") }}</th>
-                  <th>{{ tm("apiKey.table.actions") }}</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr v-for="item in apiKeys" :key="item.key_id">
-                  <td>{{ item.name }}</td>
-                  <td>
-                    <code>{{ item.key_prefix }}</code>
-                  </td>
-                  <td>{{ (item.scopes || []).join(", ") }}</td>
-                  <td>
-                    <v-chip
-                      size="small"
-                      :color="
-                        item.is_revoked || item.is_expired ? 'error' : 'success'
-                      "
-                      variant="tonal"
-                    >
-                      {{
-                        item.is_revoked || item.is_expired
-                          ? tm("apiKey.status.inactive")
-                          : tm("apiKey.status.active")
-                      }}
-                    </v-chip>
-                  </td>
-                  <td>{{ formatDate(item.last_used_at) }}</td>
-                  <td>{{ formatDate(item.created_at) }}</td>
-                  <td>
-                    <v-btn
-                      v-if="!item.is_revoked"
-                      size="x-small"
-                      color="warning"
-                      variant="tonal"
-                      class="mr-2"
-                      @click="revokeApiKey(item.key_id)"
-                    >
-                      {{ tm("apiKey.revoke") }}
-                    </v-btn>
-                    <v-btn
-                      size="x-small"
-                      color="error"
-                      variant="tonal"
-                      @click="deleteApiKey(item.key_id)"
-                    >
-                      {{ tm("apiKey.delete") }}
-                    </v-btn>
-                  </td>
-                </tr>
-                <tr v-if="apiKeys.length === 0">
-                  <td colspan="7" class="text-center text-medium-emphasis">
-                    {{ tm("apiKey.empty") }}
-                  </td>
-                </tr>
-              </tbody>
-            </v-table>
-          </v-col>
-        </v-row>
-      </v-card-text>
-    </v-card>
+          </div>
+        <div class="settings-list-card">
+  <div class="settings-item">
+    <div class="settings-item__label">
+      <div class="settings-item__title">{{ tm("theme.customize.preset") }}</div>
+    </div>
+    <div class="settings-item__control settings-item__control--wide">
+      <v-select v-model="selectedThemePreset" :items="presetOptions"
+        :label="tm('theme.customize.preset')" hide-details variant="outlined"
+        density="compact" @update:model-value="applyThemePreset" />
+    </div>
+  </div>
+  <div class="settings-item">
+    <div class="settings-item__label">
+      <div class="settings-item__title">{{ tm("theme.customize.title") }}</div>
+      <div class="settings-item__subtitle">{{ tm("theme.customize.autoSwitchDesc") }}</div>
+    </div>
+    <div class="settings-item__control">
+      <v-btn-toggle v-model="themeMode" mandatory density="compact" color="primary">
+        <v-btn value="light" size="small">{{ tm("theme.customize.light") }}</v-btn>
+        <v-btn value="dark" size="small">{{ tm("theme.customize.dark") }}</v-btn>
+        <v-btn value="system" size="small">{{ tm("theme.customize.auto") }}</v-btn>
+      </v-btn-toggle>
+    </div>
+  </div>
+</div>
+<div class="settings-config-panel">
+  <div class="settings-item__title">{{ tm("sidebar.title") }}</div>
+  <div class="settings-item__subtitle mb-4">{{ tm("sidebar.customize.subtitle") }}</div>
+  <SidebarCustomizer />
+</div>
+</section>
 
-    <!-- Resources / About Card -->
-    <v-card class="mb-4" variant="flat">
-      <v-card-title class="d-flex align-center">
-        <v-icon class="mr-2" size="20">mdi-information-outline</v-icon>
-        {{ tm("sections.resources.title") }}
-      </v-card-title>
-      <v-card-text>
-        <v-list bg-color="transparent" lines="two">
-          <v-list-item
-            v-for="item in resourceItems"
-            :key="item.key"
-            :prepend-icon="item.icon"
-            :append-icon="
-              item.key === 'changelog'
-                ? 'mdi-chevron-right'
-                : 'mdi-open-in-new'
-            "
-            rounded="lg"
-            @click="item.action"
-          >
-            <v-list-item-title>{{ item.title }}</v-list-item-title>
-            <v-list-item-subtitle>{{ item.subtitle }}</v-list-item-subtitle>
-          </v-list-item>
-        </v-list>
-      </v-card-text>
-    </v-card>
+        <section id="settings-network" class="settings-section" v-show="activeSettingsSection === 'network'">
+          <div class="settings-section__heading">
+            <div class="settings-section__title">{{ tm('sections.network.title') }}</div>
+          </div>
+          <div class="settings-section__content">
+            <template v-if="!systemConfigLoading">
+              <div
+                v-for="group in networkSystemConfigGroups"
+                :key="group.key"
+                class="system-config-group config-form astrbot-config-form"
+                @focusout.capture="scheduleSystemConfigAutoSave()"
+              >
+                <div class="system-config-group__title">{{ group.title }}</div>
+                <AstrBotConfigV4 :metadata="group.metadata" :iterable="systemConfigData" :metadata-key="group.key" />
+              </div>
+            </template>
+
+            <div class="settings-list-card">
+              <div class="settings-item settings-item--stack settings-item--proxy">
+                <div class="settings-item__label">
+                  <div class="settings-item__title">{{ tm('network.pypiMirror.title') }}</div>
+                  <div class="settings-item__subtitle">{{ tm('network.pypiMirror.subtitle') }}</div>
+                </div>
+                <div class="settings-item__control settings-item__control--proxy">
+                  <PypiMirrorSelector v-model="systemConfigData.pypi_index_url" />
+                </div>
+              </div>
+            </div>
+
+            <div class="settings-list-card">
+              <div class="settings-item settings-item--stack settings-item--proxy">
+                <div class="settings-item__label">
+                  <div class="settings-item__title">{{ tm('network.githubProxy.title') }}</div>
+                  <div class="settings-item__subtitle">{{ tm('network.githubProxy.subtitle') }}</div>
+                </div>
+                <div class="settings-item__control settings-item__control--proxy"> <ProxySelector /> </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section id="settings-security" class="settings-section" v-show="activeSettingsSection === 'security'">
+          <div class="settings-section__heading">
+            <div class="settings-section__title">{{ tm('sections.security.title') }}</div>
+          </div>
+          <div class="settings-section__content">
+            <template v-if="!systemConfigLoading">
+              <div
+                v-for="group in securitySystemConfigGroups"
+                :key="group.key"
+                class="system-config-group config-form astrbot-config-form"
+                @focusout.capture="scheduleSystemConfigAutoSave()"
+              >
+                <div class="system-config-group__title">{{ group.title }}</div>
+                <AstrBotConfigV4 :metadata="group.metadata" :iterable="systemConfigData" :metadata-key="group.key" />
+              </div>
+            </template>
+          </div>
+        </section>
+
+        <section id="settings-maintenance" class="settings-section" v-show="activeSettingsSection === 'maintenance'">
+          <div class="settings-section__heading">
+            <div class="settings-section__title">{{ tm('sections.maintenance.title') }}</div>
+          </div>
+          <div class="settings-section__content">
+            <div class="settings-list-card">
+              <div class="settings-item">
+                <div class="settings-item__label">
+                  <div class="settings-item__title">{{ tm('system.backup.title') }}</div>
+                  <div class="settings-item__subtitle">{{ tm('system.backup.subtitle') }}</div>
+                </div>
+                <div class="settings-item__control">
+                  <v-btn color="primary" variant="tonal" @click="openBackupDialog">
+                    <v-icon class="mr-2">mdi-backup-restore</v-icon>
+                    {{ tm('system.backup.button') }}
+                  </v-btn>
+                </div>
+              </div>
+
+              <div class="settings-item">
+                <div class="settings-item__label">
+                  <div class="settings-item__title">{{ tm('system.diagnostics.title') }}</div>
+                  <div class="settings-item__subtitle">{{ tm('system.diagnostics.subtitle') }}</div>
+                </div>
+                <div class="settings-item__control"> <LogExportButton /> </div>
+              </div>
+
+              <div class="settings-item">
+                <div class="settings-item__label">
+                  <div class="settings-item__title">{{ tm('system.restart.title') }}</div>
+                  <div class="settings-item__subtitle">{{ tm('system.restart.subtitle') }}</div>
+                </div>
+                <div class="settings-item__control">
+                  <v-btn color="error" variant="tonal" @click="restartAstrBot">
+                    <v-icon class="mr-2">mdi-restart</v-icon>
+                    {{ tm('system.restart.button') }}
+                  </v-btn>
+                </div>
+              </div>
+            </div>
+          </div>
+        <div class="settings-list-card">
+  <div class="settings-item">
+    <div class="settings-item__label">
+      <div class="settings-item__title">{{ tm("system.migration.title") }}</div>
+      <div class="settings-item__subtitle">{{ tm("system.migration.subtitle") }}</div>
+    </div>
+    <div class="settings-item__control">
+      <v-btn color="primary" variant="tonal" @click="startMigration">
+        <v-icon class="mr-2">mdi-database-import</v-icon>
+        {{ tm("system.migration.button") }}
+      </v-btn>
+    </div>
+  </div>
+</div>
+</section>
+
+        <section id="settings-openapi" class="settings-section" v-show="activeSettingsSection === 'openapi'">
+          <div class="settings-section__heading">
+            <div class="settings-section__title">{{ tm('sections.openapi.title') }}</div>
+          </div>
+          <div class="settings-section__content">
+            <div class="settings-list-card">
+              <div class="settings-item settings-item--stack">
+                <div class="settings-item__label">
+                  <div class="settings-item__title">
+                    <span>{{ tm('apiKey.manageTitle') }}</span>
+                        <v-btn
+                          icon
+                          size="x-small"
+                          variant="text"
+                          class="ml-2"
+                          :aria-label="tm('apiKey.docsLink')"
+                          href="https://docs.astrbot.app/dev/openapi.html"
+                          target="_blank"
+                          rel="noopener noreferrer"
+                        >
+                          <v-icon size="18">mdi-help-circle-outline</v-icon>
+                          <v-tooltip activator="parent" location="top">{{ tm('apiKey.docsLink') }}</v-tooltip>
+                        </v-btn>
+                  </div>
+                  <div class="settings-item__subtitle">{{ tm('apiKey.subtitle') }}</div>
+                </div>
+
+                <div class="api-key-panel">
+                  <div class="api-key-create-row">
+                    <v-text-field
+                      v-model="newApiKeyName"
+                      :label="tm('apiKey.name')"
+                      variant="outlined"
+                      density="compact"
+                      hide-details
+                    />
+                    <v-select
+                      v-model="newApiKeyExpiresInDays"
+                      :items="apiKeyExpiryOptions"
+                      :label="tm('apiKey.expiresInDays')"
+                      variant="outlined"
+                      density="compact"
+                      hide-details
+                    />
+                    <v-btn color="primary" variant="tonal" :loading="apiKeyCreating" @click="createApiKey">
+                      <v-icon class="mr-2">mdi-key-plus</v-icon>
+                      {{ tm('apiKey.create') }}
+                    </v-btn>
+                  </div>
+
+                  <v-alert
+                    v-if="newApiKeyExpiresInDays === 'permanent'"
+                    type="warning"
+                    variant="tonal"
+                    density="comfortable"
+                    class="my-3"
+                  >
+                    {{ tm('apiKey.permanentWarning') }}
+                  </v-alert>
+
+                  <div class="text-caption text-medium-emphasis mb-1">{{ tm('apiKey.scopes') }}</div>
+                  <div class="api-key-scope-list mb-3">
+                    <div v-for="scope in availableScopes" :key="scope.value" class="api-key-scope-item">
+                      <v-checkbox
+                        v-model="newApiKeyScopes"
+                        :value="scope.value"
+                        density="compact"
+                        hide-details
+                        color="primary"
+                      >
+                        <template #label>
+                          <div class="api-key-scope-label">
+                            <code>{{ scope.label }}</code>
+                            <span>{{ tm(scope.descriptionKey) }}</span>
+                          </div>
+                        </template>
+                      </v-checkbox>
+                      <div
+                        v-if="scope.children?.length && newApiKeyScopes.includes(scope.value)"
+                        class="api-key-subscope-list"
+                      >
+                        <div class="api-key-subscope-heading"> {{ tm('apiKey.sensitiveSubscope') }} </div>
+                        <v-checkbox
+                          v-for="child in scope.children"
+                          :key="child.value"
+                          v-model="newApiKeyScopes"
+                          :value="child.value"
+                          density="compact"
+                          hide-details
+                          color="warning"
+                        >
+                          <template #label>
+                            <div class="api-key-scope-label">
+                              <code>{{ child.label }}</code>
+                              <span>{{ tm(child.descriptionKey) }}</span>
+                            </div>
+                          </template>
+                        </v-checkbox>
+                      </div>
+                    </div>
+                  </div>
+
+                  <v-alert
+                    v-if="newApiKeyScopes.includes('chat:admin')"
+                    type="warning"
+                    variant="tonal"
+                    density="compact"
+                    class="mb-3"
+                  >
+                    {{ tm('apiKey.chatAdminWarning') }}
+                  </v-alert>
+
+                  <v-alert v-if="createdApiKeyPlaintext" type="warning" variant="tonal" class="mb-4">
+                    <div class="d-flex align-center justify-space-between flex-wrap">
+                      <span>{{ tm('apiKey.plaintextHint') }}</span>
+                      <v-btn size="small" variant="text" color="primary" @click="copyCreatedApiKey">
+                        <v-icon class="mr-1">mdi-content-copy</v-icon>{{ tm('apiKey.copy') }}
+                      </v-btn>
+                    </div>
+                    <code class="api-key-plain">{{ createdApiKeyPlaintext }}</code>
+                  </v-alert>
+
+                  <div class="settings-table-wrap">
+                    <v-table density="compact">
+                      <thead>
+                        <tr>
+                          <th>{{ tm('apiKey.table.name') }}</th>
+                          <th>{{ tm('apiKey.table.scopes') }}</th>
+                          <th>{{ tm('apiKey.table.status') }}</th>
+                          <th>{{ tm('apiKey.table.lastUsed') }}</th>
+                          <th>{{ tm('apiKey.table.createdAt') }}</th>
+                          <th>{{ tm('apiKey.table.actions') }}</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        <tr v-for="item in apiKeys" :key="item.key_id">
+                          <td>
+                            <div class="api-key-name-cell">
+                              <div>{{ item.name }}</div>
+                              <code>{{ item.key_prefix }}</code>
+                            </div>
+                          </td>
+                          <td>{{ (item.scopes || []).join(', ') }}</td>
+                          <td>
+                            <v-chip
+                              size="small"
+                              :color="item.is_revoked || item.is_expired ? 'error' : 'success'"
+                              variant="tonal"
+                            >
+                              {{ item.is_revoked || item.is_expired ? tm('apiKey.status.inactive') : tm('apiKey.status.active') }}
+                            </v-chip>
+                          </td>
+                          <td>{{ formatDate(item.last_used_at) }}</td>
+                          <td>{{ formatDate(item.created_at) }}</td>
+                          <td>
+                            <div class="api-key-actions">
+                              <v-btn
+                                v-if="!item.is_revoked"
+                                size="x-small"
+                                color="warning"
+                                variant="tonal"
+                                @click="revokeApiKey(item.key_id)"
+                              >
+                                {{ tm('apiKey.revoke') }}
+                              </v-btn>
+                              <v-btn size="x-small" color="error" variant="tonal" @click="deleteApiKey(item.key_id)">
+                                {{ tm('apiKey.delete') }}
+                              </v-btn>
+                            </div>
+                          </td>
+                        </tr>
+                        <tr v-if="apiKeys.length === 0">
+                          <td colspan="6" class="text-center text-medium-emphasis"> {{ tm('apiKey.empty') }} </td>
+                        </tr>
+                      </tbody>
+                    </v-table>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section id="settings-resources" class="settings-section" v-show="activeSettingsSection === 'resources'">
+          <div class="settings-section__heading">
+            <div class="settings-section__title">{{ tm('sections.resources.title') }}</div>
+          </div>
+          <div class="settings-section__content">
+            <div class="settings-list-card">
+              <div v-for="item in resourceItems" :key="item.key" class="settings-item">
+                <div class="settings-item__label">
+                  <div class="settings-item__title">{{ item.title }}</div>
+                  <div class="settings-item__subtitle">{{ item.subtitle }}</div>
+                </div>
+                <div class="settings-item__control">
+                  <v-btn variant="tonal" @click="item.action()">
+                    <v-icon class="mr-2">{{ item.icon }}</v-icon>
+                    {{ item.title }}
+                  </v-btn>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+      </main>
+    </div>
   </div>
 
   <WaitingForRestart ref="wfr" />
-  <MigrationDialog ref="migrationDialog" />
   <BackupDialog ref="backupDialog" />
+<MigrationDialog ref="migrationDialog" />
   <ChangelogDialog v-model="changelogDialog" />
+  <DashboardTwoFactorDialog
+    v-model="configSave2faDialogVisible"
+    :error-message="configSave2faError"
+    :saving="configSave2faSaving"
+    :rotation-hint="configSave2faRotationHint"
+    @confirm="handleConfigSave2faConfirm"
+    @cancel="handleConfigSave2faCancel"
+  />
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from "vue";
+import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 import { useTheme } from "vuetify";
+import { apiKeyApi, type OpenConfig, systemConfigApi } from "@/api/v1";
+import AstrBotConfigV4 from "@/components/shared/AstrBotConfigV4.vue";
 import BackupDialog from "@/components/shared/BackupDialog.vue";
 import ChangelogDialog from "@/components/shared/ChangelogDialog.vue";
+import DashboardTwoFactorDialog from "@/components/shared/DashboardTwoFactorDialog.vue";
+import LogExportButton from "@/components/shared/LogExportButton.vue";
 import MigrationDialog from "@/components/shared/MigrationDialog.vue";
 import ProxySelector from "@/components/shared/ProxySelector.vue";
+import PypiMirrorSelector from "@/components/shared/PypiMirrorSelector.vue";
 import SidebarCustomizer from "@/components/shared/SidebarCustomizer.vue";
 import StorageCleanupPanel from "@/components/shared/StorageCleanupPanel.vue";
 import WaitingForRestart from "@/components/shared/WaitingForRestart.vue";
+import type { ThemeMode } from "@/config";
 import { useI18n, useModuleI18n } from "@/i18n/composables";
 import { useCustomizerStore } from "@/stores/customizer";
 import { useToastStore } from "@/stores/toast";
 import { BlueBusinessLightTheme } from "@/theme/BlueBusinessLightTheme";
-import { DARK_THEME_NAME, LIGHT_THEME_NAME, type ThemeMode } from "@/theme/constants";
-import type {
-  ApiKey,
-  ApiKeyActionResponse,
-  ApiKeyCreatePayload,
-  ApiKeyCreateResponse,
-  ApiKeyExpiresDays,
-  ApiKeyListResponse,
-} from "@/types/api";
+import { DARK_THEME_NAME, LIGHT_THEME_NAME } from "@/theme/constants";
+import type { ApiKey, ApiKeyExpiresDays } from "@/types/api";
+import { copyToClipboard } from "@/utils/clipboard";
 import { askForConfirmation, useConfirmDialog } from "@/utils/confirmDialog";
-import axios, { AxiosError } from "@/utils/request";
+import { AxiosError } from "@/utils/request";
 import { restartAstrBot as restartAstrBotRuntime } from "@/utils/restartAstrBot";
+import { isRecord, stringArray } from "@/utils/typeGuards";
 
 interface WfrHandle {
   check: (initialStartTime?: number | null) => void | Promise<void>;
@@ -451,45 +539,52 @@ interface WfrHandle {
 }
 
 interface MigrationDialogHandle {
-  open: () => Promise<{ success: boolean; message: string }>;
+  open: () => Promise<{ success: boolean; message: string } | undefined>;
 }
 
 interface BackupDialogHandle {
   open: () => void;
 }
 
+type ApiKeyScope = NonNullable<Parameters<typeof apiKeyApi.create>[0]["scopes"]>[number];
+
 interface ApiKeyScopeOption {
-  value: string;
+  value: ApiKeyScope;
   label: string;
   descriptionKey: string;
   children?: ApiKeyScopeOption[];
 }
 
+interface SystemConfig extends OpenConfig {
+  pypi_index_url?: string;
+  dashboard?: { totp?: { enable?: boolean; secret?: string; recovery_code_hash?: string } };
+}
+type SystemConfigItem = Record<string, unknown>;
+interface SystemConfigMetadata {
+  system_group?: { metadata?: { system?: { items?: Record<string, SystemConfigItem> } } };
+}
 const { tm } = useModuleI18n("features/settings");
-const { locale, t } = useI18n();
+const { tm: tmConfig } = useModuleI18n("features/config");
+const { tm: tmMeta } = useModuleI18n("features/config-metadata");
+const { t, locale } = useI18n();
 const toastStore = useToastStore();
+const customizer = useCustomizerStore();
 const confirmDialog = useConfirmDialog();
 const theme = useTheme();
-const customizer = useCustomizerStore();
-
-// Theme mode toggle (light/dark/auto)
-const themeMode = computed({
-  get() {
-    if (customizer.autoSwitchTheme) return "auto";
-    return customizer.isDarkTheme ? "dark" : "light";
-  },
-  set(mode: ThemeMode) {
-    if (mode === "auto") {
-      customizer.SET_AUTO_SYNC(true);
-      customizer.APPLY_SYSTEM_THEME();
-      return;
-    }
-
-    customizer.SET_AUTO_SYNC(false);
-    const newTheme = mode === "dark" ? DARK_THEME_NAME : LIGHT_THEME_NAME;
-    customizer.SET_UI_THEME(newTheme);
-  },
+const themeMode = computed<ThemeMode>({
+  get: () => customizer.themeMode,
+  set: (mode) => customizer.SET_THEME_MODE(mode),
 });
+
+const getRequestErrorMessage = (error: unknown, fallback: string): string => {
+  if (error instanceof AxiosError) {
+    const data = error.response?.data;
+    if (data && typeof data === "object" && "message" in data && typeof data.message === "string") {
+      return data.message;
+    }
+  }
+  return fallback;
+};
 
 const getStoredColor = (key: string, fallback: string) => {
   const stored = typeof window !== "undefined" ? localStorage.getItem(key) : null;
@@ -552,18 +647,27 @@ const themePresets = [
 ];
 
 // Get stored preset or default to blue-business name
-const selectedThemePreset = ref(localStorage.getItem("themePreset") || themePresets[0].name);
+const storedThemePreset = localStorage.getItem("themePreset");
+const selectedThemePreset = ref(
+  themePresets.find((preset) => preset.id === storedThemePreset || preset.name === storedThemePreset)?.id ||
+    themePresets[0].id,
+);
 
 // Simple array for dropdown display
-const presetOptions = themePresets.map((p) => p.name);
+const presetOptions = computed(() =>
+  themePresets.map((preset) => ({
+    title: locale.value.startsWith("zh") ? preset.name : preset.nameEn,
+    value: preset.id,
+  })),
+);
 
-const applyThemePreset = (presetName: string) => {
-  const preset = themePresets.find((p) => p.name === presetName);
+const applyThemePreset = (presetId: string) => {
+  const preset = themePresets.find((p) => p.id === presetId);
   if (!preset) return;
 
   // Store the preset selection (store by name for display consistency)
-  localStorage.setItem("themePreset", presetName);
-  selectedThemePreset.value = presetName;
+  localStorage.setItem("themePreset", presetId);
+  selectedThemePreset.value = presetId;
 
   // Update primary and secondary colors
   primaryColor.value = preset.primary;
@@ -622,13 +726,32 @@ const resetThemeColors = () => {
 const wfr = ref<WfrHandle | null>(null);
 const migrationDialog = ref<MigrationDialogHandle | null>(null);
 const backupDialog = ref<BackupDialogHandle | null>(null);
-const changelogDialog = ref(false);
 const apiKeys = ref<ApiKey[]>([]);
 const apiKeyCreating = ref(false);
 const newApiKeyName = ref("");
 const newApiKeyExpiresInDays = ref<ApiKeyExpiresDays>(30);
-const newApiKeyScopes = ref(["bot", "provider", "im", "chat", "file"]);
+const newApiKeyScopes = ref<ApiKeyScope[]>(["bot", "provider", "im", "chat", "file"]);
 const createdApiKeyPlaintext = ref("");
+const systemConfigData = ref<SystemConfig>({});
+const systemConfigMetadata = ref<SystemConfigMetadata>({});
+const systemConfigLoading = ref(false);
+const systemConfigSaving = ref(false);
+const systemConfigLastSavedSnapshot = ref("{}");
+const systemConfigRestartRequired = ref(false);
+const configSave2faDialogVisible = ref(false);
+const configSave2faError = ref("");
+const configSave2faSaving = ref(false);
+const configSave2faRotationHint = ref("");
+const configSavePendingData = ref<SystemConfig | null>(null);
+const systemConfigAutoSaveTimer = ref<ReturnType<typeof setTimeout> | null>(null);
+const serverUtcEpochMs = ref<number | null>(null);
+const serverUtcOffsetMinutes = ref<number | null>(null);
+const serverClockAnchorMs = ref<number | null>(null);
+const serverClockTickMs = ref<number | null>(null);
+const serverClockTimer = ref<number | null>(null);
+const activeSettingsSection = ref("general");
+const changelogDialog = ref(false);
+
 const apiKeyExpiryOptions = computed(() => [
   { title: tm("apiKey.expiryOptions.day1"), value: 1 },
   { title: tm("apiKey.expiryOptions.day7"), value: 7 },
@@ -676,50 +799,25 @@ const apiKeyScopeOrder = availableScopes.flatMap((scope) => [
   scope.value,
   ...(scope.children || []).map((child) => child.value),
 ]);
-const configIncludedScopes = ["bot", "provider"];
-const sensitiveApiKeyScopes = ["config:edit_admin", "chat:admin"];
-const previousApiKeyScopes = ref([...newApiKeyScopes.value]);
 
-watch(
-  newApiKeyScopes,
-  (scopes) => {
-    const selectedScopes = new Set(scopes);
-    if (selectedScopes.has("config")) {
-      const previousScopes = new Set(previousApiKeyScopes.value);
-      const includedScopeRemoved = configIncludedScopes.some(
-        (scope) => previousScopes.has(scope) && !selectedScopes.has(scope),
-      );
-      if (includedScopeRemoved) {
-        selectedScopes.delete("config");
-      } else {
-        for (const scope of configIncludedScopes) {
-          selectedScopes.add(scope);
-        }
-      }
-    }
-    for (const scopeOption of availableScopes) {
-      if (!selectedScopes.has(scopeOption.value)) {
-        for (const child of scopeOption.children || []) {
-          selectedScopes.delete(child.value);
-        }
-      }
-    }
-    const nextScopes = apiKeyScopeOrder.filter((scope) => selectedScopes.has(scope));
-    if (nextScopes.length !== scopes.length || nextScopes.some((scope, index) => scope !== scopes[index])) {
-      newApiKeyScopes.value = nextScopes;
-    }
-    previousApiKeyScopes.value = [...nextScopes];
-  },
-  { deep: true, immediate: true },
-);
+const settingsNavItems = computed(() => [
+  { id: "general", label: tm("sections.general.title"), icon: "mdi mdi-tune-variant" },
+  { id: "appearance", label: tm("sections.appearance.title"), icon: "mdi mdi-palette-outline" },
+  { id: "network", label: tm("sections.network.title"), icon: "mdi mdi-lan-connect" },
+  { id: "security", label: tm("sections.security.title"), icon: "mdi mdi-shield-lock-outline" },
+  { id: "maintenance", label: tm("sections.maintenance.title"), icon: "mdi mdi-tools" },
+  { id: "openapi", label: tm("sections.openapi.title"), icon: "mdi mdi-api" },
+  { id: "resources", label: tm("sections.resources.title"), icon: "mdi mdi-information-outline", dividerBefore: true },
+]);
 
 const openExternalLink = (url: string) => {
+  if (typeof window === "undefined") return;
   window.open(url, "_blank", "noopener,noreferrer");
 };
 
 const openFaqLink = () => {
   openExternalLink(
-    locale.value === "en-US" ? "https://docs.astrbot.app/en/faq.html" : "https://docs.astrbot.app/faq.html",
+    locale.value.startsWith("zh-") ? "https://docs.astrbot.app/faq.html" : "https://docs.astrbot.app/en/faq.html",
   );
 };
 
@@ -756,6 +854,141 @@ const resourceItems = computed(() => [
   },
 ]);
 
+const configIncludedScopes: ApiKeyScope[] = ["bot", "provider"];
+const sensitiveApiKeyScopes: ApiKeyScope[] = ["config:edit_admin", "chat:admin"];
+const previousApiKeyScopes = ref([...newApiKeyScopes.value]);
+
+const systemConfigHasChanges = computed(
+  () => JSON.stringify(systemConfigData.value || {}) !== systemConfigLastSavedSnapshot.value,
+);
+
+const timezoneTimePreview = computed(() => {
+  if (
+    serverUtcEpochMs.value === null ||
+    serverUtcOffsetMinutes.value === null ||
+    serverClockAnchorMs.value === null ||
+    serverClockTickMs.value === null
+  ) {
+    return null;
+  }
+
+  const localDate = new Date(
+    serverUtcEpochMs.value +
+      Math.max(0, serverClockTickMs.value - serverClockAnchorMs.value) +
+      serverUtcOffsetMinutes.value * 60_000,
+  );
+  const localIsoTime = localDate.toISOString();
+  const absoluteOffset = Math.abs(serverUtcOffsetMinutes.value);
+  const offsetHours = Math.floor(absoluteOffset / 60);
+  const offsetMinutes = absoluteOffset % 60;
+  const offsetLabel =
+    serverUtcOffsetMinutes.value === 0
+      ? "UTC"
+      : `UTC${serverUtcOffsetMinutes.value > 0 ? "+" : "-"}${offsetHours}${offsetMinutes ? `:${String(offsetMinutes).padStart(2, "0")}` : ""}`;
+  return {
+    localTime: `${localIsoTime.slice(0, 4)}/${localIsoTime.slice(5, 7)}/${localIsoTime.slice(8, 10)} ${localIsoTime.slice(11, 16)}`,
+    offsetLabel,
+  };
+});
+
+const systemConfigGroups = computed(() => {
+  const systemSection = systemConfigMetadata.value?.system_group?.metadata?.system || {};
+  const systemItems = systemSection.items || {};
+  const createGroup = (key: string, itemKeys: string[]) => {
+    const items: Record<string, SystemConfigItem> = {};
+    itemKeys.forEach((itemKey) => {
+      if (systemItems[itemKey]) {
+        items[itemKey] = systemItems[itemKey];
+      }
+    });
+    return {
+      key,
+      title: tm(`systemConfig.groups.${key}.title`),
+      metadata: {
+        [key]: {
+          type: "object",
+          description: tm(`systemConfig.groups.${key}.title`),
+          hint: "",
+          items,
+        },
+      },
+    };
+  };
+
+  return [
+    createGroup("runtime", ["timezone", "callback_api_base"]),
+    createGroup("network", ["http_proxy", "no_proxy", "pip_install_arg"]),
+    createGroup("webuiSecurity", [
+      "dashboard.trust_proxy_headers",
+      "dashboard.ssl.enable",
+      "dashboard.ssl.cert_file",
+      "dashboard.ssl.key_file",
+      "dashboard.ssl.ca_certs",
+      "dashboard.auth_rate_limit.enable",
+      "dashboard.auth_rate_limit.average_interval",
+      "dashboard.auth_rate_limit.max_burst",
+      "dashboard.totp.enable",
+    ]),
+    createGroup("logs", [
+      "log_level",
+      "log_file_enable",
+      "log_file_path",
+      "log_file_max_mb",
+      "trace_enable",
+      "trace_db_path",
+      "trace_db_max_mb",
+      "trace_retention_days",
+    ]),
+    createGroup("tempStorage", ["temp_dir_max_size"]),
+  ].filter((group) => Object.keys(group.metadata[group.key].items).length > 0);
+});
+
+const generalSystemConfigGroups = computed(() =>
+  systemConfigGroups.value.filter(
+    (group) => group.key === "runtime" || group.key === "logs" || group.key === "tempStorage",
+  ),
+);
+const networkSystemConfigGroups = computed(() => systemConfigGroups.value.filter((group) => group.key === "network"));
+const securitySystemConfigGroups = computed(() =>
+  systemConfigGroups.value.filter((group) => group.key === "webuiSecurity"),
+);
+
+watch(
+  newApiKeyScopes,
+  (scopes) => {
+    let nextScopes = scopes;
+    const selectedScopes = new Set(scopes);
+    if (selectedScopes.has("config")) {
+      const previousScopes = new Set(previousApiKeyScopes.value);
+      const includedScopeRemoved = configIncludedScopes.some(
+        (scope) => previousScopes.has(scope) && !selectedScopes.has(scope),
+      );
+
+      if (includedScopeRemoved) {
+        selectedScopes.delete("config");
+      } else {
+        for (const scope of configIncludedScopes) {
+          selectedScopes.add(scope);
+        }
+      }
+    }
+    for (const scopeOption of availableScopes) {
+      if (!selectedScopes.has(scopeOption.value)) {
+        for (const child of scopeOption.children || []) {
+          selectedScopes.delete(child.value);
+        }
+      }
+    }
+
+    nextScopes = apiKeyScopeOrder.filter((scope) => selectedScopes.has(scope));
+    if (nextScopes.length !== scopes.length || nextScopes.some((scope, index) => scope !== scopes[index])) {
+      newApiKeyScopes.value = nextScopes;
+    }
+    previousApiKeyScopes.value = [...nextScopes];
+  },
+  { deep: true, immediate: true },
+);
+
 const showToast = (message: string, color: "success" | "error" | "warning" = "success") => {
   toastStore.add({
     message,
@@ -764,82 +997,222 @@ const showToast = (message: string, color: "success" | "error" | "warning" = "su
   });
 };
 
-const formatDate = (value: string | null) => {
+const formatDate = (value: string | number | null | undefined) => {
   if (!value) return "-";
   const dt = new Date(value);
   if (Number.isNaN(dt.getTime())) return "-";
   return dt.toLocaleString();
 };
 
+const loadSystemConfig = async (reloadFromFile = false) => {
+  systemConfigLoading.value = true;
+  try {
+    const res = await systemConfigApi.get(reloadFromFile);
+    if (res.data.status !== "ok") {
+      showToast(res.data.message || tm("systemConfig.messages.loadFailed"), "error");
+      return;
+    }
+    systemConfigData.value = (res.data.data?.config || {}) as SystemConfig;
+    systemConfigMetadata.value = (res.data.data?.metadata || {}) as SystemConfigMetadata;
+    const parsedServerTime = Date.parse(
+      typeof res.data.data?.server_utc_time === "string" ? res.data.data.server_utc_time : "",
+    );
+    const parsedUtcOffset = Number(res.data.data?.server_utc_offset_minutes);
+    serverUtcEpochMs.value = Number.isNaN(parsedServerTime) ? null : parsedServerTime;
+    serverUtcOffsetMinutes.value = Number.isFinite(parsedUtcOffset) ? parsedUtcOffset : null;
+    serverClockAnchorMs.value = serverUtcEpochMs.value === null ? null : performance.now();
+    serverClockTickMs.value = serverClockAnchorMs.value;
+    systemConfigLastSavedSnapshot.value = JSON.stringify(systemConfigData.value || {});
+    if (!reloadFromFile) systemConfigRestartRequired.value = false;
+  } catch (error) {
+    showToast(getRequestErrorMessage(error, tm("systemConfig.messages.loadFailed")), "error");
+  } finally {
+    systemConfigLoading.value = false;
+  }
+};
+
+const saveSystemConfig = async (
+  configOverride: SystemConfig | null = null,
+  headers: Record<string, string> = {},
+  allow2faPrompt = true,
+) => {
+  if (systemConfigSaving.value || systemConfigLoading.value) return { success: false };
+
+  systemConfigSaving.value = true;
+  const configPayload = JSON.parse(JSON.stringify(configOverride || systemConfigData.value || {}));
+  try {
+    const requestConfig = {
+      headers,
+      validateStatus: (status: number) => (status >= 200 && status < 300) || status === 401,
+    };
+    const res = await systemConfigApi.update(configPayload, requestConfig);
+
+    if (res.status === 401 && res.data?.data?.totp_required) {
+      if (allow2faPrompt && !headers["X-2FA-Code"]) {
+        configSavePendingData.value = configPayload;
+        configSave2faError.value = "";
+        configSave2faRotationHint.value = getConfigSaveRotationHint(configPayload);
+        configSave2faDialogVisible.value = true;
+        return { success: false, requires2fa: true };
+      }
+      configSave2faError.value = tmMeta("system_group.system.dashboard.totp.configSaveError");
+      configSave2faDialogVisible.value = true;
+      return { success: false, requires2fa: true };
+    }
+
+    if (res.data.status !== "ok") {
+      showToast(res.data.message || tm("systemConfig.messages.saveFailed"), "error");
+      return { success: false };
+    }
+
+    configSavePendingData.value = null;
+    configSave2faDialogVisible.value = false;
+    configSave2faError.value = "";
+    systemConfigData.value = configPayload;
+    systemConfigLastSavedSnapshot.value = JSON.stringify(configPayload);
+    serverUtcEpochMs.value = null;
+    serverUtcOffsetMinutes.value = null;
+    serverClockAnchorMs.value = null;
+    serverClockTickMs.value = null;
+    try {
+      const timeRes = await systemConfigApi.get();
+      if (timeRes.data.status === "ok") {
+        const parsedServerTime = Date.parse(
+          typeof timeRes.data.data?.server_utc_time === "string" ? timeRes.data.data.server_utc_time : "",
+        );
+        const parsedUtcOffset = Number(timeRes.data.data?.server_utc_offset_minutes);
+        serverUtcEpochMs.value = Number.isNaN(parsedServerTime) ? null : parsedServerTime;
+        serverUtcOffsetMinutes.value = Number.isFinite(parsedUtcOffset) ? parsedUtcOffset : null;
+        serverClockAnchorMs.value = serverUtcEpochMs.value === null ? null : performance.now();
+        serverClockTickMs.value = serverClockAnchorMs.value;
+      }
+    } catch {
+      // Keep the preview hidden until the backend time can be confirmed.
+    }
+    systemConfigRestartRequired.value = true;
+    showToast(res.data.message || tm("systemConfig.messages.saveSuccess"), "success");
+    return { success: true };
+  } catch (error) {
+    showToast(getRequestErrorMessage(error, tm("systemConfig.messages.saveFailed")), "error");
+    return { success: false };
+  } finally {
+    systemConfigSaving.value = false;
+  }
+};
+
+const refreshSystemConfigFromFile = async () => {
+  if (systemConfigLoading.value || systemConfigSaving.value || configSave2faDialogVisible.value) return;
+  if (
+    systemConfigHasChanges.value &&
+    !(await askForConfirmation(tmConfig("unsavedChangesWarning.reloadConfig"), confirmDialog))
+  )
+    return;
+  if (systemConfigSaving.value || configSave2faDialogVisible.value) return;
+  if (systemConfigAutoSaveTimer.value) {
+    clearTimeout(systemConfigAutoSaveTimer.value);
+    systemConfigAutoSaveTimer.value = null;
+  }
+  await loadSystemConfig(true);
+};
+
+const scheduleSystemConfigAutoSave = (delay = 250) => {
+  if (systemConfigLoading.value) return;
+  if (systemConfigAutoSaveTimer.value) {
+    clearTimeout(systemConfigAutoSaveTimer.value);
+  }
+  systemConfigAutoSaveTimer.value = setTimeout(async () => {
+    systemConfigAutoSaveTimer.value = null;
+    if (!systemConfigHasChanges.value) return;
+    if (systemConfigSaving.value) {
+      scheduleSystemConfigAutoSave();
+      return;
+    }
+    await saveSystemConfig();
+  }, delay);
+};
+
+watch(
+  systemConfigData,
+  () => {
+    if (!systemConfigHasChanges.value) return;
+    scheduleSystemConfigAutoSave(700);
+  },
+  { deep: true },
+);
+
+const getConfigSaveRotationHint = (configPayload: SystemConfig) => {
+  const postedSecret = configPayload?.dashboard?.totp?.secret;
+  if (postedSecret && typeof postedSecret === "string" && postedSecret.trim()) {
+    return tmMeta("system_group.system.dashboard.totp.configSaveRotationHint");
+  }
+  return "";
+};
+
+const handleConfigSave2faConfirm = async (payload: string) => {
+  if (!configSavePendingData.value || configSave2faSaving.value) return;
+  configSave2faSaving.value = true;
+  configSave2faError.value = "";
+  const headers = {
+    "X-2FA-Code": payload,
+  };
+  try {
+    await saveSystemConfig(JSON.parse(JSON.stringify(configSavePendingData.value)), headers, false);
+  } finally {
+    configSave2faSaving.value = false;
+  }
+};
+
+const handleConfigSave2faCancel = () => {
+  if (systemConfigLastSavedSnapshot.value) {
+    try {
+      systemConfigData.value = JSON.parse(systemConfigLastSavedSnapshot.value);
+    } catch (_) {
+      // Ignore invalid snapshots.
+    }
+  }
+  configSavePendingData.value = null;
+  configSave2faError.value = "";
+  configSave2faDialogVisible.value = false;
+};
+
 const loadApiKeys = async () => {
   try {
-    const res = await axios.get<ApiKeyListResponse>("/api/apikey/list");
+    const res = await apiKeyApi.list();
     if (res.data.status !== "ok") {
       showToast(res.data.message || tm("apiKey.messages.loadFailed"), "error");
       return;
     }
-    apiKeys.value = res.data.data;
-  } catch (e: unknown) {
-    if (e instanceof AxiosError) {
-      const data = e.response?.data as { message?: string } | undefined;
-      showToast(data?.message || tm("apiKey.messages.loadFailed"), "error");
-    } else {
-      console.error("An unexpected error occurred while loading API keys:", e);
-      showToast(tm("apiKey.messages.loadFailed"), "error");
-    }
+    apiKeys.value = (res.data.data || []).flatMap((value) => {
+      if (
+        !isRecord(value) ||
+        typeof value.key_id !== "string" ||
+        typeof value.name !== "string" ||
+        typeof value.key_prefix !== "string" ||
+        typeof value.created_at !== "string"
+      )
+        return [];
+      return [
+        {
+          key_id: value.key_id,
+          name: value.name,
+          key_prefix: value.key_prefix,
+          created_at: value.created_at,
+          scopes: stringArray(value.scopes),
+          is_revoked: value.is_revoked === true,
+          is_expired: value.is_expired === true,
+          last_used_at: typeof value.last_used_at === "string" ? value.last_used_at : null,
+          expires_at: typeof value.expires_at === "string" ? value.expires_at : null,
+        },
+      ];
+    });
+  } catch (e) {
+    showToast(getRequestErrorMessage(e, tm("apiKey.messages.loadFailed")), "error");
   }
-};
-
-const tryExecCommandCopy = (text: string): boolean => {
-  let textArea: HTMLTextAreaElement | null = null;
-  try {
-    if (typeof document === "undefined" || !document.body) return false;
-    textArea = document.createElement("textarea");
-    textArea.value = text;
-    textArea.setAttribute("readonly", "");
-    textArea.style.position = "fixed";
-    textArea.style.opacity = "0";
-    textArea.style.pointerEvents = "none";
-    textArea.style.left = "-9999px";
-    document.body.appendChild(textArea);
-    textArea.focus();
-    textArea.select();
-    textArea.setSelectionRange(0, text.length);
-    // Fallback to deprecated execCommand for older browsers
-    return document.execCommand("copy");
-  } catch (_) {
-    return false;
-  } finally {
-    try {
-      if (textArea?.parentNode) {
-        textArea.parentNode.removeChild(textArea);
-      }
-    } catch (_) {
-      // ignore cleanup errors
-    }
-  }
-};
-
-const copyTextToClipboard = async (text: string): Promise<boolean> => {
-  if (!text) return false;
-
-  // 由于execCommand被弃用，改用推荐的Clipboard API，但仍保留execCommand作为兼容性回退
-  if (typeof navigator !== "undefined" && navigator.clipboard?.writeText) {
-    try {
-      await navigator.clipboard.writeText(text);
-      return true;
-    } catch (_) {
-      // Clipboard API failed, try fallback method
-    }
-  }
-
-  // 回退到execCommand方法，兼容不支持Clipboard API的环境
-  return tryExecCommandCopy(text);
 };
 
 const copyCreatedApiKey = async () => {
   if (!createdApiKeyPlaintext.value) return;
-  const ok = await copyTextToClipboard(createdApiKeyPlaintext.value);
+  const ok = await copyToClipboard(createdApiKeyPlaintext.value);
   if (ok) {
     showToast(tm("apiKey.messages.copySuccess"), "success");
   } else {
@@ -848,48 +1221,51 @@ const copyCreatedApiKey = async () => {
 };
 
 const createApiKey = async () => {
-  const selectedScopes = apiKeyScopeOrder.filter((scope) => newApiKeyScopes.value.includes(scope));
+  const selectedScopeSet = new Set(newApiKeyScopes.value);
+  if (selectedScopeSet.has("config")) {
+    for (const scope of configIncludedScopes) {
+      selectedScopeSet.add(scope);
+    }
+  }
+  const selectedScopes = apiKeyScopeOrder.filter((scope) => selectedScopeSet.has(scope));
 
   if (selectedScopes.length === 0) {
     showToast(tm("apiKey.messages.scopeRequired"), "warning");
     return;
   }
   const selectedSensitiveScopes = selectedScopes.filter((scope) => sensitiveApiKeyScopes.includes(scope));
-  const confirmationMessage = selectedSensitiveScopes.length
-    ? tm("apiKey.sensitiveCreateConfirm", {
-        scopes: selectedSensitiveScopes.join(", "),
-      })
-    : tm("apiKey.createConfirm", { scopes: selectedScopes.join(", ") });
+  const confirmationMessage =
+    selectedSensitiveScopes.length > 0
+      ? tm("apiKey.sensitiveCreateConfirm", {
+          scopes: selectedSensitiveScopes.join(", "),
+        })
+      : tm("apiKey.createConfirm", {
+          scopes: selectedScopes.join(", "),
+        });
   if (!(await askForConfirmation(confirmationMessage, confirmDialog))) {
     return;
   }
   apiKeyCreating.value = true;
   try {
-    const payload: ApiKeyCreatePayload = {
+    const payload: Parameters<typeof apiKeyApi.create>[0] = {
       name: newApiKeyName.value,
       scopes: selectedScopes,
     };
     if (newApiKeyExpiresInDays.value !== "permanent") {
       payload.expires_in_days = Number(newApiKeyExpiresInDays.value);
     }
-    const res = await axios.post<ApiKeyCreateResponse>("/api/apikey/create", payload);
+    const res = await apiKeyApi.create(payload);
     if (res.data.status !== "ok") {
       showToast(res.data.message || tm("apiKey.messages.createFailed"), "error");
       return;
     }
-    createdApiKeyPlaintext.value = res.data.data?.api_key || "";
+    createdApiKeyPlaintext.value = typeof res.data.data?.api_key === "string" ? res.data.data.api_key : "";
     newApiKeyName.value = "";
     newApiKeyExpiresInDays.value = 30;
     showToast(tm("apiKey.messages.createSuccess"), "success");
     await loadApiKeys();
-  } catch (e: unknown) {
-    if (e instanceof AxiosError) {
-      const data = e.response?.data as { message?: string } | undefined;
-      showToast(data?.message || tm("apiKey.messages.createFailed"), "error");
-    } else {
-      console.error("An unexpected error occurred while creating API key:", e);
-      showToast(tm("apiKey.messages.createFailed"), "error");
-    }
+  } catch (e) {
+    showToast(getRequestErrorMessage(e, tm("apiKey.messages.createFailed")), "error");
   } finally {
     apiKeyCreating.value = false;
   }
@@ -897,59 +1273,40 @@ const createApiKey = async () => {
 
 const revokeApiKey = async (keyId: string) => {
   try {
-    const res = await axios.post<ApiKeyActionResponse>("/api/apikey/revoke", {
-      key_id: keyId,
-    });
+    const res = await apiKeyApi.revoke(keyId);
     if (res.data.status !== "ok") {
       showToast(res.data.message || tm("apiKey.messages.revokeFailed"), "error");
       return;
     }
     showToast(tm("apiKey.messages.revokeSuccess"), "success");
     await loadApiKeys();
-  } catch (e: unknown) {
-    if (e instanceof AxiosError) {
-      const data = e.response?.data as { message?: string } | undefined;
-      showToast(data?.message || tm("apiKey.messages.revokeFailed"), "error");
-    } else {
-      console.error("An unexpected error occurred while revoking API key:", e);
-      showToast(tm("apiKey.messages.revokeFailed"), "error");
-    }
+  } catch (e) {
+    showToast(getRequestErrorMessage(e, tm("apiKey.messages.revokeFailed")), "error");
   }
 };
 
 const deleteApiKey = async (keyId: string) => {
   try {
-    const res = await axios.post<ApiKeyActionResponse>("/api/apikey/delete", {
-      key_id: keyId,
-    });
+    const res = await apiKeyApi.delete(keyId);
     if (res.data.status !== "ok") {
       showToast(res.data.message || tm("apiKey.messages.deleteFailed"), "error");
       return;
     }
     showToast(tm("apiKey.messages.deleteSuccess"), "success");
     await loadApiKeys();
-  } catch (e: unknown) {
-    if (e instanceof AxiosError) {
-      const data = e.response?.data as { message?: string } | undefined;
-      showToast(data?.message || tm("apiKey.messages.deleteFailed"), "error");
-    } else {
-      console.error("An unexpected error occurred while deleting API key:", e);
-      showToast(tm("apiKey.messages.deleteFailed"), "error");
-    }
+  } catch (e) {
+    showToast(getRequestErrorMessage(e, tm("apiKey.messages.deleteFailed")), "error");
   }
 };
 
 const restartAstrBot = async () => {
+  const confirmed = await askForConfirmation(tm("system.restart.confirm"), confirmDialog);
+  if (!confirmed) return;
+
   try {
     await restartAstrBotRuntime(wfr.value);
-  } catch (error: unknown) {
-    if (error instanceof AxiosError) {
-      const data = error.response?.data as { message?: string } | undefined;
-      showToast(data?.message || tm("apiKey.messages.restartFailed"), "error");
-    } else {
-      console.error("An unexpected error occurred while restarting AstrBot:", error);
-      showToast(tm("apiKey.messages.restartFailed"), "error");
-    }
+  } catch (error) {
+    console.error(error);
   }
 };
 
@@ -957,7 +1314,7 @@ const startMigration = async () => {
   if (migrationDialog.value) {
     try {
       const result = await migrationDialog.value.open();
-      if (result.success) {
+      if (result?.success) {
         console.info("Migration completed successfully:", result.message);
       }
     } catch (error) {
@@ -972,31 +1329,412 @@ const openBackupDialog = () => {
   }
 };
 
-onMounted(() => {
-  loadApiKeys();
+let isUnmounted = false;
+
+onMounted(async () => {
+  await Promise.all([loadApiKeys(), loadSystemConfig()]);
+  if (isUnmounted) return;
+  serverClockTimer.value = window.setInterval(() => {
+    serverClockTickMs.value = performance.now();
+  }, 1000);
+  const hash = window.location.hash;
+  if (hash.includes("settings-appearance")) {
+    activeSettingsSection.value = "appearance";
+  } else if (hash.includes("settings-network")) {
+    activeSettingsSection.value = "network";
+  } else if (hash.includes("settings-security")) {
+    activeSettingsSection.value = "security";
+  } else if (hash.includes("settings-maintenance")) {
+    activeSettingsSection.value = "maintenance";
+  } else if (hash.includes("settings-openapi")) {
+    activeSettingsSection.value = "openapi";
+  } else if (hash.includes("settings-resources")) {
+    activeSettingsSection.value = "resources";
+  }
+});
+
+onUnmounted(() => {
+  isUnmounted = true;
+  if (serverClockTimer.value) {
+    clearInterval(serverClockTimer.value);
+    serverClockTimer.value = null;
+  }
+  if (systemConfigAutoSaveTimer.value) {
+    clearTimeout(systemConfigAutoSaveTimer.value);
+    systemConfigAutoSaveTimer.value = null;
+  }
 });
 </script>
 
 <style scoped>
+.settings-page {
+  --settings-border: rgba(17, 24, 39, 0.13);
+  --settings-divider: rgba(17, 24, 39, 0.09);
+  display: flex;
+  flex-direction: column;
+  width: min(100%, 940px);
+  height: 100%;
+  margin: 0 auto;
+  padding: 36px 18px 8px;
+}
+
+.settings-page__header {
+  margin-bottom: 28px;
+}
+
+.settings-page__title {
+  margin: 0;
+  color: rgb(var(--v-theme-on-surface));
+  font-size: 1.72rem;
+  font-weight: 780;
+  letter-spacing: 0;
+  line-height: 1.25;
+}
+
+.settings-layout {
+  display: grid;
+  grid-template-columns: 126px minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr);
+  gap: 34px;
+  align-items: stretch;
+  flex: 1;
+  min-height: 0;
+}
+
+.settings-main {
+  min-width: 0;
+  height: 100%;
+  overflow-y: auto;
+}
+
+.settings-nav {
+  /* The fixed layout keeps navigation outside the scrolling settings pane. */
+  position: static;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  height: 100%;
+  padding-top: 2px;
+  overflow-y: auto;
+}
+
+.settings-nav__item {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 34px;
+  padding: 6px 9px 6px 12px;
+  border: 0;
+  border-radius: var(--astrbot-radius-control);
+  background: transparent;
+  color: rgba(var(--v-theme-on-surface), 0.64);
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.84rem;
+  font-weight: 680;
+  line-height: 1.25;
+  text-align: left;
+  text-decoration: none;
+}
+
+.settings-nav__item:hover {
+  background: rgba(var(--v-theme-on-surface), 0.045);
+  color: rgb(var(--v-theme-on-surface));
+}
+
+.settings-nav__item--divider {
+  margin-top: 13px;
+}
+
+.settings-nav__item--divider::after {
+  position: absolute;
+  top: -9px;
+  right: 0;
+  left: 0;
+  height: 1px;
+  background: var(--settings-divider);
+  content: "";
+}
+
+.settings-nav__item--active {
+  background: rgba(var(--v-theme-on-surface), 0.07);
+  color: rgb(var(--v-theme-on-surface));
+  font-weight: 760;
+}
+
+.settings-nav__item--active .settings-nav__icon {
+  color: rgb(var(--v-theme-on-surface));
+}
+
+.settings-nav__icon {
+  width: 15px;
+  font-size: 15px;
+  line-height: 1;
+  text-align: center;
+}
+
+.settings-section {
+  margin-bottom: 0;
+  scroll-margin-top: 84px;
+}
+
+.settings-section:last-child {
+  margin-bottom: 0;
+}
+
+.settings-section__heading {
+  margin-bottom: 22px;
+}
+
+.settings-section__title {
+  color: rgb(var(--v-theme-on-surface));
+  font-size: 1.34rem;
+  font-weight: 780;
+  letter-spacing: 0;
+  line-height: 1.25;
+}
+
+.settings-section__content {
+  min-width: 0;
+}
+
+.settings-list-card {
+  overflow: hidden;
+  border: 1px solid var(--settings-border);
+  border-radius: var(--astrbot-radius-card);
+  background: rgb(var(--v-theme-surface));
+  box-shadow: none;
+}
+
+.settings-list-card:not(:last-child) {
+  margin-bottom: 28px;
+}
+
+.settings-item {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(180px, 34%);
+  gap: 18px;
+  align-items: center;
+  min-height: 60px;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--settings-divider);
+}
+
+.settings-item:last-child {
+  border-bottom: 0;
+}
+
+.settings-item--stack {
+  display: block;
+  min-height: auto;
+}
+
+.settings-item--stack > .settings-item__label {
+  margin-bottom: 14px;
+}
+
+.settings-item--proxy {
+  padding-bottom: 16px;
+}
+
+.settings-item--color {
+  grid-template-columns: minmax(0, 1fr) minmax(360px, 44%);
+}
+
+.settings-item__title {
+  display: flex;
+  align-items: center;
+  color: rgb(var(--v-theme-on-surface));
+  font-size: 0.88rem;
+  font-weight: 700;
+  letter-spacing: 0;
+  line-height: 1.4;
+}
+
+.settings-item__subtitle {
+  margin-top: 4px;
+  color: rgba(var(--v-theme-on-surface), 0.76);
+  font-size: 0.78rem;
+  line-height: 1.45;
+}
+
+.settings-item__control {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  min-width: 0;
+  width: 100%;
+  max-width: 270px;
+  justify-self: end;
+}
+
+.settings-item__control > * {
+  min-width: 0;
+}
+
+.settings-item__control--wide {
+  max-width: 520px;
+}
+
+.settings-item__control--proxy {
+  justify-content: stretch;
+  width: 100%;
+  max-width: none;
+}
+
+.settings-item__control :deep(.v-btn) {
+  min-height: 36px;
+  border-radius: var(--astrbot-radius-control);
+  font-size: 0.86rem;
+}
+
+.settings-item__control :deep(.v-field) {
+  border-radius: var(--astrbot-radius-control);
+  background-color: transparent;
+}
+
+.system-config-group {
+  --config-form-divider: var(--settings-divider);
+  margin-bottom: 30px;
+}
+
+.system-config-group:last-child {
+  margin-bottom: 0;
+}
+
+.system-config-group__heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.system-config-group__title {
+  color: rgb(var(--v-theme-on-surface));
+  font-size: 1.04rem;
+  font-weight: 760;
+  letter-spacing: 0;
+  line-height: 1.32;
+}
+
+.timezone-time-preview {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 5px;
+  font-variant-numeric: tabular-nums;
+}
+
+.timezone-time-preview__item {
+  padding: 3px 7px;
+  border: 1px solid rgba(var(--v-theme-primary), 0.16);
+  border-radius: 6px;
+  color: rgb(var(--v-theme-primary));
+  background: rgba(var(--v-theme-primary), 0.055);
+  font-size: 0.72rem;
+  font-weight: 600;
+  line-height: 1.3;
+  white-space: nowrap;
+}
+
+.system-config-group :deep(.v-card) {
+  margin-bottom: 0 !important;
+  padding-bottom: 0 !important;
+  overflow: hidden !important;
+  border: 1px solid var(--settings-border) !important;
+  border-radius: var(--astrbot-radius-card) !important;
+  background: rgb(var(--v-theme-surface)) !important;
+  box-shadow: none !important;
+}
+
+.system-config-group--with-cleanup :deep(.v-card) {
+  border-bottom-right-radius: 0 !important;
+  border-bottom-left-radius: 0 !important;
+}
+
+.system-config-group :deep(.config-section) {
+  display: none;
+}
+
+.system-config-group :deep(.collapsed-config-toggle-row) {
+  padding: 12px 18px 14px;
+  border-top: 1px solid var(--settings-divider);
+}
+
+.system-config-group :deep(.collapsed-config-toggle) {
+  margin-left: 0;
+  color: rgb(var(--v-theme-primary));
+  font-size: 0.84rem;
+  font-weight: 650;
+}
+
+.api-key-panel {
+  min-width: 0;
+  font-size: 0.82rem;
+}
+
+.api-key-create-row {
+  display: grid;
+  grid-template-columns: minmax(150px, 1fr) minmax(118px, 160px) auto;
+  gap: 8px;
+  align-items: center;
+  margin-bottom: 10px;
+}
+
+.api-key-panel :deep(.v-field),
+.api-key-panel :deep(.v-btn) {
+  border-radius: var(--astrbot-radius-control);
+}
+
+.api-key-panel :deep(.v-field) {
+  min-height: 36px;
+  font-size: 0.84rem;
+  background-color: transparent;
+}
+
+.api-key-panel :deep(.v-field__input) {
+  min-height: 36px;
+  padding-top: 6px;
+  padding-bottom: 6px;
+  font-size: 0.84rem;
+}
+
+.api-key-panel :deep(.v-field-label) {
+  font-size: 0.78rem;
+}
+
+.api-key-panel :deep(.v-btn) {
+  min-height: 36px;
+  padding: 0 14px;
+  font-size: 0.84rem;
+}
+
 .api-key-scope-list {
   overflow: hidden;
-  border: 1px solid rgba(var(--v-theme-on-surface), 0.12);
-  border-radius: 10px;
+  border: 1px solid var(--settings-border);
+  border-radius: var(--astrbot-radius-card);
 }
 
 .api-key-scope-item {
   padding: 8px 14px;
-  border-bottom: 1px solid rgba(var(--v-theme-on-surface), 0.08);
+  border-bottom: 1px solid var(--settings-divider);
 }
 
 .api-key-scope-item:last-child {
   border-bottom: 0;
 }
 
+.api-key-scope-item :deep(.v-selection-control) {
+  align-items: flex-start;
+}
+
 .api-key-scope-label {
   display: grid;
-  padding: 3px 0;
   gap: 2px;
+  padding: 3px 0;
 }
 
 .api-key-scope-label code {
@@ -1012,8 +1750,8 @@ onMounted(() => {
 }
 
 .api-key-subscope-list {
-  padding: 10px 12px;
   margin: 4px 0 4px 34px;
+  padding: 10px 12px;
   border-left: 3px solid rgb(var(--v-theme-warning));
   border-radius: 0 8px 8px 0;
   background: rgba(var(--v-theme-warning), 0.07);
@@ -1027,4 +1765,217 @@ onMounted(() => {
   letter-spacing: 0.04em;
   text-transform: uppercase;
 }
+
+.api-key-plain {
+  display: block;
+  margin-top: 8px;
+  word-break: break-all;
+}
+
+.api-key-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.api-key-name-cell {
+  display: grid;
+  gap: 4px;
+}
+
+.api-key-name-cell code {
+  width: fit-content;
+  color: rgba(var(--v-theme-on-surface), 0.66);
+}
+
+.settings-table-wrap {
+  width: 100%;
+  overflow-x: auto;
+  border: 1px solid var(--settings-border);
+  border-radius: var(--astrbot-radius-card);
+}
+
+.settings-table-wrap :deep(.v-table) {
+  font-size: 0.82rem;
+}
+
+.settings-table-wrap :deep(.v-table th) {
+  height: 40px;
+  padding: 0 10px;
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+
+.settings-table-wrap :deep(.v-table td) {
+  height: 44px;
+  padding: 8px 10px;
+  font-size: 0.82rem;
+  line-height: 1.35;
+}
+
+.settings-table-wrap :deep(.v-table code) {
+  font-size: 0.8rem;
+}
+
+.color-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+  justify-content: flex-end;
+}
+
+.color-controls :deep(.v-input) {
+  flex: 0 0 118px;
+  min-width: 0;
+}
+
+.color-controls :deep(.v-btn) {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
+.settings-section__content :deep(.storage-cleanup-panel) {
+  margin: 0;
+}
+
+.settings-section__content :deep(.storage-cleanup-panel--attached .storage-cleanup-card) {
+  margin-top: -1px;
+  border-top-left-radius: 0;
+  border-top-right-radius: 0;
+}
+
+.system-config-restart-bar {
+  position: fixed;
+  right: 24px;
+  bottom: 24px;
+  z-index: 30;
+  width: min(420px, calc(100vw - 48px));
+  border: 0;
+  border-radius: var(--astrbot-radius-card);
+  background:
+    linear-gradient(rgba(var(--v-theme-on-surface), 0.055), rgba(var(--v-theme-on-surface), 0.055)),
+    rgba(var(--v-theme-surface), 0.74);
+  box-shadow: none;
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+}
+
+.system-config-restart-bar__inner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  width: 100%;
+  min-height: 48px;
+  padding: 8px 12px 8px 16px;
+}
+
+.system-config-restart-bar__message {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  color: rgba(var(--v-theme-on-surface), 0.78);
+  font-size: 0.84rem;
+  font-weight: 560;
+  line-height: 1.35;
+}
+
+.system-config-restart-bar__message .v-icon {
+  color: rgba(var(--v-theme-on-surface), 0.54);
+}
+
+.system-config-restart-bar__button {
+  flex: 0 0 auto;
+  min-height: 32px;
+  border: 0;
+  border-radius: var(--astrbot-radius-control);
+  color: rgba(var(--v-theme-on-surface), 0.76) !important;
+  background-color: rgba(var(--v-theme-on-surface), 0.1) !important;
+  box-shadow: none !important;
+  font-size: 0.82rem;
+  font-weight: 650;
+}
+
+@media (max-width: 720px) {
+  .settings-page {
+    padding: 32px 14px 8px;
+  }
+
+  .settings-page__header {
+    margin-bottom: 22px;
+  }
+
+  .settings-page__title {
+    font-size: 1.36rem;
+  }
+
+  .settings-layout {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto minmax(0, 1fr);
+    gap: 22px;
+  }
+
+  .settings-nav {
+    position: static;
+    flex-flow: row wrap;
+    gap: 6px;
+    height: auto;
+    overflow-y: hidden;
+  }
+
+  .settings-nav__item {
+    border: 1px solid var(--settings-border);
+    background: rgb(var(--v-theme-surface));
+  }
+
+  .settings-item,
+  .api-key-create-row {
+    grid-template-columns: 1fr;
+  }
+
+  .settings-item {
+    gap: 12px;
+    align-items: stretch;
+    padding: 14px 16px;
+  }
+
+  .settings-item__control {
+    max-width: none;
+    justify-self: stretch;
+  }
+
+  .color-controls {
+    justify-content: flex-start;
+  }
+
+  .color-controls :deep(.v-input) {
+    flex: 1 1 120px;
+    max-width: none;
+  }
+
+  .system-config-group__heading {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .timezone-time-preview {
+    justify-content: flex-start;
+  }
+
+  .system-config-restart-bar__inner {
+    align-items: center;
+    gap: 8px;
+    padding: 8px 10px 8px 12px;
+  }
+
+  .system-config-restart-bar__message {
+    font-size: 0.8rem;
+  }
+}
+</style>
+
+<style>
+@import "@/styles/config-form.css";
 </style>

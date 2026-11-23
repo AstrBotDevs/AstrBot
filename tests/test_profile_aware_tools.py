@@ -8,6 +8,8 @@ from unittest.mock import patch
 
 import pytest
 
+from astrbot.core.astr_agent_runtime.main_agent.computer_use import _apply_sandbox_tools
+
 # ═══════════════════════════════════════════════════════════════
 # ShipyardNeoBooter.capabilities
 # ═══════════════════════════════════════════════════════════════
@@ -17,7 +19,9 @@ class TestShipyardNeoBooterCapabilities:
     """Test capabilities property on ShipyardNeoBooter."""
 
     def _make_booter(self, sandbox_caps: list[str] | None = None):
-        from astrbot.core.computer.booters.shipyard_neo import ShipyardNeoBooter
+        from astrbot.core.astr_agent_runtime.computer.booters.shipyard_neo import (
+            ShipyardNeoBooter,
+        )
 
         booter = ShipyardNeoBooter(
             endpoint_url="http://localhost:8114",
@@ -72,16 +76,6 @@ def _make_req():
     return SimpleNamespace(func_tool=None, system_prompt="")
 
 
-def _import_apply_sandbox_tools():
-    """Import _apply_sandbox_tools, skipping if circular-import fails."""
-    try:
-        from astrbot.core.astr_main_agent import apply_sandbox_tools
-
-        return apply_sandbox_tools
-    except ImportError:
-        pytest.skip("Cannot import _apply_sandbox_tools (circular import in test env)")
-
-
 class TestApplySandboxToolsConditional:
     """Verify browser tools are conditionally registered."""
 
@@ -93,11 +87,14 @@ class TestApplySandboxToolsConditional:
 
     def test_no_session_registers_all(self):
         """First request (no booted session) ￫ all tools including browser."""
-        fn = _import_apply_sandbox_tools()
         config: Any = _make_config("shipyard_neo")
         req: Any = _make_req()
 
-        fn(config, req, "session-1")
+        with patch(
+            "astrbot.core.astr_agent_runtime.computer.computer_client.session_booter",
+            {},
+        ):
+            _apply_sandbox_tools(config, req, "session-1")
 
         names = self._tool_names(req)
         assert "astrbot_execute_browser" in names
@@ -105,7 +102,9 @@ class TestApplySandboxToolsConditional:
         assert "astrbot_run_browser_skill" in names
 
     def _make_neo_booter(self, caps=None):
-        from astrbot.core.computer.booters.shipyard_neo import ShipyardNeoBooter
+        from astrbot.core.astr_agent_runtime.computer.booters.shipyard_neo import (
+            ShipyardNeoBooter,
+        )
 
         booter = ShipyardNeoBooter(
             endpoint_url="http://localhost:8114",
@@ -117,7 +116,6 @@ class TestApplySandboxToolsConditional:
 
     def test_with_browser_capability(self):
         """Booted session with browser capability ￫ browser tools registered."""
-        fn = _import_apply_sandbox_tools()
         config: Any = _make_config("shipyard_neo")
         req: Any = _make_req()
         fake_booter = self._make_neo_booter(
@@ -125,26 +123,25 @@ class TestApplySandboxToolsConditional:
         )
 
         with patch(
-            "astrbot.core.computer.computer_client.session_booter",
+            "astrbot.core.astr_agent_runtime.computer.computer_client.session_booter",
             {"session-1": fake_booter},
         ):
-            fn(config, req, "session-1")
+            _apply_sandbox_tools(config, req, "session-1")
 
         names = self._tool_names(req)
         assert "astrbot_execute_browser" in names
 
     def test_without_browser_capability(self):
         """Booted session WITHOUT browser capability ￫ browser tools NOT registered."""
-        fn = _import_apply_sandbox_tools()
         config: Any = _make_config("shipyard_neo")
         req: Any = _make_req()
         fake_booter = self._make_neo_booter(caps=["python", "shell", "filesystem"])
 
         with patch(
-            "astrbot.core.computer.computer_client.session_booter",
+            "astrbot.core.astr_agent_runtime.computer.computer_client.session_booter",
             {"session-1": fake_booter},
         ):
-            fn(config, req, "session-1")
+            _apply_sandbox_tools(config, req, "session-1")
 
         names = self._tool_names(req)
         assert "astrbot_execute_browser" not in names
@@ -155,11 +152,15 @@ class TestApplySandboxToolsConditional:
 
     def test_skill_tools_always_registered(self):
         """Skill lifecycle tools are registered regardless of capabilities."""
-        fn = _import_apply_sandbox_tools()
+        fake_booter = self._make_neo_booter(caps=["python", "shell", "filesystem"])
         config: Any = _make_config("shipyard_neo")
         req: Any = _make_req()
 
-        fn(config, req, "session-1")
+        with patch(
+            "astrbot.core.astr_agent_runtime.computer.computer_client.session_booter",
+            {"session-1": fake_booter},
+        ):
+            _apply_sandbox_tools(config, req, "session-1")
 
         names = self._tool_names(req)
         assert "astrbot_create_skill_candidate" in names
@@ -175,7 +176,9 @@ class TestResolveProfile:
     """Test smart profile selection logic."""
 
     def _make_booter(self, profile: str = ""):
-        from astrbot.core.computer.booters.shipyard_neo import ShipyardNeoBooter
+        from astrbot.core.astr_agent_runtime.computer.booters.shipyard_neo import (
+            ShipyardNeoBooter,
+        )
 
         return ShipyardNeoBooter(
             endpoint_url="http://localhost:8114",
@@ -289,7 +292,9 @@ class TestBaseComputerBooter:
 
     def test_capabilities_default_none(self):
         """Test that ComputerBooter base capabilities returns None by default."""
-        from astrbot.core.computer.booters.shipyard import ShipyardBooter
+        from astrbot.core.astr_agent_runtime.computer.booters.shipyard import (
+            ShipyardBooter,
+        )
 
         # ShipyardBooter is not abstract, can be instantiated to test defaults
         booter = ShipyardBooter.__new__(ShipyardBooter)
@@ -297,7 +302,9 @@ class TestBaseComputerBooter:
 
     def test_browser_default_none(self):
         """Test that ComputerBooter base browser returns None by default."""
-        from astrbot.core.computer.booters.shipyard import ShipyardBooter
+        from astrbot.core.astr_agent_runtime.computer.booters.shipyard import (
+            ShipyardBooter,
+        )
 
         # ShipyardBooter is not abstract, can be instantiated to test defaults
         booter = ShipyardBooter.__new__(ShipyardBooter)

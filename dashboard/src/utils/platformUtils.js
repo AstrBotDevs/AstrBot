@@ -1,3 +1,7 @@
+// ?no-inline keeps the asset URL matchable by the dark mode CSS rules.
+import matrixIcon from "@/assets/images/platform_logos/matrix.svg?no-inline";
+import mattermostIcon from "@/assets/images/platform_logos/mattermost.svg?no-inline";
+
 /**
  * 平台相关工具函数
  */
@@ -8,7 +12,9 @@
  * @returns {string|undefined} 图标URL
  */
 export function getPlatformIcon(name) {
-  if (name === "aiocqhttp") {
+  if (name === "webchat") {
+    return "/favicon.svg";
+  } else if (name === "aiocqhttp") {
     return new URL("@/assets/images/platform_logos/onebot.png", import.meta.url).href;
   } else if (name === "qq_official" || name === "qq_official_webhook") {
     return new URL("@/assets/images/platform_logos/qq.png", import.meta.url).href;
@@ -30,8 +36,6 @@ export function getPlatformIcon(name) {
     return new URL("@/assets/images/platform_logos/slack.svg", import.meta.url).href;
   } else if (name === "kook") {
     return new URL("@/assets/images/platform_logos/kook.png", import.meta.url).href;
-  } else if (name === "vocechat") {
-    return new URL("@/assets/images/platform_logos/qq.png", import.meta.url).href;
   } else if (name === "satori" || name === "Satori") {
     return new URL("@/assets/images/platform_logos/satori.png", import.meta.url).href;
   } else if (name === "misskey") {
@@ -39,7 +43,9 @@ export function getPlatformIcon(name) {
   } else if (name === "line") {
     return new URL("@/assets/images/platform_logos/line.png", import.meta.url).href;
   } else if (name === "matrix") {
-    return new URL("@/assets/images/platform_logos/matrix.svg", import.meta.url).href;
+    return matrixIcon;
+  } else if (name === "mattermost") {
+    return mattermostIcon;
   }
 }
 

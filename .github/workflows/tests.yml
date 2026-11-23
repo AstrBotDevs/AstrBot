@@ -1,0 +1,92 @@
+name: Tests
+
+on:
+  push:
+    branches:
+      - master
+      - dev
+    paths-ignore:
+      - README*.md
+      - changelogs/**
+      - dashboard/**
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  python-type-check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: astral-sh/setup-uv@v10.4.0
+        with:
+          python-version: '3.12'
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24.13.0'
+
+      - name: Install Python development dependencies
+        run: |
+          uv sync --group dev
+          .venv/bin/python --version
+
+      - name: Install pinned Pyright
+        run: npm install --global pyright@1.1.414
+
+      - name: Type-check the full Python package
+        shell: bash
+        run: |
+          pyright --version
+          # Load [tool.pyright] explicitly; pyrightconfig.json has different editor defaults.
+          exec pyright --project pyproject.toml --pythonpath .venv/bin/python --stats
+
+  smoke-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: astral-sh/setup-uv@v10.4.0
+      - run: |
+          uv run ruff format --check .
+          uv run ruff check .
+          uv run scripts/smoke_startup_check.py
+
+  unit-tests:
+    needs: smoke-test
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - ubuntu-latest
+          - windows-latest
+          - macos-latest
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: astral-sh/setup-uv@v10.4.0
+
+      - name: Sandbox for Linux
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y bubblewrap
+          # Ubuntu's AppArmor policy blocks user-namespace capabilities by default.
+          # Allow them on this ephemeral runner so the real sandbox tests can run.
+          if [ -f /proc/sys/kernel/apparmor_restrict_unprivileged_userns ]; then
+            sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+          fi
+          bwrap --unshare-all --ro-bind / / /bin/true
+
+      - name: Sandbox for macOS
+        if: runner.os == 'macOS'
+        run: test -x /usr/bin/sandbox-exec
+
+      - run: bash ./scripts/run_pytests_ci.sh ./tests

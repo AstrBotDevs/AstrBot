@@ -15,29 +15,22 @@ from astrbot.core.provider.register import (
     register_provider_adapter,
 )
 
-
 # =========================================================================
 # Fixtures — fresh state per test
 # =========================================================================
 
 
 @pytest.fixture(autouse=True)
-def _clear_registries():
-    """Clear global registries before and after each test to avoid cross-test pollution."""
-    before_keys = set(provider_cls_map.keys())
-    before_len = len(provider_registry)
-
-    yield
-
-    # Restore: remove any keys/items added during the test
-    added_keys = set(provider_cls_map.keys()) - before_keys
-    for k in added_keys:
-        provider_cls_map.pop(k, None)
-
-    added_items = len(provider_registry) - before_len
-    for _ in range(added_items):
-        if provider_registry:
-            provider_registry.pop()
+def _restore_registries():
+    """Restore registry contents even if a registration assertion fails."""
+    before_map = provider_cls_map.copy()
+    before_registry = list(provider_registry)
+    try:
+        yield
+    finally:
+        provider_cls_map.clear()
+        provider_cls_map.update(before_map)
+        provider_registry[:] = before_registry
 
 
 # =========================================================================
@@ -156,6 +149,7 @@ class TestRegisterProviderAdapter:
             pass
 
         with pytest.raises(ValueError, match="已经注册"):
+
             @register_provider_adapter("dup_provider", "Second")
             class SecondProvider:
                 pass
@@ -214,17 +208,22 @@ class TestLlmTools:
         async def fake_handler(**kwargs):
             return "done"
 
-        llm_tools.add_func(
-            name="test_func",
-            func_args=[{"name": "arg1", "type": "string", "description": "An arg"}],
-            desc="A test function",
-            handler=fake_handler,
-        )
-        tool = llm_tools.get_func("test_func")
-        assert tool is not None
-        assert tool.name == "test_func"
-        llm_tools.remove_func("test_func")
-        assert llm_tools.get_func("test_func") is None
+        name = "provider-register-test-func"
+        try:
+            llm_tools.add_func(
+                name=name,
+                func_args=[{"name": "arg1", "type": "string", "description": "An arg"}],
+                desc="A test function",
+                handler=fake_handler,
+            )
+            tool = llm_tools.get_func(name)
+            assert tool is not None
+            assert tool.name == name
+            assert tool.parameters["properties"]["arg1"]["type"] == "string"
+            llm_tools.remove_func(name)
+            assert llm_tools.get_func(name) is None
+        finally:
+            llm_tools.remove_func(name)
 
     def test_llm_tools_remove_nonexistent(self):
         """Removing a function that does not exist should not raise."""

@@ -1,8 +1,7 @@
 import os
 
 import aiofiles
-import httpx
-from openai import NOT_GIVEN, AsyncOpenAI
+from openai import NOT_GIVEN, AsyncOpenAI, DefaultAsyncHttpxClient
 
 from astrbot import logger
 from astrbot.core.provider.entities import ProviderType
@@ -35,8 +34,9 @@ class ProviderOpenAITTSAPI(TTSProvider):
         http_client = None
         if proxy:
             logger.info(f"[OpenAI TTS] 使用代理: {proxy}")
-            http_client = httpx.AsyncClient(proxy=proxy)
+            http_client = DefaultAsyncHttpxClient(proxy=proxy)
         self.client = AsyncOpenAI(
+            default_headers=self.request_headers,
             api_key=self.chosen_api_key,
             base_url=provider_config.get("api_base"),
             timeout=timeout,

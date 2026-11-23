@@ -6,7 +6,6 @@ from astrbot.core.provider.register import register_provider_adapter
 from astrbot.core.utils.datetime_utils import generate_timestamp_id
 
 from .mimo_api_common import (
-    DEFAULT_MIMO_API_BASE,
     DEFAULT_MIMO_TTS_MODEL,
     DEFAULT_MIMO_TTS_SEED_TEXT,
     DEFAULT_MIMO_TTS_VOICE,
@@ -15,7 +14,7 @@ from .mimo_api_common import (
     build_headers,
     create_http_client,
     get_temp_dir,
-    normalize_timeout,
+    mimo_connection_options,
 )
 
 
@@ -31,10 +30,9 @@ class ProviderMiMoTTSAPI(TTSProvider):
         provider_settings: dict,
     ) -> None:
         super().__init__(provider_config, provider_settings)
-        self.chosen_api_key = provider_config.get("api_key", "")
-        self.api_base = provider_config.get("api_base", DEFAULT_MIMO_API_BASE)
-        self.proxy = provider_config.get("proxy", "")
-        self.timeout = normalize_timeout(provider_config.get("timeout", 20))
+        self.chosen_api_key, self.api_base, self.proxy, self.timeout = (
+            mimo_connection_options(provider_config)
+        )
         self.voice = provider_config.get("mimo-tts-voice", DEFAULT_MIMO_TTS_VOICE)
         self.audio_format = provider_config.get("mimo-tts-format", "wav")
         self.style_prompt = provider_config.get("mimo-tts-style-prompt", "")
@@ -104,7 +102,7 @@ class ProviderMiMoTTSAPI(TTSProvider):
     async def get_audio(self, text: str) -> str:
         response = await self.client.post(
             build_api_url(self.api_base),
-            headers=build_headers(self.chosen_api_key),
+            headers={**build_headers(self.chosen_api_key), **self.request_headers},
             json=self._build_payload(text),
         )
 

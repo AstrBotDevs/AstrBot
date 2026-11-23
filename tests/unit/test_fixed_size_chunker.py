@@ -11,7 +11,6 @@ import pytest
 
 from astrbot.core.knowledge_base.chunking.fixed_size import FixedSizeChunker
 
-
 # ---------------------------------------------------------------
 # Construction
 # ---------------------------------------------------------------
@@ -179,7 +178,7 @@ class TestFixedSizeChunkerKwargs:
         result = await chunker.chunk(text, chunk_size=10, chunk_overlap=3)
         # start=0: "abcdefghij", start=7: "hijklmnopq", start=14: "opqrstuvwx",
         # start=21: "vwxyz"
-        assert len(result) == 4
+        assert result == ["abcdefghij", "hijklmnopq", "opqrstuvwx", "vwxyz"]
 
 
 # ---------------------------------------------------------------
@@ -221,10 +220,7 @@ class TestFixedSizeChunkerEdgeCases:
         chunker = FixedSizeChunker(chunk_size=10, chunk_overlap=5)
         text = "line1\nline2\nline3"
         result = await chunker.chunk(text)
-        assert isinstance(result, list)
-        assert all(isinstance(c, str) for c in result)
-        # All characters should be accounted for
-        assert sum(len(c) for c in result) >= len(text)
+        assert result == ["line1\nline", "\nline2\nlin", "2\nline3", "e3"]
 
     @pytest.mark.asyncio
     async def test_unicode_text(self):
@@ -233,9 +229,7 @@ class TestFixedSizeChunkerEdgeCases:
         text = "你好世界abc"
         result = await chunker.chunk(text)
         # Chinese characters are 1 char each in Python
-        assert isinstance(result, list)
-        assert all(isinstance(c, str) for c in result)
-        assert len(result) >= 2
+        assert result == ["你好世界a", "界abc", "c"]
 
     @pytest.mark.asyncio
     async def test_exact_multiple_of_chunk_size(self):
@@ -254,8 +248,16 @@ class TestFixedSizeChunkerEdgeCases:
         # start=0: "abcde", start=1: "bcdef", ..., start=5: "fghij",
         # then start=6: "ghij", start=7: "hij", start=8: "ij", start=9: "j"
         assert result == [
-            "abcde", "bcdef", "cdefg", "defgh", "efghi", "fghij",
-            "ghij", "hij", "ij", "j",
+            "abcde",
+            "bcdef",
+            "cdefg",
+            "defgh",
+            "efghi",
+            "fghij",
+            "ghij",
+            "hij",
+            "ij",
+            "j",
         ]
 
     @pytest.mark.asyncio
@@ -293,11 +295,9 @@ class TestFixedSizeChunkerContentPreservation:
         chunker = FixedSizeChunker(chunk_size=10, chunk_overlap=3)
         text = "0123456789" * 5
         result = await chunker.chunk(text)
-        # With overlap, combined will be longer than original
-        combined = "".join(result)
-        assert len(combined) >= len(text)
-        for i, char in enumerate(text):
-            assert char in combined
+        reconstructed = result[0] + "".join(chunk[3:] for chunk in result[1:])
+        assert reconstructed == text
+        assert all(0 < len(chunk) <= 10 for chunk in result)
 
     @pytest.mark.asyncio
     async def test_chunks_are_substrings(self):
@@ -305,8 +305,7 @@ class TestFixedSizeChunkerContentPreservation:
         chunker = FixedSizeChunker(chunk_size=7, chunk_overlap=3)
         text = "abcdefghijklmnop"
         result = await chunker.chunk(text)
-        for chunk in result:
-            assert chunk in text
+        assert result == ["abcdefg", "efghijk", "ijklmno", "mnop"]
 
     @pytest.mark.asyncio
     async def test_chunks_preserve_order(self):

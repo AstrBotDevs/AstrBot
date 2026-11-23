@@ -10,33 +10,12 @@ All tests use mocks to isolate KBHelper from its dependencies.
 """
 
 import json
-import sys
-import types
 from pathlib import Path
-from unittest.mock import ANY, AsyncMock, MagicMock, PropertyMock, call, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-
-@pytest.fixture
-def stub_provider_manager_module():
-    """Stub provider manager module to avoid circular imports in unit tests."""
-    original_module = sys.modules.get("astrbot.core.provider.manager")
-    stub_module = types.ModuleType("astrbot.core.provider.manager")
-
-    class ProviderManager:
-        ...
-
-    setattr(stub_module, "ProviderManager", ProviderManager)
-    sys.modules["astrbot.core.provider.manager"] = stub_module
-
-    try:
-        yield
-    finally:
-        if original_module is not None:
-            sys.modules["astrbot.core.provider.manager"] = original_module
-        else:
-            sys.modules.pop("astrbot.core.provider.manager", None)
+from astrbot.core.knowledge_base.kb_helper import KBHelper
 
 
 @pytest.fixture
@@ -54,6 +33,9 @@ def mock_kb_db():
     """Create a mock KBSQLiteDatabase."""
     db = MagicMock()
     db.get_db = MagicMock()
+    session = MagicMock()
+    session.execute = AsyncMock()
+    db.get_db.return_value.__aenter__.return_value = session
     db.list_kbs = AsyncMock(return_value=[])
     db.get_kb_by_id = AsyncMock()
     db.list_documents_by_kb = AsyncMock(return_value=[])
@@ -113,8 +95,13 @@ def mock_rerank_provider():
         def __init__(self) -> None:
             pass
 
-        async def rerank(self, query: str, documents: list[str], top_k: int = 10) -> list[dict]:
-            return [{"index": i, "score": 1.0, "document": doc} for i, doc in enumerate(documents[:top_k])]
+        async def rerank(
+            self, query: str, documents: list[str], top_k: int = 10
+        ) -> list[dict]:
+            return [
+                {"index": i, "score": 1.0, "document": doc}
+                for i, doc in enumerate(documents[:top_k])
+            ]
 
         async def rerank_score(self, query: str, documents: list[str]) -> list[float]:
             return [1.0] * len(documents)
@@ -146,6 +133,7 @@ def mock_vec_db():
 
 @pytest.fixture
 def helper_kwargs(
+    tmp_path,
     mock_kb_db,
     mock_knowledge_base,
     mock_provider_manager,
@@ -156,7 +144,7 @@ def helper_kwargs(
         "kb_db": mock_kb_db,
         "kb": mock_knowledge_base,
         "provider_manager": mock_provider_manager,
-        "kb_root_dir": "/tmp/test_kb_root",
+        "kb_root_dir": str(tmp_path / "knowledge"),
         "chunker": mock_chunker,
     }
 
@@ -168,7 +156,6 @@ def helper_kwargs(
 
 @pytest.mark.asyncio
 async def test_construction_sets_attributes(
-    stub_provider_manager_module,
     helper_kwargs,
     mock_kb_db,
     mock_knowledge_base,
@@ -176,13 +163,12 @@ async def test_construction_sets_attributes(
     mock_chunker,
 ):
     """Test that KBHelper.__init__ sets all expected attributes."""
-    from astrbot.core.knowledge_base.kb_helper import KBHelper
 
     helper = KBHelper(
         kb_db=mock_kb_db,
         kb=mock_knowledge_base,
         provider_manager=mock_provider_manager,
-        kb_root_dir="/tmp/test_kb_root",
+        kb_root_dir=helper_kwargs["kb_root_dir"],
         chunker=mock_chunker,
     )
 
@@ -193,17 +179,17 @@ async def test_construction_sets_attributes(
     assert helper.init_error is None
     assert helper.vec_db is None
     assert isinstance(helper.kb_dir, Path)
-    assert "medias" in str(helper.kb_medias_dir)
-    assert "files" in str(helper.kb_files_dir)
+    assert helper.kb_medias_dir == helper.kb_dir / "medias" / helper.kb.kb_id
+    assert helper.kb_files_dir == helper.kb_dir / "files" / helper.kb.kb_id
+    assert helper.kb_medias_dir.is_dir()
+    assert helper.kb_files_dir.is_dir()
 
 
 @pytest.mark.asyncio
 async def test_initialize_calls_ensure_vec_db(
-    stub_provider_manager_module,
     helper_kwargs,
 ):
     """Test that initialize() delegates to _ensure_vec_db."""
-    from astrbot.core.knowledge_base.kb_helper import KBHelper
 
     with (
         patch.object(KBHelper, "_ensure_vec_db", new_callable=AsyncMock) as mock_ensure,
@@ -221,11 +207,9 @@ async def test_initialize_calls_ensure_vec_db(
 
 @pytest.mark.asyncio
 async def test_get_ep_raises_when_no_embedding_provider_id(
-    stub_provider_manager_module,
     helper_kwargs,
 ):
     """Test that get_ep raises ValueError when kb has no embedding_provider_id."""
-    from astrbot.core.knowledge_base.kb_helper import KBHelper
 
     helper = KBHelper(**helper_kwargs)
     helper.kb.embedding_provider_id = None
@@ -236,11 +220,9 @@ async def test_get_ep_raises_when_no_embedding_provider_id(
 
 @pytest.mark.asyncio
 async def test_get_ep_raises_when_provider_not_found(
-    stub_provider_manager_module,
     helper_kwargs,
 ):
     """Test that get_ep raises ValueError when provider is not found by id."""
-    from astrbot.core.knowledge_base.kb_helper import KBHelper
 
     helper_kwargs["provider_manager"].get_provider_by_id.return_value = None
     helper = KBHelper(**helper_kwargs)
@@ -251,12 +233,10 @@ async def test_get_ep_raises_when_provider_not_found(
 
 @pytest.mark.asyncio
 async def test_get_ep_raises_when_not_embedding_provider(
-    stub_provider_manager_module,
     helper_kwargs,
     mock_provider_manager,
 ):
     """Test that get_ep raises when the returned provider is not EmbeddingProvider."""
-    from astrbot.core.knowledge_base.kb_helper import KBHelper
 
     mock_provider_manager.get_provider_by_id.return_value = MagicMock()
     helper = KBHelper(**helper_kwargs)
@@ -267,13 +247,11 @@ async def test_get_ep_raises_when_not_embedding_provider(
 
 @pytest.mark.asyncio
 async def test_get_ep_returns_embedding_provider(
-    stub_provider_manager_module,
     helper_kwargs,
     mock_embedding_provider,
     mock_provider_manager,
 ):
     """Test that get_ep returns the EmbeddingProvider successfully."""
-    from astrbot.core.knowledge_base.kb_helper import KBHelper
 
     mock_provider_manager.get_provider_by_id.return_value = mock_embedding_provider
     helper = KBHelper(**helper_kwargs)
@@ -289,11 +267,9 @@ async def test_get_ep_returns_embedding_provider(
 
 @pytest.mark.asyncio
 async def test_get_rp_returns_none_when_no_rerank_provider_id(
-    stub_provider_manager_module,
     helper_kwargs,
 ):
     """Test that get_rp returns None when kb has no rerank_provider_id."""
-    from astrbot.core.knowledge_base.kb_helper import KBHelper
 
     helper = KBHelper(**helper_kwargs)
     helper.kb.rerank_provider_id = None
@@ -304,12 +280,10 @@ async def test_get_rp_returns_none_when_no_rerank_provider_id(
 
 @pytest.mark.asyncio
 async def test_get_rp_returns_none_when_provider_not_found(
-    stub_provider_manager_module,
     helper_kwargs,
     mock_provider_manager,
 ):
     """Test that get_rp returns None when the provider is not found (logs a warning)."""
-    from astrbot.core.knowledge_base.kb_helper import KBHelper
 
     mock_provider_manager.get_provider_by_id.return_value = None
     helper = KBHelper(**helper_kwargs)
@@ -320,12 +294,10 @@ async def test_get_rp_returns_none_when_provider_not_found(
 
 @pytest.mark.asyncio
 async def test_get_rp_raises_when_not_rerank_provider(
-    stub_provider_manager_module,
     helper_kwargs,
     mock_provider_manager,
 ):
     """Test that get_rp raises when the returned provider is not RerankProvider."""
-    from astrbot.core.knowledge_base.kb_helper import KBHelper
 
     mock_provider_manager.get_provider_by_id.return_value = MagicMock()
     helper = KBHelper(**helper_kwargs)
@@ -336,13 +308,11 @@ async def test_get_rp_raises_when_not_rerank_provider(
 
 @pytest.mark.asyncio
 async def test_get_rp_returns_rerank_provider(
-    stub_provider_manager_module,
     helper_kwargs,
     mock_rerank_provider,
     mock_provider_manager,
 ):
     """Test that get_rp returns the RerankProvider successfully."""
-    from astrbot.core.knowledge_base.kb_helper import KBHelper
 
     mock_provider_manager.get_provider_by_id.return_value = mock_rerank_provider
     helper = KBHelper(**helper_kwargs)
@@ -358,14 +328,12 @@ async def test_get_rp_returns_rerank_provider(
 
 @pytest.mark.asyncio
 async def test_ensure_vec_db_creates_and_initializes(
-    stub_provider_manager_module,
     helper_kwargs,
     mock_embedding_provider,
     mock_provider_manager,
     mock_vec_db,
 ):
     """Test that _ensure_vec_db creates FaissVecDB and initializes it."""
-    from astrbot.core.knowledge_base.kb_helper import KBHelper
 
     mock_provider_manager.get_provider_by_id.return_value = mock_embedding_provider
     helper = KBHelper(**helper_kwargs)
@@ -385,14 +353,12 @@ async def test_ensure_vec_db_creates_and_initializes(
 
 @pytest.mark.asyncio
 async def test_ensure_vec_db_clears_stale_init_error(
-    stub_provider_manager_module,
     helper_kwargs,
     mock_embedding_provider,
     mock_provider_manager,
     mock_vec_db,
 ):
     """Test that _ensure_vec_db clears a stale init_error on success."""
-    from astrbot.core.knowledge_base.kb_helper import KBHelper
 
     mock_provider_manager.get_provider_by_id.return_value = mock_embedding_provider
     helper = KBHelper(**helper_kwargs)
@@ -413,12 +379,10 @@ async def test_ensure_vec_db_clears_stale_init_error(
 
 @pytest.mark.asyncio
 async def test_terminate_closes_vec_db(
-    stub_provider_manager_module,
     helper_kwargs,
     mock_vec_db,
 ):
     """Test that terminate() closes the vec_db."""
-    from astrbot.core.knowledge_base.kb_helper import KBHelper
 
     helper = KBHelper(**helper_kwargs)
     helper.vec_db = mock_vec_db
@@ -429,11 +393,9 @@ async def test_terminate_closes_vec_db(
 
 @pytest.mark.asyncio
 async def test_terminate_handles_missing_vec_db(
-    stub_provider_manager_module,
     helper_kwargs,
 ):
     """Test that terminate() does not crash when vec_db is None."""
-    from astrbot.core.knowledge_base.kb_helper import KBHelper
 
     helper = KBHelper(**helper_kwargs)
     helper.vec_db = None
@@ -449,7 +411,6 @@ async def test_terminate_handles_missing_vec_db(
 
 @pytest.mark.asyncio
 async def test_upload_document_with_pre_chunked_text(
-    stub_provider_manager_module,
     helper_kwargs,
     mock_kb_db,
     mock_vec_db,
@@ -457,7 +418,6 @@ async def test_upload_document_with_pre_chunked_text(
     mock_provider_manager,
 ):
     """Test that upload_document works with pre-chunked text (skips parsing)."""
-    from astrbot.core.knowledge_base.kb_helper import KBHelper
 
     mock_provider_manager.get_provider_by_id.return_value = mock_embedding_provider
     helper = KBHelper(**helper_kwargs)
@@ -491,7 +451,6 @@ async def test_upload_document_with_pre_chunked_text(
 
 @pytest.mark.asyncio
 async def test_upload_document_parses_when_no_pre_chunked(
-    stub_provider_manager_module,
     helper_kwargs,
     mock_kb_db,
     mock_vec_db,
@@ -500,7 +459,6 @@ async def test_upload_document_parses_when_no_pre_chunked(
     mock_chunker,
 ):
     """Test that upload_document parses file content when no pre-chunked text."""
-    from astrbot.core.knowledge_base.kb_helper import KBHelper
 
     mock_provider_manager.get_provider_by_id.return_value = mock_embedding_provider
     mock_chunker.chunk = AsyncMock(return_value=["parsed chunk"])
@@ -544,14 +502,12 @@ async def test_upload_document_parses_when_no_pre_chunked(
 
 @pytest.mark.asyncio
 async def test_upload_document_raises_when_no_content_and_no_pre_chunked(
-    stub_provider_manager_module,
     helper_kwargs,
     mock_vec_db,
     mock_embedding_provider,
     mock_provider_manager,
 ):
     """Test that upload_document raises when file_content is None and no pre_chunked."""
-    from astrbot.core.knowledge_base.kb_helper import KBHelper
 
     mock_provider_manager.get_provider_by_id.return_value = mock_embedding_provider
     helper = KBHelper(**helper_kwargs)
@@ -565,6 +521,8 @@ async def test_upload_document_raises_when_no_content_and_no_pre_chunked(
             file_content=None,
             file_type="pdf",
         )
+    mock_vec_db.insert_batch.assert_not_awaited()
+    helper.kb_db.get_db.assert_called_once()
 
 
 # ---------------------------------------------------------------
@@ -574,12 +532,10 @@ async def test_upload_document_raises_when_no_content_and_no_pre_chunked(
 
 @pytest.mark.asyncio
 async def test_list_documents_delegates_to_db(
-    stub_provider_manager_module,
     helper_kwargs,
     mock_kb_db,
 ):
     """Test that list_documents delegates to kb_db.list_documents_by_kb."""
-    from astrbot.core.knowledge_base.kb_helper import KBHelper
 
     mock_kb_db.list_documents_by_kb.return_value = ["doc1", "doc2"]
     helper = KBHelper(**helper_kwargs)
@@ -597,12 +553,10 @@ async def test_list_documents_delegates_to_db(
 
 @pytest.mark.asyncio
 async def test_get_document_delegates_to_db(
-    stub_provider_manager_module,
     helper_kwargs,
     mock_kb_db,
 ):
     """Test that get_document delegates to kb_db.get_document_by_id."""
-    from astrbot.core.knowledge_base.kb_helper import KBHelper
 
     mock_kb_db.get_document_by_id.return_value = "fake_doc"
     helper = KBHelper(**helper_kwargs)
@@ -620,13 +574,11 @@ async def test_get_document_delegates_to_db(
 
 @pytest.mark.asyncio
 async def test_delete_document_delegates_to_db_and_vec_db(
-    stub_provider_manager_module,
     helper_kwargs,
     mock_kb_db,
     mock_vec_db,
 ):
     """Test that delete_document cleans up via kb_db and vec_db."""
-    from astrbot.core.knowledge_base.kb_helper import KBHelper
 
     mock_kb_db.get_kb_by_id = AsyncMock(return_value=helper_kwargs["kb"])
     helper = KBHelper(**helper_kwargs)
@@ -643,13 +595,11 @@ async def test_delete_document_delegates_to_db_and_vec_db(
 
 @pytest.mark.asyncio
 async def test_delete_chunk_delegates_to_vec_db(
-    stub_provider_manager_module,
     helper_kwargs,
     mock_kb_db,
     mock_vec_db,
 ):
     """Test that delete_chunk removes a chunk from vec_db and refreshes stats."""
-    from astrbot.core.knowledge_base.kb_helper import KBHelper
 
     mock_kb_db.get_kb_by_id = AsyncMock(return_value=helper_kwargs["kb"])
     mock_session = MagicMock()
@@ -677,13 +627,11 @@ async def test_delete_chunk_delegates_to_vec_db(
 
 @pytest.mark.asyncio
 async def test_refresh_kb_updates_self_kb(
-    stub_provider_manager_module,
     helper_kwargs,
     mock_kb_db,
     mock_knowledge_base,
 ):
     """Test that refresh_kb fetches the latest KB from the database."""
-    from astrbot.core.knowledge_base.kb_helper import KBHelper
 
     fresh_kb = MagicMock()
     fresh_kb.kb_id = mock_knowledge_base.kb_id
@@ -699,12 +647,10 @@ async def test_refresh_kb_updates_self_kb(
 
 @pytest.mark.asyncio
 async def test_refresh_document_raises_when_not_found(
-    stub_provider_manager_module,
     helper_kwargs,
     mock_kb_db,
 ):
     """Test that refresh_document raises ValueError when doc does not exist."""
-    from astrbot.core.knowledge_base.kb_helper import KBHelper
 
     mock_kb_db.get_document_by_id = AsyncMock(return_value=None)
     helper = KBHelper(**helper_kwargs)
@@ -720,12 +666,10 @@ async def test_refresh_document_raises_when_not_found(
 
 @pytest.mark.asyncio
 async def test_get_chunks_by_doc_id_returns_formatted_chunks(
-    stub_provider_manager_module,
     helper_kwargs,
     mock_vec_db,
 ):
     """Test that get_chunks_by_doc_id returns properly formatted chunks."""
-    from astrbot.core.knowledge_base.kb_helper import KBHelper
 
     mock_vec_db.document_storage.get_documents.return_value = [
         {
@@ -756,12 +700,10 @@ async def test_get_chunks_by_doc_id_returns_formatted_chunks(
 
 @pytest.mark.asyncio
 async def test_get_chunk_count_by_doc_id(
-    stub_provider_manager_module,
     helper_kwargs,
     mock_vec_db,
 ):
     """Test that get_chunk_count_by_doc_id returns the count from vec_db."""
-    from astrbot.core.knowledge_base.kb_helper import KBHelper
 
     mock_vec_db.count_documents.return_value = 42
     helper = KBHelper(**helper_kwargs)
@@ -782,11 +724,9 @@ async def test_get_chunk_count_by_doc_id(
 
 @pytest.mark.asyncio
 async def test_save_media_creates_media_record(
-    stub_provider_manager_module,
     helper_kwargs,
 ):
     """Test that _save_media saves the media file and returns a KBMedia record."""
-    from astrbot.core.knowledge_base.kb_helper import KBHelper
 
     helper = KBHelper(**helper_kwargs)
 
@@ -817,12 +757,10 @@ async def test_save_media_creates_media_record(
 
 @pytest.mark.asyncio
 async def test_upload_from_url_raises_when_no_tavily_key(
-    stub_provider_manager_module,
     helper_kwargs,
     mock_provider_manager,
 ):
     """Test that upload_from_url raises when Tavily API key is missing."""
-    from astrbot.core.knowledge_base.kb_helper import KBHelper
 
     mock_provider_manager.acm.default_conf = {"provider_settings": {}}
     helper = KBHelper(**helper_kwargs)
@@ -833,12 +771,10 @@ async def test_upload_from_url_raises_when_no_tavily_key(
 
 @pytest.mark.asyncio
 async def test_upload_from_url_delegates_to_upload_document(
-    stub_provider_manager_module,
     helper_kwargs,
     mock_provider_manager,
 ):
     """Test that upload_from_url extracts text and delegates to upload_document."""
-    from astrbot.core.knowledge_base.kb_helper import KBHelper
 
     mock_provider_manager.acm.default_conf = {
         "provider_settings": {
@@ -872,12 +808,10 @@ async def test_upload_from_url_delegates_to_upload_document(
 
 @pytest.mark.asyncio
 async def test_clean_and_rechunk_skips_when_not_enabled(
-    stub_provider_manager_module,
     helper_kwargs,
     mock_chunker,
 ):
     """Test that _clean_and_rechunk_content uses chunker directly when cleaning disabled."""
-    from astrbot.core.knowledge_base.kb_helper import KBHelper
 
     mock_chunker.chunk = AsyncMock(return_value=["chunk a", "chunk b"])
     helper = KBHelper(**helper_kwargs)
@@ -889,17 +823,17 @@ async def test_clean_and_rechunk_skips_when_not_enabled(
     )
 
     assert result == ["chunk a", "chunk b"]
-    mock_chunker.chunk.assert_awaited_once_with("some text", chunk_size=512, chunk_overlap=50)
+    mock_chunker.chunk.assert_awaited_once_with(
+        "some text", chunk_size=512, chunk_overlap=50
+    )
 
 
 @pytest.mark.asyncio
 async def test_clean_and_rechunk_skips_when_no_provider_id(
-    stub_provider_manager_module,
     helper_kwargs,
     mock_chunker,
 ):
     """Test that _clean_and_rechunk_content uses chunker when cleaning_provider_id is None."""
-    from astrbot.core.knowledge_base.kb_helper import KBHelper
 
     mock_chunker.chunk = AsyncMock(return_value=["default chunk"])
     helper = KBHelper(**helper_kwargs)
@@ -916,13 +850,11 @@ async def test_clean_and_rechunk_skips_when_no_provider_id(
 
 @pytest.mark.asyncio
 async def test_clean_and_rechunk_falls_back_on_error(
-    stub_provider_manager_module,
     helper_kwargs,
     mock_provider_manager,
     mock_chunker,
 ):
     """Test that _clean_and_rechunk_content falls back to chunker when LLM call fails."""
-    from astrbot.core.knowledge_base.kb_helper import KBHelper
 
     mock_provider_manager.get_provider_by_id = AsyncMock(
         side_effect=Exception("provider error"),

@@ -11,53 +11,31 @@
     @dragend="handleDragEnd"
   >
     <v-card-title class="d-flex justify-space-between align-center">
-      <div class="text-truncate ml-2">
-        {{ persona.persona_id }}
-      </div>
+      <div class="text-truncate ml-2"> {{ personaDisplayName(persona) }} </div>
       <v-menu offset-y>
         <template #activator="{ props }">
-          <v-btn
-            icon="mdi-dots-vertical"
-            variant="text"
-            size="small"
-            v-bind="props"
-            @click.stop
-          />
+          <v-btn icon="mdi-dots-vertical" variant="text" size="small" v-bind="props" @click.stop />
         </template>
         <v-list density="compact">
           <v-list-item @click.stop="$emit('edit')">
-            <template #prepend>
-              <v-icon size="small"> mdi-pencil </v-icon>
-            </template>
+            <template #prepend> <v-icon size="small"> mdi-pencil </v-icon> </template>
             <v-list-item-title>{{ tm("buttons.edit") }}</v-list-item-title>
           </v-list-item>
           <v-list-item @click.stop="$emit('clone')">
-            <template #prepend>
-              <v-icon size="small"> mdi-content-copy </v-icon>
-            </template>
+            <template #prepend> <v-icon size="small"> mdi-content-copy </v-icon> </template>
             <v-list-item-title>{{ tm("buttons.clone") }}</v-list-item-title>
           </v-list-item>
           <v-list-item @click.stop="$emit('move')">
-            <template #prepend>
-              <v-icon size="small"> mdi-folder-move </v-icon>
-            </template>
-            <v-list-item-title>{{
-              tm("persona.contextMenu.moveTo")
-            }}</v-list-item-title>
+            <template #prepend> <v-icon size="small"> mdi-folder-move </v-icon> </template>
+            <v-list-item-title>{{ tm("persona.contextMenu.moveTo") }}</v-list-item-title>
           </v-list-item>
           <v-list-item @click.stop="$emit('export')">
-            <template #prepend>
-              <v-icon size="small"> mdi-download </v-icon>
-            </template>
-            <v-list-item-title>{{
-              tm("persona.contextMenu.export")
-            }}</v-list-item-title>
+            <template #prepend> <v-icon size="small"> mdi-download </v-icon> </template>
+            <v-list-item-title>{{ tm("persona.contextMenu.export") }}</v-list-item-title>
           </v-list-item>
           <v-divider class="my-1" />
-          <v-list-item class="text-error" @click.stop="$emit('delete')">
-            <template #prepend>
-              <v-icon size="small" color="error"> mdi-delete </v-icon>
-            </template>
+          <v-list-item v-if="persona.persona_id !== 'default'" class="text-error" @click.stop="$emit('delete')">
+            <template #prepend> <v-icon size="small" color="error"> mdi-delete </v-icon> </template>
             <v-list-item-title>{{ tm("buttons.delete") }}</v-list-item-title>
           </v-list-item>
         </v-list>
@@ -65,9 +43,7 @@
     </v-card-title>
 
     <v-card-text>
-      <div class="system-prompt-preview">
-        {{ truncateText(persona.system_prompt, 100) }}
-      </div>
+      <div class="system-prompt-preview"> {{ truncateText(persona.system_prompt, 100) }} </div>
 
       <div class="mt-3 d-flex flex-wrap ga-1">
         <v-chip
@@ -77,19 +53,11 @@
           variant="tonal"
           prepend-icon="mdi-chat"
         >
-          {{
-            tm("labels.presetDialogs", {
+          {{ tm("labels.presetDialogs", {
               count: persona.begin_dialogs.length / 2,
-            })
-          }}
+            }) }}
         </v-chip>
-        <v-chip
-          v-if="persona.tools === null"
-          size="small"
-          color="success"
-          variant="tonal"
-          prepend-icon="mdi-tools"
-        >
+        <v-chip v-if="persona.tools === null" size="small" color="success" variant="tonal" prepend-icon="mdi-tools">
           {{ tm("form.allToolsAvailable") }}
         </v-chip>
         <v-chip
@@ -130,7 +98,7 @@
   <!-- Custom Drag Preview -->
   <div ref="dragPreview" class="drag-preview">
     <v-icon size="small" class="mr-2"> mdi-account </v-icon>
-    <span class="text-subtitle-2">{{ persona.persona_id }}</span>
+    <span class="text-subtitle-2">{{ personaDisplayName(persona) }}</span>
   </div>
 </template>
 
@@ -162,7 +130,8 @@ export default defineComponent({
   emits: ["view", "edit", "clone", "move", "export", "delete"],
   setup() {
     const { tm } = useModuleI18n("features/persona");
-    return { tm };
+    const { tm: sharedTm } = useModuleI18n("core.shared");
+    return { tm, sharedTm };
   },
   data() {
     return {
@@ -170,6 +139,9 @@ export default defineComponent({
     };
   },
   methods: {
+    personaDisplayName(persona: Persona): string {
+      return persona.persona_id === "default" ? this.sharedTm("personaSelector.defaultPersona") : persona.persona_id;
+    },
     handleDragStart(event: DragEvent) {
       this.isDragging = true;
       if (event.dataTransfer) {
@@ -210,7 +182,10 @@ export default defineComponent({
   background: rgb(var(--v-theme-surface));
   height: 100%;
   cursor: grab;
-  transition: background-color 0.16s ease, opacity 0.2s ease, transform 0.2s ease;
+  transition:
+    background-color 0.16s ease,
+    opacity 0.2s ease,
+    transform 0.2s ease;
 }
 
 .persona-card:hover,

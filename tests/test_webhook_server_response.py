@@ -1,3 +1,5 @@
+import json
+
 from fastapi.responses import JSONResponse, Response
 
 from astrbot.core.platform.webhook_server import webhook_response_from_result
@@ -25,3 +27,6 @@ def test_webhook_response_keeps_json_for_dict():
     response = webhook_response_from_result({"ok": True})
 
     assert isinstance(response, JSONResponse)
+    assert response.status_code == 200
+    assert response.headers["content-type"] == "application/json"
+    assert json.loads(response.body) == {"ok": True}

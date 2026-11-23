@@ -1,31 +1,27 @@
 <template>
-  <div class="ipython-tool-block" :class="{ compact: !showHeader }">
-    <div v-if="displayExpanded" class="py-3 animate-fade-in">
-      <!-- Code Section -->
-      <div class="code-section">
-        <div
-          v-if="shikiReady && code"
-          class="code-highlighted"
-          v-html="highlightedCode"
-        />
-        <pre v-else class="code-fallback" :class="{ 'dark-theme': isDark }">{{
-          code || "No code available"
-        }}</pre>
-      </div>
+    <div class="ipython-tool-block" :class="{ compact: !showHeader }">
+        <div v-if="displayExpanded" class="py-3 animate-fade-in">
+            <!-- Code Section -->
+            <div class="code-section">
+                <div v-if="shikiReady && code" class="code-highlighted"
+                    v-html="highlightedCode"></div>
+                <pre v-else class="code-fallback"
+                    :class="{ 'dark-theme': isDark }">{{ code || 'No code available' }}</pre>
+            </div>
 
-      <!-- Result Section -->
-      <div v-if="result" class="result-section">
-        <div class="result-label">{{ tm("ipython.output") }}:</div>
-        <pre class="result-content" :class="{ 'dark-theme': isDark }">{{
-          formattedResult
-        }}</pre>
-      </div>
+            <!-- Result Section -->
+            <div v-if="result" class="result-section">
+                <div class="result-label">
+                    {{ tm('ipython.output') }}:
+                </div>
+                <pre class="result-content"
+                    :class="{ 'dark-theme': isDark }">{{ formattedResult }}</pre>
+            </div>
+        </div>
     </div>
-  </div>
 </template>
 
 <script setup lang="ts">
-import { type BundledLanguage, type BundledTheme, createHighlighter, type HighlighterGeneric } from "shiki";
 import { computed, onMounted, ref } from "vue";
 import { useModuleI18n } from "@/i18n/composables";
 
@@ -54,8 +50,10 @@ const props = defineProps({
 
 const { tm } = useModuleI18n("features/chat");
 const isExpanded = ref(props.initialExpanded);
-const shikiHighlighter = ref<HighlighterGeneric<BundledLanguage, BundledTheme> | null>(null);
+type ShikiModule = typeof import("@/utils/shiki");
+const shikiHighlighter = ref<Awaited<ReturnType<ShikiModule["ensureShikiLanguages"]>> | null>(null);
 const shikiReady = ref(false);
+let shiki: ShikiModule | undefined;
 
 const code = computed(() => {
   try {
@@ -81,17 +79,14 @@ const formattedResult = computed(() => {
 });
 
 const highlightedCode = computed(() => {
-  if (!shikiReady.value || !shikiHighlighter.value || !code.value) {
+  if (!shikiReady.value || !shikiHighlighter.value || !shiki || !code.value) {
     return "";
   }
   try {
-    return shikiHighlighter.value.codeToHtml(code.value, {
-      lang: "python",
-      theme: props.isDark ? "min-dark" : "github-light",
-    });
+    return shiki.renderShikiCode(shikiHighlighter.value, code.value, "python", props.isDark ? "dark" : "light");
   } catch (err) {
     console.error("Failed to highlight code:", err);
-    return `<pre><code>${code.value}</code></pre>`;
+    return `<pre><code>${shiki.escapeHtml(code.value)}</code></pre>`;
   }
 });
 
@@ -104,10 +99,8 @@ const displayExpanded = computed(() => {
 
 onMounted(async () => {
   try {
-    shikiHighlighter.value = await createHighlighter({
-      themes: ["min-dark", "github-light"],
-      langs: ["python"],
-    });
+    shiki = await import("@/utils/shiki");
+    shikiHighlighter.value = await shiki.ensureShikiLanguages(["python"]);
     shikiReady.value = true;
   } catch (err) {
     console.error("Failed to initialize Shiki:", err);
@@ -117,88 +110,104 @@ onMounted(async () => {
 
 <style scoped>
 .ipython-tool-block {
-  margin-bottom: 12px;
-  margin-top: 6px;
+    margin-bottom: 12px;
+    margin-top: 6px;
+    font-size: inherit;
+    line-height: inherit;
 }
 
 .ipython-tool-block.compact {
-  margin: 0;
+    margin: 0;
 }
 
 .py-3 {
-  padding-top: 12px;
-  padding-bottom: 12px;
+    padding-top: 12px;
+    padding-bottom: 12px;
 }
 
 .code-section {
-  margin-bottom: 12px;
+    margin-bottom: 12px;
 }
 
 .code-highlighted {
-  border-radius: 6px;
-  overflow: hidden;
-  font-size: 14px;
-  line-height: 1.5;
-  overflow-x: auto;
+    border-radius: 6px;
+    overflow: hidden;
+    font-size: 12px;
+    line-height: 1.5;
+    overflow-x: auto;
+}
+
+:deep(.code-highlighted pre.shiki) {
+    margin: 0;
+    padding: 16px;
+    border-radius: 6px;
+    overflow: auto;
+}
+
+:deep(.code-highlighted pre.shiki code) {
+    display: block;
+    padding: 0;
+    background: transparent;
+    border-radius: 0;
 }
 
 .code-fallback {
-  margin: 0;
-  padding: 12px;
-  border-radius: 6px;
-  overflow-x: auto;
-  font-size: 13px;
-  line-height: 1.5;
-  background-color: #f5f5f5;
+    margin: 0;
+    padding: 12px;
+    border-radius: 6px;
+    overflow-x: auto;
+    font-size: 12px;
+    line-height: 1.5;
+    background-color: #f5f5f5;
 }
 
 .code-fallback.dark-theme {
-  background-color: transparent;
+    background-color: rgb(var(--v-theme-codeBg));
 }
 
 .result-section {
-  margin-top: 12px;
+    margin-top: 12px;
 }
 
 .result-label {
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--v-theme-secondaryText);
-  margin-bottom: 6px;
-  opacity: 0.8;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--v-theme-secondaryText);
+    margin-bottom: 6px;
+    opacity: 0.8;
 }
 
 .result-content {
-  margin: 0;
-  padding: 12px;
-  border-radius: 6px;
-  overflow-x: auto;
-  font-size: 13px;
-  line-height: 1.5;
-  background-color: #f5f5f5;
-  max-height: 300px;
-  overflow-y: auto;
+    margin: 0;
+    padding: 12px;
+    border-radius: 6px;
+    overflow-x: auto;
+    font-size: 12px;
+    line-height: 1.5;
+    background-color: #f5f5f5;
+    max-height: 300px;
+    overflow-y: auto;
 }
 
 .result-content.dark-theme {
-  background-color: transparent;
+    background-color: rgb(var(--v-theme-codeBg));
 }
 
 .animate-fade-in {
-  animation: fadeIn 0.2s ease-in-out;
+    animation: fadeIn 0.2s ease-in-out;
 }
 
-::v-deep(.code-highlighted pre) {
-  background-color: transparent !important;
+:deep(.code-highlighted pre) {
+    background-color: transparent !important;
 }
 
 @keyframes fadeIn {
-  from {
-    opacity: 0;
-  }
+    from {
+        opacity: 0;
+    }
 
-  to {
-    opacity: 1;
-  }
+    to {
+        opacity: 1;
+    }
 }
 </style>

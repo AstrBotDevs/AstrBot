@@ -1,11 +1,9 @@
-import importlib
 import json
 import sys
 from types import SimpleNamespace
 
 import pytest
 
-from astrbot.core.knowledge_base.retrieval import sparse_retriever
 from astrbot.core.knowledge_base.retrieval.sparse_retriever import SparseRetriever
 
 
@@ -93,10 +91,31 @@ async def test_sparse_retriever_uses_fts5_without_importing_bm25(monkeypatch):
     assert storage.get_documents_calls == 0
 
 
-def test_sparse_retriever_module_import_does_not_load_bm25(monkeypatch):
-    monkeypatch.setitem(sys.modules, "rank_bm25", None)
+@pytest.mark.asyncio
+async def test_empty_fts_result_does_not_fall_back_to_optional_bm25(monkeypatch):
+    from unittest.mock import AsyncMock
 
-    importlib.reload(sparse_retriever)
+    monkeypatch.setitem(sys.modules, "rank_bm25", None)
+    storage = SimpleNamespace(
+        search_sparse=AsyncMock(return_value=[]),
+        get_documents=AsyncMock(),
+    )
+    retriever = SparseRetriever(kb_db=None)
+
+    results = await retriever.retrieve(
+        query="apple",
+        kb_ids=["kb-1"],
+        kb_options={
+            "kb-1": {
+                "vec_db": SimpleNamespace(document_storage=storage),
+                "top_k_sparse": 2,
+            }
+        },
+    )
+
+    assert results == []
+    storage.search_sparse.assert_awaited_once_with(query_tokens=["apple"], limit=2)
+    storage.get_documents.assert_not_awaited()
 
 
 @pytest.mark.asyncio

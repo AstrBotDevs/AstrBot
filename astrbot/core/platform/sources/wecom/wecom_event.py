@@ -1,4 +1,5 @@
 import asyncio
+import uuid
 
 import aiofiles
 import anyio
@@ -7,8 +8,18 @@ from wechatpy.exceptions import WeChatClientException
 
 from astrbot.api import logger
 from astrbot.api.event import AstrMessageEvent, MessageChain
-from astrbot.api.message_components import File, Image, Plain, Record, Video
+from astrbot.api.message_components import (
+    ActionRow,
+    Button,
+    File,
+    Image,
+    Plain,
+    Record,
+    Video,
+)
 from astrbot.api.platform import AstrBotMessage, PlatformMetadata
+from astrbot.core.platform.button_interaction import encode_button_callback
+from astrbot.core.platform.sources.weixin_shared import split_weixin_text
 from astrbot.core.utils.media_utils import convert_audio_to_amr
 
 from .wecom_kf_message import WeChatKFMessage
@@ -35,50 +46,7 @@ class WecomPlatformEvent(AstrMessageEvent):
         pass
 
     async def split_plain(self, plain: str) -> list[str]:
-        """将长文本分割成多个小文本, 每个小文本长度不超过 2048 字符
-
-        Args:
-            plain (str): 要分割的长文本
-        Returns:
-            list[str]: 分割后的文本列表
-
-        """
-        if len(plain) <= 2048:
-            return [plain]
-        result = []
-        start = 0
-        while start < len(plain):
-            # 剩下的字符串长度<2048时结束
-            if start + 2048 >= len(plain):
-                result.append(plain[start:])
-                break
-
-            # 向前搜索分割标点符号
-            end = min(start + 2048, len(plain))
-            cut_position = end
-            for i in range(end, start, -1):
-                if i < len(plain) and plain[i - 1] in [
-                    "｡",
-                    "!",
-                    "?",
-                    ".",
-                    "!",
-                    "?",
-                    "\n",
-                    ";",
-                    ";",
-                ]:
-                    cut_position = i
-                    break
-
-            # 没找到合适的位置分割, 直接切分
-            if cut_position == end and end < len(plain):
-                cut_position = end
-
-            result.append(plain[start:cut_position])
-            start = cut_position
-
-        return result
+        return split_weixin_text(plain, 2048)
 
     async def send(self, message: MessageChain) -> None:
         message_obj = self.message_obj
@@ -198,6 +166,48 @@ class WecomPlatformEvent(AstrMessageEvent):
                             self.get_self_id(),
                             response["media_id"],
                         )
+                elif isinstance(comp, ActionRow):
+                    if not comp.buttons:
+                        continue
+                    menu_list = []
+                    for button in comp.buttons:
+                        if isinstance(button.action, Button.CallbackAction):
+                            callback_id = encode_button_callback(
+                                button.id,
+                                button.action.data,
+                                expires_at=comp.action_expires_at,
+                            )
+                            if len(callback_id.encode("utf-8")) > 64:
+                                raise ValueError(
+                                    "WeCom customer-service callback IDs cannot exceed "
+                                    "64 bytes."
+                                )
+                            menu_list.append(
+                                {
+                                    "type": "click",
+                                    "click": {
+                                        "id": callback_id,
+                                        "content": button.label,
+                                    },
+                                }
+                            )
+                        elif isinstance(button.action, Button.UrlAction):
+                            menu_list.append(
+                                {
+                                    "type": "view",
+                                    "view": {
+                                        "url": button.action.url,
+                                        "content": button.label,
+                                    },
+                                }
+                            )
+                    kf_message_api.send_msgmenu(
+                        user_id,
+                        self.get_self_id(),
+                        comp.fallback_text or "",
+                        menu_list,
+                        "",
+                    )
                 else:
                     logger.warning(f"还没实现这个消息类型的发送逻辑: {comp.type}｡")
         else:
@@ -298,20 +308,57 @@ class WecomPlatformEvent(AstrMessageEvent):
                             message_obj.session_id,
                             response["media_id"],
                         )
+                elif isinstance(comp, ActionRow):
+                    if not comp.buttons:
+                        continue
+                    if len(comp.buttons) > 6:
+                        raise ValueError(
+                            "WeCom template cards support at most 6 buttons."
+                        )
+                    style_map = {
+                        Button.Style.DEFAULT: 1,
+                        Button.Style.PRIMARY: 2,
+                        Button.Style.DANGER: 3,
+                        Button.Style.SUCCESS: 4,
+                    }
+                    button_list = []
+                    for button in comp.buttons:
+                        item = {
+                            "text": button.label,
+                            "style": style_map[button.style],
+                        }
+                        if isinstance(button.action, Button.CallbackAction):
+                            item["type"] = 0
+                            item["key"] = encode_button_callback(
+                                button.id,
+                                button.action.data,
+                                expires_at=comp.action_expires_at,
+                            )
+                        elif isinstance(button.action, Button.UrlAction):
+                            item["type"] = 1
+                            item["url"] = button.action.url
+                        button_list.append(item)
+                    self.client.message.send(
+                        message_obj.self_id,
+                        message_obj.session_id,
+                        msg={
+                            "msgtype": "template_card",
+                            "template_card": {
+                                "card_type": "button_interaction",
+                                "main_title": {
+                                    "title": comp.fallback_text or "请选择操作"
+                                },
+                                "button_list": button_list,
+                                "task_id": f"astrbot_{uuid.uuid4().hex}",
+                            },
+                        },
+                    )
                 else:
                     logger.warning(f"还没实现这个消息类型的发送逻辑: {comp.type}｡")
 
         await super().send(message)
 
     async def send_streaming(self, generator, use_fallback: bool = False):
-        buffer = None
-        async for chain in generator:
-            if not buffer:
-                buffer = chain
-            else:
-                buffer.chain.extend(chain.chain)
-        if not buffer:
-            return None
-        buffer.squash_plain()
-        await self.send(buffer)
-        return await super().send_streaming(generator, use_fallback)
+        return await self._send_buffered_stream(
+            generator, use_fallback, super().send_streaming
+        )

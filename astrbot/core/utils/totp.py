@@ -8,7 +8,7 @@ import hmac
 import secrets
 from enum import Enum
 
-import pyotp
+from pyotp.totp import TOTP
 from sqlmodel import col, delete, select
 
 from astrbot.core.db.po import DashboardTrustedDevice
@@ -59,7 +59,7 @@ def is_totp_enabled(config) -> bool:
 def _get_verified_totp_timecode(secret: str, code: str) -> int | None:
     code = code.strip()
     try:
-        totp = pyotp.TOTP(secret.strip())
+        totp = TOTP(secret.strip())
         now = datetime.datetime.now(datetime.UTC)
         for offset in (-1, 0, 1):
             candidate_time = now + datetime.timedelta(seconds=offset * totp.interval)

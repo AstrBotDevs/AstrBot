@@ -24,7 +24,7 @@ const props = defineProps({
 
 const emit = defineEmits(["install", "open"]);
 
-const normalizePlatformList = (platforms) => {
+const normalizePlatformList = (platforms: unknown) => {
   if (!Array.isArray(platforms)) return [];
   return platforms.filter((item) => typeof item === "string");
 };
@@ -32,10 +32,7 @@ const normalizePlatformList = (platforms) => {
 const platformDisplayList = computed(() => normalizePlatformList(props.plugin?.support_platforms));
 
 const cardDescription = computed(() =>
-  pluginShortDesc(
-    props.plugin,
-    props.plugin?.short_desc || props.plugin?.desc || "",
-  ),
+  pluginShortDesc(props.plugin, props.plugin?.short_desc || props.plugin?.desc || ""),
 );
 
 const canInstallPlugin = computed(() => {
@@ -43,13 +40,10 @@ const canInstallPlugin = computed(() => {
 });
 
 const hasDownloadCount = computed(() => {
-  return (
-    props.plugin?.download_count !== undefined &&
-    props.plugin?.download_count !== null
-  );
+  return props.plugin?.download_count !== undefined && props.plugin?.download_count !== null;
 });
 
-const handleInstall = (plugin) => {
+const handleInstall = (plugin: Record<string, unknown>) => {
   if (!canInstallPlugin.value) return;
   emit("install", plugin);
 };

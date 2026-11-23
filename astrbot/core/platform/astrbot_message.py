@@ -31,6 +31,8 @@ class Group:
     """群管理员 id"""
     members: list[MessageMember] | None = None
     """所有群成员"""
+    member_count: int | None = None
+    """Total members, available even when the member list is incomplete."""
 
     def __str__(self) -> str:
         # 使用 f-string 来构建返回的字符串表示形式
@@ -40,6 +42,7 @@ class Group:
             f"Avatar: {self.group_avatar or 'N/A'}\n"
             f"Owner ID: {self.group_owner or 'N/A'}\n"
             f"Admin IDs: {self.group_admins or 'N/A'}\n"
+            f"Member Count: {self.member_count if self.member_count is not None else 'N/A'}\n"
             f"Members Len: {len(self.members) if self.members else 0}\n"
             f"First Member: {self.members[0] if self.members else 'N/A'}\n"
         )

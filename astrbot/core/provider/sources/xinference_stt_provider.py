@@ -17,6 +17,8 @@ from astrbot.core.utils.tencent_record_helper import (
     tencent_silk_to_wav,
 )
 
+from .xinference_common import find_running_model
+
 
 @register_provider_adapter(
     "xinference_stt",
@@ -48,17 +50,12 @@ class ProviderXinferenceSTT(STTProvider):
             logger.info("Xinference STT: No API key provided.")
             client = Client(self.base_url)
         self.client = client
+        client._headers.update(self.request_headers)
 
         try:
-            running_models = await client.list_models()
-            for uid, model_spec in running_models.items():
-                if model_spec.get("model_name") == self.model_name:
-                    logger.info(
-                        f"Model '{self.model_name}' is already running with UID: {uid}",
-                    )
-                    self.model_uid = uid
-                    break
-
+            self.model_uid = await find_running_model(
+                client, self.model_name, self.model_uid
+            )
             if self.model_uid is None:
                 if self.launch_model_if_not_running:
                     logger.info(f"Launching {self.model_name} model...")

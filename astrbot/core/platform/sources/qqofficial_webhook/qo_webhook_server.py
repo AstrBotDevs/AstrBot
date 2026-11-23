@@ -4,12 +4,12 @@ import logging
 import time
 from binascii import Error as BinasciiError
 
-import quart
 from botpy import BotAPI, BotHttp, BotWebSocket, Client, ConnectionSession, Token
 from cryptography.exceptions import InvalidSignature
 from cryptography.hazmat.primitives.asymmetric import ed25519
 
 from astrbot.api import logger
+from astrbot.core.platform.webhook_server import FastAPIWebhookServer
 
 for handler in logging.root.handlers[:]:
     logging.root.removeHandler(handler)
@@ -89,7 +89,7 @@ class QQOfficialWebhook:
         )
         self.api: BotAPI = BotAPI(http=self.http)
         self.token = Token(self.appid, self.secret)
-        self.server = quart.Quart(__name__)
+        self.server = FastAPIWebhookServer("qqofficial-webhook")
         self.server.add_url_rule(
             "/astrbot-qo-webhook/callback",
             view_func=self.callback,
@@ -152,15 +152,15 @@ class QQOfficialWebhook:
         }
         return response
 
-    async def callback(self):
+    async def callback(self, request):
         """内部服务器的回调入口"""
-        return await self.handle_callback(quart.request)
+        return await self.handle_callback(request)
 
-    async def handle_callback(self, request) -> dict:
+    async def handle_callback(self, request) -> dict | tuple[dict, int]:
         """处理 webhook 回调,可被统一 webhook 入口复用
 
         Args:
-            request: Quart 请求对象
+            request: Webhook 请求对象
 
         Returns:
             响应数据
@@ -180,6 +180,8 @@ class QQOfficialWebhook:
         opcode = msg.get("op")
         data = msg.get("d")
         if opcode == 13:
+            if not isinstance(data, dict):
+                return {"error": "Invalid validation payload"}, 400
             signed = await self.webhook_validation(data)
             return signed
 
@@ -214,6 +216,9 @@ class QQOfficialWebhook:
                     "creating parser connection lazily.",
                 )
                 self._setup_connection()
+            connection = self._connection
+            if connection is None:
+                raise RuntimeError("QQ webhook parser connection is unavailable")
 
             # Extract extra fields from raw payload before botpy parses and discards them
             if data:
@@ -228,9 +233,11 @@ class QQOfficialWebhook:
                     if extra:
                         self._extra_data_cache[msg_id] = extra
             try:
-                func = self._connection.parser[event]
+                func = connection.parser[event]
             except KeyError:
                 logger.error("_parser unknown event %s.", event)
+                if data:
+                    self._extra_data_cache.pop(data.get("id", ""), None)
             else:
                 func(msg)
         return {"opcode": 12}
@@ -247,3 +254,7 @@ class QQOfficialWebhook:
 
     async def shutdown_trigger(self) -> None:
         await self.shutdown_event.wait()
+
+    def pop_extra_data(self, message_id: str) -> dict:
+        """Pop and return extra fields cached from the raw webhook payload for a given message ID."""
+        return self._extra_data_cache.pop(message_id, {})

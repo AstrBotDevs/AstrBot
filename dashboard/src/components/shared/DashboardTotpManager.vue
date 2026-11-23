@@ -56,8 +56,8 @@
 
 <script setup>
 import { computed, ref } from "vue";
+import { authApi } from "@/api/v1";
 import { useModuleI18n } from "@/i18n/composables";
-import axios from "@/utils/request";
 import DashboardTotpManageDialog from "./DashboardTotpManageDialog.vue";
 import DashboardTotpRecoveryDialog from "./DashboardTotpRecoveryDialog.vue";
 import DashboardTotpSetupDialog from "./DashboardTotpSetupDialog.vue";
@@ -146,7 +146,7 @@ async function onStartRotateRecovery() {
   manageDialogVisible.value = false;
   if (!totpSecret.value) return;
   try {
-    const res = await axios.post("/api/auth/totp/recovery");
+    const res = await authApi.recoverTotp();
     if (res.data.status !== "ok") return;
     const { recovery_code: recoveryCode, recovery_code_hash: recoveryCodeHash } = res.data.data || {};
     if (!recoveryCode || !recoveryCodeHash) return;

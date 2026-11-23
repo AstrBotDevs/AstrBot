@@ -1,12 +1,16 @@
+import asyncio
 import base64
+import wave
 from io import BytesIO
 from types import SimpleNamespace
 
 import pytest
+import pytest_asyncio
 
-from astrbot.core.message.components import Image, Plain, Reply
+from astrbot.core.message.components import Image, Plain, Record, Reply
 from astrbot.core.pipeline.preprocess_stage import stage as preprocess_stage
 from astrbot.core.pipeline.preprocess_stage.stage import PreProcessStage
+from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from astrbot.core.utils import media_utils
 
 
@@ -14,8 +18,10 @@ class FakeEvent:
     def __init__(self, message):
         self.message_obj = SimpleNamespace(message=message, message_str="")
         self.message_str = ""
+        self.unified_msg_origin = "test:FriendMessage:media"
         self.is_at_or_wake_command = False
         self.temporary_local_files: list[str] = []
+        self._temporary_local_files = self.temporary_local_files
 
     def get_platform_name(self):
         return "test"
@@ -23,14 +29,29 @@ class FakeEvent:
     def get_messages(self):
         return self.message_obj.message
 
-    def track_temporary_local_file(self, path: str) -> None:
-        if path not in self.temporary_local_files:
-            self.temporary_local_files.append(path)
+    track_temporary_local_file = AstrMessageEvent.track_temporary_local_file
+    untrack_temporary_local_file = AstrMessageEvent.untrack_temporary_local_file
+
+
+@pytest_asyncio.fixture
+async def stage():
+    """Initialize preprocessing with the same session configuration API as production."""
+    config = {"provider_stt_settings": {"enable": False}}
+    stage = PreProcessStage()
+    await stage.initialize(
+        SimpleNamespace(
+            astrbot_config=config,
+            plugin_manager=SimpleNamespace(
+                context=SimpleNamespace(get_config=lambda **_: config)
+            ),
+        )
+    )
+    return stage
 
 
 @pytest.mark.asyncio
-async def test_preprocess_preserves_image_formats_and_tracks_temp_files(
-    tmp_path, monkeypatch
+async def test_preprocess_preserves_image_formats_without_tracking_temp_files(
+    tmp_path, monkeypatch, stage
 ):
     from PIL import Image as PILImage
 
@@ -77,25 +98,20 @@ async def test_preprocess_preserves_image_formats_and_tracks_temp_files(
             ),
         ]
     )
-    stage = PreProcessStage()
-    stage.config = {}
-    stage.platform_settings = {}
-    stage.stt_settings = {"enable": False}
-
     await stage.process(event)
 
     main_image = event.get_messages()[0]
     assert isinstance(main_image, Image)
     assert main_image.file == main_image.path == main_image.url
     assert main_image.file.endswith(".png")
-    assert main_image.file in event.temporary_local_files
+    assert main_image.file not in event.temporary_local_files
     with PILImage.open(main_image.file) as processed_img:
         assert processed_img.format == "PNG"
         assert processed_img.getpixel((0, 0))[3] == 128
 
     assert reply_image.file == reply_image.path == reply_image.url
     assert reply_image.file.endswith(".gif")
-    assert reply_image.file in event.temporary_local_files
+    assert reply_image.file not in event.temporary_local_files
     with PILImage.open(reply_image.file) as processed_img:
         assert processed_img.format == "GIF"
         assert processed_img.is_animated
@@ -103,7 +119,75 @@ async def test_preprocess_preserves_image_formats_and_tracks_temp_files(
 
 
 @pytest.mark.asyncio
-async def test_preprocess_path_mapping_accepts_file_uri(tmp_path):
+@pytest.mark.parametrize("quoted", [False, True])
+@pytest.mark.parametrize(
+    "source_kind", ["png", "jpeg", "gif", "webp", "bmp", "invalid"]
+)
+@pytest.mark.parametrize("pretracked", [False, True])
+async def test_preprocess_image_cleanup_preserves_usable_file(
+    tmp_path, monkeypatch, quoted, source_kind, pretracked, stage
+):
+    from pathlib import Path
+
+    from PIL import Image as PILImage
+
+    monkeypatch.setattr(media_utils, "get_astrbot_temp_path", lambda: str(tmp_path))
+    monkeypatch.setattr(
+        preprocess_stage, "get_astrbot_temp_path", lambda: str(tmp_path)
+    )
+    source_path = tmp_path / f"source.{source_kind}"
+    if source_kind == "invalid":
+        source_path.write_bytes(b"not an image")
+    else:
+        PILImage.new("RGB", (2, 2), (255, 0, 0)).save(source_path)
+
+    image = Image.fromFileSystem(str(source_path))
+    event = FakeEvent([Reply(id="reply-1", chain=[image])] if quoted else [image])
+    original = source_path.read_bytes()
+    if pretracked:
+        event.track_temporary_local_file(str(source_path))
+
+    await stage.process(event)
+
+    assert event.temporary_local_files == []
+    assert image.file == image.path == image.url == str(source_path)
+    assert source_path.read_bytes() == original
+
+    # Exercise event cleanup to verify that the usable image survives.
+    AstrMessageEvent.cleanup_temporary_local_files(
+        SimpleNamespace(_temporary_local_files=event.temporary_local_files)
+    )
+    assert source_path.read_bytes() == original
+    assert Path(await image.convert_to_file_path()).exists()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("quoted", [False, True])
+async def test_preprocess_image_cleanup_removes_invalid_materialized_file(
+    tmp_path, monkeypatch, quoted, stage
+):
+    monkeypatch.setattr(media_utils, "get_astrbot_temp_path", lambda: str(tmp_path))
+    monkeypatch.setattr(
+        preprocess_stage, "get_astrbot_temp_path", lambda: str(tmp_path)
+    )
+    reference = "data:image/png;base64," + base64.b64encode(b"not an image").decode()
+    image = Image(file=reference)
+    event = FakeEvent([Reply(id="reply-1", chain=[image])] if quoted else [image])
+
+    await stage.process(event)
+
+    materialized = list(tmp_path.glob("media_image_*"))
+    assert materialized
+    assert image.file == reference
+    assert len(event.temporary_local_files) == 1
+    AstrMessageEvent.cleanup_temporary_local_files(
+        SimpleNamespace(_temporary_local_files=event.temporary_local_files)
+    )
+    assert not [path for path in materialized if path.exists()]
+
+
+@pytest.mark.asyncio
+async def test_preprocess_path_mapping_accepts_file_uri(tmp_path, stage):
     from PIL import Image as PILImage
 
     source_root = tmp_path / "source"
@@ -114,13 +198,107 @@ async def test_preprocess_path_mapping_accepts_file_uri(tmp_path):
     target_image = target_root / "photo.jpg"
     PILImage.new("RGB", (2, 2), (255, 0, 0)).save(target_image)
     event = FakeEvent([Image(file="", url=source_image.as_uri())])
-    stage = PreProcessStage()
-    stage.config = {}
     stage.platform_settings = {"path_mapping": [f"{source_root}:{target_root}"]}
-    stage.stt_settings = {"enable": False}
 
     await stage.process(event)
 
     image = event.get_messages()[0]
     assert isinstance(image, Image)
     assert image.file == image.path == image.url == str(target_image)
+
+
+@pytest.mark.asyncio
+async def test_preprocess_path_mapping_accepts_windows_source_to_posix_target(
+    tmp_path,
+    stage,
+):
+    from PIL import Image as PILImage
+
+    target_root = tmp_path / "target"
+    target_root.mkdir()
+    target_image = target_root / "photo.jpg"
+    PILImage.new("RGB", (2, 2), (255, 0, 0)).save(target_image)
+
+    source_prefix = r"C:\remote\media"
+    event = FakeEvent([Image(file="", url=f"{source_prefix}/photo.jpg")])
+    stage.platform_settings = {"path_mapping": [f"{source_prefix}:{target_root}"]}
+
+    await stage.process(event)
+
+    image = event.get_messages()[0]
+    assert isinstance(image, Image)
+    assert image.file == image.path == image.url == str(target_image)
+
+
+@pytest.mark.asyncio
+async def test_preprocess_stt_does_not_log_transcription(tmp_path, caplog):
+    audio_path = tmp_path / "voice.wav"
+    with wave.open(str(audio_path), "wb") as wav_file:
+        wav_file.setnchannels(1)
+        wav_file.setsampwidth(2)
+        wav_file.setframerate(16000)
+        wav_file.writeframes(b"\x00\x00" * 160)
+
+    async def get_text(audio_url):
+        assert audio_url == str(audio_path)
+        return "private transcription"
+
+    provider = SimpleNamespace(get_text=get_text)
+    config = {"provider_stt_settings": {"enable": True, "provider_id": "stt"}}
+
+    async def get_using_stt_provider_async(_umo):
+        return provider
+
+    context = SimpleNamespace(
+        get_config=lambda **_: config,
+        get_using_stt_provider_async=get_using_stt_provider_async,
+    )
+    stage = PreProcessStage()
+    await stage.initialize(
+        SimpleNamespace(
+            astrbot_config=config,
+            plugin_manager=SimpleNamespace(context=context),
+        )
+    )
+    event = FakeEvent([Record(file=str(audio_path))])
+
+    await stage.process(event)
+
+    assert isinstance(event.get_messages()[0], Plain)
+    assert event.get_messages()[0].text == "private transcription"
+    assert "private transcription" not in caplog.text
+
+
+@pytest.mark.asyncio
+async def test_preprocess_stt_propagates_cancellation(tmp_path):
+    audio_path = tmp_path / "voice.wav"
+    with wave.open(str(audio_path), "wb") as wav_file:
+        wav_file.setnchannels(1)
+        wav_file.setsampwidth(2)
+        wav_file.setframerate(16000)
+        wav_file.writeframes(b"\x00\x00" * 160)
+
+    async def get_text(audio_url):
+        raise asyncio.CancelledError
+
+    provider = SimpleNamespace(get_text=get_text)
+    config = {"provider_stt_settings": {"enable": True, "provider_id": "stt"}}
+
+    async def get_using_stt_provider_async(_umo):
+        return provider
+
+    context = SimpleNamespace(
+        get_config=lambda **_: config,
+        get_using_stt_provider_async=get_using_stt_provider_async,
+    )
+    stage = PreProcessStage()
+    await stage.initialize(
+        SimpleNamespace(
+            astrbot_config=config,
+            plugin_manager=SimpleNamespace(context=context),
+        )
+    )
+    event = FakeEvent([Record(file=str(audio_path))])
+
+    with pytest.raises(asyncio.CancelledError):
+        await stage.process(event)

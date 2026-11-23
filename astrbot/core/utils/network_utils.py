@@ -1,7 +1,7 @@
 """Network error handling utilities for providers."""
 
 import ssl
-from typing import Any
+from typing import Protocol, overload
 
 import httpx
 
@@ -91,13 +91,81 @@ def log_connection_failure(
         )
 
 
+class ProxyClientFactory[ClientT](Protocol):
+    """Construct the caller's HTTP client without erasing its concrete type."""
+
+    def __call__(
+        self,
+        *,
+        verify: ssl.SSLContext | str | bool,
+        headers: dict[str, str] | None,
+        proxy: str = ...,
+    ) -> ClientT: ...
+
+
+class _HttpxModule[ClientT](Protocol):
+    @property
+    def AsyncClient(self) -> ProxyClientFactory[ClientT]: ...
+
+
+@overload
 def create_proxy_client(
     provider_label: str,
     proxy: str | None = None,
     headers: dict[str, str] | None = None,
     verify: ssl.SSLContext | str | bool | None = None,
-    httpx_module: Any = httpx,
-) -> httpx.AsyncClient:
+    httpx_module: None = None,
+    *,
+    client_factory: None = None,
+) -> httpx.AsyncClient: ...
+
+
+@overload
+def create_proxy_client[ClientT](
+    provider_label: str,
+    proxy: str | None = None,
+    headers: dict[str, str] | None = None,
+    verify: ssl.SSLContext | str | bool | None = None,
+    *,
+    httpx_module: _HttpxModule[ClientT],
+    client_factory: None = None,
+) -> ClientT: ...
+
+
+@overload
+def create_proxy_client[ClientT](
+    provider_label: str,
+    proxy: str | None,
+    headers: dict[str, str] | None,
+    verify: ssl.SSLContext | str | bool | None,
+    httpx_module: _HttpxModule[ClientT],
+    /,
+    *,
+    client_factory: None = None,
+) -> ClientT: ...
+
+
+@overload
+def create_proxy_client[ClientT](
+    provider_label: str,
+    proxy: str | None = None,
+    headers: dict[str, str] | None = None,
+    verify: ssl.SSLContext | str | bool | None = None,
+    httpx_module: _HttpxModule[object] | None = None,
+    *,
+    client_factory: ProxyClientFactory[ClientT],
+) -> ClientT: ...
+
+
+def create_proxy_client(
+    provider_label: str,
+    proxy: str | None = None,
+    headers: dict[str, str] | None = None,
+    verify: ssl.SSLContext | str | bool | None = None,
+    httpx_module: _HttpxModule[object] | None = None,
+    *,
+    client_factory: ProxyClientFactory[object] | None = None,
+) -> object:
     """Create an httpx AsyncClient with proxy configuration if provided.
 
     Uses a hybrid SSL context that combines the system SSL certificate store
@@ -115,18 +183,25 @@ def create_proxy_client(
                 SSL context (system store + certifi) when not provided.
         httpx_module: Optional httpx module to construct AsyncClient from. This is
             useful when a provider SDK performs isinstance checks against its own
-            httpx import.
+            httpx import. The default uses the application's httpx module.
+        client_factory: Optional typed constructor, such as an SDK's public
+            DefaultAsyncHttpxClient. Takes precedence over httpx_module.
 
     Returns:
         An httpx.AsyncClient created with the hybrid SSL context (system store + certifi); the proxy is applied only if one is provided.
 
     """
     resolved_verify = _SYSTEM_SSL_CTX if verify is None else verify
+    factory = client_factory
+    if factory is None:
+        factory = (
+            httpx.AsyncClient if httpx_module is None else httpx_module.AsyncClient
+        )
     if proxy:
         logger.info(f"[{provider_label}] Using proxy: {proxy}")
-        return httpx_module.AsyncClient(
+        return factory(
             proxy=proxy,
             verify=resolved_verify,
             headers=headers,
         )
-    return httpx_module.AsyncClient(verify=resolved_verify, headers=headers)
+    return factory(verify=resolved_verify, headers=headers)

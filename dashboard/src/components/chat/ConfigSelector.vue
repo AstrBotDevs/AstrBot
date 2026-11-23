@@ -1,98 +1,87 @@
 <template>
-  <div>
-    <v-list-item
-      class="styled-menu-item"
-      rounded="md"
-      :disabled="loadingConfigs || saving"
-      @click="openDialog"
-    >
-      <template #prepend>
-        <v-icon icon="mdi-cog-outline" size="small" />
-      </template>
-      <v-list-item-title>
-        {{ tm("config.title") }}
-      </v-list-item-title>
-      <v-list-item-subtitle class="text-caption">
-        {{ selectedConfigLabel }}
-      </v-list-item-subtitle>
-      <template #append>
-        <v-icon
-          icon="mdi-chevron-right"
-          size="small"
-          class="text-medium-emphasis"
-        />
-      </template>
-    </v-list-item>
-
-    <v-dialog v-model="dialog" max-width="480">
-      <v-card>
-        <v-card-title
-          class="text-h3 pa-4 pb-0 pl-6 d-flex align-center justify-space-between"
+    <div>
+        <v-list-item
+            class="styled-menu-item"
+            rounded="md"
+            @click="openDialog"
+            :disabled="loadingConfigs || saving"
         >
-          <span>选择配置文件</span>
-          <v-btn icon variant="text" @click="closeDialog">
-            <v-icon>mdi-close</v-icon>
-          </v-btn>
-        </v-card-title>
-        <v-card-text>
-          <div v-if="loadingConfigs" class="text-center py-6">
-            <v-progress-circular indeterminate color="primary" />
-          </div>
+            <template v-slot:prepend>
+                <v-icon icon="mdi-cog-outline" size="small"></v-icon>
+            </template>
+            <v-list-item-title>
+                {{ tm('config.title') }}
+            </v-list-item-title>
+            <v-list-item-subtitle class="text-caption">
+                {{ selectedConfigLabel }}
+            </v-list-item-subtitle>
+            <template v-slot:append>
+                <v-icon icon="mdi-chevron-right" size="small" class="text-medium-emphasis"></v-icon>
+            </template>
+        </v-list-item>
 
-          <v-list v-else class="config-list" density="comfortable">
-            <v-list-item
-              v-for="config in configOptions"
-              :key="config.id"
-              :active="tempSelectedConfig === config.id"
-              rounded="lg"
-              variant="text"
-              @click="tempSelectedConfig = config.id"
-            >
-              <v-list-item-title>{{ config.name }}</v-list-item-title>
-              <v-list-item-subtitle class="text-caption text-grey">
-                {{ config.id }}
-              </v-list-item-subtitle>
-              <template #append>
-                <v-icon v-if="tempSelectedConfig === config.id" color="primary">
-                  mdi-check
-                </v-icon>
-              </template>
-            </v-list-item>
-            <div
-              v-if="configOptions.length === 0"
-              class="text-center text-body-2 text-medium-emphasis"
-            >
-              暂无可选配置，请先在配置页创建。
-            </div>
-          </v-list>
-        </v-card-text>
-        <v-card-actions>
-          <v-spacer />
-          <v-btn variant="text" @click="closeDialog"> 取消 </v-btn>
-          <v-btn
-            color="primary"
-            variant="tonal"
-            :disabled="!tempSelectedConfig"
-            :loading="saving"
-            @click="confirmSelection"
-          >
-            应用
-          </v-btn>
-        </v-card-actions>
-      </v-card>
-    </v-dialog>
-  </div>
+        <v-dialog v-model="dialog" max-width="480">
+            <v-card>
+                <v-card-title class="text-h3 pa-4 pb-0 pl-6 d-flex align-center justify-space-between">
+                    <span>选择配置文件</span>
+                    <v-btn icon variant="text" @click="closeDialog">
+                        <v-icon>mdi-close</v-icon>
+                    </v-btn>
+                </v-card-title>
+                <v-card-text>
+                    <div v-if="loadingConfigs" class="text-center py-6">
+                        <v-progress-circular indeterminate color="primary"></v-progress-circular>
+                    </div>
+
+                    <v-list v-else class="config-list" density="comfortable">
+                        <v-list-item
+                            v-for="config in configOptions"
+                            :key="config.id"
+                            :active="tempSelectedConfig === config.id"
+                            rounded="lg"
+                            variant="text"
+                            @click="tempSelectedConfig = config.id"
+                        >
+                            <v-list-item-title>{{ configDisplayName(config) }}</v-list-item-title>
+                            <v-list-item-subtitle class="text-caption text-grey">
+                                {{ config.id }}
+                            </v-list-item-subtitle>
+                            <template #append>
+                                <v-icon v-if="tempSelectedConfig === config.id" color="primary">mdi-check</v-icon>
+                            </template>
+                        </v-list-item>
+                        <div v-if="configOptions.length === 0" class="text-center text-body-2 text-medium-emphasis">
+                            暂无可选配置，请先在配置页创建。
+                        </div>
+                    </v-list>
+                </v-card-text>
+                <v-card-actions>
+                    <v-spacer></v-spacer>
+                    <v-btn variant="text" @click="closeDialog">取消</v-btn>
+                    <v-btn
+                        color="primary"
+                        variant="tonal"
+                        @click="confirmSelection"
+                        :disabled="!tempSelectedConfig"
+                        :loading="saving"
+                    >
+                        应用
+                    </v-btn>
+                </v-card-actions>
+            </v-card>
+        </v-dialog>
+    </div>
 </template>
 
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from "vue";
+import { configProfileApi, configRouteApi } from "@/api/v1";
 import { useModuleI18n } from "@/i18n/composables";
 import {
   getStoredDashboardUsername,
   getStoredSelectedChatConfigId,
   setStoredSelectedChatConfigId,
 } from "@/utils/chatConfigBinding";
-import axios from "@/utils/request";
 import { useToast } from "@/utils/toast";
 
 interface ConfigInfo {
@@ -123,13 +112,14 @@ const props = withDefaults(
 const emit = defineEmits<{ "config-changed": [ConfigChangedPayload] }>();
 
 const { tm } = useModuleI18n("features/chat");
+const { tm: tmConfig } = useModuleI18n("features/config");
 
 const configOptions = ref<ConfigInfo[]>([]);
 const loadingConfigs = ref(false);
 const dialog = ref(false);
 const tempSelectedConfig = ref("");
 const selectedConfigId = ref("default");
-const agentRunnerType = ref("local");
+const agentRunnerType = ref("astrbot");
 const saving = ref(false);
 const pendingSync = ref(false);
 const routingEntries = ref<Array<{ pattern: string; confId: string }>>([]);
@@ -162,9 +152,17 @@ const targetUmo = computed(() => {
   return `${props.platformId}:${messageType.value}:${sessionKey.value}`;
 });
 
+function configDisplayName(config: ConfigInfo): string {
+  if (config.id === "default") {
+    return tmConfig("configSelection.defaultConfig");
+  }
+  return config.name || config.id;
+}
+
 const selectedConfigLabel = computed(() => {
-  const target = configOptions.value.find((item) => item.id === selectedConfigId.value);
-  return target?.name || selectedConfigId.value || "default";
+  const id = selectedConfigId.value || "default";
+  const target = configOptions.value.find((item) => item.id === id);
+  return configDisplayName(target ?? { id, name: id });
 });
 
 function openDialog() {
@@ -179,8 +177,11 @@ function closeDialog() {
 async function fetchConfigList() {
   loadingConfigs.value = true;
   try {
-    const res = await axios.get("/api/config/abconfs");
-    configOptions.value = res.data.data?.info_list || [];
+    const res = await configProfileApi.list();
+    configOptions.value = (res.data.data?.info_list || []).map((item: any) => ({
+      id: String(item.id || ""),
+      name: String(item.name || item.id || "default"),
+    }));
   } catch (error) {
     console.error("加载配置文件列表失败", error);
     configOptions.value = [];
@@ -191,7 +192,7 @@ async function fetchConfigList() {
 
 async function fetchRoutingEntries() {
   try {
-    const res = await axios.get("/api/config/umo_abconf_routes");
+    const res = await configRouteApi.list();
     const routing = res.data.data?.routing || {};
     routingEntries.value = Object.entries(routing).map(([pattern, confId]) => ({
       pattern,
@@ -229,15 +230,14 @@ async function getAgentRunnerType(confId: string): Promise<string> {
     return configCache.value[confId];
   }
   try {
-    const res = await axios.get("/api/config/abconf", {
-      params: { id: confId },
-    });
-    const type = res.data.data?.config?.provider_settings?.agent_runner_type || "local";
+    const res = await configProfileApi.get(confId);
+    const config = ((res.data.data as any).config || {}) as any;
+    const type = config?.agent?.runtime || "astrbot";
     configCache.value[confId] = type;
     return type;
   } catch (error) {
     console.error("获取配置文件详情失败", error);
-    return "local";
+    return "astrbot";
   }
 }
 
@@ -259,12 +259,11 @@ async function applySelectionToBackend(confId: string): Promise<boolean> {
   }
   saving.value = true;
   try {
-    await axios.post("/api/config/umo_abconf_route/update", {
-      umo: targetUmo.value,
-      conf_id: confId,
-    });
+    await configRouteApi.upsert(targetUmo.value, { config_id: confId });
     const filtered = routingEntries.value.filter((entry) => entry.pattern !== targetUmo.value);
-    filtered.push({ pattern: targetUmo.value, confId });
+    if (confId !== "default") {
+      filtered.push({ pattern: targetUmo.value, confId });
+    }
     routingEntries.value = filtered;
     return true;
   } catch (error) {
@@ -326,7 +325,7 @@ onMounted(async () => {
 
 <style scoped>
 .config-list {
-  max-height: 360px;
-  overflow-y: auto;
+    max-height: 360px;
+    overflow-y: auto;
 }
 </style>

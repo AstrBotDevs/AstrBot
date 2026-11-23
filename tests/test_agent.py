@@ -1,48 +1,45 @@
-"""Import smoke tests for Agent dataclass."""
+"""Agent specifications retain explicit capabilities and independent defaults."""
+
+from dataclasses import replace
 
 import pytest
 
 from astrbot.core.agent.agent import Agent
+from astrbot.core.agent.hooks import BaseAgentRunHooks
+from astrbot.core.agent.tool import FunctionTool
 
 
-class TestAgentImport:
-    """Verify Agent dataclass can be imported and instantiated."""
+def test_agent_name_is_required():
+    with pytest.raises(TypeError, match="name"):
+        Agent()
 
-    def test_class_importable(self):
-        """Agent should be importable."""
-        assert Agent is not None
 
-    def test_instantiation_with_name_only(self):
-        """Agent should be instantiatable with just a name."""
-        agent = Agent(name="test_agent")
-        assert isinstance(agent, Agent)
-        assert agent.name == "test_agent"
+def test_minimal_agent_has_no_implicit_tools_or_dialogues():
+    first, second = Agent(name="first"), Agent(name="second")
+    assert (first.instructions, first.tools, first.run_hooks, first.begin_dialogs) == (
+        None,
+        None,
+        None,
+        None,
+    )
+    first.tools = ["explicit"]
+    assert second.tools is None
 
-    def test_instantiation_with_all_fields(self):
-        """Agent should accept all optional fields."""
-        agent = Agent(
-            name="full_agent",
-            instructions="You are a test agent.",
-            tools=["tool1", "tool2"],
-            # run_hooks and begin_dialogs can be None for this test
-        )
-        assert agent.name == "full_agent"
-        assert agent.instructions == "You are a test agent."
-        assert agent.tools == ["tool1", "tool2"]
-        assert agent.run_hooks is None
-        assert agent.begin_dialogs is None
 
-    def test_is_dataclass(self):
-        """Agent should be a dataclass."""
-        from dataclasses import dataclass
-
-        # Check it has the dataclass decorator by inspecting __dataclass_fields__
-        assert hasattr(Agent, "__dataclass_fields__")
-
-    def test_defaults(self):
-        """Agent fields should have correct defaults."""
-        agent = Agent(name="defaults_test")
-        assert agent.instructions is None
-        assert agent.tools is None
-        assert agent.run_hooks is None
-        assert agent.begin_dialogs is None
+def test_agent_keeps_explicit_hook_tools_and_initial_dialogues():
+    tool = FunctionTool(name="probe", description="Probe")
+    hooks = BaseAgentRunHooks()
+    dialogues = [{"role": "user", "content": "start"}]
+    agent = Agent(
+        name="configured",
+        instructions="Follow instructions",
+        tools=["named", tool],
+        run_hooks=hooks,
+        begin_dialogs=dialogues,
+    )
+    assert agent.tools == ["named", tool] and agent.tools[1] is tool
+    assert agent.run_hooks is hooks
+    assert agent.begin_dialogs == dialogues
+    changed = replace(agent, name="renamed", instructions="New instructions")
+    assert agent.name == "configured" and agent.instructions == "Follow instructions"
+    assert changed.name == "renamed" and changed.instructions == "New instructions"

@@ -1,7 +1,8 @@
 import json
 import mimetypes
 import shutil
-from collections.abc import Awaitable, Callable, Sequence
+import uuid
+from collections.abc import Awaitable, Callable, Iterator, Sequence
 from pathlib import Path, PurePosixPath
 from typing import Any
 
@@ -9,16 +10,24 @@ import anyio
 
 from astrbot.core.db.po import Attachment
 from astrbot.core.message.components import (
+    ActionRow,
     BaseMessageComponent,
+    Button,
+    ButtonInteraction,
     File,
     Image,
     Json,
+    JSONValue,
     Plain,
     Record,
     Reply,
     Video,
 )
 from astrbot.core.message.message_event_result import MessageChain
+from astrbot.core.platform.button_interaction import (
+    decode_button_callback,
+    encode_button_callback,
+)
 from astrbot.core.utils.datetime_utils import generate_timestamp_id
 from astrbot.core.utils.media_utils import MediaResolver
 
@@ -49,14 +58,83 @@ def _safe_display_filename(filename: str | None) -> str:
     return "" if basename in {"", ".", ".."} else basename
 
 
+def _iter_message_parts(
+    message_parts: Sequence[object], *, strict: bool
+) -> Iterator[tuple[dict, str]]:
+    """Validate each part once and share normalized type dispatch across representations."""
+    for part in message_parts:
+        if not isinstance(part, dict):
+            if strict:
+                raise ValueError("message part must be an object")
+            continue
+        yield part, str(part.get("type", "")).strip()
+
+
+def _reply_message_id(part: dict, *, strict: bool) -> object | None:
+    """Keep missing reply identifiers distinct from valid falsy identifiers."""
+    message_id = part.get("message_id")
+    if message_id is None and strict:
+        raise ValueError("reply part missing message_id")
+    return message_id
+
+
+def _media_file_path(part: dict, part_type: str, *, strict: bool) -> Path | None:
+    """Validate media metadata before synchronous or asynchronous file checks."""
+    if part_type not in MEDIA_PART_TYPES:
+        if strict:
+            raise ValueError(f"unsupported message part type: {part_type}")
+        return None
+    path = part.get("path")
+    if not path:
+        if strict:
+            raise ValueError(f"{part_type} part missing path")
+        return None
+    return Path(str(path))
+
+
+def _button_callback_metadata(
+    part: dict, *, strict: bool
+) -> tuple[str, str, JSONValue | None] | None:
+    """Decode callback metadata consistently while retaining expired tokens for routing."""
+    callback_payload = part.get("callback_data")
+    if not isinstance(callback_payload, str):
+        if strict:
+            raise ValueError("button_interaction part missing callback_data")
+        return None
+    try:
+        action_id, data = decode_button_callback(callback_payload, allow_expired=True)
+    except ValueError:
+        if strict:
+            raise
+        return None
+    return callback_payload, action_id, data
+
+
+def serialize_webchat_action_row(component: ActionRow) -> dict:
+    """Use identical opaque callback tokens for stored and streamed action rows."""
+    row_data = component.toDict()["data"]
+    for button, serialized_button in zip(
+        component.buttons, row_data["buttons"], strict=True
+    ):
+        if isinstance(button.action, Button.CallbackAction):
+            serialized_button["action"]["callback_data"] = encode_button_callback(
+                button.id, button.action.data, expires_at=component.action_expires_at
+            )
+            serialized_button["action"].pop("data", None)
+    return row_data
+
+
 def strip_message_parts_path_fields(message_parts: list[dict]) -> list[dict]:
     return [{k: v for k, v in part.items() if k != "path"} for part in message_parts]
 
 
 def webchat_message_parts_have_content(message_parts: list[dict]) -> bool:
     return any(
-        part.get("type") in ("plain", "image", "record", "file", "video")
-        and (part.get("text") or part.get("attachment_id") or part.get("filename"))
+        (
+            part.get("type") in ("plain", "image", "record", "file", "video")
+            and (part.get("text") or part.get("attachment_id") or part.get("filename"))
+        )
+        or (part.get("type") == "button_interaction" and part.get("callback_data"))
         for part in message_parts
     )
 
@@ -83,13 +161,7 @@ async def parse_webchat_message_parts(
     text_parts: list[str] = []
     has_content = False
 
-    for part in message_parts:
-        if not isinstance(part, dict):
-            if strict:
-                raise ValueError("message part must be an object")
-            continue
-
-        part_type = str(part.get("type", "")).strip()
+    for part, part_type in _iter_message_parts(message_parts, strict=strict):
         if part_type == "plain":
             text = str(part.get("text", ""))
             if text or include_empty_plain:
@@ -100,10 +172,8 @@ async def parse_webchat_message_parts(
             continue
 
         if part_type == "reply":
-            message_id = part.get("message_id")
+            message_id = _reply_message_id(part, strict=strict)
             if message_id is None:
-                if strict:
-                    raise ValueError("reply part missing message_id")
                 continue
 
             reply_chain = []
@@ -149,18 +219,32 @@ async def parse_webchat_message_parts(
             )
             continue
 
-        if part_type not in MEDIA_PART_TYPES:
-            if strict:
-                raise ValueError(f"unsupported message part type: {part_type}")
+        if part_type == "button_interaction":
+            metadata = _button_callback_metadata(part, strict=strict)
+            if metadata is None:
+                continue
+            callback_payload, action_id, data = metadata
+            source_message_id = part.get("source_message_id")
+            components.append(
+                ButtonInteraction(
+                    action_id=action_id,
+                    data=data,
+                    interaction_id=str(part.get("interaction_id") or uuid.uuid4().hex),
+                    source_message_id=(
+                        str(source_message_id)
+                        if source_message_id is not None
+                        else None
+                    ),
+                    callback_data=callback_payload,
+                )
+            )
+            text_parts.append(action_id)
+            has_content = True
             continue
 
-        path = part.get("path")
-        if not path:
-            if strict:
-                raise ValueError(f"{part_type} part missing path")
+        file_path = _media_file_path(part, part_type, strict=strict)
+        if file_path is None:
             continue
-
-        file_path = Path(str(path))
         if verify_media_path_exists and not await anyio.Path(file_path).exists():
             if strict:
                 raise ValueError(f"file not found: {file_path!s}")
@@ -205,13 +289,7 @@ async def build_webchat_message_parts(
         return []
 
     message_parts: list[dict] = []
-    for part in message_payload:
-        if not isinstance(part, dict):
-            if strict:
-                raise ValueError("message part must be an object")
-            continue
-
-        part_type = str(part.get("type", "")).strip()
+    for part, part_type in _iter_message_parts(message_payload, strict=strict):
         if part_type == "plain":
             text = str(part.get("text", ""))
             if text:
@@ -219,10 +297,8 @@ async def build_webchat_message_parts(
             continue
 
         if part_type == "reply":
-            message_id = part.get("message_id")
+            message_id = _reply_message_id(part, strict=strict)
             if message_id is None:
-                if strict:
-                    raise ValueError("reply part missing message_id")
                 continue
             message_parts.append(
                 {
@@ -230,6 +306,21 @@ async def build_webchat_message_parts(
                     "message_id": message_id,
                     "selected_text": str(part.get("selected_text", "")),
                 },
+            )
+            continue
+
+        if part_type == "button_interaction":
+            metadata = _button_callback_metadata(part, strict=strict)
+            if metadata is None:
+                continue
+            callback_payload = metadata[0]
+            message_parts.append(
+                {
+                    "type": "button_interaction",
+                    "callback_data": callback_payload,
+                    "source_message_id": part.get("source_message_id"),
+                    "interaction_id": uuid.uuid4().hex,
+                }
             )
             continue
 
@@ -276,13 +367,7 @@ def webchat_message_parts_to_message_chain(
     components: list[BaseMessageComponent] = []
     has_content = False
 
-    for part in message_parts:
-        if not isinstance(part, dict):
-            if strict:
-                raise ValueError("message part must be an object")
-            continue
-
-        part_type = str(part.get("type", "")).strip()
+    for part, part_type in _iter_message_parts(message_parts, strict=strict):
         if part_type == "plain":
             text = str(part.get("text", ""))
             if text:
@@ -291,10 +376,8 @@ def webchat_message_parts_to_message_chain(
             continue
 
         if part_type == "reply":
-            message_id = part.get("message_id")
+            message_id = _reply_message_id(part, strict=strict)
             if message_id is None:
-                if strict:
-                    raise ValueError("reply part missing message_id")
                 continue
             components.append(
                 Reply(
@@ -305,18 +388,9 @@ def webchat_message_parts_to_message_chain(
             )
             continue
 
-        if part_type not in MEDIA_PART_TYPES:
-            if strict:
-                raise ValueError(f"unsupported message part type: {part_type}")
+        file_path = _media_file_path(part, part_type, strict=strict)
+        if file_path is None:
             continue
-
-        path = part.get("path")
-        if not path:
-            if strict:
-                raise ValueError(f"{part_type} part missing path")
-            continue
-
-        file_path = Path(str(path))
         if not file_path.exists():
             if strict:
                 raise ValueError(f"file not found: {file_path!s}")
@@ -421,6 +495,11 @@ async def message_chain_to_storage_message_parts(
             parts.append(
                 {"type": "plain", "text": json.dumps(comp.data, ensure_ascii=False)},
             )
+            continue
+
+        if isinstance(comp, ActionRow):
+            row_data = serialize_webchat_action_row(comp)
+            parts.append({"type": "actionrow", **row_data})
             continue
 
         if isinstance(comp, Image):

@@ -7,7 +7,17 @@ from pathlib import Path, PurePosixPath
 
 from astrbot.api import logger
 from astrbot.api.event import AstrMessageEvent, MessageChain
-from astrbot.api.message_components import File, Image, Json, Plain, Record
+from astrbot.api.message_components import (
+    ActionRow,
+    File,
+    Image,
+    Json,
+    Plain,
+    Record,
+)
+from astrbot.core.platform.sources.webchat.message_parts_helper import (
+    serialize_webchat_action_row,
+)
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 from astrbot.core.utils.datetime_utils import generate_timestamp_id
 from astrbot.core.utils.media_utils import (
@@ -66,10 +76,30 @@ class WebChatMessageEvent(AstrMessageEvent):
                 accepted = await webchat_queue_mgr.put_back_queue(
                     request_id,
                     {
-                        "type": "plain",
-                        "data": json.dumps(comp.data, ensure_ascii=False),
+                        "type": {
+                            "chatui_view": "view",
+                            "chatui_error": "error",
+                            "ui_action_result": "ui_action_result",
+                        }.get(message.type or "", "plain"),
+                        "data": comp.data
+                        if message.type
+                        in {"chatui_view", "ui_action_result", "chatui_error"}
+                        else json.dumps(comp.data, ensure_ascii=False),
                         "streaming": streaming,
                         "chain_type": message.type,
+                        "message_id": message_id,
+                    },
+                )
+                if not accepted:
+                    return None
+            elif isinstance(comp, ActionRow):
+                row_data = serialize_webchat_action_row(comp)
+                accepted = await webchat_queue_mgr.put_back_queue(
+                    request_id,
+                    {
+                        "type": "actionrow",
+                        "data": row_data,
+                        "streaming": streaming,
                         "message_id": message_id,
                     },
                 )
@@ -177,7 +207,7 @@ class WebChatMessageEvent(AstrMessageEvent):
                 },
             )
         await WebChatMessageEvent._send(message_id, message, session_id=self.session_id)
-        await super().send(MessageChain([]))
+        await super().send(message if message is not None else MessageChain([]))
 
     async def send_typing(self) -> None:
         """Emit a run-start signal before an independent LLM request."""

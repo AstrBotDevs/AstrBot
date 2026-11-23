@@ -67,7 +67,9 @@ def test_build_default_engine_order_keeps_dev_compatible_default_chain() -> None
     assert order == DEFAULT_ENGINE_ORDER
 
 
-def test_build_default_engine_order_covers_all_engines_unknown_and_no_duplicates() -> None:
+def test_build_default_engine_order_covers_all_engines_unknown_and_no_duplicates() -> (
+    None
+):
     order = build_default_engine_order("sogo")
     assert order[0] == "sogo"
     assert set(order) == set(DEFAULT_ENGINE_ORDER)

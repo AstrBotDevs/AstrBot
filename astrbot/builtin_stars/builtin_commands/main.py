@@ -1,4 +1,6 @@
-from astrbot.api import star
+from collections.abc import Callable
+
+from astrbot.api import logger, star
 from astrbot.api.event import AstrMessageEvent, filter
 from astrbot.core.star.filter.command import GreedyStr
 
@@ -16,6 +18,12 @@ from .commands import (
     T2ICommand,
     TTSCommand,
 )
+
+
+def _retain_name_handler_id[**P, R](handler: Callable[P, R]) -> Callable[P, R]:
+    """Keep saved /name command settings attached after the method rename."""
+    handler.__name__ = "name"
+    return handler
 
 
 class Main(star.Star):
@@ -95,7 +103,8 @@ class Main(star.Star):
 
     @filter.permission_type(filter.PermissionType.ADMIN)
     @filter.command("name")
-    async def name(self, event: AstrMessageEvent, alias: GreedyStr) -> None:
+    @_retain_name_handler_id
+    async def set_name(self, event: AstrMessageEvent, alias: GreedyStr) -> None:
         """Set display name for current UMO"""
         await self.name_c.name(event, alias)
 
@@ -104,6 +113,12 @@ class Main(star.Star):
     async def op(self, event: AstrMessageEvent, admin_id: str = "") -> None:
         """授权管理员｡op <admin_id>"""
         await self.admin_c.op(event, admin_id)
+
+    @filter.command("reset")
+    @filter.permission_type(filter.PermissionType.SHARED_GROUP_ADMIN)
+    async def reset(self, message: AstrMessageEvent) -> None:
+        """Clear the context of the current conversation."""
+        await self.conversation_c.reset(message)
 
     @filter.permission_type(filter.PermissionType.ADMIN)
     @filter.command("deop")
@@ -123,6 +138,12 @@ class Main(star.Star):
         """删除白名单｡dwl <sid>"""
         await self.admin_c.dwl(event, sid)
 
+    @filter.command("new")
+    @filter.permission_type(filter.PermissionType.SHARED_GROUP_ADMIN)
+    async def new_conv(self, message: AstrMessageEvent) -> None:
+        """Create a new conversation."""
+        await self.conversation_c.new_conv(message)
+
     @filter.command("stats")
     async def stats(self, message: AstrMessageEvent) -> None:
         """Show token usage statistics for the current conversation"""
@@ -138,11 +159,6 @@ class Main(star.Star):
     ) -> None:
         """查看或者切换 LLM Provider"""
         await self.provider_c.provider(event, idx, idx2)
-
-    @filter.command("reset")
-    async def reset(self, message: AstrMessageEvent) -> None:
-        """重置 LLM 会话"""
-        await self.conversation_c.reset(message)
 
     @filter.command("stop")
     async def stop(self, message: AstrMessageEvent) -> None:
@@ -162,17 +178,23 @@ class Main(star.Star):
     @filter.command("history")
     async def his(self, message: AstrMessageEvent, page: int = 1) -> None:
         """查看对话记录"""
-        await self.conversation_c.his(message, page)
+        await self._notify_retired_conversation_command(message, "history")
 
     @filter.command("ls")
     async def convs(self, message: AstrMessageEvent, page: int = 1) -> None:
         """查看对话列表"""
-        await self.conversation_c.convs(message, page)
+        await self._notify_retired_conversation_command(message, "ls")
 
-    @filter.command("new")
-    async def new_conv(self, message: AstrMessageEvent) -> None:
-        """创建新对话"""
-        await self.conversation_c.new_conv(message)
+    @staticmethod
+    async def _notify_retired_conversation_command(
+        message: AstrMessageEvent, command: str
+    ) -> None:
+        logger.info("Retired conversation command /%s invoked", command)
+        await message.send(
+            message.plain_result(
+                f"/{command} 指令已弃用，请在 WebUI 的对话管理页面查看对话和历史记录。"
+            )
+        )
 
     @filter.permission_type(filter.PermissionType.ADMIN)
     @filter.command("dashboard_update")

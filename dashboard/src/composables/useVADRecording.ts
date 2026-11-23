@@ -1,5 +1,4 @@
 import { onBeforeUnmount, ref } from "vue";
-import axios from "@/utils/request";
 
 interface VADOptions {
   onSpeechStart?: () => void;
@@ -14,146 +13,201 @@ interface VADOptions {
   minSpeechMs?: number;
   submitUserSpeechOnPause?: boolean;
   model?: "v5" | "legacy";
+  startOnLoad?: boolean;
   baseAssetPath?: string;
   onnxWASMBasePath?: string;
 }
 
 interface VADInstance {
-  start(): void;
-  pause(): void;
+  start(): void | Promise<void>;
+  pause(): void | Promise<void>;
+  destroy?: () => void | Promise<void>;
   listening: boolean;
 }
 
-// 声明全局 vad 对象类型
+const VAD_BASE_ASSET_PATH = "https://cdn.jsdelivr.net/npm/@ricky0123/vad-web@0.0.29/dist/";
+const VAD_ONNX_WASM_BASE_PATH = "https://cdn.jsdelivr.net/npm/onnxruntime-web@1.22.0/dist/";
+const VAD_SCRIPT_URLS = [`${VAD_ONNX_WASM_BASE_PATH}ort.wasm.min.js`, `${VAD_BASE_ASSET_PATH}bundle.min.js`];
+
+let vadScriptsPromise: Promise<void> | null = null;
+
+/**
+ * Lazily inject the VAD dependency scripts so they don't block the first paint.
+ * Scripts must load sequentially because vad-web expects onnxruntime on window.
+ */
+function ensureVADScriptsLoaded(): Promise<void> {
+  if (!vadScriptsPromise) {
+    vadScriptsPromise = (async () => {
+      for (const src of VAD_SCRIPT_URLS) {
+        await new Promise<void>((resolve, reject) => {
+          const script = document.createElement("script");
+          script.src = src;
+          script.onload = () => resolve();
+          script.onerror = () => reject(new Error(`Failed to load VAD dependency: ${src}`));
+          document.head.appendChild(script);
+        });
+      }
+    })();
+    // Allow retrying on the next init attempt if loading failed.
+    vadScriptsPromise.catch(() => {
+      vadScriptsPromise = null;
+    });
+  }
+  return vadScriptsPromise;
+}
+
 declare global {
   interface Window {
-    vad: {
+    vad?: {
       MicVAD: {
-        new (options: VADOptions): Promise<VADInstance>;
+        new: (options: VADOptions) => Promise<VADInstance>;
       };
     };
   }
 }
 
-/**
- * 使用 VAD (Voice Activity Detection) 进行录音的 composable
- * VAD 会自动检测用户何时开始和停止说话，无需手动控制
- */
+/** Keep microphone operations ordered across start, stop, and unmount. */
 export function useVADRecording() {
   const isRecording = ref(false);
   const isSpeaking = ref(false);
-  const audioEnergy = ref(0); // 0-1 之间的能量值
-  const vadInstance = ref<VADInstance | null>(null);
-  const isInitialized = ref(false);
-  const onSpeechStartCallback = ref<(() => void) | null>(null);
-  const onSpeechEndCallback = ref<((audio: Float32Array) => void) | null>(null);
+  const audioEnergy = ref(0);
+  let vadInstance: VADInstance | null = null;
+  let lifecycle: Promise<void> = Promise.resolve();
+  let generation = 0;
+  let activeGeneration = 0;
+  let wantsRecording = false;
+  let disposed = false;
+  let onSpeechStartCallback: (() => void) | null = null;
+  let onSpeechEndCallback: ((audio: Float32Array) => void) | null = null;
 
-  // Live Mode 不需要上传音频，直接通过 WebSocket 实时发送
-
-  // 初始化 VAD
-  async function initVAD() {
-    if (!window.vad) {
-      console.error("VAD library not loaded. Please ensure the scripts are included in index.html");
-      return;
-    }
-
-    try {
-      vadInstance.value = await (window.vad.MicVAD as any).new({
-        onSpeechStart: () => {
-          console.info("[VAD] Speech started");
-          isSpeaking.value = true;
-          // 调用开始说话回调
-          if (onSpeechStartCallback.value) {
-            onSpeechStartCallback.value();
-          }
-        },
-        onSpeechRealStart: () => {
-          console.info("[VAD] Real speech started");
-        },
-        onSpeechEnd: (audio: Float32Array) => {
-          console.info("[VAD] Speech ended, audio length:", audio.length);
-          isSpeaking.value = false;
-          // 调用语音结束回调，传递原始音频数据
-          if (onSpeechEndCallback.value) {
-            onSpeechEndCallback.value(audio);
-          }
-        },
-        onVADMisfire: () => {
-          console.info("[VAD] VAD misfire - speech segment too short");
-          isSpeaking.value = false;
-        },
-        onFrameProcessed: (probabilities: { isSpeech: number; notSpeech: number }, frame: Float32Array) => {
-          // 计算 RMS (Root Mean Square) 作为能量
-          let sum = 0;
-          for (let i = 0; i < frame.length; i++) {
-            sum += frame[i] * frame[i];
-          }
-          const rms = Math.sqrt(sum / frame.length);
-          // 简单的归一化及平滑处理，根据经验 RMS 通常较小
-          // 放大系数可以根据实际情况调整
-          const targetEnergy = Math.min(rms * 5, 1);
-          audioEnergy.value = audioEnergy.value * 0.8 + targetEnergy * 0.2;
-        },
-        // VAD 配置参数
-        positiveSpeechThreshold: 0.3,
-        negativeSpeechThreshold: 0.25,
-        redemptionMs: 1400,
-        preSpeechPadMs: 800,
-        minSpeechMs: 400,
-        submitUserSpeechOnPause: false,
-        model: "v5",
-        baseAssetPath: "https://cdn.jsdelivr.net/npm/@ricky0123/vad-web@0.0.29/dist/",
-        onnxWASMBasePath: "https://cdn.jsdelivr.net/npm/onnxruntime-web@1.22.0/dist/",
-      });
-
-      isInitialized.value = true;
-      console.info("VAD initialized successfully");
-    } catch (error) {
-      console.error("Failed to initialize VAD:", error);
-      isInitialized.value = false;
-    }
+  function enqueue(operation: () => Promise<void>): Promise<void> {
+    lifecycle = lifecycle.then(operation).catch((error) => {
+      console.error("VAD lifecycle operation failed:", error);
+    });
+    return lifecycle;
   }
 
-  // 开始录音（启动 VAD）
-  async function startRecording(onSpeechStart: () => void, onSpeechEnd: (audio: Float32Array) => void) {
-    // 存储回调函数
-    onSpeechStartCallback.value = onSpeechStart;
-    onSpeechEndCallback.value = onSpeechEnd;
-
-    if (!isInitialized.value) {
-      await initVAD();
-    }
-
-    if (vadInstance.value) {
-      vadInstance.value.start();
-      isRecording.value = true;
-      console.info("[VAD] Started");
-    }
+  function isCurrent(current: number) {
+    return !disposed && wantsRecording && current === generation;
   }
 
-  // 停止录音（暂停 VAD）
-  function stopRecording() {
-    if (vadInstance.value) {
-      vadInstance.value.pause();
-      isRecording.value = false;
-      isSpeaking.value = false;
-      onSpeechStartCallback.value = null;
-      onSpeechEndCallback.value = null;
-      console.info("[VAD] Stopped");
-    }
+  function acceptsEvents() {
+    return isCurrent(activeGeneration);
   }
 
-  // 清理资源
+  function invalidateRecording() {
+    generation += 1;
+    activeGeneration = 0;
+    wantsRecording = false;
+    isRecording.value = false;
+    isSpeaking.value = false;
+    audioEnergy.value = 0;
+    onSpeechStartCallback = null;
+    onSpeechEndCallback = null;
+  }
+
+  async function destroyInstance(instance: VADInstance) {
+    if (instance.destroy) await instance.destroy();
+    else await instance.pause();
+  }
+
+  async function ensureInstance(current: number): Promise<VADInstance | null> {
+    if (vadInstance) return vadInstance;
+    await ensureVADScriptsLoaded();
+    if (!isCurrent(current)) return null;
+    const factory = window.vad?.MicVAD;
+    if (!factory) throw new Error("VAD library not loaded.");
+
+    const instance = await factory.new({
+      startOnLoad: false,
+      onSpeechStart: () => {
+        if (!acceptsEvents()) return;
+        isSpeaking.value = true;
+        onSpeechStartCallback?.();
+      },
+      onSpeechRealStart: () => {
+        if (acceptsEvents()) console.info("[VAD] Real speech started");
+      },
+      onSpeechEnd: (audio: Float32Array) => {
+        if (!acceptsEvents()) return;
+        isSpeaking.value = false;
+        onSpeechEndCallback?.(audio);
+      },
+      onVADMisfire: () => {
+        if (acceptsEvents()) isSpeaking.value = false;
+      },
+      onFrameProcessed: (_probabilities, frame) => {
+        if (!acceptsEvents() || !frame.length) return;
+        let sum = 0;
+        for (const sample of frame) sum += sample * sample;
+        const targetEnergy = Math.min(Math.sqrt(sum / frame.length) * 5, 1);
+        audioEnergy.value = audioEnergy.value * 0.8 + targetEnergy * 0.2;
+      },
+      positiveSpeechThreshold: 0.3,
+      negativeSpeechThreshold: 0.25,
+      redemptionMs: 1400,
+      preSpeechPadMs: 800,
+      minSpeechMs: 400,
+      submitUserSpeechOnPause: false,
+      model: "v5",
+      baseAssetPath: VAD_BASE_ASSET_PATH,
+      onnxWASMBasePath: VAD_ONNX_WASM_BASE_PATH,
+    });
+    if (disposed) {
+      await destroyInstance(instance);
+      return null;
+    }
+    vadInstance = instance;
+    return instance;
+  }
+
+  function startRecording(onSpeechStart: () => void, onSpeechEnd: (audio: Float32Array) => void): Promise<void> {
+    if (disposed) return Promise.resolve();
+    if (wantsRecording) return lifecycle;
+    wantsRecording = true;
+    const current = ++generation;
+    onSpeechStartCallback = onSpeechStart;
+    onSpeechEndCallback = onSpeechEnd;
+    return enqueue(async () => {
+      if (!isCurrent(current)) return;
+      try {
+        const instance = await ensureInstance(current);
+        if (!instance || !isCurrent(current)) return;
+        activeGeneration = current;
+        await instance.start();
+        if (isCurrent(current)) isRecording.value = true;
+      } catch (error) {
+        if (isCurrent(current)) {
+          invalidateRecording();
+          console.error("Failed to start VAD recording:", error);
+        }
+        // Finish releasing a failed start before the next queued operation.
+        if (vadInstance) await vadInstance.pause();
+      }
+    });
+  }
+
+  function stopRecording(): Promise<void> {
+    invalidateRecording();
+    return enqueue(async () => {
+      if (vadInstance) await vadInstance.pause();
+    });
+  }
+
   onBeforeUnmount(() => {
-    if (vadInstance.value && isRecording.value) {
-      stopRecording();
-    }
+    disposed = true;
+    invalidateRecording();
+    void enqueue(async () => {
+      const instance = vadInstance;
+      vadInstance = null;
+      if (instance) await destroyInstance(instance);
+    });
   });
 
   return {
     isRecording,
-    isSpeaking, // 用户是否正在说话
-    audioEnergy, // 当前音频能量
+    isSpeaking,
+    audioEnergy,
     startRecording,
     stopRecording,
   };

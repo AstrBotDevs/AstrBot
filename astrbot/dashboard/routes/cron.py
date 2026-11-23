@@ -1,11 +1,12 @@
 import asyncio
 import traceback
-from datetime import datetime, timezone
+from datetime import datetime
 
 from quart import jsonify, request
 
 from astrbot.core import logger
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
+from astrbot.dashboard.services.cron_service import CronService
 
 from .route import Response, Route, RouteContext
 
@@ -29,22 +30,7 @@ class CronRoute(Route):
         self.register_routes()
 
     def _serialize_job(self, job) -> dict:
-        data = job.model_dump() if hasattr(job, "model_dump") else job.__dict__
-        for k in ["created_at", "updated_at", "last_run_at", "next_run_time"]:
-            v = data.get(k)
-            if isinstance(v, datetime):
-                # Attach UTC
-                if v.tzinfo is None:
-                    v = v.replace(tzinfo=timezone.utc)
-                data[k] = v.isoformat()
-        # expose note explicitly for UI (prefer payload.note then description)
-        payload = data.get("payload") or {}
-        data["note"] = payload.get("note") or data.get("description") or ""
-        data["run_at"] = payload.get("run_at")
-        data["run_once"] = data.get("run_once", False)
-        # status is internal; hide to avoid implying one-time completion for recurring jobs
-        data.pop("status", None)
-        return data
+        return CronService.serialize_job(job)
 
     async def list_jobs(self):
         try:
@@ -61,17 +47,28 @@ class CronRoute(Route):
             logger.error(traceback.format_exc())
             return jsonify(Response().error(f"Failed to list jobs: {e!s}").to_json())
 
+    async def _read_job_request(self):
+        cron_mgr = self.core_lifecycle.cron_manager
+        if cron_mgr is None:
+            return (
+                None,
+                None,
+                jsonify(Response().error("Cron manager not initialized").to_json()),
+            )
+        payload = await request.json
+        if not isinstance(payload, dict):
+            return (
+                cron_mgr,
+                None,
+                jsonify(Response().error("Invalid payload").to_json()),
+            )
+        return cron_mgr, payload, None
+
     async def create_job(self):
         try:
-            cron_mgr = self.core_lifecycle.cron_manager
-            if cron_mgr is None:
-                return jsonify(
-                    Response().error("Cron manager not initialized").to_json(),
-                )
-
-            payload = await request.json
-            if not isinstance(payload, dict):
-                return jsonify(Response().error("Invalid payload").to_json())
+            cron_mgr, payload, error = await self._read_job_request()
+            if cron_mgr is None or payload is None:
+                return error
 
             name = payload.get("name") or "active_agent_task"
             cron_expression = payload.get("cron_expression")
@@ -132,15 +129,9 @@ class CronRoute(Route):
 
     async def update_job(self, job_id: str):
         try:
-            cron_mgr = self.core_lifecycle.cron_manager
-            if cron_mgr is None:
-                return jsonify(
-                    Response().error("Cron manager not initialized").to_json(),
-                )
-
-            payload = await request.json
-            if not isinstance(payload, dict):
-                return jsonify(Response().error("Invalid payload").to_json())
+            cron_mgr, payload, error = await self._read_job_request()
+            if cron_mgr is None or payload is None:
+                return error
 
             job = await cron_mgr.db.get_cron_job(job_id)
             if not job:
@@ -167,18 +158,7 @@ class CronRoute(Route):
             )
 
             if job.job_type == "active_agent":
-                merged_payload = (
-                    dict(job.payload) if isinstance(job.payload, dict) else {}
-                )
-                if "payload" in payload and isinstance(payload.get("payload"), dict):
-                    merged_payload.update(payload["payload"])
-
-                if "session" in payload:
-                    session = str(payload.get("session") or "").strip()
-                    if session:
-                        merged_payload["session"] = session
-                    else:
-                        merged_payload.pop("session", None)
+                merged_payload = CronService.merge_active_agent_payload(job, payload)
 
                 note_updated = False
                 if "note" in payload:

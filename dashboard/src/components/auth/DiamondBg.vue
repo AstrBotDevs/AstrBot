@@ -194,7 +194,7 @@ onUnmounted(() => {
 }
 
 /* Light mode: clean white */
-.v-theme--bluebusinesstheme .bg {
+.v-theme--BlueBusinessTheme .bg {
   background: #ffffff;
 }
 

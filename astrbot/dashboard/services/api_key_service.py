@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import secrets
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from astrbot.core.db import BaseDatabase
@@ -60,7 +60,7 @@ class ApiKeyService:
             "expires_at": cls._serialize_datetime(key.expires_at),
             "revoked_at": cls._serialize_datetime(key.revoked_at),
             "is_revoked": key.revoked_at is not None,
-            "is_expired": bool(expires_at and expires_at < datetime.now(timezone.utc)),
+            "is_expired": bool(expires_at and expires_at < datetime.now(UTC)),
         }
 
     @staticmethod
@@ -102,7 +102,7 @@ class ApiKeyService:
             raise ApiKeyServiceError("expires_in_days must be an integer") from exc
         if expires_in_days_int <= 0:
             raise ApiKeyServiceError("expires_in_days must be greater than 0")
-        return datetime.now(timezone.utc) + timedelta(days=expires_in_days_int)
+        return datetime.now(UTC) + timedelta(days=expires_in_days_int)
 
     async def list_api_keys(self) -> list[dict]:
         keys = await self.db.list_api_keys()

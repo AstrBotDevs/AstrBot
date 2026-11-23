@@ -10,6 +10,7 @@ from astrbot.core import logger
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
 from astrbot.core.db import BaseDatabase
 from astrbot.core.umo_alias import build_umo_alias_map, parse_umo, serialize_umo_alias
+from astrbot.dashboard.services.conversation_service import conversation_export_identity
 
 from .route import Response, Route, RouteContext
 
@@ -128,6 +129,20 @@ class ConversationRoute(Route):
             logger.error(error_msg)
             return Response().error(f"获取对话列表失败: {e!s}").to_json()
 
+    async def _get_requested_conversation(self, user_id, cid):
+        if not user_id or not cid:
+            return None, Response().error("缺少必要参数: user_id 和 cid").to_json()
+        if not self.conv_mgr:
+            return None, Response().error(
+                "Conversation manager not available"
+            ).to_json()
+        conversation = await self.conv_mgr.get_conversation(
+            unified_msg_origin=user_id, conversation_id=cid
+        )
+        if not conversation:
+            return None, Response().error("对话不存在").to_json()
+        return conversation, None
+
     async def get_conv_detail(self):
         """获取指定对话详情(通过POST请求)"""
         try:
@@ -135,17 +150,9 @@ class ConversationRoute(Route):
             user_id = data.get("user_id")
             cid = data.get("cid")
 
-            if not user_id or not cid:
-                return Response().error("缺少必要参数: user_id 和 cid").to_json()
-
-            if not self.conv_mgr:
-                return Response().error("Conversation manager not available").to_json()
-            conversation = await self.conv_mgr.get_conversation(
-                unified_msg_origin=user_id,
-                conversation_id=cid,
-            )
-            if not conversation:
-                return Response().error("对话不存在").to_json()
+            conversation, error = await self._get_requested_conversation(user_id, cid)
+            if conversation is None:
+                return error
 
             alias_map = build_umo_alias_map(
                 await self.db_helper.get_umo_aliases([user_id])
@@ -179,16 +186,9 @@ class ConversationRoute(Route):
             cid = data.get("cid")
             title = data.get("title")
 
-            if not user_id or not cid:
-                return Response().error("缺少必要参数: user_id 和 cid").to_json()
-            if not self.conv_mgr:
-                return Response().error("Conversation manager not available").to_json()
-            conversation = await self.conv_mgr.get_conversation(
-                unified_msg_origin=user_id,
-                conversation_id=cid,
-            )
-            if not conversation:
-                return Response().error("对话不存在").to_json()
+            conversation, error = await self._get_requested_conversation(user_id, cid)
+            if conversation is None:
+                return error
 
             persona_id = data.get("persona_id", conversation.persona_id)
 
@@ -353,14 +353,10 @@ class ConversationRoute(Route):
             failed_items = []
 
             for conv_info in conversations_to_export:
-                user_id = conv_info.get("user_id")
-                cid = conv_info.get("cid")
-
-                if not user_id or not cid:
-                    failed_items.append(
-                        f"user_id:{user_id}, cid:{cid} - 缺少必要参数",
-                    )
+                identity = conversation_export_identity(conv_info, failed_items)
+                if identity is None:
                     continue
+                user_id, cid = identity
 
                 try:
                     conversation = await self.conv_mgr.get_conversation(

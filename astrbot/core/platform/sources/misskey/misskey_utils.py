@@ -37,12 +37,13 @@ class MessagePayloadBuilder:
     """构建不同类型消息负载的帮助类(无状态)｡"""
 
     @staticmethod
-    def build_chat_payload(
-        user_id: str,
+    def _recipient_payload(
+        recipient_field: str,
+        recipient_id: str,
         text: str | None,
-        file_id: str | None = None,
-    ) -> dict[str, Any]:
-        payload = {"toUserId": user_id}
+        file_id: str | None,
+    ) -> dict[str, str]:
+        payload = {recipient_field: recipient_id}
         if text:
             payload["text"] = text
         if file_id:
@@ -50,17 +51,24 @@ class MessagePayloadBuilder:
         return payload
 
     @staticmethod
+    def build_chat_payload(
+        user_id: str,
+        text: str | None,
+        file_id: str | None = None,
+    ) -> dict[str, Any]:
+        return MessagePayloadBuilder._recipient_payload(
+            "toUserId", user_id, text, file_id
+        )
+
+    @staticmethod
     def build_room_payload(
         room_id: str,
         text: str | None,
         file_id: str | None = None,
     ) -> dict[str, Any]:
-        payload = {"toRoomId": room_id}
-        if text:
-            payload["text"] = text
-        if file_id:
-            payload["fileId"] = file_id
-        return payload
+        return MessagePayloadBuilder._recipient_payload(
+            "toRoomId", room_id, text, file_id
+        )
 
     @staticmethod
     def build_note_payload(
@@ -86,6 +94,33 @@ def serialize_message_chain(chain: list[Any]) -> tuple[str, bool]:
         nonlocal has_at
         if isinstance(component, Comp.Plain):
             return component.text
+        if isinstance(component, Comp.ActionRow):
+            # Misskey notes can render MFM links but do not expose a bot callback
+            # channel for controls embedded in a note.
+            has_callback = any(
+                isinstance(button.action, Comp.Button.CallbackAction)
+                for button in component.buttons
+            )
+
+            buttons = []
+            if component.fallback_text and has_callback:
+                buttons.append(component.fallback_text)
+            for button in component.buttons:
+                if isinstance(button.action, Comp.Button.UrlAction):
+                    label = button.label.replace("\\", "\\\\").replace("]", "\\]")
+                    url = button.action.url.replace("\\", "%5C").replace(")", "%29")
+                    buttons.append(f"[{label}]({url})")
+                elif not component.fallback_text:
+                    buttons.append(button.label)
+            return " | ".join(buttons)
+        if isinstance(component, Comp.Button):
+            if isinstance(component.action, Comp.Button.UrlAction):
+                label = component.label.replace("\\", "\\\\").replace("]", "\\]")
+                url = component.action.url.replace("\\", "%5C").replace(")", "%29")
+                return f"[{label}]({url})"
+            return component.label
+        if isinstance(component, Comp.ButtonInteraction):
+            return ""
         if isinstance(component, Comp.File):
             # 为文件组件返回占位符,但适配器仍会处理原组件
             return "[文件]"

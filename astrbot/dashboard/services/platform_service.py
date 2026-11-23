@@ -2,9 +2,11 @@ from __future__ import annotations
 
 import secrets
 import string
+from collections.abc import Awaitable, Callable, Iterable
 
 from astrbot.core import logger
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
+from astrbot.core.log import log_context
 from astrbot.core.platform import Platform
 from astrbot.core.platform.sources.dingtalk.app_registration import (
     poll_dingtalk_app_registration_once,
@@ -14,7 +16,10 @@ from astrbot.core.platform.sources.lark.app_registration import (
     poll_app_registration_once,
     request_app_registration,
 )
-from astrbot.core.platform.sources.lark.bot_info import request_lark_bot_info
+from astrbot.core.platform.sources.lark.bot_info import (
+    LarkBotInfo,
+    request_lark_bot_info,
+)
 from astrbot.core.platform.sources.qqofficial.login_registration import (
     poll_qqofficial_login_once,
     request_qqofficial_login_qr,
@@ -35,6 +40,50 @@ def random_platform_id_suffix() -> str:
     return "_" + "".join(secrets.choice(string.ascii_lowercase) for _ in range(4))
 
 
+def find_unified_webhook_platform(
+    platforms: Iterable[Platform], webhook_uuid: str
+) -> Platform | None:
+    """Return the first matching adapter that has unified webhooks enabled."""
+    for platform in platforms:
+        if platform.config.get("webhook_uuid") == webhook_uuid:
+            if platform.unified_webhook():
+                return platform
+    return None
+
+
+def registration_request_details(payload: dict) -> tuple[str, dict]:
+    """Normalize the action and optional platform configuration consistently."""
+    action = str(payload.get("action", "")).strip().lower()
+    if not action:
+        raise PlatformServiceError("Missing action", 400)
+    platform_config = payload.get("platform_config")
+    if not isinstance(platform_config, dict):
+        platform_config = {}
+    return action, platform_config
+
+
+async def enrich_lark_registration_result(
+    result: dict,
+    domain: str,
+    request_bot_info: Callable[..., Awaitable[LarkBotInfo]],
+) -> dict:
+    """Add optional bot metadata without failing a completed registration."""
+    if result.get("status") == "created":
+        try:
+            bot_info = await request_bot_info(
+                domain=str(result.get("domain") or domain),
+                app_id=str(result.get("app_id") or ""),
+                app_secret=str(result.get("app_secret") or ""),
+            )
+            if bot_info.app_name:
+                result["bot_name"] = bot_info.app_name
+            if bot_info.open_id:
+                result["bot_open_id"] = bot_info.open_id
+        except Exception as exc:
+            logger.error(f"获取飞书机器人信息失败: {exc}", exc_info=True)
+    return result
+
+
 class PlatformService:
     def __init__(self, core_lifecycle: AstrBotCoreLifecycle) -> None:
         self.platform_manager = core_lifecycle.platform_manager
@@ -46,23 +95,22 @@ class PlatformService:
             logger.warning(f"未找到 webhook_uuid 为 {webhook_uuid} 的平台")
             raise PlatformServiceError("未找到对应平台", 404)
 
-        try:
-            return await platform_adapter.webhook_callback(request_obj)
-        except NotImplementedError as exc:
-            logger.error(
-                f"平台 {platform_adapter.meta().name} 未实现 webhook_callback 方法"
-            )
-            raise PlatformServiceError("平台未支持统一 Webhook 模式", 500) from exc
-        except Exception as exc:
-            logger.error(f"处理 webhook 回调时发生错误: {exc}", exc_info=True)
-            raise PlatformServiceError("处理回调失败", 500) from exc
+        meta = platform_adapter.meta()
+        platform_id = meta.id or platform_adapter.config.get("id")
+        with log_context(platform_id, meta.name):
+            try:
+                return await platform_adapter.webhook_callback(request_obj)
+            except NotImplementedError as exc:
+                logger.error(f"平台 {meta.name} 未实现 webhook_callback 方法")
+                raise PlatformServiceError("平台未支持统一 Webhook 模式", 500) from exc
+            except Exception as exc:
+                logger.error(f"处理 webhook 回调时发生错误: {exc}", exc_info=True)
+                raise PlatformServiceError("处理回调失败", 500) from exc
 
     def find_platform_by_uuid(self, webhook_uuid: str) -> Platform | None:
-        for platform in self.platform_manager.platform_insts:
-            if platform.config.get("webhook_uuid") == webhook_uuid:
-                if platform.unified_webhook():
-                    return platform
-        return None
+        return find_unified_webhook_platform(
+            self.platform_manager.platform_insts, webhook_uuid
+        )
 
     def get_platform_stats(self):
         try:
@@ -77,39 +125,22 @@ class PlatformService:
         payload: dict,
     ) -> dict:
         try:
-            action = str(payload.get("action", "")).strip().lower()
-            if not action:
-                raise PlatformServiceError("Missing action", 400)
-
-            platform_config = payload.get("platform_config")
-            if not isinstance(platform_config, dict):
-                platform_config = {}
-
-            if platform_type == "lark":
-                return await self._handle_lark_registration(
-                    action,
-                    payload,
-                    platform_config,
-                )
-            if platform_type == "weixin_oc":
-                return await self._handle_weixin_oc_registration(
-                    action,
-                    payload,
-                    platform_config,
-                )
+            action, platform_config = registration_request_details(payload)
             if platform_type == "dingtalk":
                 return await self._handle_dingtalk_registration(action, payload)
-            if platform_type in {"qq_official", "qq_official_webhook"}:
-                return await self._handle_qqofficial_registration(
-                    action,
-                    payload,
-                    platform_config,
+            handlers = {
+                "lark": self._handle_lark_registration,
+                "weixin_oc": self._handle_weixin_oc_registration,
+                "qq_official": self._handle_qqofficial_registration,
+                "qq_official_webhook": self._handle_qqofficial_registration,
+            }
+            handler = handlers.get(platform_type)
+            if handler is None:
+                raise PlatformServiceError(
+                    f"Unsupported platform registration: {platform_type}",
+                    404,
                 )
-
-            raise PlatformServiceError(
-                f"Unsupported platform registration: {platform_type}",
-                404,
-            )
+            return await handler(action, payload, platform_config)
         except PlatformServiceError:
             raise
         except Exception as exc:
@@ -147,20 +178,9 @@ class PlatformService:
                 domain=domain,
                 device_code=device_code,
             )
-            if result.get("status") == "created":
-                try:
-                    bot_info = await request_lark_bot_info(
-                        domain=str(result.get("domain") or domain),
-                        app_id=str(result.get("app_id") or ""),
-                        app_secret=str(result.get("app_secret") or ""),
-                    )
-                    if bot_info.app_name:
-                        result["bot_name"] = bot_info.app_name
-                    if bot_info.open_id:
-                        result["bot_open_id"] = bot_info.open_id
-                except Exception as exc:
-                    logger.error(f"获取飞书机器人信息失败: {exc}", exc_info=True)
-            return result
+            return await enrich_lark_registration_result(
+                result, domain, request_lark_bot_info
+            )
 
         raise PlatformServiceError(f"Unsupported action: {action}", 400)
 

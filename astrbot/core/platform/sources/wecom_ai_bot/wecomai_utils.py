@@ -150,6 +150,18 @@ def format_error_response(error_code: int, error_msg: str) -> str:
     return f"Error {error_code}: {error_msg}"
 
 
+def decrypt_wecom_image(encrypted_data: bytes, aes_key: bytes) -> bytes:
+    """Decrypt image bytes using WeCom's key-derived IV and validated padding."""
+    cipher = AES.new(aes_key, AES.MODE_CBC, aes_key[: AES.block_size])
+    decrypted = cipher.decrypt(encrypted_data)
+    if not decrypted:
+        raise ValueError("Encrypted image is empty")
+    padding = decrypted[-1]
+    if not 1 <= padding <= 32 or decrypted[-padding:] != bytes([padding]) * padding:
+        raise ValueError("Invalid encrypted image padding")
+    return decrypted[:-padding]
+
+
 async def process_encrypted_image(
     image_url: str,
     aes_key_base64: str,
@@ -169,7 +181,9 @@ async def process_encrypted_image(
     logger.info("开始下载加密图片: %s", image_url)
     try:
         async with aiohttp.ClientSession() as session:
-            async with session.get(image_url, timeout=15) as response:
+            async with session.get(
+                image_url, timeout=aiohttp.ClientTimeout(total=15)
+            ) as response:
                 response.raise_for_status()
                 encrypted_data = await response.read()
         logger.info("图片下载成功,大小: %d 字节", len(encrypted_data))
@@ -187,18 +201,7 @@ async def process_encrypted_image(
     if len(aes_key) != 32:
         raise ValueError("无效的AES密钥长度: 应为32字节")
 
-    iv = aes_key[:16]  # 初始向量为密钥前16字节
-
-    # 3. 解密图片数据
-    cipher = AES.new(aes_key, AES.MODE_CBC, iv)
-    decrypted_data = cipher.decrypt(encrypted_data)
-
-    # 4. 去除PKCS#7填充 (Python 3兼容写法)
-    pad_len = decrypted_data[-1]  # 直接获取最后一个字节的整数值
-    if pad_len > 32:  # AES-256块大小为32字节
-        raise ValueError("无效的填充长度 (大于32字节)")
-
-    decrypted_data = decrypted_data[:-pad_len]
+    decrypted_data = decrypt_wecom_image(encrypted_data, aes_key)
     logger.info("图片解密成功,解密后大小: %d 字节", len(decrypted_data))
 
     # 5. 转换为base64编码

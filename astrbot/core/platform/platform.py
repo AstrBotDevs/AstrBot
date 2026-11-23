@@ -9,6 +9,7 @@ from enum import Enum
 from typing import Any
 
 from astrbot.core.message.message_event_result import MessageChain
+from astrbot.core.platform.astrbot_message import AstrBotMessage
 from astrbot.core.utils.metrics import Metric
 
 from .astr_message_event import AstrMessageEvent
@@ -169,3 +170,19 @@ class Platform(abc.ABC):
 
         """
         raise NotImplementedError(f"平台 {self.meta().name} 未实现统一 Webhook 模式")
+
+    def create_event(self, message: AstrBotMessage) -> AstrMessageEvent:
+        """Creates a message event for this platform.
+
+        Args:
+            message: AstrBot message object to wrap.
+
+        Returns:
+            Created message event.
+        """
+        return AstrMessageEvent(
+            message_str=message.message_str,
+            message_obj=message,
+            platform_meta=self.meta(),
+            session_id=message.session_id,
+        )

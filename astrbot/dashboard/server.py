@@ -1,6 +1,7 @@
 import asyncio
 import errno
 import ipaddress
+import mimetypes
 import os
 import platform
 import socket
@@ -27,11 +28,109 @@ from astrbot.dashboard.asgi_runtime import (
     DashboardRequestState,
     FastAPIAppAdapter,
 )
+from astrbot.dashboard.config_values import (
+    expand_env_placeholders as _expand_env_placeholders,
+)
+from astrbot.dashboard.config_values import resolve_dashboard_host
 from astrbot.dashboard.responses import error
 from astrbot.dashboard.services.auth_service import DASHBOARD_JWT_COOKIE_NAME
+from astrbot.dashboard.services.backup_service import CHUNK_SIZE
+from astrbot.dashboard.services.chat_service import MAX_UPLOAD_FILE_SIZE_BYTES
+from astrbot.dashboard.services.config_service import MAX_FILE_BYTES
 
 from .api.app import create_dashboard_asgi_app
 from .plugin_page_auth import PluginPageAuth
+
+try:  # Mirror starlette.requests so media type detection matches the parser.
+    from python_multipart.multipart import parse_options_header
+except ImportError:  # pragma: no cover
+    try:
+        from multipart.multipart import parse_options_header
+    except ImportError:
+        parse_options_header = None
+
+if os.name == "nt":
+    # Windows 的 mimetypes 会把 .svg 映射成非标准的 image/svg,这里强制覆盖为标准类型
+    mimetypes.add_type("image/svg+xml", ".svg", strict=True)
+
+# Multipart framing (boundaries, part headers) rides on top of the file
+# payload, so whole-file upload routes get slack beyond the file size limit;
+# otherwise a file exactly at the limit would be rejected with 413.
+_MULTIPART_OVERHEAD_BYTES = 1024 * 1024
+
+# Per-route request body limits overriding the default MAX_CONTENT_LENGTH.
+# More specific prefixes must come first. Routes not listed here fall back
+# to the default; requests without a Content-Length header pass through and
+# are bounded by the per-endpoint max_bytes checks at save time.
+_BODY_LIMIT_OVERRIDES: tuple[tuple[str, int], ...] = (
+    ("/api/v1/backups/upload/chunk", CHUNK_SIZE * 2),
+    ("/api/backup/upload/chunk", CHUNK_SIZE * 2),
+    ("/api/v1/files/upload/chunk", CHUNK_SIZE * 2),
+    ("/api/v1/files", MAX_UPLOAD_FILE_SIZE_BYTES + _MULTIPART_OVERHEAD_BYTES),
+    (
+        "/api/chat/post_file",
+        MAX_UPLOAD_FILE_SIZE_BYTES + _MULTIPART_OVERHEAD_BYTES,
+    ),
+    ("/api/v1/plugins/config-files", MAX_FILE_BYTES + _MULTIPART_OVERHEAD_BYTES),
+    (
+        "/api/v1/knowledge-bases/",
+        MAX_UPLOAD_FILE_SIZE_BYTES + _MULTIPART_OVERHEAD_BYTES,
+    ),
+)
+
+
+# Methods with request-body semantics; the 411 stopgap only applies to
+# these, since form parsing (and its disk spooling) cannot trigger
+# for body-less methods like GET.
+_BODY_METHODS = frozenset({"POST", "PUT", "PATCH"})
+
+
+def _check_body_limit(
+    path: str,
+    content_length: int | None,
+    content_type: str,
+    *,
+    method: str = "POST",
+    default_limit: int,
+) -> tuple[int, str] | None:
+    """Decide whether an /api request body must be rejected up front.
+
+    Returns:
+        A (status_code, message) rejection, or None to pass through.
+
+    Note:
+        The 411 rule is a stopgap scoped to multipart uploads on methods
+        with body semantics: their form parsing spools large bodies to
+        disk before any per-file size check can run, so they must declare
+        a length that can be bounded before parsing. Body-less methods
+        (GET etc.) never trigger form parsing and pass even with a bogus
+        multipart Content-Type header. Other lengthless bodies are still
+        bounded only at save time; closing that gap fully requires
+        counting bytes as they arrive, which is out of scope here.
+    """
+    if not path.startswith("/api"):
+        return None
+    if content_length is None:
+        if method not in _BODY_METHODS:
+            return None
+        # Identify the media type by the same rule the form parser uses:
+        # parse_options_header strips surrounding whitespace, so a leading-
+        # space Content-Type that startswith() would miss is still caught.
+        media_type = (
+            parse_options_header(content_type)[0] if parse_options_header else b""
+        )
+        if media_type == b"multipart/form-data":
+            return 411, "Content-Length header is required for uploads"
+        return None
+    limit = default_limit
+    for prefix, route_limit in _BODY_LIMIT_OVERRIDES:
+        if path.startswith(prefix):
+            limit = route_limit
+            break
+    if content_length > limit:
+        return 413, f"Request body exceeds the {limit} bytes limit"
+    return None
+
 
 _RATE_LIMITED_ENDPOINTS: frozenset = frozenset(
     {
@@ -128,32 +227,25 @@ def _normalize_dashboard_value(
     return _expand_env_placeholders(value, field_name).strip()
 
 
-def _expand_env_placeholders(value: str, field_name: str) -> str:
-    missing_vars: list[str] = []
-    import re
-
-    pattern = re.compile(
-        r"\$(?:\{(?P<braced>[A-Za-z_][A-Za-z0-9_]*)(?::-(?P<default>[^}]*))?\}|(?P<plain>[A-Za-z_][A-Za-z0-9_]*))"
-    )
-
-    def _replace(match: re.Match[str]) -> str:
-        var_name = match.group("braced") or match.group("plain")
-        default = match.group("default")
-        env_value = os.environ.get(var_name)
-        if env_value is not None:
-            return env_value
-        if default is not None:
-            return default
-        missing_vars.append(var_name)
-        return match.group(0)
-
-    expanded = pattern.sub(_replace, value)
-    if missing_vars:
-        missing = ", ".join(sorted(set(missing_vars)))
-        raise ValueError(
-            f"Unresolved environment variable(s) in dashboard {field_name}: {missing}"
-        )
-    return expanded
+def _validated_proxy_address(
+    forwarded_for: str | None, real_ip: str | None
+) -> str | None:
+    """Read the first valid forwarded address, then the single-address fallback."""
+    forwarded_for = str(forwarded_for or "").strip()
+    if forwarded_for:
+        first_ip = forwarded_for.split(",", 1)[0].strip()
+        if first_ip and first_ip.lower() != "unknown":
+            try:
+                return str(ipaddress.ip_address(first_ip))
+            except ValueError:
+                pass
+    real_ip = str(real_ip or "").strip()
+    if real_ip and real_ip.lower() != "unknown":
+        try:
+            return str(ipaddress.ip_address(real_ip))
+        except ValueError:
+            pass
+    return None
 
 
 class _ProxyAwareHypercornLogger(HypercornLogger):
@@ -171,21 +263,9 @@ class _ProxyAwareHypercornLogger(HypercornLogger):
             if forwarded_for is not None and real_ip is not None:
                 break
 
-        forwarded_for = str(forwarded_for or "").strip()
-        if forwarded_for:
-            first_ip = forwarded_for.split(",", 1)[0].strip()
-            if first_ip and first_ip.lower() != "unknown":
-                try:
-                    return str(ipaddress.ip_address(first_ip))
-                except ValueError:
-                    pass
-
-        real_ip = str(real_ip or "").strip()
-        if real_ip and real_ip.lower() != "unknown":
-            try:
-                return str(ipaddress.ip_address(real_ip))
-            except ValueError:
-                pass
+        proxy_address = _validated_proxy_address(forwarded_for, real_ip)
+        if proxy_address is not None:
+            return proxy_address
 
         client = request_scope.get("client")
         if not client:
@@ -248,6 +328,27 @@ class AstrBotDashboard:
             if auth_response is not None:
                 return auth_response
             return await call_next(current_request)
+
+        @self.asgi_app.middleware("http")
+        async def dashboard_body_limit_middleware(request_, call_next):
+            # Registered after the auth middleware so it runs outermost and
+            # can reject oversized bodies before any parsing happens.
+            raw_length = request_.headers.get("content-length")
+            try:
+                content_length = int(raw_length) if raw_length else None
+            except ValueError:
+                content_length = None
+            rejection = _check_body_limit(
+                request_.url.path,
+                content_length,
+                request_.headers.get("content-type", ""),
+                method=request_.method,
+                default_limit=self.app.config["MAX_CONTENT_LENGTH"],
+            )
+            if rejection is not None:
+                status_code, message = rejection
+                return JSONResponse(error(message), status_code=status_code)
+            return await call_next(request_)
 
     def _check_webui_enabled(self) -> bool:
         cfg = self.config.get("dashboard", {})
@@ -350,9 +451,9 @@ class AstrBotDashboard:
         except jwt.InvalidTokenError:
             return None, "Token 无效"
 
-        if PluginPageAuth.is_asset_token(payload) and not PluginPageAuth.is_scope_valid(
-            payload,
-            path,
+        if payload.get("token_type") is not None and not (
+            PluginPageAuth.is_asset_token(payload)
+            and PluginPageAuth.is_scope_valid(payload, path)
         ):
             return None, "Token 无效"
 
@@ -447,23 +548,12 @@ class AstrBotDashboard:
 
     def _get_request_client_ip(self, current_request: Request) -> str:
         if bool(self.config.get("dashboard", {}).get("trust_proxy_headers", False)):
-            forwarded_for = str(
-                current_request.headers.get("X-Forwarded-For", "")
-            ).strip()
-            if forwarded_for:
-                first_ip = forwarded_for.split(",", 1)[0].strip()
-                if first_ip and first_ip.lower() != "unknown":
-                    try:
-                        return str(ipaddress.ip_address(first_ip))
-                    except ValueError:
-                        pass
-
-            real_ip = str(current_request.headers.get("X-Real-IP", "")).strip()
-            if real_ip and real_ip.lower() != "unknown":
-                try:
-                    return str(ipaddress.ip_address(real_ip))
-                except ValueError:
-                    pass
+            proxy_address = _validated_proxy_address(
+                current_request.headers.get("X-Forwarded-For", ""),
+                current_request.headers.get("X-Real-IP", ""),
+            )
+            if proxy_address is not None:
+                return proxy_address
 
         remote_addr = (
             str(current_request.client.host).strip() if current_request.client else ""
@@ -499,7 +589,7 @@ class AstrBotDashboard:
 
         credentials_display = (
             f"   ➜  Initial username: {username}\n"
-            f"   ➜  Initial password: {generated_password}\n"
+            "   ➜  Initial password: [REDACTED - not logged]\n"
             "   ➜  Change it after logging in\n ✨✨✨\n"
         )
         object.__setattr__(self.config, "_generated_dashboard_password", None)
@@ -573,15 +663,7 @@ class AstrBotDashboard:
 
         dashboard_config = self.core_lifecycle.astrbot_config.get("dashboard", {})
 
-        host_value = (
-            os.environ.get("DASHBOARD_HOST")
-            or os.environ.get("ASTRBOT_DASHBOARD_HOST")
-            or os.environ.get("ASTRBOT_HOST")
-            or dashboard_config.get("host", "0.0.0.0")
-        )
-        host = _normalize_dashboard_value(host_value, field_name="host")
-        if not isinstance(host, str) or not host:
-            raise ValueError("Dashboard host must be a non-empty string")
+        host = resolve_dashboard_host(dashboard_config)
 
         ssl_config = dashboard_config.get("ssl", {})
         if not isinstance(ssl_config, dict):
@@ -603,7 +685,13 @@ class AstrBotDashboard:
             or dashboard_config.get("port", 6185)
         )
         port = _normalize_dashboard_value(port_value, field_name="port")
-        if not isinstance(port, int) or port < 1 or port > 65535:
+        if isinstance(port, str) and port.isascii() and port.isdecimal():
+            port = int(port)
+        if (
+            isinstance(port, bool)
+            or not isinstance(port, int)
+            or not 1 <= port <= 65535
+        ):
             raise ValueError("Dashboard port must be an integer between 1 and 65535")
 
         scheme = "https" if ssl_enable else "http"

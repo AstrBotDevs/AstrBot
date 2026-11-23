@@ -165,40 +165,70 @@ When adding new environment variables:
 
 ### Code Quality Scoring Test
 
-The project enforces a **code quality score** via `tests/test_code_quality_typing.py`. All agents must treat this as a hard constraint when modifying code.
+The project enforces two independent source-quality gates in `tests/test_code_quality_typing.py`: the legacy score must be at least **80/100**, and V2 debt must be at most **200 integer units**. Both require a complete scan. These diagnostics supplement the blocking lint, static type checks, and behavioral tests; a passing custom score does not replace those checks.
 
-**Run the test:**
+**Run the gate and scanner regression tests:**
+
 ```bash
-uv run pytest tests/test_code_quality_typing.py -v
+uv run pytest tests/test_code_quality_typing.py tests/test_quality_scanner.py -v
 ```
 
-**Scoring rules (target: 100/100, threshold for PASS: 80/100):**
+**Counts and clone extent:**
 
-| Pattern | Cost |
-|---------|------|
-| `cast(Any, ...)` | -1 pt each |
-| `# type: ignore` | -0.5 pt each |
-| **BAD** `# type: ignore[...]` (unresolved-import, class-alias, no-name-module, attr-defined, etc.) | **-3 pt each** |
-| `bare except:` (no exception type) | -0.5 pt each |
-| Duplicate code block (5+ identical lines, ≥2 occurrences) | -2 pt each |
+- `C`: resolved calls to `typing.cast(typing.Any, ...)`, including supported aliases.
+- `I`: all actual `# type: ignore` comment directives.
+- `B`: the subset of `I` containing a discouraged code, such as `unresolved-import`, `class-alias`, or `attr-defined`. Thus `0 <= B <= I`; a directive with several such codes is counted once.
+- `E`: bare exception handlers without an exception type.
+- `D`: additional non-overlapping copies of the exact clone blocks selected by the scanner.
+- `k`: eligible executable AST statements in one selected clone, including eligible statements inside its compound statements. Imports, definition wrappers, docstrings, literal data declarations, and formatting do not contribute.
+- `R = sum(extra_copies * max(5, k))` over the selected clone groups.
+- `N`: eligible executable AST statements in fully scanned source files, counted once each across all scopes.
 
-**Why bad type: ignore is heavily penalized:**
-- `# type: ignore[unresolved-import]` — hides missing module/stub issues
-- `# type: ignore[class-alias]` — hides improper type alias patterns
-- `# type: ignore[attr-defined]` — hides missing attribute errors
-- These are **workarounds, not fixes** — they paper over real type errors
+Clone matching retains its existing requirement of at least five distinct source lines that start eligible executable statements. Because those lines come from the same statement nodes used for `k`, admitted clones have `k >= 5`. The explicit `max(5, k)` floor preserves at least two debt points per extra copy even if the counting convention is revised later. A nested statement is counted once per clone; previously covered copies can anchor a shorter new match without being charged again. Names and literal values remain significant. Statement counting changes the cost of accepted clones, not the matching or five-line admission rule.
 
-**Scoring formula:**
+**V2 debt and score:**
+
+```text
+U = 10*C + 5*(I-B) + 35*B + 20*E + 4*R
+debt = U / 10
+score_v2 = 80000 / (800 + U)
+PASS requires U <= 200
 ```
-score = max(0, 100 - cast_any - type_ignore*0.5 - bad_type_ignore*3 - bare_except*0.5 - dup_blocks*2)
+
+`U` is an integer, so the gate uses an exact comparison. The displayed score is 100 for zero debt and exactly 80 at `U = 200`; `U = 201` fails even if a rounded display reads 80. The smooth score remains informative beyond the failure threshold, while the raw debt identifies how much must be removed.
+
+| Pattern | V2 debt cost |
+|---------|--------------|
+| `cast(Any, ...)` | 1 point each |
+| Ordinary type-ignore directive (`I-B`) | 0.5 points each |
+| Discouraged type-ignore directive (`B`) | 3.5 points total each |
+| Bare exception handler | 2 points each |
+| Extra exact clone | 0.4 points per eligible AST statement, with a 2-point minimum |
+
+The ignore costs retain the legacy total: a discouraged directive previously paid 0.5 plus 3 points. V2 makes that subset relationship explicit. Bare handlers receive a larger cost because their unqualified catch hides exception categories. Clone cost increases with duplicated executable extent, so one long copied block no longer receives the same cost as a five-statement block. These weights and thresholds are fixed policy, independent of the current candidate's results.
+
+`density = 1000 * debt / N` is reported only as a diagnostic. It is never a divisor for the debt or either gate. Adding unrelated clean code can reduce density but cannot improve the score or turn failure into success.
+
+**Legacy gate, preserved unchanged:**
+
+```text
+legacy_score = max(0, 100 - C - 0.5*I - 3*B - 0.5*E - 2*D)
+PASS also requires legacy_score >= 80
 ```
+
+V2 debt is at least the unclamped legacy debt: existing cast/ignore costs are preserved, bare-handler cost increases, and every extra clone still costs at least two points. The legacy assertion remains independent so future changes cannot silently remove that constraint.
+
+**Coverage and invalid scans:**
+
+Reports include discovered, read, AST-parsed, and tokenized file counts plus `N`. Missing or empty source trees, zero executable statements, directory discovery failures, unreadable files, parse failures, and tokenization failures produce **INVALID**, with `score_v2 = None`, and fail the gate. A clean readable subset cannot stand in for the whole tree. Negative, non-integer, and impossible counts are rejected. No files or error categories may be excluded merely to improve a result.
 
 **Agent rules when modifying code:**
-1. **Do not add** `# type: ignore[unresolved-import]` or `# type: ignore[class-alias]` — fix the underlying issue instead
-2. **Do not use** `cast(Any, ...)` to suppress type errors — use proper type annotations
-3. **Do not add** bare `except:` clauses — use `except SomeSpecificException:`
-4. **Do not copy-paste** 5+ line blocks — extract to a shared helper function
-5. Before committing, run the scoring test and ensure score ≥ 80
+
+1. Fix missing imports, incorrect aliases, and attribute errors instead of adding discouraged type-ignore directives.
+2. Use accurate types instead of `cast(Any, ...)` to suppress errors.
+3. Catch the specific exception categories the operation can handle.
+4. Extract reusable logic when an exact executable block is duplicated.
+5. Before committing, require complete coverage, `U <= 200`, the independent legacy score of at least 80, and the other blocking project checks.
 
 ## Git Conventions
 
@@ -234,6 +264,8 @@ chore: maintenance tasks
 9. Keep `[project].version` in `pyproject.toml` and `__version__` in `astrbot/__init__.py` in sync; `VERSION` in `astrbot/core/config/default.py` must derive from `astrbot.__version__` rather than hardcoding a separate value
 10. For WebUI dialogs, use `text-h3 pa-4 pb-0 pl-6` as the base title class and use `variant="text"` or `variant="tonal"` for dialog buttons
 11. Consider Windows, macOS, and Linux behavior on both Arm64 and x86 architectures, and preserve compatibility with Python 3.12+
+
+12. When changing WebUI navigation, page structure, or terminology, update the affected instructions and screenshots in `docs/zh` and `docs/en` in the same PR. Include an old-to-new mapping for renamed, moved, or merged entry points in the relevant docs and changelog. See `CONTRIBUTING.md` for the review checklist.
 
 ## Common Tasks
 

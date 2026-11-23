@@ -1,15 +1,13 @@
 """备份管理 API 路由"""
 
 import asyncio
-import json
 import os
-import re
 import shutil
 import time
 import traceback
 import uuid
-import zipfile
 from datetime import datetime
+from pathlib import Path
 
 import anyio
 import jwt
@@ -24,43 +22,24 @@ from astrbot.core.utils.astrbot_path import (
     get_astrbot_backups_path,
     get_astrbot_data_path,
 )
+from astrbot.dashboard.services.backup_service import (
+    BackupServiceError,
+    backup_archive_metadata,
+    mark_backup_archive_uploaded,
+    read_backup_manifest,
+    validate_backup_filename,
+)
+from astrbot.dashboard.services.backup_service import secure_filename as secure_filename
+from astrbot.dashboard.services.task_progress import (
+    BackupProgressMixin,
+    task_progress_response,
+)
 
 from .route import Response, Route, RouteContext
 
 # 分片上传常量
 CHUNK_SIZE = 1024 * 1024  # 1MB
 UPLOAD_EXPIRE_SECONDS = 3600  # 上传会话过期时间(1小时)
-
-
-def secure_filename(filename: str) -> str:
-    """清洗文件名,移除路径遍历字符和危险字符
-
-    Args:
-        filename: 原始文件名
-
-    Returns:
-        安全的文件名
-
-    """
-    # 跨平台处理:先将反斜杠替换为正斜杠,再取文件名
-    filename = filename.replace("\\", "/")
-    # 仅保留文件名部分,移除路径
-    filename = os.path.basename(filename)
-
-    # 替换路径遍历字符
-    filename = filename.replace("..", "_")
-
-    # 仅保留字母､数字､下划线､连字符､点
-    filename = re.sub(r"[^\w\-.]", "_", filename)
-
-    # 移除前导点(隐藏文件)和尾部点
-    filename = filename.strip(".")
-
-    # 如果文件名为空或只包含下划线,生成一个默认名称
-    if not filename or filename.replace("_", "") == "":
-        filename = "backup"
-
-    return filename
 
 
 def generate_unique_filename(original_filename: str) -> str:
@@ -78,7 +57,7 @@ def generate_unique_filename(original_filename: str) -> str:
     return f"{name}_{timestamp}{ext}"
 
 
-class BackupRoute(Route):
+class BackupRoute(Route, BackupProgressMixin):
     """备份管理路由
 
     提供备份导出､导入､列表等 API 接口
@@ -126,82 +105,6 @@ class BackupRoute(Route):
             "/backup/rename": ("POST", self.rename_backup),  # 重命名备份
         }
         self.register_routes()
-
-    def _init_task(self, task_id: str, task_type: str, status: str = "pending") -> None:
-        """初始化任务状态"""
-        self.backup_tasks[task_id] = {
-            "type": task_type,
-            "status": status,
-            "result": None,
-            "error": None,
-        }
-        self.backup_progress[task_id] = {
-            "status": status,
-            "stage": "waiting",
-            "current": 0,
-            "total": 100,
-            "message": "",
-        }
-
-    def _set_task_result(
-        self,
-        task_id: str,
-        status: str,
-        result: dict | None = None,
-        error: str | None = None,
-    ) -> None:
-        """设置任务结果"""
-        if task_id in self.backup_tasks:
-            self.backup_tasks[task_id]["status"] = status
-            self.backup_tasks[task_id]["result"] = result
-            self.backup_tasks[task_id]["error"] = error
-        if task_id in self.backup_progress:
-            self.backup_progress[task_id]["status"] = status
-
-    def _update_progress(
-        self,
-        task_id: str,
-        *,
-        status: str | None = None,
-        stage: str | None = None,
-        current: int | None = None,
-        total: int | None = None,
-        message: str | None = None,
-    ) -> None:
-        """更新任务进度"""
-        if task_id not in self.backup_progress:
-            return
-        p = self.backup_progress[task_id]
-        if status is not None:
-            p["status"] = status
-        if stage is not None:
-            p["stage"] = stage
-        if current is not None:
-            p["current"] = current
-        if total is not None:
-            p["total"] = total
-        if message is not None:
-            p["message"] = message
-
-    def _make_progress_callback(self, task_id: str):
-        """创建进度回调函数"""
-
-        async def _callback(
-            stage: str,
-            current: int,
-            total: int,
-            message: str = "",
-        ) -> None:
-            self._update_progress(
-                task_id,
-                status="processing",
-                stage=stage,
-                current=current,
-                total=total,
-                message=message,
-            )
-
-        return _callback
 
     def _ensure_cleanup_task_started(self) -> None:
         """确保后台清理任务已启动(在异步上下文中延迟启动)"""
@@ -263,16 +166,17 @@ class BackupRoute(Route):
             dict | None: manifest 内容,如果不是有效备份则返回 None
 
         """
-        try:
-            with zipfile.ZipFile(zip_path, "r") as zf:
-                if "manifest.json" in zf.namelist():
-                    manifest_data = zf.read("manifest.json")
-                    return json.loads(manifest_data.decode("utf-8"))
-                # 没有 manifest.json,不是有效的 AstrBot 备份
-                return None
-        except Exception as e:
-            logger.debug(f"读取备份 manifest 失败: {e}")
-        return None  # 无法读取,不是有效备份
+        return read_backup_manifest(zip_path)
+
+    async def _existing_backup_path(
+        self, filename: str, *, missing_message: str
+    ) -> str:
+        """Resolve an existing backup while retaining asynchronous file checks."""
+        filename = validate_backup_filename(filename, missing="缺少参数 filename")
+        file_path = anyio.Path(self.backup_dir) / filename
+        if not await file_path.exists():
+            raise BackupServiceError(missing_message)
+        return str(file_path)
 
     async def list_backups(self):
         # 确保后台清理任务已启动
@@ -309,19 +213,8 @@ class BackupRoute(Route):
                     logger.debug(f"跳过无效备份文件: {filename}")
                     continue
 
-                stat = os.stat(file_path)
                 backup_files.append(
-                    {
-                        "filename": filename,
-                        "size": stat.st_size,
-                        "created_at": stat.st_mtime,
-                        "type": manifest.get(
-                            "origin",
-                            "exported",
-                        ),  # 老版本没有 origin 默认为 exported
-                        "astrbot_version": manifest.get("astrbot_version", "未知"),
-                        "exported_at": manifest.get("exported_at"),
-                    },
+                    backup_archive_metadata(filename, file_path, manifest),
                 )
 
             # 按创建时间倒序排序
@@ -449,7 +342,7 @@ class BackupRoute(Route):
             # 保存上传的文件
             await anyio.Path(self.backup_dir).mkdir(parents=True, exist_ok=True)
             zip_path = os.path.join(self.backup_dir, unique_filename)
-            await file.save(zip_path)
+            await file.save(Path(zip_path))
 
             logger.info(
                 f"上传的备份文件已保存: {unique_filename} (原始名称: {file.filename})",
@@ -595,7 +488,7 @@ class BackupRoute(Route):
             # 保存分片
             chunk_file = files["chunk"]
             chunk_path = os.path.join(session["chunk_dir"], f"{chunk_index}.part")
-            await chunk_file.save(chunk_path)
+            await chunk_file.save(Path(chunk_path))
 
             # 记录已接收的分片,并更新最后活动时间
             session["received_chunks"].add(chunk_index)
@@ -635,25 +528,7 @@ class BackupRoute(Route):
             zip_path: ZIP 文件路径
 
         """
-        try:
-            # 读取原有 manifest
-            manifest = {"origin": "uploaded", "uploaded_at": datetime.now().isoformat()}
-            with zipfile.ZipFile(zip_path, "r") as zf:
-                if "manifest.json" in zf.namelist():
-                    manifest_data = zf.read("manifest.json")
-                    manifest = json.loads(manifest_data.decode("utf-8"))
-                    manifest["origin"] = "uploaded"
-                    manifest["uploaded_at"] = datetime.now().isoformat()
-
-            # 使用 append 模式添加新的 manifest.json
-            # ZIP 规范中,后添加的同名文件会覆盖先前的
-            with zipfile.ZipFile(zip_path, "a") as zf:
-                new_manifest = json.dumps(manifest, ensure_ascii=False, indent=2)
-                zf.writestr("manifest.json", new_manifest)
-
-            logger.debug(f"已标记备份为上传来源: {zip_path}")
-        except Exception as e:
-            logger.warning(f"标记备份来源失败: {e}")
+        mark_backup_archive_uploaded(zip_path)
 
     async def upload_complete(self):
         """完成分片上传
@@ -796,13 +671,9 @@ class BackupRoute(Route):
             if not filename:
                 return Response().error("缺少 filename 参数").to_json()
 
-            # 安全检查 - 防止路径遍历
-            if ".." in filename or "/" in filename or "\\" in filename:
-                return Response().error("无效的文件名").to_json()
-
-            zip_path = os.path.join(self.backup_dir, filename)
-            if not await anyio.Path(zip_path).exists():
-                return Response().error(f"备份文件不存在: {filename}").to_json()
+            zip_path = await self._existing_backup_path(
+                filename, missing_message=f"备份文件不存在: {filename}"
+            )
 
             # 获取知识库管理器(用于构造 importer)
             kb_manager = getattr(self.core_lifecycle, "kb_manager", None)
@@ -817,6 +688,8 @@ class BackupRoute(Route):
             check_result = importer.pre_check(zip_path)
 
             return Response().ok(check_result.to_dict()).to_json()
+        except BackupServiceError as exc:
+            return Response().error(str(exc)).to_json()
         except Exception as e:
             logger.error(f"预检查备份文件失败: {e}")
             logger.error(traceback.format_exc())
@@ -850,13 +723,9 @@ class BackupRoute(Route):
                     .to_json()
                 )
 
-            # 安全检查 - 防止路径遍历
-            if ".." in filename or "/" in filename or "\\" in filename:
-                return Response().error("无效的文件名").to_json()
-
-            zip_path = os.path.join(self.backup_dir, filename)
-            if not await anyio.Path(zip_path).exists():
-                return Response().error(f"备份文件不存在: {filename}").to_json()
+            zip_path = await self._existing_backup_path(
+                filename, missing_message=f"备份文件不存在: {filename}"
+            )
 
             # 生成任务ID
             task_id = str(uuid.uuid4())
@@ -881,6 +750,8 @@ class BackupRoute(Route):
                 )
                 .to_json()
             )
+        except BackupServiceError as exc:
+            return Response().error(str(exc)).to_json()
         except Exception as e:
             logger.error(f"导入备份失败: {e}")
             logger.error(traceback.format_exc())
@@ -942,26 +813,12 @@ class BackupRoute(Route):
             if task_id not in self.backup_tasks:
                 return Response().error("找不到该任务").to_json()
 
-            task_info = self.backup_tasks[task_id]
-            status = task_info["status"]
-
-            response_data = {
-                "task_id": task_id,
-                "type": task_info["type"],
-                "status": status,
-            }
-
-            # 如果任务正在处理,返回进度信息
-            if status == "processing" and task_id in self.backup_progress:
-                response_data["progress"] = self.backup_progress[task_id]
-
-            # 如果任务完成,返回结果
-            if status == "completed":
-                response_data["result"] = task_info["result"]
-
-            # 如果任务失败,返回错误信息
-            if status == "failed":
-                response_data["error"] = task_info["error"]
+            response_data = task_progress_response(
+                task_id,
+                self.backup_tasks[task_id],
+                self.backup_progress,
+                include_type=True,
+            )
 
             return Response().ok(response_data).to_json()
         except Exception as e:
@@ -1011,13 +868,9 @@ class BackupRoute(Route):
             except jwt.InvalidTokenError:
                 return Response().error("Token 无效").to_json()
 
-            # 安全检查 - 防止路径遍历
-            if ".." in filename or "/" in filename or "\\" in filename:
-                return Response().error("无效的文件名").to_json()
-
-            file_path = os.path.join(self.backup_dir, filename)
-            if not await anyio.Path(file_path).exists():
-                return Response().error("备份文件不存在").to_json()
+            file_path = await self._existing_backup_path(
+                filename, missing_message="备份文件不存在"
+            )
 
             return await send_file(
                 file_path,
@@ -1025,6 +878,8 @@ class BackupRoute(Route):
                 attachment_filename=filename,
                 conditional=True,  # 启用 Range 请求支持(断点续传)
             )
+        except BackupServiceError as exc:
+            return Response().error(str(exc)).to_json()
         except Exception as e:
             logger.error(f"下载备份失败: {e}")
             logger.error(traceback.format_exc())
@@ -1042,16 +897,14 @@ class BackupRoute(Route):
             if not filename:
                 return Response().error("缺少参数 filename").to_json()
 
-            # 安全检查 - 防止路径遍历
-            if ".." in filename or "/" in filename or "\\" in filename:
-                return Response().error("无效的文件名").to_json()
-
-            file_path = os.path.join(self.backup_dir, filename)
-            if not await anyio.Path(file_path).exists():
-                return Response().error("备份文件不存在").to_json()
+            file_path = await self._existing_backup_path(
+                filename, missing_message="备份文件不存在"
+            )
 
             await anyio.Path(file_path).unlink()
             return Response().ok(message="删除备份成功").to_json()
+        except BackupServiceError as exc:
+            return Response().error(str(exc)).to_json()
         except Exception as e:
             logger.error(f"删除备份失败: {e}")
             logger.error(traceback.format_exc())

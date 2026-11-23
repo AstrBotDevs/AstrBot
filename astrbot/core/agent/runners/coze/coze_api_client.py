@@ -128,7 +128,7 @@ class CozeAPIClient:
         conversation_id: str | None = None,
         auto_save_history: bool = True,
         stream: bool = True,
-        timeout: float = 120,
+        timeout: float = 120,  # noqa: ASYNC109 - Preserve the existing timeout keyword contract.
     ) -> AsyncGenerator[dict[str, Any], None]:
         """发送聊天消息并返回流式响应
 

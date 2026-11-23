@@ -2,6 +2,10 @@ import asyncio
 from collections.abc import Awaitable, Callable
 
 from astrbot import logger
+from astrbot.core.platform.queue_listener import (
+    discard_finished_listener,
+    listen_to_queue,
+)
 
 
 class WebChatQueueMgr:
@@ -164,7 +168,9 @@ class WebChatQueueMgr:
         )
         self._listener_tasks[conversation_id] = task
         task.add_done_callback(
-            lambda _: self._listener_tasks.pop(conversation_id, None),
+            lambda finished: discard_finished_listener(
+                self._listener_tasks, conversation_id, finished
+            ),
         )
         logger.debug(f"Started listener for conversation: {conversation_id}")
 
@@ -174,34 +180,14 @@ class WebChatQueueMgr:
         queue: asyncio.Queue,
         close_event: asyncio.Event,
     ):
-        while True:
-            get_task = asyncio.create_task(queue.get())
-            close_task = asyncio.create_task(close_event.wait())
-            try:
-                done, pending = await asyncio.wait(
-                    {get_task, close_task},
-                    return_when=asyncio.FIRST_COMPLETED,
-                )
-                for task in pending:
-                    task.cancel()
-                if close_task in done:
-                    break
-                data = get_task.result()
-                if self._listener_callback is None:
-                    continue
-                try:
-                    await self._listener_callback(data)
-                except Exception as e:
-                    logger.error(
-                        f"Error processing message from conversation {conversation_id}: {e}",
-                    )
-            except asyncio.CancelledError:
-                break
-            finally:
-                if not get_task.done():
-                    get_task.cancel()
-                if not close_task.done():
-                    close_task.cancel()
+        await listen_to_queue(
+            queue,
+            close_event,
+            lambda: self._listener_callback,
+            lambda error: logger.error(
+                f"Error processing message from conversation {conversation_id}: {error}"
+            ),
+        )
 
 
 webchat_queue_mgr = WebChatQueueMgr()

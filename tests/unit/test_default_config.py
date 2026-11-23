@@ -1,11 +1,13 @@
-"""Mock-based unit tests for default config constants and structure."""
+"""Current defaults remain valid, isolated, and unchanged by migration."""
 
 from __future__ import annotations
 
-from unittest.mock import patch
+import re
+from copy import deepcopy
+from pathlib import Path
 
-import pytest
-
+from astrbot import __version__
+from astrbot.core.config.agent import get_runtime_config_default
 from astrbot.core.config.default import (
     DB_PATH,
     DEFAULT_CONFIG,
@@ -13,44 +15,46 @@ from astrbot.core.config.default import (
     VERSION,
     WEBHOOK_SUPPORTED_PLATFORMS,
 )
+from astrbot.core.utils.migra_helper import migrate_config_on_load
 
 
 class TestVersionConstant:
     """Tests for the VERSION constant."""
 
-    def test_version_is_string(self):
-        assert isinstance(VERSION, str)
-
     def test_version_format(self):
-        parts = VERSION.split(".")
-        assert len(parts) == 3
-        for p in parts:
-            assert p.isdigit()
+        assert VERSION == __version__
+        assert re.fullmatch(
+            r"\d+\.\d+\.\d+(?:-[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?"
+            r"(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?",
+            VERSION,
+        )
 
 
 class TestDBPath:
     """Tests for DB_PATH."""
 
-    @patch("astrbot.core.config.default.get_astrbot_data_path", return_value="/data")
-    def test_db_path_uses_data_path(self, mock_get_path):
-        """DB_PATH should join data path with the database filename."""
-        # Reimport to pick up the patched value
-        import importlib
-
-        from astrbot.core.config import default as default_mod
-
-        importlib.reload(default_mod)
-        assert "data_v4.db" in default_mod.DB_PATH
-
-    def test_db_path_ends_with_db(self):
-        assert DB_PATH.endswith(".db")
+    def test_db_path_uses_data_directory_and_current_filename(self):
+        path = Path(DB_PATH)
+        assert path.name == "data_v4.db"
+        assert path.parent.name == "data"
 
 
 class TestDEFAULT_VALUE_MAP:
     """Tests for DEFAULT_VALUE_MAP structure."""
 
     def test_contains_expected_types(self):
-        expected = {"int", "float", "bool", "string", "text", "list", "file", "object", "dict", "template_list"}
+        expected = {
+            "int",
+            "float",
+            "bool",
+            "string",
+            "text",
+            "list",
+            "file",
+            "object",
+            "dict",
+            "template_list",
+        }
         assert set(DEFAULT_VALUE_MAP.keys()) == expected
 
     def test_default_values_are_correct_types(self):
@@ -101,7 +105,7 @@ class TestDEFAULT_CONFIGStructure:
             "provider_sources",
             "provider",
             "provider_settings",
-            "subagent_orchestrator",
+            "agent",
             "provider_stt_settings",
             "provider_tts_settings",
             "provider_ltm_settings",
@@ -135,17 +139,21 @@ class TestDEFAULT_CONFIGStructure:
             "log_file_max_mb",
             "temp_dir_max_size",
             "trace_enable",
-            "trace_log_enable",
-            "trace_log_path",
-            "trace_log_max_mb",
+            "trace_db_path",
+            "trace_db_max_mb",
+            "trace_retention_days",
             "pip_install_arg",
             "pypi_index_url",
         }
         for key in expected_keys:
             assert key in DEFAULT_CONFIG, f"Missing top-level key: {key}"
 
-    def test_config_version_is_two(self):
-        assert DEFAULT_CONFIG["config_version"] == 2
+    def test_current_defaults_do_not_require_migration(self, tmp_path):
+        config = deepcopy(DEFAULT_CONFIG)
+        assert config["config_version"] == 6
+        assert migrate_config_on_load(config, tmp_path / "config.json") is False
+        assert config == DEFAULT_CONFIG
+        assert not (tmp_path / "config.subagents-migration.json").exists()
 
     def test_platform_settings_structure(self):
         ps = DEFAULT_CONFIG["platform_settings"]
@@ -174,9 +182,10 @@ class TestDEFAULT_CONFIGStructure:
     def test_provider_settings_defaults(self):
         ps = DEFAULT_CONFIG["provider_settings"]
         assert ps["enable"] is True
-        assert ps["default_provider_id"] == ""
-        assert ps["agent_runner_type"] == "local"
-        assert ps["llm_safety_mode"] is True
+        agent = DEFAULT_CONFIG["agent"]
+        assert agent["runtime"] == "astrbot"
+        assert agent["config"]["model"]["provider_id"] == ""
+        assert agent["config"]["persona"]["safety_mode"] is True
 
     def test_admins_id_default(self):
         assert DEFAULT_CONFIG["admins_id"] == ["astrbot"]
@@ -196,10 +205,18 @@ class TestDEFAULT_CONFIGStructure:
     def test_no_proxy_contains_localhost(self):
         assert "localhost" in DEFAULT_CONFIG["no_proxy"]
 
-    def test_subagent_orchestrator_defaults(self):
-        sa = DEFAULT_CONFIG["subagent_orchestrator"]
-        assert sa["main_enable"] is False
-        assert isinstance(sa["agents"], list)
+    def test_subagent_defaults_are_disabled_and_independent(self):
+        defaults = get_runtime_config_default("astrbot")
+        assert defaults["subagents"] == {
+            "enabled": False,
+            "config_ids": [],
+            "max_concurrent_agents": 3,
+            "task_timeout": 600,
+        }
+        defaults["subagents"]["config_ids"].append("test-agent")
+        assert get_runtime_config_default("astrbot")["subagents"]["config_ids"] == []
+        assert DEFAULT_CONFIG["agent"]["config"]["subagents"]["config_ids"] == []
+        assert "subagent_orchestrator" not in DEFAULT_CONFIG
 
     def test_quoted_message_parser_defaults(self):
         qmp = DEFAULT_CONFIG["provider_settings"]["quoted_message_parser"]

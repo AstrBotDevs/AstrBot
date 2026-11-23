@@ -1,58 +1,96 @@
-"""Smoke tests for OpenAIEmbeddingProvider."""
-from unittest.mock import patch
+"""Embedding requests use the real SDK and an in-memory HTTP transport."""
+
+import json
+
+import httpx
+import pytest
+from openai import AsyncOpenAI, AuthenticationError
 
 from astrbot.core.provider.sources.openai_embedding_source import (
     OpenAIEmbeddingProvider,
 )
 
 
-@patch("astrbot.core.provider.sources.openai_embedding_source.AsyncOpenAI")
-def test_openai_embedding_import_and_construction(mock_async_openai):
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("texts", "method", "expected"),
+    [
+        ("first", "get_embedding", [0.1, 0.2]),
+        (["first", "second"], "get_embeddings", [[0.1, 0.2], [0.3, 0.4]]),
+    ],
+)
+async def test_embedding_requests_preserve_input_model_and_vectors(
+    texts, method, expected
+):
+    requests = []
+
+    def handle(request):
+        requests.append(request)
+        inputs = json.loads(request.content)["input"]
+        count = 1 if isinstance(inputs, str) else len(inputs)
+        return httpx.Response(
+            200,
+            json={
+                "object": "list",
+                "model": "text-embedding-3-small",
+                "data": [
+                    {"object": "embedding", "index": i, "embedding": vector}
+                    for i, vector in enumerate([[0.1, 0.2], [0.3, 0.4]][:count])
+                ],
+                "usage": {"prompt_tokens": count, "total_tokens": count},
+            },
+        )
+
     provider = OpenAIEmbeddingProvider(
-        provider_config={
+        {
             "embedding_api_key": "test-key",
-            "embedding_api_base": "https://api.openai.com/v1",
-            "embedding_model": "text-embedding-3-small",
+            "embedding_api_base": "https://embedding.invalid",
+            "embedding_dimensions": 2,
+            "embedding_dimensions_mode": "always",
         },
-        provider_settings={},
+        {},
     )
-    assert provider is not None
-    assert provider.model == "text-embedding-3-small"
-
-
-@patch("astrbot.core.provider.sources.openai_embedding_source.AsyncOpenAI")
-def test_openai_embedding_default_model(mock_async_openai):
-    provider = OpenAIEmbeddingProvider(
-        provider_config={
-            "embedding_api_key": "test-key",
-        },
-        provider_settings={},
+    assert str(provider.client.base_url) == "https://embedding.invalid/v1/"
+    await provider.client.close()
+    client = httpx.AsyncClient(transport=httpx.MockTransport(handle))
+    provider.client = AsyncOpenAI(
+        api_key="test-key", base_url="https://embedding.invalid/v1", http_client=client
     )
-    assert provider.model == "text-embedding-3-small"
+    try:
+        assert await getattr(provider, method)(texts) == expected
+        assert provider.get_dim() == 2
+        assert len(requests) == 1
+        assert requests[0].url.path == "/v1/embeddings"
+        assert requests[0].headers["Authorization"] == "Bearer test-key"
+        assert json.loads(requests[0].content) == {
+            "input": texts,
+            "model": "text-embedding-3-small",
+            "dimensions": 2,
+            "encoding_format": "base64",
+        }
+    finally:
+        await provider.terminate()
+    assert client.is_closed
 
 
-@patch("astrbot.core.provider.sources.openai_embedding_source.AsyncOpenAI")
-def test_openai_embedding_api_base_convention(mock_async_openai):
-    OpenAIEmbeddingProvider(
-        provider_config={
-            "embedding_api_key": "test-key",
-            "embedding_api_base": "https://custom.api.com",
-        },
-        provider_settings={},
+@pytest.mark.asyncio
+async def test_embedding_authentication_errors_propagate_and_client_is_closed():
+    requests = []
+
+    def handle(request):
+        requests.append(request)
+        return httpx.Response(401, json={"error": {"message": "invalid credential"}})
+
+    provider = OpenAIEmbeddingProvider({"embedding_api_key": "test-key"}, {})
+    await provider.client.close()
+    client = httpx.AsyncClient(transport=httpx.MockTransport(handle))
+    provider.client = AsyncOpenAI(
+        api_key="test-key", base_url="https://embedding.invalid/v1", http_client=client
     )
-    # Should automatically append /v1
-    mock_async_openai.assert_called_once()
-    _call_kwargs = mock_async_openai.call_args.kwargs
-    assert _call_kwargs["base_url"] == "https://custom.api.com/v1"
-
-
-@patch("astrbot.core.provider.sources.openai_embedding_source.AsyncOpenAI")
-def test_openai_embedding_get_dim(mock_async_openai):
-    provider = OpenAIEmbeddingProvider(
-        provider_config={
-            "embedding_api_key": "test-key",
-            "embedding_dimensions": 256,
-        },
-        provider_settings={},
-    )
-    assert provider.get_dim() == 256
+    try:
+        with pytest.raises(AuthenticationError, match="invalid credential"):
+            await provider.get_embedding("input")
+        assert len(requests) == 1
+    finally:
+        await provider.terminate()
+    assert client.is_closed

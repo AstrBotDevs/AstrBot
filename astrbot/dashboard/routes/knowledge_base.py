@@ -1,10 +1,13 @@
 """知识库管理 API 路由"""
 
+from __future__ import annotations
+
 import asyncio
 import os
 import traceback
 import uuid
-from typing import Any
+from collections.abc import Mapping
+from typing import TYPE_CHECKING, Any
 
 import aiofiles
 import anyio
@@ -14,9 +17,20 @@ from astrbot.core import logger
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
 from astrbot.core.provider.provider import EmbeddingProvider, RerankProvider
 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
+from astrbot.dashboard.services.knowledge_base_service import (
+    _require_kb,
+    _serialize_kb,
+    _update_upload_progress,
+    _upload_options,
+)
+from astrbot.dashboard.services.task_progress import task_progress_response
 from astrbot.dashboard.utils import generate_tsne_visualization
 
 from .route import Response, Route, RouteContext
+
+if TYPE_CHECKING:
+    from astrbot.core.knowledge_base.kb_helper import KBHelper
+    from astrbot.core.knowledge_base.kb_mgr import KnowledgeBaseManager
 
 
 class KnowledgeBaseRoute(Route):
@@ -77,6 +91,45 @@ class KnowledgeBaseRoute(Route):
     def _get_kb_manager(self):
         return self.core_lifecycle.kb_manager
 
+    async def _query_kb(self) -> KBHelper:
+        """Resolve the required knowledge base from legacy query parameters."""
+        kb_manager = self._get_kb_manager()
+        kb_id = request.args.get("kb_id")
+        kb_id = self._required_value(kb_id, "kb_id")
+        return await _require_kb(kb_manager, kb_id, error_type=ValueError)
+
+    @staticmethod
+    def _required_value[T](value: T | None, field: str) -> T:
+        """Preserve the legacy route's truth-value checks for required fields."""
+        if not value:
+            raise ValueError(f"缺少参数 {field}")
+        return value
+
+    @staticmethod
+    def _kb_settings(data: Mapping[str, Any]) -> dict[str, Any]:
+        """Read the settings shared by legacy create and update requests."""
+        fields = (
+            "description",
+            "emoji",
+            "embedding_provider_id",
+            "rerank_provider_id",
+            "chunk_size",
+            "chunk_overlap",
+            "top_k_dense",
+            "top_k_sparse",
+            "top_m_final",
+        )
+        return {field: data.get(field) for field in fields}
+
+    async def _prepare_upload_task(
+        self, kb_manager: KnowledgeBaseManager, kb_id: str
+    ) -> tuple[str, KBHelper]:
+        """Resolve the target before registering a pending background task."""
+        kb_helper = await _require_kb(kb_manager, kb_id, error_type=ValueError)
+        task_id = str(uuid.uuid4())
+        self._init_task(task_id, status="pending")
+        return task_id, kb_helper
+
     def _init_task(self, task_id: str, status: str = "pending") -> None:
         self.upload_tasks[task_id] = {
             "status": status,
@@ -110,21 +163,16 @@ class KnowledgeBaseRoute(Route):
         current: int | None = None,
         total: int | None = None,
     ) -> None:
-        if task_id not in self.upload_progress:
-            return
-        p = self.upload_progress[task_id]
-        if status is not None:
-            p["status"] = status
-        if file_index is not None:
-            p["file_index"] = file_index
-        if file_name is not None:
-            p["file_name"] = file_name
-        if stage is not None:
-            p["stage"] = stage
-        if current is not None:
-            p["current"] = current
-        if total is not None:
-            p["total"] = total
+        _update_upload_progress(
+            self.upload_progress,
+            task_id,
+            status=status,
+            file_index=file_index,
+            file_name=file_name,
+            stage=stage,
+            current=current,
+            total=total,
+        )
 
     def _make_progress_callback(self, task_id: str, file_idx: int, file_name: str):
         async def _callback(stage: str, current: int, total: int) -> None:
@@ -344,14 +392,7 @@ class KnowledgeBaseRoute(Route):
             kbs = await kb_manager.list_kbs()
 
             # 转换为字典列表
-            kb_list = []
-            for kb in kbs:
-                kb_dict = kb.model_dump()
-                # include init_error from KBHelper if present
-                kb_helper = await kb_manager.get_kb(kb.kb_id)
-                if kb_helper and kb_helper.init_error:
-                    kb_dict["init_error"] = kb_helper.init_error
-                kb_list.append(kb_dict)
+            kb_list = [await _serialize_kb(kb_manager, kb) for kb in kbs]
 
             return (
                 Response()
@@ -387,15 +428,9 @@ class KnowledgeBaseRoute(Route):
             if not kb_name:
                 return Response().error("知识库名称不能为空").to_json()
 
-            description = data.get("description")
-            emoji = data.get("emoji")
-            embedding_provider_id = data.get("embedding_provider_id")
-            rerank_provider_id = data.get("rerank_provider_id")
-            chunk_size = data.get("chunk_size")
-            chunk_overlap = data.get("chunk_overlap")
-            top_k_dense = data.get("top_k_dense")
-            top_k_sparse = data.get("top_k_sparse")
-            top_m_final = data.get("top_m_final")
+            settings = self._kb_settings(data)
+            embedding_provider_id = settings["embedding_provider_id"]
+            rerank_provider_id = settings["rerank_provider_id"]
 
             # pre-check embedding dim
             if not embedding_provider_id:
@@ -444,15 +479,7 @@ class KnowledgeBaseRoute(Route):
 
             kb_helper = await kb_manager.create_kb(
                 kb_name=kb_name,
-                description=description,
-                emoji=emoji,
-                embedding_provider_id=embedding_provider_id,
-                rerank_provider_id=rerank_provider_id,
-                chunk_size=chunk_size,
-                chunk_overlap=chunk_overlap,
-                top_k_dense=top_k_dense,
-                top_k_sparse=top_k_sparse,
-                top_m_final=top_m_final,
+                **settings,
             )
             kb = kb_helper.kb
 
@@ -472,14 +499,7 @@ class KnowledgeBaseRoute(Route):
         - kb_id: 知识库 ID (必填)
         """
         try:
-            kb_manager = self._get_kb_manager()
-            kb_id = request.args.get("kb_id")
-            if not kb_id:
-                return Response().error("缺少参数 kb_id").to_json()
-
-            kb_helper = await kb_manager.get_kb(kb_id)
-            if not kb_helper:
-                return Response().error("知识库不存在").to_json()
+            kb_helper = await self._query_kb()
             kb = kb_helper.kb
 
             return Response().ok(kb.model_dump()).to_json()
@@ -512,50 +532,19 @@ class KnowledgeBaseRoute(Route):
             data = await request.json
 
             kb_id = data.get("kb_id")
-            if not kb_id:
-                return Response().error("缺少参数 kb_id").to_json()
+            kb_id = self._required_value(kb_id, "kb_id")
 
             kb_name = data.get("kb_name")
-            description = data.get("description")
-            emoji = data.get("emoji")
-            embedding_provider_id = data.get("embedding_provider_id")
-            rerank_provider_id = data.get("rerank_provider_id")
-            chunk_size = data.get("chunk_size")
-            chunk_overlap = data.get("chunk_overlap")
-            top_k_dense = data.get("top_k_dense")
-            top_k_sparse = data.get("top_k_sparse")
-            top_m_final = data.get("top_m_final")
+            settings = self._kb_settings(data)
 
             # 检查是否至少提供了一个更新字段
-            if all(
-                v is None
-                for v in [
-                    kb_name,
-                    description,
-                    emoji,
-                    embedding_provider_id,
-                    rerank_provider_id,
-                    chunk_size,
-                    chunk_overlap,
-                    top_k_dense,
-                    top_k_sparse,
-                    top_m_final,
-                ]
-            ):
+            if kb_name is None and all(value is None for value in settings.values()):
                 return Response().error("至少需要提供一个更新字段").to_json()
 
             kb_helper = await kb_manager.update_kb(
                 kb_id=kb_id,
                 kb_name=kb_name,
-                description=description,
-                emoji=emoji,
-                embedding_provider_id=embedding_provider_id,
-                rerank_provider_id=rerank_provider_id,
-                chunk_size=chunk_size,
-                chunk_overlap=chunk_overlap,
-                top_k_dense=top_k_dense,
-                top_k_sparse=top_k_sparse,
-                top_m_final=top_m_final,
+                **settings,
             )
 
             if not kb_helper:
@@ -582,8 +571,7 @@ class KnowledgeBaseRoute(Route):
             data = await request.json
 
             kb_id = data.get("kb_id")
-            if not kb_id:
-                return Response().error("缺少参数 kb_id").to_json()
+            kb_id = self._required_value(kb_id, "kb_id")
 
             success = await kb_manager.delete_kb(kb_id)
             if not success:
@@ -605,14 +593,7 @@ class KnowledgeBaseRoute(Route):
         - kb_id: 知识库 ID (必填)
         """
         try:
-            kb_manager = self._get_kb_manager()
-            kb_id = request.args.get("kb_id")
-            if not kb_id:
-                return Response().error("缺少参数 kb_id").to_json()
-
-            kb_helper = await kb_manager.get_kb(kb_id)
-            if not kb_helper:
-                return Response().error("知识库不存在").to_json()
+            kb_helper = await self._query_kb()
             kb = kb_helper.kb
 
             stats = {
@@ -644,13 +625,7 @@ class KnowledgeBaseRoute(Route):
         - page_size: 每页数量 (默认 20)
         """
         try:
-            kb_manager = self._get_kb_manager()
-            kb_id = request.args.get("kb_id")
-            if not kb_id:
-                return Response().error("缺少参数 kb_id").to_json()
-            kb_helper = await kb_manager.get_kb(kb_id)
-            if not kb_helper:
-                return Response().error("知识库不存在").to_json()
+            kb_helper = await self._query_kb()
 
             page = request.args.get("page", 1, type=int)
             page_size = request.args.get("page_size", 100, type=int)
@@ -701,11 +676,6 @@ class KnowledgeBaseRoute(Route):
             # 检查 Content-Type
             content_type = request.content_type
             kb_id = None
-            chunk_size = None
-            chunk_overlap = None
-            batch_size = 32
-            tasks_limit = 3
-            max_retries = 3
             files_to_upload = []  # 存储待上传的文件信息列表
 
             if content_type and "multipart/form-data" not in content_type:
@@ -716,13 +686,8 @@ class KnowledgeBaseRoute(Route):
             files = await request.files
 
             kb_id = form_data.get("kb_id")
-            chunk_size = int(form_data.get("chunk_size", 512))
-            chunk_overlap = int(form_data.get("chunk_overlap", 50))
-            batch_size = int(form_data.get("batch_size", 32))
-            tasks_limit = int(form_data.get("tasks_limit", 3))
-            max_retries = int(form_data.get("max_retries", 3))
-            if not kb_id:
-                return Response().error("缺少参数 kb_id").to_json()
+            upload_options = _upload_options(form_data)
+            kb_id = self._required_value(kb_id, "kb_id")
 
             # 收集所有文件
             file_list = []
@@ -773,15 +738,7 @@ class KnowledgeBaseRoute(Route):
                         await anyio.Path(temp_file_path).unlink()
 
             # 获取知识库
-            kb_helper = await kb_manager.get_kb(kb_id)
-            if not kb_helper:
-                return Response().error("知识库不存在").to_json()
-
-            # 生成任务ID
-            task_id = str(uuid.uuid4())
-
-            # 初始化任务状态
-            self._init_task(task_id, status="pending")
+            task_id, kb_helper = await self._prepare_upload_task(kb_manager, kb_id)
 
             # 启动后台任务
             _background_upload_task = asyncio.create_task(
@@ -789,11 +746,7 @@ class KnowledgeBaseRoute(Route):
                     task_id=task_id,
                     kb_helper=kb_helper,
                     files_to_upload=files_to_upload,
-                    chunk_size=chunk_size,
-                    chunk_overlap=chunk_overlap,
-                    batch_size=batch_size,
-                    tasks_limit=tasks_limit,
-                    max_retries=max_retries,
+                    **upload_options,
                 ),
             )
             self.tasks.add(_background_upload_task)
@@ -864,15 +817,7 @@ class KnowledgeBaseRoute(Route):
             )
 
             # 获取知识库
-            kb_helper = await kb_manager.get_kb(kb_id)
-            if not kb_helper:
-                return Response().error("知识库不存在").to_json()
-
-            # 生成任务ID
-            task_id = str(uuid.uuid4())
-
-            # 初始化任务状态
-            self._init_task(task_id, status="pending")
+            task_id, kb_helper = await self._prepare_upload_task(kb_manager, kb_id)
 
             # 启动后台任务
             _background_import_task = asyncio.create_task(
@@ -928,30 +873,9 @@ class KnowledgeBaseRoute(Route):
             if task_id not in self.upload_tasks:
                 return Response().error("找不到该任务").to_json()
 
-            task_info = self.upload_tasks[task_id]
-            status = task_info["status"]
-
-            # 构建返回数据
-            response_data = {
-                "task_id": task_id,
-                "status": status,
-            }
-
-            # 如果任务正在处理,返回进度信息
-            if status == "processing" and task_id in self.upload_progress:
-                response_data["progress"] = self.upload_progress[task_id]
-
-            # 如果任务完成,返回结果
-            if status == "completed":
-                response_data["result"] = task_info["result"]
-                # 清理已完成的任务
-                # del self.upload_tasks[task_id]
-                # if task_id in self.upload_progress:
-                #     del self.upload_progress[task_id]
-
-            # 如果任务失败,返回错误信息
-            if status == "failed":
-                response_data["error"] = task_info["error"]
+            response_data = task_progress_response(
+                task_id, self.upload_tasks[task_id], self.upload_progress
+            )
 
             return Response().ok(response_data).to_json()
 
@@ -969,14 +893,10 @@ class KnowledgeBaseRoute(Route):
         try:
             kb_manager = self._get_kb_manager()
             kb_id = request.args.get("kb_id")
-            if not kb_id:
-                return Response().error("缺少参数 kb_id").to_json()
+            kb_id = self._required_value(kb_id, "kb_id")
             doc_id = request.args.get("doc_id")
-            if not doc_id:
-                return Response().error("缺少参数 doc_id").to_json()
-            kb_helper = await kb_manager.get_kb(kb_id)
-            if not kb_helper:
-                return Response().error("知识库不存在").to_json()
+            doc_id = self._required_value(doc_id, "doc_id")
+            kb_helper = await _require_kb(kb_manager, kb_id, error_type=ValueError)
 
             doc = await kb_helper.get_document(doc_id)
             if not doc:
@@ -1003,15 +923,11 @@ class KnowledgeBaseRoute(Route):
             data = await request.json
 
             kb_id = data.get("kb_id")
-            if not kb_id:
-                return Response().error("缺少参数 kb_id").to_json()
+            kb_id = self._required_value(kb_id, "kb_id")
             doc_id = data.get("doc_id")
-            if not doc_id:
-                return Response().error("缺少参数 doc_id").to_json()
+            doc_id = self._required_value(doc_id, "doc_id")
 
-            kb_helper = await kb_manager.get_kb(kb_id)
-            if not kb_helper:
-                return Response().error("知识库不存在").to_json()
+            kb_helper = await _require_kb(kb_manager, kb_id, error_type=ValueError)
 
             await kb_helper.delete_document(doc_id)
             return Response().ok(message="删除文档成功").to_json()
@@ -1035,18 +951,13 @@ class KnowledgeBaseRoute(Route):
             data = await request.json
 
             kb_id = data.get("kb_id")
-            if not kb_id:
-                return Response().error("缺少参数 kb_id").to_json()
+            kb_id = self._required_value(kb_id, "kb_id")
             chunk_id = data.get("chunk_id")
-            if not chunk_id:
-                return Response().error("缺少参数 chunk_id").to_json()
+            chunk_id = self._required_value(chunk_id, "chunk_id")
             doc_id = data.get("doc_id")
-            if not doc_id:
-                return Response().error("缺少参数 doc_id").to_json()
+            doc_id = self._required_value(doc_id, "doc_id")
 
-            kb_helper = await kb_manager.get_kb(kb_id)
-            if not kb_helper:
-                return Response().error("知识库不存在").to_json()
+            kb_helper = await _require_kb(kb_manager, kb_id, error_type=ValueError)
 
             await kb_helper.delete_chunk(chunk_id, doc_id)
             return Response().ok(message="删除文本块成功").to_json()
@@ -1072,10 +983,8 @@ class KnowledgeBaseRoute(Route):
             doc_id = request.args.get("doc_id")
             page = request.args.get("page", 1, type=int)
             page_size = request.args.get("page_size", 100, type=int)
-            if not kb_id:
-                return Response().error("缺少参数 kb_id").to_json()
-            if not doc_id:
-                return Response().error("缺少参数 doc_id").to_json()
+            kb_id = self._required_value(kb_id, "kb_id")
+            doc_id = self._required_value(doc_id, "doc_id")
             kb_helper = await kb_manager.get_kb(kb_id)
             offset = (page - 1) * page_size
             limit = page_size
@@ -1190,12 +1099,10 @@ class KnowledgeBaseRoute(Route):
             data = await request.json
 
             kb_id = data.get("kb_id")
-            if not kb_id:
-                return Response().error("缺少参数 kb_id").to_json()
+            kb_id = self._required_value(kb_id, "kb_id")
 
             url = data.get("url")
-            if not url:
-                return Response().error("缺少参数 url").to_json()
+            url = self._required_value(url, "url")
 
             chunk_size = data.get("chunk_size", 512)
             chunk_overlap = data.get("chunk_overlap", 50)
@@ -1206,15 +1113,7 @@ class KnowledgeBaseRoute(Route):
             cleaning_provider_id = data.get("cleaning_provider_id")
 
             # 获取知识库
-            kb_helper = await kb_manager.get_kb(kb_id)
-            if not kb_helper:
-                return Response().error("知识库不存在").to_json()
-
-            # 生成任务ID
-            task_id = str(uuid.uuid4())
-
-            # 初始化任务状态
-            self._init_task(task_id, status="pending")
+            task_id, kb_helper = await self._prepare_upload_task(kb_manager, kb_id)
 
             # 启动后台任务
             _background_upload_from_url_task = asyncio.create_task(

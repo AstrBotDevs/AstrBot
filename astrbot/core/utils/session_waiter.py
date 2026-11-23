@@ -9,6 +9,7 @@ from collections.abc import Awaitable, Callable
 from typing import Any
 
 import astrbot.core.message.components as Comp
+from astrbot.core import logger
 from astrbot.core.platform import AstrMessageEvent
 
 USER_SESSIONS: dict[str, "SessionWaiter"] = {}  # 存储 SessionWaiter 实例
@@ -37,6 +38,9 @@ class SessionController:
                 self.future.set_exception(error)
             else:
                 self.future.set_result(None)
+        for task in self.tasks:
+            if not task.done():
+                task.cancel()
 
     def keep(self, timeout: float = 0, reset_timeout=False) -> None:
         """保持这个会话
@@ -47,6 +51,9 @@ class SessionController:
             当 reset_timeout 设置为 False 时, 代表继续维持原来的超时时间, 新 timeout = 原来剩余的timeout + timeout (可以 < 0)
 
         """
+        if self.future.done():
+            return
+
         new_ts = time.time()
 
         if reset_timeout:
@@ -76,10 +83,10 @@ class SessionController:
         self.tasks.add(_holding_task)
         _holding_task.add_done_callback(self.tasks.discard)
 
-    async def _holding(self, event: asyncio.Event, timeout: float) -> None:
+    async def _holding(self, event: asyncio.Event, duration: float) -> None:
         """等待事件结束或超时"""
         try:
-            await asyncio.wait_for(event.wait(), timeout)
+            await asyncio.wait_for(event.wait(), duration)
         except TimeoutError:
             if not self.future.done():
                 self.future.set_exception(TimeoutError("等待超时"))
@@ -132,7 +139,7 @@ class SessionWaiter:
     async def register_wait(
         self,
         handler: Callable[[SessionController, AstrMessageEvent], Awaitable[Any]],
-        timeout: int = 30,
+        timeout: int = 30,  # noqa: ASYNC109 - Preserve the plugin-facing timeout keyword.
     ) -> Any:
         """等待外部输入并处理"""
         self.handler = handler
@@ -143,15 +150,30 @@ class SessionWaiter:
 
         try:
             return await self.session_controller.future
-        except Exception as e:
-            self._cleanup(e)
-            raise e
         finally:
+            # Clean up once on success, failure, or cancellation. A shared filter
+            # can have another registration that must not be removed twice.
             self._cleanup()
+            tasks = self.session_controller.tasks.copy()
+            if self.curr_task is not None:
+                tasks.add(self.curr_task)
+            if tasks:
+                # Observe cancellation without waiting indefinitely for a plugin
+                # handler that suppresses it. Pending tasks retain their owner.
+                done, pending = await asyncio.wait(tasks, timeout=1.0)
+                for task in done:
+                    if not task.cancelled():
+                        task.exception()
+                if pending:
+                    logger.warning(
+                        "Session waiter cleanup timed out with %s task(s) still running.",
+                        len(pending),
+                    )
 
     def _cleanup(self, error: Exception | None = None) -> None:
         """清理会话"""
-        USER_SESSIONS.pop(self.session_id, None)
+        if USER_SESSIONS.get(self.session_id) is self:
+            USER_SESSIONS.pop(self.session_id, None)
         try:
             FILTERS.remove(self.session_filter)
         except ValueError:

@@ -1,25 +1,6 @@
-from __future__ import annotations
+import logging
 
-from typing import TYPE_CHECKING, Any
-
-__version__ = "4.27.3"
-
-
-if TYPE_CHECKING:
-    from .core import logger as logger
+__version__ = "4.30.0-beta.1"
+logger = logging.getLogger("astrbot")
 
 __all__ = ["logger"]
-
-
-def __getattr__(name: str) -> Any:
-    if name == "cli":
-        from astrbot.cli.__main__ import cli
-
-        return cli()
-
-    if name == "logger":
-        from .core import logger
-
-        return logger
-
-    raise AttributeError(name)

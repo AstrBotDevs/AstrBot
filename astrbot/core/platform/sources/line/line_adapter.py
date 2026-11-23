@@ -7,7 +7,16 @@ from typing import Any
 
 from astrbot.api import logger
 from astrbot.api.event import MessageChain
-from astrbot.api.message_components import At, File, Image, Plain, Record, Video
+from astrbot.api.message_components import (
+    At,
+    BaseMessageComponent,
+    ButtonInteraction,
+    File,
+    Image,
+    Plain,
+    Record,
+    Video,
+)
 from astrbot.api.platform import (
     AstrBotMessage,
     Group,
@@ -17,6 +26,7 @@ from astrbot.api.platform import (
     PlatformMetadata,
 )
 from astrbot.core.platform.astr_message_event import MessageSesion
+from astrbot.core.platform.button_interaction import decode_button_callback
 from astrbot.core.platform.register import register_platform_adapter
 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
 from astrbot.core.utils.webhook_utils import log_webhook_info
@@ -28,12 +38,16 @@ LINE_CONFIG_METADATA = {
     "channel_access_token": {
         "description": "LINE Channel Access Token",
         "type": "string",
-        "hint": "LINE Messaging API 的 channel access token｡",
+        "hint": "LINE Messaging API 的 channel access token。",
+        "secret": True,
+        "show_key": True,
     },
     "channel_secret": {
         "description": "LINE Channel Secret",
         "type": "string",
-        "hint": "用于校验 LINE Webhook 签名｡",
+        "hint": "用于校验 LINE Webhook 签名。",
+        "secret": True,
+        "show_key": True,
     },
 }
 LINE_I18N_RESOURCES = {
@@ -55,6 +69,16 @@ LINE_I18N_RESOURCES = {
         "channel_secret": {
             "description": "LINE Channel Secret",
             "hint": "Used to verify LINE webhook signatures.",
+        },
+    },
+    "ja-JP": {
+        "channel_access_token": {
+            "description": "LINE チャネルアクセストークン",
+            "hint": "LINE Messaging API のチャネルアクセストークンです。",
+        },
+        "channel_secret": {
+            "description": "LINE チャネルシークレット",
+            "hint": "LINE Webhook の署名検証に使用します。",
         },
     },
 }
@@ -155,16 +179,22 @@ class LinePlatformAdapter(Platform):
             await self.handle_msg(abm)
 
     async def convert_message(self, event: dict[str, Any]) -> AstrBotMessage | None:
-        if str(event.get("type", "")) != "message":
+        event_type = str(event.get("type", ""))
+        if event_type not in {"message", "postback"}:
             return None
         if str(event.get("mode", "active")) == "standby":
             return None
         source = event.get("source", {})
         if not isinstance(source, dict):
             return None
-        message = event.get("message", {})
-        if not isinstance(message, dict):
-            return None
+
+        message: dict[str, Any] = {}
+        if event_type == "message":
+            raw_message = event.get("message", {})
+            if not isinstance(raw_message, dict):
+                return None
+            message = raw_message
+
         source_type = str(source.get("type", ""))
         user_id = str(source.get("userId", "")).strip()
         group_id = str(source.get("groupId", "")).strip()
@@ -191,7 +221,21 @@ class LinePlatformAdapter(Platform):
         if source_type in {"group", "room"}:
             abm.type = MessageType.GROUP_MESSAGE
             container_id = group_id or room_id
-            abm.group = Group(group_id=container_id, group_name=container_id)
+            group_name = str(
+                source.get("groupName")
+                or source.get("roomName")
+                or event.get("groupName")
+                or event.get("roomName")
+                or ""
+            ).strip()
+            group_avatar = str(
+                source.get("pictureUrl") or event.get("pictureUrl") or ""
+            ).strip()
+            abm.group = Group(
+                group_id=container_id,
+                group_name=group_name or None,
+                group_avatar=group_avatar or None,
+            )
             abm.session_id = container_id
             sender_id = user_id or container_id
         elif source_type == "user":
@@ -203,7 +247,31 @@ class LinePlatformAdapter(Platform):
             abm.session_id = user_id or group_id or room_id or "unknown"
             sender_id = abm.session_id
         abm.sender = MessageMember(user_id=sender_id, nickname=sender_id[:8])
-        components = await self._parse_line_message_components(message)
+
+        components: list[BaseMessageComponent]
+        if event_type == "postback":
+            postback = event.get("postback", {})
+            if not isinstance(postback, dict):
+                return None
+            payload = postback.get("data")
+            if not isinstance(payload, str):
+                return None
+            try:
+                action_id, data = decode_button_callback(payload, allow_expired=True)
+            except ValueError:
+                logger.debug("[LINE] ignored unrecognized postback payload")
+                return None
+            components = [
+                ButtonInteraction(
+                    action_id=action_id,
+                    data=data,
+                    interaction_id=str(event.get("webhookEventId") or uuid.uuid4().hex),
+                    source_message_id=None,
+                    callback_data=payload,
+                )
+            ]
+        else:
+            components = await self._parse_line_message_components(message)
         if not components:
             return None
         abm.message = components
@@ -396,6 +464,8 @@ class LinePlatformAdapter(Platform):
                 parts.append("[audio]")
             elif isinstance(comp, File):
                 parts.append(str(comp.name or "[file]"))
+            elif isinstance(comp, ButtonInteraction):
+                parts.append(comp.action_id)
             else:
                 parts.append(f"[{comp.type}]")
         return " ".join(i for i in parts if i).strip()
@@ -426,3 +496,20 @@ class LinePlatformAdapter(Platform):
             line_api=self.line_api,
         )
         self._event_queue.put_nowait(event)
+
+    def create_event(self, message: AstrBotMessage) -> LineMessageEvent:
+        """Creates a LINE message event.
+
+        Args:
+            message: AstrBot message object to wrap.
+
+        Returns:
+            Created LINE message event.
+        """
+        return LineMessageEvent(
+            message_str=message.message_str,
+            message_obj=message,
+            platform_meta=self.meta(),
+            session_id=message.session_id,
+            line_api=self.line_api,
+        )

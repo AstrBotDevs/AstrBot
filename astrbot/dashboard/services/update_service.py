@@ -16,6 +16,8 @@ from astrbot.core.desktop_runtime import (
     is_desktop_managed_backend,
 )
 from astrbot.core.updater import AstrBotUpdater, UpdateProgress
+from astrbot.dashboard.services.task_progress import UpdateProgressMixin
+from astrbot.dashboard.validation import is_json_object, string_field
 
 
 async def call_get_dashboard_version(*args, **kwargs):
@@ -40,7 +42,7 @@ class UpdateServiceError(Exception):
         self.code = code
 
 
-class UpdateService:
+class UpdateService(UpdateProgressMixin):
     def __init__(
         self,
         astrbot_updater: AstrBotUpdater,
@@ -50,6 +52,7 @@ class UpdateService:
         pip_install_func: Callable[..., Awaitable[Any]],
         demo_mode: bool,
         clear_site_data_headers: dict,
+        dashboard_static_folder: str | None = None,
     ) -> None:
         self._updater = astrbot_updater
         self.core_lifecycle = core_lifecycle
@@ -57,6 +60,7 @@ class UpdateService:
         self.pip_install = pip_install_func
         self.demo_mode = demo_mode
         self.clear_site_data_headers = clear_site_data_headers
+        self.dashboard_static_folder = dashboard_static_folder
         self.update_progress: dict[str, dict] = {}
         self._update_tasks: dict[str, asyncio.Task] = {}
 
@@ -73,7 +77,9 @@ class UpdateService:
 
     async def check_update(self, update_type: str | None) -> UpdateServiceResult:
         try:
-            dashboard_version = await self.get_dashboard_version()
+            dashboard_version = await self.get_dashboard_version(
+                self.dashboard_static_folder
+            )
             if update_type == "dashboard":
                 return UpdateServiceResult(
                     data={
@@ -124,14 +130,17 @@ class UpdateService:
                 code="desktop_managed",
             )
 
-        payload = data if isinstance(data, dict) else {}
-        version = payload.get("version", "")
-        reboot = payload.get("reboot", True)
-        progress_id = payload.get("progress_id") or uuid.uuid4().hex
+        payload = data if is_json_object(data) else {}
+        version = string_field(payload, "version", "", error_type=UpdateServiceError)
+        reboot = bool(payload.get("reboot", True))
+        progress_id = (
+            string_field(payload, "progress_id", error_type=UpdateServiceError)
+            or uuid.uuid4().hex
+        )
         if version == "" or version == "latest":
             version = None
 
-        proxy: str | None = payload.get("proxy", None)
+        proxy = string_field(payload, "proxy", error_type=UpdateServiceError)
         if proxy:
             proxy = proxy.removesuffix("/")
 
@@ -213,7 +222,10 @@ class UpdateService:
             )
             logger.info("Updating dependencies...")
             try:
-                await self.pip_install(requirements_path="requirements.txt")
+                await self.pip_install(
+                    requirements_path="requirements.txt",
+                    bypass_core_constraints=True,
+                )
             except Exception as exc:
                 logger.error(f"Failed to update dependencies: {exc}")
             self._set_update_stage(
@@ -288,10 +300,10 @@ class UpdateService:
                 "You are not permitted to do this operation in demo mode"
             )
 
-        payload = data if isinstance(data, dict) else {}
+        payload = data if is_json_object(data) else {}
         package = payload.get("package", "")
-        mirror = payload.get("mirror", None)
-        if not package:
+        mirror = string_field(payload, "mirror", error_type=UpdateServiceError)
+        if not isinstance(package, str) or not package:
             raise UpdateServiceError("缺少参数 package 或不合法。")
         try:
             await self.pip_install(package, mirror=mirror)
@@ -299,45 +311,3 @@ class UpdateService:
         except Exception as exc:
             logger.error(f"/api/update_pip: {traceback.format_exc()}")
             raise UpdateServiceError(exc.__str__()) from exc
-
-    def _init_update_progress(self, progress_id: str, version: str | None) -> None:
-        self.update_progress[progress_id] = {
-            "id": progress_id,
-            "status": "running",
-            "stage": "preparing",
-            "version": version or "latest",
-            "message": "正在准备更新...",
-            "overall_percent": 0,
-            "stages": {
-                "dashboard": self._empty_stage("pending"),
-                "core": self._empty_stage("pending"),
-            },
-        }
-
-    @staticmethod
-    def _empty_stage(status: str = "pending") -> dict:
-        return {
-            "status": status,
-            "downloaded": 0,
-            "total": 0,
-            "percent": 0,
-            "speed": 0,
-        }
-
-    def _set_update_stage(
-        self,
-        progress_id: str,
-        stage: str,
-        status: str,
-        message: str,
-        overall_percent: int | None = None,
-    ) -> None:
-        progress = self.update_progress.get(progress_id)
-        if not progress:
-            return
-        progress["stage"] = stage
-        progress["message"] = message
-        progress["stages"].setdefault(stage, self._empty_stage())
-        progress["stages"][stage]["status"] = status
-        if overall_percent is not None:
-            progress["overall_percent"] = overall_percent

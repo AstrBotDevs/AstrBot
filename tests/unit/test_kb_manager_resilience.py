@@ -6,36 +6,15 @@ Tests the following scenarios:
 2. update_kb switches instance only after new instance initializes successfully
 3. _ensure_vec_db clears stale init_error after successful initialization
 
-These tests use lazy imports and mocks to avoid circular import issues
-in the astrbot core module chain.
+Real knowledge modules are imported once; only provider and storage boundaries are mocked.
 """
 
-import sys
-import types
-from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-
-@pytest.fixture
-def stub_provider_manager_module():
-    """Stub provider manager module to avoid circular imports in unit tests."""
-    original_module = sys.modules.get("astrbot.core.provider.manager")
-    stub_module = types.ModuleType("astrbot.core.provider.manager")
-
-    class ProviderManager: ...
-
-    setattr(stub_module, "ProviderManager", ProviderManager)
-    sys.modules["astrbot.core.provider.manager"] = stub_module
-
-    try:
-        yield
-    finally:
-        if original_module is not None:
-            sys.modules["astrbot.core.provider.manager"] = original_module
-        else:
-            sys.modules.pop("astrbot.core.provider.manager", None)
+from astrbot.core.knowledge_base.kb_helper import KBHelper
+from astrbot.core.knowledge_base.kb_mgr import KnowledgeBaseManager
 
 
 @pytest.fixture
@@ -61,7 +40,6 @@ def mock_kb_db():
 @pytest.fixture
 def mock_knowledge_base():
     """Create a mock KnowledgeBase instance."""
-    # Use lazy import to avoid circular import
     from astrbot.core.knowledge_base.models import KnowledgeBase
 
     kb = KnowledgeBase(
@@ -102,7 +80,7 @@ def mock_embedding_provider():
 
 @pytest.mark.asyncio
 async def test_update_kb_preserves_old_instance_when_reinit_fails(
-    stub_provider_manager_module,
+    tmp_path,
     mock_provider_manager,
     mock_kb_db,
     mock_knowledge_base,
@@ -112,9 +90,6 @@ async def test_update_kb_preserves_old_instance_when_reinit_fails(
     Test that update_kb preserves the old KBHelper instance when
     re-initialization fails, ensuring the knowledge base remains available.
     """
-    # Lazy import to avoid circular import
-    from astrbot.core.knowledge_base.kb_helper import KBHelper
-    from astrbot.core.knowledge_base.kb_mgr import KnowledgeBaseManager
 
     # Setup: create an existing KBHelper with working vec_db
     mock_provider_manager.get_provider_by_id.return_value = mock_embedding_provider
@@ -124,7 +99,7 @@ async def test_update_kb_preserves_old_instance_when_reinit_fails(
     old_helper.kb = mock_knowledge_base
     old_helper.prov_mgr = mock_provider_manager
     old_helper.kb_db = mock_kb_db
-    old_helper.kb_root_dir = "/tmp/test_kb"
+    old_helper.kb_root_dir = str(tmp_path)
     old_helper.chunker = MagicMock()
     old_helper.init_error = None
     old_helper.vec_db = MagicMock()  # Simulate existing working vec_db
@@ -166,7 +141,7 @@ async def test_update_kb_preserves_old_instance_when_reinit_fails(
 
 @pytest.mark.asyncio
 async def test_update_kb_switches_instance_only_after_new_reinit_success(
-    stub_provider_manager_module,
+    tmp_path,
     mock_provider_manager,
     mock_kb_db,
     mock_knowledge_base,
@@ -176,9 +151,6 @@ async def test_update_kb_switches_instance_only_after_new_reinit_success(
     Test that update_kb only switches to the new KBHelper instance
     after the new instance successfully initializes.
     """
-    # Lazy import to avoid circular import
-    from astrbot.core.knowledge_base.kb_helper import KBHelper
-    from astrbot.core.knowledge_base.kb_mgr import KnowledgeBaseManager
 
     # Setup: create an existing KBHelper
     mock_provider_manager.get_provider_by_id.return_value = mock_embedding_provider
@@ -187,7 +159,7 @@ async def test_update_kb_switches_instance_only_after_new_reinit_success(
     old_helper.kb = mock_knowledge_base
     old_helper.prov_mgr = mock_provider_manager
     old_helper.kb_db = mock_kb_db
-    old_helper.kb_root_dir = "/tmp/test_kb"
+    old_helper.kb_root_dir = str(tmp_path)
     old_helper.chunker = MagicMock()
     old_helper.init_error = None
     old_helper.vec_db = MagicMock()
@@ -233,7 +205,7 @@ async def test_update_kb_switches_instance_only_after_new_reinit_success(
 
 @pytest.mark.asyncio
 async def test_ensure_vec_db_clears_stale_init_error(
-    stub_provider_manager_module,
+    tmp_path,
     mock_provider_manager,
     mock_kb_db,
     mock_knowledge_base,
@@ -243,8 +215,6 @@ async def test_ensure_vec_db_clears_stale_init_error(
     Test that _ensure_vec_db clears the init_error attribute
     after successful initialization, removing stale error state.
     """
-    # Lazy import to avoid circular import
-    from astrbot.core.knowledge_base.kb_helper import KBHelper
 
     # Setup: create KBHelper with stale init_error
     mock_provider_manager.get_provider_by_id.return_value = mock_embedding_provider
@@ -253,10 +223,10 @@ async def test_ensure_vec_db_clears_stale_init_error(
     helper.kb = mock_knowledge_base
     helper.prov_mgr = mock_provider_manager
     helper.kb_db = mock_kb_db
-    helper.kb_root_dir = "/tmp/test_kb"
+    helper.kb_root_dir = str(tmp_path)
     helper.chunker = MagicMock()
     helper.init_error = "Previous initialization failed"
-    helper.kb_dir = Path("/tmp/test_kb") / mock_knowledge_base.kb_id
+    helper.kb_dir = tmp_path / mock_knowledge_base.kb_id
     helper.kb_dir.mkdir(parents=True, exist_ok=True)
     helper.kb_medias_dir = helper.kb_dir / "medias" / mock_knowledge_base.kb_id
     helper.kb_files_dir = helper.kb_dir / "files" / mock_knowledge_base.kb_id
@@ -280,7 +250,7 @@ async def test_ensure_vec_db_clears_stale_init_error(
 
 @pytest.mark.asyncio
 async def test_ensure_vec_db_sets_init_error_on_failure(
-    stub_provider_manager_module,
+    tmp_path,
     mock_provider_manager,
     mock_kb_db,
     mock_knowledge_base,
@@ -289,8 +259,6 @@ async def test_ensure_vec_db_sets_init_error_on_failure(
     Test that _ensure_vec_db does NOT clear init_error when
     initialization fails, preserving the error state.
     """
-    # Lazy import to avoid circular import
-    from astrbot.core.knowledge_base.kb_helper import KBHelper
 
     # Setup: provider unavailable
     mock_provider_manager.get_provider_by_id.return_value = None
@@ -299,10 +267,10 @@ async def test_ensure_vec_db_sets_init_error_on_failure(
     helper.kb = mock_knowledge_base
     helper.prov_mgr = mock_provider_manager
     helper.kb_db = mock_kb_db
-    helper.kb_root_dir = "/tmp/test_kb"
+    helper.kb_root_dir = str(tmp_path)
     helper.chunker = MagicMock()
     helper.init_error = "Previous initialization failed"
-    helper.kb_dir = Path("/tmp/test_kb") / mock_knowledge_base.kb_id
+    helper.kb_dir = tmp_path / mock_knowledge_base.kb_id
     helper.kb_medias_dir = helper.kb_dir / "medias" / mock_knowledge_base.kb_id
     helper.kb_files_dir = helper.kb_dir / "files" / mock_knowledge_base.kb_id
 

@@ -92,6 +92,7 @@ const {
   filteredExtensions,
   filteredPlugins,
   filteredMarketPlugins,
+  getMarketPluginKey,
   sortedPlugins,
   RANDOM_PLUGINS_COUNT,
   randomPlugins,
@@ -201,10 +202,15 @@ const normalizeRepoUrl = (value) =>
 const selectedMarketPlugin = computed(() => {
   const market = Array.isArray(pluginMarketData.value) ? pluginMarketData.value : [];
   const installedPlugin = selectedInstalledPlugin.value;
+  // Resolve by the unique market plugin key first; the `name` match is a
+  // fallback for legacy deep links, since multiple market entries can share
+  // the same metadata name.
+  const marketKeyMatch = market.find((item) => getMarketPluginKey(item) === selectedPluginId.value) || null;
   const marketNameMatch = market.find((item) => item.name === selectedPluginId.value) || null;
+  const marketMatch = marketKeyMatch || marketNameMatch;
 
   if (selectedDetailTab.value === "market" || !installedPlugin) {
-    return marketNameMatch;
+    return marketMatch;
   }
 
   const repo = normalizeRepoUrl(installedPlugin.repo);
@@ -340,8 +346,8 @@ const updateDialogPluginLogo = computed(() => {
         ></div>
         <v-btn
           variant="text"
-          prepend-icon="mdi-github"
-          href="https://github.com/AstrBotDevs/AstrBot_Plugins_Collection"
+          prepend-icon="mdi-upload"
+          href="https://cloud.astrbot.app/publish"
           target="_blank"
           color="primary"
           class="text-none"
@@ -358,31 +364,31 @@ const updateDialogPluginLogo = computed(() => {
       <v-card-title class="text-h3 pa-4 pb-0 pl-6">{{
         tm("dialogs.config.title")
       }}</v-card-title>
-      <v-card-text>
-        <div
-          class="d-flex align-center justify-space-between flex-wrap"
-          style="gap: 12px"
-        >
-          <div>
-            <div class="text-subtitle-1 font-weight-medium">
-              {{ tm("dialogs.config.coreSettings.logLevel") }}
-            </div>
-            <div class="text-caption text-medium-emphasis">
-              {{ tm("dialogs.config.coreSettings.logLevelHint") }}
-            </div>
-          </div>
-          <v-select
-            :model-value="extension_config.log_level"
-            :items="logLevelItems"
-            :loading="pluginLogLevelSaving"
-            density="compact"
-            variant="outlined"
-            hide-details
-            style="max-width: 220px; min-width: 180px"
-            @update:model-value="updatePluginLogLevel"
-          ></v-select>
-        </div>
-        <v-divider class="my-4"></v-divider>
+      <v-card-text class="config-form plugin-config-form astrbot-config-form">
+        <v-row class="config-row">
+          <v-col cols="12" sm="6" class="property-info">
+            <v-list-item density="compact">
+              <v-list-item-title class="property-name">
+                {{ tm("dialogs.config.coreSettings.logLevel") }}
+              </v-list-item-title>
+              <v-list-item-subtitle class="property-hint">
+                {{ tm("dialogs.config.coreSettings.logLevelHint") }}
+              </v-list-item-subtitle>
+            </v-list-item>
+          </v-col>
+          <v-col cols="12" sm="6" class="config-input">
+            <v-select
+              :model-value="extension_config.log_level"
+              :items="logLevelItems"
+              :loading="pluginLogLevelSaving"
+              density="compact"
+              variant="outlined"
+              hide-details
+              @update:model-value="updatePluginLogLevel"
+            ></v-select>
+          </v-col>
+        </v-row>
+        <v-divider class="config-divider"></v-divider>
         <AstrBotConfig
           v-if="extension_config.metadata"
           :metadata="extension_config.metadata"
@@ -391,6 +397,7 @@ const updateDialogPluginLogo = computed(() => {
           :pluginName="curr_namespace"
           :pluginI18n="extension_config.i18n"
           enable-default-reset
+          foldable
         />
         <p v-else>{{ tm("dialogs.config.noConfig") }}</p>
       </v-card-text>
@@ -1237,6 +1244,16 @@ const updateDialogPluginLogo = computed(() => {
 </template>
 
 <style scoped>
+.plugin-config-form {
+  /* v-card-text padding, published for the fold headers so their hover highlight
+     reaches the card edges. */
+  --config-group-inset: 16px;
+}
+
+.plugin-config-form > :deep(.config-section) {
+  display: none;
+}
+
 .extension-page {
   margin: 0 auto;
   max-width: 1200px;
@@ -1323,4 +1340,8 @@ const updateDialogPluginLogo = computed(() => {
 .v-theme--PurpleThemeDark .extension-page .plugin-handler-item {
   background-color: rgb(var(--v-theme-mcpCardBg));
 }
+</style>
+
+<style>
+@import "@/styles/config-form.css";
 </style>

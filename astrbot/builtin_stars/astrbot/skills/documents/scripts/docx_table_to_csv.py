@@ -9,6 +9,13 @@ from pathlib import Path
 
 from docx import Document
 
+if __package__:
+    from astrbot.builtin_stars.astrbot.skills._astrbot_skill_support.cli import (
+        parse_conversion_paths,
+    )
+else:
+    from _astrbot_skill_support.cli import parse_conversion_paths
+
 
 def main() -> int:
     """Run the table extractor.
@@ -20,17 +27,13 @@ def main() -> int:
     parser.add_argument("input", type=Path, help="Source DOCX")
     parser.add_argument("output", type=Path, help="Destination CSV")
     parser.add_argument("--table", type=int, default=0, help="Zero-based table index")
-    args = parser.parse_args()
-    input_path = args.input.expanduser().resolve(strict=False)
-    output_path = args.output.expanduser().resolve(strict=False)
-    if not input_path.is_file():
-        parser.error(f"Input file not found: {input_path}")
+    args, input_path, output_path = parse_conversion_paths(parser)
     if output_path.suffix.lower() != ".csv":
         parser.error("Output path must end with .csv")
     if args.table < 0:
         parser.error("Table index must be non-negative.")
     try:
-        document = Document(input_path)
+        document = Document(str(input_path))
         table = document.tables[args.table]
         output_path.parent.mkdir(parents=True, exist_ok=True)
         with output_path.open("w", encoding="utf-8-sig", newline="") as output_file:

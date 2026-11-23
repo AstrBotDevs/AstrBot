@@ -1,72 +1,55 @@
-import base64
 import json
-from typing import Any, override
+import typing as T
+from typing import override
 
 import astrbot.core.message.components as Comp
 from astrbot import logger
 from astrbot.core import sp
-from astrbot.core.agent.hooks import BaseAgentRunHooks
-from astrbot.core.agent.message import is_checkpoint_message
-from astrbot.core.agent.response import AgentResponse, AgentResponseData
-from astrbot.core.agent.run_context import ContextWrapper, TContext
-from astrbot.core.agent.runners.base import AgentState, BaseAgentRunner
-from astrbot.core.agent.tool_executor import BaseFunctionToolExecutor
+from astrbot.core.agent.runners.remote import RemoteAgentRunner
 from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.provider.entities import (
     LLMResponse,
     ProviderRequest,
 )
-from astrbot.core.provider.provider import Provider
 from astrbot.core.utils.media_utils import MediaResolver, describe_media_ref
 
+from ...hooks import BaseAgentRunHooks
+from ...response import AgentResponseData
+from ...run_context import ContextWrapper, TContext
+from ..base import AgentResponse, AgentState
 from .coze_api_client import CozeAPIClient
 
 
-class CozeAgentRunner(BaseAgentRunner[TContext]):
+class CozeAgentRunner(RemoteAgentRunner[TContext]):
     """Coze Agent Runner"""
 
     @override
     async def reset(
         self,
-        provider: Provider,
         request: ProviderRequest,
         run_context: ContextWrapper[TContext],
-        tool_executor: BaseFunctionToolExecutor[TContext],
         agent_hooks: BaseAgentRunHooks[TContext],
-        streaming: bool = False,
-        enforce_max_turns: int = -1,
-        llm_compress_instruction: str | None = None,
-        llm_compress_keep_recent: int = 0,
-        llm_compress_provider: Provider | None = None,
-        truncate_turns: int = 1,
-        custom_token_counter: Any = None,
-        custom_compressor: Any = None,
-        tool_schema_mode: str | None = "full",
-        fallback_providers: list[Provider] | None = None,
-        provider_config: dict | None = None,
-        **kwargs: Any,
+        provider_config: dict,
+        **kwargs: T.Any,
     ) -> None:
-        self.req = request
-        self.streaming = streaming
-        self.final_llm_resp = None
-        self._state = AgentState.IDLE
-        self.agent_hooks = agent_hooks
-        self.run_context = run_context
+        self._reset_request(
+            request, run_context, agent_hooks, kwargs.get("streaming", False)
+        )
 
         provider_config = provider_config or {}
         self.api_key = provider_config.get("coze_api_key", "")
         if not self.api_key:
-            raise Exception("Coze API Key 不能为空｡")
+            raise Exception("Coze API Key 不能为空。")
         self.bot_id = provider_config.get("bot_id", "")
         if not self.bot_id:
-            raise Exception("Coze Bot ID 不能为空｡")
+            raise Exception("Coze Bot ID 不能为空。")
         self.api_base: str = provider_config.get("coze_api_base", "https://api.coze.cn")
 
         if not isinstance(self.api_base, str) or not self.api_base.startswith(
             ("http://", "https://"),
         ):
             raise Exception(
-                "Coze API Base URL 格式不正确,必须以 http:// 或 https:// 开头｡",
+                "Coze API Base URL 格式不正确，必须以 http:// 或 https:// 开头。",
             )
 
         self.timeout = provider_config.get("timeout", 120)
@@ -82,52 +65,41 @@ class CozeAgentRunner(BaseAgentRunner[TContext]):
 
     @override
     async def step(self):
-        """执行 Coze Agent 的一个步骤"""
-        if not self.req:
-            raise ValueError("Request is not set. Please call reset() first.")
-
-        if self._state == AgentState.IDLE:
-            try:
-                await self.agent_hooks.on_agent_begin(self.run_context)
-            except Exception as e:
-                logger.error(f"Error in on_agent_begin hook: {e}", exc_info=True)
-
-        # 开始处理,转换到运行状态
-        self._transition_state(AgentState.RUNNING)
+        """
+        执行 Coze Agent 的一个步骤
+        """
+        await self._begin_agent_run()
 
         try:
             # 执行 Coze 请求并处理结果
             async for response in self._execute_coze_request():
                 yield response
         except Exception as e:
-            logger.error(f"Coze 请求失败:{e!s}")
+            logger.error(f"Coze 请求失败：{str(e)}")
             self._transition_state(AgentState.ERROR)
             self.final_llm_resp = LLMResponse(
-                role="err",
-                completion_text=f"Coze 请求失败:{e!s}",
+                role="err", completion_text=f"Coze 请求失败：{str(e)}"
             )
             yield AgentResponse(
                 type="err",
                 data=AgentResponseData(
-                    chain=MessageChain().message(f"Coze 请求失败:{e!s}"),
+                    chain=MessageChain().message(f"Coze 请求失败：{str(e)}")
                 ),
             )
         finally:
             await self.api_client.close()
 
     @override
-    async def step_until_done(self, max_step: int):
+    async def step_until_done(
+        self, max_step: int = 128
+    ) -> T.AsyncGenerator[AgentResponse, None]:
         while not self.done():
             async for resp in self.step():
                 yield resp
 
     async def _execute_coze_request(self):
         """执行 Coze 请求的核心逻辑"""
-        prompt = self.req.prompt or ""
-        session_id = self.req.session_id or "unknown"
-        image_urls = self.req.image_urls or []
-        contexts = self.req.contexts or []
-        system_prompt = self.req.system_prompt
+        prompt, session_id, image_urls, contexts, system_prompt = self._request_inputs()
 
         # 用户ID参数
         user_id = session_id
@@ -156,13 +128,11 @@ class CozeAgentRunner(BaseAgentRunner[TContext]):
         # 处理历史上下文
         if not self.auto_save_history and contexts:
             for ctx in contexts:
-                if is_checkpoint_message(ctx):
-                    continue
                 if isinstance(ctx, dict) and "role" in ctx and "content" in ctx:
                     # 处理上下文中的图片
                     content = ctx["content"]
                     if isinstance(content, list):
-                        # 多模态内容,需要处理图片
+                        # 多模态内容，需要处理图片
                         processed_content = []
                         for item in content:
                             if isinstance(item, dict):
@@ -176,8 +146,7 @@ class CozeAgentRunner(BaseAgentRunner[TContext]):
                                         if url:
                                             file_id = (
                                                 await self._download_and_upload_image(
-                                                    url,
-                                                    session_id,
+                                                    url, session_id
                                                 )
                                             )
                                             processed_content.append(
@@ -185,7 +154,7 @@ class CozeAgentRunner(BaseAgentRunner[TContext]):
                                                     "type": "file",
                                                     "file_id": file_id,
                                                     "file_url": url,
-                                                },
+                                                }
                                             )
                                     except Exception as e:
                                         logger.warning(f"处理上下文图片失败: {e}")
@@ -197,7 +166,7 @@ class CozeAgentRunner(BaseAgentRunner[TContext]):
                                     "role": ctx["role"],
                                     "content": processed_content,
                                     "content_type": "object_string",
-                                },
+                                }
                             )
                     else:
                         # 纯文本内容
@@ -206,7 +175,7 @@ class CozeAgentRunner(BaseAgentRunner[TContext]):
                                 "role": ctx["role"],
                                 "content": content,
                                 "content_type": "text",
-                            },
+                            }
                         )
 
         # 构建当前消息
@@ -218,18 +187,23 @@ class CozeAgentRunner(BaseAgentRunner[TContext]):
                     object_string_content.append({"type": "text", "text": prompt})
 
                 for url in image_urls:
-                    # the url is a base64 string
                     try:
-                        image_data = base64.b64decode(url)
-                        file_id = await self.api_client.upload_file(image_data)
+                        file_id = await self._download_and_upload_image(
+                            url,
+                            session_id,
+                        )
                         object_string_content.append(
                             {
                                 "type": "image",
                                 "file_id": file_id,
-                            },
+                            }
                         )
                     except Exception as e:
-                        logger.warning(f"处理图片失败 {url}: {e}")
+                        logger.warning(
+                            "处理图片失败 %s: %s",
+                            describe_media_ref(url),
+                            e,
+                        )
                         continue
 
                 if object_string_content:
@@ -239,7 +213,7 @@ class CozeAgentRunner(BaseAgentRunner[TContext]):
                             "role": "user",
                             "content": content,
                             "content_type": "object_string",
-                        },
+                        }
                     )
             elif prompt:
                 # 纯文本
@@ -254,6 +228,7 @@ class CozeAgentRunner(BaseAgentRunner[TContext]):
         # 执行 Coze API 请求
         accumulated_content = ""
         message_started = False
+        chat_completed = False
 
         async for chunk in self.api_client.chat_messages(
             bot_id=self.bot_id,
@@ -288,12 +263,12 @@ class CozeAgentRunner(BaseAgentRunner[TContext]):
                     accumulated_content += content
                     message_started = True
 
-                    # 如果是流式响应,发送增量数据
+                    # 如果是流式响应，发送增量数据
                     if self.streaming:
                         yield AgentResponse(
                             type="streaming_delta",
                             data=AgentResponseData(
-                                chain=MessageChain().message(content),
+                                chain=MessageChain().message(content)
                             ),
                         )
 
@@ -305,14 +280,19 @@ class CozeAgentRunner(BaseAgentRunner[TContext]):
             elif event_type == "conversation.chat.completed":
                 # 对话完成
                 logger.debug("Coze chat completed")
+                chat_completed = True
                 break
 
-            elif event_type == "error":
-                # 错误处理
-                error_msg = data.get("msg", "未知错误")
-                error_code = data.get("code", "UNKNOWN")
+            elif event_type in ("error", "conversation.chat.failed"):
+                # Chat failures may carry details in last_error.
+                error_data = data.get("last_error") or data
+                error_msg = error_data.get("msg", "未知错误")
+                error_code = error_data.get("code", "UNKNOWN")
                 logger.error(f"Coze 出现错误: {error_code} - {error_msg}")
                 raise Exception(f"Coze 出现错误: {error_code} - {error_msg}")
+
+        if not chat_completed:
+            raise Exception("Coze response stream ended before the chat completed")
 
         if not message_started and not accumulated_content:
             logger.warning("Coze 未返回任何内容")
@@ -320,26 +300,14 @@ class CozeAgentRunner(BaseAgentRunner[TContext]):
 
         # 创建最终响应
         chain = MessageChain(chain=[Comp.Plain(accumulated_content)])
-        self.final_llm_resp = LLMResponse(role="assistant", result_chain=chain)
-        self._transition_state(AgentState.DONE)
-
-        try:
-            await self.agent_hooks.on_agent_done(self.run_context, self.final_llm_resp)
-        except Exception as e:
-            logger.error(f"Error in on_agent_done hook: {e}", exc_info=True)
-
-        # 返回最终结果
-        yield AgentResponse(
-            type="llm_result",
-            data=AgentResponseData(chain=chain),
-        )
+        yield await self._finish_with_result(chain)
 
     async def _download_and_upload_image(
         self,
         image_url: str,
         session_id: str | None = None,
     ) -> str:
-        """下载图片并上传到 Coze,返回 file_id"""
+        """下载图片并上传到 Coze，返回 file_id"""
         import hashlib
 
         # 计算哈希实现缓存
@@ -363,14 +331,12 @@ class CozeAgentRunner(BaseAgentRunner[TContext]):
 
             if session_id:
                 self.file_id_cache[session_id][cache_key] = file_id
-                logger.debug(f"[Coze] 图片上传成功并缓存,file_id: {file_id}")
+                logger.debug(f"[Coze] 图片上传成功并缓存，file_id: {file_id}")
 
             return file_id
 
         except Exception as e:
-            logger.error(
-                f"处理图片失败 {describe_media_ref(image_url)}: {e!s}",
-            )
+            logger.error("处理图片失败 %s: %s", describe_media_ref(image_url), e)
             raise Exception(f"处理图片失败: {e!s}") from e
 
     @override

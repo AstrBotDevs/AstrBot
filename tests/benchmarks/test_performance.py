@@ -7,7 +7,6 @@ performance regressions and improvements over time.
 import gc
 import time
 import tracemalloc
-from typing import Any
 from collections.abc import Callable
 from dataclasses import dataclass
 
@@ -19,6 +18,7 @@ from astrbot.core.star.filter.command import CommandFilter, GreedyStr
 @dataclass
 class BenchmarkResult:
     """Result of a benchmark test."""
+
     name: str
     operation_count: int
     total_time_ms: float
@@ -73,7 +73,7 @@ class PerformanceBenchmark:
             func(*args, **kwargs)
         snapshot_after = self.tracemalloc.take_snapshot()
         self.tracemalloc.stop()
-        top_stats = snapshot_after.compare_to(snapshot_before, 'lineno')
+        top_stats = snapshot_after.compare_to(snapshot_before, "lineno")
         memory_delta_kb = sum(stat.size_diff for stat in top_stats) / 1024
 
         # Calculate score (0-100)
@@ -127,7 +127,9 @@ class TestCommandFilterBenchmarks:
 
     def test_complete_command_names_performance(self):
         """Benchmark get_complete_command_names with caching."""
-        bench = PerformanceBenchmark("CommandFilter.get_complete_command_names", operations=10000)
+        bench = PerformanceBenchmark(
+            "CommandFilter.get_complete_command_names", operations=10000
+        )
 
         # Setup: create 100 filters
         filters: list[CommandFilter] = []
@@ -139,7 +141,7 @@ class TestCommandFilterBenchmarks:
 
         result = bench.run(lambda: [cf.get_complete_command_names() for cf in filters])
 
-        print(f"\n{'='*60}")
+        print(f"\n{'=' * 60}")
         print(f"Benchmark: {result.name}")
         print(f"  Operations: {result.operation_count:,}")
         print(f"  Total time: {result.total_time_ms:.2f}ms")
@@ -147,9 +149,11 @@ class TestCommandFilterBenchmarks:
         print(f"  Ops/sec: {result.ops_per_second:,.0f}")
         print(f"  Memory delta: +{result.memory_delta_kb:.2f}KB")
         print(f"  SCORE: {result.score}/100")
-        print(f"{'='*60}\n")
+        print(f"{'=' * 60}\n")
 
-        assert result.score >= 60, f"Performance score {result.score} is below threshold 60"
+        assert result.score >= 60, (
+            f"Performance score {result.score} is below threshold 60"
+        )
 
     def test_validate_bool_params_performance(self):
         """Benchmark boolean parameter validation."""
@@ -162,7 +166,7 @@ class TestCommandFilterBenchmarks:
             lambda: cf.validate_and_convert_params(["true"], cf.handler_params)
         )
 
-        print(f"\n{'='*60}")
+        print(f"\n{'=' * 60}")
         print(f"Benchmark: {result.name}")
         print(f"  Operations: {result.operation_count:,}")
         print(f"  Total time: {result.total_time_ms:.2f}ms")
@@ -170,9 +174,11 @@ class TestCommandFilterBenchmarks:
         print(f"  Ops/sec: {result.ops_per_second:,.0f}")
         print(f"  Memory delta: +{result.memory_delta_kb:.2f}KB")
         print(f"  SCORE: {result.score}/100")
-        print(f"{'='*60}\n")
+        print(f"{'=' * 60}\n")
 
-        assert result.score >= 70, f"Performance score {result.score} is below threshold 70"
+        assert result.score >= 70, (
+            f"Performance score {result.score} is below threshold 70"
+        )
 
     def test_validate_int_params_performance(self):
         """Benchmark integer parameter validation."""
@@ -185,7 +191,7 @@ class TestCommandFilterBenchmarks:
             lambda: cf.validate_and_convert_params(["42"], cf.handler_params)
         )
 
-        print(f"\n{'='*60}")
+        print(f"\n{'=' * 60}")
         print(f"Benchmark: {result.name}")
         print(f"  Operations: {result.operation_count:,}")
         print(f"  Total time: {result.total_time_ms:.2f}ms")
@@ -193,9 +199,11 @@ class TestCommandFilterBenchmarks:
         print(f"  Ops/sec: {result.ops_per_second:,.0f}")
         print(f"  Memory delta: +{result.memory_delta_kb:.2f}KB")
         print(f"  SCORE: {result.score}/100")
-        print(f"{'='*60}\n")
+        print(f"{'=' * 60}\n")
 
-        assert result.score >= 70, f"Performance score {result.score} is below threshold 70"
+        assert result.score >= 70, (
+            f"Performance score {result.score} is below threshold 70"
+        )
 
 
 class TestMemoryBenchmarks:
@@ -215,17 +223,19 @@ class TestMemoryBenchmarks:
 
         result = bench.run(create_filters)
 
-        print(f"\n{'='*60}")
+        print(f"\n{'=' * 60}")
         print(f"Benchmark: {result.name}")
-        print(f"  Creating 1000 filters")
+        print("  Creating 1000 filters")
         print(f"  Total memory: +{result.memory_delta_kb:.2f}KB")
         print(f"  Per filter: {result.memory_delta_kb:.4f}KB")
         print(f"  SCORE: {result.score}/100")
-        print(f"{'='*60}\n")
+        print(f"{'=' * 60}\n")
 
         # Each filter should use < 10KB of memory
         per_filter_kb = result.memory_delta_kb / 1000
-        assert per_filter_kb < 10, f"Filter memory usage {per_filter_kb:.2f}KB is too high"
+        assert per_filter_kb < 10, (
+            f"Filter memory usage {per_filter_kb:.2f}KB is too high"
+        )
 
     def test_greedy_str_memory(self):
         """Benchmark GreedyStr memory usage."""
@@ -236,13 +246,15 @@ class TestMemoryBenchmarks:
 
         result = bench.run(create_greedy)
 
-        print(f"\n{'='*60}")
+        print(f"\n{'=' * 60}")
         print(f"Benchmark: {result.name}")
         print(f"  Operations: {result.operation_count:,}")
         print(f"  Memory delta: +{result.memory_delta_kb:.2f}KB")
-        print(f"  Per operation: {result.memory_delta_kb / result.operation_count:.4f}KB")
+        print(
+            f"  Per operation: {result.memory_delta_kb / result.operation_count:.4f}KB"
+        )
         print(f"  SCORE: {result.score}/100")
-        print(f"{'='*60}\n")
+        print(f"{'=' * 60}\n")
 
         assert result.score >= 50, f"Memory score {result.score} is below threshold 50"
 
@@ -253,7 +265,9 @@ class TestThroughputBenchmarks:
     @pytest.mark.asyncio
     async def test_high_throughput_bool_validation(self):
         """Test boolean validation at high throughput."""
-        bench = PerformanceBenchmark("High-throughput bool validation", operations=100000)
+        bench = PerformanceBenchmark(
+            "High-throughput bool validation", operations=100000
+        )
 
         cf = CommandFilter(command_name="test")
         cf.handler_params = {"enabled": bool}
@@ -266,13 +280,13 @@ class TestThroughputBenchmarks:
         # Run 100k validations across 6 values
         result = bench.run(validate_many)
 
-        print(f"\n{'='*60}")
+        print(f"\n{'=' * 60}")
         print(f"Benchmark: {result.name}")
         print(f"  Total operations: {result.operation_count * 6:,}")
         print(f"  Effective ops/sec: {result.ops_per_second * 6:,.0f}")
         print(f"  Total time: {result.total_time_ms:.2f}ms")
         print(f"  SCORE: {result.score}/100")
-        print(f"{'='*60}\n")
+        print(f"{'=' * 60}\n")
 
         # Should handle > 100k validations per second
         effective_ops = result.ops_per_second * 6
@@ -295,14 +309,16 @@ class TestThroughputBenchmarks:
 
         result = bench.run(resolve_all)
 
-        print(f"\n{'='*60}")
+        print(f"\n{'=' * 60}")
         print(f"Benchmark: {result.name}")
         print(f"  Operations: {result.operation_count:,}")
         print(f"  Ops/sec: {result.ops_per_second:,.0f}")
         print(f"  SCORE: {result.score}/100")
-        print(f"{'='*60}\n")
+        print(f"{'=' * 60}\n")
 
-        assert result.ops_per_second > 100_000, f"Throughput {result.ops_per_second:,.0f} is too low"
+        assert result.ops_per_second > 100_000, (
+            f"Throughput {result.ops_per_second:,.0f} is too low"
+        )
 
 
 class TestScoringSummary:
@@ -323,26 +339,32 @@ class TestScoringSummary:
         bench2 = PerformanceBenchmark("Bool validation", operations=50000)
         cf = CommandFilter(command_name="test")
         cf.handler_params = {"enabled": bool}
-        result2 = bench2.run(lambda: cf.validate_and_convert_params(["true"], cf.handler_params))
+        result2 = bench2.run(
+            lambda: cf.validate_and_convert_params(["true"], cf.handler_params)
+        )
         scores.append(result2.score)
 
         # Test 3: Int validation
         bench3 = PerformanceBenchmark("Int validation", operations=50000)
         cf2 = CommandFilter(command_name="test2")
         cf2.handler_params = {"count": int}
-        result3 = bench3.run(lambda: cf2.validate_and_convert_params(["42"], cf2.handler_params))
+        result3 = bench3.run(
+            lambda: cf2.validate_and_convert_params(["42"], cf2.handler_params)
+        )
         scores.append(result3.score)
 
         overall_score = sum(scores) // len(scores)
 
-        print(f"\n{'='*60}")
-        print(f"PERFORMANCE BENCHMARK SUMMARY")
-        print(f"{'='*60}")
+        print(f"\n{'=' * 60}")
+        print("PERFORMANCE BENCHMARK SUMMARY")
+        print(f"{'=' * 60}")
         print(f"  CommandFilter operations:  {scores[0]}/100")
         print(f"  Bool validation:         {scores[1]}/100")
         print(f"  Int validation:         {scores[2]}/100")
-        print(f"  {'-'*40}")
+        print(f"  {'-' * 40}")
         print(f"  OVERALL SCORE:          {overall_score}/100")
-        print(f"{'='*60}\n")
+        print(f"{'=' * 60}\n")
 
-        assert overall_score >= 60, f"Overall score {overall_score} is below threshold 60"
+        assert overall_score >= 60, (
+            f"Overall score {overall_score} is below threshold 60"
+        )

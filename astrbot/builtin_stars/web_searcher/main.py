@@ -1,16 +1,18 @@
 import asyncio
-import json
 import random
-import uuid
 from typing import ClassVar
 
 import aiohttp
 from bs4 import BeautifulSoup
 from readability import Document
 
-from astrbot.api import AstrBotConfig, llm_tool, logger, sp, star
+from astrbot.api import AstrBotConfig, llm_tool, logger, star
 from astrbot.api.event import AstrMessageEvent, filter
 from astrbot.api.provider import ProviderRequest
+from astrbot.core.astr_agent_runtime.tools.web_search_tools import (
+    format_search_results,
+    require_tavily_results,
+)
 from astrbot.core.provider.func_tool_manager import FunctionToolManager
 
 from .engines import HEADERS, USER_AGENTS, SearchResult
@@ -219,13 +221,7 @@ class Main(star.Star):
                     raise Exception(
                         f"Tavily web search failed: {reason}, status: {response.status}",
                     )
-                data = await response.json()
-                results: list[dict] = data.get("results", [])
-                if not results:
-                    raise ValueError(
-                        "Error: Tavily web searcher does not return any results.",
-                    )
-                return results
+                return require_tavily_results(await response.json())
 
     @llm_tool(name="web_search")
     async def search_from_search_engine(
@@ -368,24 +364,7 @@ class Main(star.Star):
         if not results:
             return "Error: Tavily web searcher does not return any results."
 
-        ret_ls = []
-        ref_uuid = str(uuid.uuid4())[:4]
-        for idx, result in enumerate(results, 1):
-            index = f"{ref_uuid}.{idx}"
-            ret_ls.append(
-                {
-                    "title": f"{result.title}",
-                    "url": f"{result.url}",
-                    "snippet": f"{result.snippet}",
-                    # TODO: do not need ref for non-webchat platform adapter
-                    "index": index,
-                },
-            )
-            if result.favicon:
-                sp.temporary_cache["_ws_favicon"][result.url] = result.favicon
-        # ret = "\n".join(ret_ls)
-        ret = json.dumps({"results": ret_ls}, ensure_ascii=False)
-        return ret
+        return format_search_results(results)
 
     @llm_tool("tavily_extract_web_page")
     async def tavily_extract_web_page(
@@ -561,23 +540,7 @@ class Main(star.Star):
         if not results:
             return "Error: BoCha web searcher does not return any results."
 
-        ret_ls = []
-        ref_uuid = str(uuid.uuid4())[:4]
-        for idx, result in enumerate(results, 1):
-            index = f"{ref_uuid}.{idx}"
-            ret_ls.append(
-                {
-                    "title": f"{result.title}",
-                    "url": f"{result.url}",
-                    "snippet": f"{result.snippet}",
-                    "index": index,
-                },
-            )
-            if result.favicon:
-                sp.temporary_cache["_ws_favicon"][result.url] = result.favicon
-        # ret = "\n".join(ret_ls)
-        ret = json.dumps({"results": ret_ls}, ensure_ascii=False)
-        return ret
+        return format_search_results(results)
 
     @filter.on_llm_request(priority=-10000)
     async def edit_web_search_tools(

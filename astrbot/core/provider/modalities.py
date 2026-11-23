@@ -40,7 +40,11 @@ def sanitize_contexts_by_modalities(
 ) -> tuple[list[dict[str, Any]], ContextSanitizeStats]:
     if not contexts:
         return [], ContextSanitizeStats()
-    if not modalities or not isinstance(modalities, list):
+    if (
+        not modalities
+        or not isinstance(modalities, list)
+        or all(kind in modalities for kind in ("image", "audio", "tool_use"))
+    ):
         copied_contexts = []
         for msg in contexts:
             copied_msg = _message_to_dict(msg)
@@ -51,13 +55,6 @@ def sanitize_contexts_by_modalities(
     supports_image = "image" in modalities
     supports_audio = "audio" in modalities
     supports_tool_use = "tool_use" in modalities
-    if supports_image and supports_audio and supports_tool_use:
-        copied_contexts = []
-        for msg in contexts:
-            copied_msg = _message_to_dict(msg)
-            if copied_msg:
-                copied_contexts.append(copied_msg)
-        return copied_contexts, ContextSanitizeStats()
 
     sanitized_contexts: list[dict[str, Any]] = []
     stats = ContextSanitizeStats()

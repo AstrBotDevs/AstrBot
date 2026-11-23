@@ -293,6 +293,14 @@ def _merge_environment_variables(env: dict) -> dict:
     return merged
 
 
+def _get_transport_type(config: dict) -> str:
+    if "transport" in config:
+        return config["transport"]
+    if "type" in config:
+        return config["type"]
+    raise Exception("MCP connection config missing transport or type field")
+
+
 async def _quick_test_mcp_connection(config: dict) -> tuple[bool, str]:
     """Quick test MCP server connectivity"""
     import aiohttp
@@ -304,12 +312,7 @@ async def _quick_test_mcp_connection(config: dict) -> tuple[bool, str]:
     timeout = cfg.get("timeout", 10)
 
     try:
-        if "transport" in cfg:
-            transport_type = cfg["transport"]
-        elif "type" in cfg:
-            transport_type = cfg["type"]
-        else:
-            raise Exception("MCP connection config missing transport or type field")
+        transport_type = _get_transport_type(cfg)
 
         async with aiohttp.ClientSession() as session:
             if transport_type == "streamable_http":
@@ -574,12 +577,7 @@ class MCPClient:
             if not success:
                 raise Exception(error_msg)
 
-            if "transport" in cfg:
-                transport_type = cfg["transport"]
-            elif "type" in cfg:
-                transport_type = cfg["type"]
-            else:
-                raise Exception("MCP connection config missing transport or type field")
+            transport_type = _get_transport_type(cfg)
 
             if transport_type != "streamable_http":
                 # SSE transport method
@@ -843,7 +841,7 @@ class MCPClient:
         self.process_pid = None
 
 
-class MCPTool(FunctionTool, Generic[TContext]):
+class MCPTool(FunctionTool, Generic[TContext]):  # noqa: UP046 - The shared TypeVar default requires Python 3.12 compatibility.
     """A function tool that calls an MCP service."""
 
     def __init__(

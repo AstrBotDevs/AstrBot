@@ -1,29 +1,26 @@
 {
   "greeting": {
-    "morning": "Good morning, welcome to AstrBot",
-    "afternoon": "Good afternoon, welcome to AstrBot",
-    "evening": "Good evening, welcome to AstrBot",
+    "morning": "Good morning",
+    "afternoon": "Good afternoon",
+    "evening": "Good evening",
     "newYear": "Happy New Year!"
   },
-  "subtitle": "You can complete the basic onboarding first. Platform and chat provider setup can both be skipped.",
+  "subtitle": "Welcome to AstrBot. See how things are running today and continue your setup.",
   "announcement": {
     "title": "Announcement"
   },
   "onboard": {
     "title": "Quick Onboarding",
-    "subtitle": "Complete initialization directly on the welcome page.",
-    "step0Title": "Configure Backend URL",
-    "step0Desc": "Configure the backend API URL for AstrBot.",
-    "step1Title": "Configure Platform Bot",
-    "step1Desc": "Connect AstrBot to IM platforms like QQ, Lark, Slack, Telegram, etc.",
-    "step2Title": "Configure AI Model",
-    "step2Desc": "Configure AI models for AstrBot.",
+    "subtitle": "Complete the basics and start using AstrBot.",
+    "step1Title": "Configure AI Model",
+    "step1Desc": "Configure AI models for AstrBot.",
+    "step2Title": "Configure Platform Bot",
+    "step2Desc": "Connect AstrBot to IM platforms like QQ, Lark, Slack, Telegram, etc.",
     "step3Title": "Allow Agent to Use Computer",
     "step3Desc": "Set whether the agent can access and use the current computer.",
     "step3HelpTitle": "Allow Agent to Use Computer",
     "step3HelpItem1": "The agent will be able to access workspace directories (each user's workspace is isolated) and use Skills to perform more complex tasks.",
     "step3HelpItem2": "For AstrBot administrators, the agent is additionally allowed to execute Shell commands, Python code, and access all local directories.",
-    "step3HelpItem3": "For more granular permission and capability configuration, go to Config File -> General Config -> Computer Use to continue.",
     "step3HelpClose": "Close",
     "step3SelectLabel": "Computer Access",
     "step3Allow": "Allow",
@@ -37,7 +34,15 @@
     "platformLoadFailed": "Failed to load platform configuration",
     "providerLoadFailed": "Failed to load provider configuration",
     "providerUpdateFailed": "Failed to update default chat provider in config file \"default\"",
-    "providerDefaultUpdated": "Default chat provider in config file \"default\" has been set to {id}"
+    "providerDefaultUpdated": "Default chat provider in config file \"default\" has been set to {id}",
+    "step3HelpItem3": "For more detailed control, configure the Computer Access options under Config -> AI -> Capabilities -> Agent Computer Use.",
+    "progress": "{count} / 3 complete",
+    "learnMore": "About these permissions",
+    "step0Title": "Configure Backend URL",
+    "step0Desc": "Configure the backend API URL for AstrBot.",
+    "computerAccessUpdateFailed": "Failed to update the agent’s computer access",
+    "computerAccessAllowed": "The agent is allowed to access and use this computer",
+    "computerAccessDenied": "The agent is not allowed to access or use this computer"
   },
   "resources": {
     "title": "Resources",
@@ -45,6 +50,42 @@
     "docsTitle": "Documentation",
     "docsDesc": "Read the official AstrBot documentation.",
     "afdianTitle": "Afdian",
-    "afdianDesc": "Support the AstrBot team on Afdian."
+    "afdianDesc": "Support the AstrBot team on Afdian.",
+    "subtitle": "Documentation, community, and resources for getting more from AstrBot."
+  },
+  "metrics": {
+    "title": "Today's activity",
+    "tokens": "Tokens today",
+    "messages": "Messages today",
+    "active_sessions": "Active sessions",
+    "vsYesterday": "vs. yesterday",
+    "newActivity": "New activity",
+    "loadFailed": "Unable to load usage. Previously loaded data may be out of date."
+  },
+  "health": {
+    "title": "Bot health",
+    "healthy": "Running normally",
+    "issues": "{count} issues",
+    "checking": "Checking status",
+    "unavailable": "Status unavailable",
+    "loadFailed": "Unable to read the latest bot status. Please try again.",
+    "description": "Each bot with recorded errors counts as one issue. The latest error is shown below; check again after restarting the bot or clearing its errors.",
+    "noIssues": "No bots are reporting errors.",
+    "errorCount": "{count} errors",
+    "noDetails": "No error details available",
+    "traceback": "Stack trace",
+    "manageBots": "Manage bots",
+    "refresh": "Refresh"
+  },
+  "system": {
+    "title": "System status",
+    "uptime": "Uptime",
+    "cpu": "CPU",
+    "memory": "Memory",
+    "disk": "Disk",
+    "daysHours": "{days}d {hours}h",
+    "hoursMinutes": "{hours}h {minutes}m",
+    "scope": "Uptime measures the AstrBot process. CPU and memory show host usage; disk shows the filesystem containing the AstrBot data directory.",
+    "unavailable": "Resource usage is unavailable. Refresh the page to try again."
   }
 }

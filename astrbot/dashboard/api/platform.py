@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends, Request
 from fastapi.responses import Response
 
 from astrbot.core.platform.webhook_server import webhook_response_from_result
+from astrbot.dashboard.api.payloads import json_or_empty as _json_or_empty
 from astrbot.dashboard.asgi_runtime import DashboardRequest
 from astrbot.dashboard.async_utils import run_maybe_async
 from astrbot.dashboard.responses import ApiError, ok
@@ -30,14 +31,6 @@ def get_service(request: Request) -> PlatformService:
 
 
 require_config_scope = ScopeDependency("config")
-
-
-async def _json_or_empty(request: Request) -> dict[str, Any]:
-    try:
-        data = await request.json()
-    except Exception:
-        return {}
-    return data if isinstance(data, dict) else {}
 
 
 def _raise_platform_error(exc: PlatformServiceError) -> None:

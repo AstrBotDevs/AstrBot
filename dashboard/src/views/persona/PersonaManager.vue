@@ -3,9 +3,7 @@
     <div class="manager-layout">
       <!-- 左侧边栏 - 仅桌面端显示 -->
       <div class="sidebar d-none d-md-block">
-        <div class="sidebar-header mb-3">
-          <h3 class="text-h6">{{ tm("folder.sidebarTitle") }}</h3>
-        </div>
+        <div class="sidebar-header mb-3"> <h3 class="text-h6">{{ tm("folder.sidebarTitle") }}</h3> </div>
         <FolderTree
           @move-folder="openMoveFolderDialog"
           @success="showSuccess"
@@ -17,17 +15,13 @@
       <!-- 主内容区 -->
       <div class="main-content">
         <!-- 页面标题与主要操作 -->
-        <div
-          class="page-header d-flex flex-wrap justify-space-between align-start mb-4 ga-3"
-        >
+        <div class="page-header d-flex flex-wrap justify-space-between align-start mb-4 ga-3">
           <div>
             <h1 class="text-h1 font-weight-bold mb-2 d-flex align-center">
               <v-icon color="primary" class="me-2">mdi-heart</v-icon>
               {{ t("core.navigation.persona") }}
             </h1>
-            <p class="text-subtitle-1 text-medium-emphasis mb-0">
-              {{ tm("page.description") }}
-            </p>
+            <p class="text-subtitle-1 text-medium-emphasis mb-0"> {{ tm("page.description") }} </p>
           </div>
 
           <div class="d-flex flex-wrap ga-2">
@@ -48,12 +42,7 @@
             >
               {{ tm("folder.createButton") }}
             </v-btn>
-            <v-btn
-              variant="outlined"
-              prepend-icon="mdi-upload"
-              @click="handleImportPersona"
-              rounded="lg"
-            >
+            <v-btn variant="outlined" prepend-icon="mdi-upload" @click="handleImportPersona" rounded="lg">
               {{ tm("buttons.import") }}
             </v-btn>
           </div>
@@ -78,17 +67,11 @@
           <div v-if="currentFolders.length > 0" class="folders-section mb-6">
             <h3 class="text-subtitle-1 font-weight-medium mb-3">
               <v-icon size="small" class="mr-1">mdi-folder</v-icon>
-              {{ tm("folder.foldersTitle") }} ({{ currentFolders.length }})
+              {{ tm("folder.foldersTitle") }}
+              ({{ currentFolders.length }})
             </h3>
             <v-row>
-              <v-col
-                v-for="folder in currentFolders"
-                :key="folder.folder_id"
-                cols="12"
-                sm="6"
-                lg="4"
-                xl="3"
-              >
+              <v-col v-for="folder in currentFolders" :key="folder.folder_id" cols="12" sm="6" lg="4" xl="3">
                 <FolderCard
                   :folder="folder"
                   @click="navigateToFolder(folder.folder_id)"
@@ -106,17 +89,11 @@
           <div v-if="currentPersonas.length > 0" class="personas-section">
             <h3 class="text-subtitle-1 font-weight-medium mb-3">
               <v-icon size="small" class="mr-1">mdi-account-heart</v-icon>
-              {{ tm("persona.personasTitle") }} ({{ currentPersonas.length }})
+              {{ tm("persona.personasTitle") }}
+              ({{ currentPersonas.length }})
             </h3>
             <v-row>
-              <v-col
-                v-for="persona in currentPersonas"
-                :key="persona.persona_id"
-                cols="12"
-                sm="6"
-                lg="4"
-                xl="3"
-              >
+              <v-col v-for="persona in currentPersonas" :key="persona.persona_id" cols="12" sm="6" lg="4" xl="3">
                 <PersonaCard
                   :persona="persona"
                   @view="viewPersona(persona)"
@@ -131,32 +108,16 @@
           </div>
 
           <!-- 空状态 -->
-          <div
-            v-if="currentFolders.length === 0 && currentPersonas.length === 0"
-            class="empty-state"
-          >
+          <div v-if="currentFolders.length === 0 && currentPersonas.length === 0" class="empty-state">
             <v-card class="text-center pa-8" elevation="0">
-              <v-icon size="64" color="grey-lighten-1" class="mb-4"
-                >mdi-folder-open-outline</v-icon
-              >
+              <v-icon size="64" color="grey-lighten-1" class="mb-4">mdi-folder-open-outline</v-icon>
               <h3 class="text-h5 mb-2">{{ tm("empty.folderEmpty") }}</h3>
-              <p class="text-body-1 text-medium-emphasis mb-4">
-                {{ tm("empty.folderEmptyDescription") }}
-              </p>
+              <p class="text-body-1 text-medium-emphasis mb-4"> {{ tm("empty.folderEmptyDescription") }} </p>
               <div class="d-flex justify-center ga-2">
-                <v-btn
-                  color="primary"
-                  variant="tonal"
-                  prepend-icon="mdi-plus"
-                  @click="openCreatePersonaDialog"
-                >
+                <v-btn color="primary" variant="tonal" prepend-icon="mdi-plus" @click="openCreatePersonaDialog">
                   {{ tm("buttons.create") }}
                 </v-btn>
-                <v-btn
-                  variant="outlined"
-                  prepend-icon="mdi-folder-plus"
-                  @click="showCreateFolderDialog = true"
-                >
+                <v-btn variant="outlined" prepend-icon="mdi-folder-plus" @click="showCreateFolderDialog = true">
                   {{ tm("folder.createButton") }}
                 </v-btn>
               </div>
@@ -180,15 +141,9 @@
     <!-- 查看 Persona 详情对话框 -->
     <v-dialog v-model="showViewDialog" max-width="700px">
       <v-card v-if="viewingPersona">
-        <v-card-title
-          class="text-h3 pa-4 pb-0 pl-6 d-flex justify-space-between align-center"
-        >
-          <span>{{ viewingPersona.persona_id }}</span>
-          <v-btn
-            icon="mdi-close"
-            variant="text"
-            @click="showViewDialog = false"
-          />
+        <v-card-title class="text-h3 pa-4 pb-0 pl-6 d-flex justify-space-between align-center">
+          <span>{{ personaDisplayName(viewingPersona) }}</span>
+          <v-btn icon="mdi-close" variant="text" @click="showViewDialog = false" />
         </v-card-title>
 
         <v-card-text>
@@ -207,22 +162,11 @@
             class="mb-4"
           >
             <h4 class="text-h6 mb-2">{{ tm("form.presetDialogs") }}</h4>
-            <div
-              v-for="(dialog, index) in viewingPersona.begin_dialogs"
-              :key="index"
-              class="mb-2"
-            >
-              <v-chip
-                :color="index % 2 === 0 ? 'primary' : 'secondary'"
-                variant="tonal"
-                size="small"
-                class="mb-1"
-              >
-                {{
-                  index % 2 === 0
+            <div v-for="(dialog, index) in viewingPersona.begin_dialogs" :key="index" class="mb-2">
+              <v-chip :color="index % 2 === 0 ? 'primary' : 'secondary'" variant="tonal" size="small" class="mb-1">
+                {{ index % 2 === 0
                     ? tm("form.userMessage")
-                    : tm("form.assistantMessage")
-                }}
+                    : tm("form.assistantMessage") }}
               </v-chip>
               <div class="dialog-content ml-2">{{ dialog }}</div>
             </div>
@@ -230,16 +174,8 @@
 
           <div class="mb-4">
             <h4 class="text-h6 mb-2">{{ tm("form.tools") }}</h4>
-            <div
-              v-if="viewingPersona.tools === null"
-              class="text-body-2 text-medium-emphasis"
-            >
-              <v-chip
-                size="small"
-                color="success"
-                variant="tonal"
-                prepend-icon="mdi-check-all"
-              >
+            <div v-if="viewingPersona.tools === null" class="text-body-2 text-medium-emphasis">
+              <v-chip size="small" color="success" variant="tonal" prepend-icon="mdi-check-all">
                 {{ tm("form.allToolsAvailable") }}
               </v-chip>
             </div>
@@ -259,23 +195,13 @@
                 {{ toolName }}
               </v-chip>
             </div>
-            <div v-else class="text-body-2 text-medium-emphasis">
-              {{ tm("form.noToolsSelected") }}
-            </div>
+            <div v-else class="text-body-2 text-medium-emphasis"> {{ tm("form.noToolsSelected") }} </div>
           </div>
 
           <div class="mb-4">
             <h4 class="text-h6 mb-2">{{ tm("form.skills") }}</h4>
-            <div
-              v-if="viewingPersona.skills === null"
-              class="text-body-2 text-medium-emphasis"
-            >
-              <v-chip
-                size="small"
-                color="success"
-                variant="tonal"
-                prepend-icon="mdi-check-all"
-              >
+            <div v-if="viewingPersona.skills === null" class="text-body-2 text-medium-emphasis">
+              <v-chip size="small" color="success" variant="tonal" prepend-icon="mdi-check-all">
                 {{ tm("form.allSkillsAvailable") }}
               </v-chip>
             </div>
@@ -295,16 +221,11 @@
                 {{ skillName }}
               </v-chip>
             </div>
-            <div v-else class="text-body-2 text-medium-emphasis">
-              {{ tm("form.noSkillsSelected") }}
-            </div>
+            <div v-else class="text-body-2 text-medium-emphasis"> {{ tm("form.noSkillsSelected") }} </div>
           </div>
 
           <div class="text-caption text-medium-emphasis">
-            <div>
-              {{ tm("labels.createdAt") }}:
-              {{ formatDate(viewingPersona.created_at) }}
-            </div>
+            <div> {{ tm("labels.createdAt") }}:{{ formatDate(viewingPersona.created_at) }} </div>
             <div v-if="viewingPersona.updated_at">
               {{ tm("labels.updatedAt") }}:
               {{ formatDate(viewingPersona.updated_at) }}
@@ -325,9 +246,7 @@
     <!-- 重命名文件夹对话框 -->
     <v-dialog v-model="showRenameFolderDialog" max-width="400px">
       <v-card>
-        <v-card-title class="text-h3 pa-4 pb-0 pl-6">{{
-          tm("folder.renameDialog.title")
-        }}</v-card-title>
+        <v-card-title class="text-h3 pa-4 pb-0 pl-6">{{ tm("folder.renameDialog.title") }}</v-card-title>
         <v-card-text>
           <v-text-field
             v-model="renameFolderData.name"
@@ -341,9 +260,7 @@
         </v-card-text>
         <v-card-actions>
           <v-spacer />
-          <v-btn variant="text" @click="showRenameFolderDialog = false">
-            {{ tm("buttons.cancel") }}
-          </v-btn>
+          <v-btn variant="text" @click="showRenameFolderDialog = false"> {{ tm("buttons.cancel") }} </v-btn>
           <v-btn
             color="primary"
             variant="tonal"
@@ -372,11 +289,9 @@
         <v-card-title>{{ tm("cloneDialog.title") }}</v-card-title>
         <v-card-text>
           <p class="text-body-2 text-medium-emphasis mb-4">
-            {{
-              tm("cloneDialog.description", {
+            {{ tm("cloneDialog.description", {
                 name: cloningPersona?.persona_id ?? "",
-              })
-            }}
+              }) }}
           </p>
           <v-text-field
             v-model="cloneNewPersonaId"
@@ -392,9 +307,7 @@
         </v-card-text>
         <v-card-actions>
           <v-spacer />
-          <v-btn variant="text" @click="showCloneDialog = false">
-            {{ tm("buttons.cancel") }}
-          </v-btn>
+          <v-btn variant="text" @click="showCloneDialog = false"> {{ tm("buttons.cancel") }} </v-btn>
           <v-btn
             color="primary"
             variant="flat"
@@ -417,11 +330,9 @@
         </v-card-title>
         <v-card-text>
           <p>
-            {{
-              tm("folder.deleteDialog.message", {
+            {{ tm("folder.deleteDialog.message", {
                 name: deleteFolderData?.name ?? "",
-              })
-            }}
+              }) }}
           </p>
           <p class="text-warning mt-2">
             <v-icon size="small" class="mr-1"> mdi-information </v-icon>
@@ -430,15 +341,8 @@
         </v-card-text>
         <v-card-actions>
           <v-spacer />
-          <v-btn variant="text" @click="showDeleteFolderDialog = false">
-            {{ tm("buttons.cancel") }}
-          </v-btn>
-          <v-btn
-            color="error"
-            variant="tonal"
-            :loading="deleteLoading"
-            @click="submitDeleteFolder"
-          >
+          <v-btn variant="text" @click="showDeleteFolderDialog = false"> {{ tm("buttons.cancel") }} </v-btn>
+          <v-btn color="error" variant="tonal" :loading="deleteLoading" @click="submitDeleteFolder">
             {{ tm("buttons.delete") }}
           </v-btn>
         </v-card-actions>
@@ -446,13 +350,7 @@
     </v-dialog>
 
     <!-- 消息提示 -->
-    <v-snackbar
-      v-model="showMessage"
-      :timeout="3000"
-      elevation="6"
-      :color="messageType"
-      location="top"
-    >
+    <v-snackbar v-model="showMessage" :timeout="3000" elevation="6" :color="messageType" location="top">
       {{ message }}
     </v-snackbar>
   </div>
@@ -506,8 +404,9 @@ export default defineComponent({
   setup() {
     const { t } = useI18n();
     const { tm } = useModuleI18n("features/persona");
+    const { tm: sharedTm } = useModuleI18n("core.shared");
     const confirmDialog = useConfirmDialog();
-    return { t, tm, confirmDialog };
+    return { t, tm, sharedTm, confirmDialog };
   },
   data() {
     return {
@@ -620,6 +519,10 @@ export default defineComponent({
     },
 
     // Persona 操作
+    personaDisplayName(persona: Persona): string {
+      return persona.persona_id === "default" ? this.sharedTm("personaSelector.defaultPersona") : persona.persona_id;
+    },
+
     openCreatePersonaDialog() {
       this.editingPersona = null;
       this.showPersonaDialog = true;
@@ -783,7 +686,7 @@ export default defineComponent({
 
         this.showSuccess(this.tm("persona.messages.exportSuccess"));
       } catch (error: any) {
-        console.error(this.tm("persona.messages.exportFailed"), error);
+        console.error(this.tm("persona.messages.exportError"), error);
 
         // 构建详细的错误消息
         let errorMessage = this.tm("persona.messages.exportError");
@@ -879,7 +782,7 @@ export default defineComponent({
               : this.tm("messages.importSuccess"),
           );
         } catch (error: any) {
-          console.error(this.tm("persona.messages.importFailed"), error);
+          console.error(this.tm("persona.messages.importError"), error);
 
           // 构建详细的错误消息
           let errorMessage = this.tm("persona.messages.importError");

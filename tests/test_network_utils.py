@@ -1,122 +1,138 @@
-"""Import smoke tests for astrbot.core.utils.network_utils."""
+"""Network helpers classify failures and construct clients without remote I/O."""
 
 import ssl
+from importlib import import_module
+from types import SimpleNamespace
+from unittest.mock import Mock
 
 import httpx
+import pytest
 
-from astrbot.core.utils import network_utils as network_utils_module
-from astrbot.core.utils.network_utils import (
-    create_proxy_client,
-    is_connection_error,
-    log_connection_failure,
+from astrbot.core.utils import network_utils
+
+
+@pytest.mark.parametrize(
+    ("error_type", "expected"),
+    [
+        (httpx.ConnectError, True),
+        (httpx.ConnectTimeout, True),
+        (httpx.ReadTimeout, True),
+        (httpx.WriteTimeout, True),
+        (httpx.PoolTimeout, True),
+        (httpx.NetworkError, True),
+        (httpx.ProxyError, True),
+        (ConnectionError, True),
+        (TimeoutError, True),
+        (OSError, True),
+        (ValueError, False),
+        (TypeError, False),
+        (BaseException, False),
+    ],
 )
+def test_error_types_determine_connection_classification(error_type, expected):
+    assert network_utils.is_connection_error(error_type("failure")) is expected
 
 
-class TestImports:
-    def test_module_importable(self):
-        assert network_utils_module is not None
-
-    def test_is_connection_error_callable(self):
-        assert callable(is_connection_error)
-
-    def test_log_connection_failure_callable(self):
-        assert callable(log_connection_failure)
-
-    def test_create_proxy_client_callable(self):
-        assert callable(create_proxy_client)
+@pytest.mark.parametrize("inner", [httpx.ConnectError("inner"), ValueError("ordinary")])
+def test_exception_causes_are_classified(inner):
+    outer = ValueError("wrapper")
+    outer.__cause__ = inner
+    assert network_utils.is_connection_error(outer) is isinstance(
+        inner, httpx.ConnectError
+    )
+    network_outer = httpx.ConnectError("outer")
+    network_outer.__cause__ = ValueError("non-network cause")
+    assert network_utils.is_connection_error(network_outer) is True
 
 
-class TestIsConnectionError:
-    def test_returns_true_for_httpx_connect_error(self):
-        assert is_connection_error(httpx.ConnectError("connection refused")) is True
-
-    def test_returns_true_for_connect_timeout(self):
-        assert is_connection_error(httpx.ConnectTimeout("timed out")) is True
-
-    def test_returns_true_for_read_timeout(self):
-        assert is_connection_error(httpx.ReadTimeout("read timed out")) is True
-
-    def test_returns_true_for_write_timeout(self):
-        assert is_connection_error(httpx.WriteTimeout("write timed out")) is True
-
-    def test_returns_true_for_pool_timeout(self):
-        assert is_connection_error(httpx.PoolTimeout("pool timed out")) is True
-
-    def test_returns_true_for_network_error(self):
-        assert is_connection_error(httpx.NetworkError("network error")) is True
-
-    def test_returns_true_for_proxy_error(self):
-        assert is_connection_error(httpx.ProxyError("proxy error")) is True
-
-    def test_returns_true_for_generic_connection_error(self):
-        assert is_connection_error(ConnectionError("connection error")) is True
-
-    def test_returns_true_for_timeout_error(self):
-        assert is_connection_error(TimeoutError("timeout")) is True
-
-    def test_returns_true_for_os_error(self):
-        assert is_connection_error(OSError("os error")) is True
-
-    def test_returns_false_for_unrelated_exception(self):
-        assert is_connection_error(ValueError("not a network error")) is False
-
-    def test_returns_false_for_type_error(self):
-        assert is_connection_error(TypeError("type error")) is False
-
-    def test_returns_false_for_none(self):
-        assert is_connection_error(BaseException()) is False
-
-    def test_follows_cause_chain(self):
-        inner = httpx.ConnectError("inner")
-        outer = ValueError("wrapped")
-        outer.__cause__ = inner
-        assert is_connection_error(outer) is True
-
-    def test_cause_chain_with_unrelated(self):
-        inner = ValueError("inner")
-        outer = httpx.ConnectError("outer")
-        outer.__cause__ = inner
-        assert is_connection_error(outer) is True
-
-
-class TestLogConnectionFailure:
-    def test_callable_with_all_args(self):
-        log_connection_failure("TestProvider", Exception("fail"), proxy="http://proxy:8080")
-
-    def test_callable_without_proxy(self):
-        log_connection_failure("TestProvider", Exception("fail"))
-
-    def test_callable_with_empty_proxy(self):
-        log_connection_failure("TestProvider", Exception("fail"), proxy="")
-
-
-class TestCreateProxyClient:
-    def test_returns_async_client_without_proxy(self):
-        client = create_proxy_client("TestProvider")
-        assert isinstance(client, httpx.AsyncClient)
-        client.aclose()
-
-    def test_returns_async_client_with_proxy(self):
-        client = create_proxy_client(
-            "TestProvider",
-            proxy="http://127.0.0.1:7890",
+@pytest.mark.parametrize(
+    ("proxy", "environment", "effective"),
+    [
+        ("http://explicit:8080", "http://environment:8080", "http://explicit:8080"),
+        (None, "http://environment:8080", "http://environment:8080"),
+        ("", "", None),
+    ],
+)
+def test_failure_log_reports_provider_error_and_selected_proxy(
+    monkeypatch, proxy, environment, effective
+):
+    logger = Mock()
+    monkeypatch.setattr(network_utils, "logger", logger)
+    monkeypatch.setenv("http_proxy", environment)
+    monkeypatch.setenv("https_proxy", "")
+    network_utils.log_connection_failure(
+        "Provider", TimeoutError("timed out"), proxy=proxy
+    )
+    if effective:
+        expected = (
+            "[Provider] Network or proxy connection failed (TimeoutError). "
+            f"Proxy: {effective}; error: timed out"
         )
-        assert isinstance(client, httpx.AsyncClient)
-        client.aclose()
+    else:
+        expected = "[Provider] Network connection failed (TimeoutError): timed out"
+    logger.error.assert_called_once_with(expected)
 
-    def test_returns_async_client_with_custom_headers(self):
-        headers = {"X-Custom": "value"}
-        client = create_proxy_client("TestProvider", headers=headers)
-        assert isinstance(client, httpx.AsyncClient)
-        client.aclose()
 
-    def test_returns_async_client_with_ssl_context(self):
-        ctx = ssl.create_default_context()
-        client = create_proxy_client("TestProvider", verify=ctx)
-        assert isinstance(client, httpx.AsyncClient)
-        client.aclose()
+@pytest.mark.parametrize(
+    "proxy", [None, "", "http://127.0.0.1:7890", "socks5://127.0.0.1:1080"]
+)
+@pytest.mark.parametrize("verify", [None, False, "custom-ca.pem"])
+@pytest.mark.parametrize("factory_mode", ["legacy-module", "typed-factory"])
+def test_client_factory_forwards_proxy_headers_and_tls_options(
+    proxy, verify, factory_mode
+):
+    sentinel = object()
+    constructor = Mock(return_value=sentinel)
+    headers = {"X-Test": "value"}
+    factory_options = (
+        {"httpx_module": SimpleNamespace(AsyncClient=constructor)}
+        if factory_mode == "legacy-module"
+        else {"client_factory": constructor}
+    )
 
-    def test_returns_async_client_with_false_verify(self):
-        client = create_proxy_client("TestProvider", verify=False)
-        assert isinstance(client, httpx.AsyncClient)
-        client.aclose()
+    client = network_utils.create_proxy_client(
+        "Provider",
+        proxy=proxy,
+        headers=headers,
+        verify=verify,
+        **factory_options,
+    )
+
+    assert client is sentinel
+    options = {
+        "headers": headers,
+        "verify": network_utils._SYSTEM_SSL_CTX if verify is None else verify,
+    }
+    if proxy:
+        options["proxy"] = proxy
+    constructor.assert_called_once_with(**options)
+    if verify is None:
+        assert isinstance(options["verify"], ssl.SSLContext)
+
+
+@pytest.mark.asyncio
+async def test_real_client_preserves_headers_and_closes():
+    async with network_utils.create_proxy_client(
+        "Provider", headers={"X-Test": "value"}
+    ) as client:
+        assert client.headers["X-Test"] == "value"
+        assert not client.is_closed
+    assert client.is_closed
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("sdk_name", ["openai", "anthropic"])
+async def test_sdk_client_factory_preserves_client_family_and_lifecycle(sdk_name):
+    """SDK HTTP clients keep their own HTTPX family and close without remote I/O."""
+    sdk = import_module(sdk_name)
+    factory = sdk.DefaultAsyncHttpxClient
+    client = network_utils.create_proxy_client(
+        sdk_name, headers={"X-Test": "sdk-client"}, client_factory=factory
+    )
+    try:
+        assert isinstance(client, factory)
+        assert client.headers["X-Test"] == "sdk-client"
+        assert not client.is_closed
+    finally:
+        await client.aclose()
+    assert client.is_closed

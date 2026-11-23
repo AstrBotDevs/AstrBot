@@ -1,126 +1,226 @@
-"""Verify core modules can be imported and initialised without crashing.
+"""Core construction and shutdown keep local state and dependency order intact."""
 
-This catches silent breakage like missing sentinel classes, reordered
-variable definitions, or constructor signature changes that only blow up
-at runtime.
-"""
+import asyncio
+import os
+from types import SimpleNamespace
+from unittest.mock import AsyncMock, Mock
 
+import pytest
+from sqlalchemy.ext.asyncio import AsyncEngine
 
-def test_core_lifecycle_import():
-    """CoreLifecycle class definition is importable."""
-    from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
-
-    assert AstrBotCoreLifecycle is not None
-
-
-def test_dashboard_server_import():
-    """AstrBotDashboard class definition is importable."""
-    from astrbot.dashboard.server import AstrBotDashboard
-
-    assert AstrBotDashboard is not None
-
-
-def test_pipeline_scheduler_import():
-    """PipelineScheduler class definition is importable."""
-    from astrbot.core.pipeline.scheduler import PipelineScheduler
-
-    assert PipelineScheduler is not None
+from astrbot.core import core_lifecycle as lifecycle_module
+from astrbot.core.core_lifecycle import AstrBotCoreLifecycle, LifecycleState
+from astrbot.core.event_bus import EventBus
+from astrbot.core.message.components import Plain
+from astrbot.core.platform.astr_message_event import AstrMessageEvent
+from astrbot.core.platform.astrbot_message import AstrBotMessage, MessageMember
+from astrbot.core.platform.message_type import MessageType
+from astrbot.core.platform.platform_metadata import PlatformMetadata
+from astrbot.core.utils import trace_store
 
 
-def test_process_stage_import():
-    """ProcessStage class definition is importable."""
-    from astrbot.core.pipeline.process_stage.stage import ProcessStage
+@pytest.fixture
+def make_core(database, monkeypatch):
+    for name in ("http_proxy", "https_proxy", "no_proxy"):
+        monkeypatch.setenv(name, "inherited-value")
 
-    assert ProcessStage is not None
+    def create(config=None):
+        monkeypatch.setattr(lifecycle_module, "astrbot_config", config or {})
+        return AstrBotCoreLifecycle(log_broker=Mock(), db=database)
 
-
-def test_platform_base_import():
-    """Platform ABC is importable and has abstract methods."""
-    from astrbot.core.platform.platform import Platform
-
-    assert len(getattr(Platform, '__abstractmethods__', ())) > 0
+    return create
 
 
-def test_compile_all():
-    """All modules compile without syntax errors (simulates PKGBUILD ``check()``)."""
-    import pathlib
+@pytest.fixture
+def track_disposal(database, monkeypatch):
+    calls = AsyncMock()
+    original_dispose = AsyncEngine.dispose
 
-    root = pathlib.Path("astrbot")
-    errors = []
-    for f in sorted(root.rglob("*.py")):
-        if "migrations" in f.parts or "__pycache__" in f.parts:
-            continue
-        try:
-            compile(f.read_bytes(), str(f), "exec")
-        except SyntaxError as e:
-            errors.append(f"{f}: {e}")
-    assert not errors, f"Compile errors:\n" + "\n".join(errors[:10])
+    async def dispose(engine: AsyncEngine, close: bool = True) -> None:
+        if engine is database.engine:
+            await calls()
+        await original_dispose(engine, close=close)
+
+    monkeypatch.setattr(AsyncEngine, "dispose", dispose)
+    return calls
 
 
-def test_cli_entry():
-    """astrbot CLI entry point function exists (``astrbot:cli``)."""
-    import importlib
-
-    mod = importlib.import_module("astrbot.cli.__main__")
-    cli = getattr(mod, "cli", None)
-    assert cli is not None, "astrbot.cli.__main__.cli must exist"
-
-
-def test_run_command_import():
-    """``astrbot run`` subcommand can be imported (AUR systemd startup path)."""
-    from astrbot.cli.commands.cmd_run import run
-
-    assert run is not None
+def test_new_core_exposes_an_unstarted_lifecycle(make_core):
+    core = make_core()
+    assert core.lifecycle_state is LifecycleState.CREATED
+    assert core.core_initialized is False
+    assert core.runtime_ready is False
+    assert core.runtime_failed is False
+    assert not core.runtime_ready_event.is_set()
+    assert not core.runtime_failed_event.is_set()
+    assert core.runtime_bootstrap_task is None
+    assert core.curr_tasks == []
+    assert core.agent_runtimes == {}
 
 
-def test_pkgbuild_aliases():
-    """PKGBUILD check() references the correct class names."""
-    # The PKGBUILD had ``from astrbot.dashboard.server import DashboardServer``
-    # which is wrong — the actual class is AstrBotDashboard.
-    # This test ensures the rename sticks.
-    from astrbot.dashboard.server import AstrBotDashboard
-
-    assert AstrBotDashboard is not None
-
-
-def test_sqlite_implements_all_abstract():
-    """SQLiteDatabase implements every abstract method of BaseDatabase."""
-    from astrbot.core.db import BaseDatabase
-    from astrbot.core.db.sqlite import SQLiteDatabase
-
-    missing = [
-        m
-        for m in getattr(BaseDatabase, '__abstractmethods__', ())
-        if not hasattr(SQLiteDatabase, m)
-        or getattr(SQLiteDatabase, m) is getattr(BaseDatabase, m, None)
-    ]
-    assert not missing, f"SQLiteDatabase missing abstract methods: {missing}"
+def test_explicit_proxy_configuration_sets_both_protocols_and_bypass_list(make_core):
+    make_core(
+        {
+            "http_proxy": "http://127.0.0.1:8123",
+            "no_proxy": ["localhost", "127.0.0.1", "internal.example"],
+        }
+    )
+    assert os.environ["http_proxy"] == "http://127.0.0.1:8123"
+    assert os.environ["https_proxy"] == "http://127.0.0.1:8123"
+    assert os.environ["no_proxy"] == "localhost,127.0.0.1,internal.example"
 
 
-def test_auth_router_import():
-    """The FastAPI auth router is importable."""
-    from astrbot.dashboard.api.auth import router
-
-    assert router is not None
-
-
-def test_log_router_import():
-    """The FastAPI live-log router is importable."""
-    from astrbot.dashboard.api.logs import router
-
-    assert router is not None
+def test_no_proxy_configuration_clears_inherited_proxy_and_keeps_loopback_local(
+    make_core,
+):
+    make_core()
+    assert "http_proxy" not in os.environ
+    assert "https_proxy" not in os.environ
+    assert os.environ["no_proxy"] == "localhost,127.0.0.1,::1"
 
 
-def test_password_utils_import():
-    """All password utility functions are importable."""
-    from astrbot.core.utils.auth_password import (
-        hash_dashboard_password,
-        verify_dashboard_password,
-        verify_dashboard_login_proof,
-        get_dashboard_login_challenge,
-        is_default_dashboard_password,
-        is_legacy_dashboard_password,
+@pytest.mark.asyncio
+async def test_partial_core_shutdown_closes_preferences_database_and_dashboard(
+    make_core, database, monkeypatch, track_disposal
+):
+    core = make_core()
+    core.dashboard_shutdown_event = asyncio.Event()
+    preferences = SimpleNamespace(db_helper=database, close=AsyncMock())
+    monkeypatch.setattr(lifecycle_module, "sp", preferences)
+    close_traces = Mock()
+    monkeypatch.setattr(trace_store, "close_trace_store", close_traces)
+
+    await core.stop()
+
+    preferences.close.assert_awaited_once()
+    close_traces.assert_called_once()
+    track_disposal.assert_awaited_once()
+    assert core.dashboard_shutdown_event.is_set()
+
+
+@pytest.mark.asyncio
+async def test_shutdown_waits_for_pipeline_finally_before_closing_dependencies(
+    make_core, database, monkeypatch, track_disposal
+):
+    core = make_core()
+    order = []
+    entered = asyncio.Event()
+    cleanup_entered = asyncio.Event()
+    allow_cleanup = asyncio.Event()
+    provider_open = True
+    umo = "adapter:FriendMessage:alice"
+    await database.create_conversation(
+        user_id=umo, platform_id="adapter", cid="cleanup-id", content=[]
     )
 
-    assert callable(hash_dashboard_password)
-    assert callable(verify_dashboard_password)
+    async def execute(_event):
+        entered.set()
+        try:
+            await asyncio.Event().wait()
+        finally:
+            cleanup_entered.set()
+            await allow_cleanup.wait()
+            assert provider_open
+            conversations = await database.get_conversations(umo)
+            assert [conversation.conversation_id for conversation in conversations] == [
+                "cleanup-id"
+            ]
+            order.append("pipeline")
+
+    async def close_provider():
+        nonlocal provider_open
+        provider_open = False
+        order.append("provider")
+
+    async def close_preferences():
+        order.append("preferences")
+
+    async def dispose():
+        order.append("database")
+
+    track_disposal.side_effect = dispose
+    monkeypatch.setattr(
+        lifecycle_module,
+        "sp",
+        SimpleNamespace(
+            db_helper=database, close=AsyncMock(side_effect=close_preferences)
+        ),
+    )
+    monkeypatch.setattr(
+        trace_store, "close_trace_store", lambda: order.append("traces")
+    )
+    core.provider_manager = SimpleNamespace(
+        terminate=AsyncMock(side_effect=close_provider)
+    )
+    scheduler = SimpleNamespace(
+        ctx=SimpleNamespace(astrbot_config={}), execute=AsyncMock(side_effect=execute)
+    )
+    event_bus = EventBus(
+        asyncio.Queue(),
+        {"main": scheduler},
+        SimpleNamespace(get_conf_info=Mock(return_value={"id": "main"})),
+    )
+    core.event_bus = event_bus
+    message = AstrBotMessage()
+    message.type = MessageType.FRIEND_MESSAGE
+    message.sender = MessageMember(user_id="alice", nickname="Alice")
+    message.message = [Plain("start")]
+    message.message_str = "start"
+    message.raw_message = "start"
+    event = AstrMessageEvent(
+        "start",
+        message,
+        PlatformMetadata(name="test", description="Test", id="adapter"),
+        "alice",
+    )
+    await core.event_bus.event_queue.put(event)
+    dispatch = asyncio.create_task(core.event_bus.dispatch())
+    core.curr_tasks = [dispatch]
+    stopping = None
+    try:
+        await asyncio.wait_for(entered.wait(), 2)
+        stopping = asyncio.create_task(core.stop())
+        await asyncio.wait_for(cleanup_entered.wait(), 2)
+        assert not stopping.done()
+        assert order == []
+        allow_cleanup.set()
+        await asyncio.wait_for(stopping, 2)
+    finally:
+        allow_cleanup.set()
+        if stopping is not None:
+            await asyncio.gather(stopping, return_exceptions=True)
+        if not dispatch.done():
+            dispatch.cancel()
+        await asyncio.gather(dispatch, return_exceptions=True)
+
+    assert dispatch.cancelled()
+    assert event_bus._pending_tasks == {}
+    assert core.event_bus is None
+    assert order == ["pipeline", "provider", "preferences", "traces", "database"]
+
+
+@pytest.mark.asyncio
+async def test_plugin_cleanup_failure_does_not_skip_other_plugins_or_provider(
+    make_core, database, monkeypatch, track_disposal
+):
+    core = make_core()
+    first, second = object(), object()
+    terminate_plugin = AsyncMock(side_effect=[RuntimeError("plugin failed"), None])
+    core.plugin_manager = SimpleNamespace(
+        context=SimpleNamespace(get_all_stars=lambda: [first, second]),
+        _terminate_plugin=terminate_plugin,
+    )
+    core.provider_manager = SimpleNamespace(terminate=AsyncMock())
+    monkeypatch.setattr(
+        lifecycle_module, "sp", SimpleNamespace(db_helper=database, close=AsyncMock())
+    )
+    monkeypatch.setattr(trace_store, "close_trace_store", Mock())
+
+    await core.stop()
+
+    assert [call.args[0] for call in terminate_plugin.await_args_list] == [
+        first,
+        second,
+    ]
+    core.provider_manager.terminate.assert_awaited_once()
+    track_disposal.assert_awaited_once()

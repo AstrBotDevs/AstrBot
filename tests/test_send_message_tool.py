@@ -1,36 +1,61 @@
-"""Import smoke tests for send_message tool module."""
+"""Current message tool input normalization and early validation contracts."""
+
+from types import SimpleNamespace
+from unittest.mock import AsyncMock
 
 import pytest
 
+from astrbot.core.agent.run_context import ContextWrapper
+from astrbot.core.astr_agent_runtime.tools.message_tools import (
+    SendMessageToUserTool,
+    _normalize_message_component,
+)
 
-class TestSendMessageToolImports:
-    """Verify send_message.py module can be imported and key classes exist."""
 
-    def test_module_import(self):
-        """Import the module without error."""
-        from astrbot.core.tools import send_message
-        assert send_message is not None
+@pytest.mark.parametrize(
+    "raw,expected",
+    [
+        (None, None),
+        ("text", None),
+        ({"type": "plain", "text": "hello"}, {"type": "plain", "text": "hello"}),
+        (
+            {
+                "type": "image",
+                "path": "output.png",
+                "url": "https://example.invalid/image",
+            },
+            {
+                "type": "image",
+                "path": "output.png",
+                "url": "https://example.invalid/image",
+            },
+        ),
+        (
+            {"type": "mention_user", "mention_user_id": "alice", "unknown": "discard"},
+            {"type": "mention_user", "mention_user_id": "alice"},
+        ),
+        ({"type": 7, "text": [], 1: "ignored"}, {}),
+    ],
+)
+def test_component_normalization_accepts_only_known_string_fields(raw, expected):
+    assert _normalize_message_component(raw) == expected
 
-    def test_send_message_to_user_tool(self):
-        """SendMessageToUserTool class is present."""
-        from astrbot.core.tools.send_message import SendMessageToUserTool
-        assert SendMessageToUserTool is not None
-        assert SendMessageToUserTool.name == "send_message_to_user"
 
-    def test_singleton_instance(self):
-        """SEND_MESSAGE_TO_USER_TOOL singleton exists."""
-        from astrbot.core.tools.send_message import SEND_MESSAGE_TO_USER_TOOL
-        from astrbot.core.tools.send_message import SendMessageToUserTool
-        assert isinstance(SEND_MESSAGE_TO_USER_TOOL, SendMessageToUserTool)
+def test_message_schemas_are_independent_between_instances():
+    first, second = SendMessageToUserTool(), SendMessageToUserTool()
+    assert first.name == second.name == "send_message_to_user"
+    assert first.parameters["required"] == ["messages"]
+    assert first.parameters["properties"]["messages"]["items"]["required"] == ["type"]
+    first.parameters["properties"]["messages"]["items"]["required"].append("text")
+    assert second.parameters["properties"]["messages"]["items"]["required"] == ["type"]
 
-    def test_message_component_typed_dict(self):
-        """MessageComponent TypedDict is present."""
-        from astrbot.core.tools.send_message import MessageComponent
-        assert MessageComponent is not None
 
-    def test_get_all_tools(self):
-        """get_all_tools function is present and returns a list."""
-        from astrbot.core.tools.send_message import get_all_tools
-        tools = get_all_tools()
-        assert isinstance(tools, list)
-        assert len(tools) == 1
+@pytest.mark.asyncio
+async def test_empty_messages_are_rejected_before_delivery():
+    event = SimpleNamespace(
+        unified_msg_origin="test:FriendMessage:caller", send=AsyncMock()
+    )
+    context = ContextWrapper(context=SimpleNamespace(event=event))
+    result = await SendMessageToUserTool().call(context, messages=[])
+    assert result == "error: messages parameter is empty or invalid."
+    event.send.assert_not_awaited()

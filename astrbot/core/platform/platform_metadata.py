@@ -35,3 +35,6 @@ class PlatformMetadata:
 
     参考 https://github.com/AstrBotDevs/AstrBot/pull/5045
     """
+
+    support_ui_interaction: bool = False
+    """Whether the adapter supports UI views and their interaction callbacks."""

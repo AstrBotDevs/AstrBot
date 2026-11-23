@@ -99,6 +99,7 @@
 
 <script lang="ts">
 import { useI18n } from "@/i18n/composables";
+import { isRecord } from "@/utils/typeGuards";
 
 export default {
   name: "ItemCardGrid",
@@ -139,13 +140,14 @@ export default {
     },
   },
   methods: {
-    getItemTitle(item) {
-      return item[this.titleField];
+    getItemTitle(item: unknown) {
+      const value = isRecord(item) ? item[this.titleField] : undefined;
+      return value == null ? undefined : String(value);
     },
-    getItemEnabled(item) {
-      return item[this.enabledField];
+    getItemEnabled(item: unknown) {
+      return isRecord(item) ? item[this.enabledField] : undefined;
     },
-    toggleEnabled(item) {
+    toggleEnabled(item: unknown) {
       this.$emit("toggle-enabled", item);
     },
   },

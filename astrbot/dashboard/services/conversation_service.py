@@ -5,15 +5,22 @@ import traceback
 from dataclasses import dataclass
 from datetime import datetime
 from io import BytesIO
+from typing import TypedDict
 
 from astrbot.core import logger
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
 from astrbot.core.db import BaseDatabase
 from astrbot.core.umo_alias import build_umo_alias_map, parse_umo, serialize_umo_alias
+from astrbot.dashboard.validation import is_json_object
 
 
 class ConversationServiceError(Exception):
     pass
+
+
+class _ConversationIdentityFilters(TypedDict, total=False):
+    platform_id: str
+    user_id: str
 
 
 @dataclass
@@ -21,6 +28,16 @@ class ConversationExport:
     file_obj: BytesIO
     filename: str
     mimetype: str = "application/jsonl"
+
+
+def conversation_export_identity(info: dict, failed_items: list[str]) -> tuple | None:
+    """Validate one requested export identity and retain its failure detail."""
+    user_id = info.get("user_id")
+    cid = info.get("cid")
+    if not user_id or not cid:
+        failed_items.append(f"user_id:{user_id}, cid:{cid} - 缺少必要参数")
+        return None
+    return user_id, cid
 
 
 class ConversationService:
@@ -31,6 +48,7 @@ class ConversationService:
     ) -> None:
         self.db_helper = db_helper
         self.conv_mgr = core_lifecycle.conversation_manager
+        self.core_lifecycle = core_lifecycle
 
     async def list_conversations(
         self,
@@ -42,7 +60,14 @@ class ConversationService:
         search_query: str,
         exclude_ids: str,
         exclude_platforms: str,
+        keyword_query: str = "",
+        umo_query: str = "",
+        sort_by: str = "created_at",
+        sort_order: str = "desc",
+        group_by_session: bool = False,
         include_history: bool = True,
+        platform_id: str | None = None,
+        user_id: str | None = None,
     ) -> dict:
         platform_list = [item.strip() for item in platforms.split(",") if item.strip()]
         message_type_list = [
@@ -60,6 +85,11 @@ class ConversationService:
             page_size = 20
         page_size = min(page_size, 100)
 
+        identity_filters: _ConversationIdentityFilters = {}
+        if platform_id is not None:
+            identity_filters["platform_id"] = platform_id
+        if user_id is not None:
+            identity_filters["user_id"] = user_id
         try:
             conversations, total_count = await self.conv_mgr.get_filtered_conversations(
                 page=page,
@@ -69,7 +99,13 @@ class ConversationService:
                 search_query=search_query,
                 exclude_ids=exclude_id_list,
                 exclude_platforms=exclude_platform_list,
+                keyword_query=keyword_query.strip(),
+                umo_query=umo_query.strip(),
+                sort_by=sort_by,
+                sort_order=sort_order,
+                group_by_session=group_by_session,
                 include_history=include_history,
+                **identity_filters,
             )
         except Exception as exc:
             logger.error(f"数据库查询出错: {exc!s}\n{traceback.format_exc()}")
@@ -80,6 +116,7 @@ class ConversationService:
         )
         umos = sorted({conv.user_id for conv in conversations if conv.user_id})
         alias_map = build_umo_alias_map(await self.db_helper.get_umo_aliases(umos))
+        webchat_titles = await self._get_webchat_titles(conversations)
 
         return {
             "conversations": [
@@ -87,6 +124,7 @@ class ConversationService:
                     conversation,
                     alias_map,
                     include_history=include_history,
+                    webchat_title=webchat_titles.get(conversation.user_id, ""),
                 )
                 for conversation in conversations
             ],
@@ -95,8 +133,37 @@ class ConversationService:
                 "page_size": page_size,
                 "total": total_count,
                 "total_pages": total_pages,
+                "grouped_by_session": group_by_session,
             },
         }
+
+    async def get_filter_options(self) -> dict:
+        """Build robot filter options from configured conversation platforms.
+
+        Returns:
+            Robot IDs and adapter types that exist in both configuration and
+            conversation history.
+        """
+        history_platform_ids = set(await self.db_helper.get_conversation_platform_ids())
+        configured_platforms = self.core_lifecycle.astrbot_config.get("platform", [])
+        bots = [
+            {
+                "id": str(platform.get("id", "")),
+                "type": str(platform.get("type", "")),
+            }
+            for platform in configured_platforms
+            if platform.get("id") in history_platform_ids
+        ]
+
+        # WebChat is a built-in platform that the platform manager always
+        # starts regardless of config, so expose it as a filterable bot ID even
+        # when it is missing from the configured platform list.
+        if "webchat" in history_platform_ids and not any(
+            bot["id"] == "webchat" for bot in bots
+        ):
+            bots.append({"id": "webchat", "type": "webchat"})
+
+        return {"bots": bots}
 
     async def get_conversation_detail(self, data: object) -> dict:
         payload = self._payload(data)
@@ -109,11 +176,14 @@ class ConversationService:
         if not conversation:
             raise ConversationServiceError("对话不存在")
 
+        webchat_titles = await self._get_webchat_titles([conversation])
         alias_map = build_umo_alias_map(await self.db_helper.get_umo_aliases([user_id]))
         return {
             "user_id": user_id,
             "cid": cid,
-            "title": conversation.title,
+            "title": conversation.title
+            or webchat_titles.get(conversation.user_id, "")
+            or None,
             "persona_id": conversation.persona_id,
             "history": conversation.history,
             "created_at": conversation.created_at,
@@ -133,7 +203,7 @@ class ConversationService:
         if not conversation:
             raise ConversationServiceError("对话不存在")
 
-        persona_id = payload.get("persona_id", conversation.persona_id)
+        persona_id = payload.get("persona_id")
 
         if title is not None or persona_id is not None:
             await self.conv_mgr.update_conversation(
@@ -173,11 +243,12 @@ class ConversationService:
         if not conversation:
             raise ConversationServiceError("对话不存在")
 
-        await self.conv_mgr.update_conversation(
+        writer = await self.conv_mgr.create_event_writer(
             unified_msg_origin=user_id,
             conversation_id=cid,
-            history=history,
+            expected_revision=conversation.revision,
         )
+        await writer.save_history(history, origin="user")
 
         return {"message": "对话历史更新成功"}
 
@@ -193,12 +264,10 @@ class ConversationService:
         failed_items = []
 
         for conv_info in conversations_to_export:
-            user_id = conv_info.get("user_id")
-            cid = conv_info.get("cid")
-
-            if not user_id or not cid:
-                failed_items.append(f"user_id:{user_id}, cid:{cid} - 缺少必要参数")
+            identity = conversation_export_identity(conv_info, failed_items)
+            if identity is None:
                 continue
+            user_id, cid = identity
 
             try:
                 conversation = await self.conv_mgr.get_conversation(
@@ -210,12 +279,15 @@ class ConversationService:
                     failed_items.append(f"user_id:{user_id}, cid:{cid} - 对话不存在")
                     continue
 
+                webchat_titles = await self._get_webchat_titles([conversation])
                 content = json.loads(conversation.history)
                 export_record = {
                     "cid": cid,
                     "user_id": user_id,
                     "platform_id": conversation.platform_id,
-                    "title": conversation.title,
+                    "title": conversation.title
+                    or webchat_titles.get(conversation.user_id, "")
+                    or None,
                     "persona_id": conversation.persona_id,
                     "created_at": conversation.created_at,
                     "updated_at": conversation.updated_at,
@@ -250,13 +322,18 @@ class ConversationService:
         failed_items = []
 
         for conv in conversations:
-            if not isinstance(conv, dict):
+            if not is_json_object(conv):
                 failed_items.append(f"{conv!r} - 格式错误")
                 continue
             user_id = conv.get("user_id")
             cid = conv.get("cid")
 
-            if not user_id or not cid:
+            if (
+                not isinstance(user_id, str)
+                or not user_id
+                or not isinstance(cid, str)
+                or not cid
+            ):
                 failed_items.append(f"user_id:{user_id}, cid:{cid} - 缺少必要参数")
                 continue
 
@@ -280,12 +357,72 @@ class ConversationService:
             "failed_items": failed_items,
         }
 
+    @staticmethod
+    def _webchat_session_id(user_id: str | None) -> str:
+        """Extract the WebChat session ID from a unified message origin.
+
+        Args:
+            user_id: Unified message origin such as
+                ``webchat:FriendMessage:webchat!creator!session_id``.
+
+        Returns:
+            The trailing session ID segment, or an empty string when the
+            origin does not carry one.
+        """
+        umo = user_id or ""
+        if "!" not in umo:
+            return ""
+        return umo.rsplit("!", 1)[-1]
+
+    async def _get_webchat_titles(self, conversations) -> dict[str, str]:
+        """Resolve WebChat session titles for conversations.
+
+        WebChat generates and stores its title on the platform session while
+        the conversation history reads the conversation title column, so the
+        session display name is used as a fallback. Title lookup failures only
+        degrade the fallback instead of failing the whole request.
+
+        Args:
+            conversations: Conversation objects returned by the conversation manager.
+
+        Returns:
+            Mapping from unified message origin to the WebChat session title.
+        """
+        session_ids: dict[str, str] = {}
+        for conversation in conversations:
+            if conversation.platform_id != "webchat":
+                continue
+            session_id = self._webchat_session_id(conversation.user_id)
+            if session_id:
+                session_ids[conversation.user_id] = session_id
+        if not session_ids:
+            return {}
+
+        try:
+            sessions = await self.db_helper.get_platform_sessions_by_ids(
+                list(set(session_ids.values())),
+            )
+        except Exception as exc:
+            logger.warning(f"查询 WebChat 会话标题失败: {exc!s}")
+            return {}
+
+        display_names = {
+            session.session_id: session.display_name
+            for session in sessions
+            if session.display_name
+        }
+        return {
+            user_id: display_names.get(session_id, "")
+            for user_id, session_id in session_ids.items()
+        }
+
     def _serialize_conversation(
         self,
         conversation,
         alias_map: dict,
         *,
         include_history: bool,
+        webchat_title: str = "",
     ) -> dict:
         """Serialize a conversation for a list response.
 
@@ -293,6 +430,8 @@ class ConversationService:
             conversation: Conversation object returned by the manager.
             alias_map: UMO aliases keyed by unified message origin.
             include_history: Whether to include the serialized message history.
+            webchat_title: WebChat session title used when the conversation
+                itself has no title.
 
         Returns:
             Conversation data suitable for a dashboard API response.
@@ -301,7 +440,7 @@ class ConversationService:
             "platform_id": conversation.platform_id,
             "user_id": conversation.user_id,
             "cid": conversation.cid,
-            "title": conversation.title,
+            "title": conversation.title or webchat_title or None,
             "persona_id": conversation.persona_id,
             "token_usage": conversation.token_usage,
             "created_at": conversation.created_at,

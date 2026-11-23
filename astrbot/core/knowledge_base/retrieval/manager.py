@@ -216,7 +216,7 @@ class RetrievalManager:
                 dense_k = int(kb_options[kb_id]["top_k_dense"])
                 vec_results = await vec_db.retrieve(
                     query=query,
-                    k=dense_k,
+                    top_k=dense_k,
                     fetch_k=dense_k * 2,
                     rerank=False,  # 稠密检索阶段不进行 rerank
                     metadata_filters={"kb_id": kb_id},

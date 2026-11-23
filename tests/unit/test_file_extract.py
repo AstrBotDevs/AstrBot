@@ -59,7 +59,6 @@ def _mock_path(file_bytes: bytes = b"dummy file content") -> MagicMock:
 
 
 class TestExtractFileMoonshotaiSuccess:
-
     FAKE_CONTENT = b"%PDF-1.4 fake binary content..."
     EXTRACTED_TEXT = "Extracted text from Moonshot AI API"
 
@@ -142,7 +141,6 @@ class TestExtractFileMoonshotaiSuccess:
 
 
 class TestExtractFileMoonshotaiErrors:
-
     FAKE_CONTENT = b"fake bytes"
 
     @pytest.mark.asyncio

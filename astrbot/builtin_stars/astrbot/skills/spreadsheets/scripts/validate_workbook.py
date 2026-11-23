@@ -4,14 +4,28 @@
 from __future__ import annotations
 
 import argparse
-import csv
 import json
 import zipfile
+from collections.abc import Iterable
 from pathlib import Path
+from typing import Protocol, runtime_checkable
 
 import xlrd
 from openpyxl import load_workbook
+from openpyxl.chart._chart import ChartBase
 from openpyxl.utils.cell import range_boundaries
+from openpyxl.worksheet.worksheet import Worksheet
+
+if __package__:
+    from astrbot.builtin_stars.astrbot.skills._astrbot_skill_support.cli import (
+        parse_input_path,
+    )
+    from astrbot.builtin_stars.astrbot.skills._astrbot_skill_support.csv_data import (
+        parse_delimited_rows,
+    )
+else:
+    from _astrbot_skill_support.cli import parse_input_path
+    from _astrbot_skill_support.csv_data import parse_delimited_rows
 
 _EXCEL_ERRORS = {
     "#NULL!",
@@ -23,6 +37,14 @@ _EXCEL_ERRORS = {
     "#N/A",
     "#GETTING_DATA",
 }
+
+
+@runtime_checkable
+class _WorksheetCharts(Protocol):
+    """Expose the chart collection supplied by editable openpyxl worksheets."""
+
+    @property
+    def _charts(self) -> Iterable[ChartBase]: ...
 
 
 def _validate_delimited(path: Path, errors: list[str], warnings: list[str]) -> dict:
@@ -37,12 +59,7 @@ def _validate_delimited(path: Path, errors: list[str], warnings: list[str]) -> d
         Validation statistics.
     """
     text = path.read_text(encoding="utf-8-sig")
-    try:
-        dialect = csv.Sniffer().sniff(text[:8192], delimiters=",\t;|")
-        delimiter = dialect.delimiter
-    except csv.Error:
-        delimiter = "\t" if path.suffix.lower() == ".tsv" else ","
-    rows = list(csv.reader(text.splitlines(), delimiter=delimiter))
+    _, rows = parse_delimited_rows(text, suffix=path.suffix)
     if not rows:
         errors.append("The file contains no rows.")
         return {"rows": 0, "columns": 0}
@@ -94,6 +111,9 @@ def _validate_xlsx(path: Path, errors: list[str], warnings: list[str]) -> dict:
     error_count = 0
     table_names: set[str] = set()
     for sheet in workbook.worksheets:
+        if not isinstance(sheet, Worksheet):
+            errors.append(f"Worksheet {sheet.title!r} is not editable.")
+            continue
         for row in sheet.iter_rows():
             for cell in row:
                 value = cell.value
@@ -115,13 +135,20 @@ def _validate_xlsx(path: Path, errors: list[str], warnings: list[str]) -> dict:
             table_names.add(table.name)
             min_col, min_row, max_col, max_row = range_boundaries(table.ref)
             if (
-                min_row < 1
+                min_row is None
+                or min_col is None
+                or max_row is None
+                or max_col is None
+                or min_row < 1
                 or min_col < 1
                 or max_row > sheet.max_row
                 or max_col > sheet.max_column
             ):
                 errors.append(f"Table {table.name} has an invalid range: {table.ref}")
 
+        if not isinstance(sheet, _WorksheetCharts):
+            errors.append(f"Worksheet {sheet.title!r} has no chart metadata.")
+            continue
         for chart in sheet._charts:
             for series in chart.ser:
                 for reference in (
@@ -164,10 +191,7 @@ def main() -> int:
     """
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("input", type=Path, help="Workbook, CSV, or TSV file")
-    args = parser.parse_args()
-    path = args.input.expanduser().resolve(strict=False)
-    if not path.is_file():
-        parser.error(f"Input file not found: {path}")
+    _, path = parse_input_path(parser)
 
     errors: list[str] = []
     warnings: list[str] = []
@@ -176,7 +200,7 @@ def main() -> int:
         if suffix in {".csv", ".tsv"}:
             statistics = _validate_delimited(path, errors, warnings)
         elif suffix == ".xls":
-            workbook = xlrd.open_workbook(path, on_demand=True)
+            workbook = xlrd.open_workbook(str(path), on_demand=True)
             statistics = {"sheets": workbook.nsheets, "format": "xls-read-only"}
             workbook.release_resources()
         elif suffix in {".xlsx", ".xlsm", ".xltx", ".xltm"}:

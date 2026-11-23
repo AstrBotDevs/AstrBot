@@ -1,4 +1,5 @@
 from collections.abc import AsyncGenerator
+from contextlib import aclosing
 
 from astrbot.core import logger
 from astrbot.core.message.components import Reply
@@ -26,9 +27,21 @@ class ContentSafetyCheckStage(Stage):
         self,
         event: AstrMessageEvent,
         check_text: str | None = None,
-    ) -> AsyncGenerator[None, None]:
-        async for item in self.process_text(event, check_text):
-            yield item
+    ) -> None:
+        """Reject incoming content before plugins or providers can process it.
+
+        Reply decoration consumes process_text directly to render its feedback.
+        An input guard sends its own feedback and never delegates blocked input.
+        """
+        async with aclosing(self.process_text(event, check_text)) as decisions:
+            async for _ in decisions:
+                warning = event.get_result()
+                if warning is not None:
+                    try:
+                        await event.send(warning)
+                    except BaseException:
+                        event.stop_event()
+                        raise
 
     async def process_text(
         self,

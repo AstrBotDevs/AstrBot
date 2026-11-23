@@ -1,6 +1,5 @@
 from collections.abc import AsyncIterator, Awaitable, Callable
 from contextlib import AbstractAsyncContextManager, asynccontextmanager
-from typing import TypeVar
 
 from tenacity import (
     AsyncRetrying,
@@ -13,8 +12,6 @@ from tenacity import (
 from astrbot import logger
 from astrbot.core.utils.config_number import coerce_int_config
 from astrbot.core.utils.network_utils import is_connection_error
-
-T = TypeVar("T")
 
 REQUEST_RETRY_ATTEMPTS = 5  # default value
 REQUEST_RETRY_WAIT_MIN_S = 0.2
@@ -63,12 +60,14 @@ def _log_retry(
     provider_label: str,
     retry_state: RetryCallState,
     max_attempts: int,
+    log_error_details: bool = True,
 ) -> None:
     error = retry_state.outcome.exception() if retry_state.outcome else None
+    detail = f": {error}" if log_error_details else ""
     logger.warning(
         f"[{provider_label}] Request failed with retryable error; "
         f"retrying ({retry_state.attempt_number + 1}/{max_attempts}): "
-        f"{error}"
+        f"{type(error).__name__}{detail}"
     )
 
 
@@ -77,6 +76,7 @@ def _build_retrying(
     *,
     retry_rate_limits: bool,
     max_attempts: int | None = None,
+    log_error_details: bool = True,
 ) -> AsyncRetrying:
     max_attempts = coerce_int_config(
         max_attempts if max_attempts is not None else REQUEST_RETRY_ATTEMPTS,
@@ -103,22 +103,41 @@ def _build_retrying(
             provider_label,
             retry_state,
             max_attempts,
+            log_error_details,
         ),
         reraise=True,
     )
 
 
-async def retry_provider_request(
+async def retry_provider_request[T](
     provider_label: str,
     request_factory: Callable[[], Awaitable[T]],
     *,
     retry_rate_limits: bool = True,
     max_attempts: int | None = None,
+    log_error_details: bool = True,
 ) -> T:
+    """Run a provider request with bounded retries.
+
+    Args:
+        provider_label: Provider name included in retry logs.
+        request_factory: Callable that starts a request on each attempt.
+        retry_rate_limits: Whether HTTP 429 responses can be retried.
+        max_attempts: Maximum attempts, including the initial request.
+        log_error_details: Include exception messages in retry logs. Disable
+            when messages may contain credentials or private request content.
+
+    Returns:
+        The successful request result.
+
+    Raises:
+        Exception: The final request error when retries are exhausted.
+    """
     retrying = _build_retrying(
         provider_label,
         retry_rate_limits=retry_rate_limits,
         max_attempts=max_attempts,
+        log_error_details=log_error_details,
     )
 
     async for attempt in retrying:
@@ -129,7 +148,7 @@ async def retry_provider_request(
 
 
 @asynccontextmanager
-async def retry_provider_request_context(
+async def retry_provider_request_context[T](
     provider_label: str,
     context_manager_factory: Callable[[], AbstractAsyncContextManager[T]],
     *,

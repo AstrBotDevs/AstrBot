@@ -40,10 +40,10 @@ class TestPathMapping:
         assert path_Mapping(mappings, "./file.txt") == "./file.txt"
         assert path_Mapping(mappings, ".\\file.txt") == ".\\file.txt"
 
-    def test_windows_path_preserves_backslashes(self):
+    def test_mapping_preserves_spaces_in_filename(self):
         mappings = ["/old:/new"]
         result = path_Mapping(mappings, "/old/Program Files/file.txt")
-        assert "\\" in result or "/" in result
+        assert result == "/new/Program Files/file.txt"
 
     def test_invalid_mapping_rule_single_part_logs_warning(self):
         mappings = ["invalid_rule"]
@@ -68,11 +68,12 @@ class TestPathMapping:
         with patch("astrbot.core.utils.path_util.os.path.exists") as mock_exists:
             mock_exists.return_value = True
             result = path_Mapping(mappings, "C:/Users/test/file.txt")
-            assert "/home" in result or "home" in result
+            assert result == "/home/test/file.txt"
 
     def test_mapping_linux_path_no_exists_check(self):
         mappings = ["/home:/usr/local"]
         with patch("astrbot.core.utils.path_util.os.path.exists") as mock_exists:
             mock_exists.return_value = False
             result = path_Mapping(mappings, "/home/test/file.txt")
-            assert "/usr/local" in result
+            assert result == "/usr/local/test/file.txt"
+            mock_exists.assert_not_called()

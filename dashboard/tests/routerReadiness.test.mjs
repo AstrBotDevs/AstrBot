@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
-import test from "node:test";
+import { test } from "vitest";
 
 test("waitForRouterReadyInBackground returns immediately and logs failures", async () => {
-  const module = await import("../src/utils/routerReadiness.mjs").catch(() => null);
+  const module = await import("../src/utils/routerReadiness.mjs");
 
   assert.ok(module?.waitForRouterReadyInBackground);
 

@@ -30,6 +30,7 @@ def _read_config(config_path):
 
 def test_password_command_changes_dashboard_password(monkeypatch, tmp_path):
     config_path = _write_config(tmp_path)
+    monkeypatch.setenv("ASTRBOT_ROOT", str(tmp_path))
     monkeypatch.chdir(tmp_path)
 
     runner = CliRunner()
@@ -38,7 +39,7 @@ def test_password_command_changes_dashboard_password(monkeypatch, tmp_path):
         input="AstrbotChanged123\nAstrbotChanged123\n",
     )
 
-    assert result.exit_code == 0
+    assert result.exit_code == 0, result.output
     config = _read_config(config_path)
     dashboard_config = config["dashboard"]
     assert verify_dashboard_password(
@@ -55,6 +56,7 @@ def test_password_command_changes_dashboard_password(monkeypatch, tmp_path):
 
 def test_password_command_can_update_dashboard_username(monkeypatch, tmp_path):
     config_path = _write_config(tmp_path)
+    monkeypatch.setenv("ASTRBOT_ROOT", str(tmp_path))
     monkeypatch.chdir(tmp_path)
 
     runner = CliRunner()
@@ -64,13 +66,14 @@ def test_password_command_can_update_dashboard_username(monkeypatch, tmp_path):
         input="AstrbotChanged123\nAstrbotChanged123\n",
     )
 
-    assert result.exit_code == 0
+    assert result.exit_code == 0, result.output
     config = _read_config(config_path)
     assert config["dashboard"]["username"] == "astrbot-admin"
 
 
 def test_conf_set_dashboard_password_updates_password_state(monkeypatch, tmp_path):
     config_path = _write_config(tmp_path)
+    monkeypatch.setenv("ASTRBOT_ROOT", str(tmp_path))
     monkeypatch.chdir(tmp_path)
 
     runner = CliRunner()
@@ -79,7 +82,7 @@ def test_conf_set_dashboard_password_updates_password_state(monkeypatch, tmp_pat
         ["set", "dashboard.password", "AstrbotChanged123"],
     )
 
-    assert result.exit_code == 0
+    assert result.exit_code == 0, result.output
     config = _read_config(config_path)
     dashboard_config = config["dashboard"]
     assert verify_dashboard_password(

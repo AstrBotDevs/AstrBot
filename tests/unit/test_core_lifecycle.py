@@ -3,12 +3,15 @@
 import asyncio
 import logging
 import os
+from collections.abc import AsyncIterator
 from contextlib import ExitStack
+from inspect import CORO_CLOSED, getcoroutinestate
 from types import SimpleNamespace
 from typing import Any, cast
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+import pytest_asyncio
 
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle, LifecycleState
 from astrbot.core.log import LogBroker
@@ -28,6 +31,7 @@ def mock_db():
     """Create a mock database."""
     db = MagicMock()
     db.initialize = AsyncMock()
+    db.engine.dispose = AsyncMock()
     return db
 
 
@@ -45,6 +49,36 @@ def _discard_created_task(coro, *args, **kwargs):
     del args, kwargs
     coro.close()
     return MagicMock()
+
+
+@pytest_asyncio.fixture
+async def runtime_tasks() -> AsyncIterator[
+    tuple[list[asyncio.Task[None]], list[asyncio.Event]]
+]:
+    """Provide running tasks whose asynchronous cleanup can be observed."""
+    started = [asyncio.Event(), asyncio.Event()]
+    cleaned = [asyncio.Event(), asyncio.Event()]
+
+    async def run(started: asyncio.Event, cleaned: asyncio.Event) -> None:
+        try:
+            started.set()
+            await asyncio.Event().wait()
+        finally:
+            await asyncio.sleep(0)
+            cleaned.set()
+
+    tasks = [
+        asyncio.create_task(run(ready, done), name=f"runtime-{index}")
+        for index, (ready, done) in enumerate(zip(started, cleaned, strict=True))
+    ]
+    await asyncio.gather(*(event.wait() for event in started))
+    try:
+        yield tasks, cleaned
+    finally:
+        for task in tasks:
+            if not task.done() and not task.cancelling():
+                task.cancel()
+        await asyncio.gather(*tasks, return_exceptions=True)
 
 
 def build_initialize_test_mocks():
@@ -67,21 +101,25 @@ def build_initialize_test_mocks():
 
     mocks["provider_manager"] = MagicMock()
     mocks["provider_manager"].initialize = AsyncMock()
+    mocks["provider_manager"].terminate = AsyncMock()
 
     mocks["platform_manager"] = MagicMock()
     mocks["platform_manager"].initialize = AsyncMock()
+    mocks["platform_manager"].terminate = AsyncMock()
 
     mocks["conversation_manager"] = MagicMock()
     mocks["platform_message_history_manager"] = MagicMock()
 
     mocks["kb_manager"] = MagicMock()
     mocks["kb_manager"].initialize = AsyncMock()
+    mocks["kb_manager"].terminate = AsyncMock()
 
     mocks["cron_manager"] = MagicMock()
 
     mocks["star_context"] = MagicMock()
     mocks["star_context"].registered_web_apis = []
     mocks["star_context"]._register_tasks = []
+    mocks["star_context"].agent.close = AsyncMock()
 
     def reset_runtime_registrations() -> None:
         mocks["star_context"].registered_web_apis.clear()
@@ -93,6 +131,7 @@ def build_initialize_test_mocks():
 
     mocks["plugin_manager"] = MagicMock()
     mocks["plugin_manager"].reload = AsyncMock()
+    mocks["plugin_manager"].cleanup_loaded_plugins = AsyncMock()
 
     mocks["astrbot_updater"] = MagicMock()
     mocks["astrbot_updater_cls"] = MagicMock(return_value=mocks["astrbot_updater"])
@@ -101,14 +140,22 @@ def build_initialize_test_mocks():
     mocks["event_bus_cls"] = MagicMock(return_value=mocks["event_bus"])
 
     mocks["migra"] = AsyncMock()
+    mocks["migrate_session_overrides"] = AsyncMock()
 
     async def update_llm_metadata():
         return None
 
     mocks["update_llm_metadata"] = update_llm_metadata
 
-    mocks["create_task"] = MagicMock(side_effect=_discard_created_task)
-    mocks["init_subagent_orchestrator"] = AsyncMock()
+    mocks["create_task"] = MagicMock(wraps=asyncio.create_task)
+    mocks["asyncio"] = SimpleNamespace(**vars(asyncio))
+    mocks["asyncio"].create_task = mocks["create_task"]
+    mocks["native_runtime"] = MagicMock()
+    mocks["native_runtime"].initialize = AsyncMock()
+    mocks["native_runtime"].close = AsyncMock()
+    mocks["subagent_service"] = MagicMock()
+    mocks["subagent_service"].start = AsyncMock()
+    mocks["subagent_service"].close = AsyncMock()
 
     return mocks
 
@@ -197,18 +244,27 @@ def patch_initialize_test_mocks(mock_astrbot_config, mocks):
     stack.enter_context(patch("astrbot.core.core_lifecycle.migra", mocks["migra"]))
     stack.enter_context(
         patch(
+            "astrbot.core.db.migration.migra_session_overrides.migrate_session_overrides",
+            mocks["migrate_session_overrides"],
+        )
+    )
+    stack.enter_context(
+        patch(
             "astrbot.core.core_lifecycle.update_llm_metadata",
             mocks["update_llm_metadata"],
         )
     )
+    stack.enter_context(patch("astrbot.core.core_lifecycle.asyncio", mocks["asyncio"]))
     stack.enter_context(
-        patch("astrbot.core.core_lifecycle.asyncio.create_task", mocks["create_task"])
+        patch(
+            "astrbot.core.core_lifecycle.AstrAgentRuntime",
+            return_value=mocks["native_runtime"],
+        )
     )
     stack.enter_context(
-        patch.object(
-            AstrBotCoreLifecycle,
-            "_init_or_reload_subagent_orchestrator",
-            mocks["init_subagent_orchestrator"],
+        patch(
+            "astrbot.core.core_lifecycle.SubAgentService",
+            return_value=mocks["subagent_service"],
         )
     )
     return stack
@@ -289,7 +345,7 @@ def build_context_for_tests() -> Context:
         MagicMock(),
         MagicMock(),
         MagicMock(),
-        MagicMock(),
+        agent_runtimes={},
     )
 
 
@@ -319,7 +375,7 @@ class TestAstrBotCoreLifecycleInit:
         assert lifecycle.log_broker == mock_log_broker
         assert lifecycle.db == mock_db
         assert lifecycle.lifecycle_state == LifecycleState.CREATED
-        assert lifecycle.subagent_orchestrator is None
+        assert lifecycle.subagents is None
         assert lifecycle.cron_manager is None
         assert lifecycle.temp_dir_cleaner is None
 
@@ -489,7 +545,6 @@ class TestProviderManagerCleanup:
 class TestContextRuntimeRegistrations:
     """Tests for runtime registration containers on Context."""
 
-    @pytest.mark.xfail(reason="Lifecycle state machine changed post-merge")
     def test_runtime_registrations_are_isolated_and_resettable(self):
         """Test Context runtime registration containers do not leak and can reset."""
         first_context = build_context_for_tests()
@@ -507,7 +562,7 @@ class TestContextRuntimeRegistrations:
         assert second_context.registered_web_apis == []
         assert second_context._register_tasks == []
 
-        cast(Any, first_context).reset_runtime_registrations()
+        first_context.reset_runtime_registrations()
 
         assert first_context.registered_web_apis == []
         assert first_context._register_tasks == []
@@ -521,13 +576,9 @@ class TestAstrBotCoreLifecycleStop:
         """Test stop without initialize should not raise errors."""
         lifecycle = AstrBotCoreLifecycle(mock_log_broker, mock_db)
 
-        with patch(
-            "astrbot.core.core_lifecycle.shutdown_local_booter",
-            new_callable=AsyncMock,
-        ) as shutdown_local_booter:
-            await lifecycle.stop()
+        await lifecycle.stop()
 
-        shutdown_local_booter.assert_awaited_once_with()
+        mock_db.engine.dispose.assert_awaited_once()
         assert lifecycle.lifecycle_state == LifecycleState.CREATED
         assert lifecycle.runtime_ready is False
 
@@ -637,47 +688,6 @@ class TestAstrBotCoreLifecycleLoadPlatform:
         assert any("inst2" in task.get_name() for task in tasks)
 
 
-class TestAstrBotCoreLifecycleErrorHandling:
-    """Tests for AstrBotCoreLifecycle error handling."""
-
-    @pytest.mark.asyncio
-    async def test_subagent_orchestrator_error_is_logged(
-        self, mock_log_broker, mock_db, mock_astrbot_config
-    ):
-        """Test that subagent orchestrator init errors are logged."""
-        lifecycle = AstrBotCoreLifecycle(mock_log_broker, mock_db)
-        lifecycle.provider_manager = MagicMock()
-        lifecycle.provider_manager.llm_tools = MagicMock()
-        lifecycle.persona_mgr = MagicMock()
-        lifecycle.astrbot_config = mock_astrbot_config
-        lifecycle.astrbot_config.get = MagicMock(return_value={})
-
-        mock_subagent = MagicMock()
-        mock_subagent.reload_from_config = AsyncMock(
-            side_effect=Exception("Orchestrator init failed")
-        )
-
-        with (
-            patch(
-                "astrbot.core.core_lifecycle.SubAgentOrchestrator",
-                return_value=mock_subagent,
-            ) as mock_subagent_cls,
-            patch("astrbot.core.core_lifecycle.logger") as mock_logger,
-        ):
-            await lifecycle._init_or_reload_subagent_orchestrator()
-
-        mock_subagent_cls.assert_called_once_with(
-            lifecycle.provider_manager.llm_tools,
-            lifecycle.persona_mgr,
-        )
-        mock_subagent.reload_from_config.assert_awaited_once_with({})
-        assert mock_logger.error.called
-        assert any(
-            "Subagent orchestrator init failed" in str(call)
-            for call in mock_logger.error.call_args_list
-        )
-
-
 class TestAstrBotCoreLifecycleDefaultChatProviderWarning:
     """Tests for startup warning when default chat provider is unset."""
 
@@ -694,7 +704,7 @@ class TestAstrBotCoreLifecycleDefaultChatProviderWarning:
         provider_a = self._make_provider("openai_source/model-a")
         provider_b = self._make_provider("openai_source/model-b")
         lifecycle.provider_manager = MagicMock(
-            provider_settings={"default_provider_id": ""},
+            default_chat_provider_id="",
             provider_insts=[provider_a, provider_b],
             curr_provider_inst=provider_b,
         )
@@ -709,7 +719,7 @@ class TestAstrBotCoreLifecycleDefaultChatProviderWarning:
     def test_warns_only_once_per_lifecycle(self, mock_log_broker, mock_db):
         lifecycle = AstrBotCoreLifecycle(mock_log_broker, mock_db)
         lifecycle.provider_manager = MagicMock(
-            provider_settings={"default_provider_id": ""},
+            default_chat_provider_id="",
             provider_insts=[
                 self._make_provider("openai_source/model-a"),
                 self._make_provider("openai_source/model-b"),
@@ -728,7 +738,7 @@ class TestAstrBotCoreLifecycleDefaultChatProviderWarning:
     ):
         lifecycle = AstrBotCoreLifecycle(mock_log_broker, mock_db)
         lifecycle.provider_manager = MagicMock(
-            provider_settings={"default_provider_id": ""},
+            default_chat_provider_id="",
             provider_insts=[self._make_provider("openai_source/model-a")],
             curr_provider_inst=self._make_provider("openai_source/model-a"),
         )
@@ -743,7 +753,7 @@ class TestAstrBotCoreLifecycleDefaultChatProviderWarning:
     ):
         lifecycle = AstrBotCoreLifecycle(mock_log_broker, mock_db)
         lifecycle.provider_manager = MagicMock(
-            provider_settings={"default_provider_id": "openai_source/model-a"},
+            default_chat_provider_id="openai_source/model-a",
             provider_insts=[
                 self._make_provider("openai_source/model-a"),
                 self._make_provider("openai_source/model-b"),
@@ -763,7 +773,7 @@ class TestAstrBotCoreLifecycleDefaultChatProviderWarning:
         provider_a = self._make_provider("openai_source/model-a")
         provider_b = self._make_provider("openai_source/model-b")
         lifecycle.provider_manager = MagicMock(
-            provider_settings={"default_provider_id": ""},
+            default_chat_provider_id="",
             provider_insts=[provider_a, provider_b],
             curr_provider_inst=None,
         )
@@ -780,7 +790,7 @@ class TestAstrBotCoreLifecycleDefaultChatProviderWarning:
     ):
         lifecycle = AstrBotCoreLifecycle(mock_log_broker, mock_db)
         lifecycle.provider_manager = MagicMock(
-            provider_settings={"default_provider_id": "non-existent-id"},
+            default_chat_provider_id="non-existent-id",
             provider_insts=[
                 self._make_provider("openai_source/model-a"),
                 self._make_provider("openai_source/model-b"),
@@ -815,7 +825,7 @@ class TestAstrBotCoreLifecycleInitialize:
         mocks["umop_config_router"].initialize.assert_awaited_once()
         mocks["astrbot_config_mgr"].initialize.assert_awaited_once()
         mocks["persona_mgr"].initialize.assert_awaited_once()
-        mocks["init_subagent_orchestrator"].assert_awaited_once()
+        mocks["native_runtime"].initialize.assert_awaited_once()
 
         mocks["plugin_manager"].reload.assert_not_called()
         mocks["provider_manager"].initialize.assert_not_called()
@@ -855,10 +865,9 @@ class TestAstrBotCoreLifecycleInitialize:
         async def record_async(name):
             call_order.append(name)
 
-        def record_create_task(coro):
+        def record_create_task(coro, *, name=None):
             call_order.append("metadata_task")
-            coro.close()
-            return MagicMock()
+            return asyncio.create_task(coro, name=name)
 
         async def plugin_reload():
             await record_async("plugin_reload")
@@ -971,7 +980,6 @@ class TestAstrBotCoreLifecycleInitialize:
         kb_manager.terminate.assert_awaited_once()
 
     @pytest.mark.asyncio
-    @pytest.mark.xfail(reason="Lifecycle state machine changed post-merge")
     async def test_bootstrap_failure_allows_safe_retry_after_cleanup(
         self, mock_log_broker, mock_db, mock_astrbot_config
     ):
@@ -998,6 +1006,9 @@ class TestAstrBotCoreLifecycleInitialize:
 
         with patch_initialize_test_mocks(mock_astrbot_config, mocks):
             await lifecycle.initialize_core()
+            lifecycle.load_pipeline_scheduler = AsyncMock(
+                return_value=pipeline_scheduler_mapping
+            )
 
             with pytest.raises(
                 RuntimeError,
@@ -1020,7 +1031,6 @@ class TestAstrBotCoreLifecycleInitialize:
         kb_manager.terminate.assert_awaited_once()
 
     @pytest.mark.asyncio
-    @pytest.mark.xfail(reason="Lifecycle state machine changed post-merge")
     async def test_bootstrap_failure_clears_context_runtime_registrations_before_retry(
         self, mock_log_broker, mock_db, mock_astrbot_config
     ):
@@ -1085,6 +1095,7 @@ class TestAstrBotCoreLifecycleInitialize:
 
         # Mock all the dependencies
         mock_db.initialize = AsyncMock()
+        mock_db.get_preferences = AsyncMock(return_value=[])
         mock_html_renderer = MagicMock()
         mock_html_renderer.initialize = AsyncMock()
 
@@ -1227,7 +1238,67 @@ class TestAstrBotCoreLifecycleInitialize:
 class TestAstrBotCoreLifecycleLoad:
     """Tests for AstrBotCoreLifecycle._load method."""
 
-    @pytest.mark.xfail(reason="Lifecycle state machine changed post-merge")
+    @pytest.mark.asyncio
+    async def test_registered_coroutine_cancelled_before_start_is_closed(
+        self, mock_log_broker, mock_db
+    ):
+        lifecycle = AstrBotCoreLifecycle(mock_log_broker, mock_db)
+        started = asyncio.Event()
+
+        async def registered_work():
+            started.set()
+            await asyncio.Event().wait()
+
+        registered = registered_work()
+        lifecycle.event_bus = None
+        lifecycle.cron_manager = None
+        lifecycle.temp_dir_cleaner = None
+        lifecycle.star_context = SimpleNamespace(_register_tasks=[registered])
+        lifecycle._set_lifecycle_state(LifecycleState.RUNTIME_READY)
+        created = []
+
+        def create_task(coro, **kwargs):
+            task = asyncio.create_task(coro, **kwargs)
+            created.append(task)
+            return task
+
+        module_asyncio = SimpleNamespace(**vars(asyncio))
+        module_asyncio.create_task = create_task
+        with (
+            patch("astrbot.core.core_lifecycle.asyncio", module_asyncio),
+            patch(
+                "astrbot.core.core_lifecycle.create_event_loop_diagnostic_tasks",
+                return_value=[],
+            ),
+        ):
+            lifecycle._load()
+        created[0].cancel()
+        await asyncio.gather(*created, return_exceptions=True)
+
+        assert not started.is_set()
+        assert getcoroutinestate(registered) == CORO_CLOSED
+
+    @pytest.mark.asyncio
+    async def test_registered_future_can_complete_without_coroutine_attributes(
+        self, mock_log_broker, mock_db
+    ):
+        lifecycle = AstrBotCoreLifecycle(mock_log_broker, mock_db)
+        registered = asyncio.get_running_loop().create_future()
+        registered.set_result(None)
+        lifecycle.event_bus = None
+        lifecycle.cron_manager = None
+        lifecycle.temp_dir_cleaner = None
+        lifecycle.star_context = SimpleNamespace(_register_tasks=[registered])
+        lifecycle._set_lifecycle_state(LifecycleState.RUNTIME_READY)
+        with patch(
+            "astrbot.core.core_lifecycle.create_event_loop_diagnostic_tasks",
+            return_value=[],
+        ):
+            lifecycle._load()
+        await asyncio.gather(*lifecycle.curr_tasks)
+        assert registered.done()
+        assert not registered.cancelled()
+
     def test_load_requires_runtime_ready_state(self, mock_log_broker, mock_db):
         """Test that _load rejects half-bootstrapped lifecycle state."""
         lifecycle = AstrBotCoreLifecycle(mock_log_broker, mock_db)
@@ -1258,6 +1329,7 @@ class TestAstrBotCoreLifecycleLoad:
         lifecycle = AstrBotCoreLifecycle(mock_log_broker, mock_db)
 
         mock_db.initialize = AsyncMock()
+        mock_db.get_preferences = AsyncMock(return_value=[])
 
         mock_html_renderer = MagicMock()
         mock_html_renderer.initialize = AsyncMock()
@@ -1352,7 +1424,6 @@ class TestAstrBotCoreLifecycleStart:
     """Tests for AstrBotCoreLifecycle.start method."""
 
     @pytest.mark.asyncio
-    @pytest.mark.xfail(reason="Lifecycle state machine changed post-merge")
     async def test_start_waits_for_runtime_ready_before_loading(
         self, mock_log_broker, mock_db
     ):
@@ -1388,7 +1459,6 @@ class TestAstrBotCoreLifecycleStart:
         mock_load.assert_called_once()
 
     @pytest.mark.asyncio
-    @pytest.mark.xfail(reason="Lifecycle state machine changed post-merge")
     async def test_start_runtime_failed_returns_cleanly(self, mock_log_broker, mock_db):
         """Test that start exits when deferred runtime bootstrap reports failure."""
         lifecycle = AstrBotCoreLifecycle(mock_log_broker, mock_db)
@@ -1429,7 +1499,6 @@ class TestAstrBotCoreLifecycleStart:
         )
 
     @pytest.mark.asyncio
-    @pytest.mark.xfail(reason="Lifecycle state machine changed post-merge")
     async def test_start_runtime_failed_state_returns_cleanly_without_bootstrap_task(
         self, mock_log_broker, mock_db
     ):
@@ -1453,7 +1522,6 @@ class TestAstrBotCoreLifecycleStart:
         )
 
     @pytest.mark.asyncio
-    @pytest.mark.xfail(reason="Lifecycle state machine changed post-merge")
     async def test_start_consumes_prefailed_runtime_bootstrap_task(
         self, mock_log_broker, mock_db
     ):
@@ -1491,7 +1559,6 @@ class TestAstrBotCoreLifecycleStart:
         )
 
     @pytest.mark.asyncio
-    @pytest.mark.xfail(reason="Lifecycle state machine changed post-merge")
     async def test_start_raises_when_runtime_bootstrap_task_missing(
         self, mock_log_broker, mock_db
     ):
@@ -1505,7 +1572,6 @@ class TestAstrBotCoreLifecycleStart:
                 await asyncio.wait_for(lifecycle.start(), timeout=0.1)
 
     @pytest.mark.asyncio
-    @pytest.mark.xfail(reason="Lifecycle state machine changed post-merge")
     async def test_start_returns_cleanly_when_stop_interrupts_runtime_wait(
         self, mock_log_broker, mock_db, mock_astrbot_config
     ):
@@ -1536,7 +1602,6 @@ class TestAstrBotCoreLifecycleStart:
         mock_logger.error.assert_not_called()
 
     @pytest.mark.asyncio
-    @pytest.mark.xfail(reason="Lifecycle state machine changed post-merge")
     async def test_start_returns_cleanly_when_restart_interrupts_runtime_wait(
         self, mock_log_broker, mock_db, mock_astrbot_config
     ):
@@ -1552,7 +1617,7 @@ class TestAstrBotCoreLifecycleStart:
             patch(
                 "astrbot.core.core_lifecycle.star_handlers_registry"
             ) as mock_registry,
-            patch("astrbot.core.core_lifecycle.threading.Thread") as mock_thread,
+            patch("astrbot.core.core_lifecycle.threading") as mock_threading,
             patch("astrbot.core.core_lifecycle.logger") as mock_logger,
         ):
             mock_registry.get_handlers_by_event_type = MagicMock(return_value=[])
@@ -1564,8 +1629,8 @@ class TestAstrBotCoreLifecycleStart:
             await lifecycle.restart()
             await asyncio.wait_for(start_task, timeout=0.1)
 
-        mock_thread.assert_called_once()
-        mock_thread.return_value.start.assert_called_once()
+        mock_threading.Thread.assert_called_once()
+        mock_threading.Thread.return_value.start.assert_called_once()
         mock_load.assert_not_called()
         mock_logger.error.assert_not_called()
 
@@ -1682,8 +1747,9 @@ class TestAstrBotCoreLifecycleStopAdditional:
     """Additional tests for AstrBotCoreLifecycle.stop method."""
 
     @pytest.mark.asyncio
-    @pytest.mark.xfail(reason="Lifecycle state machine changed post-merge")
-    async def test_stop_cancels_all_tasks(self, mock_log_broker, mock_db):
+    async def test_stop_cancels_all_tasks(
+        self, mock_log_broker, mock_db, runtime_tasks
+    ):
         """Test that stop cancels all current tasks."""
         lifecycle = AstrBotCoreLifecycle(mock_log_broker, mock_db)
 
@@ -1709,29 +1775,19 @@ class TestAstrBotCoreLifecycleStopAdditional:
         lifecycle.start_time = 123
         lifecycle._set_lifecycle_state(LifecycleState.RUNTIME_READY)
 
-        # Create mock tasks
-        mock_task1 = MagicMock(spec=asyncio.Task)
-        mock_task1.cancel = MagicMock()
-        mock_task1.get_name = MagicMock(return_value="task1")
-
-        mock_task2 = MagicMock(spec=asyncio.Task)
-        mock_task2.cancel = MagicMock()
-        mock_task2.get_name = MagicMock(return_value="task2")
-
-        lifecycle.curr_tasks = [mock_task1, mock_task2]
+        tasks, cleaned = runtime_tasks
+        lifecycle.curr_tasks = tasks.copy()
 
         await lifecycle.stop()
 
-        # Verify tasks were cancelled
-        mock_task1.cancel.assert_called_once()
-        mock_task2.cancel.assert_called_once()
+        assert all(task.cancelled() for task in tasks)
+        assert all(event.is_set() for event in cleaned)
         assert lifecycle.curr_tasks == []
         assert lifecycle.event_bus is None
         assert lifecycle.pipeline_scheduler_mapping == {}
         assert lifecycle.start_time == 0
 
     @pytest.mark.asyncio
-    @pytest.mark.xfail(reason="Lifecycle state machine changed post-merge")
     async def test_stop_terminates_all_managers(self, mock_log_broker, mock_db):
         """Test that stop terminates all managers in correct order."""
         lifecycle = AstrBotCoreLifecycle(mock_log_broker, mock_db)
@@ -1772,7 +1828,6 @@ class TestAstrBotCoreLifecycleStopAdditional:
         assert lifecycle.start_time == 0
 
     @pytest.mark.asyncio
-    @pytest.mark.xfail(reason="Lifecycle state machine changed post-merge")
     async def test_stop_handles_plugin_termination_error(
         self, mock_log_broker, mock_db
     ):
@@ -1813,11 +1868,12 @@ class TestAstrBotCoreLifecycleStopAdditional:
             # Should not raise
             await lifecycle.stop()
 
-            # Verify warning was logged about plugin termination failure
-            mock_logger.warning.assert_called()
+            mock_logger.exception.assert_any_call("Failed to terminate plugin")
+        lifecycle.provider_manager.terminate.assert_awaited_once()
+        lifecycle.platform_manager.terminate.assert_awaited_once()
+        lifecycle.kb_manager.terminate.assert_awaited_once()
 
     @pytest.mark.asyncio
-    @pytest.mark.xfail(reason="Lifecycle state machine changed post-merge")
     async def test_stop_cancels_inflight_runtime_bootstrap_without_failure_state(
         self, mock_log_broker, mock_db, mock_astrbot_config
     ):
@@ -1835,7 +1891,6 @@ class TestAstrBotCoreLifecycleStopAdditional:
         assert lifecycle.runtime_bootstrap_error is None
 
     @pytest.mark.asyncio
-    @pytest.mark.xfail(reason="Lifecycle state machine changed post-merge")
     async def test_stop_waits_for_bootstrap_cleanup_before_manager_termination(
         self, mock_log_broker, mock_db, mock_astrbot_config
     ):
@@ -1862,7 +1917,6 @@ class TestAstrBotCoreLifecycleStopAdditional:
         await lifecycle.stop()
 
     @pytest.mark.asyncio
-    @pytest.mark.xfail(reason="Lifecycle state machine changed post-merge")
     async def test_stop_clears_runtime_request_ready_before_manager_termination(
         self, mock_log_broker, mock_db
     ):
@@ -1930,7 +1984,6 @@ class TestAstrBotCoreLifecycleRestart:
     """Tests for AstrBotCoreLifecycle.restart method."""
 
     @pytest.mark.asyncio
-    @pytest.mark.xfail(reason="Lifecycle state machine changed post-merge")
     async def test_restart_in_core_ready_state_tolerates_missing_runtime_components(
         self, mock_log_broker, mock_db
     ):
@@ -1940,17 +1993,16 @@ class TestAstrBotCoreLifecycleRestart:
         lifecycle.dashboard_shutdown_event = asyncio.Event()
         lifecycle._set_lifecycle_state(LifecycleState.CORE_READY)
 
-        with patch("astrbot.core.core_lifecycle.threading.Thread") as mock_thread:
+        with patch("astrbot.core.core_lifecycle.threading") as mock_threading:
             await lifecycle.restart()
 
-        mock_thread.assert_called_once()
-        mock_thread.return_value.start.assert_called_once()
+        mock_threading.Thread.assert_called_once()
+        mock_threading.Thread.return_value.start.assert_called_once()
         assert lifecycle.lifecycle_state == LifecycleState.CREATED
 
     @pytest.mark.asyncio
-    @pytest.mark.xfail(reason="Lifecycle state machine changed post-merge")
     async def test_restart_terminates_managers_and_starts_thread(
-        self, mock_log_broker, mock_db
+        self, mock_log_broker, mock_db, runtime_tasks
     ):
         """Test that restart terminates managers and starts reboot thread."""
         lifecycle = AstrBotCoreLifecycle(mock_log_broker, mock_db)
@@ -1972,36 +2024,30 @@ class TestAstrBotCoreLifecycleRestart:
         lifecycle.start_time = 123
         lifecycle._set_lifecycle_state(LifecycleState.RUNTIME_READY)
 
-        mock_task1 = MagicMock(spec=asyncio.Task)
-        mock_task1.cancel = MagicMock()
-        mock_task1.get_name = MagicMock(return_value="task1")
+        tasks, cleaned = runtime_tasks
+        lifecycle.curr_tasks = tasks.copy()
 
-        mock_task2 = MagicMock(spec=asyncio.Task)
-        mock_task2.cancel = MagicMock()
-        mock_task2.get_name = MagicMock(return_value="task2")
-
-        lifecycle.curr_tasks = [mock_task1, mock_task2]
-
-        with patch("astrbot.core.core_lifecycle.threading.Thread") as mock_thread:
-            await lifecycle.restart()
+        # Replace only this module's reference; patching threading.Thread also
+        # disables the executor worker used by asyncio.to_thread during shutdown.
+        with patch("astrbot.core.core_lifecycle.threading") as mock_threading:
+            await asyncio.wait_for(lifecycle.restart(), timeout=5)
 
             # Verify managers were terminated
             lifecycle.provider_manager.terminate.assert_awaited_once()
             lifecycle.platform_manager.terminate.assert_awaited_once()
             lifecycle.kb_manager.terminate.assert_awaited_once()
-            mock_task1.cancel.assert_called_once()
-            mock_task2.cancel.assert_called_once()
+            assert all(task.cancelled() for task in tasks)
+            assert all(event.is_set() for event in cleaned)
 
             # Verify thread was started
-            mock_thread.assert_called_once()
-            mock_thread.return_value.start.assert_called_once()
+            mock_threading.Thread.assert_called_once()
+            mock_threading.Thread.return_value.start.assert_called_once()
             assert lifecycle.curr_tasks == []
             assert lifecycle.event_bus is None
             assert lifecycle.pipeline_scheduler_mapping == {}
             assert lifecycle.start_time == 0
 
     @pytest.mark.asyncio
-    @pytest.mark.xfail(reason="Lifecycle state machine changed post-merge")
     async def test_restart_cancels_inflight_runtime_bootstrap_without_failure_state(
         self, mock_log_broker, mock_db, mock_astrbot_config
     ):
@@ -2012,17 +2058,16 @@ class TestAstrBotCoreLifecycleRestart:
             mock_astrbot_config,
         )
 
-        with patch("astrbot.core.core_lifecycle.threading.Thread") as mock_thread:
+        with patch("astrbot.core.core_lifecycle.threading") as mock_threading:
             await lifecycle.restart()
 
-        mock_thread.assert_called_once()
-        mock_thread.return_value.start.assert_called_once()
+        mock_threading.Thread.assert_called_once()
+        mock_threading.Thread.return_value.start.assert_called_once()
         assert lifecycle.runtime_bootstrap_task is None
         assert lifecycle.runtime_failed_event.is_set() is False
         assert lifecycle.runtime_bootstrap_error is None
 
     @pytest.mark.asyncio
-    @pytest.mark.xfail(reason="Lifecycle state machine changed post-merge")
     async def test_restart_waits_for_bootstrap_cleanup_before_manager_termination(
         self, mock_log_broker, mock_db, mock_astrbot_config
     ):
@@ -2046,14 +2091,13 @@ class TestAstrBotCoreLifecycleRestart:
         assert lifecycle.provider_manager is not None
         lifecycle.provider_manager.terminate = AsyncMock(side_effect=terminate_provider)
 
-        with patch("astrbot.core.core_lifecycle.threading.Thread") as mock_thread:
+        with patch("astrbot.core.core_lifecycle.threading") as mock_threading:
             await lifecycle.restart()
 
-        mock_thread.assert_called_once()
-        mock_thread.return_value.start.assert_called_once()
+        mock_threading.Thread.assert_called_once()
+        mock_threading.Thread.return_value.start.assert_called_once()
 
     @pytest.mark.asyncio
-    @pytest.mark.xfail(reason="Lifecycle state machine changed post-merge")
     async def test_restart_clears_runtime_request_ready_before_manager_termination(
         self, mock_log_broker, mock_db
     ):
@@ -2073,14 +2117,13 @@ class TestAstrBotCoreLifecycleRestart:
         lifecycle.provider_manager = MagicMock()
         lifecycle.provider_manager.terminate = AsyncMock(side_effect=terminate_provider)
 
-        with patch("astrbot.core.core_lifecycle.threading.Thread") as mock_thread:
+        with patch("astrbot.core.core_lifecycle.threading") as mock_threading:
             await lifecycle.restart()
 
-        mock_thread.assert_called_once()
-        mock_thread.return_value.start.assert_called_once()
+        mock_threading.Thread.assert_called_once()
+        mock_threading.Thread.return_value.start.assert_called_once()
 
     @pytest.mark.asyncio
-    @pytest.mark.xfail(reason="Lifecycle state machine changed post-merge")
     async def test_restart_awaits_metadata_update_task_before_manager_termination(
         self, mock_log_broker, mock_db
     ):
@@ -2111,11 +2154,11 @@ class TestAstrBotCoreLifecycleRestart:
 
         await asyncio.sleep(0)
 
-        with patch("astrbot.core.core_lifecycle.threading.Thread") as mock_thread:
+        with patch("astrbot.core.core_lifecycle.threading") as mock_threading:
             await lifecycle.restart()
 
-        mock_thread.assert_called_once()
-        mock_thread.return_value.start.assert_called_once()
+        mock_threading.Thread.assert_called_once()
+        mock_threading.Thread.return_value.start.assert_called_once()
 
 
 class TestAstrBotCoreLifecycleLoadPipelineScheduler:

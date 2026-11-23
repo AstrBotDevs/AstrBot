@@ -1,83 +1,49 @@
-"""Import smoke tests for astrbot.core.utils.command_parser."""
+"""Behavioral coverage for command tokenization and regular-expression matching."""
 
-import re
+import pytest
 
-from astrbot.core.utils import command_parser as command_parser_module
 from astrbot.core.utils.command_parser import CommandParserMixin, CommandTokens
 
 
-class TestImports:
-    def test_module_importable(self):
-        assert command_parser_module is not None
-
-    def test_command_tokens_class_exists(self):
-        assert CommandTokens is not None
-
-    def test_command_parser_mixin_class_exists(self):
-        assert CommandParserMixin is not None
-
-
-class TestCommandTokens:
-    def test_default_attributes(self):
-        tokens = CommandTokens()
-        assert tokens.tokens == []
-        assert tokens.len == 0
-
-    def test_get_returns_none_for_out_of_bounds(self):
-        tokens = CommandTokens()
-        assert tokens.get(0) is None
-
-    def test_get_returns_stripped_token(self):
-        tokens = CommandTokens()
-        tokens.tokens = ["hello", "world"]
-        tokens.len = 2
-        assert tokens.get(0) == "hello"
-        assert tokens.get(1) == "world"
-
-    def test_get_strips_whitespace(self):
-        tokens = CommandTokens()
-        tokens.tokens = ["  hello  ", "world  "]
-        tokens.len = 2
-        assert tokens.get(0) == "hello"
-        assert tokens.get(1) == "world"
+@pytest.mark.parametrize(
+    ("message", "expected"),
+    [
+        ("hello world", ["hello", "world"]),
+        ("a\tb\nc", ["a", "b", "c"]),
+        ("", [""]),
+        ("  hello  ", ["", "hello", ""]),
+        ("你好 世界", ["你好", "世界"]),
+    ],
+)
+def test_tokenization_preserves_positions(message: str, expected: list[str]) -> None:
+    tokens = CommandParserMixin().parse_commands(message)
+    assert tokens.tokens == expected
+    assert tokens.len == len(expected)
+    assert [tokens.get(i) for i in range(tokens.len)] == expected
+    assert tokens.get(-1) is None
+    assert tokens.get(tokens.len) is None
 
 
-class DummyParser(CommandParserMixin):
-    pass
+def test_token_lookup_strips_text_without_mutating_storage() -> None:
+    tokens = CommandTokens()
+    tokens.tokens = ["  first  ", "\tsecond\n"]
+    tokens.len = 2
+    assert tokens.get(0) == "first"
+    assert tokens.get(1) == "second"
+    assert tokens.tokens == ["  first  ", "\tsecond\n"]
 
 
-class TestCommandParserMixin:
-    def setup_method(self):
-        self.parser = DummyParser()
-
-    def test_parse_commands_returns_command_tokens(self):
-        result = self.parser.parse_commands("hello world")
-        assert isinstance(result, CommandTokens)
-
-    def test_parse_commands_splits_by_whitespace(self):
-        result = self.parser.parse_commands("hello   world  foo")
-        assert result.tokens == ["hello", "world", "foo"]
-        assert result.len == 3
-
-    def test_parse_commands_empty_string(self):
-        result = self.parser.parse_commands("")
-        assert result.tokens == [""]
-        assert result.len == 1
-
-    def test_regex_match_returns_true_on_match(self):
-        assert self.parser.regex_match("hello world", "hello") is True
-
-    def test_regex_match_returns_false_on_no_match(self):
-        assert self.parser.regex_match("hello world", "goodbye") is False
-
-    def test_regex_match_multiline(self):
-        text = "line1\nline2\nline3"
-        assert self.parser.regex_match(text, "^line2$") is True
-
-    def test_regex_match_uses_re_search(self):
-        assert self.parser.regex_match("abc123def", r"\d+") is True
-
-
-class TestImportsConstValues:
-    def test_re_module_available(self):
-        assert re is not None
+@pytest.mark.parametrize(
+    ("text", "pattern", "matches"),
+    [
+        ("prefix /help suffix", r"/help", True),
+        ("hello\n/help", r"^/help$", True),
+        ("helpful", r"^help$", False),
+        ("id=42", r"\d+", True),
+        ("", "", True),
+    ],
+)
+def test_regex_search_supports_multiline_anchors(
+    text: str, pattern: str, matches: bool
+) -> None:
+    assert CommandParserMixin().regex_match(text, pattern) is matches

@@ -1,11 +1,12 @@
 import json
 import os
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Sequence
 from contextlib import asynccontextmanager
 from datetime import datetime
 from pathlib import Path
+from typing import ClassVar
 
-from sqlalchemy import Column, Text, bindparam
+from sqlalchemy import Column, DateTime, Text, bindparam
 from sqlalchemy.dialects import sqlite
 from sqlalchemy.ext.asyncio import (
     AsyncEngine,
@@ -34,7 +35,7 @@ class BaseDocModel(SQLModel, table=False):
 class Document(BaseDocModel, table=True):
     """SQLModel for documents table."""
 
-    __tablename__ = "documents"
+    __tablename__: ClassVar[str] = "documents"
 
     id: int | None = Field(
         default=None,
@@ -44,8 +45,9 @@ class Document(BaseDocModel, table=True):
     doc_id: str = Field(nullable=False, unique=True)
     text: str = Field(nullable=False)
     metadata_: str | None = Field(default=None, sa_column=Column("metadata", Text))
-    created_at: datetime | None = Field(default=None)
-    updated_at: datetime | None = Field(default=None)
+    # Retain the legacy local timestamps without reinterpreting them as UTC.
+    created_at: datetime | None = Field(default=None, sa_type=DateTime(timezone=False))
+    updated_at: datetime | None = Field(default=None, sa_type=DateTime(timezone=False))
 
 
 class DocumentStorage:
@@ -686,7 +688,7 @@ class DocumentStorage:
     async def _insert_fts_rows_batch(
         self,
         session: AsyncSession,
-        documents: list[Document],
+        documents: Sequence[Document],
         contents: list[str],
     ) -> None:
         if not self.fts5_available:
@@ -746,7 +748,7 @@ class DocumentStorage:
     async def _delete_fts_rows_batch(
         self,
         session: AsyncSession,
-        documents: list[Document],
+        documents: Sequence[Document],
     ) -> None:
         if not self.fts5_available:
             return

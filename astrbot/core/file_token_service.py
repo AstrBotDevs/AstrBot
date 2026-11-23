@@ -1,34 +1,36 @@
 import asyncio
-import platform
 import time
 import uuid
-from typing import Any
-from urllib.parse import unquote, urlparse
 
 import anyio
 
 
 class FileTokenService:
-    """维护一个简单的基于令牌的文件下载服务,支持超时和懒清除｡"""
+    """Serve token-authorized file downloads with expiration and lazy cleanup."""
 
     def __init__(self, default_timeout: float = 300) -> None:
         self.lock = asyncio.Lock()
-        self.staged_files: dict[
-            str,
-            tuple[str, float],
-        ] = {}  # token: (file_path, expire_time)
+        self.staged_files: dict[str, tuple[str, float, bool]] = {}
         self.default_timeout = default_timeout
 
     async def _cleanup_expired_tokens(self) -> None:
-        """清理过期的令牌"""
+        """Remove expired tokens."""
         now = time.time()
         expired_tokens = [
-            token for token, (_, expire) in self.staged_files.items() if expire < now
+            token for token, (_, expire, _) in self.staged_files.items() if expire < now
         ]
         for token in expired_tokens:
             self.staged_files.pop(token, None)
 
     async def check_token_expired(self, file_token: str) -> bool:
+        """Check whether a token is expired, consumed, or missing.
+
+        Args:
+            file_token: The token returned when registering a file.
+
+        Returns:
+            Whether the token is unavailable for file access.
+        """
         async with self.lock:
             await self._cleanup_expired_tokens()
             return file_token not in self.staged_files
@@ -36,34 +38,34 @@ class FileTokenService:
     async def register_file(
         self,
         file_path: str,
+        timeout: float | None = None,  # noqa: ASYNC109 - Token lifetime retained as a public keyword.
+        *,
+        single_use: bool = True,
         expire_seconds: float | None = None,
-        **kwargs: Any,
     ) -> str:
-        """向令牌服务注册一个文件｡
+        """Register a file for token-authorized access.
 
         Args:
-            file_path(str): 文件路径
-            expire_seconds(float): 超时时间,单位秒(可选)
+            file_path: The local file path or file URI.
+            timeout: The token lifetime in seconds, or the default lifetime.
+            expire_seconds: Legacy lifetime alias, taking precedence over timeout.
+            single_use: Whether to consume the token on its first file access.
+                Set to False for resources that need repeated access until expiry.
 
         Returns:
-            str: 一个单次令牌
+            The token used to access the file.
 
         Raises:
-            FileNotFoundError: 当路径不存在时抛出
-
+            FileNotFoundError: If the file path does not exist.
         """
-        # 处理 file:///
         try:
-            parsed_uri = urlparse(file_path)
-            if parsed_uri.scheme == "file":
-                local_path = unquote(parsed_uri.path)
-                if platform.system() == "Windows" and local_path.startswith("/"):
-                    local_path = local_path[1:]
-            else:
-                # 如果没有 file:/// 前缀,则认为是普通路径
-                local_path = file_path
+            from astrbot.core.utils.media_utils import file_uri_to_path, is_file_uri
+
+            local_path = (
+                file_uri_to_path(file_path) if is_file_uri(file_path) else file_path
+            )
         except Exception:
-            # 解析失败时,按原路径处理
+            # Fall back to the original path if URL parsing fails.
             local_path = file_path
 
         async with self.lock:
@@ -75,36 +77,28 @@ class FileTokenService:
                 )
 
             file_token = str(uuid.uuid4())
-            timeout = kwargs.pop("timeout", None)
-            if kwargs:
-                unknown_kwargs = ", ".join(sorted(kwargs.keys()))
-                raise ValueError(f"Unexpected arguments: {unknown_kwargs}")
-
-            resolved_expire = (
+            expire_time = time.time() + (
                 expire_seconds
                 if expire_seconds is not None
                 else timeout
                 if timeout is not None
                 else self.default_timeout
             )
-            expire_time = time.time() + resolved_expire
-            # 存储转换后的真实路径
-            self.staged_files[file_token] = (local_path, expire_time)
+            self.staged_files[file_token] = (local_path, expire_time, single_use)
             return file_token
 
     async def handle_file(self, file_token: str) -> str:
-        """根据令牌获取文件路径,使用后令牌失效｡
+        """Resolve a file path, consuming the token only when it is single-use.
 
         Args:
-            file_token(str): 注册时返回的令牌
+            file_token: The token returned when registering a file.
 
         Returns:
-            str: 文件路径
+            The registered local file path.
 
         Raises:
-            KeyError: 当令牌不存在或已过期时抛出
-            FileNotFoundError: 当文件本身已被删除时抛出
-
+            KeyError: If the token is missing, consumed, or expired.
+            FileNotFoundError: If the registered file has been deleted.
         """
         async with self.lock:
             await self._cleanup_expired_tokens()
@@ -112,7 +106,9 @@ class FileTokenService:
             if file_token not in self.staged_files:
                 raise KeyError(f"Invalid or expired file token: {file_token}")
 
-            file_path, _ = self.staged_files.pop(file_token)
+            file_path, _, single_use = self.staged_files[file_token]
+            if single_use:
+                self.staged_files.pop(file_token)
             if not await anyio.Path(file_path).exists():
                 raise FileNotFoundError(f"File does not exist: {file_path}")
             return file_path

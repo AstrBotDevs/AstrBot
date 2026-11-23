@@ -30,24 +30,30 @@ from .prompts import TEXT_REPAIR_SYSTEM_PROMPT
 
 
 class RateLimiter:
-    """一个简单的速率限制器"""
+    """Space concurrent callers according to the configured request rate.
+
+    Serialize waiting and release-time updates so an event loop stall cannot
+    cause overdue callers to be released together. The lock is released before
+    the caller starts its request.
+    """
 
     def __init__(self, max_rpm: int) -> None:
         self.max_per_minute = max_rpm
         self.interval = 60.0 / max_rpm if max_rpm > 0 else 0
         self.last_call_time = 0
+        self._lock = asyncio.Lock()
 
     async def __aenter__(self):
         if self.interval == 0:
             return
 
-        now = time.monotonic()
-        elapsed = now - self.last_call_time
+        async with self._lock:
+            elapsed = time.monotonic() - self.last_call_time
+            if elapsed < self.interval:
+                await asyncio.sleep(self.interval - elapsed)
 
-        if elapsed < self.interval:
-            await asyncio.sleep(self.interval - elapsed)
-
-        self.last_call_time = time.monotonic()
+            # Base the next wait on the actual release time, including delays.
+            self.last_call_time = time.monotonic()
 
     async def __aexit__(self, exc_type, exc_val, exc_tb):
         pass
@@ -847,9 +853,11 @@ class KBHelper:
 
         if not cleaning_provider_id:
             logger.warning(
-                "启用了内容清洗,但未提供 cleaning_provider_id,跳过清洗并使用默认分块｡",
+                "Content cleaning has no provider ID; using the requested chunking parameters.",
             )
-            return await self.chunker.chunk(content)
+            return await self.chunker.chunk(
+                content, chunk_size=chunk_size, chunk_overlap=chunk_overlap
+            )
 
         if progress_callback:
             await progress_callback("cleaning", 0, 100)
@@ -906,5 +914,7 @@ class KBHelper:
 
         except Exception as e:
             logger.error(f"使用 Provider '{cleaning_provider_id}' 清洗内容失败: {e}")
-            # 清洗失败,返回默认分块结果,保证流程不中断
-            return await self.chunker.chunk(content)
+            # Preserve the caller's chunk boundaries when cleaning fails.
+            return await self.chunker.chunk(
+                content, chunk_size=chunk_size, chunk_overlap=chunk_overlap
+            )

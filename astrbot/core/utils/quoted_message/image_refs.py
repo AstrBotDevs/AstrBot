@@ -34,13 +34,21 @@ def looks_like_image_file_name(name: str) -> bool:
     return ext in IMAGE_EXTENSIONS
 
 
-def convert_data_image_to_base64_ref(image_ref: str) -> str | None:
+def _normalize_reference_text(image_ref: object) -> tuple[str, str] | None:
+    """Prepare one nonempty reference while retaining its original case."""
     if not isinstance(image_ref, str):
         return None
     value = image_ref.strip()
     if not value:
         return None
-    lower_value = value.lower()
+    return value, value.lower()
+
+
+def convert_data_image_to_base64_ref(image_ref: str) -> str | None:
+    normalized = _normalize_reference_text(image_ref)
+    if normalized is None:
+        return None
+    value, lower_value = normalized
     if not lower_value.startswith("data:image/"):
         return None
 
@@ -66,12 +74,10 @@ def get_existing_local_path(value: str) -> str | None:
 
 
 def normalize_image_ref(image_ref: str) -> str | None:
-    if not isinstance(image_ref, str):
+    normalized = _normalize_reference_text(image_ref)
+    if normalized is None:
         return None
-    value = image_ref.strip()
-    if not value:
-        return None
-    lower_value = value.lower()
+    value, lower_value = normalized
 
     if lower_value.startswith(("http://", "https://")):
         return value

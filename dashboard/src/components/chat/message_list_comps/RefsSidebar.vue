@@ -1,17 +1,20 @@
 <template>
-  <transition name="slide-left">
-    <div v-if="isOpen" class="refs-sidebar">
+  <transition name="chat-panel">
+    <div v-if="isOpen" class="refs-sidebar chat-side-panel">
       <div class="sidebar-header">
-        <h3 class="sidebar-title">
-          {{ tm("refs.title") }}
-        </h3>
-        <v-btn icon="mdi-close" size="small" variant="text" @click="close" />
+        <h3 class="sidebar-title">{{ tm("refs.title") }}</h3>
+        <v-btn
+          icon="mdi-close"
+          size="small"
+          variant="text"
+          @click="close"
+        ></v-btn>
       </div>
 
       <div class="refs-list">
         <div
-          v-for="(ref, index) in refs?.used || []"
-          :key="index"
+          v-for="(ref, index) in normalizedRefs"
+          :key="ref.index || index"
           class="ref-item"
           @click="openLink(ref.url)"
         >
@@ -27,17 +30,13 @@
             </div>
           </div>
           <div class="ref-item-content">
-            <div class="ref-item-title">
-              {{ ref.title }}
-            </div>
-            <div class="ref-item-url">
-              {{ formatUrl(ref.url) }}
-            </div>
+            <div class="ref-item-title">{{ ref.title }}</div>
+            <div class="ref-item-url">{{ formatUrl(ref.url) }}</div>
             <div v-if="ref.snippet" class="ref-item-snippet">
               {{ ref.snippet }}
             </div>
           </div>
-          <v-icon size="small" class="ref-item-arrow"> mdi-open-in-new </v-icon>
+          <v-icon size="small" class="ref-item-arrow">mdi-open-in-new</v-icon>
         </div>
       </div>
     </div>
@@ -45,9 +44,19 @@
 </template>
 
 <script lang="ts">
+import "@/components/chat/chatPanelTransition.css";
+import { defineComponent, type PropType } from "vue";
 import { useModuleI18n } from "@/i18n/composables";
 
-export default {
+interface Reference {
+  index?: string | number;
+  title?: string;
+  url?: string;
+  snippet?: string;
+  favicon?: string;
+}
+
+export default defineComponent({
   name: "RefsSidebar",
   props: {
     modelValue: {
@@ -55,7 +64,7 @@ export default {
       default: false,
     },
     refs: {
-      type: Object,
+      type: [Object, Array] as PropType<{ used?: Reference[] } | Reference[] | null>,
       default: null,
     },
   },
@@ -72,6 +81,13 @@ export default {
       set(value: boolean) {
         this.$emit("update:modelValue", value);
       },
+    },
+    normalizedRefs() {
+      const refs = this.refs;
+      const used = Array.isArray(refs) ? refs : refs?.used || [];
+      return used
+        .map((ref) => ({ ...ref, title: ref.title || ref.url || "Reference" }))
+        .filter((ref): ref is Reference & { url: string; title: string } => Boolean(ref.url));
     },
   },
   methods: {
@@ -105,12 +121,13 @@ export default {
       }
     },
   },
-};
+});
 </script>
 
 <style scoped>
 .refs-sidebar {
-  width: 360px;
+  --chat-side-panel-width: 360px;
+  width: var(--chat-side-panel-width);
   height: calc(100% - var(--chat-panel-top-offset, 0px));
   margin-top: var(--chat-panel-top-offset, 0px);
   background: var(--chat-page-bg, rgb(var(--v-theme-surface)));
@@ -118,21 +135,6 @@ export default {
   display: flex;
   flex-direction: column;
   flex-shrink: 0;
-}
-
-.slide-left-enter-active,
-.slide-left-leave-active {
-  transition: all 0.3s ease;
-}
-
-.slide-left-enter-from {
-  transform: translateX(100%);
-  opacity: 0;
-}
-
-.slide-left-leave-to {
-  transform: translateX(100%);
-  opacity: 0;
 }
 
 .sidebar-header {

@@ -1,54 +1,54 @@
-"""Import smoke tests for astrbot.core.utils.path_util."""
+"""Path mapping has deterministic Linux and Windows expectations."""
 
-from astrbot.core.utils import path_util as path_util_module
-from astrbot.core.utils.path_util import path_Mapping
+from types import SimpleNamespace
+from unittest.mock import Mock
 
+import pytest
 
-class TestImports:
-    def test_module_importable(self):
-        assert path_util_module is not None
-
-    def test_path_mapping_callable(self):
-        assert callable(path_Mapping)
+from astrbot.core.utils import path_util
 
 
-class TestPathMapping:
-    def test_returns_src_when_no_mapping_matches(self):
-        result = path_Mapping([], "/some/path")
-        assert result == "/some/path"
-
-    def test_returns_src_when_mappings_do_not_match(self):
-        result = path_Mapping(["/a:/b"], "/some/path")
-        assert result == "/some/path"
-
-    def test_maps_linux_to_windows_simple(self):
-        result = path_Mapping(["/linux/path:/windows/path"], "/linux/path/file.txt")
-        assert "/windows/path/file.txt" in result
-
-    def test_logs_warning_for_single_item_rule(self):
-        result = path_Mapping(["invalid"], "/some/path")
-        assert result == "/some/path"
-
-    def test_strips_file_prefix(self):
-        result = path_Mapping(
+@pytest.mark.parametrize(
+    ("mappings", "source", "expected"),
+    [
+        ([], "/some/path", "/some/path"),
+        (["/a:/b"], "/some/path", "/some/path"),
+        (
+            ["/linux/path:/windows/path"],
+            "/linux/path/file.txt",
+            "/windows/path/file.txt",
+        ),
+        (
             ["/linux/path:/windows/path"],
             "file:///linux/path/file.txt",
-        )
-        assert result == "/windows/path/file.txt"
+            "/windows/path/file.txt",
+        ),
+        (["/a/:/b/"], "/a/file.txt", "/b/file.txt"),
+        (["/a:/first", "/a:/second"], "/a/file.txt", "/first/file.txt"),
+    ],
+)
+def test_path_mapping_returns_exact_result(mappings, source, expected):
+    assert path_util.path_Mapping(mappings, source) == expected
 
-    def test_handles_windows_colon_path(self):
-        """Simulate a rule like C:/src:/dest that triggers the Windows path branch."""
-        result = path_Mapping(
-            ["C:/src:/dest"],
-            "C:/src/file.txt",
-        )
-        assert result is not None
-        assert isinstance(result, str)
 
-    def test_no_mapping_changes_src(self):
-        result = path_Mapping(["/a:/b"], "/unrelated/path")
-        assert result == "/unrelated/path"
+@pytest.mark.parametrize("rule", ["invalid", "a:b:c:d:e"])
+def test_invalid_mapping_is_reported_and_skipped(monkeypatch, rule):
+    logger = Mock()
+    monkeypatch.setattr(path_util, "logger", logger)
+    assert (
+        path_util.path_Mapping([rule, "/source:/target"], "/source/file")
+        == "/target/file"
+    )
+    logger.warning.assert_called_once()
+    assert rule in logger.warning.call_args.args[0]
 
-    def test_mapping_with_trailing_slashes(self):
-        result = path_Mapping(["/a/:/b/"], "/a/file.txt")
-        assert result == "/b/file.txt"
+
+def test_existing_windows_source_maps_to_linux_destination(monkeypatch):
+    exists = Mock(side_effect=lambda path: path == "C:/src")
+    monkeypatch.setattr(
+        path_util, "os", SimpleNamespace(path=SimpleNamespace(exists=exists))
+    )
+    assert (
+        path_util.path_Mapping(["C:/src:/dest"], "C:/src/file.txt") == "/dest/file.txt"
+    )
+    exists.assert_called_once_with("C:/src")

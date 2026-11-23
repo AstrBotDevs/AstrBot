@@ -1,242 +1,246 @@
-"""Tests for CronMessageEvent."""
+"""Cron wakeups preserve their target, permissions and delivery accounting."""
 
-import time
-from unittest.mock import AsyncMock, MagicMock, patch
+import asyncio
+from types import SimpleNamespace
+from unittest.mock import AsyncMock, Mock
+from uuid import UUID
 
 import pytest
 
-from astrbot.core.cron.events import CronMessageEvent
+from astrbot.core.agent_wakeup import wake_main_agent
 from astrbot.core.message.components import Plain
 from astrbot.core.message.message_event_result import MessageChain
-from astrbot.core.platform.astr_message_event import AstrMessageEvent
+from astrbot.core.platform import agent_wakeup_event as wakeups
+from astrbot.core.platform.agent_wakeup_event import AgentWakeupEvent
+from astrbot.core.platform.astr_message_event import (
+    AstrMessageEvent,
+    streaming_response_event,
+)
 from astrbot.core.platform.message_session import MessageSession
 from astrbot.core.platform.message_type import MessageType
+from astrbot.core.platform.platform_metadata import PlatformMetadata
 
 
 @pytest.fixture
-def mock_context():
-    ctx = MagicMock()
-    ctx.send_message = AsyncMock()
-    return ctx
+def cron_target():
+    session = MessageSession.from_str("test-adapter:GroupMessage:room:alice")
+    metadata = PlatformMetadata(
+        name="test", description="Test adapter", id="test-adapter"
+    )
+    queue = asyncio.Queue()
+    context = SimpleNamespace(
+        send_message=AsyncMock(return_value=True),
+        get_platform_inst=Mock(return_value=SimpleNamespace(meta=lambda: metadata)),
+        get_event_queue=Mock(return_value=queue),
+    )
+    return context, session, metadata, queue
 
 
 @pytest.fixture
-def mock_session():
-    session = MagicMock(spec=MessageSession)
-    session.session_id = "test-session-id"
-    session.platform_id = "test-platform"
-    return session
+def cron_event(cron_target):
+    context, session, metadata, _ = cron_target
+    return AgentWakeupEvent(
+        context=context,
+        session=session,
+        platform_meta=metadata,
+        prompt="Run the scheduled check.",
+        source="cron",
+        source_id="job-1",
+        role="admin",
+    )
 
 
-class TestCronMessageEventInit:
-    """Tests for CronMessageEvent construction."""
-
-    def test_init_default_params(self, mock_context, mock_session):
-        """Default params produce a synthetic event with correct attributes."""
-        event = CronMessageEvent(
-            context=mock_context,
-            session=mock_session,
-            message="Hello from cron",
-        )
-        assert event.message_str == "Hello from cron"
-        assert event.is_at_or_wake_command is True
-        assert event.is_wake is True
-        assert event.session == mock_session
-        assert event.context_obj == mock_context
-
-    def test_init_sender_defaults(self, mock_context, mock_session):
-        """Default sender_id and sender_name are 'astrbot' and 'Scheduler'."""
-        event = CronMessageEvent(
-            context=mock_context,
-            session=mock_session,
-            message="Test",
-        )
-        assert event.message_obj.self_id == "astrbot"
-        assert event.message_obj.sender.nickname == "Scheduler"
-        assert event.message_obj.sender.user_id == "test-session-id"
-
-    def test_init_custom_sender(self, mock_context, mock_session):
-        """Custom sender_id and sender_name are reflected on the message object."""
-        event = CronMessageEvent(
-            context=mock_context,
-            session=mock_session,
-            message="Test",
-            sender_id="custom-bot",
-            sender_name="CustomName",
-        )
-        assert event.message_obj.self_id == "custom-bot"
-        assert event.message_obj.sender.nickname == "CustomName"
-
-    def test_init_with_extras(self, mock_context, mock_session):
-        """Extras dict is merged into _extras."""
-        extras = {"origin": "api", "cron_payload": {"key": "value"}}
-        event = CronMessageEvent(
-            context=mock_context,
-            session=mock_session,
-            message="Test",
-            extras=extras,
-        )
-        assert event._extras.get("origin") == "api"
-        assert event._extras["cron_payload"] == {"key": "value"}
-
-    def test_init_group_message_type(self, mock_context, mock_session):
-        """MessageType.GROUP_MESSAGE is preserved in the message object."""
-        event = CronMessageEvent(
-            context=mock_context,
-            session=mock_session,
-            message="Test",
-            message_type=MessageType.GROUP_MESSAGE,
-        )
-        assert event.message_obj.type == MessageType.GROUP_MESSAGE
-
-    def test_init_platform_meta(self, mock_context, mock_session):
-        """Platform metadata is set to cron / CronJob / platform_id."""
-        event = CronMessageEvent(
-            context=mock_context,
-            session=mock_session,
-            message="Test",
-        )
-        assert event.platform_meta.name == "cron"
-        assert event.platform_meta.description == "CronJob"
-        assert event.platform_meta.id == "test-platform"
-
-    def test_init_message_components(self, mock_context, mock_session):
-        """The message is wrapped in a Plain component."""
-        event = CronMessageEvent(
-            context=mock_context,
-            session=mock_session,
-            message="Cron message text",
-        )
-        assert len(event.message_obj.message) == 1
-        assert isinstance(event.message_obj.message[0], Plain)
-        assert event.message_obj.message[0].text == "Cron message text"
-        assert event.message_obj.message_str == "Cron message text"
-        assert event.message_obj.raw_message == "Cron message text"
-
-    def test_init_timestamp_within_range(self, mock_context, mock_session):
-        """Timestamp is set to the current time."""
-        before = int(time.time())
-        event = CronMessageEvent(
-            context=mock_context,
-            session=mock_session,
-            message="Test",
-        )
-        after = int(time.time())
-        assert before <= event.message_obj.timestamp <= after
-
-    def test_init_message_id_is_uuid_hex(self, mock_context, mock_session):
-        """Message ID is a 32-char hex string (uuid4 hex)."""
-        event = CronMessageEvent(
-            context=mock_context,
-            session=mock_session,
-            message="Test",
-        )
-        mid = event.message_obj.message_id
-        assert isinstance(mid, str)
-        assert len(mid) == 32
-        # All characters should be valid hex digits
-        int(mid, 16)
-
-    def test_init_none_extras_does_not_raise(self, mock_context, mock_session):
-        """Passing extras=None does not raise."""
-        event = CronMessageEvent(
-            context=mock_context,
-            session=mock_session,
-            message="Test",
-            extras=None,
-        )
-        # Should not raise; _extras remains default
-        assert isinstance(event._extras, dict)
-
-    def test_init_uses_session_session_id(self, mock_context, mock_session):
-        """Session ID is taken from session.session_id."""
-        event = CronMessageEvent(
-            context=mock_context,
-            session=mock_session,
-            message="Test",
-        )
-        assert event.session_id == "test-session-id"
+def test_cron_wakeup_preserves_the_real_target_instead_of_a_synthetic_platform(
+    cron_event, cron_target
+):
+    context, session, metadata, _ = cron_target
+    assert cron_event.context_obj is context
+    assert cron_event.session is session
+    assert cron_event.platform_meta is metadata
+    assert cron_event.unified_msg_origin == str(session)
+    assert cron_event.message_obj.type == MessageType.GROUP_MESSAGE
+    assert cron_event.session_id == "room:alice"
 
 
-class TestCronMessageEventSend:
-    """Tests for CronMessageEvent.send."""
+def test_cron_wakeup_preserves_prompt_and_resolved_permissions(cron_event):
+    assert cron_event.source == "cron"
+    assert cron_event.source_id == "job-1"
+    assert cron_event.role == "admin"
+    assert cron_event.message_str == "Run the scheduled check."
+    assert [part.text for part in cron_event.get_messages()] == [
+        "Run the scheduled check."
+    ]
+    assert cron_event.is_wake is True
+    assert cron_event.is_at_or_wake_command is True
+    assert cron_event.get_extra("_session_resolved") is True
+    assert cron_event.get_extra("_role_resolved") is True
+    assert cron_event.get_extra("enable_streaming") is False
 
-    @pytest.mark.asyncio
-    async def test_send_calls_context(self, mock_context, mock_session):
-        """send delegates to context.send_message on the original session."""
-        event = CronMessageEvent(
-            context=mock_context,
-            session=mock_session,
-            message="Test",
-        )
-        chain = MessageChain([Plain("response")])
 
-        with patch.object(AstrMessageEvent, "send", new_callable=AsyncMock):
-            await event.send(chain)
+def test_cron_wakeup_generates_an_explicit_message_identity(cron_target, monkeypatch):
+    context, session, metadata, _ = cron_target
+    monkeypatch.setattr(wakeups.uuid, "uuid4", lambda: UUID(int=42))
+    event = AgentWakeupEvent(
+        context=context,
+        session=session,
+        platform_meta=metadata,
+        prompt="check",
+        source="cron",
+    )
+    assert event.message_obj.message_id == UUID(int=42).hex
+    assert event.message_obj.sender.user_id == "astrbot"
+    assert event.message_obj.sender.nickname == "System"
 
-        mock_context.send_message.assert_awaited_once()
 
-    @pytest.mark.asyncio
-    async def test_send_none_is_noop(self, mock_context, mock_session):
-        """send(None) returns immediately without calling context."""
-        event = CronMessageEvent(
-            context=mock_context,
-            session=mock_session,
-            message="Test",
-        )
-        with patch.object(AstrMessageEvent, "send", new_callable=AsyncMock) as mock_super:
-            await event.send(None)
-
-        mock_context.send_message.assert_not_called()
-        mock_super.assert_not_called()
-
-    @pytest.mark.asyncio
-    async def test_send_calls_super(self, mock_context, mock_session):
-        """send also delegates to super().send()."""
-        event = CronMessageEvent(
-            context=mock_context,
-            session=mock_session,
-            message="Test",
-        )
-        chain = MessageChain([Plain("response")])
-
-        with patch.object(AstrMessageEvent, "send", new_callable=AsyncMock) as mock_super:
-            await event.send(chain)
-
-        mock_super.assert_awaited_once_with(chain)
-
-    @pytest.mark.asyncio
-    async def test_send_streaming_iterates_generator(self, mock_context, mock_session):
-        """send_streaming calls send for each yielded chain."""
-        event = CronMessageEvent(
-            context=mock_context,
-            session=mock_session,
-            message="Test",
+@pytest.mark.parametrize("invalid_source", ["", "timer", "external"])
+def test_wakeup_rejects_unknown_sources(cron_target, invalid_source):
+    context, session, metadata, _ = cron_target
+    with pytest.raises(ValueError, match="Unsupported agent wakeup source"):
+        AgentWakeupEvent(
+            context=context,
+            session=session,
+            platform_meta=metadata,
+            prompt="check",
+            source=invalid_source,
         )
 
-        async def gen():
-            yield MessageChain([Plain("part1")])
-            yield MessageChain([Plain("part2")])
 
-        with patch.object(event, "send", new_callable=AsyncMock) as mock_send:
-            await event.send_streaming(gen())
-
-        assert mock_send.call_count == 2
-
-    @pytest.mark.asyncio
-    async def test_send_streaming_empty_generator(self, mock_context, mock_session):
-        """send_streaming does not call send when the generator is empty."""
-        event = CronMessageEvent(
-            context=mock_context,
-            session=mock_session,
-            message="Test",
+def test_wakeup_rejects_mismatched_adapter_metadata(cron_target):
+    context, session, _, _ = cron_target
+    with pytest.raises(ValueError, match="must match"):
+        AgentWakeupEvent(
+            context=context,
+            session=session,
+            platform_meta=PlatformMetadata(
+                name="test", description="Other", id="other"
+            ),
+            prompt="check",
+            source="cron",
         )
 
-        async def empty_gen():
-            if False:
-                yield  # pragma: no cover
 
-        with patch.object(event, "send", new_callable=AsyncMock) as mock_send:
-            await event.send_streaming(empty_gen())
+@pytest.mark.asyncio
+async def test_cron_submission_queues_one_event_for_the_original_umo(cron_target):
+    context, session, _, queue = cron_target
+    await wake_main_agent(
+        context,
+        umo=str(session),
+        user_prompt="Scheduled input",
+        source="cron",
+        source_id="job-7",
+        role="member",
+    )
+    assert queue.qsize() == 1
+    event = queue.get_nowait()
+    assert isinstance(event, AgentWakeupEvent)
+    assert event.unified_msg_origin == str(session)
+    assert event.source_id == "job-7"
+    assert event.message_str == "Scheduled input"
+    assert event.role == "member"
+    context.send_message.assert_not_awaited()
 
-        mock_send.assert_not_called()
+
+@pytest.mark.asyncio
+async def test_cancelled_cron_submission_does_not_resolve_or_enqueue(cron_target):
+    context, session, _, queue = cron_target
+    stopped = asyncio.Event()
+    stopped.set()
+    await wake_main_agent(
+        context,
+        umo=str(session),
+        user_prompt="Cancelled input",
+        source="cron",
+        stop_signal=stopped,
+    )
+    context.get_platform_inst.assert_not_called()
+    assert queue.empty()
+
+
+@pytest.mark.asyncio
+async def test_missing_target_adapter_fails_without_enqueuing(cron_target):
+    context, session, _, queue = cron_target
+    context.get_platform_inst.return_value = None
+    with pytest.raises(ValueError, match="not found"):
+        await wake_main_agent(
+            context, umo=str(session), user_prompt="check", source="cron"
+        )
+    assert queue.empty()
+
+
+@pytest.mark.asyncio
+async def test_successful_send_uses_exact_target_and_records_once(
+    cron_event, cron_target, monkeypatch
+):
+    context, session, _, _ = cron_target
+    record_send = AsyncMock()
+    monkeypatch.setattr(AstrMessageEvent, "send", record_send)
+    chain = MessageChain([Plain("response")])
+    previous = streaming_response_event.get()
+    await cron_event.send(chain)
+    context.send_message.assert_awaited_once_with(session, chain)
+    record_send.assert_awaited_once_with(chain)
+    assert streaming_response_event.get() is previous
+
+
+@pytest.mark.asyncio
+async def test_unsent_message_is_not_recorded_as_delivered(
+    cron_event, cron_target, monkeypatch
+):
+    context, _, _, _ = cron_target
+    context.send_message.return_value = False
+    record_send = AsyncMock()
+    monkeypatch.setattr(AstrMessageEvent, "send", record_send)
+    await cron_event.send(MessageChain([Plain("response")]))
+    record_send.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_send_failure_restores_streaming_context_and_propagates(
+    cron_event, cron_target, monkeypatch
+):
+    context, _, _, _ = cron_target
+    context.send_message.side_effect = RuntimeError("delivery failed")
+    record_send = AsyncMock()
+    monkeypatch.setattr(AstrMessageEvent, "send", record_send)
+    previous = streaming_response_event.get()
+    with pytest.raises(RuntimeError, match="delivery failed"):
+        await cron_event.send(MessageChain([Plain("response")]))
+    assert streaming_response_event.get() is previous
+    record_send.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_send_none_has_no_delivery_side_effect(cron_event, cron_target):
+    context, _, _, _ = cron_target
+    await cron_event.send(None)
+    context.send_message.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_streaming_chunks_are_buffered_into_one_complete_delivery(
+    cron_event, cron_target, monkeypatch
+):
+    context, session, _, _ = cron_target
+    monkeypatch.setattr(AstrMessageEvent, "send", AsyncMock())
+
+    async def chunks():
+        yield MessageChain([Plain("first ")])
+        yield MessageChain([])
+        yield MessageChain([Plain("second")])
+
+    await cron_event.send_streaming(chunks())
+    context.send_message.assert_awaited_once()
+    actual_session, message = context.send_message.await_args.args
+    assert actual_session is session
+    assert [part.text for part in message.chain] == ["first second"]
+
+
+@pytest.mark.asyncio
+async def test_empty_stream_has_no_delivery(cron_event, cron_target):
+    context, _, _, _ = cron_target
+
+    async def chunks():
+        yield MessageChain([])
+
+    await cron_event.send_streaming(chunks())
+    context.send_message.assert_not_awaited()

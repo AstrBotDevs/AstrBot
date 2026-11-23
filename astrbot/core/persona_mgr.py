@@ -1,14 +1,28 @@
+from typing import TypedDict
+
 from astrbot import logger
-from astrbot.api import sp
 from astrbot.core.astrbot_config_mgr import AstrBotConfigManager
+from astrbot.core.config.runtime import current_message_config
 from astrbot.core.db import BaseDatabase
 from astrbot.core.db.po import Persona, PersonaFolder, Personality
 from astrbot.core.platform.message_session import MessageSession
 from astrbot.core.sentinels import NOT_GIVEN
+from astrbot.core.session_overrides import get_overrides
+
+SYSTEM_DEFAULT_PERSONA_ID = "default"
+"""Reserved persona id for the built-in system default persona.
+
+Its value is intentionally the literal string ``"default"``. The Agent Runner
+config schema (``astrbot.core.config.agent_runner``), the migration helper and
+the WebUI contract still rely on that raw string, so this constant only
+centralizes the in-module usages; keep it in sync with those call sites if the
+reserved id ever changes.
+"""
+
 
 DEFAULT_PERSONALITY = Personality(
     prompt="You are a helpful and friendly assistant.",
-    name="default",
+    name=SYSTEM_DEFAULT_PERSONA_ID,
     begin_dialogs=[],
     mood_imitation_dialogs=[],
     tools=None,
@@ -19,20 +33,47 @@ DEFAULT_PERSONALITY = Personality(
 )
 
 
+class LegacyPersonaConfig(TypedDict):
+    """Persisted persona fields exposed through the version-three compatibility API."""
+
+    prompt: str
+    name: str
+    begin_dialogs: list[str]
+    mood_imitation_dialogs: list[str]
+    tools: list[str] | None
+    skills: list[str] | None
+    custom_error_message: str | None
+
+
 class PersonaManager:
     def __init__(self, db_helper: BaseDatabase, acm: AstrBotConfigManager) -> None:
         self.db = db_helper
         self.acm = acm
-        default_ps = acm.default_conf.get("provider_settings", {})
-        self.default_persona: str = default_ps.get("default_personality", "default")
+        default_runner = acm.default_conf.get("agent", {})
+        default_runner_config = default_runner.get("config", {})
+        self.default_persona: str = (
+            default_runner_config.get("persona", {}).get(
+                "persona_id", SYSTEM_DEFAULT_PERSONA_ID
+            )
+            if default_runner.get("runtime") == "astrbot"
+            else default_runner_config.get("persona_id", SYSTEM_DEFAULT_PERSONA_ID)
+        )
         self.personas: list[Persona] = []
         self.selected_default_persona: Persona | None = None
         self.personas_v3: list[Personality] = []
         self.selected_default_persona_v3: Personality | None = None
-        self.persona_v3_config: list[dict] = []
+        self.persona_v3_config: list[LegacyPersonaConfig] = []
 
     async def initialize(self) -> None:
         self.personas = await self.get_all_personas()
+        if not any(
+            persona.persona_id == SYSTEM_DEFAULT_PERSONA_ID for persona in self.personas
+        ):
+            default_persona = await self.db.insert_persona(
+                persona_id=SYSTEM_DEFAULT_PERSONA_ID,
+                system_prompt=DEFAULT_PERSONALITY["prompt"],
+            )
+            self.personas.append(default_persona)
         self.get_v3_persona_data()
         logger.info("Loaded %s personas.", len(self.personas))
 
@@ -47,17 +88,34 @@ class PersonaManager:
         """Resolve a v3 persona object by id.
 
         - None/empty id returns None.
-        - "default" maps to in-memory DEFAULT_PERSONALITY.
-        - Otherwise search in personas_v3 by persona name.
+        - A persona in personas_v3 with the same name takes precedence, so the
+          system default persona (id ``SYSTEM_DEFAULT_PERSONA_ID``, whose value
+          is the literal ``"default"``) stays reachable and editable.
+        - ``SYSTEM_DEFAULT_PERSONA_ID`` falls back to the in-memory
+          DEFAULT_PERSONALITY only when no persona with that name exists.
         """
         if not persona_id:
+            logger.debug("[persona] get_persona_v3_by_id(None) -> None")
             return None
-        if persona_id == "default":
-            return DEFAULT_PERSONALITY
-        return next(
+        persona = next(
             (persona for persona in self.personas_v3 if persona["name"] == persona_id),
             None,
         )
+        if persona is not None:
+            logger.debug(
+                "[persona] get_persona_v3_by_id(%r) -> matched stored persona",
+                persona_id,
+            )
+            return persona
+        if persona_id == SYSTEM_DEFAULT_PERSONA_ID:
+            logger.debug(
+                "[persona] get_persona_v3_by_id(%r) -> built-in "
+                "DEFAULT_PERSONALITY (no stored persona with that name)",
+                SYSTEM_DEFAULT_PERSONA_ID,
+            )
+            return DEFAULT_PERSONALITY
+        logger.debug("[persona] get_persona_v3_by_id(%r) -> None", persona_id)
+        return None
 
     async def get_default_persona_v3(
         self,
@@ -65,9 +123,14 @@ class PersonaManager:
     ) -> Personality:
         """获取默认 persona"""
         cfg = self.acm.get_conf(umo)
-        default_persona_id = cfg.get("provider_settings", {}).get(
-            "default_personality",
-            "default",
+        agent_runner = cfg.get("agent", {})
+        runner_config = agent_runner.get("config", {})
+        default_persona_id = (
+            runner_config.get("persona", {}).get(
+                "persona_id", SYSTEM_DEFAULT_PERSONA_ID
+            )
+            if agent_runner.get("runtime") == "astrbot"
+            else runner_config.get("persona_id", SYSTEM_DEFAULT_PERSONA_ID)
         )
         return self.get_persona_v3_by_id(default_persona_id) or DEFAULT_PERSONALITY
 
@@ -75,59 +138,93 @@ class PersonaManager:
         self,
         *,
         umo: str | MessageSession,
-        conversation_persona_id: str | None,
         platform_name: str,
-        provider_settings: dict | None = None,
-    ) -> tuple[str | None, Personality | None, str | None, bool]:
-        """解析当前会话最终生效的人格｡
+    ) -> tuple[str | None, Personality | None, bool]:
+        """Resolve the persona from the effective session configuration.
+
+        Args:
+            umo: Session whose effective configuration selects the persona.
+            platform_name: Platform name used for the WebChat default prompt.
 
         Returns:
             tuple:
                 - selected persona_id
                 - selected persona object
-                - force applied persona_id from session rule
                 - whether use webchat special default persona
-
         """
-        session_service_config = (
-            await sp.get_async(
-                scope="umo",
-                scope_id=str(umo),
-                key="session_service_config",
-                default={},
+        scope = current_message_config.get()
+        if (
+            scope is not None
+            and scope.active
+            and scope.umo == str(umo)
+            and scope.context.plugin_manager.context.astrbot_config_mgr is self.acm
+        ):
+            overrides = scope.override_paths
+        else:
+            overrides = await get_overrides(str(umo))
+        cfg = self.acm.get_conf(umo)
+        agent_runner = cfg.get("agent", {})
+        runner_config = agent_runner.get("config", {})
+        persona_id = (
+            runner_config.get("persona", {}).get(
+                "persona_id", SYSTEM_DEFAULT_PERSONA_ID
             )
-            or {}
+            if agent_runner.get("runtime") == "astrbot"
+            else runner_config.get("persona_id", SYSTEM_DEFAULT_PERSONA_ID)
         )
-        force_applied_persona_id = session_service_config.get("persona_id")
-        persona_id = force_applied_persona_id
-        if not persona_id:
-            persona_id = conversation_persona_id
-            if persona_id == "[%None]":
-                pass
-            elif persona_id is None:
-                persona_id = (provider_settings or {}).get("default_personality")
+
         persona = next(
             (item for item in self.personas_v3 if item["name"] == persona_id),
             None,
         )
+        is_implicit_system_default = (
+            "agent.config.persona.persona_id" not in overrides
+            and "agent.config.persona_id" not in overrides
+            and persona_id == SYSTEM_DEFAULT_PERSONA_ID
+        )
+        logger.debug(
+            "[persona] resolve_selected_persona: umo=%s -> persona_id=%r "
+            "matched_persona=%r "
+            "implicit_system_default=%s",
+            umo,
+            persona_id,
+            persona["name"] if persona else None,
+            is_implicit_system_default,
+        )
+
+        if is_implicit_system_default and platform_name == "webchat":
+            # WebChat keeps its dedicated ChatUI default prompt (gated by the
+            # request flag) instead of the editable system default persona.
+            persona = None
+
         use_webchat_special_default = False
-        if not persona and platform_name == "webchat" and (persona_id != "[%None]"):
+        if not persona and platform_name == "webchat" and persona_id != "[%None]":
             persona_id = "_chatui_default_"
             use_webchat_special_default = True
+
         return (
             persona_id,
             persona,
-            force_applied_persona_id,
             use_webchat_special_default,
         )
 
     async def delete_persona(self, persona_id: str) -> None:
         """删除指定 persona"""
+        if persona_id == SYSTEM_DEFAULT_PERSONA_ID:
+            raise ValueError("The system default persona cannot be deleted.")
         if not await self.db.get_persona_by_id(persona_id):
             raise ValueError(f"Persona with ID {persona_id} does not exist.")
         await self.db.delete_persona(persona_id)
         self.personas = [p for p in self.personas if p.persona_id != persona_id]
         self.get_v3_persona_data()
+
+    def _update_cached_persona(self, persona_id: str, persona: Persona | None) -> None:
+        """Replace only an existing cached persona after a successful database write."""
+        if persona:
+            for i, p in enumerate(self.personas):
+                if p.persona_id == persona_id:
+                    self.personas[i] = persona
+                    break
 
     async def update_persona(
         self,
@@ -155,11 +252,7 @@ class PersonaManager:
             begin_dialogs,
             **update_kwargs,
         )
-        if persona:
-            for i, p in enumerate(self.personas):
-                if p.persona_id == persona_id:
-                    self.personas[i] = persona
-                    break
+        self._update_cached_persona(persona_id, persona)
         self.get_v3_persona_data()
         return persona
 
@@ -192,11 +285,7 @@ class PersonaManager:
 
         """
         persona = await self.db.move_persona_to_folder(persona_id, folder_id)
-        if persona:
-            for i, p in enumerate(self.personas):
-                if p.persona_id == persona_id:
-                    self.personas[i] = persona
-                    break
+        self._update_cached_persona(persona_id, persona)
         return persona
 
     async def create_folder(
@@ -327,6 +416,10 @@ class PersonaManager:
             sort_order: 排序顺序
 
         """
+        if persona_id == SYSTEM_DEFAULT_PERSONA_ID:
+            raise ValueError(
+                "Persona ID 'default' is reserved for the system default persona."
+            )
         if await self.db.get_persona_by_id(persona_id):
             raise ValueError(f"Persona with ID {persona_id} already exists.")
         new_persona = await self.db.insert_persona(
@@ -377,7 +470,9 @@ class PersonaManager:
         self.get_v3_persona_data()
         return new_persona
 
-    def get_v3_persona_data(self) -> tuple[list[dict], list[Personality], Personality]:
+    def get_v3_persona_data(
+        self,
+    ) -> tuple[list[LegacyPersonaConfig], list[Personality], Personality]:
         """获取 AstrBot <4.0.0 版本的 persona 数据｡
 
         Returns:
@@ -386,7 +481,7 @@ class PersonaManager:
             - Personality: 默认选择的 Personality 对象｡
 
         """
-        v3_persona_config = [
+        v3_persona_config: list[LegacyPersonaConfig] = [
             {
                 "prompt": persona.system_prompt,
                 "name": persona.persona_id,
@@ -420,7 +515,7 @@ class PersonaManager:
                     )
                     user_turn = not user_turn
             try:
-                persona = {
+                persona: Personality = {
                     **persona_cfg,
                     "_begin_dialogs_processed": bd_processed,
                     "_mood_imitation_dialogs_processed": "",

@@ -1,162 +1,159 @@
 <template>
-  <div>
-    <div class="project-section-header">
-      <v-btn
-        variant="text"
-        class="project-btn"
-        prepend-icon="mdi-folder-outline"
-        @click="toggleExpanded"
+  <section class="sidebar-section project-list-shell">
+    <div class="sidebar-section-header">
+      <button
+        type="button"
+        class="project-section-toggle"
+        :aria-expanded="projectsExpanded"
+        @click="projectsExpanded = !projectsExpanded"
       >
-        {{ tm("project.title") }}
-        <template #append>
-          <v-icon size="small">
-            {{ expanded ? "mdi-chevron-up" : "mdi-chevron-down" }}
-          </v-icon>
-        </template>
-      </v-btn>
+        <span>{{ tm("project.title") }}</span>
+        <ChevronDown
+          v-if="projectsExpanded"
+          class="expanded-chevron"
+          :size="16"
+          aria-hidden="true"
+        />
+        <ChevronRight v-else :size="16" aria-hidden="true" />
+      </button>
       <v-btn
-        icon="mdi-plus"
+        icon
         size="x-small"
         variant="text"
+        class="section-action-btn"
         :title="tm('project.create')"
         @click="$emit('createProject')"
-      />
+      >
+        <Plus :size="18" />
+      </v-btn>
     </div>
 
-    <v-expand-transition>
-      <div v-show="expanded" class="project-list-wrap">
-        <v-list
-          density="compact"
-          nav
-          class="project-list"
-          style="background-color: transparent"
+    <div v-show="projectsExpanded" class="project-list-wrap">
+      <div v-if="!projects.length" class="project-list-empty">
+        {{ tm("project.noProjects") }}
+      </div>
+      <div v-for="project in projects" :key="project.project_id">
+        <div
+          class="project-row project-item"
+          :class="{ active: selectedProjectId === project.project_id }"
+          role="button"
+          tabindex="0"
+          @click="handleProjectClick(project)"
+          @keydown.enter="handleProjectClick(project)"
+          @keydown.space.prevent="handleProjectClick(project)"
         >
-          <template v-for="project in projects" :key="project.project_id">
-            <v-list-item
-              rounded="lg"
-              class="project-item"
-              :class="{ active: selectedProjectId === project.project_id }"
-              @click="handleProjectClick(project)"
+          <span class="project-emoji">{{ project.emoji || "📁" }}</span>
+          <span class="project-title-wrap">
+            <span class="project-title">{{ project.title }}</span>
+            <ChevronDown
+              v-if="isProjectExpanded(project.project_id)"
+              :size="16"
+              class="project-chevron"
+            />
+            <ChevronRight v-else :size="16" class="project-chevron" />
+          </span>
+          <span class="project-actions" @click.stop>
+            <v-btn
+              icon
+              size="x-small"
+              variant="text"
+              class="project-action-btn"
+              :title="tm('project.edit')"
+              @click="$emit('editProject', project)"
             >
-              <template #prepend>
-                <span class="project-emoji">{{ project.emoji || "📁" }}</span>
-              </template>
-              <v-list-item-title class="project-title">
-                {{ project.title }}
-              </v-list-item-title>
-              <template #append>
-                <div class="project-actions" @click.stop>
-                  <v-btn
-                    icon="mdi-pencil"
-                    size="x-small"
-                    variant="text"
-                    class="project-action-btn"
-                    :title="tm('project.edit')"
-                    @click="$emit('editProject', project)"
-                  />
-                  <v-btn
-                    icon="mdi-delete"
-                    size="x-small"
-                    variant="text"
-                    class="project-action-btn"
-                    color="error"
-                    :title="tm('actions.deleteChat')"
-                    @click="handleDeleteProject(project)"
-                  />
-                  <v-btn
-                    :icon="
-                      isProjectExpanded(project.project_id)
-                        ? 'mdi-chevron-up'
-                        : 'mdi-chevron-down'
-                    "
-                    size="x-small"
-                    variant="text"
-                    class="project-action-btn"
-                    @click="toggleProject(project.project_id)"
-                  />
-                </div>
-              </template>
-            </v-list-item>
+              <Pencil :size="15" />
+            </v-btn>
+            <v-btn
+              icon
+              size="x-small"
+              variant="text"
+              class="project-action-btn"
+              :title="tm('actions.deleteChat')"
+              @click="handleDeleteProject(project)"
+            >
+              <Trash2 :size="15" />
+            </v-btn>
+          </span>
+        </div>
 
-            <v-expand-transition>
+        <Transition name="project-session-fade">
+          <div
+            v-if="isProjectExpanded(project.project_id)"
+            class="project-session-list"
+          >
+            <div
+              v-if="loadingProjectIds.includes(project.project_id)"
+              class="project-session-empty"
+            >
+              {{ tm("project.loadingSessions") }}
+            </div>
+            <template v-else-if="projectSessionList(project.project_id).length">
               <div
-                v-show="isProjectExpanded(project.project_id)"
-                class="project-session-list"
+                v-for="session in projectSessionList(project.project_id)"
+                :key="session.session_id"
+                class="project-session-row"
+                :class="{ active: activeSessionId === session.session_id }"
+                role="button"
+                tabindex="0"
+                @click="$emit('selectSession', session.session_id)"
+                @keydown.enter="$emit('selectSession', session.session_id)"
+                @keydown.space.prevent="$emit('selectSession', session.session_id)"
               >
-                <div
-                  v-if="loadingProjectIds.includes(project.project_id)"
-                  class="project-session-empty"
-                >
-                  {{ tm("project.loadingSessions") }}
-                </div>
-                <template
-                  v-else-if="projectSessionList(project.project_id).length"
-                >
-                  <div
-                    v-for="session in projectSessionList(project.project_id)"
-                    :key="session.session_id"
-                    class="project-session-item"
-                    :class="{ active: activeSessionId === session.session_id }"
-                    role="button"
-                    tabindex="0"
-                    @click="$emit('selectSession', session.session_id)"
-                    @keydown.enter="$emit('selectSession', session.session_id)"
-                    @keydown.space.prevent="
-                      $emit('selectSession', session.session_id)
+                <span class="project-session-title">
+                  {{ sessionTitle(session) }}
+                </span>
+                <span class="project-session-actions" @click.stop>
+                  <v-btn
+                    icon
+                    size="x-small"
+                    variant="text"
+                    class="project-action-btn"
+                    :title="tm('conversation.editDisplayName')"
+                    @click="
+                      $emit(
+                        'editSessionTitle',
+                        session.session_id,
+                        session.display_name || '',
+                      )
                     "
                   >
-                    <span class="project-session-title">
-                      {{ sessionTitle(session) }}
-                    </span>
-                    <v-progress-circular
-                      v-if="sessionRunning(session.session_id)"
-                      class="project-session-progress"
-                      indeterminate
-                      size="14"
-                      width="2"
-                    />
-                    <span class="project-session-actions" @click.stop>
-                      <v-btn
-                        icon="mdi-pencil"
-                        size="x-small"
-                        variant="text"
-                        class="project-action-btn"
-                        :title="tm('conversation.editDisplayName')"
-                        @click="
-                          $emit(
-                            'editSessionTitle',
-                            session.session_id,
-                            session.display_name || '',
-                          )
-                        "
-                      />
-                      <v-btn
-                        icon="mdi-delete"
-                        size="x-small"
-                        variant="text"
-                        class="project-action-btn"
-                        color="error"
-                        :title="tm('actions.deleteChat')"
-                        @click="handleDeleteSession(project.project_id, session)"
-                      />
-                    </span>
-                  </div>
-                </template>
-                <div v-else class="project-session-empty">
-                  {{ tm("project.noSessions") }}
-                </div>
+                    <Pencil :size="15" />
+                  </v-btn>
+                  <v-btn
+                    icon
+                    size="x-small"
+                    variant="text"
+                    class="project-action-btn"
+                    :title="tm('actions.deleteChat')"
+                    @click="handleDeleteSession(project.project_id, session)"
+                  >
+                    <Trash2 :size="15" />
+                  </v-btn>
+                </span>
+                <v-progress-circular
+                  v-if="sessionRunning(session.session_id)"
+                  class="project-session-progress"
+                  indeterminate
+                  size="14"
+                  width="2"
+                />
               </div>
-            </v-expand-transition>
-          </template>
-        </v-list>
+            </template>
+            <div v-else class="project-session-empty">
+              {{ tm("project.noSessions") }}
+            </div>
+          </div>
+        </Transition>
       </div>
-    </v-expand-transition>
-  </div>
+    </div>
+  </section>
 </template>
 
 <script setup lang="ts">
+import { ChevronDown, ChevronRight, Pencil, Plus, Trash2 } from "@lucide/vue";
 import { ref, watch } from "vue";
 import { useModuleI18n } from "@/i18n/composables";
+import { chatPreferences } from "@/utils/chatPreferences";
 import { askForConfirmation, useConfirmDialog } from "@/utils/confirmDialog";
 
 export interface Project {
@@ -184,7 +181,6 @@ interface Props {
   selectedProjectId?: string | null;
   activeSessionId?: string | null;
   isSessionRunning?: (sessionId: string) => boolean;
-  initialExpanded?: boolean;
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -192,7 +188,6 @@ const props = withDefaults(defineProps<Props>(), {
   loadingProjectIds: () => [],
   selectedProjectId: null,
   activeSessionId: null,
-  initialExpanded: false,
 });
 
 const emit = defineEmits<{
@@ -209,22 +204,29 @@ const emit = defineEmits<{
 const { tm } = useModuleI18n("features/chat");
 const confirmDialog = useConfirmDialog();
 
-const expanded = ref(readProjectsExpanded());
+const projectsExpanded = ref(chatPreferences().global.projectsExpanded === true);
+
+watch(projectsExpanded, (expanded) => {
+  chatPreferences((preferences) => {
+    preferences.global.projectsExpanded = expanded;
+  });
+});
+
 const expandedProjectIds = ref<Set<string>>(readExpandedProjectIds());
 
 watch(
   () => props.selectedProjectId,
   (projectId) => {
-    if (projectId) setProjectExpanded(projectId, true);
+    if (projectId) {
+      setProjectExpanded(projectId, true);
+    }
   },
 );
 
 watch(
   () => props.projects.map((project) => project.project_id).join(","),
   () => {
-    const validProjectIds = new Set(
-      props.projects.map((project) => project.project_id),
-    );
+    const validProjectIds = new Set(props.projects.map((project) => project.project_id));
     expandedProjectIds.value.forEach((projectId) => {
       if (validProjectIds.has(projectId)) {
         emit("toggleProject", projectId, true);
@@ -234,62 +236,37 @@ watch(
   { immediate: true },
 );
 
-function readProjectsExpanded() {
-  const savedState = localStorage.getItem("projectsExpanded");
-  if (savedState === null) return props.initialExpanded;
-  try {
-    return Boolean(JSON.parse(savedState));
-  } catch {
-    return props.initialExpanded;
-  }
-}
-
 function readExpandedProjectIds() {
-  try {
-    const raw = localStorage.getItem("chat.projectExpandedIds");
-    const parsed: unknown = raw ? JSON.parse(raw) : [];
-    return new Set(
-      Array.isArray(parsed)
-        ? parsed.filter((item): item is string => typeof item === "string")
-        : [],
-    );
-  } catch {
-    return new Set<string>();
-  }
-}
-
-function toggleExpanded() {
-  expanded.value = !expanded.value;
-  localStorage.setItem("projectsExpanded", JSON.stringify(expanded.value));
+  const ids = chatPreferences().global.expandedProjectIds;
+  return new Set<string>(Array.isArray(ids) ? ids.filter((id) => typeof id === "string") : []);
 }
 
 function persistExpandedProjectIds() {
-  localStorage.setItem(
-    "chat.projectExpandedIds",
-    JSON.stringify([...expandedProjectIds.value]),
-  );
+  chatPreferences((preferences) => {
+    preferences.global.expandedProjectIds = [...expandedProjectIds.value];
+  });
 }
 
 function isProjectExpanded(projectId: string) {
   return expandedProjectIds.value.has(projectId);
 }
 
-function setProjectExpanded(projectId: string, nextExpanded: boolean) {
-  if (isProjectExpanded(projectId) === nextExpanded) return;
+function setProjectExpanded(projectId: string, expanded: boolean) {
+  if (isProjectExpanded(projectId) === expanded) return;
   const next = new Set(expandedProjectIds.value);
-  if (nextExpanded) next.add(projectId);
-  else next.delete(projectId);
+  if (expanded) {
+    next.add(projectId);
+  } else {
+    next.delete(projectId);
+  }
   expandedProjectIds.value = next;
   persistExpandedProjectIds();
-  emit("toggleProject", projectId, nextExpanded);
-}
-
-function toggleProject(projectId: string) {
-  setProjectExpanded(projectId, !isProjectExpanded(projectId));
+  emit("toggleProject", projectId, expanded);
 }
 
 function handleProjectClick(project: Project) {
-  setProjectExpanded(project.project_id, true);
+  const nextExpanded = !isProjectExpanded(project.project_id);
+  setProjectExpanded(project.project_id, nextExpanded);
   emit("selectProject", project.project_id);
 }
 
@@ -323,46 +300,118 @@ async function handleDeleteSession(projectId: string, session: ProjectSession) {
 </script>
 
 <style scoped>
-.project-section-header {
+.project-list-shell {
+  margin-top: 2px;
+}
+
+.sidebar-section-header {
+  min-height: 24px;
   display: flex;
   align-items: center;
-  padding: 0 8px;
-  opacity: 0.7;
+  justify-content: space-between;
+  padding: 0 10px;
+  color: var(--chat-section-label);
+  font-size: 12px;
+  font-weight: 500;
 }
 
-.project-btn {
-  flex: 1;
-  justify-content: flex-start;
-  background-color: transparent !important;
-  border-radius: 20px;
-  padding: 8px !important;
-  text-transform: none;
+.project-section-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 36px;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
 }
 
-.project-list-wrap {
-  padding: 0 8px;
+.project-section-toggle:hover {
+  color: rgb(var(--v-theme-on-surface));
 }
 
-.project-item,
-.project-session-item {
-  border-radius: 16px !important;
-  margin-bottom: 2px;
+.project-section-toggle .expanded-chevron {
+  opacity: 0;
 }
 
-.project-item {
-  padding: 4px 8px !important;
+.project-section-toggle:hover .expanded-chevron,
+.project-section-toggle:focus-visible .expanded-chevron {
+  opacity: 1;
 }
 
-.project-item:hover,
-.project-item.active,
-.project-session-item:hover,
-.project-session-item.active {
-  background-color: rgba(103, 58, 183, 0.08);
+.section-action-btn,
+.project-action-btn {
+  color: var(--chat-muted);
+}
+
+.section-action-btn :deep(svg),
+.project-action-btn :deep(svg),
+.project-chevron {
+  flex: 0 0 auto;
+  stroke-width: 2;
+}
+
+.section-action-btn {
+  width: 36px;
+  height: 36px;
+  min-width: 36px;
+}
+
+.section-action-btn:hover,
+.project-action-btn:hover {
+  color: rgb(var(--v-theme-on-surface));
+}
+
+.project-list-wrap,
+.project-session-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.project-row,
+.project-session-row {
+  width: 100%;
+  min-height: 30px;
+  border: 0;
+  border-radius: var(--astrbot-radius-navigation);
+  background: transparent;
+  color: inherit;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 56px 4px 10px;
+  position: relative;
+  box-sizing: border-box;
+  cursor: pointer;
+  text-align: left;
+}
+
+.project-row:hover,
+.project-session-row:hover {
+  background: var(--chat-session-active-bg);
+}
+
+/* Active session stays clearly highlighted (subtle in light mode otherwise). */
+.project-row.active,
+.project-session-row.active {
+  background: rgba(var(--v-theme-primary), 0.22);
 }
 
 .project-emoji {
-  font-size: 16px;
-  margin-right: 6px;
+  width: 18px;
+  flex: 0 0 18px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 15px;
+}
+
+.project-title-wrap {
+  min-width: 0;
+  flex: 1;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
 }
 
 .project-title,
@@ -371,8 +420,21 @@ async function handleDeleteSession(projectId: string, session: ProjectSession) {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 500;
+}
+
+.project-title {
+  flex: 0 1 auto;
+}
+
+.project-session-title {
+  flex: 1;
+}
+
+.project-chevron {
+  flex: 0 0 auto;
+  color: var(--chat-muted);
 }
 
 .project-actions,
@@ -380,50 +442,63 @@ async function handleDeleteSession(projectId: string, session: ProjectSession) {
   display: flex;
   align-items: center;
   gap: 2px;
+  flex-shrink: 0;
   opacity: 0;
+  pointer-events: none;
+  position: absolute;
+  right: 0;
+  top: 50%;
+  transform: translateY(-50%);
   visibility: hidden;
-  transition: opacity 0.2s ease;
 }
 
-.project-item:hover .project-actions,
-.project-session-item:hover .project-session-actions,
-.project-session-item:focus-within .project-session-actions {
+.project-row:hover .project-actions,
+.project-row:focus-within .project-actions,
+.project-session-row:hover .project-session-actions,
+.project-session-row:focus-within .project-session-actions {
   opacity: 1;
+  pointer-events: auto;
   visibility: visible;
 }
 
-.project-action-btn {
-  opacity: 0.75;
-}
-
-.project-action-btn:hover {
-  opacity: 1;
-}
-
 .project-session-list {
-  padding: 0 0 4px 24px;
+  padding: 2px 0 4px 26px;
 }
 
-.project-session-item {
-  min-height: 30px;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 4px 4px 4px 12px;
-  cursor: pointer;
+.project-session-fade-enter-active {
+  transition: opacity 0.1s ease-out;
 }
 
-.project-session-title {
-  flex: 1;
+.project-session-fade-leave-active {
+  transition: opacity 0.08s ease-in;
+}
+
+.project-session-fade-enter-from,
+.project-session-fade-leave-to {
+  opacity: 0;
 }
 
 .project-session-progress {
-  flex: 0 0 auto;
+  position: absolute;
+  right: 4px;
+  top: 50%;
+  transform: translateY(-50%);
+  flex-shrink: 0;
+  transition:
+    opacity 0.14s ease,
+    visibility 0.14s ease;
 }
 
+.project-session-row:hover .project-session-progress,
+.project-session-row:focus-within .project-session-progress {
+  opacity: 0;
+  visibility: hidden;
+}
+
+.project-list-empty,
 .project-session-empty {
-  padding: 5px 12px;
-  color: rgba(var(--v-theme-on-surface), 0.56);
-  font-size: 12px;
+  padding: 5px 10px;
+  color: var(--chat-muted);
+  font-size: 13px;
 }
 </style>

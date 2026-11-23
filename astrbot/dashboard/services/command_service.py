@@ -15,6 +15,14 @@ class CommandServiceError(Exception):
     pass
 
 
+def find_command_payload(commands: list[dict], handler_full_name: str) -> dict:
+    """Return the registered command matching its full handler identity."""
+    for command in commands:
+        if command["handler_full_name"] == handler_full_name:
+            return command
+    return {}
+
+
 class CommandService:
     def __init__(
         self,
@@ -97,8 +105,4 @@ class CommandService:
 
     @staticmethod
     async def _get_command_payload(handler_full_name: str) -> dict:
-        commands = await list_commands()
-        for cmd in commands:
-            if cmd["handler_full_name"] == handler_full_name:
-                return cmd
-        return {}
+        return find_command_payload(await list_commands(), handler_full_name)

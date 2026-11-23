@@ -111,9 +111,10 @@
 
 <script setup lang="ts">
 import { computed, ref, watch } from "vue";
+import { pluginApi } from "@/api/v1";
 import { useModuleI18n } from "@/i18n/composables";
-import axios from "@/utils/request";
 import { useToast } from "@/utils/toast";
+import { stringArray } from "@/utils/typeGuards";
 
 const props = defineProps({
   modelValue: {
@@ -148,7 +149,7 @@ const MAX_FILE_MB = 500;
 const directoryFiles = ref<string[]>([]);
 
 const fileList = computed({
-  get: () => (Array.isArray(props.modelValue) ? props.modelValue : []),
+  get: () => stringArray(props.modelValue),
   set: (val) => emit("update:modelValue", val),
 });
 
@@ -227,11 +228,7 @@ const loadDirectoryFiles = async () => {
 
   loadingFiles.value = true;
   try {
-    const response = await axios.get(
-      `/api/config/file/get?scope=plugin&name=${encodeURIComponent(
-        props.pluginName,
-      )}&key=${encodeURIComponent(props.configKey)}`,
-    );
+    const response = await pluginApi.listConfigFiles(props.pluginName, props.configKey);
     if (response.data.status === "ok") {
       const files = response.data.data?.files || [];
       directoryFiles.value = Array.from(new Set(files));
@@ -248,7 +245,8 @@ const loadDirectoryFiles = async () => {
 
 const handleFileSelect = (event: Event): void => {
   const target = event.target;
-  if (target?.files && target.files.length > 0) {
+  if (!(target instanceof HTMLInputElement)) return;
+  if (target.files && target.files.length > 0) {
     uploadFiles(Array.from(target.files));
   }
   if (target) {
@@ -290,16 +288,10 @@ const uploadFiles = async (files: File[]): Promise<void> => {
       formData.append(`file${index}`, file);
     });
 
-    const response = await axios.post(
-      `/api/config/file/upload?scope=plugin&name=${encodeURIComponent(
-        props.pluginName,
-      )}&key=${encodeURIComponent(props.configKey)}`,
-      formData,
-      { headers: { "Content-Type": "multipart/form-data" } },
-    );
+    const response = await pluginApi.uploadConfigFiles(props.pluginName, props.configKey, formData);
 
     if (response.data.status === "ok") {
-      const uploaded = response.data.data?.uploaded || [];
+      const uploaded = stringArray(response.data.data?.uploaded);
       const errors = response.data.data?.errors || [];
 
       if (uploaded.length > 0) {
@@ -342,12 +334,10 @@ const deleteFile = (filePath: string): void => {
   directoryFiles.value = directoryFiles.value.filter((item) => item !== filePath);
 
   if (props.pluginName) {
-    axios
-      .post(`/api/config/file/delete?scope=plugin&name=${encodeURIComponent(props.pluginName)}`, { path: filePath })
-      .catch((error) => {
-        console.warn("Staged file delete failed:", error);
-        toast.warning(tm("fileUpload.deleteFailed"));
-      });
+    pluginApi.deleteConfigFile(props.pluginName, { path: filePath }).catch((error) => {
+      console.warn("Staged file delete failed:", error);
+      toast.warning(tm("fileUpload.deleteFailed"));
+    });
   }
 
   toast.success(tm("fileUpload.deleteSuccess"));
@@ -357,12 +347,10 @@ const deletePhysicalFile = (filePath: string): void => {
   directoryFiles.value = directoryFiles.value.filter((item) => item !== filePath);
 
   if (props.pluginName) {
-    axios
-      .post(`/api/config/file/delete?scope=plugin&name=${encodeURIComponent(props.pluginName)}`, { path: filePath })
-      .catch((error) => {
-        console.warn("File delete failed:", error);
-        toast.warning(tm("fileUpload.deleteFailed"));
-      });
+    pluginApi.deleteConfigFile(props.pluginName, { path: filePath }).catch((error) => {
+      console.warn("File delete failed:", error);
+      toast.warning(tm("fileUpload.deleteFailed"));
+    });
   }
 
   toast.success(tm("fileUpload.deleteSuccess"));

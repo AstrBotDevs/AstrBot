@@ -3,8 +3,11 @@
 使用 BM25 算法进行基于关键词的文档检索
 """
 
+from __future__ import annotations
+
 import json
 import os
+from collections.abc import Iterator
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
@@ -53,6 +56,20 @@ class SparseRetriever:
             os.path.join(os.path.dirname(__file__), "hit_stopwords.txt"),
         )
 
+    @staticmethod
+    def _configured_databases(
+        kb_ids: list[str], kb_options: dict
+    ) -> Iterator[tuple[str, dict, FaissVecDB]]:
+        """Keep invalid or unavailable knowledge bases out of either sparse backend."""
+        for kb_id in kb_ids:
+            kb_config = kb_options.get(kb_id)
+            if not isinstance(kb_config, dict):
+                continue
+            vec_db: FaissVecDB | None = kb_config.get("vec_db")
+            if not vec_db:
+                continue
+            yield kb_id, kb_config, vec_db
+
     async def retrieve(
         self,
         query: str,
@@ -73,13 +90,7 @@ class SparseRetriever:
         fts_results = []
         fallback_kb_ids = []
         query_tokens = tokenize_text(query, self.hit_stopwords)
-        for kb_id in kb_ids:
-            kb_config = kb_options.get(kb_id)
-            if not isinstance(kb_config, dict):
-                continue
-            vec_db: FaissVecDB | None = kb_config.get("vec_db")
-            if not vec_db:
-                continue
+        for kb_id, kb_config, vec_db in self._configured_databases(kb_ids, kb_options):
             top_k_sparse = kb_config.get("top_k_sparse", 50)
             result = await vec_db.document_storage.search_sparse(
                 query_tokens=query_tokens,
@@ -124,13 +135,7 @@ class SparseRetriever:
     ) -> list[SparseResult]:
         top_k_sparse = 0
         chunks = []
-        for kb_id in kb_ids:
-            kb_config = kb_options.get(kb_id)
-            if not isinstance(kb_config, dict):
-                continue
-            vec_db: FaissVecDB | None = kb_config.get("vec_db")
-            if not vec_db:
-                continue
+        for kb_id, kb_config, vec_db in self._configured_databases(kb_ids, kb_options):
             result = await vec_db.document_storage.get_documents(
                 metadata_filters={},
                 limit=None,

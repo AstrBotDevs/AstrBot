@@ -5,7 +5,7 @@ from .run_context import TContext
 from .tool import FunctionTool
 
 
-class HandoffTool(FunctionTool, Generic[TContext]):
+class HandoffTool(FunctionTool, Generic[TContext]):  # noqa: UP046 - The shared TypeVar default requires Python 3.12 compatibility.
     """Handoff tool for delegating tasks to another agent."""
 
     def __init__(
@@ -16,7 +16,7 @@ class HandoffTool(FunctionTool, Generic[TContext]):
         **kwargs,
     ) -> None:
         # Avoid passing duplicate `description` to the FunctionTool dataclass.
-        # Some call sites (e.g. SubAgentOrchestrator) pass `description` via kwargs
+        # Some SDK callers pass `description` via kwargs
         # to override what the main agent sees, while we also compute a default
         # description here.
         # `tool_description` is the public description shown to the main LLM.

@@ -26,6 +26,16 @@ paru -S astrbot-git
 > 使用astrbot run运行
 > 但是更加推荐使用systemctl启动，拥有自动重启，日志轮转等功能
 
+首次启动服务前，先在服务使用的数据目录中完成初始化：
+
+```bash
+mkdir -p "$HOME/.local/share/astrbot"
+cd "$HOME/.local/share/astrbot"
+astrbot init
+```
+
+完成初始化后，启动用户服务：
+
 ```bash
 systemctl --user start astrbot.service
 ```

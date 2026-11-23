@@ -1,5 +1,6 @@
 <template>
   <MarkdownRender
+    class="chat-markdown"
     custom-id="chat-message"
     :content="threadedContent"
     :is-dark="isDark"
@@ -8,14 +9,16 @@
     :smooth-streaming="isStreaming ? 'auto' : false"
     :fade="false"
     :typewriter="false"
-    :max-live-nodes="MARKDOWN_RENDER_MAX_LIVE_NODES"
+    :node-virtual="false"
+    :max-live-nodes="isStreaming ? MARKDOWN_RENDER_MAX_LIVE_NODES : 0"
+    :style="CHAT_MARKDOWN_HEADING_STYLE"
   />
 </template>
 
 <script setup lang="ts">
 import { MarkdownRender } from "markstream-vue";
 import { computed, provide } from "vue";
-import { MARKDOWN_RENDER_MAX_LIVE_NODES } from "@/components/chat/markdownRenderConfig";
+import { CHAT_MARKDOWN_HEADING_STYLE, MARKDOWN_RENDER_MAX_LIVE_NODES } from "@/components/chat/markdownRenderConfig";
 import type { ChatThread } from "@/composables/useMessages";
 
 const props = defineProps<{

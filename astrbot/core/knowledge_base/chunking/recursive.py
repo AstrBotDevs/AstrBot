@@ -110,8 +110,9 @@ class RecursiveCharacterChunker(BaseChunker):
                         combined_text = "".join(current_chunk)
                         final_chunks.append(combined_text)
 
-                        # 处理重叠部分
-                        overlap_start = max(0, len(combined_text) - overlap)
+                        # Retain only the overlap that fits beside the next segment.
+                        overlap_length = min(overlap, chunk_size - split_length)
+                        overlap_start = max(0, len(combined_text) - overlap_length)
                         if overlap_start > 0:
                             overlap_text = combined_text[overlap_start:]
                             current_chunk = [overlap_text, split]

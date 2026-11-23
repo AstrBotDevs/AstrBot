@@ -13,6 +13,7 @@ from astrbot.core.star.command_management import (
 from astrbot.core.star.command_management import (
     update_command_permission as update_command_permission_service,
 )
+from astrbot.dashboard.services.command_service import find_command_payload
 
 from .route import Response, Route, RouteContext
 
@@ -98,8 +99,4 @@ class CommandRoute(Route):
 
 
 async def _get_command_payload(handler_full_name: str):
-    commands = await list_commands()
-    for cmd in commands:
-        if cmd["handler_full_name"] == handler_full_name:
-            return cmd
-    return {}
+    return find_command_payload(await list_commands(), handler_full_name)

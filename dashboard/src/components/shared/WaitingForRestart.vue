@@ -10,9 +10,9 @@
 </template>
 
 <script lang="ts">
+import { statsApi } from "@/api/v1";
 import { useI18n } from "@/i18n/composables";
 import { useCommonStore } from "@/stores/common";
-import axios from "@/utils/request";
 
 export default {
   name: "WaitingForRestart",
@@ -75,8 +75,11 @@ export default {
     },
     async checkStartTime() {
       try {
-        const res = await axios.get("/api/stat/start-time", { timeout: 3000 });
-        const newStartTime = res.data.data.start_time;
+        const res = await statsApi.startTime({ timeout: 3000 });
+        const rawStartTime = res.data.data.start_time;
+        if (rawStartTime == null || rawStartTime === "") return this.newStartTime;
+        const newStartTime = Number(rawStartTime);
+        if (!Number.isFinite(newStartTime)) return this.newStartTime;
         console.info("wfr: checkStartTime", newStartTime, this.startTime);
         if (this.startTime !== -1 && newStartTime !== this.startTime) {
           this.newStartTime = newStartTime;

@@ -41,12 +41,14 @@ def _write_astrbot_root(path: Path) -> None:
 def test_plugin_install_editable_symlinks_local_plugin(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
+    require_symlink: Path,
 ) -> None:
     root = tmp_path / "root"
     source = tmp_path / "source-plugin"
     root.mkdir()
     _write_astrbot_root(root)
     _write_plugin(source)
+    monkeypatch.setenv("ASTRBOT_ROOT", str(root))
     monkeypatch.chdir(root)
 
     result = CliRunner().invoke(
@@ -56,8 +58,7 @@ def test_plugin_install_editable_symlinks_local_plugin(
     )
 
     target = root / "data" / "plugins" / "astrbot_plugin_local_demo"
-    target = root / "data" / "plugins" / "astrbot_plugin_local_demo"
-    assert result.exit_code == 0
+    assert result.exit_code == 0, result.output
     assert target.is_symlink()
     assert (target / "metadata.yaml").exists()
     assert (target / "main.py").read_text(encoding="utf-8") == "PLUGIN_LOADED = True\n"
@@ -73,12 +74,13 @@ def test_plugin_install_accepts_local_path_without_editable_flag(
     _write_astrbot_root(root)
     _write_plugin(source)
     _write_ignored_plugin_files(source)
+    monkeypatch.setenv("ASTRBOT_ROOT", str(root))
     monkeypatch.chdir(root)
 
     result = CliRunner().invoke(plug, ["install", str(source)])
 
     target = root / "data" / "plugins" / "astrbot_plugin_local_demo"
-    assert result.exit_code == 0
+    assert result.exit_code == 0, result.output
     assert not target.is_symlink()
     assert (target / "metadata.yaml").exists()
     assert not (target / ".git").exists()
@@ -99,6 +101,7 @@ def test_plugin_install_editable_rejects_existing_plugin(
     _write_astrbot_root(root)
     _write_plugin(source)
     _write_plugin(root / "data" / "plugins" / "astrbot_plugin_local_demo")
+    monkeypatch.setenv("ASTRBOT_ROOT", str(root))
     monkeypatch.chdir(root)
 
     result = CliRunner().invoke(plug, ["install", "-e", str(source)])
@@ -116,6 +119,7 @@ def test_plugin_install_rejects_plugin_name_with_path_separator(
     root.mkdir()
     _write_astrbot_root(root)
     _write_plugin(source, name="../bad_plugin")
+    monkeypatch.setenv("ASTRBOT_ROOT", str(root))
     monkeypatch.chdir(root)
 
     result = CliRunner().invoke(plug, ["install", str(source)])
@@ -134,6 +138,7 @@ def test_plugin_install_copy_does_not_delete_existing_target_on_race(
     root.mkdir()
     _write_astrbot_root(root)
     _write_plugin(source)
+    monkeypatch.setenv("ASTRBOT_ROOT", str(root))
     monkeypatch.chdir(root)
 
     target = root / "data" / "plugins" / "astrbot_plugin_local_demo"
@@ -182,6 +187,7 @@ def test_plugin_install_requires_name_or_editable_path(
     root = tmp_path / "root"
     root.mkdir()
     _write_astrbot_root(root)
+    monkeypatch.setenv("ASTRBOT_ROOT", str(root))
     monkeypatch.chdir(root)
 
     result = CliRunner().invoke(plug, ["install"])

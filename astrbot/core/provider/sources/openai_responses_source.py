@@ -14,6 +14,7 @@ from astrbot.core.exceptions import EmptyModelOutputError
 from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.provider.entities import LLMResponse, TokenUsage, ToolCallsResult
 
+from ..headers import build_conversation_headers
 from ..register import register_provider_adapter
 from .openai_source import ProviderOpenAIOfficial
 from .request_retry import retry_provider_request
@@ -294,26 +295,10 @@ class ProviderOpenAIResponses(ProviderOpenAIOfficial):
 
         return payloads, context_query
 
-    async def _query(
-        self,
-        payloads: dict,
-        tools: ToolSet | None,
-        *,
-        request_max_retries: int | None = None,
-    ) -> LLMResponse:
-        """Send a non-streaming Responses API request.
-
-        Args:
-            payloads: Prepared Responses API payload.
-            tools: Functions available to the model.
-            request_max_retries: Maximum transport-level request attempts.
-
-        Returns:
-            Normalized AstrBot LLM response.
-
-        Raises:
-            TypeError: If the SDK returns an unexpected response type.
-        """
+    def _prepare_responses_request(
+        self, payloads: dict, tools: ToolSet | None
+    ) -> dict[str, Any]:
+        """Translate chat settings and disable server-side conversation state."""
         if tools:
             response_tools = []
             for tool in tools.openai_schema():
@@ -328,9 +313,7 @@ class ProviderOpenAIResponses(ProviderOpenAIOfficial):
         if isinstance(custom_extra_body, dict):
             extra_body.update(custom_extra_body)
 
-        for key in list(payloads):
-            if key not in self.default_params:
-                extra_body[key] = payloads.pop(key)
+        extra_body.update(self._extract_extra_body(payloads))
 
         max_tokens = extra_body.pop("max_tokens", None)
         if max_tokens is not None and "max_output_tokens" not in extra_body:
@@ -345,12 +328,38 @@ class ProviderOpenAIResponses(ProviderOpenAIOfficial):
         payloads.pop("conversation", None)
         payloads["store"] = False
 
+        return extra_body
+
+    async def _query(
+        self,
+        payloads: dict,
+        tools: ToolSet | None,
+        *,
+        request_max_retries: int | None = None,
+        conversation_id: str | None = None,
+    ) -> LLMResponse:
+        """Send a non-streaming Responses API request.
+
+        Args:
+            payloads: Prepared Responses API payload.
+            tools: Functions available to the model.
+            request_max_retries: Maximum transport-level request attempts.
+
+        Returns:
+            Normalized AstrBot LLM response.
+
+        Raises:
+            TypeError: If the SDK returns an unexpected response type.
+        """
+        extra_body = self._prepare_responses_request(payloads, tools)
+
         response = await retry_provider_request(
             "OpenAI Responses",
             lambda: self.client.responses.create(
                 **payloads,
                 stream=False,
                 extra_body=extra_body,
+                extra_headers=build_conversation_headers(conversation_id),
             ),
             max_attempts=request_max_retries,
         )
@@ -369,6 +378,7 @@ class ProviderOpenAIResponses(ProviderOpenAIOfficial):
         tools: ToolSet | None,
         *,
         request_max_retries: int | None = None,
+        conversation_id: str | None = None,
     ) -> AsyncGenerator[LLMResponse, None]:
         """Send a streaming Responses API request.
 
@@ -383,36 +393,7 @@ class ProviderOpenAIResponses(ProviderOpenAIOfficial):
         Raises:
             EmptyModelOutputError: If the stream ends without a terminal event.
         """
-        if tools:
-            response_tools = []
-            for tool in tools.openai_schema():
-                function = tool.get("function", {})
-                response_tools.append({"type": "function", **function})
-            if response_tools:
-                payloads["tools"] = response_tools
-                payloads["tool_choice"] = payloads.get("tool_choice", "auto")
-
-        extra_body: dict[str, Any] = {}
-        custom_extra_body = self.provider_config.get("custom_extra_body", {})
-        if isinstance(custom_extra_body, dict):
-            extra_body.update(custom_extra_body)
-
-        for key in list(payloads):
-            if key not in self.default_params:
-                extra_body[key] = payloads.pop(key)
-
-        max_tokens = extra_body.pop("max_tokens", None)
-        if max_tokens is not None and "max_output_tokens" not in extra_body:
-            extra_body["max_output_tokens"] = max_tokens
-        reasoning_effort = extra_body.pop("reasoning_effort", None)
-        if reasoning_effort is not None and "reasoning" not in extra_body:
-            extra_body["reasoning"] = {"effort": reasoning_effort}
-        extra_body.pop("previous_response_id", None)
-        extra_body.pop("conversation", None)
-        extra_body.pop("store", None)
-        payloads.pop("previous_response_id", None)
-        payloads.pop("conversation", None)
-        payloads["store"] = False
+        extra_body = self._prepare_responses_request(payloads, tools)
 
         stream = await retry_provider_request(
             "OpenAI Responses",
@@ -420,6 +401,7 @@ class ProviderOpenAIResponses(ProviderOpenAIOfficial):
                 **payloads,
                 stream=True,
                 extra_body=extra_body,
+                extra_headers=build_conversation_headers(conversation_id),
             ),
             max_attempts=request_max_retries,
         )

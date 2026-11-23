@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import os
-import re
 import shutil
 import traceback
 from collections.abc import Awaitable, Callable
@@ -10,32 +9,40 @@ from pathlib import Path
 from typing import Any
 
 from astrbot.core import DEMO_MODE, logger
-from astrbot.core.computer.computer_client import (
+from astrbot.core.astr_agent_runtime.computer.computer_client import (
     _discover_bay_credentials,
     sync_skills_to_active_sandboxes,
 )
-from astrbot.core.skills.neo_skill_sync import NeoSkillSyncManager
+from astrbot.core.astr_agent_runtime.computer.neo_skill_sync import NeoSkillSyncManager
 from astrbot.core.skills.skill_manager import SkillManager
 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
-
-_SKILL_NAME_RE = re.compile(r"^[A-Za-z0-9._-]+$")
-_SKILL_FILE_MAX_BYTES = 512 * 1024
-_EDITABLE_SKILL_FILE_SUFFIXES = {
-    ".css",
-    ".html",
-    ".ini",
-    ".js",
-    ".json",
-    ".md",
-    ".py",
-    ".sh",
-    ".toml",
-    ".ts",
-    ".txt",
-    ".yaml",
-    ".yml",
-}
-_EDITABLE_SKILL_FILENAMES = {"Dockerfile", "Makefile"}
+from astrbot.dashboard.services import skill_files
+from astrbot.dashboard.services.skill_files import (
+    _EDITABLE_SKILL_FILE_SUFFIXES as _EDITABLE_SKILL_FILE_SUFFIXES,
+)
+from astrbot.dashboard.services.skill_files import (
+    _EDITABLE_SKILL_FILENAMES as _EDITABLE_SKILL_FILENAMES,
+)
+from astrbot.dashboard.services.skill_files import (
+    _SKILL_FILE_MAX_BYTES as _SKILL_FILE_MAX_BYTES,
+)
+from astrbot.dashboard.services.skill_files import (
+    _SKILL_NAME_RE as _SKILL_NAME_RE,
+)
+from astrbot.dashboard.services.skill_files import (
+    _next_available_temp_path as _next_available_temp_path,
+)
+from astrbot.dashboard.services.skill_files import (
+    _to_bool as _to_bool,
+)
+from astrbot.dashboard.services.skill_files import (
+    _to_jsonable as _to_jsonable,
+)
+from astrbot.dashboard.services.skill_files import (
+    install_skill_archives,
+    iter_skill_files,
+)
+from astrbot.dashboard.validation import is_json_object, string_field
 
 
 class SkillsServiceError(Exception):
@@ -57,44 +64,13 @@ class SkillArchive:
     filename: str
 
 
-def _to_jsonable(value: Any) -> Any:
-    if isinstance(value, dict):
-        return {key: _to_jsonable(item) for key, item in value.items()}
-    if isinstance(value, list):
-        return [_to_jsonable(item) for item in value]
-    if hasattr(value, "model_dump"):
-        return _to_jsonable(value.model_dump())
-    return value
-
-
-def _to_bool(value: Any, default: bool = False) -> bool:
-    if value is None:
-        return default
-    if isinstance(value, bool):
-        return value
-    if isinstance(value, str):
-        return value.strip().lower() in {"1", "true", "yes", "y", "on"}
-    return bool(value)
-
-
-def _next_available_temp_path(temp_dir: str, filename: str) -> str:
-    stem = Path(filename).stem
-    suffix = Path(filename).suffix
-    candidate = filename
-    index = 1
-    while os.path.exists(os.path.join(temp_dir, candidate)):
-        candidate = f"{stem}_{index}{suffix}"
-        index += 1
-    return os.path.join(temp_dir, candidate)
-
-
 class SkillsService:
     def __init__(self, core_lifecycle) -> None:
         self.core_lifecycle = core_lifecycle
 
     @staticmethod
-    def _payload(data: object) -> dict[str, Any]:
-        return data if isinstance(data, dict) else {}
+    def _payload(data: object) -> dict[str, object]:
+        return data if is_json_object(data) else {}
 
     @staticmethod
     def _ensure_mutation_allowed() -> None:
@@ -103,47 +79,8 @@ class SkillsService:
                 "You are not permitted to do this operation in demo mode"
             )
 
-    @staticmethod
-    async def _save_upload(file: Any, target_path: str) -> None:
-        if hasattr(file, "save"):
-            maybe_awaitable = file.save(target_path)
-            if hasattr(maybe_awaitable, "__await__"):
-                await maybe_awaitable
-            return
-
-        if hasattr(file, "read"):
-            data = file.read()
-            if hasattr(data, "__await__"):
-                data = await data
-            Path(target_path).write_bytes(data)
-            return
-
-        raise SkillsServiceError("Invalid upload file")
-
     def resolve_local_skill_dir(self, name: str) -> Path:
-        skill_name = str(name or "").strip()
-        if not skill_name:
-            raise ValueError("Missing skill name")
-        if not _SKILL_NAME_RE.match(skill_name):
-            raise ValueError("Invalid skill name")
-
-        skill_mgr = SkillManager()
-        if skill_mgr.is_sandbox_only_skill(skill_name):
-            raise PermissionError(
-                "Sandbox preset skill cannot be opened from local skill files."
-            )
-
-        plugin_skill_dir = skill_mgr._get_plugin_skill_dir(skill_name)
-        if plugin_skill_dir is not None:
-            return plugin_skill_dir.resolve(strict=True)
-
-        skills_root = Path(skill_mgr.skills_root).resolve(strict=True)
-        skill_dir = (skills_root / skill_name).resolve(strict=True)
-        if not skill_dir.is_relative_to(skills_root):
-            raise PermissionError("Invalid skill path")
-        if not skill_dir.is_dir() or not (skill_dir / "SKILL.md").exists():
-            raise FileNotFoundError("Local skill not found")
-        return skill_dir
+        return skill_files.resolve_local_skill_dir(name, SkillManager)
 
     @staticmethod
     def resolve_skill_relative_path(
@@ -152,31 +89,17 @@ class SkillsService:
         *,
         expect_file: bool,
     ) -> Path:
-        raw_path = str(relative_path or ".").strip() or "."
-        normalized = Path(raw_path.replace("\\", "/"))
-        if normalized.is_absolute() or ".." in normalized.parts:
-            raise ValueError("Invalid relative path")
-
-        target = (skill_dir / normalized).resolve(strict=True)
-        if not target.is_relative_to(skill_dir):
-            raise PermissionError("Path escapes skill directory")
-        if expect_file and not target.is_file():
-            raise FileNotFoundError("Skill file not found")
-        if not expect_file and not target.is_dir():
-            raise FileNotFoundError("Skill directory not found")
-        return target
+        return skill_files.resolve_skill_relative_path(
+            skill_dir, relative_path, expect_file=expect_file
+        )
 
     @staticmethod
     def skill_relative_path(skill_dir: Path, target: Path) -> str:
-        rel = target.relative_to(skill_dir).as_posix()
-        return "" if rel == "." else rel
+        return skill_files.skill_relative_path(skill_dir, target)
 
     @staticmethod
     def is_editable_skill_file(path: Path) -> bool:
-        return (
-            path.name in _EDITABLE_SKILL_FILENAMES
-            or path.suffix.lower() in _EDITABLE_SKILL_FILE_SUFFIXES
-        )
+        return skill_files.is_editable_skill_file(path)
 
     def serialize_skill_file_entry(
         self,
@@ -201,23 +124,9 @@ class SkillsService:
         }
 
     def get_neo_client_config(self) -> tuple[str, str]:
-        provider_settings = self.core_lifecycle.astrbot_config.get(
-            "provider_settings",
-            {},
+        return skill_files.get_neo_client_config(
+            self.core_lifecycle.astrbot_config, _discover_bay_credentials
         )
-        sandbox = provider_settings.get("sandbox", {})
-        endpoint = sandbox.get("shipyard_neo_endpoint", "")
-        access_token = sandbox.get("shipyard_neo_access_token", "")
-
-        if not access_token and endpoint:
-            access_token = _discover_bay_credentials(endpoint)
-
-        if not endpoint or not access_token:
-            raise ValueError(
-                "Shipyard Neo endpoint or access token not configured. "
-                "Set them in Dashboard or ensure Bay's credentials.json is accessible."
-            )
-        return endpoint, access_token
 
     async def with_neo_client(
         self,
@@ -252,7 +161,7 @@ class SkillsService:
         provider_settings = self.core_lifecycle.astrbot_config.get(
             "provider_settings", {}
         )
-        runtime = provider_settings.get("computer_use_runtime", "local")
+        runtime = provider_settings.get("computer_use_runtime", "none")
         skill_mgr = SkillManager()
         skills = skill_mgr.list_skills(
             active_only=False,
@@ -308,7 +217,7 @@ class SkillsService:
         temp_path = _next_available_temp_path(temp_dir, filename)
 
         try:
-            await self._save_upload(file, temp_path)
+            await file.save(temp_path)
             try:
                 skill_name = skill_mgr.install_skill_from_zip(
                     temp_path,
@@ -343,81 +252,21 @@ class SkillsService:
         if not file_list:
             raise SkillsServiceError("No files provided")
 
-        succeeded = []
-        failed = []
-        skipped = []
-        skill_mgr = SkillManager()
-        temp_dir = get_astrbot_temp_path()
-        os.makedirs(temp_dir, exist_ok=True)
+        succeeded, failed, skipped = await install_skill_archives(
+            file_list,
+            SkillManager(),
+            get_astrbot_temp_path(),
+            next_temp_path=_next_available_temp_path,
+            sync_skills=sync_skills_to_active_sandboxes,
+        )
 
-        for file in file_list:
-            filename = os.path.basename(file.filename or "unknown.zip")
-            temp_path = None
+        return self.batch_upload_result(len(file_list), succeeded, failed, skipped)
 
-            try:
-                if not filename.lower().endswith(".zip"):
-                    failed.append(
-                        {
-                            "filename": filename,
-                            "error": "Only .zip files are supported",
-                        }
-                    )
-                    continue
-
-                temp_path = _next_available_temp_path(temp_dir, filename)
-                await self._save_upload(file, temp_path)
-
-                try:
-                    skill_name = skill_mgr.install_skill_from_zip(
-                        temp_path,
-                        overwrite=False,
-                        skill_name_hint=Path(filename).stem,
-                    )
-                except TypeError:
-                    try:
-                        skill_name = skill_mgr.install_skill_from_zip(
-                            temp_path,
-                            overwrite=False,
-                        )
-                    except FileExistsError:
-                        skipped.append(
-                            {
-                                "filename": filename,
-                                "name": Path(filename).stem,
-                                "error": "Skill already exists.",
-                            }
-                        )
-                        skill_name = None
-                except FileExistsError:
-                    skipped.append(
-                        {
-                            "filename": filename,
-                            "name": Path(filename).stem,
-                            "error": "Skill already exists.",
-                        }
-                    )
-                    skill_name = None
-
-                if skill_name is None:
-                    continue
-                succeeded.append({"filename": filename, "name": skill_name})
-
-            except Exception as exc:
-                failed.append({"filename": filename, "error": str(exc)})
-            finally:
-                if temp_path and os.path.exists(temp_path):
-                    try:
-                        os.remove(temp_path)
-                    except Exception:
-                        pass
-
-        if succeeded:
-            try:
-                await sync_skills_to_active_sandboxes()
-            except Exception:
-                logger.warning("Failed to sync uploaded skills to active sandboxes.")
-
-        total = len(file_list)
+    @staticmethod
+    def batch_upload_result(
+        total: int, succeeded: list, failed: list, skipped: list
+    ) -> SkillsOperationResult:
+        """Describe a completed batch without losing failed or skipped entries."""
         success_count = len(succeeded)
         skipped_count = len(skipped)
         failed_count = len(failed)
@@ -506,26 +355,10 @@ class SkillsService:
             expect_file=False,
         )
 
-        entries = []
-        for entry in sorted(
-            target_dir.iterdir(),
-            key=lambda item: (not item.is_dir(), item.name.lower()),
-        ):
-            try:
-                resolved = entry.resolve(strict=True)
-            except OSError:
-                continue
-            if not resolved.is_relative_to(skill_dir):
-                continue
-            if not resolved.is_dir() and not resolved.is_file():
-                continue
-            entries.append(
-                self.serialize_skill_file_entry(
-                    skill_dir,
-                    resolved,
-                    readonly=readonly,
-                )
-            )
+        entries = [
+            self.serialize_skill_file_entry(skill_dir, entry, readonly=readonly)
+            for entry in iter_skill_files(skill_dir, target_dir)
+        ]
 
         return {
             "name": skill_name,
@@ -581,7 +414,9 @@ class SkillsService:
         self._ensure_mutation_allowed()
         payload = self._payload(data)
         skill_name = str(payload.get("name") or "").strip()
-        relative_path = payload.get("path", "SKILL.md")
+        relative_path = string_field(
+            payload, "path", "SKILL.md", error_type=SkillsServiceError
+        )
         content = payload.get("content")
         if not isinstance(content, str):
             raise SkillsServiceError("Missing file content")
@@ -619,7 +454,7 @@ class SkillsService:
         payload = self._payload(data)
         name = payload.get("name")
         active = payload.get("active", True)
-        if not name:
+        if not isinstance(name, str) or not name:
             raise SkillsServiceError("Missing skill name")
         SkillManager().set_skill_active(name, bool(active))
         return {"name": name, "active": bool(active)}
@@ -628,7 +463,7 @@ class SkillsService:
         self._ensure_mutation_allowed()
         payload = self._payload(data)
         name = payload.get("name")
-        if not name:
+        if not isinstance(name, str) or not name:
             raise SkillsServiceError("Missing skill name")
         SkillManager().delete_skill(name)
         try:
@@ -776,9 +611,9 @@ class SkillsService:
         candidate_id = payload.get("candidate_id")
         stage = payload.get("stage", "canary")
         sync_to_local = _to_bool(payload.get("sync_to_local"), True)
-        if not candidate_id:
+        if not isinstance(candidate_id, str) or not candidate_id:
             return SkillsOperationResult(ok=False, message="Missing candidate_id")
-        if stage not in {"canary", "stable"}:
+        if not isinstance(stage, str) or stage not in {"canary", "stable"}:
             return SkillsOperationResult(
                 ok=False,
                 message="Invalid stage, must be canary/stable",
@@ -845,8 +680,8 @@ class SkillsService:
         self._ensure_mutation_allowed()
         logger.info("[Neo] POST /skills/neo/sync requested.")
         payload = self._payload(data)
-        release_id = payload.get("release_id")
-        skill_key = payload.get("skill_key")
+        release_id = string_field(payload, "release_id", error_type=SkillsServiceError)
+        skill_key = string_field(payload, "skill_key", error_type=SkillsServiceError)
         require_stable = _to_bool(payload.get("require_stable"), True)
         if not release_id and not skill_key:
             return SkillsOperationResult(

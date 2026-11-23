@@ -8,6 +8,7 @@ import whisper  # type: ignore
 
 from astrbot.core import logger
 from astrbot.core.provider.entities import ProviderType
+from astrbot.core.provider.media import is_silk_file
 from astrbot.core.provider.provider import STTProvider
 from astrbot.core.provider.register import register_provider_adapter
 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
@@ -44,14 +45,8 @@ class ProviderOpenAIWhisperSelfHost(STTProvider):
         )
         logger.info("Whisper 模型加载完成｡")
 
-    async def _is_silk_file(self, file_path) -> bool:
-        silk_header = b"SILK"
-        async with await anyio.open_file(file_path, "rb") as f:
-            file_header = await f.read(8)
-
-        if silk_header in file_header:
-            return True
-        return False
+    async def _is_silk_file(self, file_path: str) -> bool:
+        return await is_silk_file(file_path)
 
     async def get_text(self, audio_url: str) -> str:
         loop = asyncio.get_running_loop()
