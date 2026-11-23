@@ -609,9 +609,12 @@ async def test_telegram_hidden_links_and_mentions_use_original_offsets():
     assert (
         result.message_str == "😀  文档 (https://example.com/docs)  https://example.com"
     )
-    assert [part.qq for part in result.message if isinstance(part, Comp.At)] == [
-        "test_bot",
-        "test_bot",
+    assert result.message == [
+        Comp.Plain("😀 "),
+        Comp.At(qq="test_bot", name="test_bot"),
+        Comp.Plain(" 文档 (https://example.com/docs) "),
+        Comp.At(qq="test_bot", name="test_bot"),
+        Comp.Plain(" https://example.com"),
     ]
 
 
@@ -667,6 +670,11 @@ async def test_telegram_mentions_use_original_utf16_offsets(
     assert result is not None
     assert result.message_str == expected
     assert [part.qq for part in result.message if isinstance(part, Comp.At)] == names
+    rendered = "".join(
+        f"@{part.name}" if isinstance(part, Comp.At) else part.text
+        for part in result.message
+    )
+    assert rendered == text.replace("/help@test_bot ", "/help ", 1)
     assert any(
         isinstance(part, Comp.At) and part.qq == result.self_id
         for part in result.message
@@ -762,10 +770,11 @@ async def test_telegram_media_caption_mention_uses_utf16_offsets(media_type):
 
     assert result is not None
     assert result.message_str == caption
-    assert any(
-        isinstance(part, Comp.At) and part.qq == result.self_id
-        for part in result.message
-    )
+    assert result.message[1:] == [
+        Comp.Plain("😀 "),
+        Comp.At(qq="test_bot", name="test_bot"),
+        Comp.Plain(" hello"),
+    ]
 
 
 @pytest.mark.asyncio
@@ -792,14 +801,10 @@ async def test_telegram_document_caption_populates_message_text_and_plain():
     assert result is not None
     assert result.message_str == "@alice 请总结这份文档"
     assert any(isinstance(component, Comp.File) for component in result.message)
-    assert any(
-        isinstance(component, Comp.Plain) and component.text == "@alice 请总结这份文档"
-        for component in result.message
-    )
-    assert any(
-        isinstance(component, Comp.At) and component.qq == "alice"
-        for component in result.message
-    )
+    assert result.message[1:] == [
+        Comp.At(qq="alice", name="alice"),
+        Comp.Plain(" 请总结这份文档"),
+    ]
 
 
 @pytest.mark.asyncio

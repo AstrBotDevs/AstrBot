@@ -20,6 +20,7 @@ from astrbot.core.agent.runtime import (
     TurnStatus,
 )
 from astrbot.core.astr_agent_runtime.main_agent.config import MainAgentBuildConfig
+from astrbot.core.message.mention_render import follow_up_text
 from astrbot.core.platform.agent_wakeup_event import AgentWakeupEvent
 from astrbot.core.utils.active_event_registry import active_event_registry
 from astrbot.core.utils.metrics import Metric
@@ -312,12 +313,12 @@ class NativeAgentSession(AgentSession):
         """
         if self._runner is None:
             return None
-        text = (
-            format_input_content(input.content)
-            if input.content is not None
-            else input.event.get_message_str() or input.event.get_message_outline()
-        )
-        ticket = self._runner.follow_up(message_text=text)
+        if input.content is not None:
+            text = format_input_content(input.content)
+            temp_text = None
+        else:
+            text, temp_text = follow_up_text(input.event)
+        ticket = self._runner.follow_up(message_text=text, temp_text=temp_text)
         if ticket is None:
             return None
         receipt = InputReceipt()

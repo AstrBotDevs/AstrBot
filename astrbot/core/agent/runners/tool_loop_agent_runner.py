@@ -112,6 +112,9 @@ class _HandleFunctionToolsResult:
 class FollowUpTicket:
     seq: int
     text: str
+    temp_text: str | None = None
+    """Temporary reminder text appended beside the follow-up; it stays visible
+    for the current run but is excluded from restored long-term history."""
     consumed: bool = False
     resolved: asyncio.Event = field(default_factory=asyncio.Event)
 
@@ -224,10 +227,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                 [
                     Message(
                         role="user",
-                        content=[
-                            TextPart(text=("\n" if index else "") + ticket.text)
-                            for index, ticket in enumerate(follow_ups)
-                        ],
+                        content=self._follow_up_user_content(follow_ups),
                     )
                 ]
             )
@@ -944,11 +944,13 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         self,
         *,
         message_text: str,
+        temp_text: str | None = None,
     ) -> FollowUpTicket | None:
         """Queue user input after the next tool batch or plain assistant reply.
 
         Args:
             message_text: Additional user input to append without modification.
+            temp_text: Optional temporary reminder stored beside the input.
 
         Returns:
             A consumption ticket, or None if the input cannot be accepted.
@@ -958,11 +960,29 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         text = message_text or ""
         if not text.strip():
             return None
-        ticket = FollowUpTicket(seq=self._follow_up_seq, text=text)
+        ticket = FollowUpTicket(seq=self._follow_up_seq, text=text, temp_text=temp_text)
         self._follow_up_seq += 1
         self._pending_follow_ups.append(ticket)
         self._steering_signal.set()
         return ticket
+
+    @staticmethod
+    def _follow_up_user_content(follow_ups: list[FollowUpTicket]) -> list[TextPart]:
+        """Assemble consumed follow-up text with optional temporary reminders.
+
+        Args:
+            follow_ups: Tickets consumed at this safe boundary.
+
+        Returns:
+            User content parts; reminders stay visible for the current run
+            but are excluded from restored long-term history.
+        """
+        content: list[TextPart] = []
+        for index, ticket in enumerate(follow_ups):
+            content.append(TextPart(text=("\n" if index else "") + ticket.text))
+            if ticket.temp_text:
+                content.append(TextPart(text=ticket.temp_text).mark_as_temp())
+        return content
 
     def _resolve_unconsumed_follow_ups(self) -> None:
         if not self._pending_follow_ups:
@@ -1446,10 +1466,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                     [
                         Message(
                             role="user",
-                            content=[
-                                TextPart(text=("\n" if index else "") + ticket.text)
-                                for index, ticket in enumerate(follow_ups)
-                            ],
+                            content=self._follow_up_user_content(follow_ups),
                         )
                     ]
                 )

@@ -144,6 +144,8 @@ class WakingCheckStage(Stage):
                         ]
                 else:
                     event.message_str = message_str[len(wake_prefix) :].strip()
+                if wake_prefix:
+                    event.set_extra("_consumed_wake_prefix", wake_prefix)
                 break
         if not is_wake:
             # 检查是否有at消息 / at全体成员消息 / 引用了bot的消息
