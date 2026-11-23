@@ -434,7 +434,8 @@ async def prepare_agent_input(
         event, provider_wake_prefix
     ):
         return None
-    content_from_event = content is None
+    if content is not None and event.get_extra("_consumed_provider_prefix"):
+        event.set_extra("_consumed_provider_prefix", None)
     if (
         content is None
         and event.get_extra("provider_request") is None
@@ -464,7 +465,6 @@ async def prepare_agent_input(
         permissions=AgentPermissions.from_event(event),
         content=content,
         streaming=streaming,
-        content_from_event=content_from_event,
     )
     if not await admit_agent_input(context, input):
         return None

@@ -99,6 +99,8 @@ class MainAgentSession(NativeAgentSession):
         )
         quote_refs: set[str] = set()
         sources: list[str] = []
+        # Capture the prefix used to build portable content before request collection.
+        consumed_provider_prefix = event.get_extra("_consumed_provider_prefix")
         req, quote_ref = await collect_initial_request(
             event,
             context,
@@ -111,7 +113,7 @@ class MainAgentSession(NativeAgentSession):
             return None
         if input.content is not None and not explicit:
             req.prompt = format_input_content(input.content)
-            if not input.content_from_event:
+            if not consumed_provider_prefix:
                 event.set_extra("_default_event_prompt", False)
         # Explicit unbound SDK/plugin contexts keep their established semantics.
         # Ordinary turns always reload this session's history after execution admission.

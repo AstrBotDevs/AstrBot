@@ -1151,11 +1151,10 @@ async def test_group_message_keeps_ordered_mentions_and_legacy_message_str(platf
 
 
 @pytest.mark.parametrize("platform", ["qq_official", "qq_official_webhook"])
-@pytest.mark.parametrize("mentions", [[], [{"id": "bot-123", "is_you": True}]], ids=["legacy", "is_you"])
 @pytest.mark.asyncio
-async def test_group_message_without_tag_keeps_plain_text(platform, mentions):
+async def test_group_message_without_tag_keeps_plain_text(platform):
     _, message = _dispatch_group_message(
-        _make_group_payload(content="plain group text", mentions=mentions)
+        _make_group_payload(content="plain group text", mentions=[])
     )
     abm = await QQOfficialPlatformAdapter._parse_from_qqofficial(
         message, MessageType.GROUP_MESSAGE

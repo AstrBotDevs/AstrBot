@@ -116,7 +116,6 @@ class AgentInput:
         streaming: Requested output mode, or None to use the runtime default.
         send_to_user: Allow automatic delivery and runtime-managed send tools.
             False retains prepared outputs as events for caller-owned delivery.
-        content_from_event: Whether Core generated content from the event text.
     """
 
     event: AstrMessageEvent
@@ -126,7 +125,6 @@ class AgentInput:
     plugin_skills: list[SkillInfo] | None = None
     streaming: bool | None = None
     send_to_user: bool = True
-    content_from_event: bool = False
 
 
 class InputReceipt:
