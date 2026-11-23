@@ -568,7 +568,7 @@ class LLMResponse:
                 "id": self.tools_call_ids[idx],
                 "function": {
                     "name": self.tools_call_name[idx],
-                    "arguments": json.dumps(tool_call_arg),
+                    "arguments": json.dumps(tool_call_arg, ensure_ascii=False),
                 },
                 "type": "function",
             }
@@ -588,7 +588,7 @@ class LLMResponse:
                     id=self.tools_call_ids[idx],
                     function=ToolCall.FunctionBody(
                         name=self.tools_call_name[idx],
-                        arguments=json.dumps(tool_call_arg),
+                        arguments=json.dumps(tool_call_arg, ensure_ascii=False),
                     ),
                     # the extra_content will not serialize if it's None when calling ToolCall.model_dump()
                     extra_content=self.tools_call_extra_content.get(
