@@ -174,6 +174,102 @@ class EventTests(unittest.TestCase):
             self.assertNotIn(forbidden, query)
         self.assertIn("issueOrPullRequest(number:", query)
 
+    def test_subject_normalizes_nested_project_field_values_connections(self):
+        node = {
+            "__typename": "Issue",
+            "id": "I",
+            "number": 1,
+            "issueState": "OPEN",
+            "stateReason": None,
+            "closedAt": None,
+            "labels": {
+                "nodes": [],
+                "pageInfo": {"hasNextPage": False, "endCursor": None},
+            },
+            "timelineItems": {
+                "nodes": [],
+                "pageInfo": {"hasNextPage": False, "endCursor": None},
+            },
+            "projectItems": {
+                "nodes": [
+                    {
+                        "id": "ITEM",
+                        "isArchived": False,
+                        "project": {"id": "P"},
+                        "fieldValues": {
+                            "nodes": [{"field": {"name": "实现关联"}, "text": "pr"}],
+                            "pageInfo": {"hasNextPage": False, "endCursor": None},
+                        },
+                    }
+                ],
+                "pageInfo": {"hasNextPage": False, "endCursor": None},
+            },
+        }
+        with patch.object(
+            sync, "graphql", return_value={"repository": {"issueOrPullRequest": node}}
+        ):
+            result = sync.read_subject("AstrBotDevs/AstrBot", 1)
+        self.assertEqual(result["projectItems"][0]["fieldValues"][0]["text"], "pr")
+
+    def test_subject_paginates_nested_project_field_values(self):
+        first_value = {"field": {"name": "Status"}, "name": "Todo"}
+        second_value = {"field": {"name": "实现关联"}, "text": "pr"}
+        node = {
+            "__typename": "Issue",
+            "id": "I",
+            "number": 1,
+            "issueState": "OPEN",
+            "stateReason": None,
+            "closedAt": None,
+            "labels": {
+                "nodes": [],
+                "pageInfo": {"hasNextPage": False, "endCursor": None},
+            },
+            "timelineItems": {
+                "nodes": [],
+                "pageInfo": {"hasNextPage": False, "endCursor": None},
+            },
+            "projectItems": {
+                "nodes": [
+                    {
+                        "id": "ITEM",
+                        "isArchived": False,
+                        "project": {"id": "P"},
+                        "fieldValues": {
+                            "nodes": [first_value],
+                            "pageInfo": {"hasNextPage": True, "endCursor": "CURSOR"},
+                        },
+                    }
+                ],
+                "pageInfo": {"hasNextPage": False, "endCursor": None},
+            },
+        }
+        next_page = {
+            "node": {
+                "fieldValues": {
+                    "nodes": [second_value],
+                    "pageInfo": {"hasNextPage": False, "endCursor": None},
+                }
+            }
+        }
+        with patch.object(
+            sync,
+            "graphql",
+            side_effect=[{"repository": {"issueOrPullRequest": node}}, next_page],
+        ) as graphql:
+            result = sync.read_subject("AstrBotDevs/AstrBot", 1)
+        self.assertEqual(
+            result["projectItems"][0]["fieldValues"], [first_value, second_value]
+        )
+        self.assertEqual(graphql.call_count, 2)
+        self.assertEqual(graphql.call_args_list[1].args[1]["cursor"], "CURSOR")
+        self.assertEqual(graphql.call_args_list[1].args[1]["id"], "ITEM")
+        self.assertIn("ProjectV2Item", graphql.call_args_list[1].args[0])
+        self.assertIn("fieldValues", graphql.call_args_list[1].args[0])
+        self.assertIn(
+            "fieldValues(first:100,after:$cursor)", graphql.call_args_list[1].args[0]
+        )
+
     def test_apply_failure_reports_confirmed_unknown_and_unattempted(self):
         plan = [
             {

@@ -5,8 +5,11 @@ import json
 import os
 import re
 import subprocess
+import sys
+import time
 import urllib.error
 import urllib.request
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from functools import cache
 from pathlib import Path
 
@@ -20,15 +23,17 @@ STATUS_OPTIONS = (
     "Closed unmerged",
 )
 DELIVERY_OPTIONS = ("未关联实现", "尚未合入", "已合入待发布", "已发布")
+APPLY_WORKERS = 4
 
 
-def connection(query, path, *, initial=None, **variables):
+def connection(query, path, *, initial=None, progress=None, **variables):
     """Read every page and fail if the cursor stalls.
 
     Args:
         query: GraphQL operation accepting a cursor variable.
         path: Keys leading to a connection in the response.
         initial: Optional first page already returned in a parent query.
+        progress: Optional label for flushed progress output.
         **variables: Other operation variables.
 
     Returns:
@@ -37,7 +42,7 @@ def connection(query, path, *, initial=None, **variables):
     Raises:
         RuntimeError: A cursor does not advance or the connection is inaccessible.
     """
-    nodes, cursor, seen = [], None, set()
+    nodes, cursor, seen, pages = [], None, set(), 0
     while True:
         if initial is not None:
             data, initial = initial, None
@@ -48,6 +53,13 @@ def connection(query, path, *, initial=None, **variables):
         if not isinstance(data, dict):
             raise RuntimeError("GitHub connection is inaccessible")
         nodes.extend(node for node in data["nodes"] if node)
+        pages += 1
+        if progress:
+            print(
+                f"Project sync: {progress}, page {pages}, {len(nodes)} items",
+                file=sys.stderr,
+                flush=True,
+            )
         page = data["pageInfo"]
         if not page["hasNextPage"]:
             return nodes
@@ -171,6 +183,66 @@ def ancestor(commit, ref):
     return result.returncode == 0
 
 
+@cache
+def tag_names():
+    """Read fetched tag names once so missing release tags fail closed."""
+    result = subprocess.run(
+        ["git", "tag", "--list"],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
+    )
+    if result.returncode:
+        raise RuntimeError("Cannot list fetched release tags")
+    return frozenset(result.stdout.splitlines())
+
+
+@cache
+def tags_containing(commit):
+    """Return tags containing a full commit using one Git graph walk.
+
+    Args:
+        commit: Full implementation commit OID.
+
+    Returns:
+        Tag names whose peeled commit descends from the implementation commit.
+
+    Raises:
+        ValueError: Commit OID is invalid.
+        RuntimeError: The repository cannot answer the containment query.
+    """
+    if not re.fullmatch(r"[0-9a-f]{40}", commit):
+        raise ValueError("Invalid implementation commit")
+    started = time.monotonic()
+    print(
+        f"Project sync: release ancestry start commit={commit[:12]}",
+        file=sys.stderr,
+        flush=True,
+    )
+    result = subprocess.run(
+        ["git", "tag", "--contains", commit],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
+    )
+    if result.returncode:
+        raise RuntimeError(
+            "Cannot verify release tag ancestry; fetch full history and tags"
+        )
+    tags = frozenset(result.stdout.splitlines())
+    print(
+        f"Project sync: release ancestry complete commit={commit[:12]} tags={len(tags)} "
+        f"seconds={time.monotonic() - started:.2f}",
+        file=sys.stderr,
+        flush=True,
+    )
+    return tags
+
+
 def delivery(content, current, linked, releases, mainline):
     """Calculate implementation links and the earliest proven stable release.
 
@@ -192,25 +264,28 @@ def delivery(content, current, linked, releases, mainline):
     all_integrated = (
         bool(merged) and len(commits) == len(merged) and integrated == commits
     )
-    published = None
-    for release in sorted(
+    stable_releases = sorted(
         (
             r
             for r in releases
             if not r["isDraft"] and not r["isPrerelease"] and r.get("publishedAt")
         ),
         key=lambda r: r["publishedAt"],
-    ):
-        if (
-            all_merged
-            and all_integrated
-            and all(
-                ancestor(commit, f"refs/tags/{release['tagName']}")
-                for commit in integrated
+    )
+    published = None
+    if all_merged and all_integrated and stable_releases:
+        release_names = {r["tagName"] for r in stable_releases}
+        missing = release_names - tag_names()
+        if missing:
+            raise RuntimeError(
+                "Stable release tags are missing; fetch full history and tags"
             )
-        ):
-            published = release
-            break
+        common_tags = release_names.copy()
+        for commit in integrated:
+            common_tags.intersection_update(tags_containing(commit))
+        published = next(
+            (r for r in stable_releases if r["tagName"] in common_tags), None
+        )
     progress = (
         "已发布"
         if published
@@ -244,11 +319,21 @@ def apply_plan(project, fields, plan, *, apply=False):
     if not apply:
         return
     total = sum(len(entry["changes"]) + (not entry["item"]) for entry in plan)
-    confirmed = 0
-    for entry in plan:
+
+    def apply_entry(entry):
+        """Apply one item sequentially inside one worker.
+
+        Args:
+            entry: Precomputed item plan.
+
+        Returns:
+            Confirmed mutation count and sanitized failure metadata.
+        """
+        confirmed = 0
         item = entry["item"]
-        if not item:
-            try:
+        failed_field = "addProjectItem"
+        try:
+            if not item:
                 result = graphql(
                     """mutation($project: ID!, $content: ID!) {
                       addProjectV2ItemById(input: {projectId:$project, contentId:$content}) { item { id } }
@@ -256,35 +341,11 @@ def apply_plan(project, fields, plan, *, apply=False):
                     {"project": project, "content": entry["content"]},
                 )
                 item = result["addProjectV2ItemById"]["item"]["id"]
-            except (RuntimeError, ValueError, OSError, KeyError, TypeError):
-                print(
-                    json.dumps(
-                        {
-                            "confirmed": confirmed,
-                            "unknown": 1,
-                            "unattempted": total - confirmed - 1,
-                            "number": entry["number"],
-                            "field": "addProjectItem",
-                        }
-                    ),
-                    flush=True,
-                )
-                raise
-            confirmed += 1
-        for name, value in entry["changes"].items():
-            field = fields[name]
-            variables = {"project": project, "item": item, "field": field["id"]}
-            if value != "":
-                variables["value"] = (
-                    {
-                        "singleSelectOptionId": next(
-                            o["id"] for o in field["options"] if o["name"] == value
-                        )
-                    }
-                    if "options" in field
-                    else {"text": value}
-                )
-            try:
+                confirmed += 1
+            for name, value in entry["changes"].items():
+                failed_field = name
+                field = fields[name]
+                variables = {"project": project, "item": item, "field": field["id"]}
                 if value == "":
                     graphql(
                         """mutation($project:ID!,$item:ID!,$field:ID!){
@@ -293,28 +354,72 @@ def apply_plan(project, fields, plan, *, apply=False):
                         variables,
                     )
                 else:
+                    variables["value"] = (
+                        {
+                            "singleSelectOptionId": next(
+                                o["id"] for o in field["options"] if o["name"] == value
+                            )
+                        }
+                        if "options" in field
+                        else {"text": value}
+                    )
                     graphql(
                         """mutation($project:ID!,$item:ID!,$field:ID!,$value:ProjectV2FieldValue!){
-                      updateProjectV2ItemFieldValue(input:{projectId:$project,itemId:$item,fieldId:$field,value:$value}){projectV2Item{id}}
+                          updateProjectV2ItemFieldValue(input:{projectId:$project,itemId:$item,fieldId:$field,value:$value}){projectV2Item{id}}
                         }""",
                         variables,
                     )
-            except (RuntimeError, ValueError, OSError):
-                print(
-                    json.dumps(
-                        {
-                            "confirmed": confirmed,
-                            "unknown": 1,
-                            "unattempted": total - confirmed - 1,
-                            "number": entry["number"],
-                            "field": name,
-                        },
-                        ensure_ascii=False,
-                    ),
-                    flush=True,
-                )
-                raise
-            confirmed += 1
+                confirmed += 1
+        except (RuntimeError, ValueError, OSError, KeyError, TypeError, StopIteration):
+            return {
+                "confirmed": confirmed,
+                "unknown": 1,
+                "field": failed_field,
+                "number": entry["number"],
+            }
+        return {
+            "confirmed": confirmed,
+            "unknown": 0,
+            "field": None,
+            "number": entry["number"],
+        }
+
+    confirmed = 0
+    unknown = 0
+    failures = []
+    with ThreadPoolExecutor(
+        max_workers=APPLY_WORKERS, thread_name_prefix="project-sync"
+    ) as executor:
+        futures = [executor.submit(apply_entry, entry) for entry in plan]
+        for completed, future in enumerate(as_completed(futures), 1):
+            result = future.result()
+            confirmed += result["confirmed"]
+            unknown += result["unknown"]
+            if result["unknown"]:
+                failures.append(result)
+            print(
+                json.dumps(
+                    {"completed_items": completed, "total_items": len(plan), **result}
+                ),
+                flush=True,
+            )
+    if failures:
+        first = failures[0]
+        print(
+            json.dumps(
+                {
+                    "confirmed": confirmed,
+                    "unknown": unknown,
+                    "unattempted": total - confirmed - unknown,
+                    "number": first["number"],
+                    "field": first["field"],
+                }
+            ),
+            flush=True,
+        )
+        raise RuntimeError(
+            "Project mutation failed; rerun reconciliation to repair unknown outcomes"
+        )
     print(
         json.dumps({"confirmed": confirmed, "unknown": 0, "unattempted": 0}), flush=True
     )
@@ -429,6 +534,17 @@ def read_subject(repository, number):
             ("node", field),
             initial=content[field],
             id=content["id"],
+        )
+    for item in content["projectItems"]:
+        item["fieldValues"] = connection(
+            """query($id:ID!,$cursor:String){node(id:$id){... on ProjectV2Item{
+              fieldValues(first:100,after:$cursor){nodes{
+                ... on ProjectV2ItemFieldSingleSelectValue{name field{... on ProjectV2SingleSelectField{name}}}
+                ... on ProjectV2ItemFieldTextValue{text field{... on ProjectV2Field{name}}}
+              }pageInfo{hasNextPage endCursor}}}}} """.strip(),
+            ("node", "fieldValues"),
+            initial=item["fieldValues"],
+            id=item["id"],
         )
     return content
 
@@ -580,6 +696,7 @@ def reconcile(
             ... on ProjectV2SingleSelectField{id name options{id name}}
           }pageInfo{hasNextPage endCursor}}}}}""",
         ("node", "fields"),
+        progress="Project fields",
         project=project,
     )
     fields = {}
@@ -632,6 +749,7 @@ def reconcile(
                 }pageInfo{hasNextPage endCursor}}
               }pageInfo{hasNextPage endCursor}}}}}""",
             ("node", "items"),
+            progress="Project items",
             project=project,
         )
         tracked = {
@@ -648,6 +766,7 @@ def reconcile(
                 labels(first:100){nodes{name}pageInfo{hasNextPage endCursor}}}
               pageInfo{hasNextPage endCursor}}}}""",
             ("repository", "issues"),
+            progress="Repository issues",
             states=["OPEN", "CLOSED"],
             **variables,
         )
@@ -659,6 +778,7 @@ def reconcile(
                   pageInfo{hasNextPage endCursor}}
               }pageInfo{hasNextPage endCursor}}}}""",
             ("repository", "pullRequests"),
+            progress="Repository PRs",
             states=["OPEN", "CLOSED", "MERGED"],
             **variables,
         )
@@ -714,6 +834,7 @@ def reconcile(
               releases(first:100,after:$cursor){nodes{tagName url publishedAt isDraft isPrerelease}
               pageInfo{hasNextPage endCursor}}}}""",
             ("repository", "releases"),
+            progress="Repository releases",
             **variables,
         )
     mainline = subprocess.run(
@@ -725,7 +846,19 @@ def reconcile(
         check=True,
     ).stdout.strip()
     plan = []
-    for content in candidates:
+    if subject is None:
+        print(
+            f"Project sync: calculating delivery for {len(candidates)} candidates",
+            file=sys.stderr,
+            flush=True,
+        )
+    for index, content in enumerate(candidates, 1):
+        if subject is None and index % 50 == 0:
+            print(
+                f"Project sync: calculated {index}/{len(candidates)} candidates",
+                file=sys.stderr,
+                flush=True,
+            )
         item = tracked.get(content["id"])
         if item and item["isArchived"]:
             continue
@@ -903,6 +1036,13 @@ def main(argv=None):
         not isinstance(v, str) or not v.strip() for v in status_names.values()
     ) or len(set(status_names.values())) != len(STATUS_OPTIONS):
         raise ValueError("Status names must be nonempty and distinct")
+    print(
+        "Project sync: starting full reconciliation"
+        if subject is None
+        else f"Project sync: starting bounded sync for item #{subject}",
+        file=sys.stderr,
+        flush=True,
+    )
     try:
         plan = reconcile(
             project,

@@ -1,3 +1,5 @@
+from openai.types.chat import ChatCompletion, ChatCompletionChunk
+
 from ..register import register_provider_adapter
 from .openai_source import ProviderOpenAIOfficial
 
@@ -21,3 +23,42 @@ class ProviderOpenRouter(ProviderOpenAIOfficial):
             "general-chat,personal-agent"  # type: ignore
         )
         self.reasoning_key = "reasoning"
+
+    def _extract_reasoning_content(
+        self, completion: ChatCompletion | ChatCompletionChunk
+    ) -> str | None:
+        reasoning = super()._extract_reasoning_content(completion)
+        if (
+            reasoning
+            or not isinstance(completion, ChatCompletion)
+            or not completion.choices
+        ):
+            return reasoning
+
+        details = getattr(completion.choices[0].message, "reasoning_details", None)
+        if not isinstance(details, list):
+            return reasoning
+
+        parts: list[str] = []
+        previous_type = None
+        for detail in details:
+            if not isinstance(detail, dict):
+                continue
+            detail_type = detail.get("type")
+            if detail_type == "reasoning.summary":
+                text = detail.get("summary")
+            elif detail_type == "reasoning.text":
+                text = detail.get("text")
+            else:
+                continue
+            if isinstance(text, str) and text:
+                if (
+                    parts
+                    and detail_type != previous_type
+                    and not parts[-1][-1].isspace()
+                    and not text[0].isspace()
+                ):
+                    parts.append("\n\n")
+                parts.append(text)
+                previous_type = detail_type
+        return "".join(parts) if parts else reasoning

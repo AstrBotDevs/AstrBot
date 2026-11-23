@@ -58,7 +58,7 @@ class QueueListener:
             await self.webchat_queue_mgr.clear_listener()
 
 
-@register_platform_adapter("webchat", "webchat")
+@register_platform_adapter("webchat", "webchat", support_ui_interaction=True)
 class WebChatAdapter(Platform):
     def __init__(
         self,
@@ -79,6 +79,7 @@ class WebChatAdapter(Platform):
             description="webchat",
             id="webchat",
             support_proactive_message=True,
+            support_ui_interaction=True,
         )
         self._shutdown_event = asyncio.Event()
         self._webchat_queue_mgr = webchat_queue_mgr
@@ -256,6 +257,17 @@ class WebChatAdapter(Platform):
         if isinstance(raw_message, tuple) and len(raw_message) >= 3:
             payload = raw_message[2]
             if isinstance(payload, dict):
+                # This object is supplied only by the authenticated view action route.
+                from astrbot.core.message.components import UIInteraction
+
+                interaction = payload.get("_ui_interaction")
+                if isinstance(interaction, UIInteraction):
+                    message.message = [interaction]
+                    message.message_str = ""
+                    message_event.message_str = ""
+                    message_event.set_extra(
+                        "ui_plugin_module", payload["_ui_plugin_module"]
+                    )
                 message_event.set_extra("locale", payload.get("locale"))
                 flags = resolve_webchat_request_flags(payload)
                 message_event.set_extra("flags", flags)
@@ -266,9 +278,7 @@ class WebChatAdapter(Platform):
                 )
                 message_event.set_extra("selected_model", payload.get("selected_model"))
                 message_event.set_extra("action_type", payload.get("action_type"))
-                message_event.set_extra(
-                    "llm_checkpoint_id", payload.get("llm_checkpoint_id")
-                )
+                message_event.set_extra("turn_id", payload.get("turn_id"))
                 message_event.set_extra(
                     "thread_selected_text", payload.get("thread_selected_text")
                 )

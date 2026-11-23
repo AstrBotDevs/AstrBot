@@ -54,22 +54,20 @@ def _dingtalk_group_message(**payload) -> dingtalk_stream.ChatbotMessage:
     )
 
 
-def test_dingtalk_reconnect_delay_uses_exponential_backoff():
-    assert [_dingtalk_reconnect_delay(i) for i in range(1, 5)] == [
-        10,
-        20,
-        40,
-        80,
-    ]
-
-
-def test_dingtalk_reconnect_delay_has_minimum_delay():
-    assert _dingtalk_reconnect_delay(0) == DINGTALK_RECONNECT_INITIAL_DELAY
-    assert _dingtalk_reconnect_delay(-1) == DINGTALK_RECONNECT_INITIAL_DELAY
-
-
-def test_dingtalk_reconnect_delay_is_capped():
-    assert _dingtalk_reconnect_delay(20) == DINGTALK_RECONNECT_MAX_DELAY
+@pytest.mark.parametrize(
+    ("retry_count", "expected"),
+    [
+        (0, DINGTALK_RECONNECT_INITIAL_DELAY),
+        (-1, DINGTALK_RECONNECT_INITIAL_DELAY),
+        (1, 10),
+        (2, 20),
+        (3, 40),
+        (4, 80),
+        (20, DINGTALK_RECONNECT_MAX_DELAY),
+    ],
+)
+def test_dingtalk_reconnect_delay_backs_off_and_is_clamped(retry_count, expected):
+    assert _dingtalk_reconnect_delay(retry_count) == expected
 
 
 @pytest.mark.asyncio

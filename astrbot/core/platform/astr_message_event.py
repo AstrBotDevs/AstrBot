@@ -25,6 +25,7 @@ from astrbot.core.message.components import (
     Image,
     Plain,
     Reply,
+    UIInteraction,
 )
 from astrbot.core.message.message_event_result import MessageChain, MessageEventResult
 from astrbot.core.platform.message_type import MessageType
@@ -78,13 +79,27 @@ def event_context(event: "AstrMessageEvent") -> Iterator[None]:
 
 
 class AstrMessageEvent(abc.ABC):
+    event_kind: str = "message"
+    trace_name: str = "AstrMessageEvent"
+
     def __init__(
         self,
         message_str: str,
         message_obj: AstrBotMessage,
         platform_meta: PlatformMetadata,
         session_id: str,
+        *,
+        event_metadata: dict[str, str] | None = None,
     ) -> None:
+        """Initialize shared event state and its initial trace record.
+
+        Args:
+            message_str: Text input associated with the event.
+            message_obj: Message components and sender information.
+            platform_meta: Metadata of the target platform.
+            session_id: Target session identifier within the platform.
+            event_metadata: Additional attributes for the initial trace record.
+        """
         self.message_str = message_str
         """纯文本的消息"""
         self.message_obj = message_obj
@@ -123,7 +138,7 @@ class AstrMessageEvent(abc.ABC):
         self.created_at = time()
         """事件创建时间(Unix timestamp)"""
         self.trace = TraceSpan(
-            name="AstrMessageEvent",
+            name=self.trace_name,
             umo=self.unified_msg_origin,
             sender_name=self.get_sender_name(),
             message_outline=self.get_message_outline(),
@@ -133,11 +148,14 @@ class AstrMessageEvent(abc.ABC):
         """事件级 TraceSpan(别名: span)"""
         self.trace.record(
             "event_received",
-            kind="message",
-            platform_id=platform_meta.id,
-            platform_name=platform_meta.name,
-            message_type=self.get_message_type().value,
-            message=self.get_message_outline(),
+            **{
+                **(event_metadata or {}),
+                "kind": self.event_kind,
+                "platform_id": platform_meta.id,
+                "platform_name": platform_meta.name,
+                "message_type": self.get_message_type().value,
+                "message": self.get_message_outline(),
+            },
         )
 
         self._has_send_oper = False
@@ -250,6 +268,42 @@ class AstrMessageEvent(abc.ABC):
             ),
             None,
         )
+
+    def get_ui_interaction(self) -> UIInteraction | None:
+        """Get the view action attached by the authenticated ChatUI transport.
+
+        Returns:
+            The current UI interaction, or None for other message types.
+        """
+        return next(
+            (part for part in self.get_messages() if isinstance(part, UIInteraction)),
+            None,
+        )
+
+    def view_result(
+        self, *, data: dict, name: str | None = None, text: str = "", title: str = ""
+    ):
+        """Create a named card or update the current interaction's card.
+
+        Args:
+            data: JSON display data, fully replacing the previous snapshot.
+            name: Registered view name for creation; omit to update a card.
+            text: Model-visible text and fallback for a newly created card.
+            title: Display title for a new view, including its workbench tab.
+
+        Returns:
+            A ViewResult to yield from a handler or return from a tool.
+
+        Raises:
+            ValueError: If an update lacks an interaction or data is invalid.
+        """
+        from astrbot.core.chatui import ViewResult
+
+        if name is None and (self.get_ui_interaction() is None or text):
+            raise ValueError("A view update requires a UI interaction and no text.")
+        if name is not None and (not name or not text.strip()):
+            raise ValueError("Creating a view requires a name and fallback text.")
+        return ViewResult(name=name, data=data, text=text, title=title)
 
     def get_message_type(self) -> MessageType:
         """获取消息类型。"""

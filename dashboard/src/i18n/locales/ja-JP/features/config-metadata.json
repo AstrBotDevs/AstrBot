@@ -1,7 +1,32 @@
 {
   "ai_group": {
     "name": "AI",
-    "agent_runner": {
+    "subagents": {
+      "description": "Subagents",
+      "agent": {
+        "config": {
+          "subagents": {
+            "enabled": {
+              "description": "Enable Subagents",
+              "hint": "Allow AstrBot to create generic or specialized subagents when appropriate to complete tasks."
+            },
+            "config_ids": {
+              "hint": "Configure specialized subagents with their own personas, toolsets, and other settings. Even without configuring any, AstrBot dynamically creates generic subagents when needed to complete tasks.",
+              "description": "Specialized Agent Configurations"
+            },
+            "max_concurrent_agents": {
+              "description": "Concurrent Agents per Conversation",
+              "hint": "Other tasks queue. Default: 3."
+            },
+            "task_timeout": {
+              "description": "Task Timeout (seconds)",
+              "hint": "Includes queue time. Default: 600 seconds."
+            }
+          }
+        }
+      }
+    },
+    "agent": {
       "description": "エージェントの実行方式",
       "hint": "AI 会話のランナーを選択します。ランナーを切り替えると、新しい種類のデフォルト設定が適用され、以前の種類のパラメーターは引き継がれません。",
       "provider_settings": {
@@ -10,8 +35,8 @@
           "hint": "AI 会話のマスタースイッチ"
         }
       },
-      "agent_runner": {
-        "runner_type": {
+      "agent": {
+        "runtime": {
           "description": "ランナー",
           "labels": [
             "組み込みエージェント",
@@ -25,7 +50,7 @@
     },
     "dify_runner": {
       "description": "Dify 設定",
-      "agent_runner": {
+      "agent": {
         "config": {
           "dify_api_type": {
             "description": "アプリケーションの種類"
@@ -56,7 +81,7 @@
     },
     "coze_runner": {
       "description": "Coze 設定",
-      "agent_runner": {
+      "agent": {
         "config": {
           "coze_api_key": {
             "description": "API Key"
@@ -81,7 +106,7 @@
     },
     "dashscope_runner": {
       "description": "Alibaba Cloud Bailianアプリケーション設定",
-      "agent_runner": {
+      "agent": {
         "config": {
           "dashscope_app_type": {
             "description": "アプリケーションの種類"
@@ -117,7 +142,7 @@
     },
     "deerflow_runner": {
       "description": "DeerFlow 設定",
-      "agent_runner": {
+      "agent": {
         "config": {
           "deerflow_api_base": {
             "description": "API Base URL"
@@ -161,7 +186,7 @@
     "ai": {
       "description": "モデル",
       "hint": "組み込みエージェントが使用する会話モデルと、共通の画像説明モデル・音声モデルを設定します。",
-      "agent_runner": {
+      "agent": {
         "config": {
           "model": {
             "provider_id": {
@@ -217,7 +242,7 @@
     "persona": {
       "description": "ペルソナ",
       "hint": "AstrBot にペルソナを設定します。",
-      "agent_runner": {
+      "agent": {
         "config": {
           "persona": {
             "persona_id": {
@@ -351,7 +376,11 @@
         "computer_use_runtime": {
           "description": "実行環境",
           "hint": "エージェントにアクセスを許可する環境です。",
-          "labels": ["環境を使用しない", "ローカルコンピューター", "外部サンドボックス"]
+          "labels": [
+            "環境を使用しない",
+            "ローカルコンピューター",
+            "外部サンドボックス"
+          ]
         },
         "computer_use_local_permissions": {
           "description": "ローカル権限ポリシー"
@@ -448,6 +477,8 @@
         "modes": {
           "none": "無効"
         },
+        "networkAlwaysOn": "常に有効",
+        "windowsHostNetworkHint": "Windows では「環境全体」でコードを実行する場合、通信だけを無効にはできません。「ワークスペース」に切り替えると無効にできます。",
         "runtimeUnknown": "実行環境の情報を取得できません。",
         "memberWarning": "一般メンバーにネットワーク接続または環境全体へのアクセスが許可されています。",
         "executionInactive": "未適用",
@@ -457,6 +488,9 @@
           "os": "OS",
           "arch": "アーキテクチャ",
           "sandbox": "ローカル隔離",
+          "windowsUnavailable": "{backend} · 準備未完了",
+          "windowsSetupHint": "設定を保存して AstrBot を再起動してください。管理者の承認を求められた場合は、サンドボックスの初期化を許可してください。",
+          "errorDetails": "診断の詳細を表示",
           "unavailableHint": "サンドボックスの起動に失敗したため、制限付きの Shell/Python 実行とワークスペース内のファイル検索に影響があります。以下のエラーを参考に、システムのセキュリティポリシー（Linux の AppArmor やユーザー名前空間の制限など）またはコンテナの制限を確認し、修正後に AstrBot を再起動して再検査してください。",
           "dialog": {
             "intro": "macOS の Seatbelt または Linux の bubblewrap（bwrap）を利用して、AstrBot Agent の実行環境を安全に隔離し、AstrBot Agent を利用する各ユーザーのファイルアクセス範囲とネットワーク権限を制限することで、安全性を高めます。",
@@ -503,7 +537,7 @@
     "truncate_and_compress": {
       "hint": "AstrBot が作業メモリを管理する方法を設定します。詳細：[コンテキスト管理方式](https://docs.astrbot.app/en/use/context-compress.html)。",
       "description": "コンテキスト管理方式",
-      "agent_runner": {
+      "agent": {
         "config": {
           "compression": {
             "max_turns": {
@@ -544,7 +578,7 @@
     },
     "others": {
       "description": "その他の設定",
-      "agent_runner": {
+      "agent": {
         "config": {
           "misc": {
             "max_steps": {
@@ -1082,6 +1116,14 @@
     "general": {
       "description": "基本設定",
       "platform_settings": {
+        "locale": {
+          "description": "システム言語",
+          "hint": "プラグインやエラーメッセージなどで使用するシステムの言語を設定します。モデルの回答や WebUI の言語は変更しません。",
+          "labels": [
+            "🇨🇳 简体中文",
+            "🇺🇸 English"
+          ]
+        },
         "unique_session": {
           "description": "会話を分離",
           "hint": "有効にすると、会話の分離に対応するプラットフォームでは、グループメンバーごとに独立したコンテキストを使用します。コマンドの権限はコマンド管理で設定してください。"
@@ -1113,7 +1155,7 @@
       },
       "wake_prefix": {
         "description": "ウェイクワード",
-        "hint": "ボットを起動するメッセージ接頭辞の一覧です。ボットへのメンションでも起動できます。"
+        "hint": "ボットを起動するメッセージ接頭辞の一覧です。ボットへのメンションでも起動できます。\n\n`/help` や `/sid` などの組み込みコマンドもウェイクワードに依存します。グループチャットではウェイクワードで始まらない限り実行されません。プライベートチャットでは、「ダイレクトメッセージでウェイクワードを必須にする」が無効なら、接頭辞なしでコマンドを直接入力して実行できます。"
       },
       "disable_builtin_commands": {
         "description": "組み込みコマンドを無効化",
@@ -1219,6 +1261,15 @@
     }
   },
   "access_group": {
+    "blacklist": {
+      "description": "Blacklist",
+      "platform_settings": {
+        "id_blacklist": {
+          "description": "Blocked session IDs",
+          "hint": "Stop processing these sessions. Blacklist takes priority over whitelist, including administrators."
+        }
+      }
+    },
     "name": "アクセス制御",
     "admins": {
       "description": "管理者",
@@ -1632,7 +1683,6 @@
           "ツール使用"
         ]
       },
-
       "custom_headers": {
         "description": "カスタムリクエストヘッダー",
         "hint": "ここで追加したキーと値のペアは、AstrBot からプロバイダーへの HTTP リクエストにカスタムヘッダーとして付加されます。値は文字列である必要があります。"
@@ -1787,6 +1837,9 @@
       "dashscope_embedding": {
         "hint": "Alibaba Cloud BailianEmbedding のデフォルトアドレスは https://dashscope.aliyuncs.com/api/v1 です。"
       },
+      "volcengine_embedding": {
+        "hint": "Volcengine Embedding、デフォルトのアドレスは https://ark.cn-beijing.volces.com/api/v3 です。Agent Plan は https://ark.cn-beijing.volces.com/api/plan/v3 です。"
+      },
       "volcengine_cluster": {
         "description": "Volcengine クラスター",
         "hint": "音声クローンモデルを使用する場合は volcano_icl または volcano_icl_concurr を選択できます。デフォルトは volcano_tts です。"
@@ -1834,6 +1887,10 @@
       "dashscope_tts_voice": {
         "description": "ボイス"
       },
+      "dashscope_tts_websocket_url": {
+        "description": "WebSocket エンドポイント",
+        "hint": "任意。Qwen-Audio-TTS モデルを使用する場合に入力してください。空欄の場合は DashScope SDK のデフォルトアドレスを使用します。wss://{WorkspaceId}.cn-beijing.maas.aliyuncs.com/api-ws/v1/inference などの完全な WebSocket URL を入力し、{WorkspaceId} を実際のワークスペース ID に置き換えてください。"
+      },
       "gm_resp_image_modal": {
         "description": "画像モダリティを有効化",
         "hint": "有効にすると、画像コンテンツを返せるようになります。モデルが対応していない場合はエラーになります。対応モデルは Google Gemini の公式ウェブサイトを確認してください。画像を生成する場合は、より良い結果を得るために `メンバー認識を有効化` 設定を無効にしてください。"
@@ -1874,11 +1931,11 @@
         "description": "思考設定",
         "budget": {
           "description": "思考予算",
-          "hint": "モデルの推論で使用する思考トークン数の上限を指定します。参照：https://ai.google.dev/gemini-api/docs/thinking#set-budget"
+          "hint": "Gemini 2.5の思考トークン予算を設定します。空欄の場合はモデルの既定値を使用します。参照 https://ai.google.dev/gemini-api/docs/thinking#set-budget"
         },
         "level": {
           "description": "思考レベル",
-          "hint": "Gemini 3 以降のモデルでの使用を推奨します。推論動作を制御できます。参照: https://ai.google.dev/gemini-api/docs/thinking#thinking-levels"
+          "hint": "参照 https://ai.google.dev/gemini-api/docs/thinking#thinking-levels"
         }
       },
       "anth_thinking_config": {
@@ -1983,6 +2040,15 @@
       "openai-tts-voice": {
         "description": "voice",
         "hint": "OpenAI TTS のボイスです。OpenAI のデフォルト対応値: 'alloy', 'echo', 'fable', 'onyx', 'nova', 'shimmer'"
+      },
+      "deepseek-tts-voice": {
+        "description": "ボイス",
+        "hint": "DeepSeek TTS のボイスです。対応する voice_id が API に送信されます。",
+        "labels": ["Stella（女性、デフォルト）", "Tide（男性）"]
+      },
+      "deepseek-tts-filter-markdown": {
+        "description": "Markdown をフィルター",
+        "hint": "合成前に Markdown 書式を削除します。デフォルトで有効です。"
       },
       "elevenlabs-tts-voice-id": {
         "description": "ボイス ID",
