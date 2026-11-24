@@ -10,6 +10,8 @@ from .message_type import MessageType
 class MessageMember:
     user_id: str  # 发送者id
     nickname: str | None = None
+    aliases: list[str] | None = None
+    """Additional platform identifiers for the sender (e.g. Lark user_id/union_id)."""
 
     def __str__(self) -> str:
         # 使用 f-string 来构建返回的字符串表示形式

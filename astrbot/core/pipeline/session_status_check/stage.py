@@ -27,9 +27,11 @@ class SessionStatusCheckStage(Stage):
             str(item).strip()
             for item in config.get("platform_settings", {}).get("id_blacklist", [])
         }
-        if event.unified_msg_origin in blacklist or str(
-            event.get_group_id()
-        ).strip() in blacklist - {""}:
+        if (
+            event.unified_msg_origin in blacklist
+            or str(event.get_group_id()).strip() in blacklist - {""}
+            or any(alias in blacklist for alias in event.get_sender_aliases())
+        ):
             logger.debug(
                 f"Session {event.unified_msg_origin} is disabled; event propagation "
                 "was stopped."

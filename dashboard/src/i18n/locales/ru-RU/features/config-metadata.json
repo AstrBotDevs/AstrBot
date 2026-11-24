@@ -1266,7 +1266,7 @@
       "platform_settings": {
         "id_blacklist": {
           "description": "Blocked session IDs",
-          "hint": "Stop processing these sessions. Blacklist takes priority over whitelist, including administrators."
+          "hint": "Stop processing these sessions. Group IDs and platform sender IDs such as Lark user_id/union_id are also accepted. Blacklist takes priority over whitelist, including administrators."
         }
       }
     },
@@ -1275,7 +1275,7 @@
             "description": "Администраторы",
             "admins_id": {
                 "description": "ID администраторов",
-                "hint": "Отправьте боту команду /sid, чтобы получить ID."
+                "hint": "Отправьте боту команду /sid, чтобы получить ID. Также можно указать ID отправителя платформы, например Lark user_id/union_id."
             }
         },
         "whitelist": {
@@ -1287,7 +1287,7 @@
                 },
                 "id_whitelist": {
                     "description": "Список разрешенных ID",
-                    "hint": "Отправьте боту команду /sid, чтобы получить ID. Если список пуст, белый список отключён."
+                    "hint": "Отправьте боту команду /sid, чтобы получить ID сеанса. Также можно указать ID группы или ID отправителя платформы, например Lark user_id/union_id. Если список пуст, белый список отключён."
                 },
                 "id_whitelist_log": {
                     "description": "Логировать заблокированные сообщения",

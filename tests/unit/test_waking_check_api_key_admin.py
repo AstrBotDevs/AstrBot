@@ -11,15 +11,21 @@ from astrbot.core.pipeline.waking_check.stage import (
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
-    ("api_key_allow_admin_role", "expected_role"),
+    ("api_key_allow_admin_role", "sender_id", "sender_aliases", "expected_role"),
     [
-        (False, "member"),
-        (True, "admin"),
-        (None, "admin"),
+        (False, "admin-user", [], "member"),
+        (True, "admin-user", [], "admin"),
+        (None, "admin-user", [], "admin"),
+        (False, "ou_sender", ["admin-user"], "member"),
+        (True, "ou_sender", ["admin-user"], "admin"),
+        (None, "ou_sender", ["admin-user"], "admin"),
+        (None, "ou_sender", ["other-user"], "member"),
     ],
 )
 async def test_waking_check_enforces_api_key_admin_authorization(
     api_key_allow_admin_role,
+    sender_id,
+    sender_aliases,
     expected_role,
     monkeypatch,
 ):
@@ -45,7 +51,8 @@ async def test_waking_check_enforces_api_key_admin_authorization(
     event = MagicMock()
     event.message_str = "hello"
     event.role = "member"
-    event.get_sender_id.return_value = "admin-user"
+    event.get_sender_id.return_value = sender_id
+    event.get_sender_aliases.return_value = sender_aliases
     event.get_messages.return_value = []
     event.is_private_chat.return_value = True
     event.get_platform_name.return_value = "webchat"
