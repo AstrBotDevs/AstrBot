@@ -1,5 +1,7 @@
 import asyncio
 import copy
+import inspect
+import json
 import sys
 import time
 import traceback
@@ -1735,6 +1737,87 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                             if k in expected_params
                         }
 
+                    # Validate dynamic keys in a killable child: schema regexes can
+                    # otherwise block the event loop indefinitely.
+                    schema = func_tool.parameters or {}
+                    validation_error = False
+                    if set(func_tool_args) - set(valid_params) and getattr(
+                        sys, "frozen", False
+                    ):
+                        validation_error = True
+                    elif set(func_tool_args) - set(valid_params):
+                        process = None
+                        try:
+                            source = (
+                                "import json,sys; from jsonschema import Draft202012Validator; "
+                                "from referencing import Registry; "
+                                "s,a=json.load(sys.stdin); "
+                                "sys.exit(0 if Draft202012Validator(s, registry=Registry()).is_valid(a) else 1)"
+                            )
+                            process = await asyncio.create_subprocess_exec(
+                                sys.executable,
+                                "-c",
+                                source,
+                                stdin=asyncio.subprocess.PIPE,
+                                stdout=asyncio.subprocess.DEVNULL,
+                                stderr=asyncio.subprocess.DEVNULL,
+                                **(
+                                    {"creationflags": 0x08000000}
+                                    if sys.platform == "win32"
+                                    else {}
+                                ),
+                            )
+                            await asyncio.wait_for(
+                                process.communicate(
+                                    json.dumps([schema, func_tool_args]).encode()
+                                ),
+                                timeout=5,
+                            )
+                            if process.returncode == 0:
+                                signature = inspect.signature(func_tool.handler)
+                                accepts_extra = any(
+                                    param.kind == inspect.Parameter.VAR_KEYWORD
+                                    for param in signature.parameters.values()
+                                )
+                                accepted = {
+                                    name
+                                    for name, param in signature.parameters.items()
+                                    if param.kind
+                                    in (
+                                        inspect.Parameter.POSITIONAL_OR_KEYWORD,
+                                        inspect.Parameter.KEYWORD_ONLY,
+                                    )
+                                }
+                                if accepts_extra or set(func_tool_args) <= accepted:
+                                    valid_params = func_tool_args
+                            elif process.returncode != 1:
+                                validation_error = True
+                        except Exception as exc:
+                            logger.warning(f"Could not validate tool arguments: {exc}")
+                            validation_error = True
+                        finally:
+                            if process is not None and process.returncode is None:
+                                with suppress(ProcessLookupError):
+                                    process.kill()
+                                await process.wait()
+
+                    if validation_error:
+                        message = "Tool argument validation could not be completed."
+                        if self._events.active:
+                            await self._events.emit(
+                                ToolRejected(
+                                    call_id=str(func_tool_id),
+                                    name=func_tool_name,
+                                    arguments=func_tool_args,
+                                    error=RuntimeErrorInfo(
+                                        code="tool_validation_failed", message=message
+                                    ),
+                                    content=(PlainOutput(text=message),),
+                                )
+                            )
+                        _append_tool_call_result(func_tool_id, f"error: {message}")
+                        continue
+
                     # 记录被忽略的参数
                     ignored_params = set(func_tool_args.keys()) - set(
                         valid_params.keys(),
@@ -2075,11 +2158,16 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         self._tool_execution_started = True
         executor = None
         try:
+            execute_with_args = getattr(self.tool_executor, "execute_with_args", None)
+            if execute_with_args is not None:
+                tool_results = execute_with_args(tool, self.run_context, arguments)
+            else:
+                tool_results = self.tool_executor.execute(
+                    tool=tool, run_context=self.run_context, **arguments
+                )
             detach = getattr(self.tool_executor, "detach", None)
             executor = self._iter_tool_executor_results(
-                self.tool_executor.execute(
-                    tool=tool, run_context=self.run_context, **arguments
-                ),
+                tool_results,
                 detach=partial(
                     detach,
                     tool=tool,
