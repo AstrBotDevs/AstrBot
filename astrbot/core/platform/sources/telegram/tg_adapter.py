@@ -945,6 +945,11 @@ class TelegramPlatformAdapter(Platform):
 
         # Add this message to the cache
         entry = self.media_group_cache[media_group_id]
+        if any(
+            cached.message and cached.message.message_id == update.message.message_id
+            for cached, _ in entry["items"]
+        ):
+            return
         entry["items"].append((update, context))
         logger.debug(
             f"Add message to media group {media_group_id}, "
@@ -1016,8 +1021,12 @@ class TelegramPlatformAdapter(Platform):
                 if not extra:
                     continue
 
-                # Merge only the message components (keep base session/meta from first)
+                # Preserve the component chain and the text exposed to event handlers.
                 abm.message.extend(extra.message)
+                if extra.message_str:
+                    abm.message_str = "\n".join(
+                        filter(None, (abm.message_str, extra.message_str))
+                    )
                 logger.debug(
                     f"Added {len(extra.message)} components to media group {media_group_id}"
                 )
