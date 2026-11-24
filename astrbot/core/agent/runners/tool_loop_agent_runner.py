@@ -1354,10 +1354,10 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                     # The re-query produced the tool calls that actually run, so
                     # its provider replay state moves as one bundle: call IDs,
                     # per-call metadata (e.g. Gemini thought signatures) and the
-                    # reasoning/signature pair. Only the first response's
-                    # user-visible narration is kept, as in the fallback above.
-                    # Mixing the two responses replays a missing or stale
-                    # signature to the provider on the next turn.
+                    # reasoning/signature pair. Mixing the two responses replays a
+                    # missing or stale signature to the provider on the next turn.
+                    # Unlike the no-tool-call fallback above, which adopts the whole
+                    # re-query response, the first response's narration is kept.
                     llm_resp.tools_call_name = requery_resp.tools_call_name
                     llm_resp.tools_call_args = requery_resp.tools_call_args
                     llm_resp.tools_call_ids = requery_resp.tools_call_ids
