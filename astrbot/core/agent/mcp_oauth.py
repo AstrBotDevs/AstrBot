@@ -242,7 +242,14 @@ def _get_storage_fingerprint(config: Mapping[str, Any]) -> str:
         ensure_ascii=False,
         separators=(",", ":"),
     )
-    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+    # The cache key must be reproducible and change when credentials rotate.
+    # Stretch the secret-bearing payload so filenames are not fast guess checks.
+    return hashlib.pbkdf2_hmac(
+        "sha256",
+        canonical.encode("utf-8"),
+        b"AstrBot MCP OAuth storage v2",
+        600_000,
+    ).hex()
 
 
 def get_mcp_oauth_storage_path(config: Mapping[str, Any]) -> Path:

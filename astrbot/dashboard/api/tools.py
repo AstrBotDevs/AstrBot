@@ -528,9 +528,9 @@ async def handle_mcp_oauth_callback(
             "<html><body><h3>OAuth flow not found or expired.</h3></body></html>",
             status_code=404,
         )
-    except ToolsServiceError as exc:
+    except ToolsServiceError:
         return HTMLResponse(
-            f"<html><body><h3>OAuth callback failed: {exc!s}</h3></body></html>",
+            "<html><body><h3>OAuth callback failed.</h3></body></html>",
             status_code=500,
         )
 
