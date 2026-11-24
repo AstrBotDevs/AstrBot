@@ -18,6 +18,8 @@ result = await run.result()
 
 `run_turn()` 提交后即返回，不等待执行完成。同一 session 的 turn 串行执行。`await run.result()` 等待执行、历史保存和输出处理完成。AstrBot 默认发送回复，插件无需再次发送 `result.text`。
 
+用 `conversation_id=cid` 指定一段属于该 `umo` 的已有对话。省略时使用当前对话。
+
 停止执行请使用 `await run.cancel()`。取消结果等待者不会停止 turn。
 
 ### 向 hooks 传递 metadata
@@ -46,7 +48,7 @@ companion = metadata.get("private_companion", {})
 
 请使用插件自己的命名空间和 JSON 兼容值。Metadata 会在 hooks 执行前复制到 `event.get_extra("agent_metadata")`，不会自动加入模型提示词或历史；需要传给模型的上下文应通过 hook 显式添加。
 
-Metadata 默认为 `{}`，不会从 `source_event` 或 `follow_up()` 继承。后续 turn 需要 metadata 时，请指定目标 `session_id` 调用 `run_turn()`。
+Metadata 默认为 `{}`，不会从 `source_event` 或 `follow_up()` 继承。后续 turn 需要 metadata 时，请指定目标 `conversation_id` 调用 `run_turn()`。
 
 ### 收集待发送消息
 

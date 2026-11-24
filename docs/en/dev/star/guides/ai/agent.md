@@ -18,6 +18,8 @@ result = await run.result()
 
 `run_turn()` submits a turn without waiting for completion. Turns in the same session execute serially. `await run.result()` waits for execution, history persistence, and output handling. AstrBot sends replies by default; do not send `result.text` again.
 
+Pass `conversation_id=cid` to target an existing conversation that belongs to `umo`. Omitting it uses the current conversation.
+
 Use `await run.cancel()` to stop execution. Cancelling a result waiter does not stop the turn.
 
 ### Pass metadata to hooks
@@ -46,7 +48,7 @@ companion = metadata.get("private_companion", {})
 
 Use a plugin namespace and JSON-compatible values. Metadata is copied into `event.get_extra("agent_metadata")` before hooks run. It is not added to the model prompt or history; add model context explicitly through a hook if needed.
 
-Metadata defaults to `{}` and is not inherited from `source_event` or by `follow_up()`. To pass metadata to another turn, call `run_turn()` with the target `session_id`.
+Metadata defaults to `{}` and is not inherited from `source_event` or by `follow_up()`. To pass metadata to another turn, call `run_turn()` with the target `conversation_id`.
 
 ### Collect messages before sending
 

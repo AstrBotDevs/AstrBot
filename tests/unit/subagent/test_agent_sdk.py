@@ -105,6 +105,34 @@ async def test_output_observers_do_not_change_delivery_or_history(sdk, send_to_u
 
 
 @pytest.mark.asyncio
+async def test_conversation_id_and_deprecated_alias_target_existing_conversation(sdk):
+    """Target a conversation by either keyword and reject conflicting IDs."""
+    target = copy.deepcopy(sdk.conversation)
+    target.cid = "target"
+    sdk.conversations[target.cid] = target
+    kwargs = {
+        "umo": sdk.event.unified_msg_origin,
+        "input_message": [PlainInput(text="Continue this conversation")],
+        "send_to_user": False,
+    }
+
+    run = await sdk.context.agent.run_turn(**kwargs, conversation_id=target.cid)
+    assert (await run.result()).status == TurnStatus.COMPLETED
+    assert (await run.get_session()).id == target.cid
+
+    with pytest.warns(DeprecationWarning, match="Use conversation_id instead"):
+        run = await sdk.context.agent.run_turn(**kwargs, session_id=target.cid)
+    assert (await run.result()).status == TurnStatus.COMPLETED
+    assert (await run.get_session()).id == target.cid
+    assert sdk.conversation.history == "[]"
+
+    with pytest.raises(ValueError, match="must match"):
+        await sdk.context.agent.run_turn(
+            **kwargs, conversation_id=target.cid, session_id=sdk.conversation.cid
+        )
+
+
+@pytest.mark.asyncio
 async def test_follow_up_queues_and_retains_conversation_and_output_policy(sdk):
     """Bind follow-ups to their original conversation and read newly saved history."""
     entered, release = asyncio.Queue(), asyncio.Event()
