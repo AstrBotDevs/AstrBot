@@ -4115,7 +4115,7 @@ CONFIG_METADATA_3 = {
                     "provider_settings.sandbox.cua_local": {
                         "description": "CUA Local Sandbox",
                         "type": "bool",
-                        "hint": "是否优先使用 CUA 本地沙箱。默认开启，避免云端沙箱要求 CUA_API_KEY。关闭后可使用 CUA 云端沙箱。",
+                        "hint": "Keep enabled. Cua Cloud ended on October 18, 2026; AstrBot only configures local CUA sandboxes.",
                         "condition": {
                             "provider_settings.computer_use_runtime": "sandbox",
                             "provider_settings.sandbox.booter": "cua",
@@ -4124,7 +4124,7 @@ CONFIG_METADATA_3 = {
                     "provider_settings.sandbox.cua_api_key": {
                         "description": "CUA API Key",
                         "type": "string",
-                        "hint": "CUA 云端沙箱 API Key。仅在关闭本地沙箱时需要。也可以通过 CUA_API_KEY 环境变量提供。",
+                        "hint": "Legacy setting for the retired Cua Cloud service. Local CUA sandboxes do not require an API key.",
                         "obvious_hint": True,
                         "secret": True,
                         "condition": {

@@ -351,11 +351,11 @@
           },
           "cua_local": {
             "description": "CUA 本地沙箱",
-            "hint": "是否优先使用 CUA 本地沙箱。默认开启，避免云端沙箱要求 CUA_API_KEY。关闭后可使用 CUA 云端沙箱。"
+            "hint": "请保持开启。Cua Cloud 已于 2026-10-18 结束服务；AstrBot 当前只配置本地 CUA 沙箱。"
           },
           "cua_api_key": {
             "description": "CUA API Key",
-            "hint": "CUA 云端沙箱 API Key。仅在关闭本地沙箱时需要。也可以通过 CUA_API_KEY 环境变量提供。"
+            "hint": "已结束的 Cua Cloud 服务的旧配置项。本地 CUA 沙箱不需要 API Key。"
           },
           "shipyard_endpoint": {
             "description": "Shipyard API Endpoint",

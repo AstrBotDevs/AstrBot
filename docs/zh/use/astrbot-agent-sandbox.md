@@ -495,40 +495,43 @@ Agent 可以在 CUA sandbox 中使用多种能力，请见下表：
 | 键盘输入 | `astrbot_cua_keyboard_type` | 向当前焦点输入文本 |
 
 > [!WARNING]
-> CUA 是可选运行时，AstrBot 默认安装不会强制安装它。如果您选择了 `CUA` 但当前 AstrBot 的 Python 环境没有安装 `cua` 包，启动沙盒时会提示安装缺失。
+> CUA 是可选运行时，需要在 AstrBot 的 Python 环境安装 `cua[sandbox]`；仅安装基础 `cua` 包不会安装高层沙箱 API。使用 `cua==0.27.5` 和 `cua-sandbox==0.10.2` 在 Linux ARM64 Docker Desktop 沙箱完成了启动、Shell/Python 执行、文件传输、Skills 同步及桌面截图烟测；尚未验证模型驱动的 GUI 任务及其他平台。
 
 #### 何时选择 CUA
 
 建议在以下场景选择 `CUA`：
 
 - 需要桌面截图、鼠标点击、键盘输入等 GUI 自动化能力。
-- 需要测试不同 OS 镜像中的行为，例如 Linux、Windows、Android。
-- 已经在本机或云端部署好 CUA 运行环境。
+- 已有本地 CUA 运行环境及支持桌面的镜像。建议从 Linux 开始；AstrBot 对 Windows、Android 的适配不具备同等能力。
 
 如果只是需要稳定的 Python/Shell/文件系统沙盒，且不需要桌面 GUI 操作，通常优先选择 `Shipyard Neo`。它与 AstrBot 的 workspace、Skills 同步和长期运行模式更贴合。
 
 #### 安装 CUA 依赖
 
-您可以在 WebUI 的 “数据与日志” 页的 “日志” 中点击 “安装 Pip 库” 按钮，输入 `cua` 以安装 CUA 依赖。也可以按照下面的方式在 AstrBot 的 Python 环境中安装 CUA。
+您可以在 WebUI 的 “数据与日志” 页的 “日志” 中点击 “安装 Pip 库” 按钮，输入 `cua[sandbox]` 以安装 CUA 依赖。也可以按照下面的方式在 AstrBot 的 Python 环境中安装 CUA。
 
 - 如果您通过源码或虚拟环境运行 AstrBot，请在 AstrBot 使用的 Python 环境中安装 CUA：
 
   ```bash
-  pip install cua
+  pip install "cua[sandbox]"
   ```
 
 - 如果您使用 `uv` 管理 AstrBot 环境，可在 AstrBot 项目目录中执行：
 
   ```bash
-  uv pip install cua
+  uv pip install "cua[sandbox]"
   ```
 
-CUA 本身还依赖具体运行方式：
+当前 `cua-sandbox` 发布版要求 Python 3.11–3.13；结合当前 AstrBot 的版本要求，建议使用 Python 3.12 或 3.13。CUA 本身还依赖具体运行方式：
 
 - 本地 Linux 容器通常需要 Docker 可用。
 - 本地 Linux/Windows VM 通常需要 QEMU 或 CUA 对应的本地运行时。
 - macOS VM 通常依赖 CUA/Lume 相关运行时。
-- 云端 CUA 需要可用的 CUA API Key。
+- 镜像需要提供 CUA 电脑接口（当前通过 `cua-spacesd` 提供）；任意容器镜像并不一定支持截图和输入。AstrBot 的 Skills 同步及多种 fallback 还依赖 POSIX Shell 和 `python3`。
+- CUA 可能自动准备运行时辅助组件。本次 Docker Desktop 烟测创建了带宿主文件系统挂载的特权容器 `cua-runsc-helper`。部署前请核对上游运行时要求及 Docker 权限；本次使用 `runc`，没有验证 gVisor 隔离配置。
+
+> [!WARNING]
+> [Cua Cloud 已于 2026-10-18 结束服务](https://cua.ai/docs/cua-sdk/guides/cua-cloud-ended)。请保持 `CUA Local Runtime` 开启。AstrBot 会拒绝 `cua_local=false`；当前适配器不提供 CUA 自有云或直连环境的配置。
 
 具体宿主机要求、镜像支持情况和本地运行时安装方式，请参考 [CUA 官方文档](https://cua.ai/docs)。
 
@@ -545,12 +548,12 @@ CUA 本身还依赖具体运行方式：
 
 CUA 相关配置项包括：
 
-- `CUA Image`：要启动的 CUA 镜像。常见值为 `linux`、`macos`、`windows`、`android`。默认 `linux`。
+- `CUA Image`：使用的 SDK 镜像工厂，默认 `linux`。建议先使用 `linux`；其他镜像取决于 SDK、宿主机运行时及下方适配限制。此字段目前不会解析任意镜像仓库地址。
 - `CUA OS Type`：镜像的操作系统类型。默认 `linux`。它会影响 AstrBot 对 POSIX Shell fallback 的判断。
-- `CUA Sandbox TTL`：沙盒生命周期，单位为秒。默认 `3600`。
+- `CUA Idle Timeout`：距最近一次沙箱工具访问后，AstrBot 自动关闭沙箱的秒数，默认 `0`（关闭）。它不是生命周期上限，也不会检测任务是否仍在执行；长任务建议保持关闭。
 - `CUA Telemetry Enabled`：是否启用 CUA 侧遥测。默认关闭。
-- `CUA Local Runtime`：是否使用本地运行时。默认开启。关闭后会按 CUA SDK 的云端方式创建沙盒。
-- `CUA API Key`：云端 CUA 所需的 API Key。仅在使用云端运行时时填写。
+- `CUA Local Runtime`：必须保持开启，原托管 Cua Cloud 服务已结束。
+- `CUA API Key`：旧配置项，无法恢复已结束的云服务。本地配置不需要填写。
 
 一个最小本地 Linux 容器配置通常是：
 
@@ -560,27 +563,18 @@ Computer Use Runtime = sandbox
 CUA Image = linux
 CUA OS Type = linux
 CUA Local Runtime = true
-CUA Sandbox TTL = 3600
+CUA Idle Timeout = 0
 ```
 
-如果使用云端 CUA，可改为：
-
-```text
-Computer Use Runtime = sandbox
-沙箱环境驱动器 = CUA
-CUA Image = linux
-CUA OS Type = linux
-CUA Local Runtime = false
-CUA API Key = <your-cua-api-key>
-```
-
-> [!WARNING]
-> 不要把 CUA API Key 写入公开日志、截图或 issue。
+已有云端配置应将 `CUA Local Runtime` 改回 `true`，并准备本地运行时。`CUA Sandbox TTL` 已不是 WebUI 配置项，且当前 SDK 的 `ephemeral()` 不接受 TTL；旧 `cua_ttl` 值不能保证沙箱生命周期。沙箱采用临时模式，上下文关闭时会删除实例，请在清理前导出重要文件。
 
 #### 使用 CUA 时的注意事项
 
 - `linux` 镜像通常适合 Shell、Python、文件系统和桌面自动化测试。
 - 非 POSIX 镜像（如 `windows`、`android`）不一定支持 `sh`、`cat`、`ls`、`rm`、`base64` 等命令。AstrBot 对需要这些命令的 fallback 操作会返回明确错误。
+- Shell 的 `env` 和 `cwd` 参数通过安全引用的 POSIX 命令实现，不再传给不支持这些关键字参数的 SDK。非 POSIX 镜像不支持这些参数及后台执行。
+- 桌面工具仅提供截图、单击和文本输入，没有独立的滚动、拖拽、双击或快捷键工具。模型需要能查看工具返回的图片。
+- SDK 没有 Python 接口时，会降级为每次启动独立的 `python3` 进程。虽然工具名为 `astrbot_execute_ipython`，但此时不保留跨调用变量状态；当前 CUA 适配器也不返回 Python 富图片结果。
 - 如果需要在 CUA sandbox 中打开浏览器或 GUI 程序，通常应使用 Shell 后台执行，例如显式传入 `background=true`，避免命令阻塞后续工具调用。
 - 直接把 sandbox 内的文件路径发送给用户通常不可行。应优先使用 AstrBot 的沙盒下载工具，将文件下载到 AstrBot 临时目录后再发送。
 - CUA 与 Shipyard Neo 的 workspace 语义不同。Shipyard Neo 固定使用 `/workspace`；CUA 的工作目录和文件路径取决于镜像与运行时。
