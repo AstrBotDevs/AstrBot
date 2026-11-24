@@ -445,6 +445,9 @@
     "discardChanges": "現在のファイルには未保存の変更があります。破棄しますか？"
   },
   "card": {
+    "repositoryVersion": "前回の検証：{version}",
+    "repositoryVersionUnknown": "リポジトリのバージョン未確認",
+    "repositoryVersionHint": "記録日時：{time}。保存済みの情報であり、リアルタイムの更新確認ではありません。「プラグインソースの変更」でリポジトリを検証すると更新できます。",
     "actions": {
       "pluginConfig": "プラグイン設定",
       "uninstallPlugin": "プラグインを削除",
