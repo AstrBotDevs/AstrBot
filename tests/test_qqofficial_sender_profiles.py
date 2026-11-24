@@ -15,7 +15,7 @@ from botpy.http import BotHttp
 from botpy.manage import C2CManageEvent
 
 from astrbot.api.event import MessageChain
-from astrbot.api.message_components import Image, Json, Plain, Reply
+from astrbot.api.message_components import ActionRow, Image, Json, Plain, Reply
 from astrbot.api.platform import (
     AstrBotMessage,
     MessageReplyContext,
@@ -473,10 +473,17 @@ async def test_qq_native_permission_event_preserves_source_without_replacing_las
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
-    "component", [Json({"unsupported": True}), Image.fromBase64("aGVsbG8=")]
+    "components",
+    [
+        [Json({"unsupported": True})],
+        [Image.fromBase64("aGVsbG8=")],
+        [Reply(id="different-human-message")],
+        [Reply(id="original-human-message"), Reply(id="REFIDX_another")],
+        [ActionRow(buttons=[], fallback_text="Unsent action")],
+    ],
 )
 async def test_qq_partial_content_does_not_receive_a_complete_chain_receipt(
-    component, monkeypatch
+    components, monkeypatch
 ):
     adapter, event, _ = await _capture_qq_reply("group", monkeypatch)
     request = AsyncMock(return_value={"id": "text-part-accepted"})
@@ -484,5 +491,5 @@ async def test_qq_partial_content_does_not_receive_a_complete_chain_receipt(
     monkeypatch.setattr(
         event, "upload_group_and_c2c_image", AsyncMock(return_value=None)
     )
-    assert await event.send(MessageChain([Plain("Text part"), component])) is None
+    assert await event.send(MessageChain([Plain("Text part"), *components])) is None
     request.assert_awaited_once()

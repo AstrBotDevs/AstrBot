@@ -301,12 +301,16 @@ class QQOfficialMessageEvent(AstrMessageEvent):
         self.send_buffer = message
         # Media helpers can skip an unsupported or failed upload. A final ID
         # then confirms only part of the requested chain.
-        complete_chain = all(
+        complete_chain = sum(
+            isinstance(component, Reply) for component in message.chain
+        ) <= 1 and all(
             isinstance(component, (Plain, Reply, ActionRow))
+            and (not isinstance(component, ActionRow) or bool(component.buttons))
             and (
                 not isinstance(component, Reply)
-                or str(component.id or "").startswith("REFIDX_")
-                or bool(self._extract_self_ref_idx(self.message_obj.raw_message))
+                or str(component.id or "").strip().startswith("REFIDX_")
+                or str(component.id or "").strip() == self.message_obj.message_id
+                and bool(self._extract_self_ref_idx(self.message_obj.raw_message))
             )
             for component in message.chain
         )
