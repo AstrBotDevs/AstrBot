@@ -94,6 +94,10 @@ async function startEditing() {
   try {
     await controller.startEditing(
       {
+        // Monaco never wrapped a selection when a bracket or quote was typed,
+        // and upstream's default auto-surround turns a select-all into
+        // `{<whole document>}`, which cannot be undone by continuing to type.
+        autoSurround: 'never',
         onChange: (event) => {
           const text = event.file.contents;
           if (text === knownText) return;
