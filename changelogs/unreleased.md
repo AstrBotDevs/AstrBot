@@ -2,6 +2,8 @@
 
 - QQ Official: failed image uploads no longer log base64 payloads, avoiding dashboard freezes from oversized log entries. Retry attempts decrease from five to three, with one summary warning.
 
+- Session waiters now wake their timeout task immediately when completed early, avoiding stale asyncio tasks for the remainder of the configured timeout.
+
 - 「插件 → 管理行为 → 函数工具」现在只列出插件工具。Agent 运行时工具由配置文件的 AI 功能设置控制，MCP 工具可在「插件 → MCP」查看。
 - Extensions → Handlers → Function Tools now lists plugin tools. Configure Agent runtime tools in the profile's AI capability settings and view MCP tools under Extensions → MCP Servers.
 
