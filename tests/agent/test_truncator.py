@@ -1,7 +1,7 @@
 """Tests for ContextTruncator."""
 
 from astrbot.core.agent.context.truncator import ContextTruncator
-from astrbot.core.agent.message import Message
+from astrbot.core.agent.message import Message, ToolCall
 
 
 class TestContextTruncator:
@@ -10,6 +10,13 @@ class TestContextTruncator:
     def create_message(self, role: str, content: str = "test content") -> Message:
         """Helper to create a simple test message."""
         return Message(role=role, content=content)
+
+    def create_tool_call(self, call_id: str) -> ToolCall:
+        """Helper to create a function tool call with the given id."""
+        return ToolCall(
+            id=call_id,
+            function=ToolCall.FunctionBody(name="send_message_to_user", arguments="{}"),
+        )
 
     def create_messages(
         self, count: int, include_system: bool = False
@@ -61,6 +68,101 @@ class TestContextTruncator:
         result = truncator.fix_messages(messages)
         # Tool message without context should be removed
         assert len(result) == 0
+
+    def test_fix_messages_drops_chain_with_missing_receipt(self):
+        """A chain whose receipts do not cover every declared call id is dropped whole."""
+        truncator = ContextTruncator()
+        messages = [
+            self.create_message("user", "run two tools"),
+            Message(
+                role="assistant",
+                tool_calls=[self.create_tool_call("c1"), self.create_tool_call("c2")],
+            ),
+            Message(role="tool", content="r1", tool_call_id="c1"),
+            self.create_message("user", "next"),
+        ]
+        result = truncator.fix_messages(messages)
+        # The assistant declared c1 and c2 but only c1 was answered; keeping the
+        # chain would 400 the next request upstream (#10338).
+        assert [m.role for m in result] == ["user", "user"]
+
+    def test_fix_messages_keeps_fully_covered_chain(self):
+        """A chain with one receipt per declared call id is kept intact."""
+        truncator = ContextTruncator()
+        messages = [
+            self.create_message("user", "run two tools"),
+            Message(
+                role="assistant",
+                tool_calls=[self.create_tool_call("c1"), self.create_tool_call("c2")],
+            ),
+            Message(role="tool", content="r1", tool_call_id="c1"),
+            Message(role="tool", content="r2", tool_call_id="c2"),
+            self.create_message("user", "done"),
+        ]
+        result = truncator.fix_messages(messages)
+        assert result == messages
+
+    def test_fix_messages_drops_intruder_receipt(self):
+        """A receipt whose id answers no declared call is dropped, chain kept."""
+        truncator = ContextTruncator()
+        messages = [
+            self.create_message("user", "run one tool"),
+            Message(role="assistant", tool_calls=[self.create_tool_call("c1")]),
+            Message(role="tool", content="stale", tool_call_id="c999"),
+            Message(role="tool", content="r1", tool_call_id="c1"),
+        ]
+        result = truncator.fix_messages(messages)
+        assert [m.role for m in result] == ["user", "assistant", "tool"]
+        assert result[-1].tool_call_id == "c1"
+
+    def test_fix_messages_dict_tool_calls_coverage(self):
+        """Raw dict tool_calls participate in the id coverage check too."""
+        truncator = ContextTruncator()
+        dict_calls = [
+            {
+                "type": "function",
+                "id": cid,
+                "function": {"name": "f", "arguments": "{}"},
+            }
+            for cid in ("c1", "c2")
+        ]
+        messages = [
+            self.create_message("user", "run two tools"),
+            Message(role="assistant", tool_calls=dict_calls),
+            Message(role="tool", content="r1", tool_call_id="c1"),
+        ]
+        result = truncator.fix_messages(messages)
+        assert [m.role for m in result] == ["user"]
+
+    def test_fix_messages_idless_tool_calls_keep_legacy_behavior(self):
+        """Id-less tool_calls cannot be id-matched; the non-empty check still applies."""
+        truncator = ContextTruncator()
+        idless_calls = [{"function": {"name": "f", "arguments": "{}"}}]
+        with_receipt = [
+            self.create_message("user", "run"),
+            Message(role="assistant", tool_calls=idless_calls),
+            Message(role="tool", content="r1"),
+        ]
+        result = truncator.fix_messages(with_receipt)
+        assert [m.role for m in result] == ["user", "assistant", "tool"]
+
+        without_receipt = [
+            self.create_message("user", "run"),
+            Message(role="assistant", tool_calls=idless_calls),
+            self.create_message("user", "again"),
+        ]
+        result = truncator.fix_messages(without_receipt)
+        assert [m.role for m in result] == ["user", "user"]
+
+    def test_fix_messages_drops_interrupted_trailing_chain(self):
+        """An assistant(tool_calls) left as the last message has no receipts coming."""
+        truncator = ContextTruncator()
+        messages = [
+            self.create_message("user", "run"),
+            Message(role="assistant", tool_calls=[self.create_tool_call("c1")]),
+        ]
+        result = truncator.fix_messages(messages)
+        assert [m.role for m in result] == ["user"]
 
     # ==================== truncate_by_turns Tests ====================
 

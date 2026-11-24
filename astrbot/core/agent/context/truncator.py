@@ -49,13 +49,21 @@ class ContextTruncator:
         return system_messages + [first_user] + truncated
 
     def fix_messages(self, messages: list[Message]) -> list[Message]:
-        """Fix the message list to ensure the validity of tool call and tool response pairing.
+        """Fix the message list so tool calls and tool responses stay paired.
 
         This method ensures that:
         1. Each `tool` message is preceded by an `assistant` message containing `tool_calls`.
-        2. Each `assistant` message containing `tool_calls` is followed by corresponding `
+        2. Each `assistant` message with `tool_calls` is followed by a tool message
+           for every declared call id; an incomplete chain is dropped whole, and a
+           receipt whose `tool_call_id` answers no declared call is dropped too.
 
         This is a requirement of the OpenAI Chat Completions API specification (Gemini enforces this strictly).
+
+        Args:
+            messages: The original message list.
+
+        Returns:
+            The message list with unpaired tool-call chains and orphan receipts removed.
         """
         if not messages:
             return messages
@@ -67,8 +75,29 @@ class ContextTruncator:
         def flush_pending_if_valid() -> None:
             nonlocal pending_assistant, pending_tools
             if pending_assistant is not None and pending_tools:
-                fixed_messages.append(pending_assistant)
-                fixed_messages.extend(pending_tools)
+                # Ids the assistant declared on its tool_calls; dicts come from
+                # raw provider payloads, ToolCall models from our own runner.
+                expected_ids = {
+                    tc_id
+                    for tc in pending_assistant.tool_calls or []
+                    if (tc_id := tc.get("id") if isinstance(tc, dict) else tc.id)
+                }
+                if expected_ids:
+                    # Keep the chain only if every declared call has its receipt,
+                    # and drop receipts whose id answers no declared call. A
+                    # partially answered chain 400s the whole request upstream
+                    # ("insufficient tool messages"), same as an orphan receipt
+                    # does in the other direction.
+                    if expected_ids <= {t.tool_call_id for t in pending_tools}:
+                        fixed_messages.append(pending_assistant)
+                        fixed_messages.extend(
+                            t for t in pending_tools if t.tool_call_id in expected_ids
+                        )
+                else:
+                    # Providers that return id-less tool_calls leave nothing to
+                    # match against; keep the historical non-empty check there.
+                    fixed_messages.append(pending_assistant)
+                    fixed_messages.extend(pending_tools)
             pending_assistant = None
             pending_tools = []
 
@@ -95,7 +124,9 @@ class ContextTruncator:
         # ensuring that any remaining valid assistant(tool_calls) and its tools are included in the final list.
         flush_pending_if_valid()
 
-        return fixed_messages
+        # Preserve list identity on a no-op so the runner does not journal a
+        # full context replacement for every model request.
+        return messages if len(fixed_messages) == len(messages) else fixed_messages
 
     def truncate_by_turns(
         self,

@@ -84,12 +84,24 @@ class ContextManager:
                     self.revision += 1
                     result = await self._run_compression(result, total_tokens)
 
+            # Pairing must hold even when neither stage above ran: a plugin
+            # hook can drop a tool receipt from the history at any time, and
+            # the next request would 400 until the session is reset (#10338).
+            result = self.truncator.fix_messages(result)
+
             return result
         except ConversationPersistenceError:
             raise
         except Exception as e:
             logger.error(f"Error during context processing: {e}", exc_info=True)
-            return messages
+            # The fallback hands back the history a stage failed on, which can
+            # carry the same broken pairing the normal exit repairs. Repair it
+            # here too, or the session keeps 400ing until it is reset (#10338).
+            try:
+                return self.truncator.fix_messages(messages)
+            except Exception:
+                logger.error("Tool pairing repair failed on the fallback path")
+                return messages
 
     async def _run_compression(
         self, messages: list[Message], prev_tokens: int

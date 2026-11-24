@@ -148,10 +148,14 @@ class TestContextManager:
 
         provider = MockProvider()
         provider.text_chat = AsyncMock(
-            return_value=LLMResponse(role="assistant", completion_text="  ", usage=TokenUsage(output=3))
+            return_value=LLMResponse(
+                role="assistant", completion_text="  ", usage=TokenUsage(output=3)
+            )
         )
         sink = AsyncMock()
-        compressor = LLMSummaryCompressor(provider=provider, keep_recent_ratio=0.15, request_event_emitter=sink)  # type: ignore[arg-type]
+        compressor = LLMSummaryCompressor(
+            provider=provider, keep_recent_ratio=0.15, request_event_emitter=sink
+        )  # type: ignore[arg-type]
         messages = self.create_messages(6)
 
         with patch("astrbot.core.agent.context.compressor.logger") as mock_logger:
@@ -445,6 +449,68 @@ class TestContextManager:
         assert result == []
 
     @pytest.mark.asyncio
+    async def test_process_repairs_broken_tool_pairing_without_truncation(self):
+        """process() repairs a broken tool_calls chain even with both stages off.
+
+        With enforce_max_turns=-1 and max_context_tokens=0 neither truncation nor
+        compression runs; a receipt deleted by a plugin hook must still not reach
+        the provider, or every later request in the session 400s (#10338).
+        """
+        config = ContextConfig()
+        manager = ContextManager(config)
+
+        messages = [
+            self.create_message("user", "call both tools"),
+            Message(
+                role="assistant",
+                tool_calls=[
+                    ToolCall(
+                        id=cid,
+                        function=ToolCall.FunctionBody(name="f", arguments="{}"),
+                    )
+                    for cid in ("c1", "c2")
+                ],
+            ),
+            Message(role="tool", content="r1", tool_call_id="c1"),
+            self.create_message("user", "continue"),
+        ]
+        result = await manager.process(messages)
+
+        assert [m.role for m in result] == ["user", "user"]
+
+    @pytest.mark.asyncio
+    async def test_process_repairs_broken_tool_pairing_when_a_stage_raises(self):
+        """The fallback exit repairs pairing too, not just the normal one.
+
+        A stage that raises returns the original history, which is the same
+        broken state the normal exit repairs; sending it upstream 400s the
+        session exactly as before (#10338).
+        """
+        config = ContextConfig(max_context_tokens=100)
+        manager = ContextManager(config)
+        manager.token_counter = MagicMock()
+        manager.token_counter.count_tokens.side_effect = RuntimeError("counting failed")
+
+        messages = [
+            self.create_message("user", "call both tools"),
+            Message(
+                role="assistant",
+                tool_calls=[
+                    ToolCall(
+                        id=cid,
+                        function=ToolCall.FunctionBody(name="f", arguments="{}"),
+                    )
+                    for cid in ("c1", "c2")
+                ],
+            ),
+            Message(role="tool", content="r1", tool_call_id="c1"),
+            self.create_message("user", "continue"),
+        ]
+        result = await manager.process(messages)
+
+        assert [m.role for m in result] == ["user", "user"]
+
+    @pytest.mark.asyncio
     async def test_process_single_message(self):
         """Test processing a single message."""
         config = ContextConfig()
@@ -467,6 +533,7 @@ class TestContextManager:
 
         assert len(result) == 20
         assert result == messages
+        assert result is messages
 
     # ==================== Enforce Max Turns Tests ====================
 
@@ -708,7 +775,9 @@ class TestContextManager:
                 return super().count_tokens(messages, trusted_token_usage) + 1000
 
         counter = RequestOverheadCounter() if custom_counter else EstimateTokenCounter()
-        original = self._rounds_with_tool_chain("f" * (5000 if oversized_latest else 20))
+        original = self._rounds_with_tool_chain(
+            "f" * (5000 if oversized_latest else 20)
+        )
         messages = [
             original[0],
             Message(
@@ -783,7 +852,9 @@ class TestContextManager:
         messages = self._rounds_with_tool_chain("latest request")
         before = [message.model_dump() for message in messages]
         manager = ContextManager(
-            ContextConfig(max_context_tokens=100, custom_compressor=InspectingCompressor())
+            ContextConfig(
+                max_context_tokens=100, custom_compressor=InspectingCompressor()
+            )
         )
 
         result = await manager.process(messages)
