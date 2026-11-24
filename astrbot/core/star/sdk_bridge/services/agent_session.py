@@ -247,7 +247,7 @@ class AgentSessionService:
             if operation == "result":
                 return self._to_sdk(await run.result(), media_cache)
             if operation == "session":
-                return self._to_sdk(run.session, media_cache)
+                return self._to_sdk(await run.get_session(), media_cache)
             if operation == "cancel":
                 await run.cancel()
                 return None

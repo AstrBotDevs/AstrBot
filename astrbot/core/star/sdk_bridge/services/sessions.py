@@ -228,7 +228,9 @@ class SessionLocaleService:
         umo = payload.get("umo")
         if umo is not None and not isinstance(umo, UMO):
             raise InvalidRequest("locale requires a UMO")
-        return self._context.locale(to_umo_string(umo) if umo is not None else None)
+        return await self._context.get_locale(
+            to_umo_string(umo) if umo is not None else None
+        )
 
 
 class SessionWaitService:

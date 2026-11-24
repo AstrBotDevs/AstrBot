@@ -65,10 +65,14 @@ class TestPlugin(Plugin):
                 observed.append(current.payload.text)
         receipt = await turn.steer(input_message=[PlainInput("more")])
         assert receipt is not None and await receipt
-        assert (await turn.session()).id == "session"
+        assert (await turn.get_session()).id == "session"
         following = await turn.follow_up(input_message=[PlainInput("next")])
         await following.cancel()
         yield event.reply(f"{''.join(observed)}:{(await turn.result()).text}")
+
+    @on.command("locale")
+    async def locale(self, event: MessageEvent):
+        yield event.reply(await self.ctx.get_locale())
 
     @on.command("button")
     async def button(self, event: MessageEvent):
@@ -94,7 +98,13 @@ def native_bridge(tmp_path, monkeypatch):
     """Build a native Runner with a persistent view and mocked model endpoints."""
     plugin_root = tmp_path / "native"
     write_sdk_plugin(
-        plugin_root, SOURCE, capabilities=[{"id": "decision.ask"}, {"id": "agent.run"}]
+        plugin_root,
+        SOURCE,
+        capabilities=[
+            {"id": "decision.ask"},
+            {"id": "agent.run"},
+            {"id": "session.locale"},
+        ],
     )
     metadata_path = plugin_root / "metadata.yaml"
     metadata = yaml.safe_load(metadata_path.read_text())
@@ -111,6 +121,7 @@ def native_bridge(tmp_path, monkeypatch):
     monkeypatch.setattr(chatui, "view_store", chatui.ViewStore(tmp_path / "views.db"))
     context = MagicMock()
     context.decision.ask = AsyncMock(return_value={"reply": DecisionBooleanAnswer(0.8)})
+    context.get_locale = AsyncMock(return_value="en-US")
     context.registered_web_apis = []
     return SDKPluginBridge(plugin_root, context)
 
@@ -166,14 +177,20 @@ async def test_models_over_native_bridge(native_bridge):
         done=True,
         events=events,
         result=AsyncMock(return_value=result),
-        session=AgentSessionStatus(session, SessionState.RUNNING, 0, "first"),
+        get_session=AsyncMock(
+            return_value=AgentSessionStatus(session, SessionState.RUNNING, 0, "first")
+        ),
         steer=AsyncMock(return_value=pending),
         follow_up=AsyncMock(return_value=following),
     )
     bridge.context.agent.run_turn = AsyncMock(return_value=run)
     try:
         await bridge.start()
-        for name, expected in (("decide", "0.8"), ("run", "working:done")):
+        for name, expected in (
+            ("decide", "0.8"),
+            ("run", "working:done"),
+            ("locale", "en-US"),
+        ):
             event = core_event(name)
             handler = star_handlers_registry.star_handlers_map[
                 f"{bridge.module_path}_{name}"
@@ -184,6 +201,10 @@ async def test_models_over_native_bridge(native_bridge):
                 assert (
                     bridge.context.agent.run_turn.await_args.kwargs["source_event"]
                     is event
+                )
+            if name == "locale":
+                bridge.context.get_locale.assert_awaited_once_with(
+                    event.unified_msg_origin
                 )
         assert bridge.context.decision.ask.await_args.args[1] == {"messages": ["hi"]}
         params = bridge.context.agent.run_turn.await_args.kwargs
