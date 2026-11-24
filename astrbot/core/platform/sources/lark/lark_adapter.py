@@ -765,7 +765,13 @@ class LarkPlatformAdapter(Platform):
                 except Exception as exc:
                     logger.warning("[Lark] Failed to save private chat route: %s", exc)
 
-        await self.handle_msg(abm, quoted_post_id=quoted_post_id)
+        await self.handle_msg(
+            abm,
+            quoted_post_id=quoted_post_id,
+            sender_type=getattr(event.event.sender, "sender_type", None),
+            tenant_key=getattr(getattr(event, "header", None), "tenant_key", None)
+            or getattr(event.event.sender, "tenant_key", None),
+        )
 
     async def convert_card_action(
         self,
@@ -924,7 +930,7 @@ class LarkPlatformAdapter(Platform):
             conversation_id=raw.chat_id,
             message_id=message.message_id,
             sender_id=event.get_sender_id(),
-            session_id=message.session_id,
+            session_id=event.get_session_id(),
             timestamp=message.timestamp,
             thread_id=getattr(raw, "thread_id", None) or None,
             root_id=getattr(raw, "root_id", None) or None,
@@ -1065,17 +1071,28 @@ class LarkPlatformAdapter(Platform):
         return MessageSendReceipt(message_ids=(message_id,))
 
     async def handle_msg(
-        self, abm: AstrBotMessage, *, quoted_post_id: str | None = None
+        self,
+        abm: AstrBotMessage,
+        *,
+        quoted_post_id: str | None = None,
+        sender_type: str | None = None,
+        tenant_key: str | None = None,
     ) -> None:
         """Queue a Lark event with metadata for preserving quoted post whitespace.
 
         Args:
             abm: Parsed message, including its reply component.
             quoted_post_id: Quoted message ID, only when its source type is post.
+            sender_type: Original SDK sender type, when supplied.
+            tenant_key: Event-header tenant, or the supplied sender tenant if absent.
         """
         if abm.type == MessageType.GROUP_MESSAGE and abm.group:
             await get_lark_group(self.lark_api, abm.group)
         event = self.create_event(abm)
+        if isinstance(sender_type, str) and sender_type:
+            event.set_extra("lark_sender_type", sender_type)
+        if isinstance(tenant_key, str) and tenant_key:
+            event.set_extra("lark_tenant_key", tenant_key)
         if quoted_post_id is not None:
             event.set_extra("lark_quoted_post_id", quoted_post_id)
         self.commit_event(event)

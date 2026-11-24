@@ -150,7 +150,7 @@ class LarkWebhookServer:
             logger.error("[Lark Webhook] 请求体为空")
             return {"error": "Empty request body"}, 400
 
-        authenticated = False
+        signature_verified = False
         # 如果配置了 encrypt_key，进行签名验证
         if self.encrypt_key:
             timestamp = request.headers.get("X-Lark-Request-Timestamp", "")
@@ -163,7 +163,7 @@ class LarkWebhookServer:
                 ):
                     logger.error("[Lark Webhook] 签名验证失败")
                     return {"error": "Invalid signature"}, 401
-                authenticated = True
+                signature_verified = True
 
         # 检查是否是加密事件
         if "encrypt" in event_data:
@@ -184,7 +184,6 @@ class LarkWebhookServer:
             if token != self.verification_token:
                 logger.error("[Lark Webhook] Verification Token 不匹配。")
                 return {"error": "Invalid verification token"}, 401
-            authenticated = True
 
         # 处理 URL 验证 (challenge)
         if event_data.get("type") == "url_verification":
@@ -197,6 +196,11 @@ class LarkWebhookServer:
             "im.chat.member.user.deleted_v1",
         }:
             # Plugins act on the operator and membership reported by Lark.
+            authenticated = (
+                signature_verified
+                if self.encrypt_key
+                else bool(self.verification_token)
+            )
             if not authenticated:
                 return {"error": "Authenticated Lark callback required"}, 401
             if header.get("app_id") != self.app_id:

@@ -287,6 +287,7 @@ async def test_lark_restored_reply_updates_one_card_then_replies_to_original(
     adapter, queue, state, calls = lark_sdk_transport
     incoming = lark.im.v1.P2ImMessageReceiveV1(
         {
+            "header": {"tenant_key": "tenant-original"},
             "event": {
                 "sender": {
                     "sender_type": "user",
@@ -300,15 +301,21 @@ async def test_lark_restored_reply_updates_one_card_then_replies_to_original(
                     "content": '{"text":"Run the calculation"}',
                     "create_time": "1700000000000",
                 },
-            }
+            },
         }
     )
     await adapter.convert_msg(incoming)
     original = queue.get_nowait()
+    assert original.get_extra("lark_sender_type") == "user"
+    assert original.get_extra("lark_tenant_key") == "tenant-original"
+    original.session_id = "oc_private%ou_researcher"
     saved = MessageReplyContext(
         **json.loads(json.dumps(asdict(adapter.get_reply_context(original))))
     )
+    assert saved.session_id == "oc_private%ou_researcher"
+    assert saved.conversation_id == "oc_private"
     recovered = adapter.create_event(saved)
+    assert recovered.get_session_id() == "oc_private%ou_researcher"
     receipt = await recovered.send(
         MessageChain(
             [
@@ -588,9 +595,11 @@ async def test_lark_group_removal_uses_the_existing_dispatcher(
     assert (await deliver_webhook())[1] == 403
     assert queue.empty()
     data["header"].update(event_id="removed-3", app_id=adapter.appid)
+    server.encrypt_key = "fixture-key"
+    assert (await deliver_webhook())[1] == 401
+    assert queue.empty()
     del data["header"]["token"]
     server.verification_token = ""
-    server.encrypt_key = "fixture-key"
     assert await deliver_webhook(sign=True) == {}
     assert queue.get_nowait().message_obj.message_id == "removed-3"
 
