@@ -22,7 +22,8 @@ def test_generate_qqofficial_bind_key_returns_base64_aes_key():
     assert len(base64.b64decode(bind_key)) == 32
 
 
-def test_qqofficial_login_result_maps_completed_payload():
+@pytest.mark.parametrize("user_openid", [None, "", " ", 123, "owner-1"])
+def test_qqofficial_login_result_maps_completed_payload(user_openid):
     bind_key = base64.b64encode(bytes(range(32))).decode("ascii")
     nonce = b"123456789012"
     cipher = AES.new(base64.b64decode(bind_key), AES.MODE_GCM, nonce=nonce)
@@ -35,6 +36,7 @@ def test_qqofficial_login_result_maps_completed_payload():
                 "status": QQOFFICIAL_BIND_STATUS_COMPLETED,
                 "bot_appid": "123456789",
                 "bot_encrypt_secret": encrypted_secret,
+                "user_openid": user_openid,
             },
         },
         bind_key=bind_key,
@@ -46,6 +48,7 @@ def test_qqofficial_login_result_maps_completed_payload():
         "appid": "123456789",
         "secret": "secret-value",
         "platform_id_suffix": "_123456789",
+        **({"user_openid": user_openid} if user_openid == "owner-1" else {}),
     }
 
 

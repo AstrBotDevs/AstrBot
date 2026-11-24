@@ -1,5 +1,8 @@
 import asyncio
 import json
+import time
+from dataclasses import asdict, replace
+from datetime import UTC, datetime
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
@@ -7,10 +10,19 @@ import pytest
 from aiohttp import ClientSession, web
 from aiohttp.test_utils import TestServer
 from botpy import ConnectionSession
-from botpy.errors import ForbiddenError
+from botpy.errors import ForbiddenError, ServerError
 from botpy.http import BotHttp
+from botpy.manage import C2CManageEvent
 
-from astrbot.api.platform import AstrBotMessage, MessageType, PlatformMetadata
+from astrbot.api.event import MessageChain
+from astrbot.api.message_components import Image, Json, Plain, Reply
+from astrbot.api.platform import (
+    AstrBotMessage,
+    MessageReplyContext,
+    MessageSendRejected,
+    MessageType,
+    PlatformMetadata,
+)
 from astrbot.core.platform.sources.qqofficial.qqofficial_message_event import (
     QQOfficialMessageEvent,
     _UserInfoRoute,
@@ -240,3 +252,237 @@ async def test_user_info_lookup_returns_none_when_unavailable(user_openid, respo
 
     assert await event.get_user_info(user_openid) is None
     assert request.await_count == int(bool(user_openid))
+
+
+async def _capture_qq_reply(scene, monkeypatch):
+    config = {
+        "id": "qq-reply-test",
+        "appid": "reply-app",
+        "secret": "fixture-secret",
+        "enable_group_c2c": True,
+        "enable_guild_direct_message": False,
+    }
+    queue = asyncio.Queue()
+    adapter = QQOfficialPlatformAdapter(config, {}, queue)
+    request = AsyncMock(return_value={"group_name": "Reply Group"})
+    monkeypatch.setattr(adapter.client.http, "request", request)
+    connection = ConnectionSession(
+        max_async=1,
+        connect=adapter.client.bot_connect,
+        dispatch=adapter.client.ws_dispatch,
+        loop=asyncio.get_running_loop(),
+        api=adapter.client.api,
+    )
+    websocket = ManagedBotWebSocket({}, connection, adapter.client)
+    source = {
+        "id": "original-human-message",
+        "content": "Read the original work",
+        "timestamp": datetime.now(UTC).isoformat(),
+        "author": {"member_openid" if scene == "group" else "user_openid": "owner-1"},
+        "message_scene": {
+            "ext": ["msg_idx=REFIDX_original", "ref_msg_idx=REFIDX_parent"]
+        },
+    }
+    if scene == "group":
+        source["group_openid"] = "original-group"
+    await websocket.on_message(
+        None,
+        json.dumps(
+            {
+                "op": 0,
+                "s": 1,
+                "id": "original-event",
+                "t": "GROUP_AT_MESSAGE_CREATE"
+                if scene == "group"
+                else "C2C_MESSAGE_CREATE",
+                "d": source,
+            }
+        ),
+    )
+    event = await asyncio.wait_for(queue.get(), timeout=2)
+    event.session.session_id = "owner-specific-session"
+    context = adapter.get_reply_context(event)
+    return adapter, event, context
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("scene", ["group", "c2c"])
+async def test_qq_reply_context_survives_restart_without_latest_message(
+    scene, monkeypatch
+):
+    adapter, event, context = await _capture_qq_reply(scene, monkeypatch)
+    request = adapter.client.http.request
+    request.reset_mock()
+    request.return_value = {
+        "id": "immediate-result",
+        "ext_info": {"ref_idx": "REFIDX_answer"},
+    }
+    receipt = await event.send(
+        MessageChain([Reply(id="original-human-message"), Plain("First answer")])
+    )
+    assert receipt.message_ids == ("immediate-result",)
+    assert receipt.reference_ids == ("REFIDX_answer",)
+    assert request.await_count == 1
+    assert request.await_args.kwargs["json"]["msg_id"] == "original-human-message"
+
+    saved = MessageReplyContext(**json.loads(json.dumps(asdict(context))))
+    restarted = QQOfficialPlatformAdapter(dict(adapter.config), {}, asyncio.Queue())
+    restarted.remember_session_scene("owner-specific-session", "guild")
+    restarted.remember_session_message_id(
+        "owner-specific-session", "new-unrelated-message"
+    )
+    reply = restarted.create_event(saved)
+    request = AsyncMock(
+        return_value={"id": "late-result", "ext_info": {"ref_idx": "REFIDX_late"}}
+    )
+    monkeypatch.setattr(restarted.client.http, "request", request)
+    assert reply.get_session_id() == "owner-specific-session"
+    assert saved.parent_id == "REFIDX_parent"
+    receipt = await reply.send(
+        MessageChain([Reply(id="original-human-message"), Plain("Late answer")])
+    )
+    assert receipt.message_ids == ("late-result",)
+    assert receipt.reference_ids == ("REFIDX_late",)
+    request.assert_awaited_once()
+    route = request.await_args.args[0]
+    payload = request.await_args.kwargs["json"]
+    assert route.parameters == (
+        {"group_openid": "original-group"}
+        if scene == "group"
+        else {"openid": "owner-1"}
+    )
+    assert payload["msg_id"] == "original-human-message"
+    assert payload["message_reference"] == {"message_id": "REFIDX_original"}
+    assert payload["msg_seq"] >= 1
+    with pytest.raises(ValueError, match="does not match"):
+        restarted.create_event(replace(saved, account_id="another-app"))
+    with pytest.raises(ValueError, match="another platform"):
+        restarted.get_reply_context(event)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("scene", ["group", "c2c"])
+@pytest.mark.parametrize(
+    "outcome",
+    [None, asyncio.TimeoutError(), ServerError("unknown"), ForbiddenError("denied")],
+)
+async def test_qq_restored_reply_does_not_retry_or_change_route(
+    scene, outcome, monkeypatch
+):
+    adapter, _, context = await _capture_qq_reply(scene, monkeypatch)
+    request = AsyncMock()
+    if isinstance(outcome, Exception):
+        request.side_effect = outcome
+    else:
+        request.return_value = outcome
+    monkeypatch.setattr(adapter.client.http, "request", request)
+    reply = adapter.create_event(context)
+    chain = MessageChain([Plain("The original result")])
+    if isinstance(outcome, ForbiddenError):
+        with pytest.raises(MessageSendRejected, match="permission_denied"):
+            await reply.send(chain)
+    elif isinstance(outcome, Exception):
+        with pytest.raises(type(outcome)):
+            await reply.send(chain)
+    else:
+        assert await reply.send(chain) is None
+    request.assert_awaited_once()
+    assert request.await_args.kwargs["json"]["msg_id"] == context.message_id
+    assert reply.send_buffer is None
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("scene", ["group", "c2c"])
+async def test_qq_expired_reply_requires_explicit_proactive_choice(scene, monkeypatch):
+    adapter, _, context = await _capture_qq_reply(scene, monkeypatch)
+    expired = replace(context, timestamp=int(time.time()) - 7200)
+    request = AsyncMock(return_value={"id": "late-result"})
+    monkeypatch.setattr(adapter.client.http, "request", request)
+    with pytest.raises(MessageSendRejected, match="reply_window_expired"):
+        await adapter.create_event(expired).send(MessageChain([Plain("Result")]))
+    request.assert_not_awaited()
+    receipt = await adapter.create_event(replace(expired, mode="proactive")).send(
+        MessageChain([Plain("Result")])
+    )
+    assert receipt.message_ids == ("late-result",)
+    request.assert_awaited_once()
+    assert request.await_args.kwargs["json"].get("msg_id") is None
+    assert request.await_args.args[0].parameters == (
+        {"group_openid": "original-group"}
+        if scene == "group"
+        else {"openid": "owner-1"}
+    )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "event_type", ["C2C_MSG_RECEIVE", "C2C_MSG_REJECT", "FRIEND_ADD", "FRIEND_DEL"]
+)
+async def test_qq_native_permission_event_preserves_source_without_replacing_last_message(
+    event_type,
+):
+    queue = asyncio.Queue()
+    adapter = QQOfficialPlatformAdapter(
+        {
+            "id": "qq-notice-test",
+            "appid": "notice-app",
+            "secret": "fixture-secret",
+            "enable_group_c2c": True,
+            "enable_guild_direct_message": False,
+        },
+        {},
+        queue,
+    )
+    adapter.remember_session_message_id("original-owner", "original-human-message")
+    connection = ConnectionSession(
+        max_async=1,
+        connect=adapter.client.bot_connect,
+        dispatch=adapter.client.ws_dispatch,
+        loop=asyncio.get_running_loop(),
+        api=adapter.client.api,
+    )
+    websocket = ManagedBotWebSocket({}, connection, adapter.client)
+    occurred_at = int(time.time()) - 20
+    await websocket.on_message(
+        None,
+        json.dumps(
+            {
+                "op": 0,
+                "s": 1,
+                "t": event_type,
+                "id": "native-permission-event",
+                "d": {"openid": "original-owner", "timestamp": occurred_at},
+            }
+        ),
+    )
+    event = await asyncio.wait_for(queue.get(), timeout=2)
+    assert event.get_message_type() == MessageType.OTHER_MESSAGE
+    assert event.get_extra("qq_official_event") == event_type
+    assert event.get_sender_id() == "original-owner"
+    assert event.get_self_id() == "notice-app"
+    assert event.message_obj.message_id == "native-permission-event"
+    assert event.message_obj.timestamp == occurred_at
+    assert isinstance(event.message_obj.raw_message, C2CManageEvent)
+    assert event.message_obj.raw_message.openid == "original-owner"
+    assert event.is_at_or_wake_command is False
+    assert not event.message_str and not event.get_messages()
+    assert (
+        adapter._session_last_message_id["original-owner"] == "original-human-message"
+    )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "component", [Json({"unsupported": True}), Image.fromBase64("aGVsbG8=")]
+)
+async def test_qq_partial_content_does_not_receive_a_complete_chain_receipt(
+    component, monkeypatch
+):
+    adapter, event, _ = await _capture_qq_reply("group", monkeypatch)
+    request = AsyncMock(return_value={"id": "text-part-accepted"})
+    monkeypatch.setattr(adapter.client.http, "request", request)
+    monkeypatch.setattr(
+        event, "upload_group_and_c2c_image", AsyncMock(return_value=None)
+    )
+    assert await event.send(MessageChain([Plain("Text part"), component])) is None
+    request.assert_awaited_once()

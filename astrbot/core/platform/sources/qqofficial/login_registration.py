@@ -170,13 +170,17 @@ def qqofficial_login_result(data: dict[str, Any], *, bind_key: str) -> dict[str,
                 "qr_status": raw_status,
                 "message": str(exc),
             }
-        return {
+        result = {
             "status": "created",
             "qr_status": raw_status,
             "appid": appid,
             "secret": secret,
             "platform_id_suffix": f"_{appid}",
         }
+        user_openid = _string_field(payload, "user_openid")
+        if user_openid and not any(char.isspace() for char in user_openid):
+            result["user_openid"] = user_openid
+        return result
 
     if raw_status == QQOFFICIAL_BIND_STATUS_EXPIRED:
         return {

@@ -6,6 +6,7 @@ import logging
 import os
 import random
 import re
+import time
 from pathlib import Path
 from typing import Any, cast
 from urllib.parse import quote
@@ -42,7 +43,14 @@ from astrbot.api.message_components import (
     Reply,
     Video,
 )
-from astrbot.api.platform import AstrBotMessage, Group, PlatformMetadata
+from astrbot.api.platform import (
+    AstrBotMessage,
+    Group,
+    MessageReplyContext,
+    MessageSendReceipt,
+    MessageSendRejected,
+    PlatformMetadata,
+)
 from astrbot.core.platform.button_interaction import encode_button_callback
 from astrbot.core.platform.sources.qqofficial.qqofficial_chunked_upload import (
     QQOFFICIAL_CHUNKED_UPLOAD_THRESHOLD,
@@ -132,6 +140,8 @@ class QQOfficialMessageEvent(AstrMessageEvent):
         platform_meta: PlatformMetadata,
         session_id: str,
         bot: Client,
+        *,
+        reply_context: MessageReplyContext | None = None,
     ) -> None:
         # Streaming support depends on the message source, not just the adapter.
         platform_meta = copy.copy(platform_meta)
@@ -140,6 +150,7 @@ class QQOfficialMessageEvent(AstrMessageEvent):
         )
         super().__init__(message_str, message_obj, platform_meta, session_id)
         self.bot = bot
+        self.reply_context = reply_context
         self.send_buffer = None
         source = getattr(message_obj, "raw_message", None)
         if isinstance(source, (botpy.message.C2CMessage, botpy.message.GroupMessage)):
@@ -274,9 +285,62 @@ class QQOfficialMessageEvent(AstrMessageEvent):
 
         return group
 
-    async def send(self, message: MessageChain) -> None:
+    async def send(self, message: MessageChain) -> MessageSendReceipt | None:
+        """Send through the native QQ path and expose its optional acceptance.
+
+        Args:
+            message: Content sent to this event's original destination.
+
+        Returns:
+            A receipt for an accepted text/button chain, or None if acceptance
+            of the complete chain cannot be established.
+
+        Raises:
+            MessageSendRejected: A restored reply is definitively refused.
+        """
         self.send_buffer = message
-        await self._post_send()
+        # Media helpers can skip an unsupported or failed upload. A final ID
+        # then confirms only part of the requested chain.
+        complete_chain = all(
+            isinstance(component, (Plain, Reply, ActionRow))
+            and (
+                not isinstance(component, Reply)
+                or str(component.id or "").startswith("REFIDX_")
+                or bool(self._extract_self_ref_idx(self.message_obj.raw_message))
+            )
+            for component in message.chain
+        )
+        try:
+            result = await self._post_send()
+        except MessageSendRejected:
+            if complete_chain:
+                raise
+            return None
+        finally:
+            self.send_buffer = None
+        if not complete_chain:
+            return None
+        if isinstance(result, str):
+            try:
+                result = json.loads(result)
+            except ValueError:
+                return None
+        # Supported text/button chains are one native message. Media chains
+        # cannot use the final part's ID as a receipt for the complete send.
+        if (
+            not isinstance(result, dict)
+            or not isinstance(result.get("id"), str)
+            or not result["id"]
+        ):
+            return None
+        ext_info = result.get("ext_info")
+        reference_id = ext_info.get("ref_idx") if isinstance(ext_info, dict) else None
+        return MessageSendReceipt(
+            message_ids=(result["id"],),
+            reference_ids=(reference_id,)
+            if isinstance(reference_id, str) and reference_id
+            else (),
+        )
 
     async def _close_stream_segment(self, stream_payload: dict):
         """以 state=10 收尾当前流式段；流已开但 buffer 恰好为空时补最小收尾帧。
@@ -503,6 +567,14 @@ class QQOfficialMessageEvent(AstrMessageEvent):
             return None
 
         source = self.message_obj.raw_message
+        reply_context = self.reply_context
+        if reply_context is not None:
+            if self.message_obj.message_id != reply_context.message_id:
+                raise ValueError("QQ reply context message changed")
+            if reply_context.mode == "reply":
+                window = 3600 if reply_context.scene == "c2c" else 300
+                if time.time() - reply_context.timestamp >= window:
+                    raise MessageSendRejected("reply_window_expired")
 
         if not isinstance(
             source,
@@ -584,7 +656,7 @@ class QQOfficialMessageEvent(AstrMessageEvent):
         if isinstance(source, Interaction):
             if source.event_id:
                 payload["event_id"] = source.event_id
-        else:
+        elif reply_context is None or reply_context.mode == "reply":
             payload["msg_id"] = self.message_obj.message_id
         if keyboard:
             payload["keyboard"] = keyboard
@@ -593,7 +665,12 @@ class QQOfficialMessageEvent(AstrMessageEvent):
             source,
             botpy.message.Message | botpy.message.DirectMessage,
         ) and not (isinstance(source, Interaction) and source.scene == "guild"):
-            payload["msg_seq"] = random.randint(1, 10000)
+            payload["msg_seq"] = (
+                reply_context.reply_sequence
+                if reply_context is not None
+                and reply_context.reply_sequence is not None
+                else random.randint(1, 10000)
+            )
 
         # 出站引用回复：消息链里存在 Reply 组件时填 message_reference。
         # 注意 botpy 在同时传 message_reference 与 file_image 时会主动去除前者（SDK 限制）。
@@ -679,6 +756,7 @@ class QQOfficialMessageEvent(AstrMessageEvent):
                     payload=payload,
                     plain_text=plain_text,
                     stream=stream,
+                    preserve_reply=reply_context is not None,
                 )
 
             case botpy.message.C2CMessage() | Interaction(scene="c2c"):
@@ -745,6 +823,7 @@ class QQOfficialMessageEvent(AstrMessageEvent):
                         payload=payload,
                         plain_text=plain_text,
                         stream=stream,
+                        preserve_reply=reply_context is not None,
                     )
                 else:
                     ret = await self._send_with_markdown_fallback(
@@ -755,6 +834,7 @@ class QQOfficialMessageEvent(AstrMessageEvent):
                         payload=payload,
                         plain_text=plain_text,
                         stream=stream,
+                        preserve_reply=reply_context is not None,
                     )
                 logger.debug(f"Message sent to C2C: {ret}")
 
@@ -774,6 +854,7 @@ class QQOfficialMessageEvent(AstrMessageEvent):
                     payload=payload,
                     plain_text=plain_text,
                     stream=stream,
+                    preserve_reply=reply_context is not None,
                 )
 
             case botpy.message.DirectMessage():
@@ -789,6 +870,7 @@ class QQOfficialMessageEvent(AstrMessageEvent):
                     payload=payload,
                     plain_text=plain_text,
                     stream=stream,
+                    preserve_reply=reply_context is not None,
                 )
 
             case Interaction():
@@ -809,7 +891,33 @@ class QQOfficialMessageEvent(AstrMessageEvent):
         payload: dict,
         plain_text: str,
         stream: dict | None = None,
+        *,
+        preserve_reply: bool = False,
     ):
+        if preserve_reply:
+            try:
+                return await send_func(payload)
+            except (
+                botpy.errors.AuthenticationFailedError,
+                botpy.errors.ForbiddenError,
+                botpy.errors.NotFoundError,
+                botpy.errors.MethodNotAllowedError,
+                botpy.errors.SequenceNumberError,
+            ) as error:
+                reason = (
+                    "permission_denied"
+                    if isinstance(
+                        error,
+                        (
+                            botpy.errors.AuthenticationFailedError,
+                            botpy.errors.ForbiddenError,
+                        ),
+                    )
+                    else "rate_limited"
+                    if isinstance(error, botpy.errors.SequenceNumberError)
+                    else "invalid_target"
+                )
+                raise MessageSendRejected(reason) from error
         try:
             return await send_func(payload)
         except _QQOFFICIAL_SEND_API_ERRORS as err:
@@ -1074,24 +1182,36 @@ class QQOfficialMessageEvent(AstrMessageEvent):
             payload["stream"] = stream_data
         route = Route("POST", "/v2/users/{openid}/messages", openid=openid)
 
-        retry_times = 3
-
-        @_qqofficial_retry(retry_times)
-        async def _do_request():
+        if getattr(self, "reply_context", None) is not None:
+            # Preserve the original attempt. A missing SDK result may have sent.
             result = await self.bot.api._http.request(route, json=payload)
-            if result is None:
-                err_msg = "发送消息API返回None，触发重试"
-                raise APIReturnNoneError(err_msg)
-            return result
+        else:
+            retry_times = 3
 
-        result = None
-        try:
-            result = await _do_request()
-        except APIReturnNoneError:
-            logger.warning(
-                f"[QQOfficial] post_c2c_message: 发送消息失败，API 返回 None，共尝试{retry_times}次后放弃"
-            )
-            return None
+            @_qqofficial_retry(retry_times)
+            async def _do_request():
+                result = await self.bot.api._http.request(route, json=payload)
+                if result is None:
+                    err_msg = "Message send API returned no response"
+                    raise APIReturnNoneError(err_msg)
+                return result
+
+            result = None
+            try:
+                result = await _do_request()
+            except APIReturnNoneError:
+                logger.warning(
+                    "[QQOfficial] post_c2c_message returned no response after %s attempts.",
+                    retry_times,
+                )
+                return None
+
+        if isinstance(result, str):
+            # qq-botpy returns text for JSON responses carrying a charset.
+            try:
+                result = json.loads(result)
+            except ValueError:
+                return None
 
         if not isinstance(result, dict):
             logger.error(f"[QQOfficial] post_c2c_message: 响应不是 dict: {result}")
