@@ -39,6 +39,41 @@ async def helloworld(self, event: AstrMessageEvent):
 > 关于 unified_msg_origin。
 > unified_msg_origin 是一个字符串，记录了一个会话的唯一 ID，AstrBot 能够据此找到属于哪个消息平台的哪个会话。这样就能够实现在 `send_message` 的时候，发送消息到正确的会话。有关 MessageChain，请参见接下来的一节。
 
+### 需要平台的发送结果时
+
+`send_message()` 返回的 `True` 只表示找到了消息平台。想获取平台返回的消息 ID 或跟踪键，使用 `send_message_with_receipt()`：
+
+```python
+receipt = await self.context.send_message_with_receipt(
+    event.unified_msg_origin,
+    MessageChain().message("Hello!"),
+)
+
+if receipt is False:
+    print("没有找到消息平台，未发送")
+elif receipt is None:
+    print("结果不确定，不要直接重发")
+else:
+    print(receipt.message_ids)
+    print(receipt.tracking_keys)
+```
+
+返回值只有三种：
+
+| 返回值 | 你该怎么做 |
+| --- | --- |
+| `MessageSendReceipt` | 平台已受理整条消息。可以读取 `message_ids` 或 `tracking_keys`。 |
+| `None` | 结果不确定。消息可能已经发出，**不要直接重发**，否则可能重复。 |
+| `False` | 没有找到匹配的消息平台，本次没有发送。 |
+
+目前支持返回回执的场景：
+
+- 钉钉：完整的纯文本消息，包括先合并再发送的流式消息。
+- 企业微信应用：发给单个成员的完整纯文本消息，包括先合并再发送的流式消息。
+- 其他平台或消息类型：通常返回 `None`。
+
+回执只说明平台受理了请求，不代表对方已经收到或已读。部分平台只提供 `tracking_keys`，没有 `message_ids`，这也是正常的。
+
 ## 富媒体消息
 
 AstrBot 支持发送富媒体消息，比如图片、语音、视频等。使用 `MessageChain` 来构建消息。

@@ -27,6 +27,7 @@ from astrbot.api.message_components import (
 from astrbot.api.platform import (
     AstrBotMessage,
     MessageMember,
+    MessageSendReceipt,
     MessageType,
     Platform,
     PlatformMetadata,
@@ -140,12 +141,12 @@ class DingtalkPlatformAdapter(Platform):
         self,
         session: MessageSesion,
         message_chain: MessageChain,
-    ) -> None:
+    ) -> MessageSendReceipt | None:
         robot_code = self.client_id
 
         if session.message_type == MessageType.GROUP_MESSAGE:
             open_conversation_id = session.session_id
-            await self.send_message_chain_to_group(
+            receipt = await self.send_message_chain_to_group(
                 open_conversation_id=open_conversation_id,
                 robot_code=robot_code,
                 message_chain=message_chain,
@@ -153,17 +154,15 @@ class DingtalkPlatformAdapter(Platform):
         else:
             staff_id = await self._get_sender_staff_id(session)
             if not staff_id:
-                logger.warning(
-                    "钉钉私聊会话缺少 staff_id 映射，回退使用 session_id 作为 userId 发送",
-                )
-                staff_id = session.session_id
-            await self.send_message_chain_to_user(
+                raise RuntimeError("DingTalk recipient staff_id is unavailable")
+            receipt = await self.send_message_chain_to_user(
                 staff_id=staff_id,
                 robot_code=robot_code,
                 message_chain=message_chain,
             )
 
         await super().send_by_session(session, message_chain)
+        return receipt
 
     async def send_with_session(
         self,
@@ -549,7 +548,7 @@ class DingtalkPlatformAdapter(Platform):
                     )
                     return ""
                 data = await resp.json()
-                return cast(str, data.get("data", {}).get("accessToken", ""))
+                return cast(str, data.get("accessToken", ""))
 
     async def _get_sender_staff_id(self, session: MessageSesion) -> str:
         try:
@@ -570,11 +569,10 @@ class DingtalkPlatformAdapter(Platform):
         robot_code: str,
         msg_key: str,
         msg_param: dict,
-    ) -> None:
+    ) -> MessageSendReceipt | None:
         access_token = await self.get_access_token()
         if not access_token:
-            logger.error("钉钉群消息发送失败: access_token 为空")
-            return
+            raise RuntimeError("DingTalk access token is unavailable")
 
         payload = {
             "msgKey": msg_key,
@@ -592,10 +590,15 @@ class DingtalkPlatformAdapter(Platform):
                 headers=headers,
                 json=payload,
             ) as resp:
-                if resp.status != 200:
-                    logger.error(
-                        f"钉钉群消息发送失败: {resp.status}, {await resp.text()}",
-                    )
+                resp.raise_for_status()
+                result = await resp.json()
+        # The message is already sent; a missing tracking key only costs the receipt.
+        query_key = result.get("processQueryKey") if isinstance(result, dict) else None
+        return (
+            MessageSendReceipt(tracking_keys=(query_key,))
+            if isinstance(query_key, str) and query_key
+            else None
+        )
 
     async def _send_private_message(
         self,
@@ -603,11 +606,10 @@ class DingtalkPlatformAdapter(Platform):
         robot_code: str,
         msg_key: str,
         msg_param: dict,
-    ) -> None:
+    ) -> MessageSendReceipt | None:
         access_token = await self.get_access_token()
         if not access_token:
-            logger.error("钉钉私聊消息发送失败: access_token 为空")
-            return
+            raise RuntimeError("DingTalk access token is unavailable")
 
         payload = {
             "robotCode": robot_code,
@@ -625,10 +627,27 @@ class DingtalkPlatformAdapter(Platform):
                 headers=headers,
                 json=payload,
             ) as resp:
-                if resp.status != 200:
-                    logger.error(
-                        f"钉钉私聊消息发送失败: {resp.status}, {await resp.text()}",
-                    )
+                resp.raise_for_status()
+                result = await resp.json()
+                if not isinstance(result, dict):
+                    return None
+                # BatchSendOTOResponseBody carries three rejection lists. The doc's
+                # field table omits filteredStaffIdList, but the SDK model has it.
+                for key in (
+                    "filteredStaffIdList",
+                    "flowControlledStaffIdList",
+                    "invalidStaffIdList",
+                ):
+                    rejected = result.get(key)
+                    if isinstance(rejected, list) and staff_id in rejected:
+                        raise RuntimeError("DingTalk did not accept the recipient")
+        # The message is already sent; a missing tracking key only costs the receipt.
+        query_key = result.get("processQueryKey")
+        return (
+            MessageSendReceipt(tracking_keys=(query_key,))
+            if isinstance(query_key, str) and query_key
+            else None
+        )
 
     async def _send_button_card(
         self,
@@ -804,22 +823,30 @@ class DingtalkPlatformAdapter(Platform):
         robot_code: str,
         message_chain: MessageChain,
         at_str: str = "",
-    ) -> None:
+    ) -> MessageSendReceipt | None:
+        receipts: list[MessageSendReceipt] = []
+        complete = True
+
         async def send_message(msg_key: str, msg_param: dict) -> None:
+            nonlocal complete
             if target_type == "group":
-                await self._send_group_message(
+                receipt = await self._send_group_message(
                     open_conversation_id=target_id,
                     robot_code=robot_code,
                     msg_key=msg_key,
                     msg_param=msg_param,
                 )
             else:
-                await self._send_private_message(
+                receipt = await self._send_private_message(
                     staff_id=target_id,
                     robot_code=robot_code,
                     msg_key=msg_key,
                     msg_param=msg_param,
                 )
+            if receipt is None:
+                complete = False
+            else:
+                receipts.append(receipt)
 
         action_rows = [
             segment for segment in message_chain.chain if isinstance(segment, ActionRow)
@@ -971,14 +998,26 @@ class DingtalkPlatformAdapter(Platform):
                     logger.warning(f"钉钉文件发送失败: {e}")
                     continue
 
+        if (
+            complete
+            and receipts
+            and all(isinstance(part, Plain) for part in message_chain.chain)
+        ):
+            return MessageSendReceipt(
+                tracking_keys=tuple(
+                    key for receipt in receipts for key in receipt.tracking_keys
+                )
+            )
+        return None
+
     async def send_message_chain_to_group(
         self,
         open_conversation_id: str,
         robot_code: str,
         message_chain: MessageChain,
         at_str: str = "",
-    ) -> None:
-        await self._send_message_chain(
+    ) -> MessageSendReceipt | None:
+        return await self._send_message_chain(
             target_type="group",
             target_id=open_conversation_id,
             robot_code=robot_code,
@@ -992,8 +1031,8 @@ class DingtalkPlatformAdapter(Platform):
         robot_code: str,
         message_chain: MessageChain,
         at_str: str = "",
-    ) -> None:
-        await self._send_message_chain(
+    ) -> MessageSendReceipt | None:
+        return await self._send_message_chain(
             target_type="user",
             target_id=staff_id,
             robot_code=robot_code,
@@ -1005,7 +1044,7 @@ class DingtalkPlatformAdapter(Platform):
         self,
         incoming_message: dingtalk_stream.ChatbotMessage,
         message_chain: MessageChain,
-    ) -> None:
+    ) -> MessageSendReceipt | None:
         robot_code = self.client_id
 
         # at_list: list[str] = []
@@ -1025,7 +1064,7 @@ class DingtalkPlatformAdapter(Platform):
         # at_str = " ".join(at_list)
 
         if incoming_message.conversation_type == "2":
-            await self.send_message_chain_to_group(
+            return await self.send_message_chain_to_group(
                 open_conversation_id=cast(str, incoming_message.conversation_id),
                 robot_code=robot_code,
                 message_chain=message_chain,
@@ -1039,9 +1078,8 @@ class DingtalkPlatformAdapter(Platform):
             )
             staff_id = sender_staff_id or await self._get_sender_staff_id(session)
             if not staff_id:
-                logger.error("钉钉私聊回复失败: 缺少 sender_staff_id")
-                return
-            await self.send_message_chain_to_user(
+                raise RuntimeError("DingTalk recipient staff_id is unavailable")
+            return await self.send_message_chain_to_user(
                 staff_id=staff_id,
                 robot_code=robot_code,
                 message_chain=message_chain,
