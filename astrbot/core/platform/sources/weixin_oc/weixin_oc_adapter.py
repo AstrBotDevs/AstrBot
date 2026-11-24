@@ -110,6 +110,8 @@ class WeixinOCReplyMeta:
     support_streaming_message=False,
 )
 class WeixinOCAdapter(Platform):
+    supports_proxy = True
+
     SESSION_TIMEOUT_ERRCODE = -14
     IMAGE_ITEM_TYPE = 2
     VOICE_ITEM_TYPE = 3
@@ -213,6 +215,7 @@ class WeixinOCAdapter(Platform):
             cdn_base_url=self.cdn_base_url,
             api_timeout_ms=self.api_timeout_ms,
             token=self.token,
+            proxy_url=self.proxy_url,
         )
 
         if self.token:

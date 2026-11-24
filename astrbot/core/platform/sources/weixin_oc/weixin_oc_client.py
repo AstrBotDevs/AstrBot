@@ -12,6 +12,7 @@ import aiohttp
 from Crypto.Cipher import AES
 
 from astrbot import logger
+from astrbot.core.platform.proxy import create_platform_client_session
 
 
 class WeixinOCClient:
@@ -23,18 +24,23 @@ class WeixinOCClient:
         cdn_base_url: str,
         api_timeout_ms: int,
         token: str | None = None,
+        proxy_url: str | None = None,
     ) -> None:
         self.adapter_id = adapter_id
         self.base_url = base_url
         self.cdn_base_url = cdn_base_url
         self.api_timeout_ms = api_timeout_ms
         self.token = token
+        self.proxy_url = proxy_url
         self._http_session: aiohttp.ClientSession | None = None
 
     async def ensure_http_session(self) -> None:
         if self._http_session is None or self._http_session.closed:
             timeout = aiohttp.ClientTimeout(total=self.api_timeout_ms / 1000)
-            self._http_session = aiohttp.ClientSession(timeout=timeout)
+            self._http_session = create_platform_client_session(
+                self.proxy_url,
+                timeout=timeout,
+            )
 
     async def close(self) -> None:
         if self._http_session is not None and not self._http_session.closed:

@@ -110,6 +110,18 @@
       ></v-checkbox>
     </div>
 
+    <v-switch
+      v-else-if="itemMeta?.options?.length >= 2 && itemMeta?.render_type === 'switch'"
+      :model-value="modelValue"
+      :true-value="itemMeta.options[1]"
+      :false-value="itemMeta.options[0]"
+      @update:model-value="emitUpdate"
+      color="primary"
+      inset
+      hide-details
+      density="compact"
+    ></v-switch>
+
     <v-autocomplete
       v-else-if="itemMeta?.type === 'list' && itemMeta?.options"
       :model-value="modelValue"
@@ -158,7 +170,8 @@
     <v-text-field
       v-else-if="itemMeta?.type === 'string'"
       :model-value="modelValue"
-      @update:model-value="emitUpdate"
+      @update:model-value="emitStringUpdate"
+      @keydown="handleStringKeydown"
       :type="stringInputType"
       :append-inner-icon="secretToggleIcon"
       :autocomplete="itemMeta?.secret ? 'new-password' : undefined"
@@ -350,6 +363,21 @@ async function emitUpdate(val) {
   }
   emit('update:modelValue', val)
 
+}
+
+const isProxyAddress = computed(() => /(^|\.)proxy\.address$/.test(props.configKey))
+
+function emitStringUpdate(value) {
+  const normalizedValue = isProxyAddress.value
+    ? String(value ?? '').replace(/\s+/g, '')
+    : value
+  emitUpdate(normalizedValue)
+}
+
+function handleStringKeydown(event) {
+  if (isProxyAddress.value && event.key === ' ') {
+    event.preventDefault()
+  }
 }
 
 const listSelectItems = computed(() =>

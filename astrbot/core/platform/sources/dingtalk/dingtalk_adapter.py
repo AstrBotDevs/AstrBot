@@ -1,15 +1,20 @@
 import asyncio
 import json
+import platform as system_platform
 import threading
 import time
 import uuid
 from concurrent.futures import CancelledError as FutureCancelledError
 from pathlib import Path
 from typing import Literal, NoReturn, cast
+from urllib.parse import quote_plus
 
 import aiohttp
 import dingtalk_stream
+import requests
+import websockets
 from dingtalk_stream import AckMessage
+from dingtalk_stream.version import VERSION_STRING
 
 from astrbot import logger
 from astrbot.api.event import MessageChain
@@ -37,6 +42,7 @@ from astrbot.core.platform.button_interaction import (
     decode_button_callback,
     encode_button_callback,
 )
+from astrbot.core.platform.proxy import create_platform_client_session
 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
 from astrbot.core.utils.io import download_file
 from astrbot.core.utils.media_utils import (
@@ -55,6 +61,102 @@ DINGTALK_RECONNECT_MAX_DELAY = 300
 DINGTALK_RECONNECT_STABLE_SECONDS = 300
 DINGTALK_BUTTON_CARD_TEMPLATE_ID = "382e4302-551d-4880-bf29-a30acfab2e71.schema"
 DINGTALK_CARD_CALLBACK_TOPIC = "/v1.0/card/instances/callback"
+
+
+class _ProxyDingTalkStreamClient(dingtalk_stream.DingTalkStreamClient):
+    """DingTalk stream client that applies an adapter-scoped proxy."""
+
+    def __init__(self, credential, *, logger, proxy_url: str | None) -> None:
+        super().__init__(credential, logger=logger)
+        self.proxy_url = proxy_url
+
+    def open_connection(self):
+        """Open the DingTalk gateway connection through the configured proxy."""
+        self.logger.info("open connection, url=%s", self.OPEN_CONNECTION_API)
+        request_headers = {
+            "Content-Type": "application/json",
+            "Accept": "application/json",
+            "User-Agent": (
+                f"DingTalkStream/1.0 SDK/{VERSION_STRING} "
+                f"Python/{system_platform.python_version()} "
+                "(+https://github.com/open-dingtalk/dingtalk-stream-sdk-python)"
+            ),
+        }
+        topics = []
+        if self._is_event_required:
+            topics.append({"type": "EVENT", "topic": "*"})
+        topics.extend(
+            {"type": "CALLBACK", "topic": topic} for topic in self.callback_handler_map
+        )
+        request_body = json.dumps(
+            {
+                "clientId": self.credential.client_id,
+                "clientSecret": self.credential.client_secret,
+                "subscriptions": topics,
+                "ua": f"dingtalk-sdk-python/v{VERSION_STRING}-union",
+                "localIp": self.get_host_ip(),
+            }
+        ).encode("utf-8")
+        response_text = ""
+        try:
+            request_kwargs = {
+                "headers": request_headers,
+                "data": request_body,
+            }
+            if self.proxy_url:
+                request_kwargs["proxies"] = {
+                    "http": self.proxy_url,
+                    "https": self.proxy_url,
+                }
+            response = requests.post(
+                self.OPEN_CONNECTION_API,
+                **request_kwargs,
+            )
+            response_text = response.text
+            response.raise_for_status()
+        except Exception as exc:
+            self.logger.error(
+                "open connection failed, error=%s, response.text=%s",
+                exc,
+                response_text,
+            )
+            return None
+        return response.json()
+
+    async def start(self):
+        """Run the SDK stream loop with an explicit WebSocket proxy."""
+        self.pre_start()
+        while True:
+            try:
+                connection = self.open_connection()
+                if not connection:
+                    self.logger.error("open connection failed")
+                    await asyncio.sleep(10)
+                    continue
+                self.logger.info("endpoint is %s", connection)
+                uri = f"{connection['endpoint']}?ticket={quote_plus(connection['ticket'])}"
+                websocket_kwargs = {}
+                if self.proxy_url:
+                    websocket_kwargs["proxy"] = self.proxy_url
+                async with websockets.connect(uri, **websocket_kwargs) as websocket:
+                    self.websocket = websocket
+                    asyncio.create_task(self.keepalive(websocket))
+                    async for raw_message in websocket:
+                        json_message = json.loads(raw_message)
+                        asyncio.create_task(self.background_task(json_message))
+            except KeyboardInterrupt:
+                break
+            except (
+                asyncio.exceptions.CancelledError,
+                websockets.exceptions.ConnectionClosedError,
+            ):
+                self.logger.error("[start] network exception")
+                await asyncio.sleep(10)
+                continue
+            except Exception as exc:
+                await asyncio.sleep(3)
+                self.logger.exception("unknown exception: %s", exc)
+                continue
 
 
 def _dingtalk_reconnect_delay(retry_count: int) -> int:
@@ -81,6 +183,8 @@ class MyEventHandler(dingtalk_stream.EventHandler):
     "dingtalk", "钉钉机器人官方 API 适配器", support_streaming_message=True
 )
 class DingtalkPlatformAdapter(Platform):
+    supports_proxy = True
+
     def __init__(
         self,
         platform_config: dict,
@@ -114,7 +218,11 @@ class DingtalkPlatformAdapter(Platform):
         self.card_callback_client = AstrCardCallbackClient()
 
         credential = dingtalk_stream.Credential(self.client_id, self.client_secret)
-        client = dingtalk_stream.DingTalkStreamClient(credential, logger=logger)
+        client = _ProxyDingTalkStreamClient(
+            credential,
+            logger=logger,
+            proxy_url=self.proxy_url,
+        )
         client.register_all_event_handler(MyEventHandler())
         client.register_callback_handler(
             dingtalk_stream.ChatbotMessage.TOPIC,
@@ -499,7 +607,7 @@ class DingtalkPlatformAdapter(Platform):
         temp_dir.mkdir(parents=True, exist_ok=True)
         f_path = temp_dir / f"dingtalk_{uuid.uuid4()}.{ext}"
         async with (
-            aiohttp.ClientSession() as session,
+            create_platform_client_session(self.proxy_url) as session,
             session.post(
                 "https://api.dingtalk.com/v1.0/robot/messageFiles/download",
                 headers=headers,
@@ -523,7 +631,7 @@ class DingtalkPlatformAdapter(Platform):
             if not download_url:
                 logger.error(f"下载钉钉文件失败: 未找到 downloadUrl, 响应: {resp_data}")
                 return ""
-            await download_file(download_url, str(f_path))
+            await download_file(download_url, str(f_path), proxy_url=self.proxy_url)
         return str(f_path)
 
     async def get_access_token(self) -> str:
@@ -538,7 +646,7 @@ class DingtalkPlatformAdapter(Platform):
             logger.warning(f"通过 dingtalk_stream 获取 access_token 失败: {e}")
 
         payload = {"appKey": self.client_id, "appSecret": self.client_secret}
-        async with aiohttp.ClientSession() as session:
+        async with create_platform_client_session(self.proxy_url) as session:
             async with session.post(
                 "https://api.dingtalk.com/v1.0/oauth2/accessToken",
                 json=payload,
@@ -586,7 +694,7 @@ class DingtalkPlatformAdapter(Platform):
             "Content-Type": "application/json",
             "x-acs-dingtalk-access-token": access_token,
         }
-        async with aiohttp.ClientSession() as session:
+        async with create_platform_client_session(self.proxy_url) as session:
             async with session.post(
                 "https://api.dingtalk.com/v1.0/robot/groupMessages/send",
                 headers=headers,
@@ -619,7 +727,7 @@ class DingtalkPlatformAdapter(Platform):
             "Content-Type": "application/json",
             "x-acs-dingtalk-access-token": access_token,
         }
-        async with aiohttp.ClientSession() as session:
+        async with create_platform_client_session(self.proxy_url) as session:
             async with session.post(
                 "https://api.dingtalk.com/v1.0/robot/oToMessages/batchSend",
                 headers=headers,
@@ -722,7 +830,7 @@ class DingtalkPlatformAdapter(Platform):
         }
         try:
             async with (
-                aiohttp.ClientSession() as session,
+                create_platform_client_session(self.proxy_url) as session,
                 session.post(
                     "https://api.dingtalk.com/v1.0/card/instances/createAndDeliver",
                     headers=headers,
@@ -777,7 +885,7 @@ class DingtalkPlatformAdapter(Platform):
             filename=media_file_path.name,
             content_type="application/octet-stream",
         )
-        async with aiohttp.ClientSession() as session:
+        async with create_platform_client_session(self.proxy_url) as session:
             async with session.post(
                 f"https://oapi.dingtalk.com/media/upload?access_token={access_token}&type={media_type}",
                 data=form,

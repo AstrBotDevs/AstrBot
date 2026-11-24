@@ -7,6 +7,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
 from typing import Any
+from urllib.parse import urlsplit
 
 from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.utils.metrics import Metric
@@ -48,6 +49,35 @@ class Platform(abc.ABC):
         self._status: PlatformStatus = PlatformStatus.PENDING
         self._errors: list[PlatformError] = []
         self._started_at: datetime | None = None
+
+    @property
+    def proxy_url(self) -> str | None:
+        """Return the adapter-specific proxy URL when one is configured.
+
+        An unset or disabled adapter proxy returns ``None`` so the underlying
+        client can retain its existing environment-proxy behavior.
+
+        Returns:
+            A normalized proxy URL, or None when the adapter proxy is disabled.
+        """
+        proxy = getattr(self, "config", {}).get("proxy")
+        if not isinstance(proxy, dict) or proxy.get("mode") != "custom":
+            return None
+
+        address = str(proxy.get("address", "")).strip()
+        if not address:
+            return None
+        proxy_type = str(proxy.get("type", "http")).strip().lower()
+        if proxy_type not in {"http", "https", "socks5"}:
+            proxy_type = "http"
+        if "://" in address:
+            if urlsplit(address).scheme.lower() != proxy_type:
+                raise ValueError(
+                    "Proxy address scheme must match the selected proxy type."
+                )
+            return address
+
+        return f"{proxy_type}://{address}"
 
     @property
     def status(self) -> PlatformStatus:

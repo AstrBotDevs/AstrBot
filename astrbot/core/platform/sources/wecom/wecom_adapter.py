@@ -170,6 +170,8 @@ class WecomServer:
 
 @register_platform_adapter("wecom", "wecom 适配器", support_streaming_message=False)
 class WecomPlatformAdapter(Platform):
+    supports_proxy = True
+
     WECHAT_KF_TEXT_CONTENT_DEDUP_TTL_SECONDS = 15
 
     def __init__(
@@ -204,6 +206,10 @@ class WecomPlatformAdapter(Platform):
             self.config["corpid"].strip(),
             self.config["secret"].strip(),
         )
+        if self.proxy_url:
+            self.client._http.proxies.update(
+                {"http": self.proxy_url, "https": self.proxy_url}
+            )
 
         # 微信客服
         self.kf_name = self.config.get("kf_name", None)

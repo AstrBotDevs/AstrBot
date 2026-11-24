@@ -23,6 +23,7 @@ from astrbot.core.utils.auth_password import (
     validate_dashboard_password,
     verify_dashboard_password,
 )
+from astrbot.core.utils.migra_helper import migrate_config_on_load
 
 
 @pytest.fixture
@@ -242,10 +243,26 @@ class TestAstrBotConfigLoad:
     @pytest.mark.parametrize(
         "member",
         [
-            {"allow_execution": False, "allow_network": False, "filesystem_scope": "workspace"},
-            {"allow_execution": False, "allow_network": False, "filesystem_scope": "host"},
-            {"allow_execution": True, "allow_network": False, "filesystem_scope": "workspace"},
-            {"allow_execution": True, "allow_network": True, "filesystem_scope": "host"},
+            {
+                "allow_execution": False,
+                "allow_network": False,
+                "filesystem_scope": "workspace",
+            },
+            {
+                "allow_execution": False,
+                "allow_network": False,
+                "filesystem_scope": "host",
+            },
+            {
+                "allow_execution": True,
+                "allow_network": False,
+                "filesystem_scope": "workspace",
+            },
+            {
+                "allow_execution": True,
+                "allow_network": True,
+                "filesystem_scope": "host",
+            },
         ],
     )
     def test_windows_workspace_upgrade_preserves_other_member_policies(
@@ -263,7 +280,10 @@ class TestAstrBotConfigLoad:
 
         loaded = AstrBotConfig(config_path=str(config_path))
 
-        assert loaded["provider_settings"]["computer_use_local_permissions"]["member"] == member
+        assert (
+            loaded["provider_settings"]["computer_use_local_permissions"]["member"]
+            == member
+        )
 
     def test_first_deploy_flag(self, temp_config_path, minimal_default_config):
         """Test first_deploy flag is set for new config."""
@@ -650,6 +670,28 @@ class TestConfigValidation:
 
         assert "platform_settings" in config
         assert "provider_settings" in config
+
+    def test_proxy_config_migration_only_adds_supported_adapters_once(self, tmp_path):
+        config = {
+            "config_version": 6,
+            "platform": [
+                {"type": "telegram", "id": "telegram"},
+                {"type": "aiocqhttp", "id": "onebot"},
+            ],
+        }
+
+        assert migrate_config_on_load(config, tmp_path / "cmd_config.json")
+        assert config["config_version"] == 7
+        assert config["platform"][0]["proxy"] == {
+            "mode": "none",
+            "type": "http",
+            "address": "",
+        }
+        assert "proxy" not in config["platform"][1]
+
+        config["platform"][0].pop("proxy")
+        assert not migrate_config_on_load(config, tmp_path / "cmd_config.json")
+        assert "proxy" not in config["platform"][0]
 
     def test_replace_none_with_default(self, temp_config_path, minimal_default_config):
         """Test that None values are replaced with defaults."""

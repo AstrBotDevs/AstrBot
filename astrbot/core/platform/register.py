@@ -1,3 +1,5 @@
+from functools import wraps
+
 from astrbot.core import logger
 
 from .platform_metadata import PlatformMetadata
@@ -54,6 +56,20 @@ def register_platform_adapter(
 
         # Get the module path of the class being decorated
         module_path = cls.__module__
+        support_proxy = bool(getattr(cls, "supports_proxy", False))
+
+        # Adapter implementations often create fresh metadata instances in
+        # meta(), so keep the registered capability visible at runtime too.
+        original_meta = cls.meta
+
+        @wraps(original_meta)
+        def meta_with_capabilities(self, *args, **kwargs):
+            metadata = original_meta(self, *args, **kwargs)
+            if isinstance(metadata, PlatformMetadata):
+                metadata.support_proxy = support_proxy
+            return metadata
+
+        cls.meta = meta_with_capabilities
 
         pm = PlatformMetadata(
             name=adapter_name,
@@ -63,6 +79,7 @@ def register_platform_adapter(
             adapter_display_name=adapter_display_name,
             logo_path=logo_path,
             support_streaming_message=support_streaming_message,
+            support_proxy=support_proxy,
             module_path=module_path,
             i18n_resources=i18n_resources,
             config_metadata=config_metadata,

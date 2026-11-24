@@ -10,6 +10,22 @@ from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 
 from .agent import get_runtime_config_default
 
+ADAPTER_PROXY_SUPPORTED_TYPES = {
+    "discord",
+    "dingtalk",
+    "kook",
+    "line",
+    "mattermost",
+    "misskey",
+    "satori",
+    "slack",
+    "telegram",
+    "wecom",
+    "wecom_ai_bot",
+    "weixin_oc",
+    "weixin_official_account",
+}
+
 
 def get_local_permission_defaults(system: str | None = None) -> dict:
     """Return fresh Local permission defaults shared by all operating systems.
@@ -91,7 +107,7 @@ WEBHOOK_SUPPORTED_PLATFORMS = [
 
 # 默认配置
 DEFAULT_CONFIG = {
-    "config_version": 6,
+    "config_version": 7,
     "platform_settings": {
         "locale": "zh-CN",
         "unique_session": False,
@@ -923,6 +939,32 @@ CONFIG_METADATA_2 = {
                         "description": "启用",
                         "type": "bool",
                         "hint": "是否启用该适配器。未启用的适配器对应的消息平台将不会接收到消息。",
+                    },
+                    "proxy": {
+                        "description": "代理设置",
+                        "type": "object",
+                        "hint": "适配器专用代理。关闭时不覆盖全局代理设置；是否实际生效取决于适配器使用的网络客户端。",
+                        "items": {
+                            "mode": {
+                                "description": "代理模式",
+                                "type": "string",
+                                "options": ["none", "custom"],
+                                "render_type": "switch",
+                            },
+                            "type": {
+                                "description": "代理类型",
+                                "type": "string",
+                                "options": ["http", "https", "socks5"],
+                                "labels": ["HTTP", "HTTPS", "SOCKS5"],
+                                "condition": {"mode": "custom"},
+                            },
+                            "address": {
+                                "description": "代理地址",
+                                "type": "string",
+                                "hint": "填写主机:端口，例如 127.0.0.1:7890。启用代理时必填。",
+                                "condition": {"mode": "custom"},
+                            },
+                        },
                     },
                     "appid": {
                         "description": "appid",
@@ -3420,7 +3462,6 @@ CONFIG_METADATA_2 = {
         },
     },
 }
-
 
 """
 Since v4.7.0, fields such as name, description, and hint support i18n.

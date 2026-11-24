@@ -11,6 +11,7 @@ import websockets
 
 from astrbot import logger
 from astrbot.core.platform.message_type import MessageType
+from astrbot.core.platform.proxy import create_platform_client_session
 from astrbot.core.utils.media_utils import MediaResolver
 
 from .kook_config import KookConfig
@@ -29,7 +30,12 @@ from .kook_types import (
 
 
 class KookClient:
-    def __init__(self, config: KookConfig, event_callback):
+    def __init__(
+        self,
+        config: KookConfig,
+        event_callback,
+        proxy_url: str | None = None,
+    ):
         # 数据字段
         self.config = config
         self._bot_id = ""
@@ -37,11 +43,13 @@ class KookClient:
         self._bot_nickname = ""
 
         # 资源字段
-        self._http_client = aiohttp.ClientSession(
+        self._http_client = create_platform_client_session(
+            proxy_url,
             headers={
                 "Authorization": f"Bot {self.config.token}",
-            }
+            },
         )
+        self.proxy_url = proxy_url
         self.event_callback = event_callback  # 回调函数，用于处理接收到的事件
         self.ws = None
         self.heartbeat_task = None
@@ -276,7 +284,10 @@ class KookClient:
                 return False
 
             # 连接WebSocket
-            self.ws = await websockets.connect(gateway_url)
+            self.ws = await websockets.connect(
+                gateway_url,
+                **({"proxy": self.proxy_url} if self.proxy_url else {}),
+            )
             self.running = True
             logger.info("[KOOK] WebSocket 连接成功")
 

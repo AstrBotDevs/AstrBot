@@ -93,6 +93,8 @@ LINE_I18N_RESOURCES = {
     i18n_resources=LINE_I18N_RESOURCES,
 )
 class LinePlatformAdapter(Platform):
+    supports_proxy = True
+
     def __init__(
         self,
         platform_config: dict,
@@ -116,6 +118,7 @@ class LinePlatformAdapter(Platform):
         self.line_api = LineAPIClient(
             channel_access_token=channel_access_token,
             channel_secret=channel_secret,
+            proxy_url=self.proxy_url,
         )
 
     async def send_by_session(

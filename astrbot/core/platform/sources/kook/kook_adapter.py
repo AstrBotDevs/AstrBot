@@ -87,6 +87,8 @@ class _KookVoiceRecord(Record):
     "KOOK 适配器",
 )
 class KookPlatformAdapter(Platform):
+    supports_proxy = True
+
     def __init__(
         self, platform_config: dict, platform_settings: dict, event_queue: asyncio.Queue
     ) -> None:
@@ -94,7 +96,14 @@ class KookPlatformAdapter(Platform):
         self.kook_config = KookConfig.from_dict(platform_config)
         logger.debug(f"[KOOK] 配置: {self.kook_config.pretty_jsons()}")
         self.settings = platform_settings
-        self.client = KookClient(self.kook_config, self._on_received)
+        if self.proxy_url:
+            self.client = KookClient(
+                self.kook_config,
+                self._on_received,
+                proxy_url=self.proxy_url,
+            )
+        else:
+            self.client = KookClient(self.kook_config, self._on_received)
         self._reconnect_task = None
         self.running = False
         self._main_task = None

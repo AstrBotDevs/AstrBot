@@ -20,6 +20,7 @@ from telegram.ext import (
     filters,
 )
 from telegram.ext import MessageHandler as TelegramMessageHandler
+from telegram.request import HTTPXRequest
 
 import astrbot.api.message_components as Comp
 from astrbot.api import logger
@@ -60,6 +61,8 @@ else:
 
 @register_platform_adapter("telegram", "telegram 适配器")
 class TelegramPlatformAdapter(Platform):
+    supports_proxy = True
+
     _FORUM_TOPIC_NAME_CACHE_MAX_SIZE = 1000
 
     def __init__(
@@ -149,13 +152,17 @@ class TelegramPlatformAdapter(Platform):
         )  # max seconds - hard cap to prevent indefinite delay
 
     def _build_application(self) -> None:
-        self.application = (
+        builder = (
             ApplicationBuilder()
             .token(self.config["telegram_token"])
             .base_url(self.base_url)
             .base_file_url(self.file_base_url)
-            .build()
         )
+        if self.proxy_url:
+            builder = builder.request(
+                HTTPXRequest(proxy=self.proxy_url)
+            ).get_updates_request(HTTPXRequest(proxy=self.proxy_url))
+        self.application = builder.build()
         message_handler = TelegramMessageHandler(
             filters=filters.ALL,
             callback=self.message_handler,
@@ -292,6 +299,16 @@ class TelegramPlatformAdapter(Platform):
                     f"Telegram token is invalid or unauthorized: {e}. Polling stopped."
                 )
                 break
+            except NetworkError as e:
+                logger.warning(
+                    "[Telegram] Network request failed during startup or polling: "
+                    "%s. Retrying in %.1fs.",
+                    type(e).__name__,
+                    self._polling_restart_delay,
+                )
+                with suppress(Exception):
+                    await self._shutdown_application(delete_commands=False)
+                self._build_application()
             except Exception as e:
                 logger.exception(
                     "Telegram polling crashed with exception: "
@@ -315,11 +332,6 @@ class TelegramPlatformAdapter(Platform):
             )
             return
 
-        logger.error(
-            f"Telegram polling request failed: {type(error).__name__}: {error!s}",
-            exc_info=error,
-        )
-
         if self._loop is None:
             return
 
@@ -328,6 +340,12 @@ class TelegramPlatformAdapter(Platform):
             self._consecutive_polling_failures = 0
         self._last_polling_failure_at = now
         self._consecutive_polling_failures += 1
+
+        if self._consecutive_polling_failures == 1:
+            logger.warning(
+                "[Telegram] Polling network request failed (%s); retrying.",
+                type(error).__name__,
+            )
 
         if self._consecutive_polling_failures < self._polling_recovery_threshold:
             return

@@ -1,3 +1,5 @@
+import asyncio
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -20,9 +22,47 @@ from astrbot.core.platform.button_interaction import (
     decode_button_callback,
     encode_button_callback,
 )
+from astrbot.core.platform.sources.wecom import wecom_adapter
 from astrbot.core.platform.sources.wecom.wecom_adapter import WecomPlatformAdapter
 from astrbot.core.platform.sources.wecom.wecom_event import WecomPlatformEvent
 from astrbot.core.platform.sources.wecom.wecom_kf_message import WeChatKFMessage
+
+
+def test_wecom_client_applies_proxy_to_http_session(monkeypatch):
+    client = SimpleNamespace(_http=SimpleNamespace(proxies={}))
+    calls = []
+
+    def create_client(*args, **kwargs):
+        calls.append((args, kwargs))
+        return client
+
+    monkeypatch.setattr(wecom_adapter, "WeChatClient", create_client)
+    monkeypatch.setattr(
+        wecom_adapter,
+        "WecomServer",
+        lambda *args: SimpleNamespace(callback=None),
+    )
+    WecomPlatformAdapter(
+        {
+            "id": "wecom-test",
+            "port": 8080,
+            "corpid": "corp",
+            "secret": "secret",
+            "proxy": {
+                "mode": "custom",
+                "type": "http",
+                "address": "127.0.0.1:7890",
+            },
+        },
+        {},
+        asyncio.Queue(),
+    )
+
+    assert calls == [(("corp", "secret"), {})]
+    assert client._http.proxies == {
+        "http": "http://127.0.0.1:7890",
+        "https": "http://127.0.0.1:7890",
+    }
 
 
 def _message() -> AstrBotMessage:
