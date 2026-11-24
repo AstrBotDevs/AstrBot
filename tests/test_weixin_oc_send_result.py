@@ -24,17 +24,20 @@ def _adapter(payload: dict) -> WeixinOCAdapter:
 @pytest.mark.asyncio
 async def test_sendmessage_warns_when_success_has_no_message_id(monkeypatch):
     warning = Mock()
+    cache = Mock()
     monkeypatch.setattr(weixin_oc_adapter.logger, "warning", warning)
     adapter = _adapter({"ret": 0})
+    adapter._cache_recent_message = cache
 
     sent = await adapter._send_items_to_session(
         "user",
         [{"type": 1, "text_item": {"text": "hi"}}],
     )
 
-    assert sent is True
+    assert sent is False
     warning.assert_called_once()
     assert "without message_id" in warning.call_args.args[0]
+    cache.assert_not_called()
 
 
 @pytest.mark.asyncio
