@@ -88,7 +88,7 @@ async def runtime(monkeypatch):
         get_event_queue=lambda: queue,
         get_platform_inst=lambda _: SimpleNamespace(meta=lambda: metadata),
         get_config=lambda **_: config,
-        locale=lambda umo=None: config["platform_settings"].get("locale", "zh-CN"),
+        get_locale=AsyncMock(return_value=config["platform_settings"].get("locale", "zh-CN")),
         astrbot_config_mgr=SimpleNamespace(
             _create_message_config=lambda _: (copy.deepcopy(config), frozenset())
         ),
@@ -501,14 +501,15 @@ async def test_sdk_handle_keeps_permissions_and_follow_up_under_core_admission(r
         source_event=source,
     )
     assert not hasattr(run, "runtime_turn")
-    assert not hasattr(run.session, "run_turn")
-    assert run.session.ref == AgentSessionRef("astrbot", "conversation")
+    session = await run.get_session()
+    assert not hasattr(session, "run_turn")
+    assert session.ref == AgentSessionRef("astrbot", "conversation")
     assert (await asyncio.wait_for(run.result(), 1)).text == "Reply 1"
     assert runtime.events[0].role == "member"
 
     context.get_config()["provider_settings"]["enable"] = False
     follow_up = await run.follow_up(input_message=[PlainInput(text="Second input")])
-    assert follow_up.session.ref == run.session.ref
+    assert (await follow_up.get_session()).ref == session.ref
     assert (await asyncio.wait_for(follow_up.result(), 1)).reason == "skipped"
     assert len(runtime.requests) == 1
 

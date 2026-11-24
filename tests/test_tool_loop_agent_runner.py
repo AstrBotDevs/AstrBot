@@ -2563,7 +2563,7 @@ async def test_step_notices_reach_model_once_per_threshold(
     event.get_platform_id.return_value = "test"
     event.send = AsyncMock()
     context = MagicMock()
-    context.locale.return_value = "zh-CN"
+    context.get_locale = AsyncMock(return_value="zh-CN")
     await runner.reset(
         provider=mock_provider,
         request=provider_request,

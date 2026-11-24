@@ -64,7 +64,8 @@ class Main(star.Star):
                 return
 
             messages_i18n = MESSAGES.get(
-                self.context.locale(event.unified_msg_origin), MESSAGES["zh-CN"]
+                await self.context.get_locale(event.unified_msg_origin),
+                MESSAGES["zh-CN"],
             )
             if p_settings.get("empty_mention_waiting_need_reply", True):
                 try:
