@@ -29,7 +29,7 @@ repo: https://github.com/your-name/repo      # Plugin repository URL
   # - example
 ```
 
-[Available marketplace categories](plugin-new.md#declare-plugin-category-optional)
+[Recommended marketplace categories](plugin-new.md#declare-plugin-category-optional)
 
 [Supported platform adapters](plugin-new.md#declare-supported-platforms-optional)
 

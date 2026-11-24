@@ -161,9 +161,13 @@ const categoryDisplay = computed(() => {
   const category = String(rawCategory || "").trim();
   if (!category) return "";
 
-  const normalized = category.toLowerCase().replace(/\s+/g, "_");
+  // Match the backend normalization so a hyphen or an underscore spelling of a
+  // recommended category still resolves to its label. An unlisted value is
+  // allowed and has no label, so show it as the author declared it instead of
+  // the missing-translation marker.
+  const normalized = category.toLowerCase().replace(/[\s-]+/g, "_");
   const label = tm(`market.categories.${normalized}`);
-  return label === `market.categories.${normalized}` ? category : label;
+  return label.includes("[MISSING:") ? category : label;
 });
 
 const authorWebsite = computed(() => {

@@ -94,7 +94,7 @@ your_plugin/
 
 这种情况下 Skill 名称会使用插件目录名。插件提供的 Skill 由插件管理，在 WebUI 的 `插件 → 技能` 页面中作为只读来源展示；可以启用或禁用，但不能从本地 Skills 页面删除或编辑。插件卸载或更新后，对应 Skill 会随插件文件变化。
 
-### 声明支持平台（Optional）
+### 声明支持平台（可选）
 
 你可以在 `metadata.yaml` 中新增 `support_platforms` 字段（`list[str]`），声明插件支持的平台适配器。WebUI 插件页会展示该字段。
 
@@ -126,7 +126,7 @@ support_platforms:
 - `matrix`
 - `mattermost`
 
-### 声明 AstrBot 版本范围（Optional）
+### 声明 AstrBot 版本范围（可选）
 
 你可以在 `metadata.yaml` 中新增 `astrbot_version` 字段，声明插件要求的 AstrBot 版本范围。格式与 `pyproject.toml` 依赖版本约束一致（PEP 440），且不要加 `v` 前缀。
 
@@ -147,31 +147,28 @@ astrbot_version: ">=4.16,<5"
 当当前 AstrBot 版本不满足该范围时，插件会被阻止加载并提示版本不兼容。
 在 WebUI 安装插件时，你可以选择“无视警告，继续安装”来跳过这个检查。
 
-### 声明插件分类（Optional）
+### 声明插件分类（可选）
 
-你可以在 `metadata.yaml` 中新增 `category` 字段，主动声明插件的市场分类。WebUI 与运行时都以该字段为准；插件市场里显示的分类取决于市场索引是否收录了该值，索引收录时会复制这个字段，因此只改 `metadata.yaml` 不会立刻改变市场展示。
+你可以在 `metadata.yaml` 中新增 `category` 字段，主动声明插件的市场分类。WebUI 与运行时直接读取该字段，市场里展示的分类取自索引快照。
 
 ```yaml
-category: platform adapter
+category: platform_adapter
 ```
 
-`category` 取值为下列英文标识之一。中文翻译只是界面上的展示文案，写进 `category` 不会被识别。
+下表是推荐使用的分类标识。
 
-| 标识 | 中文翻译 | 适用插件 |
+| 推荐标识 | 中文翻译 | 适用插件 |
 | --- | --- | --- |
-| `utility` | 实用工具 | 通用工具与生活查询：编码与格式转换、计算、短链、天气、汇率、快递、单位换算，以及定时与自动化流程 |
-| `ai_context` | AI 对话 | 围绕对话与 AI 能力：人设与角色设定、上下文压缩与注入、提示词与文本改写、记忆与知识库检索接入 |
-| `entertainment` | 娱乐 | 泛娱乐与游戏：塔罗、运势、点歌、表情包、梗图、玩梗闲聊、接龙、猜词、谁是卧底、掷骰、答题，以及围绕别的游戏的外围插件 |
-| `media` | 媒体 | 图片、音频、视频的处理与生成：解析、转码、拼接、表情包、文生图、图生图、TTS 与 ASR |
+| `utility` | 实用工具 | 通用小工具与生活信息查询 |
+| `ai_context` | AI 对话 | 围绕对话与 AI 能力的增强 |
+| `entertainment` | 娱乐 | 泛娱乐与群内小游戏 |
+| `game` | 游戏 | 连接外部游戏 |
+| `media` | 媒体 | 图片、音频、视频的处理与生成 |
 | `productivity` | 效率 | 待办、日程、笔记与个人工作流 |
-| `integration` | 外部集成 | 打通第三方平台或服务账号：GitHub、网盘、RSS、音乐、Notion |
-| `platform_adapter` | 平台适配器 | 接入新的消息平台或协议，如 QQ、Telegram、Discord |
-| `provider_adapter` | 提供商适配器 | 接入新的大模型、语音或向量服务提供商 |
+| `integration` | 外部集成 | 打通第三方平台或服务账号 |
+| `platform_adapter` | 平台适配器 | 接入新的消息平台或协议 |
+| `provider_adapter` | 提供商适配器 | 接入新的模型、语音或向量服务 |
 | `other` | 其他 | 无法归入以上任一类的插件 |
-
-取值会做轻度归一化：首尾空格、大小写以及空格、`-`、`_` 三种分隔符都会被忽略，所以下划线写法同样能识别，`platform adapter`、`Platform Adapter`、`platform-adapter` 与 `platform_adapter` 等价。
-
-未声明 `category` 的插件会归入 `other`。如果写了不支持的分类，AstrBot 会在日志中给出告警并同样归入 `other`，但**不会**阻止插件安装或更新。新增分类需要修改 AstrBot 源码，因此请优先使用上表中的标识。
 
 ### 调试插件
 

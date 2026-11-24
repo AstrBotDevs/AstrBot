@@ -1,7 +1,7 @@
 # Unreleased
 
 - QQ Official: failed image uploads no longer log base64 payloads, avoiding dashboard freezes from oversized log entries. Retry attempts decrease from five to three, with one summary warning.
-- Plugin market: plugins can now declare a marketplace category in `metadata.yaml` (canonical identifiers served by the plugin API, unknown values log a warning and fall back to `other` without blocking installation or updates), and the WebUI category filter moved from the toolbar dropdown to a chip row above the plugin list (old entry: Extensions → Plugin Market → toolbar "Category" dropdown; new entry: Extensions → Plugin Market → category row above the list).
+- Plugin market: plugins can now declare an optional marketplace category in `metadata.yaml`. The plugin API serves a ten-value recommended vocabulary (`utility`, `ai_context`, `entertainment`, `game`, `media`, `productivity`, `integration`, `platform_adapter`, `provider_adapter`, `other`) that orders the filter and supplies translated labels, but any other value is accepted as written: nothing warns, nothing is rewritten, and installation and updates are never blocked. The WebUI category filter also moved from the toolbar dropdown to a chip row above the plugin list (old entry: Extensions → Plugin Market → toolbar "Category" dropdown; new entry: Extensions → Plugin Market → category row above the list).
 
 - 「插件 → 管理行为 → 函数工具」现在只列出插件工具。Agent 运行时工具由配置文件的 AI 功能设置控制，MCP 工具可在「插件 → MCP」查看。
 - Extensions → Handlers → Function Tools now lists plugin tools. Configure Agent runtime tools in the profile's AI capability settings and view MCP tools under Extensions → MCP Servers.

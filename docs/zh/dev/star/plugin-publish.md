@@ -29,9 +29,9 @@ repo: https://github.com/your-name/repo      # 插件仓库地址
   # - example
 ```
 
-[目前可用的插件市场分类](plugin-new.md#声明插件分类-optional)
+[推荐的插件市场分类](plugin-new.md#声明插件分类-可选)
 
-[目前支持的平台适配器](plugin-new.md#声明支持平台-optional)
+[目前支持的平台适配器](plugin-new.md#声明支持平台-可选)
 
 ::: warning 大小限制
 发布到插件市场的插件压缩包（zip）大小**不得超过 16MB**。

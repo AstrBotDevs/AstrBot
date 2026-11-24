@@ -268,7 +268,7 @@ your_plugin/
 
 这种情况下 Skill 名称会使用插件目录名。插件提供的 Skill 由插件管理，在 WebUI 的 `插件 → 技能` 页面中作为只读来源展示；可以启用或禁用，但不能从本地 Skills 页面删除或编辑。插件卸载或更新后，对应 Skill 会随插件文件变化。
 
-### 声明支持平台（Optional）
+### 声明支持平台（可选）
 
 你可以在 `metadata.yaml` 中新增 `support_platforms` 字段（`list[str]`），声明插件支持的平台适配器。WebUI 插件页会展示该字段。
 
@@ -295,7 +295,7 @@ support_platforms:
 - `misskey`
 - `line`
 
-### 声明 AstrBot 版本范围（Optional）
+### 声明 AstrBot 版本范围（可选）
 
 你可以在 `metadata.yaml` 中新增 `astrbot_version` 字段，声明插件要求的 AstrBot 版本范围。格式与 `pyproject.toml` 依赖版本约束一致（PEP 440），且不要加 `v` 前缀。
 

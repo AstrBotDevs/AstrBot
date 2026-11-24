@@ -213,7 +213,8 @@ export const useExtensionPage = (initialTab = "installed") => {
   const sortOrder = ref("desc"); // desc (降序) or asc (升序)
   const randomPluginNames = ref([]);
   const marketCategoryFilter = ref("all");
-  // Canonical slug order served by the backend; empty until it loads.
+  // Recommended slug order served by the backend; empty until it loads. It
+  // only prioritizes and labels the filter, never validates a declared value.
   const marketCategorySlugs = ref([]);
 
   // 插件市场拼音搜索
@@ -238,19 +239,10 @@ export const useExtensionPage = (initialTab = "installed") => {
     if (!normalized) {
       return "other";
     }
-    const slug = normalized.replace(/[\s-]+/g, "_");
-    // Unknown slugs collapse into "other" so that a typo or an ad-hoc value in
-    // a marketplace index cannot create a one-off filter entry. An empty
-    // vocabulary means the canonical list is unknown (still loading, or an
-    // older backend), not that nothing is valid, so the discovered values are
-    // kept: folding them into "other" would leave the filter with one category.
-    if (
-      marketCategorySlugs.value.length > 0 &&
-      !marketCategorySlugs.value.includes(slug)
-    ) {
-      return "other";
-    }
-    return slug;
+    // The backend vocabulary is a recommendation, not a whitelist: a plugin may
+    // declare any category, so a discovered value keeps its own filter entry
+    // instead of being folded into "other".
+    return normalized.replace(/[\s-]+/g, "_");
   };
 
   const getMarketCategoryLabel = (key) => {
@@ -303,12 +295,15 @@ export const useExtensionPage = (initialTab = "installed") => {
       },
     ];
 
-    // Prefer the backend order so the filter reads the same everywhere; fall
-    // back to discovery order when the vocabulary is unavailable.
-    const orderedKeys =
-      marketCategorySlugs.value.length > 0
-        ? marketCategorySlugs.value
-        : [...marketCategoryMeta.value.keys()];
+    // Recommended categories lead in the backend order so the filter reads the
+    // same everywhere, then whatever else plugins declared follows in discovery
+    // order: a custom category must stay reachable, not disappear.
+    const orderedKeys = [...marketCategorySlugs.value];
+    for (const categoryKey of marketCategoryMeta.value.keys()) {
+      if (!orderedKeys.includes(categoryKey)) {
+        orderedKeys.push(categoryKey);
+      }
+    }
 
     for (const categoryKey of orderedKeys) {
       const categoryData = marketCategoryMeta.value.get(categoryKey);

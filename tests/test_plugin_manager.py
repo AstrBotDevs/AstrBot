@@ -2,6 +2,7 @@ import asyncio
 import errno
 import functools
 import json
+import logging
 import os
 import sys
 import tempfile
@@ -14,7 +15,6 @@ from unittest.mock import AsyncMock
 import pytest
 import yaml
 
-from astrbot.core.star import plugin_categories
 from astrbot.core.star import star_manager as star_manager_module
 from astrbot.core.star.star_handler import EventType, StarHandlerMetadata
 from astrbot.core.star.star_manager import PluginDependencyInstallError, PluginManager
@@ -241,15 +241,17 @@ def test_load_plugin_metadata_normalizes_category(
     assert loaded_metadata.category == expected
 
 
-def test_load_plugin_metadata_unknown_category_falls_back_to_other(tmp_path: Path):
+def test_load_plugin_metadata_keeps_unlisted_category(tmp_path: Path):
+    # The recommended vocabulary is a suggestion, so a plugin may declare a
+    # category that is not on the list; it must survive loading unchanged.
     plugin_path = tmp_path / "helloworld"
     _write_local_test_plugin(plugin_path, TEST_PLUGIN_REPO)
-    _write_plugin_category(plugin_path, "not_a_category")
+    _write_plugin_category(plugin_path, "Not A Listed Category")
 
     loaded_metadata = PluginManager._load_plugin_metadata(str(plugin_path))
 
     assert loaded_metadata is not None
-    assert loaded_metadata.category == "other"
+    assert loaded_metadata.category == "not_a_listed_category"
 
 
 def test_load_plugin_metadata_without_category_is_none(tmp_path: Path):
@@ -262,45 +264,34 @@ def test_load_plugin_metadata_without_category_is_none(tmp_path: Path):
     assert loaded_metadata.category is None
 
 
-def test_validate_plugin_metadata_allows_unknown_category(monkeypatch) -> None:
-    # A category typo must not make an existing plugin uninstallable on update.
-    warnings: list[str] = []
-    monkeypatch.setattr(
-        plugin_categories.logger, "warning", lambda message: warnings.append(message)
-    )
+def test_validate_plugin_metadata_allows_unknown_category(caplog) -> None:
+    # A category typo must not warn or make a plugin uninstallable on update.
+    with caplog.at_level(logging.WARNING):
+        star_manager_module._PluginUpdater.validate_plugin_metadata(
+            {
+                "name": TEST_PLUGIN_NAME,
+                "author": "AstrBot Team",
+                "desc": "Local test plugin",
+                "version": "1.0.0",
+                "category": "not_a_category",
+            },
+            "metadata.yaml",
+        )
 
-    star_manager_module._PluginUpdater.validate_plugin_metadata(
-        {
-            "name": TEST_PLUGIN_NAME,
-            "author": "AstrBot Team",
-            "desc": "Local test plugin",
-            "version": "1.0.0",
-            "category": "not_a_category",
-        },
-        "metadata.yaml",
-    )
-
-    assert len(warnings) == 1
-    assert "not_a_category" in warnings[0]
+    assert "not_a_category" not in caplog.text
 
 
-def test_load_plugin_metadata_warns_once_for_unknown_category(
-    tmp_path: Path, monkeypatch
-) -> None:
-    # Loading validates the metadata first, so the warning must not repeat.
-    warnings: list[str] = []
-    monkeypatch.setattr(
-        plugin_categories.logger, "warning", lambda message: warnings.append(message)
-    )
+def test_load_plugin_metadata_does_not_warn_for_unknown_category(tmp_path, caplog):
     plugin_path = tmp_path / "helloworld"
     _write_local_test_plugin(plugin_path, TEST_PLUGIN_REPO)
     _write_plugin_category(plugin_path, "not_a_category")
 
-    loaded_metadata = PluginManager._load_plugin_metadata(str(plugin_path))
+    with caplog.at_level(logging.WARNING):
+        loaded_metadata = PluginManager._load_plugin_metadata(str(plugin_path))
 
     assert loaded_metadata is not None
-    assert loaded_metadata.category == "other"
-    assert len(warnings) == 1
+    assert loaded_metadata.category == "not_a_category"
+    assert "not_a_category" not in caplog.text
 
 
 def test_load_plugin_metadata_does_not_fallback_to_legacy_info(

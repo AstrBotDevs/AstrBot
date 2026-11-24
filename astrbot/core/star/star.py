@@ -80,7 +80,11 @@ class StarMetadata:
     # Appended last on purpose: StarMetadata is constructed positionally by
     # external consumers, so new fields must not shift existing ones.
     category: str | None = None
-    """Plugin market category slug declared in metadata (None when undeclared)."""
+    """Optional marketplace category declared in metadata, normalized to a slug.
+
+    Any declared value is kept as-is, so this is not limited to the recommended
+    vocabulary; ``None`` means the plugin declares no category.
+    """
 
     @property
     def plugin_id(self) -> str:

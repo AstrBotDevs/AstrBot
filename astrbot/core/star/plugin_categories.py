@@ -1,21 +1,22 @@
-"""Canonical plugin categories that plugins declare in ``metadata.yaml``.
+"""Recommended plugin categories that plugins may declare in ``metadata.yaml``.
 
-Plugins declare a stable, machine-readable slug instead of a localized label so
-the plugin market index, the WebUI and the runtime all filter on the same
-values. Adding a category is a code change here; labels are derived from the
-slug wherever it is displayed.
+A category is an optional, free-form hint. The values below are the ones the
+plugin market, the WebUI and the runtime know how to label and order, and a
+plugin may declare something else: the declared value is normalized to a slug
+either way, so one typo or one niche category cannot block a plugin from loading,
+installing or updating. Display code derives labels from the slug and falls back
+to the words of the slug itself.
 """
 
 from __future__ import annotations
 
 import re
 
-from astrbot.core import logger
-
-PLUGIN_CATEGORY_SLUGS: tuple[str, ...] = (
+RECOMMENDED_PLUGIN_CATEGORIES: tuple[str, ...] = (
     "utility",
     "ai_context",
     "entertainment",
+    "game",
     "media",
     "productivity",
     "integration",
@@ -23,46 +24,28 @@ PLUGIN_CATEGORY_SLUGS: tuple[str, ...] = (
     "provider_adapter",
     "other",
 )
-"""Supported ``metadata.yaml`` ``category`` values, in display order."""
-
-DEFAULT_PLUGIN_CATEGORY = "other"
-"""Category used when a plugin declares an unsupported category."""
+"""Recommended ``metadata.yaml`` ``category`` values, in display order."""
 
 
-def normalize_plugin_category(value: object, *, warn: bool = True) -> str | None:
-    """Normalize the category declared by plugin metadata.
+def normalize_plugin_category(value: object) -> str | None:
+    """Normalize the optional category declared by plugin metadata.
 
-    Unsupported values never block loading or installation: they are reported in
-    the log and mapped to ``DEFAULT_PLUGIN_CATEGORY`` so that a typo in
-    ``metadata.yaml`` cannot make a plugin uninstallable.
+    Any value is accepted. A value outside ``RECOMMENDED_PLUGIN_CATEGORIES`` is
+    kept as declared instead of being rejected or rewritten, because the
+    vocabulary is a recommendation for plugin authors rather than a constraint
+    the runtime enforces.
 
     Args:
         value: Raw ``category`` value read from ``metadata.yaml``.
-        warn: Whether to report an unsupported value. Callers that already
-            validated the same metadata can pass ``False`` to avoid a duplicate
-            warning while still getting the normalized value.
 
     Returns:
-        The declared slug when it is supported, ``None`` when the plugin does
-        not declare a category, otherwise ``DEFAULT_PLUGIN_CATEGORY``.
+        The normalized slug, or ``None`` when the plugin declares no category or
+        declares something that is not a string.
     """
-    if value is None:
+    if not isinstance(value, str):
         return None
 
-    if isinstance(value, str):
-        # Collapse separator runs so that "AI - Tools" matches what the WebUI
-        # derives from the same declaration instead of falling back to "other".
-        slug = re.sub(r"[\s-]+", "_", value.strip().lower())
-        if slug in PLUGIN_CATEGORY_SLUGS:
-            return slug
-        if not slug:
-            return None
-
-    if not warn:
-        return DEFAULT_PLUGIN_CATEGORY
-
-    logger.warning(
-        f"Unsupported plugin category {value!r}; falling back to "
-        f"{DEFAULT_PLUGIN_CATEGORY!r}."
-    )
-    return DEFAULT_PLUGIN_CATEGORY
+    # Collapse separator runs so that "AI - Context", "ai-context" and
+    # "ai_context" reach the WebUI as one slug.
+    slug = re.sub(r"[\s-]+", "_", value.strip().lower())
+    return slug or None

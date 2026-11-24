@@ -149,29 +149,26 @@ In the WebUI installation flow, you can choose to "Ignore Warning and Install" t
 
 ### Declare Plugin Category (Optional)
 
-You can add a `category` field in `metadata.yaml` to declare the marketplace category of your plugin. The WebUI and the runtime follow this field. What the plugin marketplace shows depends on whether the market index copied the value, which happens when the index is updated, so editing `metadata.yaml` alone does not change the marketplace listing right away.
+You can add a `category` field in `metadata.yaml` to declare the marketplace category of your plugin. The WebUI and the runtime read this field directly; the marketplace shows the category captured in the index snapshot.
 
 ```yaml
-category: platform adapter
+category: platform_adapter
 ```
 
-`category` takes one of the following identifiers. Only the identifier column is canonical: the localized labels are display text, so the Chinese translation is not recognized, while an English spelling that normalizes to a supported identifier (such as `Platform Adapter`) is accepted.
+The identifiers below are the recommended categories.
 
-| Identifier | English label | Use it for |
+| Recommended identifier | English label | Use it for |
 | --- | --- | --- |
-| `utility` | Utility | General tools and everyday lookups: encoding and format conversion, calculation, short links, weather, exchange rates, parcels, unit conversion, plus scheduled and automated flows |
-| `ai_context` | AI Conversation | Conversation and AI capabilities around it: persona and character settings, context compression and injection, prompts and text rewriting, memory and knowledge base retrieval |
-| `entertainment` | Entertainment | Fun and games: tarot, fortune telling, song requests, stickers, memes, playful chat, word chains, word guessing, who-is-the-spy, dice, quizzes, and plugins built around another game |
-| `media` | Media | Processing and generation of images, audio and video: parsing, transcoding, joining, stickers, text-to-image, image-to-image, TTS and ASR |
+| `utility` | Utility | General tools and everyday lookups |
+| `ai_context` | AI Conversation | Enhancements around conversation and AI capabilities |
+| `entertainment` | Entertainment | General fun and in-chat games |
+| `game` | Game | Connecting to an external game |
+| `media` | Media | Processing and generating images, audio and video |
 | `productivity` | Productivity | To-dos, schedules, notes and personal workflows |
-| `integration` | Integration | Wiring a third-party platform or account: GitHub, cloud drives, RSS, music, Notion |
-| `platform_adapter` | Platform Adapter | New messaging platforms or protocols, such as QQ, Telegram and Discord |
-| `provider_adapter` | Provider Adapter | New model, speech or embedding service providers |
+| `integration` | Integration | Wiring a third-party platform or account |
+| `platform_adapter` | Platform Adapter | New messaging platforms or protocols |
+| `provider_adapter` | Provider Adapter | New model, speech or embedding services |
 | `other` | Other | Anything that does not fit the categories above |
-
-Declarations are lightly normalized: surrounding whitespace, letter case and space, `-` or `_` separators are ignored, so the underscore spelling works too: `platform adapter`, `Platform Adapter`, `platform-adapter` and `platform_adapter` are equivalent.
-
-Plugins that do not declare `category` are grouped under `other`. An unsupported value only logs a warning and is also grouped under `other`; it never blocks installation or updates. Adding a new category requires a code change in AstrBot, so prefer the identifiers above.
 
 ### Debugging Plugins
 

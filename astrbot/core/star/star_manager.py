@@ -562,10 +562,9 @@ class PluginManager:
                     if isinstance(metadata.get("astrbot_version"), str)
                     else None
                 ),
-                # The metadata was validated above, so do not warn twice.
-                category=normalize_plugin_category(
-                    metadata.get("category"), warn=False
-                ),
+                # The category is an optional, free-form hint. Declaring an
+                # unknown value is normalized but never rejected.
+                category=normalize_plugin_category(metadata.get("category")),
                 views=views,
                 i18n=PluginManager._load_plugin_i18n(plugin_path),
             )

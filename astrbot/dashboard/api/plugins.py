@@ -12,7 +12,7 @@ from fastapi.responses import PlainTextResponse, Response
 from astrbot.api.web import PluginRequest, bind_request_context
 from astrbot.core import logger
 from astrbot.core.log import LogManager
-from astrbot.core.star.plugin_categories import PLUGIN_CATEGORY_SLUGS
+from astrbot.core.star.plugin_categories import RECOMMENDED_PLUGIN_CATEGORIES
 from astrbot.dashboard.asgi_runtime import (
     DashboardRequestState,
     call_request_view,
@@ -624,9 +624,10 @@ async def list_plugin_market(
 async def list_plugin_market_categories(
     _auth: AuthContext = Depends(require_plugin_scope),
 ):
-    # Slugs only: display labels stay in the dashboard i18n bundles so that the
-    # marketplace, the WebUI and the runtime share one category vocabulary.
-    return ok({"categories": list(PLUGIN_CATEGORY_SLUGS)})
+    # Slugs only: display labels stay in the dashboard i18n bundles. This is the
+    # recommended vocabulary used to order the filter and to keep shared labels;
+    # plugins may declare any other category and the WebUI shows it as declared.
+    return ok({"categories": list(RECOMMENDED_PLUGIN_CATEGORIES)})
 
 
 @router.get("/plugin-sources")

@@ -23,7 +23,7 @@ from PIL import Image as PILImage
 import astrbot.dashboard.services.config_service as config_service
 import astrbot.dashboard.services.stat_service as stat_service
 from astrbot.core import file_token_service
-from astrbot.core.star.plugin_categories import PLUGIN_CATEGORY_SLUGS
+from astrbot.core.star.plugin_categories import RECOMMENDED_PLUGIN_CATEGORIES
 from astrbot.core.utils import llm_metadata
 from astrbot.dashboard.api.app import create_dashboard_asgi_app
 from astrbot.dashboard.api.backups import download_backup as download_backup_route
@@ -2364,7 +2364,7 @@ async def test_v1_plugins_accept_api_key(
 
 
 @pytest.mark.asyncio
-async def test_v1_plugin_market_categories_lists_canonical_slugs(
+async def test_v1_plugin_market_categories_lists_recommended_slugs(
     asgi_client: httpx.AsyncClient,
     fake_db: FakeDb,
 ):
@@ -2379,7 +2379,7 @@ async def test_v1_plugin_market_categories_lists_canonical_slugs(
     assert response.status_code == 200
     data = response.json()
     assert data["status"] == "ok"
-    assert data["data"]["categories"] == list(PLUGIN_CATEGORY_SLUGS)
+    assert data["data"]["categories"] == list(RECOMMENDED_PLUGIN_CATEGORIES)
 
 
 @pytest.mark.asyncio
