@@ -12,6 +12,8 @@ from lark_oapi.api.contact.v3 import GetUserRequest
 from lark_oapi.api.im.v1 import (
     GetMessageRequest,
     GetMessageResourceRequest,
+    PatchMessageRequest,
+    PatchMessageRequestBody,
 )
 from lark_oapi.api.im.v1.processor import P2ImMessageReceiveV1Processor
 from lark_oapi.event.callback.model.p2_card_action_trigger import (
@@ -21,10 +23,13 @@ from lark_oapi.event.callback.model.p2_card_action_trigger import (
 
 import astrbot.api.message_components as Comp
 from astrbot import logger
-from astrbot.api.event import MessageChain
+from astrbot.api.event import AstrMessageEvent, MessageChain
 from astrbot.api.platform import (
     AstrBotMessage,
     MessageMember,
+    MessageReplyContext,
+    MessageSendReceipt,
+    MessageSendRejected,
     MessageType,
     Platform,
     PlatformMetadata,
@@ -83,10 +88,15 @@ class LarkPlatformAdapter(Platform):
             asyncio.create_task(self.convert_card_action(event))
             return P2CardActionTriggerResponse()
 
+        def do_group_removal(event: Any) -> None:
+            asyncio.create_task(self.convert_group_removal(event))
+
         self.event_handler = (
             lark.EventDispatcherHandler.builder("", "")
             .register_p2_im_message_receive_v1(do_v2_msg_event)
             .register_p2_card_action_trigger(do_card_action_trigger)
+            .register_p2_im_chat_member_bot_deleted_v1(do_group_removal)
+            .register_p2_im_chat_member_user_deleted_v1(do_group_removal)
             .build()
         )
 
@@ -559,7 +569,7 @@ class LarkPlatformAdapter(Platform):
         self,
         session: MessageSesion,
         message_chain: MessageChain,
-    ) -> None:
+    ) -> MessageSendReceipt | None:
         fallback_chat_id = None
         if session.message_type == MessageType.GROUP_MESSAGE:
             id_type = "chat_id"
@@ -580,7 +590,7 @@ class LarkPlatformAdapter(Platform):
                 logger.warning("[Lark] Failed to load private chat route: %s", exc)
 
         # 复用 LarkMessageEvent 中的通用发送逻辑
-        await LarkMessageEvent.send_message_chain(
+        receipt = await LarkMessageEvent.send_message_chain(
             message_chain,
             self.lark_api,
             receive_id=receive_id,
@@ -590,6 +600,7 @@ class LarkPlatformAdapter(Platform):
         )
 
         await super().send_by_session(session, message_chain)
+        return receipt
 
     def meta(self) -> PlatformMetadata:
         return PlatformMetadata(
@@ -797,23 +808,38 @@ class LarkPlatformAdapter(Platform):
             logger.debug("[Lark] Ignored a card callback without AstrBot metadata.")
             return
         payload = value.get("astrbot_callback")
-        if not isinstance(payload, str):
-            logger.debug("[Lark] Ignored a non-AstrBot card callback.")
-            return
+        native_action = "astrbot_callback" not in value
+        if native_action:
+            if (
+                action.get("tag") != "button"
+                or not event_id
+                or not source_message_id
+                or not chat_id
+                or not sender_id
+            ):
+                logger.debug("[Lark] Ignored a native card action without its source.")
+                return
+            # Plugins may handle existing native cards through this dedicated
+            # button action. The opaque value does not grant approval or trust.
+            action_id, data = "lark:card_action", value
+            message_type = MessageType.OTHER_MESSAGE
+        else:
+            if not isinstance(payload, str):
+                logger.debug("[Lark] Ignored an invalid AstrBot card callback payload.")
+                return
+            try:
+                action_id, data = decode_button_callback(payload, allow_expired=True)
+            except ValueError:
+                logger.debug("[Lark] Ignored an invalid AstrBot card callback payload.")
+                return
 
-        try:
-            action_id, data = decode_button_callback(payload, allow_expired=True)
-        except ValueError:
-            logger.debug("[Lark] Ignored an invalid AstrBot card callback payload.")
-            return
-
-        message_type_value = value.get("astrbot_message_type")
-        try:
-            message_type = MessageType(message_type_value)
-        except (TypeError, ValueError):
-            message_type = (
-                MessageType.GROUP_MESSAGE if chat_id else MessageType.FRIEND_MESSAGE
-            )
+            message_type_value = value.get("astrbot_message_type")
+            try:
+                message_type = MessageType(message_type_value)
+            except (TypeError, ValueError):
+                message_type = (
+                    MessageType.GROUP_MESSAGE if chat_id else MessageType.FRIEND_MESSAGE
+                )
 
         if not sender_id:
             logger.debug("[Lark] Ignored a card callback without an operator open_id.")
@@ -841,7 +867,7 @@ class LarkPlatformAdapter(Platform):
             abm.group_id = chat_id
             abm.session_id = chat_id
         else:
-            abm.session_id = sender_id
+            abm.session_id = chat_id if native_action else sender_id
         abm.message = [
             Comp.ButtonInteraction(
                 action_id=action_id,
@@ -854,22 +880,180 @@ class LarkPlatformAdapter(Platform):
 
         await self.handle_msg(abm)
 
-    def create_event(self, message: AstrBotMessage) -> LarkMessageEvent:
+    def get_reply_context(self, event: AstrMessageEvent) -> MessageReplyContext:
+        """Capture an original Lark message without retaining a live event.
+
+        Args:
+            event: Received event owned by this account and platform instance.
+
+        Returns:
+            The original message, conversation and topic identifiers.
+
+        Raises:
+            ValueError: The event or native source identity does not match.
+        """
+        if (
+            not isinstance(event, LarkMessageEvent)
+            or event.get_platform_id() != self.meta().id
+            or event.bot is not self.lark_api
+        ):
+            raise ValueError("Lark reply source belongs to another platform")
+        if event.reply_context is not None:
+            self.create_event(event.reply_context)
+            return event.reply_context
+        message = event.message_obj
+        raw = message.raw_message
+        if getattr(raw, "message_id", None) != message.message_id or getattr(
+            raw, "chat_type", None
+        ) not in {"group", "p2p"}:
+            raise ValueError("Lark source does not support a durable reply")
+        return MessageReplyContext(
+            platform_id=self.meta().id,
+            platform_type=self.meta().name,
+            account_id=self.appid,
+            scene=raw.chat_type,
+            conversation_id=raw.chat_id,
+            message_id=message.message_id,
+            sender_id=event.get_sender_id(),
+            session_id=message.session_id,
+            timestamp=message.timestamp,
+            thread_id=getattr(raw, "thread_id", None) or None,
+            root_id=getattr(raw, "root_id", None) or None,
+            parent_id=getattr(raw, "parent_id", None) or None,
+        )
+
+    def create_event(
+        self, message: AstrBotMessage | MessageReplyContext
+    ) -> LarkMessageEvent:
         """Creates a Lark message event.
 
         Args:
-            message: AstrBot message object to wrap.
+            message: Original message or a saved context for this Lark account.
 
         Returns:
             Created Lark message event.
         """
+        reply_context = message if isinstance(message, MessageReplyContext) else None
+        if reply_context is not None:
+            if (
+                reply_context.platform_id != self.meta().id
+                or reply_context.platform_type != self.meta().name
+                or reply_context.account_id != self.appid
+                or reply_context.scene not in {"group", "p2p"}
+                or reply_context.mode != "reply"
+                or reply_context.reply_sequence is not None
+                or reply_context.reference_id is not None
+            ):
+                raise ValueError("Lark reply context does not match this account")
+            message = AstrBotMessage()
+            message.type = (
+                MessageType.GROUP_MESSAGE
+                if reply_context.scene == "group"
+                else MessageType.FRIEND_MESSAGE
+            )
+            message.self_id = self.bot_open_id or self.bot_name
+            message.session_id = reply_context.session_id
+            message.message_id = reply_context.message_id
+            message.timestamp = reply_context.timestamp
+            message.sender = MessageMember(user_id=reply_context.sender_id, nickname="")
+            message.group_id = (
+                reply_context.conversation_id
+                if reply_context.scene == "group"
+                else None
+            )
+            message.message = []
+            message.message_str = ""
+            message.raw_message = reply_context
         return LarkMessageEvent(
             message_str=message.message_str,
             message_obj=message,
             platform_meta=self.meta(),
             session_id=message.session_id,
             bot=self.lark_api,
+            reply_context=reply_context,
         )
+
+    async def update_message(
+        self,
+        context: MessageReplyContext,
+        message_id: str,
+        message_chain: MessageChain,
+    ) -> MessageSendReceipt:
+        """Update an existing IM card sent by this bot to the original chat.
+
+        Args:
+            context: Persisted reply context captured by this platform.
+            message_id: Platform message ID of the bot's existing card.
+            message_chain: Replacement text and optional portable button rows.
+
+        Returns:
+            API acceptance for the same message ID. No new message is created.
+
+        Raises:
+            ValueError: The context or replacement components are unsupported.
+            MessageSendRejected: The target differs or Lark rejects the update.
+            RuntimeError: The original message cannot be read reliably.
+        """
+        if not isinstance(context, MessageReplyContext) or not message_id:
+            raise ValueError("A saved Lark reply context and message ID are required")
+        original = self.create_event(context)
+        if self.lark_api.im is None:
+            raise RuntimeError("[Lark] IM API client is not initialized")
+        if not message_chain.chain or not all(
+            isinstance(component, (Comp.Plain, Comp.ActionRow))
+            for component in message_chain.chain
+        ):
+            raise ValueError("Lark card updates support text and button rows")
+        response = await self.lark_api.im.v1.message.aget(
+            GetMessageRequest.builder().message_id(message_id).build()
+        )
+        if not response.success() or response.data is None:
+            raise RuntimeError("[Lark] Original card is unavailable")
+        source = next(
+            (
+                item
+                for item in response.data.items or []
+                if item.message_id == message_id
+            ),
+            None,
+        )
+        sender = source.sender if source is not None else None
+        own_sender = (
+            sender is not None
+            and sender.sender_type == "app"
+            and (
+                sender.id_type == "app_id"
+                and sender.id == self.appid
+                or sender.id_type == "open_id"
+                and bool(self.bot_open_id)
+                and sender.id == self.bot_open_id
+            )
+        )
+        if (
+            source is None
+            or source.deleted
+            or source.msg_type != "interactive"
+            or source.chat_id != context.conversation_id
+            or not own_sender
+        ):
+            raise MessageSendRejected("invalid_target")
+        card_json = LarkMessageEvent._build_button_card(
+            message_chain.chain, original.message_obj.type.value
+        )
+        result = await self.lark_api.im.v1.message.apatch(
+            PatchMessageRequest.builder()
+            .message_id(message_id)
+            .request_body(
+                PatchMessageRequestBody.builder()
+                .content(json.dumps(card_json, ensure_ascii=False))
+                .build()
+            )
+            .build()
+        )
+        rejection = LarkMessageEvent._message_send_rejection(result)
+        if rejection is not None:
+            raise MessageSendRejected(rejection)
+        return MessageSendReceipt(message_ids=(message_id,))
 
     async def handle_msg(
         self, abm: AstrBotMessage, *, quoted_post_id: str | None = None
@@ -885,6 +1069,56 @@ class LarkPlatformAdapter(Platform):
         event = self.create_event(abm)
         if quoted_post_id is not None:
             event.set_extra("lark_quoted_post_id", quoted_post_id)
+        self.commit_event(event)
+
+    async def convert_group_removal(self, notification: Any) -> None:
+        """Expose authenticated Lark membership changes through the event queue.
+
+        Args:
+            notification: SDK event or verified webhook payload for this app.
+        """
+        data = (
+            notification
+            if isinstance(notification, dict)
+            else json.loads(lark.JSON.marshal(notification))
+        )
+        header, body = data.get("header", {}), data.get("event", {})
+        if not isinstance(header, dict) or not isinstance(body, dict):
+            return
+        event_type = header.get("event_type")
+        if (
+            data.get("schema") != "2.0"
+            or header.get("app_id") != self.appid
+            or event_type
+            not in {
+                "im.chat.member.bot.deleted_v1",
+                "im.chat.member.user.deleted_v1",
+            }
+            or not isinstance(header.get("event_id"), str)
+            or not header["event_id"]
+            or not isinstance(body.get("chat_id"), str)
+            or not body["chat_id"]
+        ):
+            logger.debug("[Lark] Ignored a membership event for another source.")
+            return
+        if self._is_duplicate_event(header["event_id"]):
+            return
+        message = AstrBotMessage()
+        message.type = MessageType.OTHER_MESSAGE
+        message.self_id = self.bot_open_id or self.bot_name
+        message.session_id = body["chat_id"]
+        message.group_id = body["chat_id"]
+        message.message_id = header["event_id"]
+        operator = body.get("operator_id") or {}
+        message.sender = MessageMember(user_id=operator.get("open_id") or "")
+        message.message_str = ""
+        message.message = [Comp.Json(data)]
+        message.raw_message = data
+        event = self.create_event(message)
+        event.set_extra("lark_event_type", event_type)
+        event.should_call_llm(False)
+        # A removed bot cannot read group information. Preserve the original
+        # notification for plugins without issuing another membership lookup.
         self.commit_event(event)
 
     async def handle_webhook_event(self, event_data: dict) -> None:
@@ -906,6 +1140,11 @@ class LarkPlatformAdapter(Platform):
                 processor.do(data)
             elif event_type == "card.action.trigger":
                 await self.convert_card_action(event_data)
+            elif event_type in {
+                "im.chat.member.bot.deleted_v1",
+                "im.chat.member.user.deleted_v1",
+            }:
+                await self.convert_group_removal(event_data)
             else:
                 logger.debug(f"[Lark Webhook] 未处理的事件类型: {event_type}")
         except Exception as e:

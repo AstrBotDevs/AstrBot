@@ -164,10 +164,21 @@ async def poll_app_registration_once(
             client_secret = await _poll_lark_secret(device_code)
         if not client_secret:
             return {"status": "error", "message": "应用创建成功但未获取到凭证"}
+        user_info = data.get("user_info")
+        user_open_id = (
+            _string_field(user_info, "open_id").strip()
+            if isinstance(user_info, dict)
+            else ""
+        )
         return {
             "status": "created",
             "app_id": client_id,
             "app_secret": client_secret,
+            **(
+                {"user_open_id": user_open_id}
+                if user_open_id and not any(char.isspace() for char in user_open_id)
+                else {}
+            ),
             "tenant_brand": tenant_brand,
             "domain": DEFAULT_LARK_OPEN_DOMAIN
             if tenant_brand == "lark"
