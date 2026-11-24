@@ -170,6 +170,10 @@
     "title": "設定ファイルを編集"
   },
   "fileUpload": {
+    "previewImage": "画像をプレビュー：{name}",
+    "closePreview": "画像プレビューを閉じる",
+    "loadingPreview": "画像プレビューを読み込み中",
+    "previewUnavailable": "画像をプレビューできません",
     "button": "ファイルを管理",
     "dialogTitle": "アップロード済みファイル",
     "dropzone": "新しいファイルをアップロード",

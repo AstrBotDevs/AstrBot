@@ -172,6 +172,10 @@
   "fileUpload": {
     "button": "Manage Files",
     "dialogTitle": "Uploaded Files",
+    "previewImage": "Preview image: {name}",
+    "closePreview": "Close image preview",
+    "loadingPreview": "Loading image preview",
+    "previewUnavailable": "Image preview unavailable",
     "dropzone": "Upload new file",
     "allowedTypes": "Allowed types: {types}",
     "empty": "No files uploaded",
