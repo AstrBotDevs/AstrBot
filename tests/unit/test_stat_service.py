@@ -2,7 +2,7 @@ import sys
 import time
 from datetime import datetime, timedelta
 from types import SimpleNamespace
-from unittest.mock import MagicMock, Mock
+from unittest.mock import AsyncMock, MagicMock, Mock
 
 import pytest
 
@@ -12,7 +12,7 @@ from astrbot.core.astr_agent_runtime.computer.process_sandbox import (
     SandboxRunResult,
     SandboxTimeoutError,
 )
-from astrbot.dashboard.services.stat_service import StatService
+from astrbot.dashboard.services.stat_service import StatService, StatServiceError
 
 
 @pytest.fixture(autouse=True)
@@ -30,6 +30,61 @@ def _make_service(db) -> StatService:
     core_lifecycle.platform_manager.get_insts.return_value = []
     core_lifecycle.start_time = int(time.time()) - 100
     return StatService(db_helper=db, core_lifecycle=core_lifecycle, config={})
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("proxy_url", "raw_status", "archive_status", "archive_type", "error"),
+    [
+        (" https://mirror.example/ ", 200, 503, "text/html", r"archive.*503"),
+        (None, 200, 206, "application/zip", None),
+        (
+            "https://mirror.example",
+            404,
+            200,
+            "application/octet-stream",
+            r"raw file.*404",
+        ),
+        ("https://mirror.example", 200, 200, "text/html", r"archive.*HTML"),
+    ],
+)
+async def test_ghproxy_requires_raw_file_and_archive(
+    monkeypatch, proxy_url, raw_status, archive_status, archive_type, error
+):
+    raw_target = (
+        "https://raw.githubusercontent.com/AstrBotDevs/AstrBot/master/.python-version"
+    )
+    archive_target = (
+        "https://github.com/AstrBotDevs/AstrBot/archive/refs/heads/master.zip"
+    )
+    prefix = "https://mirror.example/" if proxy_url else ""
+    session = MagicMock()
+    session.__aenter__.return_value = session
+
+    async def get(url, **kwargs):
+        response = MagicMock()
+        if url == prefix + archive_target:
+            assert kwargs["headers"] == {"Range": "bytes=0-0"}
+            response.status = archive_status
+            response.content_type = archive_type
+        else:
+            response.status = raw_status
+            response.content_type = "text/plain"
+        return response
+
+    session.get = AsyncMock(side_effect=get)
+    monkeypatch.setattr(stat_service.aiohttp, "ClientSession", lambda **kwargs: session)
+    service = _make_service(MagicMock())
+
+    if error:
+        with pytest.raises(StatServiceError, match=error):
+            await service.test_ghproxy_connection(proxy_url)
+    else:
+        assert (await service.test_ghproxy_connection(proxy_url))["latency"] >= 0
+    assert {call.args[0] for call in session.get.call_args_list} == {
+        prefix + raw_target,
+        prefix + archive_target,
+    }
 
 
 @pytest.mark.parametrize(
