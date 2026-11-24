@@ -221,11 +221,11 @@ def test_load_plugin_metadata_includes_category(tmp_path: Path):
 @pytest.mark.parametrize(
     ("declared", "expected"),
     [
-        ("Group Games", "group_games"),
+        ("Platform Adapter", "platform_adapter"),
         ("platform-adapter", "platform_adapter"),
         # Repeated and mixed separators must normalize like the WebUI does.
-        ("AI - Tools", "ai_tools"),
-        (" long-term  memory ", "long_term_memory"),
+        ("AI - Context", "ai_context"),
+        (" provider  adapter ", "provider_adapter"),
     ],
 )
 def test_load_plugin_metadata_normalizes_category(
@@ -1049,7 +1049,7 @@ async def test_load_plugin_keeps_declared_category(
     """Loading a plugin must keep the category declared in metadata.yaml."""
     _clear_star_runtime_state()
     module_path = f"data.plugins.{TEST_PLUGIN_DIR}.main"
-    _write_plugin_category(local_updater, "group_games")
+    _write_plugin_category(local_updater, "entertainment")
     (local_updater / "main.py").write_text(
         "from astrbot.api.star import Star\nclass Main(Star):\n    pass\n",
         encoding="utf-8",
@@ -1092,7 +1092,7 @@ async def test_load_plugin_keeps_declared_category(
     success, error = await plugin_manager_pm.load(specified_dir_name=TEST_PLUGIN_DIR)
 
     assert success, error
-    assert star_manager_module.star_map[module_path].category == "group_games"
+    assert star_manager_module.star_map[module_path].category == "entertainment"
 
 
 @pytest.mark.asyncio

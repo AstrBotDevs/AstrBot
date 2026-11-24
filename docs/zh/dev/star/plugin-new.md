@@ -152,34 +152,24 @@ astrbot_version: ">=4.16,<5"
 你可以在 `metadata.yaml` 中新增 `category` 字段，主动声明插件的市场分类。WebUI 与运行时都以该字段为准；插件市场里显示的分类取决于市场索引是否收录了该值，索引收录时会复制这个字段，因此只改 `metadata.yaml` 不会立刻改变市场展示。
 
 ```yaml
-category: media processing
+category: platform adapter
 ```
 
 `category` 取值为下列英文标识之一。中文翻译只是界面上的展示文案，写进 `category` 不会被识别。
 
 | 标识 | 中文翻译 | 适用插件 |
 | --- | --- | --- |
-| `ai tools` | AI 增强 | 基于大模型的单次文本能力：提示词、文本改写、总结与翻译 |
-| `ai image` | AI 绘图 | 文生图、图生图、画风转换与图片编辑 |
-| `ai speech` | AI 语音 | TTS 与 ASR：语音合成、音色与语气、语音识别 |
-| `ai agent` | 智能体与编排 | Agent 运行、工具调用、多智能体与工作流编排 |
-| `ai context` | AI 对话 | 跨轮次的对话语境：人设与角色设定、上下文压缩与注入、对话风格与情绪语气；记忆存储归「长期记忆」，读外部文档归「知识库」 |
-| `long term memory` | 长期记忆 | 记忆的存储与召回、用户画像与长期上下文 |
-| `knowledge base` | 知识库 | 文档入库与检索问答（RAG）、知识库管理 |
-| `tools` | 工具 | 通用小工具与命令集合：编码与格式转换、计算、短链、批量处理 |
+| `utility` | 实用工具 | 通用工具与生活查询：编码与格式转换、计算、短链、天气、汇率、快递、单位换算，以及定时与自动化流程 |
+| `ai_context` | AI 对话 | 围绕对话与 AI 能力：人设与角色设定、上下文压缩与注入、提示词与文本改写、记忆与知识库检索接入 |
+| `entertainment` | 娱乐 | 泛娱乐与游戏：塔罗、运势、点歌、表情包、梗图、玩梗闲聊、接龙、猜词、谁是卧底、掷骰、答题，以及围绕别的游戏的外围插件 |
+| `media` | 媒体 | 图片、音频、视频的处理与生成：解析、转码、拼接、表情包、文生图、图生图、TTS 与 ASR |
 | `productivity` | 效率 | 待办、日程、笔记与个人工作流 |
-| `utilities` | 生活实用 | 生活信息查询与提醒：天气、汇率、快递、黄历、单位换算 |
-| `integrations` | 外部集成 | 打通第三方平台或服务账号：GitHub、网盘、RSS、音乐、Notion |
-| `platform adapter` | 平台适配器 | 接入新的消息平台或协议，如 QQ、Telegram、Discord |
-| `media processing` | 媒体处理 | 图片、音频、视频的解析、转码、拼接与表情包生成 |
-| `automation` | 自动化与定时 | 定时推送、自动回复、由事件触发的自动化流程 |
-| `security` | 安全与审核 | 内容审核、反垃圾、敏感词、权限与风控 |
-| `entertainment` | 娱乐 | 普通泛娱乐，不含游戏：塔罗、运势、点歌、表情包、梗图、玩梗闲聊 |
-| `group games` | 群游戏 | 直接在群里玩、玩法由插件自身实现：接龙、猜词、谁是卧底、掷骰、答题 |
-| `game integration` | 游戏接入 | 围绕别的游戏的外围插件：连接器、Wiki 与资料查询、服务器状态与玩家操作（Minecraft、幻兽帕鲁、Steam） |
+| `integration` | 外部集成 | 打通第三方平台或服务账号：GitHub、网盘、RSS、音乐、Notion |
+| `platform_adapter` | 平台适配器 | 接入新的消息平台或协议，如 QQ、Telegram、Discord |
+| `provider_adapter` | 提供商适配器 | 接入新的大模型、语音或向量服务提供商 |
 | `other` | 其他 | 无法归入以上任一类的插件 |
 
-取值会做轻度归一化：首尾空格、大小写以及空格、`-`、`_` 三种分隔符都会被忽略，所以下划线写法同样能识别，`ai tools`、`AI Tools`、`ai-tools` 与 `ai_tools` 等价。
+取值会做轻度归一化：首尾空格、大小写以及空格、`-`、`_` 三种分隔符都会被忽略，所以下划线写法同样能识别，`platform adapter`、`Platform Adapter`、`platform-adapter` 与 `platform_adapter` 等价。
 
 未声明 `category` 的插件会归入 `other`。如果写了不支持的分类，AstrBot 会在日志中给出告警并同样归入 `other`，但**不会**阻止插件安装或更新。新增分类需要修改 AstrBot 源码，因此请优先使用上表中的标识。
 

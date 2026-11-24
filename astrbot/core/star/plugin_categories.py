@@ -13,24 +13,14 @@ import re
 from astrbot.core import logger
 
 PLUGIN_CATEGORY_SLUGS: tuple[str, ...] = (
-    "ai_tools",
-    "ai_image",
-    "ai_speech",
-    "ai_agent",
+    "utility",
     "ai_context",
-    "long_term_memory",
-    "knowledge_base",
-    "tools",
-    "productivity",
-    "utilities",
-    "integrations",
-    "platform_adapter",
-    "media_processing",
-    "automation",
-    "security",
     "entertainment",
-    "group_games",
-    "game_integration",
+    "media",
+    "productivity",
+    "integration",
+    "platform_adapter",
+    "provider_adapter",
     "other",
 )
 """Supported ``metadata.yaml`` ``category`` values, in display order."""
