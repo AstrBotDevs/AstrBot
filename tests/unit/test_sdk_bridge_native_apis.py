@@ -41,6 +41,7 @@ SOURCE = """
 from astrbot_sdk import MessageEvent, Plugin, on
 from astrbot_sdk.agents import PlainInput, TextDelta
 from astrbot_sdk.decision import DecisionBooleanQuestion
+from astrbot_sdk.errors import InvalidRequest
 from astrbot_sdk.message_components import ActionRow, Button, CallbackAction
 
 
@@ -55,6 +56,7 @@ class TestPlugin(Plugin):
 
     @on.command("run")
     async def run(self, event: MessageEvent):
+        self.previous_event = event
         turn = await self.ctx.agent.run_turn(
             input_message=[PlainInput("work")], send_to_user=False,
             metadata={"marker": True},
@@ -69,6 +71,24 @@ class TestPlugin(Plugin):
         following = await turn.follow_up(input_message=[PlainInput("next")])
         await following.cancel()
         yield event.reply(f"{''.join(observed)}:{(await turn.result()).text}")
+
+    @on.command("run_from_event")
+    async def run_from_event(self, event: MessageEvent):
+        try:
+            await self.ctx.agent.run_turn(
+                input_message=[PlainInput("expired")],
+                source_event=self.previous_event,
+            )
+        except InvalidRequest:
+            pass
+        else:
+            raise AssertionError("expired source event was accepted")
+        turn = await self.ctx.agent.run_turn(
+            input_message=[PlainInput("explicit")],
+            source_event=event,
+            send_to_user=False,
+        )
+        yield event.reply((await turn.result()).text)
 
     @on.command("locale")
     async def locale(self, event: MessageEvent):
@@ -189,6 +209,7 @@ async def test_models_over_native_bridge(native_bridge):
         for name, expected in (
             ("decide", "0.8"),
             ("run", "working:done"),
+            ("run_from_event", "done"),
             ("locale", "en-US"),
         ):
             event = core_event(name)
@@ -197,20 +218,21 @@ async def test_models_over_native_bridge(native_bridge):
             ]
             async for _ in handler.handler(event):
                 assert event.get_result().chain[0].text == expected
-            if name == "run":
-                assert (
-                    bridge.context.agent.run_turn.await_args.kwargs["source_event"]
-                    is event
-                )
+            if name in {"run", "run_from_event"}:
+                params = bridge.context.agent.run_turn.await_args.kwargs
+                assert params["source_event"] is event
+                assert params["send_to_user"] is False
+                if name == "run":
+                    assert params["metadata"] == {"marker": True}
+                    assert params["input_message"][0].text == "work"
+                else:
+                    assert params["input_message"][0].text == "explicit"
             if name == "locale":
                 bridge.context.get_locale.assert_awaited_once_with(
                     event.unified_msg_origin
                 )
         assert bridge.context.decision.ask.await_args.args[1] == {"messages": ["hi"]}
-        params = bridge.context.agent.run_turn.await_args.kwargs
-        assert params["send_to_user"] is False
-        assert params["metadata"] == {"marker": True}
-        assert params["input_message"][0].text == "work"
+        assert bridge.context.agent.run_turn.await_count == 2
         following.cancel.assert_awaited_once()
     finally:
         await bridge.stop()

@@ -188,7 +188,7 @@ class AgentSessionService:
             RateLimited: Too many retained turns or steering receipts.
         """
         try:
-            if operation in {"run_turn", "follow_up"}:
+            if operation in {"run_turn", "run_turn_from_event", "follow_up"}:
                 async with self._admission:
                     if len(self._runs) >= _MAX_RUNS:
                         expired = next(
@@ -203,7 +203,7 @@ class AgentSessionService:
                     delivery = payload.get("send_to_user")
                     if delivery is not None and type(delivery) is not bool:
                         raise ValueError("send_to_user must be a boolean")
-                    if operation == "run_turn":
+                    if operation != "follow_up":
                         umo = payload.get("umo")
                         if not isinstance(umo, UMO):
                             raise ValueError("run_turn requires a UMO")
@@ -218,6 +218,8 @@ class AgentSessionService:
                                 payload.get("source_event_id")
                             )
                         )
+                        if operation == "run_turn_from_event" and source is None:
+                            raise InvalidRequest("source event is no longer active")
                         if source is not None and source.unified_msg_origin != target:
                             raise ValueError("source event belongs to another UMO")
                         run = await self._bridge.context.agent.run_turn(
