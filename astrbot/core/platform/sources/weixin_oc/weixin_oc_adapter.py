@@ -936,6 +936,17 @@ class WeixinOCAdapter(Platform):
                 self._format_api_error(payload),
             )
             return False
+        message_id = str(
+            payload.get("message_id") or payload.get("msg_id") or ""
+        ).strip()
+        if not message_id:
+            logger.warning(
+                "weixin_oc(%s): sendmessage returned success without message_id for %s; "
+                "the message may have been silently dropped. Check for a stale WeChat "
+                "binding and try rebinding this account.",
+                self.meta().id,
+                user_id,
+            )
         resolved_cache_components = (
             list(cache_components)
             if cache_components is not None
@@ -945,7 +956,7 @@ class WeixinOCAdapter(Platform):
         sent_at_ms = time.time_ns() // 1_000_000
         self._cache_recent_message(
             user_id,
-            message_id=uuid.uuid4().hex,
+            message_id=message_id or uuid.uuid4().hex,
             sender_id=sender_id,
             sender_nickname=sender_id,
             timestamp=sent_at_ms // 1000,
