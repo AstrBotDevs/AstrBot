@@ -50,6 +50,18 @@ async def test_stopping_session_waiter_wakes_timeout_task():
 
 
 @pytest.mark.asyncio
+async def test_keep_after_stop_does_not_start_timeout_task():
+    controller = SessionController()
+    controller.stop()
+
+    try:
+        controller.keep(timeout=60, reset_timeout=True)
+        assert controller.current_event is None
+    finally:
+        controller.stop()
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize(
     ("private", "state"),
     [

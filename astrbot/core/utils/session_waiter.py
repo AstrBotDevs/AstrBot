@@ -48,6 +48,9 @@ class SessionController:
             当 reset_timeout 设置为 False 时, 代表继续维持原来的超时时间, 新 timeout = 原来剩余的timeout + timeout (可以 < 0)
 
         """
+        if self.future.done():
+            return
+
         new_ts = time.time()
 
         if reset_timeout:
