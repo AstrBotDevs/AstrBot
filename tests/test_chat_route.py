@@ -703,3 +703,58 @@ async def test_error_cards_survive_stream_completion_and_history(
             run.task.cancel()
             await asyncio.gather(run.task, return_exceptions=True)
         chat_service.webchat_queue_mgr.remove_queues(session_id)
+
+
+@pytest.mark.asyncio
+async def test_native_web_search_sources_persist_and_emit_refs(chat_service_instance):
+    from astrbot.core.message.components import Json
+    from astrbot.core.message.message_event_result import MessageChain
+    from astrbot.core.platform.sources.webchat.webchat_event import WebChatMessageEvent
+
+    service = chat_service_instance
+    session_id = "grounding-refs-session"
+    sources = [
+        {
+            "index": "1",
+            "url": "https://vertexaisearch.cloud.google.com/grounding-api-redirect/a",
+            "title": "AstrBot Docs",
+        }
+    ]
+    stream = await service.build_chat_stream(
+        "alice", {"message": "hello", "session_id": session_id}
+    )
+    run = next(iter(service.chat_runs.values()))
+    try:
+        await WebChatMessageEvent._send(
+            run.run_id,
+            MessageChain().message("Grounded answer"),
+            session_id,
+            streaming=True,
+        )
+        await WebChatMessageEvent._send(
+            run.run_id,
+            MessageChain(
+                chain=[Json({"sources": sources})], type="web_search_sources"
+            ),
+            session_id,
+            streaming=False,
+        )
+        await chat_service.webchat_queue_mgr.put_back_queue(
+            run.run_id,
+            {"type": "complete", "data": "Grounded answer", "streaming": True},
+        )
+        await WebChatMessageEvent._send(run.run_id, None, session_id)
+        frames = [_decode_sse_event(frame) async for frame in stream]
+        await asyncio.wait_for(run.task, timeout=1)
+
+        assert run.message_parts == [{"type": "plain", "text": "Grounded answer"}]
+        assert service.save_bot_message.await_args.args[3] == {"used": sources}
+        saved_events = [frame for frame in frames if frame["type"] == "message_saved"]
+        assert len(saved_events) == 1
+        assert saved_events[0]["data"]["refs"] == {"used": sources}
+    finally:
+        await stream.aclose()
+        if run.task and not run.task.done():
+            run.task.cancel()
+            await asyncio.gather(run.task, return_exceptions=True)
+        chat_service.webchat_queue_mgr.remove_queues(session_id)

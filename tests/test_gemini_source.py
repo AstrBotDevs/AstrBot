@@ -446,3 +446,140 @@ async def test_gemini_stream_keeps_reasoning_from_tool_call_chunk(monkeypatch):
 
     final = responses[-1]
     assert final.reasoning_content == "weighing optionsdeciding to call"
+
+
+@pytest.mark.asyncio
+async def test_gemini_query_extracts_grounding_and_url_context_sources(monkeypatch):
+    """Non-streaming responses expose deduplicated grounding and URL context sources."""
+    provider = _gemini_stream_provider()
+    candidate = types.Candidate(
+        content=types.Content(
+            role="model",
+            parts=[types.Part.from_text(text="AstrBot release summary")],
+        ),
+        finish_reason=types.FinishReason.STOP,
+        grounding_metadata=types.GroundingMetadata(
+            grounding_chunks=[
+                types.GroundingChunk(
+                    web=types.GroundingChunkWeb(
+                        uri="https://vertexaisearch.cloud.google.com/grounding-api-redirect/a",
+                        title="AstrBot Docs",
+                    )
+                ),
+                types.GroundingChunk(
+                    web=types.GroundingChunkWeb(
+                        uri="https://vertexaisearch.cloud.google.com/grounding-api-redirect/a",
+                        title="Duplicate",
+                    )
+                ),
+            ]
+        ),
+        url_context_metadata=types.UrlContextMetadata(
+            url_metadata=[
+                types.UrlMetadata(
+                    retrieved_url="https://docs.astrbot.app/guide",
+                    url_retrieval_status=types.UrlRetrievalStatus.URL_RETRIEVAL_STATUS_SUCCESS,
+                ),
+                types.UrlMetadata(
+                    retrieved_url="https://docs.astrbot.app/failed",
+                    url_retrieval_status=types.UrlRetrievalStatus.URL_RETRIEVAL_STATUS_ERROR,
+                ),
+            ]
+        ),
+    )
+    response = types.GenerateContentResponse(
+        candidates=[candidate],
+        response_id="resp-grounding",
+    )
+
+    async def fake_retry(provider_name, request_factory, max_attempts=None):
+        return response
+
+    monkeypatch.setattr(gemini_source, "retry_provider_request", fake_retry)
+    llm_response = await provider._query(
+        payloads={
+            "messages": [{"role": "user", "content": "check AstrBot docs"}],
+            "model": "gemini-3.7-flash",
+        },
+        tools=None,
+    )
+
+    assert llm_response.web_search_sources == [
+        {
+            "index": "1",
+            "url": "https://vertexaisearch.cloud.google.com/grounding-api-redirect/a",
+            "title": "AstrBot Docs",
+        },
+        {
+            "index": "2",
+            "url": "https://docs.astrbot.app/guide",
+            "title": "https://docs.astrbot.app/guide",
+        },
+    ]
+
+
+@pytest.mark.asyncio
+async def test_gemini_stream_collects_grounding_sources_across_chunks(monkeypatch):
+    """Streaming responses aggregate incremental grounding chunks including contentless tail chunks."""
+    provider = _gemini_stream_provider()
+    first_chunk = types.GenerateContentResponse(
+        candidates=[
+            types.Candidate(
+                content=types.Content(
+                    role="model",
+                    parts=[types.Part.from_text(text="Part 1. ")],
+                ),
+                grounding_metadata=types.GroundingMetadata(
+                    grounding_chunks=[
+                        types.GroundingChunk(
+                            web=types.GroundingChunkWeb(
+                                uri="https://vertexaisearch.cloud.google.com/grounding-api-redirect/1",
+                                title="Source 1",
+                            )
+                        )
+                    ]
+                ),
+            )
+        ],
+        response_id="resp-stream",
+    )
+    tail_chunk = types.GenerateContentResponse(
+        candidates=[
+            types.Candidate(
+                content=None,
+                finish_reason=types.FinishReason.STOP,
+                grounding_metadata=types.GroundingMetadata(
+                    grounding_chunks=[
+                        types.GroundingChunk(
+                            web=types.GroundingChunkWeb(
+                                uri="https://vertexaisearch.cloud.google.com/grounding-api-redirect/2",
+                                title="Source 2",
+                            )
+                        )
+                    ]
+                ),
+            )
+        ],
+        response_id="resp-stream",
+    )
+
+    responses = await _drain_gemini_stream(
+        provider,
+        monkeypatch,
+        [first_chunk, tail_chunk],
+    )
+
+    final = responses[-1]
+    assert final.is_chunk is False
+    assert final.web_search_sources == [
+        {
+            "index": "1",
+            "url": "https://vertexaisearch.cloud.google.com/grounding-api-redirect/1",
+            "title": "Source 1",
+        },
+        {
+            "index": "2",
+            "url": "https://vertexaisearch.cloud.google.com/grounding-api-redirect/2",
+            "title": "Source 2",
+        },
+    ]

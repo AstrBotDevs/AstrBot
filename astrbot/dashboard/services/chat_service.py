@@ -1086,7 +1086,15 @@ class ChatService:
                     f"Failed to extract web search refs: {exc}",
                     exc_info=True,
                 )
-                extracted_refs = pending_refs
+                extracted_refs = {}
+
+            if pending_refs:
+                merged = list(extracted_refs.get("used", []))
+                seen_urls = {ref["url"] for ref in merged}
+                merged.extend(
+                    ref for ref in pending_refs["used"] if ref["url"] not in seen_urls
+                )
+                extracted_refs = {"used": merged}
 
             run.refs = extracted_refs
             saved_record = await self.save_bot_message(
@@ -1127,6 +1135,19 @@ class ChatService:
                         run,
                         {"type": "agent_stats", "data": run.agent_stats},
                     )
+                    continue
+
+                if chain_type == "web_search_sources":
+                    sources = json.loads(result_text)["sources"]
+                    if sources:
+                        used = list(pending_refs.get("used", []))
+                        seen_urls = {ref["url"] for ref in used}
+                        for src in sources:
+                            if src["url"] not in seen_urls:
+                                seen_urls.add(src["url"])
+                                used.append({**src, "index": str(len(used) + 1)})
+                        pending_refs = {"used": used}
+                        run.refs = pending_refs
                     continue
 
                 attachment_saved_payload = None
@@ -1213,6 +1234,7 @@ class ChatService:
                                         saved_record.created_at
                                     ),
                                     "turn_id": run.turn_id,
+                                    **({"refs": run.refs} if run.refs else {}),
                                 },
                             },
                         )
@@ -1243,6 +1265,7 @@ class ChatService:
                                 "id": saved_record.id,
                                 "created_at": to_utc_isoformat(saved_record.created_at),
                                 "turn_id": run.turn_id,
+                                **({"refs": run.refs} if run.refs else {}),
                             },
                         },
                     )
