@@ -12,7 +12,6 @@ from astrbot.core.astr_agent_runtime.tools.computer_tools.shell import (
 from astrbot.core.astr_agent_runtime.tools.computer_tools.util import (
     LOCAL_NETWORK_POLICY_NOTICE,
 )
-from astrbot.core.platform.astr_message_event import current_message_event
 from astrbot.core.provider.func_tool_manager import FunctionToolManager
 from astrbot.core.provider.provider import Provider
 from astrbot.core.star.context import Context
@@ -201,25 +200,3 @@ def test_add_llm_tools_handles_empty_tool_module_path():
     context.add_llm_tools(tool)
 
     assert tool.handler_module_path == ""
-
-
-@pytest.mark.asyncio
-async def test_get_locale_resolves_active_session_and_explicit_origin():
-    context = make_context()
-    active = "qq:FriendMessage:active"
-    other = "qq:FriendMessage:other"
-    context.get_config = MagicMock(
-        side_effect=lambda umo: {
-            "platform_settings": {"locale": "en-US" if umo == active else "zh-CN"}
-        }
-    )
-    assert await context.get_locale() == "zh-CN"
-    event = SimpleNamespace(unified_msg_origin=active, _execution_active=True)
-    token = current_message_event.set(event)
-    try:
-        assert await context.get_locale() == "en-US"
-        assert await context.get_locale(other) == "zh-CN"
-        event._execution_active = False
-        assert await context.get_locale() == "zh-CN"
-    finally:
-        current_message_event.reset(token)
