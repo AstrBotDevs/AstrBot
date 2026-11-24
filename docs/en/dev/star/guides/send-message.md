@@ -58,11 +58,11 @@ else:
     print(receipt.tracking_keys)
 ```
 
-There are only three possible results:
+The return value describes what the adapter could confirm.
 
 | Result | What to do |
 | --- | --- |
-| `MessageSendReceipt` | The platform accepted the complete message. Read `message_ids` or `tracking_keys`. |
+| `MessageSendReceipt` | The platform accepted the complete message. Read `message_ids`, `tracking_keys`, or `reference_ids` when present. |
 | `None` | The result is unknown. The message may already be sent. **Do not resend immediately**, or you may send a duplicate. |
 | `False` | No matching platform was found. Nothing was sent by this call. |
 
@@ -70,9 +70,38 @@ Currently, receipts are available for:
 
 - DingTalk: complete plain-text messages, including buffered streaming messages.
 - WeCom applications: complete plain-text messages to one member, including buffered streaming messages.
+- QQ Official Bot: plain-text replies sent with `event.send()` in a group or a direct chat. QQ may also return a reference ID for quoting a message.
+- Lark: plain-text messages and interactive button cards. A complete card receipt includes its message ID.
 - Other platforms and message types usually return `None`.
 
-A receipt means the platform accepted the request. It does not mean the recipient received or read the message. Some platforms provide only `tracking_keys` and no `message_ids`; this is normal.
+A receipt confirms platform acceptance. Delivery and read status are separate. An adapter can raise `MessageSendRejected` when it knows that nothing was accepted. Its `reason` can identify an expired reply window or a permission denial. A transport error or partial send leaves the overall result unknown. Keep the original request for reconciliation before sending again.
+
+### Replying to the Original Message Later
+
+A session identifies a conversation. QQ Official Bot and Lark can also save a particular incoming message as a reply target. Capture the context while handling the event and keep it in storage your plugin controls.
+
+```python
+import json
+from dataclasses import asdict
+
+from astrbot.api.event import MessageChain
+from astrbot.api.platform import MessageReplyContext
+
+def save_reply_target(self, event):
+    platform = self.context.get_platform_inst(event.get_platform_id())
+    if platform is not None:
+        return json.dumps(asdict(platform.get_reply_context(event)))
+
+async def send_saved_reply(self, saved, text):
+    target = MessageReplyContext(**json.loads(saved))
+    platform = self.context.get_platform_inst(target.platform_id)
+    if platform is not None:
+        return await platform.create_event(target).send(MessageChain().message(text))
+```
+
+The context records the original account, sender, conversation and message. Check the plugin's current permission to reply before sending. On QQ, add `Reply(id=target.message_id)` to the chain to display a quote when the incoming message supplied a quote reference. If QQ refuses an expired reply and the plugin has permission to send proactively to the same conversation, it can explicitly choose `dataclasses.replace(target, mode="proactive")` for that send.
+
+When sending a Lark `ActionRow` card, keep the card's `receipt.message_ids[0]` with its reply context. Later, call `await platform.update_message(target, card_message_id, replacement_chain)` to edit that card in place. A replacement can contain text and new button rows, or just text to remove the buttons. Use `target.message_id` when replying to the incoming human message.
 
 ## Rich Media Messages
 

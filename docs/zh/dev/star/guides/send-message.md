@@ -58,11 +58,11 @@ else:
     print(receipt.tracking_keys)
 ```
 
-返回值只有三种：
+返回值取决于适配器能确认哪些发送结果。
 
 | 返回值 | 你该怎么做 |
 | --- | --- |
-| `MessageSendReceipt` | 平台已受理整条消息。可以读取 `message_ids` 或 `tracking_keys`。 |
+| `MessageSendReceipt` | 平台已受理整条消息。按需读取平台返回的 `message_ids`、`tracking_keys` 或 `reference_ids`。 |
 | `None` | 结果不确定。消息可能已经发出，**不要直接重发**，否则可能重复。 |
 | `False` | 没有找到匹配的消息平台，本次没有发送。 |
 
@@ -70,9 +70,38 @@ else:
 
 - 钉钉：完整的纯文本消息，包括先合并再发送的流式消息。
 - 企业微信应用：发给单个成员的完整纯文本消息，包括先合并再发送的流式消息。
+- QQ 官方机器人：在群聊或私聊中用 `event.send()` 回复的纯文本消息。QQ 有时还会返回供客户端显示引用的标识。
+- 飞书：纯文本消息和交互按钮卡片。完整的卡片回执包含该卡片的消息 ID。
 - 其他平台或消息类型：通常返回 `None`。
 
-回执只说明平台受理了请求，不代表对方已经收到或已读。部分平台只提供 `tracking_keys`，没有 `message_ids`，这也是正常的。
+回执说明平台已受理，请另查送达或已读状态。适配器能确认整条消息都被拒绝时，可以抛出 `MessageSendRejected`，其 `reason` 可说明回复窗口已过期、缺少权限等原因。网络中断或只有部分内容成功时，整条消息的结果仍然未知。保留原请求，核对后再决定是否重发。
+
+### 稍后回复原来的消息
+
+会话标识可以定位聊天。要在 QQ 官方机器人或飞书上回复聊天中的某一条消息，插件可以在收件时保存这条消息的回复上下文。
+
+```python
+import json
+from dataclasses import asdict
+
+from astrbot.api.event import MessageChain
+from astrbot.api.platform import MessageReplyContext
+
+def save_reply_target(self, event):
+    platform = self.context.get_platform_inst(event.get_platform_id())
+    if platform is not None:
+        return json.dumps(asdict(platform.get_reply_context(event)))
+
+async def send_saved_reply(self, saved, text):
+    target = MessageReplyContext(**json.loads(saved))
+    platform = self.context.get_platform_inst(target.platform_id)
+    if platform is not None:
+        return await platform.create_event(target).send(MessageChain().message(text))
+```
+
+上下文保存原平台账号、发送人、会话和消息号。发出回复前按当前权限核实是否可以回信。QQ 原消息带有引用标识时，在消息链中加入 `Reply(id=target.message_id)` 即可显示引用。若 QQ 明确拒绝过期的被动回复，且插件获准对同一聊天主动发消息，可用 `dataclasses.replace(target, mode="proactive")` 单独发起这次通知。
+
+发出飞书 `ActionRow` 按钮卡片时，把卡片回执中的 `receipt.message_ids[0]` 与回复上下文一起保存。稍后调用 `await platform.update_message(target, card_message_id, replacement_chain)` 就能更新原卡。新内容可包含文字和按钮行，也可只保留文字以移除按钮。回复原来那条人类消息时使用 `target.message_id`。
 
 ## 富媒体消息
 

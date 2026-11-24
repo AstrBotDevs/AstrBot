@@ -147,8 +147,23 @@ async def test_text_receipt_uses_original_public_send_once(platform_sender):
     assert receipt.tracking_keys == (
         ("tracking-1",) if sender.name == "dingtalk" else ()
     )
+    assert receipt.reference_ids == ()
     payload = sender.sent[0][1]
     assert payload.get("touser", payload.get("userIds")) in ("alice", ["alice"])
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("platform_sender", ["wecom"], indirect=True)
+async def test_adapter_without_saved_replies_keeps_its_original_event_path(
+    platform_sender,
+):
+    sender = platform_sender
+    event = sender.adapter.create_event(sender.event.message_obj)
+    with pytest.raises(NotImplementedError):
+        sender.adapter.get_reply_context(event)
+    result = await event.send(MessageChain().message("Reply"))
+    assert result == MessageSendReceipt(("message-1",), ())
+    assert len(sender.sent) == 1
 
 
 @pytest.mark.asyncio
