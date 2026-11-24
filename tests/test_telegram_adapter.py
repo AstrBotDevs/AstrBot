@@ -929,8 +929,9 @@ async def test_telegram_video_note_becomes_video_component():
     assert result.message[0].path == file_path
 
 
+@pytest.mark.parametrize("caption", [None, "Meeting notes"])
 @pytest.mark.asyncio
-async def test_telegram_voice_message_creates_record_component(tmp_path):
+async def test_telegram_voice_message_creates_record_component(tmp_path, caption):
     TelegramPlatformAdapter = _load_telegram_adapter()
     adapter = TelegramPlatformAdapter(
         make_platform_config("telegram"),
@@ -941,6 +942,7 @@ async def test_telegram_voice_message_creates_record_component(tmp_path):
     update = create_mock_update(
         message_text=None,
         voice=voice,
+        caption=caption,
     )
     wav_path = tmp_path / "voice.oga.wav"
     convert_message_globals = adapter.convert_message.__func__.__globals__
@@ -961,7 +963,11 @@ async def test_telegram_voice_message_creates_record_component(tmp_path):
         result = await adapter.convert_message(update, _build_context())
 
     assert result is not None
-    assert len(result.message) == 1
+    assert result.message_str == (caption or "")
+    assert len(result.message) == (2 if caption else 1)
+    if caption:
+        assert isinstance(result.message[1], Comp.Plain)
+        assert result.message[1].text == caption
     assert isinstance(result.message[0], Comp.Record)
     assert result.message[0].file == str(wav_path)
     assert result.message[0].path == str(wav_path)
