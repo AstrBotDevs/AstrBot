@@ -31,6 +31,8 @@ class SessionController:
 
     def stop(self, error: Exception | None = None) -> None:
         """立即结束这个会话"""
+        if self.current_event and not self.current_event.is_set():
+            self.current_event.set()
         if not self.future.done():
             if error:
                 self.future.set_exception(error)

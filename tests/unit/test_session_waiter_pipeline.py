@@ -1,5 +1,6 @@
 """Session waiters are dispatched by the core pipeline after access checks."""
 
+import asyncio
 import copy
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
@@ -19,9 +20,33 @@ from astrbot.core.platform.platform_metadata import PlatformMetadata
 from astrbot.core.utils.session_waiter import (
     USER_SESSIONS,
     DefaultSessionFilter,
+    SessionController,
     SessionFilter,
     SessionWaiter,
 )
+
+
+@pytest.mark.asyncio
+async def test_stopping_session_waiter_wakes_timeout_task():
+    controller = SessionController()
+    holding_started = asyncio.Event()
+    holding_finished = asyncio.Event()
+    original_holding = controller._holding
+
+    async def track_holding(event, timeout):
+        holding_started.set()
+        try:
+            await original_holding(event, timeout)
+        finally:
+            holding_finished.set()
+
+    controller._holding = track_holding
+    controller.keep(timeout=60, reset_timeout=True)
+    await holding_started.wait()
+    controller.stop()
+
+    await asyncio.wait_for(holding_finished.wait(), timeout=1)
+    assert controller.future.done()
 
 
 @pytest.mark.asyncio
