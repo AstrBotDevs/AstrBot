@@ -1068,14 +1068,15 @@ class WeixinOCAdapter(Platform):
             )
             return False
 
+        text_sent = True
         if text:
-            await self._send_items_to_session(
+            text_sent = await self._send_items_to_session(
                 user_id,
                 [self._build_plain_text_item(text)],
                 cache_components=[Plain(text)],
                 cache_message_str=text,
             )
-        return await self._send_items_to_session(
+        media_sent = await self._send_items_to_session(
             user_id,
             [media_item],
             cache_components=[segment],
@@ -1084,6 +1085,7 @@ class WeixinOCAdapter(Platform):
                 include_ref_text=False,
             ),
         )
+        return text_sent and media_sent
 
     async def _start_login_session(self) -> OpenClawLoginSession:
         endpoint = "ilink/bot/get_bot_qrcode"
