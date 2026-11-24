@@ -23,6 +23,7 @@ from astrbot.core.db.po import (
     CommandConfig,
     CommandConflict,
     ConversationEvent,
+    ConversationRevision,
     ConversationV3,
     CronJob,
     Persona,
@@ -688,7 +689,14 @@ class SQLiteDatabase(BaseDatabase):
             return await self.conversation_store.read_result(session, conv)
 
     async def update_conversation(
-        self, cid, title=None, persona_id=None, content=None, token_usage=None
+        self,
+        cid,
+        title=None,
+        persona_id=None,
+        content=None,
+        token_usage=None,
+        *,
+        expected_revision: ConversationRevision | None = None,
     ):
         snapshot = await self.conversation_store.read(cid)
         if snapshot is None:
@@ -704,12 +712,13 @@ class SQLiteDatabase(BaseDatabase):
             if token_usage is not None:
                 payload["token_usage"] = token_usage
             drafts.append({"type": "conversation.updated", "payload": payload})
+        revision = expected_revision or snapshot.revision
         await self.conversation_store.append(
             cid,
             drafts,
             history=content,
-            expected_head=snapshot.revision.head_seq,
-            expected_leaf=snapshot.revision.leaf_event_id,
+            expected_head=revision.head_seq,
+            expected_leaf=revision.leaf_event_id,
         )
         return await self.get_conversation_by_id(cid)
 

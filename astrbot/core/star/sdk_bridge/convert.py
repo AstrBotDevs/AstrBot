@@ -8,6 +8,7 @@ from typing import Any
 from uuid import uuid4
 
 from astrbot_sdk.assets import AssetRef
+from astrbot_sdk.chatui import ViewResult as SDKViewResult
 from astrbot_sdk.events import (
     UMO,
     CommandInvocation,
@@ -18,8 +19,13 @@ from astrbot_sdk.events import (
     SenderRole,
 )
 from astrbot_sdk.message_components import (
+    ActionRow,
     At,
     AtAll,
+    Button,
+    ButtonInteraction,
+    ButtonStyle,
+    CallbackAction,
     Face,
     File,
     Forward,
@@ -29,12 +35,16 @@ from astrbot_sdk.message_components import (
     Plain,
     Record,
     Reply,
+    UIInteraction,
     UnknownSegment,
+    UrlAction,
     Video,
+    ViewContext,
 )
 from astrbot_sdk.messages import MessageChain
 from astrbot_sdk.results import EventResult, MessageResult, Propagation
 
+from astrbot.core.chatui import ViewResult
 from astrbot.core.message import components as core_comp
 from astrbot.core.message.message_event_result import MessageEventResult
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
@@ -210,6 +220,53 @@ def to_sdk_chain(components: list, *, asset_store: Any = None) -> MessageChain:
                         filename=component.name or None,
                     ),
                 )
+        elif isinstance(component, core_comp.Button):
+            action = component.action
+            segments.append(
+                Button(
+                    id=component.id,
+                    label=component.label,
+                    action=(
+                        CallbackAction(action.data)
+                        if isinstance(action, core_comp.Button.CallbackAction)
+                        else UrlAction(action.url)
+                    ),
+                    style=ButtonStyle(component.style.value),
+                )
+            )
+        elif isinstance(component, core_comp.ActionRow):
+            segments.append(
+                ActionRow(
+                    buttons=tuple(to_sdk_chain(component.buttons)),
+                    fallback_text=component.fallback_text,
+                    action_timeout=component.action_timeout,
+                )
+            )
+        elif isinstance(component, core_comp.ButtonInteraction):
+            segments.append(
+                ButtonInteraction(
+                    action_id=component.action_id,
+                    interaction_id=component.interaction_id,
+                    data=component.data,
+                    source_message_id=component.source_message_id,
+                )
+            )
+        elif isinstance(component, core_comp.UIInteraction):
+            segments.append(
+                UIInteraction(
+                    action_id=component.action_id,
+                    interaction_id=component.interaction_id,
+                    data=component.data,
+                    source_message_id=component.source_message_id,
+                    view=ViewContext(
+                        id=component.view.id,
+                        name=component.view.name,
+                        version=component.view.version,
+                        revision=component.view.revision,
+                        data=component.view.data,
+                    ),
+                )
+            )
         else:
             data = {
                 key: _json_safe(value)
@@ -279,6 +336,7 @@ def to_sdk_event(
         timestamp=timestamp,
         command=command,
         is_wake=event.is_wake,
+        agent_metadata=event.get_extra("agent_metadata", {}) or {},
     )
 
 
@@ -375,6 +433,27 @@ def to_core_chain(
                     uin=segment.sender_id,
                 ),
             )
+        elif isinstance(segment, Button):
+            components.append(
+                core_comp.Button(
+                    id=segment.id,
+                    label=segment.label,
+                    style=segment.style.value,
+                    action=(
+                        core_comp.Button.CallbackAction(data=segment.action.data)
+                        if isinstance(segment.action, CallbackAction)
+                        else core_comp.Button.UrlAction(url=segment.action.url)
+                    ),
+                )
+            )
+        elif isinstance(segment, ActionRow):
+            components.append(
+                core_comp.ActionRow(
+                    buttons=to_core_chain(MessageChain(*segment.buttons)),
+                    fallback_text=segment.fallback_text,
+                    action_timeout=segment.action_timeout,
+                )
+            )
         else:
             raise ValueError(f"unsupported outbound segment: {type(segment)!r}")
     return components
@@ -386,7 +465,9 @@ def _resolve_part_source(source: Any, resolve_asset: Any) -> str:
         if resolve_asset is None:
             raise ValueError("content part references an asset without a resolver")
         return str(resolve_asset(source))
-    return str(source)
+    if isinstance(source, str) and source.startswith(("http://", "https://")):
+        return source
+    raise ValueError("content parts require an AssetRef or HTTP(S) URL")
 
 
 def to_core_content(content: Any, *, resolve_asset: Any = None) -> Any:
@@ -433,6 +514,20 @@ def to_core_context_message(message: Any, *, resolve_asset: Any = None) -> dict:
     if message.tool_call_id is not None:
         item["tool_call_id"] = message.tool_call_id
     return item
+
+
+def to_core_view_result(result: SDKViewResult) -> ViewResult:
+    """Convert an SDK result for Core's existing card delivery and update pipeline.
+
+    Args:
+        result: The view requested by the Runner.
+
+    Returns:
+        A validated Core view result.
+    """
+    return ViewResult(
+        name=result.name, data=result.data, text=result.text, title=result.title
+    )
 
 
 def apply_sdk_result(

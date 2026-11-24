@@ -32,17 +32,20 @@ class FakeConversationManager:
         self.db = self._Db(self)
 
     class _Db:
-        """Raw db helper stand-in used by the legacy db facade ops."""
+        """Event append adapter for the in-memory test conversation."""
 
         def __init__(self, manager: FakeConversationManager) -> None:
             self._manager = manager
 
-        async def get_conversation_by_id(self, cid):
-            return self._manager._store.get(cid)
+        @property
+        def conversation_store(self):
+            return self
 
-        async def get_all_conversations(self, page=1, page_size=20):
-            items = list(self._manager._store.values())
-            return items[(page - 1) * page_size : page * page_size]
+        async def append(self, cid, drafts):
+            conv = self._manager._store[cid]
+            history = json.loads(conv.history)
+            history.extend(draft["payload"]["message"] for draft in drafts)
+            conv.history = json.dumps(history)
 
     class _PO:
         def __init__(self, cid, user_id, title, persona_id, content):
@@ -57,6 +60,7 @@ class FakeConversationManager:
             self.token_usage = 0
             self.created_at = None
             self.updated_at = None
+            self.revision = None
 
     async def get_curr_conversation_id(self, umo):
         return self._current.get(umo)

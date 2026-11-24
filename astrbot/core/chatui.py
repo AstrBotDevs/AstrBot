@@ -158,7 +158,11 @@ def resolve_view(
     from astrbot.core.star.star import star_map
 
     plugin = star_map.get(module)
-    if not plugin or not plugin.activated or plugin.star_cls is None:
+    if (
+        not plugin
+        or not plugin.activated
+        or (plugin.star_cls is None and plugin.runner_view_names is None)
+    ):
         raise ViewError("VIEW_UNAVAILABLE", "The view's plugin is unavailable.")
     for spec in plugin.views:
         if spec.name != name:
@@ -174,6 +178,10 @@ def resolve_view(
             )
         if version is not None and version != spec.version:
             break
+        if plugin.runner_view_names is not None:
+            if spec.name not in plugin.runner_view_names:
+                break
+            return plugin, spec, None
         root = Path(plugin.module.__file__).resolve().parent
         entry = (root / spec.entry).resolve()
         if spec.target == "plugin_page" and not entry.is_file():

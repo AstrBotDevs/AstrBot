@@ -3,6 +3,8 @@ from __future__ import annotations
 import logging
 from typing import Any
 
+from astrbot_sdk.llm import ChatResponse
+
 from astrbot.core.star.star_handler import EventType
 
 from .convert import to_core_chain, to_sdk_chain
@@ -84,6 +86,17 @@ def snapshot_stage(
         return {
             "content": resp.completion_text,
             "reasoning_content": resp.reasoning_content,
+        }
+    if stage == "agent_end":
+        run_context, response = args
+        return {
+            "run_end_reason": run_context.run_end_reason,
+            "run_error": run_context.run_error,
+            "response": (
+                ChatResponse(response.completion_text, response.reasoning_content)
+                if response is not None
+                else None
+            ),
         }
     if stage == "tool_call":
         tool, tool_args = args

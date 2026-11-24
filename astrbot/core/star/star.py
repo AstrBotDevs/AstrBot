@@ -77,6 +77,9 @@ class StarMetadata:
     views: list[ViewSpec] = field(default_factory=list)
     """插件注册的 Views 元数据。"""
 
+    runner_view_names: frozenset[str] | None = None
+    """Entry names in the Runner manifest. None denotes a local plugin."""
+
     @property
     def plugin_id(self) -> str:
         p_name = (self.name or "unknown").lower().replace("/", "_")

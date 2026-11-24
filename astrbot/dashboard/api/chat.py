@@ -146,6 +146,28 @@ async def get_chat_view(
         )
         if not token:
             raise ViewError("VIEW_UNAVAILABLE", "View resources are unavailable.")
+        if entry is not None:
+            html = await asyncio.to_thread(entry.read_text, encoding="utf-8")
+        else:
+            from astrbot.dashboard.services.plugin_page_service import (
+                PluginPageServiceError,
+            )
+
+            try:
+                page = await pages.serve_page_content(
+                    plugin_name=plugin.name,
+                    view_name=spec.name,
+                    asset_path="",
+                    asset_token=token,
+                    username=auth.username,
+                    locale="en-US",
+                    theme=None,
+                )
+            except PluginPageServiceError as exc:
+                raise ViewError(
+                    "VIEW_UNAVAILABLE", "View resources are unavailable."
+                ) from exc
+            html = page.content
         return ok(
             {
                 "id": view_id,
@@ -167,7 +189,7 @@ async def get_chat_view(
                     "pageTitle": spec.title or spec.name,
                     "i18n": plugin.i18n or {},
                 },
-                "html": await asyncio.to_thread(entry.read_text, encoding="utf-8"),
+                "html": html,
                 "base_url": pages.build_plugin_page_view_content_path(
                     plugin.name, spec.name, token
                 ),

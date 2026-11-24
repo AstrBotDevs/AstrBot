@@ -3,14 +3,18 @@ from __future__ import annotations
 import inspect
 import json
 import logging
-from collections.abc import Mapping
+from collections.abc import Iterator, Mapping
+from contextlib import contextmanager
+from dataclasses import replace
 from pathlib import Path
 from types import SimpleNamespace
 from typing import TYPE_CHECKING, Any
 from uuid import uuid4
 
 from astrbot_sdk.capabilities import CapabilityGrant, CapabilitySet
+from astrbot_sdk.chatui import ViewResult as SDKViewResult
 from astrbot_sdk.errors import InvalidRequest
+from astrbot_sdk.events import MessageEvent
 from astrbot_sdk.runtime.metadata import load_metadata
 from astrbot_sdk.runtime.stdio_client import StdioPluginClient
 from astrbot_sdk.tools import ToolCallContext
@@ -26,7 +30,7 @@ from astrbot.core.star.star_handler import (
 )
 
 from ..sdk_plugin_metadata import _BRIDGE_MODULE_PREFIX, is_sdk_plugin_dir
-from .convert import apply_sdk_result, to_sdk_event
+from .convert import apply_sdk_result, to_core_view_result, to_sdk_event
 from .hooks import (
     apply_hook_result,
     is_metadata_stage,
@@ -35,16 +39,19 @@ from .hooks import (
 )
 from .services import (
     AgentRunService,
+    AgentSessionService,
     AssetStore,
     AssetTransferService,
     ConversationReadService,
     ConversationWriteService,
+    DecisionModelService,
     HostService,
     LLMEmbedService,
     LLMGenerateService,
     MessageSendService,
     PluginInspectService,
     RenderImageService,
+    SessionLocaleService,
     SessionWaitService,
     SpeechSynthesizeService,
     SpeechTranscribeService,
@@ -59,6 +66,7 @@ from .venv import ensure_plugin_venv
 from .ws_listener import ExternalRunnerListener
 
 if TYPE_CHECKING:
+    from astrbot.core.platform.astr_message_event import AstrMessageEvent
     from astrbot.core.star.context import Context
 
 
@@ -131,6 +139,7 @@ class SDKPluginBridge:
         self._inactivated_llm_tools: list = []
         self._web_routes: list[tuple[str, tuple[str, ...]]] = []
         self._views_manifest: dict = {}
+        self._agent_sources: dict[str, AstrMessageEvent] = {}
 
     async def start(self) -> None:
         """Start the Runner subprocess and register pipeline handlers.
@@ -148,7 +157,7 @@ class SDKPluginBridge:
             metadata = SimpleNamespace(
                 author=str(spec.get("author") or ""),
                 desc=str(spec.get("desc") or ""),
-                pages=None,
+                pages=spec.get("views", ()),
                 display_name=spec.get("display_name"),
                 short_desc=spec.get("short_desc"),
                 repo=spec.get("repo"),
@@ -220,6 +229,7 @@ class SDKPluginBridge:
                 capability_handler=self._dispatch_capability,
                 logger=self.plugin_logger,
                 on_circuit_open=self._mark_circuit_open,
+                on_runner_exit=self._clear_runner_state,
             )
         else:
             self._supervisor = RunnerSupervisor(
@@ -235,13 +245,12 @@ class SDKPluginBridge:
                 capability_handler=self._dispatch_capability,
                 logger=self.plugin_logger,
                 on_circuit_open=self._mark_circuit_open,
+                on_runner_exit=self._clear_runner_state,
             )
         try:
             handshake = await self._supervisor.start()
         except Exception:
-            if self._claims_token is not None and self._listener is not None:
-                self._listener.unregister(self._claims_token)
-                self._claims_token = None
+            await self.stop()
             raise
         if self._external is not None and handshake.plugin_id != self.plugin_id:
             await self.stop()
@@ -254,6 +263,27 @@ class SDKPluginBridge:
         # to the dashboard from this cache; view file contents stream
         # through the pipeline on demand.
         self._views_manifest = await self._fetch_views_manifest()
+
+        view_names = frozenset(
+            page["name"]
+            for page in self._views_manifest.get("pages", [])
+            if any(file.get("path") == "index.html" for file in page.get("files", []))
+        )
+        action_ids = {
+            handler.details.get("action_id")
+            for handler in handshake.handlers
+            if handler.kind.value == "ui_action"
+        }
+        for spec in views:
+            if spec.target == "plugin_page":
+                continue
+            if spec.name not in view_names or (
+                None not in action_ids and set(spec.actions) - action_ids
+            ):
+                await self.stop()
+                raise InvalidRequest(
+                    f"view {spec.name!r} needs an entry file and handlers for its declared actions"
+                )
 
         for route_info in handshake.web_routes or []:
             self._services["web.route"].register_route(
@@ -286,6 +316,7 @@ class SDKPluginBridge:
             activated=self._activated,
             logo_path=logo_path,
             views=views,
+            runner_view_names=view_names,
             i18n=self._views_i18n(),
             display_name=getattr(metadata, "display_name", None),
             short_desc=getattr(metadata, "short_desc", None),
@@ -301,6 +332,8 @@ class SDKPluginBridge:
         registrars = {
             "command": self._register_command,
             "message": self._register_message,
+            "button_action": self._register_message,
+            "ui_action": self._register_message,
             "tool": self._register_tool,
         }
         for descriptor in handshake.handlers:
@@ -344,7 +377,6 @@ class SDKPluginBridge:
             if metadata.module_path != self.module_path
         ]
         star_map.pop(self.module_path, None)
-        purge_bridge_sessions(self)
         if self._services:
             service = self._services.get("web.route")
             if service is not None:
@@ -352,9 +384,43 @@ class SDKPluginBridge:
         if self._supervisor is not None:
             await self._supervisor.stop()
             self._supervisor = None
+        await self._clear_runner_state()
         if self._claims_token is not None and self._listener is not None:
             self._listener.unregister(self._claims_token)
             self._claims_token = None
+
+    async def _clear_runner_state(self) -> None:
+        """Retire handles owned by the exited Runner."""
+        purge_bridge_sessions(self)
+        self._agent_sources.clear()
+        service = self._services.get("agent.run")
+        if isinstance(service, AgentSessionService):
+            await service.close()
+
+    @contextmanager
+    def _agent_source(
+        self,
+        event: AstrMessageEvent,
+        sdk_event: MessageEvent | None,
+    ) -> Iterator[MessageEvent | None]:
+        """Bind a source event for the duration of its Runner invocation.
+
+        Args:
+            event: Host-owned event, including its effective privileges.
+            sdk_event: Portable event delivered to the Runner.
+
+        Yields:
+            An event with an opaque reference scoped to this bridge.
+        """
+        if sdk_event is None or not self._grants.has("agent.run"):
+            yield sdk_event
+            return
+        token = uuid4().hex
+        self._agent_sources[token] = event
+        try:
+            yield replace(sdk_event, _source_token=token)
+        finally:
+            self._agent_sources.pop(token, None)
 
     def _register_command(self, descriptor: Any) -> str:
         """Register one remote command handler as a pipeline stub.
@@ -462,7 +528,16 @@ class SDKPluginBridge:
         Returns:
             The registered handler full name.
         """
+        from astrbot.core.star.filter.button_action import ButtonActionFilter
+        from astrbot.core.star.filter.ui_action import UIActionFilter
+
         stub = self._make_message_stub(descriptor.id)
+        if descriptor.kind.value == "button_action":
+            filters = [ButtonActionFilter(descriptor.details.get("action_id"))]
+        elif descriptor.kind.value == "ui_action":
+            filters = [UIActionFilter(descriptor.details.get("action_id"))]
+        else:
+            filters = self._build_message_filters(descriptor)
 
         full_name = f"{self.module_path}_{descriptor.id}"
         handler_md = StarHandlerMetadata(
@@ -471,7 +546,7 @@ class SDKPluginBridge:
             handler_name=descriptor.id,
             handler_module_path=self.module_path,
             handler=stub,
-            event_filters=self._build_message_filters(descriptor),
+            event_filters=filters,
             desc=descriptor.description or "",
             extras_configs={"priority": descriptor.priority},
         )
@@ -545,15 +620,20 @@ class SDKPluginBridge:
         async def stub(event, **_kwargs):
             client = bridge._require_client()
             sdk_event = to_sdk_event(event, asset_store=bridge._asset_store)
-            async for result in client.invoke(handler_id, sdk_event):
-                if result is not None:
-                    apply_sdk_result(
-                        event,
-                        result,
-                        resolve_asset=bridge._require_asset_store().resolve,
-                    )
-                yield
+            with bridge._agent_source(event, sdk_event) as source:
+                async for result in client.invoke(handler_id, source):
+                    if isinstance(result, SDKViewResult):
+                        yield to_core_view_result(result)
+                        continue
+                    if result is not None:
+                        apply_sdk_result(
+                            event,
+                            result,
+                            resolve_asset=bridge._require_asset_store().resolve,
+                        )
+                    yield
 
+        stub.__module__ = self.module_path
         return stub
 
     def _register_tool(self, descriptor: Any) -> str:
@@ -659,12 +739,8 @@ class SDKPluginBridge:
             else:
                 payload = snapshot_stage(stage, event, args, store=bridge._asset_store)
                 sdk_event = to_sdk_event(event, asset_store=bridge._asset_store)
-            result = await client.invoke_hook(
-                handler_id,
-                sdk_event,
-                stage,
-                payload,
-            )
+            with bridge._agent_source(event, sdk_event) as source:
+                result = await client.invoke_hook(handler_id, source, stage, payload)
             apply_hook_result(
                 stage,
                 event,
@@ -697,12 +773,18 @@ class SDKPluginBridge:
             unified = getattr(event, "unified_msg_origin", None)
             if isinstance(unified, str):
                 sdk_event = to_sdk_event(event, asset_store=bridge._asset_store)
-            call = ToolCallContext(
-                id=f"call_{uuid4().hex[:12]}",
-                umo=sdk_event.umo if sdk_event is not None else None,
-                event=sdk_event,
-            )
-            return await client.invoke_tool(handler_id, call, kwargs)
+            with bridge._agent_source(event, sdk_event) as source:
+                call = ToolCallContext(
+                    id=f"call_{uuid4().hex[:12]}",
+                    umo=source.umo if source is not None else None,
+                    event=source,
+                )
+                result = await client.invoke_tool(handler_id, call, kwargs)
+                return (
+                    to_core_view_result(result)
+                    if isinstance(result, SDKViewResult)
+                    else result
+                )
 
         return stub
 
@@ -730,16 +812,20 @@ class SDKPluginBridge:
                 arguments=kwargs,
                 asset_store=bridge._asset_store,
             )
-            async for result in client.invoke(handler_id, sdk_event, **kwargs):
-                if result is not None:
-                    apply_sdk_result(
-                        event,
-                        result,
-                        resolve_asset=bridge._require_asset_store().resolve,
-                    )
-                # Resume the Runner only after the Pipeline processes this yield.
-                yield
+            with bridge._agent_source(event, sdk_event) as source:
+                async for result in client.invoke(handler_id, source, **kwargs):
+                    if isinstance(result, SDKViewResult):
+                        yield to_core_view_result(result)
+                        continue
+                    if result is not None:
+                        apply_sdk_result(
+                            event,
+                            result,
+                            resolve_asset=bridge._require_asset_store().resolve,
+                        )
+                    yield
 
+        stub.__module__ = self.module_path
         return stub
 
     async def _dispatch_capability(
@@ -773,8 +859,8 @@ class SDKPluginBridge:
         services: tuple[HostService, ...] = (
             StorageService(self.plugin_id),
             MessageSendService(self.context, store),
-            ConversationReadService(self.context),
-            ConversationWriteService(self.context),
+            ConversationReadService(self.context, self.plugin_id, store),
+            ConversationWriteService(self.context, self.plugin_id, store),
             AssetTransferService(store),
             PluginInspectService(),
             RenderImageService(self.context, store),
@@ -788,6 +874,9 @@ class SDKPluginBridge:
                 self.module_path,
             ),
             AgentRunService(self.context, self._tool_names, store),
+            AgentSessionService(self),
+            DecisionModelService(self.context),
+            SessionLocaleService(self.context),
             SessionWaitService(self),
             WebRouteService(self),
         )

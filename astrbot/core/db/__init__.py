@@ -15,6 +15,7 @@ from astrbot.core.db.po import (
     CommandConfig,
     CommandConflict,
     ConversationRead,
+    ConversationRevision,
     CronJob,
     Persona,
     PersonaFolder,
@@ -221,6 +222,8 @@ class BaseDatabase(abc.ABC):
         persona_id: str | None = None,
         content: list[dict] | None = None,
         token_usage: int | None = None,
+        *,
+        expected_revision: ConversationRevision | None = None,
     ) -> None:
         """Update a conversation's history."""
         ...

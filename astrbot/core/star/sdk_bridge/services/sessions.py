@@ -7,6 +7,7 @@ from sys import maxsize
 from typing import TYPE_CHECKING, Any
 
 from astrbot_sdk.errors import Conflict, InvalidRequest, NotFound
+from astrbot_sdk.events import UMO
 
 from astrbot.core import logger
 
@@ -14,6 +15,7 @@ from ..convert import to_sdk_event, to_umo_string
 
 if TYPE_CHECKING:
     from astrbot.core.platform.astr_message_event import AstrMessageEvent
+    from astrbot.core.star.context import Context
 
     from ..bridge import SDKPluginBridge
 
@@ -197,6 +199,36 @@ async def _expire(key: str, entry: _WaitEntry, delay: float) -> None:
     )
     with contextlib.suppress(Exception):
         await entry.bridge._require_client().session_timeout(entry.waiter_id)
+
+
+class SessionLocaleService:
+    """Expose the effective bot reply locale without disclosing configuration."""
+
+    capability_id = "session.locale"
+
+    def __init__(self, context: Context) -> None:
+        self._context = context
+
+    async def handle(self, operation: str, payload: dict[str, Any]) -> str:
+        """Resolve the requested session's language.
+
+        Args:
+            operation: Locale service operation.
+            payload: Optional SDK session address.
+
+        Returns:
+            The effective bot reply locale.
+
+        Raises:
+            InvalidRequest: The session address is invalid.
+            NotFound: The operation is unknown.
+        """
+        if operation != "get":
+            raise NotFound(f"unknown session locale operation: {operation}")
+        umo = payload.get("umo")
+        if umo is not None and not isinstance(umo, UMO):
+            raise InvalidRequest("locale requires a UMO")
+        return self._context.locale(to_umo_string(umo) if umo is not None else None)
 
 
 class SessionWaitService:

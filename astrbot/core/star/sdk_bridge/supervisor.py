@@ -13,7 +13,7 @@ import asyncio
 import logging
 import random
 import time
-from collections.abc import Callable, Mapping
+from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -60,6 +60,7 @@ class RunnerSupervisor:
         capability_handler: Any,
         logger: logging.Logger,
         on_circuit_open: Callable[[], None] | None = None,
+        on_runner_exit: Callable[[], Awaitable[None]] | None = None,
         timing: SupervisorTiming | None = None,
     ) -> None:
         """Initialize the supervisor for one plugin.
@@ -73,6 +74,7 @@ class RunnerSupervisor:
             capability_handler: Runner-to-Host capability dispatcher.
             logger: Logger for lifecycle events.
             on_circuit_open: Called once when the circuit opens.
+            on_runner_exit: Clear connection-owned state before restarting.
             timing: Optional timing overrides.
         """
         self.plugin_root = plugin_root
@@ -83,6 +85,7 @@ class RunnerSupervisor:
         self.capability_handler = capability_handler
         self.logger = logger
         self.on_circuit_open = on_circuit_open
+        self.on_runner_exit = on_runner_exit
         self.timing = timing or SupervisorTiming()
         self._client: StdioPluginClient | None = None
         self._stopping = False
@@ -173,6 +176,8 @@ class RunnerSupervisor:
             if self._stopping or self._client is not client:
                 return
             self._client = None
+            if self.on_runner_exit is not None:
+                await self.on_runner_exit()
             if code is not None:
                 self.logger.warning(
                     f"Plugin runner for {self.plugin_root.name} exited "
@@ -264,6 +269,7 @@ class ExternalRunnerSupervisor(RunnerSupervisor):
         capability_handler: Any,
         logger: logging.Logger,
         on_circuit_open: Callable[[], None] | None = None,
+        on_runner_exit: Callable[[], Awaitable[None]] | None = None,
         timing: SupervisorTiming | None = None,
     ) -> None:
         """Initialize the supervisor for one external plugin slot.
@@ -276,6 +282,7 @@ class ExternalRunnerSupervisor(RunnerSupervisor):
             capability_handler: Runner-to-Host capability dispatcher.
             logger: Logger for lifecycle events.
             on_circuit_open: Called once when the circuit opens.
+            on_runner_exit: Clear connection-owned state before restarting.
             timing: Optional timing overrides.
         """
         super().__init__(
@@ -287,6 +294,7 @@ class ExternalRunnerSupervisor(RunnerSupervisor):
             capability_handler=capability_handler,
             logger=logger,
             on_circuit_open=on_circuit_open,
+            on_runner_exit=on_runner_exit,
             timing=timing,
         )
         self._claims = claims

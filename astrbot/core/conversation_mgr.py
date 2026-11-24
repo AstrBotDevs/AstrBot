@@ -459,6 +459,8 @@ class ConversationManager:
         title: str | None = None,
         persona_id: str | None = None,
         token_usage: int | None = None,
+        *,
+        expected_revision: ConversationRevision | None = None,
     ) -> None:
         """更新会话的对话.
 
@@ -467,8 +469,25 @@ class ConversationManager:
             conversation_id (str): 对话 ID, 是 uuid 格式的字符串
             history (List[Dict]): 对话历史记录, 是一个字典列表, 每个字典包含 role 和 content 字段
             token_usage (int | None): token 使用量。None 表示不更新
+            expected_revision: Optional required event log revision for the write.
 
         """
+        if not conversation_id:
+            # 如果没有提供 conversation_id，则获取当前的
+            conversation_id = await self.get_curr_conversation_id(unified_msg_origin)
+        if conversation_id:
+            await self.db.update_conversation(
+                cid=conversation_id,
+                title=title,
+                persona_id=persona_id,
+                content=history,
+                token_usage=token_usage,
+                **(
+                    {"expected_revision": expected_revision}
+                    if expected_revision is not None
+                    else {}
+                ),
+            )
         if persona_id is not None:
             runtime = (
                 self.acm.get_conf(unified_msg_origin).get("agent", {}).get("runtime")
@@ -481,17 +500,6 @@ class ConversationManager:
                 else "agent.config.persona_id"
             )
             await update_overrides(unified_msg_origin, {path: persona_id or None})
-        if not conversation_id:
-            # 如果没有提供 conversation_id，则获取当前的
-            conversation_id = await self.get_curr_conversation_id(unified_msg_origin)
-        if conversation_id:
-            await self.db.update_conversation(
-                cid=conversation_id,
-                title=title,
-                persona_id=persona_id,
-                content=history,
-                token_usage=token_usage,
-            )
 
     async def add_message_pair(
         self,

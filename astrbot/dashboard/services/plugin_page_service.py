@@ -795,7 +795,8 @@ class PluginPageService:
             return None
         try:
             page = await self.get_plugin_page(plugin, view_name)
-            await self.resolve_plugin_page_file(plugin, page.name, "")
+            if self._bridge_for(plugin) is None:
+                await self.resolve_plugin_page_file(plugin, page.name, "")
         except (FileNotFoundError, ValueError):
             return None
 
