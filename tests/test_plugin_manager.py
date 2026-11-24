@@ -4,6 +4,7 @@ import functools
 import json
 import os
 import sys
+import tempfile
 import zipfile
 from pathlib import Path
 from types import ModuleType
@@ -16,6 +17,7 @@ import yaml
 from astrbot.core.star import star_manager as star_manager_module
 from astrbot.core.star.star_handler import EventType, StarHandlerMetadata
 from astrbot.core.star.star_manager import PluginDependencyInstallError, PluginManager
+from astrbot.core.utils.astrbot_path import get_astrbot_system_tmp_path
 from astrbot.core.utils.pip_installer import PipInstallError
 from astrbot.core.utils.requirements_utils import MissingRequirementsPlan
 
@@ -156,7 +158,10 @@ def test_load_plugin_metadata_includes_views(tmp_path: Path):
     loaded_metadata = PluginManager._load_plugin_metadata(str(plugin_path))
 
     assert loaded_metadata is not None
-    assert loaded_metadata.views == [{"name": "dashboard", "title": "Dashboard"}]
+    assert len(loaded_metadata.views) == 1
+    assert loaded_metadata.views[0].name == "dashboard"
+    assert loaded_metadata.views[0].title == "Dashboard"
+    assert loaded_metadata.views[0].target == "plugin_page"
 
 
 def test_load_plugin_metadata_pages_alias_maps_to_views(tmp_path: Path):
@@ -171,7 +176,10 @@ def test_load_plugin_metadata_pages_alias_maps_to_views(tmp_path: Path):
     loaded_metadata = PluginManager._load_plugin_metadata(str(plugin_path))
 
     assert loaded_metadata is not None
-    assert loaded_metadata.views == [{"name": "dashboard", "title": "Dashboard"}]
+    assert len(loaded_metadata.views) == 1
+    assert loaded_metadata.views[0].name == "dashboard"
+    assert loaded_metadata.views[0].title == "Dashboard"
+    assert loaded_metadata.views[0].target == "plugin_page"
 
 
 def test_load_plugin_metadata_accepts_yml_suffix(tmp_path: Path):
@@ -481,6 +489,49 @@ async def test_install_plugin_dependency_install_flow(
             expected_content="networkx\n",
         )
         assert events[1] == ("load", TEST_PLUGIN_DIR)
+
+
+@pytest.mark.asyncio
+async def test_install_plugin_staging_root_does_not_shadow_the_marker_file(
+    plugin_manager_pm: PluginManager, monkeypatch, tmp_path
+):
+    """Installing a plugin must not fail when the temp dir holds the marker file.
+
+    Python falls back to the current working directory when the system
+    temporary directory is unusable, and that directory holds the ".astrbot"
+    marker file created by "astrbot init".
+    """
+    system_temp = tmp_path / "system_temp"
+    system_temp.mkdir()
+    marker = system_temp / ".astrbot"
+    marker.write_text("", encoding="utf-8")
+    monkeypatch.setattr(tempfile, "tempdir", str(system_temp))
+    monkeypatch.setattr(
+        star_manager_module,
+        "get_astrbot_system_tmp_path",
+        get_astrbot_system_tmp_path,
+    )
+
+    events = []
+    _mock_missing_requirements(monkeypatch, {"networkx"})
+
+    async def mock_install(repo_url: str, proxy="", *, download_url="", target_dir):
+        staged_path = Path(target_dir)
+        _write_local_test_plugin(staged_path, repo_url)
+        _write_requirements(staged_path)
+        return str(staged_path)
+
+    monkeypatch.setattr(plugin_manager_pm._updater, "install", mock_install)
+    monkeypatch.setattr(
+        "astrbot.core.star.star_manager.pip_installer.install",
+        _build_dependency_install_mock(events, False),
+    )
+    monkeypatch.setattr(plugin_manager_pm, "load", _build_load_mock(events))
+
+    await plugin_manager_pm.install_plugin(TEST_PLUGIN_REPO)
+
+    assert marker.is_file()
+    assert events[-1] == ("load", TEST_PLUGIN_DIR)
 
 
 @pytest.mark.asyncio
@@ -1295,7 +1346,7 @@ async def test_migrate_legacy_plugin_tool_inactivation_state(
         name="user_disabled_builtin",
         description="user disabled builtin",
         parameters={"type": "object", "properties": {}},
-        handler_module_path="astrbot.core.tools.user_disabled_builtin",
+        handler_module_path="astrbot.core.astr_agent_runtime.tools.user_disabled_builtin",
     )
     active_tool.active = False
     inactive_tool.active = False
@@ -2937,129 +2988,26 @@ async def test_repeated_deactivated_loads_bind_handlers_once_when_activated(
         _clear_star_runtime_state()
 
 
-def _write_runtime_test_metadata(
-    plugin_path: Path,
-    *,
-    schema_version: int | None = None,
-    isolated: bool = False,
-) -> None:
-    lines = [
-        "name: demo",
-        "desc: demo plugin",
-        "version: 1.0.0",
-        "author: tester",
-    ]
-    if schema_version == 2:
-        lines += ["schema_version: 2", "runtime:", "  api: sdk"]
-    elif isolated:
-        lines += ["runtime:", "  isolated: true"]
-    plugin_path.joinpath("metadata.yaml").write_text(
-        "\n".join(lines) + "\n",
-        encoding="utf-8",
-    )
+@pytest.mark.parametrize("target", ["chat_message", "chat_workbench", "chat_workbench_with_launcher"])
+def test_metadata_registers_chat_views(tmp_path, target):
+    _write_local_test_plugin(tmp_path, TEST_PLUGIN_REPO)
+    path = tmp_path / "metadata.yaml"
+    raw = yaml.safe_load(path.read_text())
+    raw["views"] = [{"name": "counter", "target": target, "title": "Counter", "description": "Count items", "actions": ["demo:increment"]}]
+    path.write_text(yaml.safe_dump(raw))
+    spec = PluginManager._load_plugin_metadata(str(tmp_path)).views[0]
+    assert spec.target == target
+    assert spec.entry == Path("views/counter/index.html")
+    assert spec.description == "Count items"
+    assert spec.actions == ["demo:increment"]
 
 
-def test_failed_plugin_record_exposes_runtime(plugin_manager_pm):
-    pm = plugin_manager_pm
-    store = Path(pm.plugin_store_path)
-
-    legacy_isolated = store / "legacy_iso"
-    legacy_isolated.mkdir()
-    _write_runtime_test_metadata(legacy_isolated, isolated=True)
-    legacy_inprocess = store / "legacy_proc"
-    legacy_inprocess.mkdir()
-    _write_runtime_test_metadata(legacy_inprocess)
-    sdk_plugin = store / "sdk_plugin"
-    sdk_plugin.mkdir()
-    _write_runtime_test_metadata(sdk_plugin, schema_version=2)
-
-    pm._runtime_overrides = {}
-
-    record = pm._build_failed_plugin_record(
-        root_dir_name="legacy_iso",
-        plugin_dir_path=str(legacy_isolated),
-        reserved=False,
-        error="boom",
-        error_trace="trace",
-    )
-    assert record["runtime"] == "isolated"
-    assert record["can_change_runtime"] is True
-
-    record = pm._build_failed_plugin_record(
-        root_dir_name="legacy_proc",
-        plugin_dir_path=str(legacy_inprocess),
-        reserved=False,
-        error="boom",
-        error_trace="trace",
-    )
-    assert record["runtime"] == "in-process"
-    assert record["can_change_runtime"] is True
-
-    # The user's runtime override wins over the metadata declaration.
-    pm._runtime_overrides = {"legacy_proc": "isolated"}
-    record = pm._build_failed_plugin_record(
-        root_dir_name="legacy_proc",
-        plugin_dir_path=str(legacy_inprocess),
-        reserved=False,
-        error="boom",
-        error_trace="trace",
-    )
-    assert record["runtime"] == "isolated"
-
-    record = pm._build_failed_plugin_record(
-        root_dir_name="sdk_plugin",
-        plugin_dir_path=str(sdk_plugin),
-        reserved=False,
-        error="boom",
-        error_trace="trace",
-    )
-    assert record["runtime"] == "isolated"
-    assert record["can_change_runtime"] is False
-
-
-@pytest.mark.asyncio
-async def test_set_plugin_runtime_to_in_process_removes_venv_and_failed_record(
-    plugin_manager_pm,
-    tmp_path,
-    monkeypatch,
-):
-    pm = plugin_manager_pm
-    store = Path(pm.plugin_store_path)
-    plugin_dir = store / "legacy_iso"
-    plugin_dir.mkdir()
-    _write_runtime_test_metadata(plugin_dir, isolated=True)
-
-    data_root = tmp_path / "data"
-    venv_dir = data_root / "plugin_venvs" / "legacy_iso"
-    venv_dir.mkdir(parents=True)
-    (venv_dir / "pyvenv.cfg").write_text("", encoding="utf-8")
-    monkeypatch.setattr(
-        star_manager_module,
-        "get_astrbot_data_path",
-        lambda: str(data_root),
-    )
-
-    preferences = {"plugin_runtime_overrides": {}}
-
-    async def mock_global_get(key, default=None):
-        return preferences.get(key, default)
-
-    async def mock_global_put(key, value):
-        preferences[key] = value
-
-    async def mock_load(specified_dir_name=None, ignore_version_check=False):
-        return True, None
-
-    monkeypatch.setattr(star_manager_module.sp, "global_get", mock_global_get)
-    monkeypatch.setattr(star_manager_module.sp, "global_put", mock_global_put)
-    monkeypatch.setattr(pm, "load", mock_load)
-    pm._sdk_plugin_manager = None
-    pm.failed_plugin_dict["legacy_iso"] = {"error": "boom"}
-
-    success, error = await pm.set_plugin_runtime("legacy_iso", "in-process")
-
-    assert success
-    assert error is None
-    assert not venv_dir.exists()
-    assert preferences["plugin_runtime_overrides"] == {"legacy_iso": "in-process"}
-    assert "legacy_iso" not in pm.failed_plugin_dict
+@pytest.mark.parametrize("views", [None, {}, [{"name": "../escape"}], [{"name": "a", "target": "invalid"}], [{"name": "a"}, {"name": "a"}], [{"name": "a", "target": "plugin_page", "actions": ["run"]}]])
+def test_metadata_rejects_invalid_views(tmp_path, views):
+    _write_local_test_plugin(tmp_path, TEST_PLUGIN_REPO)
+    path = tmp_path / "metadata.yaml"
+    raw = yaml.safe_load(path.read_text())
+    raw["views"] = views
+    path.write_text(yaml.safe_dump(raw))
+    with pytest.raises(ValueError):
+        PluginManager._load_plugin_metadata(str(tmp_path))

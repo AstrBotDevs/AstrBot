@@ -13,6 +13,7 @@ import math
 import mimetypes
 import os
 import shutil
+import stat
 import struct
 import subprocess
 import tempfile
@@ -377,6 +378,9 @@ def describe_media_ref(media_ref: object | None) -> str:
             else:
                 return f"bare base64 media payload_len={len(compact)}"
 
+    if not media_path_exists:
+        return f"unresolved media ref name={Path(media_ref).name!r} len={ref_len}"
+
     return f"local media path name={Path(media_ref).name!r} len={ref_len}"
 
 
@@ -467,10 +471,23 @@ async def _materialize_media_ref(
     Supported references: local paths, file:// URIs, http(s) URLs, base64://,
     data:*;base64,... URIs, and legacy bare base64 payloads.
 
+    Image references are read as soon as they are resolved, so an image must
+    resolve to a real file. Audio, video and generic file references may point to
+    a local path that does not exist yet: platforms such as NapCat can hand over a
+    path before the file is readable, and those callers convert or retry later.
+
     Args:
         media_ref: Original media reference from a platform, plugin, or history.
         media_type: Logical media family used for temp filenames and defaults.
         default_suffix: Suffix to use when the reference does not carry one.
+
+    Raises:
+        FileNotFoundError: If an image reference is neither an existing file nor a
+            supported URL or base64 payload, or if an image file URI does not
+            exist. Audio, video and file references do not raise for a missing
+            path; they return it so the caller can retry later.
+        ValueError: If the reference points to an existing path that is not a
+            regular file.
     """
 
     cleanup_paths: list[Path] = []
@@ -511,6 +528,20 @@ async def _materialize_media_ref(
 
     if is_file_uri(media_ref):
         path = Path(file_uri_to_path(media_ref))
+        try:
+            file_stat = path.stat()
+        except (OSError, ValueError):
+            # Mirror pathlib's exists(): Windows raises ValueError for over-long
+            # paths and embedded NUL bytes instead of an OSError.
+            file_stat = None
+        if file_stat is not None and not stat.S_ISREG(file_stat.st_mode):
+            raise ValueError(f"media reference is not a regular file: {media_ref}")
+        if file_stat is None and media_type == "image":
+            raise FileNotFoundError(
+                errno.ENOENT,
+                "image file URI does not point to an existing file",
+                media_ref,
+            )
         return _LocalMediaFile(path=path, mime_type=_guess_mime_type(path))
 
     if media_ref.startswith("data:"):
@@ -564,12 +595,15 @@ async def _materialize_media_ref(
         )
 
     path = Path(media_ref)
-    path_exists = False
     try:
-        path_exists = path.exists()
-    except OSError:
-        pass
-    if path_exists:
+        local_stat = path.stat()
+    except (OSError, ValueError):
+        # Mirror pathlib's exists(): Windows raises ValueError for over-long
+        # paths and embedded NUL bytes instead of an OSError.
+        local_stat = None
+    if local_stat is not None:
+        if not stat.S_ISREG(local_stat.st_mode):
+            raise ValueError(f"media reference is not a regular file: {media_ref}")
         return _LocalMediaFile(path=path, mime_type=_guess_mime_type(path))
 
     compact_media_ref = "".join(media_ref.split())
@@ -604,6 +638,19 @@ async def _materialize_media_ref(
                 cleanup_paths=cleanup_paths,
             )
 
+    if media_type == "image":
+        # Images are read right after resolution, so a missing source is a
+        # failure instead of a file that may appear later.
+        raise FileNotFoundError(
+            errno.ENOENT,
+            "image reference is not an existing local file or a valid payload",
+            media_ref,
+        )
+
+    logger.debug(
+        "Media reference does not exist locally yet; returning it for the caller: %s",
+        describe_media_ref(media_ref),
+    )
     return _LocalMediaFile(path=path, mime_type=_guess_mime_type(path))
 
 
@@ -813,7 +860,18 @@ class MediaResolver:
                 whose bytes cannot be identified.
         """
         if self.media_type == "image":
-            async with self.as_path(target_format=target_format) as resolved:
+            # Resolve outside as_path(): an image reference that cannot be
+            # materialized must degrade to None in non-strict mode, which payload
+            # assembly relies on to skip bad image refs.
+            try:
+                resolved = await self._resolve_path(target_format=target_format)
+            except (OSError, ValueError) as exc:
+                # ValueError covers non-regular sources, which is_recoverable_image_error
+                # already treats as skippable.
+                if strict or not is_recoverable_image_error(exc):
+                    raise
+                return None
+            try:
                 try:
                     media_bytes = await asyncio.to_thread(resolved.read_bytes)
                 except OSError as exc:
@@ -859,6 +917,8 @@ class MediaResolver:
                     base64_data=base64.b64encode(media_bytes).decode("utf-8"),
                     mime_type=mime_type,
                 )
+            finally:
+                resolved.cleanup()
 
         async with self.as_path(
             target_format=target_format,
@@ -1477,6 +1537,9 @@ async def convert_audio_format(
     audio_path: str,
     output_format: str = "amr",
     output_path: str | None = None,
+    *,
+    sample_rate: int | None = None,
+    channels: int | None = None,
 ) -> str:
     """Convert an audio file to the requested format with ffmpeg.
 
@@ -1486,6 +1549,10 @@ async def convert_audio_format(
             ``wav``.
         output_path: Optional output file path. When omitted, a temporary path is
             created under AstrBot's temp directory.
+        sample_rate: Optional output sample rate in Hz. WAV output with explicit
+            conversion options is encoded as 16-bit PCM.
+        channels: Optional output channel count. WAV output with explicit
+            conversion options is encoded as 16-bit PCM.
 
     Returns:
         The converted audio file path.
@@ -1494,7 +1561,11 @@ async def convert_audio_format(
         Exception: Raised when ffmpeg is unavailable or conversion fails.
     """
     source_path = Path(audio_path)
-    if source_path.suffix.lower() == f".{output_format}":
+    if (
+        source_path.suffix.lower() == f".{output_format}"
+        and sample_rate is None
+        and channels is None
+    ):
         # The magic-byte probe performs synchronous file I/O. Keep it off the
         # event loop because this helper is called while processing messages.
         if not source_path.exists():
@@ -1537,6 +1608,12 @@ async def convert_audio_format(
         args.extend(["-acodec", "libopus", "-ac", "1", "-ar", "16000"])
     elif output_format == "opus":
         args.extend(["-acodec", "libopus", "-ac", "1", "-ar", "16000"])
+    if output_format == "wav" and (sample_rate is not None or channels is not None):
+        args.extend(["-acodec", "pcm_s16le"])
+    if sample_rate is not None:
+        args.extend(["-ar", str(sample_rate)])
+    if channels is not None:
+        args.extend(["-ac", str(channels)])
     args.append(output_path)
 
     try:
@@ -1545,7 +1622,24 @@ async def convert_audio_format(
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
         )
-        _, stderr = await process.communicate()
+        try:
+            _, stderr = await process.communicate()
+        except asyncio.CancelledError:
+            if process.returncode is None:
+                try:
+                    process.kill()
+                except ProcessLookupError:
+                    pass
+            await process.communicate()
+            if output_path and os.path.exists(output_path):
+                try:
+                    os.remove(output_path)
+                except OSError as e:
+                    logger.warning(
+                        "Failed to remove cancelled audio output file: %s",
+                        e,
+                    )
+            raise
         if process.returncode != 0:
             if output_path and os.path.exists(output_path):
                 try:
@@ -1585,13 +1679,21 @@ async def convert_audio_to_amr(audio_path: str, output_path: str | None = None) 
     )
 
 
-async def convert_audio_to_wav(audio_path: str, output_path: str | None = None) -> str:
+async def convert_audio_to_wav(
+    audio_path: str,
+    output_path: str | None = None,
+    *,
+    sample_rate: int | None = None,
+    channels: int | None = None,
+) -> str:
     """Convert an audio file to WAV format.
 
     Args:
         audio_path: Source audio file path.
         output_path: Optional output file path. When omitted, a temporary path is
             created under AstrBot's temp directory.
+        sample_rate: Optional output sample rate in Hz.
+        channels: Optional output channel count.
 
     Returns:
         The converted WAV file path.
@@ -1600,20 +1702,32 @@ async def convert_audio_to_wav(audio_path: str, output_path: str | None = None) 
         audio_path=audio_path,
         output_format="wav",
         output_path=output_path,
+        sample_rate=sample_rate,
+        channels=channels,
     )
 
 
-async def ensure_wav(audio_path: str, output_path: str | None = None) -> str:
-    """Ensure the audio path points to wav format by extension/guess and convert when needed.
+async def ensure_wav(
+    audio_path: str,
+    output_path: str | None = None,
+    *,
+    sample_rate: int | None = None,
+    channels: int | None = None,
+) -> str:
+    """Ensure audio is WAV, optionally normalizing its PCM encoding.
 
-    If the file appears to already be WAV, return it directly to avoid extra
-    conversion. If the file does not exist yet, return the original path so
-    upstream retry logic can handle platform races.
+    If the file appears to already be WAV and no conversion options are set,
+    return it directly to avoid extra conversion. If the file does not exist yet,
+    return the original path so upstream retry logic can handle platform races.
 
     Args:
         audio_path: Local audio path to inspect and convert when needed.
         output_path: Optional destination path. When omitted, conversion helpers
             create a temporary file under AstrBot's temp directory.
+        sample_rate: Optional output sample rate in Hz. Setting conversion options
+            forces WAV input to be re-encoded as 16-bit PCM.
+        channels: Optional output channel count. Setting conversion options forces
+            WAV input to be re-encoded as 16-bit PCM.
 
     Returns:
         The original path when it is already WAV or unavailable; otherwise the
@@ -1633,7 +1747,7 @@ async def ensure_wav(audio_path: str, output_path: str | None = None) -> str:
         return audio_path
 
     audio_type = _get_audio_magic_type(audio_path)
-    if audio_type == "wav":
+    if audio_type == "wav" and sample_rate is None and channels is None:
         return audio_path
 
     if audio_type == "silk":
@@ -1643,9 +1757,22 @@ async def ensure_wav(audio_path: str, output_path: str | None = None) -> str:
             output_path = os.path.join(
                 temp_dir, f"media_audio_{generate_timestamp_id()}.wav"
             )
-        return await tencent_silk_to_wav(audio_path, output_path)
+        if sample_rate is None and channels is None:
+            return await tencent_silk_to_wav(audio_path, output_path)
+        return await tencent_silk_to_wav(
+            audio_path,
+            output_path,
+            sample_rate=sample_rate or 24000,
+        )
 
-    return await convert_audio_to_wav(audio_path, output_path)
+    if sample_rate is None and channels is None:
+        return await convert_audio_to_wav(audio_path, output_path)
+    return await convert_audio_to_wav(
+        audio_path,
+        output_path,
+        sample_rate=sample_rate,
+        channels=channels,
+    )
 
 
 async def ensure_jpeg(image_path: str, output_path: str | None = None) -> str:
@@ -1801,8 +1928,8 @@ def _get_audio_magic_type(audio_path: str) -> str:
     if header.startswith(b"#!SILK_V3"):
         return "silk"
 
-    # Tencent SILK: leading \x02 byte before #!SILK_V3
-    if header.startswith(b"\x02#!SILK_V3"):
+    # Tencent SILK may have a leading 0x02 or 0x03 marker before the header.
+    if header.startswith((b"\x02#!SILK_V3", b"\x03#!SILK_V3")):
         return "silk"
 
     return ""

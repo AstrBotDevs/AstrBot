@@ -14,37 +14,38 @@ if TYPE_CHECKING:
 def _build_event(umo: Any, sdk_event: Any, context: Context) -> Any:
     """Build the agent event for a plugin-initiated run.
 
-    When the SDK MessageEvent is available its real fields are preserved
-    (sender, text, timestamp); otherwise a minimal UMO-only event is built,
-    mirroring the CronMessageEvent pattern.
+    Args:
+        umo: Target SDK session.
+        sdk_event: Optional triggering SDK event.
+        context: Host context used for message delivery.
+
+    Returns:
+        A Host event scoped to the requested session.
     """
-    from astrbot.core.cron.events import CronMessageEvent
-    from astrbot.core.platform.message_session import (
-        MessageSesion as MessageSession,
-    )
+    from astrbot.core.platform.agent_wakeup_event import AgentWakeupEvent
+    from astrbot.core.platform.astrbot_message import MessageMember
+    from astrbot.core.platform.message_session import MessageSession
+    from astrbot.core.platform.platform_metadata import PlatformMetadata
 
-    from ..convert import to_core_message_type
+    from ..convert import to_umo_string
 
-    session = MessageSession(
-        platform_name=umo.platform_id,
-        message_type=to_core_message_type(umo.message_type),
-        session_id=umo.session_id,
-    )
-    if sdk_event is not None:
-        return CronMessageEvent(
-            context=context,
-            session=session,
-            message=sdk_event.text,
-            sender_id=sdk_event.sender.id,
-            sender_name=sdk_event.sender.name,
-            message_type=session.message_type,
-        )
-    return CronMessageEvent(
+    session = MessageSession.from_str(to_umo_string(umo))
+    event = AgentWakeupEvent(
         context=context,
         session=session,
-        message="",
-        message_type=session.message_type,
+        platform_meta=PlatformMetadata(
+            name=sdk_event.platform_type if sdk_event else session.platform_id,
+            description="SDK plugin agent run",
+            id=session.platform_id,
+        ),
+        prompt=sdk_event.text if sdk_event else "",
+        source="plugin",
     )
+    if sdk_event is not None:
+        event.message_obj.sender = MessageMember(
+            user_id=sdk_event.sender.id, nickname=sdk_event.sender.name
+        )
+    return event
 
 
 class AgentRunService:
@@ -93,7 +94,7 @@ class AgentRunService:
             AgentContextWrapper,
             AstrAgentContext,
         )
-        from astrbot.core.astr_agent_tool_exec import FunctionToolExecutor
+        from astrbot.core.astr_agent_runtime.tool_executor import FunctionToolExecutor
         from astrbot.core.provider.entities import ProviderRequest
         from astrbot.core.provider.register import llm_tools
 
@@ -105,16 +106,16 @@ class AgentRunService:
         if provider is None:
             raise NotFound("no chat provider available")
 
-        # Legacy tool_loop_agent semantics: no tools by default; a names
-        # list offers exactly those tools.
+        # A Runner can select only tools registered by its own bridge.
         tool_names = payload.get("tools")
         toolset: ToolSet | None = None
         if tool_names:
             toolset = ToolSet()
             for name in tool_names:
-                tool = llm_tools.get_func(str(name))
-                if tool is not None:
-                    toolset.add_tool(tool)
+                if name in self._tool_names:
+                    tool = llm_tools.get_func(name)
+                    if tool is not None:
+                        toolset.add_tool(tool)
 
         from ..convert import to_core_context_message
 

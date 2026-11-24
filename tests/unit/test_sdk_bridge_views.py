@@ -11,22 +11,16 @@ from astrbot.core.star.star import star_map
 from astrbot.dashboard.services.plugin_page_service import PluginPageService
 from tests.unit.test_sdk_bridge import FakeKVStore
 
-
-async def _empty_snapshot(_context):
-    """Stub out the legacy host-state snapshot for MagicMock contexts."""
-    return {}
-
-
 PLUGIN_SOURCE = """
-from astrbot.api.star import Context, Star
+from astrbot_sdk import Plugin
 
 
-class ViewsBridgePlugin(Star):
+class ViewsBridgePlugin(Plugin):
     pass
 """
 
 
-def write_legacy_views_plugin(plugin_root: Path) -> None:
+def write_sdk_views_plugin(plugin_root: Path) -> None:
     plugin_root.mkdir()
     (plugin_root / "metadata.yaml").write_text(
         yaml.safe_dump(
@@ -35,8 +29,13 @@ def write_legacy_views_plugin(plugin_root: Path) -> None:
                 "desc": "views bridge test plugin",
                 "author": "AstrBot",
                 "version": "1.0.0",
-                "runtime": {"isolated": True},
-                "views": [{"name": "demo", "title": "Demo Page"}],
+                "schema_version": 2,
+                "runtime": {
+                    "api": "sdk",
+                    "entrypoint": "main:ViewsBridgePlugin",
+                    "sdk_version": ">=0.1,<0.2",
+                },
+                "pages": [{"name": "demo", "title": "Demo Page"}],
             },
         ),
         "utf-8",
@@ -70,7 +69,7 @@ async def test_bridge_views_served_via_pipeline(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     plugin_root = tmp_path / "views_bridge_test"
-    write_legacy_views_plugin(plugin_root)
+    write_sdk_views_plugin(plugin_root)
     monkeypatch.setattr(
         "astrbot.core.star.sdk_bridge.services.storage.sp",
         FakeKVStore(),
@@ -80,13 +79,9 @@ async def test_bridge_views_served_via_pipeline(
         lambda: tmp_path / "assets",
     )
 
-    monkeypatch.setattr(
-        "astrbot.core.star.sdk_bridge.bridge.build_legacy_snapshot",
-        _empty_snapshot,
-    )
     context = MagicMock()
     context.registered_web_apis = []
-    bridge = SDKPluginBridge(plugin_root, context, legacy=True)
+    bridge = SDKPluginBridge(plugin_root, context)
     manager = MagicMock()
     manager._sdk_plugin_manager = MagicMock()
     manager._sdk_plugin_manager.bridges = {plugin_root.name: bridge}
@@ -98,7 +93,9 @@ async def test_bridge_views_served_via_pipeline(
         metadata = star_map[bridge.module_path]
         # metadata.yaml's views declaration and the manifest's i18n both
         # reached the registry entry.
-        assert metadata.views == [{"name": "demo", "title": "Demo Page"}]
+        assert [(view.name, view.title) for view in metadata.views] == [
+            ("demo", "Demo Page")
+        ]
         assert metadata.i18n == {"zh-CN": {"views": {"demo": {"title": "演示页"}}}}
         assert bridge._views_manifest["pages"][0]["name"] == "demo"
 

@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import sys
 from pathlib import Path
 from unittest.mock import MagicMock
 
@@ -10,10 +9,9 @@ import yaml
 from astrbot.core.message.components import Plain as CorePlain
 from astrbot.core.message.message_event_result import MessageEventResult
 from astrbot.core.pipeline.context_utils import call_event_hook
-from astrbot.core.provider.entities import LLMResponse, ProviderRequest
+from astrbot.core.provider.entities import ProviderRequest
 from astrbot.core.star.sdk_bridge import SDKPluginBridge
-from astrbot.core.star.star_handler import EventType, star_handlers_registry
-
+from astrbot.core.star.star_handler import EventType
 from tests.unit.test_sdk_bridge import FakeCoreEvent, FakeKVStore
 
 
@@ -214,8 +212,7 @@ class TestPlugin(Plugin):
             "traceback...",
         )
         assert (
-            kv.data.get(("plugin", bridge.plugin_id, "error_plugin"))
-            == "some_plugin"
+            kv.data.get(("plugin", bridge.plugin_id, "error_plugin")) == "some_plugin"
         )
 
         # plugin_loaded fires with StarMetadata (no event) during start.

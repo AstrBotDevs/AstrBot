@@ -65,96 +65,21 @@ def resolve_dependency_source(plugin_root: Path) -> Path | None:
     return None
 
 
-# pip options that take a value; hoisted from requirement lines into the
-# installer argv so uv (and the pip fallback) accept pip-style declarations
-# like "torch --index-url https://download.pytorch.org/whl/cpu".
-_OPTION_FLAGS_WITH_VALUE = {
-    "-i",
-    "--index-url",
-    "--extra-index-url",
-    "-f",
-    "--find-links",
-    "--trusted-host",
-}
-
-
-def _read_requirement_lines(source: Path) -> tuple[list[str], list[str]]:
-    """Parse a requirements.txt into (requirement lines, installer options).
-
-    Mirrors pip's tolerance: UTF-8 BOM is dropped, inline comments after
-    whitespace are stripped, global option lines and per-requirement index
-    options are hoisted into the installer argument list.
-    """
-    requirements: list[str] = []
-    options: list[str] = []
-    for raw in source.read_text(encoding="utf-8-sig").splitlines():
-        line = re.sub(r"\s+#.*$", "", raw).strip()
-        if not line or line.startswith("#"):
-            continue
-        tokens = line.split()
-        if tokens[0] in _OPTION_FLAGS_WITH_VALUE:
-            options.extend(tokens)
-            continue
-        if len(tokens) > 1 and any(
-            token in _OPTION_FLAGS_WITH_VALUE for token in tokens[1:]
-        ):
-            hoisted: list[str] = []
-            index = 1
-            while index < len(tokens):
-                flag = tokens[index]
-                if flag in _OPTION_FLAGS_WITH_VALUE and index + 1 < len(tokens):
-                    hoisted.extend([flag, tokens[index + 1]])
-                    index += 2
-                elif any(
-                    flag.startswith(f"{known}=") for known in _OPTION_FLAGS_WITH_VALUE
-                ):
-                    hoisted.append(flag)
-                    index += 1
-                else:
-                    break
-            else:
-                options.extend(hoisted)
-                requirements.append(tokens[0])
-                continue
-        requirements.append(line)
-    return requirements, options
-
-
 def _effective_requirements(
     source: Path,
-    logger: logging.Logger,
-) -> tuple[list[str], list[str]]:
-    """Read the dependency declaration into requirement specifiers.
-
-    The host package itself (astrbot) is dropped: plugins run against the
-    core environment linked into the venv, and a second copy would shadow
-    it for no benefit. Local relative paths are absolutized against the
-    plugin directory so they can be passed as install arguments.
-
-    Returns:
-        A (requirements, installer options) pair; options are pip-style
-        index/find-links flags hoisted out of requirements.txt lines.
-    """
-    options: list[str] = []
+) -> list[str]:
+    """Read dependency specifiers and make relative local paths absolute."""
     if source.name == "pyproject.toml":
         with source.open("rb") as file:
-            requirements = list(tomllib.load(file)["project"]["dependencies"])
+            requirements = tomllib.load(file)["project"]["dependencies"]
     else:
-        requirements, options = _read_requirement_lines(source)
+        requirements = [
+            line.strip()
+            for line in source.read_text(encoding="utf-8").splitlines()
+            if line.strip() and not line.lstrip().startswith("#")
+        ]
     effective: list[str] = []
     for requirement in requirements:
-        name = re.split(r"[<>=~!;\[ @]", requirement, maxsplit=1)[0].strip()
-        if name.lower() in {"astrbot", "astrbot-core"}:
-            logger.info(
-                f"Ignoring self-referential dependency {requirement!r} in "
-                f"{source.name}: plugins run against the core environment",
-            )
-            continue
-        if name.lower() in sys.stdlib_module_names:
-            logger.info(
-                f"Ignoring stdlib dependency {requirement!r} in {source.name}",
-            )
-            continue
         candidate = source.parent / requirement
         if (
             not re.match(r"^[a-zA-Z0-9_.-]+\s*(@|\[|<|>|=|~|!|;|$)", requirement)
@@ -162,7 +87,7 @@ def _effective_requirements(
         ):
             requirement = str(candidate)
         effective.append(requirement)
-    return effective, options
+    return effective
 
 
 def _fingerprint(source: Path) -> str:
@@ -222,7 +147,6 @@ async def _run(argv: list[str], cwd: Path, logger: logging.Logger) -> None:
 
 async def _install(
     requirements: list[str],
-    options: list[str],
     cwd: Path,
     venv_python: Path,
     logger: logging.Logger,
@@ -238,7 +162,6 @@ async def _install(
                 "install",
                 "--python",
                 str(venv_python),
-                *options,
                 *requirements,
             ],
             cwd,
@@ -252,7 +175,7 @@ async def _install(
             raise
     # Fallback: stdlib venv pip.
     await _run(
-        [str(venv_python), "-m", "pip", "install", *options, *requirements],
+        [str(venv_python), "-m", "pip", "install", *requirements],
         cwd,
         logger,
     )
@@ -313,7 +236,7 @@ async def ensure_plugin_venv(
     source = resolve_dependency_source(plugin_root)
     if source is None:
         return None
-    requirements, options = _effective_requirements(source, logger)
+    requirements = _effective_requirements(source)
     if not requirements:
         return None
 
@@ -345,18 +268,7 @@ async def ensure_plugin_venv(
             logger,
         )
         _link_core_site_packages(venv_dir)
-        try:
-            await _install(requirements, options, plugin_root, python, logger)
-        except RuntimeError as exc:
-            # Best effort: load the plugin against the core environment and
-            # retry the install on the next load (no marker is written). A
-            # genuinely missing dependency then fails loudly at import time
-            # with the plugin's own error instead of a venv failure.
-            logger.error(
-                f"Dependency installation failed for {plugin_root.name}; "
-                f"loading against the core environment: {exc}"
-            )
-            return python
+        await _install(requirements, plugin_root, python, logger)
         marker.write_text(
             json.dumps({"fingerprint": fingerprint, "source": source.name}),
             encoding="utf-8",

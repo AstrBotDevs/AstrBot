@@ -71,22 +71,6 @@ def _json_safe(value: Any) -> Any:
     return str(value)
 
 
-def _raw_message_safe(raw: Any) -> Any:
-    """Serialize message_obj.raw_message for the wire.
-
-    Legacy plugins introspect the platform-native payload (e.g. a telegram
-    Update or an aiocqhttp event dict). Prefer the object's own to_dict()
-    when present, then strip non-JSON values.
-    """
-    to_dict = getattr(raw, "to_dict", None)
-    if callable(to_dict):
-        try:
-            raw = to_dict()
-        except Exception:
-            pass
-    return _json_safe(raw)
-
-
 def _http_source(*candidates: Any) -> str | None:
     """Return the first public URL among candidate media references."""
     for candidate in candidates:
@@ -295,20 +279,6 @@ def to_sdk_event(
         timestamp=timestamp,
         command=command,
         is_wake=event.is_wake,
-        # waking_check fills plugins_name before handlers run; legacy plugins
-        # read it off the event, so carry it through the wire extras. Same
-        # for message_obj.self_id (bot account id on the platform).
-        extras={
-            "plugins_name": getattr(event, "plugins_name", None),
-            "self_id": getattr(event.message_obj, "self_id", "") or "",
-            # waking_check strips the wake prefix from event.message_str
-            # before handlers run; legacy plugins read the stripped text
-            # (e.g. for slicing off the command name), so carry it through.
-            "message_str": event.message_str,
-            "raw_message": _raw_message_safe(
-                getattr(event.message_obj, "raw_message", None)
-            ),
-        },
     )
 
 
@@ -405,31 +375,6 @@ def to_core_chain(
                     uin=segment.sender_id,
                 ),
             )
-        elif isinstance(segment, UnknownSegment):
-            # The legacy compat layer carries components without a new SDK
-            # counterpart as typed unknown segments; rebuild the core form.
-            if segment.segment_type == "Poke":
-                components.append(
-                    core_comp.Poke(
-                        poke_type=segment.data.get("poke_type", "126"),
-                        id=segment.data.get("user_id") or 0,
-                    ),
-                )
-            elif segment.segment_type == "Json":
-                components.append(core_comp.Json(data=segment.data.get("data")))
-            elif segment.segment_type == "Share":
-                components.append(
-                    core_comp.Share(
-                        url=str(segment.data.get("url", "")),
-                        title=str(segment.data.get("title", "")),
-                        content=str(segment.data.get("content", "")),
-                        image=str(segment.data.get("image", "")),
-                    ),
-                )
-            else:
-                raise ValueError(
-                    f"unsupported outbound segment type: {segment.segment_type!r}",
-                )
         else:
             raise ValueError(f"unsupported outbound segment: {type(segment)!r}")
     return components

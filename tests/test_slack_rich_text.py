@@ -115,3 +115,68 @@ def test_slack_quote_keeps_boundaries_around_mentions(before_mention, after_ment
         f"Question:\n{before_mention}{after_mention}\nNext paragraph"
     )
     assert [c.qq for c in components if isinstance(c, At)] == ["UOTHER"]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("style", ["bullet", "ordered"])
+async def test_slack_list_preserves_links_and_mentions(style):
+    adapter = SlackAdapter(
+        make_platform_config("slack", bot_token="xoxb-test", app_token="xapp-test"),
+        {},
+        asyncio.Queue(),
+    )
+    adapter.bot_self_id = "UBOT"
+    adapter.web_client.users_info = AsyncMock(
+        return_value={"user": {"real_name": "Tester"}},
+    )
+    adapter.web_client.conversations_info = AsyncMock(
+        return_value={"channel": {"is_im": False, "name": "test"}},
+    )
+    url = "https://example.com/slack-list-8642"
+    received = await adapter.convert_message(
+        {
+            "user": "UTEST",
+            "channel": "CTEST",
+            "text": f"<@UBOT> Link: {url}",
+            "blocks": [
+                {
+                    "type": "rich_text",
+                    "elements": [
+                        {
+                            "type": "rich_text_list",
+                            "style": style,
+                            "elements": [
+                                {
+                                    "type": "rich_text_section",
+                                    "elements": [
+                                        {"type": "user", "user_id": "UBOT"},
+                                        {"type": "text", "text": " Link: "},
+                                        {"type": "link", "url": url, "text": "Probe"},
+                                        {"type": "text", "text": " after"},
+                                    ],
+                                },
+                                {
+                                    "type": "rich_text_section",
+                                    "elements": [{"type": "link", "url": url}],
+                                },
+                                {
+                                    "type": "rich_text_section",
+                                    "elements": [{"type": "user", "user_id": "UOTHER"}],
+                                },
+                                {
+                                    "type": "rich_text_section",
+                                    "elements": [{"type": "text", "text": "End"}],
+                                },
+                            ],
+                        },
+                    ],
+                },
+            ],
+        },
+    )
+
+    assert [c.qq for c in received.message if isinstance(c, At)] == ["UBOT", "UOTHER"]
+    assert received.message_str == (
+        f"•  Link: [Probe]({url}) after\n• [{url}]({url})\n• \n• End"
+    )
+    assert [type(c) for c in received.message] == [Plain, At, Plain, At, Plain]

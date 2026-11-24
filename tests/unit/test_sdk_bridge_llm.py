@@ -1,20 +1,17 @@
 from __future__ import annotations
 
-import sys
 from pathlib import Path
-from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 import yaml
+from astrbot_sdk.errors import NotFound
+from astrbot_sdk.llm import ProviderKind
 
 from astrbot.core.provider.entities import LLMResponse, ProviderMeta, ProviderType
 from astrbot.core.star.sdk_bridge import SDKPluginBridge
 from astrbot.core.star.sdk_bridge.services.llm import LLMGenerateService
 from astrbot.core.star.star_handler import star_handlers_registry
-from astrbot_sdk.errors import NotFound
-from astrbot_sdk.llm import ProviderKind
-
 from tests.unit.test_sdk_bridge import FakeCoreEvent, FakeKVStore
 
 
@@ -164,7 +161,7 @@ async def test_bridge_llm_end_to_end(
             name = command.split()[0]
             handler = handlers[f"sdk_bridge.{plugin_root.name}_{name}"]
             event = FakeCoreEvent(command)
-            assert handler.event_filters[0].filter(event, None)
+            assert handler.event_filters[0].filter(event, {})
             params = event.get_extra("parsed_params") or {}
             replies = []
             async for _ in handler.handler(event, **params):

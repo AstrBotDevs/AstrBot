@@ -6,6 +6,8 @@ import types
 from pathlib import Path
 from typing import Generic, TypeVar
 
+from google.genai import types as genai_types
+
 REPO_ROOT = Path(__file__).resolve().parents[2]
 TOOL_MODULE_PATH = REPO_ROOT / "astrbot/core/agent/tool.py"
 
@@ -75,6 +77,49 @@ def test_google_schema_fills_missing_array_items_with_string_schema():
 
     assert source_uuids["type"] == "array"
     assert source_uuids["items"] == {"type": "string"}
+
+
+def test_google_schema_keeps_enums_only_on_string_fields():
+    tool_module = load_tool_module()
+    FunctionTool = tool_module.FunctionTool
+    ToolSet = tool_module.ToolSet
+
+    tool = FunctionTool(
+        name="list_items",
+        description="List items.",
+        parameters={
+            "type": "object",
+            "properties": {
+                "page_size": {
+                    "type": "integer",
+                    "description": "Items per page.",
+                    "enum": [10, 20, 50],
+                },
+                "strict": {"type": "boolean", "enum": [True]},
+                "order": {"type": ["string", "null"], "enum": ["asc", "desc", None]},
+            },
+        },
+    )
+
+    schema = ToolSet([tool]).google_schema()
+    properties = schema["function_declarations"][0]["parameters"]["properties"]
+
+    assert properties["page_size"] == {
+        "type": "integer",
+        "description": "Items per page.\nAllowed values: 10, 20, 50",
+    }
+    assert properties["strict"] == {
+        "type": "boolean",
+        "description": "Allowed values: true",
+    }
+    assert properties["order"] == {
+        "type": "string",
+        "enum": ["asc", "desc"],
+        "nullable": True,
+    }
+    assert tool.parameters["properties"]["page_size"]["enum"] == [10, 20, 50]
+    # The Gemini SDK rejects non-string enum values when the request is built.
+    genai_types.Tool(function_declarations=schema["function_declarations"])
 
 
 def test_openai_schema_sorts_tools_by_name_without_mutating_toolset_order():

@@ -16,7 +16,9 @@ import certifi
 
 from astrbot.api import sp
 from astrbot.core import DEMO_MODE, file_token_service, logger
-from astrbot.core.computer.computer_client import sync_skills_to_active_sandboxes
+from astrbot.core.astr_agent_runtime.computer.computer_client import (
+    sync_skills_to_active_sandboxes,
+)
 from astrbot.core.repository import (
     GitUnavailableError,
     normalize_repository_url,
@@ -27,7 +29,6 @@ from astrbot.core.star.filter.command import CommandFilter
 from astrbot.core.star.filter.command_group import CommandGroupFilter
 from astrbot.core.star.filter.permission import PermissionTypeFilter
 from astrbot.core.star.filter.regex import RegexFilter
-from astrbot.core.star.sdk_bridge.detect import is_sdk_plugin_dir
 from astrbot.core.star.star import StarMetadata
 from astrbot.core.star.star_handler import EventType, star_handlers_registry
 from astrbot.core.star.star_manager import (
@@ -54,7 +55,6 @@ PLUGIN_COMPONENT_TYPE_ORDER = {
 
 LogoTokenResolver = Callable[[str], Awaitable[str | None]]
 InstalledAtResolver = Callable[[StarMetadata], str | None]
-PluginPagesResolver = Callable[[StarMetadata], Awaitable[list]]
 PluginPagesSerializer = Callable[[StarMetadata], Awaitable[list[dict]]]
 
 
@@ -165,64 +165,13 @@ class PluginService:
         await self.sync_skills_after_plugin_change()
         return None, "重载成功。"
 
-    async def set_plugin_runtime(self, data: object) -> tuple[None, str]:
-        """Switch a legacy plugin between in-process and isolated runtime.
-
-        Args:
-            data: Mapping with "name" (plugin name) and "runtime"
-                ("isolated" or "in-process").
-
-        Returns:
-            Success message tuple.
-
-        Raises:
-            PluginServiceError: Plugin not found, unsupported runtime, or
-                the switch failed.
-        """
-        self._ensure_not_demo()
-        payload = data if isinstance(data, dict) else {}
-        plugin_name = str(payload.get("name") or "").strip()
-        runtime = str(payload.get("runtime") or "").strip()
-        if runtime not in ("isolated", "in-process"):
-            raise PluginServiceError(
-                f"不支持的运行环境: {runtime}",
-                public_message="不支持的运行环境",
-            )
-        root_dir_name = None
-        for star in self.plugin_manager.context.get_all_stars():
-            if star.name == plugin_name:
-                root_dir_name = star.root_dir_name
-                break
-        if not root_dir_name and os.path.isdir(
-            os.path.join(self.plugin_manager.plugin_store_path, plugin_name),
-        ):
-            # Failed plugins are absent from star_registry; the dashboard
-            # refers to them by directory name.
-            root_dir_name = plugin_name
-        if not root_dir_name:
-            raise PluginServiceError(
-                f"未找到插件: {plugin_name}",
-                public_message="未找到插件",
-            )
-        success, message = await self.plugin_manager.set_plugin_runtime(
-            root_dir_name,
-            runtime,
-        )
-        if not success:
-            raise PluginServiceError(
-                message or "切换运行环境失败",
-                public_message="切换运行环境失败",
-            )
-        await self.sync_skills_after_plugin_change()
-        return None, "运行环境已切换。"
-
     async def list_plugins(
         self,
         *,
         plugin_name: str | None,
         logo_token_resolver: LogoTokenResolver,
         installed_at_resolver: InstalledAtResolver,
-        discover_pages: PluginPagesResolver,
+        serialize_pages: PluginPagesSerializer,
     ) -> tuple[list[dict], str | None]:
         plugins = [
             plugin
@@ -233,7 +182,7 @@ class PluginService:
 
         async def process_plugin(plugin: StarMetadata):
             logo_url = await self.resolve_plugin_logo_url(plugin, logo_token_resolver)
-            pages = await discover_pages(plugin)
+            pages = await serialize_pages(plugin)
             return plugin, logo_url, pages
 
         results = await asyncio.gather(*(process_plugin(plugin) for plugin in plugins))
@@ -252,7 +201,8 @@ class PluginService:
                             install_sources,
                         ),
                     ),
-                    "pages": [page.name for page in pages],
+                    "pages": [page["name"] for page in pages],
+                    "views": pages,
                 }
             )
         return payload, getattr(self.plugin_manager, "failed_plugin_info", None)
@@ -263,13 +213,13 @@ class PluginService:
         plugin_name: str | None,
         logo_token_resolver: LogoTokenResolver,
         installed_at_resolver: InstalledAtResolver,
-        discover_pages: PluginPagesResolver,
+        serialize_pages: PluginPagesSerializer,
     ) -> tuple[list[dict], str | None]:
         return await self.list_plugins(
             plugin_name=plugin_name,
             logo_token_resolver=logo_token_resolver,
             installed_at_resolver=installed_at_resolver,
-            discover_pages=discover_pages,
+            serialize_pages=serialize_pages,
         )
 
     async def get_plugin_detail(
@@ -680,41 +630,14 @@ class PluginService:
             ]
         )
 
-    def _resolve_runtime_info(self, plugin: StarMetadata) -> tuple[str, bool]:
-        """Resolve a plugin's runtime mode and whether it can be switched.
-
-        Only locally installed legacy plugins can switch between in-process
-        and isolated; new SDK plugins are always isolated, external bridge
-        plugins and reserved builtin plugins are not switchable.
-
-        Args:
-            plugin: Loaded plugin metadata.
-
-        Returns:
-            Tuple of (runtime, runtime_switchable) where runtime is
-            "isolated" or "in-process".
-        """
-        runtime = (
-            "isolated"
-            if str(plugin.module_path or "").startswith("sdk_bridge.")
-            else "in-process"
-        )
-        if plugin.reserved or not plugin.root_dir_name:
-            return runtime, False
-        plugin_dir = Path(self.plugin_manager.plugin_store_path) / plugin.root_dir_name
-        if not plugin_dir.is_dir() or is_sdk_plugin_dir(plugin_dir):
-            return runtime, False
-        return runtime, True
-
+    @staticmethod
     def serialize_plugin_base(
-        self,
         plugin: StarMetadata,
         *,
         logo_url: str | None,
         installed_at: str | None,
         install_source: dict[str, Any] | None,
     ) -> dict:
-        runtime, runtime_switchable = self._resolve_runtime_info(plugin)
         install_method = (
             str(install_source.get("install_method") or "").strip().lower()
             if isinstance(install_source, dict)
@@ -741,8 +664,6 @@ class PluginService:
             "i18n": plugin.i18n,
             "root_dir_name": plugin.root_dir_name,
             "install_source": install_source,
-            "runtime": runtime,
-            "runtime_switchable": runtime_switchable,
             "updates_enabled": updates_enabled,
             "update_disabled_reason": ""
             if updates_enabled
@@ -780,7 +701,7 @@ class PluginService:
                 "title": page["title"],
                 "page_name": page["name"],
                 "i18n_key": page["i18n_key"],
-                "description": "Plugin Page entry",
+                "description": page.get("description", ""),
                 "plugin_name": plugin.name,
                 "plugin_marketplace_name": (plugin.name or "").replace("_", "-"),
             }
@@ -945,6 +866,10 @@ class PluginService:
                 fallback_desc,
             ),
         }
+        handler_md = getattr(command_filter, "handler_md", None)
+        if handler_md:
+            component["handler_full_name"] = handler_md.handler_full_name
+            component["handler_name"] = handler_md.handler_name
         return self._wrap_command_component(parts[:-1], component)
 
     def _build_command_group_component(
@@ -988,10 +913,15 @@ class PluginService:
                 component["subcommands"] = subcommands
             return component
 
-        return {
+        component = {
             "name": command_filter.command_name,
             "description": self._get_command_description(command_filter),
         }
+        handler_md = getattr(command_filter, "handler_md", None)
+        if handler_md:
+            component["handler_full_name"] = handler_md.handler_full_name
+            component["handler_name"] = handler_md.handler_name
+        return component
 
     @staticmethod
     def _wrap_command_component(parent_names: list[str], component: dict) -> dict:

@@ -1,5 +1,6 @@
 <script setup>
 import { ref, shallowRef, computed, watch } from 'vue';
+import { useRoute, useRouter } from 'vue-router';
 import { useCustomizerStore } from '../../../stores/customizer';
 import { useMobileDrawerStore } from '@/stores/mobileDrawer';
 import { useI18n } from '@/i18n/composables';
@@ -7,13 +8,15 @@ import sidebarItems, { EXTENSION_GROUP_KEY } from './sidebarItem';
 import NavItem from './NavItem.vue';
 import { usePluginSidebarItems } from '@/composables/usePluginSidebarItems';
 import { useDisplay } from 'vuetify';
-import { ChevronDown, ChevronRight, PanelLeft, Settings } from '@lucide/vue';
+import { ArrowLeft, ChevronDown, ChevronRight, MessageCircle, PanelLeft, Settings } from '@lucide/vue';
 import ChatUILogo from '@/components/chat/ChatUILogo.vue';
 import { useCommonStore } from '@/stores/common';
 
 const { t } = useI18n();
 
 const customizer = useCustomizerStore();
+const route = useRoute();
+const router = useRouter();
 const mobileDrawer = useMobileDrawerStore();
 const commonStore = useCommonStore();
 const { pluginItems, pluginGroups } = usePluginSidebarItems();
@@ -41,7 +44,7 @@ function toggleGroupByPlugin() {
 function collectGroupValues(items, values = new Set()) {
   items.forEach((item) => {
     if (item?.children && item.title) {
-      values.add(item.title);
+      values.add(item.value || item.title);
       collectGroupValues(item.children, values);
     }
   });
@@ -130,8 +133,10 @@ watch(pluginItems, () => {
 
 const { smAndDown: isMobile } = useDisplay();
 
+const isChatNavigation = computed(() => customizer.chatNavigationInSidebar &&
+  (route.path === '/chat' || route.path.startsWith('/chat/')));
 const isRailSidebar = computed(
-  () => !isMobile.value && customizer.mini_sidebar,
+  () => !isMobile.value && (isChatNavigation.value || customizer.mini_sidebar),
 );
 
 // Items visible in the sidebar: pinned extension items are lifted to the top
@@ -140,7 +145,7 @@ const isRailSidebar = computed(
 const visibleMenu = computed(() => {
   const pinnedSet = new Set(pinnedItems.value);
   const extTos = extensionTos.value;
-  const isOpen = (header) => isRailSidebar.value || !collapsedGroups.value.includes(header);
+  const isOpen = (header) => (customizer.mini_sidebar && !isMobile.value) || !collapsedGroups.value.includes(header);
   const pinned = [];
   const result = [];
   let currentHeader = null;
@@ -184,7 +189,26 @@ const visibleMenu = computed(() => {
 });
 const botVersion = computed(() => commonStore.astrbotVersion ? `v${commonStore.astrbotVersion}` : '');
 
+async function openChat() {
+  if (isChatNavigation.value) {
+    const previousRoute = sessionStorage.getItem('astrbot:last_bot_route') || '/';
+    await router.push(previousRoute.startsWith('/chat') ? '/' : previousRoute);
+    return;
+  }
+  sessionStorage.setItem('astrbot:last_bot_route', route.fullPath);
+  const sessionId = sessionStorage.getItem('astrbot:last_chat_route');
+  customizer.SET_CHAT_SIDEBAR_COLLAPSED(false);
+  // Load the chat chunk before changing the layout so both drawers start together.
+  await import('@/components/chat/Chat.vue');
+  await router.push(sessionId ? `/chat/${sessionId}` : '/chat');
+  if (isMobile.value) mobileDrawer.SET(true);
+}
+
 function toggleSidebar() {
+  if (isChatNavigation.value) {
+    void openChat();
+    return;
+  }
   if (isMobile.value) {
     mobileDrawer.SET(false);
     return;
@@ -203,40 +227,38 @@ function toggleSidebar() {
     :mobile-breakpoint="0"
     elevation="0"
     rail-width="56"
-    width="245"
+    :width="isRailSidebar ? 56 : 245"
+    :order="0"
     location="left"
     floating
     app
     class="leftSidebar"
-    :rail="isRailSidebar"
+    :class="{ 'sidebar-page-navigation': customizer.chatNavigationInSidebar, 'navigation-rail': isRailSidebar, 'chat-navigation-rail': isChatNavigation }"
   >
     <div class="sidebar-container">
       <div class="dashboard-sidebar-brand" :class="{ collapsed: isRailSidebar }" data-tauri-drag-region>
-        <div v-if="!isRailSidebar" class="dashboard-sidebar-brand-title Outfit">
-          <ChatUILogo class="dashboard-sidebar-brand-logo" />
+        <div class="dashboard-sidebar-brand-title Outfit">
+          <button
+            class="dashboard-sidebar-logo-button"
+            type="button"
+            :disabled="!isRailSidebar"
+            :aria-label="t(isChatNavigation ? 'core.navigation.backToNavigation' : 'core.navigation.expandSidebar')"
+            @click.stop="toggleSidebar"
+          >
+            <ChatUILogo class="dashboard-sidebar-brand-logo" />
+          </button>
           <span class="dashboard-sidebar-brand-copy">
             <span class="dashboard-sidebar-brand-name">AstrBot</span>
           </span>
         </div>
-        <button
-          v-if="isRailSidebar"
-          class="dashboard-sidebar-brand-toggle dashboard-sidebar-rail-btn"
-          type="button"
-          :aria-label="t('core.navigation.expandSidebar')"
-          @click.stop="toggleSidebar"
-        >
-          <span class="dashboard-sidebar-rail-icon-stack">
-            <ChatUILogo class="dashboard-sidebar-brand-logo dashboard-sidebar-brand-logo--collapsed" />
-            <PanelLeft :size="20" class="dashboard-sidebar-panel-toggle-icon" />
-          </span>
-        </button>
         <v-btn
-          v-else
           class="dashboard-sidebar-brand-toggle"
           icon
           rounded="sm"
           variant="text"
           :ripple="false"
+          :tabindex="isRailSidebar ? -1 : 0"
+          :aria-hidden="isRailSidebar"
           :aria-label="t('core.navigation.collapseSidebar')"
           @click.stop="toggleSidebar"
         >
@@ -245,10 +267,32 @@ function toggleSidebar() {
       </div>
 
       <v-list :class="['dashboard-sidebar-list', 'listitem', 'flex-grow-1', { 'hidden-scrollbar': isRailSidebar }]" v-model:opened="openedItems" :open-strategy="'multiple'">
-        <template v-for="(item, i) in visibleMenu" :key="item.header || item.title || item.to || `sidebar-item-${i}`">
+        <v-list-item
+          v-if="customizer.chatNavigationInSidebar"
+          class="dashboard-nav-item sidebar-chat-entry"
+          style="--indent-padding: 0px"
+          :aria-label="t(isChatNavigation ? 'core.navigation.backToNavigation' : 'core.navigation.chat')"
+          @click="openChat"
+        >
+          <template #prepend>
+            <span class="sidebar-chat-icon" :class="{ 'is-back': isChatNavigation }">
+              <MessageCircle :size="20" class="sidebar-chat-symbol" />
+              <ArrowLeft :size="20" class="sidebar-back-symbol" />
+            </span>
+          </template>
+          <v-list-item-title>{{ t('core.navigation.chat') }}</v-list-item-title>
+          <template #append><ChevronRight :size="16" /></template>
+          <v-tooltip v-if="isRailSidebar" activator="parent" location="right"
+            :text="t(isChatNavigation ? 'core.navigation.backToNavigation' : 'core.navigation.chat')" :open-delay="0" content-class="sidebar-rail-tooltip" />
+        </v-list-item>
+        <template
+          v-for="(item, i) in visibleMenu"
+          :key="item.to || item.value || item.header || item.title || `sidebar-item-${i}`"
+        >
           <div
             v-if="item.header"
-            v-show="!isRailSidebar"
+            :inert="isRailSidebar || undefined"
+            :aria-hidden="isRailSidebar"
             class="sidebar-group-header"
             :class="{ 'sidebar-group-header--toggle': item.collapsible }"
             @click="item.collapsible && toggleGroup(item.header)"
@@ -298,11 +342,11 @@ function toggleSidebar() {
           />
         </template>
       </v-list>
-      <div class="sidebar-footer">
+      <div class="sidebar-footer" :inert="isChatNavigation || undefined" :aria-hidden="isChatNavigation">
         <v-btn class="sidebar-footer-btn" :class="{ 'sidebar-footer-icon-btn': isRailSidebar }"
-          variant="text" :icon="isRailSidebar" to="/settings" :aria-label="t('core.navigation.settings')">
+          variant="text" to="/settings" :aria-label="t('core.navigation.settings')">
           <Settings :size="20" class="sidebar-footer-lucide-icon" />
-          <span v-if="!isRailSidebar">{{ t('core.navigation.settings') }}</span>
+          <span class="sidebar-footer-label">{{ t('core.navigation.settings') }}</span>
           <v-tooltip
             v-if="isRailSidebar"
             activator="parent"
@@ -312,7 +356,7 @@ function toggleSidebar() {
             content-class="sidebar-rail-tooltip"
           />
         </v-btn>
-        <div v-if="!isRailSidebar && botVersion" class="sidebar-footer-version">{{ botVersion }}</div>
+        <div v-if="botVersion" class="sidebar-footer-version">{{ botVersion }}</div>
       </div>
     </div>
   </v-navigation-drawer>
@@ -320,11 +364,13 @@ function toggleSidebar() {
 </template>
 
 <style scoped>
+/* Match the shell's dynamic viewport sizing so the drawer's bottom (last nav entries
+   and the Settings footer) stays above the mobile browsers' toolbar area. */
 .leftSidebar {
   top: 0 !important;
-  height: 100vh !important;
+  height: 100dvh !important;
   border-right: 0 !important;
-  background: rgb(var(--v-theme-surface)) !important;
+  background: var(--astrbot-chrome-bg, rgb(var(--v-theme-surface))) !important;
   user-select: none;
 }
 
@@ -332,6 +378,15 @@ function toggleSidebar() {
   display: flex;
   height: 100%;
   flex-direction: column;
+}
+
+.sidebar-chat-entry :deep(.v-list-item-title) {
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.sidebar-page-navigation .dashboard-sidebar-list {
+  margin-top: 8px;
 }
 
 .sidebar-group-header {
@@ -402,7 +457,7 @@ function toggleSidebar() {
 /* The header draws across the whole width, above the full-height sidebar. */
 :global(.leftSidebar .sidebar-container) {
   /* Seat the brand's top edge at the content area's top edge, fully below the toolbar. */
-  padding-top: calc(var(--astrbot-toolbar-height, 40px) - 10px);
+  padding-top: calc(var(--astrbot-toolbar-height, 42px) - 10px);
   box-sizing: border-box;
 }
 
@@ -413,10 +468,10 @@ function toggleSidebar() {
 }
 
 :global(html:not([data-astrbot-desktop-platform='macos']) .leftSidebar .dashboard-sidebar-brand) {
-  min-height: var(--astrbot-toolbar-height, 40px);
+  min-height: var(--astrbot-toolbar-height, 42px);
 }
 
-/* On macOS the sidebar stays transparent; the shared tint is painted behind it. */
+/* The shared tint is painted behind the sidebar; avoid stacking another layer. */
 :global(html[data-astrbot-desktop-platform='macos'] .leftSidebar) {
   background: transparent !important;
 }
@@ -424,7 +479,7 @@ function toggleSidebar() {
 /* A temporary (mobile) drawer floats above the page, so the vibrancy
    transparency would let content bleed through; keep it opaque instead. */
 :global(html[data-astrbot-desktop-platform='macos'] .leftSidebar.v-navigation-drawer--temporary) {
-  background: rgb(var(--v-theme-surface)) !important;
+  background: var(--astrbot-chrome-bg, rgb(var(--v-theme-surface))) !important;
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.16) !important;
   z-index: 1007 !important;
 }
@@ -502,61 +557,6 @@ function toggleSidebar() {
   color: rgba(var(--v-theme-on-surface), 0.9);
 }
 
-.dashboard-sidebar-rail-btn {
-  display: grid;
-  width: 36px;
-  height: 36px;
-  place-items: center;
-  padding: 0;
-  border: 0;
-  border-radius: 8px;
-  background: transparent;
-  color: rgb(var(--v-theme-on-surface));
-  cursor: pointer;
-}
-
-.dashboard-sidebar-rail-icon-stack {
-  display: grid;
-  width: 24px;
-  height: 24px;
-  place-items: center;
-}
-
-.dashboard-sidebar-rail-icon-stack > * {
-  grid-area: 1 / 1;
-}
-
-.dashboard-sidebar-brand-logo--collapsed,
-.dashboard-sidebar-panel-toggle-icon {
-  transition:
-    opacity 0.14s ease,
-    visibility 0.14s ease;
-}
-
-.dashboard-sidebar-brand-logo--collapsed {
-  width: 20px;
-  height: 20px;
-  opacity: 1;
-  visibility: visible;
-}
-
-.dashboard-sidebar-rail-icon-stack .dashboard-sidebar-panel-toggle-icon {
-  opacity: 0;
-  visibility: hidden;
-}
-
-.dashboard-sidebar-brand-toggle:hover .dashboard-sidebar-brand-logo--collapsed,
-.dashboard-sidebar-brand-toggle:focus-visible .dashboard-sidebar-brand-logo--collapsed {
-  opacity: 0;
-  visibility: hidden;
-}
-
-.dashboard-sidebar-brand-toggle:hover .dashboard-sidebar-panel-toggle-icon,
-.dashboard-sidebar-brand-toggle:focus-visible .dashboard-sidebar-panel-toggle-icon {
-  opacity: 1;
-  visibility: visible;
-}
-
 .dashboard-sidebar-list {
   flex: 1 1 auto;
   overflow-y: auto;
@@ -567,7 +567,7 @@ function toggleSidebar() {
   min-height: 36px !important;
   margin-bottom: 2px !important;
   padding-inline-start: calc(10px + var(--indent-padding) / 2) !important;
-  border-radius: 8px !important;
+  border-radius: var(--astrbot-radius-navigation) !important;
   color: rgba(var(--v-theme-on-surface), 0.76) !important;
 }
 
@@ -589,6 +589,8 @@ function toggleSidebar() {
 
 .leftSidebar :deep(.dashboard-nav-item .v-list-item__prepend) {
   min-width: 0;
+  width: 20px;
+  justify-content: center;
   margin-inline-end: 12px;
 }
 
@@ -621,7 +623,7 @@ function toggleSidebar() {
   justify-content: flex-start !important;
   gap: 0;
   padding-inline: 10px !important;
-  border-radius: 8px !important;
+  border-radius: var(--astrbot-radius-navigation) !important;
   color: rgba(var(--v-theme-on-surface), 0.76);
   font-size: 14px;
   font-weight: 500;
@@ -630,10 +632,15 @@ function toggleSidebar() {
   text-transform: none;
 }
 
-.sidebar-footer-btn:hover,
-.sidebar-footer-btn.v-btn--active {
+.sidebar-footer-btn:hover {
   background: rgba(var(--v-theme-on-surface), 0.08) !important;
   color: rgb(var(--v-theme-on-surface));
+}
+
+/* Match the navigation items with a primary-colored active background and label. */
+.sidebar-footer-btn.v-btn--active {
+  background: rgba(var(--v-theme-primary), 0.09) !important;
+  color: rgb(var(--v-theme-primary)) !important;
 }
 
 /* Icon-to-label spacing matches the nav items above (10px); the v-btn grid
@@ -648,83 +655,103 @@ function toggleSidebar() {
   stroke-width: 2;
 }
 
-.leftSidebar.v-navigation-drawer--rail .dashboard-sidebar-list {
-  padding: 2px 10px 12px !important;
+/* Preserve the DOM and grid so icons travel continuously while labels fade. */
+.leftSidebar {
+  --navigation-motion: 360ms cubic-bezier(0.22, 1, 0.36, 1);
+  overflow: hidden;
+  transition: width var(--navigation-motion), transform var(--navigation-motion);
 }
-
-.leftSidebar.v-navigation-drawer--rail :deep(.rail-group) {
-  width: 36px;
-  margin: 0 auto 2px;
-  padding: 0;
-  background: transparent;
+.dashboard-sidebar-list, .sidebar-footer, .dashboard-sidebar-brand {
+  transition: padding var(--navigation-motion), opacity 140ms ease, visibility 140ms;
 }
-
-.leftSidebar.v-navigation-drawer--rail :deep(.dashboard-nav-item) {
-  width: 36px !important;
-  min-width: 36px !important;
-  max-width: 36px !important;
-  min-height: 36px !important;
-  margin: 0 auto 2px !important;
-  padding: 0 !important;
-  grid-template-areas: "prepend" !important;
-  grid-template-columns: 1fr !important;
+.dashboard-sidebar-brand {
+  position: relative;
+  flex-shrink: 0;
+  overflow: hidden;
+}
+.dashboard-sidebar-brand.collapsed {
+  width: auto;
+  justify-content: space-between;
+  padding: 0 16px 2px 17px;
+}
+.dashboard-sidebar-brand-title { flex-shrink: 0; }
+.dashboard-sidebar-logo-button {
+  display: grid;
   place-items: center;
-  box-shadow: none !important;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  padding: 0;
+  border-radius: 6px;
+  cursor: pointer;
 }
-
-/* Keep the rail flat on hover: no shadow, and hovering the active item must not
-   stack an extra primary overlay that reads as a glow. */
-.leftSidebar.v-navigation-drawer--rail :deep(.dashboard-nav-item:hover),
-.leftSidebar.v-navigation-drawer--rail :deep(.dashboard-nav-item.v-list-item--active:hover) {
-  box-shadow: none !important;
+.dashboard-sidebar-logo-button:disabled { cursor: default; }
+.dashboard-sidebar-logo-button:focus-visible {
+  outline: 2px solid rgb(var(--v-theme-primary));
+  outline-offset: 4px;
 }
-
-.leftSidebar.v-navigation-drawer--rail :deep(.dashboard-nav-item.v-list-item--active .v-list-item__overlay) {
-  opacity: 0 !important;
+.dashboard-sidebar-brand-toggle { position: absolute; right: 16px; }
+.dashboard-sidebar-brand-copy,
+.dashboard-sidebar-brand-toggle,
+.sidebar-footer-label,
+.sidebar-footer-version,
+.leftSidebar :deep(.dashboard-nav-item .v-list-item__content),
+.leftSidebar :deep(.dashboard-nav-item .v-list-item__append) {
+  white-space: nowrap;
+  transition: opacity 140ms ease 120ms, transform var(--navigation-motion), visibility 0s;
 }
-
-/* Rail tooltips stay, but they must read as plain chips: no drop shadow. */
-:global(.sidebar-rail-tooltip) {
-  box-shadow: none !important;
+.leftSidebar :deep(.dashboard-nav-item) {
+  grid-template-columns: max-content minmax(0, 1fr) max-content;
+  transition: padding var(--navigation-motion), background-color 150ms ease;
 }
-
-.leftSidebar.v-navigation-drawer--rail :deep(.dashboard-nav-item .v-list-item__prepend) {
-  grid-area: prepend;
-  width: 100%;
-  justify-content: center;
-  margin: 0;
+.leftSidebar :deep(.dashboard-nav-item .v-list-item__prepend) { flex-shrink: 0; }
+.sidebar-group-header {
+  height: 40px;
+  flex-shrink: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  transition: height var(--navigation-motion), padding var(--navigation-motion), opacity 120ms ease;
 }
-
-.leftSidebar.v-navigation-drawer--rail :deep(.dashboard-nav-item .v-list-item__content),
-.leftSidebar.v-navigation-drawer--rail :deep(.dashboard-nav-item .v-list-item__append),
-.leftSidebar.v-navigation-drawer--rail :deep(.dashboard-nav-item .v-list-item__spacer) {
-  display: none;
+.sidebar-chat-icon { display: grid; place-items: center; }
+.sidebar-chat-icon > svg {
+  grid-area: 1 / 1;
+  transition: opacity 180ms ease, transform var(--navigation-motion);
 }
-
-.leftSidebar.v-navigation-drawer--rail .sidebar-footer {
-  justify-content: center;
-  padding: 8px 10px 14px !important;
+.sidebar-back-symbol { opacity: 0; transform: translateX(8px); }
+.is-back .sidebar-chat-symbol { opacity: 0; transform: translateX(-8px); }
+.is-back .sidebar-back-symbol { opacity: 1; transform: translateX(0); }
+.navigation-rail .dashboard-sidebar-list { padding: 2px 10px 12px !important; }
+.navigation-rail :deep(.dashboard-nav-item) { padding-inline: 8px !important; }
+.navigation-rail .dashboard-sidebar-brand-copy,
+.navigation-rail .dashboard-sidebar-brand-toggle,
+.navigation-rail .sidebar-footer-label,
+.navigation-rail .sidebar-footer-version,
+.navigation-rail :deep(.dashboard-nav-item .v-list-item__content),
+.navigation-rail :deep(.dashboard-nav-item .v-list-item__append) {
+  opacity: 0;
+  visibility: hidden;
+  transform: translateX(-8px);
+  transition-delay: 0s, 0s, 140ms;
+  pointer-events: none;
 }
-
-.leftSidebar.v-navigation-drawer--rail .sidebar-footer-btn {
-  width: 36px !important;
-  min-width: 36px !important;
-  max-width: 36px !important;
-  height: 36px !important;
-  min-height: 36px !important;
-  justify-content: center !important;
-  padding: 0 !important;
+.navigation-rail .sidebar-group-header {
+  height: 12px;
+  padding-block: 0;
+  opacity: 0;
+  pointer-events: none;
 }
-
-.leftSidebar.v-navigation-drawer--rail .sidebar-footer-btn :deep(.v-btn__content) {
-  justify-content: center;
+.navigation-rail .sidebar-footer { padding: 8px 10px 14px !important; }
+.navigation-rail .sidebar-footer-btn { padding-inline: 8px !important; }
+.sidebar-footer-btn { overflow: hidden; transition: padding var(--navigation-motion); }
+.sidebar-footer-btn :deep(.v-btn__content) { width: 100%; }
+.chat-navigation-rail .sidebar-footer {
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
 }
-
+.chat-navigation-rail { border-right: 1px solid rgba(var(--v-theme-on-surface), 0.08) !important; }
+:global(.sidebar-rail-tooltip) { box-shadow: none !important; }
 @media (prefers-reduced-motion: reduce) {
-  .dashboard-sidebar-brand-logo--collapsed,
-  .dashboard-sidebar-panel-toggle-icon,
-  .sidebar-footer-btn {
-    transition: none !important;
-  }
+  .leftSidebar, .leftSidebar *, .leftSidebar :deep(*) { transition: none !important; }
 }
 </style>

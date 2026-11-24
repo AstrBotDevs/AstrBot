@@ -1,22 +1,20 @@
 from __future__ import annotations
 
-import sys
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 import yaml
-
-from astrbot.core.star.sdk_bridge import SDKPluginBridge
-from astrbot.core.star.sdk_bridge.services.plugins import PluginInspectService
-from astrbot.core.star.sdk_bridge.services.render import RenderImageService
-from astrbot.core.star.sdk_bridge.services.assets import AssetStore
-from astrbot.core.star.star import StarMetadata, star_registry
-from astrbot.core.star.star_handler import star_handlers_registry
 from astrbot_sdk.context import RuntimeMode
 from astrbot_sdk.errors import NotFound
 from astrbot_sdk.render import RenderOptions, TextRenderOptions
 
+from astrbot.core.star.sdk_bridge import SDKPluginBridge
+from astrbot.core.star.sdk_bridge.services.assets import AssetStore
+from astrbot.core.star.sdk_bridge.services.plugins import PluginInspectService
+from astrbot.core.star.sdk_bridge.services.render import RenderImageService
+from astrbot.core.star.star import StarMetadata, star_registry
+from astrbot.core.star.star_handler import star_handlers_registry
 from tests.unit.test_sdk_bridge import FakeCoreEvent, FakeKVStore
 
 
@@ -168,7 +166,7 @@ async def test_bridge_plugins_render_end_to_end(
 
         event = FakeCoreEvent("who")
         who = handlers[f"sdk_bridge.{plugin_root.name}_who"]
-        assert who.event_filters[0].filter(event, None)
+        assert who.event_filters[0].filter(event, {})
         replies = []
         async for _ in who.handler(event):
             if event.get_result():
@@ -179,7 +177,7 @@ async def test_bridge_plugins_render_end_to_end(
 
         event = FakeCoreEvent("draw")
         draw = handlers[f"sdk_bridge.{plugin_root.name}_draw"]
-        assert draw.event_filters[0].filter(event, None)
+        assert draw.event_filters[0].filter(event, {})
         replies = []
         async for _ in draw.handler(event):
             if event.get_result():

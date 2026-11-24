@@ -24,8 +24,6 @@ from astrbot_sdk.runtime.stdio_client import StdioPluginClient
 from astrbot_sdk.runtime.transport import WebSocketTransport
 from astrbot_sdk.runtime.ws_client import WSPluginClient
 
-from astrbot import __version__ as _ASTRBOT_VERSION
-
 
 class CircuitOpenError(RuntimeError):
     """The runner crashed too often; invocations fail fast until reload."""
@@ -55,7 +53,6 @@ class RunnerSupervisor:
         self,
         plugin_root: Path,
         *,
-        legacy: bool,
         python_executable: Path | str | None,
         env: Mapping[str, str],
         grants: CapabilitySet,
@@ -64,13 +61,11 @@ class RunnerSupervisor:
         logger: logging.Logger,
         on_circuit_open: Callable[[], None] | None = None,
         timing: SupervisorTiming | None = None,
-        host_info: Mapping[str, Any] | None = None,
     ) -> None:
         """Initialize the supervisor for one plugin.
 
         Args:
             plugin_root: Plugin directory the runner loads.
-            legacy: Load through the legacy compat layer.
             python_executable: Plugin venv python, or None for the core one.
             env: Extra environment for the runner (over the whitelist).
             grants: Capability grants passed to every start.
@@ -79,11 +74,8 @@ class RunnerSupervisor:
             logger: Logger for lifecycle events.
             on_circuit_open: Called once when the circuit opens.
             timing: Optional timing overrides.
-            host_info: Extra metadata shipped in the initialize handshake.
         """
         self.plugin_root = plugin_root
-        self.legacy = legacy
-        self.host_info = dict(host_info or {})
         self.python_executable = python_executable
         self.env = dict(env)
         self.grants = grants
@@ -113,7 +105,6 @@ class RunnerSupervisor:
             python_executable=self.python_executable,
             capability_handler=self.capability_handler,
             logger=self.logger,
-            legacy=self.legacy,
             env=self.env,
             start_timeout=self.timing.start_timeout,
         )
@@ -129,7 +120,6 @@ class RunnerSupervisor:
         handshake = await self._client.start(
             granted_capabilities=self.grants,
             config=self.config,
-            host_info={"version": _ASTRBOT_VERSION, **self.host_info},
         )
         self._lifecycle_task = asyncio.create_task(self._lifecycle())
         self._health_task = asyncio.create_task(self._health_loop())
@@ -269,32 +259,27 @@ class ExternalRunnerSupervisor(RunnerSupervisor):
         name: str,
         *,
         claims: asyncio.Queue[WebSocketTransport],
-        legacy: bool,
         grants: CapabilitySet,
         config: Any,
         capability_handler: Any,
         logger: logging.Logger,
         on_circuit_open: Callable[[], None] | None = None,
         timing: SupervisorTiming | None = None,
-        host_info: Mapping[str, Any] | None = None,
     ) -> None:
         """Initialize the supervisor for one external plugin slot.
 
         Args:
             name: External plugin name used in logs and registry paths.
             claims: Queue yielding accepted transports for this slot.
-            legacy: Load through the legacy compat layer.
             grants: Capability grants passed to every start.
             config: Plugin config passed to every start.
             capability_handler: Runner-to-Host capability dispatcher.
             logger: Logger for lifecycle events.
             on_circuit_open: Called once when the circuit opens.
             timing: Optional timing overrides.
-            host_info: Extra metadata shipped in the initialize handshake.
         """
         super().__init__(
             Path(name),
-            legacy=legacy,
             python_executable=None,
             env={},
             grants=grants,
@@ -303,7 +288,6 @@ class ExternalRunnerSupervisor(RunnerSupervisor):
             logger=logger,
             on_circuit_open=on_circuit_open,
             timing=timing,
-            host_info=host_info,
         )
         self._claims = claims
 
@@ -314,6 +298,5 @@ class ExternalRunnerSupervisor(RunnerSupervisor):
             transport,
             capability_handler=self.capability_handler,
             logger=self.logger,
-            legacy=self.legacy,
             start_timeout=self.timing.start_timeout,
         )

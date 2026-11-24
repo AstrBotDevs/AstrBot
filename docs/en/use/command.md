@@ -4,6 +4,8 @@ AstrBot commands are registered through the plugin system. To keep the core ligh
 
 Use `/help` to view currently enabled commands.
 
+Built-in command replies and command descriptions in `/help` use the session's system language. Select **🇨🇳 简体中文** or **🇺🇸 English** under **Platforms & Messages → General → System language**. Profile routing and session overrides can select a language per session. Command names stay unchanged, and help continues to reflect renamed or disabled commands.
+
 > [!NOTE]
 > 1. `/help`, `/set`, and `/unset` are not shown in the `/help` command list by default, but they are still available.
 > 2. If you change the wake prefix and remove the default `/`, commands must use the new wake prefix as well. For example, after changing the wake prefix to `!`, use `!help` and `!reset` instead of `/help` and `/reset`.
@@ -46,8 +48,8 @@ In group chats, if `unique_session` is enabled, `/sid` also shows the current gr
 
 Common uses:
 
-- Add an admin: run `/sid` to get the `UID`, then add it in WebUI under `Config -> Platform -> General -> Administrator IDs`.
-- Configure allowlists: use `UMO` or group ID to control which sessions can use the bot.
+- Add an admin: run `/sid` to get the `UID`, then add it in WebUI under `Config -> Access Control -> Administrators -> Administrator IDs`.
+- Configure allowlists: select the profile used by your bot in `Config`, then add the `UMO` or group ID under `Access Control -> Whitelist -> Whitelist ID List` to control which sessions can use the bot.
 - Configure routing rules: use `UMO` to distinguish different platforms, groups, or private chats.
 
 ### `/name`
@@ -176,4 +178,4 @@ Install or enable the `builtin_commands_extension` plugin if you need these exte
 
 Some commands require AstrBot admin permission, such as `/dashboard_update`, `/name`, `/op`, `/deop`, `/provider`, `/model`, and `/persona`.
 
-You can use `/sid` to get a user ID, then add it in WebUI under `Config -> Platform -> General -> Administrator IDs`.
+You can use `/sid` to get a user ID, then add it in WebUI under `Config -> Access Control -> Administrators -> Administrator IDs`.

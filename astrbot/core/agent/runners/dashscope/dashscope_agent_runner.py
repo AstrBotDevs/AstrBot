@@ -355,6 +355,13 @@ class DashscopeAgentRunner(BaseAgentRunner[TContext]):
         self.final_llm_resp = LLMResponse(role="assistant", result_chain=chain)
         self._transition_state(AgentState.DONE)
 
+        if self.final_llm_resp.role == "assistant":
+            try:
+                await self.agent_hooks.on_llm_response(
+                    self.run_context, self.final_llm_resp
+                )
+            except Exception as e:
+                logger.error(f"Error in on_llm_response hook: {e}", exc_info=True)
         try:
             await self.agent_hooks.on_agent_done(self.run_context, self.final_llm_resp)
         except Exception as e:
@@ -387,7 +394,9 @@ class DashscopeAgentRunner(BaseAgentRunner[TContext]):
             payload["incremental_output"] = False
 
         # 发起请求
-        partial = functools.partial(Application.call, **payload)
+        partial = functools.partial(
+            Application.call, request_timeout=self.timeout, **payload
+        )
         response = await asyncio.get_running_loop().run_in_executor(None, partial)
 
         async for resp in self._handle_streaming_response(response, session_id):

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
+from ..sdk_plugin_metadata import is_sdk_plugin_dir
 from .bridge import SDKPluginBridge, SDKPluginManager
-from .detect import is_sdk_plugin_dir
 
 __all__ = [
     "SDKPluginBridge",

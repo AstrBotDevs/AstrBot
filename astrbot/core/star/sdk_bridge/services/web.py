@@ -1,8 +1,7 @@
 """Web route service: replay dashboard HTTP requests to bridged plugins.
 
-Routes registered by plugins (handshake declarations or dynamic register
-calls) are attached to the same registered_web_apis registry the legacy
-in-process API uses. Each incoming request is sanitized (dashboard
+Routes declared in the Runner handshake are attached to the dashboard web
+route registry. Each incoming request is sanitized (dashboard
 credentials never cross the boundary), replayed to the Runner, and the
 response chunks are pumped back as a starlette StreamingResponse.
 """
@@ -12,33 +11,18 @@ from __future__ import annotations
 import time
 import uuid
 from collections.abc import AsyncIterator
-from datetime import datetime, timedelta, timezone
 from typing import TYPE_CHECKING, Any
 
-import jwt
 from astrbot_sdk.errors import InvalidRequest, NotFound
 from astrbot_sdk.web import INLINE_BODY_LIMIT, WebRequestInfo
-
-from astrbot.dashboard.plugin_page_auth import (
-    PLUGIN_PAGE_TOKEN_TYPE,
-    WILDCARD_PAGE_SCOPE,
-)
 
 from .base import HostService
 
 if TYPE_CHECKING:
     from ..bridge import SDKPluginBridge
 
-# Headers carrying dashboard credentials or hop-by-hop proxy auth never
-# cross to plugins. "authorization" is handled separately: it is swapped for
-# a plugin-scoped view token instead of being forwarded raw.
+# Dashboard credentials stay on the Host.
 _STRIPPED_HEADERS = frozenset({"cookie", "authorization", "proxy-authorization"})
-
-# Lifetime of the scoped view token replacing the dashboard credential. View
-# scripts cache it for the page session, so it must outlive typical sessions.
-# Aligned with the dashboard session lifetime (7 days), same as the
-# dashboard-minted view asset tokens.
-_VIEW_TOKEN_TTL_SECONDS = 7 * 24 * 60 * 60
 
 _BODY_TOKEN_TTL_SECONDS = 300.0
 _BODY_CHUNK_SIZE = 1024 * 1024
@@ -76,40 +60,6 @@ class WebRouteService(HostService):
 
     async def handle(self, operation: str, payload: dict[str, Any]) -> Any:
         """Serve runner-initiated operations."""
-        if operation == "register":
-            route = payload.get("route")
-            methods = payload.get("methods")
-            # Match core behavior: routes without a leading '/' are accepted
-            # and normalized at match time (dashboard prepends '/').
-            if not isinstance(route, str) or not route.strip():
-                raise InvalidRequest("register requires a non-empty route")
-            route = route.strip()
-            if not isinstance(methods, list) or not all(
-                isinstance(method, str) for method in methods
-            ):
-                raise InvalidRequest("register requires a methods list")
-            self.register_route(
-                route,
-                methods,
-                str(payload.get("description") or ""),
-            )
-            return {}
-        if operation == "unregister":
-            route = payload.get("route")
-            methods = payload.get("methods") or []
-            registered = self._bridge.context.registered_web_apis
-            method_tuple = tuple(str(method).upper() for method in methods)
-            registered[:] = [
-                api
-                for api in registered
-                if not (api[0] == route and api[2] == list(method_tuple))
-            ]
-            self._bridge._web_routes = [
-                item
-                for item in self._bridge._web_routes
-                if item != (route, method_tuple)
-            ]
-            return {}
         if operation == "read_body":
             token = payload.get("token")
             offset = payload.get("offset", 0)
@@ -127,38 +77,6 @@ class WebRouteService(HostService):
             return {"chunk": chunk, "done": done}
         raise NotFound(f"unknown web.route operation: {operation}")
 
-    def _scoped_view_token(self, username: str | None) -> str | None:
-        """Mint a plugin-scoped view token replacing a dashboard credential.
-
-        Legacy view code echoes the request's Authorization bearer into plugin
-        page URLs (asset_token). Forwarding the raw dashboard JWT would hand
-        dashboard admin credentials to the isolated plugin process, so it is
-        swapped for a read-only token valid only for this plugin's page assets.
-
-        Args:
-            username: Authenticated dashboard username from the request.
-
-        Returns:
-            The signed token, or None when it cannot be minted.
-        """
-        plugin_name = self._bridge.plugin_name
-        if not username or not plugin_name:
-            return None
-        config = self._bridge.context.get_config()
-        jwt_secret = config.get("dashboard", {}).get("jwt_secret") if config else None
-        if not isinstance(jwt_secret, str) or not jwt_secret:
-            return None
-        now = datetime.now(timezone.utc)
-        payload = {
-            "username": username,
-            "token_type": PLUGIN_PAGE_TOKEN_TYPE,
-            "plugin_name": plugin_name,
-            "page_name": WILDCARD_PAGE_SCOPE,
-            "iat": now,
-            "exp": now + timedelta(seconds=_VIEW_TOKEN_TTL_SECONDS),
-        }
-        return jwt.encode(payload, jwt_secret, algorithm="HS256")
-
     def _make_view_handler(self, route: str) -> Any:
         """Build the dashboard view handler replaying requests to the Runner."""
         service = self
@@ -172,10 +90,6 @@ class WebRouteService(HostService):
                 for key, value in plugin_request.headers.items()
                 if key.lower() not in _STRIPPED_HEADERS
             }
-            if "authorization" in {key.lower() for key in plugin_request.headers}:
-                scoped_token = service._scoped_view_token(plugin_request.username)
-                if scoped_token:
-                    headers["authorization"] = f"Bearer {scoped_token}"
             body = await plugin_request.body()
             inline_body = None
             body_token = None

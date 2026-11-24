@@ -22,19 +22,18 @@ from tests.unit.test_sdk_bridge_supervisor import (
     make_event,
     no_capabilities,
     wait_for_client,
-    write_legacy_plugin,
+    write_sdk_plugin,
 )
 
 
 async def spawn_ws_runner(plugin_root: Path, url: str, token: str):
-    """Spawn one legacy Runner process dialed into the test listener."""
+    """Spawn one SDK Runner process dialed into the test listener."""
     return await asyncio.create_subprocess_exec(
         sys.executable,
         "-m",
         "astrbot_sdk.runtime",
         "--ws",
         url,
-        "--legacy",
         "--plugin-root",
         str(plugin_root),
         env=runner_env({RUNNER_TOKEN_ENV: token}),
@@ -91,18 +90,17 @@ async def test_listener_routes_connections_by_token() -> None:
 
 @pytest.mark.asyncio
 async def test_external_supervisor_waits_for_redial(tmp_path: Path) -> None:
-    plugin_root = tmp_path / "ext_legacy"
-    write_legacy_plugin(
+    plugin_root = tmp_path / "ext_sdk"
+    write_sdk_plugin(
         plugin_root,
         """
-from astrbot.api.event import AstrMessageEvent, filter
-from astrbot.api.star import Context, Star
+from astrbot_sdk import MessageEvent, Plugin, on
 
 
-class ExtPlugin(Star):
-    @filter.command("ok")
-    async def ok(self, event: AstrMessageEvent):
-        yield event.plain_result("fine")
+class TestPlugin(Plugin):
+    @on.command("ok")
+    async def ok(self, event: MessageEvent):
+        yield event.reply("fine")
 """,
     )
     listener = ExternalRunnerListener("127.0.0.1", 0)
@@ -110,9 +108,8 @@ class ExtPlugin(Star):
     url = f"ws://127.0.0.1:{listener.port}"
     claims = listener.register("token-1")
     supervisor = ExternalRunnerSupervisor(
-        "ext_legacy",
+        "ext_sdk",
         claims=claims,
-        legacy=True,
         grants=CapabilitySet.from_ids("storage.kv", "assets.transfer", "message.send"),
         config=None,
         capability_handler=no_capabilities,
@@ -122,7 +119,7 @@ class ExtPlugin(Star):
     process = await spawn_ws_runner(plugin_root, url, "token-1")
     try:
         handshake = await supervisor.start()
-        assert handshake.name == "ext_legacy"
+        assert handshake.name == "ext_sdk"
         first_client = supervisor.require_client()
         results = [r async for r in first_client.invoke("ok", make_event())]
         assert [r.message.text for r in results if r is not None] == ["fine"]

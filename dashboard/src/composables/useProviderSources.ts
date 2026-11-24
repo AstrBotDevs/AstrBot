@@ -45,6 +45,10 @@ export function resolveDefaultTab(value?: string) {
     return 'rerank'
   }
 
+  if (normalized.includes('decision')) {
+    return 'decision'
+  }
+
   return 'chat_completion'
 }
 
@@ -87,6 +91,7 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
     { value: 'chat_completion', label: tm('providers.tabs.chatCompletion'), icon: 'mdi-message-text' },
     { value: 'speech_to_text', label: tm('providers.tabs.speechToText'), icon: 'mdi-microphone-message' },
     { value: 'text_to_speech', label: tm('providers.tabs.textToSpeech'), icon: 'mdi-volume-high' },
+    { value: 'decision', label: tm('providers.tabs.decision'), icon: 'mdi-scale-balance' },
     { value: 'embedding', label: tm('providers.tabs.embedding'), icon: 'mdi-code-json' },
     { value: 'rerank', label: tm('providers.tabs.rerank'), icon: 'mdi-compare-vertical' }
   ])
@@ -194,10 +199,17 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
   const mergedModelEntries = computed(() => {
     const configuredEntries = (sourceProviders.value || []).map((provider: any) => {
       const metadata = getModelMetadata(provider.model)
+      let displayMetadata = metadata || buildMetadataFromProvider(provider)
+      if (provider.max_context_tokens > 0) {
+        displayMetadata = {
+          ...displayMetadata,
+          limit: { ...displayMetadata?.limit, context: provider.max_context_tokens }
+        }
+      }
       return {
         type: 'configured',
         provider,
-        metadata: metadata || buildMetadataFromProvider(provider),
+        metadata: displayMetadata,
         hasModelMetadata: Boolean(metadata)
       }
     })
@@ -350,7 +362,9 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
 
   function getModelMetadata(modelName?: string) {
     if (!modelName) return null
-    return modelMetadata.value?.[modelName] || null
+    // Schema refreshes only include configured models; retain fetched candidate metadata.
+    const availableModel = availableModels.value.find((item) => item?.name === modelName)
+    return availableModel?.metadata || modelMetadata.value?.[modelName] || null
   }
 
   function supportsImageInput(meta: any) {
@@ -403,7 +417,9 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
       dashscope_tts: 'text_to_speech',
       azure_tts: 'text_to_speech',
       minimax_tts_api: 'text_to_speech',
-      volcengine_tts: 'text_to_speech'
+      volcengine_tts: 'text_to_speech',
+      system_one_decision: 'decision',
+      openai_decision: 'decision'
     }
     return oldVersionProviderTypeMapping[provider.type]
   }
@@ -424,7 +440,6 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
       suppressSourceWatch = false
     })
     availableModels.value = []
-    modelMetadata.value = {}
     isSourceModified.value = false
   }
 
@@ -608,7 +623,7 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
       const response = await providerApi.sourceModels(sourceId)
       if (response.data.status === 'ok') {
         const metadataMap = (response.data.data.model_metadata || {}) as Record<string, any>
-        modelMetadata.value = metadataMap
+        modelMetadata.value = { ...modelMetadata.value, ...metadataMap }
         availableModels.value = (response.data.data.models || []).map((model: string) => ({
           name: model,
           metadata: metadataMap?.[model] || null
@@ -620,7 +635,6 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
         throw new Error(response.data.message || tm('models.fetchError'))
       }
     } catch (error: any) {
-      modelMetadata.value = {}
       showMessage(error.response?.data?.message || error.message || tm('models.fetchError'), 'error')
     } finally {
       loadingModels.value = false

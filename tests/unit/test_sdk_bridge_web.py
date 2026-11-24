@@ -124,17 +124,11 @@ async def test_bridge_web_route_replay(
 
 
 @pytest.mark.asyncio
-async def test_bridge_web_route_swaps_authorization_for_scoped_view_token(
+async def test_bridge_web_route_drops_dashboard_credentials(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """The dashboard credential never crosses to the plugin; it is swapped
-    for a plugin-scoped plugin_page_asset token that view scripts may echo
-    into asset_token URLs."""
-    import jwt
-
-    from astrbot.dashboard.plugin_page_auth import PluginPageAuth
-
+    """Dashboard credentials are stripped before crossing the Runner boundary."""
     plugin_root = tmp_path / "webbridge"
     write_sdk_web_plugin(plugin_root)
     monkeypatch.setattr(
@@ -148,86 +142,6 @@ async def test_bridge_web_route_swaps_authorization_for_scoped_view_token(
 
     context = MagicMock()
     context.registered_web_apis = []
-    context.get_config.return_value = {"dashboard": {"jwt_secret": "view-secret"}}
-    bridge = SDKPluginBridge(plugin_root, context)
-    try:
-        await bridge.start()
-        view_handler = next(
-            api[1]
-            for api in context.registered_web_apis
-            if api[0] == "/plugin/echo-auth"
-        )
-
-        class AuthRequest(FakeStarletteRequest):
-            def __init__(self) -> None:
-                super().__init__()
-                self.headers = {
-                    "authorization": "Bearer DASHBOARD_ADMIN_JWT",
-                    "cookie": "session=SECRET",
-                }
-
-        plugin_request = PluginRequest(
-            AuthRequest(),
-            path_params={},
-            plugin_name="plugin_webbridge",
-            username="admin",
-        )
-        with bind_request_context(plugin_request):
-            response = await view_handler()
-        assert response.status_code == 200
-        body = b""
-        async for chunk in response.body_iterator:
-            body += chunk
-        import json
-
-        echoed = json.loads(body)
-        assert echoed["cookie"] == ""
-        forwarded = echoed["authorization"]
-        assert forwarded.startswith("Bearer ")
-        assert forwarded != "Bearer DASHBOARD_ADMIN_JWT"
-
-        payload = jwt.decode(
-            forwarded.removeprefix("Bearer "), "view-secret", algorithms=["HS256"]
-        )
-        assert payload["token_type"] == "plugin_page_asset"
-        assert payload["plugin_name"] == "plugin_webbridge"
-        assert payload["page_name"] == "*"
-        assert payload["username"] == "admin"
-        assert payload["exp"] - payload["iat"] == 7 * 24 * 60 * 60
-
-        # The auth middleware only guards the shared bridge SDK script now;
-        # view assets authenticate via path tokens at the v1 route layer.
-        assert PluginPageAuth.is_scope_valid(
-            payload, "/api/plugin/page/bridge-sdk.js"
-        )
-        assert not PluginPageAuth.is_scope_valid(
-            payload, "/api/plugin/page/content/plugin_webbridge/app/index.html"
-        )
-        assert not PluginPageAuth.is_scope_valid(payload, "/api/auth/me")
-    finally:
-        await bridge.stop()
-
-
-@pytest.mark.asyncio
-async def test_bridge_web_route_drops_authorization_without_secret(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """Without a usable jwt secret the dashboard credential is dropped."""
-    plugin_root = tmp_path / "webbridge"
-    write_sdk_web_plugin(plugin_root)
-    monkeypatch.setattr(
-        "astrbot.core.star.sdk_bridge.services.storage.sp",
-        FakeKVStore(),
-    )
-    monkeypatch.setattr(
-        "astrbot.core.star.sdk_bridge.bridge._asset_root",
-        lambda: tmp_path / "assets",
-    )
-
-    context = MagicMock()
-    context.registered_web_apis = []
-    context.get_config.return_value = {"dashboard": {}}
     bridge = SDKPluginBridge(plugin_root, context)
     try:
         await bridge.start()

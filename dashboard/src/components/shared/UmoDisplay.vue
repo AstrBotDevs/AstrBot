@@ -1,23 +1,65 @@
 <template>
-  <div class="umo-display" :class="{ 'umo-display--compact': compact }">
+  <div
+    class="umo-display"
+    :class="{
+      'umo-display--compact': compact,
+      'umo-display--two-line': twoLineTitle,
+    }"
+  >
     <div class="umo-display__main">
-      <div class="umo-display__line">
-        <span class="umo-display__name" :class="{ 'umo-display__name--umo': !hasReadableName }" :title="showRawTitle ? displayNameTitle : displayName">
+      <div
+        class="umo-display__line"
+        :title="showRawTitle ? displayNameTitle : displayName"
+      >
+        <span
+          class="umo-display__name"
+          :class="{ 'umo-display__name--umo': !hasReadableName }"
+          :title="showRawTitle ? displayNameTitle : displayName"
+        >
           {{ displayName }}
         </span>
+        <span
+          v-if="showMeta && hasReadableName"
+          class="umo-display__umo"
+          :title="umo"
+          >({{ umo }})</span
+        >
       </div>
 
-      <div v-if="showMeta && hasReadableName" class="umo-display__meta">
-        <span class="umo-display__umo" :title="umo">{{ umo }}</span>
+      <div v-if="showPlatform && resolvedPlatform" class="umo-display__meta">
+        <PlatformLogo :platform-type="platformType || resolvedPlatform" />
+        <span class="umo-display__platform">{{ resolvedPlatform }}</span>
+        <v-chip
+          v-if="
+            resolvedMessageType === 'GroupMessage' ||
+            resolvedMessageType === 'FriendMessage'
+          "
+          size="x-small"
+          variant="flat"
+          :color="
+            resolvedMessageType === 'GroupMessage' ? '#1976D2' : '#2E7D32'
+          "
+        >
+          {{
+            t(
+              resolvedMessageType === "GroupMessage"
+                ? "core.common.umoSelector.group"
+                : "core.common.umoSelector.private",
+            )
+          }}
+        </v-chip>
       </div>
     </div>
 
-    <v-chip v-if="showPlatform && resolvedPlatform" size="x-small" :color="platformColor" class="umo-display__platform">
-      {{ resolvedPlatform }}
-    </v-chip>
-
     <div v-if="editable || showInfo" class="umo-display__actions">
-      <v-btn v-if="editable" icon size="x-small" variant="text" class="umo-display__edit" @click.stop="$emit('edit')">
+      <v-btn
+        v-if="editable"
+        icon
+        size="x-small"
+        variant="text"
+        class="umo-display__edit"
+        @click.stop="$emit('edit')"
+      >
         <v-icon size="small" color="grey">mdi-pencil-outline</v-icon>
         <v-tooltip v-if="editTooltip" activator="parent" location="top">
           {{ editTooltip }}
@@ -25,7 +67,9 @@
       </v-btn>
       <v-tooltip v-if="showInfo" location="top">
         <template v-slot:activator="{ props }">
-          <v-icon v-bind="props" size="small" class="umo-display__info"> mdi-information-outline </v-icon>
+          <v-icon v-bind="props" size="small" class="umo-display__info">
+            mdi-information-outline
+          </v-icon>
         </template>
         <div>
           <p>UMO: {{ umo }}</p>
@@ -36,8 +80,16 @@
 </template>
 
 <script>
+import { useI18n } from "@/i18n/composables";
+import PlatformLogo from "./PlatformLogo.vue";
+
 export default {
-  name: 'UmoDisplay',
+  name: "UmoDisplay",
+  components: { PlatformLogo },
+  setup() {
+    const { t } = useI18n();
+    return { t };
+  },
   props: {
     umo: {
       type: String,
@@ -45,29 +97,37 @@ export default {
     },
     platform: {
       type: String,
-      default: '',
+      default: "",
+    },
+    platformType: {
+      type: String,
+      default: "",
     },
     messageType: {
       type: String,
-      default: '',
+      default: "",
     },
     sessionId: {
       type: String,
-      default: '',
+      default: "",
     },
     autoName: {
       type: String,
-      default: '',
+      default: "",
     },
     userAlias: {
       type: String,
-      default: '',
+      default: "",
     },
     customName: {
       type: String,
-      default: '',
+      default: "",
     },
     compact: {
+      type: Boolean,
+      default: false,
+    },
+    twoLineTitle: {
       type: Boolean,
       default: false,
     },
@@ -93,50 +153,42 @@ export default {
     },
     editTooltip: {
       type: String,
-      default: '',
+      default: "",
     },
   },
-  emits: ['edit'],
+  emits: ["edit"],
   computed: {
     umoParts() {
-      return this.umo.split(':')
+      return this.umo.split(":");
     },
     resolvedPlatform() {
-      return this.platform || this.umoParts[0] || ''
+      return this.platform || this.umoParts[0] || "";
     },
     resolvedMessageType() {
-      return this.messageType || this.umoParts[1] || ''
+      return this.messageType || this.umoParts[1] || "";
     },
     resolvedSessionId() {
-      return this.sessionId || this.umoParts.slice(2).join(':') || this.umo
+      return this.sessionId || this.umoParts.slice(2).join(":") || this.umo;
     },
     aliasName() {
-      return this.userAlias || this.customName || ''
+      return this.userAlias || this.customName || "";
     },
     displayName() {
       if (this.aliasName && this.autoName && this.aliasName !== this.autoName) {
-        return `${this.aliasName}（${this.autoName}）`
+        return `${this.aliasName}（${this.autoName}）`;
       }
-      return this.aliasName || this.autoName || this.umo
+      return this.aliasName || this.autoName || this.umo;
     },
     displayNameTitle() {
-      return this.hasReadableName ? `${this.displayName} / UMO: ${this.umo}` : this.umo
+      return this.hasReadableName
+        ? `${this.displayName} / UMO: ${this.umo}`
+        : this.umo;
     },
     hasReadableName() {
-      return Boolean(this.aliasName || this.autoName)
-    },
-    platformColor() {
-      const colors = {
-        aiocqhttp: 'blue',
-        qq_official: 'purple',
-        telegram: 'light-blue',
-        discord: 'indigo',
-        webchat: 'orange',
-      }
-      return colors[this.resolvedPlatform] || 'grey'
+      return Boolean(this.aliasName || this.autoName);
     },
   },
-}
+};
 </script>
 
 <style scoped>
@@ -157,24 +209,26 @@ export default {
 }
 
 .umo-display__line {
-  display: flex;
-  align-items: center;
-  min-width: 0;
-  gap: 6px;
-}
-
-.umo-display__platform {
-  flex: 0 0 auto;
-  max-width: 96px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.umo-display__name {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.umo-display--two-line .umo-display__line {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.umo-display__platform {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.umo-display__name {
   font-weight: 500;
   font-size: 14px;
   line-height: 1.3;
@@ -182,7 +236,6 @@ export default {
 
 .umo-display__name--umo {
   color: rgba(var(--v-theme-on-surface), 0.78);
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', monospace;
   font-size: 12px;
 }
 
@@ -200,6 +253,9 @@ export default {
 
 .umo-display__meta {
   display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px;
   min-width: 0;
   color: rgba(var(--v-theme-on-surface), 0.62);
   font-size: 12px;
@@ -207,11 +263,13 @@ export default {
 }
 
 .umo-display__umo {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', monospace;
+  margin-left: 4px;
+  color: rgba(var(--v-theme-on-surface), var(--v-medium-emphasis-opacity));
+  font-size: 12px;
+}
+
+.umo-display__meta :deep(.v-chip) {
+  flex: 0 0 auto;
 }
 
 .umo-display--compact .umo-display__name {

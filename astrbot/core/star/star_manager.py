@@ -35,7 +35,6 @@ from astrbot.core.platform.register import unregister_platform_adapters_by_modul
 from astrbot.core.provider.register import llm_tools
 from astrbot.core.utils.astrbot_path import (
     get_astrbot_config_path,
-    get_astrbot_data_path,
     get_astrbot_path,
     get_astrbot_plugin_path,
     get_astrbot_system_tmp_path,
@@ -53,7 +52,7 @@ from .command_management import sync_command_configs
 from .context import Context
 from .error_messages import format_plugin_error
 from .filter.permission import COMMAND_PERMISSION_TYPES, PermissionTypeFilter
-from .sdk_bridge.detect import is_isolated_legacy_dir, is_sdk_plugin_dir
+from .sdk_plugin_metadata import is_sdk_plugin_dir
 from .star import star_map, star_registry
 from .star_handler import EventType, star_handlers_registry
 from .updater import PLUGIN_METADATA_FILENAMES, _PluginUpdater
@@ -223,9 +222,6 @@ class PluginManager:
         self._sdk_plugin_manager = None
         """新版 SDK 插件管理器（懒加载，未安装 astrbot-sdk 时保持为 None）"""
 
-        self._runtime_overrides: dict = {}
-        """插件运行环境覆盖（root_dir_name -> "isolated"/"in-process"），在 load() 时刷新"""
-
         self.failed_plugin_info = ""
         if os.getenv("ASTRBOT_RELOAD", "0") == "1":
             asyncio.create_task(self._watch_plugins_changes())
@@ -296,7 +292,7 @@ class PluginManager:
         return classes
 
     @staticmethod
-    def _get_modules(path, runtime_overrides: dict | None = None):
+    def _get_modules(path):
         modules = []
 
         dirs = os.listdir(path)
@@ -306,10 +302,7 @@ class PluginManager:
             if d.startswith((".plugin-install-", ".plugin-upload-", ".plugin-backup-")):
                 continue
             if os.path.isdir(os.path.join(path, d)):
-                if is_sdk_plugin_dir(
-                    os.path.join(path, d),
-                ) or is_isolated_legacy_dir(os.path.join(path, d), runtime_overrides):
-                    # 新版 SDK 插件与声明隔离运行的旧版插件都由桥接器隔离加载
+                if is_sdk_plugin_dir(os.path.join(path, d)):
                     continue
                 if os.path.exists(os.path.join(path, d, "main.py")):
                     module_str = "main"
@@ -335,11 +328,9 @@ class PluginManager:
     def _get_plugin_modules(self) -> list[dict]:
         plugins = []
         if os.path.exists(self.plugin_store_path):
-            plugins.extend(
-                self._get_modules(self.plugin_store_path, self._runtime_overrides)
-            )
+            plugins.extend(self._get_modules(self.plugin_store_path))
         if os.path.exists(self.reserved_plugin_path):
-            _p = self._get_modules(self.reserved_plugin_path, self._runtime_overrides)
+            _p = self._get_modules(self.reserved_plugin_path)
             for p in _p:
                 p["reserved"] = True
             plugins.extend(_p)
@@ -542,6 +533,14 @@ class PluginManager:
                 _PluginUpdater.validate_plugin_metadata(metadata, metadata_label)
             except ValueError as exc:
                 raise Exception(f"插件元数据校验失败：{exc!s}") from exc
+            from astrbot.core.chatui import ViewSpec
+
+            raw_views = metadata.get("views", metadata.get("pages", []))
+            if not isinstance(raw_views, list):
+                raise ValueError("Plugin views must be a list of declarations.")
+            views = [ViewSpec.model_validate(view) for view in raw_views]
+            if len({view.name for view in views}) != len(views):
+                raise ValueError("Plugin view names must be unique.")
             metadata = StarMetadata(
                 name=metadata["name"],
                 author=metadata["author"],
@@ -568,12 +567,7 @@ class PluginManager:
                     if isinstance(metadata.get("astrbot_version"), str)
                     else None
                 ),
-                # "views" is the preferred key; "pages" stays as an alias.
-                views=metadata["views"]
-                if isinstance(metadata.get("views"), list)
-                else metadata["pages"]
-                if isinstance(metadata.get("pages"), list)
-                else [],
+                views=views,
                 i18n=PluginManager._load_plugin_i18n(plugin_path),
             )
 
@@ -848,17 +842,6 @@ class PluginManager:
             "traceback": error_trace,
             "reserved": reserved,
         }
-        if is_sdk_plugin_dir(plugin_dir_path):
-            # New-style SDK plugins always run isolated and cannot switch.
-            record["runtime"] = "isolated"
-            record["can_change_runtime"] = False
-        else:
-            record["runtime"] = (
-                "isolated"
-                if is_isolated_legacy_dir(plugin_dir_path, self._runtime_overrides)
-                else "in-process"
-            )
-            record["can_change_runtime"] = True
         try:
             metadata = self._load_plugin_metadata(plugin_path=plugin_dir_path)
             if metadata:
@@ -1041,79 +1024,6 @@ class PluginManager:
             else:
                 return False, error
 
-    async def set_plugin_runtime(
-        self,
-        root_dir_name: str,
-        runtime: str,
-    ) -> tuple[bool, str | None]:
-        """切换旧版插件的运行环境（进程内 / 隔离）并重载插件。
-
-        用户的覆盖保存在 plugin_runtime_overrides 中，优先于插件
-        metadata.yaml 里的 runtime.isolated 声明。新版 SDK 插件始终隔离
-        运行，不可切换。切回进程内时会删除该插件的隔离 venv
-        （data/plugin_venvs/<目录名>）。
-
-        Args:
-            root_dir_name: 插件目录名。
-            runtime: "isolated"（隔离）或 "in-process"（进程内）。
-
-        Returns:
-            tuple: (success, error_message)。
-        """
-        if runtime not in ("isolated", "in-process"):
-            return False, f"不支持的运行环境: {runtime}"
-        plugin_dir = os.path.join(self.plugin_store_path, root_dir_name)
-        if not os.path.isdir(plugin_dir):
-            return False, f"插件目录不存在: {root_dir_name}"
-        if is_sdk_plugin_dir(plugin_dir):
-            return False, "新版 SDK 插件始终隔离运行，无需切换"
-
-        async with self._pm_lock:
-            overrides = await sp.global_get("plugin_runtime_overrides", {})
-            if not isinstance(overrides, dict):
-                overrides = {}
-            overrides[root_dir_name] = runtime
-            await sp.global_put("plugin_runtime_overrides", overrides)
-            self._runtime_overrides = overrides
-
-            # 停掉当前实例（隔离桥接或进程内）
-            bridge = (
-                self._sdk_plugin_manager.bridges.get(root_dir_name)
-                if self._sdk_plugin_manager is not None
-                else None
-            )
-            if bridge is not None:
-                await self._sdk_plugin_manager.unload(root_dir_name)
-            else:
-                smd = next(
-                    (
-                        metadata
-                        for metadata in star_registry
-                        if metadata.root_dir_name == root_dir_name
-                    ),
-                    None,
-                )
-                if smd is not None:
-                    try:
-                        await self._terminate_plugin(smd)
-                    except Exception:
-                        logger.warning(traceback.format_exc())
-                    if smd.name and smd.module_path:
-                        await self._unbind_plugin(smd.name, smd.module_path)
-
-            if runtime == "in-process":
-                # The isolated venv (data/plugin_venvs/<dir>) is no longer
-                # needed once the plugin runs inside the core process.
-                remove_dir(
-                    str(Path(get_astrbot_data_path()) / "plugin_venvs" / root_dir_name),
-                )
-
-            success, error = await self.load(specified_dir_name=root_dir_name)
-            if success:
-                self.failed_plugin_dict.pop(root_dir_name, None)
-                self._rebuild_failed_plugin_info()
-            return success, error
-
     async def reload(self, specified_plugin_name=None):
         """重新加载插件
 
@@ -1159,8 +1069,7 @@ class PluginManager:
                 if smd is not None and specified_module_path.startswith(
                     "sdk_bridge.",
                 ):
-                    # 桥接插件（SDK / 隔离运行）由 bridge 管理器整体重启；
-                    # 经典的 terminate + load(module_path) 路径不认识它。
+                    # The bridge owns SDK plugin reloads.
                     if self._sdk_plugin_manager is not None:
                         await self._sdk_plugin_manager.unload(smd.root_dir_name)
                     return await self.load(specified_dir_name=smd.root_dir_name)
@@ -1202,9 +1111,6 @@ class PluginManager:
         inactivated_plugins = await sp.global_get("inactivated_plugins", [])
         inactivated_llm_tools = await sp.global_get("inactivated_llm_tools", [])
         alter_cmd = await sp.global_get("alter_cmd", {})
-        self._runtime_overrides = await sp.global_get("plugin_runtime_overrides", {})
-        if not isinstance(self._runtime_overrides, dict):
-            self._runtime_overrides = {}
 
         plugin_modules = self._get_plugin_modules()
         if plugin_modules is None:
@@ -1214,6 +1120,7 @@ class PluginManager:
 
         # 导入插件模块，并尝试实例化插件类
         for plugin_module in plugin_modules:
+            plugin_logger = logger
             try:
                 module_str = plugin_module["module"]
                 # module_path = plugin_module['module_path']
@@ -1238,7 +1145,11 @@ class PluginManager:
                 if specified_dir_name and root_dir_name != specified_dir_name:
                     continue
 
-                logger.info("Loading plugin %s ...", root_dir_name)
+                # Use the directory name until plugin metadata is available.
+                plugin_logger = logging.LoggerAdapter(
+                    logger, {"plugin_name": root_dir_name}
+                )
+                plugin_logger.info("Loading plugin %s ...", root_dir_name)
 
                 # 尝试导入模块
                 try:
@@ -1251,8 +1162,10 @@ class PluginManager:
                     )
                 except Exception as e:
                     error_trace = traceback.format_exc()
-                    logger.error(error_trace)
-                    logger.error(f"Failed to import plugin {root_dir_name}: {e!s}")
+                    plugin_logger.error(error_trace)
+                    plugin_logger.error(
+                        f"Failed to import plugin {root_dir_name}: {e!s}"
+                    )
                     has_load_error = True
                     self.failed_plugin_dict[root_dir_name] = (
                         self._build_failed_plugin_record(
@@ -1305,10 +1218,14 @@ class PluginManager:
                             metadata.views = metadata_yaml.views
                             metadata.i18n = metadata_yaml.i18n
                     except Exception as e:
-                        logger.warning(
+                        plugin_logger.warning(
                             f"Failed to load metadata for plugin {root_dir_name}: "
                             f"{e!s}. Using default metadata.",
                         )
+
+                    plugin_logger = logging.LoggerAdapter(
+                        logger, {"plugin_name": metadata.name or root_dir_name}
+                    )
 
                     if not ignore_version_check:
                         is_valid, error_message = (
@@ -1322,7 +1239,7 @@ class PluginManager:
                                 or "The plugin does not support the current AstrBot version."
                             )
 
-                    logger.info(metadata)
+                    plugin_logger.info(metadata)
                     metadata.config = plugin_config
                     plugin_id = metadata.plugin_id
 
@@ -1356,7 +1273,7 @@ class PluginManager:
                             setattr(metadata.star_cls, "plugin_id", plugin_id)
                     else:
                         metadata.star_cls = None
-                        logger.info("Plugin %s is disabled.", metadata.name)
+                        plugin_logger.info("Plugin %s is disabled.", metadata.name)
 
                     metadata.module = module
                     metadata.root_dir_name = root_dir_name
@@ -1387,6 +1304,36 @@ class PluginManager:
                                 raw_handler,
                                 metadata.star_cls,
                             )
+
+                    # resolve_view() below reads `activated` to decide whether the
+                    # plugin is available, but that flag is only refreshed from
+                    # `inactivated_plugins` further down in this function. Sync it
+                    # first, otherwise the "disable then enable" path still sees the
+                    # previous False and rejects the view as unavailable.
+                    metadata.activated = not plugin_disabled
+
+                    if not plugin_disabled and metadata.star_cls is not None:
+                        from astrbot.core.chatui import resolve_view
+                        from astrbot.core.star.filter.ui_action import UIActionFilter
+
+                        action_filters = [
+                            item
+                            for handler in related_handlers
+                            for item in handler.event_filters
+                            if isinstance(item, UIActionFilter)
+                        ]
+                        for spec in metadata.views:
+                            resolve_view(
+                                metadata.module_path, spec.name, target=spec.target
+                            )
+                            for action in spec.actions:
+                                if not any(
+                                    item.action_id in (None, action)
+                                    for item in action_filters
+                                ):
+                                    raise ValueError(
+                                        f"No UI handler registered for {action}."
+                                    )
 
                     # Apply the same idempotent binding lifecycle to LLM tools.
                     for func_tool in llm_tools.func_list:
@@ -1422,7 +1369,7 @@ class PluginManager:
 
                 else:
                     # v3.4.0 以前的方式注册插件
-                    logger.debug(
+                    plugin_logger.debug(
                         f"Plugin {path} was not registered with the decorator; "
                         "attempting the legacy loading method.",
                     )
@@ -1459,6 +1406,10 @@ class PluginManager:
                     )
                     if not metadata:
                         raise Exception(f"无法找到插件 {plugin_dir_path} 的元数据。")
+
+                    plugin_logger = logging.LoggerAdapter(
+                        logger, {"plugin_name": metadata.name or root_dir_name}
+                    )
 
                     if not ignore_version_check:
                         is_valid, error_message = (
@@ -1522,7 +1473,7 @@ class PluginManager:
                                 ),
                             )
 
-                        logger.debug(
+                        plugin_logger.debug(
                             f"Inserted permission filter {cmd_type} into "
                             f"{metadata.name}.{handler.handler_name}.",
                         )
@@ -1538,20 +1489,30 @@ class PluginManager:
                     EventType.OnPluginLoadedEvent,
                 )
                 for handler in handlers:
+                    handler_plugin = star_map.get(handler.handler_module_path)
+                    handler_plugin_name = (
+                        handler_plugin.name if handler_plugin else None
+                    ) or handler.handler_module_path
                     try:
                         logger.info(
-                            f"hook(on_plugin_loaded) -> {star_map[handler.handler_module_path].name} - {handler.handler_name}",
+                            f"hook(on_plugin_loaded) -> {handler_plugin_name} - {handler.handler_name}",
+                            extra={"plugin_name": handler_plugin_name},
                         )
                         await handler.handler(metadata)
                     except Exception:
-                        logger.error(traceback.format_exc())
+                        logger.error(
+                            traceback.format_exc(),
+                            extra={"plugin_name": handler_plugin_name},
+                        )
 
             except BaseException as e:
-                logger.error(f"----- Failed to load plugin {root_dir_name} -----")
+                plugin_logger.error(
+                    f"----- Failed to load plugin {root_dir_name} -----"
+                )
                 errors = traceback.format_exc()
                 for line in errors.split("\n"):
-                    logger.error(f"| {line}")
-                logger.error("----------------------------------")
+                    plugin_logger.error(f"| {line}")
+                plugin_logger.error("----------------------------------")
                 has_load_error = True
                 self.failed_plugin_dict[root_dir_name] = (
                     self._build_failed_plugin_record(
@@ -1597,10 +1558,6 @@ class PluginManager:
                     for d in os.listdir(self.plugin_store_path)
                     if is_sdk_plugin_dir(
                         os.path.join(self.plugin_store_path, d),
-                    )
-                    or is_isolated_legacy_dir(
-                        os.path.join(self.plugin_store_path, d),
-                        self._runtime_overrides,
                     )
                 ]
             if specified_dir_name:
@@ -1648,7 +1605,6 @@ class PluginManager:
             try:
                 await self._sdk_plugin_manager.load_all(
                     specified_dir_name=dir_name,
-                    runtime_overrides=self._runtime_overrides,
                 )
             except Exception as e:
                 error_trace = traceback.format_exc()

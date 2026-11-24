@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import sys
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock
 
@@ -10,7 +9,6 @@ import yaml
 from astrbot.core.provider.entities import LLMResponse
 from astrbot.core.star.sdk_bridge import SDKPluginBridge
 from astrbot.core.star.star_handler import star_handlers_registry
-
 from tests.unit.test_sdk_bridge import FakeCoreEvent, FakeKVStore
 
 
@@ -82,6 +80,9 @@ class FakeAgentProvider:
             provider_type=ProviderType.CHAT_COMPLETION,
         )
 
+    def get_model(self) -> str:
+        return "fake-model"
+
     async def text_chat(self, **kwargs):
         self.calls.append(kwargs)
         contexts = kwargs.get("contexts") or []
@@ -152,7 +153,7 @@ async def test_bridge_agent_run_end_to_end(
             f"sdk_bridge.{plugin_root.name}_research"
         ]
         event = FakeCoreEvent("research sh")
-        assert handler.event_filters[0].filter(event, None)
+        assert handler.event_filters[0].filter(event, {})
         params = event.get_extra("parsed_params") or {}
 
         replies = []
@@ -169,8 +170,9 @@ async def test_bridge_agent_run_end_to_end(
         assert func_tool.names() == ["get_weather"]
 
         # Default (no tools) means no toolset is offered at all.
-        from astrbot.core.star.sdk_bridge.services.agent import AgentRunService
         from astrbot_sdk.events import UMO, MessageType
+
+        from astrbot.core.star.sdk_bridge.services.agent import AgentRunService
 
         provider.calls.clear()
         service = AgentRunService(context, bridge._tool_names)
@@ -213,8 +215,9 @@ async def test_agent_run_with_restricted_tools(
         await bridge.start()
 
         # Ask the agent service directly with a tools whitelist.
-        from astrbot.core.star.sdk_bridge.services.agent import AgentRunService
         from astrbot_sdk.events import UMO, MessageType
+
+        from astrbot.core.star.sdk_bridge.services.agent import AgentRunService
 
         service = AgentRunService(context, bridge._tool_names)
         result = await service.handle(

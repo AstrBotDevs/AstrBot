@@ -134,6 +134,16 @@ const desktopUpdateCurrentVersion = ref("-");
 const desktopUpdateLatestVersion = ref("-");
 const desktopUpdateStatus = ref("");
 const desktopDownloadProgress = ref<AstrBotDesktopAppUpdateProgress | null>(null);
+const appHasNewVersion = computed(() =>
+  isDesktopReleaseMode.value
+    ? desktopUpdateHasNewVersion.value
+    : hasNewVersion.value,
+);
+const hasAvailableUpdate = computed(
+  () =>
+    appHasNewVersion.value ||
+    (!isDesktopReleaseMode.value && dashboardHasNewVersion.value),
+);
 const isChatPath = computed(
   () => route.path === "/chat" || route.path.startsWith("/chat/"),
 );
@@ -154,7 +164,8 @@ const chatHeaderStyle = computed(() => {
     // window material in the top-left corner.
     left: "0px",
     width: "100%",
-    "--astrbot-chat-sidebar-width": `${sidebarWidth}px`,
+    "--astrbot-chat-sidebar-width": `${sidebarWidth + (!smAndDown.value && customizer.chatNavigationInSidebar ? 56 : 0)}px`,
+    "--astrbot-workbench-preferred-width": chatHeader.workbenchWidth ? `${chatHeader.workbenchWidth}px` : undefined,
   };
 });
 const getAppUpdaterBridge = (): AstrBotAppUpdaterBridge | null => {
@@ -297,10 +308,11 @@ function cancelDesktopUpdate() {
   desktopUpdateDialog.value = false;
 }
 
-async function openDesktopUpdateDialog() {
+async function checkDesktopUpdate(showDialog = false) {
   if (desktopUpdateInstalling.value) return;
+  if (showDialog) desktopUpdateDialog.value = true;
+  if (desktopUpdateChecking.value) return;
   desktopDownloadProgress.value = null;
-  desktopUpdateDialog.value = true;
   desktopUpdateChecking.value = true;
   desktopUpdateInstalling.value = false;
   desktopUpdateHasNewVersion.value = false;
@@ -310,6 +322,7 @@ async function openDesktopUpdateDialog() {
 
   const bridge = getAppUpdaterBridge();
   if (!bridge) {
+    console.warn("[desktop-update] App updater bridge is unavailable.");
     desktopUpdateChecking.value = false;
     desktopUpdateStatus.value = t(
       "core.header.updateDialog.desktopApp.checkFailed",
@@ -317,9 +330,21 @@ async function openDesktopUpdateDialog() {
     return;
   }
 
+  let checkTimeout: ReturnType<typeof setTimeout> | undefined;
   try {
-    const result = await bridge.checkForAppUpdate();
+    const result = await Promise.race([
+      bridge.checkForAppUpdate(),
+      new Promise<never>((_, reject) => {
+        checkTimeout = setTimeout(() => {
+          reject(new Error("Desktop app update check timed out."));
+        }, 30_000);
+      }),
+    ]);
     if (!result?.ok) {
+      console.warn(
+        "[desktop-update] Failed to check for app updates.",
+        result?.reason || "Unknown error",
+      );
       desktopUpdateCurrentVersion.value = result?.currentVersion || "-";
       desktopUpdateLatestVersion.value =
         result?.latestVersion || result?.currentVersion || "-";
@@ -336,11 +361,12 @@ async function openDesktopUpdateDialog() {
       ? t("core.header.updateDialog.desktopApp.hasNewVersion")
       : t("core.header.updateDialog.desktopApp.isLatest");
   } catch (error) {
-    console.error(error);
+    console.error("[desktop-update] Failed to check for app updates.", error);
     desktopUpdateStatus.value = t(
       "core.header.updateDialog.desktopApp.checkFailed",
     );
   } finally {
+    if (checkTimeout !== undefined) clearTimeout(checkTimeout);
     desktopUpdateChecking.value = false;
   }
 }
@@ -391,7 +417,7 @@ async function confirmDesktopUpdate() {
 
 function handleUpdateClick() {
   if (isDesktopReleaseMode.value) {
-    void openDesktopUpdateDialog();
+    void checkDesktopUpdate(true);
     return;
   }
   checkUpdate();
@@ -910,7 +936,6 @@ getVersion();
 checkUpdate();
 initPasswordWarningFromStorage();
 
-commonStore.createEventSource(); // log
 commonStore.getStartTime();
 
 onUnmounted(() => {
@@ -1044,6 +1069,7 @@ onMounted(async () => {
   isDesktopReleaseMode.value = runtimeInfo.isDesktopRuntime;
   if (isDesktopReleaseMode.value) {
     dashboardHasNewVersion.value = false;
+    void checkDesktopUpdate();
   }
 
   // The toolbar band doubles as the window drag region on desktop (no native title bar).
@@ -1058,7 +1084,7 @@ onMounted(async () => {
 <template>
   <v-app-bar
     elevation="0"
-    height="40"
+    height="42"
     data-tauri-drag-region
     class="top-header"
     :class="{
@@ -1072,6 +1098,7 @@ onMounted(async () => {
     <v-btn
       v-if="$vuetify.display.smAndDown"
       class="header-menu-btn"
+      :class="{ 'header-menu-btn--browser': !isDesktopReleaseMode }"
       icon
       rounded="lg"
       variant="text"
@@ -1090,15 +1117,20 @@ onMounted(async () => {
 
     <v-spacer />
 
-    <!-- 版本提示信息 - 在手机上隐藏 -->
-    <div v-if="!isChatPath" class="mr-4 hidden-xs">
-      <small v-if="hasNewVersion">
+    <!-- Desktop keeps the update notice visible in both Bot and Chat modes. -->
+    <button
+      v-if="hasAvailableUpdate && (!isChatPath || isDesktopReleaseMode)"
+      type="button"
+      class="update-notice mr-4 hidden-xs text-no-wrap"
+      @click="handleUpdateClick"
+    >
+      <small v-if="appHasNewVersion">
         {{ t("core.header.version.hasNewVersion") }}
       </small>
       <small v-else-if="dashboardHasNewVersion && !isDesktopReleaseMode">
         {{ t("core.header.version.dashboardHasNewVersion") }}
       </small>
-    </div>
+    </button>
 
     <div class="header-actions" :class="{ 'chat-header-actions': isChatPath }">
       <v-btn
@@ -1125,7 +1157,7 @@ onMounted(async () => {
 
       <!-- Bot/Chat mode switch - single button, hidden in chat mobile menu -->
       <v-btn
-        v-if="!isChatPath || !$vuetify.display.smAndDown"
+        v-if="!customizer.chatNavigationInSidebar && (!isChatPath || !$vuetify.display.smAndDown)"
         class="mode-switch-btn"
         :class="{ 'mr-4 hidden-xs': !isChatPath }"
         variant="text"
@@ -1156,7 +1188,9 @@ onMounted(async () => {
             icon
             :ripple="false"
           >
-            <v-icon>mdi-dots-vertical</v-icon>
+            <v-badge :model-value="hasAvailableUpdate" color="primary" dot floating>
+              <v-icon>mdi-dots-vertical</v-icon>
+            </v-badge>
             <span class="header-toolbar-label">{{ t("core.navigation.options") }}</span>
           </v-btn>
         </template>
@@ -1164,8 +1198,10 @@ onMounted(async () => {
         <!-- Bot/Chat 模式切换 - 仅在手机端显示 -->
         <template
           v-if="
-            (isChatPath && $vuetify.display.smAndDown) ||
-            (!isChatPath && $vuetify.display.xs)
+            !customizer.chatNavigationInSidebar && (
+              (isChatPath && $vuetify.display.smAndDown) ||
+              (!isChatPath && $vuetify.display.xs)
+            )
           "
         >
           <div class="mobile-mode-switch-wrapper">
@@ -1325,9 +1361,7 @@ onMounted(async () => {
         }}</v-list-item-title>
         <template
           v-slot:append
-          v-if="
-            hasNewVersion || (dashboardHasNewVersion && !isDesktopReleaseMode)
-          "
+          v-if="hasAvailableUpdate"
         >
           <v-chip size="x-small" color="primary" variant="tonal" class="ml-2"
             >!</v-chip
@@ -1358,6 +1392,8 @@ onMounted(async () => {
         </v-list-item-title>
       </v-list-item>
       </StyledMenu>
+      <!-- Keep the Teleport destination mounted while ChatUI leaves or re-enters. -->
+      <div v-show="isChatPath" id="chat-workbench-header" />
       <!-- Custom caption buttons on Windows, where the native title bar is disabled. -->
       <div v-if="isWindowsDesktop" class="header-caption-btns">
         <v-btn
@@ -1564,6 +1600,7 @@ onMounted(async () => {
               <div class="release-message-preview">
                 <MarkdownRender
                   :content="releaseMessage"
+                  :is-dark="isDarkTheme"
                   :typewriter="false"
                   class="markdown-content"
                 />
@@ -1760,6 +1797,7 @@ onMounted(async () => {
         >
           <MarkdownRender
             :content="selectedReleaseNotes"
+            :is-dark="isDarkTheme"
             :typewriter="false"
             class="markdown-content"
           />
@@ -2500,6 +2538,14 @@ onMounted(async () => {
   user-select: none;
 }
 
+.top-header .update-notice {
+  cursor: pointer;
+}
+
+.top-header .update-notice:hover {
+  text-decoration: underline;
+}
+
 /* Mount point for page-contextual toolbar content (see the template note). */
 .app-header-context {
   display: flex;
@@ -2519,12 +2565,13 @@ onMounted(async () => {
 
 html {
   /* Keep in sync with the app bar height above. */
-  --astrbot-toolbar-height: 40px;
+  --astrbot-toolbar-height: 42px;
 }
 
 .top-header,
 .top-header.chat-mode-header,
 .top-header.chat-mode-header.chat-mode-header--dark {
+  background: var(--astrbot-chrome-bg, #f2f2f7) !important;
   border-bottom: 0 !important;
   box-shadow: none !important;
 }
@@ -2571,6 +2618,11 @@ html[data-astrbot-desktop-platform='macos'] .top-header.chat-mode-header.chat-mo
 
 .top-header .header-menu-btn:hover {
   color: rgba(var(--v-theme-on-surface), 0.9);
+}
+
+.top-header .v-toolbar__content > .header-menu-btn--browser:first-child {
+  margin-inline-start: -12px;
+  margin-inline-end: 12px;
 }
 
 .header-toolbar-label {
@@ -2674,4 +2726,38 @@ html[data-astrbot-desktop-platform='macos'] .top-header.chat-mode-header.chat-mo
   color: #fff;
 }
 
+</style>
+
+<style>
+#chat-workbench-header:empty {
+  display: none;
+}
+#chat-workbench-header {
+  min-width: 0;
+  flex-shrink: 0;
+}
+#chat-workbench-header:has(.workbench-launcher) {
+  display: flex;
+  align-items: center;
+  padding: 0 8px;
+  height: var(--astrbot-toolbar-height);
+}
+#chat-workbench-header:has(.workbench-header) {
+  width: calc(var(--astrbot-workbench-width) - var(--workbench-caption-width, 0px));
+  border-left: 1px solid rgba(var(--v-theme-on-surface), 0.1);
+}
+.top-header:has(#chat-workbench-header .workbench-header) {
+  --astrbot-active-workbench-width: var(--astrbot-workbench-width);
+}
+.top-header:has(#chat-workbench-header:not(:empty)) .header-actions {
+  margin-right: -18px;
+}
+.top-header:has(.header-caption-btns) {
+  --workbench-caption-width: 132px;
+}
+@media (min-width: 960px) and (max-width: 1400px) {
+  .top-header:has(#chat-workbench-header .workbench-header) .chat-toolbar-context-title {
+    display: none;
+  }
+}
 </style>

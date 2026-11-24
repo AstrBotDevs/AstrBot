@@ -12,7 +12,7 @@ from astrbot_sdk.conversations import (
 )
 from astrbot_sdk.errors import InvalidRequest, NotFound
 
-from ..convert import to_core_chain, to_umo_string
+from ..convert import to_umo_string
 
 if TYPE_CHECKING:
     from astrbot.core.conversation_mgr import ConversationManager
@@ -174,49 +174,6 @@ class ConversationReadService(ConversationServiceBase):
                     ),
                 ),
             }
-        if operation == "list_filtered":
-            convs, total = await self._manager.get_filtered_conversations(
-                page=int(payload.get("page") or 1),
-                page_size=int(payload.get("page_size") or 20),
-                platform_ids=payload.get("platform_ids"),
-                search_query=str(payload.get("search_query") or ""),
-                include_history=bool(payload.get("include_history", True)),
-            )
-            return {
-                "page": ConversationPage(
-                    items=tuple(to_sdk_conversation(conv) for conv in convs),
-                    next_cursor=None,
-                ),
-                "total": total,
-            }
-        if operation == "get_by_id_global":
-            # Legacy conversation_manager.db read: cross-session lookup by
-            # conversation id, granted under conversation.read like the
-            # in-process db handle plugins already reach.
-            record = await self._manager.db.get_conversation_by_id(
-                self._cid(payload),
-            )
-            return {
-                "record": (
-                    _serialize_conversation_v2(record) if record is not None else None
-                ),
-            }
-        if operation == "list_all":
-            records = await self._manager.db.get_all_conversations(
-                page=int(payload.get("page") or 1),
-                page_size=int(payload.get("page_size") or 20),
-            )
-            return {
-                "records": [_serialize_conversation_v2(record) for record in records],
-            }
-        if operation == "human_readable_context":
-            contexts, total_pages = await self._manager.get_human_readable_context(
-                self._umo(payload),
-                self._cid(payload),
-                page=int(payload.get("page") or 1),
-                page_size=int(payload.get("page_size") or 10),
-            )
-            return {"contexts": contexts, "total_pages": total_pages}
         raise NotFound(f"unknown conversation operation: {operation}")
 
 
@@ -283,140 +240,4 @@ class ConversationWriteService(ConversationServiceBase):
                 self._cid(payload),
             )
             return {}
-        if operation == "evict_session":
-            # Mirror the in-process dict pop: drop the cached session ->
-            # conversation binding so the next message re-resolves it.
-            self._manager.session_conversations.pop(self._umo(payload), None)
-            return {}
         raise NotFound(f"unknown conversation operation: {operation}")
-
-
-def _serialize_conversation_v2(record: Any) -> dict[str, Any]:
-    """Serialize one ConversationV2 row to a JSON-safe dict."""
-    return {
-        "conversation_id": record.conversation_id,
-        "platform_id": record.platform_id,
-        "user_id": record.user_id,
-        "content": record.content,
-        "title": record.title,
-        "persona_id": record.persona_id,
-        "token_usage": record.token_usage,
-        "created_at": (
-            record.created_at.isoformat() if record.created_at is not None else None
-        ),
-        "updated_at": (
-            record.updated_at.isoformat() if record.updated_at is not None else None
-        ),
-    }
-
-
-def _serialize_history(record: Any) -> dict[str, Any]:
-    """Serialize one PlatformMessageHistory row to a JSON-safe dict."""
-    created_at = getattr(record, "created_at", None)
-    updated_at = getattr(record, "updated_at", None)
-    return {
-        "id": record.id,
-        "platform_id": record.platform_id,
-        "user_id": record.user_id,
-        "sender_id": record.sender_id,
-        "sender_name": record.sender_name,
-        "content": record.content,
-        "llm_checkpoint_id": record.llm_checkpoint_id,
-        "created_at": created_at.isoformat() if created_at else None,
-        "updated_at": updated_at.isoformat() if updated_at else None,
-    }
-
-
-class MessageHistoryService:
-    """Platform message history access for isolated legacy plugins.
-
-    Mirrors ``context.message_history_manager``; only granted to legacy
-    plugins so their transcript bookkeeping keeps working.
-    """
-
-    capability_id = "message.history"
-
-    def __init__(self, context: Context) -> None:
-        """Initialize the service.
-
-        Args:
-            context: AstrBot star context with the history manager.
-        """
-        self._context = context
-
-    @property
-    def _manager(self) -> Any:
-        return self._context.message_history_manager
-
-    async def handle(self, operation: str, payload: dict[str, Any]) -> Any:
-        """Serve one message.history operation."""
-        if operation == "insert":
-            record = await self._manager.insert(
-                platform_id=self._required(payload, "platform_id"),
-                user_id=self._required(payload, "user_id"),
-                content=payload.get("content") or {},
-                sender_id=payload.get("sender_id"),
-                sender_name=payload.get("sender_name"),
-                llm_checkpoint_id=payload.get("llm_checkpoint_id"),
-                max_messages=payload.get("max_messages"),
-            )
-            return {"record": _serialize_history(record)}
-        if operation == "insert_message_chain":
-            chain = payload.get("message_chain")
-            if chain is None:
-                raise InvalidRequest("insert_message_chain requires message_chain")
-            from astrbot.core.message.message_event_result import (
-                MessageChain as CoreChain,
-            )
-
-            core_chain = CoreChain(chain=to_core_chain(chain))
-            record = await self._manager.insert_message_chain(
-                platform_id=self._required(payload, "platform_id"),
-                user_id=self._required(payload, "user_id"),
-                message_chain=core_chain,
-                role=str(payload.get("role") or "user"),
-                sender_id=payload.get("sender_id"),
-                sender_name=payload.get("sender_name"),
-                max_messages=payload.get("max_messages"),
-            )
-            return {"record": _serialize_history(record) if record else None}
-        if operation == "get":
-            records = await self._manager.get(
-                platform_id=self._required(payload, "platform_id"),
-                user_id=self._required(payload, "user_id"),
-                page=int(payload.get("page") or 1),
-                page_size=int(payload.get("page_size") or 200),
-            )
-            return {"records": [_serialize_history(record) for record in records]}
-        if operation == "count":
-            return {
-                "count": await self._manager.count(
-                    platform_id=self._required(payload, "platform_id"),
-                    user_id=self._required(payload, "user_id"),
-                ),
-            }
-        if operation == "delete":
-            await self._manager.delete(
-                platform_id=self._required(payload, "platform_id"),
-                user_id=self._required(payload, "user_id"),
-                offset_sec=int(payload.get("offset_sec") or 86400),
-            )
-            return {}
-        if operation == "update":
-            await self._manager.update(
-                int(self._required(payload, "message_id")),
-                content=payload.get("content"),
-                llm_checkpoint_id=payload.get("llm_checkpoint_id"),
-            )
-            return {}
-        if operation == "delete_by_id":
-            await self._manager.delete_by_id(int(self._required(payload, "message_id")))
-            return {}
-        raise NotFound(f"unknown message.history operation: {operation}")
-
-    @staticmethod
-    def _required(payload: dict[str, Any], key: str) -> Any:
-        value = payload.get(key)
-        if value is None or value == "":
-            raise InvalidRequest(f"message.history operation requires {key}")
-        return value

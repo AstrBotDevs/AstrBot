@@ -27,7 +27,7 @@ from astrbot.core.star.sdk_bridge.supervisor import (
 )
 
 
-def write_legacy_plugin(plugin_root: Path, main_py: str) -> None:
+def write_sdk_plugin(plugin_root: Path, main_py: str) -> None:
     plugin_root.mkdir()
     (plugin_root / "metadata.yaml").write_text(
         yaml.safe_dump(
@@ -36,6 +36,12 @@ def write_legacy_plugin(plugin_root: Path, main_py: str) -> None:
                 "desc": "supervisor test plugin",
                 "author": "AstrBot",
                 "version": "1.0.0",
+                "schema_version": 2,
+                "runtime": {
+                    "api": "sdk",
+                    "entrypoint": "main:TestPlugin",
+                    "sdk_version": ">=0.1,<0.2",
+                },
             },
         ),
         "utf-8",
@@ -71,7 +77,6 @@ def make_supervisor(
 ) -> RunnerSupervisor:
     return RunnerSupervisor(
         plugin_root,
-        legacy=True,
         python_executable=Path(sys.executable),
         env={},
         grants=CapabilitySet.from_ids("storage.kv", "assets.transfer", "message.send"),
@@ -109,23 +114,22 @@ async def wait_for_client(
 @pytest.mark.asyncio
 async def test_crash_restarts_runner(tmp_path: Path) -> None:
     plugin_root = tmp_path / "crasher"
-    write_legacy_plugin(
+    write_sdk_plugin(
         plugin_root,
         """
 import os
 
-from astrbot.api.event import AstrMessageEvent, filter
-from astrbot.api.star import Context, Star
+from astrbot_sdk import MessageEvent, Plugin, on
 
 
-class CrasherPlugin(Star):
-    @filter.command("boom")
-    async def boom(self, event: AstrMessageEvent):
+class TestPlugin(Plugin):
+    @on.command("boom")
+    async def boom(self, event: MessageEvent):
         os._exit(3)
 
-    @filter.command("ok")
-    async def ok(self, event: AstrMessageEvent):
-        yield event.plain_result("fine")
+    @on.command("ok")
+    async def ok(self, event: MessageEvent):
+        yield event.reply("fine")
 """,
     )
     supervisor = make_supervisor(
@@ -155,7 +159,7 @@ class CrasherPlugin(Star):
 async def test_crash_loop_opens_circuit(tmp_path: Path) -> None:
     marker = tmp_path / "crash.marker"
     plugin_root = tmp_path / "looper"
-    write_legacy_plugin(
+    write_sdk_plugin(
         plugin_root,
         f"""
 import os
@@ -164,13 +168,12 @@ import sys
 if os.path.exists({str(marker)!r}):
     raise SystemExit(1)
 
-from astrbot.api.event import AstrMessageEvent, filter
-from astrbot.api.star import Context, Star
+from astrbot_sdk import MessageEvent, Plugin, on
 
 
-class LooperPlugin(Star):
-    @filter.command("boom")
-    async def boom(self, event: AstrMessageEvent):
+class TestPlugin(Plugin):
+    @on.command("boom")
+    async def boom(self, event: MessageEvent):
         open({str(marker)!r}, "w").close()
         os._exit(3)
 """,
@@ -210,24 +213,23 @@ async def test_unresponsive_runner_is_killed_and_restarted(
     tmp_path: Path,
 ) -> None:
     plugin_root = tmp_path / "wedged"
-    write_legacy_plugin(
+    write_sdk_plugin(
         plugin_root,
         """
 import time
 
-from astrbot.api.event import AstrMessageEvent, filter
-from astrbot.api.star import Context, Star
+from astrbot_sdk import MessageEvent, Plugin, on
 
 
-class WedgedPlugin(Star):
-    @filter.command("wedge")
-    async def wedge(self, event: AstrMessageEvent):
+class TestPlugin(Plugin):
+    @on.command("wedge")
+    async def wedge(self, event: MessageEvent):
         time.sleep(60)
-        yield event.plain_result("unreachable")
+        yield event.reply("unreachable")
 
-    @filter.command("ok")
-    async def ok(self, event: AstrMessageEvent):
-        yield event.plain_result("fine")
+    @on.command("ok")
+    async def ok(self, event: MessageEvent):
+        yield event.reply("fine")
 """,
     )
     supervisor = make_supervisor(
@@ -268,17 +270,16 @@ async def _collect(stream: Any) -> None:
 @pytest.mark.asyncio
 async def test_ping_reports_protocol_version(tmp_path: Path) -> None:
     plugin_root = tmp_path / "pinger"
-    write_legacy_plugin(
+    write_sdk_plugin(
         plugin_root,
         """
-from astrbot.api.event import AstrMessageEvent, filter
-from astrbot.api.star import Context, Star
+from astrbot_sdk import MessageEvent, Plugin, on
 
 
-class PingerPlugin(Star):
-    @filter.command("ok")
-    async def ok(self, event: AstrMessageEvent):
-        yield event.plain_result("fine")
+class TestPlugin(Plugin):
+    @on.command("ok")
+    async def ok(self, event: MessageEvent):
+        yield event.reply("fine")
 """,
     )
     supervisor = make_supervisor(plugin_root)

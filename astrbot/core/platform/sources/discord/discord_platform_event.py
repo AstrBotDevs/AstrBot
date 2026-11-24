@@ -3,6 +3,7 @@ from collections.abc import AsyncGenerator
 from io import BytesIO
 from pathlib import Path
 from typing import cast
+from urllib.parse import unquote, urlparse
 
 import discord
 from discord.types.interactions import ComponentInteractionData
@@ -10,12 +11,14 @@ from discord.types.interactions import ComponentInteractionData
 from astrbot import logger
 from astrbot.api.event import AstrMessageEvent, MessageChain
 from astrbot.api.message_components import (
+    ActionRow,
     BaseMessageComponent,
     File,
     Image,
     Plain,
     Record,
     Reply,
+    Video,
 )
 from astrbot.api.platform import (
     AstrBotMessage,
@@ -32,7 +35,7 @@ from astrbot.core.utils.media_utils import (
 )
 
 from .client import DiscordBotClient
-from .components import DiscordEmbed, DiscordView
+from .components import DiscordEmbed, DiscordView, action_rows_to_discord_view
 
 
 # 自定义Discord视图组件（兼容旧版本）
@@ -295,6 +298,7 @@ class DiscordPlatformEvent(AstrMessageEvent):
         content_parts = []
         files = []
         view = None
+        action_rows = []
         embeds = []
         reference_message_id = None
         for i in message.chain:  # 遍历消息链
@@ -303,7 +307,7 @@ class DiscordPlatformEvent(AstrMessageEvent):
             elif isinstance(i, Reply):
                 reference_message_id = i.id
             elif isinstance(i, At):
-                content_parts.append(f"<@{i.qq}>")
+                content_parts.append("@everyone" if i.qq == "all" else f"<@{i.qq}>")
             elif isinstance(i, Image):
                 logger.debug(f"[Discord] 开始处理 Image 组件: {i}")
                 try:
@@ -386,6 +390,22 @@ class DiscordPlatformEvent(AstrMessageEvent):
                         describe_media_ref(audio_ref),
                         exc_info=True,
                     )
+            elif isinstance(i, Video):
+                try:
+                    path = Path(await i.convert_to_file_path())
+                    filename = path.name
+                    if i.file.startswith(("http://", "https://")):
+                        url_path = unquote(urlparse(i.file).path).replace("\\", "/")
+                        url_filename = url_path.rsplit("/", 1)[-1]
+                        if url_filename not in ("", ".", ".."):
+                            filename = url_filename
+                    files.append(discord.File(path, filename=filename))
+                except Exception:
+                    logger.warning(
+                        "[Discord] Failed to process video: %s",
+                        describe_media_ref(i.file),
+                        exc_info=True,
+                    )
             elif isinstance(i, File):
                 try:
                     file_path_str = await i.get_file()
@@ -414,8 +434,17 @@ class DiscordPlatformEvent(AstrMessageEvent):
                 # 如果消息链中包含Discord视图组件（兼容旧版本）
                 if isinstance(i.view, discord.ui.View):
                     view = i.view
+            elif isinstance(i, ActionRow):
+                action_rows.append(i)
             else:
                 logger.debug(f"[Discord] 忽略了不支持的消息组件: {i.type}")
+
+        if action_rows:
+            if view is not None:
+                logger.warning(
+                    "[Discord] Common ActionRow components override a legacy Discord view."
+                )
+            view = action_rows_to_discord_view(action_rows)
 
         content = "".join(content_parts)
         if len(content) > 2000:
@@ -445,17 +474,11 @@ class DiscordPlatformEvent(AstrMessageEvent):
             == discord.InteractionType.application_command
         )
 
-    def is_button_interaction(self) -> bool:
-        """判断是否为按钮交互"""
-        return (
-            hasattr(self.message_obj, "raw_message")
-            and hasattr(self.message_obj.raw_message, "type")
-            and cast(discord.Interaction, self.message_obj.raw_message).type
-            == discord.InteractionType.component
-        )
-
     def get_interaction_custom_id(self) -> str:
-        """获取交互组件的custom_id"""
+        """Return the portable action ID, with legacy raw-data fallback."""
+        button_interaction = self.get_button_interaction()
+        if button_interaction is not None:
+            return button_interaction.action_id
         if self.is_button_interaction():
             try:
                 return cast(

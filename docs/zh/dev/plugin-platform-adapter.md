@@ -52,12 +52,16 @@ class FakeClient:
 ```py
 import asyncio
 
+# AstrBot v4.30.0 之前的导入方式：
+# from astrbot.core.platform.astr_message_event import MessageSesion as MessageSession
 from astrbot.api.platform import (
     Platform,
     AstrBotMessage,
     MessageMember,
+    MessageSession,
     PlatformMetadata,
     MessageType,
+    register_platform_adapter,
 )
 from astrbot.api.event import MessageChain
 from astrbot.api.message_components import (
@@ -65,8 +69,6 @@ from astrbot.api.message_components import (
     Image,
     Record,
 )  # 消息链中的组件，可以根据需要导入
-from astrbot.core.platform.astr_message_event import MessageSesion
-from astrbot.api.platform import register_platform_adapter
 from astrbot import logger
 from .client import FakeClient
 from .fake_platform_event import FakePlatformEvent
@@ -87,7 +89,7 @@ class FakePlatformAdapter(Platform):
         self.settings = platform_settings  # platform_settings 平台设置。
 
     async def send_by_session(
-        self, session: MessageSesion, message_chain: MessageChain
+        self, session: MessageSession, message_chain: MessageChain
     ):
         # 必须实现
         await super().send_by_session(session, message_chain)

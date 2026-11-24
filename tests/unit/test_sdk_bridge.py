@@ -51,6 +51,7 @@ class FakeCoreEvent:
         self.is_wake = True
         self.is_at_or_wake_command = True
         self.plugins_name = None
+        self.trace = MagicMock()
         self._text = text
         # The real AstrMessageEvent exposes the raw text as an attribute too
         # (CommandGroupFilter reads it directly).
@@ -476,12 +477,13 @@ class TestPlugin(Plugin):
         await bridge.stop()
 
 
-def test_legacy_loader_skips_sdk_plugin_dirs(tmp_path: Path) -> None:
+def test_in_process_loader_skips_sdk_plugin_dirs(tmp_path: Path) -> None:
     from astrbot.core.star.star_manager import PluginManager
 
     legacy = tmp_path / "legacy_plugin"
     legacy.mkdir()
-    (legacy / "main.py").write_text("# legacy", "utf-8")
+    (legacy / "main.py").write_text("# in-process", "utf-8")
+    (legacy / "metadata.yaml").write_text("runtime:\n  isolated: true\n", "utf-8")
     sdk = tmp_path / "sdk_plugin"
     sdk.mkdir()
     (sdk / "main.py").write_text("# sdk", "utf-8")
@@ -492,77 +494,6 @@ def test_legacy_loader_skips_sdk_plugin_dirs(tmp_path: Path) -> None:
 
     modules = PluginManager._get_modules(str(tmp_path))
     assert [m["pname"] for m in modules] == ["legacy_plugin"]
-
-
-def test_legacy_loader_runtime_overrides(tmp_path: Path) -> None:
-    from astrbot.core.star.star_manager import PluginManager
-
-    legacy = tmp_path / "legacy_plugin"
-    legacy.mkdir()
-    (legacy / "main.py").write_text("# legacy", "utf-8")
-    declared = tmp_path / "declared_isolated"
-    declared.mkdir()
-    (declared / "main.py").write_text("# declared", "utf-8")
-    (declared / "metadata.yaml").write_text(
-        yaml.safe_dump({"runtime": {"isolated": True}}),
-        "utf-8",
-    )
-
-    # No overrides: plain legacy loads in-process, metadata-declared is skipped.
-    modules = PluginManager._get_modules(str(tmp_path))
-    assert [m["pname"] for m in modules] == ["legacy_plugin"]
-
-    # Override into isolation: plain legacy is skipped too.
-    modules = PluginManager._get_modules(
-        str(tmp_path),
-        {"legacy_plugin": "isolated"},
-    )
-    assert modules == []
-
-    # Override back to in-process: metadata declaration is overridden.
-    modules = PluginManager._get_modules(
-        str(tmp_path),
-        {"declared_isolated": "in-process"},
-    )
-    assert sorted(m["pname"] for m in modules) == [
-        "declared_isolated",
-        "legacy_plugin",
-    ]
-
-
-@pytest.mark.asyncio
-async def test_load_all_honors_runtime_overrides(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """SDKPluginManager.load_all must apply runtime overrides when detecting
-    isolated legacy plugins (previously the raw metadata check dropped
-    override-isolated plugins, leaving them loaded nowhere)."""
-    from astrbot.core.star.sdk_bridge import bridge as bridge_mod
-
-    legacy = tmp_path / "legacy_plugin"
-    legacy.mkdir()
-    (legacy / "main.py").write_text("# legacy", "utf-8")
-
-    started: list[tuple[str, bool]] = []
-
-    class FakeBridge:
-        def __init__(self, plugin_root, context, legacy=False, **kwargs):
-            started.append((plugin_root.name, legacy))
-
-        async def start(self) -> None:
-            return None
-
-    monkeypatch.setattr(bridge_mod, "SDKPluginBridge", FakeBridge)
-    manager = bridge_mod.SDKPluginManager(context=None, plugin_store_path=tmp_path)
-
-    # Without overrides a plain legacy plugin is not bridge-loaded.
-    await manager.load_all()
-    assert started == []
-
-    # With the isolated override it is bridge-loaded in legacy mode.
-    await manager.load_all(runtime_overrides={"legacy_plugin": "isolated"})
-    assert started == [("legacy_plugin", True)]
 
 
 def write_sdk_plugin(plugin_root: Path, source: str, *, capabilities=None) -> None:
@@ -655,7 +586,7 @@ class TestPlugin(Plugin):
         # 模拟 waking_check：指令匹配与参数解析
         event = FakeCoreEvent("greet 2")
         command_filter = handler.event_filters[0]
-        assert command_filter.filter(event, None)
+        assert command_filter.filter(event, {})
         parsed = event.get_extra("parsed_params")
         assert parsed == {"times": 2, "prefix": "hi"}
 
@@ -672,10 +603,8 @@ class TestPlugin(Plugin):
 
         # ctx.messages.send 经由 Context.send_message 主动发送
         context.send_message.assert_awaited_once()
-        # 镜像进程内 event.send()：在飞事件被标记为已发送，管线跳过 LLM 阶段
-        assert event._has_send_oper is True
-        # 处理结束后在飞事件表清空
-        assert bridge._inflight_events == {}
+        # A proactive send is independent of the command event.
+        assert event._has_send_oper is False
         session, chain = context.send_message.await_args.args
         assert session.platform_id == "webchat"
         assert session.message_type is CoreMessageType.FRIEND_MESSAGE
@@ -709,131 +638,3 @@ class TestPlugin(Plugin):
     with pytest.raises(Exception, match="parent path"):
         await bridge.start()
     await bridge.stop()
-
-
-def test_to_sdk_event_carries_plugins_name_extras() -> None:
-    event = FakeCoreEvent()
-    event.plugins_name = ["meme_manager", "astrbot"]
-
-    sdk_event = to_sdk_event(event)
-
-    assert sdk_event.extras["plugins_name"] == ["meme_manager", "astrbot"]
-
-    event.plugins_name = None
-    assert to_sdk_event(event).extras["plugins_name"] is None
-
-
-class _FakeInflightEvent:
-    """Stand-in for an in-flight Host AstrMessageEvent."""
-
-    def __init__(self) -> None:
-        self.call_llm = False
-        self.calls: list[tuple[str, dict]] = []
-
-    async def send_typing(self) -> None:
-        self.calls.append(("send_typing", {}))
-
-    async def stop_typing(self) -> None:
-        self.calls.append(("stop_typing", {}))
-
-    async def react(self, emoji: str) -> None:
-        self.calls.append(("react", {"emoji": emoji}))
-
-    async def get_group(self, group_id: str | None = None, **_kwargs: Any) -> Any:
-        from astrbot.core.platform.astrbot_message import Group
-
-        self.calls.append(("get_group", {"group_id": group_id}))
-        if group_id is None:
-            return None
-        return Group(group_id=group_id, group_name="G")
-
-
-@pytest.mark.asyncio
-async def test_event_state_service_set_call_llm() -> None:
-    from astrbot.core.star.sdk_bridge.services import EventStateService
-
-    first, second = _FakeInflightEvent(), _FakeInflightEvent()
-    inflight = {"webchat:FriendMessage:user-1": [first, second]}
-    service = EventStateService(inflight)
-
-    await service.handle(
-        "set_call_llm",
-        {"umo": "webchat:FriendMessage:user-1", "value": True},
-    )
-
-    assert first.call_llm is True
-    assert second.call_llm is True
-
-
-@pytest.mark.asyncio
-async def test_event_state_service_call_method() -> None:
-    from astrbot_sdk.errors import InvalidRequest, NotFound
-
-    from astrbot.core.star.sdk_bridge.services import EventStateService
-
-    event = _FakeInflightEvent()
-    service = EventStateService({"webchat:FriendMessage:user-1": [event]})
-
-    await service.handle(
-        "call_method",
-        {"umo": "webchat:FriendMessage:user-1", "method": "send_typing"},
-    )
-    await service.handle(
-        "call_method",
-        {
-            "umo": "webchat:FriendMessage:user-1",
-            "method": "react",
-            "args": {"emoji": "👍"},
-        },
-    )
-    assert event.calls == [
-        ("send_typing", {}),
-        ("react", {"emoji": "👍"}),
-    ]
-
-    result = await service.handle(
-        "call_method",
-        {
-            "umo": "webchat:FriendMessage:user-1",
-            "method": "get_group",
-            "args": {"group_id": "g-1"},
-        },
-    )
-    assert result["result"]["group_id"] == "g-1"
-    assert result["result"]["group_name"] == "G"
-
-    # Methods outside the allowlist never reach the event.
-    with pytest.raises(NotFound):
-        await service.handle(
-            "call_method",
-            {"umo": "webchat:FriendMessage:user-1", "method": "stop_event"},
-        )
-    # Without an in-flight event there is nothing to forward to.
-    with pytest.raises(NotFound):
-        await service.handle(
-            "call_method",
-            {"umo": "webchat:FriendMessage:nobody", "method": "send_typing"},
-        )
-    with pytest.raises(InvalidRequest):
-        await service.handle("call_method", {"method": "send_typing"})
-
-
-def test_snapshot_platform_entry_redacts_config() -> None:
-    from astrbot.core.star.sdk_bridge.snapshot import _platform_entries
-
-    instance = SimpleNamespace(
-        config={"appid": "123", "app_secret": "s3cret", "token": "abc"},
-    )
-    instance.meta = lambda: SimpleNamespace(
-        id="qq-1",
-        name="qq_official",
-        description="d",
-        adapter_display_name="QQ",
-    )
-
-    entries = _platform_entries([instance])
-
-    assert entries[0]["id"] == "qq-1"
-    assert entries[0]["config"]["appid"] == "123"
-    assert entries[0]["config"]["app_secret"] == ""
-    assert entries[0]["config"]["token"] == ""

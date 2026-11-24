@@ -1,11 +1,11 @@
 from __future__ import annotations
 
-import sys
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 import yaml
+from astrbot_sdk.errors import InvalidRequest, NotFound
 
 from astrbot.core.star.sdk_bridge import SDKPluginBridge
 from astrbot.core.star.sdk_bridge.services.assets import AssetStore
@@ -15,9 +15,6 @@ from astrbot.core.star.sdk_bridge.services.speech import (
     SpeechTranscribeService,
 )
 from astrbot.core.star.star_handler import star_handlers_registry
-from astrbot_sdk.assets import AssetRef
-from astrbot_sdk.errors import InvalidRequest, NotFound
-
 from tests.unit.test_sdk_bridge import FakeCoreEvent, FakeKVStore
 
 
@@ -201,7 +198,7 @@ async def test_bridge_speech_embed_end_to_end(
             name = command.split()[0]
             handler = handlers[f"sdk_bridge.{plugin_root.name}_{name}"]
             event = FakeCoreEvent(command)
-            assert handler.event_filters[0].filter(event, None)
+            assert handler.event_filters[0].filter(event, {})
             params = event.get_extra("parsed_params") or {}
             replies = []
             async for _ in handler.handler(event, **params):

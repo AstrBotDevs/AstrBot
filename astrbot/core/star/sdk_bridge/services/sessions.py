@@ -252,7 +252,7 @@ class SessionWaitService:
                     f"{existing.bridge.plugin_id}: {key}"
                 )
             # Same-plugin re-registration evicts the previous waiter, mirroring
-            # the legacy USER_SESSIONS overwrite semantics.
+            # the in-process waiter overwrite semantics.
             _remove(existing)
             with contextlib.suppress(Exception):
                 await existing.bridge._require_client().session_timeout(

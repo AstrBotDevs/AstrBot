@@ -11,17 +11,13 @@ from uuid import uuid4
 
 from astrbot_sdk.capabilities import CapabilityGrant, CapabilitySet
 from astrbot_sdk.errors import InvalidRequest
-from astrbot_sdk.results import GroupUsage
 from astrbot_sdk.runtime.metadata import load_metadata
 from astrbot_sdk.runtime.stdio_client import StdioPluginClient
 from astrbot_sdk.tools import ToolCallContext
 
 from astrbot.core import logger, sp
-from astrbot.core.config.astrbot_config import AstrBotConfig
-from astrbot.core.message.message_event_result import MessageEventResult
 from astrbot.core.provider.register import llm_tools
-from astrbot.core.star.filter import HandlerFilter
-from astrbot.core.star.filter.command_group import CommandGroupFilter
+from astrbot.core.star.filter.command import CommandFilter
 from astrbot.core.star.star import StarMetadata, star_map, star_registry
 from astrbot.core.star.star_handler import (
     EventType,
@@ -29,10 +25,8 @@ from astrbot.core.star.star_handler import (
     star_handlers_registry,
 )
 
-from .convert import apply_sdk_result, to_sdk_event, to_umo_string
-from .detect import _BRIDGE_MODULE_PREFIX
-from .detect import is_isolated_legacy_dir as is_isolated_legacy_dir
-from .detect import is_sdk_plugin_dir as is_sdk_plugin_dir
+from ..sdk_plugin_metadata import _BRIDGE_MODULE_PREFIX, is_sdk_plugin_dir
+from .convert import apply_sdk_result, to_sdk_event
 from .hooks import (
     apply_hook_result,
     is_metadata_stage,
@@ -43,39 +37,23 @@ from .services import (
     AgentRunService,
     AssetStore,
     AssetTransferService,
-    ConfigWriteService,
     ConversationReadService,
     ConversationWriteService,
-    CronScheduleService,
-    DbService,
-    EventInjectService,
-    EventStateService,
-    FileTokenService,
-    HandlerRegisterService,
     HostService,
-    KnowledgeBaseService,
     LLMEmbedService,
     LLMGenerateService,
-    MessageHistoryService,
     MessageSendService,
-    PersonaWriteService,
-    PlatformRawService,
     PluginInspectService,
-    PluginLifecycleService,
-    ProviderWriteService,
     RenderImageService,
     SessionWaitService,
     SpeechSynthesizeService,
     SpeechTranscribeService,
-    SpStoreService,
     StorageService,
-    SubagentReloadService,
     ToolRegisterService,
     WebRouteService,
     dispatch_capability,
     purge_bridge_sessions,
 )
-from .snapshot import build_legacy_snapshot
 from .supervisor import ExternalRunnerSupervisor, RunnerSupervisor
 from .venv import ensure_plugin_venv
 from .ws_listener import ExternalRunnerListener
@@ -91,124 +69,13 @@ def _asset_root() -> Path:
     return Path(get_astrbot_data_path()) / "sdk_assets"
 
 
-def _metadata_views(metadata: Any) -> list[dict]:
-    """Extract the views declaration from plugin metadata (views or pages)."""
-    views = getattr(metadata, "views", None) or getattr(metadata, "pages", None)
-    if not views:
-        return []
-    return [dict(item) for item in views if isinstance(item, dict | Mapping)]
-
-
 def _param_types() -> dict[str, type]:
-    from astrbot.core.star.filter.command import GreedyStr
-
     return {
         "str": str,
         "int": int,
         "float": float,
         "bool": bool,
-        "GreedyStr": GreedyStr,
     }
-
-
-# Capabilities granted to isolated legacy plugins. Legacy plugins declare no
-# capability set; the compat facade is constrained by this fixed set so the
-# old API surface (KV, LLM, conversations, render, tools, send) keeps working.
-_LEGACY_GRANT_IDS = (
-    "storage.kv",
-    "assets.transfer",
-    "message.send",
-    "llm.observe",
-    "llm.modify",
-    "message.observe",
-    "message.modify",
-    "llm.generate",
-    "llm.agent",
-    "llm.embed",
-    "speech.transcribe",
-    "speech.synthesize",
-    "conversation.read",
-    "conversation.write",
-    "render.image",
-    "llm.tool.register",
-    "plugin.inspect",
-    "web.route",
-    "message.wait",
-    "platform.raw",
-    "event.state",
-    "config.write",
-    "persona.write",
-    "provider.write",
-    "plugin.lifecycle",
-    "subagents.reload",
-    "cron.schedule",
-    "kb.manage",
-    "message.history",
-    "file.token",
-    "handler.register",
-    "event.inject",
-    "db.read",
-    "sp.store",
-)
-
-
-def _load_legacy_plugin_config(plugin_root: Path, root_dir_name: str) -> Any:
-    """Load one legacy plugin's config from its _conf_schema.json.
-
-    Mirrors the in-process star manager: when the plugin ships a config
-    schema, its values live at data/config/{root_dir_name}_config.json.
-    """
-    schema_path = plugin_root / "_conf_schema.json"
-    if not schema_path.is_file():
-        return None
-    from astrbot.core.star.star_manager import PluginManager
-    from astrbot.core.utils.astrbot_path import get_astrbot_config_path
-
-    return AstrBotConfig(
-        config_path=str(
-            Path(get_astrbot_config_path()) / f"{root_dir_name}_config.json"
-        ),
-        schema=PluginManager._load_plugin_config_schema(str(schema_path)),
-    )
-
-
-class _DeferringCommandGroupFilter(CommandGroupFilter):
-    """Command group filter that defers the bare-message reply to the Runner.
-
-    In-process, a bare group-name message raises the usage-tree reply after
-    the group's custom filters pass. Those custom filters live in the plugin
-    Runner and cannot be evaluated synchronously by waking_check, so a bare
-    message falls through to the synthetic bare-group handler instead of
-    raising here. Sub-command matching is unchanged.
-    """
-
-    def filter(self, event, cfg) -> bool:
-        if not event.is_at_or_wake_command:
-            return False
-        if not self.custom_filter_ok(event, cfg):
-            return False
-        if self.equals(event.message_str.strip()):
-            return False
-        return self.startswith(event.message_str)
-
-
-class _BareGroupHandlerFilter(HandlerFilter):
-    """Matches exactly the bare group-name message of one command group.
-
-    Registered on the synthetic handler that asks the plugin Runner to
-    evaluate group-level custom filters and answer with a usage-tree
-    request. Must not be a CommandGroupFilter, or waking_check would exclude
-    the handler from activation like any group anchor.
-    """
-
-    def __init__(self, group_filter: CommandGroupFilter) -> None:
-        self._group_filter = group_filter
-
-    def filter(self, event, cfg) -> bool:
-        return bool(
-            event.is_at_or_wake_command
-            and self._group_filter.equals(event.message_str.strip())
-        )
 
 
 class SDKPluginBridge:
@@ -225,7 +92,6 @@ class SDKPluginBridge:
         context: Context,
         *,
         plugin_logger: logging.Logger | None = None,
-        legacy: bool = False,
         external: Mapping[str, Any] | None = None,
         listener: ExternalRunnerListener | None = None,
     ) -> None:
@@ -237,7 +103,6 @@ class SDKPluginBridge:
                 used for registry naming.
             context: AstrBot star context used for platform and config access.
             plugin_logger: Logger receiving Runner stderr output.
-            legacy: Load the plugin through the legacy compat layer.
             external: External plugin spec (plugin_id, token, capabilities,
                 config); when set, the Runner dials in over WebSocket
                 instead of being spawned locally.
@@ -251,7 +116,6 @@ class SDKPluginBridge:
         self.plugin_id = ""
         # StarMetadata.name from the handshake; used for plugin page token scopes.
         self.plugin_name = ""
-        self.legacy = legacy
         self._external = external
         self._listener = listener
         self._claims_token: str | None = None
@@ -259,23 +123,14 @@ class SDKPluginBridge:
         self._grants = CapabilitySet()
         self._services: dict[str, HostService] = {}
         self._asset_store: AssetStore | None = None
-        self._plugin_config: Any = None
         self._handler_full_names: list[str] = []
         self._tool_names: list[str] = []
         # Activation state read from shared preferences during start(); tools
         # registered before start() default to active.
         self._activated = True
         self._inactivated_llm_tools: list = []
-        # Legacy command groups: full group path -> CommandGroupFilter, plus
-        # (parent path, filter) pairs linked after every handler registers.
-        self._command_group_filters: dict[str, Any] = {}
-        self._pending_command_links: list[tuple[str, Any]] = []
         self._web_routes: list[tuple[str, tuple[str, ...]]] = []
         self._views_manifest: dict = {}
-        # Core events currently being served by the Runner, keyed by umo
-        # string. Proactive sends mark them so the pipeline skips the LLM
-        # stage, mirroring in-process event.send().
-        self._inflight_events: dict[str, list[Any]] = {}
 
     async def start(self) -> None:
         """Start the Runner subprocess and register pipeline handlers.
@@ -289,14 +144,10 @@ class SDKPluginBridge:
             # come from the host-side external plugin spec.
             spec = self._external
             self.plugin_id = str(spec["plugin_id"])
-            if self.legacy:
-                grants = CapabilitySet.from_ids(*_LEGACY_GRANT_IDS)
-            else:
-                grants = CapabilitySet.from_ids(*(spec.get("capabilities") or ()))
+            grants = CapabilitySet.from_ids(*(spec.get("capabilities") or ()))
             metadata = SimpleNamespace(
                 author=str(spec.get("author") or ""),
                 desc=str(spec.get("desc") or ""),
-                views=[],
                 pages=None,
                 display_name=spec.get("display_name"),
                 short_desc=spec.get("short_desc"),
@@ -304,32 +155,11 @@ class SDKPluginBridge:
                 support_platforms=[],
                 astrbot_version=None,
             )
-        elif self.legacy:
-            from astrbot_sdk.runtime.loader import _load_metadata_for_legacy
-
-            metadata = _load_metadata_for_legacy(self.plugin_root)
-            self.plugin_id = metadata.plugin_id
-            grants = CapabilitySet.from_ids(*_LEGACY_GRANT_IDS)
         else:
             metadata = load_metadata(self.plugin_root)
             self.plugin_id = metadata.plugin_id
             # The vertical slice grants every declared capability; the user
             # authorization flow will replace this in a later step.
-            legacy_only = {
-                "platform.raw",
-                "config.write",
-                "persona.write",
-                "cron.schedule",
-                "kb.manage",
-                "message.history",
-            }
-            declared = legacy_only & metadata.capabilities.all_ids
-            if declared:
-                raise RuntimeError(
-                    f"SDK plugin {metadata.name} declares {sorted(declared)}, "
-                    "which are legacy-compat capabilities; new SDK plugins "
-                    "cannot declare them",
-                )
             grants = CapabilitySet.from_ids(*metadata.capabilities.all_ids)
             language = getattr(metadata.runtime, "language", "python")
             if str(language) != "python":
@@ -338,6 +168,14 @@ class SDKPluginBridge:
                     f"runtime.language={language}; only Python runners are "
                     "supported yet",
                 )
+        from astrbot.core.chatui import ViewSpec
+
+        views = [
+            ViewSpec.model_validate(
+                {key: value for key, value in page.items() if key != "entry_file"}
+            )
+            for page in metadata.pages or ()
+        ]
         # Mirror the in-process loader: reject plugins whose declared
         # astrbot_version range excludes the running core version.
         from astrbot.core.star.star_manager import (
@@ -365,17 +203,7 @@ class SDKPluginBridge:
         # arrive while the Runner executes lifecycle.startup during handshake.
         self._asset_store = AssetStore(_asset_root(), self.plugin_id)
         self._services = self._build_services()
-        host_info: dict[str, Any] = {}
-        if self.legacy:
-            # Legacy sync getters (config/providers/personas) are served from
-            # this snapshot by the compat layer inside the runner.
-            host_info["snapshot"] = await build_legacy_snapshot(self.context)
-        config = None
-        if self._external is not None:
-            config = self._external.get("config")
-        elif self.legacy:
-            config = _load_legacy_plugin_config(self.plugin_root, self.root_dir_name)
-        self._plugin_config = config
+        config = self._external.get("config") if self._external is not None else None
         if self._external is not None:
             if self._listener is None:
                 raise RuntimeError(
@@ -387,21 +215,17 @@ class SDKPluginBridge:
             self._supervisor = ExternalRunnerSupervisor(
                 self.root_dir_name,
                 claims=claims,
-                legacy=self.legacy,
                 grants=grants,
                 config=config,
                 capability_handler=self._dispatch_capability,
                 logger=self.plugin_logger,
                 on_circuit_open=self._mark_circuit_open,
-                host_info=host_info,
             )
         else:
             self._supervisor = RunnerSupervisor(
                 self.plugin_root,
-                legacy=self.legacy,
                 python_executable=python_executable,
                 env={
-                    "ASTRBOT_DATA_PATH": str(_asset_root().parent),
                     # Keep SDK plugin data under the AstrBot data directory
                     # instead of the inherited cwd.
                     "ASTRBOT_SDK_DATA_DIR": str(_asset_root().parent / "plugin_data"),
@@ -411,7 +235,6 @@ class SDKPluginBridge:
                 capability_handler=self._dispatch_capability,
                 logger=self.plugin_logger,
                 on_circuit_open=self._mark_circuit_open,
-                host_info=host_info,
             )
         try:
             handshake = await self._supervisor.start()
@@ -462,7 +285,7 @@ class SDKPluginBridge:
             root_dir_name=self.root_dir_name,
             activated=self._activated,
             logo_path=logo_path,
-            views=_metadata_views(metadata),
+            views=views,
             i18n=self._views_i18n(),
             display_name=getattr(metadata, "display_name", None),
             short_desc=getattr(metadata, "short_desc", None),
@@ -472,10 +295,6 @@ class SDKPluginBridge:
             ),
             astrbot_version=getattr(metadata, "astrbot_version", None),
         )
-        if isinstance(config, AstrBotConfig):
-            # Same as in-process plugins: the dashboard config tab reads
-            # metadata.config and metadata.config.schema.
-            star_metadata.config = config
         star_map[self.module_path] = star_metadata
         star_registry.append(star_metadata)
 
@@ -500,16 +319,6 @@ class SDKPluginBridge:
                 continue
             full_name = registrar(descriptor)
             self._handler_full_names.append(full_name)
-        # Command-group filters are referenced by their sub-commands for the
-        # usage tree; link them only after every handler has been registered
-        # so a sub-command declared before its group still resolves.
-        for parent_path, sub_filter in self._pending_command_links:
-            parent = self._command_group_filters.get(parent_path)
-            if parent is None:
-                continue
-            parent.add_sub_command_filter(sub_filter)
-            if isinstance(sub_filter, CommandGroupFilter):
-                sub_filter.parent_group = parent
         star_metadata.star_handler_full_names = list(self._handler_full_names)
         await self._fire_lifecycle_hooks(EventType.OnPluginLoadedEvent, star_metadata)
 
@@ -529,8 +338,6 @@ class SDKPluginBridge:
             if handler is not None:
                 star_handlers_registry.remove(handler)
         self._handler_full_names = []
-        self._command_group_filters = {}
-        self._pending_command_links = []
         star_registry[:] = [
             metadata
             for metadata in star_registry
@@ -576,8 +383,6 @@ class SDKPluginBridge:
                 )
             aliases.add(alias_parts[-1])
 
-        is_group = bool(descriptor.details.get("group"))
-        group_custom_filters = bool(descriptor.details.get("group_custom_filters"))
         stub = self._make_command_stub(descriptor.id, command_path)
         stub.__signature__ = self._build_stub_signature(descriptor)
 
@@ -590,27 +395,16 @@ class SDKPluginBridge:
             handler=stub,
             event_filters=[],
             desc=descriptor.description or "",
-            extras_configs={
-                "priority": descriptor.priority,
-                # Mirror the in-process quirk: a sub-command handler nests
-                # under its group in list_commands() only when the command
-                # decorator created the handler metadata (bottom-most
-                # decorator); otherwise it lists flat at root level.
-                **(
-                    {"sub_command": True}
-                    if descriptor.details.get("sub_command")
-                    else {}
-                ),
-            },
+            extras_configs={"priority": descriptor.priority},
         )
-        command_filter = self._build_command_filter(
-            parts,
-            aliases,
-            handler_md,
-            group=is_group,
-            defer_bare=group_custom_filters,
+        handler_md.event_filters.append(
+            CommandFilter(
+                command_name=parts[-1],
+                alias=aliases,
+                handler_md=handler_md,
+                parent_command_names=parts[:-1],
+            ),
         )
-        handler_md.event_filters.append(command_filter)
         roles = set(descriptor.details.get("roles", []))
         if roles == {"admin"}:
             from astrbot.core.star.filter.permission import (
@@ -618,8 +412,6 @@ class SDKPluginBridge:
                 PermissionTypeFilter,
             )
 
-            # Runs after the command filter, mirroring in-process decorator
-            # order: the usage reply wins over a silent permission skip.
             handler_md.event_filters.append(
                 PermissionTypeFilter(PermissionType.ADMIN),
             )
@@ -629,38 +421,6 @@ class SDKPluginBridge:
                 f"handler {descriptor.id} ignores roles {sorted(roles)}",
             )
         star_handlers_registry.append(handler_md)
-        if is_group:
-            self._command_group_filters[command_path] = command_filter
-            if group_custom_filters:
-                # Group-level custom filters live in the Runner and cannot be
-                # evaluated synchronously by waking_check. A synthetic handler
-                # matching exactly the bare group-name message activates
-                # instead, letting the plugin decide between the usage tree
-                # and a silent fall-through to the LLM stage.
-                bare_filters: list = [_BareGroupHandlerFilter(command_filter)]
-                if roles == {"admin"}:
-                    bare_filters.append(PermissionTypeFilter(PermissionType.ADMIN))
-                star_handlers_registry.append(
-                    StarHandlerMetadata(
-                        event_type=EventType.AdapterMessageEvent,
-                        handler_full_name=f"{full_name}__bare",
-                        handler_name=f"{descriptor.id}__bare",
-                        handler_module_path=self.module_path,
-                        handler=self._make_command_stub(
-                            descriptor.id,
-                            command_path,
-                            group_filter=command_filter,
-                        ),
-                        event_filters=bare_filters,
-                        desc=descriptor.description or "",
-                        extras_configs={"priority": descriptor.priority},
-                    ),
-                )
-                self._handler_full_names.append(f"{full_name}__bare")
-        if parts[:-1]:
-            self._pending_command_links.append(
-                (" ".join(parts[:-1]), command_filter),
-            )
         return full_name
 
     def _build_stub_signature(self, descriptor: Any) -> inspect.Signature:
@@ -689,35 +449,6 @@ class SDKPluginBridge:
                     ),
                 )
         return inspect.Signature(parameters)
-
-    @staticmethod
-    def _build_command_filter(
-        parts: list[str],
-        aliases: set[str],
-        handler_md: StarHandlerMetadata,
-        *,
-        group: bool = False,
-        defer_bare: bool = False,
-    ) -> Any:
-        """Build the core command filter matching the SDK command path."""
-        if group:
-            # Group anchors replicate the in-process CommandGroupFilter: a
-            # bare group-name message raises the usage-tree reply instead of
-            # running the (usually empty) fallback handler. With Runner-side
-            # custom filters, the bare reply is deferred to the plugin.
-            cls = _DeferringCommandGroupFilter if defer_bare else CommandGroupFilter
-            return cls(
-                group_name=parts[-1],
-                alias=aliases,
-            )
-        from astrbot.core.star.filter.command import CommandFilter
-
-        return CommandFilter(
-            command_name=parts[-1],
-            alias=aliases,
-            handler_md=handler_md,
-            parent_command_names=parts[:-1],
-        )
 
     def _register_message(self, descriptor: Any) -> str:
         """Register one remote message handler as a pipeline stub.
@@ -800,11 +531,6 @@ class SDKPluginBridge:
             )
         return filters
 
-    def _mark_event_sent(self, umo: Any) -> None:
-        """Mirror in-process event.send() on every in-flight event for umo."""
-        for event in self._inflight_events.get(to_umo_string(umo), ()):
-            event._has_send_oper = True
-
     def _make_message_stub(self, handler_id: str) -> Any:
         """Create the async generator bridging pipeline and message invocation.
 
@@ -819,23 +545,14 @@ class SDKPluginBridge:
         async def stub(event, **_kwargs):
             client = bridge._require_client()
             sdk_event = to_sdk_event(event, asset_store=bridge._asset_store)
-            key = to_umo_string(sdk_event.umo)
-            bridge._inflight_events.setdefault(key, []).append(event)
-            try:
-                async for result in client.invoke(handler_id, sdk_event):
-                    if result is not None:
-                        apply_sdk_result(
-                            event,
-                            result,
-                            resolve_asset=bridge._require_asset_store().resolve,
-                        )
-                    yield
-            finally:
-                events = bridge._inflight_events.get(key)
-                if events and event in events:
-                    events.remove(event)
-                    if not events:
-                        bridge._inflight_events.pop(key, None)
+            async for result in client.invoke(handler_id, sdk_event):
+                if result is not None:
+                    apply_sdk_result(
+                        event,
+                        result,
+                        resolve_asset=bridge._require_asset_store().resolve,
+                    )
+                yield
 
         return stub
 
@@ -985,18 +702,7 @@ class SDKPluginBridge:
                 umo=sdk_event.umo if sdk_event is not None else None,
                 event=sdk_event,
             )
-            key = to_umo_string(sdk_event.umo) if sdk_event is not None else None
-            if key is not None:
-                bridge._inflight_events.setdefault(key, []).append(event)
-            try:
-                return await client.invoke_tool(handler_id, call, kwargs)
-            finally:
-                if key is not None:
-                    events = bridge._inflight_events.get(key)
-                    if events and event in events:
-                        events.remove(event)
-                        if not events:
-                            bridge._inflight_events.pop(key, None)
+            return await client.invoke_tool(handler_id, call, kwargs)
 
         return stub
 
@@ -1004,17 +710,12 @@ class SDKPluginBridge:
         self,
         handler_id: str,
         command_path: str,
-        *,
-        group_filter: CommandGroupFilter | None = None,
     ) -> Any:
         """Create the async generator bridging pipeline and Runner invocation.
 
         Args:
             handler_id: Remote handler ID.
             command_path: Full command path used for the invocation DTO.
-            group_filter: Set for the synthetic bare-group handler: the Runner
-                is told the message is the bare group name and its GroupUsage
-                marker is rendered into the in-process usage-tree reply.
 
         Returns:
             Async generator function compatible with call_handler.
@@ -1023,57 +724,21 @@ class SDKPluginBridge:
 
         async def stub(event, **kwargs):
             client = bridge._require_client()
-            if group_filter is not None:
-                kwargs = {**kwargs, "bare_group": True}
             sdk_event = to_sdk_event(
                 event,
                 command_path=command_path,
                 arguments=kwargs,
                 asset_store=bridge._asset_store,
             )
-            key = to_umo_string(sdk_event.umo)
-            bridge._inflight_events.setdefault(key, []).append(event)
-            try:
-                async for result in client.invoke(handler_id, sdk_event, **kwargs):
-                    if result is not None:
-                        if group_filter is not None and isinstance(result, GroupUsage):
-                            # Mirror the waking_check ValueError reply
-                            # byte-for-byte: the group's custom filters
-                            # accepted the bare group-name message.
-                            tree = (
-                                group_filter.group_name
-                                + "\n"
-                                + (
-                                    group_filter.print_cmd_tree(
-                                        group_filter.sub_command_filters,
-                                    )
-                                )
-                            )
-                            await event.send(
-                                MessageEventResult()
-                                .message(
-                                    f"插件 {bridge.plugin_name}: 参数不足。"
-                                    f"{group_filter.group_name} 指令组下有如下指令，"
-                                    f"请参考：\n{tree}",
-                                )
-                                .use_markdown(False),
-                            )
-                            event.stop_event()
-                        else:
-                            apply_sdk_result(
-                                event,
-                                result,
-                                resolve_asset=bridge._require_asset_store().resolve,
-                            )
-                    # Each resume of this generator advances the client stream,
-                    # which acknowledges the previous plugin yield.
-                    yield
-            finally:
-                events = bridge._inflight_events.get(key)
-                if events and event in events:
-                    events.remove(event)
-                    if not events:
-                        bridge._inflight_events.pop(key, None)
+            async for result in client.invoke(handler_id, sdk_event, **kwargs):
+                if result is not None:
+                    apply_sdk_result(
+                        event,
+                        result,
+                        resolve_asset=bridge._require_asset_store().resolve,
+                    )
+                # Resume the Runner only after the Pipeline processes this yield.
+                yield
 
         return stub
 
@@ -1107,28 +772,11 @@ class SDKPluginBridge:
         store = self._require_asset_store()
         services: tuple[HostService, ...] = (
             StorageService(self.plugin_id),
-            SpStoreService(),
-            MessageSendService(self.context, store, mark_sent=self._mark_event_sent),
+            MessageSendService(self.context, store),
             ConversationReadService(self.context),
             ConversationWriteService(self.context),
             AssetTransferService(store),
-            FileTokenService(store),
             PluginInspectService(),
-            PluginLifecycleService(self.context),
-            ProviderWriteService(self.context),
-            PlatformRawService(self.context),
-            EventStateService(self._inflight_events),
-            EventInjectService(self.context),
-            DbService(self.context),
-            ConfigWriteService(
-                lambda: self._plugin_config,
-                lambda: self.context.astrbot_config_mgr.ucr,
-            ),
-            PersonaWriteService(self.context),
-            SubagentReloadService(self.context),
-            CronScheduleService(self),
-            KnowledgeBaseService(self.context),
-            MessageHistoryService(self.context),
             RenderImageService(self.context, store),
             LLMGenerateService(self.context, store),
             LLMEmbedService(self.context),
@@ -1142,7 +790,6 @@ class SDKPluginBridge:
             AgentRunService(self.context, self._tool_names, store),
             SessionWaitService(self),
             WebRouteService(self),
-            HandlerRegisterService(self),
         )
         return {service.capability_id: service for service in services}
 
@@ -1153,8 +800,7 @@ class SDKPluginBridge:
     ) -> None:
         """Fire plugin_loaded/unloaded hooks for this bridge's plugin.
 
-        Legacy plugin loading fires these inside the PluginManager loop;
-        SDK plugins need their own trigger at bridge start/stop.
+        The bridge dispatches these hooks when its Runner starts or stops.
         """
         handlers = star_handlers_registry.get_handlers_by_event_type(event_type)
         for handler in handlers:
@@ -1246,15 +892,11 @@ class SDKPluginManager:
     async def load_all(
         self,
         specified_dir_name: str | None = None,
-        runtime_overrides: dict | None = None,
     ) -> list[str]:
         """Start bridges for every SDK plugin directory.
 
         Args:
             specified_dir_name: Load only this plugin directory when given.
-            runtime_overrides: User runtime choices keyed by plugin directory
-                name; they take precedence over metadata declarations when
-                detecting isolated legacy plugins.
 
         Returns:
             Directory names of successfully loaded SDK plugins.
@@ -1276,8 +918,6 @@ class SDKPluginManager:
                 continue
             if is_sdk_plugin_dir(entry):
                 bridge = SDKPluginBridge(entry, self.context)
-            elif is_isolated_legacy_dir(entry, runtime_overrides):
-                bridge = SDKPluginBridge(entry, self.context, legacy=True)
             else:
                 continue
             await bridge.start()
@@ -1320,7 +960,6 @@ class SDKPluginManager:
             bridge = SDKPluginBridge(
                 self.plugin_store_path / name,
                 self.context,
-                legacy=bool(plugin.get("legacy")),
                 external=plugin,
                 listener=listener,
             )

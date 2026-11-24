@@ -1152,6 +1152,11 @@ export const useExtensionPage = (initialTab = "installed") => {
     curr_namespace.value = extension_name;
     currentConfigPlugin.value = extension_name;
     configDialog.value = true;
+    // Drop the previous plugin's schema immediately: the dialog keeps rendering the old
+    // metadata while the request is in flight, which would let the user toggle groups of
+    // one plugin under another plugin's namespace.
+    extension_config.metadata = {};
+    extension_config.config = {};
     extension_config.log_level = null;
     try {
       const res = await pluginApi.config(extension_name);
@@ -1243,23 +1248,6 @@ export const useExtensionPage = (initialTab = "installed") => {
       params: { pluginId: plugin.name },
       hash: "#plugin-components",
     });
-  };
-
-  const setPluginRuntime = async (plugin_name, runtime) => {
-    try {
-      const res = await pluginApi.setRuntime(plugin_name, runtime);
-      if (res.data.status === "error") {
-        toast(res.data.message || tm("messages.runtimeSwitchFailed"), "error");
-        return;
-      }
-      toast(tm("messages.runtimeSwitchSuccess"), "success");
-      await getExtensions();
-    } catch (err) {
-      toast(
-        resolveErrorMessage(err, tm("messages.runtimeSwitchFailed")),
-        "error",
-      );
-    }
   };
 
   const reloadPlugin = async (plugin_name) => {
@@ -2647,7 +2635,6 @@ export const useExtensionPage = (initialTab = "installed") => {
     updatePluginLogLevel,
     pluginLogLevelSaving,
     showPluginInfo,
-    setPluginRuntime,
     reloadPlugin,
     viewReadme,
     viewChangelog,

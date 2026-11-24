@@ -134,7 +134,7 @@ async def test_bridge_assets_end_to_end(
         ]
 
         event = FakeCoreEvent("roundtrip")
-        assert handler.event_filters[0].filter(event, None)
+        assert handler.event_filters[0].filter(event, {})
 
         replies = []
         async for _ in handler.handler(event):

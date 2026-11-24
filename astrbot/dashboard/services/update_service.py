@@ -217,7 +217,10 @@ class UpdateService:
             )
             logger.info("Updating dependencies...")
             try:
-                await self.pip_install(requirements_path="requirements.txt")
+                await self.pip_install(
+                    requirements_path="requirements.txt",
+                    bypass_core_constraints=True,
+                )
             except Exception as exc:
                 logger.error(f"Failed to update dependencies: {exc}")
             self._set_update_stage(

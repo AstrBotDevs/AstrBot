@@ -161,21 +161,6 @@ async def test_read_service_operations() -> None:
     )
     assert result["conversation"] is None
 
-    # Legacy conversation_manager.db reads (cross-session, no umo).
-    result = await service.handle("get_by_id_global", {"conversation_id": cid})
-    assert result["record"]["conversation_id"] == cid
-    assert result["record"]["user_id"] == UMO_STR
-    assert result["record"]["title"] == "t"
-
-    result = await service.handle("list_all", {"page": 1, "page_size": 10})
-    assert [r["conversation_id"] for r in result["records"]] == [cid]
-
-    result = await service.handle(
-        "get_by_id_global",
-        {"conversation_id": "missing"},
-    )
-    assert result["record"] is None
-
 
 @pytest.mark.asyncio
 async def test_write_service_operations() -> None:
@@ -230,20 +215,6 @@ async def test_write_service_operations() -> None:
         {"umo": SDK_UMO, "conversation_id": conversation.id},
     )
     assert await manager.get_conversation(UMO_STR, conversation.id) is None
-
-
-@pytest.mark.asyncio
-async def test_write_service_evict_session() -> None:
-    context = make_context()
-    manager = context.conversation_manager
-    manager.session_conversations[UMO_STR] = "conv-1"
-    service = ConversationWriteService(context)
-
-    result = await service.handle("evict_session", {"umo": SDK_UMO})
-    assert result == {}
-    assert UMO_STR not in manager.session_conversations
-    # Evicting an unknown session is a no-op, mirroring dict.pop default.
-    assert await service.handle("evict_session", {"umo": SDK_UMO}) == {}
 
 
 def write_conv_plugin(plugin_root: Path) -> None:
@@ -317,7 +288,7 @@ async def test_bridge_conversation_end_to_end(
         ]
 
         event = FakeCoreEvent("remember milk")
-        assert handler.event_filters[0].filter(event, None)
+        assert handler.event_filters[0].filter(event, {})
         params = event.get_extra("parsed_params")
 
         replies = []
