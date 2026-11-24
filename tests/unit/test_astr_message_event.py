@@ -15,6 +15,7 @@ from astrbot.core.message.components import (
     Forward,
     Image,
     Plain,
+    Record,
     Reply,
 )
 from astrbot.core.message.message_event_result import (
@@ -667,6 +668,20 @@ class TestGetMessageOutline:
         )
         outline = event.get_message_outline()
         assert "[引用消息]" in outline
+
+    def test_outline_with_other_component_uses_type_value(
+        self, platform_meta, astrbot_message
+    ):
+        """Test outline shows the component type value for other components."""
+        astrbot_message.message = [Record(file="voice.amr")]
+        event = ConcreteAstrMessageEvent(
+            message_str="",
+            message_obj=astrbot_message,
+            platform_meta=platform_meta,
+            session_id="session123",
+        )
+        outline = event.get_message_outline()
+        assert outline == "[Record]"
 
     def test_outline_empty_chain(self, platform_meta, astrbot_message):
         """Test outline with empty message chain."""

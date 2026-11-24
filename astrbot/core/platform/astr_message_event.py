@@ -237,7 +237,8 @@ class AstrMessageEvent(abc.ABC):
                 else:
                     parts.append("[引用消息]")
             else:
-                parts.append(f"[{i.type}]")
+                # Python 3.12+ formats a str-mixin Enum as "ComponentType.Record".
+                parts.append(f"[{getattr(i.type, 'value', i.type)}]")
         return " ".join(parts)
 
     def get_message_outline(self) -> str:
