@@ -211,16 +211,31 @@ export function useMediaHandling() {
     }
 
     async function handlePaste(event: ClipboardEvent) {
-        const items = event.clipboardData?.items;
-        if (!items) return;
+        const clipboardData = event.clipboardData;
+        if (!clipboardData) return;
 
-        for (let i = 0; i < items.length; i++) {
-            if (items[i].type.indexOf('image') !== -1) {
-                const file = items[i].getAsFile();
-                if (file) {
-                    await processAndUploadImage(file);
+        // Snapshot all pasted images synchronously before awaiting uploads,
+        // because browsers clear clipboardData once the paste event finishes.
+        const imageFiles = Array.from(clipboardData.files).filter(file =>
+            file.type.startsWith('image/')
+        );
+
+        if (imageFiles.length === 0) {
+            for (const item of Array.from(clipboardData.items)) {
+                if (item.kind === 'file' && item.type.startsWith('image/')) {
+                    const file = item.getAsFile();
+                    if (file) {
+                        imageFiles.push(file);
+                    }
                 }
             }
+        }
+
+        if (imageFiles.length === 0) return;
+
+        event.preventDefault();
+        for (const file of imageFiles) {
+            await processAndUploadImage(file);
         }
     }
 
