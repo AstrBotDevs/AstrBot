@@ -2,16 +2,21 @@ import typing as T
 from collections.abc import Iterable
 
 
-def extract_text(content: T.Any) -> str:
+def extract_text(content: T.Any, *, preserve_block_text: bool = False) -> str:
     if isinstance(content, str):
         return content
     if isinstance(content, dict):
         if isinstance(content.get("text"), str):
             return content["text"]
         if "content" in content:
-            return extract_text(content.get("content"))
+            return extract_text(
+                content.get("content"), preserve_block_text=preserve_block_text
+            )
         if "kwargs" in content and isinstance(content["kwargs"], dict):
-            return extract_text(content["kwargs"].get("content"))
+            return extract_text(
+                content["kwargs"].get("content"),
+                preserve_block_text=preserve_block_text,
+            )
     if isinstance(content, list):
         parts: list[str] = []
         for item in content:
@@ -22,7 +27,14 @@ def extract_text(content: T.Any) -> str:
                 if item_type == "text" and isinstance(item.get("text"), str):
                     parts.append(item["text"])
                 elif "content" in item:
-                    parts.append(extract_text(item["content"]))
+                    parts.append(
+                        extract_text(
+                            item["content"], preserve_block_text=preserve_block_text
+                        )
+                    )
+        if preserve_block_text:
+            # LangChain text blocks already carry their own whitespace.
+            return "".join(parts)
         return "\n".join([p for p in parts if p]).strip()
     return str(content) if content is not None else ""
 
@@ -71,7 +83,7 @@ def extract_latest_ai_text(messages: Iterable[T.Any]) -> str:
         if not isinstance(msg, dict):
             continue
         if is_ai_message(msg):
-            text = extract_text(msg.get("content"))
+            text = extract_text(msg.get("content"), preserve_block_text=True)
             if text:
                 return text
     return ""
@@ -138,7 +150,7 @@ def extract_ai_delta_from_event_data(data: T.Any) -> str:
     if not msg_obj:
         return ""
     if is_ai_message(msg_obj):
-        return extract_text(msg_obj.get("content"))
+        return extract_text(msg_obj.get("content"), preserve_block_text=True)
     return ""
 
 
