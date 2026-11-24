@@ -415,13 +415,7 @@ class DelegatedAgentSession(NativeAgentSession):
         )
         req = ProviderRequest(
             system_prompt=instructions.system_prompt,
-            contexts=[
-                {
-                    **message.model_dump(),
-                    **({"_no_save": True} if message._no_save else {}),
-                }
-                for message in history
-            ],
+            contexts=dump_messages(history, include_temporary=True),
             func_tool=tools if tools.tools else None,
             conversation=Conversation(
                 platform_id=caller.event.get_platform_id(),

@@ -1503,10 +1503,10 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             if self.req:
                 self.req.func_tool = None
                 self.run_context.tools = None
-            # 注入提示词
-            await self._append_context_messages(
-                [Message(role="user", content=self.MAX_STEPS_REACHED_PROMPT)]
-            )
+            # Keep the generated instruction in the active user turn.
+            limit_message = Message(role="user", content=self.MAX_STEPS_REACHED_PROMPT)
+            limit_message._turn_continuation = True
+            await self._append_context_messages([limit_message])
             # 再执行最后一步
             async with aclosing(self.step()) as responses:
                 async for resp in responses:
@@ -1630,9 +1630,9 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                     if content is not None:
                         content.extend(image_parts)
                     else:
-                        await self._append_context_messages(
-                            [Message(role="user", content=image_parts)]
-                        )
+                        image_message = Message(role="user", content=image_parts)
+                        image_message._turn_continuation = True
+                        await self._append_context_messages([image_message])
                     logger.debug(
                         f"Appended {len(cached_images)} cached image(s) to context for LLM review"
                     )
