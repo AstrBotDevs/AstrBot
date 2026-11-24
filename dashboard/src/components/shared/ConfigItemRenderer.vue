@@ -141,6 +141,7 @@
 
     <div v-else-if="itemMeta?.editor_mode" class="editor-container">
       <StreamDiffsEditor
+        class="editor-surface"
         :theme-type="itemMeta?.editor_theme === 'vs-dark' ? 'dark' : 'light'"
         :language="itemMeta?.editor_language || 'json'"
         :model-value="modelValue"
@@ -488,6 +489,13 @@ function getSelectItems(itemMeta) {
   display: flex;
   flex-direction: column;
   width: 100%;
+}
+
+/* The surface has no intrinsic height: without this an empty or one-line value
+   collapses to a single row that is hard to click into. */
+.editor-surface {
+  flex-grow: 1;
+  min-height: 100px;
 }
 
 .editor-json-error {

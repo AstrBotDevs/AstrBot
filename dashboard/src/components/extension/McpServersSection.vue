@@ -616,6 +616,10 @@ export default {
         };
       }
       this.serverConfigJson = JSON.stringify(template, null, 2);
+      // The editor swaps an externally assigned document without emitting
+      // `change`, so re-run validation here or an error from the previous
+      // content would stay on screen next to valid JSON.
+      this.validateJson();
     },
     saveServer() {
       if (!this.validateJson()) {

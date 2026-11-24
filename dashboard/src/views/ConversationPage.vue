@@ -528,6 +528,7 @@ export default {
         this.debouncedApplyFilters?.cancel();
         this.listRequestId += 1;
         this.listAbortController?.abort();
+        if (this.historyFormatTimer) clearTimeout(this.historyFormatTimer);
     },
 
     computed: {
@@ -639,10 +640,6 @@ export default {
 
     mounted() {
         this.fetchConversations();
-    },
-
-    beforeUnmount() {
-        if (this.historyFormatTimer) clearTimeout(this.historyFormatTimer);
     },
 
     methods: {
