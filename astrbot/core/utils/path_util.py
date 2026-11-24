@@ -44,7 +44,12 @@ def path_Mapping(mappings, srcPath: str) -> str:
         to_ = to_.removesuffix("\\")
         # logger.debug(f"\t路径映射-规则(处理): {from_} -> {to_}")
 
-        url = file_uri_to_path(srcPath) if is_file_uri(srcPath) else srcPath
+        if is_file_uri(srcPath):
+            # Mapping prefixes describe source paths, not this host's filesystem.
+            url = file_uri_to_path(srcPath).replace("\\", "/")
+            from_ = from_.replace("\\", "/")
+        else:
+            url = srcPath
         if url.startswith(from_):
             srcPath = url.replace(from_, to_, 1)
             if ":" in srcPath:

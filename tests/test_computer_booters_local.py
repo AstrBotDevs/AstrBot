@@ -1,9 +1,11 @@
 """Local booter lifecycle and unsupported transfer behavior."""
 
+from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 import pytest
 
+from astrbot.core.astr_agent_runtime.computer.booters import local as local_booter
 from astrbot.core.astr_agent_runtime.computer.booters.local import (
     LocalBooter,
     LocalFileSystemComponent,
@@ -45,7 +47,6 @@ async def test_local_transfers_are_explicitly_unsupported(operation):
         (b"", None, ""),
         ("中文".encode(), None, "中文"),
         ("café".encode("latin-1"), "latin-1", "café"),
-        (b"\xff", "not-an-encoding", "�"),
     ],
 )
 def test_output_decoding_preserves_known_encodings(
@@ -56,3 +57,23 @@ def test_output_decoding_preserves_known_encodings(
         lambda _: "utf-8",
     )
     assert _decode_bytes_with_fallback(data, preferred_encoding=encoding) == expected
+
+
+@pytest.mark.parametrize(
+    "platform_name,locale_encoding,expected",
+    [("posix", "utf-8", "�"), ("nt", "cp1252", "ÿ")],
+)
+def test_output_decoding_uses_platform_fallback(
+    monkeypatch: pytest.MonkeyPatch,
+    platform_name: str,
+    locale_encoding: str,
+    expected: str,
+) -> None:
+    monkeypatch.setattr(local_booter, "os", SimpleNamespace(name=platform_name))
+    monkeypatch.setattr(
+        local_booter.locale, "getpreferredencoding", lambda _: locale_encoding
+    )
+    assert (
+        _decode_bytes_with_fallback(b"\xff", preferred_encoding="not-an-encoding")
+        == expected
+    )

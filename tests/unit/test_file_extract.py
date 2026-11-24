@@ -131,8 +131,7 @@ class TestExtractFileMoonshotaiSuccess:
 
         await extract_file_moonshotai("/my/custom/document.txt", "key")
 
-        args, _ = mock_path_cls.call_args
-        assert str(args[0]) == "/my/custom/document.txt"
+        mock_path_cls.assert_called_once_with(Path("/my/custom/document.txt"))
 
 
 # ---------------------------------------------------------------------------

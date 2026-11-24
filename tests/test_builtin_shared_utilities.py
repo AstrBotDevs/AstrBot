@@ -129,15 +129,17 @@ def test_rendering_replaces_old_pages_only_after_all_pages_are_available(
     destination.mkdir()
     old_page = destination / "source-page-9.png"
     old_page.write_bytes(b"previous successful output")
-    monkeypatch.setattr(office, "_find_soffice", lambda: Path("/tools/soffice"))
+    soffice = tmp_path / "tools" / "soffice"
+    pdftoppm = tmp_path / "tools" / "pdftoppm"
+    monkeypatch.setattr(office, "_find_soffice", lambda: soffice)
     monkeypatch.setattr(
         office,
         "shutil",
-        SimpleNamespace(which=lambda command: "/tools/pdftoppm", copy2=shutil.copy2),
+        SimpleNamespace(which={"pdftoppm": str(pdftoppm)}.get, copy2=shutil.copy2),
     )
 
     def run_tool(command, **options):
-        if command[0] == "/tools/soffice":
+        if Path(command[0]) == soffice:
             temporary = Path(command[command.index("--outdir") + 1])
             assert Path(options["env"]["TMPDIR"]) == temporary
             writer = PdfWriter()
@@ -145,6 +147,7 @@ def test_rendering_replaces_old_pages_only_after_all_pages_are_available(
                 writer.add_blank_page(width=100, height=100)
             writer.write(temporary / "source.pdf")
         else:
+            assert Path(command[0]) == pdftoppm
             prefix = Path(command[-1])
             for page in range(1, 3 if complete else 2):
                 prefix.with_name(f"page-{page}.png").write_bytes(

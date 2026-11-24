@@ -177,11 +177,17 @@ def test_workspace_file_creation_does_not_create_missing_trusted_root(tmp_path):
 def test_windows_workspace_open_rejects_alternate_streams_and_ambiguous_names(
     tmp_path, name
 ):
+    existing_file = tmp_path / "file.txt"
+    existing_file.write_bytes(b"unchanged")
+    existing_entries = set(tmp_path.rglob("*"))
+
     with pytest.raises(PermissionError, match="unsafe restricted Windows path"):
         open_file_in_allowed_roots(
             str(tmp_path / name), (tmp_path,), access="write", create_parents=True
         )
-    assert list(tmp_path.iterdir()) == []
+    assert set(tmp_path.rglob("*")) == existing_entries
+    assert existing_file.read_bytes() == b"unchanged"
+    assert not (tmp_path / "file.txt:stream").exists()
 
 
 @pytest.mark.parametrize("access", ["read", "write", "edit"])

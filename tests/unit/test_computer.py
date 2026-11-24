@@ -8,7 +8,6 @@ import json
 import os
 import shlex
 import shutil
-import subprocess
 import sys
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, call, patch
@@ -34,9 +33,11 @@ from astrbot.core.astr_agent_runtime.computer.booters.local import (
 
 
 def _python_command(code: str) -> str:
-    """Build a shell-safe Python command for the current operating system."""
+    """Quote Python arguments for the shell used by the local booter."""
     args = [sys.executable, "-u", "-c", code]
-    return subprocess.list2cmdline(args) if os.name == "nt" else shlex.join(args)
+    if os.name == "nt":
+        return "& " + " ".join("'" + arg.replace("'", "''") + "'" for arg in args)
+    return shlex.join(args)
 
 
 class TestLocalBooterInit:
@@ -256,7 +257,7 @@ class TestLocalShellComponent:
 
         try:
             result = await shell.exec_managed(
-                _python_command('import os; print(os.environ["TEST_VAR"])'),
+                _python_command("import os; print(os.environ['TEST_VAR'])"),
                 owner_id="owner-a",
                 creator_id="sender-a",
                 creator_is_admin=False,
@@ -1084,26 +1085,41 @@ class TestSyncSkillsToSandbox:
     """Tests for _sync_skills_to_sandbox function."""
 
     @pytest.mark.asyncio
-    async def test_sync_skills_no_skills_dir(self):
-        """Test sync does nothing when skills directory doesn't exist."""
+    async def test_sync_skills_no_skills_dir(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        """Refresh metadata without uploading when local and plugin skills are absent."""
         from astrbot.core.astr_agent_runtime.computer import computer_client
 
+        skills_root = tmp_path / "missing-skills"
+        assert not skills_root.exists()
+        temp_root = tmp_path / "sync-temp"
+        monkeypatch.setattr(
+            computer_client, "get_astrbot_skills_path", lambda: str(skills_root)
+        )
+        monkeypatch.setattr(
+            computer_client, "get_astrbot_temp_path", lambda: str(temp_root)
+        )
+        monkeypatch.setattr("astrbot.core.star.star.star_registry", [])
         mock_booter = MagicMock()
-        mock_booter.shell.exec = AsyncMock()
+        mock_booter.shell.exec = AsyncMock(
+            side_effect=[
+                {"exit_code": 0},
+                {"exit_code": 0, "stdout": '{"managed_skills": []}'},
+                {"exit_code": 0, "stdout": '{"skills": []}'},
+            ]
+        )
         mock_booter.upload_file = AsyncMock(return_value={"success": True})
 
-        with (
-            patch(
-                "astrbot.core.astr_agent_runtime.computer.computer_client.get_astrbot_skills_path",
-                return_value="/nonexistent/path",
-            ),
-            patch(
-                "astrbot.core.astr_agent_runtime.computer.computer_client.os.path.isdir",
-                return_value=False,
-            ),
-        ):
-            await computer_client._sync_skills_to_sandbox(mock_booter)
-            mock_booter.upload_file.assert_not_called()
+        await computer_client._sync_skills_to_sandbox(mock_booter)
+
+        mock_booter.upload_file.assert_not_called()
+        assert mock_booter.shell.exec.await_args_list == [
+            call("rm -f skills/skills.zip"),
+            call(computer_client._build_apply_sync_command()),
+            call(computer_client._build_scan_command()),
+        ]
+        assert not list(temp_root.iterdir())
 
     @pytest.mark.asyncio
     async def test_sync_skills_empty_dir(self):
@@ -1132,8 +1148,9 @@ class TestSyncSkillsToSandbox:
             mock_booter.upload_file.assert_not_called()
 
     @pytest.mark.asyncio
+    @pytest.mark.parametrize("newline", ["\n", "\r\n"], ids=["lf", "crlf"])
     async def test_sync_skills_success(
-        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path, newline: str
     ) -> None:
         """Upload a real skill bundle, refresh metadata, and remove local staging."""
         from astrbot.core.astr_agent_runtime.computer import computer_client
@@ -1142,7 +1159,8 @@ class TestSyncSkillsToSandbox:
         skill_dir = skills_root / "demo"
         skill_dir.mkdir(parents=True)
         skill_text = "---\nname: demo\ndescription: Demo skill\n---\n# Demo\n"
-        skill_dir.joinpath("SKILL.md").write_text(skill_text, encoding="utf-8")
+        skill_bytes = skill_text.replace("\n", newline).encode("utf-8")
+        skill_dir.joinpath("SKILL.md").write_bytes(skill_bytes)
         temp_root = tmp_path / "sync-temp"
         monkeypatch.setattr(
             computer_client, "get_astrbot_skills_path", lambda: str(skills_root)
@@ -1185,7 +1203,7 @@ class TestSyncSkillsToSandbox:
         mock_booter.upload_file.assert_awaited_once_with(
             str(temp_root / "skills_bundle.zip"), "skills/skills.zip"
         )
-        assert uploaded_files == {"demo/SKILL.md": skill_text.encode("utf-8")}
+        assert uploaded_files == {"demo/SKILL.md": skill_bytes}
         assert mock_booter.shell.exec.await_args_list == [
             call("mkdir -p skills"),
             call(computer_client._build_apply_sync_command()),

@@ -1,7 +1,7 @@
 import base64
 import json
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from threading import Thread
 
 from click.testing import CliRunner
@@ -73,8 +73,8 @@ def test_service_install_requires_initialized_root(monkeypatch, tmp_path):
 def test_systemd_unit_uses_astrbot_executable_and_working_directory():
     unit = _build_systemd_unit(
         "astrbot",
-        Path("/home/astrbot/.local/bin/astrbot"),
-        Path("/home/astrbot/AstrBot Root"),
+        PurePosixPath("/home/astrbot/.local/bin/astrbot"),
+        PurePosixPath("/home/astrbot/AstrBot Root"),
     )
 
     assert 'WorkingDirectory="/home/astrbot/AstrBot Root"' in unit
@@ -85,9 +85,9 @@ def test_systemd_unit_uses_astrbot_executable_and_working_directory():
 def test_launchd_plist_uses_astrbot_executable_and_working_directory():
     plist = _build_launchd_plist(
         "astrbot",
-        Path("/Users/astrbot/.local/bin/astrbot"),
-        Path("/Users/astrbot/AstrBot"),
-        Path("/Users/astrbot/Library/Logs/AstrBot"),
+        PurePosixPath("/Users/astrbot/.local/bin/astrbot"),
+        PurePosixPath("/Users/astrbot/AstrBot"),
+        PurePosixPath("/Users/astrbot/Library/Logs/AstrBot"),
     )
 
     assert plist["Label"] == "app.astrbot.astrbot"
@@ -103,6 +103,7 @@ def test_launch_agent_start_waits_until_loaded_before_kickstart(monkeypatch, tmp
     loaded_states = [False, False, True]
 
     monkeypatch.setattr(cmd_service.shutil, "which", lambda name: "/bin/launchctl")
+    monkeypatch.setattr(cmd_service.os, "getuid", lambda: 1000, raising=False)
     monkeypatch.setattr(cmd_service, "_launch_agent_path", lambda _name: plist_path)
     monkeypatch.setattr(cmd_service.time, "sleep", lambda _seconds: None)
 

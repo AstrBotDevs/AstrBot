@@ -13,19 +13,29 @@ class TestPathMapping:
         mappings = ["/old:/new"]
         assert path_Mapping(mappings, "/old/file.txt") == "/new/file.txt"
         assert path_Mapping(mappings, "/old") == "/new"
+        # Existing rules replace string prefixes, including partial components.
+        assert path_Mapping(mappings, "/older/file.txt") == "/newer/file.txt"
 
     def test_mapping_with_file_prefix(self):
         mappings = ["/old:/new"]
         assert path_Mapping(mappings, "file:///old/file.txt") == "/new/file.txt"
+        assert path_Mapping(mappings, "file:///older/file.txt") == "/newer/file.txt"
 
     def test_multiple_mappings_uses_first_match(self):
         mappings = ["/first:/alpha", "/second:/beta"]
         assert path_Mapping(mappings, "/first/file.txt") == "/alpha/file.txt"
         assert path_Mapping(mappings, "/second/file.txt") == "/beta/file.txt"
+        assert (
+            path_Mapping(["/first:/alpha", "/first:/beta"], "file:///first/file.txt")
+            == "/alpha/file.txt"
+        )
 
     def test_mapping_no_match_returns_original(self):
         mappings = ["/old:/new"]
         assert path_Mapping(mappings, "/other/file.txt") == "/other/file.txt"
+        uri = "file:///other/voice%20note.txt"
+        assert path_Mapping(mappings, uri) == uri
+        assert path_Mapping(mappings, r"\old\file.txt") == r"\old\file.txt"
 
     def test_mapping_strips_trailing_slashes(self):
         mappings = ["/old/:/new/"]

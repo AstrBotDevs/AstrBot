@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import uuid as uuid_mod
+from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -171,9 +172,7 @@ class TestCreateConf:
         return_value=uuid_mod.UUID("00000000-0000-0000-0000-000000000001"),
     )
     @patch("astrbot.core.astrbot_config_mgr.AstrBotConfig")
-    @patch(
-        "astrbot.core.astrbot_config_mgr.get_astrbot_config_path", return_value="/cfg"
-    )
+    @patch("astrbot.core.astrbot_config_mgr.get_astrbot_config_path")
     @pytest.mark.asyncio
     async def test_create_conf_creates_and_saves(
         self,
@@ -182,11 +181,16 @@ class TestCreateConf:
         mock_uuid,
         acm,
         mock_sp,
+        tmp_path: Path,
     ):
+        config_dir = tmp_path / "config"
+        mock_get_path.return_value = str(config_dir)
         mock_conf_instance = MagicMock()
         mock_Config.return_value = mock_conf_instance
         conf_id = await acm.create_conf(config={"key": "val"}, name="myname")
-        expected_path = "/cfg/abconf_00000000-0000-0000-0000-000000000001.json"
+        expected_path = str(
+            config_dir / "abconf_00000000-0000-0000-0000-000000000001.json"
+        )
         mock_get_path.assert_called_once_with()
         mock_Config.assert_called_once_with(
             config_path=expected_path,
@@ -224,9 +228,7 @@ class TestDeleteConf:
 
     @patch("astrbot.core.astrbot_config_mgr.os.remove")
     @patch("astrbot.core.astrbot_config_mgr.os.path.exists", return_value=True)
-    @patch(
-        "astrbot.core.astrbot_config_mgr.get_astrbot_config_path", return_value="/cfg"
-    )
+    @patch("astrbot.core.astrbot_config_mgr.get_astrbot_config_path")
     @pytest.mark.asyncio
     async def test_delete_conf_removes_file_and_mapping(
         self,
@@ -235,7 +237,10 @@ class TestDeleteConf:
         mock_remove,
         acm,
         mock_sp,
+        tmp_path: Path,
     ):
+        config_dir = tmp_path / "config"
+        mock_get_path.return_value = str(config_dir)
         conf_id = "uuid-to-delete"
         mapping = {
             conf_id: {"path": "abconf_uuid-to-delete.json", "name": "x"},
@@ -246,19 +251,20 @@ class TestDeleteConf:
         result = await acm.delete_conf(conf_id)
         assert result is True
         mock_get_path.assert_called_once_with()
-        mock_exists.assert_called_once_with("/cfg/abconf_uuid-to-delete.json")
-        mock_remove.assert_called_once_with("/cfg/abconf_uuid-to-delete.json")
+        expected_path = str(config_dir / "abconf_uuid-to-delete.json")
+        mock_exists.assert_called_once_with(expected_path)
+        mock_remove.assert_called_once_with(expected_path)
         mock_sp.global_put.assert_awaited_once_with("abconf_mapping", {})
         assert acm.abconf_data == {}
 
     @patch("astrbot.core.astrbot_config_mgr.os.path.exists", return_value=False)
-    @patch(
-        "astrbot.core.astrbot_config_mgr.get_astrbot_config_path", return_value="/cfg"
-    )
+    @patch("astrbot.core.astrbot_config_mgr.get_astrbot_config_path")
     @pytest.mark.asyncio
     async def test_delete_conf_handles_missing_file(
-        self, mock_get_path, mock_exists, acm, mock_sp
+        self, mock_get_path, mock_exists, acm, mock_sp, tmp_path: Path
     ):
+        config_dir = tmp_path / "config"
+        mock_get_path.return_value = str(config_dir)
         conf_id = "uuid-missing-file"
         mapping = {conf_id: {"path": "gone.json", "name": "x"}}
         mock_sp.global_get.return_value = mapping
@@ -268,17 +274,14 @@ class TestDeleteConf:
         result = await acm.delete_conf(conf_id)
         assert result is True
         mock_get_path.assert_called_once_with()
-        mock_exists.assert_called_once_with("/cfg/gone.json")
+        mock_exists.assert_called_once_with(str(config_dir / "gone.json"))
         assert conf_id not in acm.confs
         mock_sp.global_put.assert_awaited_once_with("abconf_mapping", {})
 
     @pytest.mark.asyncio
     @patch("astrbot.core.astrbot_config_mgr.os.remove", side_effect=OSError("busy"))
     @patch("astrbot.core.astrbot_config_mgr.os.path.exists", return_value=True)
-    @patch(
-        "astrbot.core.astrbot_config_mgr.get_astrbot_config_path",
-        return_value="/cfg",
-    )
+    @patch("astrbot.core.astrbot_config_mgr.get_astrbot_config_path")
     async def test_delete_conf_preserves_state_when_file_removal_fails(
         self,
         mock_get_path,
@@ -286,7 +289,10 @@ class TestDeleteConf:
         mock_remove,
         acm,
         mock_sp,
+        tmp_path: Path,
     ):
+        config_dir = tmp_path / "config"
+        mock_get_path.return_value = str(config_dir)
         conf_id = "uuid-busy"
         mapping = {conf_id: {"path": "busy.json", "name": "Busy"}}
         profile = MagicMock()
@@ -297,8 +303,9 @@ class TestDeleteConf:
         assert await acm.delete_conf(conf_id) is False
 
         mock_get_path.assert_called_once_with()
-        mock_exists.assert_called_once_with("/cfg/busy.json")
-        mock_remove.assert_called_once_with("/cfg/busy.json")
+        expected_path = str(config_dir / "busy.json")
+        mock_exists.assert_called_once_with(expected_path)
+        mock_remove.assert_called_once_with(expected_path)
         assert acm.confs[conf_id] is profile
         assert acm.abconf_data is mapping
         mock_sp.global_put.assert_not_awaited()

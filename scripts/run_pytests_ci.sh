@@ -13,4 +13,7 @@ if ((${#PYTEST_TARGETS[@]} == 0)); then
 fi
 
 echo "[ci] running tests: ${PYTEST_TARGETS[*]}"
-exec uv run --group dev python -m pytest "${PYTEST_TARGETS[@]}"
+exec uv run --group dev python -m pytest \
+  --durations=20 \
+  -W error::pytest.PytestUnhandledThreadExceptionWarning \
+  "${PYTEST_TARGETS[@]}"
