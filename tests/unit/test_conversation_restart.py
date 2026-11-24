@@ -72,7 +72,7 @@ def restart(monkeypatch):
         "platform_settings": {},
     }
     context.get_config.return_value = config
-    context.locale.return_value = "en-US"
+    context.get_locale = AsyncMock(return_value="en-US")
     manager = SimpleNamespace(
         get_curr_conversation_id=AsyncMock(return_value="old-id"),
         get_conversation=AsyncMock(return_value=SimpleNamespace(persona_id="persona")),
