@@ -20,6 +20,7 @@ from astrbot.core.star.star_manager import PluginDependencyInstallError, PluginM
 from astrbot.core.utils.astrbot_path import get_astrbot_system_tmp_path
 from astrbot.core.utils.pip_installer import PipInstallError
 from astrbot.core.utils.requirements_utils import MissingRequirementsPlan
+from astrbot.dashboard.services.plugin_service import PluginService
 
 # --- Test Data & Helpers ---
 
@@ -2087,6 +2088,128 @@ async def test_update_plugin_dependency_install_flow(
             expected_content="networkx\n",
         )
         assert ("reload", TEST_PLUGIN_DIR) in events
+
+
+@pytest.mark.asyncio
+async def test_update_plugin_serializes_only_overlapping_plugin_updates(
+    plugin_manager_pm: PluginManager, monkeypatch
+):
+    other_plugin = MockStar()
+    other_plugin.name = other_plugin.root_dir_name = "other_plugin"
+    cast(Any, plugin_manager_pm.context).stars.extend([MockStar(), other_plugin])
+    first_reload_started = asyncio.Event()
+    allow_first_reload = asyncio.Event()
+    other_update_started = asyncio.Event()
+    versions = {}
+    loaded = []
+
+    async def update(plugin, *, proxy, download_url, repo_url):
+        versions[plugin.root_dir_name] = download_url
+        if plugin is other_plugin:
+            other_update_started.set()
+
+    async def reload(name):
+        if name == TEST_PLUGIN_NAME and not first_reload_started.is_set():
+            first_reload_started.set()
+            await allow_first_reload.wait()
+        loaded.append((name, versions[name]))
+        return True, None
+
+    monkeypatch.setattr(plugin_manager_pm._updater, "update", update)
+    monkeypatch.setattr(plugin_manager_pm, "reload", reload)
+
+    async with asyncio.timeout(5), asyncio.TaskGroup() as tasks:
+        tasks.create_task(
+            plugin_manager_pm.update_plugin(TEST_PLUGIN_NAME, download_url="first")
+        )
+        await first_reload_started.wait()
+        tasks.create_task(
+            plugin_manager_pm.update_plugin(TEST_PLUGIN_NAME, download_url="second")
+        )
+        tasks.create_task(
+            plugin_manager_pm.update_plugin(other_plugin.name, download_url="other")
+        )
+        await other_update_started.wait()
+        allow_first_reload.set()
+
+    assert loaded == [
+        (other_plugin.name, "other"),
+        (TEST_PLUGIN_NAME, "first"),
+        (TEST_PLUGIN_NAME, "second"),
+    ]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("batch", [False, True])
+@pytest.mark.parametrize("download_fails", [False, True])
+async def test_update_plugin_persists_source_only_after_replacing_files(
+    plugin_manager_pm: PluginManager, monkeypatch, batch, download_fails
+):
+    plugin_name = "demo_plugin"
+    plugin = MockStar()
+    plugin.name = plugin_name
+    stars = cast(Any, plugin_manager_pm.context).stars
+    stars.append(plugin)
+    service = PluginService(None, plugin_manager_pm)
+    old_source = {
+        "install_method": "market",
+        "market_plugin_id": "owner/old-plugin",
+        "repo": "https://github.com/owner/old-plugin",
+        "download_url": "https://example.com/old.zip",
+        "installed_at": "2026-01-01T00:00:00+00:00",
+    }
+    new_source = {
+        "market_plugin_id": "owner/new-plugin",
+        "repo": "https://github.com/owner/new-plugin",
+        "download_url": "https://example.com/new.zip",
+    }
+    write_sources = AsyncMock()
+    download = AsyncMock(
+        side_effect=RuntimeError("Download failed") if download_fails else None
+    )
+
+    async def reload(_name):
+        stars.clear()
+        return False, "Plugin initialization failed"
+
+    reload_plugin = AsyncMock(side_effect=reload)
+    monkeypatch.setattr(plugin_manager_pm._updater, "update", download)
+    monkeypatch.setattr(plugin_manager_pm, "reload", reload_plugin)
+    monkeypatch.setattr(service, "sync_skills_after_plugin_change", AsyncMock())
+    monkeypatch.setattr(
+        service,
+        "get_plugin_install_sources",
+        AsyncMock(return_value={TEST_PLUGIN_DIR: dict(old_source)}),
+    )
+    monkeypatch.setattr(service, "save_plugin_install_sources", write_sources)
+    monkeypatch.setattr(
+        service,
+        "resolve_market_update_info",
+        AsyncMock(return_value={**new_source, "market_plugin": new_source}),
+    )
+
+    if batch:
+        data, _message = await service.update_all_plugins({"names": [plugin_name] * 2})
+        assert [result["status"] for result in data["results"]] == ["error"]
+    else:
+        error = "Download failed" if download_fails else "Plugin initialization failed"
+        with pytest.raises(RuntimeError, match=error):
+            await service.update_plugin({"name": plugin_name})
+
+    download.assert_awaited_once()
+    if download_fails:
+        write_sources.assert_not_awaited()
+        reload_plugin.assert_not_awaited()
+    else:
+        reload_plugin.assert_awaited_once_with(plugin_name)
+        write_sources.assert_awaited_once()
+        record = write_sources.await_args.args[0][TEST_PLUGIN_DIR]
+        assert record == {
+            **old_source,
+            **new_source,
+            "root_dir_name": TEST_PLUGIN_DIR,
+            "updated_at": record["updated_at"],
+        }
 
 
 @pytest.mark.asyncio

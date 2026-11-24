@@ -8,6 +8,7 @@ import ssl
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from datetime import datetime, timezone
+from functools import partial
 from pathlib import Path
 from typing import Any
 
@@ -109,6 +110,7 @@ class PluginService:
             EventType.OnPluginErrorEvent: "插件报错时",
         }
         self._logo_cache: dict[str, str] = {}
+        self._install_source_lock = asyncio.Lock()
 
     @staticmethod
     def _payload(data: object) -> dict[str, Any]:
@@ -1543,43 +1545,41 @@ class PluginService:
 
     async def refresh_plugin_install_source_after_update(
         self,
-        plugin_name: str,
+        root_dir_name: str,
         update_info: dict[str, Any],
     ) -> None:
-        """Refresh stored source fields after a successful plugin update.
+        """Refresh the source for the installed files independently of reload.
 
         Args:
-            plugin_name: Installed plugin metadata name.
+            root_dir_name: Stable key for the installed plugin directory.
             update_info: Marketplace update information.
         """
-        plugin = self.find_plugin_by_name(plugin_name)
-        if not plugin or not plugin.root_dir_name:
-            return
-        records = await self.get_plugin_install_sources()
-        record = records.get(plugin.root_dir_name)
-        if not isinstance(record, dict):
-            update_record = update_info.get("record")
-            if not isinstance(update_record, dict):
-                return
-            record = dict(update_record)
-        market_plugin = update_info.get("market_plugin")
-        if isinstance(market_plugin, dict):
-            market_plugin_id = self.get_market_plugin_id(market_plugin)
-            if market_plugin_id:
-                record["market_plugin_id"] = market_plugin_id
-            record["repo"] = str(
-                market_plugin.get("repo") or record.get("repo") or ""
-            ).strip()
-            record["download_url"] = str(
-                market_plugin.get("download_url")
-                or update_info.get("download_url")
-                or record.get("download_url")
-                or ""
-            ).strip()
-        record["root_dir_name"] = plugin.root_dir_name
-        record["updated_at"] = datetime.now(timezone.utc).isoformat()
-        records[plugin.root_dir_name] = record
-        await self.save_plugin_install_sources(records)
+        async with self._install_source_lock:
+            records = await self.get_plugin_install_sources()
+            record = records.get(root_dir_name)
+            if not isinstance(record, dict):
+                update_record = update_info.get("record")
+                if not isinstance(update_record, dict):
+                    return
+                record = dict(update_record)
+            market_plugin = update_info.get("market_plugin")
+            if isinstance(market_plugin, dict):
+                market_plugin_id = self.get_market_plugin_id(market_plugin)
+                if market_plugin_id:
+                    record["market_plugin_id"] = market_plugin_id
+                record["repo"] = str(
+                    market_plugin.get("repo") or record.get("repo") or ""
+                ).strip()
+                record["download_url"] = str(
+                    market_plugin.get("download_url")
+                    or update_info.get("download_url")
+                    or record.get("download_url")
+                    or ""
+                ).strip()
+            record["root_dir_name"] = root_dir_name
+            record["updated_at"] = datetime.now(timezone.utc).isoformat()
+            records[root_dir_name] = record
+            await self.save_plugin_install_sources(records)
 
     async def install_plugin(self, data: object) -> tuple[dict, str]:
         self._ensure_not_demo()
@@ -1802,15 +1802,19 @@ class PluginService:
         download_url = str(update_info.get("download_url") or "").strip()
         repo_url = str(update_info.get("repo") or "").strip()
         logger.info(f"Updating plugin {plugin_name}")
-        await self.plugin_manager.update_plugin(
-            plugin_name,
-            proxy or "",
-            download_url=download_url,
-            repo_url=repo_url,
-        )
-        await self.refresh_plugin_install_source_after_update(plugin_name, update_info)
-        await self.plugin_manager.reload(plugin_name)
-        await self.sync_skills_after_plugin_change()
+        try:
+            await self.plugin_manager.update_plugin(
+                plugin_name,
+                proxy or "",
+                download_url=download_url,
+                repo_url=repo_url,
+                on_files_replaced=partial(
+                    self.refresh_plugin_install_source_after_update,
+                    update_info=update_info,
+                ),
+            )
+        finally:
+            await self.sync_skills_after_plugin_change()
         logger.info(f"Updated plugin {plugin_name} successfully.")
         return None, "更新成功。"
 
@@ -1822,26 +1826,32 @@ class PluginService:
 
         if not isinstance(plugin_names, list) or not plugin_names:
             raise PluginServiceError("插件列表不能为空")
+        if any(not isinstance(name, str) for name in plugin_names):
+            raise PluginServiceError("插件名称必须是字符串")
+        plugin_names = list(dict.fromkeys(plugin_names))
 
         results = []
         sem = asyncio.Semaphore(PLUGIN_UPDATE_CONCURRENCY)
+        attempted_update = False
 
         async def _update_one(name: str):
+            nonlocal attempted_update
             async with sem:
                 try:
                     logger.info(f"Updating plugin {name} as part of a batch update.")
                     update_info = await self.resolve_market_update_info(name)
                     download_url = str(update_info.get("download_url") or "").strip()
                     repo_url = str(update_info.get("repo") or "").strip()
+                    attempted_update = True
                     await self.plugin_manager.update_plugin(
                         name,
                         proxy,
                         download_url=download_url,
                         repo_url=repo_url,
-                    )
-                    await self.refresh_plugin_install_source_after_update(
-                        name,
-                        update_info,
+                        on_files_replaced=partial(
+                            self.refresh_plugin_install_source_after_update,
+                            update_info=update_info,
+                        ),
                     )
                     return {"name": name, "status": "ok", "message": "更新成功"}
                 except PluginServiceError as exc:
@@ -1887,7 +1897,7 @@ class PluginService:
                 results.append(result)
 
         failed = [result for result in results if result["status"] == "error"]
-        if len(failed) < len(results):
+        if attempted_update:
             await self.sync_skills_after_plugin_change()
         message = (
             "批量更新完成，全部成功。"

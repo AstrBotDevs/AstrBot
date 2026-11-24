@@ -12,11 +12,12 @@ import shutil
 import sys
 import tempfile
 import traceback
-from collections.abc import Iterable
+from collections.abc import Awaitable, Callable, Iterable
 from dataclasses import dataclass
 from enum import Enum, auto
 from pathlib import Path
 from types import ModuleType
+from weakref import WeakValueDictionary
 
 import yaml
 from packaging.specifiers import InvalidSpecifier, SpecifierSet
@@ -214,6 +215,9 @@ class PluginManager:
         """插件配置 Schema 文件名"""
         self._pm_lock = asyncio.Lock()
         """StarManager操作互斥锁"""
+        self._update_locks: WeakValueDictionary[Path, asyncio.Lock] = (
+            WeakValueDictionary()
+        )
 
         self.failed_plugin_dict = {}
         """加载失败插件的信息，用于后续可能的热重载"""
@@ -1924,6 +1928,8 @@ class PluginManager:
         proxy="",
         download_url: str = "",
         repo_url: str = "",
+        *,
+        on_files_replaced: Callable[[str], Awaitable[None]] | None = None,
     ) -> None:
         """Update and reload an installed plugin.
 
@@ -1932,6 +1938,8 @@ class PluginManager:
             proxy: Optional URL-prefix mirror for archive downloads.
             download_url: Optional direct plugin archive URL.
             repo_url: Repository locator selected by the update source.
+            on_files_replaced: Optional callback receiving the root directory name
+                after the updater replaces the files, even if loading later fails.
 
         Returns:
             None.
@@ -1943,22 +1951,35 @@ class PluginManager:
         plugin = self.context.get_registered_star(plugin_name)
         if not plugin:
             raise Exception("插件不存在。")
-        if plugin.reserved:
-            raise Exception("该插件是 AstrBot 保留插件，无法更新。")
+        root_dir_name = plugin.root_dir_name
+        if not root_dir_name:
+            raise ValueError(f"Plugin {plugin_name} has no root directory name.")
 
-        await self._updater.update(
-            plugin,
-            proxy=proxy,
-            download_url=download_url,
-            repo_url=repo_url,
-        )
-        if plugin.root_dir_name:
-            plugin_dir_path = os.path.join(self.plugin_store_path, plugin.root_dir_name)
-            await self._ensure_plugin_requirements(
-                plugin_dir_path,
-                plugin_name,
+        plugin_path = Path(self.plugin_store_path) / root_dir_name
+        update_lock = self._update_locks.setdefault(plugin_path, asyncio.Lock())
+        async with update_lock:
+            plugin = self.context.get_registered_star(plugin_name)
+            if not plugin or plugin.root_dir_name != root_dir_name:
+                raise Exception("插件不存在。")
+            if plugin.reserved:
+                raise Exception("该插件是 AstrBot 保留插件，无法更新。")
+
+            await self._updater.update(
+                plugin,
+                proxy=proxy,
+                download_url=download_url,
+                repo_url=repo_url,
             )
-        await self.reload(plugin_name)
+            try:
+                if on_files_replaced is not None:
+                    await on_files_replaced(root_dir_name)
+            finally:
+                await self._ensure_plugin_requirements(str(plugin_path), plugin_name)
+                success, error = await self.reload(plugin_name)
+                if not success:
+                    raise RuntimeError(
+                        error or f"Failed to reload plugin {plugin_name} after update."
+                    )
 
     async def turn_off_plugin(self, plugin_name: str) -> None:
         """禁用一个插件。
