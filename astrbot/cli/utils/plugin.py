@@ -159,13 +159,18 @@ def build_plug_list(plugins_dir: Path) -> list:
     # Get online plugin list
     online_plugins_dict = {}
     try:
-        with httpx.Client() as client:
+        with httpx.Client(follow_redirects=True, trust_env=True) as client:
             resp = client.get("https://api.soulter.top/astrbot/plugins")
             resp.raise_for_status()
             data = resp.json()
             for plugin_id, plugin_info in data.items():
-                online_plugins_dict[str(plugin_id)] = {
-                    "name": str(plugin_id),
+                # The market keys entries by "author/name" and adds a "$meta"
+                # header, so take the plugin name from the entry itself.
+                if plugin_id == "$meta" or not isinstance(plugin_info, dict):
+                    continue
+                plugin_name = str(plugin_info.get("name") or plugin_id)
+                online_plugins_dict[plugin_name] = {
+                    "name": plugin_name,
                     "desc": str(plugin_info.get("desc", "")),
                     "version": str(plugin_info.get("version", "")),
                     "author": str(plugin_info.get("author", "")),
