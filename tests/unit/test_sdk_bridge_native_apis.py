@@ -1,14 +1,14 @@
 """Exercise the native SDK interfaces through the Host and Runner."""
 
+import hashlib
+import json
 from datetime import UTC, datetime
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 import yaml
-from astrbot_sdk.conversations import ConversationPatch
-from astrbot_sdk.errors import Conflict
-from astrbot_sdk.events import UMO, MessageType
+from astrbot_sdk.errors import Conflict, InvalidRequest, NotFound
 
 from astrbot.core import chatui
 from astrbot.core.agent.events import (
@@ -299,40 +299,59 @@ async def test_native_buttons_and_views(native_bridge):
 @pytest.mark.asyncio
 async def test_conversation_event_storage_and_revision(database):
     """The bridge uses the real append log, revision checks and plugin namespace."""
-    umo = UMO("webchat", MessageType.PRIVATE, "test-owner")
-    record = await database.conversation_store.create(
-        umo="webchat:FriendMessage:test-owner", platform_id="webchat"
-    )
+    umo = "webchat:FriendMessage:test-owner"
+    record = await database.conversation_store.create(umo=umo, platform_id="webchat")
     context = SimpleNamespace(conversation_manager=ConversationManager(database))
-    reader = ConversationReadService(context, "tester/demo")
+    reader = ConversationReadService(context)
     writer = ConversationWriteService(context, "tester/demo")
-    payload = {"umo": umo, "conversation_id": record.conversation_id}
-    original = (await reader.handle("get", payload))["conversation"]
+    payload = {"unified_msg_origin": umo, "conversation_id": record.conversation_id}
+    original = await reader.handle("get_conversation", payload)
     assert original.revision.head_seq == 1
 
-    message_id = await writer.handle(
-        "append_message", {**payload, "content": "hello", "message_id": "sdk-message"}
-    )
-    assert message_id == await writer.handle(
-        "append_message", {**payload, "content": "hello", "message_id": "sdk-message"}
-    )
-    custom = {**payload, "event_type": "done", "data": {"success": True}}
-    await writer.handle("append_plugin_event", custom)
-    events = await reader.handle("list_plugin_events", custom)
-    assert len(events) == 1 and events[0].data == {"success": True}
-    other = ConversationReadService(context, "other/demo")
-    assert await other.handle("list_plugin_events", custom) == []
-    with pytest.raises(Conflict):
+    append = {"cid": original.cid, "content": "hello", "message_id": "sdk-message"}
+    message_id = await writer.handle("append_message", append)
+    assert message_id == await writer.handle("append_message", append)
+    with pytest.raises(NotFound):
         await writer.handle(
-            "update",
+            "append_message", {**append, "unified_msg_origin": "webchat:FriendMessage:other"}
+        )
+    with pytest.raises(InvalidRequest):
+        await writer.handle(
+            "append_message",
             {
-                **payload,
-                "patch": ConversationPatch(messages=()),
-                "expected_revision": original.revision,
+                "cid": original.cid,
+                "content": [{"type": "image_url", "image_url": {"url": "/host/private.png"}}],
             },
         )
-    fork_id = await writer.handle("fork", {"umo": umo, "source_event_id": message_id})
-    fork = (await reader.handle("get", {**payload, "conversation_id": fork_id}))[
-        "conversation"
-    ]
-    assert [part.content for part in fork.messages] == ["hello"]
+    await writer.handle(
+        "append_plugin_event",
+        {"cid": original.cid, "event_type": "done", "data": {"success": True}},
+    )
+    namespace = hashlib.sha256(b"tester/demo").hexdigest()
+    events = await database.conversation_store.events(
+        original.cid, event_type=f"plugin.{namespace}.done",
+    )
+    assert len(events) == 1 and events[0].payload == {"success": True}
+    with pytest.raises(Conflict):
+        await writer.handle(
+            "update_conversation",
+            {**payload, "history": [], "expected_revision": original.revision},
+        )
+    fork_id = await writer.handle(
+        "fork_conversation", {"unified_msg_origin": umo, "source_event_id": message_id}
+    )
+    fork = await reader.handle("get_conversation", {**payload, "conversation_id": fork_id})
+    assert [part["content"] for part in json.loads(fork.history)] == ["hello"]
+
+    await context.conversation_manager.append_message(
+        [{"type": "image_url", "image_url": {"url": "/host/existing.png"}}],
+        cid=original.cid,
+    )
+    current = await reader.handle("get_conversation", payload)
+    history = json.loads(current.history)
+    await writer.handle(
+        "update_conversation",
+        {**payload, "history": history, "expected_revision": current.revision},
+    )
+    updated = await reader.handle("get_conversation", payload)
+    assert json.loads(updated.history) == history

@@ -859,7 +859,9 @@ class SDKPluginBridge:
         services: tuple[HostService, ...] = (
             StorageService(self.plugin_id),
             MessageSendService(self.context, store),
-            ConversationReadService(self.context, self.plugin_id, store),
+            ConversationReadService(
+                self.context, allow_create=self._grants.has("conversation.write")
+            ),
             ConversationWriteService(self.context, self.plugin_id, store),
             AssetTransferService(store),
             PluginInspectService(),

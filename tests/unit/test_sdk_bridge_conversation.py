@@ -7,9 +7,7 @@ from unittest.mock import MagicMock
 
 import pytest
 import yaml
-from astrbot_sdk.conversations import ConversationPage, ConversationPatch, Message
-from astrbot_sdk.errors import NotFound
-from astrbot_sdk.events import UMO, MessageType
+from astrbot_sdk.errors import CapabilityDenied, NotFound
 
 from astrbot.core.star.sdk_bridge import SDKPluginBridge
 from astrbot.core.star.sdk_bridge.services.conversation import (
@@ -28,24 +26,6 @@ class FakeConversationManager:
         self._store: dict[str, Any] = {}
         self._current: dict[str, str] = {}
         self._seq = 0
-        self.session_conversations: dict[str, str] = {}
-        self.db = self._Db(self)
-
-    class _Db:
-        """Event append adapter for the in-memory test conversation."""
-
-        def __init__(self, manager: FakeConversationManager) -> None:
-            self._manager = manager
-
-        @property
-        def conversation_store(self):
-            return self
-
-        async def append(self, cid, drafts):
-            conv = self._manager._store[cid]
-            history = json.loads(conv.history)
-            history.extend(draft["payload"]["message"] for draft in drafts)
-            conv.history = json.dumps(history)
 
     class _PO:
         def __init__(self, cid, user_id, title, persona_id, content):
@@ -58,25 +38,38 @@ class FakeConversationManager:
             self.history = json.dumps(content)
             self.content = content
             self.token_usage = 0
-            self.created_at = None
-            self.updated_at = None
+            self.created_at = 0
+            self.updated_at = 0
             self.revision = None
 
     async def get_curr_conversation_id(self, umo):
         return self._current.get(umo)
 
     async def get_conversation(self, umo, cid, create_if_not_exists=False):
+        if cid not in self._store and create_if_not_exists:
+            cid = await self.new_conversation(umo)
         return self._store.get(cid)
 
-    async def get_conversations(self, umo):
-        return [c for c in self._store.values() if c.user_id == umo]
+    async def get_conversations(self, umo, platform_id=None):
+        return [
+            conv
+            for conv in self._store.values()
+            if conv.user_id == umo and (platform_id is None or platform_id == conv.platform_id)
+        ]
 
-    async def new_conversation(self, umo, content=None, title=None, persona_id=None):
+    async def new_conversation(
+        self, umo, platform_id=None, content=None, title=None, persona_id=None
+    ):
         self._seq += 1
         cid = f"conv-{self._seq}"
         self._store[cid] = self._PO(cid, umo, title, persona_id, content or [])
         self._current[umo] = cid
         return cid
+
+    async def add_message_pair(self, cid, user_message, assistant_message):
+        conv = self._store[cid]
+        history = json.loads(conv.history)
+        conv.history = json.dumps([*history, user_message, assistant_message])
 
     async def switch_conversation(self, umo, cid):
         self._current[umo] = cid
@@ -111,10 +104,10 @@ def make_context() -> Any:
 
 
 UMO_STR = "webchat:FriendMessage:user-1"
-SDK_UMO = UMO("webchat", MessageType.PRIVATE, "user-1")
+SESSION = {"unified_msg_origin": UMO_STR}
 
 
-def test_to_sdk_conversation_parses_history() -> None:
+def test_to_sdk_conversation_preserves_core_fields() -> None:
     po = FakeConversationManager._PO(
         "conv-1",
         UMO_STR,
@@ -129,11 +122,14 @@ def test_to_sdk_conversation_parses_history() -> None:
         ],
     )
     conv = to_sdk_conversation(po)
-    assert conv.id == "conv-1"
-    assert conv.title == "title"
-    assert conv.persona_id is None
-    assert [m.role for m in conv.messages] == ["user", "assistant"]
-    assert conv.messages[1].content == "hello"
+    assert conv.cid == po.cid
+    assert conv.user_id == po.user_id
+    assert conv.platform_id == po.platform_id
+    assert conv.title == po.title
+    assert conv.persona_id == ""
+    assert conv.history == po.history
+    assert conv.token_usage == po.token_usage
+    assert conv.created_at == 0
 
 
 @pytest.mark.asyncio
@@ -142,28 +138,27 @@ async def test_read_service_operations() -> None:
     manager = context.conversation_manager
     service = ConversationReadService(context)
 
+    assert await service.handle("get_curr_conversation_id", SESSION) is None
+
     cid = await manager.new_conversation(UMO_STR, title="t")
+    assert await service.handle("get_curr_conversation_id", SESSION) == cid
 
-    result = await service.handle("current", {"umo": SDK_UMO})
-    assert result["conversation"].id == cid
+    conv = await service.handle("get_conversation", {**SESSION, "conversation_id": cid})
+    assert conv.cid == cid
+    assert conv.title == "t"
+    assert await service.handle(
+        "get_conversations", {**SESSION, "platform_id": "webchat"}
+    ) == [conv]
 
-    result = await service.handle("get", {"umo": SDK_UMO, "conversation_id": cid})
-    assert result["conversation"].title == "t"
-
-    result = await service.handle(
-        "list",
-        {"umo": SDK_UMO, "cursor": None, "limit": 50},
+    missing = {**SESSION, "conversation_id": "missing"}
+    assert await service.handle("get_conversation", missing) is None
+    with pytest.raises(CapabilityDenied):
+        await service.handle("get_conversation", {**missing, "create_if_not_exists": True})
+    writable = ConversationReadService(context, allow_create=True)
+    created = await writable.handle(
+        "get_conversation", {**missing, "create_if_not_exists": True}
     )
-    page = result["page"]
-    assert isinstance(page, ConversationPage)
-    assert [item.id for item in page.items] == [cid]
-    assert page.next_cursor is None
-
-    result = await service.handle(
-        "get",
-        {"umo": SDK_UMO, "conversation_id": "missing"},
-    )
-    assert result["conversation"] is None
+    assert created.cid == await manager.get_curr_conversation_id(UMO_STR)
 
 
 @pytest.mark.asyncio
@@ -172,53 +167,38 @@ async def test_write_service_operations() -> None:
     manager = context.conversation_manager
     service = ConversationWriteService(context)
 
-    result = await service.handle(
-        "create",
-        {
-            "umo": SDK_UMO,
-            "title": "notes",
-            "persona_id": None,
-            "messages": [],
-        },
+    cid = await service.handle(
+        "new_conversation",
+        {**SESSION, "title": "notes"},
     )
-    conversation = result["conversation"]
-    assert conversation.title == "notes"
-    assert await manager.get_curr_conversation_id(UMO_STR) == conversation.id
+    assert await manager.get_curr_conversation_id(UMO_STR) == cid
+    assert await service.handle(
+        "add_message_pair",
+        {
+            **SESSION,
+            "cid": cid,
+            "user_message": {"role": "user", "content": "milk"},
+            "assistant_message": {"role": "assistant", "content": "got it"},
+        },
+    ) is None
+    stored = await manager.get_conversation(UMO_STR, cid)
+    assert json.loads(stored.history) == [
+        {"role": "user", "content": "milk"},
+        {"role": "assistant", "content": "got it"},
+    ]
 
-    await service.handle(
-        "append",
-        {
-            "umo": SDK_UMO,
-            "conversation_id": conversation.id,
-            "messages": [
-                Message(role="user", content="milk"),
-            ],
-        },
-    )
-    stored = await manager.get_conversation(UMO_STR, conversation.id)
-    assert json.loads(stored.history) == [{"role": "user", "content": "milk"}]
-
-    result = await service.handle(
-        "update",
-        {
-            "umo": SDK_UMO,
-            "conversation_id": conversation.id,
-            "patch": ConversationPatch(title="renamed"),
-        },
-    )
-    assert result["conversation"].title == "renamed"
+    assert await service.handle(
+        "update_conversation", {**SESSION, "title": "renamed"}
+    ) is None
+    assert stored.title == "renamed"
 
     with pytest.raises(NotFound):
         await service.handle(
-            "append",
-            {"umo": SDK_UMO, "conversation_id": "missing", "messages": []},
+            "add_message_pair", {**SESSION, "cid": "missing"},
         )
 
-    await service.handle(
-        "delete",
-        {"umo": SDK_UMO, "conversation_id": conversation.id},
-    )
-    assert await manager.get_conversation(UMO_STR, conversation.id) is None
+    await service.handle("delete_conversation", SESSION)
+    assert await manager.get_conversation(UMO_STR, cid) is None
 
 
 def write_conv_plugin(plugin_root: Path) -> None:
@@ -248,24 +228,24 @@ def write_conv_plugin(plugin_root: Path) -> None:
     )
     (plugin_root / "main.py").write_text(
         """
+import json
+
 from astrbot_sdk import MessageEvent, Plugin, on
-from astrbot_sdk.conversations import Message
 
 class TestPlugin(Plugin):
     @on.command("remember")
     async def remember(self, event: MessageEvent, note: str):
-        conv = await self.ctx.conversations.create(
-            event.umo,
-            title="notes",
-            messages=(Message(role="user", content=note),),
+        umo = event.unified_msg_origin
+        cid = await self.ctx.conversations.new_conversation(umo, title="notes")
+        await self.ctx.conversations.add_message_pair(
+            cid,
+            {"role": "user", "content": note},
+            {"role": "assistant", "content": "got it"},
         )
-        await self.ctx.conversations.append(
-            event.umo,
-            conv.id,
-            (Message(role="assistant", content="got it"),),
-        )
-        current = await self.ctx.conversations.current(event.umo)
-        yield event.reply(f"{current.title}:{len(current.messages)}")
+        assert await self.ctx.conversations.get_curr_conversation_id(umo) == cid
+        assert (await self.ctx.conversations.get_conversations())[0].cid == cid
+        current = await self.ctx.conversations.get_conversation(umo, cid)
+        yield event.reply(f"{current.title}:{len(json.loads(current.history))}")
 """,
         "utf-8",
     )
