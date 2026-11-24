@@ -162,12 +162,6 @@ async def apply_persona(
                     if plugin_tools is not None
                     else tmgr.get_func(tool_name)
                 )
-                if (
-                    tool is None
-                    and plugin_tools is not None
-                    and tmgr.is_builtin_tool(tool_name)
-                ):
-                    tool = tmgr.get_builtin_tool(tool_name)
                 if tool and tool.active:
                     persona_toolset.add_tool(tool)
     if not req.func_tool:

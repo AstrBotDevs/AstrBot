@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING
 from uuid import uuid4
 
 from astrbot.core.agent.input import ImageInput, InputComponent, format_input_content
+from astrbot.core.agent.mcp_client import MCPTool
 from astrbot.core.agent.message import (
     ContentPart,
     ImageURLPart,
@@ -59,9 +60,7 @@ async def native_user_message(
         if isinstance(item, ImageInput):
             reference = item.source
             if item.path is not None:
-                resolver = caller.context.get_llm_tool_manager().get_builtin_tool(
-                    SendMessageToUserTool
-                )
+                resolver = SendMessageToUserTool()
                 reference, _ = await resolver._resolve_path_from_sandbox(
                     ContextWrapper(context=caller.agent_context),
                     item.path,
@@ -327,35 +326,37 @@ class DelegatedAgentSession(NativeAgentSession):
             user_message,
         ]
 
-        # Resolve tool implementations against fresh permissions each turn; the
-        # saved native configuration stores names, never executable objects.
         manager = caller.context.get_llm_tool_manager()
-        available = ToolSet(
-            tools=list(request.plugin_tools.tools)
-            if request.plugin_tools is not None
-            else list(manager.get_full_tool_set().tools)
-        )
-        for tool in caller.tools:
-            if request.plugin_tools is None or manager.is_builtin_tool(tool.name):
-                available.add_tool(available.get_tool(tool.name) or tool)
+        plugin_tools = request.plugin_tools
+        if plugin_tools is None:
+            plugin_tools = manager.get_full_tool_set()
+        parent_plugin_tools = caller.agent_context.plugin_tools
         selected = (
-            available.tools
+            caller.tools.tools
             if conversation.tools is None
-            else [
-                available.get_tool(name)
-                or (manager.get_func(name) if manager.is_builtin_tool(name) else None)
-                for name in conversation.tools
-            ]
+            else [caller.tools.get_tool(name) for name in conversation.tools]
         )
         tools = ToolSet()
         for tool in selected:
             if (
                 tool is None
-                or not tool.active
-                or tool.name not in caller.tools.names()
                 or tool.name in SUBAGENT_TOOL_NAMES
                 or tool.name.startswith("transfer_to_")
             ):
+                continue
+            # Refresh plugin and MCP instances while keeping the runtime
+            # instance the parent selected, including same-named variants.
+            if parent_plugin_tools is None:
+                tool = plugin_tools.get_tool(tool.name) or tool
+            elif (
+                parent_plugin_tools.get_tool(tool.name) is tool
+                or tool.handler is not None
+                or tool.handler_module_path
+                or isinstance(tool, MCPTool)
+                or manager.get_func(tool.name) is tool
+            ):
+                tool = plugin_tools.get_tool(tool.name)
+            if tool is None or not tool.active:
                 continue
             metadata = (
                 star_map.get(tool.handler_module_path)

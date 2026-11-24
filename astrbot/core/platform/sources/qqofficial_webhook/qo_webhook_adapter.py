@@ -36,16 +36,7 @@ class botClient(Client):
     async def on_group_at_message_create(
         self, message: botpy.message.GroupMessage
     ) -> None:
-        abm = await QQOfficialPlatformAdapter._parse_from_qqofficial(
-            message,
-            MessageType.GROUP_MESSAGE,
-            force_group_mention=True,
-            bot=self,
-        )
-        abm.group_id = cast(str, message.group_openid)
-        abm.session_id = abm.group_id
-        self.platform.remember_session_scene(abm.session_id, "group")
-        self._commit(abm)
+        await self.on_group_message_create(message)
 
     async def on_group_message_create(
         self, message: botpy.message.GroupMessage

@@ -22,7 +22,6 @@ from astrbot.core.astr_agent_runtime.tools.web_search_tools import (
 )
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from astrbot.core.provider.entities import ProviderRequest
-from astrbot.core.star.context import Context
 
 WEB_SEARCH_CITATION_TOOL_NAMES = frozenset(
     {
@@ -52,7 +51,6 @@ WEB_SEARCH_CITATION_PROMPT = (
 
 def apply_web_search(
     req: ProviderRequest,
-    plugin_context: Context,
     prov_settings: dict,
     event: AstrMessageEvent,
 ) -> str:
@@ -60,7 +58,6 @@ def apply_web_search(
 
     Args:
         req: Request with already-selected registered tools.
-        plugin_context: Registry providing builtin search tools.
         prov_settings: Search enablement and provider settings.
         event: Output platform used to select the citation format.
 
@@ -72,36 +69,33 @@ def apply_web_search(
         if req.func_tool is None:
             req.func_tool = ToolSet()
 
-        tool_mgr = plugin_context.get_llm_tool_manager()
         provider = prov_settings.get("websearch_provider", "tavily")
         if provider == "tavily":
-            req.func_tool.add_tool(tool_mgr.get_builtin_tool(TavilyWebSearchTool))
-            req.func_tool.add_tool(tool_mgr.get_builtin_tool(TavilyExtractWebPageTool))
+            req.func_tool.add_tool(TavilyWebSearchTool())
+            req.func_tool.add_tool(TavilyExtractWebPageTool())
         elif provider == "bocha":
-            req.func_tool.add_tool(tool_mgr.get_builtin_tool(BochaWebSearchTool))
+            req.func_tool.add_tool(BochaWebSearchTool())
         elif provider == "brave":
-            req.func_tool.add_tool(tool_mgr.get_builtin_tool(BraveWebSearchTool))
+            req.func_tool.add_tool(BraveWebSearchTool())
         elif provider == "firecrawl":
-            req.func_tool.add_tool(tool_mgr.get_builtin_tool(FirecrawlWebSearchTool))
-            req.func_tool.add_tool(
-                tool_mgr.get_builtin_tool(FirecrawlExtractWebPageTool)
-            )
+            req.func_tool.add_tool(FirecrawlWebSearchTool())
+            req.func_tool.add_tool(FirecrawlExtractWebPageTool())
         elif provider == "baidu_ai_search":
-            req.func_tool.add_tool(tool_mgr.get_builtin_tool(BaiduWebSearchTool))
+            req.func_tool.add_tool(BaiduWebSearchTool())
         elif provider == "exa":
-            req.func_tool.add_tool(tool_mgr.get_builtin_tool(ExaWebSearchTool))
-            req.func_tool.add_tool(tool_mgr.get_builtin_tool(ExaGetContentsTool))
+            req.func_tool.add_tool(ExaWebSearchTool())
+            req.func_tool.add_tool(ExaGetContentsTool())
         elif provider == "anysearch":
-            req.func_tool.add_tool(tool_mgr.get_builtin_tool(AnySearchWebSearchTool))
+            req.func_tool.add_tool(AnySearchWebSearchTool())
         elif provider == "deepseek":
-            req.func_tool.add_tool(tool_mgr.get_builtin_tool(DeepSeekWebSearchTool))
-            req.func_tool.add_tool(tool_mgr.get_builtin_tool(DeepSeekFetchWebPageTool))
+            req.func_tool.add_tool(DeepSeekWebSearchTool())
+            req.func_tool.add_tool(DeepSeekFetchWebPageTool())
         elif provider == "serpapi":
-            req.func_tool.add_tool(tool_mgr.get_builtin_tool(SerpApiWebSearchTool))
-            req.func_tool.add_tool(tool_mgr.get_builtin_tool(SerpApiNewsSearchTool))
-            req.func_tool.add_tool(tool_mgr.get_builtin_tool(SerpApiImageSearchTool))
-            req.func_tool.add_tool(tool_mgr.get_builtin_tool(SerpApiFinanceSearchTool))
-            req.func_tool.add_tool(tool_mgr.get_builtin_tool(SerpApiScholarSearchTool))
+            req.func_tool.add_tool(SerpApiWebSearchTool())
+            req.func_tool.add_tool(SerpApiNewsSearchTool())
+            req.func_tool.add_tool(SerpApiImageSearchTool())
+            req.func_tool.add_tool(SerpApiFinanceSearchTool())
+            req.func_tool.add_tool(SerpApiScholarSearchTool())
 
     return _get_citation_instructions(event, req)
 

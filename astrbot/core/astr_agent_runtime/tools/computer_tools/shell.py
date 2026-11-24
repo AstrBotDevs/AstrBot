@@ -19,7 +19,6 @@ from astrbot.core.astr_agent_runtime.computer.computer_client import (
 from astrbot.core.astr_agent_runtime.context import AstrAgentContext
 from astrbot.core.utils.astrbot_path import get_astrbot_system_tmp_path
 
-from ..registry import builtin_tool
 from .fs import _read_allowed_roots, _write_allowed_roots
 from .util import (
     check_local_execution_permission,
@@ -27,13 +26,6 @@ from .util import (
     is_local_runtime,
     workspace_root_for_context,
 )
-
-_COMPUTER_RUNTIME_TOOL_CONFIG = {
-    "provider_settings.computer_use_runtime": ("local", "sandbox"),
-}
-_LOCAL_RUNTIME_TOOL_CONFIG = {
-    "provider_settings.computer_use_runtime": "local",
-}
 
 
 def _quote_redirect_path(path: str, *, local_runtime: bool) -> str:
@@ -62,7 +54,6 @@ def _redirect_background_stdout_command(
     return f"({command}) > {_quote_redirect_path(output_path, local_runtime=local_runtime)} 2>&1"
 
 
-@builtin_tool(config=_COMPUTER_RUNTIME_TOOL_CONFIG)
 @dataclass
 class ExecuteShellTool(FunctionTool):
     name: str = "astrbot_execute_shell"
@@ -295,7 +286,6 @@ class LocalExecuteShellTool(ExecuteShellTool):
         )
 
 
-@builtin_tool(config=_LOCAL_RUNTIME_TOOL_CONFIG)
 @dataclass
 class ShellSessionTool(FunctionTool):
     """Manage shell sessions created by the local shell execution tool."""
