@@ -11,7 +11,7 @@ class SetUnsetCommands:
     async def set_variable(self, event: AstrMessageEvent, key: str, value: str) -> None:
         """设置会话变量"""
         uid = event.unified_msg_origin
-        locale = self.context.locale(uid)
+        locale = await self.context.get_locale(uid)
         session_var = await sp.session_get(uid, "session_variables", {})
         session_var[key] = value
         await sp.session_put(uid, "session_variables", session_var)
@@ -25,7 +25,7 @@ class SetUnsetCommands:
     async def unset_variable(self, event: AstrMessageEvent, key: str) -> None:
         """移除会话变量"""
         uid = event.unified_msg_origin
-        locale = self.context.locale(uid)
+        locale = await self.context.get_locale(uid)
         session_var = await sp.session_get(uid, "session_variables", {})
 
         if key not in session_var:

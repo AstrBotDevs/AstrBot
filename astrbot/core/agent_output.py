@@ -128,7 +128,9 @@ async def present_turn(
     """
     event = turn.input.event
     locale = (
-        context.locale(event.unified_msg_origin) if context is not None else "zh-CN"
+        await context.get_locale(event.unified_msg_origin)
+        if context is not None
+        else "zh-CN"
     )
     names: dict[str, tuple[str, str]] = {}
     buffered = MessageChain()

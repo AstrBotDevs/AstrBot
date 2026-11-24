@@ -109,9 +109,12 @@ class AgentRun:
         """Return the runtime turn identity."""
         return self._turn.id
 
-    @property
-    def session(self) -> AgentSessionStatus:
-        """Sample the owning session's execution state for the caller."""
+    async def get_session(self) -> AgentSessionStatus:
+        """Sample the owning session's execution state for the caller.
+
+        Returns:
+            The session identity, execution state, queue size, and active turn.
+        """
         session = self._turn.session
         active_turn = session.active_turn
         return AgentSessionStatus(

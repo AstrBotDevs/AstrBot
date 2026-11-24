@@ -119,7 +119,7 @@ class ProviderCommands:
     ) -> None:
         """查看或者切换 LLM Provider"""
         umo = event.unified_msg_origin
-        locale = self.context.locale(umo)
+        locale = await self.context.get_locale(umo)
         cfg = self.context.get_config(umo).get("provider_settings", {})
         reachability_check_enabled = cfg.get("reachability_check", True)
 
