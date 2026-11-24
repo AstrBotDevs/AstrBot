@@ -686,6 +686,8 @@ async def on_llm_tool_respond(
 
 内置 runner 在执行退出时调用一次 `on_agent_done`，包括错误、取消和步数耗尽。通过 `run_context.run_end_reason`（`completed`、`error`、`cancelled` 或 `max_steps`）和 `run_context.run_error` 读取结果。该 hook 不代表历史已保存。
 
+在有当前消息的命令或钩子中，可调用 `await self.schedule_continuation(prompt)` 申请续行。宿主会将续行绑定到提交请求的插件实例和提交时的对话。同一对话的受管续行按入队顺序执行。发起实例在执行前被禁用、卸载或替换时，宿主会跳过对应待办。观察插件仍会收到原有钩子，只有发起实例可以从本轮再申请续行。观察插件的续行申请会返回 `False`，请求成功入队时返回 `True`。
+
 `resp` 可能为 `None` 或中断提示。需要在发送前修改模型回复，请使用 `on_llm_response`。
 
 ```python

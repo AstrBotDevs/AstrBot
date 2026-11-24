@@ -484,6 +484,9 @@ async def admit_agent_input(context: Context, input: AgentInput) -> bool:
     from astrbot.core.agent.runtime import AgentPermissions
 
     event = input.event
+    owner = event._continuation_owner
+    if owner is not None and owner._active_metadata() is None:
+        return False
     current_config = context.get_config(umo=event.unified_msg_origin)
     if event.is_stopped() or not current_config.get("provider_settings", {}).get(
         "enable", True

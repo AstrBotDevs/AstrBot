@@ -21,9 +21,11 @@ from astrbot.core.agent.hooks import BaseAgentRunHooks
 from astrbot.core.agent.run_context import ContextWrapper
 from astrbot.core.agent.runtime import AgentSessionRef
 from astrbot.core.agent.tool_image_cache import tool_image_cache
+from astrbot.core.agent_service import AgentService
 from astrbot.core.agent_wakeup import wake_main_agent
 from astrbot.core.astr_agent_runtime import AstrAgentRuntime
 from astrbot.core.astr_agent_runtime import session as native_session
+from astrbot.core.astr_agent_runtime.hooks import MainAgentHooks
 from astrbot.core.astr_agent_runtime.main_agent import MainAgentBuildResult
 from astrbot.core.astr_agent_runtime.main_agent import builder as native_builder
 from astrbot.core.astr_agent_runtime.main_agent.request import prepare_request
@@ -32,18 +34,28 @@ from astrbot.core.config.default import DEFAULT_CONFIG
 from astrbot.core.event_bus import EventBus
 from astrbot.core.log import _log_context
 from astrbot.core.message.message_event_result import MessageChain
+from astrbot.core.pipeline import context_utils
 from astrbot.core.pipeline.context import PipelineContext
 from astrbot.core.pipeline.scheduler import PipelineScheduler
 from astrbot.core.platform.agent_wakeup_event import AgentWakeupEvent
 from astrbot.core.platform.astr_message_event import (
     AstrMessageEvent,
     current_message_event,
+    event_context,
 )
 from astrbot.core.platform.astrbot_message import AstrBotMessage, MessageMember
 from astrbot.core.platform.message_type import MessageType
 from astrbot.core.platform.platform_metadata import PlatformMetadata
 from astrbot.core.provider.entities import LLMResponse
 from astrbot.core.provider.func_tool_manager import FunctionToolManager
+from astrbot.core.star import base as star_base
+from astrbot.core.star.base import Star
+from astrbot.core.star.star import StarMetadata, star_map
+from astrbot.core.star.star_handler import (
+    EventType,
+    StarHandlerMetadata,
+    StarHandlerRegistry,
+)
 from astrbot.core.utils import trace as trace_module
 
 
@@ -71,6 +83,7 @@ async def runtime(monkeypatch):
         gate=asyncio.Event(),
         cleaned=asyncio.Event(),
         requests=[],
+        agent_hooks=BaseAgentRunHooks(),
         events=[],
         deliver=False,
         fail=False,
@@ -176,10 +189,12 @@ async def runtime(monkeypatch):
             provider=provider,
             request=prepared.request,
             run_context=ContextWrapper(
-                context=SimpleNamespace(event=event, send_to_user=True, _output_turn=None)
+                context=SimpleNamespace(
+                    event=event, send_to_user=True, _output_turn=None
+                )
             ),
             tool_executor=MagicMock(),
-            agent_hooks=BaseAgentRunHooks(),
+            agent_hooks=control.agent_hooks,
             streaming=config.streaming_response,
         )
         return MainAgentBuildResult(runner, prepared.request, provider)
@@ -196,6 +211,7 @@ async def runtime(monkeypatch):
     monkeypatch.setattr(trace_module, "_get_log_broker", lambda: None)
     native = AstrAgentRuntime(context, agent_configs=MagicMock(), subagents=MagicMock())
     runtimes = {"astrbot": native}
+    context.agent = AgentService(context, runtimes)
     scheduler = PipelineScheduler(
         PipelineContext(
             config, SimpleNamespace(context=context), "profile", agent_runtimes=runtimes
@@ -231,7 +247,9 @@ async def runtime(monkeypatch):
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("source", ["cron", "background_task", "plugin"])
-async def test_wakeup_output_policy_preserves_explicit_sends_and_history(runtime, source):
+async def test_wakeup_output_policy_preserves_explicit_sends_and_history(
+    runtime, source
+):
     """Keep explicit sends and history when automatic replies are disabled.
 
     Args:
@@ -523,8 +541,12 @@ async def test_background_output_uses_normal_overflow_and_image_handling(
 
     original = native_builder.build_main_agent
     store = database.conversation_store
-    conversation = await store.create(umo="target:FriendMessage:alice", platform_id="target")
-    writer = ConversationEventWriter(store, await store.read(conversation.conversation_id))
+    conversation = await store.create(
+        umo="target:FriendMessage:alice", platform_id="target"
+    )
+    writer = ConversationEventWriter(
+        store, await store.read(conversation.conversation_id)
+    )
 
     async def build(**kwargs):
         result = await original(**kwargs)
@@ -608,7 +630,262 @@ async def test_background_output_uses_normal_overflow_and_image_handling(
     assert output not in json.dumps(history)
     events = await store.events(conversation.conversation_id)
     assert not any(event.type == "context.rebased" for event in events)
-    assert sum(
-        event.type == "message.appended" and event.payload["message"]["role"] == "user"
-        for event in events
-    ) == 1
+    assert (
+        sum(
+            event.type == "message.appended"
+            and event.payload["message"]["role"] == "user"
+            for event in events
+        )
+        == 1
+    )
+
+
+@pytest.fixture
+def continuation_plugins(runtime, monkeypatch):
+    """Provide loaded plugin instances and an ordinary event for managed requests."""
+    monkeypatch.setattr(star_base, "star_registry", [])
+    plugins = {}
+    for name in ("A", "B", "C", "D"):
+        module = f"fixture.continuation.{name}"
+        metadata = StarMetadata(name=name)
+        monkeypatch.setitem(star_map, module, metadata)
+        cls = type(f"Plugin{name}", (Star,), {"__module__": module})
+        plugins[name] = metadata.star_cls = cls(runtime.context)
+
+    message = AstrBotMessage()
+    message.type = MessageType.FRIEND_MESSAGE
+    message.self_id = "bot"
+    message.sender = MessageMember(user_id="alice")
+    initial = AstrMessageEvent(
+        "start",
+        message,
+        PlatformMetadata(id="target", name="aiocqhttp", description="Target"),
+        "user",
+    )
+    return plugins, initial
+
+
+@pytest.mark.asyncio
+async def test_host_checks_continuation_ownership_without_hiding_turns(
+    runtime, monkeypatch, continuation_plugins
+):
+    """Other plugins can observe managed turns but cannot re-arm them."""
+    registry = StarHandlerRegistry()
+    monkeypatch.setattr(context_utils, "star_handlers_registry", registry)
+    runtime.agent_hooks = MainAgentHooks()
+    plugins, initial = continuation_plugins
+
+    attempts = []
+    observations = []
+
+    async def check(event, *_):
+        if event.message_str != "C next":
+            # A child task inherits the host's turn ownership.
+            accepted = await asyncio.create_task(
+                plugins["C"].schedule_continuation("C next")
+            )
+            attempts.append((event.message_str, accepted))
+            if event.message_str == "A":
+                for source in ("plugin", "cron", "background_task"):
+                    with pytest.raises(PermissionError):
+                        await wake_main_agent(
+                            runtime.context,
+                            umo=event.unified_msg_origin,
+                            user_prompt="Unmanaged bypass",
+                            source=source,
+                            source_id="A",
+                        )
+
+    async def observe(event, *_):
+        observations.append(event.message_str)
+
+    for owner, callback in [("C", check), ("D", observe)]:
+        registry.append(
+            StarHandlerMetadata(
+                event_type=EventType.OnAgentDoneEvent,
+                handler_full_name=f"fixture.continuation.{owner}.done",
+                handler_name="done",
+                handler_module_path=f"fixture.continuation.{owner}",
+                handler=callback,
+                event_filters=[],
+            )
+        )
+
+    with event_context(initial):
+        assert await asyncio.gather(
+            *(plugins[name].schedule_continuation(name) for name in ("A", "B", "C"))
+        ) == [True, True, True]
+    await asyncio.wait_for(runtime.drain(), 3)
+
+    assert attempts == [("A", False), ("B", False), ("C", True)]
+    assert observations == ["A", "B", "C", "C next"]
+    assert len(runtime.requests) == 4
+    assert {
+        "role": "assistant",
+        "content": [{"type": "text", "text": "Reply 1"}],
+    } in runtime.requests[1]
+
+
+@pytest.mark.asyncio
+async def test_managed_continuation_fifo_stays_with_queued_conversation(
+    runtime, monkeypatch, continuation_plugins
+):
+    """Hold the first pipeline before admission and switch conversations."""
+    plugins, initial = continuation_plugins
+    first_entered = asyncio.Event()
+    unblock = asyncio.Event()
+    starts = []
+    execute = runtime.scheduler.execute
+
+    async def delayed(event):
+        starts.append(event.message_str)
+        if event.message_str == "first":
+            first_entered.set()
+            await unblock.wait()
+        await execute(event)
+
+    monkeypatch.setattr(runtime.scheduler, "execute", delayed)
+    with event_context(initial):
+        assert await plugins["A"].schedule_continuation("first")
+        assert await plugins["B"].schedule_continuation("second")
+
+    await asyncio.wait_for(first_entered.wait(), 2)
+    umo = initial.unified_msg_origin
+    runtime.conversation.user_id = umo
+    other = SimpleNamespace(cid="other", user_id=umo, history="[]", token_usage=0)
+    conversations = {"conversation": runtime.conversation, "other": other}
+    manager = runtime.context.conversation_manager
+    manager.get_curr_conversation_id.return_value = "other"
+    manager.get_conversation.side_effect = lambda _, cid: conversations.get(cid)
+    for _ in range(20):
+        await asyncio.sleep(0)
+    assert starts == ["first"]
+    unblock.set()
+    await asyncio.wait_for(runtime.drain(), 3)
+
+    assert starts == ["first", "second"]
+    assert len(runtime.requests) == 2
+    assert {
+        "role": "assistant",
+        "content": [{"type": "text", "text": "Reply 1"}],
+    } in runtime.requests[1]
+    assert "second" in runtime.conversation.history
+    assert other.history == "[]"
+    assert manager.get_curr_conversation_id.return_value == "other"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("change", ["disable", "unload", "reload"])
+async def test_managed_continuation_skips_stale_waiting_plugin(
+    runtime, continuation_plugins, change
+):
+    """Recheck the plugin instance when its FIFO turn starts."""
+    plugins, initial = continuation_plugins
+    with event_context(initial):
+        assert await plugins["A"].schedule_continuation("first")
+        assert await plugins["B"].schedule_continuation("stale")
+        assert await plugins["C"].schedule_continuation("third")
+
+    runtime.gate.clear()
+    await asyncio.wait_for(runtime.started.wait(), 2)
+    module = type(plugins["B"]).__module__
+    if change == "disable":
+        star_map[module].activated = False
+    elif change == "unload":
+        del star_map[module]
+    else:
+        star_map[module].star_cls = type(plugins["B"])(runtime.context)
+
+    runtime.gate.set()
+    await asyncio.wait_for(runtime.drain(), 3)
+    assert [event.message_str for event in runtime.events] == ["first", "third"]
+    assert len(runtime.requests) == 2
+
+
+@pytest.mark.asyncio
+async def test_managed_continuation_uses_running_conversation_after_switch(
+    runtime, monkeypatch, continuation_plugins
+):
+    """A regular turn's completion targets its own conversation after a switch."""
+    plugins, initial = continuation_plugins
+    initial.message_str = "/llm First"
+    initial.message_obj.message = []
+    registry = StarHandlerRegistry()
+    monkeypatch.setattr(context_utils, "star_handlers_registry", registry)
+    runtime.agent_hooks = MainAgentHooks()
+
+    async def continue_first(event, *_):
+        if event is initial:
+            assert await plugins["A"].schedule_continuation("follow-up")
+
+    registry.append(
+        StarHandlerMetadata(
+            event_type=EventType.OnAgentDoneEvent,
+            handler_full_name="fixture.continuation.A.done",
+            handler_name="done",
+            handler_module_path=type(plugins["A"]).__module__,
+            handler=continue_first,
+            event_filters=[],
+        )
+    )
+    runtime.gate.clear()
+    await runtime.context.get_event_queue().put(initial)
+    await asyncio.wait_for(runtime.started.wait(), 2)
+
+    umo = initial.unified_msg_origin
+    other = SimpleNamespace(cid="other", user_id=umo, history="[]", token_usage=0)
+    conversations = {"conversation": runtime.conversation, "other": other}
+    manager = runtime.context.conversation_manager
+    manager.get_curr_conversation_id.return_value = "other"
+    manager.get_conversation.side_effect = lambda _, cid: conversations.get(cid)
+
+    runtime.gate.set()
+    await asyncio.wait_for(runtime.drain(), 3)
+    assert len(runtime.requests) == 2
+    assert "follow-up" in runtime.conversation.history
+    assert other.history == "[]"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("stop_when", ["queued", "waiting-for-fifo"])
+@pytest.mark.parametrize("stop_method", ["request_agent_stop_all", "stop_all"])
+async def test_stop_cancels_pending_managed_continuations(
+    runtime, continuation_plugins, monkeypatch, stop_when, stop_method
+):
+    """A stop reaches managed work even before its pipeline is registered."""
+    from astrbot.core.utils.active_event_registry import active_event_registry
+
+    plugins, initial = continuation_plugins
+    runtime.gate.clear()
+    waiting = asyncio.Event()
+    execute = runtime.bus._execute
+
+    async def mark_waiting(scheduler, event):
+        if event.message_str == "pending":
+            waiting.set()
+        await execute(scheduler, event)
+
+    monkeypatch.setattr(runtime.bus, "_execute", mark_waiting)
+    if stop_when == "waiting-for-fifo":
+        with event_context(initial):
+            assert await plugins["A"].schedule_continuation("active")
+        await asyncio.wait_for(runtime.started.wait(), 2)
+
+    with event_context(initial):
+        assert await plugins["B"].schedule_continuation("pending")
+        if stop_when == "waiting-for-fifo":
+            await asyncio.wait_for(waiting.wait(), 2)
+
+        stop = getattr(active_event_registry, stop_method)
+        assert stop(initial.unified_msg_origin, exclude=initial) == (
+            2 if stop_when == "waiting-for-fifo" else 1
+        )
+        assert await plugins["C"].schedule_continuation("after stop")
+
+    runtime.gate.set()
+    await asyncio.wait_for(runtime.drain(), 3)
+    expected = (
+        ["active", "after stop"] if stop_when == "waiting-for-fifo" else ["after stop"]
+    )
+    assert [event.message_str for event in runtime.events] == expected
+    assert len(runtime.requests) == len(expected)

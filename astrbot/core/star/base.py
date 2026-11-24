@@ -63,6 +63,75 @@ class Star(CommandParserMixin, PluginKVStoreMixin):
             star_map[cls.__module__].star_cls_type = cls
             star_map[cls.__module__].module_path = cls.__module__
 
+    def _active_metadata(self) -> StarMetadata | None:
+        metadata = star_map.get(type(self).__module__)
+        if metadata is not None and metadata.activated and metadata.star_cls is self:
+            return metadata
+        return None
+
+    async def schedule_continuation(self, user_prompt: str) -> bool:
+        """Enqueue a managed main-agent continuation for the current session.
+
+        A managed continuation can schedule another turn only through the
+        plugin instance that started it. Other plugins can still observe it.
+
+        Args:
+            user_prompt: Model input for the next turn.
+
+        Returns:
+            True when queued, or False when another plugin owns the current
+            continuation.
+
+        Raises:
+            RuntimeError: If invoked without a current event or by an inactive plugin.
+            ValueError: If the target adapter is unavailable or the prompt is empty.
+        """
+        from astrbot.core.platform.agent_wakeup_event import AgentWakeupEvent
+        from astrbot.core.platform.astr_message_event import (
+            _continuation_owner,
+            current_message_event,
+        )
+        from astrbot.core.platform.message_session import MessageSession
+        from astrbot.core.utils.active_event_registry import active_event_registry
+
+        owner = _continuation_owner.get()
+        if owner is not None and owner is not self:
+            return False
+        metadata = self._active_metadata()
+        origin = current_message_event.get()
+        if metadata is None:
+            raise RuntimeError("Continuation requires an active plugin instance")
+        if origin is None:
+            raise RuntimeError("Continuation requires a current message event")
+        if not user_prompt.strip():
+            raise ValueError("Continuation requires a non-empty prompt")
+        platform = self.context.get_platform_inst(origin.session.platform_id)
+        if platform is None:
+            raise ValueError("Continuation target adapter is unavailable")
+
+        umo = origin.unified_msg_origin
+        target = await self.context.agent._continuation_target(origin)
+
+        event = AgentWakeupEvent(
+            context=self.context,
+            session=MessageSession.from_str(umo),
+            platform_meta=platform.meta(),
+            prompt=user_prompt,
+            source="plugin",
+            source_id=metadata.name,
+            role=origin.role,
+            agent_session=target,
+            source_event=origin,
+        )
+        event._continuation_owner = self
+        active_event_registry.register_pending_continuation(event)
+        try:
+            await self.context.get_event_queue().put(event)
+        except BaseException:
+            active_event_registry.discard_pending_continuation(event)
+            raise
+        return True
+
     async def text_to_image(
         self,
         text: str,

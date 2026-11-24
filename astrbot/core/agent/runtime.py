@@ -387,6 +387,9 @@ class AgentSession(ABC):
                     self.active_turn = turn
                     turn.emit(TurnStarted())
                     async with self._execution_scope():
+                        input.event._agent_session_ref = AgentSessionRef(
+                            self.runtime_name, self.id
+                        )
                         if admit is not None and not await admit():
                             result = TurnResult(reason="skipped")
                         else:

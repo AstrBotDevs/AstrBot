@@ -21,7 +21,9 @@ from astrbot.core.pipeline.scheduler import PipelineScheduler
 from astrbot.core.platform.message_type import MessageType
 
 from .platform import AstrMessageEvent
+from .platform.agent_wakeup_event import AgentWakeupEvent
 from .utils.active_event_registry import active_event_registry
+from .utils.session_lock import SessionLockManager
 
 UNIQUE_SESSION_ID_BUILDERS: dict[str, Callable[[AstrMessageEvent], str | None]] = {
     "aiocqhttp": lambda e: f"{e.get_sender_id()}_{e.get_group_id()}",
@@ -51,11 +53,13 @@ class EventBus:
         # 持有正在执行的 pipeline 任务的强引用, 防止 task 在 pending 状态被 GC 回收
         self._pending_tasks: dict[asyncio.Task, AstrMessageEvent] = {}
         self.stopped_platforms: set[str] = set()
+        self._continuation_lanes = SessionLockManager()
 
     async def dispatch(self) -> None:
         while True:
             event: AstrMessageEvent = await self.event_queue.get()
             if event.get_platform_id() in self.stopped_platforms:
+                active_event_registry.discard_pending_continuation(event)
                 event.trace.record("pipeline_end", status="cancelled")
                 continue
             original_umo = event.unified_msg_origin
@@ -63,6 +67,7 @@ class EventBus:
             conf_id = conf_info["id"]
             scheduler = self.pipeline_scheduler_mapping.get(conf_id)
             if not scheduler:
+                active_event_registry.discard_pending_continuation(event)
                 logger.error(
                     f"PipelineScheduler not found for id: {conf_id}, event ignored."
                 )
@@ -77,6 +82,7 @@ class EventBus:
                 conf_id = conf_info["id"]
                 scheduler = self.pipeline_scheduler_mapping.get(conf_id)
                 if not scheduler:
+                    active_event_registry.discard_pending_continuation(event)
                     logger.error(
                         f"PipelineScheduler not found for id: {conf_id}, event ignored."
                     )
@@ -84,9 +90,36 @@ class EventBus:
             conf_name = conf_info.get("name") or conf_id
             with event.trace.context():
                 self._print_event(event, conf_name)
-            task = asyncio.create_task(scheduler.execute(event))
+            task = asyncio.create_task(self._execute(scheduler, event))
             self._pending_tasks[task] = event
             task.add_done_callback(self._on_task_done)
+
+    async def _execute(
+        self, scheduler: PipelineScheduler, event: AstrMessageEvent
+    ) -> None:
+        """Run a queued event, preserving managed FIFO before pipeline hooks.
+
+        Args:
+            scheduler: Pipeline selected for the event.
+            event: Message or programmatic wakeup dequeued by the bus.
+        """
+        if not isinstance(event, AgentWakeupEvent) or event._continuation_owner is None:
+            await scheduler.execute(event)
+            return
+        owner = event._continuation_owner
+        target = event.agent_session
+        if target is None:
+            raise ValueError("Managed continuation has no conversation target")
+        async with self._continuation_lanes.acquire_lock(
+            f"{target.runtime}:{target.session_id}"
+        ):
+            if (
+                active_event_registry.get_background_stop_signal(event).is_set()
+                or owner._active_metadata() is None
+            ):
+                event.trace.record("pipeline_end", status="cancelled")
+                return
+            await scheduler.execute(event)
 
     async def stop_platform(self, platform_id: str) -> None:
         """Block queued messages and drain an adapter's active executions.
@@ -99,6 +132,7 @@ class EventBus:
         while not self.event_queue.empty():
             event = self.event_queue.get_nowait()
             if event.get_platform_id() == platform_id:
+                active_event_registry.discard_pending_continuation(event)
                 event.trace.record("pipeline_end", status="cancelled")
             else:
                 retained.append(event)
@@ -141,7 +175,9 @@ class EventBus:
 
     def _on_task_done(self, task: asyncio.Task) -> None:
         """pipeline 任务结束回调: 移除强引用并暴露未捕获的异常"""
-        self._pending_tasks.pop(task, None)
+        event = self._pending_tasks.pop(task, None)
+        if event is not None:
+            active_event_registry.discard_pending_continuation(event)
         if task.cancelled():
             return
         exc = task.exception()

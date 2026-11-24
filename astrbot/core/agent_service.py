@@ -264,6 +264,35 @@ class AgentService:
             raise TypeError("runtime must implement AgentRuntime")
         self._runtimes[name] = runtime
 
+    async def _continuation_target(self, event: AstrMessageEvent) -> AgentSessionRef:
+        """Bind a continuation to the originating or currently selected session.
+
+        Args:
+            event: Host event on whose behalf a plugin submitted a continuation.
+
+        Returns:
+            Runtime and conversation identity captured before queuing.
+
+        Raises:
+            RuntimeError: If the configured runtime is unavailable.
+        """
+        if event._agent_session_ref is not None:
+            return event._agent_session_ref
+        if isinstance(event, AgentWakeupEvent) and event.agent_session is not None:
+            return event.agent_session
+        umo = event.unified_msg_origin
+        config = self.context.get_config(umo=umo).get("agent", {})
+        runtime_name = config.get("runtime", "astrbot")
+        runtime = self._runtimes.get(runtime_name)
+        if runtime is None:
+            raise RuntimeError(f"Agent runtime unavailable: {runtime_name}")
+        session = await runtime.open_session(
+            umo,
+            input=AgentInput(event, AgentPermissions.from_event(event)),
+            options={"config": deepcopy(config.get("config", {}))},
+        )
+        return AgentSessionRef(runtime_name, session.id)
+
     def _make_event(
         self,
         umo: str,

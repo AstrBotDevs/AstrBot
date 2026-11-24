@@ -4,6 +4,7 @@ import asyncio
 from typing import TYPE_CHECKING
 
 from astrbot.core.platform.agent_wakeup_event import AgentWakeupEvent, WakeupSource
+from astrbot.core.platform.astr_message_event import _continuation_owner
 from astrbot.core.platform.message_session import MessageSession
 from astrbot.core.star.context import Context
 
@@ -44,6 +45,56 @@ async def wake_main_agent(
     Raises:
         ValueError: If the source or target session is invalid,
             or the target platform adapter is unavailable.
+        PermissionError: If this entry point is called from a managed
+            continuation. Use the owning Star's continuation entry point.
+    """
+    if _continuation_owner.get() is not None:
+        raise PermissionError(
+            "Use Star.schedule_continuation in a managed continuation"
+        )
+    await _queue_agent_wakeup(
+        ctx,
+        umo=umo,
+        user_prompt=user_prompt,
+        source=source,
+        source_id=source_id,
+        role=role,
+        stop_signal=stop_signal,
+        agent_session=agent_session,
+        tool_result=tool_result,
+        source_event=source_event,
+    )
+
+
+async def _queue_agent_wakeup(
+    ctx: Context,
+    *,
+    umo: str,
+    user_prompt: str,
+    source: WakeupSource,
+    source_id: str | None = None,
+    role: str = "member",
+    stop_signal: asyncio.Event | None = None,
+    agent_session: "AgentSessionRef | None" = None,
+    tool_result: "tuple[str, CallToolResult] | None" = None,
+    source_event: "AstrMessageEvent | None" = None,
+) -> None:
+    """Queue a wakeup from a trusted runtime producer or the public entry point.
+
+    Args:
+        ctx: Host services used to enqueue the wakeup.
+        umo: Target message session.
+        user_prompt: Input for the triggered turn.
+        source: Trigger kind supplied by the producer.
+        source_id: Identity of the producer's job, task, or plugin.
+        role: Effective caller role.
+        stop_signal: Optional shared cancellation signal.
+        agent_session: Exact conversation target, when already selected.
+        tool_result: Typed output of a completed tool.
+        source_event: Event carrying caller identity and restrictions.
+
+    Raises:
+        ValueError: If the target session or platform adapter is invalid.
     """
     if stop_signal is not None and stop_signal.is_set():
         return
