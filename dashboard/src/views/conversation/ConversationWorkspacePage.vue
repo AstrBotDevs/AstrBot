@@ -8,7 +8,7 @@ import {
   watch,
 } from "vue";
 import { RouterLink, useRoute, useRouter } from "vue-router";
-import { LazyMonacoEditor as VueMonacoEditor } from '@/components/shared/LazyMonacoEditor';
+import StreamDiffsEditor from '@/components/shared/StreamDiffsEditor.vue';
 import {
   Bot,
   Braces,
@@ -1283,21 +1283,12 @@ function changePage(nextPage: number) {
         </v-card-title>
         <v-card-text class="pa-6">
           <div class="raw-data-editor">
-            <VueMonacoEditor
-              v-model:value="rawHistoryText"
-              theme="vs-dark"
+            <StreamDiffsEditor
+              v-model="rawHistoryText"
               language="json"
-              :options="{
-                automaticLayout: true,
-                domReadOnly: true,
-                fontSize: 13,
-                minimap: { enabled: false },
-                readOnly: true,
-                scrollBeyondLastLine: false,
-                tabSize: 2,
-                wordWrap: 'on',
-                wrappingIndent: 'indent',
-              }"
+              theme-type="dark"
+              :font-size="13"
+              readonly
             />
           </div>
         </v-card-text>

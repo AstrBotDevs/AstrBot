@@ -890,12 +890,13 @@
                 {{ editorDialog.error }}
               </v-alert>
 
-              <div class="skill-editor__monaco">
-                <VueMonacoEditor
-                  v-model:value="editorDialog.content"
-                  :theme="editorTheme"
+              <div class="skill-editor__surface">
+                <StreamDiffsEditor
+                  v-model="editorDialog.content"
+                  :theme-type="editorTheme === 'vs-dark' ? 'dark' : 'light'"
                   :language="editorLanguage"
-                  :options="editorOptions"
+                  :readonly="!editorDialog.fileEditable || editorDialog.loadingFile"
+                  :font-size="13"
                   style="height: 100%; width: 100%"
                   @change="editorDialog.fileDirty = true"
                 />
@@ -959,7 +960,7 @@
 
 <script>
 import { computed, nextTick, onMounted, reactive, ref, watch } from "vue";
-import { LazyMonacoEditor as VueMonacoEditor } from '@/components/shared/LazyMonacoEditor';
+import StreamDiffsEditor from '@/components/shared/StreamDiffsEditor.vue';
 import { skillApi, systemConfigApi } from "@/api/v1";
 import { useI18n, useModuleI18n } from "@/i18n/composables";
 import OutlinedActionListItem from "@/components/shared/OutlinedActionListItem.vue";
@@ -976,7 +977,7 @@ export default {
   name: "SkillsSection",
   components: {
     OutlinedActionListItem,
-    VueMonacoEditor,
+    StreamDiffsEditor,
   },
   setup() {
     const { t } = useI18n();
@@ -1074,16 +1075,6 @@ export default {
     const editorTheme = computed(() =>
       customizer.uiTheme === "PurpleThemeDark" ? "vs-dark" : "vs-light",
     );
-    const editorOptions = computed(() => ({
-      automaticLayout: true,
-      fontSize: 13,
-      lineNumbers: "on",
-      minimap: { enabled: false },
-      readOnly: !editorDialog.fileEditable || editorDialog.loadingFile,
-      scrollBeyondLastLine: false,
-      tabSize: 2,
-      wordWrap: "on",
-    }));
     const uploadStateCounts = computed(() =>
       uploadItems.value.reduce(
         (counts, item) => {
@@ -2166,7 +2157,6 @@ export default {
       editorDialog,
       editorLanguage,
       editorTheme,
-      editorOptions,
       formatFileSize,
       uploadStatusLabel,
       statusChipClass,
@@ -2464,7 +2454,7 @@ export default {
   white-space: nowrap;
 }
 
-.skill-editor__monaco {
+.skill-editor__surface {
   border: 1px solid rgba(128, 128, 128, 0.28);
   border-radius: 10px;
   flex: 1 1 auto;
@@ -2808,7 +2798,7 @@ export default {
     max-height: 20vh;
   }
 
-  .skill-editor__monaco {
+  .skill-editor__surface {
     min-height: 40vh;
   }
 

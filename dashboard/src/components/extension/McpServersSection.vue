@@ -325,17 +325,8 @@
               {{ tm('dialogs.addServer.tips.transportRecommendation') }}
             </v-alert>
 
-            <div class="monaco-container" style="margin-top: 16px;">
-              <VueMonacoEditor v-model:value="serverConfigJson" theme="vs-dark" language="json" :options="{
-                minimap: {
-                  enabled: false
-                },
-                scrollBeyondLastLine: false,
-                automaticLayout: true,
-                lineNumbers: 'on',
-                roundedSelection: true,
-                tabSize: 2
-              }" @change="validateJson" />
+            <div class="server-config-editor" style="margin-top: 16px;">
+              <StreamDiffsEditor v-model="serverConfigJson" language="json" theme-type="dark" :font-size="13" @change="validateJson" />
             </div>
 
             <div v-if="jsonError" class="mt-2 text-error">
@@ -429,7 +420,7 @@
 </template>
 
 <script>
-import { LazyMonacoEditor as VueMonacoEditor } from '@/components/shared/LazyMonacoEditor';
+import StreamDiffsEditor from '@/components/shared/StreamDiffsEditor.vue';
 import { mcpApi } from '@/api/v1';
 import { useI18n, useModuleI18n } from '@/i18n/composables';
 import OutlinedActionListItem from '@/components/shared/OutlinedActionListItem.vue';
@@ -442,7 +433,7 @@ import {
 export default {
   name: 'McpServersSection',
   components: {
-    VueMonacoEditor,
+    StreamDiffsEditor,
     OutlinedActionListItem
   },
   setup() {
@@ -979,7 +970,7 @@ export default {
   transform: translateY(-4px) scale(1.05);
 }
 
-.monaco-container {
+.server-config-editor {
   border: 1px solid rgba(0, 0, 0, 0.1);
   border-radius: 8px;
   height: 300px;

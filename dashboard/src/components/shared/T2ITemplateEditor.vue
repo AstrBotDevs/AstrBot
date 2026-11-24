@@ -132,12 +132,11 @@
               </div>
             </v-toolbar>
             <div class="flex-grow-1" style="border-right: 1px solid rgba(0,0,0,0.1);">
-              <VueMonacoEditor
-                v-model:value="templateContent"
-                :theme="editorTheme"
+              <StreamDiffsEditor
+                v-model="templateContent"
+                theme-type="light"
                 language="html"
-                :options="editorOptions"
-                style="height: 100%;"
+                :font-size="12"
               />
             </div>
           </v-col>
@@ -246,7 +245,7 @@
 
 <script setup>
 import { ref, computed, nextTick, watch } from 'vue'
-import { LazyMonacoEditor as VueMonacoEditor } from '@/components/shared/LazyMonacoEditor';
+import StreamDiffsEditor from '@/components/shared/StreamDiffsEditor.vue';
 import { useI18n, useModuleI18n } from '@/i18n/composables'
 import { useToast } from '@/utils/toast'
 import { statsApi, t2iApi } from '@/api/v1'
@@ -279,15 +278,6 @@ const applyAndCloseDialog = ref(false)
 const previewFrame = ref(null)
 
 // --- 编辑器配置 ---
-const editorTheme = computed(() => 'vs-light')
-const editorOptions = {
-  automaticLayout: true,
-  fontSize: 12,
-  lineNumbers: 'on',
-  wordWrap: 'on',
-  minimap: { enabled: false },
-  scrollBeyondLastLine: false,
-}
 
 // --- 预览逻辑 ---
 const previewVersion = ref('v4.0.0')

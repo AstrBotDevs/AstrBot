@@ -1,6 +1,6 @@
 <script setup>
 import MarkdownIt from 'markdown-it-ts'
-import { LazyMonacoEditor as VueMonacoEditor } from '@/components/shared/LazyMonacoEditor';
+import StreamDiffsEditor from '@/components/shared/StreamDiffsEditor.vue';
 import { ref, computed } from 'vue'
 import ConfigItemRenderer from './ConfigItemRenderer.vue'
 import TemplateListEditor from './TemplateListEditor.vue'
@@ -460,9 +460,10 @@ function getSpecialSubtype(value) {
         </v-toolbar-items>
       </v-toolbar>
       <v-card-text class="pa-0">
-        <VueMonacoEditor :theme="currentEditingTheme" :language="currentEditingLanguage"
-          style="height: calc(100vh - 64px);" v-model:value="currentEditingKeyIterable[currentEditingKey]">
-        </VueMonacoEditor>
+        <StreamDiffsEditor :theme-type="currentEditingTheme === 'vs-dark' ? 'dark' : 'light'"
+          :language="currentEditingLanguage" style="height: calc(100vh - 64px);"
+          v-model="currentEditingKeyIterable[currentEditingKey]">
+        </StreamDiffsEditor>
       </v-card-text>
     </v-card>
   </v-dialog>
@@ -567,25 +568,6 @@ function getSpecialSubtype(value) {
 .config-divider {
   border-color: rgba(0, 0, 0, 0.1);
   margin-left: 24px;
-}
-
-.editor-container {
-  position: relative;
-  display: flex;
-  width: 100%;
-}
-
-.editor-fullscreen-btn {
-  position: absolute;
-  top: 4px;
-  right: 4px;
-  z-index: 10;
-  background-color: rgba(0, 0, 0, 0.3);
-  border-radius: 4px;
-}
-
-.editor-fullscreen-btn:hover {
-  background-color: rgba(0, 0, 0, 0.5);
 }
 
 .plugin-set-display-row {
