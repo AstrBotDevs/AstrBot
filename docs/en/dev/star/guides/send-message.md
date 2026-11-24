@@ -103,6 +103,8 @@ The context records the original account, sender, conversation and message. Chec
 
 When sending a Lark `ActionRow` card, keep the card's `receipt.message_ids[0]` with its reply context. Later, call `await platform.update_message(target, card_message_id, replacement_chain)` to edit that card in place. A replacement can contain text and new button rows, or just text to remove the buttons. Use `target.message_id` when replying to the incoming human message.
 
+Plugins can listen for changes affecting a destination with `@filter.event_message_type(filter.EventMessageType.OTHER_MESSAGE)`. QQ exposes the native `C2C_MSG_RECEIVE`, `C2C_MSG_REJECT`, `FRIEND_ADD` and `FRIEND_DEL` names through `event.get_extra("qq_official_event")`. On Lark, subscribe the app to the bot or user group-removal events and read `event.get_extra("lark_event_type")`. Use the participants in the event to identify who left the chat.
+
 ## Rich Media Messages
 
 AstrBot supports sending rich media messages such as images, audio, videos, etc. Use `MessageChain` to construct messages.
@@ -211,6 +213,7 @@ async def confirm(self, event: AstrMessageEvent):
 - `Button.CallbackAction.data` must be JSON-compatible and is returned as `interaction.data`. The button ID becomes `interaction.action_id`; prefix IDs with your plugin name to avoid collisions.
 - `Button.UrlAction` opens a link without invoking a plugin callback and is unaffected by `action_timeout`. `fallback_text` is used on platforms without button support, rather than as an expiry notice.
 - `@filter.button_action()` without an ID matches all button callbacks. Use `event.get_button_interaction()` to access the `ButtonInteraction` event component.
+- On Lark, `@filter.button_action("lark:card_action")` receives native buttons from existing cards with an opaque `value`. Match the original card's `source_message_id` and the current operator before acting on `interaction.data`. In webhook mode, card actions and group-removal notifications require a validated Lark signature or verification token for the configured app.
 
 ## Sending Video Messages
 

@@ -103,6 +103,8 @@ async def send_saved_reply(self, saved, text):
 
 发出飞书 `ActionRow` 按钮卡片时，把卡片回执中的 `receipt.message_ids[0]` 与回复上下文一起保存。稍后调用 `await platform.update_message(target, card_message_id, replacement_chain)` 就能更新原卡。新内容可包含文字和按钮行，也可只保留文字以移除按钮。回复原来那条人类消息时使用 `target.message_id`。
 
+插件可以用 `@filter.event_message_type(filter.EventMessageType.OTHER_MESSAGE)` 接收影响回信目标的事件。QQ 通过 `event.get_extra("qq_official_event")` 提供原生事件名 `C2C_MSG_RECEIVE`、`C2C_MSG_REJECT`、`FRIEND_ADD` 和 `FRIEND_DEL`。飞书应用订阅机器人或成员离群事件后，可从 `event.get_extra("lark_event_type")` 读取事件类型，并从事件中取得实际离群的对象。
+
 ## 富媒体消息
 
 AstrBot 支持发送富媒体消息，比如图片、语音、视频等。使用 `MessageChain` 来构建消息。
@@ -209,6 +211,7 @@ async def confirm(self, event: AstrMessageEvent):
 - `Button.CallbackAction.data` 必须可以 JSON 序列化，点击后通过 `interaction.data` 读取；按钮 ID 对应 `interaction.action_id`。建议给 ID 加插件名前缀。
 - `Button.UrlAction` 只打开链接，不触发插件回调，也不受 `action_timeout` 限制。`fallback_text` 用于不支持按钮的平台，不是过期提示。
 - `@filter.button_action()` 不指定 ID 时匹配所有按钮回调。通过 `event.get_button_interaction()` 获取 `ButtonInteraction` 事件组件。
+- 飞书原生卡片的按钮可用 `@filter.button_action("lark:card_action")` 接收，原 `value` 保存在 `interaction.data`。执行动作前核对原卡的 `source_message_id` 和实际点击人。Webhook 模式须通过当前飞书应用的签名或 verification token 校验，才能接收卡片操作和离群通知。
 
 ## 发送视频消息
 

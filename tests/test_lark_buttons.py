@@ -428,9 +428,10 @@ async def test_native_lark_buttons_use_a_dedicated_opaque_interaction():
         "astrbot_message_type": MessageType.FRIEND_MESSAGE.value,
     }
     callback = {
-        "header": {"event_id": "native-action"},
+        "header": {"event_id": "native-action", "token": "fixture-webhook-token"},
         "event": {
             "operator": {"open_id": "ou_actual"},
+            "token": "fixture-card-token",
             "action": {"tag": "button", "value": value},
             "context": {
                 "open_message_id": "om_old_card",
@@ -444,7 +445,9 @@ async def test_native_lark_buttons_use_a_dedicated_opaque_interaction():
     assert message.type == MessageType.OTHER_MESSAGE
     assert message.session_id == "oc_original"
     assert message.sender.user_id == "ou_actual"
-    assert message.raw_message == callback
+    assert message.raw_message["event"]["context"] == callback["event"]["context"]
+    assert "token" not in message.raw_message["header"]
+    assert "token" not in message.raw_message["event"]
     assert interaction.action_id == "lark:card_action"
     assert interaction.data == value
     assert interaction.interaction_id == "native-action"
@@ -507,9 +510,13 @@ async def test_lark_partial_send_is_not_a_whole_chain_rejection(lark_sdk_transpo
 async def test_lark_group_removal_uses_the_existing_dispatcher(
     lark_sdk_transport, kind
 ):
+    import hashlib
     import json
+    from types import SimpleNamespace
 
     from lark_oapi.core.model import RawRequest
+
+    from astrbot.core.platform.sources.lark.server import LarkWebhookServer
 
     adapter, queue, state, calls = lark_sdk_transport
     event_type = f"im.chat.member.{kind}.deleted_v1"
@@ -545,12 +552,47 @@ async def test_lark_group_removal_uses_the_existing_dispatcher(
     assert event.call_llm is False
     assert not calls and not state["writes"]
 
+    server = LarkWebhookServer(
+        {"app_id": adapter.appid, "app_secret": "fixture"}, queue
+    )
+    server.set_callback(adapter.handle_webhook_event)
+
+    async def deliver_webhook(*, sign=False):
+        body = json.dumps(data).encode()
+        headers = {}
+        if sign:
+            headers = {
+                "X-Lark-Request-Timestamp": "1700000000",
+                "X-Lark-Request-Nonce": "nonce",
+                "X-Lark-Signature": hashlib.sha256(
+                    b"1700000000noncefixture-key" + body
+                ).hexdigest(),
+            }
+        request = SimpleNamespace(
+            headers=headers,
+            get_data=AsyncMock(return_value=body),
+            json=asyncio.sleep(0, data),
+        )
+        return await server.handle_callback(request)
+
     data["header"]["event_id"] = "removed-2"
-    await adapter.handle_webhook_event(data)
-    assert queue.get_nowait().message_obj.message_id == "removed-2"
-    data["header"].update(event_id="foreign-event", app_id="cli_other")
-    await adapter.handle_webhook_event(data)
+    assert (await deliver_webhook())[1] == 401
     assert queue.empty()
+    server.verification_token = "fixture-token"
+    data["header"]["token"] = "fixture-token"
+    assert await deliver_webhook() == {}
+    received = queue.get_nowait().message_obj
+    assert received.message_id == "removed-2"
+    assert "token" not in received.raw_message["header"]
+    data["header"].update(event_id="foreign-event", app_id="cli_other")
+    assert (await deliver_webhook())[1] == 403
+    assert queue.empty()
+    data["header"].update(event_id="removed-3", app_id=adapter.appid)
+    del data["header"]["token"]
+    server.verification_token = ""
+    server.encrypt_key = "fixture-key"
+    assert await deliver_webhook(sign=True) == {}
+    assert queue.get_nowait().message_obj.message_id == "removed-3"
 
 
 @pytest.mark.asyncio

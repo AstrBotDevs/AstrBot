@@ -858,7 +858,16 @@ class LarkPlatformAdapter(Platform):
         abm.self_id = self.bot_open_id or self.bot_name
         abm.message_id = source_message_id or event_id
         abm.message_str = ""
-        abm.raw_message = callback
+        if native_action:
+            # Native card handlers need the originating IDs and action, while
+            # the webhook verification and card-update tokens stay private.
+            abm.raw_message = {
+                "schema": callback_data.get("schema"),
+                "header": {key: val for key, val in header.items() if key != "token"},
+                "event": {"operator": operator, "context": context, "action": action},
+            }
+        else:
+            abm.raw_message = callback
         abm.sender = MessageMember(
             user_id=sender_id,
             nickname=sender_id[:8],
@@ -1103,6 +1112,11 @@ class LarkPlatformAdapter(Platform):
             return
         if self._is_duplicate_event(header["event_id"]):
             return
+        data = {
+            "schema": data["schema"],
+            "header": {key: val for key, val in header.items() if key != "token"},
+            "event": body,
+        }
         message = AstrBotMessage()
         message.type = MessageType.OTHER_MESSAGE
         message.self_id = self.bot_open_id or self.bot_name
