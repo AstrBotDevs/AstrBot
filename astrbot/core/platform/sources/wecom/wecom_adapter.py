@@ -326,49 +326,46 @@ class WecomPlatformAdapter(Platform):
 
     @override
     async def run(self) -> None:
-        loop = asyncio.get_running_loop()
         started_at = int(time.time())
         self._wechat_kf_id = None
         if self.kf_name and self.config.get("secret", "").strip():
-            try:
-                matches = set()
-                offset = 0
-                limit = 100
-                while True:
-                    page = await asyncio.to_thread(
-                        self.wechat_kf_api.get_account_list, offset, limit
-                    )
-                    accounts = page["account_list"]
-                    matches.update(
-                        account["open_kfid"]
-                        for account in accounts
-                        if account.get("name") == self.kf_name
-                        and account.get("open_kfid")
-                    )
-                    if len(accounts) < limit:
-                        break
-                    offset += len(accounts)
-                if len(matches) != 1:
-                    raise ValueError(
-                        "Expected one WeCom customer-service account matching kf_name"
-                    )
-                kfid = matches.pop()
-                self._wechat_kf_scope = (
-                    f"{self.meta().id}:{self.config['corpid'].strip()}:{kfid}"
+            matches = set()
+            offset = 0
+            limit = 100
+            while True:
+                page = await asyncio.to_thread(
+                    self.wechat_kf_api.get_account_list, offset, limit
                 )
-                if not await sp.get_async("wecom_kf", self._wechat_kf_scope, "cursor"):
-                    await sp.put_async(
-                        "wecom_kf",
-                        self._wechat_kf_scope,
-                        "cursor",
-                        {"cursor": "", "since": started_at},
-                    )
-                self._wechat_kf_id = kfid
+                accounts = page["account_list"]
+                matches.update(
+                    account["open_kfid"]
+                    for account in accounts
+                    if account.get("name") == self.kf_name and account.get("open_kfid")
+                )
+                if len(accounts) < limit:
+                    break
+                offset += len(accounts)
+            if len(matches) != 1:
+                raise ValueError(
+                    "Expected one WeCom customer-service account matching kf_name"
+                )
+            kfid = matches.pop()
+            self._wechat_kf_scope = (
+                f"{self.meta().id}:{self.config['corpid'].strip()}:{kfid}"
+            )
+            if not await sp.get_async("wecom_kf", self._wechat_kf_scope, "cursor"):
+                await sp.put_async(
+                    "wecom_kf",
+                    self._wechat_kf_scope,
+                    "cursor",
+                    {"cursor": "", "since": started_at},
+                )
+            self._wechat_kf_id = kfid
+            try:
                 kf_url = (
-                    await loop.run_in_executor(
-                        None,
+                    await asyncio.to_thread(
                         self.wechat_kf_api.add_contact_way,
-                        self._wechat_kf_id,
+                        kfid,
                         "astrbot_placeholder",
                     )
                 ).get("url", "")
@@ -520,6 +517,10 @@ class WecomPlatformAdapter(Platform):
         if msgtype == "text":
             text_data = msg.get("text", {})
             text = text_data.get("content", "").strip()
+            msgid = msg.get("msgid")
+            dedup_value = msgid or text
+            abm.message = [Plain(text=text)]
+            abm.message_str = text
             menu_id = text_data.get("menu_id")
             if isinstance(menu_id, str) and menu_id:
                 try:
@@ -537,6 +538,7 @@ class WecomPlatformAdapter(Platform):
                         "callback as a regular text message."
                     )
                 else:
+                    dedup_value = msgid
                     abm.message = [
                         ButtonInteraction(
                             action_id=action_id,
@@ -547,24 +549,19 @@ class WecomPlatformAdapter(Platform):
                         )
                     ]
                     abm.message_str = action_id
-                    await self.handle_msg(abm)
-                    return abm
-            if text:
+            if dedup_value:
                 now = time.monotonic()
                 self._wechat_kf_seen_text_messages = {
                     key: expiry
                     for key, expiry in self._wechat_kf_seen_text_messages.items()
                     if expiry > now
                 }
-                msgid = msg.get("msgid")
-                dedup_key = (abm.self_id, abm.session_id, bool(msgid), msgid or text)
+                dedup_key = (abm.self_id, abm.session_id, bool(msgid), dedup_value)
                 if dedup_key in self._wechat_kf_seen_text_messages:
                     logger.debug(
                         "Ignored a duplicate WeCom customer-service text message."
                     )
                     return None
-            abm.message = [Plain(text=text)]
-            abm.message_str = text
         elif msgtype == "image":
             media_id = msg.get("image", {}).get("media_id", "")
             resp: Response = await asyncio.get_running_loop().run_in_executor(
@@ -600,9 +597,11 @@ class WecomPlatformAdapter(Platform):
                     default_suffix=".wav",
                 ).to_path(target_format="wav")
             except Exception as e:
-                logger.error(f"转换音频失败: {e}。如果没有安装 ffmpeg 请先安装。")
+                logger.warning(
+                    "Could not transcode WeCom customer-service audio; using the original AMR: %s",
+                    e,
+                )
                 path_wav = path
-                return
 
             abm.message = [Record(file=path_wav, url=path_wav)]
         elif msgtype == "file":

@@ -198,6 +198,7 @@ async def test_wecom_expired_menu_does_not_become_regular_message(monkeypatch):
     clock = [100.0]
     monkeypatch.setattr(button_interaction.time, "time", lambda: clock[0])
     adapter = object.__new__(WecomPlatformAdapter)
+    adapter._wechat_kf_seen_text_messages = {}
     adapter.handle_msg = AsyncMock()
     callback = encode_button_callback("approve", expires_at=160)
     clock[0] = 160.0
@@ -224,15 +225,14 @@ async def test_wecom_customer_service_menu_click_becomes_button_interaction():
     adapter.handle_msg = AsyncMock()
     callback = encode_button_callback("approve", {"request_id": 42})
 
-    message = await adapter.convert_wechat_kf_message(
-        {
-            "msgtype": "text",
-            "external_userid": "customer-1",
-            "open_kfid": "kf-1",
-            "msgid": "click-1",
-            "text": {"content": "Approve", "menu_id": callback},
-        }
-    )
+    item = {
+        "msgtype": "text",
+        "external_userid": "customer-1",
+        "open_kfid": "kf-1",
+        "msgid": "click-1",
+        "text": {"content": "Approve", "menu_id": callback},
+    }
+    message = await adapter.convert_wechat_kf_message(item)
 
     assert message is not None
     assert message.message_str == "approve"
@@ -242,4 +242,9 @@ async def test_wecom_customer_service_menu_click_becomes_button_interaction():
     assert interaction.data == {"request_id": 42}
     assert interaction.interaction_id == "click-1"
     assert interaction.source_message_id is None
+    assert await adapter.convert_wechat_kf_message(item) is None
     adapter.handle_msg.assert_awaited_once_with(message)
+    other_click = await adapter.convert_wechat_kf_message({**item, "msgid": "click-2"})
+    assert other_click is not None
+    assert other_click.message[0].interaction_id == "click-2"
+    assert adapter.handle_msg.await_count == 2
