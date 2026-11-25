@@ -587,7 +587,9 @@ async def test_native_sessions_persist_at_supported_execution_boundaries(sdk, de
             sdk.root, [{"type": "plain", "text": "Initial"}]
         )
         session = await sdk.native.open_session(
-            sdk.scope.umo, session_id=agent["conversation_id"]
+            sdk.scope.umo,
+            session_id=agent["conversation_id"],
+            options={"profile": "subagent"},
         )
         turn = None
     else:
