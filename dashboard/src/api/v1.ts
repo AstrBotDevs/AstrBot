@@ -46,6 +46,7 @@ import {
   type PluginVersionSupportRequest,
   type PluginValidateRepoRequest,
   type PluginConfigFileDeleteRequest,
+  type PluginSourceRequest,
   type ProviderConfigRequest,
   type PypiIndexTestRequest,
   type RuntimeInfo,
@@ -1398,7 +1399,7 @@ export const pluginApi = {
   sources() {
     return typed<any>(openApiV1.listPluginSources());
   },
-  createSource(body: { name: string; url: string }) {
+  createSource(body: PluginSourceRequest) {
     return typed<OpenConfig>(openApiV1.createPluginSource({ body }));
   },
   replaceSources(sources: OpenConfig[]) {

@@ -1297,6 +1297,7 @@ export const useExtensionPage = (initialTab = "installed") => {
   // 为表格视图创建一个处理安装插件的函数
   const handleInstallPlugin = async (plugin) => {
     if (plugin.tags && plugin.tags.includes("danger")) {
+      dialog.value = false;
       selectedDangerPlugin.value = plugin;
       dangerConfirmDialog.value = true;
     } else {
@@ -1325,6 +1326,7 @@ export const useExtensionPage = (initialTab = "installed") => {
   const cancelDangerInstall = () => {
     dangerConfirmDialog.value = false;
     selectedDangerPlugin.value = null;
+    if (marketInstallLink.value) closeInstallDialog();
   };
 
   const resolveMarketInstallLink = async (addSource = false) => {
@@ -1383,9 +1385,7 @@ export const useExtensionPage = (initialTab = "installed") => {
         toast(tm("market.sourceAdded"), "success");
       }
 
-      selectedMarketInstallPlugin.value = { ...plugin, logo };
-      extension_url.value = plugin.repo;
-      uploadTab.value = "url";
+      await handleInstallPlugin({ ...plugin, logo });
     } catch (error) {
       request.error = resolveErrorMessage(error, fallback);
     } finally {
