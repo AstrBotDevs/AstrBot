@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import asyncio
+import json
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
@@ -184,6 +186,107 @@ def test_to_sdk_event_converts_core_event(core_text: str) -> None:
     assert isinstance(chain[0], Plain) and chain[0].text == "hello "
     assert isinstance(chain[1], At) and chain[1].user_id == "123"
     assert isinstance(chain[2], AtAll)
+
+
+@pytest.mark.asyncio
+async def test_local_sdk_config_loads_and_applies_dashboard_changes(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from astrbot.core.star.star_manager import PluginManager
+    from astrbot.dashboard.services.config_service import ConfigFileService
+
+    plugin_root = tmp_path / "sdk_config"
+    write_sdk_plugin(
+        plugin_root,
+        """
+from astrbot_sdk import Plugin, lifecycle, on
+
+class TestPlugin(Plugin):
+    previous = ""
+
+    @lifecycle.config_changed
+    async def config_changed(self, event):
+        self.previous = event.previous["greeting"]
+
+    @on.command("greet")
+    async def greet(self, event):
+        yield event.reply(f"{self.previous}:{self.config['greeting']}")
+""",
+    )
+    (plugin_root / "_conf_schema.json").write_text(
+        json.dumps({"greeting": {"type": "string", "default": "Hello"}}),
+        encoding="utf-8",
+    )
+    config_dir = tmp_path / "config"
+    monkeypatch.setattr(
+        "astrbot.core.star.sdk_bridge.bridge.get_astrbot_config_path",
+        lambda: str(config_dir),
+    )
+    monkeypatch.setattr(
+        "astrbot.core.star.sdk_bridge.bridge._asset_root", lambda: tmp_path / "assets"
+    )
+    bridge = SDKPluginBridge(plugin_root, MagicMock())
+    manager = PluginManager.__new__(PluginManager)
+    manager._pm_lock = asyncio.Lock()
+    manager._sdk_plugin_manager = SimpleNamespace(bridges={plugin_root.name: bridge})
+    service = ConfigFileService(SimpleNamespace(plugin_manager=manager))
+    try:
+        await bridge.start()
+        metadata = star_map[bridge.module_path]
+        assert metadata.config == {"greeting": "Hello"}
+        assert service.get_plugin_metadata_by_name(metadata.name) is metadata
+        handler = star_handlers_registry.star_handlers_map[f"{bridge.module_path}_greet"]
+        original = FakeCoreEvent("greet")
+        async for _ in handler.handler(original):
+            pass
+        assert original.get_result().chain[0].text == ":Hello"
+
+        await service.save_plugin_configs({"greeting": "你好"}, metadata.name)
+        config_path = config_dir / "sdk_config_config.json"
+        assert json.loads(config_path.read_text(encoding="utf-8-sig")) == {
+            "greeting": "你好"
+        }
+        event = FakeCoreEvent("greet")
+        async for _ in handler.handler(event):
+            pass
+        assert event.get_result().chain[0].text == "Hello:你好"
+    finally:
+        await bridge.stop()
+
+
+def test_external_sdk_config_imports_inline_values_once(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    schema_path = tmp_path / "schemas" / "_conf_schema.json"
+    schema_path.parent.mkdir()
+    schema = {
+        "greeting": {"type": "string", "default": "Hello"},
+        "enabled": {"type": "bool", "default": False},
+    }
+    schema_path.write_text(json.dumps(schema), encoding="utf-8")
+    monkeypatch.setattr(
+        "astrbot.core.star.sdk_bridge.bridge.get_astrbot_config_path",
+        lambda: str(tmp_path),
+    )
+    bridge = SDKPluginBridge(
+        tmp_path / "external",
+        MagicMock(),
+        external={
+            "config_schema_path": "schemas/_conf_schema.json",
+            "config": {"greeting": "Imported"},
+        },
+    )
+
+    config, runner_values = bridge._load_config()
+    assert config.schema == schema
+    assert runner_values == {"greeting": "Imported", "enabled": False}
+    config.save_config({"greeting": "Saved"})
+
+    _, runner_values = bridge._load_config()
+    assert runner_values == {"greeting": "Saved", "enabled": False}
+    assert json.loads(
+        (tmp_path / "external_config.json").read_text(encoding="utf-8-sig")
+    ) == runner_values
 
 
 def test_to_sdk_chain_registers_local_media(tmp_path: Path) -> None:

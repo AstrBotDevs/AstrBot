@@ -82,6 +82,7 @@ class RunnerSupervisor:
         self.env = dict(env)
         self.grants = grants
         self.config = config
+        self._config_lock = asyncio.Lock()
         self.capability_handler = capability_handler
         self.logger = logger
         self.on_circuit_open = on_circuit_open
@@ -120,13 +121,26 @@ class RunnerSupervisor:
         """
         self._client = await self._make_client()
         self._started_at = time.monotonic()
-        handshake = await self._client.start(
-            granted_capabilities=self.grants,
-            config=self.config,
-        )
+        async with self._config_lock:
+            handshake = await self._client.start(
+                granted_capabilities=self.grants,
+                config=self.config,
+            )
         self._lifecycle_task = asyncio.create_task(self._lifecycle())
         self._health_task = asyncio.create_task(self._health_loop())
         return handshake
+
+    async def reconfigure(self, config: Any) -> None:
+        """Apply values to the current Runner and retain them for reconnects.
+
+        Args:
+            config: Latest saved plugin configuration.
+        """
+        async with self._config_lock:
+            self.config = config
+            client = self._client
+            if client is not None and client.is_running:
+                await client.reconfigure(config)
 
     async def stop(self) -> None:
         """Stop the runner deliberately; no restart is scheduled."""
@@ -207,11 +221,13 @@ class RunnerSupervisor:
                 return
             client = await self._make_client()
             try:
-                self._started_at = time.monotonic()
-                await client.start(
-                    granted_capabilities=self.grants,
-                    config=self.config,
-                )
+                async with self._config_lock:
+                    self._started_at = time.monotonic()
+                    await client.start(
+                        granted_capabilities=self.grants,
+                        config=self.config,
+                    )
+                    self._client = client
             except Exception as exc:  # noqa: BLE001 - any start failure counts
                 self.logger.error(
                     f"Plugin runner for {self.plugin_root.name} failed to "
@@ -221,7 +237,6 @@ class RunnerSupervisor:
                 # The next loop iteration registers this failed attempt.
                 self._client = None
                 continue
-            self._client = client
             self.logger.info(
                 f"Plugin runner for {self.plugin_root.name} restarted",
             )

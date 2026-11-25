@@ -100,7 +100,7 @@ from astrbot_sdk import MessageEvent, Plugin, on
 class TestPlugin(Plugin):
     @on.command("ok")
     async def ok(self, event: MessageEvent):
-        yield event.reply("fine")
+        yield event.reply(self.config["greeting"])
 """,
     )
     listener = ExternalRunnerListener("127.0.0.1", 0)
@@ -111,7 +111,7 @@ class TestPlugin(Plugin):
         "ext_sdk",
         claims=claims,
         grants=CapabilitySet.from_ids("storage.kv", "assets.transfer", "message.send"),
-        config=None,
+        config={"greeting": "fine"},
         capability_handler=no_capabilities,
         logger=logging.getLogger("test.external_supervisor"),
         timing=SupervisorTiming(base_backoff=0.05, max_backoff=0.1),
@@ -123,6 +123,10 @@ class TestPlugin(Plugin):
         first_client = supervisor.require_client()
         results = [r async for r in first_client.invoke("ok", make_event())]
         assert [r.message.text for r in results if r is not None] == ["fine"]
+        await supervisor.reconfigure({"greeting": "updated"})
+        assert supervisor.require_client() is first_client
+        results = [r async for r in first_client.invoke("ok", make_event())]
+        assert [r.message.text for r in results if r is not None] == ["updated"]
 
         # The runner dies; instead of respawning, the supervisor backs off
         # and waits for the operator's runner to dial back in.
@@ -133,7 +137,7 @@ class TestPlugin(Plugin):
         restarted = supervisor.require_client()
         assert restarted is not first_client
         results = [r async for r in restarted.invoke("ok", make_event())]
-        assert [r.message.text for r in results if r is not None] == ["fine"]
+        assert [r.message.text for r in results if r is not None] == ["updated"]
     finally:
         await supervisor.stop()
         await listener.stop()

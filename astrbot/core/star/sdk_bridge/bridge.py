@@ -3,6 +3,8 @@ from __future__ import annotations
 import inspect
 import json
 import logging
+import os
+import tempfile
 from collections.abc import Iterator, Mapping
 from contextlib import contextmanager
 from dataclasses import replace
@@ -20,6 +22,7 @@ from astrbot_sdk.runtime.stdio_client import StdioPluginClient
 from astrbot_sdk.tools import ToolCallContext
 
 from astrbot.core import logger, sp
+from astrbot.core.config.astrbot_config import AstrBotConfig
 from astrbot.core.provider.register import llm_tools
 from astrbot.core.star.filter.command import CommandFilter
 from astrbot.core.star.star import StarMetadata, star_map, star_registry
@@ -28,6 +31,7 @@ from astrbot.core.star.star_handler import (
     StarHandlerMetadata,
     star_handlers_registry,
 )
+from astrbot.core.utils.astrbot_path import get_astrbot_config_path
 
 from ..sdk_plugin_metadata import _BRIDGE_MODULE_PREFIX, is_sdk_plugin_dir
 from .convert import apply_sdk_result, to_core_view_result, to_sdk_event
@@ -200,6 +204,7 @@ class SDKPluginBridge:
                 error_message
                 or "The plugin does not support the current AstrBot version."
             )
+        plugin_config, runner_config = self._load_config()
         self._grants = grants
         python_executable = None
         if self._external is None:
@@ -212,7 +217,6 @@ class SDKPluginBridge:
         # arrive while the Runner executes lifecycle.startup during handshake.
         self._asset_store = AssetStore(_asset_root(), self.plugin_id)
         self._services = self._build_services()
-        config = self._external.get("config") if self._external is not None else None
         if self._external is not None:
             if self._listener is None:
                 raise RuntimeError(
@@ -225,7 +229,7 @@ class SDKPluginBridge:
                 self.root_dir_name,
                 claims=claims,
                 grants=grants,
-                config=config,
+                config=runner_config,
                 capability_handler=self._dispatch_capability,
                 logger=self.plugin_logger,
                 on_circuit_open=self._mark_circuit_open,
@@ -241,7 +245,7 @@ class SDKPluginBridge:
                     "ASTRBOT_SDK_DATA_DIR": str(_asset_root().parent / "plugin_data"),
                 },
                 grants=grants,
-                config=config,
+                config=runner_config,
                 capability_handler=self._dispatch_capability,
                 logger=self.plugin_logger,
                 on_circuit_open=self._mark_circuit_open,
@@ -313,6 +317,7 @@ class SDKPluginBridge:
             version=handshake.version,
             module_path=self.module_path,
             root_dir_name=self.root_dir_name,
+            config=plugin_config,
             activated=self._activated,
             logo_path=logo_path,
             views=views,
@@ -354,6 +359,80 @@ class SDKPluginBridge:
             self._handler_full_names.append(full_name)
         star_metadata.star_handler_full_names = list(self._handler_full_names)
         await self._fire_lifecycle_hooks(EventType.OnPluginLoadedEvent, star_metadata)
+
+    def _load_config(self) -> tuple[AstrBotConfig | None, Any]:
+        """Load the Host's configuration and prepare its Runner payload.
+
+        Returns:
+            A schema-backed configuration for the dashboard and plain Runner values.
+
+        Raises:
+            ValueError: A schema path or configuration object is invalid.
+            FileNotFoundError: The declared external schema does not exist.
+        """
+        from astrbot.core.star.star_manager import PluginManager
+
+        config_dir = Path(get_astrbot_config_path())
+        config_path = config_dir / f"{self.root_dir_name}_config.json"
+        schema_path = self.plugin_root / "_conf_schema.json"
+        legacy_values = None
+        if self._external is not None:
+            external_schema_path = self._external.get("config_schema_path")
+            if external_schema_path is not None:
+                if (
+                    not isinstance(external_schema_path, str)
+                    or not external_schema_path
+                ):
+                    raise ValueError("config_schema_path must be a nonempty path")
+                schema_path = config_dir / external_schema_path
+                if not schema_path.is_file():
+                    raise FileNotFoundError(schema_path)
+            legacy_values = self._external.get("config")
+
+        schema = None
+        if schema_path.is_file():
+            schema = PluginManager._load_plugin_config_schema(str(schema_path))
+            if not isinstance(schema, dict):
+                raise ValueError(
+                    f"Plugin configuration schema must be an object: {schema_path}"
+                )
+        if legacy_values is not None and not config_path.exists():
+            if schema is not None and not isinstance(legacy_values, dict):
+                raise ValueError(
+                    "A plugin configuration with a schema must be an object"
+                )
+            # Import previously embedded values only before the first save.
+            config_dir.mkdir(parents=True, exist_ok=True)
+            fd, temporary_name = tempfile.mkstemp(
+                prefix=f".{config_path.name}.", suffix=".tmp", dir=config_dir
+            )
+            temporary = Path(temporary_name)
+            try:
+                with os.fdopen(fd, "w", encoding="utf-8") as file:
+                    json.dump(legacy_values, file, ensure_ascii=False, indent=2)
+                temporary.replace(config_path)
+            finally:
+                temporary.unlink(missing_ok=True)
+
+        if schema is not None:
+            config = AstrBotConfig(config_path=str(config_path), schema=schema)
+            return config, dict(config)
+        if config_path.is_file():
+            return None, json.loads(config_path.read_text(encoding="utf-8-sig"))
+        return None, None
+
+    async def reconfigure(self, config: Mapping[str, Any]) -> None:
+        """Apply saved configuration to the plugin.
+
+        Args:
+            config: Current saved configuration values.
+
+        Raises:
+            RuntimeError: The bridge has no Runner supervisor.
+        """
+        if self._supervisor is None:
+            raise RuntimeError(f"SDK plugin {self.root_dir_name} is not running")
+        await self._supervisor.reconfigure(dict(config))
 
     async def stop(self) -> None:
         """Unregister handlers and shut the Runner subprocess down."""
@@ -1030,8 +1109,6 @@ class SDKPluginManager:
         Returns:
             Names of successfully loaded external plugins.
         """
-        from astrbot.core.utils.astrbot_path import get_astrbot_config_path
-
         loaded: list[str] = []
         config_path = Path(get_astrbot_config_path()) / "sdk_bridge_external.json"
         if not config_path.is_file():
@@ -1048,6 +1125,12 @@ class SDKPluginManager:
             name = str(plugin["name"])
             if specified_name and name != specified_name:
                 continue
+            if not name or name in {".", ".."} or "/" in name or "\\" in name:
+                raise ValueError(f"Invalid external SDK plugin name: {name!r}")
+            if any(metadata.root_dir_name == name for metadata in star_registry):
+                raise ValueError(
+                    f"Plugin installation name is already in use: {name!r}"
+                )
             bridge = SDKPluginBridge(
                 self.plugin_store_path / name,
                 self.context,

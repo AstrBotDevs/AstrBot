@@ -1164,9 +1164,13 @@ class ConfigFileService:
             raise ValueError(f"格式校验未通过: {errors}")
         metadata.config.save_config(post_configs)
         try:
-            success, error_message = await self.core_lifecycle.plugin_manager.reload(
-                plugin_name
-            )
+            plugin_manager = self.core_lifecycle.plugin_manager
+            if (getattr(metadata, "module_path", None) or "").startswith("sdk_bridge."):
+                success, error_message = await plugin_manager.reload(
+                    plugin_name, config_only=True
+                )
+            else:
+                success, error_message = await plugin_manager.reload(plugin_name)
         except Exception as exc:
             logger.exception(
                 f"Failed to reload plugin {plugin_name} after saving its configuration."

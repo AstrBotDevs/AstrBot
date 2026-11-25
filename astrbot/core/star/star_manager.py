@@ -1024,12 +1024,13 @@ class PluginManager:
             else:
                 return False, error
 
-    async def reload(self, specified_plugin_name=None):
+    async def reload(self, specified_plugin_name=None, *, config_only: bool = False):
         """重新加载插件
 
         Args:
             specified_plugin_name (str, optional): 要重载的特定插件名称。
                                                  如果为 None，则重载所有插件。
+            config_only: Apply saved settings in place for an SDK Runner.
 
         Returns:
             tuple: 返回 load() 方法的结果，包含 (success, error_message)
@@ -1071,6 +1072,13 @@ class PluginManager:
                 ):
                     # The bridge owns SDK plugin reloads.
                     if self._sdk_plugin_manager is not None:
+                        if config_only and smd.config is not None:
+                            bridge = self._sdk_plugin_manager.bridges.get(
+                                smd.root_dir_name
+                            )
+                            if bridge is not None:
+                                await bridge.reconfigure(smd.config)
+                                return True, None
                         await self._sdk_plugin_manager.unload(smd.root_dir_name)
                     return await self.load(specified_dir_name=smd.root_dir_name)
                 if smd:
