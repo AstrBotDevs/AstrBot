@@ -1569,7 +1569,17 @@ async def test_parse_openai_completion_reads_nested_data_choices():
 
 
 @pytest.mark.asyncio
-async def test_parse_openai_completion_accepts_json_string_tool_call():
+@pytest.mark.parametrize(
+    ("raw_arguments", "expected_args"),
+    [
+        ('{"tz": "UTC"}', {"tz": "UTC"}),
+        (None, {}),
+        ({"tz": "UTC"}, {"tz": "UTC"}),
+    ],
+)
+async def test_parse_openai_completion_accepts_json_string_tool_call(
+    raw_arguments, expected_args
+):
     """Some OpenAI-compatible APIs return each tool call as a JSON string (#1359)."""
     provider = _make_provider()
     tools = ToolSet(
@@ -1585,7 +1595,7 @@ async def test_parse_openai_completion_accepts_json_string_tool_call():
         {
             "id": "call_1",
             "type": "function",
-            "function": {"name": "get_time", "arguments": '{"tz": "UTC"}'},
+            "function": {"name": "get_time", "arguments": raw_arguments},
         }
     )
     # The SDK builds responses without strict validation, so the string is kept.
@@ -1614,7 +1624,7 @@ async def test_parse_openai_completion_accepts_json_string_tool_call():
 
         assert response.role == "tool"
         assert response.tools_call_name == ["get_time"]
-        assert response.tools_call_args == [{"tz": "UTC"}]
+        assert response.tools_call_args == [expected_args]
         assert response.tools_call_ids == ["call_1"]
     finally:
         await provider.terminate()

@@ -894,9 +894,19 @@ class ProviderOpenAIOfficial(Provider):
             for tool_call in choice.message.tool_calls:
                 if isinstance(tool_call, str):
                     # workaround for #1359
-                    tool_call = ChatCompletionMessageToolCall.model_validate(
-                        json.loads(tool_call)
-                    )
+                    tool_call = json.loads(tool_call)
+                    # The SDK model requires string arguments; some APIs send
+                    # null or an object instead.
+                    function = tool_call.get("function")
+                    if isinstance(function, dict):
+                        arguments = function.get("arguments")
+                        if arguments is None:
+                            function["arguments"] = "{}"
+                        elif not isinstance(arguments, str):
+                            function["arguments"] = json.dumps(
+                                arguments, ensure_ascii=False
+                            )
+                    tool_call = ChatCompletionMessageToolCall.model_validate(tool_call)
                 if tools is None:
                     # 工具集未提供
                     # Should be unreachable
