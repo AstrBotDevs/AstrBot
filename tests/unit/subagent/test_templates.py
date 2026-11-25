@@ -40,11 +40,10 @@ async def test_persona_resolution_occurs_in_native_runtime(environment, persona_
         env.root, [{"type": "plain", "text": "Task"}], config_id=selected.config_id
     )
     await env.service.wait(env.root, [agent["agent_id"]], 2000, "all")
-    data = (
-        await env.db.get_preference(
-            "subagent_native", "conversation", agent["conversation_id"]
-        )
-    ).value
+    row = await env.db.conversation_store.get_metadata(
+        agent["conversation_id"], subagent=True
+    )
+    data = row.subagent_config
     assert data["instructions"] == (
         "Persona instructions" if persona_id == "default" else "Parent instructions"
     )
@@ -102,12 +101,10 @@ async def test_temporary_persona_dialogue_is_used_once_but_not_saved_as_history(
     )
     await env.service.wait(env.root, [agent["agent_id"]], 2000, "all")
     assert "Temporary setup" in str(env.provider.text_chat.call_args.kwargs["contexts"])
-    row = (
-        await env.db.get_preference(
-            "subagent_native", "conversation", agent["conversation_id"]
-        )
-    ).value
-    assert "Temporary setup" not in str(row["messages"])
+    snapshot = await env.db.conversation_store.read(
+        agent["conversation_id"], subagent=True
+    )
+    assert "Temporary setup" not in str(snapshot.messages)
     await env.service.send(
         env.root, agent["agent_id"], [{"type": "plain", "text": "Continue"}]
     )

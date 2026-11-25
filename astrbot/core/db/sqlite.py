@@ -175,6 +175,18 @@ class SQLiteDatabase(BaseDatabase):
             await self._ensure_persona_custom_error_message_column(conn)
             await self._ensure_platform_message_history_event_columns(conn)
             await self._ensure_chatui_project_workspace_columns(conn)
+            columns = await conn.execute(text("PRAGMA table_info(conversations_v3)"))
+            existing = {row[1] for row in columns}
+            for name, sql_type in (
+                ("runtime", "VARCHAR"),
+                ("subagent_config", "JSON"),
+            ):
+                if name not in existing:
+                    await conn.execute(
+                        text(
+                            f"ALTER TABLE conversations_v3 ADD COLUMN {name} {sql_type}"
+                        )
+                    )
             # The table-level unique constraint already provides an index for UMO
             # lookups. Older schemas also created this redundant explicit index.
             await conn.execute(text("DROP INDEX IF EXISTS ix_umo_aliases_umo"))
@@ -427,7 +439,9 @@ class SQLiteDatabase(BaseDatabase):
     async def get_conversations(self, user_id=None, platform_id=None):
         async with self.get_db(consistent_read=True) as session:
             session: AsyncSession
-            query = select(ConversationV3)
+            query = select(ConversationV3).where(
+                col(ConversationV3.subagent_config).is_(None)
+            )
 
             if user_id:
                 query = query.where(ConversationV3.umo == user_id)
@@ -444,7 +458,10 @@ class SQLiteDatabase(BaseDatabase):
     async def get_conversation_by_id(self, cid):
         async with self.get_db(consistent_read=True) as session:
             session: AsyncSession
-            query = select(ConversationV3).where(ConversationV3.conversation_id == cid)
+            query = select(ConversationV3).where(
+                ConversationV3.conversation_id == cid,
+                col(ConversationV3.subagent_config).is_(None),
+            )
             result = await session.execute(query)
             conv = result.scalar_one_or_none()
             return (
@@ -459,6 +476,7 @@ class SQLiteDatabase(BaseDatabase):
             offset = (page - 1) * page_size
             result = await session.execute(
                 select(ConversationV3)
+                .where(col(ConversationV3.subagent_config).is_(None))
                 .order_by(desc(ConversationV3.created_at))
                 .offset(offset)
                 .limit(page_size),
@@ -480,7 +498,7 @@ class SQLiteDatabase(BaseDatabase):
             session: AsyncSession
             # Build the base query with filters
             base_query = select(ConversationV3)
-            conditions = []
+            conditions = [col(ConversationV3.subagent_config).is_(None)]
 
             if platform_ids:
                 conditions.append(col(ConversationV3.platform_id).in_(platform_ids))
@@ -658,6 +676,7 @@ class SQLiteDatabase(BaseDatabase):
         async with self.get_db() as session:
             result = await session.execute(
                 select(ConversationV3.platform_id)
+                .where(col(ConversationV3.subagent_config).is_(None))
                 .distinct()
                 .order_by(ConversationV3.platform_id)
             )

@@ -160,6 +160,10 @@ class ConversationV3(TimestampMixin, SQLModel, table=True):
     umo: str = Field(index=True)
     title: str | None = None
     persona_id: str | None = None
+    runtime: str | None = None
+    subagent_config: dict | None = Field(
+        default=None, sa_column=Column(JSON(none_as_null=True), nullable=True)
+    )
 
     __table_args__ = (
         Index("ix_conversations_v3_created_id", "created_at", "id"),

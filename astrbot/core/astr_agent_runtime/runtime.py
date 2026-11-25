@@ -169,30 +169,26 @@ class AstrAgentRuntime(AgentRuntime):
         """
         if self._closed:
             raise ValueError("AstrBot agent runtime is closed")
-        if input is not None and isinstance(input.event, AgentWakeupEvent):
+        profile = (options or {}).get("profile", "main")
+        if (
+            profile == "main"
+            and input is not None
+            and isinstance(input.event, AgentWakeupEvent)
+        ):
             target = input.event.agent_session
             if target is not None:
                 if session_id is not None and session_id != target.session_id:
                     raise ValueError("Wakeup and runtime session targets differ")
                 session_id = target.session_id
         manager = self.context.conversation_manager
-        conversation = None
-        profile = (options or {}).get("profile", "main")
-        if session_id is not None and "profile" not in (options or {}):
-            if ("subagent", session_id) in self._sessions:
-                profile = "subagent"
-            else:
-                conversation = await manager.db.conversation_store.get_metadata(
-                    session_id
-                )
-                if conversation is None or conversation.conversation_id != session_id:
-                    profile = "subagent"
         if profile == "subagent":
             async with self._opening:
                 if self._closed:
                     raise ValueError("AstrBot agent runtime is closed")
                 if session_id is not None:
                     session = self._sessions.get((profile, session_id))
+                    if session is not None and session.umo != umo:
+                        raise ValueError("Agent session belongs to another UMO")
                     if session is None or session.closed:
                         if session is not None:
                             await session.close()
@@ -218,6 +214,7 @@ class AstrAgentRuntime(AgentRuntime):
                 return session
         if profile != "main":
             raise ValueError(f"Unknown built-in agent session profile: {profile}")
+        conversation = None
         select_current = session_id is None
         if select_current and input is not None:
             request = input.event.get_extra("provider_request")

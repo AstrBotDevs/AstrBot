@@ -71,10 +71,21 @@ class SubAgentService:
                 agent.scope.umo, agent.scope.conversation_id
             )
             if conversation is None:
+                if agent.runtime == "astrbot":
+                    await context._db.conversation_store.delete(
+                        cid=agent.conversation_id, umo=agent.scope.umo, subagent=True
+                    )
                 await self.store.remove(agent)
                 continue
             if conversation.user_id != agent.scope.umo:
                 raise ValueError("Agent session belongs to another main conversation")
+            if agent.runtime == "astrbot":
+                metadata = await context._db.conversation_store.get_metadata(
+                    agent.conversation_id, subagent=True
+                )
+                if metadata is None or metadata.umo != agent.scope.umo:
+                    self.store.agents.pop(agent.agent_id)
+                    continue
             for turn in agent.turns:
                 if not turn.finished:
                     turn.state = AgentState.INTERRUPTED
@@ -176,9 +187,6 @@ class SubAgentService:
         )
         conversation_id = session.id
         async with self._lifecycle_lock:
-            if self._closing:
-                await session.close()
-                raise ValueError("Cannot open an agent while AstrBot is shutting down")
             if not isinstance(conversation_id, str) or not conversation_id:
                 raise ValueError("Agent runtime returned an empty conversation ID")
             if any(
@@ -208,13 +216,21 @@ class SubAgentService:
                 next_turn_id=2,
             )
             try:
+                if self._closing:
+                    raise ValueError(
+                        "Cannot open an agent while AstrBot is shutting down"
+                    )
                 await self.store.save(agent)
             except BaseException:
                 try:
                     await session.close()
+                    if runtime == "astrbot":
+                        await caller.context._db.conversation_store.delete(
+                            cid=conversation_id, umo=caller.scope.umo, subagent=True
+                        )
                 except Exception:
                     logger.exception(
-                        "Unable to cancel an unregistered agent conversation"
+                        "Unable to clean up an unregistered agent conversation"
                     )
                 raise
             self.store.agents[agent.agent_id] = agent

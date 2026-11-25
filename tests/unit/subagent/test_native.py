@@ -54,6 +54,52 @@ async def test_native_followup_preserves_internal_turn_boundaries_after_restore(
 
 
 @pytest.mark.asyncio
+async def test_native_subagent_journal_is_scoped_to_umo(environment):
+    """Allow delegated restores within the UMO and keep them out of main listings."""
+    env = environment
+    store = env.db.conversation_store
+    main = await store.create(umo=env.scope.umo, platform_id="test")
+    agent = await env.service.spawn(
+        env.root, [{"type": "plain", "text": "Private input"}]
+    )
+    result = await env.service.wait(env.root, [agent["agent_id"]], 2000, "all")
+    assert result["agents"][0]["state"] == "completed"
+    cid = agent["conversation_id"]
+
+    assert await store.read(cid) is None
+    assert [
+        conv.conversation_id for conv in await env.db.get_conversations(env.scope.umo)
+    ] == [main.conversation_id]
+    snapshot = await store.read(cid, subagent=True)
+    assert "Private input" in str(snapshot.messages)
+    assert snapshot.conversation.runtime == "astrbot"
+    events = await store.events(cid, subagent=True)
+    assert events[0].type == "conversation.created"
+    assert "parent_conversation_id" not in events[0].payload
+    assert "kind" not in events[0].payload
+    assert any(event.type == "message.appended" for event in events)
+
+    options = {"profile": "subagent"}
+    session = await env.native.open_session(
+        env.scope.umo, session_id=cid, options=options
+    )
+    with pytest.raises(ValueError, match="another UMO"):
+        await env.native.open_session(
+            "test:FriendMessage:bob", session_id=cid, options=options
+        )
+    await session.close()
+    env.native._sessions.pop(("subagent", cid))
+    with pytest.raises(ValueError, match="not found or inaccessible"):
+        await env.native.open_session(
+            "test:FriendMessage:bob", session_id=cid, options=options
+        )
+    restored = await env.native.open_session(
+        env.scope.umo, session_id=cid, options=options
+    )
+    assert "Private input" in str(await restored.history())
+
+
+@pytest.mark.asyncio
 async def test_native_runtime_owns_computer_initialization_and_shutdown(
     environment, monkeypatch
 ):
