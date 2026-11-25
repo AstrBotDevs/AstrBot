@@ -1597,13 +1597,11 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             cached_images: Images produced by the shared tool result preparation.
             content: Prepared input to extend before persistence; otherwise append a message.
         """
-        # If there are cached images and the model supports image input,
-        # append a user message with images so LLM can see them
+        # Tool results introduce new multimodal content. Unknown capabilities
+        # must not send images to a text-only provider.
         if cached_images:
-            modalities = self.provider.provider_config.get("modalities", [])
-            supports_image = (
-                not modalities or "image" in modalities
-            )  # Empty list is treated as unconfigured for backward compatibility
+            modalities = self.provider.provider_config.get("modalities") or []
+            supports_image = "image" in modalities
             if supports_image:
                 # Build user message with images for LLM to review
                 image_parts = []
