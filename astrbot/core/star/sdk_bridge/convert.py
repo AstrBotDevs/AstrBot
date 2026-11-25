@@ -337,6 +337,7 @@ def to_sdk_event(
         command=command,
         is_wake=event.is_wake,
         agent_metadata=event.get_extra("agent_metadata", {}) or {},
+        _message_str=event.get_message_str(),
     )
 
 

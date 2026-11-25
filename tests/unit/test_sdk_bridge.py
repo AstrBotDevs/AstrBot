@@ -8,6 +8,7 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 import yaml
 from astrbot_sdk.assets import AssetRef
+from astrbot_sdk.events import MessageType
 from astrbot_sdk.message_components import (
     At,
     AtAll,
@@ -140,8 +141,10 @@ def test_is_sdk_plugin_dir(tmp_path: Path) -> None:
     assert not is_sdk_plugin_dir(tmp_path / "missing")
 
 
-def test_to_sdk_event_converts_core_event() -> None:
+@pytest.mark.parametrize("core_text", ["greet 2", ""])
+def test_to_sdk_event_converts_core_event(core_text: str) -> None:
     event = FakeCoreEvent(
+        text=core_text,
         components=[
             core_comp.Plain("hello "),
             core_comp.At(qq="123", name="Moon"),
@@ -158,11 +161,26 @@ def test_to_sdk_event_converts_core_event() -> None:
     assert sdk_event.is_private
     assert sdk_event.platform_type == "webchat"
     assert sdk_event.sender.name == "Moon"
+    assert sdk_event.get_sender_id() == event.get_sender_id()
+    assert sdk_event.get_sender_name() == event.get_sender_name()
+    assert sdk_event.role == event.role
+    assert sdk_event.is_private_chat()
+    assert sdk_event.get_message_type() is MessageType.PRIVATE
+    assert sdk_event.get_platform_name() == event.get_platform_name()
+    assert sdk_event.get_platform_id() == "webchat"
+    assert sdk_event.unified_msg_origin == event.unified_msg_origin
+    assert sdk_event.message_str == core_text
+    assert sdk_event.get_message_str() == core_text
+    assert sdk_event.text == "hello "
     assert sdk_event.command is not None
     assert sdk_event.command.path == "greet"
     assert sdk_event.command.arguments == {"times": 2}
 
     chain = sdk_event.message
+    segments = sdk_event.get_messages()
+    assert segments == list(chain)
+    segments.clear()
+    assert len(chain) == 3
     assert isinstance(chain[0], Plain) and chain[0].text == "hello "
     assert isinstance(chain[1], At) and chain[1].user_id == "123"
     assert isinstance(chain[2], AtAll)
