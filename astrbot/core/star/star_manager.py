@@ -1815,10 +1815,14 @@ class PluginManager:
         delete_data: bool = False,
     ) -> None:
         """卸载加载失败的插件（按目录名）。"""
-        directory_name = Path(dir_name).name
+        directory_name = next(
+            (name for name in self.failed_plugin_dict if name == dir_name), None
+        )
+        if directory_name is None:
+            raise Exception(format_plugin_error("not_found_in_failed_list"))
         if (
             not directory_name
-            or directory_name != dir_name
+            or Path(directory_name).name != directory_name
             or directory_name in {".", ".."}
             or any(character in directory_name for character in ("/", "\\", ":", "\0"))
         ):
