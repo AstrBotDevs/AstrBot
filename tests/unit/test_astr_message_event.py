@@ -261,12 +261,11 @@ async def test_public_context_send_records_only_successful_delivery(
             side_effect=RuntimeError("send failed") if outcome == "failure" else None
         ),
     )
-    context = SimpleNamespace(
-        platform_manager=SimpleNamespace(
-            platform_insts=[] if outcome == "missing" else [platform]
-        ),
-        get_config=lambda **kwargs: {},
+    context = Context.__new__(Context)
+    context.platform_manager = SimpleNamespace(
+        platform_insts=[] if outcome == "missing" else [platform]
     )
+    context.get_config = lambda **kwargs: {}
     with event_context(event):
         assert current_message_event.get() is event
         if outcome == "failure":
@@ -301,17 +300,16 @@ async def test_public_context_send_skips_unscoped_and_stream_chunk_records(
     """Do not invent traces or duplicate streaming chunk delivery records."""
     event = astr_message_event
     event.trace = MagicMock()
-    context = SimpleNamespace(
-        platform_manager=SimpleNamespace(
-            platform_insts=[
-                SimpleNamespace(
-                    meta=lambda: SimpleNamespace(id="target"),
-                    send_by_session=AsyncMock(),
-                )
-            ]
-        ),
-        get_config=lambda **kwargs: {},
+    context = Context.__new__(Context)
+    context.platform_manager = SimpleNamespace(
+        platform_insts=[
+            SimpleNamespace(
+                meta=lambda: SimpleNamespace(id="target"),
+                send_by_session=AsyncMock(),
+            )
+        ]
     )
+    context.get_config = lambda **kwargs: {}
     if scoped:
         with event_context(event):
             token = streaming_response_event.set(event)
@@ -341,23 +339,16 @@ async def test_nested_event_forwarding_records_delivery_once(monkeypatch):
     monkeypatch.setattr(
         "astrbot.core.platform.astr_message_event.Metric.upload", AsyncMock()
     )
-    context = SimpleNamespace(
-        platform_manager=SimpleNamespace(
-            platform_insts=[
-                SimpleNamespace(
-                    meta=lambda: SimpleNamespace(id="target"),
-                    send_by_session=AsyncMock(),
-                )
-            ]
-        ),
-        get_config=lambda **kwargs: {},
+    context = Context.__new__(Context)
+    context.platform_manager = SimpleNamespace(
+        platform_insts=[
+            SimpleNamespace(
+                meta=lambda: SimpleNamespace(id="target"),
+                send_by_session=AsyncMock(),
+            )
+        ]
     )
-
-    async def send_message(session, chain):
-        """Dispatch through the real public context method."""
-        return await Context.send_message(context, session, chain)
-
-    context.send_message = send_message
+    context.get_config = lambda **kwargs: {}
     event = AgentWakeupEvent(
         context=context,
         session=MessageSession.from_str("target:FriendMessage:user"),

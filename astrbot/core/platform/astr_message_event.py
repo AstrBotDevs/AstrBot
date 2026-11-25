@@ -37,6 +37,7 @@ from astrbot.core.utils.trace import TraceSpan
 from .astrbot_message import AstrBotMessage, Group
 from .message_session import MessageSesion, MessageSession  # noqa
 from .platform_metadata import PlatformMetadata
+from .send_receipt import MessageSendReceipt
 
 streaming_response_event: ContextVar["AstrMessageEvent | None"] = ContextVar(
     "streaming_response_event", default=None
@@ -604,12 +605,15 @@ class AstrMessageEvent(abc.ABC):
 
     """平台适配器"""
 
-    async def send(self, message: MessageChain) -> None:
-        """发送消息到消息平台。
+    async def send(self, message: MessageChain) -> MessageSendReceipt | None:
+        """Send a message to the platform.
 
         Args:
-            message (MessageChain): 消息链，具体使用方式请参考文档。
+            message: Message content to send.
 
+        Returns:
+            An optional API acceptance receipt for the complete chain. None
+            means the adapter does not expose a confirmed result, not failure.
         """
         if (
             message is not None

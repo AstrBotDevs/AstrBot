@@ -15,6 +15,7 @@ from .astr_message_event import AstrMessageEvent
 from .astrbot_message import AstrBotMessage
 from .message_session import MessageSesion
 from .platform_metadata import PlatformMetadata
+from .send_receipt import MessageSendReceipt
 
 
 class PlatformStatus(Enum):
@@ -135,10 +136,16 @@ class Platform(abc.ABC):
         self,
         session: MessageSesion,
         message_chain: MessageChain,
-    ) -> None:
-        """通过会话发送消息。该方法旨在让插件能够直接通过**可持久化的会话数据**发送消息，而不需要保存 event 对象。
+    ) -> MessageSendReceipt | None:
+        """Send through a persisted session without retaining an event object.
 
-        异步方法。
+        Args:
+            session: Destination session.
+            message_chain: Message content to send.
+
+        Returns:
+            An optional API acceptance receipt for the complete chain. None
+            means the adapter does not expose a confirmed result, not failure.
         """
         asyncio.create_task(
             Metric.upload(msg_event_tick=1, adapter_name=self.meta().name)

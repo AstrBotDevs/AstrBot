@@ -42,6 +42,7 @@ from astrbot.dashboard.async_utils import run_maybe_async
 from astrbot.dashboard.responses import ApiError
 from astrbot.dashboard.schemas import BotCleanupTarget
 from astrbot.dashboard.services.bot_cleanup_service import delete_bot_data
+from astrbot.dashboard.services.platform_service import REGISTRATION_HANDLERS
 
 PROTECTED_2FA_CONFIG_PATHS = (
     ("dashboard", "totp", "enable"),
@@ -1406,7 +1407,10 @@ class BotConfigService:
                     "support_proactive_message": platform.support_proactive_message,
                 }
             )
-        return {"bot_types": bot_types}
+        return {
+            "bot_types": bot_types,
+            "registration_types": list(REGISTRATION_HANDLERS),
+        }
 
     def list_bots(
         self, *, enabled: bool | None = None, type_: str | None = None
