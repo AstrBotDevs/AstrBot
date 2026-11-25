@@ -1815,7 +1815,15 @@ class PluginManager:
         delete_data: bool = False,
     ) -> None:
         """卸载加载失败的插件（按目录名）。"""
-        plugin_path = Path(self.plugin_store_path) / dir_name
+        directory_name = Path(dir_name).name
+        if (
+            not directory_name
+            or directory_name != dir_name
+            or directory_name in {".", ".."}
+            or any(character in directory_name for character in ("/", "\\", ":", "\0"))
+        ):
+            raise ValueError("Invalid plugin directory name.")
+        plugin_path = Path(self.plugin_store_path) / directory_name
         directory_lock = self._plugin_dir_locks.setdefault(plugin_path, asyncio.Lock())
         async with directory_lock, self._pm_lock:
             failed_info = self.failed_plugin_dict.get(dir_name)

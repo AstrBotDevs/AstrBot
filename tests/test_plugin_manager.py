@@ -11,7 +11,7 @@ from datetime import datetime
 from pathlib import Path
 from types import ModuleType
 from typing import Any, cast
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, Mock
 
 import pytest
 import yaml
@@ -2787,6 +2787,40 @@ async def test_uninstall_plugin_handles_disabled_plugin_with_plugin_id(
 
     assert len(cleanup_calls) == 1
     assert cleanup_calls[0]["plugin_id"] == "mock_author/mock_name"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("dir_name", ["", ".", "..", "../outside", "..\\outside", "/outside"])
+async def test_uninstall_failed_plugin_rejects_paths_outside_plugin_directory(
+    plugin_manager_pm: PluginManager, monkeypatch, dir_name
+):
+    plugin_manager_pm.failed_plugin_dict[dir_name] = {"error": "Import failed"}
+    remove_directory = Mock()
+    cleanup_state = Mock()
+    monkeypatch.setattr(star_manager_module, "remove_dir", remove_directory)
+    monkeypatch.setattr(plugin_manager_pm, "_cleanup_plugin_state", cleanup_state)
+
+    with pytest.raises(ValueError, match="Invalid plugin directory name"):
+        await plugin_manager_pm.uninstall_failed_plugin(dir_name)
+
+    remove_directory.assert_not_called()
+    cleanup_state.assert_not_called()
+    assert dir_name in plugin_manager_pm.failed_plugin_dict
+
+
+@pytest.mark.asyncio
+async def test_uninstall_failed_plugin_accepts_legacy_directory_name(
+    plugin_manager_pm: PluginManager,
+):
+    dir_name = "legacy-plugin"
+    plugin_path = Path(plugin_manager_pm.plugin_store_path) / dir_name
+    plugin_path.mkdir()
+    plugin_manager_pm.failed_plugin_dict[dir_name] = {"error": "Import failed"}
+
+    await plugin_manager_pm.uninstall_failed_plugin(dir_name)
+
+    assert not plugin_path.exists()
+    assert dir_name not in plugin_manager_pm.failed_plugin_dict
 
 
 @pytest.mark.asyncio
