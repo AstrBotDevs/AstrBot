@@ -1062,6 +1062,7 @@ class ChatService:
         """
         pending_accumulator = BotMessageAccumulator()
         display_accumulator = BotMessageAccumulator()
+        has_shared_parts = False
         pending_agent_stats = {}
         pending_refs = {}
 
@@ -1129,6 +1130,7 @@ class ChatService:
                     )
                     continue
 
+                part = None
                 attachment_saved_payload = None
                 if msg_type == "plain":
                     for accumulator in (pending_accumulator, display_accumulator):
@@ -1179,10 +1181,28 @@ class ChatService:
                     for accumulator in (pending_accumulator, display_accumulator):
                         accumulator.add_part(part)
 
-                snapshot_accumulator = deepcopy(display_accumulator)
-                run.message_parts = snapshot_accumulator.build_message_parts(
-                    include_pending_tool_calls=True
-                )
+                if part or (msg_type == "plain" and type(result_text) is not str):
+                    has_shared_parts = True
+                # A standalone text tail can reuse the last detached prefix.
+                # Shared payloads must be captured again at every publication.
+                if (
+                    not has_shared_parts
+                    and display_accumulator.pending_text
+                    and not display_accumulator.pending_tool_calls
+                    and len(run.message_parts) == len(display_accumulator.parts) + 1
+                    and run.message_parts[-1]["type"] == "plain"
+                ):
+                    parts = run.message_parts.copy()
+                    parts[-1] = {
+                        "type": "plain",
+                        "text": display_accumulator.pending_text,
+                    }
+                    run.message_parts = parts
+                else:
+                    snapshot_accumulator = deepcopy(display_accumulator)
+                    run.message_parts = snapshot_accumulator.build_message_parts(
+                        include_pending_tool_calls=True
+                    )
                 self._publish_chat_run(run, result)
                 if attachment_saved_payload:
                     self._publish_chat_run(run, attachment_saved_payload)
