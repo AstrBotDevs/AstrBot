@@ -145,7 +145,13 @@ In the WebUI installation flow, you can choose to "Ignore Warning and Install" t
 
 ### Recommended Marketplace Categories
 
-Use the table below to choose a category based on the plugin's main purpose when publishing or listing a plugin. The market source sets `category` in the plugin's index record and provides the category labels and translations. [Marketplace category format](../plugin-market/2026-11-25.md#_4-1-marketplace-categories)
+Set the optional `category` field in the `metadata.yaml` file at the root of your plugin. Choose one category ID that fits your plugin's main purpose. For example, a general-purpose utility plugin can use the following value.
+
+```yaml
+category: utility
+```
+
+Once the marketplace index includes this value, users can find your plugin under that category. [Marketplace category format](../plugin-market/2026-11-25.md#_4-1-marketplace-categories)
 
 | ID | Label | Typical plugins |
 | --- | --- | --- |
