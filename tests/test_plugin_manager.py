@@ -2790,7 +2790,9 @@ async def test_uninstall_plugin_handles_disabled_plugin_with_plugin_id(
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("dir_name", ["", ".", "..", "../outside", "..\\outside", "/outside"])
+@pytest.mark.parametrize(
+    "dir_name", ["", ".", "..", "../outside", "..\\outside", "/outside"]
+)
 async def test_uninstall_failed_plugin_rejects_paths_outside_plugin_directory(
     plugin_manager_pm: PluginManager, monkeypatch, dir_name
 ):
@@ -2806,6 +2808,27 @@ async def test_uninstall_failed_plugin_rejects_paths_outside_plugin_directory(
     remove_directory.assert_not_called()
     cleanup_state.assert_not_called()
     assert dir_name in plugin_manager_pm.failed_plugin_dict
+
+
+@pytest.mark.asyncio
+async def test_uninstall_failed_plugin_rejects_directory_symlink(
+    plugin_manager_pm: PluginManager, tmp_path: Path
+):
+    outside_directory = tmp_path / "outside"
+    outside_directory.mkdir()
+    plugin_path = Path(plugin_manager_pm.plugin_store_path) / TEST_PLUGIN_DIR
+    try:
+        plugin_path.symlink_to(outside_directory, target_is_directory=True)
+    except OSError as error:
+        pytest.skip(f"Directory symlinks are unavailable: {error}")
+    plugin_manager_pm.failed_plugin_dict[TEST_PLUGIN_DIR] = {"error": "Import failed"}
+
+    with pytest.raises(ValueError, match="Invalid plugin directory path"):
+        await plugin_manager_pm.uninstall_failed_plugin(TEST_PLUGIN_DIR)
+
+    assert outside_directory.is_dir()
+    assert plugin_path.is_symlink()
+    assert TEST_PLUGIN_DIR in plugin_manager_pm.failed_plugin_dict
 
 
 @pytest.mark.asyncio

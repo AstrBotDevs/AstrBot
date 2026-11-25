@@ -1823,8 +1823,17 @@ class PluginManager:
             or any(character in directory_name for character in ("/", "\\", ":", "\0"))
         ):
             raise ValueError("Invalid plugin directory name.")
-        plugin_path = Path(self.plugin_store_path) / directory_name
-        directory_lock = self._plugin_dir_locks.setdefault(plugin_path, asyncio.Lock())
+        plugin_root = Path(self.plugin_store_path).resolve()
+        plugin_path = (plugin_root / directory_name).resolve()
+        if (
+            not plugin_path.is_relative_to(plugin_root)
+            or plugin_path.parent != plugin_root
+            or plugin_path.name != directory_name
+        ):
+            raise ValueError("Invalid plugin directory path.")
+        directory_lock = self._plugin_dir_locks.setdefault(
+            Path(self.plugin_store_path) / directory_name, asyncio.Lock()
+        )
         async with directory_lock, self._pm_lock:
             failed_info = self.failed_plugin_dict.get(dir_name)
             if not failed_info:
