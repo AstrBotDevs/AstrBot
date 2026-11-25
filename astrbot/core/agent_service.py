@@ -32,6 +32,7 @@ from astrbot.core.agent.runtime import (
 )
 from astrbot.core.agent_input import prepare_agent_input
 from astrbot.core.agent_output import deliver_agent_turn
+from astrbot.core.astr_agent_runtime.subagents.caller import DelegatedAgentInput
 from astrbot.core.log import log_context
 from astrbot.core.message import components as Comp
 from astrbot.core.platform.agent_wakeup_event import AgentWakeupEvent
@@ -278,10 +279,14 @@ class AgentService:
             RuntimeError: If the configured runtime is unavailable.
         """
         turn = _current_agent_turn.get()
-        if turn is not None and turn.input.event is event:
-            return AgentSessionRef(turn.session.runtime_name, turn.session.id)
-        if isinstance(event, AgentWakeupEvent) and event.agent_session is not None:
-            return event.agent_session
+        if turn is not None and turn.input.event is not event:
+            turn = None
+        delegated = turn is not None and isinstance(turn.input, DelegatedAgentInput)
+        if not delegated:
+            if turn is not None:
+                return AgentSessionRef(turn.session.runtime_name, turn.session.id)
+            if isinstance(event, AgentWakeupEvent) and event.agent_session is not None:
+                return event.agent_session
         umo = event.unified_msg_origin
         config = self.context.get_config(umo=umo).get("agent", {})
         runtime_name = config.get("runtime", "astrbot")
@@ -290,7 +295,11 @@ class AgentService:
             raise RuntimeError(f"Agent runtime unavailable: {runtime_name}")
         session = await runtime.open_session(
             umo,
-            input=AgentInput(event, AgentPermissions.from_event(event)),
+            # Delegated inputs reuse the parent event, which can pin an older
+            # conversation. Resolve the current main session for a child wakeup.
+            input=None
+            if delegated
+            else AgentInput(event, AgentPermissions.from_event(event)),
             options={"config": deepcopy(config.get("config", {}))},
         )
         return AgentSessionRef(runtime_name, session.id)

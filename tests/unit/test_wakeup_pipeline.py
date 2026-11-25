@@ -20,7 +20,6 @@ from opentelemetry.trace import format_trace_id, get_current_span
 from astrbot.core.agent.hooks import BaseAgentRunHooks
 from astrbot.core.agent.run_context import ContextWrapper
 from astrbot.core.agent.runtime import (
-    AgentInput,
     AgentPermissions,
     AgentSession,
     AgentSessionRef,
@@ -36,6 +35,7 @@ from astrbot.core.astr_agent_runtime.main_agent import MainAgentBuildResult
 from astrbot.core.astr_agent_runtime.main_agent import builder as native_builder
 from astrbot.core.astr_agent_runtime.main_agent.request import prepare_request
 from astrbot.core.astr_agent_runtime.runner import AgentRunner
+from astrbot.core.astr_agent_runtime.subagents.caller import DelegatedAgentInput
 from astrbot.core.config.default import DEFAULT_CONFIG
 from astrbot.core.event_bus import EventBus
 from astrbot.core.log import _log_context
@@ -822,8 +822,7 @@ async def test_managed_continuation_uses_running_conversation_after_switch(
 
     class ChildSession(AgentSession):
         async def execute_turn(self, turn):
-            target = await runtime.context.agent._continuation_target(turn.input.event)
-            assert target.session_id == self.id
+            assert await plugins["A"].schedule_continuation("child follow-up")
             return TurnResult()
 
         async def history(self):
@@ -833,7 +832,7 @@ async def test_managed_continuation_uses_running_conversation_after_switch(
         if event is initial:
             child = ChildSession("delegated", event.unified_msg_origin)
             child_turn = await child.run_turn(
-                AgentInput(event, AgentPermissions.from_event(event))
+                DelegatedAgentInput(event, AgentPermissions.from_event(event))
             )
             assert (await child_turn.result()).reason != "error"
             assert await plugins["A"].schedule_continuation("follow-up")
@@ -858,12 +857,19 @@ async def test_managed_continuation_uses_running_conversation_after_switch(
     manager = runtime.context.conversation_manager
     manager.get_curr_conversation_id.return_value = "other"
     manager.get_conversation.side_effect = lambda _, cid: conversations.get(cid)
+    saved = {}
 
+    async def save(_, cid, *, history, **kwargs):
+        saved[cid] = json.dumps(history)
+        conversations[cid].history = saved[cid]
+
+    manager.update_conversation.side_effect = save
     runtime.gate.set()
     await asyncio.wait_for(runtime.drain(), 3)
-    assert len(runtime.requests) == 2
-    assert "follow-up" in runtime.conversation.history
-    assert other.history == "[]"
+    assert len(runtime.requests) == 3
+    assert "follow-up" in saved["conversation"]
+    assert "child follow-up" not in saved["conversation"]
+    assert "child follow-up" in saved["other"]
 
 
 @pytest.mark.asyncio
