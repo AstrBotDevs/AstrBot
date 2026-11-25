@@ -1,5 +1,8 @@
 # Unreleased
 
+- QQ 官方适配器移除「主动消息使用 Markdown」配置项：主动消息默认使用 Markdown，插件仍可通过 `MessageChain.use_markdown(False)` 强制纯文本。
+- QQ Official: remove the `use_markdown` platform option. Proactive messages now default to Markdown; plugins can still force plain text with `MessageChain.use_markdown(False)`.
+
 - The plugin marketplace's Category dropdown moves to an expandable row of localized category filters with plugin counts. The row shows **All** and the total plugin count even when the selected source has no categories. Market installs save the category in the existing installation record.
 
 - QQ Official: failed image uploads no longer log base64 payloads, avoiding dashboard freezes from oversized log entries. Retry attempts decrease from five to three, with one summary warning.
