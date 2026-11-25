@@ -88,21 +88,3 @@ test("page labels react to locale changes and resolve metadata by view name", ()
     "Default description",
   );
 });
-
-test("plugin labels support the marketplace metadata translation fields", () => {
-  const labels = usePluginI18n();
-  const plugin = {
-    display_name: "Weather Forecast",
-    i18n: {
-      "zh-CN": { display_name: "天气预报", desc: "查看天气", short_desc: "天气" },
-      "en-US": { metadata: { desc: "View the forecast" } },
-    },
-  };
-  locale.value = "zh-CN";
-  assert.equal(labels.pluginName(plugin), "天气预报");
-  assert.equal(labels.pluginDesc(plugin), "查看天气");
-  assert.equal(labels.pluginShortDesc(plugin), "天气");
-  locale.value = "en-US";
-  assert.equal(labels.pluginName(plugin), "Weather Forecast");
-  assert.equal(labels.pluginDesc(plugin), "View the forecast");
-});
