@@ -120,6 +120,7 @@ class ConversationCommands:
         agent_runner_type = cfg["agent"]["runtime"]
 
         active_event_registry.stop_all(umo, exclude=message)
+        await active_event_registry.wait_for_segment_sends(umo, exclude=message)
         cid = await self.context.conversation_manager.get_curr_conversation_id(umo)
         if agent_runner_type in THIRD_PARTY_AGENT_RUNNER_KEY:
             await _clear_third_party_agent_runner_state(

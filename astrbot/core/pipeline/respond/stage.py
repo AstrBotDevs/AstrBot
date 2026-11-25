@@ -12,6 +12,7 @@ from astrbot.core.platform.astr_message_event import (
     streaming_response_event,
 )
 from astrbot.core.star.star_handler import EventType
+from astrbot.core.utils.active_event_registry import active_event_registry
 from astrbot.core.utils.path_util import path_Mapping
 from astrbot.core.utils.telemetry import bounded_text
 
@@ -357,11 +358,12 @@ class RespondStage(Stage):
                     if event.is_stopped() and event.get_extra("agent_stop_requested"):
                         return
                     try:
-                        if comp.type in need_separately:
-                            await event.send(result.derive([comp]))
-                        else:
-                            await event.send(result.derive([*header_comps, comp]))
-                            header_comps.clear()
+                        with active_event_registry.track_segment_send(event):
+                            if comp.type in need_separately:
+                                await event.send(result.derive([comp]))
+                            else:
+                                await event.send(result.derive([*header_comps, comp]))
+                                header_comps.clear()
                     except Exception as e:
                         logger.error(
                             "Failed to send the message chain: "
