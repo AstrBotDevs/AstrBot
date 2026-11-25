@@ -147,7 +147,18 @@ astrbot_version: ">=4.16,<5"
 
 发布或收录插件时，可以按插件的主要用途参考下表。市场源在插件索引记录的 `category` 字段配置分类，并提供分类名称及翻译。[市场源分类格式](../plugin-market/2026-11-25.md#_4-1-市场分类)
 
-<!--@include: ../plugin-market/2026-11-25.md#recommended-categories-->
+| ID | 中文名称 | 适用插件 |
+| --- | --- | --- |
+| `utility` | 实用工具 | 通用小工具、生活信息查询 |
+| `ai_context` | AI 对话 | 对话与 AI 能力增强 |
+| `entertainment` | 娱乐 | 泛娱乐、群内小游戏 |
+| `game` | 游戏 | 连接外部游戏 |
+| `media` | 媒体 | 图片、音频、视频的处理与生成 |
+| `productivity` | 效率 | 待办、日程、笔记、个人工作流 |
+| `integration` | 外部集成 | 第三方平台或服务集成 |
+| `platform_adapter` | 平台适配器 | 接入消息平台或协议 |
+| `provider_adapter` | 提供商适配器 | 接入模型、语音或向量服务 |
+| `other` | 其他 | 市场源主动归入其他类的插件 |
 
 ### 调试插件
 

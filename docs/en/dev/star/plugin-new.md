@@ -147,7 +147,18 @@ In the WebUI installation flow, you can choose to "Ignore Warning and Install" t
 
 Use the table below to choose a category based on the plugin's main purpose when publishing or listing a plugin. The market source sets `category` in the plugin's index record and provides the category labels and translations. [Marketplace category format](../plugin-market/2026-11-25.md#_4-1-marketplace-categories)
 
-<!--@include: ../plugin-market/2026-11-25.md#recommended-categories-->
+| ID | Label | Typical plugins |
+| --- | --- | --- |
+| `utility` | Utility | General utilities and everyday information lookup |
+| `ai_context` | AI Conversation | Conversation and AI enhancements |
+| `entertainment` | Entertainment | General entertainment and chat minigames |
+| `game` | Game | Connections to external games |
+| `media` | Media | Image, audio, and video processing or generation |
+| `productivity` | Productivity | Tasks, calendars, notes, and personal workflows |
+| `integration` | Integration | Third-party platforms and services |
+| `platform_adapter` | Platform Adapter | Messaging platforms and protocols |
+| `provider_adapter` | Provider Adapter | Model, voice, and vector services |
+| `other` | Other | Plugins the market source explicitly groups under Other |
 
 ### Debugging Plugins
 
