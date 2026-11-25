@@ -131,7 +131,7 @@ class TestPlugin(Plugin):
 
     @on.command("draw")
     async def draw(self, event: MessageEvent):
-        asset = await self.ctx.render.text("hello render")
+        asset = await self.ctx.t2i.text("hello render")
         yield event.reply(f"asset={asset.id}")
 """,
         "utf-8",
