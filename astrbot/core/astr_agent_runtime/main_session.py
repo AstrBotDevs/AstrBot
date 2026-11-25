@@ -99,6 +99,8 @@ class MainAgentSession(NativeAgentSession):
         )
         quote_refs: set[str] = set()
         sources: list[str] = []
+        # Capture the prefix used to build portable content before request collection.
+        consumed_provider_prefix = event.get_extra("_consumed_provider_prefix")
         req, quote_ref = await collect_initial_request(
             event,
             context,
@@ -111,11 +113,33 @@ class MainAgentSession(NativeAgentSession):
             return None
         if input.content is not None and not explicit:
             req.prompt = format_input_content(input.content)
+            if not consumed_provider_prefix:
+                event.set_extra("_default_event_prompt", False)
         # Explicit unbound SDK/plugin contexts keep their established semantics.
         # Ordinary turns always reload this session's history after execution admission.
         if not explicit or req.conversation is not None:
             req.conversation = manager.to_legacy_conversation(conversation)
-            req.contexts = conversation.content or []
+            req.contexts = []
+            outstanding = {}
+            for message in [*(conversation.content or []), {"role": "user"}]:
+                if message["role"] != "tool" and outstanding:
+                    req.contexts.extend(
+                        {
+                            "role": "tool",
+                            "tool_call_id": call_id,
+                            "content": "Execution was interrupted; the result is unavailable. Do not assume the operation did not take effect.",
+                        }
+                        for call_id in outstanding
+                    )
+                    outstanding.clear()
+                if message["role"] == "assistant":
+                    outstanding.update(
+                        (call["id"], call) for call in message.get("tool_calls", [])
+                    )
+                elif message["role"] == "tool":
+                    outstanding.pop(message.get("tool_call_id"), None)
+                req.contexts.append(message)
+            req.contexts.pop()  # Remove the sentinel used to close an unfinished batch.
         if not explicit:
             event.set_extra("provider_request", req)
         collected = CollectedInput(

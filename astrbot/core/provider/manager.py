@@ -509,6 +509,10 @@ class ProviderManager:
                 from .sources.mimo_stt_api_source import (
                     ProviderMiMoSTTAPI as ProviderMiMoSTTAPI,
                 )
+            case "deepseek_stt_api":
+                from .sources.deepseek_stt_api_source import (
+                    ProviderDeepSeekSTTAPI as ProviderDeepSeekSTTAPI,
+                )
             case "openai_whisper_selfhost":
                 from .sources.whisper_selfhosted_source import (
                     ProviderOpenAIWhisperSelfHost as ProviderOpenAIWhisperSelfHost,
@@ -520,6 +524,10 @@ class ProviderManager:
             case "openai_tts_api":
                 from .sources.openai_tts_api_source import (
                     ProviderOpenAITTSAPI as ProviderOpenAITTSAPI,
+                )
+            case "deepseek_tts_api":
+                from .sources.deepseek_tts_api_source import (
+                    ProviderDeepSeekTTSAPI as ProviderDeepSeekTTSAPI,
                 )
             case "mimo_tts_api":
                 from .sources.mimo_tts_api_source import (
@@ -588,6 +596,10 @@ class ProviderManager:
             case "dashscope_embedding":
                 from .sources.dashscope_embedding_source import (
                     DashScopeEmbeddingProvider as DashScopeEmbeddingProvider,
+                )
+            case "volcengine_embedding":
+                from .sources.volcengine_embedding_source import (
+                    VolcengineEmbeddingProvider as VolcengineEmbeddingProvider,
                 )
             case "vllm_rerank":
                 from .sources.vllm_rerank_source import (

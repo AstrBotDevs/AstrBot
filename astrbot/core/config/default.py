@@ -93,6 +93,7 @@ WEBHOOK_SUPPORTED_PLATFORMS = [
 DEFAULT_CONFIG = {
     "config_version": 6,
     "platform_settings": {
+        "locale": "zh-CN",
         "unique_session": False,
         "rate_limit": {
             "time": 60,
@@ -1150,6 +1151,10 @@ CONFIG_METADATA_2 = {
             "platform_settings": {
                 "type": "object",
                 "items": {
+                    "locale": {
+                        "type": "string",
+                        "options": ["zh-CN", "en-US"],
+                    },
                     "unique_session": {
                         "type": "bool",
                     },
@@ -1358,7 +1363,7 @@ CONFIG_METADATA_2 = {
                             "sexually_explicit": "BLOCK_MEDIUM_AND_ABOVE",
                             "dangerous_content": "BLOCK_MEDIUM_AND_ABOVE",
                         },
-                        "gm_thinking_config": {"budget": 0, "level": "HIGH"},
+                        "gm_thinking_config": {"budget": None, "level": "AUTO"},
                         "proxy": "",
                     },
                     "Anthropic": {
@@ -1737,6 +1742,18 @@ CONFIG_METADATA_2 = {
                         "timeout": "20",
                         "proxy": "",
                     },
+                    "DeepSeek STT(API)": {
+                        "id": "deepseek_stt",
+                        "provider": "deepseek",
+                        "type": "deepseek_stt_api",
+                        "provider_type": "speech_to_text",
+                        "enable": False,
+                        "api_key": "",
+                        "api_base": "https://api.deepseek.com/v1",
+                        "timeout": "120",
+                        "proxy": "",
+                        "custom_headers": {},
+                    },
                     "Whisper(Local)": {
                         "provider": "openai",
                         "type": "openai_whisper_selfhost",
@@ -1767,6 +1784,20 @@ CONFIG_METADATA_2 = {
                         "openai-tts-voice": "alloy",
                         "timeout": "20",
                         "proxy": "",
+                    },
+                    "DeepSeek TTS(API)": {
+                        "id": "deepseek_tts",
+                        "type": "deepseek_tts_api",
+                        "provider": "deepseek",
+                        "provider_type": "text_to_speech",
+                        "enable": False,
+                        "api_key": "",
+                        "api_base": "https://api.deepseek.com/v1",
+                        "deepseek-tts-voice": "stella",
+                        "deepseek-tts-filter-markdown": True,
+                        "timeout": "20",
+                        "proxy": "",
+                        "custom_headers": {},
                     },
                     "MiMo TTS(API)": {
                         "id": "mimo_tts",
@@ -1881,6 +1912,7 @@ CONFIG_METADATA_2 = {
                         "api_key": "",
                         "model": "cosyvoice-v1",
                         "dashscope_tts_voice": "loongstella",
+                        "dashscope_tts_websocket_url": "",
                         "timeout": "20",
                     },
                     "Azure TTS": {
@@ -2036,6 +2068,22 @@ CONFIG_METADATA_2 = {
                         "embedding_api_key": "",
                         "embedding_api_base": "https://dashscope.aliyuncs.com/api/v1",
                         "embedding_model": "text-embedding-v4",
+                        "embedding_dimensions": 1024,
+                        "timeout": 60,
+                        "proxy": "",
+                    },
+                    "Volcengine Embedding": {
+                        "id": "volcengine_embedding",
+                        "type": "volcengine_embedding",
+                        "provider": "volcengine",
+                        "provider_type": "embedding",
+                        "hint": "provider_group.provider.volcengine_embedding.hint",
+                        "enable": True,
+                        "embedding_api_key": "",
+                        # Agent Plan: https://ark.cn-beijing.volces.com/api/plan/v3
+                        # Use its dedicated API key and doubao-embedding-vision model.
+                        "embedding_api_base": "https://ark.cn-beijing.volces.com/api/v3",
+                        "embedding_model": "doubao-embedding-vision-251215",
                         "embedding_dimensions": 1024,
                         "timeout": 60,
                         "proxy": "",
@@ -2624,6 +2672,11 @@ CONFIG_METADATA_2 = {
                         "secret": True,
                     },
                     "dashscope_tts_voice": {"description": "音色", "type": "string"},
+                    "dashscope_tts_websocket_url": {
+                        "description": "WebSocket Endpoint",
+                        "type": "string",
+                        "hint": "可选，使用 Qwen-Audio-TTS 模型时填写。留空使用 DashScope SDK 默认地址。请填写完整 WebSocket 地址，例如 wss://{WorkspaceId}.cn-beijing.maas.aliyuncs.com/api-ws/v1/inference，并将 {WorkspaceId} 替换为实际业务空间 ID。",
+                    },
                     "gm_resp_image_modal": {
                         "description": "启用图片模态",
                         "type": "bool",
@@ -2702,17 +2755,20 @@ CONFIG_METADATA_2 = {
                             "budget": {
                                 "description": "Thinking Budget",
                                 "type": "int",
-                                "hint": "Guides the model on the specific number of thinking tokens to use for reasoning. See: https://ai.google.dev/gemini-api/docs/thinking#set-budget",
+                                "nullable": True,
+                                "hint": "Thinking token budget for Gemini 2.5. Leave blank to use the model default. See https://ai.google.dev/gemini-api/docs/thinking#set-budget",
                             },
                             "level": {
                                 "description": "Thinking Level",
                                 "type": "string",
-                                "hint": "Recommended for Gemini 3 models and onwards, lets you control reasoning behavior.See: https://ai.google.dev/gemini-api/docs/thinking#thinking-levels",
+                                "hint": "AUTO uses Google's model default. See https://ai.google.dev/gemini-api/docs/thinking#thinking-levels",
                                 "options": [
+                                    "AUTO",
                                     "MINIMAL",
                                     "LOW",
                                     "MEDIUM",
                                     "HIGH",
+                                    "XHIGH",
                                 ],
                             },
                         },
@@ -2913,6 +2969,18 @@ CONFIG_METADATA_2 = {
                         "description": "voice",
                         "type": "string",
                         "hint": "OpenAI TTS 的声音。OpenAI 默认支持：'alloy', 'echo', 'fable', 'onyx', 'nova', 'shimmer'",
+                    },
+                    "deepseek-tts-voice": {
+                        "description": "音色",
+                        "type": "string",
+                        "hint": "DeepSeek TTS 音色，实际请求使用对应的 voice_id。",
+                        "options": ["stella", "tide"],
+                        "labels": ["海星（女声，默认）", "暗潮（男声）"],
+                    },
+                    "deepseek-tts-filter-markdown": {
+                        "description": "过滤 Markdown",
+                        "type": "bool",
+                        "hint": "朗读前移除 Markdown 格式，默认启用。",
                     },
                     "mimo-tts-voice": {
                         "description": "音色",
@@ -4456,6 +4524,13 @@ CONFIG_METADATA_3 = {
                 "description": "基本",
                 "type": "object",
                 "items": {
+                    "platform_settings.locale": {
+                        "description": "系统语言",
+                        "type": "string",
+                        "options": ["zh-CN", "en-US"],
+                        "labels": ["🇨🇳 简体中文", "🇺🇸 English"],
+                        "hint": "设置系统的语言，用于插件、错误信息回复等地方。不会改变模型回答或 WebUI 的语言。",
+                    },
                     "platform_settings.unique_session": {
                         "description": "隔离对话",
                         "type": "bool",
@@ -4476,6 +4551,7 @@ CONFIG_METADATA_3 = {
                         "description": "回复时的文本前缀",
                         "hint": "回复中附带的文本前缀。",
                         "type": "string",
+                        "collapsed": True,
                     },
                     "platform_settings.reply_with_mention": {
                         "description": "回复时 @ 发送人",
@@ -4491,16 +4567,19 @@ CONFIG_METADATA_3 = {
                         "description": "转发消息的字数阈值",
                         "hint": "在受支持的平台上，当回复消息过长时，采用 “合并消息转发” 的方式发送消息。",
                         "type": "int",
+                        "collapsed": True,
                     },
                     "platform_settings.empty_mention_waiting": {
                         "description": "只 @ 机器人是否触发等待",
                         "hint": "当发送一条只有提及机器人的消息时，是否在接下来的 1 分钟内保持唤醒状态等待用户的第二条消息。",
                         "type": "bool",
+                        "collapsed": True,
                     },
                     "disable_builtin_commands": {
                         "description": "禁用自带指令",
                         "type": "bool",
                         "hint": "禁用所有 AstrBot 的自带指令，如 help, sid, new 等。",
+                        "collapsed": True,
                     },
                 },
             },

@@ -669,6 +669,40 @@ class TestRunActiveAgentJob:
     """Tests for active agent cron job execution."""
 
     @pytest.mark.asyncio
+    @pytest.mark.parametrize("allow_admin_role", [None, False, True])
+    @pytest.mark.parametrize("still_admin", [False, True])
+    async def test_job_respects_saved_permission_ceiling(
+        self,
+        cron_manager,
+        sample_cron_job,
+        mock_context,
+        monkeypatch,
+        allow_admin_role,
+        still_admin,
+    ):
+        """Saved restrictions cap the role resolved from current administrator IDs."""
+        wake = AsyncMock()
+        monkeypatch.setattr("astrbot.core.agent_wakeup.wake_main_agent", wake)
+        cron_manager.ctx = mock_context
+        mock_context.get_config.return_value = {
+            "admins_id": ["alice"] if still_admin else [],
+        }
+        sample_cron_job.payload = {
+            "session": "target:GroupMessage:group-id",
+            "sender_id": "alice",
+            "origin": "tool",
+        }
+        if allow_admin_role is not None:
+            sample_cron_job.payload["allow_admin_role"] = allow_admin_role
+        await cron_manager._run_active_agent_job(
+            sample_cron_job, datetime(2026, 11, 1, tzinfo=timezone.utc)
+        )
+        expected = (
+            "admin" if still_admin and allow_admin_role is not False else "member"
+        )
+        assert wake.await_args.kwargs["role"] == expected
+
+    @pytest.mark.asyncio
     @pytest.mark.parametrize("session", [None, "", "   "])
     async def test_job_requires_a_target_umo(
         self, cron_manager, sample_cron_job, mock_context, monkeypatch, session

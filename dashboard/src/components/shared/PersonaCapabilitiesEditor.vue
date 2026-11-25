@@ -62,9 +62,7 @@ const selectionDialog = ref({
   selectedNames: [],
 });
 
-const selectableTools = computed(() =>
-  props.availableTools.filter((tool) => tool.origin !== "builtin"),
-);
+const selectableTools = computed(() => props.availableTools);
 const selectableToolNames = computed(() =>
   selectableTools.value
     .filter((tool) => tool.active !== false)

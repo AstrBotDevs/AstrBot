@@ -6,7 +6,6 @@ from unittest.mock import AsyncMock, MagicMock
 import aiohttp
 import pytest
 
-from astrbot.core.astr_agent_runtime.tools import registry
 from astrbot.core.astr_agent_runtime.tools import web_search_tools as tools
 
 
@@ -791,33 +790,6 @@ async def test_serpapi_requires_credentials_before_request(serpapi_http, tool_cl
 
     assert "SerpApi API key is not configured" in result
     serpapi_http.factory.assert_not_called()
-
-
-@pytest.mark.parametrize(
-    "enabled,provider,expected",
-    [(True, "serpapi", True), (False, "serpapi", False), (True, "tavily", False)],
-)
-@pytest.mark.parametrize(
-    "tool_class",
-    [
-        tools.SerpApiWebSearchTool,
-        tools.SerpApiNewsSearchTool,
-        tools.SerpApiImageSearchTool,
-        tools.SerpApiFinanceSearchTool,
-        tools.SerpApiScholarSearchTool,
-    ],
-)
-def test_serpapi_tool_is_registered_and_gated(enabled, provider, expected, tool_class):
-    name = tool_class().name
-    rule = registry.get_builtin_tool_config_rule(name)
-    conditions = rule.evaluate(
-        {"provider_settings": {"web_search": enabled, "websearch_provider": provider}}
-    )
-
-    assert all(condition["matched"] for condition in conditions) is expected
-    assert registry.get_builtin_tool_class(name) is tool_class
-    assert name in tools.WEB_SEARCH_TOOL_NAMES
-    assert tool_class.__name__ in tools.__all__
 
 
 @pytest.mark.parametrize("key,expected", [("old-key", ["old-key"]), ("", [])])

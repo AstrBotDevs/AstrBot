@@ -108,6 +108,12 @@ class PatchedC2CMessage(botpy.message.C2CMessage):
         super().__init__(api, event_id, data)  # type: ignore
         _set_raw_message_fields(self, data)
 
+    class _User(botpy.message.C2CMessage._User):
+        def __init__(self, data: dict[str, Any]) -> None:
+            super().__init__(data)
+            self.username = data.get("username")
+            self.avatar = data.get("avatar")
+
 
 class PatchedGroupMessage(botpy.message.GroupMessage):
     __slots__ = ("raw_data", "message_type", "msg_elements")
@@ -125,6 +131,7 @@ class PatchedGroupMessage(botpy.message.GroupMessage):
         def __init__(self, data: dict[str, Any]) -> None:
             self.id = data.get("id", None)
             self.username = data.get("username", None)
+            self.member_nickname = data.get("member_nickname")
             self.bot = data.get("bot", None)
             self.avatar = data.get("avatar", None)
             self.member_openid = data.get("member_openid", None)
@@ -231,16 +238,7 @@ class botClient(Client):
     async def on_group_at_message_create(
         self, message: botpy.message.GroupMessage
     ) -> None:
-        abm = await QQOfficialPlatformAdapter._parse_from_qqofficial(
-            message,
-            MessageType.GROUP_MESSAGE,
-            force_group_mention=True,
-            bot=self,
-        )
-        abm.group_id = cast(str, message.group_openid)
-        abm.session_id = abm.group_id
-        self.platform.remember_session_scene(abm.session_id, "group")
-        self._commit(abm)
+        await self.on_group_message_create(message)
 
     async def on_group_message_create(
         self, message: botpy.message.GroupMessage
@@ -902,13 +900,64 @@ class QQOfficialPlatformAdapter(Platform):
         return re.sub(rf"(?:[ \t]*{markup_pattern}[ \t]*)+", " ", content or "")
 
     @staticmethod
+    def _parse_ordered_mentions(
+        content: str | None,
+        mention_names: dict[str, str],
+    ) -> list[BaseMessageComponent]:
+        """Split group text into ordered Plain/At components at mention tags.
+
+        Args:
+            content: Raw QQ message content containing mention markup.
+            mention_names: Known mention identifiers mapped to usernames.
+
+        Returns:
+            Ordered components with each confirmed mention kept at its original position.
+        """
+        import re
+
+        content = content or ""
+        if not mention_names:
+            components: list[BaseMessageComponent] = []
+            parsed = QQOfficialPlatformAdapter._parse_face_message(content)
+            if parsed:
+                components.append(Plain(parsed))
+            return components
+        tag_pattern = re.compile(
+            "|".join(
+                rf'(?:<qqbot-at-user\s+id="{re.escape(mention_id)}"\s*/>|'
+                rf"<@!?{re.escape(mention_id)}>)"
+                for mention_id in sorted(mention_names, key=len, reverse=True)
+            )
+        )
+        components = []
+        cursor = 0
+        for match in tag_pattern.finditer(content):
+            text = content[cursor : match.start()]
+            if text:
+                components.append(
+                    Plain(QQOfficialPlatformAdapter._parse_face_message(text))
+                )
+            tag = match.group(0)
+            if tag.startswith("<qqbot-at-user"):
+                mention_id = re.search(r'id="([^"]*)"', tag).group(1)
+            else:
+                mention_id = tag[2:].lstrip("!")[:-1]
+            components.append(At(qq=mention_id, name=mention_names.get(mention_id, "")))
+            cursor = match.end()
+        tail = content[cursor:]
+        if tail:
+            components.append(
+                Plain(QQOfficialPlatformAdapter._parse_face_message(tail))
+            )
+        return components
+
+    @staticmethod
     async def _parse_from_qqofficial(
         message: botpy.message.Message
         | botpy.message.GroupMessage
         | botpy.message.DirectMessage
         | botpy.message.C2CMessage,
         message_type: MessageType,
-        force_group_mention: bool = False,
         *,
         bot: Client | None = None,
     ) -> AstrBotMessage:
@@ -917,7 +966,6 @@ class QQOfficialPlatformAdapter(Platform):
         Args:
             message: Incoming QQ message with preserved raw payload fields.
             message_type: AstrBot message type for this event.
-            force_group_mention: Treat a legacy group-at event as mentioning the bot.
             bot: Authenticated client used for cached QQ group metadata lookups.
 
         Returns:
@@ -985,7 +1033,9 @@ class QQOfficialPlatformAdapter(Platform):
             if isinstance(message, botpy.message.GroupMessage):
                 abm.sender = MessageMember(
                     message.author.member_openid,
-                    getattr(message.author, "username", "") or "",
+                    getattr(message.author, "member_nickname", "")
+                    or getattr(message.author, "username", "")
+                    or "",
                 )
                 raw_data = getattr(message, "raw_data", {})
                 group_name = getattr(message, "group_name", None)
@@ -997,14 +1047,14 @@ class QQOfficialPlatformAdapter(Platform):
                 )
                 if bot is not None:
                     await get_qq_group(bot, abm.group)
+                mentions = getattr(message, "mentions", None) or []
                 bot_mentions = [
                     mention
-                    for mention in (getattr(message, "mentions", None) or [])
+                    for mention in mentions
                     if getattr(mention, "is_you", False) is True
                     and getattr(mention, "id", None) is not None
                 ]
                 bot_mention_ids = [str(mention.id) for mention in bot_mentions]
-                group_mentioned = bool(bot_mention_ids) or force_group_mention
                 plain_content_raw = message.content or ""
                 for mention_id in bot_mention_ids:
                     plain_content_raw = (
@@ -1017,11 +1067,18 @@ class QQOfficialPlatformAdapter(Platform):
                     plain_content_raw.strip()
                 )
                 abm.self_id = bot_mention_ids[0] if bot_mention_ids else "qq_official"
-                if group_mentioned:
-                    mention_name = (
-                        getattr(bot_mentions[0], "username", "") if bot_mentions else ""
+                mention_names = {
+                    str(mention.id): str(getattr(mention, "username", "") or "")
+                    for mention in mentions
+                    if getattr(mention, "id", None) is not None
+                }
+                msg.extend(
+                    QQOfficialPlatformAdapter._parse_ordered_mentions(
+                        message.content, mention_names
                     )
-                    msg.append(At(qq=abm.self_id, name=mention_name))
+                )
+                if not msg:
+                    msg.append(Plain(""))
             else:
                 abm.sender = MessageMember(
                     message.author.user_openid,
@@ -1032,7 +1089,7 @@ class QQOfficialPlatformAdapter(Platform):
                 )
                 abm.self_id = "unknown_selfid"
                 msg.append(At(qq="qq_official"))
-            msg.append(Plain(abm.message_str))
+                msg.append(Plain(abm.message_str))
             await QQOfficialPlatformAdapter._append_attachments(
                 msg, message.attachments
             )
@@ -1063,7 +1120,8 @@ class QQOfficialPlatformAdapter(Platform):
                 str(message.author.id),
                 str(message.author.username),
             )
-            msg.append(At(qq="qq_official"))
+            if isinstance(message, botpy.message.DirectMessage):
+                msg.append(At(qq="qq_official"))
             msg.append(Plain(plain_content))
 
             if isinstance(message, botpy.message.Message):

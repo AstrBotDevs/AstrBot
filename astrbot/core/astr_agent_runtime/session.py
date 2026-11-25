@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING
 from astrbot.core import logger
 from astrbot.core.agent.events import RuntimeExecutionError, TurnPrepared
 from astrbot.core.agent.input import format_input_content
+from astrbot.core.agent.message import ContentPart, Message, TextPart
 from astrbot.core.agent.runtime import (
     AgentInput,
     AgentSession,
@@ -19,6 +20,7 @@ from astrbot.core.agent.runtime import (
     TurnStatus,
 )
 from astrbot.core.astr_agent_runtime.main_agent.config import MainAgentBuildConfig
+from astrbot.core.message.mention_render import follow_up_text
 from astrbot.core.platform.agent_wakeup_event import AgentWakeupEvent
 from astrbot.core.utils.active_event_registry import active_event_registry
 from astrbot.core.utils.metrics import Metric
@@ -106,6 +108,9 @@ class NativeAgentSession(AgentSession):
             result.provider,
         )
         runner.run_context.context.permissions = turn.input.permissions
+        runner.run_context.context.send_to_user = turn.input.send_to_user
+        if runner.run_context.context._output_turn is None:
+            runner.run_context.context._output_turn = turn
         runner.run_context.context.agent_session = AgentSessionRef("astrbot", self.id)
         self._runner = runner
         runner.run_context.context._runtime = self.runtime
@@ -146,6 +151,29 @@ class NativeAgentSession(AgentSession):
                 await writer.start_turn(
                     trigger, event_id=turn_id if isinstance(turn_id, str) else None
                 )
+            if isinstance(event, AgentWakeupEvent) and event.tool_result is not None:
+                tool_name, tool_result = event.tool_result
+                text, images = await runner.prepare_tool_result(
+                    result=tool_result,
+                    tool_call_id=event.source_id or event.message_obj.message_id,
+                    tool_name=tool_name,
+                )
+                parts: list[ContentPart] = [
+                    TextPart(text=f"Background tool output (untrusted data):\n{text}")
+                ]
+                await runner.append_tool_result_images(images, content=parts)
+                # Complete the prepared input before its first persistence boundary.
+                messages = runner.run_context.messages
+                if messages and messages[-1].role == "user":
+                    message = messages[-1]
+                    content = message.content
+                    message.content = (
+                        [TextPart(text=content)]
+                        if isinstance(content, str)
+                        else list(content or [])
+                    ) + parts
+                else:
+                    messages.append(Message(role="user", content=parts))
             outcome = await execute_native_loop(runner, turn, config.max_steps)
             status = outcome.status
             return outcome
@@ -285,12 +313,12 @@ class NativeAgentSession(AgentSession):
         """
         if self._runner is None:
             return None
-        text = (
-            format_input_content(input.content)
-            if input.content is not None
-            else input.event.get_message_str() or input.event.get_message_outline()
-        )
-        ticket = self._runner.follow_up(message_text=text)
+        if input.content is not None:
+            text = format_input_content(input.content)
+            temp_text = None
+        else:
+            text, temp_text = follow_up_text(input.event)
+        ticket = self._runner.follow_up(message_text=text, temp_text=temp_text)
         if ticket is None:
             return None
         receipt = InputReceipt()

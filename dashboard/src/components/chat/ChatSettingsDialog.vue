@@ -74,6 +74,30 @@
           </div>
 
           <div v-else class="settings-list">
+            <div class="settings-item">
+              <div class="settings-item-title">{{ tm("voice.sttModel") }}</div>
+              <v-select
+                :model-value="sttProvider"
+                :items="sttProviders"
+                :aria-label="tm('voice.sttModel')"
+                :no-data-text="tm('voice.noSttProvider')"
+                variant="outlined"
+                density="compact"
+                hide-details
+                @update:model-value="emit('update:sttProvider', $event)"
+              >
+                <template #no-data>
+                  <v-list-item>
+                    <v-list-item-title class="text-wrap">{{ tm("voice.noSttProvider") }}</v-list-item-title>
+                  </v-list-item>
+                </template>
+                <template #append-item>
+                  <v-list-item @click="emit('configureStt')" class="text-primary">
+                    <v-list-item-title>{{ tm("voice.configure") }}</v-list-item-title>
+                  </v-list-item>
+                </template>
+              </v-select>
+            </div>
             <div class="settings-item settings-item-switch">
               <div>
                 <div class="settings-item-title">
@@ -161,10 +185,14 @@ defineProps<{
   enableReasoning: boolean;
   sendShortcut: "enter" | "shift_enter";
   transportMode: TransportMode;
+  sttProvider: string;
+  sttProviders: { title: string; value: string }[];
 }>();
 
 const emit = defineEmits<{
   "update:modelValue": [value: boolean];
+  "update:sttProvider": [value: string];
+  configureStt: [];
   "update:enableStreaming": [value: boolean];
   "update:enableReasoning": [value: boolean];
   "update:sendShortcut": [value: "enter" | "shift_enter"];

@@ -323,6 +323,10 @@ export type GhproxyTestRequest = {
     proxy_url: string;
 };
 
+export type HTTPValidationError = {
+    detail?: Array<ValidationError>;
+};
+
 export type ImMessageRequest = {
     umo: string;
     message: (string | Array<MessagePart>);
@@ -796,6 +800,26 @@ export type UpdateRequest = {
     proxy?: string;
     reboot?: boolean;
     progress_id?: string;
+};
+
+export type ValidationError = {
+    loc: Array<(string | number)>;
+    msg: string;
+    type: string;
+    input?: unknown;
+    ctx?: {
+        [key: string]: unknown;
+    };
+};
+
+/**
+ * Untrusted input submitted by a view through the authenticated host.
+ */
+export type ViewActionRequest = {
+    action_id: string;
+    interaction_id: string;
+    expected_revision: number;
+    data?: unknown;
 };
 
 export type LoginData = {
@@ -1449,6 +1473,27 @@ export type SendChatMessageData = {
 export type SendChatMessageResponse = (SuccessEnvelope);
 
 export type SendChatMessageError = unknown;
+
+export type TranscribeChatAudioData = {
+    body: {
+        file: (Blob | File);
+        /**
+         * STT provider ID; defaults to the first available provider.
+         */
+        provider_id?: string;
+    };
+};
+
+export type TranscribeChatAudioResponse = ({
+    status: 'ok' | 'error';
+    message?: string;
+    data?: {
+        text: string;
+        provider_id: string;
+    };
+});
+
+export type TranscribeChatAudioError = unknown;
 
 export type OpenChatWebSocketData = {
     query?: {
@@ -2549,7 +2594,7 @@ export type ListCommandConflictsError = unknown;
 export type ListToolsData = {
     query?: {
         enabled?: boolean;
-        origin?: 'builtin' | 'plugin' | 'mcp';
+        origin?: 'plugin' | 'mcp';
     };
 };
 
@@ -4035,3 +4080,50 @@ export type ReceivePlatformWebhookData = {
 export type ReceivePlatformWebhookResponse = (unknown);
 
 export type ReceivePlatformWebhookError = unknown;
+
+export type ListWorkbenchViewsResponse = (SuccessEnvelope);
+
+export type ListWorkbenchViewsError = unknown;
+
+export type GetWorkbenchViewData = {
+    path: {
+        plugin_name: string;
+        view_name: string;
+    };
+};
+
+export type GetWorkbenchViewResponse = (SuccessEnvelope);
+
+export type GetWorkbenchViewError = (unknown);
+
+export type GetChatViewApiV1ChatViewsViewIdGetData = {
+    path: {
+        view_id: string;
+    };
+};
+
+export type GetChatViewApiV1ChatViewsViewIdGetResponse = (unknown);
+
+export type GetChatViewApiV1ChatViewsViewIdGetError = (HTTPValidationError);
+
+export type RunChatViewActionApiV1ChatViewsViewIdActionsPostData = {
+    body: ViewActionRequest;
+    path: {
+        view_id: string;
+    };
+};
+
+export type RunChatViewActionApiV1ChatViewsViewIdActionsPostResponse = (unknown);
+
+export type RunChatViewActionApiV1ChatViewsViewIdActionsPostError = (HTTPValidationError);
+
+export type GetChatViewActionApiV1ChatViewsViewIdActionsInteractionIdGetData = {
+    path: {
+        interaction_id: string;
+        view_id: string;
+    };
+};
+
+export type GetChatViewActionApiV1ChatViewsViewIdActionsInteractionIdGetResponse = (unknown);
+
+export type GetChatViewActionApiV1ChatViewsViewIdActionsInteractionIdGetError = (HTTPValidationError);

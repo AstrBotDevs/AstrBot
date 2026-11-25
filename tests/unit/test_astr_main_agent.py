@@ -98,7 +98,6 @@ def mock_context():
     )
     ctx.persona_manager.get_persona_v3_by_id = MagicMock(return_value=None)
     tool_mgr = MagicMock()
-    tool_mgr.get_builtin_tool.side_effect = lambda cls, **kwargs: cls(**kwargs)
     ctx.get_llm_tool_manager.return_value = tool_mgr
     return ctx
 
@@ -632,8 +631,8 @@ class TestApplyKb:
         assert req.func_tool is not None
 
 
-class TestBuiltinToolInjection:
-    """Tests for builtin tool injection paths."""
+class TestRuntimeToolInjection:
+    """Tests for runtime tool injection paths."""
 
     @pytest.mark.asyncio
     async def test_serpapi_injects_all_search_tools(self, mock_event, mock_context):
@@ -645,7 +644,6 @@ class TestBuiltinToolInjection:
 
         web_search_build.apply_web_search(
             req,
-            mock_context,
             mock_context.get_config()["provider_settings"],
             mock_event,
         )
@@ -667,10 +665,10 @@ class TestBuiltinToolInjection:
         )
 
     @pytest.mark.asyncio
-    async def test_apply_web_search_tools_uses_builtin_tool_manager(
+    async def test_apply_web_search_tools_adds_baidu_tool(
         self, mock_event, mock_context
     ):
-        """Test web search tool injection through the builtin tool manager."""
+        """Verify the selected Baidu search tool reaches the model request."""
         req = ProviderRequest()
         mock_context.get_config.return_value = {
             "provider_settings": {
@@ -678,24 +676,16 @@ class TestBuiltinToolInjection:
                 "websearch_provider": "baidu_ai_search",
             }
         }
-        builtin_tool = MagicMock(spec=FunctionTool)
-        builtin_tool.name = "web_search_baidu"
-        tool_mgr = MagicMock()
-        tool_mgr.get_builtin_tool.return_value = builtin_tool
-        mock_context.get_llm_tool_manager.return_value = tool_mgr
-
         web_search_build.apply_web_search(
             req,
-            mock_context,
             mock_context.get_config()["provider_settings"],
             mock_event,
         )
 
-        tool_mgr.get_builtin_tool.assert_called_once_with(
-            web_search_build.BaiduWebSearchTool
-        )
         assert req.func_tool is not None
-        assert req.func_tool.get_tool("web_search_baidu") is builtin_tool
+        assert isinstance(
+            req.func_tool.get_tool("web_search_baidu"), web_search_build.BaiduWebSearchTool
+        )
 
     @pytest.mark.asyncio
     @pytest.mark.parametrize(
@@ -735,28 +725,15 @@ class TestBuiltinToolInjection:
                 "websearch_provider": provider,
             }
         }
-        search_tool = MagicMock(spec=FunctionTool)
-        search_tool.name = search_name
-        extract_tool = MagicMock(spec=FunctionTool)
-        extract_tool.name = extract_name
-        tool_mgr = MagicMock()
-        tool_mgr.get_builtin_tool.side_effect = [search_tool, extract_tool]
-        mock_context.get_llm_tool_manager.return_value = tool_mgr
-
         web_search_build.apply_web_search(
             req,
-            mock_context,
             mock_context.get_config()["provider_settings"],
             mock_event,
         )
 
-        assert tool_mgr.get_builtin_tool.call_args_list == [
-            ((search_class,),),
-            ((extract_class,),),
-        ]
         assert req.func_tool is not None
-        assert req.func_tool.get_tool(search_name) is search_tool
-        assert req.func_tool.get_tool(extract_name) is extract_tool
+        assert isinstance(req.func_tool.get_tool(search_name), search_class)
+        assert isinstance(req.func_tool.get_tool(extract_name), extract_class)
 
     @pytest.mark.parametrize(
         "tool_name",
@@ -816,19 +793,12 @@ class TestBuiltinToolInjection:
         assert web_search_build.WEB_SEARCH_CITATION_PROMPT not in req.system_prompt
 
     @pytest.mark.asyncio
-    async def test_proactive_cron_job_tools_uses_builtin_tool_manager(
+    async def test_runtime_adds_proactive_cron_job_tool(
         self, mock_context, mock_event, mock_provider
     ):
-        """Test cron tool injection through the builtin tool manager."""
+        """Verify the runtime adds the scheduled task tool."""
         mock_event.platform_meta.support_proactive_message = False
         req = ProviderRequest()
-        tool_mgr = MagicMock()
-
-        future_task_tool = MagicMock(spec=FunctionTool)
-        future_task_tool.name = "future_task"
-        tool_mgr.get_builtin_tool.return_value = future_task_tool
-        mock_context.get_llm_tool_manager.return_value = tool_mgr
-
         req.prompt = "Run task"
         with (
             patch.object(native_execution, "AgentRunner") as runner,
@@ -847,9 +817,8 @@ class TestBuiltinToolInjection:
                 req=req,
             )
 
-        tool_mgr.get_builtin_tool.assert_called_once_with(builder_build.FutureTaskTool)
         assert req.func_tool is not None
-        assert req.func_tool.get_tool("future_task") is future_task_tool
+        assert isinstance(req.func_tool.get_tool("future_task"), builder_build.FutureTaskTool)
 
 
 class TestApplyFileExtract:
@@ -1524,7 +1493,7 @@ class TestEnsurePersonaAndSkills:
             ),
         ],
     )
-    async def test_persona_empty_tools_keeps_late_builtin_tools(
+    async def test_persona_empty_tools_keeps_runtime_search_tools(
         self, mock_event, mock_context, mock_provider, provider, tool_names
     ):
         persona = {"name": "locked", "prompt": "No tools.", "tools": []}
@@ -1573,7 +1542,6 @@ class TestEnsurePersonaAndSkills:
         assert result.provider_request.func_tool is not None
         assert result.provider_request.func_tool.names() == tool_names
         assert "<execution_environment" not in result.provider_request.system_prompt
-        assert "<tool_use_instructions>" in result.provider_request.system_prompt
 
     @pytest.mark.asyncio
     @pytest.mark.parametrize("role", ["admin", "member"])
@@ -1584,7 +1552,7 @@ class TestEnsurePersonaAndSkills:
         ("allow_execution", "allow_network"),
         [(True, False), (True, True), (False, False)],
     )
-    async def test_persona_empty_tools_keeps_local_runtime_builtin_tools(
+    async def test_persona_empty_tools_keeps_local_runtime_tools(
         self,
         monkeypatch,
         mock_event,
@@ -3690,12 +3658,6 @@ async def test_feature_composition_preserves_tool_scope_and_instruction_order(
         assert (
             req.system_prompt.count(computer_use_build.LOCAL_NETWORK_POLICY_NOTICE) == 1
         )
-    tool_prompt = (
-        builder_build.TOOL_CALL_PROMPT
-        if tool_schema_mode == "full"
-        else builder_build.TOOL_CALL_PROMPT_SKILLS_LIKE_MODE
-    )
-    markers.append(tool_prompt)
     markers.append(web_search_build.WEB_SEARCH_CITATION_PROMPT)
     positions = [req.system_prompt.index(marker) for marker in markers]
     assert positions == sorted(positions)
@@ -3716,18 +3678,7 @@ async def test_feature_composition_preserves_tool_scope_and_instruction_order(
     environment = req.system_prompt.split(environment_start, 1)[1].split(
         "</execution_environment>", 1
     )[0]
-    instructions = req.system_prompt.split("<tool_use_instructions>", 1)[1].split(
-        "</tool_use_instructions>", 1
-    )[0]
-    assert (
-        f"<tool_use_instructions>{instructions}</tool_use_instructions>" == tool_prompt
-    )
     assert req.system_prompt.count("</execution_environment>") == 1
-    assert req.system_prompt.count("<tool_use_instructions>") == 1
-    assert req.system_prompt.count("</tool_use_instructions>") == 1
-    assert req.system_prompt.index(
-        "</execution_environment>"
-    ) < req.system_prompt.index("<tool_use_instructions>")
     assert "Persona marker" not in environment
     assert "Workspace marker" not in environment
     if runtime == "local":

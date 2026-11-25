@@ -8,6 +8,7 @@ import uuid
 from collections.abc import Awaitable, Callable
 from contextlib import aclosing, suppress
 from dataclasses import dataclass, field, replace
+from functools import partial
 from pathlib import Path
 
 from mcp.types import (
@@ -26,11 +27,7 @@ from tenacity import (
 )
 
 from astrbot import logger
-from astrbot.core.agent.event_stream import (
-    AgentEventStream,
-    RequestEventRecorder,
-    request_context_for_journal,
-)
+from astrbot.core.agent.event_stream import AgentEventStream
 from astrbot.core.agent.message import (
     ImageURLPart,
     TextPart,
@@ -38,9 +35,9 @@ from astrbot.core.agent.message import (
     dump_messages,
 )
 from astrbot.core.agent.tool import FunctionTool, ToolSet
-from astrbot.core.agent.tool_image_cache import tool_image_cache
+from astrbot.core.agent.tool_image_cache import CachedImage, tool_image_cache
 from astrbot.core.agent_output_content import content_from_chain
-from astrbot.core.exceptions import EmptyModelOutputError
+from astrbot.core.exceptions import ConversationPersistenceError, EmptyModelOutputError
 from astrbot.core.provider.entities import (
     LLMResponse,
     ProviderRequest,
@@ -51,7 +48,6 @@ from astrbot.core.provider.modalities import (
     sanitize_contexts_by_modalities,
 )
 from astrbot.core.provider.provider import Provider
-from astrbot.core.provider.request_observer import request_recorder_kwargs
 from astrbot.core.utils.async_generator import iterate_in_task
 from astrbot.core.utils.event_id import new_event_id
 
@@ -116,6 +112,9 @@ class _HandleFunctionToolsResult:
 class FollowUpTicket:
     seq: int
     text: str
+    temp_text: str | None = None
+    """Temporary reminder text appended beside the follow-up; it stays visible
+    for the current run but is excluded from restored long-term history."""
     consumed: bool = False
     resolved: asyncio.Event = field(default_factory=asyncio.Event)
 
@@ -136,13 +135,6 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
     EMPTY_OUTPUT_RETRY_WAIT_MAX_S = 4
     USER_INTERRUPTION_REQUEST = "Stop output."
     USER_INTERRUPTION_MESSAGE = "Output stopped."
-    FOLLOW_UP_NOTICE_TEMPLATE = (
-        "\n\n[SYSTEM NOTICE] User sent follow-up messages while tool execution "
-        "was in progress. Prioritize these follow-up instructions in your next "
-        "actions. In your very next action, briefly acknowledge to the user "
-        "that their follow-up message(s) were received before continuing.\n"
-        "{follow_up_lines}"
-    )
     MAX_STEPS_REACHED_PROMPT = (
         "[SYSTEM NOTICE: Agent step budget exhausted] "
         "Remaining steps: 0. Stop using tools; summarize results and unfinished work. "
@@ -196,9 +188,12 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
     )
 
     async def _complete_with_assistant_response(self, llm_resp: LLMResponse) -> None:
-        """Finalize the current step as a plain assistant response with no tool calls."""
+        """Record a plain reply and continue if accepted steering is still pending.
+
+        Args:
+            llm_resp: Assistant response without tool calls.
+        """
         self.final_llm_resp = llm_resp
-        self._transition_state(AgentState.DONE)
         self.stats.end_time = time.time()
 
         parts = []
@@ -213,18 +208,47 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             parts.append(TextPart(text=llm_resp.completion_text))
         if len(parts) == 0:
             logger.warning("LLM returned empty assistant message with no tool calls.")
-        await self._append_context_messages([Message(role="assistant", content=parts)])
+        await self._append_context_messages(
+            [Message(role="assistant", content=parts)], record_response=True
+        )
 
         try:
             await self.agent_hooks.on_llm_response(self.run_context, llm_resp)
         except Exception as e:
             logger.error(f"Error in on_llm_response hook: {e}", exc_info=True)
+
+        if self._is_stop_requested():
+            await self._finalize_aborted_step()
+            return
+        if self._pending_follow_ups and self.run_context.run_end_reason != "max_steps":
+            # A plain reply is also a safe boundary for accepted user input.
+            follow_ups = list(self._pending_follow_ups)
+            await self._append_context_messages(
+                [
+                    Message(
+                        role="user",
+                        content=self._follow_up_user_content(follow_ups),
+                    )
+                ]
+            )
+            # Keep input arriving while the context sink was awaited for the next step.
+            del self._pending_follow_ups[: len(follow_ups)]
+            if not self._pending_follow_ups:
+                self._steering_signal.clear()
+            for ticket in follow_ups:
+                ticket.consumed = True
+                ticket.resolved.set()
+            self.final_llm_resp = None
+            return
+
+        self._transition_state(AgentState.DONE)
         self._resolve_unconsumed_follow_ups()
 
     async def _finish_run(self) -> None:
         """Notify execution exit once, including failure and cancellation paths."""
         if self._done_hook_called:
             return
+        await self._flush_pending_response()
         self._done_hook_called = True
         if self._aborted:
             self.run_context.run_end_reason = "cancelled"
@@ -285,6 +309,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         self._message_id = str(uuid.uuid4())
         self.req = request
         self._conversation_event_sink = conversation_event_sink
+        self._pending_assistant_event: AgentResponse | None = None
         self._context_initialized = False
         self.streaming = streaming
         self.enforce_max_turns = enforce_max_turns
@@ -313,9 +338,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             llm_compress_provider=self.llm_compress_provider,
             custom_token_counter=self.custom_token_counter,
             custom_compressor=self.custom_compressor,
-            request_event_emitter=self._events.emit
-            if conversation_event_sink
-            else None,
+            request_event_emitter=conversation_event_sink,
         )
         self.request_context_manager = ContextManager(
             self.request_context_manager_config
@@ -340,10 +363,12 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         self.run_context = run_context
         self.run_context.run_end_reason = None
         self.run_context.run_error = None
+        self.run_context.tools = request.func_tool
         self._done_hook_called = False
         self._aborted = False
         self._abort_signal = asyncio.Event()
         self._pending_follow_ups: list[FollowUpTicket] = []
+        self._steering_signal = asyncio.Event()
         self._follow_up_seq = 0
         self._last_tool_name: str | None = None
         self._last_tool_args: dict[str, T.Any] | None = None
@@ -352,25 +377,9 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         self._step_budget_used = 0
         self._step_budget_notified: set[int] = set()
 
-        # These two are used for tool schema mode handling
-        # We now have two modes:
-        # - "full": use full tool schema for LLM calls, default.
-        # - "skills_like": use light tool schema for LLM calls, and re-query with param-only schema when needed.
-        #   Light tool schema does not include tool parameters.
-        #   This can reduce token usage when tools have large descriptions.
-        # See #4681
         self.tool_schema_mode = tool_schema_mode
-        self._tool_schema_param_set = None
-        self._skill_like_raw_tool_set = None
-        if tool_schema_mode == "skills_like":
-            tool_set = self.req.func_tool
-            if not tool_set:
-                return
-            self._skill_like_raw_tool_set = tool_set
-            light_set = tool_set.get_light_tool_set()
-            self._tool_schema_param_set = tool_set.get_param_only_tool_set()
-            # MODIFIE the req.func_tool to use light tool schemas
-            self.req.func_tool = light_set
+        self._light_tool_set: ToolSet | None = None
+        self._tool_schema_param_set: ToolSet | None = None
 
         # append existing messages in the run context
         messages = load_messages(request.contexts or [])
@@ -582,27 +591,8 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             Provider replies for normal model processing and hooks.
         """
         request_id = new_event_id()
-        recorder = None
+        await self._flush_pending_response()
         payload["contexts"] = self._sanitize_contexts_for_provider(contexts)
-        if self._events.active and self._conversation_event_sink is not None:
-            recorder = RequestEventRecorder(
-                self._events.emit,
-                {
-                    "provider_id": self.provider.provider_config.get("id", ""),
-                    "model": payload.get("model") or self.provider.get_model(),
-                    "attempt_scope": "provider_call",
-                    "input_context": request_context_for_journal(
-                        payload["contexts"],
-                        source_contexts=contexts,
-                        modalities=self.provider.provider_config.get("modalities"),
-                        extra_user_content_parts=payload.get(
-                            "extra_user_content_parts"
-                        ),
-                    ),
-                },
-                invocation_id=request_id,
-            )
-            await recorder.begin()
         if self._events.active:
             if completed := self._finish_message():
                 await self._events.emit(completed)
@@ -615,16 +605,8 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         started = time.monotonic()
         status = TurnStatus.FAILED
         final = None
+        partial_usage = None
         error = None
-        if self._events.active:
-            await self._events.emit(
-                RequestStarted(
-                    request_id=request_id,
-                    provider_id=self.provider.provider_config.get("id"),
-                    model=payload.get("model") or self.provider.get_model(),
-                    streaming=streaming,
-                )
-            )
         settled = False
 
         async def settle() -> None:
@@ -633,19 +615,63 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                 return
             settled = True
             self._message_status = status
-            usage = final.usage if final is not None else None
+            usage = (
+                final.usage
+                if final is not None and final.usage is not None
+                else partial_usage
+            )
             reported_error = error
             if final is not None and final.role == "err":
                 reported_error = RuntimeErrorInfo(
                     code="provider_error", message=final.completion_text
                 )
+            if self._conversation_event_sink is not None:
+                parts = []
+                if final is not None:
+                    self._sanitize_malformed_tool_calls(final)
+                    if final.reasoning_content is not None or final.reasoning_signature:
+                        parts.append(
+                            ThinkPart(
+                                think=final.reasoning_content or "",
+                                encrypted=final.reasoning_signature,
+                            )
+                        )
+                    if final.completion_text:
+                        parts.append(TextPart(text=final.completion_text))
+                else:
+                    parts = [
+                        ThinkPart(think=part.text or "")
+                        if isinstance(part, ReasoningOutput)
+                        else TextPart(text=part.text or "")
+                        for part in self._message_parts
+                    ]
+                message = AssistantMessageSegment(
+                    content=parts or None,
+                    tool_calls=final.to_openai_tool_calls_model() if final else [],
+                )
+                data = {
+                    "message": message.model_dump(),
+                    "status": status.value,
+                    "provider_id": self.provider.provider_config.get("id", ""),
+                    "model": payload.get("model") or self.provider.get_model(),
+                }
+                if usage is not None:
+                    data["usage"] = {
+                        "input_tokens": usage.input,
+                        "cached_input_tokens": usage.input_cached,
+                        "output_tokens": usage.output,
+                    }
+                if reported_error is not None:
+                    data["error"] = {
+                        "code": reported_error.code,
+                        "message": reported_error.message,
+                    }
+                self._pending_assistant_event = AgentResponse(
+                    "message.appended", data, request_id
+                )
+                if status != TurnStatus.COMPLETED:
+                    await self._flush_pending_response()
             if self._events.active:
-                if recorder:
-                    await recorder.finish(
-                        status.value,
-                        usage=usage,
-                        error_code=reported_error.code if reported_error else None,
-                    )
                 await self._events.emit(
                     RequestFinished(
                         request_id=request_id,
@@ -663,11 +689,17 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                 )
 
         try:
-            if streaming:
-                stream = self.provider.text_chat_stream(
-                    **payload,
-                    **request_recorder_kwargs(self.provider.text_chat_stream, recorder),
+            if self._events.active:
+                await self._events.emit(
+                    RequestStarted(
+                        request_id=request_id,
+                        provider_id=self.provider.provider_config.get("id"),
+                        model=payload.get("model") or self.provider.get_model(),
+                        streaming=streaming,
+                    )
                 )
+            if streaming:
+                stream = self.provider.text_chat_stream(**payload)
                 try:
                     while True:
                         try:
@@ -677,6 +709,8 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                         if response is None:
                             status = TurnStatus.CANCELLED
                             break
+                        if response.usage is not None:
+                            partial_usage = response.usage
                         if not response.is_chunk:
                             final = response
                             status = (
@@ -689,12 +723,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                 finally:
                     await self._close_executor(stream)
             else:
-                response = await self._await_or_stop(
-                    self.provider.text_chat(
-                        **payload,
-                        **request_recorder_kwargs(self.provider.text_chat, recorder),
-                    )
-                )
+                response = await self._await_or_stop(self.provider.text_chat(**payload))
                 if response is not None:
                     final = response
                     status = (
@@ -830,6 +859,8 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                             raise
                     if self._is_stop_requested():
                         return
+            except ConversationPersistenceError:
+                raise
             except Exception as exc:  # noqa: BLE001
                 last_exception = exc
                 logger.warning(
@@ -874,7 +905,8 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         return sanitized_contexts
 
     def _func_tool_for_provider(self) -> ToolSet | None:
-        if not self.req.func_tool:
+        tool_set = self.req.func_tool
+        if not tool_set:
             return None
         modalities = self.provider.provider_config.get("modalities", None)
         if isinstance(modalities, list) and modalities and "tool_use" not in modalities:
@@ -883,7 +915,11 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                 self.provider,
             )
             return None
-        return self.req.func_tool
+        if self.tool_schema_mode == "skills_like":
+            if self._light_tool_set is None:
+                self._light_tool_set = tool_set.get_light_tool_set()
+            return self._light_tool_set or None
+        return tool_set
 
     def _simple_print_message_role(self, tag: str, messages: list):
         roles = [m.role for m in messages]
@@ -898,46 +934,54 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         self,
         *,
         message_text: str,
+        temp_text: str | None = None,
     ) -> FollowUpTicket | None:
-        """Queue a follow-up message for the next tool result."""
+        """Queue user input after the next tool batch or plain assistant reply.
+
+        Args:
+            message_text: Additional user input to append without modification.
+            temp_text: Optional temporary reminder stored beside the input.
+
+        Returns:
+            A consumption ticket, or None if the input cannot be accepted.
+        """
         if self.done() or self._is_stop_requested():
             return None
-        text = (message_text or "").strip()
-        if not text:
+        text = message_text or ""
+        if not text.strip():
             return None
-        ticket = FollowUpTicket(seq=self._follow_up_seq, text=text)
+        ticket = FollowUpTicket(seq=self._follow_up_seq, text=text, temp_text=temp_text)
         self._follow_up_seq += 1
         self._pending_follow_ups.append(ticket)
+        self._steering_signal.set()
         return ticket
+
+    @staticmethod
+    def _follow_up_user_content(follow_ups: list[FollowUpTicket]) -> list[TextPart]:
+        """Assemble consumed follow-up text with optional temporary reminders.
+
+        Args:
+            follow_ups: Tickets consumed at this safe boundary.
+
+        Returns:
+            User content parts; reminders stay visible for the current run
+            but are excluded from restored long-term history.
+        """
+        content: list[TextPart] = []
+        for index, ticket in enumerate(follow_ups):
+            content.append(TextPart(text=("\n" if index else "") + ticket.text))
+            if ticket.temp_text:
+                content.append(TextPart(text=ticket.temp_text).mark_as_temp())
+        return content
 
     def _resolve_unconsumed_follow_ups(self) -> None:
         if not self._pending_follow_ups:
             return
         follow_ups = self._pending_follow_ups
         self._pending_follow_ups = []
+        self._steering_signal.clear()
         for ticket in follow_ups:
             ticket.resolved.set()
-
-    def _consume_follow_up_notice(self) -> str:
-        if not self._pending_follow_ups:
-            return ""
-        follow_ups = self._pending_follow_ups
-        self._pending_follow_ups = []
-        for ticket in follow_ups:
-            ticket.consumed = True
-            ticket.resolved.set()
-        follow_up_lines = "\n".join(
-            f"{idx}. {ticket.text}" for idx, ticket in enumerate(follow_ups, start=1)
-        )
-        return self.FOLLOW_UP_NOTICE_TEMPLATE.format(
-            follow_up_lines=follow_up_lines,
-        )
-
-    def _merge_follow_up_notice(self, content: str) -> str:
-        notice = self._consume_follow_up_notice()
-        if not notice:
-            return content
-        return f"{content}{notice}"
 
     def _track_tool_call_streak(
         self,
@@ -1002,22 +1046,50 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             for tool_name in llm_resp.tools_call_name
         ]
 
-    async def _append_context_messages(self, messages: list[Message]) -> None:
+    async def _flush_pending_response(self) -> None:
+        """Save an unconsumed model response without adding it to future context."""
+        event = self._pending_assistant_event
+        if event is None:
+            return
+        event.data["message"]["_no_save"] = True
+        try:
+            await self._conversation_event_sink(event)
+        except Exception as exc:
+            raise ConversationPersistenceError(
+                "Assistant response was not acknowledged"
+            ) from exc
+        self._pending_assistant_event = None
+
+    async def _append_context_messages(
+        self, messages: list[Message], *, record_response: bool = False
+    ) -> None:
         """Append framework messages and stage only their new event payloads.
 
         Args:
             messages: New messages owned by the runner, in execution order.
+            record_response: Attach the pending model outcome to its assistant message.
         """
+        if self._conversation_event_sink is not None and not self._context_initialized:
+            await self._conversation_event_sink(self._context_response())
+            self._context_initialized = True
         self.run_context.messages.extend(messages)
         if self._conversation_event_sink is not None:
-            response = AgentResponse(
-                "context.appended",
-                {"messages": dump_messages(messages, include_temporary=True)},
-            )
-            if self._events.active:
-                await self._events.emit(response)
-            else:
-                await self._conversation_event_sink(response)
+            data: dict[str, T.Any] = {
+                "messages": dump_messages(messages, include_temporary=True)
+            }
+            event = self._pending_assistant_event if record_response else None
+            if event is not None:
+                data["assistant"] = {
+                    "event_id": event.event_id,
+                    "metadata": {
+                        key: value
+                        for key, value in event.data.items()
+                        if key != "message"
+                    },
+                }
+            await self._conversation_event_sink(AgentResponse("context.appended", data))
+            if event is not None:
+                self._pending_assistant_event = None
 
     def _context_response(
         self, reason="legacy_replace", origin="unknown"
@@ -1283,6 +1355,26 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                     llm_resp.tools_call_args = requery_resp.tools_call_args
                     llm_resp.tools_call_ids = requery_resp.tools_call_ids
 
+            # Persist the assistant decision before any tool side effects.
+            parts = []
+            if llm_resp.reasoning_content is not None or llm_resp.reasoning_signature:
+                parts.append(
+                    ThinkPart(
+                        think=llm_resp.reasoning_content or "",
+                        encrypted=llm_resp.reasoning_signature,
+                    )
+                )
+            if llm_resp.completion_text:
+                parts.append(TextPart(text=llm_resp.completion_text))
+            if len(parts) == 0:
+                parts = None
+            tool_call_message = AssistantMessageSegment(
+                tool_calls=llm_resp.to_openai_tool_calls_model(), content=parts
+            )
+            await self._append_context_messages(
+                [tool_call_message], record_response=True
+            )
+
             tool_call_result_blocks = []
             cached_images = []  # Collect cached images for LLM visibility
             try:
@@ -1347,69 +1439,34 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                             TextPart(text=notice),
                         ]
 
-            # 将结果添加到上下文中
-            parts = []
-            if llm_resp.reasoning_content is not None or llm_resp.reasoning_signature:
-                parts.append(
-                    ThinkPart(
-                        think=llm_resp.reasoning_content or "",
-                        encrypted=llm_resp.reasoning_signature,
-                    )
-                )
-            if llm_resp.completion_text:
-                parts.append(TextPart(text=llm_resp.completion_text))
-            if len(parts) == 0:
-                parts = None
             tool_calls_result = ToolCallsResult(
-                tool_calls_info=AssistantMessageSegment(
-                    tool_calls=llm_resp.to_openai_tool_calls_model(),
-                    content=parts,
-                ),
+                tool_calls_info=tool_call_message,
                 tool_calls_result=tool_call_result_blocks,
             )
-            # record the assistant message with tool calls
-            await self._append_context_messages(
-                tool_calls_result.to_openai_messages_model()
-            )
+            await self._append_context_messages(tool_call_result_blocks)
 
-            # If there are cached images and the model supports image input,
-            # append a user message with images so LLM can see them
-            if cached_images:
-                modalities = self.provider.provider_config.get("modalities", [])
-                supports_image = (
-                    not modalities or "image" in modalities
-                )  # Empty list is treated as unconfigured for backward compatibility
-                if supports_image:
-                    # Build user message with images for LLM to review
-                    image_parts = []
-                    for cached_img in cached_images:
-                        img_data = tool_image_cache.get_image_base64_by_path(
-                            cached_img.file_path, cached_img.mime_type
-                        )
-                        if img_data:
-                            base64_data, mime_type = img_data
-                            image_parts.append(
-                                TextPart(
-                                    text=f"[Image from tool '{cached_img.tool_name}', path='{cached_img.file_path}']"
-                                )
-                            )
-                            image_parts.append(
-                                ImageURLPart(
-                                    image_url=ImageURLPart.ImageURL(
-                                        url=f"data:{mime_type};base64,{base64_data}",
-                                        id=cached_img.file_path,
-                                    )
-                                )
-                            )
-                    if image_parts:
-                        await self._append_context_messages(
-                            [Message(role="user", content=image_parts)]
-                        )
-                        logger.debug(
-                            f"Appended {len(cached_images)} cached image(s) to context for LLM review"
-                        )
+            await self.append_tool_result_images(cached_images)
 
             self.req.append_tool_calls_result(tool_calls_result)
+
+            if tool_call_result_blocks and self._pending_follow_ups:
+                # Keep all tool replies together before adding new user input.
+                follow_ups = list(self._pending_follow_ups)
+                await self._append_context_messages(
+                    [
+                        Message(
+                            role="user",
+                            content=self._follow_up_user_content(follow_ups),
+                        )
+                    ]
+                )
+                # Preserve inputs arriving while the context sink was awaited.
+                del self._pending_follow_ups[: len(follow_ups)]
+                if not self._pending_follow_ups:
+                    self._steering_signal.clear()
+                for ticket in follow_ups:
+                    ticket.consumed = True
+                    ticket.resolved.set()
 
     async def step_until_done(
         self, max_step: int
@@ -1445,14 +1502,140 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             # 拔掉所有工具
             if self.req:
                 self.req.func_tool = None
-            # 注入提示词
-            await self._append_context_messages(
-                [Message(role="user", content=self.MAX_STEPS_REACHED_PROMPT)]
-            )
+                self.run_context.tools = None
+            # Keep the generated instruction in the active user turn.
+            limit_message = Message(role="user", content=self.MAX_STEPS_REACHED_PROMPT)
+            limit_message._turn_continuation = True
+            await self._append_context_messages([limit_message])
             # 再执行最后一步
             async with aclosing(self.step()) as responses:
                 async for resp in responses:
                     yield resp
+
+    async def prepare_tool_result(
+        self, *, result: CallToolResult, tool_call_id: str, tool_name: str
+    ) -> tuple[str, list[CachedImage]]:
+        """Prepare foreground or background output using the same storage policy.
+
+        Args:
+            result: Complete tool output, retaining typed MCP content blocks.
+            tool_call_id: Unique execution ID used for generated artifact paths.
+            tool_name: Tool that produced the output.
+
+        Returns:
+            Inline text with overflow references, and images cached for model review.
+        """
+        if not result.content:
+            return "The tool returned no content.", []
+        cached_images = []
+        inline_result = ""
+        result_parts: list[str] = []
+        for index, content_item in enumerate(result.content):
+            if isinstance(content_item, TextContent):
+                result_parts.append(content_item.text)
+            elif isinstance(content_item, ImageContent):
+                # Cache the image instead of sending directly
+                cached_img = tool_image_cache.save_image(
+                    base64_data=content_item.data,
+                    tool_call_id=tool_call_id,
+                    tool_name=tool_name,
+                    index=index,
+                    mime_type=content_item.mimeType or "image/png",
+                )
+                result_parts.append(
+                    f"Image returned and cached at path='{cached_img.file_path}'. "
+                    f"Review the image below. Use send_message_to_user to send it to the user if satisfied, "
+                    f"with type='image' and path='{cached_img.file_path}'."
+                )
+                # Retain cached images for model review.
+                cached_images.append(cached_img)
+            elif isinstance(content_item, EmbeddedResource):
+                resource = content_item.resource
+                if isinstance(resource, TextResourceContents):
+                    result_parts.append(resource.text)
+                elif (
+                    isinstance(resource, BlobResourceContents)
+                    and resource.mimeType
+                    and resource.mimeType.startswith("image/")
+                ):
+                    # Cache the image instead of sending directly
+                    cached_img = tool_image_cache.save_image(
+                        base64_data=resource.blob,
+                        tool_call_id=tool_call_id,
+                        tool_name=tool_name,
+                        index=index,
+                        mime_type=resource.mimeType,
+                    )
+                    result_parts.append(
+                        f"Image returned and cached at path='{cached_img.file_path}'. "
+                        f"Review the image below. Use send_message_to_user to send it to the user if satisfied, "
+                        f"with type='image' and path='{cached_img.file_path}'."
+                    )
+                    # Retain cached images for model review.
+                    cached_images.append(cached_img)
+                else:
+                    result_parts.append(
+                        "The tool has returned a data type that is not supported."
+                    )
+        if result_parts:
+            inline_result = "\n\n".join(result_parts)
+            inline_result = await self._materialize_large_tool_result(
+                tool_call_id=tool_call_id,
+                content=inline_result,
+            )
+        return inline_result, cached_images
+
+    async def append_tool_result_images(
+        self,
+        cached_images: list[CachedImage],
+        *,
+        content: list[ContentPart] | None = None,
+    ) -> None:
+        """Append cached tool images when the current model supports vision.
+
+        Args:
+            cached_images: Images produced by the shared tool result preparation.
+            content: Prepared input to extend before persistence; otherwise append a message.
+        """
+        # If there are cached images and the model supports image input,
+        # append a user message with images so LLM can see them
+        if cached_images:
+            modalities = self.provider.provider_config.get("modalities", [])
+            supports_image = (
+                not modalities or "image" in modalities
+            )  # Empty list is treated as unconfigured for backward compatibility
+            if supports_image:
+                # Build user message with images for LLM to review
+                image_parts = []
+                for cached_img in cached_images:
+                    img_data = tool_image_cache.get_image_base64_by_path(
+                        cached_img.file_path, cached_img.mime_type
+                    )
+                    if img_data:
+                        base64_data, mime_type = img_data
+                        image_parts.append(
+                            TextPart(
+                                text=f"[Image from tool '{cached_img.tool_name}', path='{cached_img.file_path}']"
+                            )
+                        )
+                        image_parts.append(
+                            ImageURLPart(
+                                image_url=ImageURLPart.ImageURL(
+                                    url=f"data:{mime_type};base64,{base64_data}",
+                                    id=cached_img.file_path,
+                                )
+                            )
+                        )
+                if image_parts:
+                    if content is not None:
+                        content.extend(image_parts)
+                    else:
+                        image_message = Message(role="user", content=image_parts)
+                        image_message._turn_continuation = True
+                        await self._append_context_messages([image_message])
+                    logger.debug(
+                        f"Appended {len(cached_images)} cached image(s) to context for LLM review"
+                    )
 
     async def _handle_function_tools(
         self,
@@ -1468,7 +1651,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                 ToolCallMessageSegment(
                     role="tool",
                     tool_call_id=tool_call_id,
-                    content=self._merge_follow_up_notice(content),
+                    content=content,
                 ),
             )
 
@@ -1501,24 +1684,17 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                         )
                     return
 
-                if (
-                    self.tool_schema_mode == "skills_like"
-                    and self._skill_like_raw_tool_set
-                ):
-                    # in 'skills_like' mode, raw.func_tool is light schema, does not have handler
-                    # so we need to get the tool from the raw tool set
-                    func_tool = self._skill_like_raw_tool_set.get_tool(func_tool_name)
-                    available_tools = self._skill_like_raw_tool_set.names()
-                else:
-                    func_tool = req.func_tool.get_tool(func_tool_name)
-                    available_tools = req.func_tool.names()
+                func_tool = req.func_tool.get_tool(func_tool_name)
 
                 #  Some API may return None for tools with no parameters
                 if func_tool_args is None:
                     func_tool_args = {}
                 logger.info(f"使用工具：{func_tool_name}，参数：{func_tool_args}")
 
-                if not func_tool:
+                if not func_tool or not func_tool.active:
+                    available_tools = [
+                        tool.name for tool in req.func_tool if tool.active
+                    ]
                     logger.warning(f"未找到指定的工具: {func_tool_name}，将跳过。")
                     if self._events.active:
                         await self._events.emit(
@@ -1589,71 +1765,16 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                     if isinstance(resp, CallToolResult):
                         res = resp
                         _final_resp = resp
-                        if not res.content:
-                            _append_tool_call_result(
-                                func_tool_id,
-                                "The tool returned no content.",
+                        inline_result, cached_images = await self.prepare_tool_result(
+                            result=res,
+                            tool_call_id=func_tool_id,
+                            tool_name=func_tool_name,
+                        )
+                        for cached_image in cached_images:
+                            yield _HandleFunctionToolsResult.from_cached_image(
+                                cached_image
                             )
-                            continue
-
-                        result_parts: list[str] = []
-                        for index, content_item in enumerate(res.content):
-                            if isinstance(content_item, TextContent):
-                                result_parts.append(content_item.text)
-                            elif isinstance(content_item, ImageContent):
-                                # Cache the image instead of sending directly
-                                cached_img = tool_image_cache.save_image(
-                                    base64_data=content_item.data,
-                                    tool_call_id=func_tool_id,
-                                    tool_name=func_tool_name,
-                                    index=index,
-                                    mime_type=content_item.mimeType or "image/png",
-                                )
-                                result_parts.append(
-                                    f"Image returned and cached at path='{cached_img.file_path}'. "
-                                    f"Review the image below. Use send_message_to_user to send it to the user if satisfied, "
-                                    f"with type='image' and path='{cached_img.file_path}'."
-                                )
-                                # Yield image info for LLM visibility (will be handled in step())
-                                yield _HandleFunctionToolsResult.from_cached_image(
-                                    cached_img
-                                )
-                            elif isinstance(content_item, EmbeddedResource):
-                                resource = content_item.resource
-                                if isinstance(resource, TextResourceContents):
-                                    result_parts.append(resource.text)
-                                elif (
-                                    isinstance(resource, BlobResourceContents)
-                                    and resource.mimeType
-                                    and resource.mimeType.startswith("image/")
-                                ):
-                                    # Cache the image instead of sending directly
-                                    cached_img = tool_image_cache.save_image(
-                                        base64_data=resource.blob,
-                                        tool_call_id=func_tool_id,
-                                        tool_name=func_tool_name,
-                                        index=index,
-                                        mime_type=resource.mimeType,
-                                    )
-                                    result_parts.append(
-                                        f"Image returned and cached at path='{cached_img.file_path}'. "
-                                        f"Review the image below. Use send_message_to_user to send it to the user if satisfied, "
-                                        f"with type='image' and path='{cached_img.file_path}'."
-                                    )
-                                    # Yield image info for LLM visibility
-                                    yield _HandleFunctionToolsResult.from_cached_image(
-                                        cached_img
-                                    )
-                                else:
-                                    result_parts.append(
-                                        "The tool has returned a data type that is not supported."
-                                    )
-                        if result_parts:
-                            inline_result = "\n\n".join(result_parts)
-                            inline_result = await self._materialize_large_tool_result(
-                                tool_call_id=func_tool_id,
-                                content=inline_result,
-                            )
+                        if inline_result:
                             _append_tool_call_result(
                                 func_tool_id,
                                 inline_result
@@ -1784,7 +1905,9 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         if not subset.tools:
             return llm_resp, full_tool_set
 
-        if isinstance(self._tool_schema_param_set, ToolSet):
+        if self._tool_schema_param_set is None:
+            self._tool_schema_param_set = full_tool_set.get_param_only_tool_set()
+        if self._tool_schema_param_set:
             param_subset = self._build_tool_subset(
                 self._tool_schema_param_set, tool_names
             )
@@ -1863,6 +1986,27 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
     async def _finalize_aborted_step(self) -> None:
         logger.info("Agent execution was requested to stop by user.")
 
+        pending_calls = {}
+        for message in self.run_context.messages:
+            if message.role == "assistant":
+                pending_calls.update(
+                    (call["id"] if isinstance(call, dict) else call.id, call)
+                    for call in (message.tool_calls or [])
+                )
+            elif message.role == "tool":
+                pending_calls.pop(message.tool_call_id, None)
+        if pending_calls:
+            await self._append_context_messages(
+                [
+                    ToolCallMessageSegment(
+                        role="tool",
+                        tool_call_id=call_id,
+                        content="Execution was interrupted; the result is unavailable. Do not assume the operation did not take effect.",
+                    )
+                    for call_id in pending_calls
+                ]
+            )
+
         await self._append_context_messages(
             [
                 Message(
@@ -1899,7 +2043,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
     async def _recorded_tool_results(
         self, tool: FunctionTool[TContext], call_id: str, arguments: JsonObject
     ) -> T.AsyncGenerator[T.Any | CallToolResult, None]:
-        """Record the actual executor boundary after validation and plugin hooks.
+        """Publish runtime tool events after validation and plugin hooks.
 
         Args:
             tool: Resolved function tool.
@@ -1917,20 +2061,6 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         error: RuntimeErrorInfo | None = None
         structured = None
         exit_code = None
-        raw_result = None
-        record = self._events.active and self._conversation_event_sink is not None
-        if record:
-            await self._events.emit(
-                AgentResponse(
-                    "tool.started",
-                    {
-                        "tool_call_id": call_id,
-                        "tool_name": tool.name,
-                        "arguments": arguments,
-                    },
-                    execution_id,
-                )
-            )
         if self._events.active:
             if completed := self._finish_message():
                 await self._events.emit(completed)
@@ -1945,13 +2075,23 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         self._tool_execution_started = True
         executor = None
         try:
-            executor = self.tool_executor.execute(
-                tool=tool, run_context=self.run_context, **arguments
+            detach = getattr(self.tool_executor, "detach", None)
+            executor = self._iter_tool_executor_results(
+                self.tool_executor.execute(
+                    tool=tool, run_context=self.run_context, **arguments
+                ),
+                detach=partial(
+                    detach,
+                    tool=tool,
+                    run_context=self.run_context,
+                    task_id=execution_id,
+                    arguments=arguments,
+                )
+                if detach is not None
+                else None,
             )
-            async for item in self._iter_tool_executor_results(executor):
+            async for item in executor:
                 if isinstance(item, CallToolResult):
-                    if record:
-                        raw_result = item.model_dump(mode="json", exclude_none=True)
                     progress = []
                     for block in item.content:
                         if isinstance(block, TextContent):
@@ -2004,13 +2144,6 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             if executor is not None:
                 await self._close_executor(executor)
             if self._events.active:
-                if record:
-                    payload = {"execution_id": execution_id, "status": status.value}
-                    if raw_result is not None:
-                        payload["result"] = raw_result
-                    if error is not None:
-                        payload["error"] = {"code": error.code}
-                    await self._events.emit(AgentResponse("tool.finished", payload))
                 await self._events.emit(
                     ToolFinished(
                         execution_id=execution_id,
@@ -2026,8 +2159,20 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
     async def _iter_tool_executor_results(
         self,
         executor: T.AsyncGenerator[ToolExecutorResultT, None],
-    ) -> T.AsyncGenerator[ToolExecutorResultT, None]:
+        *,
+        detach: Callable[..., CallToolResult | None] | None = None,
+    ) -> T.AsyncGenerator[ToolExecutorResultT | CallToolResult, None]:
+        """Read tools until completion, stop, or accepted background ownership.
+
+        Args:
+            executor: Tool iterator whose original task must survive a handoff.
+            detach: Optional executor callback accepting ownership of a pending read.
+
+        Yields:
+            Tool results, or a submission receipt when execution moves to the background.
+        """
         executor = iterate_in_task(executor)
+        detached = False
 
         async def _next_executor_result() -> ToolExecutorResultT:
             return await anext(executor)
@@ -2041,11 +2186,39 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
 
                 next_result_task = asyncio.create_task(_next_executor_result())
                 abort_task = asyncio.create_task(self._abort_signal.wait())
+                steering_task = (
+                    asyncio.create_task(self._steering_signal.wait())
+                    if detach
+                    else None
+                )
                 try:
+                    waiters = {next_result_task, abort_task}
+                    if steering_task is not None:
+                        waiters.add(steering_task)
                     done, _ = await asyncio.wait(
-                        {next_result_task, abort_task},
+                        waiters,
                         return_when=asyncio.FIRST_COMPLETED,
                     )
+
+                    if (
+                        steering_task in done
+                        and not next_result_task.done()
+                        and abort_task not in done
+                        and detach is not None
+                    ):
+                        receipt = detach(
+                            executor=executor, pending_result=next_result_task
+                        )
+                        if receipt is not None:
+                            detached = True
+                            yield receipt
+                            return
+                        # Unsupported executors keep waiting without spinning on steering.
+                        detach = None
+                        done, _ = await asyncio.wait(
+                            {next_result_task, abort_task},
+                            return_when=asyncio.FIRST_COMPLETED,
+                        )
 
                     if abort_task in done:
                         if not next_result_task.done():
@@ -2060,16 +2233,19 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                         yield next_result_task.result()
                     except StopAsyncIteration:
                         return
-                except asyncio.CancelledError:
-                    if not next_result_task.done():
-                        next_result_task.cancel()
-                    # The reader must finish before its async generator can be closed.
-                    await asyncio.gather(next_result_task, return_exceptions=True)
+                except BaseException:
+                    if not detached:
+                        if not next_result_task.done():
+                            next_result_task.cancel()
+                        # Finish the read before closing its async generator.
+                        await asyncio.gather(next_result_task, return_exceptions=True)
                     raise
                 finally:
-                    if not abort_task.done():
-                        abort_task.cancel()
-                        with suppress(asyncio.CancelledError):
-                            await abort_task
+                    for task in (abort_task, steering_task):
+                        if task is not None:
+                            if not task.done():
+                                task.cancel()
+                            await asyncio.gather(task, return_exceptions=True)
         finally:
-            await executor.aclose()
+            if not detached:
+                await executor.aclose()

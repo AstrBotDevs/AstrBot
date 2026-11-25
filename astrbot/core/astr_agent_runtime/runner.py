@@ -280,7 +280,11 @@ async def run_agent(
                             await astr_event.send(msg_chain)
                         elif show_tool_use and show_tool_call_result:
                             status_msg = _build_tool_result_status_message(
-                                msg_chain, tool_name_by_call_id
+                                msg_chain,
+                                tool_name_by_call_id,
+                                await agent_runner.run_context.context.context.get_locale(
+                                    astr_event.unified_msg_origin
+                                ),
                             )
                             await astr_event.send(
                                 MessageChain(type="tool_call").message(status_msg)
@@ -311,7 +315,12 @@ async def run_agent(
                                 # Delay tool status notification until tool_call_result.
                                 continue
                             chain = MessageChain(type="tool_call").message(
-                                _build_tool_call_status_message(tool_info)
+                                _build_tool_call_status_message(
+                                    tool_info,
+                                    await agent_runner.run_context.context.context.get_locale(
+                                        astr_event.unified_msg_origin
+                                    ),
+                                )
                             )
                             await astr_event.send(chain)
                         continue

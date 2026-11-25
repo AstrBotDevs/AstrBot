@@ -12,7 +12,6 @@ from pydantic.dataclasses import dataclass as pydantic_dataclass
 from astrbot.core import logger, sp
 from astrbot.core.agent.tool import FunctionTool, ToolExecResult
 from astrbot.core.astr_agent_runtime.context import AstrAgentContext
-from astrbot.core.astr_agent_runtime.tools.registry import builtin_tool
 
 WEB_SEARCH_TOOL_NAMES = [
     "web_search_baidu",
@@ -33,42 +32,6 @@ WEB_SEARCH_TOOL_NAMES = [
     "web_search_deepseek",
     "deepseek_fetch_web_page",
 ]
-_TAVILY_WEB_SEARCH_TOOL_CONFIG = {
-    "provider_settings.web_search": True,
-    "provider_settings.websearch_provider": "tavily",
-}
-_BOCHA_WEB_SEARCH_TOOL_CONFIG = {
-    "provider_settings.web_search": True,
-    "provider_settings.websearch_provider": "bocha",
-}
-_BRAVE_WEB_SEARCH_TOOL_CONFIG = {
-    "provider_settings.web_search": True,
-    "provider_settings.websearch_provider": "brave",
-}
-_FIRECRAWL_WEB_SEARCH_TOOL_CONFIG = {
-    "provider_settings.web_search": True,
-    "provider_settings.websearch_provider": "firecrawl",
-}
-_BAIDU_WEB_SEARCH_TOOL_CONFIG = {
-    "provider_settings.web_search": True,
-    "provider_settings.websearch_provider": "baidu_ai_search",
-}
-_EXA_WEB_SEARCH_TOOL_CONFIG = {
-    "provider_settings.web_search": True,
-    "provider_settings.websearch_provider": "exa",
-}
-_ANYSEARCH_WEB_SEARCH_TOOL_CONFIG = {
-    "provider_settings.web_search": True,
-    "provider_settings.websearch_provider": "anysearch",
-}
-_DEEPSEEK_WEB_SEARCH_TOOL_CONFIG = {
-    "provider_settings.web_search": True,
-    "provider_settings.websearch_provider": "deepseek",
-}
-_SERPAPI_WEB_SEARCH_TOOL_CONFIG = {
-    "provider_settings.web_search": True,
-    "provider_settings.websearch_provider": "serpapi",
-}
 
 
 @std_dataclass
@@ -569,7 +532,6 @@ async def _serpapi_search(
     ]
 
 
-@builtin_tool(config=_SERPAPI_WEB_SEARCH_TOOL_CONFIG)
 @pydantic_dataclass
 class SerpApiWebSearchTool(FunctionTool[AstrAgentContext]):
     name: str = "web_search_serpapi"
@@ -633,7 +595,6 @@ class SerpApiWebSearchTool(FunctionTool[AstrAgentContext]):
         return _search_result_payload(results[:max_results])
 
 
-@builtin_tool(config=_SERPAPI_WEB_SEARCH_TOOL_CONFIG)
 @pydantic_dataclass
 class SerpApiNewsSearchTool(FunctionTool[AstrAgentContext]):
     name: str = "news_search_serpapi"
@@ -735,7 +696,6 @@ class SerpApiNewsSearchTool(FunctionTool[AstrAgentContext]):
         return json.dumps({"results": results}, ensure_ascii=False)
 
 
-@builtin_tool(config=_SERPAPI_WEB_SEARCH_TOOL_CONFIG)
 @pydantic_dataclass
 class SerpApiImageSearchTool(FunctionTool[AstrAgentContext]):
     name: str = "image_search_serpapi"
@@ -828,7 +788,6 @@ class SerpApiImageSearchTool(FunctionTool[AstrAgentContext]):
         return json.dumps({"results": results}, ensure_ascii=False)
 
 
-@builtin_tool(config=_SERPAPI_WEB_SEARCH_TOOL_CONFIG)
 @pydantic_dataclass
 class SerpApiFinanceSearchTool(FunctionTool[AstrAgentContext]):
     name: str = "finance_search_serpapi"
@@ -920,7 +879,6 @@ class SerpApiFinanceSearchTool(FunctionTool[AstrAgentContext]):
         return json.dumps(result, ensure_ascii=False)
 
 
-@builtin_tool(config=_SERPAPI_WEB_SEARCH_TOOL_CONFIG)
 @pydantic_dataclass
 class SerpApiScholarSearchTool(FunctionTool[AstrAgentContext]):
     name: str = "scholar_search_serpapi"
@@ -1188,7 +1146,6 @@ async def _baidu_search(
             ]
 
 
-@builtin_tool(config=_TAVILY_WEB_SEARCH_TOOL_CONFIG)
 @pydantic_dataclass
 class TavilyWebSearchTool(FunctionTool[AstrAgentContext]):
     name: str = "web_search_tavily"
@@ -1275,7 +1232,6 @@ class TavilyWebSearchTool(FunctionTool[AstrAgentContext]):
         return _search_result_payload(results)
 
 
-@builtin_tool(config=_TAVILY_WEB_SEARCH_TOOL_CONFIG)
 @pydantic_dataclass
 class TavilyExtractWebPageTool(FunctionTool[AstrAgentContext]):
     name: str = "tavily_extract_web_page"
@@ -1322,7 +1278,6 @@ class TavilyExtractWebPageTool(FunctionTool[AstrAgentContext]):
         return ret or "Error: Tavily web searcher does not return any results."
 
 
-@builtin_tool(config=_BOCHA_WEB_SEARCH_TOOL_CONFIG)
 @pydantic_dataclass
 class BochaWebSearchTool(FunctionTool[AstrAgentContext]):
     name: str = "web_search_bocha"
@@ -1386,7 +1341,6 @@ class BochaWebSearchTool(FunctionTool[AstrAgentContext]):
         return _search_result_payload(results)
 
 
-@builtin_tool(config=_BRAVE_WEB_SEARCH_TOOL_CONFIG)
 @pydantic_dataclass
 class BraveWebSearchTool(FunctionTool[AstrAgentContext]):
     name: str = "web_search_brave"
@@ -1444,7 +1398,6 @@ class BraveWebSearchTool(FunctionTool[AstrAgentContext]):
         return _search_result_payload(results)
 
 
-@builtin_tool(config=_FIRECRAWL_WEB_SEARCH_TOOL_CONFIG)
 @pydantic_dataclass
 class FirecrawlWebSearchTool(FunctionTool[AstrAgentContext]):
     name: str = "web_search_firecrawl"
@@ -1498,7 +1451,6 @@ class FirecrawlWebSearchTool(FunctionTool[AstrAgentContext]):
         return _search_result_payload(results)
 
 
-@builtin_tool(config=_FIRECRAWL_WEB_SEARCH_TOOL_CONFIG)
 @pydantic_dataclass
 class FirecrawlExtractWebPageTool(FunctionTool[AstrAgentContext]):
     name: str = "firecrawl_extract_web_page"
@@ -1562,7 +1514,6 @@ class FirecrawlExtractWebPageTool(FunctionTool[AstrAgentContext]):
         return ret or "Error: Firecrawl web scraper does not return any results."
 
 
-@builtin_tool(config=_BAIDU_WEB_SEARCH_TOOL_CONFIG)
 @pydantic_dataclass
 class BaiduWebSearchTool(FunctionTool[AstrAgentContext]):
     name: str = "web_search_baidu"
@@ -1739,7 +1690,6 @@ async def _exa_get_contents(
     raise Exception("Exa get contents failed with all configured keys.")
 
 
-@builtin_tool(config=_EXA_WEB_SEARCH_TOOL_CONFIG)
 @pydantic_dataclass
 class ExaWebSearchTool(FunctionTool[AstrAgentContext]):
     """Web search tool powered by the Exa Search API."""
@@ -1844,7 +1794,6 @@ class ExaWebSearchTool(FunctionTool[AstrAgentContext]):
         return _search_result_payload(results)
 
 
-@builtin_tool(config=_EXA_WEB_SEARCH_TOOL_CONFIG)
 @pydantic_dataclass
 class ExaGetContentsTool(FunctionTool[AstrAgentContext]):
     """Extract full page content from URLs using the Exa Contents API."""
@@ -1990,7 +1939,6 @@ async def _anysearch_search(
     raise Exception("AnySearch web search failed with all configured keys.")
 
 
-@builtin_tool(config=_ANYSEARCH_WEB_SEARCH_TOOL_CONFIG)
 @pydantic_dataclass
 class AnySearchWebSearchTool(FunctionTool[AstrAgentContext]):
     """Web search tool powered by the AnySearch API."""
@@ -2090,7 +2038,6 @@ class AnySearchWebSearchTool(FunctionTool[AstrAgentContext]):
         return _search_result_payload(results)
 
 
-@builtin_tool(config=_DEEPSEEK_WEB_SEARCH_TOOL_CONFIG)
 @pydantic_dataclass
 class DeepSeekWebSearchTool(FunctionTool[AstrAgentContext]):
     name: str = "web_search_deepseek"
@@ -2231,7 +2178,6 @@ class DeepSeekWebSearchTool(FunctionTool[AstrAgentContext]):
         return _search_result_payload(results)
 
 
-@builtin_tool(config=_DEEPSEEK_WEB_SEARCH_TOOL_CONFIG)
 @pydantic_dataclass
 class DeepSeekFetchWebPageTool(FunctionTool[AstrAgentContext]):
     name: str = "deepseek_fetch_web_page"
