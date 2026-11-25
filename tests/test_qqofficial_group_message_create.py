@@ -1112,6 +1112,128 @@ async def test_webhook_send_by_session_use_markdown_config_false_sends_content()
     assert "msg_type" not in kwargs
 
 
+@pytest.mark.asyncio
+async def test_markdown_rejected_keeps_msg_id_and_degrades_to_content():
+    # Regression test for #10420: a markdown rejection (50056) must degrade to
+    # a plain-content passive reply with msg_id intact, not drop msg_id and
+    # become a proactive message (which hits the proactive quota, e.g. 304049).
+    calls = []
+
+    async def fake_send(payload):
+        calls.append(dict(payload))
+        if len(calls) == 1:
+            raise botpy.errors.ServerError("不允许发送原生 markdown")
+        return {"id": "sent-content"}
+
+    payload = {
+        "markdown": {"content": "**bold** text"},
+        "msg_type": 2,
+        "msg_id": "passive-1",
+    }
+    ret = await QQOfficialMessageEvent._send_with_markdown_fallback(
+        fake_send, payload, "**bold** text"
+    )
+
+    assert ret == {"id": "sent-content"}
+    assert len(calls) == 2
+    assert calls[1]["msg_id"] == "passive-1"
+    assert "markdown" not in calls[1]
+    assert calls[1]["content"] == "**bold** text"
+    assert calls[1]["msg_type"] == 0
+
+
+@pytest.mark.asyncio
+async def test_non_markdown_error_still_falls_back_to_active_send():
+    # Errors unrelated to the payload content (stale msg_id and the like)
+    # keep the old behavior: retry once without msg_id as a proactive message.
+    calls = []
+
+    async def fake_send(payload):
+        calls.append(dict(payload))
+        if len(calls) == 1:
+            raise botpy.errors.NotFoundError("msg_id expired")
+        return {"id": "sent-active"}
+
+    payload = {
+        "markdown": {"content": "**bold** text"},
+        "msg_type": 2,
+        "msg_id": "passive-1",
+    }
+    ret = await QQOfficialMessageEvent._send_with_markdown_fallback(
+        fake_send, payload, "**bold** text"
+    )
+
+    assert ret == {"id": "sent-active"}
+    assert len(calls) == 2
+    assert "msg_id" not in calls[1]
+
+
+@pytest.mark.asyncio
+async def test_stream_newline_retry_keeps_msg_id():
+    # The stream markdown newline fix is a content correction, not an id
+    # problem, so the retry must stay a passive reply with msg_id.
+    calls = []
+
+    async def fake_send(payload):
+        calls.append(dict(payload))
+        if len(calls) == 1:
+            raise botpy.errors.ServerError("流式消息md分片需要\\n结束")
+        return {"id": "sent-newline"}
+
+    payload = {
+        "markdown": {"content": "partial chunk"},
+        "msg_type": 2,
+        "msg_id": "passive-1",
+    }
+    ret = await QQOfficialMessageEvent._send_with_markdown_fallback(
+        fake_send, payload, "partial chunk", stream={"msg_seq": 1}
+    )
+
+    assert ret == {"id": "sent-newline"}
+    assert len(calls) == 2
+    assert calls[1]["msg_id"] == "passive-1"
+    assert calls[1]["markdown"]["content"] == "partial chunk\n"
+
+
+@pytest.mark.asyncio
+async def test_markdown_fallback_active_retry_markdown_rejected_downgrades_to_plain_content():
+    # The passive send can fail for a non-markdown reason (expired msg_id) and
+    # the active retry then hit the markdown rejection. The downgrade must
+    # cover the active path too, otherwise the message is lost entirely.
+    calls = []
+
+    async def send_func(payload):
+        calls.append(dict(payload))
+        if len(calls) == 1:
+            raise botpy.errors.ServerError("msg_id expired")
+        if len(calls) == 2:
+            raise botpy.errors.ServerError(
+                f"50056 {QQOfficialMessageEvent.MARKDOWN_NOT_ALLOWED_ERROR}"
+            )
+        return {"id": "sent-ok"}
+
+    payload = {
+        "msg_id": "expired-msg",
+        "msg_type": 2,
+        "markdown": {"content": "**md**"},
+        "message_reference": {"message_id": "quoted-1"},
+    }
+
+    ret = await QQOfficialMessageEvent._send_with_markdown_fallback(
+        send_func, payload, "plain fallback"
+    )
+
+    assert ret == {"id": "sent-ok"}
+    assert len(calls) == 3
+    assert calls[0]["msg_id"] == "expired-msg"
+    assert "msg_id" not in calls[1]
+    assert calls[1]["markdown"] == {"content": "**md**"}
+    assert "markdown" not in calls[2]
+    assert calls[2]["content"] == "plain fallback"
+    assert calls[2]["msg_type"] == 0
+    assert calls[2]["message_reference"] == {"message_id": "quoted-1"}
+
+
 @pytest.mark.parametrize("platform", ["qq_official", "qq_official_webhook"])
 @pytest.mark.asyncio
 async def test_group_message_without_tag_keeps_plain_text(platform):
@@ -1126,7 +1248,11 @@ async def test_group_message_without_tag_keeps_plain_text(platform):
     assert isinstance(abm.message[0], Plain)
     assert abm.message[0].text == "plain group text"
     event = QQOfficialMessageEvent(
-        abm.message_str, abm, SimpleNamespace(name=platform, id=platform), "group-1", None
+        abm.message_str,
+        abm,
+        SimpleNamespace(name=platform, id=platform),
+        "group-1",
+        None,
     )
     assert follow_up_text(event) == ("plain group text", None)
 
@@ -1149,6 +1275,10 @@ async def test_guild_channel_does_not_generate_placeholder_mention():
     )
     assert abm.message == [Plain("channel text")]
     event = QQOfficialMessageEvent(
-        abm.message_str, abm, SimpleNamespace(name="qq_official", id="qq"), "channel-1", None
+        abm.message_str,
+        abm,
+        SimpleNamespace(name="qq_official", id="qq"),
+        "channel-1",
+        None,
     )
     assert follow_up_text(event) == ("channel text", None)
