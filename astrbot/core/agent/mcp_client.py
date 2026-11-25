@@ -1,15 +1,19 @@
 import asyncio
 import copy
+import inspect
 import logging
 import os
 import re
 import sys
 from contextlib import AsyncExitStack
 from datetime import timedelta
+from functools import partial
+from importlib.metadata import version
 from pathlib import Path, PureWindowsPath
 from typing import Any, Generic
 
 import httpx
+from packaging.version import Version
 from tenacity import (
     before_sleep_log,
     retry,
@@ -20,6 +24,7 @@ from tenacity import (
 
 from astrbot import logger
 from astrbot.core.agent.run_context import ContextWrapper
+from astrbot.core.utils.http_ssl import get_httpx_default_verify
 from astrbot.core.utils.log_pipe import LogPipe
 
 from .run_context import TContext
@@ -544,6 +549,24 @@ class MCPClient:
             else:
                 raise Exception("MCP connection config missing transport or type field")
 
+            sdk_transport = (
+                streamable_http_client_legacy
+                if transport_type == "streamable_http"
+                else sse_client
+            )
+            client_options: dict[str, Any] = {}
+            if (
+                sdk_transport
+                and "httpx_client_factory"
+                in inspect.signature(sdk_transport).parameters
+            ):
+                # MCP 1.30 handles same-origin redirects in the transport.
+                client_options["httpx_client_factory"] = partial(
+                    httpx.AsyncClient,
+                    verify=get_httpx_default_verify(),
+                    follow_redirects=Version(version("mcp")) < Version("1.30.0"),
+                )
+
             if transport_type != "streamable_http":
                 # SSE transport method
                 self._streams_context = sse_client(
@@ -551,6 +574,7 @@ class MCPClient:
                     headers=cfg.get("headers", {}),
                     timeout=cfg.get("timeout", 5),
                     sse_read_timeout=cfg.get("sse_read_timeout", 60 * 5),
+                    **client_options,
                 )
                 streams = await self.exit_stack.enter_async_context(
                     self._streams_context,
@@ -577,10 +601,12 @@ class MCPClient:
                         timeout=timeout,
                         sse_read_timeout=sse_read_timeout,
                         terminate_on_close=cfg.get("terminate_on_close", True),
+                        **client_options,
                     )
                 elif streamable_http_client:
                     http_client = await self.exit_stack.enter_async_context(
                         httpx.AsyncClient(
+                            verify=get_httpx_default_verify(),
                             headers=cfg.get("headers", {}),
                             timeout=httpx.Timeout(
                                 timeout_seconds,

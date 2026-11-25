@@ -4,7 +4,6 @@ import asyncio
 import hashlib
 import json
 import os
-import ssl
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -12,7 +11,6 @@ from pathlib import Path
 from typing import Any
 
 import aiohttp
-import certifi
 
 from astrbot.api import sp
 from astrbot.core import DEMO_MODE, file_token_service, logger
@@ -36,6 +34,7 @@ from astrbot.core.star.star_manager import (
     PluginVersionUnsupportedError,
 )
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path, get_astrbot_temp_path
+from astrbot.core.utils.http_ssl import build_tls_connector
 
 PLUGIN_UPDATE_CONCURRENCY = 3
 PLUGIN_OPERATION_FAILED_MESSAGE = "插件操作失败，请查看服务端日志。"
@@ -1003,15 +1002,12 @@ class PluginService:
                 return cached_data, None
 
         remote_data = None
-        ssl_context = ssl.create_default_context(cafile=certifi.where())
-        connector = aiohttp.TCPConnector(ssl=ssl_context)
-
         for url in source.urls:
             try:
                 async with (
                     aiohttp.ClientSession(
                         trust_env=True,
-                        connector=connector,
+                        connector=build_tls_connector(certifi_only=True),
                     ) as session,
                     session.get(url) as response,
                 ):
@@ -1034,7 +1030,10 @@ class PluginService:
                             "Fetched remote plugin marketplace data successfully; "
                             f"received {len(remote_data)} plugins."
                         )
-                        current_md5 = await self.fetch_remote_md5(source.md5_url)
+                        # The configured checksum describes the primary registry.
+                        current_md5 = None
+                        if url == source.urls[0]:
+                            current_md5 = await self.fetch_remote_md5(source.md5_url)
                         self.save_plugin_cache(
                             source.cache_file,
                             remote_data,
@@ -1109,13 +1108,10 @@ class PluginService:
             return None
 
         try:
-            ssl_context = ssl.create_default_context(cafile=certifi.where())
-            connector = aiohttp.TCPConnector(ssl=ssl_context)
-
             async with (
                 aiohttp.ClientSession(
                     trust_env=True,
-                    connector=connector,
+                    connector=build_tls_connector(certifi_only=True),
                 ) as session,
                 session.get(md5_url) as response,
             ):
