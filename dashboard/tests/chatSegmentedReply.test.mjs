@@ -19,6 +19,7 @@ const names = new Set([
   "processStreamPayload",
   "processPayload",
   "handleButtonClick",
+  "appendError",
   "appendPlain",
   "appendReasoningPart",
   "markMessageStarted",
@@ -92,12 +93,18 @@ for (const outcome of ["segmented", "empty", "error"]) {
     if (outcome !== "empty") {
       assert.deepEqual(records.map((record) => record.id), [1, 2]);
       assert.equal(records[0].content.message[0].text, "First.");
-      const lastText = records[1].content.message
-        .map((part) => part.text || "")
-        .join("");
-      assert.equal(
-        lastText,
-        outcome === "error" ? "Second.\n\nConnection lost" : "Second.",
+      assert.deepEqual(
+        JSON.parse(JSON.stringify(records[1].content.message)),
+        outcome === "error"
+          ? [
+              { type: "plain", text: "Second." },
+              {
+                type: "error",
+                code: "connection_error",
+                message: "Connection lost",
+              },
+            ]
+          : [{ type: "plain", text: "Second." }],
       );
     }
   });

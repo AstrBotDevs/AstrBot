@@ -1182,6 +1182,15 @@ class ChatService:
                                 "type": part["type"],
                             },
                         }
+                elif msg_type == "error":
+                    error = (
+                        result_text
+                        if isinstance(result_text, dict)
+                        else {"code": "agent_error", "message": str(result_text)}
+                    )
+                    part = {**error, "type": "error"}
+                    for accumulator in (pending_accumulator, display_accumulator):
+                        accumulator.add_part(part)
                 elif msg_type in {"actionrow", "view"} and isinstance(
                     result_text, dict
                 ):
@@ -1243,10 +1252,13 @@ class ChatService:
         except Exception as exc:
             run.status = "failed"
             logger.exception(f"WebChat run unexpected error: {exc}", exc_info=True)
-            self._publish_chat_run(
-                run,
-                {"type": "error", "data": "WebChat run failed"},
+            error = {"code": "agent_error", "message": "WebChat run failed"}
+            for accumulator in (pending_accumulator, display_accumulator):
+                accumulator.add_part({**error, "type": "error"})
+            run.message_parts = deepcopy(display_accumulator).build_message_parts(
+                include_pending_tool_calls=True
             )
+            self._publish_chat_run(run, {"type": "error", "data": error})
         finally:
             try:
                 saved_record = await asyncio.shield(flush_pending_bot_message())

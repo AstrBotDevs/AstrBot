@@ -17,9 +17,6 @@
         >
           <span class="provider-trigger-copy">
             <span class="provider-trigger-title">{{ triggerTitle }}</span>
-            <span v-if="triggerMeta" class="provider-trigger-meta">
-              {{ triggerMeta }}
-            </span>
           </span>
           <v-icon class="provider-trigger-chevron" size="18">
             mdi-chevron-down
@@ -585,13 +582,6 @@ const triggerTitle = computed(() => {
   return sharedTm("providerSelector.notSelected");
 });
 
-const triggerMeta = computed(() => {
-  if (props.variant !== "header") return "";
-  const model = selectedProvider.value?.model || props.fallbackModel;
-  if (!model || model === triggerTitle.value) return "";
-  return model;
-});
-
 const menuLocation = computed(() => {
   if (props.variant === "input") return "top";
   return props.variant === "header" ? "bottom start" : "bottom end";
@@ -950,8 +940,7 @@ defineExpose({ getCurrentSelection });
   gap: 10px;
 }
 
-.provider-trigger-title,
-.provider-trigger-meta {
+.provider-trigger-title {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -987,13 +976,6 @@ defineExpose({ getCurrentSelection });
   line-height: 24px;
 }
 
-.provider-trigger--header .provider-trigger-meta {
-  color: rgba(var(--v-theme-on-surface), 0.55);
-  font-size: 13px;
-  font-weight: 500;
-  line-height: 18px;
-}
-
 .provider-trigger--input {
   height: 40px;
   max-width: min(280px, 42vw);
@@ -1010,10 +992,6 @@ defineExpose({ getCurrentSelection });
 .provider-trigger--input .provider-trigger-title {
   font-size: 14px;
   font-weight: 500;
-}
-
-.provider-trigger--input .provider-trigger-meta {
-  display: none;
 }
 
 .provider-trigger-chevron {
@@ -1290,10 +1268,6 @@ defineExpose({ getCurrentSelection });
 }
 
 @media (max-width: 768px) {
-  .provider-trigger--header .provider-trigger-meta {
-    display: none;
-  }
-
   .provider-trigger--input {
     height: 38px;
     max-width: 48vw;

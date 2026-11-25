@@ -12,6 +12,7 @@ from typing import TYPE_CHECKING, Protocol
 from astrbot.core import logger
 from astrbot.core.agent.message import TextPart
 from astrbot.core.message.components import File, Reply
+from astrbot.core.message.mention_render import supplement_mention_display
 from astrbot.core.platform.agent_wakeup_event import AgentWakeupEvent
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from astrbot.core.provider import Provider
@@ -265,6 +266,10 @@ async def prepare_input_content(
         or (req.conversation and req.image_urls)
     ):
         quote_image_ref = None
+    # Record whether the user actually supplied prompt text before attachment
+    # handling and placeholder defaults fill the prompt: the mention display
+    # must replace only real user text, never the defaults generated below.
+    prompt_has_text = bool((req.prompt or "").strip())
     await prepare_request_images(
         req,
         event,
@@ -329,6 +334,9 @@ async def prepare_input_content(
         )
         if captioned_ref:
             captioned_refs.add(captioned_ref)
+    if event.get_extra("_default_event_prompt"):
+        event.set_extra("_default_event_prompt", False)
+        supplement_mention_display(event, req, prompt_has_text=prompt_has_text)
     apply_prompt_prefix(req, cfg)
     if (
         req.conversation
@@ -426,6 +434,8 @@ async def prepare_agent_input(
         event, provider_wake_prefix
     ):
         return None
+    if content is not None and event.get_extra("_consumed_provider_prefix"):
+        event.set_extra("_consumed_provider_prefix", None)
     if (
         content is None
         and event.get_extra("provider_request") is None
@@ -439,6 +449,10 @@ async def prepare_agent_input(
             text = text[len(provider_wake_prefix) :]
             # Platform text is already typed; preserve its formatting and whitespace.
             content = [PlainInput.model_construct(text=text)] if text else []
+            # Record the consumed prefix as a plain fact: the agent input
+            # boundary needs it to keep the chain-rendered body consistent
+            # with this already-stripped text.
+            event.set_extra("_consumed_provider_prefix", provider_wake_prefix)
     for component in event.message_obj.message:
         if isinstance(component, File):
             await component.get_file()

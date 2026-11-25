@@ -1,6 +1,7 @@
 from collections.abc import AsyncGenerator
 
 from astrbot import logger
+from astrbot.core.i18n import get_config_locale, translate
 from astrbot.core.message.components import (
     At,
     AtAll,
@@ -143,6 +144,8 @@ class WakingCheckStage(Stage):
                         ]
                 else:
                     event.message_str = message_str[len(wake_prefix) :].strip()
+                if wake_prefix:
+                    event.set_extra("_consumed_wake_prefix", wake_prefix)
                 break
         if not is_wake:
             # 检查是否有at消息 / at全体成员消息 / 引用了bot的消息
@@ -257,7 +260,12 @@ class WakingCheckStage(Stage):
                     await event.send(
                         MessageEventResult()
                         .message(
-                            f"插件 {star_map[handler.handler_module_path].name}: {e}",
+                            translate(
+                                "plugin_filter_error",
+                                get_config_locale(effective_config),
+                                plugin=star_map[handler.handler_module_path].name,
+                                detail=str(e),
+                            ),
                         )
                         .use_markdown(False),
                     )
@@ -272,7 +280,11 @@ class WakingCheckStage(Stage):
                     if self.no_permission_reply:
                         await event.send(
                             MessageChain().message(
-                                f"您(ID: {event.get_sender_id()})的权限不足以使用此指令。通过 /sid 获取 ID 并请管理员添加。",
+                                translate(
+                                    "permission_denied",
+                                    get_config_locale(effective_config),
+                                    sender_id=event.get_sender_id(),
+                                ),
                             ),
                         )
                     logger.info(

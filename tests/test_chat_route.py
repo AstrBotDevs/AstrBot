@@ -828,3 +828,59 @@ async def test_completed_chat_stream_preserves_pending_output(
             run.task.cancel()
             await asyncio.gather(run.task, return_exceptions=True)
         chat_service.webchat_queue_mgr.remove_queues(session_id)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("streaming", [False, True])
+async def test_error_cards_survive_stream_completion_and_history(
+    chat_service_instance, streaming
+):
+    from astrbot.core.message.components import Json
+    from astrbot.core.message.message_event_result import MessageChain
+    from astrbot.core.platform.sources.webchat.webchat_event import WebChatMessageEvent
+
+    service = chat_service_instance
+    session_id = "error-session"
+    stream = await service.build_chat_stream(
+        "alice", {"message": "hello", "session_id": session_id}
+    )
+    run = next(iter(service.chat_runs.values()))
+    error = {"code": "noProvider", "message": "Configure a model"}
+    try:
+        await WebChatMessageEvent._send(
+            run.run_id,
+            MessageChain().message("Partial reply"),
+            session_id,
+            streaming=True,
+        )
+        await WebChatMessageEvent._send(
+            run.run_id,
+            MessageChain(chain=[Json(error)], type="chatui_error"),
+            session_id,
+            streaming=streaming,
+        )
+        await chat_service.webchat_queue_mgr.put_back_queue(
+            run.run_id, {"type": "complete", "data": "Partial reply", "streaming": True}
+        )
+        await WebChatMessageEvent._send(run.run_id, None, session_id)
+        frames = [_decode_sse_event(frame) async for frame in stream]
+        await asyncio.wait_for(run.task, timeout=1)
+        expected = [
+            {"type": "plain", "text": "Partial reply"},
+            {"type": "error", **error},
+        ]
+        assert run.message_parts == expected
+        assert [
+            part
+            for call in service.save_bot_message.await_args_list
+            for part in call.args[1]
+        ] == expected
+        assert [frame["data"] for frame in frames if frame["type"] == "error"] == [
+            error
+        ]
+    finally:
+        await stream.aclose()
+        if run.task and not run.task.done():
+            run.task.cancel()
+            await asyncio.gather(run.task, return_exceptions=True)
+        chat_service.webchat_queue_mgr.remove_queues(session_id)

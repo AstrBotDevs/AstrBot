@@ -29,6 +29,7 @@
           :is-message-streaming="(message) => sending && message === activeBotRecord"
           variant="thread"
           @button-click="handleButtonClick"
+          @configure-models="emit('configureModels')"
         />
       </div>
 
@@ -63,6 +64,7 @@ import { chatApi } from "@/api/v1";
 import { fetchWithAuth } from "@/api/http";
 import {
   appendPlain,
+  appendError,
   appendReasoningPart,
   buildChatRequestFlags,
   extractReasoningText,
@@ -89,6 +91,7 @@ const props = defineProps<{
 }>();
 
 const emit = defineEmits<{
+  configureModels: [];
   "update:modelValue": [value: boolean];
   delete: [thread: ChatThread];
 }>();
@@ -215,10 +218,7 @@ async function send() {
       scrollToBottom();
     });
   } catch (error) {
-    appendPlain(
-      replyState.botRecord,
-      `\n\n${String((error as Error)?.message || error)}`,
-    );
+    appendError(replyState.botRecord, error, "connection_error");
     console.error("Failed to send thread message:", error);
   } finally {
     sending.value = false;
@@ -285,10 +285,7 @@ async function handleButtonClick(payload: {
     });
   } catch (error) {
     showBotRecord();
-    appendPlain(
-      replyState.botRecord,
-      `\n\n${String((error as Error)?.message || error)}`,
-    );
+    appendError(replyState.botRecord, error, "connection_error");
     console.error("Failed to send thread button interaction:", error);
   } finally {
     sending.value = false;
@@ -410,7 +407,7 @@ function processPayload(
 
   if (type === "error") {
     markMessageStarted(botRecord);
-    appendPlain(botRecord, `\n\n${String(data)}`);
+    appendError(botRecord, data);
     return;
   }
 

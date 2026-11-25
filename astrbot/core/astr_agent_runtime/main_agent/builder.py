@@ -130,11 +130,10 @@ async def build_main_agent(
     req = prepared.request
 
     # Seed caller capabilities before persona selection.
-    tool_mgr = plugin_context.get_llm_tool_manager()
     if config.enable_message_delivery:
         if req.func_tool is None:
             req.func_tool = ToolSet()
-        req.func_tool.add_tool(tool_mgr.get_builtin_tool(SendMessageToUserTool))
+        req.func_tool.add_tool(SendMessageToUserTool())
     await persona.apply_persona(
         req,
         config.provider_settings,
@@ -152,7 +151,7 @@ async def build_main_agent(
     if req.func_tool is not None:
         req.func_tool = plugins.filter_tools(event, req.func_tool)
     search_instructions = web_search.apply_web_search(
-        req, plugin_context, config.provider_settings, event
+        req, config.provider_settings, event
     )
     if config.llm_safety_mode:
         persona.apply_safety_instructions(config, req)
@@ -165,21 +164,21 @@ async def build_main_agent(
     )
     await computer_use.apply_computer_use(req, plugin_context, config, agent_context)
 
-    builtin_types = []
+    runtime_tool_types = []
     if config.add_cron_tools:
-        builtin_types.append(FutureTaskTool)
+        runtime_tool_types.append(FutureTaskTool)
     if event.platform_meta.support_proactive_message:
-        builtin_types.append(SendMessageToUserTool)
+        runtime_tool_types.append(SendMessageToUserTool)
     if (
         event.get_message_type() == MessageType.GROUP_MESSAGE
         and config.group_message_history_enabled
     ):
-        builtin_types.append(GetGroupMessageHistoryTool)
-    if builtin_types:
+        runtime_tool_types.append(GetGroupMessageHistoryTool)
+    if runtime_tool_types:
         if req.func_tool is None:
             req.func_tool = ToolSet()
-        for tool_type in builtin_types:
-            req.func_tool.add_tool(tool_mgr.get_builtin_tool(tool_type))
+        for tool_type in runtime_tool_types:
+            req.func_tool.add_tool(tool_type())
 
     if not await subagent.apply_subagents(req, plugin_context, event, runtime=runtime):
         return None

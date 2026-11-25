@@ -3,7 +3,7 @@
 import asyncio
 import re
 from types import SimpleNamespace
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, call, patch
 
 import pytest
 
@@ -845,14 +845,17 @@ class TestProcessBuffer:
         buffer = "Line 1\nLine 2\nLine 3\nRemaining"
         pattern = re.compile(r".*\n")
 
-        with patch.object(
-            astr_message_event, "send", new_callable=AsyncMock
-        ) as mock_send:
+        with (
+            patch.object(
+                astr_message_event, "send", new_callable=AsyncMock
+            ) as mock_send,
+            patch.object(asyncio, "sleep", new_callable=AsyncMock) as mock_sleep,
+        ):
             result = await astr_message_event.process_buffer(buffer, pattern)
 
-            # Should have sent 3 lines and remaining should be "Remaining"
-            assert mock_send.call_count == 3
-            assert result == "Remaining"
+        assert mock_send.await_count == 3
+        assert mock_sleep.await_args_list == [call(1.5)] * 3
+        assert result == "Remaining"
 
     @pytest.mark.asyncio
     async def test_process_buffer_no_match(self, astr_message_event):

@@ -493,6 +493,13 @@ class OpenApiService:
                         chain_type=chain_type,
                         streaming=streaming,
                     )
+                elif msg_type == "error":
+                    error = (
+                        result_text
+                        if isinstance(result_text, dict)
+                        else {"code": "agent_error", "message": str(result_text)}
+                    )
+                    message_accumulator.add_part({**error, "type": "error"})
                 elif msg_type in {"image", "record", "file", "video"}:
                     filename = str(result_text).replace(f"[{msg_type.upper()}]", "")
                     part = await chat_bridge.create_attachment_from_file(

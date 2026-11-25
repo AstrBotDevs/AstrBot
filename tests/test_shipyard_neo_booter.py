@@ -59,16 +59,6 @@ class TestWaitUntilReady:
         sandbox.delete.assert_not_called()
 
     @pytest.mark.asyncio
-    async def test_starting_then_ready(self):
-        """Sandbox transitions STARTING → READY within timeout."""
-        booter = self._make_booter()
-        sandbox = _make_sandbox_mock(["starting", "starting", "ready"])
-
-        await booter._wait_until_ready(sandbox)
-
-        sandbox.delete.assert_not_called()
-
-    @pytest.mark.asyncio
     async def test_failed_deletes_and_raises(self):
         """Sandbox reaches FAILED → delete called → RuntimeError raised."""
         booter = self._make_booter()

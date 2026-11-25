@@ -121,6 +121,8 @@ The following settings control different things:
 | The persona's capabilities settings | Which tools and skills the current persona can use. For plugins with AI tools, check that the relevant tool is allowed here. |
 | Extensions → Handlers | Registered commands, function tools, and other handlers. Commands can have their own enabled state, name, and permission settings. |
 
+**Extensions → Handlers → Function Tools** lists tools provided by plugins. The profile's AI capability settings control Agent runtime tools such as web search. View MCP servers and their tools under **Extensions → MCP Servers**.
+
 **First check that the plugin is open, then check the profile and persona used by the current conversation.** Selecting a closed plugin in a profile does not open it. If you route platforms or conversations to different profiles, edit the one that actually applies.
 
 ### Update, reload, close, or delete

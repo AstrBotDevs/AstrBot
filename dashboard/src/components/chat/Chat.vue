@@ -10,7 +10,7 @@
   >
     <v-navigation-drawer
       class="chat-sidebar"
-      :class="{ collapsed: isSidebarCollapsed, 'sidebar-page-navigation': sidebarNavigation }"
+      :class="{ collapsed: isSidebarCollapsed, 'sidebar-page-navigation': sidebarNavigation, 'chat-sidebar--paired': pairedNavigation }"
       :model-value="isMobile ? mobileDrawer.open : true"
       @update:model-value="isMobile && mobileDrawer.SET($event)"
       :permanent="!isMobile"
@@ -18,6 +18,7 @@
       :mobile-breakpoint="0"
       :rail="isSidebarCollapsed"
       :width="245"
+      :order="1"
       :rail-width="56"
       location="left"
       floating
@@ -32,9 +33,9 @@
             v-if="!isSidebarCollapsed"
             class="chat-sidebar-brand-title Outfit"
           >
-            <ChatUILogo class="chat-sidebar-brand-logo" />
+            <ChatUILogo v-if="!pairedNavigation" class="chat-sidebar-brand-logo" />
             <span class="chat-sidebar-brand-copy">
-              <span class="chat-sidebar-brand-name">AstrBot</span>
+              <span class="chat-sidebar-brand-name">{{ pairedNavigation ? t("core.navigation.chat") : "AstrBot" }}</span>
               <span v-if="!sidebarNavigation" class="chat-sidebar-brand-mode">ChatUI</span>
             </span>
           </div>
@@ -42,11 +43,12 @@
             v-if="isSidebarCollapsed"
             class="chat-sidebar-brand-toggle chat-sidebar-rail-btn"
             type="button"
-            aria-label="Toggle sidebar"
+            :aria-label="t('core.navigation.expandSidebar')"
             @click.stop="toggleChatSidebar"
           >
             <span class="chat-sidebar-rail-icon-stack">
               <ChatUILogo
+                v-if="!pairedNavigation"
                 class="chat-sidebar-brand-logo chat-sidebar-brand-logo--collapsed"
               />
               <PanelLeft :size="20" class="sidebar-panel-toggle-icon" />
@@ -59,6 +61,7 @@
             rounded="sm"
             variant="text"
             :ripple="false"
+            :aria-label="t('core.navigation.collapseSidebar')"
             @click.stop="toggleChatSidebar"
           >
             <PanelLeft :size="20" class="sidebar-panel-toggle-icon" />
@@ -66,7 +69,7 @@
         </div>
 
         <v-btn
-          v-if="sidebarNavigation"
+          v-if="sidebarNavigation && !pairedNavigation"
           class="new-chat-btn sidebar-back-btn"
           :class="{ 'icon-only': isSidebarCollapsed }"
           variant="text"
@@ -142,10 +145,25 @@
 
         <section class="sidebar-section session-list">
           <div class="sidebar-section-header">
-            <span>{{ tm("conversation.title") }}</span>
+            <button
+              type="button"
+              class="session-section-toggle"
+              :aria-expanded="sessionsExpanded"
+              @click="sessionsExpanded = !sessionsExpanded"
+            >
+              <span>{{ tm("conversation.title") }}</span>
+              <ChevronDown
+                v-if="sessionsExpanded"
+                class="expanded-chevron"
+                :size="16"
+                aria-hidden="true"
+              />
+              <ChevronRight v-else :size="16" aria-hidden="true" />
+            </button>
           </div>
           <div
             v-for="session in sidebarSessions"
+            v-show="sessionsExpanded"
             :key="session.session_id"
             class="session-item"
             :class="{
@@ -191,14 +209,14 @@
             />
           </div>
           <v-progress-linear
-            v-if="sessionsPagination.loading"
+            v-if="sessionsExpanded && sessionsPagination.loading"
             color="primary"
             height="2"
             indeterminate
             :aria-label="tm('conversation.loading')"
           />
           <ChatLoadError
-            v-if="sessionsPagination.error"
+            v-if="sessionsExpanded && sessionsPagination.error"
             :message="tm('conversation.loadFailed')"
             :loading="sessionsPagination.loading"
             @retry="getSessions(sessionsPagination.append)"
@@ -416,6 +434,7 @@
               @open-thread="openThreadPanel"
               @open-refs="openRefsSidebar"
               @button-click="handleButtonClick"
+              @configure-models="openProviderWorkspace()"
             />
           </div>
         </section>
@@ -571,6 +590,7 @@
       :deleting="deletingThread"
       :get-provider-selection="getSelectedProviderSelection"
       @delete="deleteThread"
+      @configure-models="openProviderWorkspace()"
     />
     <ChatWorkbench
       v-if="workbench?.tabs.length"
@@ -622,6 +642,8 @@ import { isAxiosError } from "axios";
 import {
   ArrowDown,
   ChevronLeft,
+  ChevronDown,
+  ChevronRight,
   Box,
   PanelLeft,
   PanelRightOpen,
@@ -785,6 +807,14 @@ const tokenModelMetadata = ref<Record<string, ProviderModelMetadata>>({});
 const selectedTokenProviderId = ref("");
 const messagesContainer = ref<HTMLElement | null>(null);
 const sidebarContent = ref<HTMLElement | null>(null);
+const sessionsExpanded = ref(chatPreferences().global.sessionsExpanded !== false);
+
+watch(sessionsExpanded, (expanded) => {
+  chatPreferences((preferences) => {
+    preferences.global.sessionsExpanded = expanded;
+  });
+});
+
 const sidebarProjects = ref<InstanceType<typeof ProjectList> | null>(null);
 const sidebarProjectElement = computed<HTMLElement | null>(
   () => sidebarProjects.value?.$el || null,
@@ -854,6 +884,8 @@ watch(settingsOpen, (open) => {
   if (open) void loadSttProviders();
 });
 const { smAndDown: isMobile } = useDisplay();
+
+const pairedNavigation = computed(() => sidebarNavigation.value && !isMobile.value);
 
 const isSidebarCollapsed = computed(
   () => !isMobile.value && customizer.chatSidebarCollapsed,
@@ -1267,7 +1299,7 @@ watch(
 );
 
 watch(
-  [() => sessionsPagination.loading, () => mobileDrawer.open],
+  [() => sessionsPagination.loading, () => mobileDrawer.open, sessionsExpanded],
   () => loadMoreSessions(),
   { flush: "post" },
 );
@@ -2137,6 +2169,7 @@ function handleMessagesScroll() {
 function loadMoreSessions() {
   const container = sidebarContent.value;
   if (
+    !sessionsExpanded.value ||
     !container ||
     container.clientHeight === 0 ||
     (isMobile.value && !mobileDrawer.open) ||
@@ -2257,6 +2290,22 @@ async function stopCurrentSession() {
   background: var(--astrbot-chrome-bg, rgb(var(--v-theme-surface)));
   border-right: 0;
   user-select: none;
+}
+
+.chat-sidebar--paired {
+  border-radius: 16px 0 0 16px;
+  animation: paired-sidebar-enter 360ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+.chat-sidebar--paired .chat-sidebar-rail-icon-stack .sidebar-panel-toggle-icon {
+  opacity: 1;
+  visibility: visible;
+}
+@keyframes paired-sidebar-enter {
+  from { opacity: 0; clip-path: inset(0 0 0 100%); }
+  to { opacity: 1; clip-path: inset(0); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .chat-sidebar--paired { animation: none; }
 }
 
 .chat-sidebar.collapsed {
@@ -2574,7 +2623,7 @@ async function stopCurrentSession() {
   padding: 2px 16px 12px;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 0;
 }
 
 .sidebar-section {
@@ -2585,10 +2634,33 @@ async function stopCurrentSession() {
   min-height: 24px;
   display: flex;
   align-items: center;
-  padding: 0 10px 4px;
+  padding: 0 10px;
   color: var(--chat-section-label);
   font-size: 12px;
   font-weight: 500;
+}
+
+.session-section-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 36px;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+.session-section-toggle:hover {
+  color: rgb(var(--v-theme-on-surface));
+}
+
+.session-section-toggle .expanded-chevron {
+  opacity: 0;
+}
+
+.session-section-toggle:hover .expanded-chevron,
+.session-section-toggle:focus-visible .expanded-chevron {
+  opacity: 1;
 }
 
 .session-list {

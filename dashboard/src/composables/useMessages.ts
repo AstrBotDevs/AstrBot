@@ -29,6 +29,8 @@ export interface MessagePart {
   };
   type: string;
   text?: string;
+  code?: string;
+  message?: string;
   think?: string;
   message_id?: string | number;
   selected_text?: string;
@@ -827,10 +829,7 @@ export function useMessages(options: UseMessagesOptions) {
       });
     } catch (error) {
       if (!abort.signal.aborted) {
-        appendPlain(
-          connection.botRecord || botRecord,
-          `\n\n${String((error as Error)?.message || error)}`,
-        );
+        appendError(connection.botRecord || botRecord, error, "connection_error");
         console.error("Regenerate failed:", error);
       }
     } finally {
@@ -959,10 +958,7 @@ export function useMessages(options: UseMessagesOptions) {
       .catch((error) => {
         if (abort.signal.aborted) return;
         ensureBotRecordVisible(connection);
-        appendPlain(
-          connection.botRecord || botRecord,
-          `\n\n${String(error?.message || error)}`,
-        );
+        appendError(connection.botRecord || botRecord, error, "connection_error");
         console.error("SSE chat failed:", error);
       })
       .finally(async () => {
@@ -1138,7 +1134,7 @@ export function useMessages(options: UseMessagesOptions) {
         if (!connection.botRecord) continue;
         connection.errorShown = true;
         ensureBotRecordVisible(connection);
-        appendPlain(connection.botRecord, "\n\nWebSocket connection failed.");
+        appendError(connection.botRecord, "WebSocket connection failed.", "connection_error");
       }
     };
     ws.onclose = async () => {
@@ -1155,7 +1151,7 @@ export function useMessages(options: UseMessagesOptions) {
           connection.botRecord
         ) {
           ensureBotRecordVisible(connection);
-          appendPlain(connection.botRecord, "\n\nWebSocket connection closed.");
+          appendError(connection.botRecord, "WebSocket connection closed.", "connection_error");
         }
         delete activeConnections[connection.messageId];
       }
@@ -1185,7 +1181,7 @@ export function useMessages(options: UseMessagesOptions) {
         connection.errorShown = true;
         if (connection.botRecord) {
           ensureBotRecordVisible(connection);
-          appendPlain(connection.botRecord, "\n\nWebSocket connection failed.");
+          appendError(connection.botRecord, "WebSocket connection failed.", "connection_error");
         }
         console.error("Failed to send WebSocket payload:", error);
         void finishWebSocketStream(sessionId, messageId);
@@ -1473,7 +1469,7 @@ export function useMessages(options: UseMessagesOptions) {
     }
     if (msgType === "error") {
       markMessageStarted(botRecord);
-      appendPlain(botRecord, `\n\n${String(data)}`);
+      appendError(botRecord, data);
       return;
     }
     if (msgType === "complete" || msgType === "break") {
@@ -1852,6 +1848,19 @@ function isThinkingPart(part: MessagePart) {
 
 function firstNonEmptyPartIndex(parts: MessagePart[]) {
   return parts.findIndex((part) => !isEmptyPlainPart(part));
+}
+
+/** Preserve error identity across stream transports and thread messages. */
+export function appendError(record: ChatRecord, error: unknown, code = "agent_error") {
+  markMessageStarted(record);
+  const data = error && typeof error === "object"
+    ? error as { code?: unknown; message?: unknown }
+    : undefined;
+  record.content.message.push({
+    type: "error",
+    code: typeof data?.code === "string" ? data.code : code,
+    message: typeof data?.message === "string" ? data.message : payloadText(error),
+  });
 }
 
 export function appendPlain(record: ChatRecord, text: string, append = true) {

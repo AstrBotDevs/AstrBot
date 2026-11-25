@@ -1,4 +1,7 @@
+from typing import cast
+
 from ..message import Message
+from .round_utils import split_into_rounds
 
 
 class ContextTruncator:
@@ -21,7 +24,7 @@ class ContextTruncator:
         Returns:
             tuple: (system_messages, non_system_messages)
         """
-        first_non_system = 0
+        first_non_system = len(messages)
         for i, msg in enumerate(messages):
             if msg.role != "system":
                 first_non_system = i
@@ -103,15 +106,21 @@ class ContextTruncator:
         keep_most_recent_turns: int,
         drop_turns: int = 1,
     ) -> list[Message]:
-        """
-        Turn-based truncation strategy, which drops the oldest turns while keeping the most recent N turns.
-        A turn consists of a user message and an assistant message.
-        This method ensures that the truncated context list conforms to OpenAI's context format.
+        """Keep the most recent complete user turns when the limit is exceeded.
+
+        A turn starts at a user input and includes all subsequent assistant
+        messages, tool calls, tool results and generated user-role messages
+        until the next user input. A pre-user fragment does not count as a turn
+        and is discarded when truncation occurs.
+        The current, possibly unfinished turn counts towards the limit and is
+        always retained along with the leading system messages.
 
         Args:
             messages: The original list of messages in the context.
             keep_most_recent_turns: The number of most recent turns to keep. If set to -1, it means keeping all turns (no truncation).
-            drop_turns: The number of turns to drop from the beginning.
+            drop_turns: Additional retention reduction on overflow. Retains
+                ``keep_most_recent_turns - drop_turns + 1`` turns, with a minimum
+                of one so the current task is not discarded.
 
         Returns:
             The truncated list of messages.
@@ -120,27 +129,15 @@ class ContextTruncator:
             return messages
 
         system_messages, non_system_messages = self._split_system_rest(messages)
+        rounds = cast(list[list[Message]], split_into_rounds(non_system_messages))
+        if rounds and (rounds[0][0].role != "user" or rounds[0][0]._turn_continuation):
+            rounds = rounds[1:]
 
-        if len(non_system_messages) // 2 <= keep_most_recent_turns:
+        if len(rounds) <= max(1, keep_most_recent_turns):
             return messages
 
-        num_to_keep = keep_most_recent_turns - drop_turns + 1
-        if num_to_keep <= 0:
-            truncated_contexts = []
-        else:
-            truncated_contexts = non_system_messages[-num_to_keep * 2 :]
-
-        # Find the first user message
-        index = next(
-            (i for i, item in enumerate(truncated_contexts) if item.role == "user"),
-            None,
-        )
-        if index is not None and index > 0:
-            truncated_contexts = truncated_contexts[index:]
-
-        result = self._ensure_user_message(
-            system_messages, truncated_contexts, messages
-        )
+        num_to_keep = max(1, keep_most_recent_turns - drop_turns + 1)
+        result = system_messages + [msg for rnd in rounds[-num_to_keep:] for msg in rnd]
         return self.fix_messages(result)
 
     def truncate_by_dropping_oldest_turns(
@@ -148,28 +145,32 @@ class ContextTruncator:
         messages: list[Message],
         drop_turns: int = 1,
     ) -> list[Message]:
-        """Drop the oldest N turns, regardless of the number of turns to keep."""
+        """Drop the oldest complete user turns while preserving the latest one.
+
+        A pre-user fragment is discarded along with the removed turns and
+        does not count towards the number of turns dropped.
+
+        Args:
+            messages: Context including any leading system messages.
+            drop_turns: Number of oldest turns to remove. Nonpositive values
+                disable truncation; at least the latest complete turn is kept.
+
+        Returns:
+            Context with leading system messages and the retained turns.
+        """
         if drop_turns <= 0:
             return messages
 
         system_messages, non_system_messages = self._split_system_rest(messages)
+        rounds = cast(list[list[Message]], split_into_rounds(non_system_messages))
+        if rounds and (rounds[0][0].role != "user" or rounds[0][0]._turn_continuation):
+            rounds = rounds[1:]
 
-        if len(non_system_messages) // 2 <= drop_turns:
-            truncated_non_system = []
-        else:
-            truncated_non_system = non_system_messages[drop_turns * 2 :]
+        if len(rounds) <= 1:
+            return messages
 
-        # Find the first user message
-        index = next(
-            (i for i, item in enumerate(truncated_non_system) if item.role == "user"),
-            None,
-        )
-        if index is not None:
-            truncated_non_system = truncated_non_system[index:]
-
-        result = self._ensure_user_message(
-            system_messages, truncated_non_system, messages
-        )
+        num_to_drop = min(drop_turns, len(rounds) - 1)
+        result = system_messages + [msg for rnd in rounds[num_to_drop:] for msg in rnd]
         return self.fix_messages(result)
 
     def truncate_by_halving(

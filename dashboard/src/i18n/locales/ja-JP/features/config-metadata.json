@@ -1116,6 +1116,14 @@
     "general": {
       "description": "基本設定",
       "platform_settings": {
+        "locale": {
+          "description": "システム言語",
+          "hint": "プラグインやエラーメッセージなどで使用するシステムの言語を設定します。モデルの回答や WebUI の言語は変更しません。",
+          "labels": [
+            "🇨🇳 简体中文",
+            "🇺🇸 English"
+          ]
+        },
         "unique_session": {
           "description": "会話を分離",
           "hint": "有効にすると、会話の分離に対応するプラットフォームでは、グループメンバーごとに独立したコンテキストを使用します。コマンドの権限はコマンド管理で設定してください。"
@@ -1828,6 +1836,9 @@
       },
       "dashscope_embedding": {
         "hint": "Alibaba Cloud BailianEmbedding のデフォルトアドレスは https://dashscope.aliyuncs.com/api/v1 です。"
+      },
+      "volcengine_embedding": {
+        "hint": "Volcengine Embedding、デフォルトのアドレスは https://ark.cn-beijing.volces.com/api/v3 です。Agent Plan は https://ark.cn-beijing.volces.com/api/plan/v3 です。"
       },
       "volcengine_cluster": {
         "description": "Volcengine クラスター",
