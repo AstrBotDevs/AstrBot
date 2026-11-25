@@ -156,7 +156,7 @@ Once the marketplace index includes this value, users can find your plugin under
 | ID | Label | Typical plugins |
 | --- | --- | --- |
 | `utility` | Utility | General utilities and everyday information lookup |
-| `ai_context` | AI Conversation | Conversation and AI enhancements |
+| `ai_context` | AI Conversation | Plugins that modify model context or support conversations, such as knowledge bases, long-term memory, and proactive replies. |
 | `entertainment` | Entertainment | General entertainment and chat minigames |
 | `game` | Game | Connections to external games |
 | `media` | Media | Image, audio, and video processing or generation |
