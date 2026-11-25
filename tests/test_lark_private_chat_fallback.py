@@ -6,6 +6,7 @@ import pytest
 
 import astrbot.api.message_components as Comp
 from astrbot.api.event import MessageChain
+from astrbot.api.platform import MessageSendRejected
 from astrbot.core.platform.message_session import MessageSession
 from astrbot.core.platform.message_type import MessageType
 from astrbot.core.platform.platform import Platform
@@ -98,7 +99,7 @@ async def test_private_file_retries_failed_open_id_with_chat_id(private_chat):
     create.side_effect = [
         SimpleNamespace(
             success=lambda: False,
-            code=230101,
+            code=230034,
             msg="Sending messages to users is temporarily unavailable.",
         ),
         SimpleNamespace(success=lambda: True, code=0, msg="success"),
@@ -138,11 +139,16 @@ async def test_private_buttons_retry_open_id_with_chat_id(private_chat):
         v1=SimpleNamespace(card=SimpleNamespace(acreate=card_create))
     )
     create.side_effect = [
-        SimpleNamespace(success=lambda: False, code=230101, msg="Unavailable"),
-        SimpleNamespace(success=lambda: True, code=0, msg="success"),
+        SimpleNamespace(success=lambda: False, code=230034, msg="Unavailable"),
+        SimpleNamespace(
+            success=lambda: True,
+            code=0,
+            msg="success",
+            data=SimpleNamespace(message_id="om_card"),
+        ),
     ]
 
-    await adapter.send_by_session(
+    receipt = await adapter.send_by_session(
         MessageSession("lark-test", MessageType.FRIEND_MESSAGE, "ou_test_user"),
         MessageChain(
             [
@@ -172,7 +178,9 @@ async def test_private_buttons_retry_open_id_with_chat_id(private_chat):
         first.request_body.msg_type == fallback.request_body.msg_type == "interactive"
     )
     assert first.request_body.uuid == fallback.request_body.uuid
-    card_create.assert_awaited_once()
+    assert receipt.message_ids == ("om_card",)
+    assert json.loads(fallback.request_body.content)["schema"] == "2.0"
+    card_create.assert_not_awaited()
 
 
 @pytest.mark.asyncio
@@ -197,7 +205,7 @@ async def test_mixed_chain_retries_only_failed_file(private_chat):
     await adapter.convert_msg(event)
     create.side_effect = [
         SimpleNamespace(success=lambda: True, code=0, msg="success"),
-        SimpleNamespace(success=lambda: False, code=230101, msg="Unavailable"),
+        SimpleNamespace(success=lambda: False, code=230034, msg="Unavailable"),
         SimpleNamespace(success=lambda: True, code=0, msg="success"),
     ]
 
@@ -223,10 +231,10 @@ async def test_failed_delivery_is_not_reported_as_success(private_chat, known_ch
     if known_chat:
         await adapter.convert_msg(event)
     create.return_value = SimpleNamespace(
-        success=lambda: False, code=230101, msg="Unavailable"
+        success=lambda: False, code=230034, msg="Unavailable"
     )
 
-    with pytest.raises(RuntimeError, match="230101"):
+    with pytest.raises(MessageSendRejected, match="invalid_target"):
         await adapter.send_by_session(
             MessageSession("lark-test", MessageType.FRIEND_MESSAGE, "ou_test_user"),
             MessageChain([Comp.File(file="test.csv", name="test.csv")]),
@@ -283,7 +291,7 @@ async def test_private_route_survives_adapter_recreation_and_is_scoped(private_c
     restarted.appid = adapter.appid
     restarted.lark_api = adapter.lark_api
     create.side_effect = [
-        SimpleNamespace(success=lambda: False, code=230101, msg="Unavailable"),
+        SimpleNamespace(success=lambda: False, code=230034, msg="Unavailable"),
         SimpleNamespace(success=lambda: True, code=0, msg="success"),
     ]
     session = MessageSession("lark-test", MessageType.FRIEND_MESSAGE, "ou_test_user")
@@ -294,9 +302,9 @@ async def test_private_route_survives_adapter_recreation_and_is_scoped(private_c
     restarted.appid = "cli_another_bot"
     create.reset_mock(side_effect=True)
     create.return_value = SimpleNamespace(
-        success=lambda: False, code=230101, msg="Unavailable"
+        success=lambda: False, code=230034, msg="Unavailable"
     )
-    with pytest.raises(RuntimeError, match="230101"):
+    with pytest.raises(MessageSendRejected, match="invalid_target"):
         await restarted.send_by_session(
             MessageSession("another-bot", MessageType.FRIEND_MESSAGE, "ou_test_user"),
             MessageChain([Comp.Plain("hello")]),
@@ -328,7 +336,7 @@ async def test_group_message_does_not_replace_private_route(private_chat):
     event.event.message.chat_id = "oc_group"
     await adapter.convert_msg(event)
     create.side_effect = [
-        SimpleNamespace(success=lambda: False, code=230101, msg="Unavailable"),
+        SimpleNamespace(success=lambda: False, code=230034, msg="Unavailable"),
         SimpleNamespace(success=lambda: True, code=0, msg="success"),
     ]
 
@@ -347,7 +355,7 @@ async def test_reply_failure_keeps_boolean_result_without_proactive_fallback(
     adapter, _, create, _ = private_chat
     reply = AsyncMock(
         return_value=SimpleNamespace(
-            success=lambda: False, code=230101, msg="Unavailable"
+            success=lambda: False, code=230034, msg="Unavailable"
         )
     )
     adapter.lark_api.im.v1.message.areply = reply

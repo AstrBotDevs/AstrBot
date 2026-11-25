@@ -39,6 +39,76 @@ async def helloworld(self, event: AstrMessageEvent):
 > 关于 unified_msg_origin。
 > unified_msg_origin 是一个字符串，记录了一个会话的唯一 ID，AstrBot 能够据此找到属于哪个消息平台的哪个会话。这样就能够实现在 `send_message` 的时候，发送消息到正确的会话。有关 MessageChain，请参见接下来的一节。
 
+### 需要平台的发送结果时
+
+`send_message()` 返回的 `True` 只表示找到了消息平台。想获取平台返回的消息 ID 或跟踪键，使用 `send_message_with_receipt()`：
+
+```python
+receipt = await self.context.send_message_with_receipt(
+    event.unified_msg_origin,
+    MessageChain().message("Hello!"),
+)
+
+if receipt is False:
+    print("没有找到消息平台，未发送")
+elif receipt is None:
+    print("结果不确定，不要直接重发")
+else:
+    print(receipt.message_ids)
+    print(receipt.tracking_keys)
+```
+
+返回值取决于适配器能确认哪些发送结果。
+
+| 返回值 | 你该怎么做 |
+| --- | --- |
+| `MessageSendReceipt` | 平台已受理整条消息。按需读取平台返回的 `message_ids`、`tracking_keys` 或 `reference_ids`。 |
+| `None` | 结果不确定。消息可能已经发出，**不要直接重发**，否则可能重复。 |
+| `False` | 没有找到匹配的消息平台，本次没有发送。 |
+
+目前支持返回回执的场景：
+
+- 钉钉：完整的纯文本消息，包括先合并再发送的流式消息。
+- 企业微信应用：发给单个成员的完整纯文本消息，包括先合并再发送的流式消息。
+- QQ 官方机器人：在群聊或私聊中用 `event.send()` 回复的纯文本消息。QQ 有时还会返回供客户端显示引用的标识。
+- 飞书：纯文本消息和交互按钮卡片。完整的卡片回执包含该卡片的消息 ID。
+- 其他平台或消息类型：通常返回 `None`。
+
+回执说明平台已受理，请另查送达或已读状态。适配器能确认整条消息都被拒绝时，可以抛出 `MessageSendRejected`，其 `reason` 可说明回复窗口已过期、缺少权限等原因。网络中断或只有部分内容成功时，整条消息的结果仍然未知。保留原请求，核对后再决定是否重发。
+
+### 稍后回复原来的消息
+
+会话标识可以定位聊天。要在 QQ 官方机器人或飞书上回复聊天中的某一条消息，插件可以在收件时保存这条消息的回复上下文。
+
+```python
+import json
+from dataclasses import asdict
+
+from astrbot.api.event import MessageChain
+from astrbot.api.platform import MessageReplyContext
+
+def save_reply_target(self, event):
+    platform = self.context.get_platform_inst(event.get_platform_id())
+    if platform is not None:
+        return json.dumps(asdict(platform.get_reply_context(event)))
+
+async def send_saved_reply(self, saved, text):
+    target = MessageReplyContext(**json.loads(saved))
+    platform = self.context.get_platform_inst(target.platform_id)
+    if platform is not None:
+        return await platform.create_event(target).send(MessageChain().message(text))
+```
+
+上下文保存原平台账号、发送人、会话和消息号。发出回复前按当前权限核实是否可以回信。QQ 原消息带有引用标识时，在消息链中加入 `Reply(id=target.message_id)` 即可显示引用。若 QQ 明确拒绝过期的被动回复，且插件获准对同一聊天主动发消息，可用 `dataclasses.replace(target, mode="proactive")` 单独发起这次通知。
+
+发出飞书 `ActionRow` 按钮卡片时，把卡片回执中的 `receipt.message_ids[0]` 与回复上下文一起保存。稍后调用 `await platform.update_message(target, card_message_id, replacement_chain)` 就能更新原卡。新内容可包含文字和按钮行，也可只保留文字以移除按钮。回复原来那条人类消息时使用 `target.message_id`。
+
+插件可以用 `@filter.event_message_type(filter.EventMessageType.OTHER_MESSAGE)` 接收影响回信目标的事件。QQ 通过 `event.get_extra("qq_official_event")` 提供原生事件名 `C2C_MSG_RECEIVE`、`C2C_MSG_REJECT`、`FRIEND_ADD`、`FRIEND_DEL`、`GROUP_ADD_ROBOT` 和 `GROUP_DEL_ROBOT`。飞书应用订阅机器人或成员离群事件后，可从 `event.get_extra("lark_event_type")` 读取事件类型，并从事件中取得实际离群的对象。
+
+飞书群消息可用 `await event.get_typed_mentions()` 按需查询原消息中被 @ 的对象。同一事件只查询一次。每个结果包含原 `key`、`id` 和 `id_type`，人使用 `open_id`，机器人使用 `app_id`。原消息的提及列表无法核实时返回 `None`。
+
+已有飞书应用需要开通这两项离群订阅时，有配置权限的 Dashboard 客户端可调用 `POST /api/v1/bot-types/lark/registration`。发起时传 `action="start"` 和 `platform_config={"registration_update": "group_membership", "app_id": "<原 App ID>", "domain": "feishu"}`，国际版用 `"lark"`。展示返回的 `verification_uri_complete`，在服务端保存 `device_code`。查询进度时传 `action="poll"`、相同配置和这个设备码。成功响应中的 `user_open_id` 来自平台返回的扫码人，`bot_open_id` 和 `bot_active` 来自用新凭据读取的机器人资料。更新凭据前核对原 App、预期扫码人和原机器人。
+
 ## 富媒体消息
 
 AstrBot 支持发送富媒体消息，比如图片、语音、视频等。使用 `MessageChain` 来构建消息。
@@ -145,6 +215,7 @@ async def confirm(self, event: AstrMessageEvent):
 - `Button.CallbackAction.data` 必须可以 JSON 序列化，点击后通过 `interaction.data` 读取；按钮 ID 对应 `interaction.action_id`。建议给 ID 加插件名前缀。
 - `Button.UrlAction` 只打开链接，不触发插件回调，也不受 `action_timeout` 限制。`fallback_text` 用于不支持按钮的平台，不是过期提示。
 - `@filter.button_action()` 不指定 ID 时匹配所有按钮回调。通过 `event.get_button_interaction()` 获取 `ButtonInteraction` 事件组件。
+- 飞书原生卡片的按钮可用 `@filter.button_action("lark:card_action")` 接收，原 `value` 保存在 `interaction.data`。执行动作前核对原卡的 `source_message_id` 和实际点击人。Webhook 模式须通过当前飞书应用的签名或 verification token 校验，才能接收卡片操作和离群通知。
 
 ## 发送视频消息
 

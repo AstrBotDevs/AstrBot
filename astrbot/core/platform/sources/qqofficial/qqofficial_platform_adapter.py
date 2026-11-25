@@ -5,6 +5,7 @@ import logging
 import os
 import random
 import time
+from datetime import datetime
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any, cast
@@ -15,10 +16,11 @@ from botpy import Client
 from botpy.connection import ConnectionState
 from botpy.gateway import BotWebSocket
 from botpy.interaction import Interaction
+from botpy.manage import C2CManageEvent, GroupManageEvent
 from botpy.types.message import MarkdownPayload
 
 from astrbot import logger
-from astrbot.api.event import MessageChain
+from astrbot.api.event import AstrMessageEvent, MessageChain
 from astrbot.api.message_components import (
     ActionRow,
     At,
@@ -34,6 +36,7 @@ from astrbot.api.platform import (
     AstrBotMessage,
     Group,
     MessageMember,
+    MessageReplyContext,
     MessageType,
     Platform,
     PlatformMetadata,
@@ -285,6 +288,104 @@ class botClient(Client):
         abm.session_id = abm.sender.user_id
         self.platform.remember_session_scene(abm.session_id, "friend")
         self._commit(abm)
+
+    def _commit_permission(
+        self, source: C2CManageEvent | GroupManageEvent, event_type: str
+    ) -> None:
+        """Expose a native permission change through the ordinary event queue.
+
+        Args:
+            source: SDK event carrying the original target, timestamp and event ID.
+            event_type: The native QQ event name, exposed as ``qq_official_event``
+                in the event's extra data. The message type is OTHER_MESSAGE.
+        """
+        group = isinstance(source, GroupManageEvent)
+        sender_id = source.op_member_openid if group else source.openid
+        conversation_id = source.group_openid if group else source.openid
+        if (
+            not isinstance(sender_id, str)
+            or not sender_id
+            or not isinstance(conversation_id, str)
+            or not conversation_id
+            or not isinstance(source.event_id, str)
+            or not source.event_id
+            or not isinstance(source.timestamp, (int, str))
+            or isinstance(source.timestamp, bool)
+        ):
+            logger.warning("[QQOfficial] Ignore incomplete permission event.")
+            return
+        try:
+            timestamp = int(source.timestamp)
+        except ValueError:
+            logger.warning("[QQOfficial] Ignore invalid permission timestamp.")
+            return
+        if timestamp <= 0:
+            return
+        message = AstrBotMessage()
+        message.type = MessageType.OTHER_MESSAGE
+        message.self_id = str(self.platform.appid)
+        message.session_id = conversation_id
+        message.message_id = source.event_id
+        message.sender = MessageMember(user_id=sender_id, nickname="")
+        if group:
+            message.group_id = conversation_id
+        message.timestamp = timestamp
+        message.message = []
+        message.message_str = ""
+        message.raw_message = source
+        event = self.platform.create_event(message)
+        event.set_extra("qq_official_event", event_type)
+        # These are plugin notifications, with no text or implicit LLM request.
+        event.is_wake = True
+        self.platform.commit_event(event)
+
+    async def on_c2c_msg_receive(self, event: C2CManageEvent) -> None:
+        """Forward the user's native permission to receive proactive messages.
+
+        Args:
+            event: QQ's parsed C2C permission event.
+        """
+        self._commit_permission(event, "C2C_MSG_RECEIVE")
+
+    async def on_c2c_msg_reject(self, event: C2CManageEvent) -> None:
+        """Forward the user's native rejection of proactive messages.
+
+        Args:
+            event: QQ's parsed C2C permission event.
+        """
+        self._commit_permission(event, "C2C_MSG_REJECT")
+
+    async def on_friend_add(self, event: C2CManageEvent) -> None:
+        """Forward a native friend-add notification.
+
+        Args:
+            event: QQ's parsed C2C relationship event.
+        """
+        self._commit_permission(event, "FRIEND_ADD")
+
+    async def on_friend_del(self, event: C2CManageEvent) -> None:
+        """Forward a native friend-removal notification.
+
+        Args:
+            event: QQ's parsed C2C relationship event.
+        """
+        self._commit_permission(event, "FRIEND_DEL")
+
+    async def on_group_add_robot(self, event: GroupManageEvent) -> None:
+        """Forward the native notification that this bot joined a group.
+
+        Args:
+            event: QQ's parsed group relationship event.
+        """
+        self._commit_permission(event, "GROUP_ADD_ROBOT")
+
+    async def on_group_del_robot(self, event: GroupManageEvent) -> None:
+        """Forward the native notification that this bot left a group.
+
+        Args:
+            event: QQ's parsed group relationship event.
+        """
+        self._commit_permission(event, "GROUP_DEL_ROBOT")
 
     async def on_interaction_create(self, interaction: Interaction) -> None:
         """Handle a QQ inline-keyboard click.
@@ -651,21 +752,145 @@ class QQOfficialPlatformAdapter(Platform):
             support_proactive_message=True,
         )
 
-    def create_event(self, message: AstrBotMessage) -> QQOfficialMessageEvent:
+    def get_reply_context(self, event: AstrMessageEvent) -> MessageReplyContext:
+        """Capture the original QQ destination for a reply after a restart.
+
+        Args:
+            event: An event received by this platform instance.
+
+        Returns:
+            The original account, message and optional QQ reference identifiers.
+
+        Raises:
+            ValueError: The event belongs to another account or source kind.
+        """
+        if (
+            not isinstance(event, QQOfficialMessageEvent)
+            or event.get_platform_id() != self.meta().id
+            or event.bot is not self.client
+        ):
+            raise ValueError("QQ reply source belongs to another platform")
+        message = event.message_obj
+        raw = message.raw_message
+        if isinstance(raw, botpy.message.GroupMessage):
+            scene, conversation_id = "group", raw.group_openid
+            sender_id = raw.author.member_openid
+            if message.group_id != conversation_id:
+                raise ValueError("QQ reply group differs from its original source")
+        elif isinstance(raw, botpy.message.C2CMessage):
+            scene, conversation_id = "c2c", raw.author.user_openid
+            sender_id = conversation_id
+        else:
+            raise ValueError("QQ source does not support a durable reply")
+        if raw.id != message.message_id or sender_id != event.get_sender_id():
+            raise ValueError("QQ reply source identity changed")
+        timestamp = message.timestamp
+        try:
+            # Redelivery must not extend the platform's passive reply window.
+            original_time = datetime.fromisoformat(str(raw.timestamp))
+            if original_time.tzinfo is not None:
+                timestamp = int(original_time.timestamp())
+        except ValueError:
+            pass
+        parent_id = None
+        raw_data = getattr(raw, "raw_data", None)
+        if isinstance(raw_data, dict):
+            source_scene = raw_data.get("message_scene")
+            if isinstance(source_scene, dict):
+                for value in source_scene.get("ext") or []:
+                    if isinstance(value, str) and value.startswith("ref_msg_idx="):
+                        parent_id = value.removeprefix("ref_msg_idx=").strip() or None
+                        break
+        return MessageReplyContext(
+            platform_id=self.meta().id,
+            platform_type=self.meta().name,
+            account_id=str(self.appid),
+            scene=scene,
+            conversation_id=conversation_id,
+            message_id=message.message_id,
+            sender_id=sender_id,
+            session_id=event.get_session_id(),
+            timestamp=timestamp,
+            reference_id=QQOfficialMessageEvent._extract_self_ref_idx(raw) or None,
+            parent_id=parent_id,
+        )
+
+    def create_event(
+        self, message: AstrBotMessage | MessageReplyContext
+    ) -> QQOfficialMessageEvent:
         """Creates a QQ Official message event.
 
         Args:
-            message: AstrBot message object to wrap.
+            message: Original message or a saved context for this QQ account.
 
         Returns:
             Created QQ Official message event.
+
+        Raises:
+            ValueError: The saved context does not belong to this account.
         """
+        reply_context = message if isinstance(message, MessageReplyContext) else None
+        if reply_context is not None:
+            if (
+                reply_context.platform_id != self.meta().id
+                or reply_context.platform_type != self.meta().name
+                or reply_context.account_id != str(self.appid)
+                or reply_context.scene not in {"group", "c2c"}
+                or reply_context.thread_id is not None
+                or reply_context.root_id is not None
+            ):
+                raise ValueError("QQ reply context does not match this account")
+            raw_data = {
+                "id": reply_context.message_id,
+                "content": "",
+                "timestamp": str(reply_context.timestamp),
+                "message_scene": {
+                    "ext": [
+                        f"{key}={value}"
+                        for key, value in (
+                            ("msg_idx", reply_context.reference_id),
+                            ("ref_msg_idx", reply_context.parent_id),
+                        )
+                        if value is not None
+                    ]
+                },
+            }
+            message = AstrBotMessage()
+            message.type = (
+                MessageType.GROUP_MESSAGE
+                if reply_context.scene == "group"
+                else MessageType.FRIEND_MESSAGE
+            )
+            message.self_id = str(self.appid)
+            message.session_id = reply_context.session_id
+            message.message_id = reply_context.message_id
+            message.timestamp = reply_context.timestamp
+            message.sender = MessageMember(user_id=reply_context.sender_id, nickname="")
+            message.message = []
+            message.message_str = ""
+            if reply_context.scene == "group":
+                message.group_id = reply_context.conversation_id
+                raw_data.update(
+                    group_openid=reply_context.conversation_id,
+                    author={"member_openid": reply_context.sender_id},
+                )
+                message.raw_message = PatchedGroupMessage(
+                    self.client.api, reply_context.message_id, raw_data
+                )
+            else:
+                if reply_context.sender_id != reply_context.conversation_id:
+                    raise ValueError("QQ direct reply sender and destination differ")
+                raw_data["author"] = {"user_openid": reply_context.sender_id}
+                message.raw_message = PatchedC2CMessage(
+                    self.client.api, reply_context.message_id, raw_data
+                )
         return QQOfficialMessageEvent(
             message.message_str,
             message,
             self.meta(),
             message.session_id,
             self.client,
+            reply_context=reply_context,
         )
 
     @staticmethod

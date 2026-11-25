@@ -12,6 +12,8 @@ from astrbot.core.platform.sources.dingtalk.app_registration import (
     request_dingtalk_app_registration,
 )
 from astrbot.core.platform.sources.lark.app_registration import (
+    DEFAULT_FEISHU_OPEN_DOMAIN,
+    DEFAULT_LARK_OPEN_DOMAIN,
     poll_app_registration_once,
     request_app_registration,
 )
@@ -125,9 +127,29 @@ class PlatformService:
         platform_config: dict,
     ) -> dict:
         domain = str(platform_config.get("domain") or "").strip()
+        update = platform_config.get("registration_update")
+        membership_app_id = None
+        if update is not None:
+            if update != "group_membership":
+                raise PlatformServiceError("Unsupported Lark registration update", 400)
+            membership_app_id = platform_config.get("app_id")
+            if not isinstance(membership_app_id, str) or not membership_app_id.strip():
+                raise PlatformServiceError("An existing Lark app_id is required", 400)
+            if domain.rstrip("/") not in {
+                "",
+                "feishu",
+                "lark",
+                DEFAULT_FEISHU_OPEN_DOMAIN,
+                DEFAULT_LARK_OPEN_DOMAIN,
+            }:
+                raise PlatformServiceError(
+                    "An official Lark registration domain is required", 400
+                )
 
         if action == "start":
-            registration = await request_app_registration(domain)
+            registration = await request_app_registration(
+                domain, membership_app_id=membership_app_id
+            )
             return {
                 "status": "pending",
                 "device_code": registration.device_code,
@@ -148,6 +170,7 @@ class PlatformService:
             result = await poll_app_registration_once(
                 domain=domain,
                 device_code=device_code,
+                membership_app_id=membership_app_id,
             )
             if result.get("status") == "created":
                 try:
@@ -160,6 +183,8 @@ class PlatformService:
                         result["bot_name"] = bot_info.app_name
                     if bot_info.open_id:
                         result["bot_open_id"] = bot_info.open_id
+                    if membership_app_id is not None and bot_info.active is not None:
+                        result["bot_active"] = bot_info.active
                 except Exception as exc:
                     logger.error(f"获取飞书机器人信息失败: {exc}", exc_info=True)
             return result

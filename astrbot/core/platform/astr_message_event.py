@@ -37,6 +37,7 @@ from astrbot.core.utils.trace import TraceSpan
 from .astrbot_message import AstrBotMessage, Group
 from .message_session import MessageSesion, MessageSession  # noqa
 from .platform_metadata import PlatformMetadata
+from .send_receipt import MessageSendReceipt
 
 streaming_response_event: ContextVar["AstrMessageEvent | None"] = ContextVar(
     "streaming_response_event", default=None
@@ -410,10 +411,16 @@ class AstrMessageEvent(abc.ABC):
         self,
         generator: AsyncGenerator[MessageChain, None],
         use_fallback: bool = False,
-    ) -> None:
-        """发送流式消息到消息平台，使用异步生成器。
-        目前仅支持: telegram，qq official 私聊。
-        Fallback仅支持 aiocqhttp。
+    ) -> MessageSendReceipt | None:
+        """Send a stream of message chains to the platform.
+
+        Args:
+            generator: Stream of message chains to deliver.
+            use_fallback: Whether to use the platform's fallback strategy.
+
+        Returns:
+            An optional API acceptance receipt for the complete stream. None
+            means the adapter does not expose a confirmed result, not failure.
         """
         asyncio.create_task(
             Metric.upload(msg_event_tick=1, adapter_name=self.platform_meta.name),
@@ -604,12 +611,15 @@ class AstrMessageEvent(abc.ABC):
 
     """平台适配器"""
 
-    async def send(self, message: MessageChain) -> None:
-        """发送消息到消息平台。
+    async def send(self, message: MessageChain) -> MessageSendReceipt | None:
+        """Send a message to the platform.
 
         Args:
-            message (MessageChain): 消息链，具体使用方式请参考文档。
+            message: Message content to send.
 
+        Returns:
+            An optional API acceptance receipt for the complete chain. None
+            means the adapter does not expose a confirmed result, not failure.
         """
         if (
             message is not None

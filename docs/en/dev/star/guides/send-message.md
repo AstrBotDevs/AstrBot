@@ -39,6 +39,76 @@ With this feature, you can store the `unified_msg_origin` and send messages when
 > About unified_msg_origin.
 > `unified_msg_origin` is a string that records the unique ID of a session. AstrBot uses it to identify which messaging platform and which session it belongs to. This allows messages to be sent to the correct session when using `send_message`. For more about MessageChain, see the next section.
 
+### When You Need the Platform's Send Result
+
+`send_message()` returns `True` when it finds a matching platform. To get the platform's message ID or tracking key, use `send_message_with_receipt()`:
+
+```python
+receipt = await self.context.send_message_with_receipt(
+    event.unified_msg_origin,
+    MessageChain().message("Hello!"),
+)
+
+if receipt is False:
+    print("No matching platform; nothing was sent")
+elif receipt is None:
+    print("Unknown result; do not resend immediately")
+else:
+    print(receipt.message_ids)
+    print(receipt.tracking_keys)
+```
+
+The return value describes what the adapter could confirm.
+
+| Result | What to do |
+| --- | --- |
+| `MessageSendReceipt` | The platform accepted the complete message. Read `message_ids`, `tracking_keys`, or `reference_ids` when present. |
+| `None` | The result is unknown. The message may already be sent. **Do not resend immediately**, or you may send a duplicate. |
+| `False` | No matching platform was found. Nothing was sent by this call. |
+
+Currently, receipts are available for:
+
+- DingTalk: complete plain-text messages, including buffered streaming messages.
+- WeCom applications: complete plain-text messages to one member, including buffered streaming messages.
+- QQ Official Bot: plain-text replies sent with `event.send()` in a group or a direct chat. QQ may also return a reference ID for quoting a message.
+- Lark: plain-text messages and interactive button cards. A complete card receipt includes its message ID.
+- Other platforms and message types usually return `None`.
+
+A receipt confirms platform acceptance. Delivery and read status are separate. An adapter can raise `MessageSendRejected` when it knows that nothing was accepted. Its `reason` can identify an expired reply window or a permission denial. A transport error or partial send leaves the overall result unknown. Keep the original request for reconciliation before sending again.
+
+### Replying to the Original Message Later
+
+A session identifies a conversation. QQ Official Bot and Lark can also save a particular incoming message as a reply target. Capture the context while handling the event and keep it in storage your plugin controls.
+
+```python
+import json
+from dataclasses import asdict
+
+from astrbot.api.event import MessageChain
+from astrbot.api.platform import MessageReplyContext
+
+def save_reply_target(self, event):
+    platform = self.context.get_platform_inst(event.get_platform_id())
+    if platform is not None:
+        return json.dumps(asdict(platform.get_reply_context(event)))
+
+async def send_saved_reply(self, saved, text):
+    target = MessageReplyContext(**json.loads(saved))
+    platform = self.context.get_platform_inst(target.platform_id)
+    if platform is not None:
+        return await platform.create_event(target).send(MessageChain().message(text))
+```
+
+The context records the original account, sender, conversation and message. Check the plugin's current permission to reply before sending. On QQ, add `Reply(id=target.message_id)` to the chain to display a quote when the incoming message supplied a quote reference. If QQ refuses an expired reply and the plugin has permission to send proactively to the same conversation, it can explicitly choose `dataclasses.replace(target, mode="proactive")` for that send.
+
+When sending a Lark `ActionRow` card, keep the card's `receipt.message_ids[0]` with its reply context. Later, call `await platform.update_message(target, card_message_id, replacement_chain)` to edit that card in place. A replacement can contain text and new button rows, or just text to remove the buttons. Use `target.message_id` when replying to the incoming human message.
+
+Plugins can listen for changes affecting a destination with `@filter.event_message_type(filter.EventMessageType.OTHER_MESSAGE)`. QQ exposes the native `C2C_MSG_RECEIVE`, `C2C_MSG_REJECT`, `FRIEND_ADD`, `FRIEND_DEL`, `GROUP_ADD_ROBOT` and `GROUP_DEL_ROBOT` names through `event.get_extra("qq_official_event")`. On Lark, subscribe the app to the bot or user group-removal events and read `event.get_extra("lark_event_type")`. Use the participants in the event to identify who left the chat.
+
+On a Lark group message, `await event.get_typed_mentions()` looks up the original mentions once per event. Each entry has a native `key`, an `id` and its `id_type` (`open_id` for a user or `app_id` for an application). The method returns `None` when the original list cannot be verified.
+
+To authorize these two removal subscriptions on an **existing Lark app**, a dashboard client with config access can call `POST /api/v1/bot-types/lark/registration`. Pass `action="start"` and `platform_config={"registration_update": "group_membership", "app_id": "<existing app ID>", "domain": "feishu"}`. Use `"lark"` for an international app. Show the returned `verification_uri_complete` and keep its `device_code` private. Poll with `action="poll"`, the same config and that device code. On success, `user_open_id` identifies the scanner when supplied, while `bot_open_id` and `bot_active` come from bot info read with the returned credentials. Match the app, expected scanner and original bot before applying new credentials.
+
 ## Rich Media Messages
 
 AstrBot supports sending rich media messages such as images, audio, videos, etc. Use `MessageChain` to construct messages.
@@ -147,6 +217,7 @@ async def confirm(self, event: AstrMessageEvent):
 - `Button.CallbackAction.data` must be JSON-compatible and is returned as `interaction.data`. The button ID becomes `interaction.action_id`; prefix IDs with your plugin name to avoid collisions.
 - `Button.UrlAction` opens a link without invoking a plugin callback and is unaffected by `action_timeout`. `fallback_text` is used on platforms without button support, rather than as an expiry notice.
 - `@filter.button_action()` without an ID matches all button callbacks. Use `event.get_button_interaction()` to access the `ButtonInteraction` event component.
+- On Lark, `@filter.button_action("lark:card_action")` receives native buttons from existing cards with an opaque `value`. Match the original card's `source_message_id` and the current operator before acting on `interaction.data`. In webhook mode, card actions and group-removal notifications require a validated Lark signature or verification token for the configured app.
 
 ## Sending Video Messages
 

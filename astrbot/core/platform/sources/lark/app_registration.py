@@ -1,12 +1,27 @@
+import base64
+import gzip
+import json
 from dataclasses import dataclass
 from typing import Any
-from urllib.parse import urlencode
+from urllib.parse import parse_qs, urlencode, urlsplit
 
 import aiohttp
 
 DEFAULT_FEISHU_OPEN_DOMAIN = "https://open.feishu.cn"
 DEFAULT_LARK_OPEN_DOMAIN = "https://open.larksuite.com"
 APP_REGISTRATION_PATH = "/oauth/v1/app/registration"
+GROUP_MEMBERSHIP_ADDONS = {
+    "preset": False,
+    "scopes": {"tenant": ["im:chat.members:bot_access", "im:chat.members:read"]},
+    "events": {
+        "items": {
+            "tenant": [
+                "im.chat.member.bot.deleted_v1",
+                "im.chat.member.user.deleted_v1",
+            ]
+        }
+    },
+}
 
 
 @dataclass
@@ -102,7 +117,9 @@ def _raise_registration_error(status: int, raw: dict[str, Any], fallback: str) -
     raise RuntimeError(message)
 
 
-async def request_app_registration(domain: str) -> LarkAppRegistration:
+async def request_app_registration(
+    domain: str, *, membership_app_id: str | None = None
+) -> LarkAppRegistration:
     endpoints = resolve_app_registration_endpoints(domain)
     status, raw = await _post_registration(
         endpoints.registration,
@@ -118,7 +135,42 @@ async def request_app_registration(domain: str) -> LarkAppRegistration:
     user_code = _string_field(data, "user_code")
     verification_uri = _string_field(data, "verification_uri")
     verification_uri_complete = _string_field(data, "verification_uri_complete")
-    if not verification_uri_complete and user_code:
+    if membership_app_id is not None:
+        # Lark's SDK attaches the target and incremental addons to the launcher.
+        # Keep the original device code for AstrBot's separate poll request.
+        launcher = urlsplit(verification_uri_complete)
+        if (
+            not _string_field(data, "device_code")
+            or launcher.scheme != "https"
+            or f"https://{launcher.netloc}" != endpoints.open_base
+            or launcher.path != "/page/launcher"
+            or launcher.fragment
+        ):
+            raise RuntimeError("Lark returned no launcher for the requested app")
+        query = parse_qs(launcher.query, keep_blank_values=True)
+        if "createOnly" in query or query.get("clientID", [membership_app_id]) != [
+            membership_app_id
+        ]:
+            raise RuntimeError("Lark returned a different app registration target")
+        manifest = json.dumps(GROUP_MEMBERSHIP_ADDONS, separators=(",", ":")).encode()
+        query.update(
+            {
+                "from": ["sdk"],
+                "tp": ["sdk"],
+                "source": ["AstrBot"],
+                "clientID": [membership_app_id],
+                "addons": [
+                    base64.urlsafe_b64encode(gzip.compress(manifest, mtime=0))
+                    .decode()
+                    .rstrip("=")
+                ],
+            }
+        )
+        verification_uri_complete = launcher._replace(
+            query=urlencode(query, doseq=True)
+        ).geturl()
+        verification_uri = verification_uri_complete
+    elif not verification_uri_complete and user_code:
         verification_uri_complete = (
             f"{endpoints.open_base}/page/cli?{urlencode({'user_code': user_code})}"
         )
@@ -144,6 +196,7 @@ async def poll_app_registration_once(
     *,
     domain: str,
     device_code: str,
+    membership_app_id: str | None = None,
 ) -> dict[str, Any]:
     endpoints = resolve_app_registration_endpoints(domain)
     status, raw = await _post_registration(
@@ -160,18 +213,46 @@ async def poll_app_registration_once(
     tenant_brand = _tenant_brand(data)
 
     if status < 400 and not error and client_id:
-        if not client_secret and tenant_brand == "lark":
+        result_domain = (
+            DEFAULT_LARK_OPEN_DOMAIN
+            if tenant_brand == "lark"
+            else DEFAULT_FEISHU_OPEN_DOMAIN
+        )
+        if membership_app_id is not None:
+            expected_brand = (
+                "lark" if endpoints.open_base == DEFAULT_LARK_OPEN_DOMAIN else "feishu"
+            )
+            if (
+                client_id != membership_app_id
+                or tenant_brand
+                and tenant_brand != expected_brand
+            ):
+                return {
+                    "status": "error",
+                    "message": "Lark returned a different app or domain",
+                }
+            result_domain = endpoints.open_base
+        elif not client_secret and tenant_brand == "lark":
             client_secret = await _poll_lark_secret(device_code)
         if not client_secret:
             return {"status": "error", "message": "应用创建成功但未获取到凭证"}
+        user_info = data.get("user_info")
+        user_open_id = (
+            _string_field(user_info, "open_id").strip()
+            if isinstance(user_info, dict)
+            else ""
+        )
         return {
             "status": "created",
             "app_id": client_id,
             "app_secret": client_secret,
+            **(
+                {"user_open_id": user_open_id}
+                if user_open_id and not any(char.isspace() for char in user_open_id)
+                else {}
+            ),
             "tenant_brand": tenant_brand,
-            "domain": DEFAULT_LARK_OPEN_DOMAIN
-            if tenant_brand == "lark"
-            else DEFAULT_FEISHU_OPEN_DOMAIN,
+            "domain": result_domain,
         }
     if error == "authorization_pending":
         return {"status": "pending"}

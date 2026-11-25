@@ -21,6 +21,7 @@ from lark_oapi.api.im.v1 import (
     CreateMessageReactionRequestBody,
     Emoji,
     GetChatMembersRequest,
+    GetMessageRequest,
     ReplyMessageRequest,
     ReplyMessageRequestBody,
 )
@@ -38,7 +39,13 @@ from astrbot.api.message_components import (
     Video,
 )
 from astrbot.api.message_components import Image as AstrBotImage
-from astrbot.api.platform import Group, MessageMember
+from astrbot.api.platform import (
+    Group,
+    MessageMember,
+    MessageReplyContext,
+    MessageSendReceipt,
+    MessageSendRejected,
+)
 from astrbot.core.platform.button_interaction import encode_button_callback
 from astrbot.core.utils.media_utils import (
     MediaResolver,
@@ -59,9 +66,94 @@ class LarkMessageEvent(AstrMessageEvent):
         platform_meta,
         session_id,
         bot: lark.Client,
+        *,
+        reply_context: MessageReplyContext | None = None,
     ) -> None:
         super().__init__(message_str, message_obj, platform_meta, session_id)
         self.bot = bot
+        self.reply_context = reply_context
+        self._mention_lookup_lock: asyncio.Lock | None = None
+
+    async def get_typed_mentions(self) -> list[dict[str, str]] | None:
+        """Read mentioned users' open IDs and applications' app IDs for this group message.
+
+        Returns:
+            Native mention keys, IDs and ID types. An empty list means no group
+            mentions apply. None means the original mentions could not be verified.
+        """
+        raw = self.message_obj.raw_message
+        if not self.get_group_id():
+            return []
+        if getattr(raw, "chat_type", None) != "group":
+            return None
+        if not raw.mentions:
+            return []
+        # Multiple consumers of an event share the lookup, including an unknown result.
+        if self._mention_lookup_lock is None:
+            self._mention_lookup_lock = asyncio.Lock()
+        async with self._mention_lookup_lock:
+            if "lark_typed_mentions" in self.get_extra():
+                return self.get_extra("lark_typed_mentions")
+            self.set_extra("lark_typed_mentions", None)
+            if self.bot.im is None:
+                return None
+            try:
+                response = await self.bot.im.v1.message.aget(
+                    GetMessageRequest.builder()
+                    .message_id(self.message_obj.message_id)
+                    .user_id_type("open_id")
+                    .build()
+                )
+            except Exception as exc:
+                logger.warning(
+                    "[Lark] Failed to read original message mentions: %s", exc
+                )
+                return None
+            if not response.success() or response.data is None:
+                return None
+            original = next(
+                (
+                    item
+                    for item in response.data.items or []
+                    if item.message_id == raw.message_id
+                ),
+                None,
+            )
+            if (
+                original is None
+                or original.chat_id != self.get_group_id()
+                or original.chat_id != raw.chat_id
+                or original.deleted is not False
+                or original.updated is not False
+            ):
+                return None
+            if self.get_extra("lark_sender_type") == "user" and (
+                original.sender is None
+                or original.sender.id_type != "open_id"
+                or original.sender.sender_type != "user"
+                or original.sender.id != self.get_sender_id()
+            ):
+                return None
+            incoming_keys = {mention.key for mention in raw.mentions}
+            typed = original.mentions or []
+            if (
+                len(typed) != len(raw.mentions)
+                or len(incoming_keys) != len(typed)
+                or {mention.key for mention in typed} != incoming_keys
+                or any(
+                    not mention.key
+                    or not mention.id
+                    or mention.id_type not in {"open_id", "app_id"}
+                    for mention in typed
+                )
+            ):
+                return None
+            result = [
+                {"key": mention.key, "id": mention.id, "id_type": mention.id_type}
+                for mention in typed
+            ]
+            self.set_extra("lark_typed_mentions", result)
+            return result
 
     async def get_group(
         self,
@@ -154,6 +246,55 @@ class LarkMessageEvent(AstrMessageEvent):
         return group
 
     @staticmethod
+    def _message_send_rejection(response) -> str | None:
+        """Classify documented IM refusals without treating service errors as safe retries.
+
+        Args:
+            response: Generated SDK response from message create, reply or patch.
+
+        Returns:
+            A stable refusal reason, or None for API acceptance.
+
+        Raises:
+            RuntimeError: The response cannot establish acceptance or refusal.
+        """
+        status = getattr(getattr(response, "raw", None), "status_code", None)
+        code = response.code
+        if (
+            type(code) is not int
+            or status is not None
+            and (status >= 500 or status < 200 or code == 0 and status >= 400)
+        ):
+            raise RuntimeError("[Lark] Message acceptance is unknown")
+        if code == 0:
+            return None
+        if code == 230020:
+            return "rate_limited"
+        if code in {230002, 230006, 230013, 230018, 230027, 230035, 230038, 230053}:
+            return "permission_denied"
+        if code in {230011, 230019, 230029, 230034, 230050, 230110, 230111}:
+            return "invalid_target"
+        if code in {
+            230001,
+            230015,
+            230017,
+            230022,
+            230025,
+            230028,
+            230031,
+            230036,
+            230054,
+            230055,
+            230071,
+            230072,
+            230075,
+            230099,
+        }:
+            return "rejected"
+        # In particular, 230049 says that the message is still being sent.
+        raise RuntimeError(f"[Lark] Message acceptance is unknown ({code})")
+
+    @staticmethod
     async def _send_im_message(
         lark_client: lark.Client,
         *,
@@ -163,8 +304,10 @@ class LarkMessageEvent(AstrMessageEvent):
         receive_id: str | None = None,
         receive_id_type: str | None = None,
         fallback_chat_id: str | None = None,
-    ) -> bool:
-        """Send one IM message, retrying rejected private sends by chat ID once.
+        reply_in_thread: bool = False,
+        return_receipt: bool = False,
+    ) -> bool | MessageSendReceipt:
+        """Send one IM message, falling back only for a rejected recipient ID.
 
         Args:
             lark_client: Lark API client.
@@ -174,16 +317,18 @@ class LarkMessageEvent(AstrMessageEvent):
             receive_id: Recipient for proactive messages.
             receive_id_type: Recipient ID type for proactive messages.
             fallback_chat_id: Known private chat to use if open ID is rejected.
+            reply_in_thread: Keep a reply in its original topic.
+            return_receipt: Return confirmed message IDs instead of a bool.
 
         Returns:
-            Whether the message was delivered.
+            Whether the API accepted the message, or its requested receipt.
 
         Raises:
             RuntimeError: A proactive send fails, including its fallback attempt.
             ValueError: A proactive send has no recipient or recipient ID type.
         """
         if lark_client.im is None:
-            if not reply_message_id:
+            if not reply_message_id or return_receipt:
                 raise RuntimeError("[Lark] IM API client is not initialized")
             logger.error("[Lark] API Client im 模块未初始化")
             return False
@@ -197,7 +342,7 @@ class LarkMessageEvent(AstrMessageEvent):
                     .content(content)
                     .msg_type(msg_type)
                     .uuid(str(uuid.uuid4()))
-                    .reply_in_thread(False)
+                    .reply_in_thread(reply_in_thread)
                     .build()
                 )
                 .build()
@@ -229,7 +374,8 @@ class LarkMessageEvent(AstrMessageEvent):
             )
             response = await lark_client.im.v1.message.acreate(request)
             if (
-                not response.success()
+                LarkMessageEvent._message_send_rejection(response) is not None
+                and response.code == 230034
                 and receive_id_type == "open_id"
                 and fallback_chat_id
             ):
@@ -254,14 +400,28 @@ class LarkMessageEvent(AstrMessageEvent):
                 )
                 response = await lark_client.im.v1.message.acreate(fallback_request)
 
-        if not response.success():
+        rejection = LarkMessageEvent._message_send_rejection(response)
+        if rejection is not None:
+            if return_receipt:
+                raise MessageSendRejected(rejection) from RuntimeError(
+                    f"[Lark] Message send failed ({response.code}): {response.msg}"
+                )
             if not reply_message_id:
                 raise RuntimeError(
                     f"[Lark] Message send failed ({response.code}): {response.msg}"
                 )
-            logger.error(f"[Lark] 发送飞书消息失败({response.code}): {response.msg}")
+            logger.error(
+                f"[Lark] Message send failed ({response.code}): {response.msg}"
+            )
             return False
 
+        if return_receipt:
+            message_id = getattr(getattr(response, "data", None), "message_id", None)
+            if message_id is not None and (
+                not isinstance(message_id, str) or not message_id
+            ):
+                raise RuntimeError("Lark returned an invalid accepted message ID")
+            return MessageSendReceipt(message_ids=(message_id,) if message_id else ())
         return True
 
     @staticmethod
@@ -563,6 +723,7 @@ class LarkMessageEvent(AstrMessageEvent):
 
         return {
             "schema": "2.0",
+            "config": {"update_multi": True},
             "body": {
                 "elements": elements,
             },
@@ -651,7 +812,8 @@ class LarkMessageEvent(AstrMessageEvent):
         receive_id_type: str | None = None,
         message_type: str | None = None,
         fallback_chat_id: str | None = None,
-    ) -> None:
+        reply_in_thread: bool = False,
+    ) -> MessageSendReceipt | None:
         """Send each message component with an optional private chat fallback.
 
         Args:
@@ -662,193 +824,254 @@ class LarkMessageEvent(AstrMessageEvent):
             receive_id_type: Recipient ID type for proactive messages.
             message_type: AstrBot message type embedded in callback context.
             fallback_chat_id: Known private chat to use if open ID is rejected.
+            reply_in_thread: Keep a reply in its original topic.
+
+        Returns:
+            Acceptance of the whole chain, or None for unqualified components.
 
         Raises:
             RuntimeError: A proactive message cannot be delivered.
         """
+        qualified = bool(message_chain.chain) and all(
+            isinstance(component, (Plain, At, ActionRow, File, Record, Video))
+            for component in message_chain.chain
+        )
+        receipts: list[MessageSendReceipt | None] = []
         if lark_client.im is None:
-            if not reply_message_id:
+            if not reply_message_id or qualified:
                 raise RuntimeError("[Lark] IM API client is not initialized")
             logger.error("[Lark] API Client im 模块未初始化")
             return
 
-        # 分离文件、音频、视频组件和其他组件
-        file_components: list[File] = []
-        audio_components: list[Record] = []
-        media_components: list[Video] = []
-        other_components = []
+        try:
+            # 分离文件、音频、视频组件和其他组件
+            file_components: list[File] = []
+            audio_components: list[Record] = []
+            media_components: list[Video] = []
+            other_components = []
 
-        for comp in message_chain.chain:
-            if isinstance(comp, File):
-                file_components.append(comp)
-            elif isinstance(comp, Record):
-                audio_components.append(comp)
-            elif isinstance(comp, Video):
-                media_components.append(comp)
-            else:
-                other_components.append(comp)
+            for comp in message_chain.chain:
+                if isinstance(comp, File):
+                    file_components.append(comp)
+                elif isinstance(comp, Record):
+                    audio_components.append(comp)
+                elif isinstance(comp, Video):
+                    media_components.append(comp)
+                else:
+                    other_components.append(comp)
 
-        has_reasoning_marker = any(
-            isinstance(comp, Json)
-            and isinstance(comp.data, dict)
-            and comp.data.get("type") == "lark_collapsible_panel_reasoning"
-            for comp in other_components
-        )
-        if (
-            has_reasoning_marker
-            and not file_components
-            and not audio_components
-            and not media_components
-        ):
-            card_json = LarkMessageEvent._build_reasoning_card(message_chain)
-            if card_json and await LarkMessageEvent._send_interactive_card(
-                card_json,
-                lark_client=lark_client,
-                reply_message_id=reply_message_id,
-                receive_id=receive_id,
-                receive_id_type=receive_id_type,
-                fallback_chat_id=fallback_chat_id,
-            ):
-                return
-
-        button_components = [
-            comp for comp in other_components if isinstance(comp, (Plain, ActionRow))
-        ]
-        action_rows = [
-            comp for comp in button_components if isinstance(comp, ActionRow)
-        ]
-        if action_rows:
-            other_components = [
-                comp
+            has_reasoning_marker = any(
+                isinstance(comp, Json)
+                and isinstance(comp.data, dict)
+                and comp.data.get("type") == "lark_collapsible_panel_reasoning"
                 for comp in other_components
-                if not isinstance(comp, (Plain, ActionRow))
-            ]
-            card_json = LarkMessageEvent._build_button_card(
-                button_components,
-                message_type,
             )
-            if not await LarkMessageEvent._send_interactive_card(
-                card_json,
-                lark_client=lark_client,
-                reply_message_id=reply_message_id,
-                receive_id=receive_id,
-                receive_id_type=receive_id_type,
-                fallback_chat_id=fallback_chat_id,
+            if (
+                has_reasoning_marker
+                and not file_components
+                and not audio_components
+                and not media_components
             ):
-                for component in button_components:
-                    if isinstance(component, Plain):
-                        other_components.append(component)
-                        continue
-                    fallback = component.fallback_text or " / ".join(
-                        button.label for button in component.buttons
-                    )
-                    if fallback:
-                        other_components.append(Plain(fallback))
-
-        # 先发送非文件内容（如果有）
-        if other_components:
-            buffered_components: list = []
-
-            async def _flush_buffer() -> None:
-                nonlocal buffered_components
-                if not buffered_components:
+                card_json = LarkMessageEvent._build_reasoning_card(message_chain)
+                if card_json and await LarkMessageEvent._send_interactive_card(
+                    card_json,
+                    lark_client=lark_client,
+                    reply_message_id=reply_message_id,
+                    receive_id=receive_id,
+                    receive_id_type=receive_id_type,
+                    fallback_chat_id=fallback_chat_id,
+                ):
                     return
 
-                pending_chain = MessageChain()
-                pending_chain.chain = buffered_components
-                buffered_components = []
-
-                res = await LarkMessageEvent._convert_to_lark(
-                    pending_chain,
-                    lark_client,
+            button_components = [
+                comp
+                for comp in other_components
+                if isinstance(comp, (Plain, ActionRow))
+            ]
+            action_rows = [
+                comp for comp in button_components if isinstance(comp, ActionRow)
+            ]
+            if action_rows:
+                other_components = [
+                    comp
+                    for comp in other_components
+                    if not isinstance(comp, (Plain, ActionRow))
+                ]
+                card_json = LarkMessageEvent._build_button_card(
+                    button_components,
+                    message_type,
                 )
-                if res:  # 只在有内容时发送
-                    wrapped = {
-                        "zh_cn": {
-                            "title": "",
-                            "content": res,
-                        },
-                    }
-                    await LarkMessageEvent._send_im_message(
-                        lark_client,
-                        content=json.dumps(wrapped),
-                        msg_type="post",
-                        reply_message_id=reply_message_id,
-                        receive_id=receive_id,
-                        receive_id_type=receive_id_type,
-                        fallback_chat_id=fallback_chat_id,
+                # Non-streaming buttons use an IM card so its message can be
+                # updated without retaining a separate CardKit entity identifier.
+                receipt = await LarkMessageEvent._send_im_message(
+                    lark_client,
+                    content=json.dumps(card_json, ensure_ascii=False),
+                    msg_type="interactive",
+                    reply_message_id=reply_message_id,
+                    receive_id=receive_id,
+                    receive_id_type=receive_id_type,
+                    fallback_chat_id=fallback_chat_id,
+                    reply_in_thread=reply_in_thread,
+                    return_receipt=True,
+                )
+                if (
+                    not isinstance(receipt, MessageSendReceipt)
+                    or not receipt.message_ids
+                ):
+                    raise RuntimeError(
+                        "[Lark] Accepted card response omitted its message ID"
                     )
+                receipts.append(receipt)
 
-            # 维持组件顺序：遇到折叠面板标记先 flush 当前普通内容并发送卡片
-            for comp in other_components:
-                if isinstance(comp, Json) and isinstance(comp.data, dict):
-                    comp_type = comp.data.get("type")
-                    if comp_type == "lark_collapsible_panel_reasoning":
-                        await _flush_buffer()
-                        if reason_text := str(comp.data.get("content", "")).strip():
-                            panel_title = str(
-                                comp.data.get("title", "💭 Thinking"),
-                            )
-                            success = await LarkMessageEvent._send_collapsible_reasoning_panel(
-                                reasoning_content=reason_text,
-                                title=panel_title,
-                                lark_client=lark_client,
-                                reply_message_id=reply_message_id,
-                                receive_id=receive_id,
-                                receive_id_type=receive_id_type,
-                                fallback_chat_id=fallback_chat_id,
-                            )
-                            if not success:
-                                buffered_components.append(
-                                    Plain(
-                                        f"🤔 {panel_title}: {reason_text}",
-                                    ),
+            # 先发送非文件内容（如果有）
+            if other_components:
+                buffered_components: list = []
+
+                async def _flush_buffer() -> None:
+                    nonlocal buffered_components
+                    if not buffered_components:
+                        return
+
+                    pending_chain = MessageChain()
+                    pending_chain.chain = buffered_components
+                    buffered_components = []
+
+                    res = await LarkMessageEvent._convert_to_lark(
+                        pending_chain,
+                        lark_client,
+                    )
+                    if res:  # 只在有内容时发送
+                        wrapped = {
+                            "zh_cn": {
+                                "title": "",
+                                "content": res,
+                            },
+                        }
+                        receipt = await LarkMessageEvent._send_im_message(
+                            lark_client,
+                            content=json.dumps(wrapped),
+                            msg_type="post",
+                            reply_message_id=reply_message_id,
+                            receive_id=receive_id,
+                            receive_id_type=receive_id_type,
+                            fallback_chat_id=fallback_chat_id,
+                            reply_in_thread=reply_in_thread,
+                            return_receipt=True,
+                        )
+                        if isinstance(receipt, MessageSendReceipt):
+                            receipts.append(receipt)
+
+                # 维持组件顺序：遇到折叠面板标记先 flush 当前普通内容并发送卡片
+                for comp in other_components:
+                    if isinstance(comp, Json) and isinstance(comp.data, dict):
+                        comp_type = comp.data.get("type")
+                        if comp_type == "lark_collapsible_panel_reasoning":
+                            await _flush_buffer()
+                            if reason_text := str(comp.data.get("content", "")).strip():
+                                panel_title = str(
+                                    comp.data.get("title", "💭 Thinking"),
                                 )
-                        continue
-                buffered_components.append(comp)
+                                success = await LarkMessageEvent._send_collapsible_reasoning_panel(
+                                    reasoning_content=reason_text,
+                                    title=panel_title,
+                                    lark_client=lark_client,
+                                    reply_message_id=reply_message_id,
+                                    receive_id=receive_id,
+                                    receive_id_type=receive_id_type,
+                                    fallback_chat_id=fallback_chat_id,
+                                )
+                                receipts.append(None)
+                                if not success:
+                                    buffered_components.append(
+                                        Plain(
+                                            f"🤔 {panel_title}: {reason_text}",
+                                        ),
+                                    )
+                            continue
+                    buffered_components.append(comp)
 
-            await _flush_buffer()
+                await _flush_buffer()
 
-        # 发送附件
-        for file_comp in file_components:
-            await LarkMessageEvent._send_file_message(
-                file_comp,
-                lark_client,
-                reply_message_id,
-                receive_id,
-                receive_id_type,
-                fallback_chat_id,
+            # 发送附件
+            for file_comp in file_components:
+                receipts.append(
+                    await LarkMessageEvent._send_file_message(
+                        file_comp,
+                        lark_client,
+                        reply_message_id,
+                        receive_id,
+                        receive_id_type,
+                        fallback_chat_id,
+                        reply_in_thread=reply_in_thread,
+                    )
+                )
+
+            for audio_comp in audio_components:
+                receipts.append(
+                    await LarkMessageEvent._send_audio_message(
+                        audio_comp,
+                        lark_client,
+                        reply_message_id,
+                        receive_id,
+                        receive_id_type,
+                        fallback_chat_id,
+                        reply_in_thread=reply_in_thread,
+                    )
+                )
+
+            for media_comp in media_components:
+                receipts.append(
+                    await LarkMessageEvent._send_media_message(
+                        media_comp,
+                        lark_client,
+                        reply_message_id,
+                        receive_id,
+                        receive_id_type,
+                        fallback_chat_id,
+                        reply_in_thread=reply_in_thread,
+                    )
+                )
+        except MessageSendRejected as exc:
+            if receipts:
+                raise RuntimeError(
+                    "[Lark] Message chain was only partly accepted"
+                ) from exc
+            raise
+        if (
+            qualified
+            and receipts
+            and all(isinstance(receipt, MessageSendReceipt) for receipt in receipts)
+        ):
+            return MessageSendReceipt(
+                message_ids=tuple(
+                    message_id
+                    for receipt in receipts
+                    if isinstance(receipt, MessageSendReceipt)
+                    for message_id in receipt.message_ids
+                )
             )
+        return None
 
-        for audio_comp in audio_components:
-            await LarkMessageEvent._send_audio_message(
-                audio_comp,
-                lark_client,
-                reply_message_id,
-                receive_id,
-                receive_id_type,
-                fallback_chat_id,
-            )
+    async def send(self, message: MessageChain) -> MessageSendReceipt | None:
+        """Reply to the original message and return qualified API acceptance.
 
-        for media_comp in media_components:
-            await LarkMessageEvent._send_media_message(
-                media_comp,
-                lark_client,
-                reply_message_id,
-                receive_id,
-                receive_id_type,
-                fallback_chat_id,
-            )
+        Args:
+            message: Message chain to send through the original Lark account.
 
-    async def send(self, message: MessageChain) -> None:
-        """发送消息链到飞书，然后交给父类做框架级发送/记录"""
-        await LarkMessageEvent.send_message_chain(
+        Returns:
+            Acceptance of the whole chain, or None for unqualified components.
+        """
+        receipt = await LarkMessageEvent.send_message_chain(
             message,
             self.bot,
             reply_message_id=self.message_obj.message_id,
             message_type=self.message_obj.type.value,
+            reply_in_thread=bool(
+                getattr(self.message_obj.raw_message, "thread_id", None)
+            ),
         )
         await super().send(message)
+        return receipt
 
     @staticmethod
     async def _send_file_message(
@@ -858,7 +1081,9 @@ class LarkMessageEvent(AstrMessageEvent):
         receive_id: str | None = None,
         receive_id_type: str | None = None,
         fallback_chat_id: str | None = None,
-    ) -> None:
+        *,
+        reply_in_thread: bool = False,
+    ) -> MessageSendReceipt | None:
         """Upload and send a file.
 
         Args:
@@ -868,6 +1093,10 @@ class LarkMessageEvent(AstrMessageEvent):
             receive_id: Recipient for proactive messages.
             receive_id_type: Recipient ID type for proactive messages.
             fallback_chat_id: Known private chat to use if open ID is rejected.
+            reply_in_thread: Keep a reply in its original topic.
+
+        Returns:
+            The message acceptance receipt, or None if no message was sent.
 
         Raises:
             RuntimeError: A proactive message cannot be delivered.
@@ -882,7 +1111,7 @@ class LarkMessageEvent(AstrMessageEvent):
             return
 
         content = json.dumps({"file_key": file_key})
-        await LarkMessageEvent._send_im_message(
+        return await LarkMessageEvent._send_im_message(
             lark_client,
             content=content,
             msg_type="file",
@@ -890,6 +1119,8 @@ class LarkMessageEvent(AstrMessageEvent):
             receive_id=receive_id,
             receive_id_type=receive_id_type,
             fallback_chat_id=fallback_chat_id,
+            reply_in_thread=reply_in_thread,
+            return_receipt=True,
         )
 
     @staticmethod
@@ -900,7 +1131,9 @@ class LarkMessageEvent(AstrMessageEvent):
         receive_id: str | None = None,
         receive_id_type: str | None = None,
         fallback_chat_id: str | None = None,
-    ) -> None:
+        *,
+        reply_in_thread: bool = False,
+    ) -> MessageSendReceipt | None:
         """Upload and send an audio message.
 
         Args:
@@ -910,6 +1143,10 @@ class LarkMessageEvent(AstrMessageEvent):
             receive_id: Recipient for proactive messages.
             receive_id_type: Recipient ID type for proactive messages.
             fallback_chat_id: Known private chat to use if open ID is rejected.
+            reply_in_thread: Keep a reply in its original topic.
+
+        Returns:
+            The message acceptance receipt, or None if no message was sent.
 
         Raises:
             RuntimeError: A proactive message cannot be delivered.
@@ -963,7 +1200,7 @@ class LarkMessageEvent(AstrMessageEvent):
                 raise RuntimeError("[Lark] Attachment upload failed")
             return
 
-        await LarkMessageEvent._send_im_message(
+        return await LarkMessageEvent._send_im_message(
             lark_client,
             content=json.dumps({"file_key": file_key}),
             msg_type="audio",
@@ -971,6 +1208,8 @@ class LarkMessageEvent(AstrMessageEvent):
             receive_id=receive_id,
             receive_id_type=receive_id_type,
             fallback_chat_id=fallback_chat_id,
+            reply_in_thread=reply_in_thread,
+            return_receipt=True,
         )
 
     @staticmethod
@@ -981,7 +1220,9 @@ class LarkMessageEvent(AstrMessageEvent):
         receive_id: str | None = None,
         receive_id_type: str | None = None,
         fallback_chat_id: str | None = None,
-    ) -> None:
+        *,
+        reply_in_thread: bool = False,
+    ) -> MessageSendReceipt | None:
         """Upload and send a video message.
 
         Args:
@@ -991,6 +1232,10 @@ class LarkMessageEvent(AstrMessageEvent):
             receive_id: Recipient for proactive messages.
             receive_id_type: Recipient ID type for proactive messages.
             fallback_chat_id: Known private chat to use if open ID is rejected.
+            reply_in_thread: Keep a reply in its original topic.
+
+        Returns:
+            The message acceptance receipt, or None if no message was sent.
 
         Raises:
             RuntimeError: A proactive message cannot be delivered.
@@ -1044,7 +1289,7 @@ class LarkMessageEvent(AstrMessageEvent):
                 raise RuntimeError("[Lark] Attachment upload failed")
             return
 
-        await LarkMessageEvent._send_im_message(
+        return await LarkMessageEvent._send_im_message(
             lark_client,
             content=json.dumps({"file_key": file_key}),
             msg_type="media",
@@ -1052,6 +1297,8 @@ class LarkMessageEvent(AstrMessageEvent):
             receive_id=receive_id,
             receive_id_type=receive_id_type,
             fallback_chat_id=fallback_chat_id,
+            reply_in_thread=reply_in_thread,
+            return_receipt=True,
         )
 
     async def react(self, emoji: str) -> None:

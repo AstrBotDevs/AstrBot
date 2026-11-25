@@ -15,6 +15,8 @@ from .astr_message_event import AstrMessageEvent
 from .astrbot_message import AstrBotMessage
 from .message_session import MessageSesion
 from .platform_metadata import PlatformMetadata
+from .reply_context import MessageReplyContext
+from .send_receipt import MessageSendReceipt
 
 
 class PlatformStatus(Enum):
@@ -135,10 +137,16 @@ class Platform(abc.ABC):
         self,
         session: MessageSesion,
         message_chain: MessageChain,
-    ) -> None:
-        """通过会话发送消息。该方法旨在让插件能够直接通过**可持久化的会话数据**发送消息，而不需要保存 event 对象。
+    ) -> MessageSendReceipt | None:
+        """Send through a persisted session without retaining an event object.
 
-        异步方法。
+        Args:
+            session: Destination session.
+            message_chain: Message content to send.
+
+        Returns:
+            An optional API acceptance receipt for the complete chain. None
+            means the adapter does not expose a confirmed result, not failure.
         """
         asyncio.create_task(
             Metric.upload(msg_event_tick=1, adapter_name=self.meta().name)
@@ -148,20 +156,64 @@ class Platform(abc.ABC):
         """提交一个事件到事件队列。"""
         self._event_queue.put_nowait(event)
 
-    def create_event(self, message: AstrBotMessage) -> AstrMessageEvent:
+    def get_reply_context(self, event: AstrMessageEvent) -> MessageReplyContext:
+        """Capture the original message's reply destination on this adapter.
+
+        Args:
+            event: An incoming event from this configured platform instance.
+
+        Returns:
+            Serializable identifiers for a future reply to the same message.
+
+        Raises:
+            NotImplementedError: The adapter does not support saved replies.
+        """
+        raise NotImplementedError(f"{self.meta().name} does not support saved replies")
+
+    def create_event(
+        self, message: AstrBotMessage | MessageReplyContext
+    ) -> AstrMessageEvent:
         """Creates a message event for this platform.
 
         Args:
-            message: AstrBot message object to wrap.
+            message: AstrBot message object or this adapter's saved reply context.
 
         Returns:
             Created message event.
         """
+        if isinstance(message, MessageReplyContext):
+            raise NotImplementedError(
+                f"{self.meta().name} does not support saved replies"
+            )
         return AstrMessageEvent(
             message_str=message.message_str,
             message_obj=message,
             platform_meta=self.meta(),
             session_id=message.session_id,
+        )
+
+    async def update_message(
+        self,
+        context: MessageReplyContext,
+        message_id: str,
+        message_chain: MessageChain,
+    ) -> MessageSendReceipt | None:
+        """Replace a previously sent interactive message in its original chat.
+
+        Args:
+            context: Original incoming message context identifying the account and chat.
+            message_id: Platform message ID from the send receipt for the card.
+            message_chain: New contents of the existing message.
+
+        Returns:
+            A receipt when the platform acknowledged the update in full, or None
+            if acceptance could not be established.
+
+        Raises:
+            NotImplementedError: This adapter does not support updating messages.
+        """
+        raise NotImplementedError(
+            f"{self.meta().name} does not support updating messages"
         )
 
     def get_client(self) -> object:
