@@ -467,11 +467,11 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         """
         safe_tool_call_id = (
             "".join(
-                ch if ch.isalnum() or ch in {"-", "_", "."} else "_"
+                ch if (ch.isascii() and ch.isalnum()) or ch in {"-", "_"} else "_"
                 for ch in tool_call_id
             )
-            .strip("._")[:120]
-            .rstrip("._")
+            .strip("_")[:120]
+            .rstrip("_")
             or "tool_call"
         )
         file_name = f"{safe_tool_call_id}_{uuid.uuid4().hex[:8]}.txt"

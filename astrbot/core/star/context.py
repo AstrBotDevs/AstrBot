@@ -374,7 +374,7 @@ class Context:
         if read_tool is not None:
             other_kwargs.setdefault("read_tool", read_tool)
             if (
-                other_kwargs.get("read_tool") is not None
+                other_kwargs.get("read_tool") is read_tool
                 and "tool_result_overflow_dir" not in other_kwargs
                 and "tool_result_overflow_writer" not in other_kwargs
             ):
