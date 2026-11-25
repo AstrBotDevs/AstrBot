@@ -8,6 +8,7 @@ import pytest
 from PIL import Image as PILImage
 
 from astrbot.core.agent.tool import FunctionTool, ToolSet
+from astrbot.core.astr_agent_runtime.subagents.caller import DelegatedAgentInput
 from astrbot.core.astr_agent_runtime.subagents.store import AgentState
 from astrbot.core.message.components import Image
 from astrbot.core.provider.entities import LLMResponse
@@ -66,20 +67,21 @@ async def test_native_subagent_journal_is_scoped_to_umo(environment):
     assert result["agents"][0]["state"] == "completed"
     cid = agent["conversation_id"]
 
-    assert await store.read(cid) is None
+    assert await env.db.get_conversation_by_id(cid) is None
     assert [
         conv.conversation_id for conv in await env.db.get_conversations(env.scope.umo)
     ] == [main.conversation_id]
-    snapshot = await store.read(cid, subagent=True)
+    snapshot = await store.read(cid)
     assert "Private input" in str(snapshot.messages)
-    assert snapshot.conversation.runtime == "astrbot"
-    events = await store.events(cid, subagent=True)
+    events = await store.events(cid)
     assert events[0].type == "conversation.created"
     assert "parent_conversation_id" not in events[0].payload
     assert "kind" not in events[0].payload
     assert any(event.type == "message.appended" for event in events)
 
     options = {"profile": "subagent"}
+    with pytest.raises(ValueError, match="missing or belongs to another UMO"):
+        await env.native.open_session(env.scope.umo, session_id=cid)
     session = await env.native.open_session(
         env.scope.umo, session_id=cid, options=options
     )
@@ -89,14 +91,25 @@ async def test_native_subagent_journal_is_scoped_to_umo(environment):
         )
     await session.close()
     env.native._sessions.pop(("subagent", cid))
-    with pytest.raises(ValueError, match="not found or inaccessible"):
-        await env.native.open_session(
-            "test:FriendMessage:bob", session_id=cid, options=options
-        )
-    restored = await env.native.open_session(
-        env.scope.umo, session_id=cid, options=options
+    caller = env.service._caller(env.root)
+    request = DelegatedAgentInput(
+        event=env.event, permissions=env.root.permissions, caller=caller
     )
-    assert "Private input" in str(await restored.history())
+    with pytest.raises(ValueError, match="owning caller"):
+        await env.native.open_session(
+            "test:FriendMessage:bob", session_id=cid, options=options, input=request
+        )
+    profile = env.context.get_config()
+    profile["agent"]["config"]["persona"] = {"system_prompt": "Updated parent instructions"}
+    env.context.get_config = lambda **kwargs: profile
+    await env.service.send(
+        env.root, agent["agent_id"], [{"type": "plain", "text": "After reopening"}]
+    )
+    result = await env.service.wait(env.root, [agent["agent_id"]], 2000, "all")
+    assert result["agents"][0]["state"] == "completed"
+    contexts = str(env.provider.text_chat.call_args.kwargs["contexts"])
+    assert "Private input" in contexts
+    assert "Updated parent instructions" in contexts
 
 
 @pytest.mark.asyncio

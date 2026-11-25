@@ -3,6 +3,7 @@ from types import SimpleNamespace
 
 import pytest
 
+from astrbot.core.agent.message import dump_messages
 from astrbot.core.astr_agent_runtime.main_agent import persona as persona_build
 from astrbot.core.skills.skill_manager import SkillInfo
 
@@ -40,19 +41,22 @@ async def test_persona_resolution_occurs_in_native_runtime(environment, persona_
         env.root, [{"type": "plain", "text": "Task"}], config_id=selected.config_id
     )
     await env.service.wait(env.root, [agent["agent_id"]], 2000, "all")
-    row = await env.db.conversation_store.get_metadata(
-        agent["conversation_id"], subagent=True
+    session = await env.native.open_session(
+        env.scope.umo,
+        session_id=agent["conversation_id"],
+        options={"profile": "subagent"},
     )
-    data = row.subagent_config
-    assert data["instructions"] == (
+    assert session.conversation.instructions == (
         "Persona instructions" if persona_id == "default" else "Parent instructions"
     )
-    assert data["tools"] == (None if persona_id == "default" else ["tool_a"])
-    assert data["initial_dialogs"] == (dialogs if persona_id == "default" else [])
+    assert session.conversation.tools == (None if persona_id == "default" else ["tool_a"])
+    assert dump_messages(session.conversation.initial_dialogs) == (
+        dialogs if persona_id == "default" else []
+    )
 
 
 @pytest.mark.asyncio
-async def test_expert_changes_do_not_reconfigure_open_conversations(environment):
+async def test_expert_changes_take_effect_when_the_conversation_reopens(environment):
     env = environment
     persona = {"prompt": "Original instructions", "tools": []}
     env.context.persona_manager.get_persona_v3_by_id.side_effect = lambda _: deepcopy(
@@ -81,6 +85,22 @@ async def test_expert_changes_do_not_reconfigure_open_conversations(environment)
     assert "Updated instructions" not in str(
         env.provider.text_chat.call_args.kwargs["contexts"]
     )
+    session = await env.native.open_session(
+        env.scope.umo,
+        session_id=agent["conversation_id"],
+        options={"profile": "subagent"},
+    )
+    await session.close()
+    await env.service.send(
+        env.root, agent["agent_id"], [{"type": "plain", "text": "After reopening"}]
+    )
+    result = await env.service.wait(env.root, [agent["agent_id"]], 2000, "all")
+    assert result["agents"][0]["state"] == "completed"
+    assert env.context.provider_manager.get_provider_by_id.call_args.args == ("model",)
+    contexts = str(env.provider.text_chat.call_args.kwargs["contexts"])
+    assert "Updated instructions" in contexts
+    assert "Initial" in contexts
+    assert "Continue" in contexts
 
 
 @pytest.mark.asyncio
@@ -101,9 +121,7 @@ async def test_temporary_persona_dialogue_is_used_once_but_not_saved_as_history(
     )
     await env.service.wait(env.root, [agent["agent_id"]], 2000, "all")
     assert "Temporary setup" in str(env.provider.text_chat.call_args.kwargs["contexts"])
-    snapshot = await env.db.conversation_store.read(
-        agent["conversation_id"], subagent=True
-    )
+    snapshot = await env.db.conversation_store.read(agent["conversation_id"])
     assert "Temporary setup" not in str(snapshot.messages)
     await env.service.send(
         env.root, agent["agent_id"], [{"type": "plain", "text": "Continue"}]

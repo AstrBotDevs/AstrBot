@@ -159,7 +159,7 @@ class AstrAgentRuntime(AgentRuntime):
             umo: Source selected by Core.
             session_id: Exact conversation to restore, or None for current main.
             options: Runtime-specific session options.
-            input: Initial event used only to create a missing main conversation.
+            input: Event for creating a main conversation or opening a delegated one.
 
         Returns:
             The sole live owner of the requested native conversation.
@@ -185,23 +185,22 @@ class AstrAgentRuntime(AgentRuntime):
             async with self._opening:
                 if self._closed:
                     raise ValueError("AstrBot agent runtime is closed")
-                if session_id is not None:
-                    session = self._sessions.get((profile, session_id))
-                    if session is not None and session.umo != umo:
-                        raise ValueError("Agent session belongs to another UMO")
-                    if session is None or session.closed:
-                        if session is not None:
-                            await session.close()
-                        session = await DelegatedAgentSession.restore(
-                            self, umo, session_id
-                        )
-                else:
+                session = (
+                    self._sessions.get((profile, session_id))
+                    if session_id is not None
+                    else None
+                )
+                if session is not None and session.umo != umo:
+                    raise ValueError("Agent session belongs to another UMO")
+                if session is None or session.closed:
                     if not isinstance(input, DelegatedAgentInput):
                         raise ValueError(
-                            "Creating a child requires delegated caller input"
+                            "Opening a child requires delegated caller input"
                         )
-                    session = await DelegatedAgentSession.create(
-                        self, umo, input, options or {}
+                    if session is not None:
+                        await session.close()
+                    session = await DelegatedAgentSession.open(
+                        self, umo, input, options or {}, session_id=session_id
                     )
                 if self._closed:
                     await session.close()
@@ -245,7 +244,13 @@ class AstrAgentRuntime(AgentRuntime):
                     conversation = await manager.db.conversation_store.get_metadata(
                         session_id
                     )
-        if conversation is None or conversation.umo != umo:
+        if (
+            session_id is None
+            or conversation is None
+            or conversation.umo != umo
+            or self.subagents.store.find_native_conversation(umo, session_id)
+            is not None
+        ):
             raise ValueError("Agent conversation is missing or belongs to another UMO")
         # Existing conversations perform all database reads outside this registry
         # lock. Their execution lock controls when fresh history is loaded.

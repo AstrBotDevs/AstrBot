@@ -20,6 +20,7 @@ from astrbot.core.db.po import (
     ConversationRevision,
     ConversationV3,
     PlatformMessageHistory,
+    Preference,
 )
 from astrbot.core.db.webchat_projection import project_webchat_event_links
 from astrbot.core.sentinels import NOT_GIVEN
@@ -43,6 +44,26 @@ class ContextUnavailableError(ValueError):
 
 class ConversationConflictError(RuntimeError):
     """The conversation changed after a caller read its revision."""
+
+
+def main_conversation_filter():
+    """Exclude conversations registered to a native subagent.
+
+    Returns:
+        A correlated SQL predicate for main conversation queries.
+    """
+    return ~(
+        select(1)
+        .where(
+            Preference.scope == "subagent_session",
+            Preference.scope_id == ConversationV3.umo,
+            col(Preference.value)["runtime"].as_string() == "astrbot",
+            col(Preference.value)["conversation_id"].as_string()
+            == ConversationV3.conversation_id,
+        )
+        .correlate(ConversationV3)
+        .exists()
+    )
 
 
 def same_conversation_owner(source: str, target: str) -> bool:
@@ -317,8 +338,6 @@ class ConversationStore:
         created_at=None,
         updated_at=None,
         source_event_id=None,
-        runtime: str | None = None,
-        subagent_config: dict | None = None,
     ) -> ConversationV3:
         """Create a conversation with an independent optional context snapshot.
 
@@ -332,8 +351,6 @@ class ConversationStore:
             created_at: Optional migration timestamp.
             updated_at: Optional migration timestamp.
             source_event_id: Authorized historical position to copy.
-            runtime: Registered runtime responsible for the conversation.
-            subagent_config: Configuration snapshot for a delegated conversation.
 
         Returns:
             Newly committed metadata.
@@ -350,13 +367,17 @@ class ConversationStore:
                     )
                 ).scalar_one_or_none()
                 owner = (
-                    await session.get(ConversationV3, source.conversation_ref)
+                    await session.scalar(
+                        select(ConversationV3).where(
+                            ConversationV3.id == source.conversation_ref,
+                            main_conversation_filter(),
+                        )
+                    )
                     if source
                     else None
                 )
                 if (
                     not owner
-                    or owner.subagent_config is not None
                     or not same_conversation_owner(owner.umo, umo)
                     or source.type not in CONTEXT_TYPES
                 ):
@@ -372,8 +393,6 @@ class ConversationStore:
                 platform_id=platform_id,
                 title=title,
                 persona_id=persona_id,
-                runtime=runtime,
-                subagent_config=subagent_config,
                 created_at=created_at or datetime.now(timezone.utc),
                 updated_at=updated_at or created_at or datetime.now(timezone.utc),
             )
@@ -558,10 +577,7 @@ class ConversationStore:
         async with self.db.get_db(consistent_read=True) as session:
             conv = (
                 await session.execute(
-                    select(ConversationV3).where(
-                        ConversationV3.conversation_id == cid,
-                        col(ConversationV3.subagent_config).is_(None),
-                    )
+                    select(ConversationV3).where(ConversationV3.conversation_id == cid)
                 )
             ).scalar_one_or_none()
             if conv is None:
@@ -639,34 +655,27 @@ class ConversationStore:
         async with self.db.get_db(consistent_read=True) as session:
             return await self.project(session, conversation, leaf)
 
-    async def get_metadata(
-        self, cid: str, *, subagent: bool = False
-    ) -> ConversationV3 | None:
+    async def get_metadata(self, cid: str) -> ConversationV3 | None:
         """Read identity and ownership without loading message bodies.
 
         Args:
             cid: Public conversation identity.
-            subagent: Whether to select a conversation with a subagent configuration snapshot.
 
         Returns:
             Detached metadata, or None when the conversation is absent.
         """
         async with self.db.get_db() as session:
             return await session.scalar(
-                select(ConversationV3).where(
-                    ConversationV3.conversation_id == cid,
-                    col(ConversationV3.subagent_config).is_not(None) == subagent,
-                )
+                select(ConversationV3).where(ConversationV3.conversation_id == cid)
             )
 
     async def read_for_execution(
-        self, cid: str, *, subagent: bool = False
+        self, cid: str
     ) -> tuple[ConversationRead, ConversationSnapshot] | None:
         """Load a request and its writer projection from the same database view.
 
         Args:
             cid: Public conversation identity.
-            subagent: Whether to select a conversation with a subagent configuration snapshot.
 
         Returns:
             Plugin-compatible history and an independent writer snapshot sharing
@@ -698,10 +707,7 @@ class ConversationStore:
                             ).scalar_subquery(),
                             0,
                         ),
-                    ).where(
-                        ConversationV3.conversation_id == cid,
-                        col(ConversationV3.subagent_config).is_not(None) == subagent,
-                    )
+                    ).where(ConversationV3.conversation_id == cid)
                 )
             ).one_or_none()
             if loaded is None:
@@ -725,18 +731,13 @@ class ConversationStore:
             return record, snapshot
 
     async def read(
-        self,
-        cid: str,
-        *,
-        include_history: bool = True,
-        subagent: bool = False,
+        self, cid: str, *, include_history: bool = True
     ) -> ConversationSnapshot | None:
         """Read a conversation and its derived revision from one database view.
 
         Args:
             cid: Public conversation identity.
             include_history: Whether to load message bodies.
-            subagent: Whether to select a conversation with a subagent configuration snapshot.
 
         Returns:
             Detached metadata and revision, with context when requested, or None.
@@ -745,8 +746,7 @@ class ConversationStore:
             row = (
                 await session.execute(
                     select(ConversationV3, *conversation_revision_columns()).where(
-                        ConversationV3.conversation_id == cid,
-                        col(ConversationV3.subagent_config).is_not(None) == subagent,
+                        ConversationV3.conversation_id == cid
                     )
                 )
             ).one_or_none()
@@ -1044,7 +1044,6 @@ class ConversationStore:
         reason="legacy_replace",
         origin="unknown",
         link_display: bool = True,
-        subagent: bool = False,
     ) -> ConversationAppendResult:
         """Atomically validate and append a batch, optionally committing legacy history.
 
@@ -1058,7 +1057,6 @@ class ConversationStore:
             origin: Host-attributed source of a legacy context replacement.
             link_display: Maintain display links in the transaction. Hosts without
                 display rows can opt out; existing callers retain projection.
-            subagent: Whether to select a conversation with a subagent configuration snapshot.
 
         Returns:
             Acknowledged events and whether the complete batch was already stored.
@@ -1098,11 +1096,7 @@ class ConversationStore:
                             ConversationEvent,
                             col(ConversationEvent.event_id).in_(select(ids.c.value)),
                         )
-                        .where(
-                            ConversationV3.conversation_id == cid,
-                            col(ConversationV3.subagent_config).is_not(None)
-                            == subagent,
-                        )
+                        .where(ConversationV3.conversation_id == cid)
                     )
                 ).all()
                 if not metadata_rows:
@@ -1117,9 +1111,7 @@ class ConversationStore:
                 metadata = (
                     await session.execute(
                         select(ConversationV3, *metadata_columns).where(
-                            ConversationV3.conversation_id == cid,
-                            col(ConversationV3.subagent_config).is_not(None)
-                            == subagent,
+                            ConversationV3.conversation_id == cid
                         )
                     )
                 ).one_or_none()
@@ -1200,7 +1192,7 @@ class ConversationStore:
             batch_events: dict[str, ConversationEvent] = {}
             batch_finishes: set[tuple[str, str]] = set()
             for index, draft in enumerate(drafts):
-                event_type = draft["type"]
+                kind = draft["type"]
                 payload = draft.get("payload", {})
                 # Legacy history may add drafts after the initial normalization.
                 size = (
@@ -1218,14 +1210,14 @@ class ConversationStore:
                 await self._validate_event(
                     session, conv, draft, leaf_event_id, batch_events, batch_finishes
                 )
-                if event_type == "conversation.updated":
+                if kind == "conversation.updated":
                     metadata_changes.update(payload.get("changes", {}))
                 head_seq += 1
                 event = ConversationEvent(
                     conversation_ref=conv.id,
                     seq=head_seq,
                     event_id=draft.get("event_id") or new_event_id(),
-                    type=event_type,
+                    type=kind,
                     payload=payload,
                 )
                 # Payloads are already detached above. Serializing them again via
@@ -1236,12 +1228,9 @@ class ConversationStore:
                 batch_bytes += size
                 batch_events[event.event_id] = event
                 committed.append(event)
-                if event_type in CONTEXT_TYPES:
+                if kind in CONTEXT_TYPES:
                     leaf_event_id = event.event_id
-                if (
-                    event_type == "context.rebased"
-                    and payload.get("origin") == "plugin"
-                ):
+                if kind == "context.rebased" and payload.get("origin") == "plugin":
                     has_plugin_baseline = True
             if rows:
                 await session.execute(insert(ConversationEvent).values(rows))
@@ -1274,7 +1263,6 @@ class ConversationStore:
         limit=100,
         max_bytes=4 * 1024 * 1024,
         descending=False,
-        subagent: bool = False,
     ) -> list[ConversationEvent]:
         """Read an indexed event page without loading the conversation projection.
 
@@ -1286,7 +1274,6 @@ class ConversationStore:
             limit: Maximum events, from 1 to 1000.
             max_bytes: Soft byte budget; one oversized event is returned alone.
             descending: Whether to read newest first.
-            subagent: Whether to select a conversation with a subagent configuration snapshot.
 
         Returns:
             Detached events; continue using the last returned seq.
@@ -1302,7 +1289,6 @@ class ConversationStore:
                 )
                 .where(
                     ConversationV3.conversation_id == cid,
-                    col(ConversationV3.subagent_config).is_not(None) == subagent,
                     ConversationEvent.seq > after_seq,
                 )
             )
@@ -1353,7 +1339,6 @@ class ConversationStore:
                     )
                     .where(
                         ConversationV3.conversation_id == cid,
-                        col(ConversationV3.subagent_config).is_(None),
                         ConversationEvent.event_id == request_id,
                         ConversationEvent.type == "request.started",
                     )
@@ -1402,8 +1387,7 @@ class ConversationStore:
             conv, head_seq, leaf_event_id = (
                 await session.execute(
                     select(ConversationV3, *conversation_revision_columns()).where(
-                        ConversationV3.conversation_id == cid,
-                        col(ConversationV3.subagent_config).is_(None),
+                        ConversationV3.conversation_id == cid
                     )
                 )
             ).one()
@@ -1464,8 +1448,7 @@ class ConversationStore:
             conv, head_seq, leaf_event_id = (
                 await session.execute(
                     select(ConversationV3, *conversation_revision_columns()).where(
-                        ConversationV3.conversation_id == cid,
-                        col(ConversationV3.subagent_config).is_(None),
+                        ConversationV3.conversation_id == cid
                     )
                 )
             ).one()
@@ -1554,28 +1537,24 @@ class ConversationStore:
             await session.commit()
             return replacement
 
-    async def delete(self, *, cid=None, umo=None, subagent: bool = False) -> None:
+    async def delete(self, *, cid=None, umo=None) -> None:
         """Delete conversations; independent forks retain their own contexts.
 
         Args:
             cid: Optional single public identity.
             umo: Optional owner filter, or owner whose conversations are deleted together.
-            subagent: Whether the selected conversation is a subagent conversation.
 
         Raises:
             ValueError: The conversation selection is invalid.
         """
         async with self.db.get_db() as session:
             await session.execute(text("BEGIN IMMEDIATE"))
-            query = select(ConversationV3.id)
-            if cid:
-                query = query.where(
-                    ConversationV3.conversation_id == cid,
-                    col(ConversationV3.subagent_config).is_not(None) == subagent,
-                )
-                if umo is not None:
-                    query = query.where(ConversationV3.umo == umo)
-            else:
+            query = (
+                select(ConversationV3.id).where(ConversationV3.conversation_id == cid)
+                if cid
+                else select(ConversationV3.id).where(ConversationV3.umo == umo)
+            )
+            if cid and umo is not None:
                 query = query.where(ConversationV3.umo == umo)
             ids = list((await session.execute(query)).scalars())
             if ids:

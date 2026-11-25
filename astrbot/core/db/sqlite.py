@@ -15,6 +15,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import col, delete, desc, func, or_, select, text, update
 
 from astrbot.core.db import BaseDatabase
+from astrbot.core.db.conversation import main_conversation_filter
 from astrbot.core.db.migration.migra_conversation_events import migrate_conversations
 from astrbot.core.db.po import (
     ApiKey,
@@ -175,18 +176,6 @@ class SQLiteDatabase(BaseDatabase):
             await self._ensure_persona_custom_error_message_column(conn)
             await self._ensure_platform_message_history_event_columns(conn)
             await self._ensure_chatui_project_workspace_columns(conn)
-            columns = await conn.execute(text("PRAGMA table_info(conversations_v3)"))
-            existing = {row[1] for row in columns}
-            for name, sql_type in (
-                ("runtime", "VARCHAR"),
-                ("subagent_config", "JSON"),
-            ):
-                if name not in existing:
-                    await conn.execute(
-                        text(
-                            f"ALTER TABLE conversations_v3 ADD COLUMN {name} {sql_type}"
-                        )
-                    )
             # The table-level unique constraint already provides an index for UMO
             # lookups. Older schemas also created this redundant explicit index.
             await conn.execute(text("DROP INDEX IF EXISTS ix_umo_aliases_umo"))
@@ -439,9 +428,7 @@ class SQLiteDatabase(BaseDatabase):
     async def get_conversations(self, user_id=None, platform_id=None):
         async with self.get_db(consistent_read=True) as session:
             session: AsyncSession
-            query = select(ConversationV3).where(
-                col(ConversationV3.subagent_config).is_(None)
-            )
+            query = select(ConversationV3).where(main_conversation_filter())
 
             if user_id:
                 query = query.where(ConversationV3.umo == user_id)
@@ -459,8 +446,7 @@ class SQLiteDatabase(BaseDatabase):
         async with self.get_db(consistent_read=True) as session:
             session: AsyncSession
             query = select(ConversationV3).where(
-                ConversationV3.conversation_id == cid,
-                col(ConversationV3.subagent_config).is_(None),
+                ConversationV3.conversation_id == cid, main_conversation_filter()
             )
             result = await session.execute(query)
             conv = result.scalar_one_or_none()
@@ -476,7 +462,7 @@ class SQLiteDatabase(BaseDatabase):
             offset = (page - 1) * page_size
             result = await session.execute(
                 select(ConversationV3)
-                .where(col(ConversationV3.subagent_config).is_(None))
+                .where(main_conversation_filter())
                 .order_by(desc(ConversationV3.created_at))
                 .offset(offset)
                 .limit(page_size),
@@ -498,7 +484,7 @@ class SQLiteDatabase(BaseDatabase):
             session: AsyncSession
             # Build the base query with filters
             base_query = select(ConversationV3)
-            conditions = [col(ConversationV3.subagent_config).is_(None)]
+            conditions = [main_conversation_filter()]
 
             if platform_ids:
                 conditions.append(col(ConversationV3.platform_id).in_(platform_ids))
@@ -676,7 +662,7 @@ class SQLiteDatabase(BaseDatabase):
         async with self.get_db() as session:
             result = await session.execute(
                 select(ConversationV3.platform_id)
-                .where(col(ConversationV3.subagent_config).is_(None))
+                .where(main_conversation_filter())
                 .distinct()
                 .order_by(ConversationV3.platform_id)
             )
@@ -709,8 +695,8 @@ class SQLiteDatabase(BaseDatabase):
     async def update_conversation(
         self, cid, title=None, persona_id=None, content=None, token_usage=None
     ):
-        snapshot = await self.conversation_store.read(cid)
-        if snapshot is None:
+        current = await self.get_conversation_by_id(cid)
+        if current is None:
             return None
         changes = {}
         if title is not None:
@@ -727,12 +713,20 @@ class SQLiteDatabase(BaseDatabase):
             cid,
             drafts,
             history=content,
-            expected_head=snapshot.revision.head_seq,
-            expected_leaf=snapshot.revision.leaf_event_id,
+            expected_head=current.revision.head_seq,
+            expected_leaf=current.revision.leaf_event_id,
         )
         return await self.get_conversation_by_id(cid)
 
     async def delete_conversation(self, cid) -> None:
+        async with self.get_db() as session:
+            main_id = await session.scalar(
+                select(ConversationV3.id).where(
+                    ConversationV3.conversation_id == cid, main_conversation_filter()
+                )
+            )
+        if main_id is None:
+            return
         await self.conversation_store.delete(cid=cid)
 
     async def delete_conversations_by_user_id(self, user_id: str) -> None:

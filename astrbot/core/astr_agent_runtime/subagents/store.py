@@ -201,7 +201,7 @@ class SubAgentStore:
             )
 
     async def remove(self, agent: AgentRecord) -> None:
-        """Delete a session whose owning main conversation no longer exists.
+        """Remove a delegated session registration from memory and storage.
 
         Args:
             agent: Session to remove from memory and persistent storage.
@@ -229,6 +229,29 @@ class SubAgentStore:
         if agent is None or agent.scope != scope:
             raise ValueError(f"Unknown subagent: {agent_id}")
         return agent
+
+    def find_native_conversation(
+        self, umo: str, conversation_id: str
+    ) -> AgentRecord | None:
+        """Find the registered native subagent for a conversation.
+
+        Args:
+            umo: Owner of the conversation.
+            conversation_id: ConversationStore identity.
+
+        Returns:
+            The corresponding subagent or None if no registration matches.
+        """
+        return next(
+            (
+                agent
+                for agent in self.agents.values()
+                if agent.scope.umo == umo
+                and agent.runtime == "astrbot"
+                and agent.conversation_id == conversation_id
+            ),
+            None,
+        )
 
     def list(self, scope: AgentScope) -> list[AgentRecord]:
         """Return sessions shared within one main conversation.

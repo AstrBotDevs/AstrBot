@@ -194,7 +194,9 @@ async def runtime(monkeypatch):
         lambda *_: SimpleNamespace(append=lambda *args, **kwargs: True),
     )
     monkeypatch.setattr(trace_module, "_get_log_broker", lambda: None)
-    native = AstrAgentRuntime(context, agent_configs=MagicMock(), subagents=MagicMock())
+    subagents = MagicMock()
+    subagents.store.find_native_conversation.return_value = None
+    native = AstrAgentRuntime(context, agent_configs=MagicMock(), subagents=subagents)
     runtimes = {"astrbot": native}
     scheduler = PipelineScheduler(
         PipelineContext(

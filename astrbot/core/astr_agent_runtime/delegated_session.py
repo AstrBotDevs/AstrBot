@@ -75,7 +75,7 @@ async def native_user_message(
 
 @dataclass
 class NativeConversation:
-    """The complete persisted state owned by the native runtime."""
+    """An open child conversation with resolved settings and committed history."""
 
     conversation_id: str
     provider_id: str
@@ -101,31 +101,57 @@ class DelegatedAgentSession(NativeAgentSession):
         self.conversation = conversation
 
     @classmethod
-    async def create(
+    async def open(
         cls,
         runtime: AstrAgentRuntime,
         umo: str,
         input: DelegatedAgentInput,
         options: dict,
+        *,
+        session_id: str | None = None,
     ) -> DelegatedAgentSession:
-        """Snapshot native configuration and its capabilities when a child session opens.
+        """Open a child conversation with current settings and persisted history.
 
         Args:
             runtime: Owner supplying storage and application services.
             umo: Owner message source.
-            input: Initial caller and its currently delegable capabilities.
-            options: Validated runtime configuration and display metadata.
+            input: Current caller and its delegable capabilities.
+            options: Runtime configuration and display metadata for a new child.
+            session_id: Existing registered conversation to restore, if any.
 
         Returns:
-            A new persisted private session with no model work started.
+            An open child session, ready to accept a turn.
 
         Raises:
-            ValueError: If the caller, persona or configured provider is unavailable.
+            ValueError: If ownership or the requested configuration is invalid.
         """
         caller = input.caller
         if caller is None or caller.scope.umo != umo:
             raise ValueError("A delegated session requires an owning caller")
-        overrides = runtime.normalize_config(options.get("config", {}), delegated=True)
+        store = runtime.context._db.conversation_store
+        overrides = options.get("config", {})
+        history = []
+        token_usage = 0
+        if session_id is not None:
+            agent = runtime.subagents.store.find_native_conversation(umo, session_id)
+            loaded = await store.read_for_execution(session_id) if agent else None
+            if agent is None or loaded is None or loaded[0].user_id != umo:
+                raise ValueError(
+                    f"Native agent conversation not found or inaccessible: {session_id}"
+                )
+            record, _ = loaded
+            history = load_messages(record.content or [])
+            token_usage = record.token_usage
+            config_id = agent.options.get("config_id")
+            overrides = {}
+            if config_id is not None:
+                selected = await runtime.agent_configs.get(config_id)
+                if not selected.enabled or selected.runtime != "astrbot":
+                    raise ValueError(
+                        f"Native agent configuration is unavailable: {config_id}"
+                    )
+                overrides = selected.config
+        overrides = runtime.normalize_config(overrides, delegated=True)
         config = runtime.normalize_config(
             caller.context.get_config(umo=umo).get("agent", {}).get("config", {})
         )
@@ -176,12 +202,14 @@ class DelegatedAgentSession(NativeAgentSession):
                 f"Unknown or unavailable chat provider: {provider_id}. Available chat provider IDs: {available}"
             )
         conversation = NativeConversation(
-            conversation_id=uuid4().hex,
+            conversation_id=session_id or uuid4().hex,
             provider_id=provider_id,
             instructions=instructions,
             tools=tools,
             skills=skills,
             runtime_config=config,
+            messages=history,
+            token_usage=token_usage,
             initial_dialogs=load_messages(
                 [
                     {**item.model_dump(), "_no_save": item._no_save}
@@ -191,70 +219,7 @@ class DelegatedAgentSession(NativeAgentSession):
                 ]
             ),
         )
-        await runtime.context._db.conversation_store.create(
-            cid=conversation.conversation_id,
-            umo=umo,
-            platform_id=caller.event.get_platform_id(),
-            runtime="astrbot",
-            subagent_config={
-                "provider_id": conversation.provider_id,
-                "instructions": conversation.instructions,
-                "tools": conversation.tools,
-                "skills": conversation.skills,
-                "runtime_config": conversation.runtime_config,
-                "initial_dialogs": dump_messages(
-                    conversation.initial_dialogs, include_temporary=True
-                ),
-            },
-        )
         return cls(runtime, conversation, umo)
-
-    @classmethod
-    async def restore(
-        cls, runtime: AstrAgentRuntime, umo: str, session_id: str
-    ) -> DelegatedAgentSession:
-        """Restore exact persisted native state without replaying unfinished work.
-
-        Args:
-            runtime: Owner of the native persistence service.
-            umo: Expected conversation source.
-            session_id: Exact private native conversation identity.
-
-        Returns:
-            A live session with its committed history.
-
-        Raises:
-            ValueError: If the session is missing or belongs to another UMO.
-        """
-        loaded = await runtime.context._db.conversation_store.read_for_execution(
-            session_id, subagent=True
-        )
-        if (
-            loaded is None
-            or loaded[1].conversation.umo != umo
-            or loaded[1].conversation.runtime != "astrbot"
-            or loaded[1].conversation.subagent_config is None
-        ):
-            raise ValueError(
-                f"Native agent conversation not found or inaccessible: {session_id}"
-            )
-        record, snapshot = loaded
-        data = snapshot.conversation.subagent_config
-        return cls(
-            runtime,
-            NativeConversation(
-                conversation_id=session_id,
-                provider_id=data["provider_id"],
-                instructions=data["instructions"],
-                tools=data["tools"],
-                skills=data.get("skills"),
-                runtime_config=data["runtime_config"],
-                initial_dialogs=load_messages(data["initial_dialogs"]),
-                messages=load_messages(record.content or []),
-                token_usage=record.token_usage,
-            ),
-            umo,
-        )
 
     async def _commit_history(
         self, history: list[dict], token_usage: int | None
@@ -277,7 +242,6 @@ class DelegatedAgentSession(NativeAgentSession):
             history=history,
             origin="system",
             link_display=False,
-            subagent=True,
         )
         conversation.messages = load_messages(history)
         conversation.token_usage = token_usage or 0
