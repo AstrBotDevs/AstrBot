@@ -39,7 +39,6 @@ from .message_session import MessageSesion, MessageSession  # noqa
 from .platform_metadata import PlatformMetadata
 
 if TYPE_CHECKING:
-    from astrbot.core.agent.events import AgentSessionRef
     from astrbot.core.star.base import Star
 
 streaming_response_event: ContextVar["AstrMessageEvent | None"] = ContextVar(
@@ -186,7 +185,6 @@ class AstrMessageEvent(abc.ABC):
         self.platform = platform_meta
         self._execution_active = False
         self._continuation_owner: Star | None = None
-        self._agent_session_ref: AgentSessionRef | None = None
 
     @property
     def unified_msg_origin(self) -> str:

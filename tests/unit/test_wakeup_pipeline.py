@@ -19,7 +19,13 @@ from opentelemetry.trace import format_trace_id, get_current_span
 
 from astrbot.core.agent.hooks import BaseAgentRunHooks
 from astrbot.core.agent.run_context import ContextWrapper
-from astrbot.core.agent.runtime import AgentSessionRef
+from astrbot.core.agent.runtime import (
+    AgentInput,
+    AgentPermissions,
+    AgentSession,
+    AgentSessionRef,
+    TurnResult,
+)
 from astrbot.core.agent.tool_image_cache import tool_image_cache
 from astrbot.core.agent_service import AgentService
 from astrbot.core.agent_wakeup import wake_main_agent
@@ -814,8 +820,22 @@ async def test_managed_continuation_uses_running_conversation_after_switch(
     monkeypatch.setattr(context_utils, "star_handlers_registry", registry)
     runtime.agent_hooks = MainAgentHooks()
 
+    class ChildSession(AgentSession):
+        async def execute_turn(self, turn):
+            target = await runtime.context.agent._continuation_target(turn.input.event)
+            assert target.session_id == self.id
+            return TurnResult()
+
+        async def history(self):
+            return []
+
     async def continue_first(event, *_):
         if event is initial:
+            child = ChildSession("delegated", event.unified_msg_origin)
+            child_turn = await child.run_turn(
+                AgentInput(event, AgentPermissions.from_event(event))
+            )
+            assert (await child_turn.result()).reason != "error"
             assert await plugins["A"].schedule_continuation("follow-up")
 
     registry.append(
@@ -889,3 +909,61 @@ async def test_stop_cancels_pending_managed_continuations(
     )
     assert [event.message_str for event in runtime.events] == expected
     assert len(runtime.requests) == len(expected)
+
+
+@pytest.mark.asyncio
+async def test_managed_continuation_rejects_expired_event(
+    runtime, continuation_plugins
+):
+    plugins, initial = continuation_plugins
+    release = asyncio.Event()
+
+    async def continue_later():
+        await release.wait()
+        return await plugins["A"].schedule_continuation("expired")
+
+    with event_context(initial):
+        task = asyncio.create_task(continue_later())
+    release.set()
+    with pytest.raises(RuntimeError, match="active message event"):
+        await task
+
+    await asyncio.wait_for(runtime.drain(), 3)
+    assert runtime.events == []
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("source_ends", [False, True])
+async def test_managed_continuation_rechecks_source_after_resolving_target(
+    runtime, continuation_plugins, monkeypatch, source_ends
+):
+    from astrbot.core.utils.active_event_registry import active_event_registry
+
+    plugins, initial = continuation_plugins
+    started = asyncio.Event()
+    release = asyncio.Event()
+    resolve = runtime.context.agent._continuation_target
+
+    async def resolve_later(event):
+        started.set()
+        await release.wait()
+        return await resolve(event)
+
+    monkeypatch.setattr(runtime.context.agent, "_continuation_target", resolve_later)
+    with event_context(initial):
+        task = asyncio.create_task(plugins["A"].schedule_continuation("expired"))
+        await asyncio.wait_for(started.wait(), 2)
+        if not source_ends:
+            assert (
+                active_event_registry.request_agent_stop_all(initial.unified_msg_origin)
+                == 1
+            )
+            release.set()
+            assert await task is False
+    if source_ends:
+        release.set()
+        with pytest.raises(RuntimeError, match="active message event"):
+            await task
+
+    await asyncio.wait_for(runtime.drain(), 3)
+    assert runtime.events == []

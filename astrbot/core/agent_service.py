@@ -28,6 +28,7 @@ from astrbot.core.agent.runtime import (
     RuntimeEvent,
     SessionState,
     TurnResult,
+    _current_agent_turn,
 )
 from astrbot.core.agent_input import prepare_agent_input
 from astrbot.core.agent_output import deliver_agent_turn
@@ -276,8 +277,9 @@ class AgentService:
         Raises:
             RuntimeError: If the configured runtime is unavailable.
         """
-        if event._agent_session_ref is not None:
-            return event._agent_session_ref
+        turn = _current_agent_turn.get()
+        if turn is not None and turn.input.event is event:
+            return AgentSessionRef(turn.session.runtime_name, turn.session.id)
         if isinstance(event, AgentWakeupEvent) and event.agent_session is not None:
             return event.agent_session
         umo = event.unified_msg_origin

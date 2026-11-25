@@ -80,10 +80,10 @@ class Star(CommandParserMixin, PluginKVStoreMixin):
 
         Returns:
             True when queued, or False when another plugin owns the current
-            continuation.
+            continuation or the source event stops before submission.
 
         Raises:
-            RuntimeError: If invoked without a current event or by an inactive plugin.
+            RuntimeError: If invoked without an active event or by an inactive plugin.
             ValueError: If the target adapter is unavailable or the prompt is empty.
         """
         from astrbot.core.platform.agent_wakeup_event import AgentWakeupEvent
@@ -101,8 +101,11 @@ class Star(CommandParserMixin, PluginKVStoreMixin):
         origin = current_message_event.get()
         if metadata is None:
             raise RuntimeError("Continuation requires an active plugin instance")
-        if origin is None:
-            raise RuntimeError("Continuation requires a current message event")
+        if origin is None or not origin._execution_active:
+            raise RuntimeError("Continuation requires an active message event")
+        stop_signal = active_event_registry.get_background_stop_signal(origin)
+        if stop_signal.is_set():
+            return False
         if not user_prompt.strip():
             raise ValueError("Continuation requires a non-empty prompt")
         platform = self.context.get_platform_inst(origin.session.platform_id)
@@ -111,6 +114,10 @@ class Star(CommandParserMixin, PluginKVStoreMixin):
 
         umo = origin.unified_msg_origin
         target = await self.context.agent._continuation_target(origin)
+        if stop_signal.is_set():
+            return False
+        if not origin._execution_active:
+            raise RuntimeError("Continuation requires an active message event")
 
         event = AgentWakeupEvent(
             context=self.context,
