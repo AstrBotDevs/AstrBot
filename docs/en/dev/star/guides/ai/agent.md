@@ -10,7 +10,6 @@ Use `self.context.agent.run_turn()` to submit programmatic inputs to a conversat
 from astrbot.api.agents import PlainInput
 
 run = await self.context.agent.run_turn(
-    umo=event.unified_msg_origin,
     input_message=[PlainInput(text="Video analysis is complete. Explain the result briefly.")],
 )
 result = await run.result()
@@ -18,7 +17,9 @@ result = await run.result()
 
 `run_turn()` submits a turn without waiting for completion. Turns in the same session execute serially. `await run.result()` waits for execution, history persistence, and output handling. AstrBot sends replies by default; do not send `result.text` again.
 
-Pass `conversation_id=cid` to target an existing conversation that belongs to `umo`. Omitting it uses the current conversation.
+In a message handler, omitting `umo` uses the active message's chat. You can also pass `source_event` explicitly. Pass `conversation_id=cid` to target an existing conversation in that chat. Without a conversation ID, the runtime uses the current conversation.
+
+From a background task, a conversation ID registered with Core also lets AstrBot look up the UMO. The runtime still comes from the target chat's configuration or a matching source event. Pass `umo` explicitly for a conversation known only to a custom runtime.
 
 Use `await run.cancel()` to stop execution. Cancelling a result waiter does not stop the turn.
 

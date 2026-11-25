@@ -345,7 +345,7 @@ class AgentService:
     async def run_turn(
         self,
         *,
-        umo: str,
+        umo: str | None = None,
         input_message: Sequence[InputComponent],
         send_to_user: bool = True,
         source_event: AstrMessageEvent | None = None,
@@ -356,15 +356,17 @@ class AgentService:
         """Submit a configured runtime turn without waiting for model execution.
 
         Args:
-            umo: Target conversation source, including existing isolation.
+            umo: Target chat, including existing isolation. Omit it to use
+                the source event or the active message's UMO. Outside an
+                event, a conversation registered with Core supplies its UMO.
             input_message: Portable plain, image and file content.
             send_to_user: Automatically present runtime output and allow native
                 send_message_to_user delivery. False exposes prepared messages
                 through output.ready events instead. Explicit plugin sends are
                 unaffected. History is saved regardless of this setting.
             source_event: Caller identity; defaults to the active same-UMO event.
-            conversation_id: ID of the existing conversation to run in. Omit it
-                to use the current conversation for `umo`.
+            conversation_id: ID of the existing conversation in the selected
+                runtime. Omit it to use the current conversation for `umo`.
             metadata: JSON-compatible plugin data, deep-copied into the wakeup
                 event's "agent_metadata" extra before admission hooks run.
                 Defaults to an empty dict; source-event metadata is not inherited.
@@ -378,8 +380,8 @@ class AgentService:
 
         Raises:
             RuntimeError: If the service or selected runtime is unavailable.
-            ValueError: If input or the conversation target is invalid, or if
-                `conversation_id` and the deprecated `session_id` differ.
+            ValueError: If the target UMO cannot be determined, the input or
+                conversation target is invalid, or the two ID arguments differ.
         """
         if self._closed:
             raise RuntimeError("Agent service is unavailable")
@@ -397,9 +399,24 @@ class AgentService:
             if (
                 current is not None
                 and current._execution_active
-                and current.unified_msg_origin == umo
+                and (umo is None or current.unified_msg_origin == umo)
             ):
                 source_event = current
+        if umo is None:
+            if source_event is not None:
+                umo = source_event.unified_msg_origin
+            elif conversation_id is not None:
+                store = self.context.conversation_manager.db.conversation_store
+                conversation = await store.get_metadata(conversation_id)
+                if conversation is None:
+                    raise ValueError(
+                        "Cannot infer UMO from this conversation ID. Pass umo explicitly."
+                    )
+                umo = conversation.umo
+            else:
+                raise ValueError(
+                    "run_turn requires a UMO, source event, or conversation ID"
+                )
         config = self.context.get_config(umo=umo).get("agent", {})
         target = (
             source_event.agent_session

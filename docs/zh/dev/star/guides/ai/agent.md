@@ -10,7 +10,6 @@
 from astrbot.api.agents import PlainInput
 
 run = await self.context.agent.run_turn(
-    umo=event.unified_msg_origin,
     input_message=[PlainInput(text="视频分析已完成，请向用户简要说明结果。")],
 )
 result = await run.result()
@@ -18,7 +17,9 @@ result = await run.result()
 
 `run_turn()` 提交后即返回，不等待执行完成。同一 session 的 turn 串行执行。`await run.result()` 等待执行、历史保存和输出处理完成。AstrBot 默认发送回复，插件无需再次发送 `result.text`。
 
-用 `conversation_id=cid` 指定一段属于该 `umo` 的已有对话。省略时使用当前对话。
+在消息处理器中，省略 `umo` 会使用当前消息所在的聊天，也可以显式传入 `source_event`。用 `conversation_id=cid` 指定该聊天下的已有对话，省略对话 ID 时使用当前对话。
+
+后台任务也可以用 Core 中已有的对话 ID 推断 UMO。运行时仍取目标聊天的配置，或沿用与对话匹配的源事件所携带的运行时。只在自定义运行时中存在的对话需要显式传入 `umo`。
 
 停止执行请使用 `await run.cancel()`。取消结果等待者不会停止 turn。
 
