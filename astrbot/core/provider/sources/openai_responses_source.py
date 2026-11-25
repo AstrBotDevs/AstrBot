@@ -543,6 +543,7 @@ class ProviderOpenAIResponses(ProviderOpenAIOfficial):
         reasoning_parts: list[str] = []
         serialized_reasoning_items: list[dict] = []
         web_search_sources: list[dict[str, Any]] = []
+        seen_source_urls: set[str] = set()
 
         for item in self._field(response, "output", []) or []:
             item_type = self._field(item, "type")
@@ -555,9 +556,10 @@ class ProviderOpenAIResponses(ProviderOpenAIOfficial):
                             if self._field(annotation, "type") != "url_citation":
                                 continue
                             url = self._field(annotation, "url")
-                            if not url:
+                            if not url or url in seen_source_urls:
                                 continue
-                            title = self._field(annotation, "title")
+                            seen_source_urls.add(url)
+                            title = self._field(annotation, "title") or url
                             web_search_sources.append(
                                 {
                                     "index": str(len(web_search_sources) + 1),
@@ -624,6 +626,19 @@ class ProviderOpenAIResponses(ProviderOpenAIOfficial):
             )
         if llm_response.tools_call_args:
             llm_response.role = "tool"
+
+        if not web_search_sources:
+            for url in self._field(response, "citations", []) or []:
+                if not url or url in seen_source_urls:
+                    continue
+                seen_source_urls.add(url)
+                web_search_sources.append(
+                    {
+                        "index": str(len(web_search_sources) + 1),
+                        "url": url,
+                        "title": url,
+                    }
+                )
 
         llm_response.web_search_sources = web_search_sources
 

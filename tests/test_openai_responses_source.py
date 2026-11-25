@@ -397,3 +397,102 @@ async def test_parse_failed_response_raises_provider_error():
 
     with pytest.raises(RuntimeError, match="server_error: failed"):
         await provider._parse_response(response, tools=None)
+
+
+def test_build_response_tools_includes_xai_web_search_only_when_enabled():
+    func_toolset = SimpleNamespace(
+        openai_schema=lambda: [
+            {
+                "type": "function",
+                "function": {
+                    "name": "get_weather",
+                    "description": "Weather",
+                    "parameters": {"type": "object", "properties": {}},
+                },
+            }
+        ]
+    )
+    enabled = _make_provider({"provider": "xai", "xai_native_search": True})
+    disabled = _make_provider({"provider": "xai", "xai_native_search": False})
+    non_xai = _make_provider({"provider": "openai", "xai_native_search": True})
+
+    assert enabled._build_response_tools(func_toolset) == [
+        {
+            "type": "function",
+            "name": "get_weather",
+            "description": "Weather",
+            "parameters": {"type": "object", "properties": {}},
+        },
+        {"type": "web_search"},
+    ]
+    assert disabled._build_response_tools(None) == []
+    assert non_xai._build_response_tools(None) == []
+
+
+@pytest.mark.asyncio
+async def test_parse_response_extracts_deduplicated_xai_url_and_top_level_citations():
+    provider = _make_provider({"provider": "xai", "xai_native_search": True})
+    annotated = _make_response(
+        [
+            {
+                "id": "msg_1",
+                "type": "message",
+                "role": "assistant",
+                "status": "completed",
+                "content": [
+                    {
+                        "type": "output_text",
+                        "text": "xAI update [[1]](https://x.ai/news) [[1]](https://x.ai/news)",
+                        "annotations": [
+                            {
+                                "type": "url_citation",
+                                "url": "https://x.ai/news",
+                                "title": "xAI News",
+                                "start_index": 11,
+                                "end_index": 34,
+                            },
+                            {
+                                "type": "url_citation",
+                                "url": "https://x.ai/news",
+                                "title": "xAI News",
+                                "start_index": 35,
+                                "end_index": 58,
+                            },
+                            {
+                                "type": "url_citation",
+                                "url": "https://docs.x.ai/",
+                                "title": "",
+                                "start_index": 0,
+                                "end_index": 1,
+                            },
+                        ],
+                    }
+                ],
+            }
+        ]
+    )
+    parsed = await provider._parse_response(annotated, tools=None)
+    assert parsed.web_search_sources == [
+        {"index": "1", "url": "https://x.ai/news", "title": "xAI News"},
+        {"index": "2", "url": "https://docs.x.ai/", "title": "https://docs.x.ai/"},
+    ]
+
+    top_level = _make_response(
+        [
+            {
+                "id": "msg_2",
+                "type": "message",
+                "role": "assistant",
+                "status": "completed",
+                "content": [
+                    {"type": "output_text", "text": "Summary", "annotations": []}
+                ],
+            }
+        ],
+        citations=["https://x.ai/company", "https://x.ai/company", "https://x.ai/"],
+    )
+    parsed_fallback = await provider._parse_response(top_level, tools=None)
+    assert parsed_fallback.web_search_sources == [
+        {"index": "1", "url": "https://x.ai/company", "title": "https://x.ai/company"},
+        {"index": "2", "url": "https://x.ai/", "title": "https://x.ai/"},
+    ]

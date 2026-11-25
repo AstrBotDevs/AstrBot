@@ -1365,6 +1365,7 @@ async def test_empty_output_retries_exhausted_then_uses_fallback_provider(
     assert fallback_provider.call_count == 1
 
 
+
 @pytest.mark.asyncio
 async def test_stop_signal_returns_aborted_and_discards_partial_message(
     runner, provider_request, mock_tool_executor, mock_hooks
@@ -2245,18 +2246,13 @@ async def test_event_journal_records_requests_tools_and_final_context(
     await db.initialize()
     try:
         conv = await db.create_conversation("umo", "p")
-        writer = ConversationEventWriter(
-            db.conversation_store,
-            await db.conversation_store.read(conv.conversation_id),
-        )
+        writer = ConversationEventWriter(db.conversation_store, await db.conversation_store.read(conv.conversation_id))
         provider = VaryingUsageProvider()
         sink = AsyncMock(wraps=writer.consume)
         await runner.reset(
-            provider=provider,
-            request=provider_request,
+            provider=provider, request=provider_request,
             run_context=ContextWrapper(context=None),
-            tool_executor=mock_tool_executor,
-            agent_hooks=mock_hooks,
+            tool_executor=mock_tool_executor, agent_hooks=mock_hooks,
             streaming=streaming,
             conversation_event_sink=sink,
         )
@@ -2310,14 +2306,9 @@ async def test_journal_failure_does_not_retry_a_model_or_fallback(
 
     primary, fallback = MockProvider(), MockProvider()
     await runner.reset(
-        provider=primary,
-        fallback_providers=[fallback],
-        request=provider_request,
-        run_context=ContextWrapper(context=None),
-        tool_executor=mock_tool_executor,
-        agent_hooks=mock_hooks,
-        streaming=False,
-        conversation_event_sink=persist,
+        provider=primary, fallback_providers=[fallback], request=provider_request,
+        run_context=ContextWrapper(context=None), tool_executor=mock_tool_executor,
+        agent_hooks=mock_hooks, streaming=False, conversation_event_sink=persist,
     )
     with pytest.raises(ConversationPersistenceError):
         await collect_events(runner.step())
@@ -2347,13 +2338,9 @@ async def test_tool_call_message_is_acknowledged_before_creating_executor(
         return True
 
     await runner.reset(
-        provider=provider,
-        request=provider_request,
-        run_context=ContextWrapper(context=None),
-        tool_executor=executor,
-        agent_hooks=mock_hooks,
-        streaming=False,
-        conversation_event_sink=persist,
+        provider=provider, request=provider_request,
+        run_context=ContextWrapper(context=None), tool_executor=executor,
+        agent_hooks=mock_hooks, streaming=False, conversation_event_sink=persist,
     )
     with pytest.raises(ConversationPersistenceError):
         await collect_events(runner.step_until_done(3))

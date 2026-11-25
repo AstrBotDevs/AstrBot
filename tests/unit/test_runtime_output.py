@@ -1,7 +1,8 @@
 """Protocol boundaries: typed snapshots, media round trips and presentation."""
 
 import asyncio
-from unittest.mock import MagicMock
+from types import SimpleNamespace
+from unittest.mock import AsyncMock, MagicMock
 from uuid import UUID
 
 import pytest
@@ -15,6 +16,7 @@ from astrbot.core.agent.events import (
     TextDelta,
     ToolStarted,
     TurnResult,
+    WebSearchSources,
 )
 from astrbot.core.agent.output import ExtensionOutput, PlainOutput, ReasoningOutput
 from astrbot.core.agent.runtime import AgentInput, AgentPermissions, AgentSession
@@ -192,3 +194,37 @@ async def test_cancelled_turn_retains_already_reported_usage():
     events = [event async for event in turn.events()]
     assert sum(event.type == "turn.finished" for event in events) == 1
     assert events[-1].payload.result == result
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("platform", ["webchat", "telegram"])
+async def test_present_turn_forwards_web_search_sources_only_to_webchat(platform):
+    sources = ({"index": "1", "url": "https://x.ai/news", "title": "xAI News"},)
+
+    class SearchSession(OutputSession):
+        async def execute_turn(self, turn):
+            turn.emit(WebSearchSources(sources=sources))
+            turn.emit(
+                MessageCompleted(
+                    message_id="reply",
+                    content=(PlainOutput(text="Answer"),),
+                )
+            )
+            return TurnResult(content=(PlainOutput(text="Answer"),))
+
+    session = SearchSession("session", f"{platform}:FriendMessage:user")
+    agent_input = input_for(session)
+    agent_input.event.get_platform_name.return_value = platform
+    agent_input.event.send = AsyncMock()
+    turn = await session.run_turn(agent_input)
+
+    chains = [chain async for chain in present_turn(turn, streaming=False)]
+
+    assert [chain.get_plain_text() for chain in chains] == ["Answer"]
+    if platform == "webchat":
+        agent_input.event.send.assert_awaited_once()
+        sent_chain = agent_input.event.send.await_args.args[0]
+        assert sent_chain.type == "web_search_sources"
+        assert sent_chain.chain[0].data == {"sources": list(sources)}
+    else:
+        agent_input.event.send.assert_not_awaited()

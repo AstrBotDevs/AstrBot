@@ -332,27 +332,6 @@ def extract_web_search_refs(accumulated_text: str, accumulated_parts: list) -> d
     return {"used": used_refs} if used_refs else {}
 
 
-def parse_web_search_sources(result_text: str) -> dict:
-    """Parse a web_search_sources back-queue payload into a refs dict.
-
-    The payload is ``{"sources": [...]}``; the refs shape mirrors
-    ``extract_web_search_refs`` so the frontend renders native search
-    sources as the same clickable cards.
-
-    Args:
-        result_text: Serialized native search sources.
-
-    Returns:
-        Reference cards, or an empty mapping for invalid input.
-    """
-    try:
-        parsed = json.loads(result_text)
-        sources = parsed.get("sources", []) if isinstance(parsed, dict) else []
-        return {"used": sources} if isinstance(sources, list) else {}
-    except (TypeError, json.JSONDecodeError):
-        return {}
-
-
 def sanitize_message_content(content: dict) -> dict:
     if not isinstance(content, dict):
         raise ValueError("Missing key: content")
@@ -1030,14 +1009,20 @@ class ChatService:
                     plain_text,
                     message_parts_to_save,
                 )
-                if not extracted_refs and pending_refs:
-                    extracted_refs = pending_refs
             except Exception as exc:
                 logger.exception(
                     f"Failed to extract web search refs: {exc}",
                     exc_info=True,
                 )
-                extracted_refs = pending_refs
+                extracted_refs = {}
+
+            if pending_refs:
+                merged = list(extracted_refs.get("used", []))
+                seen_urls = {ref["url"] for ref in merged}
+                merged.extend(
+                    ref for ref in pending_refs["used"] if ref["url"] not in seen_urls
+                )
+                extracted_refs = {"used": merged}
 
             run.refs = extracted_refs
             saved_record = await self.save_bot_message(
@@ -1081,8 +1066,16 @@ class ChatService:
                     continue
 
                 if chain_type == "web_search_sources":
-                    pending_refs = parse_web_search_sources(result_text)
-                    run.refs = pending_refs
+                    sources = json.loads(result_text)["sources"]
+                    if sources:
+                        used = list(pending_refs.get("used", []))
+                        seen_urls = {ref["url"] for ref in used}
+                        for src in sources:
+                            if src["url"] not in seen_urls:
+                                seen_urls.add(src["url"])
+                                used.append({**src, "index": str(len(used) + 1)})
+                        pending_refs = {"used": used}
+                        run.refs = pending_refs
                     continue
 
                 attachment_saved_payload = None
@@ -1156,7 +1149,7 @@ class ChatService:
                                         saved_record.created_at
                                     ),
                                     "turn_id": run.turn_id,
-                                    "refs": run.refs,
+                                    **({"refs": run.refs} if run.refs else {}),
                                 },
                             },
                         )
@@ -1184,7 +1177,7 @@ class ChatService:
                                 "id": saved_record.id,
                                 "created_at": to_utc_isoformat(saved_record.created_at),
                                 "turn_id": run.turn_id,
-                                "refs": run.refs,
+                                **({"refs": run.refs} if run.refs else {}),
                             },
                         },
                     )

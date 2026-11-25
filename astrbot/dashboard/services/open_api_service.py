@@ -29,7 +29,6 @@ from astrbot.dashboard.services.auth_service import (
 from astrbot.dashboard.services.chat_service import (
     BotMessageAccumulator,
     collect_plain_text_from_message_parts,
-    parse_web_search_sources,
 )
 
 SendJson = Callable[[dict], Awaitable[None]]
@@ -487,7 +486,15 @@ class OpenApiService:
                     continue
 
                 if chain_type == "web_search_sources":
-                    refs = parse_web_search_sources(result_text)
+                    sources = json.loads(result_text)["sources"]
+                    if sources:
+                        used = list(refs.get("used", []))
+                        seen_urls = {ref["url"] for ref in used}
+                        for src in sources:
+                            if src["url"] not in seen_urls:
+                                seen_urls.add(src["url"])
+                                used.append({**src, "index": str(len(used) + 1)})
+                        refs = {"used": used}
                     continue
 
                 await send_json(result)
@@ -522,7 +529,7 @@ class OpenApiService:
                     plain_text = collect_plain_text_from_message_parts(
                         message_parts_to_save
                     )
-                    fallback_refs = refs
+                    pending_refs = refs
                     try:
                         refs = chat_bridge.extract_web_search_refs(
                             plain_text,
@@ -533,8 +540,16 @@ class OpenApiService:
                             f"Open API WS failed to extract web search refs: {exc}",
                             exc_info=True,
                         )
-                    if not refs and fallback_refs:
-                        refs = fallback_refs
+                        refs = {}
+                    if pending_refs:
+                        merged = list(refs.get("used", []))
+                        seen_urls = {ref["url"] for ref in merged}
+                        merged.extend(
+                            ref
+                            for ref in pending_refs["used"]
+                            if ref["url"] not in seen_urls
+                        )
+                        refs = {"used": merged}
 
                     saved_record = await chat_bridge.save_bot_message(
                         session_id,
