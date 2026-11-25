@@ -2,8 +2,7 @@ from __future__ import annotations
 
 import asyncio
 from collections import defaultdict
-from collections.abc import Callable, Iterator
-from contextlib import contextmanager
+from collections.abc import Callable
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -25,9 +24,6 @@ class ActiveEventRegistry:
             str, dict[asyncio.Task[None], AstrMessageEvent]
         ] = defaultdict(dict)
         self._background_cancel_requested: set[asyncio.Task[None]] = set()
-        self._segment_sends: dict[AstrMessageEvent, set[asyncio.Event]] = defaultdict(
-            set
-        )
 
     def register(self, event: AstrMessageEvent) -> None:
         self._events[event.unified_msg_origin].add(event)
@@ -38,43 +34,6 @@ class ActiveEventRegistry:
         self._events[umo].discard(event)
         if not self._events[umo]:
             del self._events[umo]
-
-    @contextmanager
-    def track_segment_send(self, event: AstrMessageEvent) -> Iterator[None]:
-        """Track a segment until its platform send finishes or fails.
-
-        Args:
-            event: Message event performing the segment send.
-
-        Yields:
-            Control while the segment is being sent.
-        """
-        done = asyncio.Event()
-        sends = self._segment_sends[event]
-        sends.add(done)
-        try:
-            yield
-        finally:
-            done.set()
-            sends.remove(done)
-            if not sends:
-                del self._segment_sends[event]
-
-    async def wait_for_segment_sends(self, umo: str, exclude: AstrMessageEvent) -> None:
-        """Wait for sends already in progress in a session after requesting stop.
-
-        Args:
-            umo: Unified message origin of the stopped events.
-            exclude: Event that requested the stop and should continue.
-        """
-        await asyncio.gather(
-            *(
-                done.wait()
-                for event in self._events.get(umo, ())
-                if event is not exclude
-                for done in self._segment_sends.get(event, ())
-            )
-        )
 
     def register_agent_stop_callback(
         self,
