@@ -47,8 +47,6 @@ async function submitAccountStage() {
   loading.value = true;
   apiError.value = '';
   try {
-    // @ts-ignore
-    authStore.returnUrl = new URLSearchParams(window.location.search).get('redirect');
     const res = await authStore.login(username.value, password.value);
     if (res === 'totp_required') {
       goToTotpStage();

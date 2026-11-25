@@ -53,11 +53,16 @@ export function usePluginI18n() {
     return resolvePluginI18n(i18n, locale.value, key, fallback);
   };
 
+  const resolveMetadata = (plugin, key, fallback) => {
+    const i18n = plugin?.i18n;
+    return resolve(i18n, `metadata.${key}`, resolve(i18n, key, fallback));
+  };
+
   const pluginName = (plugin) => {
     const fallback = plugin?.display_name?.length
       ? plugin.display_name
       : plugin?.name;
-    return resolve(plugin?.i18n, "metadata.display_name", fallback || "");
+    return resolveMetadata(plugin, "display_name", fallback || "");
   };
 
   const categoryName = (category) => {
@@ -77,17 +82,17 @@ export function usePluginI18n() {
   };
 
   const pluginDesc = (plugin, fallback = "") => {
-    return resolve(
-      plugin?.i18n,
-      "metadata.desc",
+    return resolveMetadata(
+      plugin,
+      "desc",
       fallback || plugin?.desc || plugin?.description || "",
     );
   };
 
   const pluginShortDesc = (plugin, fallback = "") => {
-    return resolve(
-      plugin?.i18n,
-      "metadata.short_desc",
+    return resolveMetadata(
+      plugin,
+      "short_desc",
       fallback ||
         plugin?.short_desc ||
         plugin?.desc ||

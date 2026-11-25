@@ -219,6 +219,16 @@
             "dataHint": "Данные находятся в data/plugin_data и data/plugins_data, а также KV-данные в базе данных"
         },
         "install": {
+      "sourceRequired": "Добавьте этот источник плагинов, чтобы перейти к подтверждению установки.",
+      "addSourceAndContinue": "Добавить и продолжить",
+      "validatingSource": "Проверка источника плагинов…",
+      "savingSource": "Добавление источника плагинов…",
+      "loadingPlugin": "Поиск плагина…",
+      "retryPreview": "Повторить",
+      "marketPluginNotFound": "В указанном источнике нет этого плагина, доступного для установки.",
+      "invalidMarketPluginId": "Недопустимый идентификатор плагина. Используйте формат author/name.",
+      "invalidRegistryUrl": "Укажите корректный HTTPS-адрес источника плагинов.",
+      "linkConflict": "В ссылке установки указано несколько источников.",
             "title": "Установка плагина",
             "fromFile": "Из файла",
             "fromUrl": "По ссылке",

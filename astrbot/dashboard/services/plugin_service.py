@@ -110,6 +110,7 @@ class PluginService:
             EventType.OnPluginErrorEvent: "插件报错时",
         }
         self._logo_cache: dict[str, str] = {}
+        self._create_source_lock = asyncio.Lock()
 
     @staticmethod
     def _payload(data: object) -> dict[str, Any]:
@@ -2095,13 +2096,30 @@ class PluginService:
             raise PluginServiceError("sources fields must be a list")
         return sources
 
-    @staticmethod
-    async def create_custom_source(data: object) -> list:
+    async def create_custom_source(self, data: object) -> list:
+        """Append a plugin source once, including when the request is retried.
+
+        Args:
+            data: Source fields from the add-source request.
+
+        Returns:
+            The saved list of custom sources.
+        """
         source = data if isinstance(data, dict) else {}
-        sources = await PluginService.get_custom_sources()
-        sources.append(source)
-        await sp.global_put("custom_plugin_sources", sources)
-        return sources
+        url = self.normalize_registry_url(source.get("url"))
+        async with self._create_source_lock:
+            sources = await self.get_custom_sources()
+            if url and any(
+                self.normalize_registry_url(
+                    item.get("url") if isinstance(item, dict) else item
+                )
+                == url
+                for item in sources
+            ):
+                return sources
+            sources.append(source)
+            await sp.global_put("custom_plugin_sources", sources)
+            return sources
 
     @staticmethod
     async def replace_custom_sources(data: object) -> list:

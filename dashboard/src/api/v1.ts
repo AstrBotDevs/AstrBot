@@ -1398,6 +1398,9 @@ export const pluginApi = {
   sources() {
     return typed<any>(openApiV1.listPluginSources());
   },
+  createSource(body: { name: string; url: string }) {
+    return typed<OpenConfig>(openApiV1.createPluginSource({ body }));
+  },
   replaceSources(sources: OpenConfig[]) {
     return typed<OpenConfig>(
       openApiV1.replacePluginSources({ body: { sources: sources as any } }),

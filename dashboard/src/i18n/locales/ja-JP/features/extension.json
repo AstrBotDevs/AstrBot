@@ -219,6 +219,16 @@
       "dataHint": "data/plugin_data、plugins_data ディレクトリ内のデータと、データベース内のプラグインの KV データを削除します"
     },
     "install": {
+      "sourceRequired": "このプラグインソースを追加してから、インストールを確認してください。",
+      "addSourceAndContinue": "追加して続行",
+      "validatingSource": "プラグインソースを確認中…",
+      "savingSource": "プラグインソースを追加中…",
+      "loadingPlugin": "プラグインを検索中…",
+      "retryPreview": "再試行",
+      "marketPluginNotFound": "指定されたプラグインソースにインストール可能なプラグインが見つかりませんでした。",
+      "invalidMarketPluginId": "プラグイン ID が無効です。author/name の形式を使用してください。",
+      "invalidRegistryUrl": "プラグインソースには有効な HTTPS URL を指定してください。",
+      "linkConflict": "インストールリンクに複数のソースが指定されています。",
       "title": "プラグインをインストール",
       "fromFile": "ファイルからインストール",
       "fromUrl": "URL からインストール",
