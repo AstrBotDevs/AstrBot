@@ -361,13 +361,50 @@ class Context:
             for k, v in kwargs.items()
             if k not in ["stream", "agent_hooks", "agent_context", "run_context"]
         }
-        if request.func_tool and request.func_tool.get_tool("astrbot_file_read_tool"):
-            other_kwargs.setdefault(
-                "tool_result_overflow_dir", get_astrbot_system_tmp_path()
-            )
-            other_kwargs.setdefault(
-                "read_tool", request.func_tool.get_tool("astrbot_file_read_tool")
-            )
+        candidate_read_tool = (
+            request.func_tool.get_tool("astrbot_file_read_tool")
+            if request.func_tool
+            else None
+        )
+        read_tool = (
+            candidate_read_tool
+            if candidate_read_tool is not None and candidate_read_tool.active
+            else None
+        )
+        if read_tool is not None:
+            other_kwargs.setdefault("read_tool", read_tool)
+            if (
+                other_kwargs.get("read_tool") is not None
+                and "tool_result_overflow_dir" not in other_kwargs
+                and "tool_result_overflow_writer" not in other_kwargs
+            ):
+                overflow_context = run_context.context.context
+                overflow_umo = run_context.context.event.unified_msg_origin
+                provider_settings = (
+                    overflow_context.get_config(umo=overflow_umo).get(
+                        "provider_settings"
+                    )
+                    or {}
+                )
+                runtime = (
+                    provider_settings.get("computer_use_runtime", "none")
+                    if isinstance(provider_settings, dict)
+                    else "none"
+                )
+                if runtime == "sandbox":
+                    from astrbot.core.astr_agent_runtime.execution import (
+                        create_sandbox_tool_result_overflow_writer,
+                    )
+
+                    other_kwargs["tool_result_overflow_writer"] = (
+                        create_sandbox_tool_result_overflow_writer(
+                            overflow_context, overflow_umo
+                        )
+                    )
+                else:
+                    other_kwargs["tool_result_overflow_dir"] = (
+                        get_astrbot_system_tmp_path()
+                    )
 
         await agent_runner.reset(
             provider=prov,

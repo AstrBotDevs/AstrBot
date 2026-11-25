@@ -299,6 +299,9 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         fallback_providers: list[Provider] | None = None,
         request_max_retries: int | None = None,
         tool_result_overflow_dir: str | None = None,
+        # Async callback `(file_name, content) -> readable_path`; takes
+        # precedence over `tool_result_overflow_dir` when both are provided.
+        tool_result_overflow_writer: Callable[[str, str], Awaitable[str]] | None = None,
         read_tool: FunctionTool | None = None,
         max_context_tokens: int | None = None,
         conversation_event_sink: Callable[[AgentResponse], Awaitable[bool]]
@@ -321,6 +324,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         self.custom_compressor = custom_compressor
         self.request_max_retries = request_max_retries
         self.tool_result_overflow_dir = tool_result_overflow_dir
+        self.tool_result_overflow_writer = tool_result_overflow_writer
         self.read_tool = read_tool
         self._tool_result_token_counter = EstimateTokenCounter()
         self.request_context_manager_config = ContextConfig(
@@ -448,18 +452,40 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         tool_call_id: str,
         content: str,
     ) -> str:
-        if self.tool_result_overflow_dir is None:
-            raise ValueError("tool_result_overflow_dir is not configured")
+        """Persist an oversized tool result via the configured overflow target.
 
-        overflow_dir = Path(self.tool_result_overflow_dir).resolve(strict=False)
+        Args:
+            tool_call_id: Identifier of the tool call producing the result.
+            content: Full tool result text to persist.
+
+        Returns:
+            Path that the model can pass to the file-read tool.
+
+        Raises:
+            ValueError: If no overflow writer or directory is configured, or if
+                a custom writer returns an empty path.
+        """
         safe_tool_call_id = (
             "".join(
                 ch if ch.isalnum() or ch in {"-", "_", "."} else "_"
                 for ch in tool_call_id
-            ).strip("._")
+            )
+            .strip("._")[:120]
+            .rstrip("._")
             or "tool_call"
         )
         file_name = f"{safe_tool_call_id}_{uuid.uuid4().hex[:8]}.txt"
+
+        if self.tool_result_overflow_writer is not None:
+            written_path = await self.tool_result_overflow_writer(file_name, content)
+            if not isinstance(written_path, str) or not written_path.strip():
+                raise ValueError("tool_result_overflow_writer returned an empty path")
+            return written_path.strip()
+
+        if self.tool_result_overflow_dir is None:
+            raise ValueError("tool_result_overflow_dir is not configured")
+
+        overflow_dir = Path(self.tool_result_overflow_dir).resolve(strict=False)
         overflow_path = overflow_dir / file_name
 
         def _run() -> str:
@@ -475,7 +501,10 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         tool_call_id: str,
         content: str,
     ) -> str:
-        if self.tool_result_overflow_dir is None or self.read_tool is None:
+        if (
+            self.tool_result_overflow_writer is None
+            and self.tool_result_overflow_dir is None
+        ) or self.read_tool is None:
             return content
 
         estimated_tokens = self._tool_result_token_counter.count_tokens(
@@ -497,11 +526,16 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                 exc,
                 exc_info=True,
             )
+            target_desc = (
+                "an overflow file"
+                if self.tool_result_overflow_writer is not None
+                else f"`{self.tool_result_overflow_dir}`"
+            )
             error_notice = (
                 "Tool output exceeded the inline result limit "
                 f"({estimated_tokens} estimated tokens > "
                 f"{self.TOOL_RESULT_MAX_ESTIMATED_TOKENS}) and could not be written "
-                f"to `{self.tool_result_overflow_dir}`: {exc}"
+                f"to {target_desc}: {exc}"
             )
             if not preview:
                 return error_notice
