@@ -13,6 +13,7 @@ BOT_INFO_PATH = "/open-apis/bot/v3/info"
 class LarkBotInfo:
     app_name: str
     open_id: str
+    active: bool | None = None
 
 
 def _open_base(domain: str) -> str:
@@ -91,4 +92,7 @@ async def request_lark_bot_info(
     return LarkBotInfo(
         app_name=_string_field(bot, "app_name"),
         open_id=_string_field(bot, "open_id"),
+        active=bot["activate_status"] == 1
+        if type(bot.get("activate_status")) is int
+        else None,
     )

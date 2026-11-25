@@ -105,6 +105,10 @@ async def send_saved_reply(self, saved, text):
 
 插件可以用 `@filter.event_message_type(filter.EventMessageType.OTHER_MESSAGE)` 接收影响回信目标的事件。QQ 通过 `event.get_extra("qq_official_event")` 提供原生事件名 `C2C_MSG_RECEIVE`、`C2C_MSG_REJECT`、`FRIEND_ADD` 和 `FRIEND_DEL`。飞书应用订阅机器人或成员离群事件后，可从 `event.get_extra("lark_event_type")` 读取事件类型，并从事件中取得实际离群的对象。
 
+飞书群消息可用 `await event.get_typed_mentions()` 按需查询原消息中被 @ 的对象。同一事件只查询一次。每个结果包含原 `key`、`id` 和 `id_type`，人使用 `open_id`，机器人使用 `app_id`。原消息的提及列表无法核实时返回 `None`。
+
+已有飞书应用需要开通这两项离群订阅时，有配置权限的 Dashboard 客户端可调用 `POST /api/v1/bot-types/lark/registration`。发起时传 `action="start"` 和 `platform_config={"registration_update": "group_membership", "app_id": "<原 App ID>", "domain": "feishu"}`，国际版用 `"lark"`。展示返回的 `verification_uri_complete`，在服务端保存 `device_code`。查询进度时传 `action="poll"`、相同配置和这个设备码。成功响应中的 `user_open_id` 来自平台返回的扫码人，`bot_open_id` 和 `bot_active` 来自用新凭据读取的机器人资料。更新凭据前核对原 App、预期扫码人和原机器人。
+
 ## 富媒体消息
 
 AstrBot 支持发送富媒体消息，比如图片、语音、视频等。使用 `MessageChain` 来构建消息。

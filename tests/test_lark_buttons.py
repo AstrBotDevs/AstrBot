@@ -191,6 +191,10 @@ async def lark_sdk_transport(monkeypatch):
                 200, json={"code": 0, "data": {"user": {"name": "Researcher"}}}
             )
         if request.method == "GET":
+            if "user_id_type" in request.url.params:
+                state.setdefault("mention_queries", []).append(
+                    request.url.params["user_id_type"]
+                )
             message = state["cards"].get(path.rsplit("/", 1)[-1])
             return httpx.Response(
                 200, json={"code": 0, "data": {"items": [message] if message else []}}
@@ -269,6 +273,67 @@ async def lark_sdk_transport(monkeypatch):
     yield adapter, queue, state, calls
     adapter.client._cache._cron.cancel()
     await asyncio.gather(adapter.client._cache._cron, return_exceptions=True)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("changed", [None, {"updated": True}, {"chat_id": "oc_other"}])
+async def test_lark_group_mentions_load_typed_ids_from_the_original_message(
+    lark_sdk_transport, monkeypatch, changed
+):
+    import json
+
+    import lark_oapi as lark
+
+    from astrbot.core.platform.sources.lark import lark_adapter
+
+    adapter, queue, state, _ = lark_sdk_transport
+    monkeypatch.setattr(lark_adapter, "get_lark_group", AsyncMock())
+    sender = {"sender_type": "user", "sender_id": {"open_id": "ou_sender"}}
+    message = {
+        "message_id": "om_mentions",
+        "chat_id": "oc_original",
+        "chat_type": "group",
+        "message_type": "text",
+        "content": json.dumps({"text": "@_user_1 @_user_2"}),
+        "mentions": [
+            {"key": "@_user_1", "id": {"open_id": "ou_human"}, "name": "Teammate"},
+            {"key": "@_user_2", "id": {"open_id": "ou_local_bot"}, "name": "Teammate"},
+        ],
+    }
+    typed = [
+        {"key": "@_user_1", "id": "ou_human", "id_type": "open_id"},
+        {"key": "@_user_2", "id": "cli_other_bot", "id_type": "app_id"},
+    ]
+    state["cards"]["om_mentions"] = {
+        "message_id": "om_mentions",
+        "chat_id": "oc_original",
+        "deleted": False,
+        "updated": False,
+        "sender": {"sender_type": "user", "id_type": "open_id", "id": "ou_sender"},
+        "mentions": typed,
+        **(changed or {}),
+    }
+    await adapter.convert_msg(
+        lark.im.v1.P2ImMessageReceiveV1(
+            {"event": {"sender": sender, "message": message}}
+        )
+    )
+    event = queue.get_nowait()
+    expected = None if changed else typed
+    assert await asyncio.gather(
+        event.get_typed_mentions(), event.get_typed_mentions()
+    ) == [expected, expected]
+    assert event.get_extra("lark_typed_mentions") == expected
+    assert state["mention_queries"] == ["open_id"]
+    for scene, mentions in (("p2p", message["mentions"]), ("group", [])):
+        message.update(chat_type=scene, mentions=mentions)
+        await adapter.convert_msg(
+            lark.im.v1.P2ImMessageReceiveV1(
+                {"event": {"sender": sender, "message": message}}
+            )
+        )
+        assert await queue.get_nowait().get_typed_mentions() == []
+    assert state["mention_queries"] == ["open_id"]
 
 
 @pytest.mark.asyncio

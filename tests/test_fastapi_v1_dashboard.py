@@ -3730,6 +3730,129 @@ async def test_v1_bot_type_registration_uses_platform_service(
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "brand,host", [("feishu", "feishu.cn"), ("lark", "larksuite.com")]
+)
+async def test_existing_lark_app_membership_update_uses_the_original_device(
+    asgi_client, monkeypatch, brand, host
+):
+    import base64
+    import gzip
+    from urllib.parse import parse_qs, urlsplit
+
+    from astrbot.core.platform.sources.lark import app_registration, bot_info
+
+    route = "/api/v1/bot-types/lark/registration"
+    config = {
+        "domain": brand,
+        "app_id": "cli_original",
+        "registration_update": "group_membership",
+    }
+    launcher = f"https://open.{host}/page/launcher?ticket=original"
+    platform_results = [
+        (200, {"verification_uri_complete": launcher, "device_code": "first-device"}),
+        (200, {"error": "authorization_pending"}),
+        (
+            200,
+            {
+                "client_id": "cli_original",
+                "client_secret": "rotated",
+                "user_info": {"open_id": "ou_scanner"},
+            },
+        ),
+        (200, {"client_id": "cli_other", "client_secret": "other-secret"}),
+        (
+            200,
+            {
+                "client_id": "cli_original",
+                "client_secret": "foreign-secret",
+                "user_info": {
+                    "tenant_brand": "lark" if brand == "feishu" else "feishu"
+                },
+            },
+        ),
+    ]
+    registration = AsyncMock(side_effect=platform_results)
+    token = AsyncMock(return_value={"code": 0, "tenant_access_token": "fresh-token"})
+    bot = AsyncMock(
+        return_value={"code": 0, "bot": {"open_id": "ou_bot", "activate_status": 1}}
+    )
+    monkeypatch.setattr(app_registration, "_post_registration", registration)
+    monkeypatch.setattr(bot_info, "_post_json", token)
+    monkeypatch.setattr(bot_info, "_get_json", bot)
+
+    async def operation(action, **fields):
+        response = await asgi_client.post(
+            route,
+            headers=_jwt_headers(),
+            json={"action": action, "platform_config": config, **fields},
+        )
+        assert response.status_code == 200
+        return response.json()["data"]
+
+    started = await operation("start")
+    assert started["status"] == "pending"
+    assert started["verification_uri"] == started["verification_uri_complete"]
+    url = urlsplit(started["verification_uri_complete"])
+    query = parse_qs(url.query)
+    assert (url.scheme, url.netloc, url.path) == (
+        "https",
+        f"open.{host}",
+        "/page/launcher",
+    )
+    assert query["clientID"] == ["cli_original"] and "createOnly" not in query
+    assert query["ticket"] == ["original"] and query["tp"] == ["sdk"]
+    encoded = query["addons"][0]
+    addons = json.loads(
+        gzip.decompress(base64.urlsafe_b64decode(encoded + "=" * (-len(encoded) % 4)))
+    )
+    assert addons == {
+        "preset": False,
+        "scopes": {"tenant": ["im:chat.members:bot_access", "im:chat.members:read"]},
+        "events": {
+            "items": {
+                "tenant": [
+                    "im.chat.member.bot.deleted_v1",
+                    "im.chat.member.user.deleted_v1",
+                ]
+            }
+        },
+    }
+    progress = {"device_code": started["device_code"]}
+    assert await operation("poll", **progress) == {"status": "pending"}
+    accepted = await operation("poll", **progress)
+    assert accepted == {
+        "status": "created",
+        "app_id": "cli_original",
+        "app_secret": "rotated",
+        "domain": f"https://open.{host}",
+        "user_open_id": "ou_scanner",
+        "tenant_brand": "",
+        "bot_open_id": "ou_bot",
+        "bot_active": True,
+    }
+    for _ in range(2):
+        rejected = await operation("poll", **progress)
+        assert rejected["status"] == "error" and "app_secret" not in rejected
+    assert all(
+        call.args[0] == f"https://accounts.{host}/oauth/v1/app/registration"
+        for call in registration.await_args_list
+    )
+    assert all(
+        call.args[1] == {"action": "poll", "device_code": "first-device"}
+        for call in registration.await_args_list[1:]
+    )
+    token.assert_awaited_once_with(
+        f"https://open.{host}/open-apis/auth/v3/tenant_access_token/internal",
+        {"app_id": "cli_original", "app_secret": "rotated"},
+    )
+    bot.assert_awaited_once_with(
+        f"https://open.{host}/open-apis/bot/v3/info",
+        headers={"Authorization": "Bearer fresh-token"},
+    )
+
+
+@pytest.mark.asyncio
 async def test_v1_token_file_is_public(
     asgi_client: httpx.AsyncClient,
     tmp_path: Path,

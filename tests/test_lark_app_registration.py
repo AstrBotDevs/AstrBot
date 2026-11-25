@@ -35,6 +35,44 @@ def test_registration_data_accepts_wrapped_and_plain_payloads():
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "launcher",
+    [
+        "",
+        "https://open.feishu.cn/page/cli?user_code=fixture",
+        "https://open.feishu.cn/page/launcher?createOnly=true",
+        "https://open.feishu.cn/page/launcher?clientID=cli_other&clientID=cli_original",
+        "https://open.larksuite.com/page/launcher?ticket=fixture",
+    ],
+)
+async def test_membership_update_requires_a_launcher_for_the_original_app(
+    monkeypatch, launcher
+):
+    from unittest.mock import AsyncMock
+
+    from astrbot.core.platform.sources.lark import app_registration
+
+    monkeypatch.setattr(
+        app_registration,
+        "_post_registration",
+        AsyncMock(
+            return_value=(
+                200,
+                {
+                    "verification_uri_complete": launcher,
+                    "device_code": "device",
+                    "user_code": "fixture",
+                },
+            )
+        ),
+    )
+    with pytest.raises(RuntimeError, match="Lark returned"):
+        await app_registration.request_app_registration(
+            "feishu", membership_app_id="cli_original"
+        )
+
+
+@pytest.mark.asyncio
 async def test_registration_keeps_the_verified_scanner_when_present(monkeypatch):
     from types import SimpleNamespace
     from unittest.mock import AsyncMock

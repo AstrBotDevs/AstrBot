@@ -21,6 +21,7 @@ from lark_oapi.api.im.v1 import (
     CreateMessageReactionRequestBody,
     Emoji,
     GetChatMembersRequest,
+    GetMessageRequest,
     ReplyMessageRequest,
     ReplyMessageRequestBody,
 )
@@ -71,6 +72,88 @@ class LarkMessageEvent(AstrMessageEvent):
         super().__init__(message_str, message_obj, platform_meta, session_id)
         self.bot = bot
         self.reply_context = reply_context
+        self._mention_lookup_lock: asyncio.Lock | None = None
+
+    async def get_typed_mentions(self) -> list[dict[str, str]] | None:
+        """Read mentioned users' open IDs and applications' app IDs for this group message.
+
+        Returns:
+            Native mention keys, IDs and ID types. An empty list means no group
+            mentions apply. None means the original mentions could not be verified.
+        """
+        raw = self.message_obj.raw_message
+        if not self.get_group_id():
+            return []
+        if getattr(raw, "chat_type", None) != "group":
+            return None
+        if not raw.mentions:
+            return []
+        # Multiple consumers of an event share the lookup, including an unknown result.
+        if self._mention_lookup_lock is None:
+            self._mention_lookup_lock = asyncio.Lock()
+        async with self._mention_lookup_lock:
+            if "lark_typed_mentions" in self.get_extra():
+                return self.get_extra("lark_typed_mentions")
+            self.set_extra("lark_typed_mentions", None)
+            if self.bot.im is None:
+                return None
+            try:
+                response = await self.bot.im.v1.message.aget(
+                    GetMessageRequest.builder()
+                    .message_id(self.message_obj.message_id)
+                    .user_id_type("open_id")
+                    .build()
+                )
+            except Exception as exc:
+                logger.warning(
+                    "[Lark] Failed to read original message mentions: %s", exc
+                )
+                return None
+            if not response.success() or response.data is None:
+                return None
+            original = next(
+                (
+                    item
+                    for item in response.data.items or []
+                    if item.message_id == raw.message_id
+                ),
+                None,
+            )
+            if (
+                original is None
+                or original.chat_id != self.get_group_id()
+                or original.chat_id != raw.chat_id
+                or original.deleted is not False
+                or original.updated is not False
+            ):
+                return None
+            if self.get_extra("lark_sender_type") == "user" and (
+                original.sender is None
+                or original.sender.id_type != "open_id"
+                or original.sender.sender_type != "user"
+                or original.sender.id != self.get_sender_id()
+            ):
+                return None
+            incoming_keys = {mention.key for mention in raw.mentions}
+            typed = original.mentions or []
+            if (
+                len(typed) != len(raw.mentions)
+                or len(incoming_keys) != len(typed)
+                or {mention.key for mention in typed} != incoming_keys
+                or any(
+                    not mention.key
+                    or not mention.id
+                    or mention.id_type not in {"open_id", "app_id"}
+                    for mention in typed
+                )
+            ):
+                return None
+            result = [
+                {"key": mention.key, "id": mention.id, "id_type": mention.id_type}
+                for mention in typed
+            ]
+            self.set_extra("lark_typed_mentions", result)
+            return result
 
     async def get_group(
         self,

@@ -105,6 +105,10 @@ When sending a Lark `ActionRow` card, keep the card's `receipt.message_ids[0]` w
 
 Plugins can listen for changes affecting a destination with `@filter.event_message_type(filter.EventMessageType.OTHER_MESSAGE)`. QQ exposes the native `C2C_MSG_RECEIVE`, `C2C_MSG_REJECT`, `FRIEND_ADD` and `FRIEND_DEL` names through `event.get_extra("qq_official_event")`. On Lark, subscribe the app to the bot or user group-removal events and read `event.get_extra("lark_event_type")`. Use the participants in the event to identify who left the chat.
 
+On a Lark group message, `await event.get_typed_mentions()` looks up the original mentions once per event. Each entry has a native `key`, an `id` and its `id_type` (`open_id` for a user or `app_id` for an application). The method returns `None` when the original list cannot be verified.
+
+To authorize these two removal subscriptions on an **existing Lark app**, a dashboard client with config access can call `POST /api/v1/bot-types/lark/registration`. Pass `action="start"` and `platform_config={"registration_update": "group_membership", "app_id": "<existing app ID>", "domain": "feishu"}`. Use `"lark"` for an international app. Show the returned `verification_uri_complete` and keep its `device_code` private. Poll with `action="poll"`, the same config and that device code. On success, `user_open_id` identifies the scanner when supplied, while `bot_open_id` and `bot_active` come from bot info read with the returned credentials. Match the app, expected scanner and original bot before applying new credentials.
+
 ## Rich Media Messages
 
 AstrBot supports sending rich media messages such as images, audio, videos, etc. Use `MessageChain` to construct messages.
