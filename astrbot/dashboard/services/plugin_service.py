@@ -595,8 +595,7 @@ class PluginService:
             return
 
         registry_name = await self.resolve_registry_name(payload.get("registry_url"))
-        records = await self.get_plugin_install_sources()
-        records[plugin.root_dir_name] = self.build_install_source_record(
+        record = self.build_install_source_record(
             plugin,
             payload,
             fallback_method=fallback_method,
@@ -604,7 +603,10 @@ class PluginService:
             download_url=download_url,
             registry_name=registry_name,
         )
-        await self.save_plugin_install_sources(records)
+        async with self._install_source_lock:
+            records = await self.get_plugin_install_sources()
+            records[plugin.root_dir_name] = record
+            await self.save_plugin_install_sources(records)
 
     async def remove_plugin_install_source(self, root_dir_name: str | None) -> None:
         """Remove an installation source record.
@@ -614,11 +616,12 @@ class PluginService:
         """
         if not root_dir_name:
             return
-        records = await self.get_plugin_install_sources()
-        if root_dir_name not in records:
-            return
-        del records[root_dir_name]
-        await self.save_plugin_install_sources(records)
+        async with self._install_source_lock:
+            records = await self.get_plugin_install_sources()
+            if root_dir_name not in records:
+                return
+            del records[root_dir_name]
+            await self.save_plugin_install_sources(records)
 
     @staticmethod
     def is_ghost_plugin(plugin: StarMetadata) -> bool:
@@ -1428,35 +1431,36 @@ class PluginService:
 
         install_method = str(payload.get("install_method") or "market").strip().lower()
         if install_method == "repository":
-            records = await self.get_plugin_install_sources()
-            old_record = self.resolve_plugin_install_source(plugin, records)
-            installed_at = (
-                old_record.get("installed_at")
-                if isinstance(old_record, dict) and old_record.get("installed_at")
-                else self.get_plugin_installed_at(plugin)
-                or datetime.now(timezone.utc).isoformat()
-            )
-            record = {
-                "schema_version": 1,
-                "root_dir_name": plugin.root_dir_name,
-                "install_method": "repository",
-                "registry_url": None,
-                "registry_name": "Repository",
-                "repo": plugin_repo,
-                "download_url": "",
-                "installed_at": installed_at,
-                "updated_at": datetime.now(timezone.utc).isoformat(),
-            }
-            plugin_name_value = str(plugin.name or "").strip()
-            if plugin_name_value:
-                record["name"] = plugin_name_value
-                record["marketplace_name"] = plugin_name_value.replace("_", "-")
+            async with self._install_source_lock:
+                records = await self.get_plugin_install_sources()
+                old_record = self.resolve_plugin_install_source(plugin, records)
+                installed_at = (
+                    old_record.get("installed_at")
+                    if isinstance(old_record, dict) and old_record.get("installed_at")
+                    else self.get_plugin_installed_at(plugin)
+                    or datetime.now(timezone.utc).isoformat()
+                )
+                record = {
+                    "schema_version": 1,
+                    "root_dir_name": plugin.root_dir_name,
+                    "install_method": "repository",
+                    "registry_url": None,
+                    "registry_name": "Repository",
+                    "repo": plugin_repo,
+                    "download_url": "",
+                    "installed_at": installed_at,
+                    "updated_at": datetime.now(timezone.utc).isoformat(),
+                }
+                plugin_name_value = str(plugin.name or "").strip()
+                if plugin_name_value:
+                    record["name"] = plugin_name_value
+                    record["marketplace_name"] = plugin_name_value.replace("_", "-")
 
-            for key in (plugin.root_dir_name, plugin.name):
-                if key:
-                    records.pop(key, None)
-            records[plugin.root_dir_name] = record
-            await self.save_plugin_install_sources(records)
+                for key in (plugin.root_dir_name, plugin.name):
+                    if key:
+                        records.pop(key, None)
+                records[plugin.root_dir_name] = record
+                await self.save_plugin_install_sources(records)
             return record, "插件源已更新。"
 
         if install_method != "market":
@@ -1515,32 +1519,33 @@ class PluginService:
             )
 
         registry_name = await self.resolve_registry_name(registry_url)
-        records = await self.get_plugin_install_sources()
-        old_record = self.resolve_plugin_install_source(plugin, records)
-        installed_at = (
-            old_record.get("installed_at")
-            if isinstance(old_record, dict) and old_record.get("installed_at")
-            else self.get_plugin_installed_at(plugin)
-            or datetime.now(timezone.utc).isoformat()
-        )
-        record = {
-            "schema_version": 1,
-            "root_dir_name": plugin.root_dir_name,
-            "install_method": "market",
-            "registry_url": registry_url,
-            "registry_name": registry_name,
-            "market_plugin_id": market_plugin_id,
-            "repo": repo_url,
-            "download_url": str(market_plugin.get("download_url") or "").strip(),
-            "installed_at": installed_at,
-            "updated_at": datetime.now(timezone.utc).isoformat(),
-        }
+        async with self._install_source_lock:
+            records = await self.get_plugin_install_sources()
+            old_record = self.resolve_plugin_install_source(plugin, records)
+            installed_at = (
+                old_record.get("installed_at")
+                if isinstance(old_record, dict) and old_record.get("installed_at")
+                else self.get_plugin_installed_at(plugin)
+                or datetime.now(timezone.utc).isoformat()
+            )
+            record = {
+                "schema_version": 1,
+                "root_dir_name": plugin.root_dir_name,
+                "install_method": "market",
+                "registry_url": registry_url,
+                "registry_name": registry_name,
+                "market_plugin_id": market_plugin_id,
+                "repo": repo_url,
+                "download_url": str(market_plugin.get("download_url") or "").strip(),
+                "installed_at": installed_at,
+                "updated_at": datetime.now(timezone.utc).isoformat(),
+            }
 
-        for key in (plugin.root_dir_name, plugin.name):
-            if key:
-                records.pop(key, None)
-        records[plugin.root_dir_name] = record
-        await self.save_plugin_install_sources(records)
+            for key in (plugin.root_dir_name, plugin.name):
+                if key:
+                    records.pop(key, None)
+            records[plugin.root_dir_name] = record
+            await self.save_plugin_install_sources(records)
         return record, "插件源已更新。"
 
     async def refresh_plugin_install_source_after_update(
@@ -1762,9 +1767,7 @@ class PluginService:
         delete_config = payload.get("delete_config", False)
         delete_data = payload.get("delete_data", False)
         logger.info(f"Uninstalling plugin {plugin_name}")
-        plugin = self.find_plugin_by_name(plugin_name)
-        root_dir_name = plugin.root_dir_name if plugin else None
-        await self.plugin_manager.uninstall_plugin(
+        root_dir_name = await self.plugin_manager.uninstall_plugin(
             plugin_name,
             delete_config=delete_config,
             delete_data=delete_data,
@@ -1789,6 +1792,7 @@ class PluginService:
             delete_config=delete_config,
             delete_data=delete_data,
         )
+        await self.remove_plugin_install_source(dir_name)
         await self.sync_skills_after_plugin_change()
         logger.info(f"Uninstalled failed plugin {dir_name} successfully.")
         return None, "卸载成功"

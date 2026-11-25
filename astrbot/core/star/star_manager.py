@@ -215,7 +215,7 @@ class PluginManager:
         """插件配置 Schema 文件名"""
         self._pm_lock = asyncio.Lock()
         """StarManager操作互斥锁"""
-        self._update_locks: WeakValueDictionary[Path, asyncio.Lock] = (
+        self._plugin_dir_locks: WeakValueDictionary[Path, asyncio.Lock] = (
             WeakValueDictionary()
         )
 
@@ -1742,26 +1742,36 @@ class PluginManager:
         plugin_name: str,
         delete_config: bool = False,
         delete_data: bool = False,
-    ) -> None:
-        """卸载指定的插件。
+    ) -> str:
+        """Uninstall a registered plugin under the same directory lock as updates.
 
         Args:
-            plugin_name (str): 要卸载的插件名称
-            delete_config (bool): 是否删除插件配置文件，默认为 False
-            delete_data (bool): 是否删除插件数据，默认为 False
+            plugin_name: Registered name of the plugin to remove.
+            delete_config: Whether to remove its configuration file.
+            delete_data: Whether to remove its persistent data.
+
+        Returns:
+            The removed plugin's root directory name.
 
         Raises:
-            Exception: 当插件不存在、是保留插件时，或删除插件文件夹失败时抛出异常
-
+            Exception: If the plugin cannot be found or removed.
         """
         async with self._pm_lock:
             plugin = self.context.get_registered_star(plugin_name)
             if not plugin:
                 raise Exception("插件不存在。")
+            root_dir_name = plugin.root_dir_name
+            if not root_dir_name:
+                raise Exception(f"插件 {plugin_name} 数据不完整，无法卸载。")
+
+        plugin_path = Path(self.plugin_store_path) / root_dir_name
+        directory_lock = self._plugin_dir_locks.setdefault(plugin_path, asyncio.Lock())
+        async with directory_lock, self._pm_lock:
+            plugin = self.context.get_registered_star(plugin_name)
+            if not plugin or plugin.root_dir_name != root_dir_name:
+                raise Exception("插件不存在。")
             if plugin.reserved:
                 raise Exception("该插件是 AstrBot 保留插件，无法卸载。")
-            root_dir_name = plugin.root_dir_name
-            ppath = self.plugin_store_path
 
             # 终止插件
             try:
@@ -1774,14 +1784,14 @@ class PluginManager:
                 )
 
             # 从 star_registry 和 star_map 中删除
-            if plugin.module_path is None or root_dir_name is None:
+            if plugin.module_path is None:
                 raise Exception(f"插件 {plugin_name} 数据不完整，无法卸载。")
 
             await self._unbind_plugin(plugin_name, plugin.module_path)
 
             # 删除插件文件夹
             try:
-                remove_dir(os.path.join(ppath, root_dir_name))
+                remove_dir(str(plugin_path))
             except Exception as e:
                 raise Exception(
                     f"移除插件成功，但是删除插件文件夹失败: {e!s}。您可以手动删除该文件夹，位于 addons/plugins/ 下。",
@@ -1796,6 +1806,7 @@ class PluginManager:
                 delete_config=delete_config,
                 delete_data=delete_data,
             )
+            return root_dir_name
 
     async def uninstall_failed_plugin(
         self,
@@ -1804,7 +1815,9 @@ class PluginManager:
         delete_data: bool = False,
     ) -> None:
         """卸载加载失败的插件（按目录名）。"""
-        async with self._pm_lock:
+        plugin_path = Path(self.plugin_store_path) / dir_name
+        directory_lock = self._plugin_dir_locks.setdefault(plugin_path, asyncio.Lock())
+        async with directory_lock, self._pm_lock:
             failed_info = self.failed_plugin_dict.get(dir_name)
             if not failed_info:
                 raise Exception(
@@ -1818,10 +1831,9 @@ class PluginManager:
 
             self._cleanup_plugin_state(dir_name)
 
-            plugin_path = os.path.join(self.plugin_store_path, dir_name)
-            if os.path.exists(plugin_path):
+            if plugin_path.exists():
                 try:
-                    remove_dir(plugin_path)
+                    remove_dir(str(plugin_path))
                 except Exception as e:
                     raise Exception(
                         format_plugin_error(
@@ -1956,8 +1968,8 @@ class PluginManager:
             raise ValueError(f"Plugin {plugin_name} has no root directory name.")
 
         plugin_path = Path(self.plugin_store_path) / root_dir_name
-        update_lock = self._update_locks.setdefault(plugin_path, asyncio.Lock())
-        async with update_lock:
+        directory_lock = self._plugin_dir_locks.setdefault(plugin_path, asyncio.Lock())
+        async with directory_lock:
             plugin = self.context.get_registered_star(plugin_name)
             if not plugin or plugin.root_dir_name != root_dir_name:
                 raise Exception("插件不存在。")
