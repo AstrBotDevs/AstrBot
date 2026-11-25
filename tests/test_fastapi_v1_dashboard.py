@@ -3167,6 +3167,35 @@ async def test_plugin_service_update_github_source_uses_plugin_repo(
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("failed", [False, True])
+async def test_plugin_service_uninstall_removes_source_without_live_registration(
+    asgi_app: FastAPI,
+    monkeypatch: pytest.MonkeyPatch,
+    failed: bool,
+):
+    service = asgi_app.state.services.plugins
+    root_dir_name = "plugin_installation_directory"
+    method_name = "uninstall_failed_plugin" if failed else "uninstall_plugin"
+    plugin_identifier = root_dir_name if failed else "plugin_metadata_name"
+    payload = {"dir_name" if failed else "name": plugin_identifier}
+    uninstall = AsyncMock(return_value=None if failed else root_dir_name)
+    remove_source = AsyncMock()
+    sync_skills = AsyncMock()
+    monkeypatch.setattr(service.plugin_manager.context, "get_all_stars", lambda: [])
+    monkeypatch.setattr(service.plugin_manager, method_name, uninstall, raising=False)
+    monkeypatch.setattr(service, "remove_plugin_install_source", remove_source)
+    monkeypatch.setattr(service, "sync_skills_after_plugin_change", sync_skills)
+
+    assert await getattr(service, method_name)(payload) == (None, "卸载成功")
+
+    uninstall.assert_awaited_once_with(
+        plugin_identifier, delete_config=False, delete_data=False
+    )
+    remove_source.assert_awaited_once_with(root_dir_name)
+    sync_skills.assert_awaited_once()
+
+
+@pytest.mark.asyncio
 async def test_v1_plugin_update_all_hides_internal_exceptions(
     asgi_client: httpx.AsyncClient,
 ):

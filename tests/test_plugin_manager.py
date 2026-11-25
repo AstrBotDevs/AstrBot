@@ -6,10 +6,12 @@ import os
 import sys
 import tempfile
 import zipfile
+from copy import deepcopy
+from datetime import datetime
 from pathlib import Path
 from types import ModuleType
 from typing import Any, cast
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, Mock
 
 import pytest
 import yaml
@@ -20,6 +22,7 @@ from astrbot.core.star.star_manager import PluginDependencyInstallError, PluginM
 from astrbot.core.utils.astrbot_path import get_astrbot_system_tmp_path
 from astrbot.core.utils.pip_installer import PipInstallError
 from astrbot.core.utils.requirements_utils import MissingRequirementsPlan
+from astrbot.dashboard.services.plugin_service import PluginService
 
 # --- Test Data & Helpers ---
 
@@ -2090,6 +2093,316 @@ async def test_update_plugin_dependency_install_flow(
 
 
 @pytest.mark.asyncio
+async def test_update_plugin_serializes_only_overlapping_plugin_updates(
+    plugin_manager_pm: PluginManager, monkeypatch
+):
+    other_plugin = MockStar()
+    other_plugin.name = other_plugin.root_dir_name = "other_plugin"
+    cast(Any, plugin_manager_pm.context).stars.extend([MockStar(), other_plugin])
+    first_reload_started = asyncio.Event()
+    allow_first_reload = asyncio.Event()
+    other_update_started = asyncio.Event()
+    versions = {}
+    loaded = []
+
+    async def update(plugin, *, proxy, download_url, repo_url):
+        versions[plugin.root_dir_name] = download_url
+        if plugin is other_plugin:
+            other_update_started.set()
+
+    async def reload(name):
+        if name == TEST_PLUGIN_NAME and not first_reload_started.is_set():
+            first_reload_started.set()
+            await allow_first_reload.wait()
+        loaded.append((name, versions[name]))
+        return True, None
+
+    monkeypatch.setattr(plugin_manager_pm._updater, "update", update)
+    monkeypatch.setattr(plugin_manager_pm, "reload", reload)
+
+    async with asyncio.timeout(5), asyncio.TaskGroup() as tasks:
+        tasks.create_task(
+            plugin_manager_pm.update_plugin(TEST_PLUGIN_NAME, download_url="first")
+        )
+        await first_reload_started.wait()
+        tasks.create_task(
+            plugin_manager_pm.update_plugin(TEST_PLUGIN_NAME, download_url="second")
+        )
+        tasks.create_task(
+            plugin_manager_pm.update_plugin(other_plugin.name, download_url="other")
+        )
+        await other_update_started.wait()
+        allow_first_reload.set()
+
+    assert loaded == [
+        (other_plugin.name, "other"),
+        (TEST_PLUGIN_NAME, "first"),
+        (TEST_PLUGIN_NAME, "second"),
+    ]
+
+
+@pytest.mark.asyncio
+async def test_uninstall_plugin_waits_for_in_progress_update(
+    plugin_manager_pm: PluginManager, local_updater: Path, monkeypatch
+):
+    plugin = MockStar()
+    plugin.module_path = "data.plugins.helloworld.main"
+    plugin.plugin_id = "astrbot_team/helloworld"
+    stars = cast(Any, plugin_manager_pm.context).stars
+    stars.append(plugin)
+    download_started = asyncio.Event()
+    allow_download = asyncio.Event()
+    events = []
+
+    async def replace_files(*args, **kwargs):
+        download_started.set()
+        await allow_download.wait()
+        _write_local_test_plugin(local_updater, TEST_PLUGIN_REPO, "2.0.0")
+        events.append("replace")
+
+    async def reload(name):
+        async with plugin_manager_pm._pm_lock:
+            if plugin not in stars:
+                stars.append(plugin)
+            events.append("reload")
+        return True, None
+
+    async def unbind(name, module_path):
+        stars.remove(plugin)
+        events.append("unbind")
+
+    monkeypatch.setattr(plugin_manager_pm._updater, "update", replace_files)
+    monkeypatch.setattr(plugin_manager_pm, "reload", reload)
+    monkeypatch.setattr(plugin_manager_pm, "_terminate_plugin", AsyncMock())
+    monkeypatch.setattr(plugin_manager_pm, "_unbind_plugin", unbind)
+
+    async with asyncio.timeout(5), asyncio.TaskGroup() as tasks:
+        tasks.create_task(plugin_manager_pm.update_plugin(TEST_PLUGIN_NAME))
+        await download_started.wait()
+        uninstall = tasks.create_task(
+            plugin_manager_pm.uninstall_plugin(TEST_PLUGIN_NAME)
+        )
+        await asyncio.sleep(0)
+        allow_download.set()
+
+    assert uninstall.result() == TEST_PLUGIN_DIR
+    assert events == ["replace", "reload", "unbind"]
+    assert not local_updater.exists()
+    assert not stars
+
+
+@pytest.mark.asyncio
+async def test_queued_update_cannot_recreate_uninstalled_plugin(
+    plugin_manager_pm: PluginManager, local_updater: Path, monkeypatch
+):
+    plugin = MockStar()
+    plugin.module_path = "data.plugins.helloworld.main"
+    plugin.plugin_id = "astrbot_team/helloworld"
+    stars = cast(Any, plugin_manager_pm.context).stars
+    stars.append(plugin)
+    uninstall_started = asyncio.Event()
+    allow_uninstall = asyncio.Event()
+
+    async def terminate(_plugin):
+        uninstall_started.set()
+        await allow_uninstall.wait()
+
+    async def unbind(_name, _module_path):
+        stars.remove(plugin)
+
+    update_files = AsyncMock()
+    reload_plugin = AsyncMock(return_value=(True, None))
+    monkeypatch.setattr(plugin_manager_pm, "_terminate_plugin", terminate)
+    monkeypatch.setattr(plugin_manager_pm, "_unbind_plugin", unbind)
+    monkeypatch.setattr(plugin_manager_pm._updater, "update", update_files)
+    monkeypatch.setattr(plugin_manager_pm, "reload", reload_plugin)
+
+    async with asyncio.timeout(5):
+        uninstall = asyncio.create_task(
+            plugin_manager_pm.uninstall_plugin(TEST_PLUGIN_NAME)
+        )
+        update = None
+        try:
+            await uninstall_started.wait()
+            update = asyncio.create_task(
+                plugin_manager_pm.update_plugin(TEST_PLUGIN_NAME)
+            )
+            await asyncio.sleep(0)
+            allow_uninstall.set()
+            await uninstall
+            with pytest.raises(Exception, match="插件不存在"):
+                await update
+        finally:
+            allow_uninstall.set()
+            await asyncio.gather(
+                uninstall, *([update] if update else []), return_exceptions=True
+            )
+
+    update_files.assert_not_awaited()
+    reload_plugin.assert_not_awaited()
+    assert not local_updater.exists()
+    assert not stars
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("batch", [False, True])
+@pytest.mark.parametrize("download_fails", [False, True])
+async def test_update_plugin_persists_source_only_after_replacing_files(
+    plugin_manager_pm: PluginManager, monkeypatch, batch, download_fails
+):
+    plugin_name = "demo_plugin"
+    plugin = MockStar()
+    plugin.name = plugin_name
+    stars = cast(Any, plugin_manager_pm.context).stars
+    stars.append(plugin)
+    service = PluginService(None, plugin_manager_pm)
+    old_source = {
+        "install_method": "market",
+        "market_plugin_id": "owner/old-plugin",
+        "repo": "https://github.com/owner/old-plugin",
+        "download_url": "https://example.com/old.zip",
+        "installed_at": "2026-01-01T00:00:00+00:00",
+        "updated_at": "2026-01-02T00:00:00+00:00",
+    }
+    new_source = {
+        "market_plugin_id": "owner/new-plugin",
+        "repo": "https://github.com/owner/new-plugin",
+        "download_url": "https://example.com/new.zip",
+    }
+    write_sources = AsyncMock()
+    download = AsyncMock(
+        side_effect=RuntimeError("Download failed") if download_fails else None
+    )
+
+    async def reload(_name):
+        stars.clear()
+        return False, "Plugin initialization failed"
+
+    reload_plugin = AsyncMock(side_effect=reload)
+    monkeypatch.setattr(plugin_manager_pm._updater, "update", download)
+    monkeypatch.setattr(plugin_manager_pm, "reload", reload_plugin)
+    monkeypatch.setattr(service, "sync_skills_after_plugin_change", AsyncMock())
+    monkeypatch.setattr(
+        service,
+        "get_plugin_install_sources",
+        AsyncMock(return_value={TEST_PLUGIN_DIR: dict(old_source)}),
+    )
+    monkeypatch.setattr(service, "save_plugin_install_sources", write_sources)
+    monkeypatch.setattr(
+        service,
+        "resolve_market_update_info",
+        AsyncMock(return_value={**new_source, "market_plugin": new_source}),
+    )
+
+    if batch:
+        data, _message = await service.update_all_plugins({"names": [plugin_name] * 2})
+        assert [result["status"] for result in data["results"]] == ["error"]
+    else:
+        error = "Download failed" if download_fails else "Plugin initialization failed"
+        with pytest.raises(RuntimeError, match=error):
+            await service.update_plugin({"name": plugin_name})
+
+    download.assert_awaited_once()
+    if download_fails:
+        write_sources.assert_not_awaited()
+        reload_plugin.assert_not_awaited()
+    else:
+        reload_plugin.assert_awaited_once_with(plugin_name)
+        write_sources.assert_awaited_once()
+        record = dict(write_sources.await_args.args[0][TEST_PLUGIN_DIR])
+        expected = {
+            **old_source,
+            **new_source,
+            "root_dir_name": TEST_PLUGIN_DIR,
+        }
+        assert datetime.fromisoformat(
+            record.pop("updated_at")
+        ) > datetime.fromisoformat(expected.pop("updated_at"))
+        assert record == expected
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("operation", ["install", "remove", "repository", "market"])
+async def test_install_source_writes_preserve_concurrent_updates(
+    plugin_manager_pm: PluginManager, monkeypatch, operation
+):
+    cast(Any, plugin_manager_pm.context).stars.append(MockStar())
+    service = PluginService(None, plugin_manager_pm)
+    other_plugin = "other_plugin"
+    old_source = {"repo": TEST_PLUGIN_REPO, "installed_at": "2026-01-01T00:00:00+00:00"}
+    saved = {other_plugin: old_source.copy(), TEST_PLUGIN_DIR: old_source.copy()}
+    first_write_started = asyncio.Event()
+    release_first_write = asyncio.Event()
+    new_download_url = "https://example.com/new.zip"
+    market_entry = {
+        "market_plugin_id": "AstrBotDevs/helloworld",
+        "repo": TEST_PLUGIN_REPO,
+        "download_url": "https://example.com/market.zip",
+    }
+
+    async def read_sources():
+        return deepcopy(saved)
+
+    async def write_sources(records):
+        nonlocal saved
+        if not first_write_started.is_set():
+            first_write_started.set()
+            await release_first_write.wait()
+        saved = records
+
+    monkeypatch.setattr(service, "get_plugin_install_sources", read_sources)
+    monkeypatch.setattr(service, "save_plugin_install_sources", write_sources)
+    monkeypatch.setattr(
+        service, "resolve_registry_name", AsyncMock(return_value="Market")
+    )
+    monkeypatch.setattr(
+        service,
+        "get_online_plugins",
+        AsyncMock(return_value=({"helloworld": market_entry}, None)),
+    )
+
+    async with asyncio.timeout(5), asyncio.TaskGroup() as tasks:
+        tasks.create_task(
+            service.refresh_plugin_install_source_after_update(
+                other_plugin, {"market_plugin": {"download_url": new_download_url}}
+            )
+        )
+        await first_write_started.wait()
+        if operation == "install":
+            tasks.create_task(
+                service.persist_plugin_install_source(
+                    {"name": TEST_PLUGIN_NAME},
+                    {},
+                    fallback_method="url",
+                    repo_url=TEST_PLUGIN_REPO,
+                    download_url="",
+                )
+            )
+        elif operation == "remove":
+            tasks.create_task(service.remove_plugin_install_source(TEST_PLUGIN_DIR))
+        else:
+            tasks.create_task(
+                service.bind_plugin_market_source(
+                    {
+                        "name": TEST_PLUGIN_NAME,
+                        "install_method": operation,
+                        "market_plugin_id": market_entry["market_plugin_id"],
+                    }
+                )
+            )
+        await asyncio.sleep(0)
+        release_first_write.set()
+
+    assert saved[other_plugin]["download_url"] == new_download_url
+    if operation == "remove":
+        assert TEST_PLUGIN_DIR not in saved
+    else:
+        assert saved[TEST_PLUGIN_DIR]["install_method"] == (
+            "url" if operation == "install" else operation
+        )
+
+
+@pytest.mark.asyncio
 async def test_install_plugin_skips_dependency_install_when_no_requirements_missing(
     plugin_manager_pm: PluginManager, monkeypatch
 ):
@@ -2474,6 +2787,63 @@ async def test_uninstall_plugin_handles_disabled_plugin_with_plugin_id(
 
     assert len(cleanup_calls) == 1
     assert cleanup_calls[0]["plugin_id"] == "mock_author/mock_name"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "dir_name", ["", ".", "..", "../outside", "..\\outside", "/outside"]
+)
+async def test_uninstall_failed_plugin_rejects_paths_outside_plugin_directory(
+    plugin_manager_pm: PluginManager, monkeypatch, dir_name
+):
+    plugin_manager_pm.failed_plugin_dict[dir_name] = {"error": "Import failed"}
+    remove_directory = Mock()
+    cleanup_state = Mock()
+    monkeypatch.setattr(star_manager_module, "remove_dir", remove_directory)
+    monkeypatch.setattr(plugin_manager_pm, "_cleanup_plugin_state", cleanup_state)
+
+    with pytest.raises(ValueError, match="Invalid plugin directory name"):
+        await plugin_manager_pm.uninstall_failed_plugin(dir_name)
+
+    remove_directory.assert_not_called()
+    cleanup_state.assert_not_called()
+    assert dir_name in plugin_manager_pm.failed_plugin_dict
+
+
+@pytest.mark.asyncio
+async def test_uninstall_failed_plugin_rejects_directory_symlink(
+    plugin_manager_pm: PluginManager, tmp_path: Path
+):
+    outside_directory = tmp_path / "outside"
+    outside_directory.mkdir()
+    plugin_path = Path(plugin_manager_pm.plugin_store_path) / TEST_PLUGIN_DIR
+    try:
+        plugin_path.symlink_to(outside_directory, target_is_directory=True)
+    except OSError as error:
+        pytest.skip(f"Directory symlinks are unavailable: {error}")
+    plugin_manager_pm.failed_plugin_dict[TEST_PLUGIN_DIR] = {"error": "Import failed"}
+
+    with pytest.raises(ValueError, match="Invalid plugin directory path"):
+        await plugin_manager_pm.uninstall_failed_plugin(TEST_PLUGIN_DIR)
+
+    assert outside_directory.is_dir()
+    assert plugin_path.is_symlink()
+    assert TEST_PLUGIN_DIR in plugin_manager_pm.failed_plugin_dict
+
+
+@pytest.mark.asyncio
+async def test_uninstall_failed_plugin_accepts_legacy_directory_name(
+    plugin_manager_pm: PluginManager,
+):
+    dir_name = "legacy-plugin"
+    plugin_path = Path(plugin_manager_pm.plugin_store_path) / dir_name
+    plugin_path.mkdir()
+    plugin_manager_pm.failed_plugin_dict[dir_name] = {"error": "Import failed"}
+
+    await plugin_manager_pm.uninstall_failed_plugin(dir_name)
+
+    assert not plugin_path.exists()
+    assert dir_name not in plugin_manager_pm.failed_plugin_dict
 
 
 @pytest.mark.asyncio
