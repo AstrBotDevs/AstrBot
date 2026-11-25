@@ -18,6 +18,8 @@ result = await run.result()
 
 `run_turn()` submits a turn without waiting for completion. Turns in the same session execute serially. `await run.result()` waits for execution, history persistence, and output handling. AstrBot sends replies by default; do not send `result.text` again.
 
+Pass `conversation_id=cid` to target an existing conversation that belongs to `umo`. Omitting it uses the current conversation.
+
 Use `await run.cancel()` to stop execution. Cancelling a result waiter does not stop the turn.
 
 ### Pass metadata to hooks
@@ -46,7 +48,7 @@ companion = metadata.get("private_companion", {})
 
 Use a plugin namespace and JSON-compatible values. Metadata is copied into `event.get_extra("agent_metadata")` before hooks run. It is not added to the model prompt or history; add model context explicitly through a hook if needed.
 
-Metadata defaults to `{}` and is not inherited from `source_event` or by `follow_up()`. To pass metadata to another turn, call `run_turn()` with the target `session_id`.
+Metadata defaults to `{}` and is not inherited from `source_event` or by `follow_up()`. To pass metadata to another turn, call `run_turn()` with the target `conversation_id`.
 
 ### Collect messages before sending
 
@@ -102,9 +104,11 @@ if receipt is not None:
 
 `follow_up()` queues a turn in the original runtime and conversation. `steer()` adds input to an active turn: it returns `None` if rejected, or an `InputReceipt` whose awaited boolean indicates whether the input was consumed and saved. Rejected input is not queued automatically. Steering images and files are currently passed as text references.
 
+When steering arrives while a tool result is pending, the built-in executor moves the running tool to the background without executing it again. The foreground receives a handoff result containing the task ID and proceeds with steering. Completion or failure triggers a wakeup in the original runtime conversation. Stopping the session cancels these background tools too; executors without handoff support keep waiting for the tool result.
+
 For event-backed main sessions, user and assistant messages are committed incrementally. Assistant tool calls are committed before tool execution, and tool results are stored as `message.appended`. `tool.started` and `tool.finished` remain runtime notifications and are not stored in the conversation journal. Missing tool results after an interrupted execution are represented as unknown results when preparing the next turn.
 
-`run.session.state` is `idle`, `queued`, `running`, or `closed`. The snapshot contains `ref`, `pending_turn_count`, and `active_turn_id`. Read the property again to refresh it.
+Call `session = await run.get_session()` to read the latest session snapshot. Its `state` is `idle`, `queued`, `running`, or `closed`. It also contains `ref`, `pending_turn_count`, and `active_turn_id`. Replace reads of the former `run.session` property with this call.
 
 Core resolves permissions from `source_event` or the current active same-UMO event. Background calls without a source run as members. A source event from another UMO is rejected.
 

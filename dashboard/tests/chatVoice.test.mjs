@@ -6,14 +6,14 @@ import { File } from "node:buffer";
 import { ref, computed, watch, nextTick, effectScope } from "vue";
 import ts from "typescript";
 
-function setupVoice() {
+function setupVoice(initialStorage = {}) {
   const draft = ref("Existing draft");
   const stagedFiles = ref([]);
   const contextKey = ref("chat-a");
   const calls = { transcriptions: [], uploads: [], sends: [], errors: [] };
   const mounted = [];
   const stopped = [];
-  const storage = new Map();
+  const storage = new Map(Object.entries({ user: "alice", ...initialStorage }));
   const recorder = {
     isRecording: ref(false),
     isStarting: ref(false),
@@ -32,6 +32,7 @@ function setupVoice() {
     },
   };
   const sandbox = vm.createContext({
+    exports: {},
     ref,
     computed,
     watch,
@@ -41,8 +42,13 @@ function setupVoice() {
     useToast: () => ({ error: (error) => calls.errors.push(error) }),
     useRecording: () => recorder,
     localStorage: {
-      getItem: (key) => storage.get(key),
+      get length() {
+        return storage.size;
+      },
+      key: (index) => [...storage.keys()][index] ?? null,
+      getItem: (key) => storage.get(key) ?? null,
       setItem: (key, value) => storage.set(key, value),
+      removeItem: (key) => storage.delete(key),
     },
     providerApi: {
       listByProviderType: async () => ({
@@ -69,6 +75,17 @@ function setupVoice() {
     URL: { createObjectURL: () => "blob:preview" },
     console: { error() {} },
   });
+  const preferencesSource = readFileSync(
+    new URL("../src/utils/chatPreferences.ts", import.meta.url),
+    "utf8",
+  );
+  vm.runInContext(
+    ts.transpile(preferencesSource, {
+      module: ts.ModuleKind.CommonJS,
+      target: ts.ScriptTarget.ES2022,
+    }),
+    sandbox,
+  );
   const source = readFileSync(
     new URL("../src/composables/useChatVoice.ts", import.meta.url),
     "utf8",
@@ -122,7 +139,12 @@ test("dictation uses selected STT, appends to the draft, and never sends audio",
     assert.equal(h.voice.sttProviders.value.length, 2);
     h.voice.selectedSttProvider.value = "second";
     await nextTick();
-    assert.equal(h.storage.get("chat.sttProvider"), "second");
+    assert.equal(
+      JSON.parse(h.storage.get("astrbot.chat.preferences")).users.alice.global
+        .sttProvider,
+      "second",
+    );
+    assert.equal(h.storage.has("chat.sttProvider"), false);
     const finished = h.voice.finish();
     await flush();
     assert.equal(h.calls.transcriptions[0].args[1], "second");
@@ -206,3 +228,33 @@ test("cancelling active capture discards the recording without an upload", async
     h.cleanup();
   }
 });
+
+for (const format of ["legacy", "consolidated"]) {
+  test(`dictation restores the saved provider from ${format} preferences`, async () => {
+    const h = setupVoice(
+      format === "legacy"
+        ? { "chat.sttProvider": "second" }
+        : {
+            "astrbot.chat.preferences": JSON.stringify({
+              version: 1,
+              users: {
+                alice: { global: { sttProvider: "second" }, sessions: {} },
+              },
+            }),
+          },
+    );
+    try {
+      assert.equal(h.voice.selectedSttProvider.value, "second");
+      await h.voice.start("transcribe");
+      assert.equal(h.voice.selectedSttProvider.value, "second");
+      assert.equal(
+        JSON.parse(h.storage.get("astrbot.chat.preferences")).users.alice.global
+          .sttProvider,
+        "second",
+      );
+      assert.equal(h.storage.has("chat.sttProvider"), false);
+    } finally {
+      h.cleanup();
+    }
+  });
+}

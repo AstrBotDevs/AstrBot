@@ -57,32 +57,17 @@
         "description": "Описание функции",
         "parameters": "Параметры",
         "noParameters": "У этого инструмента нет параметров",
-        "filter": {
-            "showBuiltin": "Показать встроенные"
-        },
         "table": {
             "paramName": "Параметр",
             "type": "Тип",
             "description": "Описание",
             "required": "Обяз.",
-            "origin": "Источник",
             "originName": "Имя источника",
-            "readonly": "Только чтение",
             "permission": "Доступ",
             "permissionAdmin": "Админ",
             "permissionMember": "Все",
             "permissionEveryone": "Все",
-            "permissionBuiltin": "Встроенный",
             "actions": "Действия"
-        },
-        "configTags": {
-            "tooltipTitle": "Этот инструмент включен в файле конфигурации {config}, потому что:",
-            "conditions": {
-                "truthy": "{key} включен",
-                "equals": "{key} = {expected}",
-                "in": "{key} соответствует {expected}",
-                "fallback": "Текущее значение {key}: {actual}"
-            }
         },
         "summary": {
             "total": "Всего",
@@ -160,11 +145,9 @@
         "configParseError": "Ошибка разбора конфигурации: {error}",
         "noAvailableConfig": "Конфигурация отсутствует",
         "toggleToolSuccess": "Статус инструмента изменен!",
-        "toggleToolReadonly": "Встроенные инструменты доступны только для чтения и не могут быть включены или выключены.",
         "toggleToolError": "Не удалось изменить статус: {error}",
         "updateToolPermissionSuccess": "Доступ к {name} обновлён",
         "updateToolPermissionFailed": "Не удалось обновить доступ к инструменту",
-        "updateToolPermissionBuiltin": "Встроенные инструменты не поддерживают настройку доступа.",
         "testError": "Ошибка теста связи: {error}"
     },
     "syncProvider": {

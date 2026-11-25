@@ -80,6 +80,12 @@ To replace the TOTP secret, you can do so in the TOTP management window, where y
 
 AstrBot includes a built-in ChatUI for talking to configured models directly in your browser.
 
+With the sidebar chat entry enabled under **System Settings → Appearance**, selecting **Chat** on desktop smoothly narrows the main navigation: labels fade out while icons and the logo move into the left rail, with the chat sidebar alongside it. The Chat icon becomes a **left arrow (Back to navigation)**. Select it to return to the previous page and restore the previous navigation width, or select any rail icon to navigate directly. The system settings button at the bottom of the rail is hidden in this mode; chat settings remain in the chat sidebar. Reduced-motion preferences disable the animation; narrow screens keep a single drawer.
+
+Entry mapping: **Chat sidebar → Back to navigation** moves to **Left navigation rail → Left arrow**. Disabling this appearance option keeps the existing chat switcher.
+
+![Chat dual sidebars: navigation rail and conversation list (Chinese interface)](images/chat-dual-sidebar.jpg)
+
 ChatUI supports these common workflows:
 
 - The sidebar initially loads the 30 most recent conversations. Scroll near the bottom to automatically load older conversations, with a progress bar while loading. Automatic requests pause after a failure; select **Retry** to continue.
@@ -125,6 +131,14 @@ After selecting an explicit model, click the gear beside the selector to open it
 After editing, click the disk icon labeled `Save Configuration` in the lower-right corner and check for a successful save message.
 
 Use the `{}` icon labeled `Edit Configuration File` to edit the current profile as JSON. Select `Apply This Configuration` to stage the changes in the visual editor, close the editor, and then select `Save Configuration`.
+
+### System Language
+
+In a configuration profile, open **Platforms & Messages → General → System language**, select **🇨🇳 简体中文** or **🇺🇸 English**, and save. The configuration key is `platform_settings.locale`: `zh-CN` by default, or `en-US` for English.
+
+This controls Core tool activity messages, tool result labels, model response errors, reasoning prefixes, permission notices, command validation and group help, and plugin filter and handler error messages. Built-in plugin replies and command descriptions in `/help` also use this language. Third-party plugin error details, command descriptions, and reply bodies keep their original text unless the plugin adopts the system language. Model-generated content and the WebUI display language are unaffected.
+
+Use existing profile routing or session configuration overrides to select different languages for different sessions. Missing or unsupported values fall back to Simplified Chinese.
 
 ### System Settings
 
@@ -264,3 +278,18 @@ Modify the `password` in the `dashboard` configuration in the data/cmd_config.js
 
 > [!TIP]
 > For more details, see [FAQ - Forgot Dashboard Password](/en/faq.md#forgot-dashboard-password).
+
+## ChatUI workbench
+
+The workbench button at the right of the ChatUI header opens a reading and visualization area. Click **+** in its tab bar to open **New workbench**, then choose a registered plugin view. A context-usage view can follow the active session; tools and plugin messages can also open file previews directly.
+
+Tabs sit in the main header. Drag the left divider to resize, expand for full-screen reading, or hide and reopen using the same header control. All tabs, including resident plugin views and New workbench, belong to their chat session. Switching sessions restores its tabs, selected view, and open/hidden state. This is a new entry point and does not replace standalone plugin pages in the extensions sidebar.
+
+See [Workbench page](../dev/star/guides/plugin-views/workbench.md) for plugin development.
+
+
+The workbench remembers open tabs, the active tab, visibility, and width. Closed tabs stay closed after a reload; use the compact entry in a chat message to reopen one. New tool results can still open new tabs, while loading older messages does not expand the workbench.
+
+![Compact workbench entries (sample files, Chinese interface)](images/chat-workbench-entry.jpg)
+
+ChatUI uses one `astrbot.chat.preferences` localStorage record, containing global and per-session preferences for each account. Model selections, configuration, speech recognition, expanded projects, drafts, and workbench layouts share this record. Existing scattered keys migrate automatically and are removed only after a successful write. Preferences apply to the current browser.

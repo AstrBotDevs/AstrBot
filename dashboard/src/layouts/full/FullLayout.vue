@@ -8,6 +8,7 @@ import { useRouterLoadingStore } from "@/stores/routerLoading";
 import { useCommonStore } from "@/stores/common";
 import { useMobileDrawerStore } from "@/stores/mobileDrawer";
 import { statsApi } from "@/api/v1";
+import { useDisplay } from "vuetify";
 import { useI18n } from "@/i18n/composables";
 
 const Chat = defineAsyncComponent(() => import("@/components/chat/Chat.vue"));
@@ -42,7 +43,10 @@ const isFullScreenRoute = computed(
 );
 const shouldMountChat = ref(isCurrentChatRoute.value);
 
-const showSidebar = computed(() => !isCurrentChatRoute.value);
+const { smAndDown } = useDisplay();
+const showSidebar = computed(
+  () => !isCurrentChatRoute.value || (customizer.chatNavigationInSidebar && !smAndDown.value),
+);
 
 const hasFirstNotice = ref(false);
 const showFirstNoticeDialog = ref(false);
@@ -117,6 +121,7 @@ onMounted(() => {
       :theme="useCustomizerStore().uiTheme"
       :class="[
         customizer.fontTheme,
+        { 'sidebar-navigation-shell': customizer.chatNavigationInSidebar },
         customizer.mini_sidebar ? 'mini-sidebar' : '',
         customizer.inputBg ? 'inputWithbg' : '',
       ]"
@@ -178,6 +183,22 @@ onMounted(() => {
 <style scoped>
 .chat-main {
   padding-top: 0 !important;
+}
+
+/* Keep the content offset and both drawers on the same motion curve. */
+:global(.sidebar-navigation-shell .v-main),
+:global(.sidebar-navigation-shell .v-navigation-drawer),
+:global(.sidebar-navigation-shell .app-header-context) {
+  transition: width 360ms cubic-bezier(0.22, 1, 0.36, 1),
+    left 360ms cubic-bezier(0.22, 1, 0.36, 1),
+    padding-left 360ms cubic-bezier(0.22, 1, 0.36, 1),
+    margin-left 360ms cubic-bezier(0.22, 1, 0.36, 1),
+    transform 360ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+@media (prefers-reduced-motion: reduce) {
+  :global(.sidebar-navigation-shell .v-main),
+  :global(.sidebar-navigation-shell .v-navigation-drawer),
+  :global(.sidebar-navigation-shell .app-header-context) { transition: none; }
 }
 
 /* The header takes its own row in the flow, so the content area owns the remaining

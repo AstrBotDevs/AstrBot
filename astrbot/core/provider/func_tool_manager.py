@@ -9,7 +9,7 @@ import urllib.parse
 from collections.abc import AsyncGenerator, Awaitable, Callable, Mapping
 from dataclasses import dataclass
 from types import MappingProxyType
-from typing import Any, TypeVar, overload
+from typing import Any
 
 import aiohttp
 from deprecated import deprecated
@@ -18,15 +18,7 @@ from astrbot import logger
 from astrbot.core import sp
 from astrbot.core.agent.mcp_client import MCPClient, MCPTool
 from astrbot.core.agent.tool import FunctionTool, ToolSet
-from astrbot.core.astr_agent_runtime.tools.registry import (
-    ensure_builtin_tools_loaded,
-    get_builtin_tool_class,
-    get_builtin_tool_name,
-    iter_builtin_tool_classes,
-)
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
-
-BuiltinToolT = TypeVar("BuiltinToolT", bound=FunctionTool)
 
 DEFAULT_MCP_CONFIG = {"mcpServers": {}}
 
@@ -216,9 +208,7 @@ async def _quick_test_mcp_connection(config: dict) -> tuple[bool, str]:
 class _PermissionGuardedTool(FunctionTool):
     """Transparent proxy that checks per-tool permissions before delegating.
 
-    Only wraps non-builtin tools. Builtin tools are added to the tool set
-    without wrapping, so their existing hardcoded permission logic
-    (``check_admin_permission`` / ``_is_restricted_env``) is unaffected.
+    Only wraps tools contributed to the manager by plugins and MCP servers.
 
     The ``handler`` field is intentionally kept ``None`` so that
     ``FunctionToolExecutor._execute_local`` falls through to the
@@ -291,9 +281,7 @@ class _PermissionGuardedTool(FunctionTool):
 class FunctionToolManager:
     def __init__(self) -> None:
         self.func_list: list[FuncTool] = []
-        """All tools include mcp tools and plugin tools, except astrbot builtin tools."""
-        self.builtin_func_list: dict[type[FuncTool], FuncTool] = {}
-        """All astrbot builtin tools, keyed by their class. Values are instantiated tool objects, created on demand."""
+        """Tools contributed by plugins and MCP servers."""
 
         self._mcp_server_runtime: dict[str, _MCPServerRuntime] = {}
         """MCP runtime metadata, keyed by server name. Updated atomically on MCP lifecycle changes."""
@@ -409,73 +397,12 @@ class FunctionToolManager:
         for f in reversed(self.func_list):
             if f.name == name:
                 return f
-        if isinstance(name, str):
-            try:
-                builtin_tool = self.get_builtin_tool(name)
-            except KeyError:
-                return None
-            if getattr(builtin_tool, "active", True):
-                return builtin_tool
-            return builtin_tool
         return None
 
-    @overload
-    def get_builtin_tool(self, tool: type[BuiltinToolT]) -> BuiltinToolT: ...
-
-    @overload
-    def get_builtin_tool(self, tool: str) -> FuncTool: ...
-
-    def get_builtin_tool(self, tool: str | type[FuncTool]) -> FuncTool:
-        """Resolve a cached builtin, retaining the type of a requested tool class.
-
-        Args:
-            tool: Registered builtin name or concrete tool class.
-
-        Returns:
-            The instance cached under that tool's concrete class.
-
-        Raises:
-            KeyError: If the builtin name or class is not registered.
-            TypeError: If the selector is neither a name nor a tool class.
-        """
-        ensure_builtin_tools_loaded()
-
-        if isinstance(tool, str):
-            tool_cls = get_builtin_tool_class(tool)
-            if tool_cls is None:
-                raise KeyError(f"Builtin tool {tool} is not registered.")
-        elif isinstance(tool, type) and issubclass(tool, FunctionTool):
-            tool_cls = tool
-            if get_builtin_tool_name(tool_cls) is None:
-                raise KeyError(
-                    f"Builtin tool class {tool_cls.__module__}.{tool_cls.__name__} is not registered.",
-                )
-        else:
-            raise TypeError("tool must be a builtin tool name or FunctionTool class.")
-
-        cached_tool = self.builtin_func_list.get(tool_cls)
-        if cached_tool is not None:
-            return cached_tool
-
-        builtin_tool = tool_cls()  # type: ignore
-        self.builtin_func_list[tool_cls] = builtin_tool
-        return builtin_tool
-
-    def iter_builtin_tools(self) -> list[FuncTool]:
-        ensure_builtin_tools_loaded()
-        return [
-            self.get_builtin_tool(tool_cls) for tool_cls in iter_builtin_tool_classes()
-        ]
-
-    def is_builtin_tool(self, name: str) -> bool:
-        ensure_builtin_tools_loaded()
-        return get_builtin_tool_class(name) is not None
-
     def _default_permission(self, tool_name: str) -> str:
-        """Compute the fallback permission for a non-builtin tool.
+        """Compute the fallback permission for a plugin or MCP tool.
 
-        All non-builtin tools default to ``"member"`` (no restriction).
-        Builtin tools are never routed through this method."""
+        Tools default to ``"member"`` when no restriction is configured."""
         return "member"
 
     async def _check_tool_permission(
@@ -485,7 +412,7 @@ class FunctionToolManager:
     ) -> str | None:
         """Return an error string if the caller lacks permission, or None.
 
-        Only non-builtin tools are guarded. Permission is resolved from
+        Permission is resolved from
         ``tool_permissions`` in SharedPreferences (``_default`` key). When
         no explicit entry exists the tool inherits the fallback
         ``_default_permission``."""
@@ -517,18 +444,11 @@ class FunctionToolManager:
         return None
 
     def get_full_tool_set(self) -> ToolSet:
-        """获取完整工具集
+        """Return the registered plugin and MCP tools with permission checks.
 
-        使用 ToolSet.add_tool 进行填充。对于同名工具，去重规则为：
-        - 优先保留 active=True 的工具；
-        - 当 active 状态相同时，后加载的工具会覆盖前面的工具。
-
-        因此，后加载的 inactive 工具不会覆盖已激活的工具；
-        同时，MCP 工具在需要时仍可覆盖被禁用的内置工具。
-
-        Non-builtin tools are wrapped with ``_PermissionGuardedTool`` so that
-        every invocation checks the per-tool permission configured via the
-        dashboard.
+        Returns:
+            A tool set that prefers active tools and uses the latest registration
+            when tools with the same name have the same active state.
         """
         tool_set = ToolSet()
         for tool in self.func_list:

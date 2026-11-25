@@ -1,7 +1,14 @@
 from collections.abc import AsyncGenerator
 
 from astrbot import logger
-from astrbot.core.message.components import At, AtAll, ButtonInteraction, Reply
+from astrbot.core.i18n import get_config_locale, translate
+from astrbot.core.message.components import (
+    At,
+    AtAll,
+    ButtonInteraction,
+    Reply,
+    UIInteraction,
+)
 from astrbot.core.message.message_event_result import MessageChain, MessageEventResult
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from astrbot.core.platform.button_interaction import (
@@ -12,6 +19,7 @@ from astrbot.core.platform.button_interaction import (
 from astrbot.core.star.filter.button_action import ButtonActionFilter
 from astrbot.core.star.filter.command_group import CommandGroupFilter
 from astrbot.core.star.filter.permission import PermissionTypeFilter
+from astrbot.core.star.filter.ui_action import UIActionFilter
 from astrbot.core.star.star import star_map
 from astrbot.core.star.star_handler import EventType, star_handlers_registry
 from astrbot.core.utils.session_waiter import FILTERS, USER_SESSIONS
@@ -136,6 +144,8 @@ class WakingCheckStage(Stage):
                         ]
                 else:
                     event.message_str = message_str[len(wake_prefix) :].strip()
+                if wake_prefix:
+                    event.set_extra("_consumed_wake_prefix", wake_prefix)
                 break
         if not is_wake:
             # 检查是否有at消息 / at全体成员消息 / 引用了bot的消息
@@ -159,6 +169,7 @@ class WakingCheckStage(Stage):
             # 检查是否是私聊
             if (
                 not event.is_button_interaction()
+                and event.get_ui_interaction() is None
                 and event.is_private_chat()
                 and (
                     not self.friend_message_needs_wake_prefix
@@ -207,6 +218,14 @@ class WakingCheckStage(Stage):
             plugins_name=event.plugins_name,
         ):
             plugin = star_map.get(handler.handler_module_path)
+            ui_interaction = event.get_ui_interaction()
+            if isinstance(ui_interaction, UIInteraction) and (
+                handler.handler_module_path != event.get_extra("ui_plugin_module")
+                or not any(
+                    isinstance(item, UIActionFilter) for item in handler.event_filters
+                )
+            ):
+                continue
             if plugin and not plugin.reserved and plugin.name in disabled_plugins:
                 continue
             if event.is_button_interaction() and not any(
@@ -241,7 +260,12 @@ class WakingCheckStage(Stage):
                     await event.send(
                         MessageEventResult()
                         .message(
-                            f"插件 {star_map[handler.handler_module_path].name}: {e}",
+                            translate(
+                                "plugin_filter_error",
+                                get_config_locale(effective_config),
+                                plugin=star_map[handler.handler_module_path].name,
+                                detail=str(e),
+                            ),
                         )
                         .use_markdown(False),
                     )
@@ -256,7 +280,11 @@ class WakingCheckStage(Stage):
                     if self.no_permission_reply:
                         await event.send(
                             MessageChain().message(
-                                f"您(ID: {event.get_sender_id()})的权限不足以使用此指令。通过 /sid 获取 ID 并请管理员添加。",
+                                translate(
+                                    "permission_denied",
+                                    get_config_locale(effective_config),
+                                    sender_id=event.get_sender_id(),
+                                ),
                             ),
                         )
                     logger.info(
@@ -289,7 +317,7 @@ class WakingCheckStage(Stage):
         event.set_extra("handlers_parsed_params", handlers_parsed_params)
 
         # Admit follow-up input without invoking callbacks before access checks.
-        if not is_wake:
+        if not is_wake and event.get_ui_interaction() is None:
             for session_filter in tuple(FILTERS):
                 session = USER_SESSIONS.get(session_filter.filter(event))
                 if session and not session.session_controller.future.done():

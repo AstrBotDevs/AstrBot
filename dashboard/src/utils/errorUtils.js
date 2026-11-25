@@ -20,10 +20,11 @@ const pickResponseMessage = (responseData) => {
 
 export const resolveErrorMessage = (err, fallbackMessage = "") => {
   if (typeof err === "string") {
-    return err.trim() || fallbackMessage;
+    const value = err.trim();
+    return INVALID_ERROR_STRINGS.has(value) ? fallbackMessage : value;
   }
   if (typeof err === "number" || typeof err === "boolean") {
-    return String(err);
+    return fallbackMessage;
   }
 
   const fromResponse =
@@ -36,8 +37,13 @@ export const resolveErrorMessage = (err, fallbackMessage = "") => {
 
   let fromString = "";
   if (typeof err?.toString === "function") {
-    const value = err.toString().trim();
-    fromString = INVALID_ERROR_STRINGS.has(value) ? "" : value;
+    try {
+      const raw = err.toString();
+      const value = typeof raw === "string" ? raw.trim() : "";
+      fromString = INVALID_ERROR_STRINGS.has(value) ? "" : value;
+    } catch {
+      fromString = "";
+    }
   }
 
   return fromResponse || fromError || fromString || fallbackMessage;

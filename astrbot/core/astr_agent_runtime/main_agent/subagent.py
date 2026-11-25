@@ -93,7 +93,6 @@ async def apply_subagents(
         req.func_tool.remove_tool(name)
     if not enabled or req.conversation is None or runtime is None:
         return True
-    manager = context.get_llm_tool_manager()
     for tool_type in (
         SpawnAgentTool,
         ListAgentsTool,
@@ -102,7 +101,7 @@ async def apply_subagents(
         SendAgentMessageTool,
         CancelAgentTool,
     ):
-        tool = manager.get_builtin_tool(tool_type)
+        tool = tool_type()
         if tool.active:
             req.func_tool.add_tool(tool)
 

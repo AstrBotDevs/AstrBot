@@ -1116,6 +1116,14 @@
         "general": {
             "description": "Общие",
             "platform_settings": {
+                "locale": {
+                  "description": "Язык системы",
+                  "hint": "Выберите язык системы для плагинов, сообщений об ошибках и других системных сообщений. Не меняет язык ответов модели или WebUI.",
+                  "labels": [
+                    "🇨🇳 简体中文",
+                    "🇺🇸 English"
+                  ]
+                },
                 "unique_session": {
                     "description": "Изолировать диалоги",
                     "hint": "При включении на платформах с поддержкой изоляции у каждого участника группы будет отдельный контекст диалога. Права на команды настраиваются в разделе управления командами."
@@ -1829,6 +1837,9 @@
             "dashscope_embedding": {
                 "hint": "Embedding Aliyun DashScope. URL по умолчанию: https://dashscope.aliyuncs.com/api/v1."
             },
+            "volcengine_embedding": {
+              "hint": "Volcengine Embedding, адрес по умолчанию — https://ark.cn-beijing.volces.com/api/v3. Agent Plan — https://ark.cn-beijing.volces.com/api/plan/v3."
+            },
             "volcengine_cluster": {
                 "description": "Кластер Volcengine",
                 "hint": "Для моделей клонирования голоса выберите volcano_icl или volcano_icl_concurr; по умолчанию volcano_tts."
@@ -1876,6 +1887,10 @@
             "dashscope_tts_voice": {
                 "description": "Голос"
             },
+            "dashscope_tts_websocket_url": {
+                "description": "Адрес WebSocket API",
+                "hint": "Необязательно. Заполните при использовании модели Qwen-Audio-TTS. Оставьте пустым, чтобы использовать адрес DashScope SDK по умолчанию. Укажите полный URL WebSocket, например wss://{WorkspaceId}.cn-beijing.maas.aliyuncs.com/api-ws/v1/inference, заменив {WorkspaceId} фактическим ID рабочего пространства."
+            },
             "gm_resp_image_modal": {
                 "description": "Включить визуальную модальность",
                 "hint": "Если включено, ответы могут содержать изображения. Требует поддержки моделью. Совет: для генерации изображений отключите 'Распознавание участников'."
@@ -1916,11 +1931,11 @@
                 "description": "Настройки рассуждения (Thinking)",
                 "budget": {
                     "description": "Бюджет рассуждения",
-                    "hint": "Указывает модели количество токенов рассуждения. См. документацию Google."
+                    "hint": "Бюджет токенов рассуждения Gemini 2.5. Пустое поле использует значение модели по умолчанию."
                 },
                 "level": {
                     "description": "Уровень рассуждения",
-                    "hint": "Рекомендуется для моделей Gemini 3+. Позволяет контролировать процесс рассуждения."
+                    "hint": "См. https://ai.google.dev/gemini-api/docs/thinking#thinking-levels"
                 }
             },
             "anth_thinking_config": {

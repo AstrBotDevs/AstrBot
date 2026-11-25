@@ -1,5 +1,6 @@
 """Comprehensive tests for ContextManager."""
 
+import math
 import sys
 from pathlib import Path
 from typing import Literal
@@ -12,11 +13,13 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 from astrbot.core.agent.context.config import ContextConfig
 from astrbot.core.agent.context.manager import ContextManager
+from astrbot.core.agent.context.token_counter import EstimateTokenCounter
 from astrbot.core.agent.message import (
     AudioURLPart,
     ImageURLPart,
     Message,
     TextPart,
+    ThinkPart,
     ToolCall,
 )
 from astrbot.core.provider.entities import LLMResponse, TokenUsage
@@ -692,6 +695,93 @@ class TestContextManager:
         assert "only the latest round left" in caplog.text
 
     @pytest.mark.asyncio
+    @pytest.mark.parametrize("summary", [False, True])
+    async def test_token_fallback_keeps_internal_notice_with_oversized_request(
+        self, summary
+    ):
+        """The last internal notice cannot replace the active request in fallback."""
+        from astrbot.core.agent.message import dump_messages, load_messages
+
+        original = self._rounds_with_tool_chain("f" * 900)
+        messages = load_messages(
+            dump_messages(original)
+            + [
+                {"role": "assistant", "content": "Working"},
+                {
+                    "role": "user",
+                    "content": "Internal notice",
+                    "_turn_continuation": True,
+                },
+            ]
+        )
+        config = ContextConfig(
+            max_context_tokens=1000,
+            llm_compress_provider=FailingProvider() if summary else None,
+            custom_token_counter=CharTokenCounter(),
+        )
+
+        result = await ContextManager(config).process(messages)
+
+        assert result == [messages[0], *messages[-3:]]
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("summary", [False, True])
+    @pytest.mark.parametrize("custom_counter", [False, True])
+    @pytest.mark.parametrize("oversized_latest", [False, True])
+    async def test_fallback_preserves_mixed_rounds_and_custom_token_counts(
+        self, summary, custom_counter, oversized_latest
+    ):
+        """Keep whole tool rounds and honor non-additive custom token counters."""
+
+        class RequestOverheadCounter(EstimateTokenCounter):
+            def count_tokens(self, messages, trusted_token_usage=0):
+                return super().count_tokens(messages, trusted_token_usage) + 1000
+
+        counter = RequestOverheadCounter() if custom_counter else EstimateTokenCounter()
+        original = self._rounds_with_tool_chain("f" * (5000 if oversized_latest else 20))
+        messages = [
+            original[0],
+            Message(
+                role="user",
+                content=[
+                    TextPart(text="old context 中文 😀" * 1000),
+                    ImageURLPart(
+                        image_url=ImageURLPart.ImageURL(
+                            url="https://example.com/image.png"
+                        )
+                    ),
+                    AudioURLPart(
+                        audio_url=AudioURLPart.AudioURL(
+                            url="https://example.com/audio.wav"
+                        )
+                    ),
+                ],
+            ),
+            Message(role="assistant", content=[ThinkPart(think="old reasoning" * 100)]),
+            *original[1:],
+        ]
+        before = [message.model_dump() for message in messages]
+        expected = (
+            [messages[0], messages[-1]]
+            if oversized_latest
+            else [original[0], *original[3:]]
+        )
+        config = ContextConfig(
+            max_context_tokens=(
+                100
+                if oversized_latest
+                else math.ceil(counter.count_tokens(expected) / 0.82)
+            ),
+            llm_compress_provider=FailingProvider() if summary else None,  # type: ignore[arg-type]
+            custom_token_counter=counter if custom_counter else None,
+        )
+
+        result = await ContextManager(config).process(messages)
+
+        assert result == expected
+        assert [message.model_dump() for message in messages] == before
+
+    @pytest.mark.asyncio
     async def test_llm_summary_is_requested_once(self):
         """A failed summary falls back to truncation instead of being retried."""
         from astrbot.core.agent.context.compressor import LLMSummaryCompressor
@@ -704,6 +794,32 @@ class TestContextManager:
 
         assert result is messages
         assert provider.attempts == 1
+
+    @pytest.mark.asyncio
+    async def test_custom_compressor_receives_matching_history_and_token_count(self):
+        """Custom compression checks must see the current retained messages."""
+        from astrbot.core.agent.context.compressor import TruncateByTurnsCompressor
+
+        counter = EstimateTokenCounter()
+
+        class InspectingCompressor(TruncateByTurnsCompressor):
+            async def __call__(self, messages):
+                return messages
+
+            def should_compress(self, messages, current_tokens, max_tokens):
+                assert current_tokens == counter.count_tokens(messages)
+                return super().should_compress(messages, current_tokens, max_tokens)
+
+        messages = self._rounds_with_tool_chain("latest request")
+        before = [message.model_dump() for message in messages]
+        manager = ContextManager(
+            ContextConfig(max_context_tokens=100, custom_compressor=InspectingCompressor())
+        )
+
+        result = await manager.process(messages)
+
+        assert result == [messages[0], messages[-1]]
+        assert [message.model_dump() for message in messages] == before
 
     # ==================== Combined Truncation and Compression Tests ====================
 
@@ -1141,6 +1257,25 @@ class TestContextManager:
 
         rounds = split_into_rounds([])
         assert len(rounds) == 0
+
+    @pytest.mark.parametrize("as_models", [False, True])
+    def test_split_rounds_keeps_internal_user_messages_in_current_round(
+        self, as_models
+    ):
+        """Internal notices must not split a user's request from its result."""
+        from astrbot.core.agent.context.round_utils import split_into_rounds
+        from astrbot.core.agent.message import load_messages
+
+        history = [
+            {"role": "user", "content": "Request"},
+            {"role": "assistant", "content": "Working"},
+            {"role": "user", "content": "Internal notice", "_turn_continuation": True},
+            {"role": "assistant", "content": "Done"},
+            {"role": "user", "content": "Follow-up"},
+        ]
+        messages = load_messages(history) if as_models else history
+
+        assert split_into_rounds(messages) == [messages[:4], messages[4:]]
 
     def test_split_rounds_accepts_message_objects(self):
         """Message objects can be split without converting them to dictionaries."""

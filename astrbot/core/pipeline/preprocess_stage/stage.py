@@ -283,5 +283,3 @@ class PreProcessStage(Stage):
                             plain_comp = await _stt_record(reply_comp, is_reply=True)
                             if plain_comp:
                                 component.chain[idx] = plain_comp
-                                event.message_str += plain_comp.text
-                                event.message_obj.message_str += plain_comp.text

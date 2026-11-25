@@ -15,9 +15,6 @@ fi
 
 PYTEST_TARGETS=("${@:-./tests}")
 
- echo "[ci] syncing dependencies with uv"
-uv sync --dev
-
 echo "[ci] running tests: ${PYTEST_TARGETS[*]}"
 # Some tests may leave non-daemon worker threads alive (e.g. aiosqlite warning path),
 # which can block pytest process exit in CI. Run pytest via python and force process exit

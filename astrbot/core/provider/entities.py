@@ -60,9 +60,11 @@ class DecisionBooleanQuestion:
     Attributes:
         instructions: The statement or question evaluated by the model. Providers
             that support it also accept explicit DecisionInput content.
+        criteria: Optional descriptions for the "true" and/or "false" outcomes.
     """
 
     instructions: str | DecisionInput
+    criteria: Mapping[str, str] | None = None
 
 
 @dataclass(frozen=True, slots=True)

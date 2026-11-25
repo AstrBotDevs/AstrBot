@@ -34,7 +34,7 @@ jobs:
     # Configure this environment to allow only the default branch before adding secrets.
     environment: project-sync
     runs-on: ubuntu-latest
-    timeout-minutes: 120
+    timeout-minutes: 10
     steps:
       - name: Validate manual branch
         if: github.event_name == 'workflow_dispatch' && github.ref != format('refs/heads/{0}', github.event.repository.default_branch)
@@ -43,7 +43,7 @@ jobs:
           exit 1
       # Never check out the PR head or a PR-controlled base branch with this token.
       - name: Check out trusted default branch
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        uses: actions/checkout@v7
         with:
           ref: ${{ github.event.repository.default_branch || github.ref_name }}
           persist-credentials: false
@@ -52,10 +52,8 @@ jobs:
           sparse-checkout: scripts/sync_github_project.py
           sparse-checkout-cone-mode: false
 
-      - name: Set up Python
-        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7
-        with:
-          python-version: '3.12'
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v10.4.0
 
       - name: Synchronize current item state
         env:
@@ -68,7 +66,7 @@ jobs:
           APPLY_CHANGES: ${{ github.event_name != 'workflow_dispatch' || inputs.apply }}
         run: |
           if [ "$APPLY_CHANGES" = 'true' ]; then
-            python -I scripts/sync_github_project.py --apply
+            uv run --no-project python -I scripts/sync_github_project.py --apply
           else
-            python -I scripts/sync_github_project.py
+            uv run --no-project python -I scripts/sync_github_project.py
           fi

@@ -3,7 +3,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from astrbot.core.message.components import Image, Record
+from astrbot.core.message.components import Image, Plain, Record, Reply
 from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.pipeline.process_stage.method.agent_sub_stages import third_party
 from astrbot.core.provider.entities import LLMResponse
@@ -91,7 +91,9 @@ async def test_third_party_runner_receives_inline_profile_config(
     event = MagicMock()
     event.message_str = "hello"
     event.unified_msg_origin = "webchat:FriendMessage:test"
-    event.message_obj.message = []
+    event.message_obj.message = [
+        Reply(id="quoted", sender_nickname="Alice", chain=[Plain("Tomorrow at ten.")])
+    ]
     event.platform_meta.support_streaming_message = True
     event.get_extra.return_value = None
 
@@ -99,6 +101,9 @@ async def test_third_party_runner_receives_inline_profile_config(
 
     assert results == [None]
     assert runner.reset.await_args.kwargs["provider_config"] is inline_config
+    assert runner.reset.await_args.kwargs["request"].prompt == (
+        "hello\n\n<Quoted Message>\n(Alice): Tomorrow at ten.\n</Quoted Message>"
+    )
     assert "persona_id" not in config["agent"]["config"]
     assert runner_factory_calls == [True]
 

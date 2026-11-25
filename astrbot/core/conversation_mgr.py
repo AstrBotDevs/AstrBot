@@ -308,6 +308,9 @@ class ConversationManager:
             conversation_id (str): 对话 ID, 是 uuid 格式的字符串
 
         """
+        target = await self.db.get_conversation_by_id(conversation_id)
+        if target is None or target.user_id != unified_msg_origin:
+            raise ValueError("Conversation not found or inaccessible")
         self.session_conversations[unified_msg_origin] = conversation_id
         await sp.session_put(unified_msg_origin, "sel_conv_id", conversation_id)
 
