@@ -1009,6 +1009,7 @@ class QQOfficialPlatformAdapter(Platform):
             quoted_message_str = QQOfficialPlatformAdapter._parse_face_message(
                 str(quoted_content or "").strip()
             )
+            # Content alone cannot distinguish attachment metadata from quoted prose.
             if quoted_message_str:
                 quoted_chain.append(Plain(quoted_message_str))
             if isinstance(quoted_attachments, list):
@@ -1016,7 +1017,11 @@ class QQOfficialPlatformAdapter(Platform):
                     quoted_chain,
                     quoted_attachments,
                 )
-        if quoted_message_id or quoted_element_message_id or quoted_chain:
+        # QQ tags a passive reply with message_type 103 and stuffs the previous
+        # message into msg_elements even when the user quoted nothing, so a
+        # message id is the only thing that marks a real quote. Building a Reply
+        # out of the echo makes downstream plugins verify the wrong message.
+        if quoted_message_id or quoted_element_message_id:
             msg.append(
                 Reply(
                     id=str(quoted_message_id or quoted_element_message_id or ""),
