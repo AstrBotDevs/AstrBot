@@ -12,7 +12,7 @@ from aiohttp.test_utils import TestServer
 from botpy import ConnectionSession
 from botpy.errors import ForbiddenError, ServerError
 from botpy.http import BotHttp
-from botpy.manage import C2CManageEvent
+from botpy.manage import C2CManageEvent, GroupManageEvent
 
 from astrbot.api.event import MessageChain
 from astrbot.api.message_components import ActionRow, Image, Json, Plain, Reply
@@ -416,7 +416,15 @@ async def test_qq_expired_reply_requires_explicit_proactive_choice(scene, monkey
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
-    "event_type", ["C2C_MSG_RECEIVE", "C2C_MSG_REJECT", "FRIEND_ADD", "FRIEND_DEL"]
+    "event_type",
+    [
+        "C2C_MSG_RECEIVE",
+        "C2C_MSG_REJECT",
+        "FRIEND_ADD",
+        "FRIEND_DEL",
+        "GROUP_ADD_ROBOT",
+        "GROUP_DEL_ROBOT",
+    ],
 )
 async def test_qq_native_permission_event_preserves_source_without_replacing_last_message(
     event_type,
@@ -443,6 +451,7 @@ async def test_qq_native_permission_event_preserves_source_without_replacing_las
     )
     websocket = ManagedBotWebSocket({}, connection, adapter.client)
     occurred_at = int(time.time()) - 20
+    group = event_type.startswith("GROUP_")
     await websocket.on_message(
         None,
         json.dumps(
@@ -451,7 +460,17 @@ async def test_qq_native_permission_event_preserves_source_without_replacing_las
                 "s": 1,
                 "t": event_type,
                 "id": "native-permission-event",
-                "d": {"openid": "original-owner", "timestamp": occurred_at},
+                "d": {
+                    "timestamp": occurred_at,
+                    **(
+                        {
+                            "group_openid": "original-group",
+                            "op_member_openid": "original-owner",
+                        }
+                        if group
+                        else {"openid": "original-owner"}
+                    ),
+                },
             }
         ),
     )
@@ -462,8 +481,14 @@ async def test_qq_native_permission_event_preserves_source_without_replacing_las
     assert event.get_self_id() == "notice-app"
     assert event.message_obj.message_id == "native-permission-event"
     assert event.message_obj.timestamp == occurred_at
-    assert isinstance(event.message_obj.raw_message, C2CManageEvent)
-    assert event.message_obj.raw_message.openid == "original-owner"
+    assert isinstance(
+        event.message_obj.raw_message, GroupManageEvent if group else C2CManageEvent
+    )
+    if group:
+        assert event.get_group_id() == "original-group"
+        assert event.message_obj.raw_message.op_member_openid == "original-owner"
+    else:
+        assert event.message_obj.raw_message.openid == "original-owner"
     assert event.is_at_or_wake_command is False
     assert not event.message_str and not event.get_messages()
     assert (

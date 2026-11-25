@@ -16,7 +16,7 @@ from botpy import Client
 from botpy.connection import ConnectionState
 from botpy.gateway import BotWebSocket
 from botpy.interaction import Interaction
-from botpy.manage import C2CManageEvent
+from botpy.manage import C2CManageEvent, GroupManageEvent
 from botpy.types.message import MarkdownPayload
 
 from astrbot import logger
@@ -289,37 +289,46 @@ class botClient(Client):
         self.platform.remember_session_scene(abm.session_id, "friend")
         self._commit(abm)
 
-    def _commit_c2c_permission(self, source: C2CManageEvent, event_type: str) -> None:
-        """Expose a native C2C permission change through the ordinary event queue.
+    def _commit_permission(
+        self, source: C2CManageEvent | GroupManageEvent, event_type: str
+    ) -> None:
+        """Expose a native permission change through the ordinary event queue.
 
         Args:
-            source: SDK event carrying the original OpenID, timestamp and event ID.
+            source: SDK event carrying the original target, timestamp and event ID.
             event_type: The native QQ event name, exposed as ``qq_official_event``
                 in the event's extra data. The message type is OTHER_MESSAGE.
         """
+        group = isinstance(source, GroupManageEvent)
+        sender_id = source.op_member_openid if group else source.openid
+        conversation_id = source.group_openid if group else source.openid
         if (
-            not isinstance(source.openid, str)
-            or not source.openid
+            not isinstance(sender_id, str)
+            or not sender_id
+            or not isinstance(conversation_id, str)
+            or not conversation_id
             or not isinstance(source.event_id, str)
             or not source.event_id
             or not isinstance(source.timestamp, (int, str))
             or isinstance(source.timestamp, bool)
         ):
-            logger.warning("[QQOfficial] Ignore incomplete C2C permission event.")
+            logger.warning("[QQOfficial] Ignore incomplete permission event.")
             return
         try:
             timestamp = int(source.timestamp)
         except ValueError:
-            logger.warning("[QQOfficial] Ignore invalid C2C permission timestamp.")
+            logger.warning("[QQOfficial] Ignore invalid permission timestamp.")
             return
         if timestamp <= 0:
             return
         message = AstrBotMessage()
         message.type = MessageType.OTHER_MESSAGE
         message.self_id = str(self.platform.appid)
-        message.session_id = source.openid
+        message.session_id = conversation_id
         message.message_id = source.event_id
-        message.sender = MessageMember(user_id=source.openid, nickname="")
+        message.sender = MessageMember(user_id=sender_id, nickname="")
+        if group:
+            message.group_id = conversation_id
         message.timestamp = timestamp
         message.message = []
         message.message_str = ""
@@ -336,7 +345,7 @@ class botClient(Client):
         Args:
             event: QQ's parsed C2C permission event.
         """
-        self._commit_c2c_permission(event, "C2C_MSG_RECEIVE")
+        self._commit_permission(event, "C2C_MSG_RECEIVE")
 
     async def on_c2c_msg_reject(self, event: C2CManageEvent) -> None:
         """Forward the user's native rejection of proactive messages.
@@ -344,7 +353,7 @@ class botClient(Client):
         Args:
             event: QQ's parsed C2C permission event.
         """
-        self._commit_c2c_permission(event, "C2C_MSG_REJECT")
+        self._commit_permission(event, "C2C_MSG_REJECT")
 
     async def on_friend_add(self, event: C2CManageEvent) -> None:
         """Forward a native friend-add notification.
@@ -352,7 +361,7 @@ class botClient(Client):
         Args:
             event: QQ's parsed C2C relationship event.
         """
-        self._commit_c2c_permission(event, "FRIEND_ADD")
+        self._commit_permission(event, "FRIEND_ADD")
 
     async def on_friend_del(self, event: C2CManageEvent) -> None:
         """Forward a native friend-removal notification.
@@ -360,7 +369,23 @@ class botClient(Client):
         Args:
             event: QQ's parsed C2C relationship event.
         """
-        self._commit_c2c_permission(event, "FRIEND_DEL")
+        self._commit_permission(event, "FRIEND_DEL")
+
+    async def on_group_add_robot(self, event: GroupManageEvent) -> None:
+        """Forward the native notification that this bot joined a group.
+
+        Args:
+            event: QQ's parsed group relationship event.
+        """
+        self._commit_permission(event, "GROUP_ADD_ROBOT")
+
+    async def on_group_del_robot(self, event: GroupManageEvent) -> None:
+        """Forward the native notification that this bot left a group.
+
+        Args:
+            event: QQ's parsed group relationship event.
+        """
+        self._commit_permission(event, "GROUP_DEL_ROBOT")
 
     async def on_interaction_create(self, interaction: Interaction) -> None:
         """Handle a QQ inline-keyboard click.

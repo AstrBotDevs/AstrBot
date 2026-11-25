@@ -103,7 +103,7 @@ The context records the original account, sender, conversation and message. Chec
 
 When sending a Lark `ActionRow` card, keep the card's `receipt.message_ids[0]` with its reply context. Later, call `await platform.update_message(target, card_message_id, replacement_chain)` to edit that card in place. A replacement can contain text and new button rows, or just text to remove the buttons. Use `target.message_id` when replying to the incoming human message.
 
-Plugins can listen for changes affecting a destination with `@filter.event_message_type(filter.EventMessageType.OTHER_MESSAGE)`. QQ exposes the native `C2C_MSG_RECEIVE`, `C2C_MSG_REJECT`, `FRIEND_ADD` and `FRIEND_DEL` names through `event.get_extra("qq_official_event")`. On Lark, subscribe the app to the bot or user group-removal events and read `event.get_extra("lark_event_type")`. Use the participants in the event to identify who left the chat.
+Plugins can listen for changes affecting a destination with `@filter.event_message_type(filter.EventMessageType.OTHER_MESSAGE)`. QQ exposes the native `C2C_MSG_RECEIVE`, `C2C_MSG_REJECT`, `FRIEND_ADD`, `FRIEND_DEL`, `GROUP_ADD_ROBOT` and `GROUP_DEL_ROBOT` names through `event.get_extra("qq_official_event")`. On Lark, subscribe the app to the bot or user group-removal events and read `event.get_extra("lark_event_type")`. Use the participants in the event to identify who left the chat.
 
 On a Lark group message, `await event.get_typed_mentions()` looks up the original mentions once per event. Each entry has a native `key`, an `id` and its `id_type` (`open_id` for a user or `app_id` for an application). The method returns `None` when the original list cannot be verified.
 

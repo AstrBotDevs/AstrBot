@@ -103,7 +103,7 @@ async def send_saved_reply(self, saved, text):
 
 发出飞书 `ActionRow` 按钮卡片时，把卡片回执中的 `receipt.message_ids[0]` 与回复上下文一起保存。稍后调用 `await platform.update_message(target, card_message_id, replacement_chain)` 就能更新原卡。新内容可包含文字和按钮行，也可只保留文字以移除按钮。回复原来那条人类消息时使用 `target.message_id`。
 
-插件可以用 `@filter.event_message_type(filter.EventMessageType.OTHER_MESSAGE)` 接收影响回信目标的事件。QQ 通过 `event.get_extra("qq_official_event")` 提供原生事件名 `C2C_MSG_RECEIVE`、`C2C_MSG_REJECT`、`FRIEND_ADD` 和 `FRIEND_DEL`。飞书应用订阅机器人或成员离群事件后，可从 `event.get_extra("lark_event_type")` 读取事件类型，并从事件中取得实际离群的对象。
+插件可以用 `@filter.event_message_type(filter.EventMessageType.OTHER_MESSAGE)` 接收影响回信目标的事件。QQ 通过 `event.get_extra("qq_official_event")` 提供原生事件名 `C2C_MSG_RECEIVE`、`C2C_MSG_REJECT`、`FRIEND_ADD`、`FRIEND_DEL`、`GROUP_ADD_ROBOT` 和 `GROUP_DEL_ROBOT`。飞书应用订阅机器人或成员离群事件后，可从 `event.get_extra("lark_event_type")` 读取事件类型，并从事件中取得实际离群的对象。
 
 飞书群消息可用 `await event.get_typed_mentions()` 按需查询原消息中被 @ 的对象。同一事件只查询一次。每个结果包含原 `key`、`id` 和 `id_type`，人使用 `open_id`，机器人使用 `app_id`。原消息的提及列表无法核实时返回 `None`。
 
