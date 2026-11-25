@@ -1039,6 +1039,8 @@ class PluginManager:
                         specified_module_path = smd.module_path
                         break
 
+            load_module_path = specified_module_path
+
             # 终止插件
             if not specified_module_path:
                 # 重载所有插件
@@ -1061,6 +1063,17 @@ class PluginManager:
                 # 只重载指定插件
                 smd = star_map.get(specified_module_path)
                 if smd:
+                    # Updates may change the entry filename within this plugin.
+                    for plugin_module in self._get_plugin_modules():
+                        if (
+                            plugin_module["pname"] == smd.root_dir_name
+                            and plugin_module.get("reserved", False) == smd.reserved
+                        ):
+                            module_prefix = specified_module_path.rsplit(".", 1)[0]
+                            load_module_path = (
+                                f"{module_prefix}.{plugin_module['module']}"
+                            )
+                            break
                     try:
                         await self._terminate_plugin(smd)
                     except Exception as e:
@@ -1069,10 +1082,27 @@ class PluginManager:
                             f"Plugin {smd.name} did not terminate cleanly: {e!s}. "
                             "The plugin may not work correctly.",
                         )
-                    if smd.name and smd.activated:
+                    if smd.name and (
+                        smd.activated or load_module_path != specified_module_path
+                    ):
                         await self._unbind_plugin(smd.name, specified_module_path)
+                    if load_module_path != specified_module_path:
+                        # Disabled state is persisted under the entry module path.
+                        inactivated_plugins = await sp.global_get(
+                            "inactivated_plugins", []
+                        )
+                        if specified_module_path in inactivated_plugins:
+                            await sp.global_put(
+                                "inactivated_plugins",
+                                [
+                                    load_module_path
+                                    if path == specified_module_path
+                                    else path
+                                    for path in inactivated_plugins
+                                ],
+                            )
 
-            result = await self.load(specified_module_path)
+            result = await self.load(load_module_path)
 
             return result
 
@@ -1104,6 +1134,7 @@ class PluginManager:
             return False, "未找到任何插件模块"
 
         has_load_error = False
+        found_plugin = False
 
         # 导入插件模块，并尝试实例化插件类
         for plugin_module in plugin_modules:
@@ -1131,6 +1162,8 @@ class PluginManager:
                     continue
                 if specified_dir_name and root_dir_name != specified_dir_name:
                     continue
+
+                found_plugin = True
 
                 # Use the directory name until plugin metadata is available.
                 plugin_logger = logging.LoggerAdapter(
@@ -1537,6 +1570,9 @@ class PluginManager:
         self._rebuild_failed_plugin_info()
         if has_load_error:
             return False, self.failed_plugin_info
+        if (specified_module_path or specified_dir_name) and not found_plugin:
+            target = specified_dir_name or specified_module_path
+            return False, f"No entry module found for plugin {target}."
         return True, None
 
     async def _cleanup_failed_plugin_install(
@@ -1958,7 +1994,11 @@ class PluginManager:
                 plugin_dir_path,
                 plugin_name,
             )
-        await self.reload(plugin_name)
+        success, error = await self.reload(plugin_name)
+        if not success:
+            raise Exception(
+                error or f"Failed to reload plugin {plugin_name} after update."
+            )
 
     async def turn_off_plugin(self, plugin_name: str) -> None:
         """禁用一个插件。
