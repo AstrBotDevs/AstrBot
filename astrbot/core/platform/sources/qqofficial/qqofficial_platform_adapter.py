@@ -207,11 +207,52 @@ class ManagedBotWebSocket(BotWebSocket):
     def __init__(self, session, connection: Any, client: botClient):
         super().__init__(session, connection)
         self._client = client
+        self._reconnect_queued = False
+        # QQ rejects resume for expired sessions or invalid sequence numbers.
+        self._INVALID_RECONNECT_CODE.extend((4006, 4007, 4009))
+
+    async def _is_system_event(self, message_event, ws):
+        """Close rejected connections and schedule one replacement.
+
+        Args:
+            message_event: Decoded QQ gateway event.
+            ws: Active SDK websocket connection.
+
+        Returns:
+            Whether the event was handled as a gateway control message.
+        """
+        opcode = message_event["op"]
+        if opcode not in (self.WS_RECONNECT, self.WS_INVALID_SESSION):
+            return await super()._is_system_event(message_event, ws)
+
+        self._can_reconnect = True
+        if opcode == self.WS_INVALID_SESSION:
+            self._can_reconnect = message_event.get("d") is True
+            if not self._can_reconnect:
+                self._session["session_id"] = ""
+                self._session["last_seq"] = 0
+        # botpy exits its receive loop when close() finishes, without calling
+        # on_closed for this locally initiated close. Queue recovery explicitly.
+        await ws.close()
+        await self.on_closed(ws.close_code, "Gateway requested session recovery")
+        return True
+
+    async def on_error(self, exception: BaseException):
+        if self._client.is_shutting_down or self._reconnect_queued:
+            return
+        self._reconnect_queued = True
+        await super().on_error(exception)
 
     async def on_closed(self, close_status_code, close_msg):
         if self._client.is_shutting_down:
             logger.debug("[QQOfficial] Ignore websocket reconnect during shutdown.")
             return
+        if self._reconnect_queued:
+            return
+        self._reconnect_queued = True
+        logger.warning(
+            "[QQOfficial] Websocket closed; recovery queued (%s).", close_status_code
+        )
         await super().on_closed(close_status_code, close_msg)
 
     async def close(self) -> None:
