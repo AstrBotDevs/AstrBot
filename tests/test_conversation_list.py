@@ -457,3 +457,52 @@ async def test_webchat_session_title_matches_search_and_keyword(tmp_path: Path):
     )
     assert total == 0
     assert conversations == []
+
+
+@pytest.mark.asyncio
+async def test_sqlite_database_applies_bounded_memory_pragmas(tmp_path: Path):
+    """Ensure SQLiteDatabase configures bounded memory PRAGMAs on every connection."""
+    db = SQLiteDatabase(str(tmp_path / "pragmas.db"))
+    try:
+        await db.initialize()
+        await db.engine.dispose()
+        async with db.engine.connect() as conn:
+            assert (await conn.execute(text("PRAGMA foreign_keys"))).scalar_one() == 1
+            assert (
+                await conn.execute(text("PRAGMA busy_timeout"))
+            ).scalar_one() == 30000
+            assert (
+                await conn.execute(text("PRAGMA cache_size"))
+            ).scalar_one() == -8000
+            assert (await conn.execute(text("PRAGMA mmap_size"))).scalar_one() == 0
+            journal_mode = (
+                await conn.execute(text("PRAGMA journal_mode"))
+            ).scalar_one()
+            assert str(journal_mode).lower() == "wal"
+    finally:
+        await db.engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_kb_sqlite_database_applies_bounded_memory_pragmas(tmp_path: Path):
+    """Ensure KBSQLiteDatabase configures bounded memory PRAGMAs on every connection."""
+    from astrbot.core.knowledge_base.kb_db_sqlite import KBSQLiteDatabase
+
+    kb_db = KBSQLiteDatabase(str(tmp_path / "kb_pragmas.db"))
+    try:
+        await kb_db.initialize()
+        await kb_db.engine.dispose()
+        async with kb_db.engine.connect() as conn:
+            assert (
+                await conn.execute(text("PRAGMA busy_timeout"))
+            ).scalar_one() == 30000
+            assert (
+                await conn.execute(text("PRAGMA cache_size"))
+            ).scalar_one() == -4000
+            assert (await conn.execute(text("PRAGMA mmap_size"))).scalar_one() == 0
+            journal_mode = (
+                await conn.execute(text("PRAGMA journal_mode"))
+            ).scalar_one()
+            assert str(journal_mode).lower() == "wal"
+    finally:
+        await kb_db.engine.dispose()

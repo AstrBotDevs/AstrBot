@@ -2,7 +2,7 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from sqlalchemy import delete, func, select, text, update
+from sqlalchemy import delete, event, func, select, text, update
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlmodel import col, desc
 
@@ -44,6 +44,19 @@ class KBSQLiteDatabase:
             pool_recycle=3600,
         )
 
+        @event.listens_for(self.engine.sync_engine, "connect")
+        def configure_sqlite_connection(connection, _record):
+            """Apply per-connection SQLite durability and bounded memory PRAGMAs."""
+            cursor = connection.cursor()
+            try:
+                cursor.execute("PRAGMA busy_timeout=30000")
+                cursor.execute("PRAGMA synchronous=NORMAL")
+                cursor.execute("PRAGMA cache_size=-4000")
+                cursor.execute("PRAGMA temp_store=MEMORY")
+                cursor.execute("PRAGMA mmap_size=0")
+            finally:
+                cursor.close()
+
         # 创建会话工厂
         self.async_session = async_sessionmaker(
             self.engine,
@@ -71,10 +84,6 @@ class KBSQLiteDatabase:
 
             # 配置 SQLite 性能优化参数
             await conn.execute(text("PRAGMA journal_mode=WAL"))
-            await conn.execute(text("PRAGMA synchronous=NORMAL"))
-            await conn.execute(text("PRAGMA cache_size=20000"))
-            await conn.execute(text("PRAGMA temp_store=MEMORY"))
-            await conn.execute(text("PRAGMA mmap_size=134217728"))
             await conn.execute(text("PRAGMA optimize"))
             await conn.commit()
 

@@ -139,11 +139,20 @@ class SQLiteDatabase(BaseDatabase):
         super().__init__()
 
         @event.listens_for(self.engine.sync_engine, "connect")
-        def enable_foreign_keys(connection, _record):
-            """Enforce event ownership and ancestry on every pooled connection."""
+        def configure_sqlite_connection(connection, _record):
+            """Apply per-connection SQLite integrity and bounded memory PRAGMAs."""
             cursor = connection.cursor()
-            cursor.execute("PRAGMA foreign_keys=ON")
-            cursor.close()
+            try:
+                cursor.execute("PRAGMA foreign_keys=ON")
+                cursor.execute("PRAGMA busy_timeout=30000")
+                cursor.execute("PRAGMA synchronous=NORMAL")
+                # Negative cache_size sets KiB (~8 MiB); positive values count 4 KiB pages.
+                cursor.execute("PRAGMA cache_size=-8000")
+                cursor.execute("PRAGMA temp_store=MEMORY")
+                # Leave file caching to the OS page cache so memory stays reclaimable.
+                cursor.execute("PRAGMA mmap_size=0")
+            finally:
+                cursor.close()
 
     async def initialize(self) -> None:
         """Serialize schema migration before allowing application traffic."""
@@ -164,11 +173,6 @@ class SQLiteDatabase(BaseDatabase):
                 )
             )
             await conn.execute(text("PRAGMA journal_mode=WAL"))
-            await conn.execute(text("PRAGMA busy_timeout=30000"))
-            await conn.execute(text("PRAGMA synchronous=NORMAL"))
-            await conn.execute(text("PRAGMA cache_size=20000"))
-            await conn.execute(text("PRAGMA temp_store=MEMORY"))
-            await conn.execute(text("PRAGMA mmap_size=134217728"))
             await conn.execute(text("PRAGMA optimize"))
             # 确保 personas 表有 folder_id、sort_order、skills 列（前向兼容）
             await self._ensure_persona_folder_columns(conn)
