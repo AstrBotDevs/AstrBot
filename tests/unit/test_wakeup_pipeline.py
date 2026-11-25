@@ -809,6 +809,32 @@ async def test_managed_continuation_skips_stale_waiting_plugin(
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("setting", "value"),
+    [("plugin_set", ["A", "C"]), ("disabled_plugins", ["B"])],
+)
+async def test_managed_continuation_rechecks_session_plugin_policy(
+    runtime, continuation_plugins, setting, value
+):
+    """Skip queued input from an owner no longer enabled by the session."""
+    plugins, initial = continuation_plugins
+    runtime.gate.clear()
+    with event_context(initial):
+        assert await plugins["A"].schedule_continuation("first")
+        assert await plugins["B"].schedule_continuation("excluded continuation")
+        assert await plugins["C"].schedule_continuation("third")
+    await asyncio.wait_for(runtime.started.wait(), 2)
+
+    runtime.context.get_config(umo=initial.unified_msg_origin)[setting] = value
+    runtime.gate.set()
+    await asyncio.wait_for(runtime.drain(), 3)
+
+    assert len(runtime.requests) == 2
+    assert "excluded continuation" not in runtime.conversation.history
+    assert "third" in runtime.conversation.history
+
+
+@pytest.mark.asyncio
 async def test_managed_continuation_uses_running_conversation_after_switch(
     runtime, monkeypatch, continuation_plugins
 ):

@@ -484,9 +484,6 @@ async def admit_agent_input(context: Context, input: AgentInput) -> bool:
     from astrbot.core.agent.runtime import AgentPermissions
 
     event = input.event
-    owner = event._continuation_owner
-    if owner is not None and owner._active_metadata() is None:
-        return False
     current_config = context.get_config(umo=event.unified_msg_origin)
     if event.is_stopped() or not current_config.get("provider_settings", {}).get(
         "enable", True
@@ -494,6 +491,17 @@ async def admit_agent_input(context: Context, input: AgentInput) -> bool:
         return False
     enabled = current_config.get("plugin_set", ["*"])
     disabled = current_config.get("disabled_plugins", [])
+    owner = event._continuation_owner
+    if owner is not None:
+        metadata = owner._active_metadata()
+        if metadata is None or (
+            not metadata.reserved
+            and (
+                metadata.name in disabled
+                or ("*" not in enabled and metadata.name not in enabled)
+            )
+        ):
+            return False
     if disabled:
         from astrbot.core.star.star import star_registry
 
