@@ -1,5 +1,6 @@
 """Comprehensive tests for ContextManager."""
 
+import logging
 import math
 import sys
 from pathlib import Path
@@ -86,7 +87,7 @@ class RateLimitedProvider(MockProvider):
 class CharTokenCounter:
     """Counts one token per character of text content."""
 
-    def count_tokens(self, messages, trusted_token_usage: int = 0) -> int:
+    def count_tokens(self, messages, reported_token_usage: int = 0) -> int:
         return sum(len(m.content) for m in messages if isinstance(m.content, str))
 
 
@@ -143,21 +144,25 @@ class TestContextManager:
         assert isinstance(manager.compressor, TruncateByTurnsCompressor)
 
     @pytest.mark.asyncio
-    async def test_llm_compressor_keeps_history_when_summary_is_empty(self):
+    async def test_llm_compressor_returns_none_when_summary_is_empty(self):
         from astrbot.core.agent.context.compressor import LLMSummaryCompressor
 
         provider = MockProvider()
         provider.text_chat = AsyncMock(
-            return_value=LLMResponse(role="assistant", completion_text="  ", usage=TokenUsage(output=3))
+            return_value=LLMResponse(
+                role="assistant", completion_text="  ", usage=TokenUsage(output=3)
+            )
         )
         sink = AsyncMock()
-        compressor = LLMSummaryCompressor(provider=provider, keep_recent_ratio=0.15, request_event_emitter=sink)  # type: ignore[arg-type]
+        compressor = LLMSummaryCompressor(
+            provider=provider, keep_recent_ratio=0.15, request_event_emitter=sink
+        )  # type: ignore[arg-type]
         messages = self.create_messages(6)
 
         with patch("astrbot.core.agent.context.compressor.logger") as mock_logger:
             result = await compressor(messages)
 
-        assert result == messages
+        assert result is None
         mock_logger.warning.assert_called_once_with(
             "LLM context compression returned an empty summary."
         )
@@ -595,7 +600,7 @@ class TestContextManager:
         mock_compressor.should_compress = MagicMock(side_effect=[True, False])
         manager.compressor = mock_compressor
 
-        result = await manager.process(messages, trusted_token_usage=83)
+        result = await manager.process(messages, reported_token_usage=83)
 
         first_check = mock_compressor.should_compress.call_args_list[0]
         assert first_check.args == (messages, 83, 100)
@@ -738,7 +743,9 @@ class TestContextManager:
                 return super().count_tokens(messages, trusted_token_usage) + 1000
 
         counter = RequestOverheadCounter() if custom_counter else EstimateTokenCounter()
-        original = self._rounds_with_tool_chain("f" * (5000 if oversized_latest else 20))
+        original = self._rounds_with_tool_chain(
+            "f" * (5000 if oversized_latest else 20)
+        )
         messages = [
             original[0],
             Message(
@@ -792,8 +799,80 @@ class TestContextManager:
 
         result = await compressor(messages)
 
-        assert result is messages
+        assert result is None
         assert provider.attempts == 1
+
+    @pytest.mark.asyncio
+    async def test_failed_summary_trims_when_only_real_usage_exceeds_limit(
+        self, caplog
+    ):
+        """A failed summary must not wave an over-limit history through.
+
+        The estimate of the unchanged history sits under the trigger, so the
+        post-compression recheck alone would return early. The real usage
+        reported by the previous API call is what triggered compression, and
+        the fallback has to honor it.
+        """
+        config = ContextConfig(
+            max_context_tokens=1000,
+            llm_compress_provider=FailingProvider(),  # type: ignore[arg-type]
+        )
+        manager = ContextManager(config)
+        messages = self._rounds_with_tool_chain("f" * 20)
+
+        with caplog.at_level(logging.INFO):
+            result = await manager.process(messages, reported_token_usage=900)
+
+        # The oldest round is dropped and the tool chain stays paired, same
+        # as the estimate-triggered failure fallback above.
+        assert result == [messages[0], *messages[3:]]
+        assert "falling back to dropping the oldest rounds" in caplog.text
+        assert "Compress completed" not in caplog.text
+
+    @pytest.mark.asyncio
+    async def test_unchanged_history_keeps_trusted_usage_count(self):
+        """A compressor that returns the list unchanged (nothing meaningful
+        to summarize) must not downgrade the count to a lower estimate."""
+
+        class PassthroughCompressor:
+            def should_compress(self, messages, current_tokens, max_tokens):
+                return max_tokens > 0 and current_tokens / max_tokens > 0.82
+
+            async def __call__(self, messages):
+                return messages
+
+        config = ContextConfig(
+            max_context_tokens=1000,
+            custom_compressor=PassthroughCompressor(),  # type: ignore[arg-type]
+        )
+        manager = ContextManager(config)
+        messages = self._rounds_with_tool_chain("f" * 20)
+
+        result = await manager.process(messages, reported_token_usage=900)
+
+        assert result == [messages[0], *messages[3:]]
+
+    @pytest.mark.asyncio
+    async def test_recount_fallback_preserves_reported_usage_excess(self):
+        """Recounting a shortened history must retain the trusted-count excess."""
+
+        class ReportedCharTokenCounter(CharTokenCounter):
+            def count_tokens(self, messages, reported_token_usage=0):
+                return reported_token_usage or super().count_tokens(messages)
+
+        config = ContextConfig(
+            max_context_tokens=1100,
+            llm_compress_provider=FailingProvider(),  # type: ignore[arg-type]
+            custom_token_counter=ReportedCharTokenCounter(),
+        )
+        manager = ContextManager(config)
+        messages = self._rounds_with_tool_chain("f" * 20)
+
+        result = await manager.process(messages, reported_token_usage=2000)
+
+        # Dropping only the first round would leave an estimate below the
+        # trigger, but the provider's actual usage is still over the limit.
+        assert result == [messages[0], messages[-1]]
 
     @pytest.mark.asyncio
     async def test_custom_compressor_receives_matching_history_and_token_count(self):
@@ -813,7 +892,9 @@ class TestContextManager:
         messages = self._rounds_with_tool_chain("latest request")
         before = [message.model_dump() for message in messages]
         manager = ContextManager(
-            ContextConfig(max_context_tokens=100, custom_compressor=InspectingCompressor())
+            ContextConfig(
+                max_context_tokens=100, custom_compressor=InspectingCompressor()
+            )
         )
 
         result = await manager.process(messages)
