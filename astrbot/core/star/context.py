@@ -17,6 +17,7 @@ from astrbot.core.astrbot_config_mgr import AstrBotConfigManager
 from astrbot.core.config.astrbot_config import AstrBotConfig
 from astrbot.core.conversation_mgr import ConversationManager
 from astrbot.core.db import BaseDatabase
+from astrbot.core.i18n import get_config_locale
 from astrbot.core.knowledge_base.kb_mgr import KnowledgeBaseManager
 from astrbot.core.llm_error_messages import LLM_ERROR_MESSAGES
 from astrbot.core.message.message_event_result import MessageChain
@@ -678,6 +679,24 @@ class Context:
             # 使用默认配置
             return self._config
         return self.astrbot_config_mgr.get_conf(umo)
+
+    async def get_locale(self, umo: str | None = None) -> str:
+        """Resolve the bot reply language for a session.
+
+        Args:
+            umo: Unified message origin. Omit to use the active message's
+                session, or the default profile if there is no active message.
+
+        Returns:
+            ``zh-CN`` or ``en-US`` from the effective configuration, falling
+            back to ``zh-CN`` when missing or unsupported. This is independent
+            of the WebUI display language.
+        """
+        if umo is None:
+            event = current_message_event.get()
+            if event is not None and event._execution_active:
+                umo = event.unified_msg_origin
+        return get_config_locale(self.get_config(umo=umo))
 
     async def send_message(
         self,

@@ -162,7 +162,7 @@ export interface ProviderListParams {
 }
 
 export interface ToolListParams {
-  origin?: 'builtin' | 'plugin' | 'mcp';
+  origin?: 'plugin' | 'mcp';
   enabled?: boolean;
 }
 

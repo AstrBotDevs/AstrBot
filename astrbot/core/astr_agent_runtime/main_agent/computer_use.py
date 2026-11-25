@@ -47,7 +47,6 @@ from astrbot.core.astr_agent_runtime.tools.computer_tools.util import (
 )
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from astrbot.core.provider.entities import ProviderRequest
-from astrbot.core.provider.register import llm_tools
 from astrbot.core.star.context import Context
 from astrbot.core.utils.runtime_env import resolve_windows_shell
 
@@ -66,29 +65,24 @@ SANDBOX_MODE_PROMPT = (
 )
 
 
-def _apply_local_env_tools(
-    req: ProviderRequest,
-    plugin_context: Context,
-) -> str:
+def _apply_local_env_tools(req: ProviderRequest) -> str:
     """Register local computer tools and return their runtime instructions.
 
     Args:
         req: Request receiving local computer tools.
-        plugin_context: Registry providing shared builtin tools.
 
     Returns:
         Instructions describing the local shell and execution environment.
     """
     if req.func_tool is None:
         req.func_tool = ToolSet()
-    tool_mgr = plugin_context.get_llm_tool_manager()
     req.func_tool.add_tool(LocalExecuteShellTool())
-    req.func_tool.add_tool(tool_mgr.get_builtin_tool(ShellSessionTool))
-    req.func_tool.add_tool(tool_mgr.get_builtin_tool(LocalPythonTool))
-    req.func_tool.add_tool(tool_mgr.get_builtin_tool(FileReadTool))
-    req.func_tool.add_tool(tool_mgr.get_builtin_tool(FileWriteTool))
-    req.func_tool.add_tool(tool_mgr.get_builtin_tool(FileEditTool))
-    req.func_tool.add_tool(tool_mgr.get_builtin_tool(GrepTool))
+    req.func_tool.add_tool(ShellSessionTool())
+    req.func_tool.add_tool(LocalPythonTool())
+    req.func_tool.add_tool(FileReadTool())
+    req.func_tool.add_tool(FileWriteTool())
+    req.func_tool.add_tool(FileEditTool())
+    req.func_tool.add_tool(GrepTool())
     return f"## Shell and sessions\n{_build_local_mode_prompt()}\n"
 
 
@@ -176,15 +170,14 @@ def _apply_sandbox_tools(
         os.environ["SHIPYARD_ENDPOINT"] = ep
         os.environ["SHIPYARD_ACCESS_TOKEN"] = at
 
-    tool_mgr = llm_tools
-    req.func_tool.add_tool(tool_mgr.get_builtin_tool(ExecuteShellTool))
-    req.func_tool.add_tool(tool_mgr.get_builtin_tool(PythonTool))
-    req.func_tool.add_tool(tool_mgr.get_builtin_tool(FileUploadTool))
-    req.func_tool.add_tool(tool_mgr.get_builtin_tool(FileDownloadTool))
-    req.func_tool.add_tool(tool_mgr.get_builtin_tool(FileReadTool))
-    req.func_tool.add_tool(tool_mgr.get_builtin_tool(FileWriteTool))
-    req.func_tool.add_tool(tool_mgr.get_builtin_tool(FileEditTool))
-    req.func_tool.add_tool(tool_mgr.get_builtin_tool(GrepTool))
+    req.func_tool.add_tool(ExecuteShellTool())
+    req.func_tool.add_tool(PythonTool())
+    req.func_tool.add_tool(FileUploadTool())
+    req.func_tool.add_tool(FileDownloadTool())
+    req.func_tool.add_tool(FileReadTool())
+    req.func_tool.add_tool(FileWriteTool())
+    req.func_tool.add_tool(FileEditTool())
+    req.func_tool.add_tool(GrepTool())
     if booter == "shipyard_neo":
         # Neo-specific path rule: filesystem tools operate relative to sandbox
         # workspace root. Do not prepend "/workspace".
@@ -222,22 +215,22 @@ def _apply_sandbox_tools(
         # Browser tools: only register if profile supports browser
         # (or if capabilities are unknown because sandbox hasn't booted yet)
         if sandbox_capabilities is None or "browser" in sandbox_capabilities:
-            req.func_tool.add_tool(tool_mgr.get_builtin_tool(BrowserExecTool))
-            req.func_tool.add_tool(tool_mgr.get_builtin_tool(BrowserBatchExecTool))
-            req.func_tool.add_tool(tool_mgr.get_builtin_tool(RunBrowserSkillTool))
+            req.func_tool.add_tool(BrowserExecTool())
+            req.func_tool.add_tool(BrowserBatchExecTool())
+            req.func_tool.add_tool(RunBrowserSkillTool())
 
         # Neo-specific tools (always available for shipyard_neo)
-        req.func_tool.add_tool(tool_mgr.get_builtin_tool(GetExecutionHistoryTool))
-        req.func_tool.add_tool(tool_mgr.get_builtin_tool(AnnotateExecutionTool))
-        req.func_tool.add_tool(tool_mgr.get_builtin_tool(CreateSkillPayloadTool))
-        req.func_tool.add_tool(tool_mgr.get_builtin_tool(GetSkillPayloadTool))
-        req.func_tool.add_tool(tool_mgr.get_builtin_tool(CreateSkillCandidateTool))
-        req.func_tool.add_tool(tool_mgr.get_builtin_tool(ListSkillCandidatesTool))
-        req.func_tool.add_tool(tool_mgr.get_builtin_tool(EvaluateSkillCandidateTool))
-        req.func_tool.add_tool(tool_mgr.get_builtin_tool(PromoteSkillCandidateTool))
-        req.func_tool.add_tool(tool_mgr.get_builtin_tool(ListSkillReleasesTool))
-        req.func_tool.add_tool(tool_mgr.get_builtin_tool(RollbackSkillReleaseTool))
-        req.func_tool.add_tool(tool_mgr.get_builtin_tool(SyncSkillReleaseTool))
+        req.func_tool.add_tool(GetExecutionHistoryTool())
+        req.func_tool.add_tool(AnnotateExecutionTool())
+        req.func_tool.add_tool(CreateSkillPayloadTool())
+        req.func_tool.add_tool(GetSkillPayloadTool())
+        req.func_tool.add_tool(CreateSkillCandidateTool())
+        req.func_tool.add_tool(ListSkillCandidatesTool())
+        req.func_tool.add_tool(EvaluateSkillCandidateTool())
+        req.func_tool.add_tool(PromoteSkillCandidateTool())
+        req.func_tool.add_tool(ListSkillReleasesTool())
+        req.func_tool.add_tool(RollbackSkillReleaseTool())
+        req.func_tool.add_tool(SyncSkillReleaseTool())
 
     if booter == "cua":
         runtime_prompt += (
@@ -251,9 +244,9 @@ def _apply_sandbox_tools(
             "`astrbot_cua_mouse_click` for coordinates and `astrbot_cua_keyboard_type` "
             "for text input; use text=`\\n` for Enter.\n"
         )
-        req.func_tool.add_tool(tool_mgr.get_builtin_tool(CuaScreenshotTool))
-        req.func_tool.add_tool(tool_mgr.get_builtin_tool(CuaMouseClickTool))
-        req.func_tool.add_tool(tool_mgr.get_builtin_tool(CuaKeyboardTypeTool))
+        req.func_tool.add_tool(CuaScreenshotTool())
+        req.func_tool.add_tool(CuaMouseClickTool())
+        req.func_tool.add_tool(CuaKeyboardTypeTool())
 
     return f"{runtime_prompt}\n## Sandbox\n{SANDBOX_MODE_PROMPT}\n"
 
@@ -268,7 +261,7 @@ async def apply_computer_use(
 
     Args:
         req: Request receiving computer tools and runtime instructions.
-        plugin_context: Builtin tool registry.
+        plugin_context: Workspace services.
         config: Local or sandbox runtime settings.
         agent_context: Event and services used to resolve execution permissions.
     """
@@ -276,7 +269,7 @@ async def apply_computer_use(
     if config.computer_use_runtime == "sandbox":
         runtime_prompt = _apply_sandbox_tools(config, req, req.session_id)
     elif config.computer_use_runtime == "local":
-        runtime_prompt = _apply_local_env_tools(req, plugin_context)
+        runtime_prompt = _apply_local_env_tools(req)
         local_policy = get_local_permission_policy(
             AgentContextWrapper(context=agent_context)
         )

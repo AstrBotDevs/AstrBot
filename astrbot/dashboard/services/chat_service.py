@@ -177,15 +177,7 @@ class BotMessageAccumulator:
         *,
         chain_type: str | None,
         streaming: bool,
-        error_code: str | None = None,
     ) -> None:
-        if error_code:
-            self._flush_pending_text()
-            self.parts.append(
-                {"type": "plain", "text": result_text, "error_code": error_code}
-            )
-            return
-
         if chain_type == "tool_call":
             self._flush_pending_text()
             self._store_tool_call(result_text)
@@ -237,11 +229,7 @@ class BotMessageAccumulator:
         if not self.pending_text:
             return
 
-        if (
-            self.parts
-            and self.parts[-1].get("type") == "plain"
-            and not self.parts[-1].get("error_code")
-        ):
+        if self.parts and self.parts[-1].get("type") == "plain":
             last_text = self.parts[-1].get("text")
             self.parts[-1]["text"] = f"{last_text or ''}{self.pending_text}"
         else:
@@ -1142,17 +1130,12 @@ class ChatService:
                     continue
 
                 attachment_saved_payload = None
-                if msg_type in ("plain", "error"):
-                    if msg_type == "error":
-                        run.status = "failed"
+                if msg_type == "plain":
                     for accumulator in (pending_accumulator, display_accumulator):
                         accumulator.add_plain(
                             result_text,
                             chain_type=chain_type,
                             streaming=streaming,
-                            error_code=result.get("error_code")
-                            if msg_type == "error"
-                            else None,
                         )
                 elif msg_type in {"image", "record", "file", "video"}:
                     prefix = {
@@ -1180,6 +1163,16 @@ class ChatService:
                                 "type": part["type"],
                             },
                         }
+                elif msg_type == "error":
+                    run.status = "failed"
+                    error = (
+                        result_text
+                        if isinstance(result_text, dict)
+                        else {"code": "agent_error", "message": str(result_text)}
+                    )
+                    part = {**error, "type": "error"}
+                    for accumulator in (pending_accumulator, display_accumulator):
+                        accumulator.add_part(part)
                 elif msg_type in {"actionrow", "view"} and isinstance(
                     result_text, dict
                 ):
@@ -1233,10 +1226,13 @@ class ChatService:
         except Exception as exc:
             run.status = "failed"
             logger.exception(f"WebChat run unexpected error: {exc}", exc_info=True)
-            self._publish_chat_run(
-                run,
-                {"type": "error", "data": "WebChat run failed"},
+            error = {"code": "agent_error", "message": "WebChat run failed"}
+            for accumulator in (pending_accumulator, display_accumulator):
+                accumulator.add_part({**error, "type": "error"})
+            run.message_parts = deepcopy(display_accumulator).build_message_parts(
+                include_pending_tool_calls=True
             )
+            self._publish_chat_run(run, {"type": "error", "data": error})
         finally:
             try:
                 saved_record = await asyncio.shield(flush_pending_bot_message())

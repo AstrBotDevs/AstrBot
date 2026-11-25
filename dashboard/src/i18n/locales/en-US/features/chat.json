@@ -261,8 +261,6 @@
     "close": "Close"
   },
   "errors": {
-    "messageProcessingFailed": "Message processing failed. Check the AstrBot logs and try again.",
-    "ffmpegNotFound": "Audio processing failed: FFmpeg was not found in the AstrBot runtime environment. Install FFmpeg and ensure it is in PATH, then try again.",
     "sendMessageFailed": "Failed to send message, please try again",
     "createSessionFailed": "Failed to create session, please refresh the page"
   },
@@ -295,5 +293,29 @@
     "resize": "Resize workbench",
     "closeTab": "Close {title}",
     "resize": "Resize workbench"
+  },
+  "executionError": {
+    "noModel": {
+      "title": "No chat model available",
+      "description": "Configure and enable a model to start chatting."
+    },
+    "modelConfiguration": {
+      "title": "This model is unavailable",
+      "description": "Check the model configuration or select another available chat model."
+    },
+    "connection": {
+      "title": "Connection problem",
+      "description": "Check your network connection and try again shortly."
+    },
+    "ffmpegNotFound": {
+      "title": "FFmpeg is not available",
+      "description": "Install FFmpeg in the AstrBot runtime environment and ensure it is in PATH, then try again."
+    },
+    "generic": {
+      "title": "This reply could not be completed",
+      "description": "Try again later or open the details to learn more."
+    },
+    "configureModels": "Configure models",
+    "details": "View details"
   }
 }

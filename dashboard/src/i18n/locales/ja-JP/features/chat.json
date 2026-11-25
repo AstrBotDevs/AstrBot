@@ -261,8 +261,6 @@
     "close": "閉じる"
   },
   "errors": {
-    "messageProcessingFailed": "メッセージの処理に失敗しました。AstrBot のログを確認してから、もう一度お試しください。",
-    "ffmpegNotFound": "音声の処理に失敗しました：AstrBot の実行環境に FFmpeg が見つかりません。FFmpeg をインストールし、PATH に追加してから、もう一度お試しください。",
     "sendMessageFailed": "メッセージの送信に失敗しました。もう一度お試しください",
     "createSessionFailed": "セッションの作成に失敗しました。ページを再読み込みしてください"
   },
@@ -295,5 +293,29 @@
     "resize": "ワークベンチの幅を調整",
     "closeTab": "{title} を閉じる",
     "resize": "ワークベンチの幅を調整"
+  },
+  "executionError": {
+    "noModel": {
+      "title": "利用可能なチャットモデルがありません",
+      "description": "モデルを設定して有効にすると、チャットを開始できます。"
+    },
+    "modelConfiguration": {
+      "title": "このモデルは利用できません",
+      "description": "モデルの設定を確認するか、別の利用可能なチャットモデルを選択してください。"
+    },
+    "connection": {
+      "title": "接続に問題が発生しました",
+      "description": "ネットワーク接続を確認して、しばらくしてから再試行してください。"
+    },
+    "ffmpegNotFound": {
+      "title": "FFmpeg が見つかりません",
+      "description": "AstrBot の実行環境に FFmpeg をインストールし、PATH に追加してから再試行してください。"
+    },
+    "generic": {
+      "title": "返信を完了できませんでした",
+      "description": "しばらくしてから再試行するか、詳細を開いて原因を確認してください。"
+    },
+    "configureModels": "モデルを設定",
+    "details": "詳細を表示"
   }
 }

@@ -261,8 +261,6 @@
     "close": "关闭"
   },
   "errors": {
-    "messageProcessingFailed": "消息处理失败，请查看 AstrBot 日志后重试。",
-    "ffmpegNotFound": "音频处理失败：AstrBot 运行环境中未找到 FFmpeg。请安装 FFmpeg 并确保它在 PATH 中，然后重试。",
     "sendMessageFailed": "发送消息失败，请重试",
     "createSessionFailed": "创建会话失败，请刷新页面重试"
   },
@@ -295,5 +293,29 @@
     "resize": "调整工作台宽度",
     "closeTab": "关闭 {title}",
     "resize": "调整工作台宽度"
+  },
+  "executionError": {
+    "noModel": {
+      "title": "尚无可用的对话模型",
+      "description": "配置并启用一个模型后，即可开始聊天。"
+    },
+    "modelConfiguration": {
+      "title": "当前模型不可用",
+      "description": "请检查模型配置，或选择其他可用的对话模型。"
+    },
+    "connection": {
+      "title": "连接出现问题",
+      "description": "请检查网络连接，稍后重新尝试。"
+    },
+    "ffmpegNotFound": {
+      "title": "未找到 FFmpeg",
+      "description": "请在 AstrBot 运行环境中安装 FFmpeg 并确保其位于 PATH 中，然后重试。"
+    },
+    "generic": {
+      "title": "这次回复未能完成",
+      "description": "请稍后重试，或展开详情查看原因。"
+    },
+    "configureModels": "配置模型",
+    "details": "查看详情"
   }
 }

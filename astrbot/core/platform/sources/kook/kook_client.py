@@ -16,8 +16,10 @@ from astrbot.core.utils.media_utils import MediaResolver
 from .kook_config import KookConfig
 from .kook_types import (
     KookApiPaths,
+    KookChannelType,
     KookGatewayIndexResponse,
     KookHelloEventData,
+    KookMessageEventData,
     KookMessageSignal,
     KookMessageType,
     KookResumeAckEventData,
@@ -511,6 +513,34 @@ class KookClient:
             logger.error(
                 f'[KOOK] 发送kook消息类型 "{kook_message_type.name}" 异常: {e}'
             )
+
+    async def get_voice_url(self, event: KookMessageEventData, media_id: int) -> str:
+        """Gets the temporary playback URL for a received voice card.
+
+        Args:
+            event: Incoming message containing the voice card.
+            media_id: Media identifier from the voice module.
+
+        Returns:
+            The playback URL issued by KOOK.
+
+        Raises:
+            aiohttp.ClientResponseError: If the HTTP request fails with an error status.
+            RuntimeError: If KOOK rejects the voice-token request.
+        """
+        payload = {"msg_id": event.msg_id, "media_id": media_id}
+        if event.channel_type == KookChannelType.PERSON:
+            payload.update(scene="private", chat_code=event.extra.code)
+        else:
+            payload.update(scene="channel", channel_id=event.target_id)
+        async with self._http_client.post(
+            KookApiPaths.ASSET_VOICE_TOKEN, json=payload
+        ) as resp:
+            resp.raise_for_status()
+            result = await resp.json()
+            if result["code"] != 0:
+                raise RuntimeError(f"KOOK voice-token request failed: {result['code']}")
+            return result["data"]["url"]
 
     async def upload_asset(self, file_url: str | None) -> str:
         """上传文件到kook,获得远端资源url

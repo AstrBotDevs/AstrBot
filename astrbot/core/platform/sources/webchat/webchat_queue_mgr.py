@@ -213,8 +213,10 @@ class WebChatQueueMgr:
                         str(request_id),
                         {
                             "type": "error",
-                            "data": error_message,
-                            "error_code": error_code,
+                            "data": {
+                                "code": error_code,
+                                "message": error_message,
+                            },
                             "streaming": False,
                             "message_id": str(request_id),
                         },

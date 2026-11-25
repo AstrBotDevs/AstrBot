@@ -1843,7 +1843,7 @@ export const listCommandConflicts = <ThrowOnError extends boolean = false>(optio
 };
 
 /**
- * List LLM tools
+ * List registered plugin and MCP tools
  */
 export const listTools = <ThrowOnError extends boolean = false>(options?: OptionsLegacyParser<ListToolsData, ThrowOnError>) => {
     return (options?.client ?? client).get<ListToolsResponse, ListToolsError, ThrowOnError>({

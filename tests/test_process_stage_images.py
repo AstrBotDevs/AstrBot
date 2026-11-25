@@ -6,6 +6,7 @@ import copy
 import inspect
 import os
 import random
+import wave
 from contextlib import nullcontext
 from pathlib import Path
 from types import SimpleNamespace
@@ -35,7 +36,8 @@ from astrbot.core.astr_agent_runtime.main_agent import providers as providers_bu
 from astrbot.core.astr_agent_runtime.main_agent import request as request_build
 from astrbot.core.astr_agent_runtime.tools.subagent import SUBAGENT_TOOL_NAMES
 from astrbot.core.config.default import DEFAULT_CONFIG
-from astrbot.core.message.components import Image, Plain, Reply
+from astrbot.core.message.components import Image, Plain, Record, Reply
+from astrbot.core.message.mention_render import follow_up_text
 from astrbot.core.pipeline import context_utils
 from astrbot.core.pipeline.preprocess_stage import stage as preprocess
 from astrbot.core.pipeline.process_stage.method.agent_sub_stages import (
@@ -118,9 +120,6 @@ def harness(tmp_path, monkeypatch):
         return_value=(None, None, False)
     )
     context.persona_manager.personas_v3 = []
-    context.get_llm_tool_manager.return_value.get_builtin_tool.side_effect = (
-        lambda cls, **kwargs: cls(**kwargs)
-    )
     conversation = SimpleNamespace(
         cid="conv",
         user_id="test:FriendMessage:images",
@@ -186,9 +185,9 @@ def harness(tmp_path, monkeypatch):
     provider.text_chat_stream = stream
     context.get_using_provider_async = AsyncMock(return_value=provider)
     context.get_provider_by_id.return_value = provider
-    runtime = AstrAgentRuntime(
-        context, agent_configs=MagicMock(), subagents=MagicMock()
-    )
+    subagents = MagicMock()
+    subagents.store.find_native_conversation.return_value = None
+    runtime = AstrAgentRuntime(context, agent_configs=MagicMock(), subagents=subagents)
     ctx = SimpleNamespace(
         astrbot_config=config,
         plugin_manager=SimpleNamespace(context=context),
@@ -1281,6 +1280,30 @@ async def test_core_prefix_processing_preserves_attachments_and_source(
         for part in request.extra_user_content_parts
     )
     assert event.message_str == text
+
+
+@pytest.mark.asyncio
+async def test_quoted_voice_transcription_stays_in_the_reply(harness, tmp_path):
+    audio_path = tmp_path / "quoted.wav"
+    with wave.open(str(audio_path), "wb") as wav:
+        wav.setparams((1, 2, 16000, 0, "NONE", "not compressed"))
+        wav.writeframes(b"\x00\x00" * 160)
+    harness.config["provider_stt_settings"]["enable"] = True
+    harness.context.get_using_stt_provider_async = AsyncMock(
+        return_value=SimpleNamespace(get_text=AsyncMock(return_value="Tomorrow at ten."))
+    )
+    reply = Reply(id="quoted", sender_nickname="Alice", chain=[Record(file=str(audio_path))])
+    event = make_event([reply, Plain("Can you explain?")], text="Can you explain?")
+
+    await process_event(harness, event, preprocess_first=True)
+
+    quoted = "<Quoted Message>\n(Alice): Tomorrow at ten.\n</Quoted Message>"
+    assert reply.chain == [Plain("Tomorrow at ten.")]
+    assert event.message_str == event.message_obj.message_str == "Can you explain?"
+    request = harness.captured[0].req
+    assert request.prompt == "Can you explain?"
+    assert [part.text for part in request.extra_user_content_parts].count(quoted) == 1
+    assert follow_up_text(event) == (f"Can you explain?\n\n{quoted}", None)
 
 
 @pytest.mark.asyncio

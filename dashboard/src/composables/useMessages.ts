@@ -1,5 +1,5 @@
 import { computed, onBeforeUnmount, provide, reactive, ref, type Ref } from "vue";
-import { useI18n, useModuleI18n } from "@/i18n/composables";
+import { useI18n } from "@/i18n/composables";
 import { chatApi, fileApi } from "@/api/v1";
 import { fetchWithAuth } from "@/api/http";
 import type { Session } from "@/composables/useSessions";
@@ -29,7 +29,8 @@ export interface MessagePart {
   };
   type: string;
   text?: string;
-  error_code?: string;
+  code?: string;
+  message?: string;
   think?: string;
   message_id?: string | number;
   selected_text?: string;
@@ -805,10 +806,7 @@ export function useMessages(options: UseMessagesOptions) {
       });
     } catch (error) {
       if (!abort.signal.aborted) {
-        appendPlain(
-          botRecord,
-          `\n\n${String((error as Error)?.message || error)}`,
-        );
+        appendError(botRecord, error, "connection_error");
         console.error("Regenerate failed:", error);
       }
     } finally {
@@ -936,7 +934,7 @@ export function useMessages(options: UseMessagesOptions) {
       .catch((error) => {
         if (abort.signal.aborted) return;
         ensureBotRecordVisible(connection);
-        appendPlain(botRecord, `\n\n${String(error?.message || error)}`);
+        appendError(botRecord, error, "connection_error");
         console.error("SSE chat failed:", error);
       })
       .finally(async () => {
@@ -1112,7 +1110,7 @@ export function useMessages(options: UseMessagesOptions) {
         if (!connection.botRecord) continue;
         connection.errorShown = true;
         ensureBotRecordVisible(connection);
-        appendPlain(connection.botRecord, "\n\nWebSocket connection failed.");
+        appendError(connection.botRecord, "WebSocket connection failed.", "connection_error");
       }
     };
     ws.onclose = async () => {
@@ -1129,7 +1127,7 @@ export function useMessages(options: UseMessagesOptions) {
           connection.botRecord
         ) {
           ensureBotRecordVisible(connection);
-          appendPlain(connection.botRecord, "\n\nWebSocket connection closed.");
+          appendError(connection.botRecord, "WebSocket connection closed.", "connection_error");
         }
         delete activeConnections[connection.messageId];
       }
@@ -1159,7 +1157,7 @@ export function useMessages(options: UseMessagesOptions) {
         connection.errorShown = true;
         if (connection.botRecord) {
           ensureBotRecordVisible(connection);
-          appendPlain(connection.botRecord, "\n\nWebSocket connection failed.");
+          appendError(connection.botRecord, "WebSocket connection failed.", "connection_error");
         }
         console.error("Failed to send WebSocket payload:", error);
         void finishWebSocketStream(sessionId, messageId);
@@ -1369,15 +1367,7 @@ export function useMessages(options: UseMessagesOptions) {
     }
     if (msgType === "error") {
       markMessageStarted(botRecord);
-      if (["ffmpegNotFound", "messageProcessingFailed"].includes(payload.error_code)) {
-        botRecord.can_retry = false;
-        botRecord.can_fork = false;
-      }
-      messageContent(botRecord).message.push({
-        type: "plain",
-        text: String(data),
-        error_code: payload.error_code,
-      });
+      appendError(botRecord, data);
       return;
     }
     if (msgType === "complete" || msgType === "break") {
@@ -1624,7 +1614,6 @@ export function displayParts(content: ChatContent): MessagePart[] {
 }
 
 export function messageBlocks(content: ChatContent): MessageDisplayBlock[] {
-  const { tm } = useModuleI18n("features/chat");
   const parts = Array.isArray(content.message)
     ? content.message
     : normalizeMessageParts(content.message, content.reasoning || "");
@@ -1633,15 +1622,7 @@ export function messageBlocks(content: ChatContent): MessageDisplayBlock[] {
   let currentKind: MessageDisplayBlock["kind"] | null = null;
   let currentParts: MessagePart[] = [];
 
-  for (let part of parts) {
-    if (
-      content.type === "bot" &&
-      part.type === "plain" &&
-      (part.error_code === "ffmpegNotFound" ||
-        part.error_code === "messageProcessingFailed")
-    ) {
-      part = { ...part, text: tm(`errors.${part.error_code}`) };
-    }
+  for (const part of parts) {
     if (isEmptyPlainPart(part)) continue;
 
     const nextKind: MessageDisplayBlock["kind"] = isThinkingPart(part)
@@ -1762,11 +1743,24 @@ function firstNonEmptyPartIndex(parts: MessagePart[]) {
   return parts.findIndex((part) => !isEmptyPlainPart(part));
 }
 
+/** Preserve error identity across stream transports and thread messages. */
+export function appendError(record: ChatRecord, error: unknown, code = "agent_error") {
+  markMessageStarted(record);
+  const data = error && typeof error === "object"
+    ? error as { code?: unknown; message?: unknown }
+    : undefined;
+  record.content.message.push({
+    type: "error",
+    code: typeof data?.code === "string" ? data.code : code,
+    message: typeof data?.message === "string" ? data.message : payloadText(error),
+  });
+}
+
 export function appendPlain(record: ChatRecord, text: string, append = true) {
   markMessageStarted(record);
   const content = record.content;
   let last = content.message[content.message.length - 1];
-  if (!last || last.type !== "plain" || last.error_code) {
+  if (!last || last.type !== "plain") {
     last = { type: "plain", text: "" };
     content.message.push(last);
   }
