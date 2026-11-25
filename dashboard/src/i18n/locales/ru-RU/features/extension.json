@@ -145,13 +145,7 @@
         "allPlugins": "📦 Все плагины",
         "category": "Категория",
         "categories": {
-            "all": "Все",
-            "ai_tools": "AI Tools",
-            "entertainment": "Развлечения",
-            "productivity": "Продуктивность",
-            "integrations": "Интеграции",
-            "utilities": "Утилиты",
-            "other": "Другое"
+            "all": "Все"
         },
         "showFullName": "Полное имя",
         "devDocs": "Документация для разработчиков",

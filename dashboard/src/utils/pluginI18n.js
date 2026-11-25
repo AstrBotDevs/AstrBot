@@ -60,6 +60,22 @@ export function usePluginI18n() {
     return resolve(plugin?.i18n, "metadata.display_name", fallback || "");
   };
 
+  const categoryName = (category) => {
+    const languageTag = locale.value.toLowerCase();
+    const translations = Object.entries(category?.i18n || {});
+    for (const candidate of [languageTag, languageTag.split("-")[0]]) {
+      const translation = translations.find(
+        ([tag]) => tag.toLowerCase() === candidate,
+      )?.[1]?.display_name;
+      if (typeof translation === "string" && translation.trim()) {
+        return translation.trim();
+      }
+    }
+    return typeof category?.display_name === "string"
+      ? category.display_name.trim()
+      : "";
+  };
+
   const pluginDesc = (plugin, fallback = "") => {
     return resolve(
       plugin?.i18n,
@@ -106,6 +122,7 @@ export function usePluginI18n() {
     locale,
     resolve,
     pluginName,
+    categoryName,
     pluginDesc,
     pluginShortDesc,
     pluginPageText,

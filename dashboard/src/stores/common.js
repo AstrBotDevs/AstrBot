@@ -59,14 +59,36 @@ export const useCommonStore = defineStore("common", {
           custom_registry: sourceKey || undefined,
         })
         .then((res) => {
-          let data = [];
-          if (res.data.data && typeof res.data.data === "object") {
-            for (let key in res.data.data) {
+          const data = [];
+          const market = res.data.data;
+          const categories = new Map();
+          if (Array.isArray(market?.$meta?.categories)) {
+            for (const [order, category] of market.$meta.categories.entries()) {
+              const id = category?.id;
+              const name = category?.display_name;
+              if (
+                typeof id === "string" &&
+                /^[a-z0-9][a-z0-9_]*$/.test(id) &&
+                typeof name === "string" &&
+                name.trim() &&
+                !categories.has(id)
+              ) {
+                categories.set(id, {
+                  id,
+                  display_name: name.trim(),
+                  i18n: category.i18n,
+                  order,
+                });
+              }
+            }
+          }
+
+          if (market && typeof market === "object") {
+            for (const [key, pluginData] of Object.entries(market)) {
               if (key === "$meta") {
                 continue;
               }
 
-              const pluginData = res.data.data[key];
               const fallbackPluginName = String(key || "").includes("/")
                 ? ""
                 : String(key || "").trim();
@@ -118,7 +140,7 @@ export const useCommonStore = defineStore("common", {
                 astrbot_version: pluginData?.astrbot_version
                   ? pluginData.astrbot_version
                   : "",
-                category: pluginData?.category ? pluginData.category : "",
+                market_category: categories.get(pluginData?.category),
                 support_platforms: Array.isArray(pluginData?.support_platforms)
                   ? pluginData.support_platforms
                   : Array.isArray(pluginData?.support_platform)

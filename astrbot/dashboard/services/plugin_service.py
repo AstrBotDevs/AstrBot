@@ -4,6 +4,7 @@ import asyncio
 import hashlib
 import json
 import os
+import re
 import ssl
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
@@ -525,6 +526,7 @@ class PluginService:
         repo_url: str,
         download_url: str,
         registry_name: str,
+        category: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         """Build a persisted installation source record.
 
@@ -535,6 +537,7 @@ class PluginService:
             repo_url: Repository URL used for installation.
             download_url: Download URL used for installation.
             registry_name: Resolved registry display name.
+            category: Category definition resolved from the marketplace source.
 
         Returns:
             A serializable installation source record.
@@ -560,6 +563,8 @@ class PluginService:
         market_plugin_id = self.get_market_plugin_id(payload)
         if market_plugin_id:
             record["market_plugin_id"] = market_plugin_id
+        if install_method == "market" and category is not None:
+            record["category"] = category
 
         return record
 
@@ -571,6 +576,7 @@ class PluginService:
         fallback_method: str,
         repo_url: str,
         download_url: str,
+        category: dict[str, Any] | None = None,
     ) -> None:
         """Persist an installation source record for a newly installed plugin.
 
@@ -580,6 +586,7 @@ class PluginService:
             fallback_method: Method to use for non-market installs.
             repo_url: Repository URL used for installation.
             download_url: Download URL used for installation.
+            category: Category definition resolved from the marketplace source.
         """
         plugin_name = None
         if isinstance(plugin_info, dict):
@@ -601,6 +608,7 @@ class PluginService:
             repo_url=repo_url,
             download_url=download_url,
             registry_name=registry_name,
+            category=category,
         )
         await self.save_plugin_install_sources(records)
 
@@ -1275,10 +1283,56 @@ class PluginService:
                 return plugin
         return None
 
+    @staticmethod
+    def resolve_market_category(
+        market_data: object, category_id: object
+    ) -> dict[str, Any] | None:
+        """Resolve a category snapshot from the selected marketplace source.
+
+        Args:
+            market_data: Raw marketplace data from the source.
+            category_id: Category ID referenced by the plugin entry.
+
+        Returns:
+            The category and its display labels, or None for an unresolved ID.
+        """
+        if not isinstance(category_id, str) or not re.fullmatch(
+            r"[a-z0-9][a-z0-9_]*", category_id
+        ):
+            return None
+        meta = market_data.get("$meta") if isinstance(market_data, dict) else None
+        categories = meta.get("categories") if isinstance(meta, dict) else None
+        if not isinstance(categories, list):
+            return None
+
+        for category in categories:
+            if not isinstance(category, dict) or category.get("id") != category_id:
+                continue
+            display_name = category.get("display_name")
+            if not isinstance(display_name, str) or not display_name.strip():
+                continue
+            snapshot: dict[str, Any] = {
+                "id": category_id,
+                "display_name": display_name.strip(),
+            }
+            i18n = category.get("i18n")
+            if isinstance(i18n, dict):
+                translations = {}
+                for locale, labels in i18n.items():
+                    label = (
+                        labels.get("display_name") if isinstance(labels, dict) else None
+                    )
+                    if isinstance(label, str) and label.strip():
+                        translations[locale] = {"display_name": label.strip()}
+                if translations:
+                    snapshot["i18n"] = translations
+            return snapshot
+        return None
+
     async def resolve_market_install_info(
         self,
         payload: dict[str, Any],
-    ) -> dict[str, str] | None:
+    ) -> dict[str, Any] | None:
         """Validate a marketplace install request and resolve install URLs.
 
         Args:
@@ -1328,6 +1382,9 @@ class PluginService:
             "market_plugin_id": market_plugin_id,
             "repo": repo_url,
             "download_url": str(market_plugin.get("download_url") or "").strip(),
+            "category": self.resolve_market_category(
+                market_data, market_plugin.get("category")
+            ),
         }
 
     async def resolve_market_update_info(self, plugin_name: str) -> dict[str, Any]:
@@ -1533,6 +1590,11 @@ class PluginService:
             "installed_at": installed_at,
             "updated_at": datetime.now(timezone.utc).isoformat(),
         }
+        category = self.resolve_market_category(
+            market_data, market_plugin.get("category")
+        )
+        if category is not None:
+            record["category"] = category
 
         for key in (plugin.root_dir_name, plugin.name):
             if key:
@@ -1642,6 +1704,9 @@ class PluginService:
                 else "url",
                 repo_url=repo_url,
                 download_url=download_url,
+                category=market_install_info["category"]
+                if market_install_info
+                else None,
             )
             await self.sync_skills_after_plugin_change()
             logger.info(f"Installed plugin {repo_url} successfully.")

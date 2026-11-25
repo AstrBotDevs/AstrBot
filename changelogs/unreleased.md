@@ -1,5 +1,7 @@
 # Unreleased
 
+- The plugin marketplace displays localized categories from the selected source and hides the category dropdown when none are available. Market installs save the category in the existing installation record.
+
 - QQ Official: failed image uploads no longer log base64 payloads, avoiding dashboard freezes from oversized log entries. Retry attempts decrease from five to three, with one summary warning.
 
 - Session waiters now wake their timeout task immediately when completed early, avoiding stale asyncio tasks for the remainder of the configured timeout.
