@@ -164,7 +164,8 @@ const chatHeaderStyle = computed(() => {
     // window material in the top-left corner.
     left: "0px",
     width: "100%",
-    "--astrbot-chat-sidebar-width": `${sidebarWidth}px`,
+    "--astrbot-chat-sidebar-width": `${sidebarWidth + (!smAndDown.value && customizer.chatNavigationInSidebar ? 56 : 0)}px`,
+    "--astrbot-workbench-preferred-width": chatHeader.workbenchWidth ? `${chatHeader.workbenchWidth}px` : undefined,
   };
 });
 const getAppUpdaterBridge = (): AstrBotAppUpdaterBridge | null => {
@@ -1097,6 +1098,7 @@ onMounted(async () => {
     <v-btn
       v-if="$vuetify.display.smAndDown"
       class="header-menu-btn"
+      :class="{ 'header-menu-btn--browser': !isDesktopReleaseMode }"
       icon
       rounded="lg"
       variant="text"
@@ -1390,6 +1392,8 @@ onMounted(async () => {
         </v-list-item-title>
       </v-list-item>
       </StyledMenu>
+      <!-- Keep the Teleport destination mounted while ChatUI leaves or re-enters. -->
+      <div v-show="isChatPath" id="chat-workbench-header" />
       <!-- Custom caption buttons on Windows, where the native title bar is disabled. -->
       <div v-if="isWindowsDesktop" class="header-caption-btns">
         <v-btn
@@ -2616,6 +2620,11 @@ html[data-astrbot-desktop-platform='macos'] .top-header.chat-mode-header.chat-mo
   color: rgba(var(--v-theme-on-surface), 0.9);
 }
 
+.top-header .v-toolbar__content > .header-menu-btn--browser:first-child {
+  margin-inline-start: -12px;
+  margin-inline-end: 12px;
+}
+
 .header-toolbar-label {
   display: inline;
   margin-inline-start: 6px;
@@ -2717,4 +2726,38 @@ html[data-astrbot-desktop-platform='macos'] .top-header.chat-mode-header.chat-mo
   color: #fff;
 }
 
+</style>
+
+<style>
+#chat-workbench-header:empty {
+  display: none;
+}
+#chat-workbench-header {
+  min-width: 0;
+  flex-shrink: 0;
+}
+#chat-workbench-header:has(.workbench-launcher) {
+  display: flex;
+  align-items: center;
+  padding: 0 8px;
+  height: var(--astrbot-toolbar-height);
+}
+#chat-workbench-header:has(.workbench-header) {
+  width: calc(var(--astrbot-workbench-width) - var(--workbench-caption-width, 0px));
+  border-left: 1px solid rgba(var(--v-theme-on-surface), 0.1);
+}
+.top-header:has(#chat-workbench-header .workbench-header) {
+  --astrbot-active-workbench-width: var(--astrbot-workbench-width);
+}
+.top-header:has(#chat-workbench-header:not(:empty)) .header-actions {
+  margin-right: -18px;
+}
+.top-header:has(.header-caption-btns) {
+  --workbench-caption-width: 132px;
+}
+@media (min-width: 960px) and (max-width: 1400px) {
+  .top-header:has(#chat-workbench-header .workbench-header) .chat-toolbar-context-title {
+    display: none;
+  }
+}
 </style>

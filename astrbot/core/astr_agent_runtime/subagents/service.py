@@ -71,10 +71,21 @@ class SubAgentService:
                 agent.scope.umo, agent.scope.conversation_id
             )
             if conversation is None:
+                if agent.runtime == "astrbot":
+                    await context._db.conversation_store.delete(
+                        cid=agent.conversation_id, umo=agent.scope.umo
+                    )
                 await self.store.remove(agent)
                 continue
             if conversation.user_id != agent.scope.umo:
                 raise ValueError("Agent session belongs to another main conversation")
+            if agent.runtime == "astrbot":
+                metadata = await context._db.conversation_store.get_metadata(
+                    agent.conversation_id
+                )
+                if metadata is None or metadata.umo != agent.scope.umo:
+                    self.store.agents.pop(agent.agent_id)
+                    continue
             for turn in agent.turns:
                 if not turn.finished:
                     turn.state = AgentState.INTERRUPTED
@@ -176,9 +187,6 @@ class SubAgentService:
         )
         conversation_id = session.id
         async with self._lifecycle_lock:
-            if self._closing:
-                await session.close()
-                raise ValueError("Cannot open an agent while AstrBot is shutting down")
             if not isinstance(conversation_id, str) or not conversation_id:
                 raise ValueError("Agent runtime returned an empty conversation ID")
             if any(
@@ -207,14 +215,32 @@ class SubAgentService:
                 ],
                 next_turn_id=2,
             )
+            registered = False
             try:
+                if self._closing:
+                    raise ValueError(
+                        "Cannot open an agent while AstrBot is shutting down"
+                    )
                 await self.store.save(agent)
+                registered = True
+                if runtime == "astrbot":
+                    # Publish the mapping first so main listings never see the child.
+                    await caller.context._db.conversation_store.create(
+                        cid=conversation_id,
+                        umo=caller.scope.umo,
+                        platform_id=caller.event.get_platform_id(),
+                    )
             except BaseException:
                 try:
                     await session.close()
+                    if registered:
+                        await caller.context._db.conversation_store.delete(
+                            cid=conversation_id, umo=caller.scope.umo
+                        )
+                        await self.store.remove(agent)
                 except Exception:
                     logger.exception(
-                        "Unable to cancel an unregistered agent conversation"
+                        "Unable to clean up an unregistered agent conversation"
                     )
                 raise
             self.store.agents[agent.agent_id] = agent
@@ -520,24 +546,24 @@ class SubAgentService:
         async with self._slot(agent.scope.umo, limit):
             turn.state, turn.started_at = AgentState.RUNNING, time()
             await self.store.save(agent)
+            input = DelegatedAgentInput(
+                event=caller.event,
+                permissions=turn.permissions,
+                content=parse_input_content(turn.messages),
+                plugin_tools=caller.agent_context.plugin_tools,
+                plugin_skills=caller.agent_context.plugin_skills,
+                caller=caller,
+                send_to_user=turn.send_to_user,
+                sequence=turn.turn_id,
+            )
             session = await self.runtimes[agent.runtime].open_session(
                 agent.scope.umo,
                 session_id=agent.conversation_id,
                 options={"profile": "subagent"},
+                input=input if agent.runtime == "astrbot" else None,
             )
             session.runtime_name = agent.runtime
-            handle = await session.run_turn(
-                DelegatedAgentInput(
-                    event=caller.event,
-                    permissions=turn.permissions,
-                    content=parse_input_content(turn.messages),
-                    plugin_tools=caller.agent_context.plugin_tools,
-                    plugin_skills=caller.agent_context.plugin_skills,
-                    caller=caller,
-                    send_to_user=turn.send_to_user,
-                    sequence=turn.turn_id,
-                )
-            )
+            handle = await session.run_turn(input)
             self._turn_handles[agent.agent_id] = handle
             try:
                 result = await handle.result()

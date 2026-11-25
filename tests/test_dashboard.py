@@ -10,7 +10,7 @@ import zipfile
 from datetime import datetime
 from pathlib import Path
 from types import SimpleNamespace
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, call
 from urllib.parse import parse_qs, urlsplit
 
 import jwt
@@ -44,6 +44,7 @@ from astrbot.dashboard.password_state import (
     set_password_storage_upgraded,
 )
 from astrbot.dashboard.server import AstrBotDashboard
+from astrbot.dashboard.services import auth_service
 from astrbot.dashboard.services.auth_service import DASHBOARD_JWT_COOKIE_NAME
 from astrbot.dashboard.services.plugin_page_service import PluginPageService
 from astrbot.dashboard.services.plugin_service import PluginService
@@ -257,19 +258,13 @@ window.renderTabs = renderTabs;
 
 
 @pytest_asyncio.fixture(scope="module")
-async def core_lifecycle_td(tmp_path_factory):
+async def core_lifecycle_td(tmp_path_factory, dashboard_test_config):
     """Creates and initializes a core lifecycle instance with a temporary database."""
     tmp_db_path = tmp_path_factory.mktemp("data") / "test_data_v3.db"
     db = SQLiteDatabase(str(tmp_db_path))
     log_broker = LogBroker()
     core_lifecycle = AstrBotCoreLifecycle(log_broker, db)
-    from astrbot.core.config.astrbot_config import AstrBotConfig
-    from astrbot.core.config.default import DEFAULT_CONFIG
-
-    core_lifecycle.astrbot_config = AstrBotConfig(
-        str(tmp_db_path.with_name("cmd_config.json")),
-        default_config=copy.deepcopy(DEFAULT_CONFIG),
-    )
+    core_lifecycle.astrbot_config = dashboard_test_config
     await core_lifecycle.initialize()
     generated_password = getattr(
         core_lifecycle.astrbot_config,
@@ -474,11 +469,27 @@ async def authenticated_header(
     return {"Authorization": f"Bearer {token}"}
 
 
+@pytest.fixture
+def failed_login_sleep(monkeypatch: pytest.MonkeyPatch) -> AsyncMock:
+    """Record failed login delays inside the auth service.
+
+    Args:
+        monkeypatch: Restores the auth module's asyncio binding after the test.
+
+    Returns:
+        The mock awaited by the failed login branch.
+    """
+    sleep = AsyncMock(return_value=None)
+    monkeypatch.setattr(auth_service, "asyncio", SimpleNamespace(sleep=sleep))
+    return sleep
+
+
 @pytest.mark.asyncio
 async def test_auth_login(
     app: FastAPIAppAdapter,
     core_lifecycle_td: AstrBotCoreLifecycle,
     monkeypatch: pytest.MonkeyPatch,
+    failed_login_sleep: AsyncMock,
 ):
     """Tests the login functionality with both wrong and correct credentials."""
     monkeypatch.setitem(app.config, "DASHBOARD_JWT_COOKIE_SECURE", False)
@@ -490,6 +501,8 @@ async def test_auth_login(
     )
     data = await response.get_json()
     assert data["status"] == "error"
+    failed_login_sleep.assert_awaited_once_with(3)
+    failed_login_sleep.reset_mock()
 
     response = await test_client.post(
         "/api/auth/login",
@@ -500,6 +513,7 @@ async def test_auth_login(
     )
     data = await response.get_json()
     assert data["status"] == "ok" and "token" in data["data"]
+    failed_login_sleep.assert_not_awaited()
     set_cookie_headers = response.headers.getlist("Set-Cookie")
     jwt_cookie_header = next(
         (value for value in set_cookie_headers if DASHBOARD_JWT_COOKIE_NAME in value),
@@ -659,6 +673,7 @@ async def test_auth_rate_limit_uses_same_bucket_across_paths(
     app: FastAPIAppAdapter,
     core_lifecycle_td: AstrBotCoreLifecycle,
     monkeypatch: pytest.MonkeyPatch,
+    failed_login_sleep: AsyncMock,
 ):
     """Same client IP shares a rate-limit bucket across different auth endpoints."""
     monkeypatch.setenv("ASTRBOT_TEST_MODE", "false")
@@ -685,6 +700,7 @@ async def test_auth_rate_limit_uses_same_bucket_across_paths(
         assert r2.status_code == 429, (
             "second request from same IP should be rate limited"
         )
+        failed_login_sleep.assert_awaited_once_with(3)
     finally:
         cfg["auth_rate_limit"] = rl_original
         cfg["trust_proxy_headers"] = tp_original
@@ -695,6 +711,7 @@ async def test_auth_rate_limit_separates_different_client_ips(
     app: FastAPIAppAdapter,
     core_lifecycle_td: AstrBotCoreLifecycle,
     monkeypatch: pytest.MonkeyPatch,
+    failed_login_sleep: AsyncMock,
 ):
     """Different client IPs have independent rate-limit buckets."""
     monkeypatch.setenv("ASTRBOT_TEST_MODE", "false")
@@ -733,6 +750,7 @@ async def test_auth_rate_limit_separates_different_client_ips(
             headers={"X-Forwarded-For": "198.51.100.11"},
         )
         assert r_c.status_code != 429, "different IP has its own bucket"
+        assert failed_login_sleep.await_args_list == [call(3), call(3)]
     finally:
         cfg["auth_rate_limit"] = rl_original
         cfg["trust_proxy_headers"] = tp_original
@@ -743,6 +761,7 @@ async def test_auth_rate_limit_applies_to_v1_login(
     app: FastAPIAppAdapter,
     core_lifecycle_td: AstrBotCoreLifecycle,
     monkeypatch: pytest.MonkeyPatch,
+    failed_login_sleep: AsyncMock,
 ):
     """The v1 login endpoint uses the same token-bucket limiter as legacy login."""
     monkeypatch.setenv("ASTRBOT_TEST_MODE", "false")
@@ -773,6 +792,7 @@ async def test_auth_rate_limit_applies_to_v1_login(
             headers=headers,
         )
         assert second.status_code == 429, "v1 login should be rate limited"
+        failed_login_sleep.assert_awaited_once_with(3)
     finally:
         cfg["auth_rate_limit"] = rl_original
         cfg["trust_proxy_headers"] = tp_original
@@ -783,6 +803,7 @@ async def test_auth_rate_limit_ignores_proxy_headers_by_default(
     app: FastAPIAppAdapter,
     core_lifecycle_td: AstrBotCoreLifecycle,
     monkeypatch: pytest.MonkeyPatch,
+    failed_login_sleep: AsyncMock,
 ):
     """When trust_proxy_headers is False, all proxy-spoofed IPs fall back to the connection IP."""
     monkeypatch.setenv("ASTRBOT_TEST_MODE", "false")
@@ -814,6 +835,7 @@ async def test_auth_rate_limit_ignores_proxy_headers_by_default(
         assert r2.status_code == 429, (
             "same connection IP, same bucket despite proxy headers"
         )
+        failed_login_sleep.assert_awaited_once_with(3)
     finally:
         cfg["auth_rate_limit"] = rl_original
         cfg["trust_proxy_headers"] = tp_original
@@ -1329,6 +1351,7 @@ async def test_md5_dashboard_password_keeps_md5_auth_until_edit(
 async def test_md5_login_failure_includes_upgrade_faq_hint(
     app: FastAPIAppAdapter,
     core_lifecycle_td: AstrBotCoreLifecycle,
+    failed_login_sleep: AsyncMock,
 ):
     original_dashboard_config = copy.deepcopy(
         core_lifecycle_td.astrbot_config["dashboard"]
@@ -1357,6 +1380,7 @@ async def test_md5_login_failure_includes_upgrade_faq_hint(
 
         assert data["status"] == "error"
         assert data["message"].startswith("Incorrect username or password.")
+        failed_login_sleep.assert_awaited_once_with(3)
         assert "用户名或密码错误" in data["message"]
         assert "https://docs.astrbot.app/en/faq.html" in data["message"]
         assert "https://docs.astrbot.app/faq.html" in data["message"]
@@ -1915,8 +1939,8 @@ async def test_plugin_detail_includes_scanned_page_component(
             "name": PLUGIN_PAGE_DEMO_PAGE_NAME,
             "title": PLUGIN_PAGE_DEMO_PAGE_NAME,
             "page_name": PLUGIN_PAGE_DEMO_PAGE_NAME,
-            "i18n_key": f"pages.{PLUGIN_PAGE_DEMO_PAGE_NAME}",
-            "description": "Plugin Page entry",
+            "i18n_key": f"views.{PLUGIN_PAGE_DEMO_PAGE_NAME}",
+            "description": "",
             "plugin_name": PLUGIN_PAGE_DEMO_NAME,
             "plugin_marketplace_name": PLUGIN_PAGE_DEMO_NAME.replace("_", "-"),
         }
@@ -1942,7 +1966,7 @@ async def test_plugin_page_entry_returns_signed_content_path(
     assert data["status"] == "ok"
     assert data["data"]["name"] == PLUGIN_PAGE_DEMO_PAGE_NAME
     assert data["data"]["title"] == PLUGIN_PAGE_DEMO_PAGE_NAME
-    assert data["data"]["i18n_key"] == f"pages.{PLUGIN_PAGE_DEMO_PAGE_NAME}"
+    assert data["data"]["i18n_key"] == f"views.{PLUGIN_PAGE_DEMO_PAGE_NAME}"
     assert data["data"]["content_path"].startswith(
         f"/api/v1/plugins/{PLUGIN_PAGE_DEMO_NAME}/views/{PLUGIN_PAGE_DEMO_PAGE_NAME}/_t/"
     )

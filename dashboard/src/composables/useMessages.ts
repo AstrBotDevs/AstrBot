@@ -1,8 +1,10 @@
-import { computed, onBeforeUnmount, reactive, ref, type Ref } from "vue";
+import { computed, onBeforeUnmount, provide, reactive, ref, type Ref } from "vue";
 import { useI18n } from "@/i18n/composables";
 import { chatApi, fileApi } from "@/api/v1";
 import { fetchWithAuth } from "@/api/http";
 import type { Session } from "@/composables/useSessions";
+
+import { streamViewAction, viewActionKey } from "@/utils/chatViews";
 
 export type TransportMode = "sse" | "websocket";
 
@@ -19,8 +21,16 @@ export function buildChatRequestFlags(
 }
 
 export interface MessagePart {
+  view_metadata?: {
+    name: string;
+    title: string;
+    description: string;
+    i18n?: Record<string, unknown>;
+  };
   type: string;
   text?: string;
+  code?: string;
+  message?: string;
   think?: string;
   message_id?: string | number;
   selected_text?: string;
@@ -178,6 +188,36 @@ export function useMessages(options: UseMessagesOptions) {
     {},
   );
   const activeConnections = reactive<Record<string, ActiveConnection>>({});
+
+  provide(viewActionKey, (viewId, input) => {
+    const sessionId = options.currentSessionId.value;
+    const messageId = input.interaction_id;
+    const botRecord = reactive<ChatRecord>({
+      id: `local-view-${messageId}`,
+      created_at: new Date().toISOString(),
+      content: { type: "bot", message: [], reasoning: "", isLoading: true },
+    });
+    const connection: ActiveConnection = {
+      sessionId, messageId, transport: "sse", botRecord, botVisible: false,
+    };
+    let messageSaved = false;
+    return streamViewAction(viewId, input, (payload) => {
+      if (payload.type === "run_started") {
+        connection.runId = payload.data?.run_id;
+        return;
+      }
+      if (payload.type === "message_saved") messageSaved = true;
+      processStreamPayload(botRecord, payload, undefined, connection);
+      if (connection.botVisible) {
+        activeConnections[messageId] = connection;
+        options.onStreamUpdate?.(sessionId);
+      }
+    }, () => {
+      delete activeConnections[messageId];
+      if (messageSaved) void options.onSessionsChanged?.();
+    });
+  });
+
   const chatWebSockets: Record<string, WebSocket> = {};
   const closingChatWebSockets = new WeakSet<WebSocket>();
   const deferredBotAnchors = new WeakMap<ChatRecord, ChatRecord>();
@@ -766,10 +806,7 @@ export function useMessages(options: UseMessagesOptions) {
       });
     } catch (error) {
       if (!abort.signal.aborted) {
-        appendPlain(
-          botRecord,
-          `\n\n${String((error as Error)?.message || error)}`,
-        );
+        appendError(botRecord, error, "connection_error");
         console.error("Regenerate failed:", error);
       }
     } finally {
@@ -897,7 +934,7 @@ export function useMessages(options: UseMessagesOptions) {
       .catch((error) => {
         if (abort.signal.aborted) return;
         ensureBotRecordVisible(connection);
-        appendPlain(botRecord, `\n\n${String(error?.message || error)}`);
+        appendError(botRecord, error, "connection_error");
         console.error("SSE chat failed:", error);
       })
       .finally(async () => {
@@ -1073,7 +1110,7 @@ export function useMessages(options: UseMessagesOptions) {
         if (!connection.botRecord) continue;
         connection.errorShown = true;
         ensureBotRecordVisible(connection);
-        appendPlain(connection.botRecord, "\n\nWebSocket connection failed.");
+        appendError(connection.botRecord, "WebSocket connection failed.", "connection_error");
       }
     };
     ws.onclose = async () => {
@@ -1090,7 +1127,7 @@ export function useMessages(options: UseMessagesOptions) {
           connection.botRecord
         ) {
           ensureBotRecordVisible(connection);
-          appendPlain(connection.botRecord, "\n\nWebSocket connection closed.");
+          appendError(connection.botRecord, "WebSocket connection closed.", "connection_error");
         }
         delete activeConnections[connection.messageId];
       }
@@ -1120,7 +1157,7 @@ export function useMessages(options: UseMessagesOptions) {
         connection.errorShown = true;
         if (connection.botRecord) {
           ensureBotRecordVisible(connection);
-          appendPlain(connection.botRecord, "\n\nWebSocket connection failed.");
+          appendError(connection.botRecord, "WebSocket connection failed.", "connection_error");
         }
         console.error("Failed to send WebSocket payload:", error);
         void finishWebSocketStream(sessionId, messageId);
@@ -1330,7 +1367,7 @@ export function useMessages(options: UseMessagesOptions) {
     }
     if (msgType === "error") {
       markMessageStarted(botRecord);
-      appendPlain(botRecord, `\n\n${String(data)}`);
+      appendError(botRecord, data);
       return;
     }
     if (msgType === "complete" || msgType === "break") {
@@ -1376,11 +1413,12 @@ export function useMessages(options: UseMessagesOptions) {
       return;
     }
 
-    if (msgType === "actionrow" && data && typeof data === "object") {
+    if ((msgType === "actionrow" || msgType === "view") && data && typeof data === "object") {
       markMessageStarted(botRecord);
       messageContent(botRecord).message.push({
-        type: "actionrow",
         ...(data as Record<string, unknown>),
+        type: msgType,
+        ...(msgType === "view" ? { workbenchLive: true } : {}),
       });
       return;
     }
@@ -1703,6 +1741,19 @@ function isThinkingPart(part: MessagePart) {
 
 function firstNonEmptyPartIndex(parts: MessagePart[]) {
   return parts.findIndex((part) => !isEmptyPlainPart(part));
+}
+
+/** Preserve error identity across stream transports and thread messages. */
+export function appendError(record: ChatRecord, error: unknown, code = "agent_error") {
+  markMessageStarted(record);
+  const data = error && typeof error === "object"
+    ? error as { code?: unknown; message?: unknown }
+    : undefined;
+  record.content.message.push({
+    type: "error",
+    code: typeof data?.code === "string" ? data.code : code,
+    message: typeof data?.message === "string" ? data.message : payloadText(error),
+  });
 }
 
 export function appendPlain(record: ChatRecord, text: string, append = true) {

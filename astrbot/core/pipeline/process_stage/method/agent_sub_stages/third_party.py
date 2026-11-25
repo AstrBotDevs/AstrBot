@@ -41,6 +41,7 @@ from astrbot.core.utils.active_event_registry import active_event_registry
 from astrbot.core.utils.config_number import coerce_int_config
 from astrbot.core.utils.media_utils import describe_media_ref
 from astrbot.core.utils.metrics import Metric
+from astrbot.core.utils.quoted_message.chain_parser import ReplyChainParser
 
 from .....astr_agent_context import AgentContextWrapper, AstrAgentContext
 from ....context import PipelineContext, call_event_hook
@@ -316,6 +317,10 @@ class ThirdPartyAgentSubStage(Stage):
                     )
                     continue
                 req.audio_urls.append(audio_path)
+
+        if quoted := ReplyChainParser().format_embedded_replies(event):
+            prompt = req.prompt or ""
+            req.prompt = f"{prompt}\n\n{quoted}" if prompt.strip() else quoted
 
         empty_prompt = not req.prompt or (
             event.get_platform_name() == "lark" and not req.prompt.strip()

@@ -126,17 +126,19 @@ async def test_follow_up_queues_and_retains_conversation_and_output_policy(sdk):
     )
     sdk.context.conversation_manager.get_curr_conversation_id.return_value = "other"
     second = await first.follow_up(input_message=[PlainInput(text="Second input")])
-    assert second.session.ref == first.session.ref
-    assert first.session.state == SessionState.RUNNING
-    assert first.session.pending_turn_count == 1
+    session = await first.get_session()
+    assert (await second.get_session()).ref == session.ref
+    assert session.state == SessionState.RUNNING
+    assert session.pending_turn_count == 1
     assert not second.send_to_user
     release.set()
     await asyncio.wait_for(first.result(), 3)
     next_history = await asyncio.wait_for(entered.get(), 3)
     assert "First reply" in json.dumps(next_history)
     await asyncio.wait_for(second.result(), 3)
-    assert first.session.state == SessionState.IDLE
-    assert first.session.pending_turn_count == 0
+    session = await first.get_session()
+    assert session.state == SessionState.IDLE
+    assert session.pending_turn_count == 0
     assert sdk.conversations["other"].history == "[]"
     sdk.platform_send.assert_not_awaited()
 
@@ -585,7 +587,9 @@ async def test_native_sessions_persist_at_supported_execution_boundaries(sdk, de
             sdk.root, [{"type": "plain", "text": "Initial"}]
         )
         session = await sdk.native.open_session(
-            sdk.scope.umo, session_id=agent["conversation_id"]
+            sdk.scope.umo,
+            session_id=agent["conversation_id"],
+            options={"profile": "subagent"},
         )
         turn = None
     else:
@@ -727,7 +731,7 @@ async def test_registered_runtime_runs_without_native_request_construction(
     follow_up = await run.follow_up(
         input_message=[PlainInput(text="Continue")], send_to_user=False
     )
-    assert follow_up.session.ref == run.session.ref
+    assert (await follow_up.get_session()).ref == (await run.get_session()).ref
     assert (await follow_up.result()).text == "Continue"
     sdk.provider.text_chat.assert_not_awaited()
 

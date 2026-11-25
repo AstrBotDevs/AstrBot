@@ -21,6 +21,8 @@ from astrbot.core.agent.events import (
 from astrbot.core.agent.output import PlainOutput, ReasoningOutput
 from astrbot.core.agent.runtime import AgentTurn, TurnStatus
 from astrbot.core.agent_output_content import chain_from_content
+from astrbot.core.i18n import translate
+from astrbot.core.llm_error_messages import LLM_ERROR_CODE_EXTRA_KEY
 from astrbot.core.message.components import Json
 from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.persona_error_reply import (
@@ -64,14 +66,16 @@ def _record_tool_call_name(
     tool_name_by_call_id[str(tool_call_id)] = str(tool_name)
 
 
-def _build_tool_call_status_message(tool_info: dict | None) -> str:
+def _build_tool_call_status_message(
+    tool_info: dict | None, locale: str = "zh-CN"
+) -> str:
     if tool_info:
-        return f"🔨 调用工具: {tool_info.get('name', 'unknown')}"
-    return "🔨 调用工具..."
+        return translate("tool_call", locale, name=tool_info.get("name", "unknown"))
+    return translate("tool_call_pending", locale)
 
 
 def _build_tool_result_status_message(
-    msg_chain: MessageChain, tool_name_by_call_id: dict[str, str]
+    msg_chain: MessageChain, tool_name_by_call_id: dict[str, str], locale: str = "zh-CN"
 ) -> str:
     tool_name = "unknown"
     tool_result = ""
@@ -87,9 +91,9 @@ def _build_tool_result_status_message(
         tool_result = msg_chain.get_plain_text(with_other_comps_mark=True)
     tool_result = _truncate_tool_result(tool_result, 70)
 
-    status_msg = f"🔨 调用工具: {tool_name}"
+    status_msg = translate("tool_call", locale, name=tool_name)
     if tool_result:
-        status_msg = f"{status_msg}\n📎 返回结果: {tool_result}"
+        status_msg += "\n" + translate("tool_result", locale, result=tool_result)
     return status_msg
 
 
@@ -97,6 +101,7 @@ async def present_turn(
     turn: AgentTurn,
     *,
     streaming: bool,
+    emit_output: bool = True,
     stream_to_general: bool = False,
     show_tool_use: bool = True,
     show_tool_call_result: bool = False,
@@ -109,6 +114,9 @@ async def present_turn(
     Args:
         turn: A runtime execution that proceeds independently of this consumer.
         streaming: Whether this platform receives incremental output.
+        emit_output: Whether to present automatic replies and status messages.
+            False still consumes events and records traces; explicit tool sends
+            and runtime history persistence are unaffected.
         stream_to_general: Whether only complete messages should be displayed.
         show_tool_use: Whether non-WebChat platforms show tool activity.
         show_tool_call_result: Whether activity includes a short result excerpt.
@@ -120,6 +128,11 @@ async def present_turn(
         Platform-neutral message chains ready for the normal delivery pipeline.
     """
     event = turn.input.event
+    locale = (
+        await context.get_locale(event.unified_msg_origin)
+        if context is not None
+        else "zh-CN"
+    )
     names: dict[str, tuple[str, str]] = {}
     buffered = MessageChain()
     buffer = buffer_intermediate_messages and not streaming and not stream_to_general
@@ -129,11 +142,12 @@ async def present_turn(
     async for output in turn.events():
         payload = output.payload
         if isinstance(payload, TurnFinished):
-            if buffered.chain:
+            if emit_output and buffered.chain:
                 yield buffered
             result = payload.result
             if (
-                result.status == TurnStatus.COMPLETED
+                emit_output
+                and result.status == TurnStatus.COMPLETED
                 and result.content
                 and not completed
                 and not emitted
@@ -155,16 +169,40 @@ async def present_turn(
                 event.set_extra("agent_user_aborted", True)
             if result.status == TurnStatus.FAILED:
                 text = extract_persona_custom_error_message_from_event(event) or (
-                    f"LLM 响应错误: {result.error.message or '未知错误'}"
+                    translate(
+                        "llm_response_error",
+                        locale,
+                        detail=result.error.message
+                        or translate("unknown_error", locale),
+                    )
                     if result.error and result.error.code == "provider_error"
                     else f"Error occurred during AI execution.\n{result.error.message if result.error else 'Unknown error'}"
                 )
-                yield MessageChain().message(text)
+                if event.get_platform_name() == "webchat":
+                    yield MessageChain(
+                        type="chatui_error",
+                        chain=[
+                            Json(
+                                {
+                                    "code": event.get_extra(LLM_ERROR_CODE_EXTRA_KEY)
+                                    or (
+                                        result.error.code
+                                        if result.error
+                                        else "agent_error"
+                                    ),
+                                    "message": text,
+                                }
+                            )
+                        ],
+                    )
+                else:
+                    yield MessageChain().message(text)
             return
         if isinstance(payload, TurnPrepared):
             event.set_extra("_agent_chat_model", payload.model)
             if (
-                context is not None
+                emit_output
+                and context is not None
                 and event.get_platform_name() == "webchat"
                 and not isinstance(event, AgentWakeupEvent)
                 and payload.provider_id
@@ -190,7 +228,8 @@ async def present_turn(
                 )
         elif isinstance(payload, (TextDelta, ReasoningDelta)):
             if (
-                streaming
+                emit_output
+                and streaming
                 and not stream_to_general
                 and (not isinstance(payload, ReasoningDelta) or show_reasoning)
             ):
@@ -203,6 +242,8 @@ async def present_turn(
                     type="reasoning" if isinstance(payload, ReasoningDelta) else None
                 ).message(payload.text)
         elif isinstance(payload, MessageCompleted):
+            if not emit_output:
+                continue
             if payload.message_id in completed:
                 continue
             completed.add(payload.message_id)
@@ -244,6 +285,8 @@ async def present_turn(
                 "ts": output.created_at.timestamp(),
             }
             event.trace.record("agent_tool_call", tool_name=info)
+            if not emit_output:
+                continue
             if streaming and show_tool_use:
                 yield MessageChain(chain=[], type="break")
             if event.get_platform_name() == "webchat":
@@ -253,7 +296,7 @@ async def present_turn(
             elif show_tool_use and not show_tool_call_result:
                 await event.send(
                     MessageChain(type="tool_call").message(
-                        f"🔨 调用工具: {payload.name}"
+                        translate("tool_call", locale, name=payload.name)
                     )
                 )
         elif isinstance(payload, (ToolFinished, ToolRejected)):
@@ -269,6 +312,8 @@ async def present_turn(
             if not text and payload.error:
                 text = payload.error.message
             event.trace.record("agent_tool_result", tool_result=text)
+            if not emit_output:
+                continue
             if event.get_platform_name() == "webchat":
                 await event.send(
                     MessageChain(
@@ -287,11 +332,17 @@ async def present_turn(
             elif show_tool_use and show_tool_call_result:
                 await event.send(
                     MessageChain(type="tool_call").message(
-                        f"🔨 调用工具: {name}\n📎 返回结果: {_truncate_tool_result(text)}"
+                        translate("tool_call", locale, name=name)
+                        + "\n"
+                        + translate(
+                            "tool_result", locale, result=_truncate_tool_result(text)
+                        )
                     )
                 )
         elif (
-            isinstance(payload, UsageUpdated) and event.get_platform_name() == "webchat"
+            emit_output
+            and isinstance(payload, UsageUpdated)
+            and event.get_platform_name() == "webchat"
         ):
             tokens = payload.usage.tokens
             metrics = payload.metrics
