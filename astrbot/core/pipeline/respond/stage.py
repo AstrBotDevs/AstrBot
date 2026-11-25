@@ -354,6 +354,8 @@ class RespondStage(Stage):
                 for comp in result.chain:
                     i = await self._calc_comp_interval(comp)
                     await asyncio.sleep(i)
+                    if event.is_stopped() and event.get_extra("agent_stop_requested"):
+                        return
                     try:
                         if comp.type in need_separately:
                             await event.send(result.derive([comp]))
