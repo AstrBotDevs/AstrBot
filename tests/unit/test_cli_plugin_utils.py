@@ -13,6 +13,7 @@ class FakeResponse:
 
     def json(self):
         return {
+            "$meta": {"schema_version": 1},
             "local-plugin": {
                 "desc": "remote description",
                 "version": "2.0.0",
@@ -36,7 +37,7 @@ class FakeClient:
         return False
 
     def get(self, url):
-        assert url == "https://api.soulter.top/astrbot/plugins"
+        assert url == "https://cloud.astrbot.app/api/v1/market/plugins.json"
         return FakeResponse()
 
 

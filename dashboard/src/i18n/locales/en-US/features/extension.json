@@ -219,6 +219,16 @@
       "dataHint": "Deletes data in data/plugin_data and data/plugins_data, as well as KV preference data in the database"
     },
     "install": {
+      "sourceRequired": "Add this plugin source to continue to the installation confirmation. AstrBot will access this URL when you continue. Only add sources you trust.",
+      "addSourceAndContinue": "Add and continue",
+      "validatingSource": "Checking the plugin source…",
+      "savingSource": "Adding the plugin source…",
+      "loadingPlugin": "Looking up the plugin…",
+      "retryPreview": "Retry",
+      "marketPluginNotFound": "The selected plugin source has no installable entry for this plugin.",
+      "invalidMarketPluginId": "Invalid marketplace plugin ID. Use author/name.",
+      "invalidRegistryUrl": "Enter a valid HTTPS URL for the plugin source.",
+      "linkConflict": "The installation link specifies more than one source.",
       "title": "Install Extension",
       "fromFile": "Install from File",
       "fromUrl": "Install from URL",

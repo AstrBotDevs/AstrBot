@@ -59,6 +59,7 @@ export const useCommonStore = defineStore("common", {
           custom_registry: sourceKey || undefined,
         })
         .then((res) => {
+          if (res.data.status === "error") throw new Error(res.data.message);
           const data = [];
           const market = res.data.data;
           const categories = new Map();

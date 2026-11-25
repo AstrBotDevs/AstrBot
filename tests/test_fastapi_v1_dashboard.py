@@ -3625,6 +3625,44 @@ async def test_v1_safe_plugin_routes_accept_slash_ids(
 
 
 @pytest.mark.asyncio
+async def test_v1_plugin_source_add_is_idempotent_for_concurrent_requests(
+    asgi_client: httpx.AsyncClient,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    sources = [{"name": "existing", "url": "https://market.example/other.json"}]
+    writes = []
+
+    async def fake_global_get(_key, _default=None):
+        return list(sources)
+
+    async def fake_global_put(_key, value):
+        await asyncio.sleep(0)
+        sources[:] = value
+        writes.append(value)
+
+    monkeypatch.setattr(
+        "astrbot.dashboard.services.plugin_service.sp.global_get", fake_global_get
+    )
+    monkeypatch.setattr(
+        "astrbot.dashboard.services.plugin_service.sp.global_put", fake_global_put
+    )
+    new_source = {"name": "Cloud", "url": "https://market.example/plugins.json"}
+    responses = await asyncio.gather(
+        *(
+            asgi_client.post(
+                "/api/v1/plugin-sources", json=new_source, headers=_jwt_headers()
+            )
+            for _ in range(2)
+        )
+    )
+
+    assert all(response.status_code == 200 for response in responses)
+    assert all(response.json()["data"]["sources"] == sources for response in responses)
+    assert sources[1:] == [new_source]
+    assert len(writes) == 1
+
+
+@pytest.mark.asyncio
 async def test_v1_safe_plugin_source_delete_accepts_slash_ids(
     asgi_client: httpx.AsyncClient,
     monkeypatch: pytest.MonkeyPatch,
