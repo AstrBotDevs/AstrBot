@@ -1,6 +1,6 @@
 # Unreleased
 
-- The plugin marketplace's Category dropdown moves to an expandable row of localized category filters with plugin counts. The row appears when the selected source provides usable categories. Market installs save the category in the existing installation record.
+- The plugin marketplace's Category dropdown moves to an expandable row of localized category filters with plugin counts. The row shows **All** and the total plugin count even when the selected source has no categories. Market installs save the category in the existing installation record.
 
 - QQ Official: failed image uploads no longer log base64 payloads, avoiding dashboard freezes from oversized log entries. Retry attempts decrease from five to three, with one summary warning.
 

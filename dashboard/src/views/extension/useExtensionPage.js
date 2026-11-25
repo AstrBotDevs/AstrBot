@@ -235,7 +235,6 @@ export const useExtensionPage = (initialTab = "installed") => {
       }
     }
 
-    if (categories.size === 0) return [];
     return [
       {
         value: "",

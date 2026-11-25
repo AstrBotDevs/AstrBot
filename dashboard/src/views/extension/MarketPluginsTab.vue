@@ -170,15 +170,14 @@ const marketSortItems = computed(() => [
 
 // One scrollable chip row at every width; a toggle expands it into wrapped rows
 // when the categories do not fit on a single line.
-const hasCategories = computed(() => marketCategoryItems.value.length > 0);
-
 const categoryChipsExpanded = ref(false);
 const categoryChipsOverflow = ref(false);
 const chipsRowEl = ref(null);
 
 const measureCategoryChips = () => {
   const el = chipsRowEl.value;
-  if (!el) {
+  if (!el || marketCategoryItems.value.length === 1) {
+    categoryChipsExpanded.value = false;
     categoryChipsOverflow.value = false;
     return;
   }
@@ -361,7 +360,6 @@ const openMarketPluginDetail = (plugin) => {
     <div class="mt-4">
       <div class="market-category-row">
         <div
-          v-if="hasCategories"
           class="market-category-chips"
           :class="{ 'is-expanded': categoryChipsExpanded }"
         >
