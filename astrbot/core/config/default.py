@@ -1377,6 +1377,7 @@ CONFIG_METADATA_2 = {
                         "timeout": 120,
                         "proxy": "",
                         "custom_headers": {},
+                        "anth_enable_prompt_cache": True,
                         "anth_thinking_config": {"type": "", "budget": 0, "effort": ""},
                     },
                     "Kimi Coding Plan": {
@@ -2772,6 +2773,11 @@ CONFIG_METADATA_2 = {
                                 ],
                             },
                         },
+                    },
+                    "anth_enable_prompt_cache": {
+                        "description": "自动提示词缓存",
+                        "type": "bool",
+                        "hint": "自动为 Anthropic 请求添加缓存断点。不支持缓存的兼容网关可关闭此选项。",
                     },
                     "anth_thinking_config": {
                         "description": "思考配置",

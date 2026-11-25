@@ -1855,6 +1855,10 @@
           "hint": "参见 https://ai.google.dev/gemini-api/docs/thinking#thinking-levels"
         }
       },
+      "anth_enable_prompt_cache": {
+        "description": "自动提示词缓存",
+        "hint": "自动为 Anthropic 请求添加缓存断点。不支持缓存的兼容网关可关闭此选项。"
+      },
       "anth_thinking_config": {
         "description": "思考配置",
         "type": {

@@ -21,6 +21,99 @@ def _provider() -> ProviderAnthropic:
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("streaming", [False, True])
+@pytest.mark.parametrize("enabled", [None, True, False], ids=["default", "on", "off"])
+@pytest.mark.parametrize("explicit_cache", [False, True])
+async def test_anthropic_prompt_cache_option(
+    monkeypatch, streaming, enabled, explicit_cache
+):
+    captured = []
+
+    def handle(request):
+        body = json.loads(request.content)
+        captured.append(body)
+        if body.get("stream"):
+            return sdk_httpx.Response(
+                200,
+                headers={"content-type": "text/event-stream"},
+                content=_tool_use_stream([]),
+            )
+        return sdk_httpx.Response(
+            200,
+            json={
+                "id": "msg_1",
+                "type": "message",
+                "role": "assistant",
+                "model": "claude-test",
+                "content": [{"type": "text", "text": "ok"}],
+                "stop_reason": "end_turn",
+                "stop_sequence": None,
+                "usage": {"input_tokens": 1, "output_tokens": 1},
+            },
+        )
+
+    monkeypatch.setattr(
+        ProviderAnthropic,
+        "_create_http_client",
+        lambda self, config: sdk_httpx.AsyncClient(
+            transport=sdk_httpx.MockTransport(handle)
+        ),
+    )
+    config = {
+        "id": "anthropic-test",
+        "type": "anthropic_chat_completion",
+        "key": ["sk-test"],
+        "model": "claude-test",
+        "api_base": "https://api.anthropic.test",
+    }
+    if enabled is not None:
+        config["anth_enable_prompt_cache"] = enabled
+    provider = ProviderAnthropic(config, {})
+    system_blocks = [{"type": "text", "text": "Be helpful."}]
+    explicit_marker = {"type": "ephemeral", "ttl": "1h"}
+    if explicit_cache:
+        system_blocks[-1]["cache_control"] = explicit_marker
+    try:
+        if streaming:
+            responses = [
+                response
+                async for response in provider.text_chat_stream(
+                    prompt="hi", system_prompt=system_blocks
+                )
+            ]
+        else:
+            responses = [
+                await provider.text_chat(prompt="hi", system_prompt=system_blocks)
+            ]
+
+        provider.provider_config["anth_enable_prompt_cache"] = False
+        if streaming:
+            await provider.text_chat(prompt="again", system_prompt=system_blocks)
+        else:
+            async for _ in provider.text_chat_stream(
+                prompt="again", system_prompt=system_blocks
+            ):
+                pass
+    finally:
+        await provider.terminate()
+
+    assert responses
+    assert len(captured) == 2
+    if explicit_cache:
+        assert captured[0]["system"][-1]["cache_control"] == explicit_marker
+    elif enabled is False:
+        assert "cache_control" not in captured[0]["system"][-1]
+    else:
+        assert captured[0]["system"][-1]["cache_control"] == {"type": "ephemeral"}
+
+    expected_system = [{"type": "text", "text": "Be helpful."}]
+    if explicit_cache:
+        expected_system[-1]["cache_control"] = explicit_marker
+    assert captured[1]["system"] == expected_system
+    assert system_blocks == expected_system
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize(
     ("custom_headers", "expected_key"),
     [({}, "test-key"), ({"x-api-key": "override-key"}, "override-key")],

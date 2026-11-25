@@ -1938,6 +1938,10 @@
           "hint": "参照 https://ai.google.dev/gemini-api/docs/thinking#thinking-levels"
         }
       },
+      "anth_enable_prompt_cache": {
+        "description": "プロンプトの自動キャッシュ",
+        "hint": "Anthropic リクエストにキャッシュのブレークポイントを自動で追加します。キャッシュに対応していない互換ゲートウェイでは、この設定を無効にしてください。"
+      },
       "anth_thinking_config": {
         "description": "思考設定",
         "type": {

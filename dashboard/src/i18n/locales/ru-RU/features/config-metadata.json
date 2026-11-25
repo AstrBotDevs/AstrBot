@@ -1938,6 +1938,10 @@
                     "hint": "См. https://ai.google.dev/gemini-api/docs/thinking#thinking-levels"
                 }
             },
+            "anth_enable_prompt_cache": {
+                "description": "Автоматическое кэширование промптов",
+                "hint": "Автоматически добавлять точки кэширования в запросы Anthropic. Отключите этот параметр для совместимых шлюзов, которые не поддерживают кэширование."
+            },
             "anth_thinking_config": {
                 "description": "Настройки рассуждения (Thinking)",
                 "type": {
