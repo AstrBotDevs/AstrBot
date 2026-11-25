@@ -299,13 +299,15 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         fallback_providers: list[Provider] | None = None,
         request_max_retries: int | None = None,
         tool_result_overflow_dir: str | None = None,
-        # Async callback `(file_name, content) -> readable_path`; takes
-        # precedence over `tool_result_overflow_dir` when both are provided.
-        tool_result_overflow_writer: Callable[[str, str], Awaitable[str]] | None = None,
         read_tool: FunctionTool | None = None,
         max_context_tokens: int | None = None,
         conversation_event_sink: Callable[[AgentResponse], Awaitable[bool]]
         | None = None,
+        *,
+        # Async callback `(file_name, content) -> readable_path`; takes
+        # precedence over `tool_result_overflow_dir` when both are provided.
+        # The callback uses the run context's tool call timeout.
+        tool_result_overflow_writer: Callable[[str, str], Awaitable[str]] | None = None,
         **kwargs: T.Any,
     ) -> None:
         self._events = AgentEventStream[RunnerEventPayload | AgentResponse]()
@@ -464,6 +466,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         Raises:
             ValueError: If no overflow writer or directory is configured, or if
                 a custom writer returns an empty path.
+            asyncio.TimeoutError: If the custom writer exceeds the tool call timeout.
         """
         safe_tool_call_id = (
             "".join(
@@ -477,7 +480,15 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         file_name = f"{safe_tool_call_id}_{uuid.uuid4().hex[:8]}.txt"
 
         if self.tool_result_overflow_writer is not None:
-            written_path = await self.tool_result_overflow_writer(file_name, content)
+            try:
+                written_path = await asyncio.wait_for(
+                    self.tool_result_overflow_writer(file_name, content),
+                    timeout=self.run_context.tool_call_timeout,
+                )
+            except asyncio.TimeoutError as exc:
+                raise asyncio.TimeoutError(
+                    "Tool result overflow write timed out."
+                ) from exc
             if not isinstance(written_path, str) or not written_path.strip():
                 raise ValueError("tool_result_overflow_writer returned an empty path")
             return written_path.strip()
