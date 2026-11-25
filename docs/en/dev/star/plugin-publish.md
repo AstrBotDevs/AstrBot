@@ -24,11 +24,13 @@ repo: https://github.com/your-name/repo      # Plugin repository URL
 #   - aiocqhttp
 #   - qq_official
 # social_link: https://github.com/your-web   # (Optional) Your personal website, GitHub profile, etc.
-# tags:                                      # (Optional) Tag list for marketplace categorization and search
+# tags:                                      # (Optional) Tag list for marketplace search
   # - example
 ```
 
 [Supported platform adapters](plugin-new.md#declare-supported-platforms-optional)
+
+[Recommended marketplace categories](plugin-new.md#recommended-marketplace-categories)
 
 ::: warning Size Limit
 The plugin zip package submitted to the marketplace **must not exceed 16MB**.

@@ -143,6 +143,12 @@ If you only want to declare a minimum version, use:
 If the current AstrBot version does not satisfy this range, the plugin will be blocked from loading with a compatibility error.
 In the WebUI installation flow, you can choose to "Ignore Warning and Install" to bypass this check.
 
+### Recommended Marketplace Categories
+
+Use the table below to choose a category based on the plugin's main purpose when publishing or listing a plugin. The market source sets `category` in the plugin's index record and provides the category labels and translations. [Marketplace category format](../plugin-market/2026-11-25.md#_4-1-marketplace-categories)
+
+<!--@include: ../plugin-market/2026-11-25.md#recommended-categories-->
+
 ### Debugging Plugins
 
 AstrBot uses a runtime plugin injection mechanism. Therefore, when debugging plugins, you need to start the AstrBot main application.

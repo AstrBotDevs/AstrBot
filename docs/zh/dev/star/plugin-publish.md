@@ -24,11 +24,13 @@ repo: https://github.com/your-name/repo      # 插件仓库地址
 #   - aiocqhttp
 #   - qq_official
 # social_link: https://github.com/your-web   # （可选）你的个人网站、GitHub 主页等
-# tags:                                      # （可选）标签列表，用于插件市场分类和搜索
+# tags:                                      # （可选）标签列表，用于插件市场搜索
   # - example
 ```
 
 [目前支持的平台适配器](plugin-new.md#声明支持平台-optional)
+
+[推荐的插件市场分类](plugin-new.md#推荐的插件市场分类)
 
 ::: warning 大小限制
 发布到插件市场的插件压缩包（zip）大小**不得超过 16MB**。
