@@ -1,6 +1,7 @@
 """Route registered AI input to its runtime and present the resulting turn."""
 
 import asyncio
+import random
 from collections.abc import AsyncGenerator
 from copy import deepcopy
 from functools import partial
@@ -127,6 +128,49 @@ class InternalAgentSubStage(Stage):
             streaming = self.streaming_response
             if event.get_extra("enable_streaming") is not None:
                 streaming = bool(event.get_extra("enable_streaming"))
+
+            stream_to_general = (
+                self.unsupported_streaming_strategy == "turn_off"
+                and not event.platform_meta.support_streaming_message
+            )
+
+            # TTS + streaming: roll once before the runtime opens the session.
+            # With dual_output the text keeps streaming and the voice is sent
+            # after STREAMING_FINISH; without it the reply is switched to
+            # non-streaming so the decorate stage can emit voice only.
+            if (
+                emit_output
+                and streaming
+                and not stream_to_general
+                and event.get_extra("action_type") != "live"
+            ):
+                tts_cfg = self.ctx.plugin_manager.context.get_config(
+                    umo=event.unified_msg_origin
+                ).get("provider_tts_settings", {})
+                if tts_cfg.get("enable"):
+                    try:
+                        tts_prob = float(tts_cfg.get("trigger_probability", 1.0))
+                    except (TypeError, ValueError):
+                        tts_prob = 1.0
+                    if random.random() < max(0.0, min(tts_prob, 1.0)):
+                        try:
+                            tts_provider = await self.ctx.plugin_manager.context.get_using_tts_provider_async(
+                                event.unified_msg_origin
+                            )
+                        except Exception:
+                            logger.warning(
+                                "Failed to resolve TTS provider for %s",
+                                event.unified_msg_origin,
+                                exc_info=True,
+                            )
+                            tts_provider = None
+                        if tts_provider is not None:
+                            if tts_cfg.get("dual_output"):
+                                event.set_extra("tts_stream_dual", True)
+                            else:
+                                event.set_extra("tts_forced", True)
+                                streaming = False
+
             input = await prepare_agent_input(
                 self.ctx.plugin_manager.context,
                 event,
@@ -141,6 +185,8 @@ class InternalAgentSubStage(Stage):
             # Waiting hooks may override this event's presentation preference.
             if event.get_extra("enable_streaming") is not None:
                 streaming = bool(event.get_extra("enable_streaming"))
+            if event.get_extra("tts_forced", False):
+                streaming = False
             input.streaming = streaming
             show_reasoning = self.show_reasoning
             if event.get_extra("enable_reasoning") is not None:
@@ -161,10 +207,6 @@ class InternalAgentSubStage(Stage):
                 ),
             )
             active_event_registry.register_agent_stop_callback(event, turn.request_stop)
-            stream_to_general = (
-                self.unsupported_streaming_strategy == "turn_off"
-                and not event.platform_meta.support_streaming_message
-            )
             chains = present_turn(
                 turn,
                 streaming=streaming,
