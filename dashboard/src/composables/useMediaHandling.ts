@@ -231,12 +231,11 @@ export function useMediaHandling() {
             }
         }
 
+        const fallbackFiles = Array.from(clipboardData.files).filter(
+            file => !directoryNames.has(file.name)
+        );
         const pastedFiles =
-            clipboardData.files.length > itemFiles.length + directoryNames.size
-                ? Array.from(clipboardData.files).filter(
-                      file => !directoryNames.has(file.name)
-                  )
-                : itemFiles;
+            fallbackFiles.length > itemFiles.length ? fallbackFiles : itemFiles;
 
         if (directoryNames.size > 0 || pastedFiles.length > 0) {
             event.preventDefault();
