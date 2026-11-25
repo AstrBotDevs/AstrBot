@@ -142,8 +142,10 @@
   },
   "market": {
     "recommended": "🥳 Recommended",
-    "allPlugins": "📦 All Extensions",
     "category": "Category",
+    "expandCategories": "Show all categories",
+    "collapseCategories": "Collapse categories",
+    "refresh": "Refresh",
     "categories": {
       "all": "All"
     },

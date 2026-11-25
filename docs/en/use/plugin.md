@@ -43,7 +43,7 @@ The same workspace has **Skills**, **MCP Servers**, and **Handlers** tabs for sk
 
 ### 2. Choose a suitable plugin
 
-Search by plugin name or a keyword describing the feature you want. When the current market source provides categories, use the **Category** dropdown above the plugin list to filter it. Open a plugin's details and check:
+Search by plugin name or a keyword describing the feature you want. The **Category** dropdown has moved to a row of category filters above the plugin list. When the current market source provides categories, select one to filter the list. Each category shows its plugin count. If the row overflows, scroll horizontally or select the arrow to expand it. Open a plugin's details and check:
 
 - **Features and usage**: whether it meets your needs and whether you use it through commands, natural language, or another trigger.
 - **Supported platforms**: whether it works with your messaging platform. Some features depend on platform-specific APIs.
