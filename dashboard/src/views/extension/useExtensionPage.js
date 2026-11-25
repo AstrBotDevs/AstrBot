@@ -129,9 +129,10 @@ export const useExtensionPage = (initialTab = "installed") => {
     forceUpdate: false,
   });
 
-  // 更新全部插件确认对话框
+  // Track selected plugins for the batch update confirmation.
   const updateAllConfirmDialog = reactive({
     show: false,
+    selectedNames: [],
   });
 
   // 插件更新日志对话框（复用 ReadmeDialog）
@@ -1019,23 +1020,29 @@ export const useExtensionPage = (initialTab = "installed") => {
     }
   };
 
-  // 确认强制更新
-  // 显示更新全部插件确认对话框
+  // Select all available updates whenever the confirmation opens.
   const showUpdateAllConfirm = () => {
     if (updatableExtensions.value.length === 0) {
       toast(tm("messages.noUpdatesAvailable"), "info");
       return;
     }
+    updateAllConfirmDialog.selectedNames = updatableExtensions.value.map(
+      (ext) => ext.name,
+    );
     updateAllConfirmDialog.show = true;
   };
 
-  // 确认更新全部插件
   const confirmUpdateAll = () => {
+    if (
+      updateAllConfirmDialog.selectedNames.length === 0 ||
+      updatingAll.value
+    ) {
+      return;
+    }
     updateAllConfirmDialog.show = false;
-    updateAllExtensions();
+    return updateAllExtensions(updateAllConfirmDialog.selectedNames);
   };
 
-  // 取消更新全部插件
   const cancelUpdateAll = () => {
     updateAllConfirmDialog.show = false;
   };
@@ -1047,9 +1054,12 @@ export const useExtensionPage = (initialTab = "installed") => {
     await updateExtension(name, true);
   };
 
-  const updateAllExtensions = async () => {
+  const updateAllExtensions = async (selectedNames) => {
     if (updatingAll.value) return;
-    if (updatableExtensions.value.length === 0) {
+    const targets = updatableExtensions.value
+      .filter((ext) => selectedNames.includes(ext.name))
+      .map((ext) => ext.name);
+    if (targets.length === 0) {
       toast(tm("messages.noUpdatesAvailable"), "info");
       return;
     }
@@ -1059,7 +1069,6 @@ export const useExtensionPage = (initialTab = "installed") => {
     loadingDialog.result = "";
     loadingDialog.show = true;
 
-    const targets = updatableExtensions.value.map((ext) => ext.name);
     try {
       const res = await pluginApi.updateMany({
         names: targets,
