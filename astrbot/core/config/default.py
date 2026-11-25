@@ -10,6 +10,8 @@ from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 
 from .agent import get_runtime_config_default
 
+PLUGIN_DEFAULT_REGISTRY_URL = "https://cloud.astrbot.app/api/v1/market/plugins.json"
+
 
 def get_local_permission_defaults(system: str | None = None) -> dict:
     """Return fresh Local permission defaults shared by all operating systems.

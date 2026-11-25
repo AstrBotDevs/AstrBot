@@ -1331,7 +1331,8 @@ export const useExtensionPage = (initialTab = "installed") => {
     const request = marketInstallLink.value;
     if (!request || request.loading) return;
 
-    const { registryUrl, pluginId } = request;
+    const { pluginId } = request;
+    let registryUrl = request.registryUrl;
     const fallback = tm("messages.sourceResolveFailed");
     request.loading = true;
     request.error = "";
@@ -1342,10 +1343,16 @@ export const useExtensionPage = (initialTab = "installed") => {
         if (data.status !== "ok") throw new Error(data.message || fallback);
         if (marketInstallLink.value !== request) return;
         customSources.value = data.data?.sources || [];
-        request.needsSource = !customSources.value.some(
-          (source) => normalizeRegistryUrl(source?.url || source) === registryUrl,
-        );
-        if (request.needsSource && !addSource) return;
+        if (normalizeRegistryUrl(data.data?.default_registry_url) === registryUrl) {
+          registryUrl = null;
+          request.registryUrl = null;
+          request.needsSource = false;
+        } else {
+          request.needsSource = !customSources.value.some(
+            (source) => normalizeRegistryUrl(source?.url || source) === registryUrl,
+          );
+          if (request.needsSource && !addSource) return;
+        }
       }
 
       const plugins = await commonStore.getPluginCollections(true, registryUrl);

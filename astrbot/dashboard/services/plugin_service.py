@@ -20,6 +20,7 @@ from astrbot.core import DEMO_MODE, file_token_service, logger
 from astrbot.core.astr_agent_runtime.computer.computer_client import (
     sync_skills_to_active_sandboxes,
 )
+from astrbot.core.config.default import PLUGIN_DEFAULT_REGISTRY_URL
 from astrbot.core.repository import (
     GitUnavailableError,
     normalize_repository_url,
@@ -1092,9 +1093,9 @@ class PluginService:
             urls = [custom_url]
         else:
             cache_file = os.path.join(data_dir, "plugins.json")
-            md5_url = "https://api.soulter.top/astrbot/plugins-md5"
+            md5_url = PLUGIN_DEFAULT_REGISTRY_URL.removesuffix(".json") + "-md5.json"
             urls = [
-                "https://api.soulter.top/astrbot/plugins",
+                PLUGIN_DEFAULT_REGISTRY_URL,
                 "https://github.com/AstrBotDevs/AstrBot_Plugins_Collection/raw/refs/heads/main/plugin_cache_original.json",
             ]
         return RegistrySource(urls=urls, cache_file=cache_file, md5_url=md5_url)
