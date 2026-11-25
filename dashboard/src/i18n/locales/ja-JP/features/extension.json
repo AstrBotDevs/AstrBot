@@ -219,7 +219,7 @@
       "dataHint": "data/plugin_data、plugins_data ディレクトリ内のデータと、データベース内のプラグインの KV データを削除します"
     },
     "install": {
-      "sourceRequired": "このプラグインソースを追加してから、インストールを確認してください。",
+      "sourceRequired": "このプラグインソースを追加してから、インストールを確認してください。続行すると AstrBot がこの URL にアクセスします。信頼できるソースのみ追加してください。",
       "addSourceAndContinue": "追加して続行",
       "validatingSource": "プラグインソースを確認中…",
       "savingSource": "プラグインソースを追加中…",

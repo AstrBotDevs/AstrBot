@@ -219,7 +219,7 @@
       "dataHint": "删除 data/plugin_data、plugins_data 目录下的数据，以及数据库中插件的 KV 数据"
     },
     "install": {
-      "sourceRequired": "请先添加这个插件源，再确认安装插件。",
+      "sourceRequired": "请先添加这个插件源，再确认安装插件。继续后，AstrBot 将访问该地址，请仅添加可信的插件源。",
       "addSourceAndContinue": "添加并继续",
       "validatingSource": "正在验证插件源…",
       "savingSource": "正在添加插件源…",
