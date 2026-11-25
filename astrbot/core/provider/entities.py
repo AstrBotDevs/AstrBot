@@ -497,7 +497,6 @@ class LLMResponse:
         tools_call_extra_content: dict[str, dict[str, Any]] | None = None,
         reasoning_content: str | None = None,
         reasoning_signature: str | None = None,
-        web_search_sources: list[dict[str, Any]] | None = None,
         raw_completion: ChatCompletion
         | Response
         | GenerateContentResponse
@@ -506,6 +505,7 @@ class LLMResponse:
         is_chunk: bool = False,
         id: str | None = None,
         usage: TokenUsage | None = None,
+        web_search_sources: list[dict[str, Any]] | None = None,
     ) -> None:
         """初始化 LLMResponse
 
