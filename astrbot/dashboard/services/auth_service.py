@@ -54,6 +54,7 @@ from astrbot.dashboard.password_state import (
 
 CHAT_ADMIN_SCOPE = "chat:admin"
 CONFIG_EDIT_ADMIN_SCOPE = "config:edit_admin"
+BACKUP_IMPORT_SCOPE = "backup:import"
 
 DEFAULT_OPEN_API_SCOPES = (
     "bot",
@@ -63,6 +64,7 @@ DEFAULT_OPEN_API_SCOPES = (
     "config",
     "chat",
     "data",
+    "backup",
     "file",
     "plugin",
     "mcp",
@@ -73,6 +75,7 @@ ALL_OPEN_API_SCOPES = (
     *DEFAULT_OPEN_API_SCOPES,
     CHAT_ADMIN_SCOPE,
     CONFIG_EDIT_ADMIN_SCOPE,
+    BACKUP_IMPORT_SCOPE,
 )
 
 OPEN_API_SCOPE_INCLUDES = {

@@ -38,7 +38,7 @@ X-API-Key: abk_xxx
 - `config:edit_admin` 和 `chat:admin` 必须显式授予，不会随父 scope 隐式获得。
 - WebUI 中取消 `bot` 或 `provider` 时，会同步取消依赖它们的 `config`。
 
-当前开发者 API Key 开放 11 个顶级 scope 和 2 个敏感子权限。`tool`、`skills`、`kb`、`system` 暂不支持作为开发者 API Key scope。`/api/v1/skills/*` 接口使用单数 `skill` scope，不使用复数 `skills`。
+当前开发者 API Key 开放 12 个顶级 scope 和 2 个敏感子权限。`tool`、`skills`、`kb`、`system` 暂不支持作为开发者 API Key scope。`/api/v1/skills/*` 接口使用单数 `skill` scope，不使用复数 `skills`。
 
 交互式文档中的每个接口也会显示英文标签 `Required scope: ...`；涉及管理员能力时，还会显示 `Conditional sensitive scope: ...`。
 
