@@ -2534,12 +2534,23 @@ async def test_v1_plugin_repository_install_uses_transport_route(
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("has_definitions", "category_id"),
+    [(True, "utility"), (True, "unknown"), (False, "utility"), (True, None)],
+)
 async def test_plugin_service_market_install_uses_registry_entry(
     asgi_app: FastAPI,
     monkeypatch: pytest.MonkeyPatch,
+    has_definitions: bool,
+    category_id: str | None,
 ):
     plugin_service = asgi_app.state.services.plugins
     captured = {}
+    category = {
+        "id": "utility",
+        "display_name": "Utilities",
+        "i18n": {"zh-CN": {"display_name": "实用工具"}},
+    }
 
     async def fake_get_online_plugins(*, custom_registry, force_refresh):
         captured["registry_url"] = custom_registry
@@ -2549,11 +2560,13 @@ async def test_plugin_service_market_install_uses_registry_entry(
                 "schema_version": 1,
                 "name": "Test Market",
                 "version": "2026.06.27",
+                **({"categories": [category]} if has_definitions else {}),
             },
             "astrbot-plugin-demo": {
                 "author": "AstrBotDevs",
                 "repo": "https://github.com/AstrBotDevs/astrbot-plugin-demo",
                 "download_url": "https://cdn.example/market-plugin.zip",
+                "category": category_id,
             },
         }, None
 
@@ -2569,23 +2582,21 @@ async def test_plugin_service_market_install_uses_registry_entry(
         captured["download_url"] = download_url
         return {"name": "astrbot_plugin_demo"}
 
-    async def fake_persist_plugin_install_source(
-        plugin_info,
-        payload,
-        *,
-        fallback_method,
-        repo_url,
-        download_url,
-    ):
-        captured["persist_payload"] = payload
-        captured["persist_fallback_method"] = fallback_method
-        captured["persist_repo_url"] = repo_url
-        captured["persist_download_url"] = download_url
+    async def fake_get_plugin_install_sources():
+        return {}
+
+    async def fake_save_plugin_install_sources(records):
+        captured["records"] = records
 
     async def fake_sync_skills_after_plugin_change():
         captured["synced"] = True
 
     monkeypatch.setattr(plugin_service, "get_online_plugins", fake_get_online_plugins)
+    monkeypatch.setattr(
+        plugin_service,
+        "find_plugin_by_name",
+        lambda name: SimpleNamespace(root_dir_name=name),
+    )
     monkeypatch.setattr(
         plugin_service.plugin_manager,
         "install_plugin",
@@ -2594,8 +2605,13 @@ async def test_plugin_service_market_install_uses_registry_entry(
     )
     monkeypatch.setattr(
         plugin_service,
-        "persist_plugin_install_source",
-        fake_persist_plugin_install_source,
+        "get_plugin_install_sources",
+        fake_get_plugin_install_sources,
+    )
+    monkeypatch.setattr(
+        plugin_service,
+        "save_plugin_install_sources",
+        fake_save_plugin_install_sources,
     )
     monkeypatch.setattr(
         plugin_service,
@@ -2610,6 +2626,7 @@ async def test_plugin_service_market_install_uses_registry_entry(
             "install_method": "market",
             "registry_url": "https://example.com/plugins.json",
             "market_plugin_id": "AstrBotDevs/astrbot-plugin-demo",
+            "category": {"id": "client_supplied"},
             "proxy": "https://proxy.example",
             "ignore_version_check": True,
         }
@@ -2623,20 +2640,16 @@ async def test_plugin_service_market_install_uses_registry_entry(
     assert captured["download_url"] == "https://cdn.example/market-plugin.zip"
     assert captured["proxy"] == "https://proxy.example"
     assert captured["ignore_version_check"] is True
-    assert captured["persist_fallback_method"] == "repository"
-    assert (
-        captured["persist_repo_url"]
-        == "https://github.com/AstrBotDevs/astrbot-plugin-demo"
-    )
-    assert captured["persist_download_url"] == "https://cdn.example/market-plugin.zip"
-    assert (
-        captured["persist_payload"]["registry_url"]
-        == "https://example.com/plugins.json"
-    )
-    assert (
-        captured["persist_payload"]["market_plugin_id"]
-        == "AstrBotDevs/astrbot-plugin-demo"
-    )
+    record = captured["records"]["astrbot_plugin_demo"]
+    assert record["install_method"] == "market"
+    assert record["repo"] == captured["repo_url"]
+    assert record["download_url"] == captured["download_url"]
+    assert record["registry_url"] == captured["registry_url"]
+    assert record["market_plugin_id"] == "AstrBotDevs/astrbot-plugin-demo"
+    if has_definitions and category_id == category["id"]:
+        assert record["category"] == category
+    else:
+        assert "category" not in record
     assert captured["synced"] is True
 
 

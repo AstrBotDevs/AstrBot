@@ -142,16 +142,12 @@
   },
   "market": {
     "recommended": "🥳 おすすめ",
-    "allPlugins": "📦 すべてのプラグイン",
     "category": "カテゴリ",
+    "expandCategories": "すべてのカテゴリを表示",
+    "collapseCategories": "カテゴリを折りたたむ",
+    "refresh": "更新",
     "categories": {
-      "all": "すべて",
-      "ai_tools": "AI ツール",
-      "entertainment": "エンターテインメント",
-      "productivity": "生産性",
-      "integrations": "外部連携",
-      "utilities": "ユーティリティ",
-      "other": "その他"
+      "all": "すべて"
     },
     "showFullName": "正式名称",
     "devDocs": "プラグイン開発ドキュメント",

@@ -142,16 +142,12 @@
   },
   "market": {
     "recommended": "🥳 Recommended",
-    "allPlugins": "📦 All Extensions",
     "category": "Category",
+    "expandCategories": "Show all categories",
+    "collapseCategories": "Collapse categories",
+    "refresh": "Refresh",
     "categories": {
-      "all": "All",
-      "ai_tools": "AI Tools",
-      "entertainment": "Entertainment",
-      "productivity": "Productivity",
-      "integrations": "Integrations",
-      "utilities": "Utilities",
-      "other": "Other"
+      "all": "All"
     },
     "showFullName": "Full Name",
     "devDocs": "Extension Development Docs",
