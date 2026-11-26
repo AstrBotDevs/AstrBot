@@ -984,6 +984,19 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             content.append(TextPart(text=("\n" if index else "") + ticket.text))
             if ticket.temp_text:
                 content.append(TextPart(text=ticket.temp_text).mark_as_temp())
+        content.append(
+            TextPart(
+                text=(
+                    "\n<system_reminder>\n"
+                    "The preceding input is a steer for the current turn. "
+                    "If it changes your approach and work remains, start with one or "
+                    "two short sentences of user-visible text explaining how you will "
+                    "adjust before continuing with reasoning or tools. Then continue "
+                    "the task in the same turn. Give this update only once for this steer.\n"
+                    "</system_reminder>"
+                )
+            ).mark_as_temp()
+        )
         message = Message(role="user", content=content)
         message._turn_continuation = True
         await self._append_context_messages([message])

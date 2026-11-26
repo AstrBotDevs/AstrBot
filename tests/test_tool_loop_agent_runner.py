@@ -1651,7 +1651,11 @@ async def test_steering_appends_user_messages_after_all_tool_results(
     assert [message.role for message in tail] == [
         "assistant", *(["tool"] * tool_count), "user",
     ]
-    assert tail[-1].content == [TextPart(text="follow up 1"), TextPart(text="\nfollow up 2")]
+    first, second, reminder = tail[-1].content
+    assert [first, second] == [TextPart(text="follow up 1"), TextPart(text="\nfollow up 2")]
+    assert reminder._no_save
+    assert "<system_reminder>" in reminder.text
+    assert "user-visible text" in reminder.text
     assert ticket1.resolved.is_set() is True
     assert ticket2.resolved.is_set() is True
     assert ticket1.consumed is True
@@ -1683,9 +1687,10 @@ async def test_queued_steering_is_included_in_the_first_model_request(
     assert ticket.resolved.is_set() is True
     assert ticket.consumed is True
     assert provider.call_count == 1
-    assert provider.received_contexts[0][-1]["content"] == [
-        {"type": "text", "text": "follow up without tool"}
-    ]
+    original, reminder = provider.received_contexts[0][-1]["content"]
+    assert original == {"type": "text", "text": "follow up without tool"}
+    assert reminder["type"] == "text"
+    assert "a steer for the current turn" in reminder["text"]
 
 
 @pytest.mark.asyncio
@@ -2982,7 +2987,9 @@ async def test_steering_restarts_model_generation_in_the_same_step(
     assert ticket is not None and ticket.consumed and ticket.resolved.is_set()
     assert len(requests) == (3 if requery else 2)
     assert requests[-1][0].content == runner.run_context.messages[0].content
-    assert requests[-1][-1].content == [TextPart(text="change direction")]
+    original, reminder = requests[-1][-1].content
+    assert original == TextPart(text="change direction")
+    assert "user-visible text" in reminder.text
     assert [message.role for message in runner.run_context.messages] == [
         "user", "user", "assistant",
     ]
@@ -3078,7 +3085,9 @@ async def test_running_tool_returns_its_real_result_before_steering(
         "user", "assistant", "tool", "user",
     ]
     assert requests[1][-2].content == "finished once"
-    assert requests[1][-1].content == [TextPart(text="also consider this")]
+    original, reminder = requests[1][-1].content
+    assert original == TextPart(text="also consider this")
+    assert "a steer for the current turn" in reminder.text
     finished = [event for event in events if event.type == "tool.finished"]
     assert len(finished) == 1 and finished[0].status == "completed"
     assert finished[0].structured_result is None

@@ -334,14 +334,19 @@ async def test_wakeup_queues_while_a_user_message_steers(runtime, follow_up):
         "content": [{"type": "text", "text": "Reply 1"}],
     }
     assert (earlier_reply in runtime.requests[1]) == (follow_up == "wakeup")
-    assert runtime.requests[1][-1] == {
-        "role": "user",
-        "content": [{"type": "text", "text": "Next input"}],
-    }
+    model_input = runtime.requests[1][-1]
+    assert model_input["role"] == "user"
+    assert model_input["content"][0] == {"type": "text", "text": "Next input"}
+    reminders = model_input["content"][1:]
+    if follow_up == "wakeup":
+        assert reminders == []
+    else:
+        assert len(reminders) == 1
+        assert "a steer for the current turn" in reminders[0]["text"]
     assert len(runtime.events) == (2 if follow_up == "wakeup" else 1)
-    assert json.loads(runtime.conversation.history)[-1]["content"] == [
-        {"type": "text", "text": "Reply 2"}
-    ]
+    history = json.loads(runtime.conversation.history)
+    assert history[-2]["content"] == [{"type": "text", "text": "Next input"}]
+    assert history[-1]["content"] == [{"type": "text", "text": "Reply 2"}]
 
 
 @pytest.mark.asyncio
