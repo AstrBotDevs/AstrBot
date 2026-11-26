@@ -603,3 +603,76 @@ async def test_browser_tool_still_denies_non_admin_when_admin_requirement_enable
     assert "Permission denied" in result
     assert "Using browser tools is only allowed for admin users" in result
     assert "User's ID is: user-1" in result
+
+
+def test_chatui_workspace_mode_narrows_host_access(monkeypatch):
+    """ChatUI's per-conversation "workspace" mode only ever narrows access."""
+    from astrbot.core.astr_agent_runtime.tools.computer_tools import util
+
+    monkeypatch.setattr(
+        util, "get_process_sandbox_status", lambda: {"status": "detected"}
+    )
+    policy = {
+        "admin": {
+            "allow_execution": True,
+            "allow_network": True,
+            "filesystem_scope": "host",
+        },
+        "member": {
+            "allow_execution": False,
+            "allow_network": False,
+            "filesystem_scope": "none",
+        },
+    }
+    context = _make_local_run_context("admin", policy)
+    extras = {"permission_mode": "workspace"}
+    context.context.event.get_extra = extras.get
+
+    narrowed = get_local_permission_policy(context)
+    inspected = get_local_permission_policy(context, role="admin")
+    extras["permission_mode"] = "workspace_no_ask"
+    not_asking = get_local_permission_policy(context)
+    extras["permission_mode"] = "full"
+    full = get_local_permission_policy(context)
+
+    assert narrowed.filesystem_scope == "workspace"
+    assert narrowed.allow_execution is True
+    assert narrowed.requires_sandbox is True
+    assert inspected.filesystem_scope == "host"
+    # "Don't ask again" from workspace keeps the same confinement.
+    assert not_asking.filesystem_scope == "workspace"
+    assert not_asking.requires_sandbox is True
+    assert full.filesystem_scope == "host"
+
+    member = _make_local_run_context("member", policy)
+    member.context.event.get_extra = {"permission_mode": "workspace"}.get
+    assert get_local_permission_policy(member).filesystem_scope == "none"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("action", ["write", "write_line"])
+async def test_workspace_shell_session_write_requires_sandbox(monkeypatch, action):
+    context = _make_local_run_context(
+        "admin",
+        {
+            "admin": {
+                "allow_execution": True,
+                "allow_network": True,
+                "filesystem_scope": "host",
+            }
+        },
+    )
+    context.context.event.get_extra = {"permission_mode": "workspace"}.get
+    component = local.LocalShellComponent()
+    write = AsyncMock(return_value={"session_id": "shell-1"})
+    monkeypatch.setattr(component, "write_session", write)
+    monkeypatch.setattr(
+        component, "poll_session", AsyncMock(return_value={"session_id": "shell-1"})
+    )
+    monkeypatch.setattr(
+        shell, "get_local_booter", lambda: SimpleNamespace(shell=component)
+    )
+    await shell.ShellSessionTool().call(
+        context, action=action, session_id="shell-1", chars="hello"
+    )
+    assert write.await_args.kwargs["require_sandboxed"] is True

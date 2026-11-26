@@ -169,6 +169,7 @@ def test_local_legacy_fields_are_fully_migrated():
                 "tool_schema_mode": "skills_like",
                 "tool_call_timeout": 88,
                 "sanitize_context_by_modalities": True,
+                "tool_approval": {"tools": [], "timeout": 120},
             },
         },
     }
@@ -249,6 +250,7 @@ def test_local_migration_replaces_default_root_inserted_before_version_bump():
                 "tool_schema_mode": "full",
                 "tool_call_timeout": 96,
                 "sanitize_context_by_modalities": True,
+                "tool_approval": {"tools": [], "timeout": 120},
             },
         },
     }

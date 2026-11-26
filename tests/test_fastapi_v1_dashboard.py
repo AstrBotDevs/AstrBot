@@ -5183,3 +5183,67 @@ async def test_chat_transcription_requires_auth_and_passes_selected_provider(
     assert response.status_code == 200
     assert response.json()["data"] == {"text": "dictated words", "provider_id": "stt-2"}
     assert received == [(b"recording", "stt-2")]
+
+
+@pytest.mark.asyncio
+async def test_v1_chat_permission_mode_route(
+    asgi_client: httpx.AsyncClient, asgi_app, temp_db
+):
+    """A mode change reaches running work under the caller's own conversation."""
+    from astrbot.core.astr_agent_runtime import permission_mode
+
+    await temp_db.initialize()
+    await temp_db.create_platform_session(
+        creator="fastapi-v1-test", session_id="conv-1"
+    )
+    asgi_app.state.services.chat.db = temp_db
+    url = "/api/v1/chat/sessions/conv-1/permission-mode"
+    try:
+        unauthenticated = await asgi_client.put(url, json={"mode": "full"})
+        invalid = await asgi_client.put(
+            url, json={"mode": "root"}, headers=_jwt_headers()
+        )
+        changed = await asgi_client.put(
+            url, json={"mode": "workspace"}, headers=_jwt_headers()
+        )
+
+        assert unauthenticated.status_code == 401
+        assert invalid.status_code == 422
+        assert changed.status_code == 200
+        assert permission_mode._conversation_modes == {
+            "webchat!fastapi-v1-test!conv-1": "workspace"
+        }
+    finally:
+        permission_mode._conversation_modes.clear()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "owner,platform",
+    [(None, "webchat"), ("someone-else", "webchat"), ("fastapi-v1-test", "telegram")],
+)
+async def test_permission_mode_rejects_unowned_session(
+    asgi_client, asgi_app, temp_db, owner, platform
+):
+    from astrbot.core.astr_agent_runtime import permission_mode
+
+    await temp_db.initialize()
+    if owner:
+        await temp_db.create_platform_session(
+            creator=owner, platform_id=platform, session_id="forbidden"
+        )
+    asgi_app.state.services.chat.db = temp_db
+    before = dict(permission_mode._conversation_modes)
+    try:
+        response = await asgi_client.put(
+            "/api/v1/chat/sessions/forbidden/permission-mode",
+            json={"mode": "full"},
+            headers=_jwt_headers(),
+        )
+        # Without the ownership check this request would store a mode.
+        assert response.status_code == 403
+        assert permission_mode._conversation_modes == before
+    finally:
+        permission_mode.set_conversation_permission_mode(
+            "webchat!fastapi-v1-test!forbidden", None
+        )

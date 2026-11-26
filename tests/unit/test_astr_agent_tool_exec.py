@@ -53,7 +53,9 @@ class _DummyTool:
 
 def _build_run_context(message_components: list[object] | None = None):
     event = _DummyEvent(message_components=message_components)
-    ctx = SimpleNamespace(event=event, context=SimpleNamespace())
+    ctx = SimpleNamespace(
+        event=event, context=SimpleNamespace(get_config=lambda **_kwargs: {})
+    )
     return ContextWrapper(context=ctx)
 
 

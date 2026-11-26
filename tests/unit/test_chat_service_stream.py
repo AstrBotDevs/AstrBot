@@ -1,5 +1,7 @@
 import asyncio
 import json
+from datetime import datetime, timezone
+from types import SimpleNamespace
 from unittest.mock import Mock
 
 import pytest
@@ -7,6 +9,34 @@ import pytest
 from astrbot.core.message.interactive_ui import view_store
 from astrbot.core.platform_message_history_mgr import PlatformMessageHistoryManager
 from astrbot.dashboard.services.chat_service import ChatRunState, ChatService
+
+
+def test_history_recomputes_approval_remaining_time():
+    """A reloaded approval card gets the time left, not a stale value."""
+    from astrbot.dashboard.services import chat_service
+
+    row = {
+        "type": "actionrow",
+        "expires_at": datetime.now(timezone.utc).timestamp() + 30,
+        "expires_in": 999,
+    }
+    record = SimpleNamespace(
+        created_at=datetime.now(timezone.utc),
+        updated_at=datetime.now(timezone.utc),
+        model_dump=lambda: {"content": {"message": [dict(row)]}},
+    )
+    served = chat_service.serialize_history_entry(record)["content"]["message"][0]
+    normalized = chat_service.normalize_reasoning_message_parts([dict(row)])[0]
+    # The snapshot sent to a client that reconnects to a running turn.
+    snapshot = chat_service.build_bot_history_content([dict(row)])["message"][0]
+    # Two clock reads can differ by a rounding step.
+    assert 0 < served["expires_in"] <= 30.01
+    assert 0 < normalized["expires_in"] <= 30
+    assert 0 < snapshot["expires_in"] <= 30
+    expired = chat_service.normalize_reasoning_message_parts(
+        [{**row, "expires_at": 1.0}]
+    )[0]
+    assert expired["expires_in"] == 0
 
 
 @pytest.mark.asyncio

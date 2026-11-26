@@ -42,6 +42,8 @@ for (const scenario of ["missing end", "complete", "aborted", "another run"]) {
       locale: { value: "en-US" },
       chatApi: { sendStreamUrl: () => "/chat/send" },
       buildChatRequestFlags: () => ({}),
+      readChatSessionPrefs: () => ({}),
+      processToolStreamPayload: () => false,
       fetchWithAuth: async () => ({ ok: true, body: {} }),
       readSseStream: async (_body, onPayload) => {
         if (scenario === "complete") onPayload({ type: "end" });
