@@ -46,13 +46,10 @@ class KBSQLiteDatabase:
 
         @event.listens_for(self.engine.sync_engine, "connect")
         def configure_sqlite_connection(connection, _record):
-            """Apply per-connection SQLite durability and bounded memory PRAGMAs."""
+            """Apply per-connection bounded memory PRAGMAs."""
             cursor = connection.cursor()
             try:
-                cursor.execute("PRAGMA busy_timeout=30000")
-                cursor.execute("PRAGMA synchronous=NORMAL")
                 cursor.execute("PRAGMA cache_size=-4000")
-                cursor.execute("PRAGMA temp_store=MEMORY")
                 cursor.execute("PRAGMA mmap_size=0")
             finally:
                 cursor.close()
@@ -84,6 +81,8 @@ class KBSQLiteDatabase:
 
             # 配置 SQLite 性能优化参数
             await conn.execute(text("PRAGMA journal_mode=WAL"))
+            await conn.execute(text("PRAGMA synchronous=NORMAL"))
+            await conn.execute(text("PRAGMA temp_store=MEMORY"))
             await conn.execute(text("PRAGMA optimize"))
             await conn.commit()
 

@@ -144,11 +144,8 @@ class SQLiteDatabase(BaseDatabase):
             cursor = connection.cursor()
             try:
                 cursor.execute("PRAGMA foreign_keys=ON")
-                cursor.execute("PRAGMA busy_timeout=30000")
-                cursor.execute("PRAGMA synchronous=NORMAL")
                 # Negative cache_size sets KiB (~8 MiB); positive values count 4 KiB pages.
                 cursor.execute("PRAGMA cache_size=-8000")
-                cursor.execute("PRAGMA temp_store=MEMORY")
                 # Leave file caching to the OS page cache so memory stays reclaimable.
                 cursor.execute("PRAGMA mmap_size=0")
             finally:
@@ -173,6 +170,9 @@ class SQLiteDatabase(BaseDatabase):
                 )
             )
             await conn.execute(text("PRAGMA journal_mode=WAL"))
+            await conn.execute(text("PRAGMA busy_timeout=30000"))
+            await conn.execute(text("PRAGMA synchronous=NORMAL"))
+            await conn.execute(text("PRAGMA temp_store=MEMORY"))
             await conn.execute(text("PRAGMA optimize"))
             # 确保 personas 表有 folder_id、sort_order、skills 列（前向兼容）
             await self._ensure_persona_folder_columns(conn)
