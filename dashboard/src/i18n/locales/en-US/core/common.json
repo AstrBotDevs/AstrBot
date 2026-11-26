@@ -158,8 +158,13 @@
     "noParams": "No parameters",
     "presets": "Presets",
     "newKeyLabel": "New key",
+    "customBodyKeyPlaceholder": "Custom request body key",
+    "omitWhenEmpty": "Use default.",
+    "custom": "Custom",
     "valueTypeLabel": "Value type",
     "keyExists": "Key already exists",
+    "requiredField": "This field is required",
+    "invalidNumber": "Invalid number",
     "invalidJson": "Invalid JSON format",
     "placeholders": {
       "keyName": "Key",

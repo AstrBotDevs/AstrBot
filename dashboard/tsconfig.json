@@ -7,7 +7,8 @@
     "paths": {
       "@/*": ["./src/*"]
     },
-    "allowJs": true
+    "allowJs": true,
+    "noEmit": true
   },
 
   "references": [

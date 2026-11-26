@@ -11,6 +11,7 @@ These paths use the current default sidebar with a fixed menu order. Extension i
 | Welcome / Welcome page | Overview (the `/welcome` URL remains available) |
 | Providers → Add Provider → Agent Runner | Config → Select a profile → AI → `…` beside the AI heading → Change execution mode |
 | Providers → Decision (after Chat Completion) | Providers → Decision (balance-scale icon, between Text to Speech and Embedding) |
+| Providers → Model configuration → Custom request body parameters → Modify | Providers → Model configuration → Custom request body parameters (inline) |
 | Data / Dashboard | Data & Logs → Statistics |
 | Conversation Management / Conversations | Data & Logs → Conversations |
 | Logs / Console | Data & Logs → Logs |

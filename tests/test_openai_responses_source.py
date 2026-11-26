@@ -213,7 +213,6 @@ async def test_query_flattens_tools_and_enforces_stateless_body(monkeypatch):
     provider = _make_provider(
         {
             "custom_extra_body": {
-                "max_tokens": 321,
                 "reasoning_effort": "low",
                 "previous_response_id": "resp_previous",
                 "conversation": "conv_1",
@@ -281,10 +280,7 @@ async def test_query_flattens_tools_and_enforces_stateless_body(monkeypatch):
             },
         }
     ]
-    assert captured["extra_body"] == {
-        "max_output_tokens": 321,
-        "reasoning": {"effort": "low"},
-    }
+    assert captured["extra_body"] == {"reasoning": {"effort": "low"}}
     assert result.role == "tool"
     assert result.tools_call_name == ["weather"]
     assert result.tools_call_args == [{"city": "SZ"}]

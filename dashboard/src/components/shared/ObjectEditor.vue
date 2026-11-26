@@ -1,5 +1,5 @@
 <template>
-  <div class="d-flex align-center justify-space-between">
+  <div v-if="!inline" v-bind="$attrs" class="d-flex align-center justify-space-between">
     <div>
       <span v-if="!modelValue || Object.keys(modelValue).length === 0" style="color: rgb(var(--v-theme-primaryText));">
         {{ t('core.common.objectEditor.noItems') }}
@@ -19,247 +19,238 @@
   </div>
 
   <!-- Key-Value Management Dialog -->
-  <v-dialog v-model="dialog" max-width="600px">
-    <v-card>
-      <v-card-title class="text-h3 pa-4 pb-0 pl-6">
+  <component :is="inline ? 'div' : VDialog" v-bind="inline ? $attrs : {}" :class="{ 'object-editor-inline': inline }" v-model="dialog" :max-width="inline ? undefined : '600px'">
+    <component :is="inline ? 'div' : VCard">
+      <v-card-title v-if="!inline" class="text-h3 pa-4 pb-0 pl-6">
         {{ resolveDialogTitle }}
       </v-card-title>
 
-      <v-card-text class="pa-4" style="max-height: 400px; overflow-y: auto;">
+      <v-card-text :class="inline ? 'pa-0' : 'pa-4'" :style="inline ? undefined : 'max-height: 400px; overflow-y: auto;'">
+        <!-- Template schema fields -->
+        <div v-if="hasTemplateSchema" :class="{ 'mt-4': !inline }">
+          <v-divider v-if="!inline" class="mb-3"></v-divider>
+          <div v-if="!inline" class="text-caption text-grey mb-2">{{ t('core.common.objectEditor.presets') }}</div>
+          <div v-for="(template, templateKey) in templateSchema" :key="templateKey" class="template-field" :class="{ 'template-field-inactive': !inline && !isTemplateKeyAdded(templateKey) }">
+            <ConfigFieldRow :compact="!inline" :label-columns="inline ? 6 : 4">
+              <template #title>{{ getTemplateTitle(template, templateKey) }}</template>
+              <template v-if="template.hint" #hint>{{ resolveTemplateText(templateKey, 'hint', template.hint) }}</template>
+              <div class="object-editor-value-group">
+                <div class="object-editor-value">
+                  <ReasoningEffortInput
+                    v-if="template.render_type === 'reasoning_effort'"
+                    :model-value="getTemplateValue(templateKey)"
+                    :suggested-value="template.default"
+                    @update:model-value="updateTemplateValue(templateKey, $event)"
+                  />
+                  <v-select
+                    v-else-if="template.options"
+                    :model-value="isTemplateKeyAdded(templateKey) ? getTemplateValue(templateKey) : template.default ?? null"
+                    :items="template.options"
+                    :aria-label="getTemplateTitle(template, templateKey)"
+                    @update:model-value="updateTemplateValue(templateKey, $event)"
+                    density="compact"
+                    variant="outlined"
+                    hide-details
+                    clearable
+                  ></v-select>
+                  <v-text-field
+                    v-else-if="template.type === 'string'"
+                    :model-value="getTemplateValue(templateKey)"
+                    @update:model-value="updateTemplateValue(templateKey, $event)"
+                    density="compact"
+                    variant="outlined"
+                    hide-details
+                    :aria-label="getTemplateTitle(template, templateKey)"
+                    :clearable="inline"
+                    :placeholder="inline ? t('core.common.objectEditor.omitWhenEmpty') : t('core.common.objectEditor.placeholders.stringValue')"
+                  ></v-text-field>
+                  <ConfigNumberInput
+                    v-else-if="['number', 'float', 'int'].includes(template.type)"
+                    :model-value="getTemplateValue(templateKey)"
+                    @update:model-value="updateTemplateValue(templateKey, $event)"
+                    :slider="template.slider"
+                    :slider-preview="inline ? template.default : undefined"
+                    :min="template.min"
+                    :max="template.max"
+                    :integer="template.integer"
+                    :aria-label="getTemplateTitle(template, templateKey)"
+                    :placeholder="inline ? String(template.default ?? t('core.common.objectEditor.omitWhenEmpty')) : t('core.common.objectEditor.placeholders.numberValue')"
+                  />
+                  <v-switch
+                    v-else-if="template.type === 'boolean' || template.type === 'bool'"
+                    :model-value="getTemplateValue(templateKey)"
+                    @update:model-value="updateTemplateValue(templateKey, $event)"
+                    density="compact"
+                    hide-details
+                    color="primary"
+                  ></v-switch>
+                </div>
+                <template v-if="!inline">
+                  <v-btn
+                    v-if="isTemplateKeyAdded(templateKey)"
+                    icon
+                    variant="text"
+                    size="small"
+                    color="error"
+                    @click="removeKeyValuePairByKey(templateKey)"
+                  >
+                    <v-icon>mdi-close</v-icon>
+                  </v-btn>
+                </template>
+              </div>
+            </ConfigFieldRow>
+            <ConfigFieldDivider v-if="inline" />
+            <slot v-if="inline" name="after-template" :template-key="templateKey" />
+          </div>
+        </div>
+
         <!-- Regular key-value pairs (non-template) -->
         <div v-if="nonTemplatePairs.length > 0">
           <div v-for="pair in nonTemplatePairs" :key="pair._id" class="key-value-pair">
-            <v-row no-gutters align="center" class="mb-2">
-              <v-col cols="4">
+            <ConfigFieldRow :compact="!inline" :label-columns="inline ? 6 : 4">
+              <template #label>
                 <v-text-field
                   v-model="pair.key"
+                  :class="{ 'config-field--full-width': inline }"
                   density="compact"
                   variant="outlined"
-                  hide-details
+                  hide-details="auto"
+                  :rules="[value => !localKeyValuePairs.some(other => other !== pair && other.key === value) || t('core.common.objectEditor.keyExists')]"
                   :placeholder="t('core.common.objectEditor.placeholders.keyName')"
                   @focus="pair._originalKey = pair.key"
                   @blur="onKeyBlur(pair)"
                 ></v-text-field>
-              </v-col>
-              <v-col cols="7" class="pl-2 d-flex align-center justify-end">
-                <v-text-field
-                  v-if="pair.type === 'string'"
-                  v-model="pair.value"
-                  density="compact"
-                  variant="outlined"
-                  hide-details
-                  :placeholder="t('core.common.objectEditor.placeholders.stringValue')"
-                ></v-text-field>
-                <div v-else-if="pair.type === 'number' || pair.type === 'float' || pair.type === 'int'" class="d-flex align-center gap-2 flex-grow-1">
-                  <template v-if="pair.slider">
-                    <span style="min-width: 5px; text-align: right;">
-                      {{ pair.slider.min }}
-                    </span>
-
-                    <v-slider
-                      :model-value="Number(pair.value) || 0"
-                      @update:model-value="pair.value = $event"
-                      :min="pair.slider.min"
-                      :max="pair.slider.max"
-                      :step="pair.slider.step"
-                      color="primary"
+              </template>
+              <template #default>
+                <div class="object-editor-value-group">
+                  <div class="object-editor-value" :class="{ 'object-editor-value--boolean': pair.type === 'boolean' }">
+                    <v-text-field
+                      v-if="pair.type === 'string'"
+                      v-model="pair.value"
                       density="compact"
+                      variant="outlined"
                       hide-details
-                      class="flex-grow-1"
-                    ></v-slider>
-
-                    <span style="min-width: 5px; text-align: left;">
-                      {{ pair.slider.max }}
-                    </span>
-                  </template>
-                  
-                  <v-text-field
-                    v-model.number="pair.value"
-                    type="number"
-                    density="compact"
-                    variant="outlined"
-                    hide-details
-                    :placeholder="t('core.common.objectEditor.placeholders.numberValue')"
-                    :style="pair.slider ? 'max-width: 120px;' : ''"
-                  ></v-text-field>
+                      :placeholder="t('core.common.objectEditor.placeholders.stringValue')"
+                    ></v-text-field>
+                    <ConfigNumberInput
+                      v-else-if="['number', 'float', 'int'].includes(pair.type)"
+                      v-model="pair.value"
+                      :slider="pair.slider"
+                      :placeholder="t('core.common.objectEditor.placeholders.numberValue')"
+                      required
+                    />
+                    <div v-else-if="pair.type === 'boolean'" class="object-editor-boolean">
+                      <span v-if="inline" class="text-body-1">False</span>
+                      <v-switch
+                        v-model="pair.value"
+                        density="compact"
+                        hide-details
+                        color="primary"
+                        :inset="inline"
+                      ></v-switch>
+                      <span v-if="inline" class="text-body-1">True</span>
+                    </div>
+                    <v-text-field
+                      v-if="pair.type === 'json'"
+                      v-model="pair.value"
+                      density="compact"
+                      variant="outlined"
+                      hide-details="auto"
+                      :placeholder="t('core.common.objectEditor.placeholders.jsonValue')"
+                      @blur="validateJSON(pair)"
+                      :rules="[() => { validateJSON(pair); return pair.jsonError || true }]"
+                      :error-messages="pair.jsonError"
+                    ></v-text-field>
+                  </div>
+                  <v-btn
+                    icon
+                    variant="text"
+                    size="small"
+                    color="error"
+                    :aria-label="t('core.common.delete')"
+                    @click="removeKeyValuePairByKey(pair.key)"
+                  >
+                    <v-icon>mdi-delete</v-icon>
+                  </v-btn>
                 </div>
-                <v-switch
-                  v-else-if="pair.type === 'boolean'"
-                  v-model="pair.value"
-                  density="compact"
-                  hide-details
-                  color="primary"
-                ></v-switch>
-                <v-text-field
-                  v-if="pair.type === 'json'"
-                  v-model="pair.value"
-                  density="compact"
-                  variant="outlined"
-                  hide-details="auto"
-                  :placeholder="t('core.common.objectEditor.placeholders.jsonValue')"
-                  @blur="validateJSON(pair)"
-                  :error-messages="pair.jsonError"
-                ></v-text-field>
-              </v-col>
-              <v-col cols="1" class="pl-2">
-                <v-btn
-                  icon
-                  variant="text"
-                  size="small"
-                  color="error"
-                  @click="removeKeyValuePairByKey(pair.key)"
-                >
-                  <v-icon>mdi-delete</v-icon>
-                </v-btn>
-              </v-col>
-            </v-row>
+              </template>
+            </ConfigFieldRow>
+            <ConfigFieldDivider v-if="inline" />
           </div>
         </div>
 
-        <!-- Template schema fields -->
-        <div v-if="hasTemplateSchema" class="mt-4">
-          <v-divider class="mb-3"></v-divider>
-          <div class="text-caption text-grey mb-2">{{ t('core.common.objectEditor.presets') }}</div>
-          <div v-for="(template, templateKey) in templateSchema" :key="templateKey" class="template-field" :class="{ 'template-field-inactive': !isTemplateKeyAdded(templateKey) }">
-            <v-row no-gutters align="center" class="mb-2">
-              <v-col cols="4">
-                <div class="d-flex flex-column">
-                  <span class="text-caption font-weight-medium">{{ getTemplateTitle(template, templateKey) }}</span>
-                  <span v-if="template.hint" class="text-caption text-grey" style="font-size: 0.7rem;">{{ resolveTemplateText(templateKey, 'hint', template.hint) }}</span>
-                </div>
-              </v-col>
-              <v-col cols="7" class="pl-2 d-flex align-center justify-end">
-                <v-select
-                  v-if="template.options"
-                  :model-value="getTemplateValue(templateKey) ?? null"
-                  :items="template.options"
-                  :aria-label="getTemplateTitle(template, templateKey)"
-                  @update:model-value="updateTemplateValue(templateKey, $event)"
-                  density="compact"
-                  variant="outlined"
-                  hide-details
-                ></v-select>
-                <v-text-field
-                  v-else-if="template.type === 'string'"
-                  :model-value="getTemplateValue(templateKey)"
-                  @update:model-value="updateTemplateValue(templateKey, $event)"
-                  density="compact"
-                  variant="outlined"
-                  hide-details
-                  :placeholder="t('core.common.objectEditor.placeholders.stringValue')"
-                ></v-text-field>
-                <div v-else-if="template.type === 'number' || template.type === 'float' || template.type === 'int'" class="d-flex align-center ga-4 flex-grow-1">
-                  <template v-if="template.slider">
-                    <span style="min-width: 5px; text-align: right;">
-                      {{ template.slider.min }}
-                    </span>
-
-                    <v-slider
-                      :model-value="Number(getTemplateValue(templateKey)) || 0"
-                      @update:model-value="updateTemplateValue(templateKey, $event)"
-                      :min="template.slider.min"
-                      :max="template.slider.max"
-                      :step="template.slider.step"
-                      color="primary"
-                      density="compact"
-                      hide-details
-                      class="flex-grow-1"
-                    ></v-slider>
-
-                    <span style="min-width: 5px; text-align: left;">
-                      {{ template.slider.max }}
-                    </span>
-                  </template>
-                  
-
-                  <v-text-field
-                    :model-value="getTemplateValue(templateKey)"
-                    @update:model-value="updateTemplateValue(templateKey, $event)"
-                    type="number"
-                    density="compact"
-                    variant="outlined"
-                    hide-details
-                    :placeholder="t('core.common.objectEditor.placeholders.numberValue')"
-                    :style="template.slider ? 'max-width: 120px;' : ''"
-                  ></v-text-field>
-                </div>
-                <v-switch
-                  v-else-if="template.type === 'boolean' || template.type === 'bool'"
-                  :model-value="getTemplateValue(templateKey)"
-                  @update:model-value="updateTemplateValue(templateKey, $event)"
-                  density="compact"
-                  hide-details
-                  color="primary"
-                ></v-switch>
-              </v-col>
-              <v-col cols="1" class="pl-2">
-                <v-btn
-                  v-if="isTemplateKeyAdded(templateKey)"
-                  icon
-                  variant="text"
-                  size="small"
-                  color="error"
-                  @click="removeTemplateKey(templateKey)"
-                >
-                  <v-icon>mdi-close</v-icon>
-                </v-btn>
-              </v-col>
-            </v-row>
-          </div>
-        </div>
-
-        <div v-if="localKeyValuePairs.length === 0 && !hasTemplateSchema" class="text-center py-8">
+        <div v-if="!inline && localKeyValuePairs.length === 0 && !hasTemplateSchema" class="text-center py-8">
           <v-icon size="64" color="grey-lighten-1">mdi-code-json</v-icon>
           <p class="text-grey mt-4">{{ t('core.common.objectEditor.noParams') }}</p>
         </div>
       </v-card-text>
 
       <!-- Add new key-value pair section -->
-      <v-card-text class="pa-4">
-        <div class="d-flex align-center ga-2">
-          <v-text-field
-            v-model="newKey"
-            :label="t('core.common.objectEditor.newKeyLabel')"
-            density="compact"
-            variant="outlined"
-            hide-details
-            class="flex-grow-1"
-          ></v-text-field>
-          <v-select
-            v-model="newValueType"
-            :items="['string', 'number', 'boolean', 'json']"
-            :label="t('core.common.objectEditor.valueTypeLabel')"
-            density="compact"
-            variant="outlined"
-            hide-details
-            style="max-width: 120px;"
-          ></v-select>
-          <v-btn @click="addKeyValuePair" variant="tonal" color="primary">
-            <v-icon>mdi-plus</v-icon>
-            {{ t('core.common.add') }}
-          </v-btn>
-        </div>
+      <v-card-text :class="inline ? 'pa-0' : 'pa-4'">
+        <ConfigFieldRow :compact="!inline" :label-columns="inline ? 6 : 4">
+          <template #label>
+            <v-text-field
+              v-model="newKey"
+              :class="{ 'config-field--full-width': inline }"
+              :label="inline ? undefined : t('core.common.objectEditor.newKeyLabel')"
+              :placeholder="inline ? t('core.common.objectEditor.customBodyKeyPlaceholder') : undefined"
+              :aria-label="inline ? t('core.common.objectEditor.customBodyKeyPlaceholder') : t('core.common.objectEditor.newKeyLabel')"
+              density="compact"
+              variant="outlined"
+              hide-details
+            />
+          </template>
+              <template #default>
+            <div class="object-editor-value-group">
+              <div class="object-editor-value">
+                <v-select
+                  v-model="newValueType"
+                  :items="['string', 'number', 'boolean', { title: 'raw', value: 'json' }]"
+                  :label="t('core.common.objectEditor.valueTypeLabel')"
+                  density="compact"
+                  variant="outlined"
+                  hide-details
+                />
+              </div>
+              <v-btn @click="addKeyValuePair" :icon="inline" :size="inline ? 'small' : 'default'" variant="tonal" color="primary" :aria-label="t('core.common.add')">
+                <v-icon>mdi-plus</v-icon>
+                <span v-if="!inline">{{ t('core.common.add') }}</span>
+              </v-btn>
+            </div>
+          </template>
+        </ConfigFieldRow>
       </v-card-text>
 
-      <v-card-actions class="pa-4">
+      <v-card-actions v-if="!inline" class="pa-4">
         <v-spacer></v-spacer>
         <v-btn variant="text" @click="cancelDialog">{{ t('core.common.cancel') }}</v-btn>
         <v-btn color="primary" variant="tonal" @click="confirmDialog">{{ t('core.common.confirm') }}</v-btn>
       </v-card-actions>
-    </v-card>
-  </v-dialog>
+    </component>
+  </component>
 </template>
 
 <script setup>
-import { ref, computed, watch } from 'vue'
+import { ref, computed, watch, toRaw } from 'vue'
+import { VCard, VDialog } from 'vuetify/components'
+import ConfigNumberInput from './ConfigNumberInput.vue'
+import ConfigFieldRow from './ConfigFieldRow.vue'
+import ConfigFieldDivider from './ConfigFieldDivider.vue'
 import { useI18n } from '@/i18n/composables'
 import { useToast } from '@/utils/toast'
 import { useConfigTextResolver } from '@/composables/useConfigTextResolver'
+import ReasoningEffortInput from '../provider/ReasoningEffortInput.vue'
 
 const { t } = useI18n()
 const { warning: toastWarning } = useToast()
 
+defineOptions({ inheritAttrs: false })
+
 const props = defineProps({
+  inline: {
+    type: Boolean,
+    default: false
+  },
   modelValue: {
     type: Object,
     required: true
@@ -322,16 +313,24 @@ const displayKeys = computed(() => {
   return Object.keys(props.modelValue).slice(0, props.maxDisplayItems)
 })
 
-// 分离模板字段和普通字段
+// Keep custom rows visible until a key rename has been validated on blur.
 const nonTemplatePairs = computed(() => {
-  return localKeyValuePairs.value.filter(pair => !templateSchema.value[pair.key])
+  return localKeyValuePairs.value.filter(pair => !pair.template)
 })
 
-// 监听 modelValue 变化，主要用于初始化
+// Keep inline drafts in sync without rebuilding fields on our own emitted updates.
+let lastEmittedValue
 watch(() => props.modelValue, (newValue) => {
-  // This watch is primarily for initialization or external changes
-  // The dialog-based editing handles internal updates
+  if (props.inline && toRaw(newValue) !== lastEmittedValue) {
+    initializeLocalKeyValuePairs()
+    newKey.value = ''
+    newValueType.value = 'string'
+  }
 }, { immediate: true })
+
+watch(localKeyValuePairs, () => {
+  if (props.inline) confirmDialog()
+}, { deep: true })
 
 function createPair({ key, value, type, slider, template, jsonError = '', _originalKey }) {
   return {
@@ -349,7 +348,7 @@ function createPair({ key, value, type, slider, template, jsonError = '', _origi
 function initializeLocalKeyValuePairs() {
   localKeyValuePairs.value = []
   nextPairId.value = 0
-  for (const [key, value] of Object.entries(props.modelValue)) {
+  for (const [key, value] of Object.entries(props.modelValue || {})) {
     let _type = (typeof value) === 'object' ? 'json':(typeof value)
     let _value = _type === 'json' ? JSON.stringify(value) : value
 
@@ -394,7 +393,7 @@ function addKeyValuePair() {
     let defaultValue
     switch (newValueType.value) {
       case 'number':
-        defaultValue = 0
+        defaultValue = 1
         break
       case 'boolean':
         defaultValue = false
@@ -407,11 +406,16 @@ function addKeyValuePair() {
         break
     }
 
-    localKeyValuePairs.value.push(createPair({
-      key,
-      value: defaultValue,
-      type: newValueType.value
-    }))
+    const template = templateSchema.value[key]
+    if (template) {
+      updateTemplateValue(key, template.default ?? defaultValue)
+    } else {
+      localKeyValuePairs.value.push(createPair({
+        key,
+        value: defaultValue,
+        type: newValueType.value
+      }))
+    }
     newKey.value = ''
   }
 }
@@ -448,7 +452,11 @@ function onKeyBlur(pair) {
   if (template) {
     pair.type = template.type || pair.type
     if (pair.value === undefined || pair.value === null || pair.value === '') {
-      pair.value = template.default !== undefined ? template.default : pair.value
+      if (template.default === undefined) {
+        removeKeyValuePairByKey(newKey)
+        return
+      }
+      pair.value = template.default
     }
     pair.slider = template.slider
     pair.template = template
@@ -467,11 +475,16 @@ function getTemplateValue(templateKey) {
   if (pair) {
     return pair.value
   }
+  if (props.inline) return ''
   const template = templateSchema.value[templateKey]
-  return template?.default !== undefined ? template.default : getDefaultValueForType(template?.type || 'string')
+  return template?.default ?? ''
 }
 
 function updateTemplateValue(templateKey, newValue) {
+  if (newValue === '' || newValue === null || newValue === undefined) {
+    removeKeyValuePairByKey(templateKey)
+    return
+  }
   const existingIndex = localKeyValuePairs.value.findIndex(pair => pair.key === templateKey)
   const template = templateSchema.value[templateKey]
 
@@ -491,34 +504,15 @@ function updateTemplateValue(templateKey, newValue) {
   }
 }
 
-function removeTemplateKey(templateKey) {
-  const index = localKeyValuePairs.value.findIndex(pair => pair.key === templateKey)
-  if (index >= 0) {
-    localKeyValuePairs.value.splice(index, 1)
-  }
-}
-
-function getDefaultValueForType(type) {
-  switch (type) {
-    case 'int':
-    case 'float':
-    case 'number':
-      return 0
-    case 'bool':
-    case 'boolean':
-      return false
-    case 'json':
-      return '{}'
-    case 'string':
-    default:
-      return ''
-  }
-}
-
 function confirmDialog() {
   const updatedValue = {}
   for (const pair of localKeyValuePairs.value) {
-    if (pair.type === 'json' && pair.jsonError) return
+    if (Object.hasOwn(updatedValue, pair.key)) return
+    if (['int', 'float', 'number'].includes(pair.type) && (pair.value === '' || pair.value == null)) return
+    if (pair.type === 'json') {
+      validateJSON(pair)
+      if (pair.jsonError) return
+    }
     let convertedValue = pair.value
     // 根据声明的类型进行转换
     switch (pair.type) {
@@ -550,6 +544,7 @@ function confirmDialog() {
     }
     updatedValue[pair.key] = convertedValue
   }
+  lastEmittedValue = updatedValue
   emit('update:modelValue', updatedValue)
   dialog.value = false
 }
@@ -584,4 +579,49 @@ function resolveTemplateText(templateKey, attr, fallback) {
 .template-field-inactive {
   opacity: 0.8;
 }
+
+.object-editor-value-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+}
+
+.object-editor-value {
+  flex: 1 1 0;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+}
+
+.object-editor-boolean {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.object-editor-value-group > .v-btn {
+  flex: 0 0 auto;
+}
+
+.object-editor-inline .config-field--full-width {
+  width: 100%;
+}
+
+.object-editor-inline .object-editor-boolean {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  width: 100%;
+}
+
+.object-editor-inline .object-editor-boolean > span:last-child {
+  text-align: right;
+}
+
+.object-editor-inline .object-editor-value--boolean :deep(.v-switch),
+.object-editor-inline .object-editor-value--boolean :deep(.v-input__control) {
+  margin-left: 0 !important;
+}
+
 </style>

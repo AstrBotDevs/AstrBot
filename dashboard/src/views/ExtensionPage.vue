@@ -137,6 +137,7 @@ const {
   pluginOn,
   pluginOff,
   openExtensionConfig,
+  pluginConfigForm,
   updateConfig,
   updatePluginLogLevel,
   pluginLogLevelSaving,
@@ -424,16 +425,17 @@ const updateDialogPluginLogo = computed(() => {
           </v-col>
         </v-row>
         <v-divider class="config-divider"></v-divider>
-        <AstrBotConfig
-          v-if="extension_config.metadata"
-          :metadata="extension_config.metadata"
-          :iterable="extension_config.config"
-          :metadataKey="curr_namespace"
-          :pluginName="curr_namespace"
-          :pluginI18n="extension_config.i18n"
-          enable-default-reset
-          foldable
-        />
+        <v-form v-if="extension_config.metadata" ref="pluginConfigForm" @submit.prevent>
+          <AstrBotConfig
+            :metadata="extension_config.metadata"
+            :iterable="extension_config.config"
+            :metadataKey="curr_namespace"
+            :pluginName="curr_namespace"
+            :pluginI18n="extension_config.i18n"
+            enable-default-reset
+            foldable
+          />
+        </v-form>
         <p v-else>{{ tm("dialogs.config.noConfig") }}</p>
       </v-card-text>
       <v-card-actions>

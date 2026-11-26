@@ -24,6 +24,7 @@
             </nav>
 
             <main class="settings-main pe-3">
+            <v-form ref="systemConfigForm" @submit.prevent>
                 <v-slide-y-reverse-transition>
                     <div v-if="systemConfigRestartRequired" class="system-config-restart-bar" role="status">
                         <div class="system-config-restart-bar__inner">
@@ -496,6 +497,7 @@
                         </div>
                     </div>
                 </section>
+            </v-form>
             </main>
         </div>
     </div>
@@ -592,6 +594,7 @@ const newApiKeyExpiresInDays = ref(30);
 const newApiKeyScopes = ref(['bot', 'provider', 'im', 'chat', 'file']);
 const createdApiKeyPlaintext = ref('');
 const systemConfigData = ref({});
+const systemConfigForm = ref(null);
 const systemConfigMetadata = ref({});
 const systemConfigLoading = ref(false);
 const systemConfigSaving = ref(false);
@@ -892,6 +895,9 @@ const loadSystemConfig = async () => {
 
 const saveSystemConfig = async (configOverride = null, headers = {}, allow2faPrompt = true) => {
     if (systemConfigSaving.value || systemConfigLoading.value) return { success: false };
+    if (!configOverride && systemConfigForm.value && !(await systemConfigForm.value.validate()).valid) {
+        return { success: false };
+    }
 
     systemConfigSaving.value = true;
     const configPayload = JSON.parse(JSON.stringify(configOverride || systemConfigData.value || {}));

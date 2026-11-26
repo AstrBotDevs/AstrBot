@@ -92,7 +92,7 @@
 
               <v-divider></v-divider>
 
-              <div class="provider-config-body">
+              <v-form ref="providerSourceForm" class="provider-config-body" @submit.prevent>
                 <section class="provider-section config-form">
                   <div class="provider-section-head">
                     <div class="provider-section-title">{{ tm('providers.settings') }}</div>
@@ -152,7 +152,7 @@
                     @add-model-provider="openModelAddDialog"
                   />
                 </section>
-              </div>
+              </v-form>
             </div>
 
             <div v-else class="provider-empty-state">
@@ -208,7 +208,7 @@
 
               <v-divider></v-divider>
 
-              <div class="provider-config-body">
+              <v-form ref="legacyProviderForm" class="provider-config-body" @submit.prevent>
                 <section class="provider-section config-form">
                   <div class="provider-section-head">
                     <div class="provider-section-title">{{ tm('providers.settings') }}</div>
@@ -241,7 +241,7 @@
                     />
                   </div>
                 </details>
-              </div>
+              </v-form>
             </div>
 
             <div v-else class="provider-empty-state">
@@ -291,13 +291,15 @@
           {{ providerEditDialogTitle }}
         </v-card-title>
         <v-card-text class="py-4 config-form">
-          <AstrBotConfig
-            v-if="providerEditData"
-            :iterable="providerEditData"
-            :metadata="providerModelConfigSchema"
-            metadataKey="provider"
-            :is-editing="true"
-          />
+          <v-form ref="providerEditForm" @submit.prevent="saveEditedProvider">
+            <AstrBotConfig
+              v-if="providerEditData"
+              :iterable="providerEditData"
+              :metadata="providerModelConfigSchema"
+              metadataKey="provider"
+              :is-editing="true"
+            />
+          </v-form>
         </v-card-text>
         <v-card-actions class="pa-4">
           <v-spacer></v-spacer>
@@ -393,6 +395,7 @@ const {
   selectProviderSource,
   addProviderSource,
   deleteProviderSource,
+  providerSourceForm,
   saveProviderSource,
   fetchAvailableModels,
   buildModelProviderConfig,
@@ -421,6 +424,13 @@ const speechHintKeys = {
 const legacyConfigSchema = computed(() => {
   const schema = JSON.parse(JSON.stringify(configSchema.value || {}))
   const providerType = selectedLegacyProvider.value?.type
+  if (providerType === 'volcengine_tts') {
+    for (const key of ['timeout', 'volcengine_speed_ratio']) {
+      const item = schema.provider?.items?.[key]
+      if (item) item.required = false
+    }
+    return schema
+  }
   const hintKey = decisionHintKeys[providerType]
   const speechHintKey = speechHintKeys[providerType]
   if (!hintKey && !speechHintKey) return schema
@@ -457,6 +467,7 @@ const legacyConfigSchema = computed(() => {
 
 const unsavedLegacyProviderMarker = Symbol('unsavedLegacyProvider')
 const legacyProviderDrafts = ref([])
+const legacyProviderForm = ref(null)
 const selectedLegacyProvider = ref(null)
 const newSelectedProviderConfig = ref({})
 const newProviderOriginalId = ref('')
@@ -499,6 +510,7 @@ const displayedLegacyProviders = computed(() => [
 ])
 
 const {
+  providerEditForm,
   showProviderEditDialog,
   providerEditData,
   savingProviders,
@@ -674,6 +686,8 @@ function selectLegacyProvider(provider) {
 
 async function saveLegacyProvider() {
   if (!selectedLegacyProvider.value) return
+  if (selectedLegacyProvider.value.type !== 'volcengine_tts'
+    && legacyProviderForm.value && !(await legacyProviderForm.value.validate()).valid) return
 
   loading.value = true
   const wasUpdating = updatingMode.value

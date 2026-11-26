@@ -1,8 +1,10 @@
 from types import SimpleNamespace
+from unittest.mock import Mock
 
 import httpx
 import pytest
 from google.genai import types
+from google.genai.client import AsyncClient
 
 import astrbot.core.message.components as Comp
 import astrbot.core.provider.sources.gemini_source as gemini_source
@@ -13,10 +15,24 @@ from astrbot.core.provider.sources.gemini_source import ProviderGoogleGenAI
 
 
 @pytest.mark.asyncio
-async def test_gemini_thinking_level_is_serialized_on_every_request():
-    model = "gemini-3.7-flash"
+@pytest.mark.parametrize(
+    ("model", "provider_config", "expected"),
+    [
+        (
+            "models/gemini-3.5-flash-lite",
+            {
+                "gm_thinking_config": {"level": "HIGH"},
+                "custom_extra_body": {"reasoning_effort": "minimal"},
+            },
+            types.ThinkingLevel.MINIMAL,
+        ),
+    ],
+)
+async def test_gemini_thinking_level_is_serialized_on_every_request(
+    model, provider_config, expected
+):
     provider = ProviderGoogleGenAI.__new__(ProviderGoogleGenAI)
-    provider.provider_config = {"gm_thinking_config": {"level": "HIGH"}}
+    provider.provider_config = provider_config
     provider.provider_settings = {}
     provider.model_name = model
     provider.safety_settings = []
@@ -27,10 +43,10 @@ async def test_gemini_thinking_level_is_serialized_on_every_request():
     assert first_config.thinking_config is not None
     assert second_config.thinking_config is not None
     assert first_config.thinking_config.model_dump(exclude_none=True) == {
-        "thinking_level": types.ThinkingLevel.HIGH,
+        "thinking_level": expected,
     }
     assert second_config.thinking_config.model_dump(exclude_none=True) == {
-        "thinking_level": types.ThinkingLevel.HIGH,
+        "thinking_level": expected,
     }
 
 
@@ -51,7 +67,9 @@ async def test_gemini_thinking_level_is_serialized_on_every_request():
         ("gemini-3.8-flash", {"gm_thinking_config": {"level": "MINIMAL"}}),
     ],
 )
-async def test_gemini_omits_unset_or_unsupported_thinking_config(model, provider_config):
+async def test_gemini_omits_unset_or_unsupported_thinking_config(
+    model, provider_config
+):
     provider = ProviderGoogleGenAI.__new__(ProviderGoogleGenAI)
     provider.provider_config = provider_config
     provider.provider_settings = {}
@@ -210,7 +228,7 @@ def test_gemini_reasoning_only_output_is_allowed():
 def test_gemini_extract_usage_excludes_cached_tokens_from_input_other():
     provider = ProviderGoogleGenAI.__new__(ProviderGoogleGenAI)
 
-    usage_metadata = SimpleNamespace(
+    usage_metadata = types.GenerateContentResponseUsageMetadata(
         prompt_token_count=100,
         cached_content_token_count=30,
         candidates_token_count=50,
@@ -229,7 +247,7 @@ def test_gemini_extract_usage_excludes_cached_tokens_from_input_other():
 def test_gemini_extract_usage_without_cache_keeps_full_prompt_tokens():
     provider = ProviderGoogleGenAI.__new__(ProviderGoogleGenAI)
 
-    usage_metadata = SimpleNamespace(
+    usage_metadata = types.GenerateContentResponseUsageMetadata(
         prompt_token_count=100,
         cached_content_token_count=0,
         candidates_token_count=20,
@@ -269,7 +287,7 @@ async def test_gemini_get_models_retries_transient_request_error(monkeypatch):
 
     models = FakeModels()
     provider = ProviderGoogleGenAI.__new__(ProviderGoogleGenAI)
-    provider.client = SimpleNamespace(models=models)
+    provider.client = Mock(spec=AsyncClient, models=models)
 
     assert await provider.get_models() == ["gemini-a"]
     assert models.calls == 2
@@ -320,8 +338,10 @@ def _gemini_stream_provider():
     provider.provider_settings = {}
     provider.model_name = "gemini-3.7-flash"
     provider.safety_settings = []
-    provider.client = SimpleNamespace(
-        models=SimpleNamespace(generate_content_stream=lambda **kwargs: None)
+    provider.client = Mock(
+        spec=AsyncClient,
+        models=SimpleNamespace(generate_content_stream=lambda **kwargs: None),
+        _api_client=SimpleNamespace(_http_options=types.HttpOptions(headers={})),
     )
     return provider
 
@@ -393,10 +413,9 @@ async def test_gemini_stream_keeps_conversation_header_until_consumed(
 ):
     """The conversation header must be present while the stream is consumed."""
     provider = _gemini_stream_provider()
-    headers: dict[str, str] = {}
-    provider.client._api_client = SimpleNamespace(
-        _http_options=SimpleNamespace(headers=headers),
-    )
+    assert provider.client is not None
+    headers = provider.client._api_client._http_options.headers
+    assert headers is not None
     observed_headers: list[str | None] = []
 
     async def fake_stream():
