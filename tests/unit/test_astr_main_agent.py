@@ -221,6 +221,62 @@ def test_append_system_reminders_includes_weekday(mock_event):
     ]
 
 
+def test_append_system_reminders_does_not_inject_identifier(mock_event):
+    """User identifier is injected inline, not inside trailing system_reminder."""
+    req = ProviderRequest(prompt="Hello")
+    request_build.append_system_reminders(
+        mock_event,
+        req,
+        {"identifier": True, "datetime_system_prompt": False},
+        "UTC",
+    )
+    assert req.extra_user_content_parts == []
+
+
+def test_apply_user_identifier_inline_prefix(mock_event):
+    """Inline user identifier prepends structured nickname and ID to prompt."""
+    req = ProviderRequest(prompt="Hello")
+    request_build.apply_user_identifier(mock_event, req, {"identifier": True})
+    assert req.prompt == "[TestUser (ID: user123)]: Hello"
+
+
+def test_apply_user_identifier_sanitizes_special_chars(mock_event):
+    """Special characters like brackets, colons, and newlines do not break prefix."""
+    mock_event.message_obj.sender.nickname = "Alice: [Admin]\nLine2"
+    mock_event.message_obj.sender.user_id = "u_42"
+    req = ProviderRequest(prompt="Hi")
+    request_build.apply_user_identifier(mock_event, req, {"identifier": True})
+    assert req.prompt == "[Alice: (Admin) Line2 (ID: u_42)]: Hi"
+
+
+def test_apply_user_identifier_missing_nickname_fallback(mock_event):
+    """Fallback to ID-only format when nickname is empty."""
+    mock_event.message_obj.sender.nickname = ""
+    req = ProviderRequest(prompt="Hi")
+    request_build.apply_user_identifier(mock_event, req, {"identifier": True})
+    assert req.prompt == "[ID: user123]: Hi"
+
+
+def test_apply_user_identifier_media_only_prompts(mock_event):
+    """Empty prompt with image or audio preserves placeholder with inline prefix."""
+    img_req = ProviderRequest(prompt="", image_urls=["/tmp/a.png"])
+    request_build.apply_user_identifier(mock_event, img_req, {"identifier": True})
+    assert img_req.prompt == "[TestUser (ID: user123)]: [图片]"
+
+    audio_req = ProviderRequest(prompt="", audio_urls=["/tmp/a.wav"])
+    request_build.apply_user_identifier(mock_event, audio_req, {"identifier": True})
+    assert audio_req.prompt == "[TestUser (ID: user123)]: [音频]"
+
+
+def test_apply_prompt_prefix_and_user_identifier_order(mock_event):
+    """User identifier is placed at the outermost prefix after prompt_prefix."""
+    req = ProviderRequest(prompt="Hello")
+    cfg = {"prompt_prefix": "Prefix: {{prompt}}", "identifier": True}
+    request_build.apply_prompt_prefix(req, cfg)
+    request_build.apply_user_identifier(mock_event, req, cfg)
+    assert req.prompt == "[TestUser (ID: user123)]: Prefix: Hello"
+
+
 def test_local_mode_prompt_uses_windows_powershell_51():
     with (
         patch(
@@ -3631,9 +3687,10 @@ async def test_feature_composition_preserves_tool_scope_and_instruction_order(
     kb_name = knowledge_base_build.KnowledgeBaseQueryTool().name
     assert (kb_name in names) == agentic_kb
     assert retrieve.await_count == int(not agentic_kb)
-    assert "User ID: user123" in req.extra_user_content_parts[0].text
+    assert req.prompt == "[TestUser (ID: user123)]: Question"
+    assert all("User ID:" not in part.text for part in req.extra_user_content_parts)
     if not agentic_kb:
-        assert "Knowledge marker" in req.extra_user_content_parts[1].text
+        assert "Knowledge marker" in req.extra_user_content_parts[0].text
     assert req.contexts[0] == {"role": "assistant", "content": "Opening"}
     markers = [
         persona_build.LLM_SAFETY_MODE_SYSTEM_PROMPT,

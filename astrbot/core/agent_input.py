@@ -72,25 +72,72 @@ def apply_prompt_prefix(req: ProviderRequest, cfg: dict) -> None:
         req.prompt = f"{prefix}{req.prompt}"
 
 
+def _sanitize_identifier_value(value: object) -> str:
+    """Normalize an identifier field into a single-line, bracket-safe string."""
+    if value is None:
+        return ""
+    text = " ".join(str(value).split())
+    return text.replace("[", "(").replace("]", ")")
+
+
+def format_user_identifier(event: AstrMessageEvent) -> str:
+    """Format the sender's nickname and ID as a structured inline prefix."""
+    sender = getattr(event.message_obj, "sender", None)
+    if sender is None:
+        return ""
+    user_id = _sanitize_identifier_value(getattr(sender, "user_id", None))
+    nickname = _sanitize_identifier_value(getattr(sender, "nickname", None))
+    if nickname and user_id:
+        return f"[{nickname} (ID: {user_id})]"
+    if nickname:
+        return f"[{nickname}]"
+    if user_id:
+        return f"[ID: {user_id}]"
+    return ""
+
+
+def apply_user_identifier(
+    event: AstrMessageEvent,
+    req: ProviderRequest,
+    cfg: dict,
+) -> None:
+    """Prepend the formatted sender identifier inline to the current prompt.
+
+    Args:
+        event: Event providing sender details.
+        req: Request whose current prompt is updated in place.
+        cfg: Provider settings controlling whether user identification is enabled.
+    """
+    if not cfg.get("identifier"):
+        return
+    identifier = format_user_identifier(event)
+    if not identifier:
+        return
+    if req.prompt and req.prompt.strip():
+        req.prompt = f"{identifier}: {req.prompt}"
+    elif req.image_urls:
+        req.prompt = f"{identifier}: [图片]"
+    elif req.audio_urls:
+        req.prompt = f"{identifier}: [音频]"
+    else:
+        req.prompt = f"{identifier}:"
+
+
 def append_system_reminders(
     event: AstrMessageEvent,
     req: ProviderRequest,
     cfg: dict,
     timezone: str | None,
 ) -> None:
-    """Append configured sender, group, and time information to the user content.
+    """Append configured group and time information to the user content.
 
     Args:
-        event: Event providing sender and group details.
+        event: Event providing group details.
         req: Request receiving the additional user content.
         cfg: Provider settings controlling which reminders are included.
         timezone: Configured IANA timezone, or None for the local timezone.
     """
     system_parts: list[str] = []
-    if cfg.get("identifier"):
-        user_id = event.message_obj.sender.user_id
-        user_nickname = event.message_obj.sender.nickname
-        system_parts.append(f"User ID: {user_id}, Nickname: {user_nickname}")
 
     if cfg.get("group_name_display") and event.message_obj.group_id:
         if not event.message_obj.group:
@@ -338,6 +385,7 @@ async def prepare_input_content(
         event.set_extra("_default_event_prompt", False)
         supplement_mention_display(event, req, prompt_has_text=prompt_has_text)
     apply_prompt_prefix(req, cfg)
+    apply_user_identifier(event, req, cfg)
     if (
         req.conversation
         and caption_provider_id

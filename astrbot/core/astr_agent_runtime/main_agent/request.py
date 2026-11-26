@@ -18,6 +18,12 @@ from astrbot.core.agent_input import (
     apply_prompt_prefix as apply_prompt_prefix,
 )
 from astrbot.core.agent_input import (
+    apply_user_identifier as apply_user_identifier,
+)
+from astrbot.core.agent_input import (
+    format_user_identifier as format_user_identifier,
+)
+from astrbot.core.agent_input import (
     matches_provider_wake_prefix as matches_provider_wake_prefix,
 )
 from astrbot.core.db.po import ConversationRead
