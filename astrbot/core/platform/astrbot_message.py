@@ -63,10 +63,12 @@ class AstrBotMessage:
     message_str: str  # 最直观的纯文本消息字符串
     raw_message: object
     timestamp: int  # 消息时间戳
+    business_connection_id: str | None  # Telegram Business connection id
 
     def __init__(self) -> None:
         self.timestamp = int(time.time())
         self.group = None
+        self.business_connection_id = None
 
     def __str__(self) -> str:
         return str(self.__dict__)

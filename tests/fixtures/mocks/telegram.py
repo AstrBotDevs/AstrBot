@@ -57,6 +57,8 @@ def create_mock_telegram_modules():
     mock_telegram_ext.filters.ALL = MagicMock()
     mock_telegram_ext.MessageHandler = MagicMock
     mock_telegram_ext.CallbackQueryHandler = MagicMock
+    mock_telegram_ext.BusinessConnectionHandler = MagicMock
+    mock_telegram_ext.BusinessMessagesDeletedHandler = MagicMock
 
     # Mock telegramify_markdown
     mock_telegramify = MagicMock()

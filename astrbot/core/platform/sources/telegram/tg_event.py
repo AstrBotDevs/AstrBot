@@ -194,12 +194,15 @@ class TelegramPlatformEvent(AstrMessageEvent):
         chat_id: str,
         action: ChatAction | str,
         message_thread_id: str | None = None,
+        business_connection_id: str | None = None,
     ) -> None:
         """发送聊天状态动作"""
         try:
             payload: dict[str, Any] = {"chat_id": chat_id, "action": action}
             if message_thread_id:
                 payload["message_thread_id"] = message_thread_id
+            if business_connection_id:
+                payload["business_connection_id"] = business_connection_id
             await client.send_chat_action(**payload)
         except Exception as e:
             logger.warning(f"[Telegram] 发送 chat action 失败: {e}")
@@ -227,15 +230,24 @@ class TelegramPlatformEvent(AstrMessageEvent):
         effective_thread_id = message_thread_id or cast(
             str | None, payload.get("message_thread_id")
         )
+        business_connection_id = cast(str | None, payload.get("business_connection_id"))
         await cls._send_chat_action(
-            client, user_name, upload_action, effective_thread_id
+            client,
+            user_name,
+            upload_action,
+            effective_thread_id,
+            business_connection_id,
         )
         send_payload = dict(payload)
         if effective_thread_id and "message_thread_id" not in send_payload:
             send_payload["message_thread_id"] = effective_thread_id
         await send_coro(**send_payload)
         await cls._send_chat_action(
-            client, user_name, ChatAction.TYPING, effective_thread_id
+            client,
+            user_name,
+            ChatAction.TYPING,
+            effective_thread_id,
+            business_connection_id,
         )
 
     @classmethod
@@ -305,14 +317,22 @@ class TelegramPlatformEvent(AstrMessageEvent):
         self,
         user_name: str,
         message_thread_id: str | None = None,
+        business_connection_id: str | None = None,
     ) -> None:
         """确保显示 typing 状态"""
         await self._send_chat_action(
-            self.client, user_name, ChatAction.TYPING, message_thread_id
+            self.client,
+            user_name,
+            ChatAction.TYPING,
+            message_thread_id,
+            business_connection_id,
         )
 
     async def send_typing(self) -> None:
         message_thread_id = None
+        business_connection_id = getattr(
+            self.message_obj, "business_connection_id", None
+        )
         if self.get_message_type() == MessageType.GROUP_MESSAGE:
             user_name = self.message_obj.group_id
         else:
@@ -321,7 +341,7 @@ class TelegramPlatformEvent(AstrMessageEvent):
         if "#" in user_name:
             user_name, message_thread_id = user_name.split("#")
 
-        await self._ensure_typing(user_name, message_thread_id)
+        await self._ensure_typing(user_name, message_thread_id, business_connection_id)
 
     @classmethod
     async def send_with_client(
@@ -329,6 +349,7 @@ class TelegramPlatformEvent(AstrMessageEvent):
         client: ExtBot,
         message: MessageChain,
         user_name: str,
+        business_connection_id: str | None = None,
     ) -> None:
         image_path = None
 
@@ -363,7 +384,9 @@ class TelegramPlatformEvent(AstrMessageEvent):
 
         # 根据消息链确定合适的 chat action 并发送
         action = cls._get_chat_action_for_chain(message.chain)
-        await cls._send_chat_action(client, user_name, action, message_thread_id)
+        await cls._send_chat_action(
+            client, user_name, action, message_thread_id, business_connection_id
+        )
 
         for index, i in enumerate(message.chain):
             payload = {
@@ -373,6 +396,8 @@ class TelegramPlatformEvent(AstrMessageEvent):
                 payload["reply_to_message_id"] = str(reply_message_id)
             if message_thread_id:
                 payload["message_thread_id"] = message_thread_id
+            if business_connection_id:
+                payload["business_connection_id"] = business_connection_id
             if reply_markup is not None and index == last_renderable_index:
                 payload["reply_markup"] = reply_markup
 
@@ -425,13 +450,28 @@ class TelegramPlatformEvent(AstrMessageEvent):
                 payload["reply_to_message_id"] = str(reply_message_id)
             if message_thread_id:
                 payload["message_thread_id"] = message_thread_id
+            if business_connection_id:
+                payload["business_connection_id"] = business_connection_id
             await cls._send_text_chunks(client, fallback_text, payload)
 
     async def send(self, message: MessageChain) -> None:
+        business_connection_id = getattr(
+            self.message_obj, "business_connection_id", None
+        )
         if self.get_message_type() == MessageType.GROUP_MESSAGE:
-            await self.send_with_client(self.client, message, self.message_obj.group_id)
+            await self.send_with_client(
+                self.client,
+                message,
+                self.message_obj.group_id,
+                business_connection_id=business_connection_id,
+            )
         else:
-            await self.send_with_client(self.client, message, self.get_sender_id())
+            await self.send_with_client(
+                self.client,
+                message,
+                self.get_sender_id(),
+                business_connection_id=business_connection_id,
+            )
         await super().send(message)
 
     async def get_group(
@@ -675,6 +715,9 @@ class TelegramPlatformEvent(AstrMessageEvent):
 
     async def send_streaming(self, generator, use_fallback: bool = False):
         message_thread_id = None
+        business_connection_id = getattr(
+            self.message_obj, "business_connection_id", None
+        )
 
         if self.get_message_type() == MessageType.GROUP_MESSAGE:
             user_name = self.message_obj.group_id
@@ -689,17 +732,19 @@ class TelegramPlatformEvent(AstrMessageEvent):
         }
         if message_thread_id:
             payload["message_thread_id"] = message_thread_id
+        if business_connection_id:
+            payload["business_connection_id"] = business_connection_id
 
-        # sendMessageDraft 仅支持私聊（显式检查 FRIEND_MESSAGE）
         is_private = self.get_message_type() == MessageType.FRIEND_MESSAGE
-
-        if is_private:
+        # sendMessageDraft 仅支持私聊，且不支持 business_connection_id；
+        # Business 回复改用 edit_message_text fallback。
+        if is_private and not business_connection_id:
             logger.info("[Telegram] 流式输出: 使用 sendMessageDraft (私聊)")
             await self._send_streaming_draft(
                 user_name, message_thread_id, payload, generator
             )
         else:
-            logger.info("[Telegram] 流式输出: 使用 edit_message_text fallback (群聊)")
+            logger.info("[Telegram] 流式输出: 使用 edit_message_text fallback")
             await self._send_streaming_edit(
                 user_name, message_thread_id, payload, generator
             )
@@ -824,13 +869,14 @@ class TelegramPlatformEvent(AstrMessageEvent):
         delta = ""
         current_content = ""
         message_id = None
+        business_connection_id = cast(str | None, payload.get("business_connection_id"))
         last_edit_time = 0  # 上次编辑消息的时间
         throttle_interval = 0.6  # 编辑消息的间隔时间 (秒)
         last_chat_action_time = 0  # 上次发送 chat action 的时间
         chat_action_interval = 0.5  # chat action 的节流间隔 (秒)
 
         # 发送初始 typing 状态
-        await self._ensure_typing(user_name, message_thread_id)
+        await self._ensure_typing(user_name, message_thread_id, business_connection_id)
         last_chat_action_time = asyncio.get_running_loop().time()
 
         def _append_text(t: str) -> None:
@@ -868,7 +914,9 @@ class TelegramPlatformEvent(AstrMessageEvent):
                 if time_since_last_edit >= throttle_interval:
                     current_time = asyncio.get_running_loop().time()
                     if current_time - last_chat_action_time >= chat_action_interval:
-                        await self._ensure_typing(user_name, message_thread_id)
+                        await self._ensure_typing(
+                            user_name, message_thread_id, business_connection_id
+                        )
                         last_chat_action_time = current_time
                     try:
                         await self.client.edit_message_text(
@@ -883,7 +931,9 @@ class TelegramPlatformEvent(AstrMessageEvent):
             else:
                 current_time = asyncio.get_running_loop().time()
                 if current_time - last_chat_action_time >= chat_action_interval:
-                    await self._ensure_typing(user_name, message_thread_id)
+                    await self._ensure_typing(
+                        user_name, message_thread_id, business_connection_id
+                    )
                     last_chat_action_time = current_time
                 try:
                     msg = await self.client.send_message(
