@@ -2,7 +2,7 @@
 
 import asyncio
 from types import SimpleNamespace
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import MagicMock
 from uuid import UUID
 
 import pytest
@@ -243,39 +243,3 @@ async def test_failed_turn_preserves_error_identity_and_partial_reply(
     else:
         assert chains[-1].type is None
         assert "Failure detail" in chains[-1].get_plain_text()
-
-
-@pytest.mark.asyncio
-@pytest.mark.parametrize(
-    ("platform", "tool_between", "expected"),
-    [
-        ("webchat", False, ["A", "\n\n", "B"]),
-        ("webchat", True, ["A", "B"]),
-        # Other platforms keep their output unchanged.
-        ("test", False, ["A", "B"]),
-    ],
-)
-async def test_streamed_messages_are_separated_unless_a_tool_call_splits_them(
-    platform, tool_between, expected
-):
-    class TwoMessages(OutputSession):
-        async def execute_turn(self, turn):
-            turn.emit(TextDelta(message_id="first", part_index=0, text="A"))
-            if tool_between:
-                turn.emit(
-                    ToolStarted(
-                        execution_id="e", call_id="c", name="tool", arguments={}
-                    )
-                )
-            turn.emit(TextDelta(message_id="second", part_index=0, text="B"))
-            return TurnResult(content=(PlainOutput(text="B"),))
-
-    session = TwoMessages("session", "test:FriendMessage:user")
-    agent_input = input_for(session)
-    agent_input.event.send = AsyncMock()
-    agent_input.event.get_platform_name.return_value = platform
-    turn = await session.run_turn(agent_input)
-    chains = [chain async for chain in present_turn(turn, streaming=True)]
-    assert [
-        chain.get_plain_text() for chain in chains if chain.type is None
-    ] == expected

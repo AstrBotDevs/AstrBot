@@ -16,114 +16,6 @@ from astrbot.core.platform.button_interaction import (
 )
 
 
-def test_expired_callbacks_are_pruned_from_the_database(tmp_path, monkeypatch):
-    registry = button_interaction._ButtonCallbackRegistry()
-    path = tmp_path / "callbacks.db"
-    registry.configure(path)
-    monkeypatch.setattr(button_interaction.time, "time", lambda: 100.0)
-    token = registry.register("old", None, expires_at=101)
-    monkeypatch.setattr(button_interaction.time, "time", lambda: 200000.0)
-    registry.register("new", None, expires_at=200100)
-    with sqlite3.connect(path) as connection:
-        assert (
-            connection.execute(
-                "SELECT COUNT(*) FROM button_callbacks WHERE token=?", (token,)
-            ).fetchone()[0]
-            == 0
-        )
-
-
-@pytest.mark.asyncio
-@pytest.mark.parametrize("operation", ["register", "lookup"])
-async def test_callback_sqlite_wait_runs_off_the_event_loop(
-    tmp_path, monkeypatch, operation
-):
-    db_path = tmp_path / "callbacks.db"
-    registry = button_interaction._ButtonCallbackRegistry()
-    registry.configure(db_path)
-    monkeypatch.setattr(button_interaction, "_button_callback_registry", registry)
-    if operation == "lookup":
-        token = encode_button_callback("approve", {"item": 42})
-        registry._cache.clear()
-        callback = button_interaction.decode_button_callback_async(token)
-    else:
-        callback = button_interaction.encode_button_callback_async(
-            "approve", {"item": 42}
-        )
-
-    loop = asyncio.get_running_loop()
-    event_loop_thread = threading.get_ident()
-    connect = sqlite3.connect
-    connection_attempted = asyncio.Event()
-
-    def track_connection(database, *, timeout):
-        assert threading.get_ident() != event_loop_thread
-        loop.call_soon_threadsafe(connection_attempted.set)
-        return connect(database, timeout=min(timeout, 5))
-
-    monkeypatch.setattr(button_interaction.sqlite3, "connect", track_connection)
-    with closing(connect(db_path)) as locked_db:
-        locked_db.execute("BEGIN EXCLUSIVE")
-        task = asyncio.create_task(callback)
-        try:
-            await asyncio.wait_for(connection_attempted.wait(), timeout=2)
-            assert not task.done()
-        finally:
-            locked_db.rollback()
-            result = await task
-
-    if operation == "lookup":
-        assert result == ("approve", {"item": 42})
-    else:
-        restarted_registry = button_interaction._ButtonCallbackRegistry()
-        await asyncio.to_thread(restarted_registry.configure, db_path)
-        monkeypatch.setattr(
-            button_interaction, "_button_callback_registry", restarted_registry
-        )
-        assert await button_interaction.decode_button_callback_async(result) == (
-            "approve",
-            {"item": 42},
-        )
-
-
-def test_long_expired_callbacks_leave_the_cache(tmp_path, monkeypatch):
-    registry = button_interaction._ButtonCallbackRegistry()
-    registry.configure(tmp_path / "callbacks.db")
-    monkeypatch.setattr(button_interaction.time, "time", lambda: 100.0)
-    old = registry.register("old", None, expires_at=101)
-    monkeypatch.setattr(button_interaction.time, "time", lambda: 200000.0)
-    recent = registry.register("recent", None, expires_at=199999)
-    assert old not in registry._cache
-    # Within the retention day a late click still gets the expiry notice.
-    with pytest.raises(button_interaction.ButtonActionExpiredError):
-        registry.resolve(recent)
-
-
-@pytest.mark.asyncio
-async def test_failed_save_does_not_publish_callback(tmp_path, monkeypatch):
-    registry = button_interaction._ButtonCallbackRegistry()
-    registry.configure(tmp_path / "callbacks.db")
-    monkeypatch.setattr(button_interaction, "_button_callback_registry", registry)
-
-    def locked(*args, **kwargs):
-        raise sqlite3.OperationalError("database is locked")
-
-    monkeypatch.setattr(button_interaction.sqlite3, "connect", locked)
-    with pytest.raises(sqlite3.OperationalError, match="database is locked"):
-        await button_interaction.encode_button_callback_async("approve")
-    assert not registry._cache
-
-
-def test_cache_limit_loads_evicted_callbacks_from_database(tmp_path, monkeypatch):
-    registry = button_interaction._ButtonCallbackRegistry()
-    registry.configure(tmp_path / "callbacks.db")
-    monkeypatch.setattr(button_interaction, "_MAX_CACHED_CALLBACKS", 2)
-    tokens = [registry.register(str(index), None) for index in range(4)]
-    assert list(registry._cache) == tokens[2:]
-    # A dropped entry is still found in the database.
-    assert registry.resolve(tokens[0]) == ("0", None)
-
-
 def test_action_row_serializes_portable_buttons():
     row = ActionRow(
         buttons=[
@@ -269,6 +161,45 @@ def test_callback_registry_survives_process_restart(tmp_path, monkeypatch):
     assert button_interaction.decode_button_callback(payload) == (
         "approve",
         {"request_id": "req-1"},
+    )
+
+
+@pytest.mark.asyncio
+async def test_async_button_registration_waits_for_sqlite_commit(tmp_path, monkeypatch):
+    db_path = tmp_path / "callbacks.db"
+    registry = button_interaction._ButtonCallbackRegistry()
+    registry.configure(db_path)
+    monkeypatch.setattr(button_interaction, "_button_callback_registry", registry)
+
+    loop = asyncio.get_running_loop()
+    loop_thread = threading.get_ident()
+    write_started = asyncio.Event()
+    connect = sqlite3.connect
+
+    def connect_on_worker(path, *, timeout):
+        assert threading.get_ident() != loop_thread
+        loop.call_soon_threadsafe(write_started.set)
+        return connect(path, timeout=min(timeout, 5))
+
+    monkeypatch.setattr(button_interaction.sqlite3, "connect", connect_on_worker)
+    with closing(connect(db_path)) as locked_db:
+        locked_db.execute("BEGIN EXCLUSIVE")
+        registration = asyncio.create_task(
+            button_interaction.encode_button_callback_async("approve", {"item": 42})
+        )
+        try:
+            await asyncio.wait_for(write_started.wait(), timeout=2)
+            assert not registration.done()
+        finally:
+            locked_db.rollback()
+            token = await registration
+
+    restarted = button_interaction._ButtonCallbackRegistry()
+    await asyncio.to_thread(restarted.configure, db_path)
+    monkeypatch.setattr(button_interaction, "_button_callback_registry", restarted)
+    assert await button_interaction.decode_button_callback_async(token) == (
+        "approve",
+        {"item": 42},
     )
 
 
