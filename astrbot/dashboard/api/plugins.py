@@ -45,6 +45,7 @@ from astrbot.dashboard.services.plugin_page_service import (
     PluginPageServiceError,
 )
 from astrbot.dashboard.services.plugin_service import (
+    PLUGIN_DEFAULT_REGISTRY_URL,
     PLUGIN_OPERATION_FAILED_MESSAGE,
     PluginService,
     PluginServiceError,
@@ -631,7 +632,12 @@ async def list_plugin_sources(
     _auth: AuthContext = Depends(require_plugin_scope),
     service: PluginService = Depends(get_service),
 ):
-    return ok({"sources": await service.get_custom_sources()})
+    return ok(
+        {
+            "sources": await service.get_custom_sources(),
+            "default_registry_url": PLUGIN_DEFAULT_REGISTRY_URL,
+        }
+    )
 
 
 @router.post("/plugin-sources")

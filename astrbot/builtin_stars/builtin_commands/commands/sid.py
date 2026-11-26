@@ -15,7 +15,7 @@ class SIDCommand:
     async def sid(self, event: AstrMessageEvent) -> None:
         """获取消息来源信息"""
         sid = event.unified_msg_origin
-        locale = self.context.locale(sid)
+        locale = await self.context.get_locale(sid)
         user_id = str(event.get_sender_id())
         umo_platform = event.session.platform_id
         umo_msg_type = event.session.message_type.value

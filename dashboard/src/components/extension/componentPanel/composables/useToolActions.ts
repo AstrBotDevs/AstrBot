@@ -11,15 +11,10 @@ export function useToolActions(
   toast: (message: string, color?: string) => void
 ) {
   const toolSearch = ref('');
-  const showBuiltinTools = ref(true);
+  const pluginTools = computed(() => tools.value.filter(tool => tool.origin === 'plugin'));
 
   const filteredTools = computed(() => {
-    let result = tools.value;
-
-    // Filter builtin tools
-    if (!showBuiltinTools.value) {
-      result = result.filter(tool => tool.origin !== 'builtin');
-    }
+    let result = pluginTools.value;
 
     // Filter by search query
     const query = normalizeTextInput(toolSearch.value).trim().toLowerCase();
@@ -35,7 +30,7 @@ export function useToolActions(
   });
 
   const toolSummary = computed<ToolSummary>(() => {
-    const all = tools.value;
+    const all = pluginTools.value;
     return {
       total: all.length,
       active: all.filter(t => t.active).length,
@@ -48,14 +43,9 @@ export function useToolActions(
    */
   const toggleTool = async (
     tool: ToolItem,
-    readonlyMessage: string,
     successMessage: string,
     errorMessage: string
   ) => {
-    if (tool.readonly) {
-      toast(readonlyMessage, 'info');
-      return;
-    }
     const previous = tool.active;
     tool.active = !tool.active;
     try {
@@ -84,13 +74,8 @@ export function useToolActions(
     tool: ToolItem,
     permission: 'admin' | 'member',
     successMessage: string,
-    builtinMessage: string,
     errorMessage: string
   ) => {
-    if (tool.origin === 'builtin') {
-      toast(builtinMessage, 'info');
-      return;
-    }
     try {
       const res = await toolApi.setPermission(tool.name, permission);
       if (res.data.status === 'ok') {
@@ -112,7 +97,6 @@ export function useToolActions(
 
   return {
     toolSearch,
-    showBuiltinTools,
     filteredTools,
     toolSummary,
     toggleTool,

@@ -656,7 +656,7 @@ class TestEventFiltering:
     """Tests for event filtering functionality."""
 
     @pytest.mark.asyncio
-    async def test_filter_by_event_origin(self, event_queue):
+    async def test_filter_by_event_origin(self):
         """Test filtering events by their unified_msg_origin."""
         scheduler1 = MagicMock()
         scheduler1.execute = AsyncMock()
@@ -679,14 +679,12 @@ class TestEventFiltering:
             "telegram-conf": scheduler1,
             "discord-conf": scheduler2,
         }
+        event_queue = AsyncMock(spec=asyncio.Queue)
         event_bus = EventBus(
             event_queue=event_queue,
             pipeline_scheduler_mapping=pipeline_mapping,
             astrbot_config_mgr=config_mgr,
         )
-
-        processed = asyncio.Event()
-        scheduler1.execute.side_effect = lambda e: processed.set()  # noqa: ARG001
 
         # Create Telegram event
         mock_event = MagicMock()
@@ -697,18 +695,12 @@ class TestEventFiltering:
         mock_event.get_sender_id.return_value = "tg123"
         mock_event.get_message_outline.return_value = "TG Message"
 
-        await event_queue.put(mock_event)
+        event_queue.get.side_effect = [mock_event, asyncio.CancelledError]
+        with pytest.raises(asyncio.CancelledError):
+            await event_bus.dispatch()
+        await asyncio.gather(*event_bus._pending_tasks)
 
-        task = asyncio.create_task(event_bus.dispatch())
-        try:
-            await asyncio.wait_for(processed.wait(), timeout=1.0)
-        finally:
-            task.cancel()
-            with suppress(asyncio.CancelledError):
-                await task
-
-        # Only telegram scheduler should be called
-        scheduler1.execute.assert_called_once()
+        scheduler1.execute.assert_awaited_once_with(mock_event)
         scheduler2.execute.assert_not_called()
 
     @pytest.mark.asyncio

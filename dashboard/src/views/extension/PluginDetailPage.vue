@@ -38,6 +38,7 @@ const props = defineProps({
 const { tm, router } = props.state;
 const { locale } = useI18n();
 const {
+  categoryName,
   pluginName,
   pluginDesc: resolvePluginDesc,
   pluginViewTitle,
@@ -155,16 +156,13 @@ const authorDisplay = computed(() => {
   return typeof author === "string" ? author.trim() : "";
 });
 
-const categoryDisplay = computed(() => {
-  const rawCategory =
-    pluginData.value?.category || props.marketPlugin?.category || "";
-  const category = String(rawCategory || "").trim();
-  if (!category) return "";
-
-  const normalized = category.toLowerCase().replace(/\s+/g, "_");
-  const label = tm(`market.categories.${normalized}`);
-  return label === `market.categories.${normalized}` ? category : label;
-});
+const categoryDisplay = computed(() =>
+  categoryName(
+    isMarketDetail.value
+      ? props.marketPlugin?.market_category
+      : pluginData.value?.install_source?.category,
+  ),
+);
 
 const authorWebsite = computed(() => {
   const plugin = pluginData.value || {};

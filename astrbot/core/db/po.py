@@ -364,6 +364,39 @@ class PlatformMessageHistory(TimestampMixin, SQLModel, table=True):
     )
 
 
+class InteractiveViewRecord(SQLModel, table=True):
+    """Persist the source and snapshot of an interactive message."""
+
+    __tablename__: str = "interactive_views"
+
+    id: str = Field(primary_key=True)
+    owner: str
+    session_id: str
+    platform_id: str
+    history_platform_id: str
+    module: str
+    name: str
+    version: int
+    revision: int
+    data: str = Field(sa_type=Text)
+    text: str = Field(sa_type=Text)
+    message_id: str | None = None
+    run_id: str
+
+
+class InteractiveViewActionRecord(SQLModel, table=True):
+    """Persist an action reservation and its replayable receipt."""
+
+    __tablename__: str = "interactive_view_actions"
+
+    view_id: str = Field(primary_key=True)
+    id: str = Field(primary_key=True)
+    request: str = Field(sa_type=Text)
+    started: float
+    status: str
+    result: str | None = Field(default=None, sa_type=Text)
+
+
 class WebChatThread(TimestampMixin, SQLModel, table=True):
     """A side thread created from a selected WebChat assistant response."""
 

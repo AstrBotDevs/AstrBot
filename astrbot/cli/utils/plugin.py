@@ -10,6 +10,8 @@ import click
 import httpx
 import yaml
 
+from astrbot.core.config.default import PLUGIN_DEFAULT_REGISTRY_URL
+
 from .version_comparator import VersionComparator
 
 
@@ -160,10 +162,12 @@ def build_plug_list(plugins_dir: Path) -> list:
     online_plugins_dict = {}
     try:
         with httpx.Client() as client:
-            resp = client.get("https://api.soulter.top/astrbot/plugins")
+            resp = client.get(PLUGIN_DEFAULT_REGISTRY_URL)
             resp.raise_for_status()
             data = resp.json()
             for plugin_id, plugin_info in data.items():
+                if plugin_id == "$meta":
+                    continue
                 online_plugins_dict[str(plugin_id)] = {
                     "name": str(plugin_id),
                     "desc": str(plugin_info.get("desc", "")),

@@ -14,7 +14,7 @@ from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from astrbot.core.platform.button_interaction import (
     BUTTON_ACTION_EXPIRED_MESSAGE,
     ButtonActionExpiredError,
-    decode_button_callback,
+    decode_button_callback_async,
 )
 from astrbot.core.star.filter.button_action import ButtonActionFilter
 from astrbot.core.star.filter.command_group import CommandGroupFilter
@@ -88,7 +88,7 @@ class WakingCheckStage(Stage):
         interaction = event.get_button_interaction()
         if isinstance(interaction, ButtonInteraction) and interaction.callback_data:
             try:
-                decode_button_callback(interaction.callback_data)
+                await decode_button_callback_async(interaction.callback_data)
             except ButtonActionExpiredError:
                 event.stop_event()
                 await event.send(MessageChain().message(BUTTON_ACTION_EXPIRED_MESSAGE))
@@ -144,6 +144,8 @@ class WakingCheckStage(Stage):
                         ]
                 else:
                     event.message_str = message_str[len(wake_prefix) :].strip()
+                if wake_prefix:
+                    event.set_extra("_consumed_wake_prefix", wake_prefix)
                 break
         if not is_wake:
             # 检查是否有at消息 / at全体成员消息 / 引用了bot的消息

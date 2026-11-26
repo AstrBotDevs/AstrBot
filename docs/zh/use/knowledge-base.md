@@ -25,7 +25,7 @@
 3. 填写该服务要求的 API 地址、API Key、模型名称和向量维度等信息。
 4. 保存配置，确保该提供商可用。
 
-当前可接入 OpenAI 兼容服务、Google Gemini、Ollama、阿里云百炼和 NVIDIA 等嵌入服务。以 `OpenAI Embedding` 为例：API 地址应填写服务的 API 基础地址，模型名称填写服务提供的嵌入模型，而不是对话模型。
+当前可接入 OpenAI 兼容服务、Google Gemini、Ollama、阿里云百炼、火山引擎和 NVIDIA 等嵌入服务。以 `OpenAI Embedding` 为例：API 地址应填写服务的 API 基础地址，模型名称填写服务提供的嵌入模型，而不是对话模型。
 
 如使用 Ollama 等本地服务，API 地址必须能从运行 AstrBot 的环境访问到。在 Docker 中填写 `localhost` 指向 AstrBot 容器本身，并不自动指向宿主机。
 

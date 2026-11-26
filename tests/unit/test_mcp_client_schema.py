@@ -1,6 +1,10 @@
+import importlib.metadata
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
+import pytest
+
+from astrbot.core.agent import mcp_client
 from astrbot.core.agent.mcp_client import MCPTool, _normalize_mcp_input_schema
 
 
@@ -130,3 +134,21 @@ class TestMCPToolSchemaNormalization:
         # actual MCP call.
         assert tool.name == "t_drive_create_doc"
         assert tool.mcp_tool.name == "t_drive.create_doc"
+
+
+@pytest.mark.asyncio
+async def test_connect_to_server_rejects_unsupported_mcp_major(monkeypatch):
+    monkeypatch.setattr(
+        mcp_client,
+        "importlib_metadata",
+        SimpleNamespace(
+            version=lambda _name: "2.3.0",
+            PackageNotFoundError=importlib.metadata.PackageNotFoundError,
+        ),
+    )
+    client = mcp_client.MCPClient()
+
+    with pytest.raises(RuntimeError, match=r"mcp 2\.3\.0"):
+        await client.connect_to_server({"command": "bash"}, "demo_server")
+
+    assert client._connection_task is None

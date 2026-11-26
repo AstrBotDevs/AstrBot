@@ -95,12 +95,14 @@ async def collect_initial_request(
             prefix_text = event.message_str
             if event.get_platform_name() == "lark":
                 prefix_text = prefix_text.lstrip()
+            consumed_provider_prefix = ""
             if (
                 provider_wake_prefix
                 and not isinstance(event, AgentWakeupEvent)
                 and prefix_text.startswith(provider_wake_prefix)
             ):
                 req.prompt = prefix_text[len(provider_wake_prefix) :]
+                consumed_provider_prefix = provider_wake_prefix
 
             # media files attachments
             for comp in event.message_obj.message:
@@ -277,6 +279,9 @@ async def collect_initial_request(
                             exc_info=True,
                         )
 
+            if consumed_provider_prefix:
+                event.set_extra("_consumed_provider_prefix", consumed_provider_prefix)
+            event.set_extra("_default_event_prompt", True)
     req.image_urls = normalize_and_dedupe_strings(req.image_urls)
     quote_image_ref = None
     quote = next(

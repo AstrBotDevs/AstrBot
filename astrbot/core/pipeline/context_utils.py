@@ -3,7 +3,7 @@ import traceback
 import typing as T
 
 from astrbot import logger
-from astrbot.core.chatui import ViewResult, emit_view
+from astrbot.core.message.interactive_ui import ViewResult, emit_view
 from astrbot.core.message.message_event_result import CommandResult, MessageEventResult
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from astrbot.core.star.star import star_map

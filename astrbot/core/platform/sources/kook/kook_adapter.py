@@ -1,6 +1,7 @@
 import asyncio
 import json
 import re
+from collections.abc import Awaitable, Callable
 
 from astrbot import logger
 from astrbot.api.event import MessageChain
@@ -18,6 +19,7 @@ from astrbot.core.message.components import (
     BaseMessageComponent,
     ButtonInteraction,
     File,
+    PrivateAttr,
     Record,
     Video,
 )
@@ -45,10 +47,39 @@ from .kook_types import (
     KookRoleExtraType,
     PlainTextElement,
     SectionModule,
+    VoiceModule,
 )
 
 KOOK_AT_SELECTOR_REGEX = re.compile(r"\((met|rol)\)([^()]+)\(\1\)")
 AT_MENTION_PREFIX_REGEX = re.compile(r"^@[^\s]+(\s*-\s*[^\s]+)?\s*")
+
+
+class _KookVoiceRecord(Record):
+    """Represents a KOOK voice card whose audio is fetched on first read."""
+
+    _get_voice_url: Callable[[], Awaitable[str]] = PrivateAttr()
+
+    def __init__(
+        self, client: KookClient, event: KookMessageEventData, media_id: int
+    ) -> None:
+        super().__init__(file=None)
+
+        # Session waiters copy message components without copying the HTTP client.
+        async def get_voice_url() -> str:
+            return await client.get_voice_url(event, media_id)
+
+        self._get_voice_url = get_voice_url
+
+    async def _resolve_file_source(self) -> str:
+        """Downloads audio from a temporary playback URL on first read.
+
+        Returns:
+            The local audio path.
+        """
+        if self.file is None:
+            url = await self._get_voice_url()
+            self.file = await Record(file=url).convert_to_file_path()
+        return self.file
 
 
 @register_platform_adapter(
@@ -387,7 +418,7 @@ class KookPlatformAdapter(Platform):
 
         text_parts: list[str] = []
         images: list[str] = []
-        files: list[tuple[KookModuleType, str, str]] = []
+        files: list[tuple[KookModuleType, str, str] | _KookVoiceRecord] = []
 
         for card in card_list:
             for module in card.modules:
@@ -408,6 +439,12 @@ class KookPlatformAdapter(Platform):
                         files.append((module.type, module.title, module.src))
                         text_parts.append(f" [{module.type.value}]")
 
+                    case VoiceModule():
+                        files.append(
+                            _KookVoiceRecord(self.client, data, module.media_id)
+                        )
+                        text_parts.append(" [voice]")
+
                     case _:
                         logger.debug(f"[KOOK] 跳过或未处理模块: {module.type}")
 
@@ -423,9 +460,10 @@ class KookPlatformAdapter(Platform):
         for img_url in images:
             message.append(Image(file=img_url))
         for file in files:
-            file_type = file[0]
-            file_name = file[1]
-            file_url = file[2]
+            if isinstance(file, _KookVoiceRecord):
+                message.append(file)
+                continue
+            file_type, file_name, file_url = file
             if file_type == KookModuleType.FILE:
                 message.append(File(name=file_name, url=file_url))
             elif file_type == KookModuleType.VIDEO:
@@ -544,7 +582,7 @@ class KookPlatformAdapter(Platform):
     ) -> AstrBotMessage | None:
         if data.type == KookMessageType.SYSTEM:
             if data.extra.type == "message_btn_click":
-                return self._convert_button_interaction(data)
+                return await asyncio.to_thread(self._convert_button_interaction, data)
             return None
 
         abm = AstrBotMessage()

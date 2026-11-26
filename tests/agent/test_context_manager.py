@@ -696,6 +696,36 @@ class TestContextManager:
 
     @pytest.mark.asyncio
     @pytest.mark.parametrize("summary", [False, True])
+    async def test_token_fallback_keeps_internal_notice_with_oversized_request(
+        self, summary
+    ):
+        """The last internal notice cannot replace the active request in fallback."""
+        from astrbot.core.agent.message import dump_messages, load_messages
+
+        original = self._rounds_with_tool_chain("f" * 900)
+        messages = load_messages(
+            dump_messages(original)
+            + [
+                {"role": "assistant", "content": "Working"},
+                {
+                    "role": "user",
+                    "content": "Internal notice",
+                    "_turn_continuation": True,
+                },
+            ]
+        )
+        config = ContextConfig(
+            max_context_tokens=1000,
+            llm_compress_provider=FailingProvider() if summary else None,
+            custom_token_counter=CharTokenCounter(),
+        )
+
+        result = await ContextManager(config).process(messages)
+
+        assert result == [messages[0], *messages[-3:]]
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("summary", [False, True])
     @pytest.mark.parametrize("custom_counter", [False, True])
     @pytest.mark.parametrize("oversized_latest", [False, True])
     async def test_fallback_preserves_mixed_rounds_and_custom_token_counts(
@@ -1267,6 +1297,25 @@ class TestContextManager:
 
         rounds = split_into_rounds([])
         assert len(rounds) == 0
+
+    @pytest.mark.parametrize("as_models", [False, True])
+    def test_split_rounds_keeps_internal_user_messages_in_current_round(
+        self, as_models
+    ):
+        """Internal notices must not split a user's request from its result."""
+        from astrbot.core.agent.context.round_utils import split_into_rounds
+        from astrbot.core.agent.message import load_messages
+
+        history = [
+            {"role": "user", "content": "Request"},
+            {"role": "assistant", "content": "Working"},
+            {"role": "user", "content": "Internal notice", "_turn_continuation": True},
+            {"role": "assistant", "content": "Done"},
+            {"role": "user", "content": "Follow-up"},
+        ]
+        messages = load_messages(history) if as_models else history
+
+        assert split_into_rounds(messages) == [messages[:4], messages[4:]]
 
     def test_split_rounds_accepts_message_objects(self):
         """Message objects can be split without converting them to dictionaries."""

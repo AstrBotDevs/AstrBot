@@ -57,32 +57,17 @@
     "description": "機能の説明",
     "parameters": "パラメーター一覧",
     "noParameters": "このツールにはパラメーターがありません",
-    "filter": {
-      "showBuiltin": "組み込みツールを表示"
-    },
     "table": {
       "paramName": "パラメーター名",
       "type": "種類",
       "description": "説明",
       "required": "必須",
-      "origin": "提供元",
       "originName": "提供元の名前",
-      "readonly": "読み取り専用",
       "permission": "権限",
       "permissionAdmin": "管理者",
       "permissionMember": "すべてのユーザー",
       "permissionEveryone": "すべてのユーザー",
-      "permissionBuiltin": "システム組み込み",
       "actions": "操作"
-    },
-    "configTags": {
-      "tooltipTitle": "このツールが設定ファイル {config} で有効になっている理由：",
-      "conditions": {
-        "truthy": "{key} が有効です",
-        "equals": "{key} = {expected}",
-        "in": "{key} が {expected} に一致しました",
-        "fallback": "{key} の現在値は {actual} です"
-      }
     },
     "summary": {
       "total": "合計",
@@ -196,11 +181,9 @@
     "configParseError": "設定の解析に失敗しました：{error}",
     "noAvailableConfig": "利用可能な設定がありません",
     "toggleToolSuccess": "ツールの状態を切り替えました",
-    "toggleToolReadonly": "組み込みツールは読み取り専用のため、有効化または無効化できません。",
     "toggleToolError": "ツールの状態を切り替えられませんでした：{error}",
     "updateToolPermissionSuccess": "ツール {name} の権限を更新しました",
     "updateToolPermissionFailed": "ツール権限の更新に失敗しました",
-    "updateToolPermissionBuiltin": "組み込みツールでは個別の権限を設定できません",
     "testError": "接続テストに失敗しました：{error}"
   }
 }

@@ -18,14 +18,8 @@ from astrbot.core.astr_agent_runtime.tools.computer_tools.util import (
     check_admin_permission,
 )
 from astrbot.core.astr_agent_runtime.tools.output import prepare_tool_output
-from astrbot.core.astr_agent_runtime.tools.registry import builtin_tool
 from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
-
-_CUA_TOOL_CONFIG = {
-    "provider_settings.computer_use_runtime": "sandbox",
-    "provider_settings.sandbox.booter": "cua",
-}
 
 
 def _to_json(data: Any) -> str:
@@ -50,7 +44,6 @@ async def _get_gui_component(context: ContextWrapper[AstrAgentContext]) -> Any:
     return gui
 
 
-@builtin_tool(config=_CUA_TOOL_CONFIG)
 @dataclass
 class CuaScreenshotTool(FunctionTool):
     name: str = "astrbot_cua_screenshot"
@@ -113,7 +106,6 @@ class CuaScreenshotTool(FunctionTool):
             return f"Error taking CUA screenshot: {_exception_detail(e)}"
 
 
-@builtin_tool(config=_CUA_TOOL_CONFIG)
 @dataclass
 class CuaMouseClickTool(FunctionTool):
     name: str = "astrbot_cua_mouse_click"
@@ -150,7 +142,6 @@ class CuaMouseClickTool(FunctionTool):
             return f"Error clicking CUA desktop: {_exception_detail(e)}"
 
 
-@builtin_tool(config=_CUA_TOOL_CONFIG)
 @dataclass
 class CuaKeyboardTypeTool(FunctionTool):
     name: str = "astrbot_cua_keyboard_type"

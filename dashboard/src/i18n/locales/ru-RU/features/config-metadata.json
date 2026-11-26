@@ -973,10 +973,6 @@
                 "description": "Единый режим Webhook",
                 "hint": "Использовать общий вход вебхуков AstrBot без открытия новых портов. URL: /api/v1/webhooks/platforms/{uuid}."
             },
-            "use_markdown": {
-                "description": "Отправлять проактивные сообщения в формате Markdown",
-                "hint": "Если включено, проактивные сообщения по умолчанию отправляются в формате Markdown; явный вызов use_markdown() в плагине имеет приоритет над этой настройкой."
-            },
             "webhook_uuid": {
                 "description": "UUID вебхука",
                 "hint": "Создается автоматически при добавлении платформы."
@@ -1837,6 +1833,9 @@
             "dashscope_embedding": {
                 "hint": "Embedding Aliyun DashScope. URL по умолчанию: https://dashscope.aliyuncs.com/api/v1."
             },
+            "volcengine_embedding": {
+              "hint": "Volcengine Embedding, адрес по умолчанию — https://ark.cn-beijing.volces.com/api/v3. Agent Plan — https://ark.cn-beijing.volces.com/api/plan/v3."
+            },
             "volcengine_cluster": {
                 "description": "Кластер Volcengine",
                 "hint": "Для моделей клонирования голоса выберите volcano_icl или volcano_icl_concurr; по умолчанию volcano_tts."
@@ -2037,6 +2036,9 @@
             "openai-tts-voice": {
                 "description": "API Base URL",
                 "hint": "Голоса OpenAI TTS: alloy, echo и др."
+            },
+            "stepfun-tts-voice": {
+                "description": "ID голоса"
             },
             "deepseek-tts-voice": {
                 "description": "Голос",

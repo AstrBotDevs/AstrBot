@@ -16,6 +16,7 @@ from astrbot.core.platform.message_type import MessageType
 def make_main_with_conversation_manager(conv_mgr):
     main = Main.__new__(Main)
     main.context = MagicMock()
+    main.context.get_locale = AsyncMock(return_value="zh-CN")
     main.context.get_using_provider_async = AsyncMock(
         side_effect=lambda *args, **kwargs: main.context.get_using_provider(
             *args,
@@ -23,6 +24,7 @@ def make_main_with_conversation_manager(conv_mgr):
         )
     )
     main.context.conversation_manager = conv_mgr
+    main.group_chat_context = None
     return main
 
 
