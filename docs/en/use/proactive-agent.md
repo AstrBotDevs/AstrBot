@@ -95,6 +95,8 @@ Scheduling does not grant extra capabilities:
 - For file operations or code execution, configure [Agent Sandbox](./astrbot-agent-sandbox.md).
 - For a business service, configure its [plugin](./plugin.md) or [MCP](./mcp.md).
 
+If [tools requiring approval](./tool-approval.md) are configured and `future_task` is in the list, creating or editing a task needs approval. Once approved, the listed tools the task uses on schedule are not asked about again. A task created without approval asks its creator. A task created in the ChatUI Workspace mode stays limited to the workspace when it runs, and Full access never passes to tasks. See [approval for scheduled tasks](./tool-approval.md#scheduled-tasks).
+
 ### Supported Platforms
 
 Execution and delivery are separate. Successful execution does not guarantee that a platform will accept a message. Platform permissions, conversation identifiers, connection state, proactive-message windows, and media formats all affect delivery. Check **Supported platforms** on the page and your platform's documentation; an old fixed platform list is not a complete support reference.

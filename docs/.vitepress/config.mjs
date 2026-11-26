@@ -181,6 +181,7 @@ export default defineConfig({
                   { text: "Agent 沙盒环境", link: "/astrbot-agent-sandbox" },
                   { text: "SubAgent 编排", link: "/subagent" },
                   { text: "主动型能力", link: "/proactive-agent" },
+                  { text: "工具审批与权限档位", link: "/tool-approval" },
                   {
                     text: "网页搜索",
                     link: "/websearch",
@@ -485,6 +486,7 @@ export default defineConfig({
                   { text: "Agent Sandbox", link: "/astrbot-agent-sandbox" },
                   { text: "SubAgent Orchestration", link: "/subagent" },
                   { text: "Proactive Capabilities", link: "/proactive-agent" },
+                  { text: "Tool Approval and Permissions", link: "/tool-approval" },
                   {
                     text: "Web Search",
                     link: "/websearch",
