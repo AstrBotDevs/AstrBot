@@ -6,13 +6,13 @@ import json
 import sqlite3
 import time
 import uuid
-from contextlib import contextmanager
+from contextlib import closing, contextmanager
 from pathlib import Path
 from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-from astrbot.core.utils.astrbot_path import get_astrbot_data_path
+from astrbot.core.config.default import DB_PATH
 
 
 class ViewSpec(BaseModel):
@@ -241,33 +241,55 @@ class ViewStore:
     """Persist view snapshots and reserve callbacks across workers."""
 
     def __init__(self, path: Path | None = None):
-        self.path = path
+        self.path = path if path is not None else Path(DB_PATH)
+
+    def initialize(self) -> None:
+        """Create the ChatUI tables and import legacy records in one transaction."""
+        with self.connect() as db:
+            db.execute("BEGIN IMMEDIATE")
+            if db.execute(
+                "SELECT 1 FROM sqlite_master WHERE type='table' AND name='chatui_actions'"
+            ).fetchone():
+                return
+
+            db.execute(
+                "CREATE TABLE chatui_views ("
+                "id TEXT PRIMARY KEY, owner TEXT, session_id TEXT, platform TEXT, "
+                "module TEXT, name TEXT, version INTEGER, revision INTEGER, "
+                "data TEXT, text TEXT, message_id TEXT, run_id TEXT)"
+            )
+            db.execute(
+                "CREATE TABLE chatui_actions ("
+                "view_id TEXT, id TEXT, request TEXT, started REAL, status TEXT, "
+                "result TEXT, PRIMARY KEY(view_id, id))"
+            )
+
+            legacy_path = self.path.with_name("chatui.db")
+            if legacy_path.is_file():
+                db.execute(
+                    "ATTACH DATABASE ? AS legacy_chatui",
+                    (legacy_path.resolve().as_uri() + "?mode=ro",),
+                )
+                # An interrupted first use of ChatUI may have left an empty file.
+                for table in ("views", "actions"):
+                    if db.execute(
+                        "SELECT 1 FROM legacy_chatui.sqlite_master WHERE type='table' AND name=?",
+                        (table,),
+                    ).fetchone():
+                        db.execute(
+                            f"INSERT INTO chatui_{table} SELECT * FROM legacy_chatui.{table}"
+                        )
 
     @contextmanager
     def connect(self):
-        """Open the view database, creating its tables on first use.
+        """Open a transaction on the main SQLite database.
 
         Yields:
             A connection with dictionary-style rows, closed on exit.
         """
-        path = self.path or Path(get_astrbot_data_path()) / "chatui.db"
-        path.parent.mkdir(parents=True, exist_ok=True)
-        connection = sqlite3.connect(path, timeout=10)
-        connection.row_factory = sqlite3.Row
-        connection.executescript(
-            "CREATE TABLE IF NOT EXISTS views ("
-            "id TEXT PRIMARY KEY, owner TEXT, session_id TEXT, platform TEXT, "
-            "module TEXT, name TEXT, version INTEGER, revision INTEGER, "
-            "data TEXT, text TEXT, message_id TEXT, run_id TEXT);"
-            "CREATE TABLE IF NOT EXISTS actions ("
-            "view_id TEXT, id TEXT, request TEXT, started REAL, status TEXT, "
-            "result TEXT, PRIMARY KEY(view_id, id));"
-        )
-        try:
-            with connection:
-                yield connection
-        finally:
-            connection.close()
+        with closing(sqlite3.connect(self.path, timeout=30, uri=True)) as db, db:
+            db.row_factory = sqlite3.Row
+            yield db
 
     def create(self, event, module: str, result: ViewResult) -> dict:
         """Persist a card created by a plugin message or tool handler.
@@ -300,7 +322,7 @@ class ViewStore:
         with self.connect() as db:
             stored = {**record, "data": json.dumps(record["data"], ensure_ascii=False)}
             db.execute(
-                "INSERT INTO views VALUES (:id,:owner,:session_id,:platform,"
+                "INSERT INTO chatui_views VALUES (:id,:owner,:session_id,:platform,"
                 ":module,:name,:version,:revision,:data,:text,:message_id,:run_id)",
                 stored,
             )
@@ -319,7 +341,9 @@ class ViewStore:
             ViewError: If the instance no longer exists.
         """
         with self.connect() as db:
-            row = db.execute("SELECT * FROM views WHERE id=?", (view_id,)).fetchone()
+            row = db.execute(
+                "SELECT * FROM chatui_views WHERE id=?", (view_id,)
+            ).fetchone()
         if not row:
             raise ViewError("VIEW_UNAVAILABLE", "This view is unavailable.")
         record = dict(row)
@@ -335,7 +359,7 @@ class ViewStore:
         """
         with self.connect() as db:
             db.execute(
-                "UPDATE views SET message_id=? WHERE id=?", (message_id, view_id)
+                "UPDATE chatui_views SET message_id=? WHERE id=?", (message_id, view_id)
             )
 
     def begin(self, view_id: str, request: ViewActionRequest) -> dict | None:
@@ -355,7 +379,7 @@ class ViewStore:
         with self.connect() as db:
             db.execute("BEGIN IMMEDIATE")
             previous = db.execute(
-                "SELECT * FROM actions WHERE view_id=? AND id=?",
+                "SELECT * FROM chatui_actions WHERE view_id=? AND id=?",
                 (view_id, request.interaction_id),
             ).fetchone()
             if previous:
@@ -373,7 +397,7 @@ class ViewStore:
                 )
                 raise ViewError(code, "This action has already been accepted.")
             active = db.execute(
-                "SELECT id,started FROM actions WHERE view_id=? AND status='running'",
+                "SELECT id,started FROM chatui_actions WHERE view_id=? AND status='running'",
                 (view_id,),
             ).fetchone()
             if active:
@@ -384,7 +408,7 @@ class ViewStore:
                     "Another action is still pending.",
                 )
             row = db.execute(
-                "SELECT revision FROM views WHERE id=?", (view_id,)
+                "SELECT revision FROM chatui_views WHERE id=?", (view_id,)
             ).fetchone()
             if not row:
                 raise ViewError("VIEW_UNAVAILABLE", "This view is unavailable.")
@@ -394,7 +418,7 @@ class ViewStore:
                     "The view has changed. Review it and try again.",
                 )
             db.execute(
-                "INSERT INTO actions VALUES (?,?,?,?,?,NULL)",
+                "INSERT INTO chatui_actions VALUES (?,?,?,?,?,NULL)",
                 (view_id, request.interaction_id, encoded, time.time(), "running"),
             )
         return None
@@ -420,18 +444,18 @@ class ViewStore:
         with self.connect() as db:
             db.execute("BEGIN IMMEDIATE")
             previous = db.execute(
-                "SELECT result FROM actions WHERE view_id=? AND id=?",
+                "SELECT result FROM chatui_actions WHERE view_id=? AND id=?",
                 (view_id, interaction_id),
             ).fetchone()
             if previous and previous["result"]:
                 return json.loads(previous["result"])
             if data is not None and error is None:
                 db.execute(
-                    "UPDATE views SET data=?,revision=revision+1 WHERE id=?",
+                    "UPDATE chatui_views SET data=?,revision=revision+1 WHERE id=?",
                     (json.dumps(data, ensure_ascii=False), view_id),
                 )
             row = db.execute(
-                "SELECT data,revision FROM views WHERE id=?", (view_id,)
+                "SELECT data,revision FROM chatui_views WHERE id=?", (view_id,)
             ).fetchone()
             result = {
                 "view_id": view_id,
@@ -444,7 +468,7 @@ class ViewStore:
                     "revision": row["revision"],
                 }
             db.execute(
-                "UPDATE actions SET status=?,result=? WHERE view_id=? AND id=?",
+                "UPDATE chatui_actions SET status=?,result=? WHERE view_id=? AND id=?",
                 (
                     "failed" if error else "completed",
                     json.dumps(result),
@@ -462,10 +486,11 @@ class ViewStore:
         """
         with self.connect() as db:
             db.execute(
-                "DELETE FROM actions WHERE view_id IN (SELECT id FROM views WHERE session_id=?)",
+                "DELETE FROM chatui_actions WHERE view_id IN "
+                "(SELECT id FROM chatui_views WHERE session_id=?)",
                 (session_id,),
             )
-            db.execute("DELETE FROM views WHERE session_id=?", (session_id,))
+            db.execute("DELETE FROM chatui_views WHERE session_id=?", (session_id,))
 
 
 view_store = ViewStore()

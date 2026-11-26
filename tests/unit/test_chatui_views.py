@@ -2,6 +2,8 @@
 
 import asyncio
 import json
+import sqlite3
+from contextlib import closing
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock
@@ -194,6 +196,7 @@ def views(tmp_path, monkeypatch):
     )
     monkeypatch.setitem(star_map, __name__, plugin)
     store = ViewStore(tmp_path / "views.db")
+    store.initialize()
     monkeypatch.setattr(core_views, "view_store", store)
     monkeypatch.setattr(chat_routes, "view_store", store)
     monkeypatch.setattr("astrbot.core.pipeline.process_stage.stage.view_store", store)
@@ -467,6 +470,51 @@ def test_persisted_actions_revision_and_replay(views):
     store.delete_session("session-1")
     with pytest.raises(ViewError):
         store.get(record["id"])
+
+
+@pytest.mark.asyncio
+async def test_migrate_legacy_chatui_database_once(temp_db):
+    main_path = Path(temp_db.db_path)
+    legacy_path = main_path.with_name("chatui.db")
+    request = ViewActionRequest(
+        action_id="demo:select", interaction_id="click-1", expected_revision=1
+    )
+    receipt = {
+        "view_id": "card-1",
+        "interaction_id": "click-1",
+        "error": None,
+        "snapshot": {"data": {"selected": 1}, "revision": 2},
+    }
+    with closing(sqlite3.connect(legacy_path)) as db, db:
+        db.executescript(
+            "CREATE TABLE views ("
+            "id TEXT PRIMARY KEY, owner TEXT, session_id TEXT, platform TEXT, "
+            "module TEXT, name TEXT, version INTEGER, revision INTEGER, "
+            "data TEXT, text TEXT, message_id TEXT, run_id TEXT);"
+            "CREATE TABLE actions ("
+            "view_id TEXT, id TEXT, request TEXT, started REAL, status TEXT, "
+            "result TEXT, PRIMARY KEY(view_id, id));"
+            "INSERT INTO views VALUES ('card-1', 'alice', 'session-1', 'webchat', "
+            "'demo', 'results', 1, 2, '{\"selected\":1}', 'One item', 'msg-1', 'run-1');"
+        )
+        db.execute(
+            "INSERT INTO actions VALUES ('card-1', 'click-1', ?, 0, 'completed', ?)",
+            (json.dumps(request.model_dump(), sort_keys=True), json.dumps(receipt)),
+        )
+
+    await temp_db.initialize()
+    store = ViewStore(main_path)
+    assert store.get("card-1")["message_id"] == "msg-1"
+    assert store.get("card-1")["data"] == {"selected": 1}
+    assert store.begin("card-1", request) == receipt
+
+    store.delete_session("session-1")
+    assert legacy_path.is_file()
+    await temp_db.initialize()
+    with pytest.raises(ViewError, match="This view is unavailable"):
+        store.get("card-1")
+    with store.connect() as db:
+        assert db.execute("SELECT COUNT(*) FROM chatui_actions").fetchone()[0] == 0
 
 
 @pytest.mark.asyncio
