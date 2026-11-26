@@ -180,7 +180,10 @@ async def test_platform_callback_honors_row_deadline(
         ]
     else:
         parts = await message_chain_to_storage_message_parts(
-            chain, insert_attachment=AsyncMock(), attachments_dir=tmp_path
+            chain,
+            session_id="session-1",
+            insert_attachment=AsyncMock(),
+            attachments_dir=tmp_path,
         )
         token = parts[0]["buttons"][0]["action"]["callback_data"]
 

@@ -4,7 +4,7 @@ from unittest.mock import Mock
 
 import pytest
 
-from astrbot.core.chatui import view_store
+from astrbot.core.message.interactive_ui import view_store
 from astrbot.core.platform_message_history_mgr import PlatformMessageHistoryManager
 from astrbot.dashboard.services.chat_service import ChatRunState, ChatService
 
@@ -109,7 +109,13 @@ async def test_stream_saves_one_reply_after_its_follow_up(database, monkeypatch)
     )
     assert user_record.id == follow_up.id
     assert record.id == first_save.id
-    bind_view.assert_called_once_with("forecast", str(record.id))
+    bind_view.assert_called_once_with(
+        "forecast",
+        str(record.id),
+        platform_id="webchat",
+        session_id=run.session_id,
+        history_platform_id=run.platform_history_id,
+    )
     parts = record.content["message"]
     assert [part["type"] for part in parts] == [
         "plain",

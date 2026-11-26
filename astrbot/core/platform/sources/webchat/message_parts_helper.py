@@ -1,3 +1,4 @@
+import asyncio
 import json
 import mimetypes
 import shutil
@@ -7,18 +8,21 @@ from pathlib import Path, PurePosixPath
 from typing import Any
 
 from astrbot.core.db.po import Attachment
+from astrbot.core.message import interactive_ui
 from astrbot.core.message.components import (
     ActionRow,
     Button,
     ButtonInteraction,
     File,
     Image,
+    InteractiveView,
     Json,
     Plain,
     Record,
     Reply,
     Video,
 )
+from astrbot.core.message.interactive_ui import ViewError, resolve_view_spec
 from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.platform.button_interaction import (
     decode_button_callback_async,
@@ -33,6 +37,85 @@ ReplyHistoryGetter = Callable[
     [Any],
     Awaitable[tuple[list[dict], str | None, str | None] | None],
 ]
+
+
+def resolve_view(
+    module: str, name: str, version: int | None = None, *, target: str | None = None
+):
+    """Resolve the HTML entry for a view rendered by the dashboard.
+
+    Args:
+        module: Module that owns the view.
+        name: View name declared by the plugin.
+        version: Required version of a persisted view.
+        target: Dashboard host to validate, or None for interactive messages.
+
+    Returns:
+        The plugin, its declaration, and the resolved HTML path.
+
+    Raises:
+        ViewError: If the view or its HTML entry is unavailable.
+    """
+    plugin, spec = resolve_view_spec(module, name, version, target=target)
+    root = Path(plugin.module.__file__).resolve().parent
+    entry = (root / spec.entry).resolve()
+    if spec.target == "plugin_page" and not entry.is_file():
+        entry = (root / "pages" / spec.name / "index.html").resolve()
+    if not entry.is_relative_to(root) or not entry.is_file():
+        raise ViewError("VIEW_UNAVAILABLE", "The view or its version is unavailable.")
+    return plugin, spec, entry
+
+
+async def serialize_webchat_view(
+    view: InteractiveView, session_id: str, history_platform_id: str
+) -> dict:
+    """Translate an interactive component into the WebChat view payload.
+
+    Args:
+        view: View reference sent by the message pipeline.
+        session_id: Destination conversation identifier.
+        history_platform_id: Destination history namespace.
+
+    Returns:
+        A WebChat message part with the card or its fallback text.
+    """
+    fallback = {"type": "plain", "text": view.fallback_text}
+    try:
+        record = await asyncio.to_thread(interactive_ui.view_store.get, view.view_id)
+    except ViewError:
+        return fallback
+    if (
+        record["platform_id"] != "webchat"
+        or record["session_id"] != session_id
+        or record["history_platform_id"] != history_platform_id
+    ):
+        return fallback
+    plugin, spec = resolve_view_spec(
+        record["module"], record["name"], record["version"]
+    )
+    return {
+        "type": "view",
+        "id": view.view_id,
+        "name": spec.name,
+        "text": view.fallback_text,
+        "title": view.title,
+        "target": spec.target,
+        "view_metadata": {
+            "name": spec.name,
+            "title": spec.title,
+            "description": spec.description,
+            "i18n": {
+                locale: {
+                    prefix: {spec.name: translations[prefix][spec.name]}
+                    for prefix in ("views", "pages")
+                    if isinstance(translations.get(prefix), dict)
+                    and isinstance(translations[prefix].get(spec.name), dict)
+                }
+                for locale, translations in plugin.i18n.items()
+            },
+        },
+    }
+
 
 MEDIA_PART_TYPES = {"image", "record", "file", "video"}
 
@@ -460,6 +543,8 @@ async def create_attachment_part_from_existing_file(
 async def message_chain_to_storage_message_parts(
     message_chain: MessageChain,
     *,
+    session_id: str,
+    history_platform_id: str = "webchat",
     insert_attachment: AttachmentInserter,
     attachments_dir: str | Path,
 ) -> list[dict]:
@@ -471,6 +556,12 @@ async def message_chain_to_storage_message_parts(
         if isinstance(comp, Plain):
             if comp.text:
                 parts.append({"type": "plain", "text": comp.text})
+            continue
+
+        if isinstance(comp, InteractiveView):
+            parts.append(
+                await serialize_webchat_view(comp, session_id, history_platform_id)
+            )
             continue
 
         if isinstance(comp, Json):
