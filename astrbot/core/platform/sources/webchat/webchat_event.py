@@ -43,6 +43,8 @@ class WebChatMessageEvent(AstrMessageEvent):
         session_id: str,
         streaming: bool = False,
         emit_complete: bool = False,
+        *,
+        history_platform_id: str = "webchat",
     ) -> str | None:
         request_id = str(message_id)
         if not message:
@@ -74,11 +76,17 @@ class WebChatMessageEvent(AstrMessageEvent):
                 if not accepted:
                     return None
             elif isinstance(comp, InteractiveView):
+                part = await serialize_webchat_view(
+                    comp, session_id, history_platform_id
+                )
+                part_type = part.pop("type")
+                if part_type == "plain":
+                    data = part["text"]
                 accepted = await webchat_queue_mgr.put_back_queue(
                     request_id,
                     {
-                        "type": "view",
-                        "data": serialize_webchat_view(comp),
+                        "type": part_type,
+                        "data": part if part_type == "view" else data,
                         "streaming": streaming,
                         "message_id": message_id,
                     },
@@ -231,7 +239,12 @@ class WebChatMessageEvent(AstrMessageEvent):
                     "message_id": message_id,
                 },
             )
-        await WebChatMessageEvent._send(message_id, message, session_id=self.session_id)
+        await WebChatMessageEvent._send(
+            message_id,
+            message,
+            session_id=self.get_extra("view_session_id", self.session_id),
+            history_platform_id=self.get_extra("view_history_platform_id", "webchat"),
+        )
         await super().send(message if message is not None else MessageChain([]))
 
     async def send_typing(self) -> None:
@@ -295,8 +308,11 @@ class WebChatMessageEvent(AstrMessageEvent):
             r = await WebChatMessageEvent._send(
                 message_id=message_id,
                 message=chain,
-                session_id=self.session_id,
+                session_id=self.get_extra("view_session_id", self.session_id),
                 streaming=True,
+                history_platform_id=self.get_extra(
+                    "view_history_platform_id", "webchat"
+                ),
             )
             if not r:
                 continue

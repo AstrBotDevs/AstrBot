@@ -166,6 +166,7 @@ Handlers can also yield ordinary message results or explicitly request a model r
 ## Persistence and boundaries
 
 - Main chat, standalone chat, and threads share the card renderer. Reloading restores data without executing the original command, tool, or callback.
+- A card instance stays bound to the first message that stores it. Sending it to another conversation uses the text fallback. AstrBot backups include card state and action receipts.
 - Increment `version` for incompatible contracts. Older incompatible cards fall back to text; there is no automatic migration. Successful data replacement increments `revision`.
 - The backend checks session ownership, source message, plugin availability, session plugin configuration, and declared actions. Plugins must still enforce business permissions.
 - Concurrent actions reserve the instance exclusively. Stale input gets `REVISION_CONFLICT` and the latest snapshot. Completed duplicate requests replay their outcome; reusing an ID with different input fails.

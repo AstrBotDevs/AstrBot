@@ -321,7 +321,7 @@ class ViewStore:
         session_id: str,
         history_platform_id: str,
     ) -> None:
-        """Associate a card with its persisted source message.
+        """Bind the first persisted source message for a card.
 
         Args:
             view_id: Instance identifier.
@@ -333,7 +333,8 @@ class ViewStore:
         with self.connect() as db:
             db.execute(
                 "UPDATE interactive_views SET message_id=? "
-                "WHERE id=? AND platform_id=? AND session_id=? AND history_platform_id=?",
+                "WHERE id=? AND message_id IS NULL "
+                "AND platform_id=? AND session_id=? AND history_platform_id=?",
                 (message_id, view_id, platform_id, session_id, history_platform_id),
             )
 

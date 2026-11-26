@@ -8,6 +8,7 @@ from typing import Any
 from astrbot import logger
 from astrbot.core import db_helper
 from astrbot.core.db.po import PlatformMessageHistory
+from astrbot.core.message.components import InteractiveView
 from astrbot.core.message.interactive_ui import view_store
 from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.platform import (
@@ -30,13 +31,35 @@ from .webchat_event import WebChatMessageEvent
 from .webchat_queue_mgr import WebChatQueueMgr, webchat_queue_mgr
 
 
-def _extract_conversation_id(session_id: str) -> str:
-    """Extract raw webchat conversation id from event/session id."""
-    if session_id.startswith("webchat!"):
-        parts = session_id.split("!", 2)
-        if len(parts) == 3:
-            return parts[2]
-    return session_id
+async def _extract_conversation_id(session_id: str) -> str:
+    """Resolve the conversation in a WebChat session identifier.
+
+    Args:
+        session_id: Raw conversation ID or a qualified WebChat session ID.
+
+    Returns:
+        The raw conversation ID used for delivery and history.
+    """
+    parts = session_id.split("!", 2)
+    if len(parts) != 3 or parts[0] != "webchat":
+        return session_id
+    _, owner, conversation_id = parts
+    if "!" not in conversation_id:
+        return conversation_id
+
+    # Either the account name or the conversation ID can contain the separator.
+    candidate = conversation_id
+    while True:
+        session = await db_helper.get_platform_session_by_id(candidate)
+        if session and session.platform_id == "webchat" and session.creator == owner:
+            return candidate
+        thread = await db_helper.get_webchat_thread_by_id(candidate)
+        if thread and thread.creator == owner:
+            return candidate
+        segment, separator, candidate = candidate.partition("!")
+        if not separator:
+            return conversation_id
+        owner = f"{owner}!{segment}"
 
 
 class QueueListener:
@@ -90,7 +113,12 @@ class WebChatAdapter(Platform):
         session: MessageSesion,
         message_chain: MessageChain,
     ) -> None:
-        conversation_id = _extract_conversation_id(session.session_id)
+        conversation_id = await _extract_conversation_id(session.session_id)
+        history_platform_id = "webchat"
+        if any(
+            isinstance(part, InteractiveView) for part in message_chain.chain
+        ) and await db_helper.get_webchat_thread_by_id(conversation_id):
+            history_platform_id = "webchat_thread"
         active_request_ids = self._webchat_queue_mgr.list_back_request_ids(
             conversation_id
         )
@@ -103,7 +131,9 @@ class WebChatAdapter(Platform):
             # No active streams to consume this proactive message.
             # Persist directly and return to avoid creating an unused queue.
             try:
-                await self._save_proactive_message(conversation_id, message_chain)
+                await self._save_proactive_message(
+                    conversation_id, message_chain, history_platform_id
+                )
             except Exception as e:
                 logger.error(
                     f"[WebChatAdapter] Failed to save proactive message: {e}",
@@ -116,9 +146,10 @@ class WebChatAdapter(Platform):
             await WebChatMessageEvent._send(
                 request_id,
                 message_chain,
-                session.session_id,
+                conversation_id,
                 streaming=True,
                 emit_complete=True,
+                history_platform_id=history_platform_id,
             )
 
         # If only passive subscription queues exist for this conversation,
@@ -126,7 +157,9 @@ class WebChatAdapter(Platform):
         # the normal streaming persistence path.
         if not stream_request_ids:
             try:
-                await self._save_proactive_message(conversation_id, message_chain)
+                await self._save_proactive_message(
+                    conversation_id, message_chain, history_platform_id
+                )
             except Exception as e:
                 logger.error(
                     f"[WebChatAdapter] Failed to save proactive message: {e}",
@@ -139,19 +172,18 @@ class WebChatAdapter(Platform):
         self,
         conversation_id: str,
         message_chain: MessageChain,
+        history_platform_id: str,
     ) -> None:
         message_parts = await message_chain_to_storage_message_parts(
             message_chain,
+            session_id=conversation_id,
+            history_platform_id=history_platform_id,
             insert_attachment=db_helper.insert_attachment,
             attachments_dir=self.attachments_dir,
         )
         if not message_parts:
             return
 
-        view_parts = [part for part in message_parts if part["type"] == "view"]
-        history_platform_id = "webchat"
-        if view_parts and await db_helper.get_webchat_thread_by_id(conversation_id):
-            history_platform_id = "webchat_thread"
         record = await db_helper.insert_platform_message_history(
             platform_id=history_platform_id,
             user_id=conversation_id,
@@ -159,15 +191,16 @@ class WebChatAdapter(Platform):
             sender_id="bot",
             sender_name="bot",
         )
-        for part in view_parts:
-            await asyncio.to_thread(
-                view_store.bind_message,
-                part["id"],
-                str(record.id),
-                platform_id=self.meta().id,
-                session_id=conversation_id,
-                history_platform_id=history_platform_id,
-            )
+        for part in message_parts:
+            if part["type"] == "view":
+                await asyncio.to_thread(
+                    view_store.bind_message,
+                    part["id"],
+                    str(record.id),
+                    platform_id=self.meta().id,
+                    session_id=conversation_id,
+                    history_platform_id=history_platform_id,
+                )
 
     async def _get_message_history(
         self, message_id: int
@@ -271,9 +304,7 @@ class WebChatAdapter(Platform):
         if isinstance(raw_message, tuple) and len(raw_message) >= 3:
             payload = raw_message[2]
             if isinstance(payload, dict):
-                message_event.set_extra(
-                    "view_session_id", _extract_conversation_id(message.session_id)
-                )
+                message_event.set_extra("view_session_id", raw_message[1])
                 message_event.set_extra(
                     "view_history_platform_id",
                     payload.get("_platform_history_id", self.meta().id),

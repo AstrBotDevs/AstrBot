@@ -170,22 +170,6 @@ class SQLiteDatabase(BaseDatabase):
             await conn.execute(text("PRAGMA temp_store=MEMORY"))
             await conn.execute(text("PRAGMA mmap_size=134217728"))
             await conn.execute(text("PRAGMA optimize"))
-            await conn.execute(
-                text(
-                    "CREATE TABLE IF NOT EXISTS interactive_views ("
-                    "id TEXT PRIMARY KEY, owner TEXT, session_id TEXT, "
-                    "platform_id TEXT, history_platform_id TEXT, "
-                    "module TEXT, name TEXT, version INTEGER, revision INTEGER, "
-                    "data TEXT, text TEXT, message_id TEXT, run_id TEXT)"
-                )
-            )
-            await conn.execute(
-                text(
-                    "CREATE TABLE IF NOT EXISTS interactive_view_actions ("
-                    "view_id TEXT, id TEXT, request TEXT, started REAL, status TEXT, "
-                    "result TEXT, PRIMARY KEY(view_id, id))"
-                )
-            )
             # 确保 personas 表有 folder_id、sort_order、skills 列（前向兼容）
             await self._ensure_persona_folder_columns(conn)
             await self._ensure_persona_skills_column(conn)

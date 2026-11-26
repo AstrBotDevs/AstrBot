@@ -25,6 +25,7 @@ from astrbot.core.pipeline.process_stage.stage import ProcessStage
 from astrbot.core.pipeline.waking_check.stage import WakingCheckStage
 from astrbot.core.platform.astrbot_message import AstrBotMessage, MessageMember
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
+from astrbot.core.platform.message_session import MessageSession
 from astrbot.core.platform.message_type import MessageType
 from astrbot.core.platform.platform_metadata import PlatformMetadata
 from astrbot.core.platform.sources.webchat import webchat_adapter
@@ -108,10 +109,17 @@ def test_view_targets_default_to_legacy_page_and_validate_page_actions():
 async def test_workbench_tool_result_emits_persistent_target_and_title(
     views, target, history_platform_id, monkeypatch, database
 ):
-    store, event, plugin, _ = views
-    message = event.message_obj
-    message.raw_message[2]["_platform_history_id"] = history_platform_id
+    store, _, plugin, _ = views
     adapter = webchat_adapter.WebChatAdapter({"id": "webchat"}, {}, asyncio.Queue())
+    username = "alice!ops" if history_platform_id == "webchat_thread" else "alice"
+    session_id = "session-1" if history_platform_id == "webchat_thread" else "session!1"
+    message = await adapter.convert_message(
+        (
+            username,
+            session_id,
+            {"message_id": "run-1", "_platform_history_id": history_platform_id},
+        )
+    )
     event = adapter.create_event(message)
     event.send = AsyncMock()
     plugin.views[0].target = target
@@ -124,9 +132,8 @@ async def test_workbench_tool_result_emits_persistent_target_and_title(
     await core_views.emit_view(event, __name__, result)
     send_frame = AsyncMock(return_value=True)
     monkeypatch.setattr(webchat_queue_mgr, "put_back_queue", send_frame)
-    await WebChatMessageEvent._send(
-        "run-1", event.send.await_args.args[0], event.session_id
-    )
+    chain = event.send.await_args.args[0]
+    await WebChatMessageEvent.send(event, chain)
     frame = send_frame.await_args.args[1]
     assert frame["type"] == "view"
     part = frame["data"]
@@ -136,16 +143,24 @@ async def test_workbench_tool_result_emits_persistent_target_and_title(
     assert record["data"] == {"url": "files/notes.md"}
     assert record["platform_id"] == "webchat"
     assert record["history_platform_id"] == history_platform_id
-    assert record["session_id"] == "session-1"
+    assert record["session_id"] == session_id
 
-    monkeypatch.setattr(webchat_adapter, "db_helper", database)
-    monkeypatch.setattr(webchat_adapter, "view_store", store)
+    if history_platform_id == "webchat":
+        await database.create_platform_session(
+            creator=username, platform_id="webchat", session_id=session_id
+        )
     monkeypatch.setattr(
         database,
         "get_webchat_thread_by_id",
-        AsyncMock(return_value=history_platform_id == "webchat_thread"),
+        AsyncMock(
+            side_effect=lambda cid: (
+                SimpleNamespace(creator=username)
+                if history_platform_id == "webchat_thread" and cid == session_id
+                else None
+            )
+        ),
     )
-    await adapter._save_proactive_message("session-1", event.send.await_args.args[0])
+    await adapter.send_by_session(event.session, chain)
     message_id = store.get(part["id"])["message_id"]
     history = await database.get_platform_message_history_by_id(int(message_id))
     assert history.platform_id == history_platform_id
@@ -153,6 +168,35 @@ async def test_workbench_tool_result_emits_persistent_target_and_title(
 
     with pytest.raises(ValueError, match="title"):
         interactive_ui.ViewResult(data={}, title="Cannot rename through an update")
+
+
+@pytest.mark.asyncio
+async def test_reusing_view_preserves_source_and_uses_text_in_other_sessions(
+    views, database, monkeypatch
+):
+    store, event, _, _ = views
+    adapter = webchat_adapter.WebChatAdapter({"id": "webchat"}, {}, asyncio.Queue())
+    await core_views.emit_view(
+        event, __name__, event.view_result(name="results", data={}, text="Results")
+    )
+    chain = event.send.await_args.args[0]
+    view_id = chain.chain[0].view_id
+    await adapter.send_by_session(event.session, chain)
+    source_id = store.get(view_id)["message_id"]
+    assert source_id is not None
+    await adapter.send_by_session(event.session, chain)
+    assert store.get(view_id)["message_id"] == source_id
+
+    other = MessageSession("webchat", MessageType.FRIEND_MESSAGE, "other-session")
+    await adapter.send_by_session(other, chain)
+    (history,) = await database.get_platform_message_history("webchat", "other-session")
+    assert history.content["message"] == [{"type": "plain", "text": "Results"}]
+
+    send_frame = AsyncMock(return_value=True)
+    monkeypatch.setattr(webchat_queue_mgr, "put_back_queue", send_frame)
+    await WebChatMessageEvent._send("other-run", chain, "other-session")
+    frame = send_frame.await_args.args[1]
+    assert (frame["type"], frame["data"]) == ("plain", "Results")
 
 
 @pytest.mark.asyncio
@@ -239,6 +283,8 @@ def views(tmp_path, monkeypatch, database):
     monkeypatch.setitem(star_map, __name__, plugin)
     store = ViewStore(Path(database.db_path))
     monkeypatch.setattr(core_views, "view_store", store)
+    monkeypatch.setattr(webchat_adapter, "db_helper", database)
+    monkeypatch.setattr(webchat_adapter, "view_store", store)
     monkeypatch.setattr(chat_routes, "view_store", store)
     monkeypatch.setattr("astrbot.core.pipeline.process_stage.stage.view_store", store)
     message = AstrBotMessage()
@@ -938,7 +984,9 @@ async def test_default_message_titles_keep_metadata_for_live_localization(views)
     spec.title = "Default title"
     plugin.i18n = {"en-US": {"views": {"results": {"title": "Translated"}}, "metadata": {"secret": "Unrelated"}}}
     await core_views.emit_view(event, __name__, event.view_result(name="results", data={}, text="Opened"))
-    part = serialize_webchat_view(event.send.await_args.args[0].chain[0])
+    part = await serialize_webchat_view(
+        event.send.await_args.args[0].chain[0], "session-1", "webchat"
+    )
     assert part["title"] == ""
     assert part["view_metadata"]["title"] == "Default title"
     assert part["view_metadata"]["i18n"]["en-US"] == {"views": {"results": {"title": "Translated"}}}

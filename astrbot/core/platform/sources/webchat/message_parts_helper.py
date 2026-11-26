@@ -1,3 +1,4 @@
+import asyncio
 import json
 import mimetypes
 import shutil
@@ -7,6 +8,7 @@ from pathlib import Path, PurePosixPath
 from typing import Any
 
 from astrbot.core.db.po import Attachment
+from astrbot.core.message import interactive_ui
 from astrbot.core.message.components import (
     ActionRow,
     Button,
@@ -64,19 +66,37 @@ def resolve_view(
     return plugin, spec, entry
 
 
-def serialize_webchat_view(view: InteractiveView) -> dict:
+async def serialize_webchat_view(
+    view: InteractiveView, session_id: str, history_platform_id: str
+) -> dict:
     """Translate an interactive component into the WebChat view payload.
 
     Args:
         view: View reference sent by the message pipeline.
+        session_id: Destination conversation identifier.
+        history_platform_id: Destination history namespace.
 
     Returns:
-        The payload shared by live messages and WebChat history.
+        A WebChat message part with the card or its fallback text.
     """
-    plugin, spec = resolve_view_spec(view.module, view.name, view.version)
+    fallback = {"type": "plain", "text": view.fallback_text}
+    try:
+        record = await asyncio.to_thread(interactive_ui.view_store.get, view.view_id)
+    except ViewError:
+        return fallback
+    if (
+        record["platform_id"] != "webchat"
+        or record["session_id"] != session_id
+        or record["history_platform_id"] != history_platform_id
+    ):
+        return fallback
+    plugin, spec = resolve_view_spec(
+        record["module"], record["name"], record["version"]
+    )
     return {
+        "type": "view",
         "id": view.view_id,
-        "name": view.name,
+        "name": spec.name,
         "text": view.fallback_text,
         "title": view.title,
         "target": spec.target,
@@ -523,6 +543,8 @@ async def create_attachment_part_from_existing_file(
 async def message_chain_to_storage_message_parts(
     message_chain: MessageChain,
     *,
+    session_id: str,
+    history_platform_id: str = "webchat",
     insert_attachment: AttachmentInserter,
     attachments_dir: str | Path,
 ) -> list[dict]:
@@ -537,7 +559,9 @@ async def message_chain_to_storage_message_parts(
             continue
 
         if isinstance(comp, InteractiveView):
-            parts.append({"type": "view", **serialize_webchat_view(comp)})
+            parts.append(
+                await serialize_webchat_view(comp, session_id, history_platform_id)
+            )
             continue
 
         if isinstance(comp, Json):
