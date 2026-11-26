@@ -988,11 +988,9 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             TextPart(
                 text=(
                     "\n<system_reminder>\n"
-                    "The preceding input is a steer for the current turn. "
-                    "If it changes your approach and work remains, start with one or "
-                    "two short sentences of user-visible text explaining how you will "
-                    "adjust before continuing with reasoning or tools. Then continue "
-                    "the task in the same turn. Give this update only once for this steer.\n"
+                    "This is a steer for the current turn. If it changes your plan, "
+                    "first explain the adjustment in 1–2 sentences of user-visible text, "
+                    "then continue.\n"
                     "</system_reminder>"
                 )
             ).mark_as_temp()
