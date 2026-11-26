@@ -55,7 +55,18 @@ async def sync_command_configs() -> None:
     config_map = _bind_configs_to_descriptors(descriptors, config_records)
     live_handlers = {desc.handler_full_name for desc in descriptors}
 
-    stale_configs = [key for key in config_map if key not in live_handlers]
+    stale_configs = []
+    for key, cfg in config_map.items():
+        if key in live_handlers:
+            continue
+        plugin_md = star_map.get(cfg.module_path) if cfg.module_path else None
+        if (
+            plugin_md is not None
+            and not plugin_md.activated
+            and plugin_md.module is None
+        ):
+            continue
+        stale_configs.append(key)
     if stale_configs:
         await db_helper.delete_command_configs(stale_configs)
 
