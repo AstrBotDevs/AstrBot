@@ -66,10 +66,22 @@ async def test_card_is_shown_in_chatui_only(platform):
 
 
 @pytest.mark.asyncio
-async def test_a_card_that_cannot_be_sent_does_not_stop_the_reply():
+@pytest.mark.parametrize("send_fails", [False, True])
+async def test_a_card_does_not_stop_the_reply(send_fails):
     event = _event()
-    event.send.side_effect = RuntimeError("stream closed")
-    await notify_auxiliary_model_failure(event, "Knowledge base", "down")
+    event._has_send_oper = False
+
+    async def send(_chain):
+        # Like AstrMessageEvent.send, which the pipeline checks before
+        # running the model.
+        event._has_send_oper = True
+        if send_fails:
+            raise RuntimeError("stream closed")
+
+    event.send = AsyncMock(side_effect=send)
+    await notify_auxiliary_model_failure(event, "Speech-to-text (whisper)", "down")
+    event.send.assert_awaited_once()
+    assert event._has_send_oper is False
 
 
 def _voice(tmp_path):

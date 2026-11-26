@@ -30,6 +30,9 @@ async def notify_auxiliary_model_failure(
     """
     if event.get_platform_name() != "webchat":
         return
+    # Sending marks the event as answered, and the pipeline then skips the
+    # model. The card is only a notice: keep the reply going.
+    has_sent = event._has_send_oper
     try:
         await event.send(
             MessageChain(
@@ -46,3 +49,5 @@ async def notify_auxiliary_model_failure(
         )
     except Exception as exc:
         logger.warning(f"Failed to show the {model} failure in ChatUI: {exc}")
+    finally:
+        event._has_send_oper = has_sent
