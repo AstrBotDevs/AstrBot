@@ -4,6 +4,7 @@ import asyncio
 import json
 import os
 import re
+import sqlite3
 import uuid
 from collections.abc import AsyncIterator
 from copy import deepcopy
@@ -175,6 +176,7 @@ class BotMessageAccumulator:
     def __init__(self) -> None:
         self.parts: list[dict] = []
         self.pending_text = ""
+        self._plain_streaming = True
         self.pending_tool_calls: dict[str, dict] = {}
         self.record = None
 
@@ -187,29 +189,43 @@ class BotMessageAccumulator:
         *,
         chain_type: str | None,
         streaming: bool,
-    ) -> None:
+    ) -> str:
+        """Accumulate a plain frame and return the text to send to subscribers.
+
+        Args:
+            result_text: Text or serialized tool payload.
+            chain_type: Optional reasoning or tool event type.
+            streaming: Whether this frame is an incremental text chunk.
+
+        Returns:
+            The frame text, including a paragraph break when a stream follows
+            standalone text. Subscribers can then render it after reconnecting.
+        """
         if chain_type == "tool_call":
             self._flush_pending_text()
             self._store_tool_call(result_text)
-            return
+            return result_text
 
         if chain_type == "tool_call_result":
             self._flush_pending_text()
             self._store_tool_call_result(result_text)
-            return
+            return result_text
 
         if chain_type == "reasoning":
             self._flush_pending_text()
             self._append_think_part(result_text)
-            return
+            return result_text
 
         if not result_text:
-            return
-        if not streaming:
+            return result_text
+        separator = ""
+        if not streaming or not self._plain_streaming:
             self._flush_pending_text()
             if self.parts and self.parts[-1].get("type") == "plain":
-                self.pending_text = "\n\n"
-        self.pending_text += result_text
+                separator = "\n\n"
+        self.pending_text += separator + result_text
+        self._plain_streaming = streaming
+        return separator + result_text if streaming else result_text
 
     def add_part(self, part: dict | None) -> None:
         """Append a structured non-text message part.
@@ -936,14 +952,6 @@ class ChatService:
                 sender_name="bot",
                 turn_id=turn_id,
             )
-        from astrbot.core.chatui import view_store
-
-        if record:
-            for part in message_parts:
-                if part.get("type") == "view":
-                    await asyncio.to_thread(
-                        view_store.bind_message, part["id"], str(record.id)
-                    )
         return record
 
     def get_active_chat_runs(self, username: str, session_id: str) -> list[dict]:
@@ -1111,6 +1119,7 @@ class ChatService:
         display_accumulator = BotMessageAccumulator()
         pending_agent_stats = {}
         pending_refs = {}
+        bound_view_ids: set[str] = set()
 
         async def flush_pending_bot_message(final: bool = True):
             """Save the buffered bot message.
@@ -1153,6 +1162,28 @@ class ChatService:
                 record=pending_accumulator.record,
             )
             pending_accumulator.record = saved_record
+            if saved_record:
+                from astrbot.core.chatui import view_store
+
+                for part in message_parts_to_save:
+                    if part.get("type") != "view":
+                        continue
+                    view_id = part.get("id")
+                    if not isinstance(view_id, str) or view_id in bound_view_ids:
+                        continue
+                    try:
+                        await asyncio.to_thread(
+                            view_store.bind_message, view_id, str(saved_record.id)
+                        )
+                    except (sqlite3.Error, OSError) as exc:
+                        logger.warning(
+                            "Could not bind ChatUI view %s to history message %s: %s",
+                            view_id,
+                            saved_record.id,
+                            exc,
+                        )
+                    else:
+                        bound_view_ids.add(view_id)
             if final:
                 pending_accumulator = BotMessageAccumulator()
                 pending_agent_stats = {}
@@ -1188,12 +1219,14 @@ class ChatService:
 
                 attachment_saved_payload = None
                 if msg_type == "plain":
-                    for accumulator in (pending_accumulator, display_accumulator):
-                        accumulator.add_plain(
-                            result_text,
-                            chain_type=chain_type,
-                            streaming=streaming,
-                        )
+                    outgoing_text = pending_accumulator.add_plain(
+                        result_text, chain_type=chain_type, streaming=streaming
+                    )
+                    display_accumulator.add_plain(
+                        result_text, chain_type=chain_type, streaming=streaming
+                    )
+                    if outgoing_text != result_text:
+                        result = {**result, "data": outgoing_text}
                 elif msg_type in {"image", "record", "file", "video"}:
                     prefix = {
                         "image": "[IMAGE]",
@@ -1263,14 +1296,18 @@ class ChatService:
                                 .values(created_at=display_at)
                             )
 
+                final = msg_type == "end"
                 snapshot_accumulator = deepcopy(display_accumulator)
-                run.message_parts = snapshot_accumulator.build_message_parts()
-                self._publish_chat_run(run, result)
+                run.message_parts = snapshot_accumulator.build_message_parts(
+                    final=final
+                )
+                if not final:
+                    self._publish_chat_run(run, result)
                 if attachment_saved_payload:
                     self._publish_chat_run(run, attachment_saved_payload)
 
                 should_save = False
-                if msg_type == "end":
+                if final:
                     should_save = bool(
                         pending_accumulator.has_content()
                         or pending_refs
@@ -1283,9 +1320,7 @@ class ChatService:
                         should_save = True
 
                 if should_save:
-                    saved_record = await flush_pending_bot_message(
-                        final=msg_type == "end"
-                    )
+                    saved_record = await flush_pending_bot_message(final=final)
                     if saved_record:
                         self._publish_chat_run(
                             run,
@@ -1300,8 +1335,9 @@ class ChatService:
                                 },
                             },
                         )
-                if msg_type == "end":
+                if final:
                     run.status = "completed"
+                    self._publish_chat_run(run, result)
                     break
         except asyncio.CancelledError:
             run.status = "stopped"

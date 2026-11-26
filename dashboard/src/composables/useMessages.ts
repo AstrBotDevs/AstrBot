@@ -1182,14 +1182,14 @@ export function useMessages(options: UseMessagesOptions) {
       const payload = JSON.parse(event.data);
       const payloadMessageId =
         payload?.message_id == null ? "" : String(payload.message_id);
-      let connection = payloadMessageId
+      const connection = payloadMessageId
         ? activeConnections[payloadMessageId]
-        : undefined;
-      if (!connection) {
-        const candidates = getWebSocketConnections(sessionId);
-        connection = candidates[0];
-      }
-      if (connection?.transport !== "websocket" || !connection.botRecord) {
+        : getWebSocketConnections(sessionId)[0];
+      if (
+        connection?.transport !== "websocket" ||
+        connection.sessionId !== sessionId ||
+        !connection.botRecord
+      ) {
         return;
       }
       processStreamPayload(

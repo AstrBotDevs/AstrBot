@@ -516,11 +516,13 @@ class OpenApiService:
                     continue
 
                 if msg_type == "plain":
-                    message_accumulator.add_plain(
+                    outgoing_text = message_accumulator.add_plain(
                         result_text,
                         chain_type=chain_type,
                         streaming=streaming,
                     )
+                    if outgoing_text != result_text:
+                        result = {**result, "data": outgoing_text}
                 elif msg_type == "error":
                     error = (
                         result_text

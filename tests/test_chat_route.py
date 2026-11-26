@@ -635,8 +635,8 @@ async def test_completed_chat_stream_preserves_pending_output(
             "plain",
             "plain",
             "agent_stats",
-            "end",
             "message_saved",
+            "end",
         ]
         assert json.loads(received[1]["data"])["result"] == "Found"
         assert received[2]["data"] == "Final reply"

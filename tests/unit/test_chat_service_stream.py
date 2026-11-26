@@ -1,14 +1,16 @@
 import asyncio
 import json
+from unittest.mock import Mock
 
 import pytest
 
+from astrbot.core.chatui import view_store
 from astrbot.core.platform_message_history_mgr import PlatformMessageHistoryManager
 from astrbot.dashboard.services.chat_service import ChatRunState, ChatService
 
 
 @pytest.mark.asyncio
-async def test_stream_saves_one_reply_after_its_follow_up(database):
+async def test_stream_saves_one_reply_after_its_follow_up(database, monkeypatch):
     service = object.__new__(ChatService)
     service.db = database
     service.platform_history_mgr = PlatformMessageHistoryManager(database)
@@ -16,8 +18,12 @@ async def test_stream_saves_one_reply_after_its_follow_up(database):
     service.chat_runs = {}
     service.chat_runs_by_session = {}
     reply_saved = asyncio.Event()
+    frames = []
+    bind_view = Mock()
+    monkeypatch.setattr(view_store, "bind_message", bind_view)
 
     def publish(run, payload):
+        frames.append(payload)
         if payload["type"] == "message_saved":
             reply_saved.set()
 
@@ -48,12 +54,15 @@ async def test_stream_saves_one_reply_after_its_follow_up(database):
 
     for event in (
         {"type": "plain", "data": "Looking up Shanghai."},
-        {"type": "plain", "data": "Checking the latest forecast."},
+        {"type": "plain", "data": "One moment."},
+        {"type": "plain", "data": "Checking the ", "streaming": True},
+        {"type": "plain", "data": "latest forecast.", "streaming": True},
         {
             "type": "plain",
             "chain_type": "tool_call",
             "data": json.dumps({"id": "c1", "name": "read", "ts": 1}),
         },
+        {"type": "view", "data": {"id": "forecast", "name": "forecast"}},
         {
             "type": "actionrow",
             "data": {"buttons": [], "title": "Choose an option"},
@@ -72,6 +81,9 @@ async def test_stream_saves_one_reply_after_its_follow_up(database):
     ):
         run.back_queue.put_nowait(event)
     await asyncio.wait_for(run.task, timeout=5)
+    assert frames[-2]["type"] == "message_saved"
+    assert frames[-1]["type"] == "end"
+    assert any(frame.get("data") == "\n\nChecking the " for frame in frames)
 
     # A captured input can be acknowledged after its target has already finished.
     capture_run = ChatRunState(
@@ -97,18 +109,20 @@ async def test_stream_saves_one_reply_after_its_follow_up(database):
     )
     assert user_record.id == follow_up.id
     assert record.id == first_save.id
+    bind_view.assert_called_once_with("forecast", str(record.id))
     parts = record.content["message"]
     assert [part["type"] for part in parts] == [
         "plain",
         "tool_call",
+        "view",
         "actionrow",
         "tool_call",
     ]
     assert parts[0]["text"] == (
-        "Let me check.\n\nLooking up Shanghai.\n\nChecking the latest forecast."
+        "Let me check.\n\nLooking up Shanghai.\n\nOne moment.\n\nChecking the latest forecast."
     )
     (finished,) = parts[1]["tool_calls"]
-    (interrupted,) = parts[3]["tool_calls"]
+    (interrupted,) = parts[4]["tool_calls"]
     assert finished["id"] == "c1"
     assert finished["result"] == "ok"
     assert finished["finished_ts"] == 2
