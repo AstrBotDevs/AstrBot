@@ -270,7 +270,7 @@ class AstrMessageEvent(abc.ABC):
         )
 
     def get_ui_interaction(self) -> UIInteraction | None:
-        """Get the view action attached by the authenticated ChatUI transport.
+        """Get the view action attached by the authenticated platform adapter.
 
         Returns:
             The current UI interaction, or None for other message types.
@@ -297,7 +297,7 @@ class AstrMessageEvent(abc.ABC):
         Raises:
             ValueError: If an update lacks an interaction or data is invalid.
         """
-        from astrbot.core.chatui import ViewResult
+        from astrbot.core.message.interactive_ui import ViewResult
 
         if name is None and (self.get_ui_interaction() is None or text):
             raise ValueError("A view update requires a UI interaction and no text.")

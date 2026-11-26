@@ -22,7 +22,7 @@ from astrbot.api.platform import (
 )
 from astrbot.core import astrbot_config
 from astrbot.core.platform.astr_message_event import MessageSesion
-from astrbot.core.platform.button_interaction import decode_button_callback
+from astrbot.core.platform.button_interaction import decode_button_callback_async
 from astrbot.core.utils.webhook_utils import log_webhook_info
 
 from ...register import register_platform_adapter
@@ -293,7 +293,7 @@ class MattermostPlatformAdapter(Platform):
         if not isinstance(encoded_callback, str):
             return None
         try:
-            action_id, callback_data = decode_button_callback(
+            action_id, callback_data = await decode_button_callback_async(
                 encoded_callback, allow_expired=True
             )
         except ValueError:

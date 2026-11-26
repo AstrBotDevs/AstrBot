@@ -11,7 +11,7 @@ class AdminCommands:
 
     async def update_dashboard(self, event: AstrMessageEvent) -> None:
         """更新管理面板"""
-        locale = self.context.locale(event.unified_msg_origin)
+        locale = await self.context.get_locale(event.unified_msg_origin)
         await event.send(
             MessageChain().message(translate("dashboard_updating", locale))
         )

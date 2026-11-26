@@ -88,7 +88,7 @@ async def runtime(monkeypatch):
         get_event_queue=lambda: queue,
         get_platform_inst=lambda _: SimpleNamespace(meta=lambda: metadata),
         get_config=lambda **_: config,
-        locale=lambda umo=None: config["platform_settings"].get("locale", "zh-CN"),
+        get_locale=AsyncMock(return_value=config["platform_settings"].get("locale", "zh-CN")),
         astrbot_config_mgr=SimpleNamespace(
             _create_message_config=lambda _: (copy.deepcopy(config), frozenset())
         ),
@@ -194,7 +194,9 @@ async def runtime(monkeypatch):
         lambda *_: SimpleNamespace(append=lambda *args, **kwargs: True),
     )
     monkeypatch.setattr(trace_module, "_get_log_broker", lambda: None)
-    native = AstrAgentRuntime(context, agent_configs=MagicMock(), subagents=MagicMock())
+    subagents = MagicMock()
+    subagents.store.find_native_conversation.return_value = None
+    native = AstrAgentRuntime(context, agent_configs=MagicMock(), subagents=subagents)
     runtimes = {"astrbot": native}
     scheduler = PipelineScheduler(
         PipelineContext(
@@ -288,8 +290,9 @@ async def test_wakeup_runs_normal_whitelist_check(runtime):
 
 
 @pytest.mark.asyncio
-async def test_wakeup_queues_after_an_active_message_and_reads_its_saved_reply(runtime):
-    """Return immediately from enqueueing and load history after the session lock."""
+@pytest.mark.parametrize("follow_up", ["wakeup", "user_message"])
+async def test_wakeup_queues_while_a_user_message_steers(runtime, follow_up):
+    """Only a user follow-up preempts model generation on the active turn."""
     runtime.gate.clear()
     message = AstrBotMessage()
     message.type = MessageType.FRIEND_MESSAGE
@@ -304,28 +307,46 @@ async def test_wakeup_queues_after_an_active_message_and_reads_its_saved_reply(r
     )
     await runtime.context.get_event_queue().put(first)
     await asyncio.wait_for(runtime.started.wait(), 1)
-    await asyncio.wait_for(
-        wake_main_agent(
-            runtime.context,
-            umo=first.unified_msg_origin,
-            user_prompt="Next input",
-            source="background_task",
-        ),
-        1,
-    )
-    for _ in range(20):
-        await asyncio.sleep(0)
-    assert len(runtime.requests) == 1
+    if follow_up == "wakeup":
+        await asyncio.wait_for(
+            wake_main_agent(
+                runtime.context,
+                umo=first.unified_msg_origin,
+                user_prompt="Next input",
+                source="background_task",
+            ),
+            1,
+        )
+        for _ in range(20):
+            await asyncio.sleep(0)
+        assert not runtime.cleaned.is_set()
+    else:
+        steering = AstrMessageEvent(
+            "Next input", copy.deepcopy(message), first.platform_meta, "user"
+        )
+        await runtime.context.get_event_queue().put(steering)
+        await asyncio.wait_for(runtime.cleaned.wait(), 1)
     runtime.gate.set()
     await asyncio.wait_for(runtime.drain(), 1)
     assert len(runtime.requests) == 2
-    assert {
+    earlier_reply = {
         "role": "assistant",
         "content": [{"type": "text", "text": "Reply 1"}],
-    } in runtime.requests[1]
-    assert json.loads(runtime.conversation.history)[-1]["content"] == [
-        {"type": "text", "text": "Reply 2"}
-    ]
+    }
+    assert (earlier_reply in runtime.requests[1]) == (follow_up == "wakeup")
+    model_input = runtime.requests[1][-1]
+    assert model_input["role"] == "user"
+    assert model_input["content"][0] == {"type": "text", "text": "Next input"}
+    reminders = model_input["content"][1:]
+    if follow_up == "wakeup":
+        assert reminders == []
+    else:
+        assert len(reminders) == 1
+        assert "a steer for the current turn" in reminders[0]["text"]
+    assert len(runtime.events) == (2 if follow_up == "wakeup" else 1)
+    history = json.loads(runtime.conversation.history)
+    assert history[-2]["content"] == [{"type": "text", "text": "Next input"}]
+    assert history[-1]["content"] == [{"type": "text", "text": "Reply 2"}]
 
 
 @pytest.mark.asyncio
@@ -501,14 +522,15 @@ async def test_sdk_handle_keeps_permissions_and_follow_up_under_core_admission(r
         source_event=source,
     )
     assert not hasattr(run, "runtime_turn")
-    assert not hasattr(run.session, "run_turn")
-    assert run.session.ref == AgentSessionRef("astrbot", "conversation")
+    session = await run.get_session()
+    assert not hasattr(session, "run_turn")
+    assert session.ref == AgentSessionRef("astrbot", "conversation")
     assert (await asyncio.wait_for(run.result(), 1)).text == "Reply 1"
     assert runtime.events[0].role == "member"
 
     context.get_config()["provider_settings"]["enable"] = False
     follow_up = await run.follow_up(input_message=[PlainInput(text="Second input")])
-    assert follow_up.session.ref == run.session.ref
+    assert (await follow_up.get_session()).ref == session.ref
     assert (await asyncio.wait_for(follow_up.result(), 1)).reason == "skipped"
     assert len(runtime.requests) == 1
 

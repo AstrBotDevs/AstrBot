@@ -326,7 +326,9 @@ class SatoriPlatformAdapter(Platform):
                     await self.handle_msg(abm)
 
             elif event_type == "interaction/button":
-                abm = self.convert_satori_button_interaction(event_data)
+                abm = await asyncio.to_thread(
+                    self.convert_satori_button_interaction, event_data
+                )
                 if abm:
                     await self.handle_msg(abm)
 

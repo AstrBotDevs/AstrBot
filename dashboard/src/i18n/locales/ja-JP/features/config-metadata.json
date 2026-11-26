@@ -973,10 +973,6 @@
         "description": "統合 Webhook モード",
         "hint": "Webhook モードで AstrBot の統合 Webhook エントリーポイントを使用し、個別のポートを開く必要をなくします。コールバックアドレスは /api/v1/webhooks/platforms/{webhook_uuid} です。"
       },
-      "use_markdown": {
-        "description": "プロアクティブメッセージで Markdown を使用",
-        "hint": "有効にすると、Bot が自発的に送信するメッセージは既定で Markdown モードで送信されます。プラグインが use_markdown() を明示的に呼び出して指定した場合は、この設定の影響を受けません。"
-      },
       "webhook_uuid": {
         "description": "Webhook UUID",
         "hint": "統合 Webhook モードの一意識別子です。プラットフォームの作成時に自動生成されます。"
@@ -1837,6 +1833,9 @@
       "dashscope_embedding": {
         "hint": "Alibaba Cloud BailianEmbedding のデフォルトアドレスは https://dashscope.aliyuncs.com/api/v1 です。"
       },
+      "volcengine_embedding": {
+        "hint": "Volcengine Embedding、デフォルトのアドレスは https://ark.cn-beijing.volces.com/api/v3 です。Agent Plan は https://ark.cn-beijing.volces.com/api/plan/v3 です。"
+      },
       "volcengine_cluster": {
         "description": "Volcengine クラスター",
         "hint": "音声クローンモデルを使用する場合は volcano_icl または volcano_icl_concurr を選択できます。デフォルトは volcano_tts です。"
@@ -2037,6 +2036,9 @@
       "openai-tts-voice": {
         "description": "voice",
         "hint": "OpenAI TTS のボイスです。OpenAI のデフォルト対応値: 'alloy', 'echo', 'fable', 'onyx', 'nova', 'shimmer'"
+      },
+      "stepfun-tts-voice": {
+        "description": "ボイス ID"
       },
       "deepseek-tts-voice": {
         "description": "ボイス",

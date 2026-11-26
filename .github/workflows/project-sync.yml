@@ -53,7 +53,7 @@ jobs:
           sparse-checkout-cone-mode: false
 
       - name: Set up uv
-        uses: astral-sh/setup-uv@v10.3.3
+        uses: astral-sh/setup-uv@v10.4.0
 
       - name: Synchronize current item state
         env:

@@ -2590,7 +2590,7 @@ export type ListCommandConflictsError = unknown;
 export type ListToolsData = {
     query?: {
         enabled?: boolean;
-        origin?: 'builtin' | 'plugin' | 'mcp';
+        origin?: 'plugin' | 'mcp';
     };
 };
 

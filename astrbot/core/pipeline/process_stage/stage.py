@@ -2,8 +2,12 @@ import asyncio
 from collections.abc import AsyncGenerator
 from contextlib import aclosing
 
-from astrbot.core.chatui import ViewResult, resolve_view, view_store
 from astrbot.core.message.components import Json, UIInteraction
+from astrbot.core.message.interactive_ui import (
+    ViewResult,
+    resolve_view_spec,
+    view_store,
+)
 from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from astrbot.core.provider.entities import ProviderRequest
@@ -57,7 +61,7 @@ class ProcessStage(Stage):
             request = None
             deadline = asyncio.get_running_loop().time() + 120
             try:
-                resolve_view(
+                resolve_view_spec(
                     event.get_extra("ui_plugin_module"),
                     interaction.view.name,
                     interaction.view.version,

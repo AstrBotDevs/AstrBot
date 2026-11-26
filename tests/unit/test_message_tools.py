@@ -396,16 +396,41 @@ async def test_member_with_host_scope_can_send_local_absolute_file(tmp_path):
     }
     tool = SendMessageToUserTool()
     ctx = _make_context(role="member", local_permissions=permissions)
-    file_path = tmp_path / "result.txt"
+    file_path = tmp_path / "report.html"
     file_path.write_text("result", encoding="utf-8")
 
     result = await tool.call(
         ctx,
-        messages=[{"type": "file", "path": str(file_path)}],
+        messages=[
+            {"type": "file", "path": str(file_path), "text": "Open in a browser."}
+        ],
     )
 
     assert "Message sent to session" in result
-    ctx.context.context.send_message.assert_called_once()
+    caption, sent_file = ctx.context.context.send_message.await_args.args[1].chain
+    assert caption.text == "Open in a browser."
+    assert (await sent_file.to_dict())["data"]["name"] == file_path.name
+
+
+@pytest.mark.asyncio
+async def test_send_file_url_with_separate_caption():
+    ctx = _make_context()
+    url = "https://example.com/files/test%20report.html?download=1#preview"
+
+    await SendMessageToUserTool().call(
+        ctx,
+        messages=[
+            {"type": "plain", "text": "Open in a browser."},
+            {"type": "file", "url": url},
+        ],
+    )
+
+    caption, sent_file = ctx.context.context.send_message.await_args.args[1].chain
+    assert caption.text == "Open in a browser."
+    assert (await sent_file.to_dict())["data"] == {
+        "file": url,
+        "name": "test report.html",
+    }
 
 
 @pytest.mark.asyncio

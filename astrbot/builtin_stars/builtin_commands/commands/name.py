@@ -11,7 +11,7 @@ class NameCommand:
 
     async def name(self, event: AstrMessageEvent, alias: str) -> None:
         umo = event.unified_msg_origin
-        locale = self.context.locale(umo)
+        locale = await self.context.get_locale(umo)
         auto_name = get_event_auto_name(event)
         alias = normalize_umo_name(alias)
         if not alias:

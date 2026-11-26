@@ -41,6 +41,10 @@
     },
     "deepseekSttHints": {
       "apiBase": "DeepSeek STT API のベース URL（既定は https://api.deepseek.com/v1）。/tools/asr は自動で追加されるため、/v1 を重複して追加しないでください。"
+    },
+    "stepfunTtsHints": {
+      "model": "StepFun TTS のモデル ID。既定値は stepaudio-3-tts です。",
+      "apiBase": "中国向け API の既定値は https://api.stepfun.com/v1 です。中国国外では https://api.stepfun.ai/v1 を使用してください。Step Plan の場合は、中国向けは https://api.stepfun.com/step_plan/v1、中国国外向けは https://api.stepfun.ai/step_plan/v1 を使用してください。/audio/speech は自動で追加されます。"
     }
   },
   "availability": {

@@ -4,12 +4,12 @@ Plugins can provide `.astrbot-plugin/i18n/*.json` files in their own directory s
 
 ## Message Reply Language
 
-Call `self.context.locale(event.unified_msg_origin)` to obtain the session's system language: `zh-CN` or `en-US`. The method reads the effective configuration, including profile routing, session overrides, and the current message's configuration snapshot. Calling `self.context.locale()` without a UMO reads the default profile.
+Use `await self.context.get_locale(event.unified_msg_origin)` to obtain the session's system language, `zh-CN` or `en-US`. This replaces `self.context.locale(...)`. The method reads the effective configuration, including profile routing, session overrides, and the current message's configuration snapshot. With no UMO, it uses the active message's session or the default profile when there is no active message.
 
 Users configure `platform_settings.locale` under **Platforms & Messages → General → System language**. Missing or unsupported values fall back to `zh-CN`. This setting is independent of the WebUI display language. Runtime translation resources and formatting belong to the plugin; Core provides the locale lookup API. The built-in plugins keep their runtime translations in their own `i18n.py` modules. Plugins supply their own reply translations, for example:
 
 ```python
-locale = self.context.locale(event.unified_msg_origin)
+locale = await self.context.get_locale(event.unified_msg_origin)
 text = "操作成功。" if locale == "zh-CN" else "Operation successful."
 yield event.plain_result(text)
 ```

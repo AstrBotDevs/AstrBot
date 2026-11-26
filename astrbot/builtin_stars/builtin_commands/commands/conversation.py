@@ -137,7 +137,9 @@ class ConversationCommands:
 
         message.set_extra("_clean_group_context_session", True)
         message.set_result(
-            MessageEventResult().message(translate("reset", self.context.locale(umo)))
+            MessageEventResult().message(
+                translate("reset", await self.context.get_locale(umo))
+            )
         )
 
     async def stop(self, message: AstrMessageEvent) -> None:
@@ -146,7 +148,7 @@ class ConversationCommands:
         Args:
             message: Stop command event, excluded from the request.
         """
-        locale = self.context.locale(message.unified_msg_origin)
+        locale = await self.context.get_locale(message.unified_msg_origin)
         stopped_count = active_event_registry.request_agent_stop_all(
             message.unified_msg_origin, exclude=message
         )
@@ -190,7 +192,7 @@ class ConversationCommands:
             MessageEventResult().message(
                 translate(
                     "new_conversation",
-                    self.context.locale(message.unified_msg_origin),
+                    await self.context.get_locale(message.unified_msg_origin),
                     cid=cid[:4],
                 )
             ),
@@ -199,7 +201,7 @@ class ConversationCommands:
     async def stats(self, message: AstrMessageEvent) -> None:
         """Show token usage statistics for the current conversation."""
         umo = message.unified_msg_origin
-        locale = self.context.locale(umo)
+        locale = await self.context.get_locale(umo)
         cid = await self.context.conversation_manager.get_curr_conversation_id(umo)
 
         if not cid:

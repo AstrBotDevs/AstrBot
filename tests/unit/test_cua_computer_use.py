@@ -10,7 +10,6 @@ import pytest
 from astrbot.core.astr_agent_runtime.computer.booters.cua import CuaShellComponent
 from astrbot.core.astr_agent_runtime.tool_executor import FunctionToolExecutor
 from astrbot.core.config.default import CONFIG_METADATA_3
-from astrbot.core.provider.func_tool_manager import FunctionToolManager
 
 
 class FakeContext:
@@ -1543,27 +1542,8 @@ async def test_cua_available_allows_shell_health_warning_on_stderr():
     assert await booter.available() is True
 
 
-def test_cua_tools_are_registered_as_builtin_tools():
-    from astrbot.core.astr_agent_runtime.tools.computer_tools.cua import (
-        CuaKeyboardTypeTool,
-        CuaMouseClickTool,
-        CuaScreenshotTool,
-    )
-
-    manager = FunctionToolManager()
-
-    assert manager.get_builtin_tool(CuaScreenshotTool).name == "astrbot_cua_screenshot"
-    assert manager.get_builtin_tool(CuaMouseClickTool).name == "astrbot_cua_mouse_click"
-    assert (
-        manager.get_builtin_tool(CuaKeyboardTypeTool).name
-        == "astrbot_cua_keyboard_type"
-    )
-
-
 def test_cua_runtime_tools_are_available_to_handoffs():
-    manager = FunctionToolManager()
-
-    tools = FunctionToolExecutor._get_runtime_computer_tools("sandbox", manager, "cua")
+    tools = FunctionToolExecutor._get_runtime_computer_tools("sandbox", "cua")
 
     assert "astrbot_cua_screenshot" in tools
     assert "astrbot_cua_mouse_click" in tools
@@ -1572,18 +1552,14 @@ def test_cua_runtime_tools_are_available_to_handoffs():
 
 
 def test_runtime_tool_selection_treats_none_booter_as_empty():
-    manager = FunctionToolManager()
-
-    tools = FunctionToolExecutor._get_runtime_computer_tools("sandbox", manager, None)
+    tools = FunctionToolExecutor._get_runtime_computer_tools("sandbox", None)
 
     assert "astrbot_execute_shell" in tools
     assert "astrbot_cua_screenshot" not in tools
 
 
 def test_runtime_tool_selection_normalizes_cua_booter_case():
-    manager = FunctionToolManager()
-
-    tools = FunctionToolExecutor._get_runtime_computer_tools("sandbox", manager, "CUA")
+    tools = FunctionToolExecutor._get_runtime_computer_tools("sandbox", "CUA")
 
     assert "astrbot_cua_screenshot" in tools
 

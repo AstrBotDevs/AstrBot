@@ -524,7 +524,11 @@ class QQOfficialMessageEvent(AstrMessageEvent):
             file_source,
             file_name,
         ) = await QQOfficialMessageEvent._parse_to_qqofficial(message_to_send)
-        keyboard = QQOfficialMessageEvent._parse_keyboard(message_to_send)
+        keyboard = None
+        if any(isinstance(part, ActionRow) for part in message_to_send.chain):
+            keyboard = await asyncio.to_thread(
+                QQOfficialMessageEvent._parse_keyboard, message_to_send
+            )
         if keyboard and not plain_text:
             plain_text = next(
                 (

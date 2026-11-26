@@ -11,7 +11,7 @@ star_map: dict[str, StarMetadata] = {}
 """key 是模块路径，__module__"""
 
 if TYPE_CHECKING:
-    from astrbot.core.chatui import ViewSpec
+    from astrbot.core.message.interactive_ui import ViewSpec
 
     from . import Star
 
