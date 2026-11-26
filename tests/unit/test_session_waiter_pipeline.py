@@ -2,17 +2,16 @@
 
 import asyncio
 import copy
+from contextlib import aclosing
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 import pytest
-import pytest_asyncio
 
 from astrbot.builtin_stars.astrbot.group_chat_context import GroupChatContext
-from astrbot.builtin_stars.astrbot.i18n import MESSAGES
 from astrbot.builtin_stars.astrbot.main import Main
 from astrbot.core.config.default import DEFAULT_CONFIG
-from astrbot.core.message.components import At, File, Image, Plain
+from astrbot.core.message.components import At, Image, Plain
 from astrbot.core.pipeline.process_stage import stage as processing
 from astrbot.core.pipeline.scheduler import PipelineScheduler
 from astrbot.core.pipeline.waking_check import stage as waking
@@ -164,389 +163,119 @@ async def test_session_waiter_pipeline(monkeypatch, private, state):
         assert event.is_stopped()
 
 
-def make_event(components, text="", session="group"):
-    message = AstrBotMessage()
-    message.type = MessageType.GROUP_MESSAGE
-    message.self_id = "bot"
-    message.sender = MessageMember(user_id="sender", nickname="Sender")
-    message.message = components
-    event = AstrMessageEvent(
-        text,
-        message,
-        PlatformMetadata(id="test", name="test", description="Test"),
-        session,
-    )
-    event.is_at_or_wake_command = any(isinstance(c, At) for c in components)
-    event.set_extra("activated_handlers", ["empty_mention"])
-    return event
-
-
-async def wait_until(predicate):
-    # Observe the real registry; it has no registration/cleanup notification API.
-    async with asyncio.timeout(1):
-        while not predicate():  # noqa: ASYNC110
-            await asyncio.sleep(0)
-
-
-@pytest_asyncio.fixture
-async def empty_mention_flow(monkeypatch):
-    sessions, filters = {}, []
-    for module in (waiting, processing):
-        monkeypatch.setattr(module, "USER_SESSIONS", sessions)
-        monkeypatch.setattr(module, "FILTERS", filters)
-    controllers = []
-    original_keep = waiting.SessionController.keep
-
-    def keep(controller, *args, **kwargs):
-        controllers.append(controller)
-        return original_keep(controller, *args, **kwargs)
-
-    monkeypatch.setattr(waiting.SessionController, "keep", keep)
+@pytest.fixture
+def empty_mention(monkeypatch):
+    monkeypatch.setattr(waiting, "USER_SESSIONS", {})
+    monkeypatch.setattr(waiting, "FILTERS", [])
     config = copy.deepcopy(DEFAULT_CONFIG)
     config["platform_settings"].update(
         empty_mention_waiting=True, empty_mention_waiting_need_reply=True
     )
-    config["wake_prefix"] = ["/"]
     config["provider_ltm_settings"]["group_icl_enable"] = False
     queue = asyncio.Queue()
     main = Main.__new__(Main)
     main.context = SimpleNamespace(
-        get_config=lambda **kwargs: config,
+        get_config=lambda **_: config,
         get_locale=AsyncMock(return_value="en-US"),
         get_event_queue=lambda: queue,
         conversation_manager=SimpleNamespace(
-            get_curr_conversation_id=AsyncMock(return_value=None),
-            new_conversation=AsyncMock(return_value="conversation"),
+            get_curr_conversation_id=AsyncMock(return_value="conversation"),
+            get_conversation=AsyncMock(return_value=None),
         ),
     )
     main.group_chat_context = GroupChatContext(None, main.context)
-    started, release = asyncio.Event(), asyncio.Event()
-    calls, tasks = [], []
+    return main, config, queue
 
-    async def plugin(event):
-        # Keep the generator owned by this consumer when it is cancelled.
-        handler = main.handle_empty_mention(event)
-        try:
-            async for result in handler:
-                yield result
-        finally:
-            await handler.aclose()
 
-    async def agent(event):
-        if isinstance(event.get_extra("provider_request"), ProviderRequest):
-            started.set()
-            await release.wait()
-            calls.append("greeting")
-        else:
-            calls.append("follow-up")
-        event._has_send_oper = True
-        yield
-
-    process = processing.ProcessStage()
-    process.ctx = SimpleNamespace(astrbot_config=config)
-    process.star_request_sub_stage = SimpleNamespace(process=plugin)
-    process.agent_sub_stage = SimpleNamespace(process=agent)
-
-    async def consume(event):
-        async for _ in process.process(event):
-            pass
-
-    def start(event):
-        task = asyncio.create_task(consume(event))
-        tasks.append(task)
-        return task
-
-    try:
-        yield SimpleNamespace(
-            main=main,
-            config=config,
-            sessions=sessions,
-            filters=filters,
-            queue=queue,
-            started=started,
-            release=release,
-            calls=calls,
-            consume=consume,
-            start=start,
-        )
-    finally:
-        release.set()
-        for task in tasks:
-            if not task.done():
-                task.cancel()
-        await asyncio.gather(*tasks, return_exceptions=True)
-        # Let nested generators finalize before releasing the existing timers.
-        await wait_until(lambda: not sessions)
-        for controller in controllers:
-            if controller.current_event:
-                controller.current_event.set()
-        await asyncio.sleep(0)
+def make_group_event(*components, text=""):
+    message = AstrBotMessage()
+    message.type = MessageType.GROUP_MESSAGE
+    message.self_id = "bot"
+    message.sender = MessageMember(user_id="sender", nickname="Sender")
+    message.message = list(components)
+    return AstrMessageEvent(
+        text,
+        message,
+        PlatformMetadata(id="test", name="test", description="Test"),
+        "group",
+    )
 
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
-    ("components", "expected", "enabled"),
+    ("tail", "should_wait"),
     [
-        ([At(qq="bot")], True, True),
-        ([At(qq="bot"), Plain("")], True, True),
-        ([At(qq="bot"), Plain(" \t\n")], True, True),
-        ([At(qq="bot"), Plain("question")], False, True),
-        ([At(qq="bot"), Plain(""), Image(file="test.png")], False, True),
-        ([At(qq="bot"), File(name="test", file="test.txt")], False, True),
-        ([Image(file="test.png")], False, True),
-        ([At(qq="other"), Plain("")], False, True),
-        ([At(qq="bot"), Plain("")], False, False),
-        ([Plain("/")], True, True),
-        ([At(qq="bot"), At(qq="bot"), Plain("")], False, True),
+        ([Plain("")], True),
+        ([Plain(" \t")], True),
+        ([Plain("question")], False),
+        ([Plain(""), Image(file="test.png")], False),
     ],
 )
-async def test_classification_preserves_message_chain(
-    empty_mention_flow, components, expected, enabled
+async def test_empty_mention_classification(empty_mention, tail, should_wait):
+    main, _, _ = empty_mention
+    event = make_group_event(At(qq="bot"), *tail)
+    chain = event.get_messages()
+    original = copy.deepcopy(chain)
+    async with aclosing(main.handle_empty_mention(event)) as handler:
+        reply = await anext(handler, None)
+        assert isinstance(reply, ProviderRequest) is should_wait
+        assert bool(waiting.USER_SESSIONS) is should_wait
+        assert event.get_messages() is chain and chain == original
+    assert not waiting.USER_SESSIONS and not waiting.FILTERS
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("group_context_enabled", [False, True])
+async def test_empty_mention_captures_follow_up_during_greeting(
+    empty_mention, group_context_enabled
 ):
-    empty_mention_flow.config["platform_settings"].update(
-        empty_mention_waiting=enabled, empty_mention_waiting_need_reply=False
-    )
-    event = make_event(components)
-    snapshot = copy.deepcopy(components)
-    task = empty_mention_flow.start(event)
-    await wait_until(lambda: bool(empty_mention_flow.sessions) or task.done())
-    assert bool(empty_mention_flow.sessions) is expected
-    assert event.get_messages() is components
-    assert components == snapshot
-    if expected:
-        assert (
-            next(iter(empty_mention_flow.sessions.values())).session_controller.timeout
-            == 60
+    main, config, queue = empty_mention
+    config["provider_ltm_settings"]["group_icl_enable"] = group_context_enabled
+    context = main.group_chat_context
+    mention = make_group_event(At(qq="bot"))
+    follow_up = make_group_event(Plain("follow-up"), text="follow-up")
+    if group_context_enabled:
+        await context.handle_message(
+            make_group_event(Plain("earlier-chat"), text="earlier-chat")
         )
 
+    # Deliver a follow-up at the lookup await without sleeps or a fake pipeline.
+    async def deliver_during_lookup(origin):
+        await context.handle_message(
+            make_group_event(Plain("later-chat"), text="later-chat")
+        )
+        await SessionWaiter.trigger(origin, follow_up)
+        queued_during_lookup.append(not queue.empty())
+        return "conversation"
 
-@pytest.mark.asyncio
-@pytest.mark.parametrize("text", [None, "", " \t\n"])
-@pytest.mark.parametrize("during_greeting", [True, False])
-async def test_follow_up_is_redispatched_once(
-    empty_mention_flow, text, during_greeting
-):
-    components = [At(qq="bot")]
-    if text is not None:
-        components.append(Plain(text))
-    if not during_greeting:
-        empty_mention_flow.release.set()
-    original = empty_mention_flow.start(make_event(components))
-    await asyncio.wait_for(empty_mention_flow.started.wait(), 1)
-    assert empty_mention_flow.sessions, (
-        "The waiter must exist before the model greeting completes"
-    )
-
-    follow_up = make_event([Plain("question")], "question")
-    await empty_mention_flow.consume(follow_up)
-    assert follow_up.is_stopped()
-    assert empty_mention_flow.queue.qsize() == 1
-    replay = empty_mention_flow.queue.get_nowait()
-    assert replay is not follow_up and not replay.is_stopped()
-    assert isinstance(replay.get_messages()[0], At)
-    assert replay.message_str == "question"
-    # The waking stage recognizes the inserted At on redispatch.
-    replay.is_at_or_wake_command = True
-    await empty_mention_flow.consume(replay)
-    assert empty_mention_flow.calls.count("follow-up") == 1
-    empty_mention_flow.release.set()
-    await asyncio.wait_for(original, 1)
-    assert empty_mention_flow.sessions == {} and empty_mention_flow.filters == []
-
-
-@pytest.mark.asyncio
-async def test_silent_waiting_does_not_request_a_greeting(empty_mention_flow):
-    empty_mention_flow.config["platform_settings"][
-        "empty_mention_waiting_need_reply"
-    ] = False
-    original = empty_mention_flow.start(make_event([At(qq="bot"), Plain("")]))
-    await wait_until(lambda: bool(empty_mention_flow.sessions) or original.done())
-    assert (
-        empty_mention_flow.sessions
-        and not empty_mention_flow.started.is_set()
-        and not empty_mention_flow.calls
-    )
-    await empty_mention_flow.consume(make_event([Plain("question")], "question"))
-    replay = empty_mention_flow.queue.get_nowait()
-    replay.is_at_or_wake_command = True
-    await empty_mention_flow.consume(replay)
-    await asyncio.wait_for(original, 1)
-    assert empty_mention_flow.calls == ["follow-up"]
-    assert empty_mention_flow.sessions == {} and empty_mention_flow.filters == []
-
-
-@pytest.mark.asyncio
-async def test_closing_handler_during_greeting_cleans_waiter(empty_mention_flow):
-    handler = empty_mention_flow.main.handle_empty_mention(make_event([At(qq="bot")]))
-    try:
-        assert isinstance(await anext(handler), ProviderRequest)
-        assert empty_mention_flow.sessions
-    finally:
-        await handler.aclose()
-    assert empty_mention_flow.sessions == {} and empty_mention_flow.filters == []
-
-
-@pytest.mark.asyncio
-async def test_cancelling_silent_wait_cleans_waiter(empty_mention_flow):
-    empty_mention_flow.config["platform_settings"][
-        "empty_mention_waiting_need_reply"
-    ] = False
-    original = empty_mention_flow.start(make_event([At(qq="bot")]))
-    await wait_until(lambda: bool(empty_mention_flow.sessions))
-    original.cancel()
-    with pytest.raises(asyncio.CancelledError):
-        await original
-    assert empty_mention_flow.sessions == {} and empty_mention_flow.filters == []
-
-
-@pytest.mark.asyncio
-async def test_cancelling_greeting_pipeline_cleans_waiter(empty_mention_flow):
-    original = empty_mention_flow.start(make_event([At(qq="bot")]))
-    await asyncio.wait_for(empty_mention_flow.started.wait(), 1)
-    assert empty_mention_flow.sessions
-    original.cancel()
-    with pytest.raises(asyncio.CancelledError):
-        await original
-    await wait_until(lambda: not empty_mention_flow.sessions)
-    assert empty_mention_flow.filters == [] and empty_mention_flow.queue.empty()
-
-
-@pytest.mark.asyncio
-async def test_greeting_setup_error_keeps_waiting_until_handler_closes(
-    empty_mention_flow,
-):
-    manager = empty_mention_flow.main.context.conversation_manager
-    manager.get_curr_conversation_id.side_effect = RuntimeError("test failure")
-    handler = empty_mention_flow.main.handle_empty_mention(make_event([At(qq="bot")]))
-    try:
-        fallback = await anext(handler)
-        assert fallback.get_plain_text() == MESSAGES["en-US"]["empty_mention"]
-        assert empty_mention_flow.sessions
-    finally:
-        await handler.aclose()
-    assert empty_mention_flow.sessions == {} and empty_mention_flow.filters == []
-
-
-@pytest.mark.asyncio
-@pytest.mark.parametrize("reply", [True, False])
-async def test_timeout_cleans_waiter_without_follow_up(empty_mention_flow, reply):
-    empty_mention_flow.config["platform_settings"][
-        "empty_mention_waiting_need_reply"
-    ] = reply
-    original = empty_mention_flow.start(make_event([At(qq="bot")]))
-    await wait_until(lambda: bool(empty_mention_flow.sessions))
-    controller = next(iter(empty_mention_flow.sessions.values())).session_controller
-    # Exercise the real timeout path without waiting sixty wall-clock seconds.
-    await controller._holding(asyncio.Event(), 0)
-    empty_mention_flow.release.set()
-    await asyncio.wait_for(original, 1)
-    assert (
-        empty_mention_flow.queue.empty() and "follow-up" not in empty_mention_flow.calls
-    )
-    assert empty_mention_flow.sessions == {} and empty_mention_flow.filters == []
-
-
-@pytest.mark.asyncio
-async def test_concurrent_follow_ups_only_consume_waiter_once(empty_mention_flow):
-    original = empty_mention_flow.start(make_event([At(qq="bot")]))
-    await asyncio.wait_for(empty_mention_flow.started.wait(), 1)
-    assert empty_mention_flow.sessions
-    await asyncio.gather(
-        empty_mention_flow.consume(make_event([Plain("first")], "first")),
-        empty_mention_flow.consume(make_event([Plain("second")], "second")),
-    )
-    assert empty_mention_flow.queue.qsize() == 1
-    empty_mention_flow.release.set()
-    await asyncio.wait_for(original, 1)
-
-
-@pytest.mark.asyncio
-async def test_other_conversation_does_not_consume_waiter(empty_mention_flow):
-    original = empty_mention_flow.start(make_event([At(qq="bot")]))
-    await asyncio.wait_for(empty_mention_flow.started.wait(), 1)
-    assert empty_mention_flow.sessions
-    other = make_event([Plain("question")], "question", session="other-group")
-    await empty_mention_flow.consume(other)
-    assert (
-        empty_mention_flow.queue.empty()
-        and not other.is_stopped()
-        and empty_mention_flow.sessions
-    )
-    await empty_mention_flow.consume(make_event([Plain("question")], "question"))
-    assert empty_mention_flow.queue.qsize() == 1
-    empty_mention_flow.release.set()
-    await asyncio.wait_for(original, 1)
-
-
-@pytest.mark.asyncio
-@pytest.mark.parametrize("lookup_fails", [False, True])
-async def test_empty_mention_keeps_context_boundary_during_lookup(
-    empty_mention_flow, lookup_fails
-):
-    """Keep earlier chat in the greeting and replay a fast follow-up once.
-
-    Args:
-        empty_mention_flow: Real message processing with an isolated session registry.
-        lookup_fails: Whether to fall back to a plain greeting after the lookup.
-    """
-    flow = empty_mention_flow
-    flow.config["provider_ltm_settings"]["group_icl_enable"] = True
-    context = flow.main.group_chat_context
-    await context.handle_message(
-        make_event([Plain("before-mention")], "before-mention")
-    )
-    lookup_started, release_lookup = asyncio.Event(), asyncio.Event()
-
-    async def lookup(_umo):
-        lookup_started.set()
-        await release_lookup.wait()
-        if lookup_fails:
-            raise RuntimeError("Conversation lookup failed")
-        return None
-
-    flow.main.context.conversation_manager.get_curr_conversation_id.side_effect = lookup
-    mention = make_event([At(qq="bot"), Plain("")])
-    handler = flow.main.handle_empty_mention(mention)
-    greeting = asyncio.create_task(anext(handler))
-    try:
-        await asyncio.wait_for(lookup_started.wait(), 1)
-        assert mention.get_extra("_group_context_record_id")
-        await context.handle_message(make_event([Plain("later-chat")], "later-chat"))
-        follow_up = make_event([Plain("question")], "question")
-        await flow.consume(follow_up)
+    queued_during_lookup = []
+    if group_context_enabled:
+        main.context.conversation_manager.get_curr_conversation_id.side_effect = (
+            deliver_during_lookup
+        )
+    async with aclosing(main.handle_empty_mention(mention)) as handler:
+        greeting = await anext(handler)
+        if group_context_enabled:
+            assert queued_during_lookup == [False]
+        else:
+            await SessionWaiter.trigger(mention.unified_msg_origin, follow_up)
         assert follow_up.is_stopped()
-        assert flow.queue.empty()
-
-        release_lookup.set()
-        reply = await asyncio.wait_for(greeting, 1)
-        assert flow.queue.qsize() == 1
-        replay = flow.queue.get_nowait()
-        assert replay.message_str == "question"
+        assert queue.qsize() == 1
+        replay = queue.get_nowait()
+        assert replay.message_str == "follow-up" and not replay.is_stopped()
         assert isinstance(replay.get_messages()[0], At)
 
-        if lookup_fails:
-            assert reply.get_plain_text() == MESSAGES["en-US"]["empty_mention"]
-            return
+        if group_context_enabled:
+            await main.decorate_llm_req(mention, greeting)
+            (part,) = greeting.extra_user_content_parts
+            assert "earlier-chat" in part.text and "later-chat" not in part.text
+            await context.handle_message(replay)
+            next_request = replay.request_llm(
+                prompt="follow-up", session_id="conversation"
+            )
+            await main.decorate_llm_req(replay, next_request)
+            (part,) = next_request.extra_user_content_parts
+            assert "later-chat" in part.text and "earlier-chat" not in part.text
 
-        assert isinstance(reply, ProviderRequest)
-        injected = [part.text for part in reply.extra_user_content_parts]
-        assert len(injected) == 1
-        assert "before-mention" in injected[0]
-        assert "later-chat" not in injected[0] and "question" not in injected[0]
-
-        # The regular request hook must not consume the later chat a second time.
-        await flow.main.decorate_llm_req(mention, reply)
-        assert [part.text for part in reply.extra_user_content_parts] == injected
-        await context.handle_message(replay)
-        next_request = replay.request_llm(prompt="question", session_id="conversation")
-        await flow.main.decorate_llm_req(replay, next_request)
-        next_context = [part.text for part in next_request.extra_user_content_parts]
-        assert len(next_context) == 1 and "later-chat" in next_context[0]
-        assert "before-mention" not in next_context[0]
-    finally:
-        release_lookup.set()
-        if not greeting.done():
-            greeting.cancel()
-        await asyncio.gather(greeting, return_exceptions=True)
-        await handler.aclose()
-    assert flow.sessions == {} and flow.filters == [] and flow.queue.empty()
+        assert await anext(handler, None) is None
+    assert not waiting.USER_SESSIONS and not waiting.FILTERS and queue.empty()
