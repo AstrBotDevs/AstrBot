@@ -199,7 +199,7 @@ async def test_cancelled_turn_retains_already_reported_usage():
 @pytest.mark.parametrize("streaming", [False, True])
 @pytest.mark.parametrize("platform", ["webchat", "test"])
 @pytest.mark.parametrize(
-    "code", ["noProvider", "provider_error", "unknown_runtime_error"]
+    "code", ["noProvider", "provider_error", "providerAuth", "unknown_runtime_error"]
 )
 async def test_failed_turn_preserves_error_identity_and_partial_reply(
     streaming, platform, code
@@ -243,3 +243,11 @@ async def test_failed_turn_preserves_error_identity_and_partial_reply(
     else:
         assert chains[-1].type is None
         assert "Failure detail" in chains[-1].get_plain_text()
+    if code.startswith("provider"):
+        # A specific provider code keeps the localized model error text.
+        text = (
+            chains[-1].chain[0].data["message"]
+            if platform == "webchat"
+            else chains[-1].get_plain_text()
+        )
+        assert not text.startswith("Error occurred during AI execution")

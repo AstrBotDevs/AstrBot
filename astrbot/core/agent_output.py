@@ -177,7 +177,9 @@ async def present_turn(
                         detail=result.error.message
                         or translate("unknown_error", locale),
                     )
-                    if result.error and result.error.code == "provider_error"
+                    # Provider failures may carry a specific code, e.g.
+                    # "providerAuth" (see classify_provider_failure).
+                    if result.error and result.error.code.startswith("provider")
                     else f"Error occurred during AI execution.\n{result.error.message if result.error else 'Unknown error'}"
                 )
                 if event.get_platform_name() == "webchat":
