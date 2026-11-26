@@ -7,10 +7,10 @@ import math
 import sqlite3
 import threading
 import time
+from contextlib import closing
 from copy import deepcopy
 from pathlib import Path
 
-from astrbot import logger
 from astrbot.core.message.components import JSONValue
 
 BUTTON_CALLBACK_PREFIX = "astrbot:"
@@ -18,10 +18,9 @@ BUTTON_ACTION_EXPIRED_MESSAGE = (
     "按钮已过期，请重新发起操作。 / This button has expired. Please start again."
 )
 
-
-# Callbacks kept in memory; unsaved ones are never dropped from the cache.
+# Keep recently registered or loaded callbacks in memory to avoid repeated reads.
 _MAX_CACHED_CALLBACKS = 4096
-# Expired callbacks stay stored this long so a late click still gets a notice.
+# Retain expired tokens long enough to report their expiry to late clicks.
 _EXPIRED_RETENTION_SECONDS = 86400
 
 
@@ -36,9 +35,6 @@ class _ButtonCallbackRegistry:
         self._cache: dict[str, tuple[str, JSONValue | None, float | None]] = {}
         self._db_path: Path | None = None
         self._lock = threading.RLock()
-        self._pending_writes: set[asyncio.Task] = set()
-        # Callbacks registered but not yet saved, retried on every write.
-        self._unsaved: dict[str, str] = {}
 
     def configure(self, db_path: str | Path) -> None:
         """Enable persistent callback lookup using AstrBot's SQLite database.
@@ -47,7 +43,10 @@ class _ButtonCallbackRegistry:
             db_path: Path to the initialized AstrBot SQLite database.
         """
         resolved_path = Path(db_path)
-        with self._lock, sqlite3.connect(resolved_path, timeout=30) as connection:
+        with (
+            self._lock,
+            closing(sqlite3.connect(resolved_path, timeout=30)) as connection,
+        ):
             connection.execute(
                 "CREATE TABLE IF NOT EXISTS button_callbacks ("
                 "token TEXT PRIMARY KEY, payload TEXT NOT NULL)"
@@ -70,6 +69,7 @@ class _ButtonCallbackRegistry:
 
         Raises:
             ValueError: If the payload is not JSON-compatible or expiry is not finite.
+            sqlite3.Error: If the callback cannot be persisted.
         """
         callback_payload = {"i": action_id, "d": data}
         if expires_at is not None:
@@ -88,74 +88,39 @@ class _ButtonCallbackRegistry:
             raise ValueError("Button callback data must be JSON-compatible.") from exc
 
         token = hashlib.blake2s(payload.encode("utf-8"), digest_size=16).hexdigest()
-        with self._lock:
-            self._cache[token] = (action_id, deepcopy(data), expires_at)
-            if self._db_path is not None:
-                self._unsaved[token] = payload
-            self._trim_cache()
-            if self._db_path is None:
-                return token
-        try:
-            loop = asyncio.get_running_loop()
-        except RuntimeError:
-            self._persist()
-        else:
-            # A locked database must not block the event loop (other platforms
-            # and every button click share it), so save on a worker thread.
-            task = loop.create_task(asyncio.to_thread(self._persist))
-            self._pending_writes.add(task)
-            task.add_done_callback(self._pending_writes.discard)
-        return token
-
-    def _trim_cache(self) -> None:
-        """Drop the oldest saved callbacks beyond the cache limit (lock held)."""
-        for old_token in list(self._cache):
-            if len(self._cache) <= _MAX_CACHED_CALLBACKS:
-                return
-            if old_token not in self._unsaved:
-                self._cache.pop(old_token, None)
-
-    def _persist(self) -> None:
-        """Save every unsaved callback without holding the registry lock.
-
-        A failed write keeps the callbacks unsaved (and cached), so the next
-        registration retries them instead of losing them on restart.
-        """
+        entry = (action_id, deepcopy(data), expires_at)
         with self._lock:
             db_path = self._db_path
-            pending = dict(self._unsaved)
-        if db_path is None or not pending:
-            return
-        try:
-            with sqlite3.connect(db_path, timeout=30) as connection:
-                connection.executemany(
+        cutoff = None
+        if db_path is not None:
+            # Publish the token only after committing it. A locked database must
+            # not hold the cache lock while other callbacks are being resolved.
+            with closing(sqlite3.connect(db_path, timeout=30)) as connection:
+                connection.execute(
                     "INSERT INTO button_callbacks(token, payload) VALUES (?, ?) "
                     "ON CONFLICT(token) DO UPDATE SET payload = excluded.payload",
-                    pending.items(),
+                    (token, payload),
                 )
+                cutoff = time.time() - _EXPIRED_RETENTION_SECONDS
                 connection.execute(
                     "DELETE FROM button_callbacks WHERE json_valid(payload) "
                     "AND json_extract(payload, '$.e') < ?",
-                    (time.time() - _EXPIRED_RETENTION_SECONDS,),
+                    (cutoff,),
                 )
                 connection.commit()
-        except sqlite3.Error as exc:
-            logger.error(
-                f"Failed to save {len(pending)} button callback(s); "
-                f"they stay usable and will be retried: {exc}"
-            )
-            return
-        cutoff = time.time() - _EXPIRED_RETENTION_SECONDS
         with self._lock:
-            for token in pending:
-                self._unsaved.pop(token, None)
-            for token, (_, _, expires_at) in list(self._cache.items()):
-                if expires_at is not None and expires_at < cutoff:
-                    self._cache.pop(token, None)
+            self._cache[token] = entry
+            if cutoff is not None:
+                for old_token, (_, _, old_expiry) in list(self._cache.items()):
+                    if old_expiry is not None and old_expiry < cutoff:
+                        self._cache.pop(old_token)
+            self._trim_cache()
+        return token
 
-    async def flush(self) -> None:
-        """Wait for callback writes still running, so a shutdown keeps them."""
-        await asyncio.gather(*self._pending_writes, return_exceptions=True)
+    def _trim_cache(self) -> None:
+        """Drop the oldest cached callbacks while holding the registry lock."""
+        while len(self._cache) > _MAX_CACHED_CALLBACKS:
+            self._cache.pop(next(iter(self._cache)))
 
     def resolve(
         self, token: str, *, allow_expired: bool = False
@@ -174,21 +139,19 @@ class _ButtonCallbackRegistry:
         """
         with self._lock:
             cached = self._cache.get(token)
+            db_path = self._db_path
         if cached is None:
-            payload = None
-            if self._db_path is not None:
-                with sqlite3.connect(self._db_path, timeout=30) as connection:
+            row = None
+            if db_path is not None:
+                with closing(sqlite3.connect(db_path, timeout=30)) as connection:
                     row = connection.execute(
                         "SELECT payload FROM button_callbacks WHERE token = ?",
                         (token,),
                     ).fetchone()
-                    if row is not None:
-                        payload = row[0]
-
-            if payload is None:
+            if row is None:
                 raise ValueError("Unknown AstrBot button callback token.")
             try:
-                decoded = json.loads(payload)
+                decoded = json.loads(row[0])
             except (TypeError, json.JSONDecodeError) as exc:
                 raise ValueError("Invalid stored button callback payload.") from exc
             if not isinstance(decoded, dict) or not isinstance(decoded.get("i"), str):
@@ -220,11 +183,6 @@ def configure_button_callback_registry(db_path: str | Path) -> None:
         db_path: Path to AstrBot's SQLite database.
     """
     _button_callback_registry.configure(db_path)
-
-
-async def flush_button_callbacks() -> None:
-    """Wait for pending button callback writes before AstrBot stops."""
-    await _button_callback_registry.flush()
 
 
 def encode_button_callback(
@@ -274,3 +232,49 @@ def decode_button_callback(
     if len(token) != 32 or any(char not in "0123456789abcdef" for char in token):
         raise ValueError("Invalid AstrBot button callback token.")
     return _button_callback_registry.resolve(token, allow_expired=allow_expired)
+
+
+async def encode_button_callback_async(
+    action_id: str,
+    data: JSONValue | None = None,
+    *,
+    expires_at: float | None = None,
+) -> str:
+    """Persist a callback on a worker thread before returning its token.
+
+    Args:
+        action_id: Stable identifier used by plugin code to route the click.
+        data: Optional JSON-compatible context returned with the click.
+        expires_at: Absolute callback deadline shared by the action row.
+
+    Returns:
+        The compact callback token.
+
+    Raises:
+        ValueError: If the callback data, action ID, or expiry is invalid.
+        sqlite3.Error: If the callback cannot be persisted.
+    """
+    return await asyncio.to_thread(
+        encode_button_callback, action_id, data, expires_at=expires_at
+    )
+
+
+async def decode_button_callback_async(
+    payload: str, *, allow_expired: bool = False
+) -> tuple[str, JSONValue | None]:
+    """Resolve a callback on a worker thread, including database cache misses.
+
+    Args:
+        payload: The exact callback value returned by the IM platform.
+        allow_expired: Resolve metadata only to route an expiry notice.
+
+    Returns:
+        The action identifier and its optional JSON data.
+
+    Raises:
+        ValueError: If the payload is unknown, invalid, or expired.
+        sqlite3.Error: If the stored callback cannot be read.
+    """
+    return await asyncio.to_thread(
+        decode_button_callback, payload, allow_expired=allow_expired
+    )

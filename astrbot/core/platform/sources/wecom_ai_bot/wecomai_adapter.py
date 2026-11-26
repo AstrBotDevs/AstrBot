@@ -23,7 +23,7 @@ from astrbot.api.platform import (
     PlatformMetadata,
 )
 from astrbot.core.platform.astr_message_event import MessageSesion
-from astrbot.core.platform.button_interaction import decode_button_callback
+from astrbot.core.platform.button_interaction import decode_button_callback_async
 from astrbot.core.utils.webhook_utils import log_webhook_info
 
 from ...register import register_platform_adapter
@@ -386,7 +386,7 @@ class WecomAIBotAdapter(Platform):
                     )
                     return None
                 try:
-                    decode_button_callback(event_key, allow_expired=True)
+                    await decode_button_callback_async(event_key, allow_expired=True)
                 except ValueError as e:
                     logger.warning("Ignored unknown WeCom button callback: %s", e)
                     return None
@@ -484,7 +484,7 @@ class WecomAIBotAdapter(Platform):
                     )
                     return
                 try:
-                    decode_button_callback(event_key, allow_expired=True)
+                    await decode_button_callback_async(event_key, allow_expired=True)
                 except ValueError as e:
                     logger.warning(
                         "[WecomAI][LongConn] Ignored unknown button callback: %s", e
@@ -642,7 +642,9 @@ class WecomAIBotAdapter(Platform):
                 event_key = native_interaction.get("event_key")
                 if not isinstance(event_key, str):
                     raise ValueError("WeCom template card event is missing event_key.")
-                action_id, data = decode_button_callback(event_key, allow_expired=True)
+                action_id, data = await decode_button_callback_async(
+                    event_key, allow_expired=True
+                )
                 interaction_id = str(message_data.get("msgid") or uuid.uuid4())
                 button_interaction = ButtonInteraction(
                     action_id=action_id,

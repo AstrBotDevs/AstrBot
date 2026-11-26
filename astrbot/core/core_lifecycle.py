@@ -34,7 +34,6 @@ from astrbot.core.persona_mgr import PersonaManager
 from astrbot.core.pipeline.scheduler import PipelineContext, PipelineScheduler
 from astrbot.core.platform.button_interaction import (
     configure_button_callback_registry,
-    flush_button_callbacks,
 )
 from astrbot.core.platform.manager import PlatformManager
 from astrbot.core.platform_message_history_mgr import PlatformMessageHistoryManager
@@ -163,7 +162,9 @@ class AstrBotCoreLifecycle:
         await self.db.initialize()
         button_callback_db_path = getattr(self.db, "db_path", None)
         if isinstance(button_callback_db_path, (str, Path)):
-            configure_button_callback_registry(button_callback_db_path)
+            await asyncio.to_thread(
+                configure_button_callback_registry, button_callback_db_path
+            )
         if sp.db_helper is self.db:
             await sp.initialize()
 
@@ -416,7 +417,6 @@ class AstrBotCoreLifecycle:
 
         await self.provider_manager.terminate()
         await self.platform_manager.terminate()
-        await flush_button_callbacks()
         await self.kb_manager.terminate()
         if sp.db_helper is self.db:
             await sp.close()

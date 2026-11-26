@@ -17,8 +17,8 @@
 - A tool call still without a result when the reply ends is marked **Interrupted, result unknown**, live and after a reload, instead of showing a running timer.
 - 同一轮里两段模型消息之间没有工具调用时，补一个段落分隔，避免文字连在一起；只作用于 WebChat，其他平台的输出不变。
 - When two model messages in one turn follow each other without a tool call in between, WebChat inserts a paragraph break so the text does not run together. Other platforms are unchanged.
-- 按钮回调的注册改为在后台线程写入数据库，不再阻塞事件循环（所有平台共用）；过期一天以上的回调从缓存和数据库中清理。
-- Button callback registration writes to the database on a background thread instead of blocking the event loop (shared by all platforms). Callbacks expired for over a day are removed from the cache and the database.
+- 按钮回调的数据库读写在工作线程执行（所有平台共用）。回调写入成功后才发送按钮，过期一天以上的回调会从缓存和数据库中清理。
+- Button callback database reads and writes run on worker threads across all platforms. Buttons are sent after registration commits, and callbacks expired for over a day are removed from the cache and database.
 - 分块上传的清理任务在没有事件循环时不再留下未等待的协程。
 - The chunked-upload cleanup task no longer leaves an unawaited coroutine when no event loop is running.
 

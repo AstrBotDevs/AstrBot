@@ -30,6 +30,7 @@ import time
 import uuid
 from enum import Enum
 from pathlib import Path, PurePosixPath
+from threading import Lock
 from typing import Any, Literal, TypeAlias
 
 from deprecated import deprecated
@@ -216,6 +217,9 @@ class Button(BaseMessageComponent):
         }
 
 
+_action_row_deadline_lock = Lock()
+
+
 class ActionRow(BaseMessageComponent):
     """A group of buttons that should be displayed on one row when possible."""
 
@@ -232,8 +236,12 @@ class ActionRow(BaseMessageComponent):
         Returns:
             Unix timestamp for this row's callback expiry, or None if unlimited.
         """
-        if self.action_timeout is not None and self._action_expires_at is None:
-            self._action_expires_at = time.time() + self.action_timeout
+        timeout = self.action_timeout
+        if timeout is not None and self._action_expires_at is None:
+            # Platform workers may render the same row concurrently.
+            with _action_row_deadline_lock:
+                if self._action_expires_at is None:
+                    self._action_expires_at = time.time() + timeout
         return self._action_expires_at
 
     def toDict(self) -> dict:
