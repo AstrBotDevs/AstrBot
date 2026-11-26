@@ -98,11 +98,9 @@ class InternalAgentSubStage(Stage):
             )
             if not has_input and event.get_extra("provider_request") is None:
                 return
-            # Explicit session wakeups are queued turns; their sender already tried steering.
+            # Wakeups queue their own turns, including when they use the selected session.
             active = (
-                runtime.active_turn(event.unified_msg_origin)
-                if target is None
-                else None
+                runtime.active_turn(event.unified_msg_origin) if not is_wakeup else None
             )
             if active is not None:
                 selected = await runtime.open_session(
