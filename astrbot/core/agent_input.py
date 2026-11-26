@@ -113,7 +113,7 @@ def apply_user_identifier(
         cfg: Provider settings controlling whether user identification is enabled.
         prompt_was_empty: Whether the prompt was empty before prompt_prefix was applied.
     """
-    if not cfg.get("identifier"):
+    if not isinstance(cfg, dict) or not cfg.get("identifier"):
         return
     identifier = format_user_identifier(event)
     if not identifier:
