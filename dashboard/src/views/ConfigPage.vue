@@ -246,6 +246,7 @@
 
 
 <script>
+import { useRoute, useRouter } from 'vue-router';
 import { configProfileApi, systemConfigApi } from '@/api/v1';
 import AstrBotCoreConfigWrapper from '@/components/config/AstrBotCoreConfigWrapper.vue';
 import SessionMappingsDialog from '@/components/config/SessionMappingsDialog.vue';
@@ -285,6 +286,8 @@ export default {
     const confirmDialog = useConfirmDialog();
 
     return {
+      pageRoute: useRoute(),
+      pageRouter: useRouter(),
       t,
       tm,
       tmMeta,
@@ -383,12 +386,12 @@ export default {
         }
       }
     },
-    '$route.query.scope'(scope) {
+    'pageRoute.query.scope'(scope) {
       if (scope === 'sessions' && !this.initialConfigId) this.mappingsDialog = true;
     },
-    async '$route.fullPath'(newVal) {
+    async 'pageRoute.fullPath'(newVal) {
       if (this.extractConfigTypeFromHash(newVal) === 'system') {
-        this.$router.replace('/settings#system-config');
+        this.pageRouter.replace('/settings#system-config');
         return;
       }
       await this.syncConfigTypeFromHash(newVal);
@@ -458,16 +461,16 @@ export default {
   },
   mounted() {
     const hashConfigType = this.extractConfigTypeFromHash(
-      this.$route?.fullPath || ''
+      this.pageRoute?.fullPath || ''
     );
     if (hashConfigType === 'system') {
-      this.$router.replace('/settings#system-config');
+      this.pageRouter.replace('/settings#system-config');
       return;
     }
     this.configType = hashConfigType || 'normal';
     this.isSystemConfig = this.configType === 'system';
 
-    if (this.$route?.query?.scope === 'sessions' && !this.initialConfigId) this.mappingsDialog = true;
+    if (this.pageRoute?.query?.scope === 'sessions' && !this.initialConfigId) this.mappingsDialog = true;
     const targetConfigId = this.initialConfigId || 'default';
     this.getConfigInfoList(targetConfigId);
     // 初始化配置类型状态
@@ -491,10 +494,10 @@ export default {
   methods: {
     onMappingsChange(open) {
       this.mappingsDialog = open;
-      if (!open && this.$route?.query?.scope === 'sessions') {
-        const query = {...this.$route.query};
+      if (!open && this.pageRoute?.query?.scope === 'sessions') {
+        const query = {...this.pageRoute.query};
         delete query.scope;
-        this.$router.replace({path: '/config', query});
+        this.pageRouter.replace({path: '/config', query});
       }
     },
     // 处理语言切换事件，重新加载配置以获取插件的 i18n 数据
@@ -952,7 +955,7 @@ export default {
         if (saveAndSwitch === 'close') {
           // 恢复路由
           const originalHash = this.isSystemConfig ? '#system' : '#normal';
-          this.$router.replace('/config' + originalHash);
+          this.pageRouter.replace('/config' + originalHash);
           this.configType = this.isSystemConfig ? 'system' : 'normal';
           return;
         }
@@ -960,7 +963,7 @@ export default {
           await this.updateConfig();
           // 系统配置保存后不跳转
           if (this.isSystemConfig) {
-            this.$router.replace('/settings#system-config');
+            this.pageRouter.replace('/settings#system-config');
             return;
           }
         }

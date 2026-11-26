@@ -37,6 +37,7 @@
 </template>
 
 <script>
+import { useRoute, useRouter } from 'vue-router';
 import { useModuleI18n } from '@/i18n/composables';
 
 export default {
@@ -44,7 +45,7 @@ export default {
   components: {},
   setup() {
     const { tm } = useModuleI18n('features/alkaid/index');
-    return { tm };
+    return { tm, pageRoute: useRoute(), pageRouter: useRouter() };
   },
   data() {
     return {}
@@ -52,8 +53,8 @@ export default {
   methods: {
     navigateTo(tab) {
       try {
-        if (this.$router && typeof this.$router.push === 'function') {
-          this.$router.push(`/alkaid/${tab}`);
+        if (this.pageRouter && typeof this.pageRouter.push === 'function') {
+          this.pageRouter.push(`/alkaid/${tab}`);
         }
       } catch (error) {
         console.warn('Navigation error:', error);
@@ -61,7 +62,7 @@ export default {
     },
     isActive(tab) {
       try {
-        return this.$route && this.$route.path.includes(`/alkaid/${tab}`);
+        return this.pageRoute && this.pageRoute.path.includes(`/alkaid/${tab}`);
       } catch (error) {
         console.warn('Route check error:', error);
         return false;
@@ -70,7 +71,7 @@ export default {
   },
   mounted() {
     // 如果在根路径 /alkaid，默认跳转到知识库页面
-    if (this.$route.path === '/alkaid') {
+    if (this.pageRoute.path === '/alkaid') {
       this.navigateTo('knowledge-base');
     }
   }

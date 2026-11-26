@@ -5,7 +5,7 @@
       <v-btn
         icon="mdi-arrow-left"
         variant="text"
-        @click="$router.push({ name: 'NativeKBDetail', params: { kbId } })"
+        @click="router.push({ name: 'NativeKBDetail', params: { kbId } })"
       />
       <div class="header-content">
         <h1 class="text-h4">{{ document.doc_name }}</h1>
@@ -251,7 +251,7 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { knowledgeApi } from '@/api/v1'
 import { useI18n, useModuleI18n } from '@/i18n/composables'
 import { askForConfirmation, useConfirmDialog } from '@/utils/confirmDialog'
@@ -259,6 +259,7 @@ import { askForConfirmation, useConfirmDialog } from '@/utils/confirmDialog'
 const { tm: t } = useModuleI18n('features/knowledge-base/document')
 const { locale } = useI18n()
 const route = useRoute()
+const router = useRouter()
 
 const confirmDialog = useConfirmDialog()
 

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { RouterView, useRoute } from "vue-router";
-import { ref, onMounted, computed, defineAsyncComponent, watch } from "vue";
+import { ref, shallowRef, onMounted, computed, defineAsyncComponent, watch } from "vue";
+import type { menu } from "./vertical-sidebar/sidebarItem";
 import VerticalSidebarVue from "./vertical-sidebar/VerticalSidebar.vue";
 import VerticalHeaderVue from "./vertical-header/VerticalHeader.vue";
 import { useCustomizerStore } from "@/stores/customizer";
@@ -13,6 +14,9 @@ import { useI18n } from "@/i18n/composables";
 
 const Chat = defineAsyncComponent(() => import("@/components/chat/Chat.vue"));
 const ReadmeDialog = defineAsyncComponent(() => import("@/components/shared/ReadmeDialog.vue"));
+
+const NavigationDialog = defineAsyncComponent(() => import("./NavigationDialog.vue"));
+const navigationItem = shallowRef<menu | null>(null);
 
 const FIRST_NOTICE_SEEN_KEY = "astrbot:first_notice_seen:v1";
 
@@ -54,6 +58,8 @@ const showFirstNoticeDialog = ref(false);
 watch(isCurrentChatRoute, (isChatRoute) => {
   if (isChatRoute) {
     shouldMountChat.value = true;
+  } else {
+    navigationItem.value = null;
   }
 });
 
@@ -135,7 +141,7 @@ onMounted(() => {
         top
         style="z-index: 9999; position: absolute; opacity: 0.3"
       />
-      <VerticalSidebarVue v-if="showSidebar" />
+      <VerticalSidebarVue v-if="showSidebar" @navigate="navigationItem = $event" />
       <VerticalHeaderVue />
       <v-main :class="{ 'chat-main': isCurrentChatRoute }">
         <v-container
@@ -169,6 +175,12 @@ onMounted(() => {
           </div>
         </v-container>
       </v-main>
+
+      <NavigationDialog
+        v-if="navigationItem && isCurrentChatRoute"
+        :item="navigationItem"
+        @close="navigationItem = null"
+      />
 
       <ReadmeDialog
         v-if="hasFirstNotice"

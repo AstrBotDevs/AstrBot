@@ -12,6 +12,7 @@ import { ArrowLeft, ChevronDown, ChevronRight, MessageCircle, PanelLeft, Setting
 import ChatUILogo from '@/components/chat/ChatUILogo.vue';
 import { useCommonStore } from '@/stores/common';
 
+const emit = defineEmits(['navigate']);
 const { t } = useI18n();
 
 const customizer = useCustomizerStore();
@@ -145,7 +146,7 @@ const isRailSidebar = computed(
 const visibleMenu = computed(() => {
   const pinnedSet = new Set(pinnedItems.value);
   const extTos = extensionTos.value;
-  const isOpen = (header) => (customizer.mini_sidebar && !isMobile.value) || !collapsedGroups.value.includes(header);
+  const isOpen = (header) => isRailSidebar.value || !collapsedGroups.value.includes(header);
   const pinned = [];
   const result = [];
   let currentHeader = null;
@@ -246,6 +247,9 @@ function toggleSidebar() {
             @click.stop="toggleSidebar"
           >
             <ChatUILogo class="dashboard-sidebar-brand-logo" />
+            <ArrowLeft v-if="isChatNavigation" :size="20" class="dashboard-sidebar-logo-back" />
+            <v-tooltip v-if="isChatNavigation" activator="parent" location="right"
+              :text="t('core.navigation.backToNavigation')" :open-delay="0" content-class="sidebar-rail-tooltip" />
           </button>
           <span class="dashboard-sidebar-brand-copy">
             <span class="dashboard-sidebar-brand-name">AstrBot</span>
@@ -268,22 +272,19 @@ function toggleSidebar() {
 
       <v-list :class="['dashboard-sidebar-list', 'listitem', 'flex-grow-1', { 'hidden-scrollbar': isRailSidebar }]" v-model:opened="openedItems" :open-strategy="'multiple'">
         <v-list-item
-          v-if="customizer.chatNavigationInSidebar"
+          v-if="customizer.chatNavigationInSidebar && !isChatNavigation"
           class="dashboard-nav-item sidebar-chat-entry"
           style="--indent-padding: 0px"
-          :aria-label="t(isChatNavigation ? 'core.navigation.backToNavigation' : 'core.navigation.chat')"
+          :aria-label="t('core.navigation.chat')"
           @click="openChat"
         >
           <template #prepend>
-            <span class="sidebar-chat-icon" :class="{ 'is-back': isChatNavigation }">
-              <MessageCircle :size="20" class="sidebar-chat-symbol" />
-              <ArrowLeft :size="20" class="sidebar-back-symbol" />
-            </span>
+            <MessageCircle :size="20" />
           </template>
           <v-list-item-title>{{ t('core.navigation.chat') }}</v-list-item-title>
           <template #append><ChevronRight :size="16" /></template>
           <v-tooltip v-if="isRailSidebar" activator="parent" location="right"
-            :text="t(isChatNavigation ? 'core.navigation.backToNavigation' : 'core.navigation.chat')" :open-delay="0" content-class="sidebar-rail-tooltip" />
+            :text="t('core.navigation.chat')" :open-delay="0" content-class="sidebar-rail-tooltip" />
         </v-list-item>
         <template
           v-for="(item, i) in visibleMenu"
@@ -336,6 +337,8 @@ function toggleSidebar() {
             :item="item"
             class="leftPadding"
             :rail="isRailSidebar"
+            :open-in-dialog="isChatNavigation && !isMobile"
+            @navigate="(item) => emit('navigate', item)"
             :pinnable="extensionTos.has(item.to) || Boolean(item.children?.some((c) => extensionTos.has(c.to)))"
             :pinned-tos="pinnedItems"
             @toggle-pin="togglePin"
@@ -685,6 +688,13 @@ function toggleSidebar() {
   border-radius: 6px;
   cursor: pointer;
 }
+.dashboard-sidebar-logo-button > .dashboard-sidebar-brand-logo,
+.dashboard-sidebar-logo-back {
+  grid-area: 1 / 1;
+}
+.dashboard-sidebar-logo-back { opacity: 0; }
+.chat-navigation-rail .dashboard-sidebar-logo-button:is(:hover, :focus-visible) .dashboard-sidebar-brand-logo { opacity: 0; }
+.chat-navigation-rail .dashboard-sidebar-logo-button:is(:hover, :focus-visible) .dashboard-sidebar-logo-back { opacity: 1; }
 .dashboard-sidebar-logo-button:disabled { cursor: default; }
 .dashboard-sidebar-logo-button:focus-visible {
   outline: 2px solid rgb(var(--v-theme-primary));
@@ -712,14 +722,6 @@ function toggleSidebar() {
   white-space: nowrap;
   transition: height var(--navigation-motion), padding var(--navigation-motion), opacity 120ms ease;
 }
-.sidebar-chat-icon { display: grid; place-items: center; }
-.sidebar-chat-icon > svg {
-  grid-area: 1 / 1;
-  transition: opacity 180ms ease, transform var(--navigation-motion);
-}
-.sidebar-back-symbol { opacity: 0; transform: translateX(8px); }
-.is-back .sidebar-chat-symbol { opacity: 0; transform: translateX(-8px); }
-.is-back .sidebar-back-symbol { opacity: 1; transform: translateX(0); }
 .navigation-rail .dashboard-sidebar-list { padding: 2px 10px 12px !important; }
 .navigation-rail :deep(.dashboard-nav-item) { padding-inline: 8px !important; }
 .navigation-rail .dashboard-sidebar-brand-copy,
@@ -744,6 +746,12 @@ function toggleSidebar() {
 .navigation-rail .sidebar-footer-btn { padding-inline: 8px !important; }
 .sidebar-footer-btn { overflow: hidden; transition: padding var(--navigation-motion); }
 .sidebar-footer-btn :deep(.v-btn__content) { width: 100%; }
+/* Align the first rail rows with the paired chat sidebar actions. */
+.chat-navigation-rail .dashboard-sidebar-list {
+  margin-top: 0;
+  padding-top: 0 !important;
+}
+.chat-navigation-rail .sidebar-group-header:first-child { height: 0; }
 .chat-navigation-rail .sidebar-footer {
   opacity: 0;
   visibility: hidden;
