@@ -94,8 +94,7 @@ ChatUI supports these common workflows:
 - Select the config profile, model provider, and model on the chat page; if Provider session separation is enabled, you can also choose a model for the current session only.
 - Send text, images, files, and voice input; uploaded attachments show previews and use file signature checks to help identify file types.
 - View model thinking, tool-call status, knowledge-base or web-search references, and per-message token and latency statistics.
-- Copy or regenerate existing replies, including regenerating with another model. Each reply, including its tool calls and button cards, is saved as one record, so it stays one bubble after a reload and copy or regenerate apply to the whole reply. Older replies already saved as several records are not merged.
-- A tool call that has not returned when the reply ends is shown as **Interrupted, result unknown** instead of a running timer; its action may still have taken effect.
+- Copy or regenerate existing replies, including regenerating with another model.
 - Edit a user message and continue generation from that point, or start a thread from a specific excerpt.
 - Switch between streaming/normal response modes and SSE/WebSocket transport modes.
 
