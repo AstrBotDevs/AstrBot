@@ -70,7 +70,9 @@ def set_llm_error_message(event: AstrMessageEvent, key: str, **params: str) -> N
 _PROVIDER_FAILURE_CODES = (
     (
         "providerToolsRequireResponses",
-        re.compile(r"/v1/responses", re.IGNORECASE),
+        # The advice in OpenAI's error, not any mention of the path: a proxy
+        # 404 for "POST /v1/responses" is not this case.
+        re.compile(r"use /v1/responses", re.IGNORECASE),
     ),
     (
         "providerAuth",

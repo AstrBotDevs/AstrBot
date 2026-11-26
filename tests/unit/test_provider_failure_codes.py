@@ -35,6 +35,12 @@ from astrbot.core.llm_error_messages import classify_provider_failure
             "The model `gpt-x` does not exist",
             "providerModelNotFound",
         ),
+        # A wrong base URL on a Responses provider is not a tools problem.
+        (
+            "All chat models failed: NotFoundError: Error code: 404 - "
+            "Invalid URL (POST /v1/responses)",
+            "providerModelNotFound",
+        ),
         # Failures without a specific user action keep the generic code.
         (
             "All chat models failed: APIConnectionError: Connection error.",
