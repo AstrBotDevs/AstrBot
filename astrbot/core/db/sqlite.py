@@ -14,7 +14,6 @@ from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import col, delete, desc, func, or_, select, text, update
 
-from astrbot.core.chatui import ViewStore
 from astrbot.core.db import BaseDatabase
 from astrbot.core.db.conversation import main_conversation_filter
 from astrbot.core.db.migration.migra_conversation_events import migrate_conversations
@@ -171,6 +170,21 @@ class SQLiteDatabase(BaseDatabase):
             await conn.execute(text("PRAGMA temp_store=MEMORY"))
             await conn.execute(text("PRAGMA mmap_size=134217728"))
             await conn.execute(text("PRAGMA optimize"))
+            await conn.execute(
+                text(
+                    "CREATE TABLE IF NOT EXISTS chatui_views ("
+                    "id TEXT PRIMARY KEY, owner TEXT, session_id TEXT, platform TEXT, "
+                    "module TEXT, name TEXT, version INTEGER, revision INTEGER, "
+                    "data TEXT, text TEXT, message_id TEXT, run_id TEXT)"
+                )
+            )
+            await conn.execute(
+                text(
+                    "CREATE TABLE IF NOT EXISTS chatui_actions ("
+                    "view_id TEXT, id TEXT, request TEXT, started REAL, status TEXT, "
+                    "result TEXT, PRIMARY KEY(view_id, id))"
+                )
+            )
             # 确保 personas 表有 folder_id、sort_order、skills 列（前向兼容）
             await self._ensure_persona_folder_columns(conn)
             await self._ensure_persona_skills_column(conn)
@@ -182,7 +196,6 @@ class SQLiteDatabase(BaseDatabase):
             await conn.execute(text("DROP INDEX IF EXISTS ix_umo_aliases_umo"))
             await conn.commit()
         await migrate_conversations(self.conversation_store)
-        await asyncio.to_thread(ViewStore(Path(self.db_path)).initialize)
         self.inited = True
 
     async def _ensure_persona_folder_columns(self, conn) -> None:

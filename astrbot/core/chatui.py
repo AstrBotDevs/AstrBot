@@ -243,51 +243,14 @@ class ViewStore:
     def __init__(self, path: Path | None = None):
         self.path = path if path is not None else Path(DB_PATH)
 
-    def initialize(self) -> None:
-        """Create the ChatUI tables and import legacy records in one transaction."""
-        with self.connect() as db:
-            db.execute("BEGIN IMMEDIATE")
-            if db.execute(
-                "SELECT 1 FROM sqlite_master WHERE type='table' AND name='chatui_actions'"
-            ).fetchone():
-                return
-
-            db.execute(
-                "CREATE TABLE chatui_views ("
-                "id TEXT PRIMARY KEY, owner TEXT, session_id TEXT, platform TEXT, "
-                "module TEXT, name TEXT, version INTEGER, revision INTEGER, "
-                "data TEXT, text TEXT, message_id TEXT, run_id TEXT)"
-            )
-            db.execute(
-                "CREATE TABLE chatui_actions ("
-                "view_id TEXT, id TEXT, request TEXT, started REAL, status TEXT, "
-                "result TEXT, PRIMARY KEY(view_id, id))"
-            )
-
-            legacy_path = self.path.with_name("chatui.db")
-            if legacy_path.is_file():
-                db.execute(
-                    "ATTACH DATABASE ? AS legacy_chatui",
-                    (legacy_path.resolve().as_uri() + "?mode=ro",),
-                )
-                # An interrupted first use of ChatUI may have left an empty file.
-                for table in ("views", "actions"):
-                    if db.execute(
-                        "SELECT 1 FROM legacy_chatui.sqlite_master WHERE type='table' AND name=?",
-                        (table,),
-                    ).fetchone():
-                        db.execute(
-                            f"INSERT INTO chatui_{table} SELECT * FROM legacy_chatui.{table}"
-                        )
-
     @contextmanager
     def connect(self):
-        """Open a transaction on the main SQLite database.
+        """Open a connection to the main SQLite database.
 
         Yields:
             A connection with dictionary-style rows, closed on exit.
         """
-        with closing(sqlite3.connect(self.path, timeout=30, uri=True)) as db, db:
+        with closing(sqlite3.connect(self.path, timeout=30)) as db, db:
             db.row_factory = sqlite3.Row
             yield db
 
