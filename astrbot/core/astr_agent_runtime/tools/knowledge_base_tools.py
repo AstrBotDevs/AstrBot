@@ -113,16 +113,20 @@ class KnowledgeBaseQueryTool(FunctionTool[AstrAgentContext]):
         if not query:
             return "error: Query parameter is empty."
         errors: list[str] = []
-        result = await retrieve_knowledge_base(
-            query=query,
-            umo=context.context.event.unified_msg_origin,
-            context=context.context.context,
-            errors=errors,
-        )
-        if errors:
-            await notify_auxiliary_model_failure(
-                context.context.event, "Knowledge base", "; ".join(errors)
+        try:
+            result = await retrieve_knowledge_base(
+                query=query,
+                umo=context.context.event.unified_msg_origin,
+                context=context.context.context,
+                errors=errors,
             )
+        finally:
+            # Retrieval raises when no knowledge base is usable; the failures
+            # collected before that are still shown.
+            if errors:
+                await notify_auxiliary_model_failure(
+                    context.context.event, "Knowledge base", "; ".join(errors)
+                )
         if not result:
             return "No relevant knowledge found."
         return result

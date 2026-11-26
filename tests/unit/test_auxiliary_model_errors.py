@@ -120,7 +120,9 @@ async def test_failed_speech_to_text_shows_the_provider_and_cause(tmp_path):
         provider_config={"id": "whisper"},
         get_text=AsyncMock(side_effect=RuntimeError("model whisper-9 not found")),
     )
-    event = await _preprocess(provider, [Record(file=str(_voice(tmp_path)))])
+    # Two failed recordings in one message give one card.
+    voice = str(_voice(tmp_path))
+    event = await _preprocess(provider, [Record(file=voice), Record(file=voice)])
     assert _cards(event) == [
         {
             "code": AUXILIARY_MODEL_ERROR_CODE,
@@ -248,20 +250,30 @@ async def test_knowledge_base_failures_are_shown_without_dropping_results(
 
 
 @pytest.mark.asyncio
-async def test_knowledge_base_tool_shows_failures_and_still_answers(monkeypatch):
+@pytest.mark.parametrize("raises", [False, True])
+async def test_knowledge_base_tool_shows_failures_and_still_answers(
+    monkeypatch, raises
+):
     from astrbot.core.astr_agent_runtime.tools import knowledge_base_tools
 
     async def retrieve(query, umo, context, errors):
         errors.append("Knowledge base docs is unavailable: no embedding provider")
+        if raises:
+            # As kb_mgr does when no knowledge base is usable.
+            raise ValueError("no usable knowledge base")
         return "fact"
 
     monkeypatch.setattr(knowledge_base_tools, "retrieve_knowledge_base", retrieve)
     event = _event()
     wrapper = SimpleNamespace(context=SimpleNamespace(event=event, context=None))
-    result = await knowledge_base_tools.KnowledgeBaseQueryTool().call(
-        wrapper, query="q"
-    )
-    assert result == "fact"
+    if raises:
+        with pytest.raises(ValueError):
+            await knowledge_base_tools.KnowledgeBaseQueryTool().call(wrapper, query="q")
+    else:
+        result = await knowledge_base_tools.KnowledgeBaseQueryTool().call(
+            wrapper, query="q"
+        )
+        assert result == "fact"
     assert [card["message"] for card in _cards(event)] == [
         "Knowledge base: Knowledge base docs is unavailable: no embedding provider"
     ]

@@ -241,8 +241,12 @@ class PreProcessStage(Stage):
                     )
                 return
 
+            # One card per message, however many recordings fail.
+            stt_failure_shown = False
+
             async def _stt_record(record_comp: Record, is_reply: bool = False):
                 """对单个 Record 组件执行语音转文本，成功返回 Plain，失败返回 None。"""
+                nonlocal stt_failure_shown
                 prefix = "referenced " if is_reply else ""
                 try:
                     path = await record_comp.convert_to_file_path()
@@ -270,12 +274,14 @@ class PreProcessStage(Stage):
                         logger.error(traceback.format_exc())
                         suffix = " (referenced message)" if is_reply else ""
                         logger.error(f"Speech-to-text{suffix} failed: {e}")
-                        await notify_auxiliary_model_failure(
-                            event,
-                            "Speech-to-text "
-                            f"({stt_provider.provider_config.get('id', 'unknown')})",
-                            str(e),
-                        )
+                        if not stt_failure_shown:
+                            stt_failure_shown = True
+                            await notify_auxiliary_model_failure(
+                                event,
+                                "Speech-to-text "
+                                f"({stt_provider.provider_config.get('id', 'unknown')})",
+                                str(e),
+                            )
                         break
                 return None
 
