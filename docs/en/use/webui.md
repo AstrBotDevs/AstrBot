@@ -175,7 +175,7 @@ Select `Data & Logs` in the left sidebar to switch between `Statistics`, `Conver
 
 ### Statistics
 
-The `Statistics` tab summarizes platform instances, messages, model calls, tokens, and uptime. It also shows message trends, platform message rankings, model-call trends, model usage rankings, and conversation model usage rankings. Use the range selector at the top to view 1 day, 3 days, or 1 week.
+The `Statistics` tab summarizes platform instances, messages, model calls, tokens, and uptime. It also shows message trends, platform message rankings, model-call trends, and token usage by provider, plugin, and conversation. The request count includes retries and provider fallbacks. Historical totals still contribute to token usage. Use the range selector at the top to view 1 day, 3 days, or 1 week.
 
 ### Conversations
 

@@ -60,6 +60,7 @@
   "modelTotal": {
     "title": "{range}模型调用总量",
     "callCount": "共 {count} 次调用",
+    "unknownUsage": "{count} 次请求未返回 Token 用量",
     "avgTtft": "平均首字延迟（TTFT）",
     "avgDuration": "平均响应时间",
     "avgTpm": "平均每分钟输出（TPM）",
@@ -68,6 +69,9 @@
   "modelRanking": {
     "title": "模型用量排名"
   },
+  "pluginRanking": {
+    "title": "插件用量排名"
+  },
   "sessionRanking": {
     "title": "{range}会话模型用量 Top 10",
     "openConversation": "查看对话"
@@ -75,6 +79,7 @@
   "empty": {
     "platformStats": "当前没有平台消息统计数据。",
     "modelCalls": "{range}还没有模型调用数据。",
+    "pluginCalls": "{range}还没有插件调用数据。",
     "sessionCalls": "{range}还没有会话调用数据。"
   },
   "chart": {

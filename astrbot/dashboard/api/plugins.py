@@ -12,6 +12,7 @@ from fastapi.responses import PlainTextResponse, Response
 from astrbot.api.web import PluginRequest, bind_request_context
 from astrbot.core import logger
 from astrbot.core.log import LogManager
+from astrbot.core.utils.plugin_scope import plugin_id_for_callback, plugin_scope
 from astrbot.dashboard.asgi_runtime import (
     DashboardRequestState,
     call_request_view,
@@ -256,13 +257,15 @@ async def _call_plugin_extension(
         username=username,
     )
     app_adapter = getattr(request.app.state, "dashboard_app_adapter", None)
-    if app_adapter is None:
-        with bind_request_context(plugin_request):
+    with (
+        bind_request_context(plugin_request),
+        plugin_scope(plugin_id_for_callback(view_handler)),
+    ):
+        if app_adapter is None:
             return await run_maybe_async(lambda: view_handler(**path_values))
 
-    g_obj = DashboardRequestState()
-    g_obj.username = username
-    with bind_request_context(plugin_request):
+        g_obj = DashboardRequestState()
+        g_obj.username = username
         return await call_request_view(
             request,
             app_adapter,

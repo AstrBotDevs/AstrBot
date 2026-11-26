@@ -123,6 +123,9 @@
               <div class="card-label">{{ t('modelTotal.title', { range: rangeLabel }) }}</div>
               <div class="token-total-value">{{ formatNumber(providerStats?.range_total_tokens ?? 0) }} <span style="font-size: 18px;">{{ t('units.tokens') }}</span></div>
               <div class="card-note">{{ t('modelTotal.callCount', { count: formatNumber(providerStats?.range_total_calls ?? 0) }) }}</div>
+              <div v-if="providerStats?.range_unknown_usage_calls" class="card-note">
+                {{ t('modelTotal.unknownUsage', { count: formatNumber(providerStats.range_unknown_usage_calls) }) }}
+              </div>
               <div class="token-meta-list">
                 <div class="token-meta-item">
                   <span>{{ t('modelTotal.avgTtft') }}</span>
@@ -143,26 +146,21 @@
               </div>
             </section>
 
-            <section class="stat-card provider-list-card">
+            <section
+              v-for="ranking in usageRankings"
+              :key="ranking.title"
+              class="stat-card provider-list-card"
+            >
               <div class="card-head compact">
-                <div>
-                  <div class="section-title">{{ t('modelRanking.title') }}</div>
+                <div class="section-title">{{ ranking.title }}</div>
+              </div>
+              <div v-if="ranking.items.length" class="provider-list provider-list--scrollable">
+                <div v-for="item in ranking.items" :key="item.id" class="provider-row">
+                  <span class="provider-name">{{ item.id }}</span>
+                  <strong>{{ formatNumber(item.tokens) }}</strong>
                 </div>
               </div>
-              <div
-                v-if="rangeProviderRanking.length"
-                class="provider-list provider-list--scrollable"
-              >
-                <div
-                  v-for="provider in rangeProviderRanking"
-                  :key="provider.provider_id"
-                  class="provider-row"
-                >
-                  <span class="provider-name">{{ provider.provider_id }}</span>
-                  <strong>{{ formatNumber(provider.tokens) }}</strong>
-                </div>
-              </div>
-              <div v-else class="empty-state">{{ t('empty.modelCalls', { range: rangeLabel }) }}</div>
+              <div v-else class="empty-state">{{ ranking.empty }}</div>
             </section>
           </section>
         </div>
@@ -320,12 +318,14 @@ interface ProviderTokenStatsResponse {
   }
   range_total_tokens: number
   range_total_calls: number
+  range_unknown_usage_calls: number
   range_avg_ttft_ms: number
   range_avg_duration_ms: number
   range_avg_tpm: number
   range_success_rate: number
   range_by_provider: ProviderRankingItem[]
   range_by_umo: UmoRankingItem[]
+  range_by_plugin: Array<{ plugin_id: string; tokens: number; calls: number }>
   today_total_tokens: number
   today_total_calls: number
   today_by_provider: ProviderRankingItem[]
@@ -550,7 +550,24 @@ const providerTrendSeries = computed<ChartSeries>(() =>
   }))
 )
 
-const rangeProviderRanking = computed(() => providerStats.value?.range_by_provider ?? [])
+const usageRankings = computed(() => [
+  {
+    title: t('modelRanking.title'),
+    empty: t('empty.modelCalls', { range: rangeLabel.value }),
+    items: (providerStats.value?.range_by_provider ?? []).map((item) => ({
+      id: item.provider_id,
+      tokens: item.tokens,
+    })),
+  },
+  {
+    title: t('pluginRanking.title'),
+    empty: t('empty.pluginCalls', { range: rangeLabel.value }),
+    items: (providerStats.value?.range_by_plugin ?? []).map((item) => ({
+      id: item.plugin_id,
+      tokens: item.tokens,
+    })),
+  },
+])
 
 const rangeUmoRanking = computed(() =>
   (providerStats.value?.range_by_umo ?? []).slice(0, 10).map((item) => ({

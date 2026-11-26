@@ -8,6 +8,7 @@ from astrbot.core.message.message_event_result import CommandResult, MessageEven
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from astrbot.core.star.star import star_map
 from astrbot.core.star.star_handler import EventType, star_handlers_registry
+from astrbot.core.utils.plugin_scope import plugin_id_for_callback, plugin_scope
 
 
 async def call_handler(
@@ -140,7 +141,15 @@ async def call_event_hook(
                 logger.debug(
                     f"hook({hook_type.name}) -> {plugin_name} - {handler.handler_name}",
                 )
-                await handler.handler(event, *args, **kwargs)
+                plugin_id = (
+                    plugin.plugin_id
+                    if plugin
+                    else plugin_id_for_callback(
+                        handler.handler, handler.handler_module_path
+                    )
+                )
+                with plugin_scope(plugin_id):
+                    await handler.handler(event, *args, **kwargs)
             except BaseException as exc:
                 logger.error(traceback.format_exc(), extra={"plugin_name": plugin_name})
                 event.trace.record(

@@ -8,6 +8,7 @@ from astrbot.core import sp
 from astrbot.core.config_bindings import BINDING_KEY
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
 from astrbot.core.db.po import (
+    ChatRequestStat,
     ConversationEvent,
     ConversationV3,
     PlatformMessageHistory,
@@ -163,11 +164,12 @@ async def delete_bot_data(
                     )
             if "stats" in targets:
                 # PlatformStat aggregates adapter types, so it is shared by bots.
-                await session.execute(
-                    delete(ProviderStat).where(
-                        func.substr(ProviderStat.umo, 1, len(prefix)) == prefix
+                for model in (ProviderStat, ChatRequestStat):
+                    await session.execute(
+                        delete(model).where(
+                            func.substr(model.umo, 1, len(prefix)) == prefix
+                        )
                     )
-                )
 
     if "traces" in targets:
         await asyncio.to_thread(

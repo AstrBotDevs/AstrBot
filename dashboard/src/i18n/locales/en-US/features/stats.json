@@ -60,6 +60,7 @@
   "modelTotal": {
     "title": "{range} total model calls",
     "callCount": "{count} calls",
+    "unknownUsage": "{count} requests did not report token usage",
     "avgTtft": "Average TTFT",
     "avgDuration": "Average Response Time",
     "avgTpm": "Average Output TPM",
@@ -68,6 +69,9 @@
   "modelRanking": {
     "title": "Model Usage Ranking"
   },
+  "pluginRanking": {
+    "title": "Plugin token usage"
+  },
   "sessionRanking": {
     "title": "{range} Session Model Usage Top 10",
     "openConversation": "View conversation"
@@ -75,6 +79,7 @@
   "empty": {
     "platformStats": "No platform message statistics available.",
     "modelCalls": "No model call data for {range}.",
+    "pluginCalls": "No plugin requests for {range} yet.",
     "sessionCalls": "No session call data for {range}."
   },
   "chart": {

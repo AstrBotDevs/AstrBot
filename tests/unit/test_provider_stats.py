@@ -1,65 +1,114 @@
 from types import SimpleNamespace
+from unittest.mock import AsyncMock, MagicMock
 
+import httpx
 import pytest
+from openai.types.chat.chat_completion import ChatCompletion
 from sqlmodel import select
 
-from astrbot.core.agent.response import AgentStats
-from astrbot.core.astr_agent_runtime import history as native_history
-from astrbot.core.db.po import ProviderStat
-from astrbot.core.provider.entities import ProviderRequest, TokenUsage
+from astrbot.core.db.po import ChatRequestStat
+from astrbot.core.pipeline.process_stage.method import star_request
+from astrbot.core.provider.sources import chat_request, request_retry
+from astrbot.core.provider.sources.openai_source import ProviderOpenAIOfficial
+from astrbot.core.star.star import StarMetadata
+from astrbot.core.star.star_handler import EventType
+from astrbot.dashboard.services.stat_service import StatService
 
 
 @pytest.mark.asyncio
-async def test_record_internal_agent_stats_persists_provider_stat(
+async def test_direct_plugin_chat_counts_each_attempt_and_keeps_historical_tokens(
     temp_db,
-    monkeypatch: pytest.MonkeyPatch,
+    monkeypatch,
 ):
-    monkeypatch.setattr(native_history, "db_helper", temp_db)
+    monkeypatch.setattr(chat_request, "db_helper", temp_db)
+    monkeypatch.setattr(request_retry, "REQUEST_RETRY_WAIT_MIN_S", 0)
+    monkeypatch.setattr(request_retry, "REQUEST_RETRY_WAIT_MAX_S", 0)
+    await temp_db.insert_provider_stat(
+        umo="test:FriendMessage:old",
+        provider_id="old-provider",
+        stats={"token_usage": {"input_other": 9}},
+    )
+    provider = ProviderOpenAIOfficial(
+        {"id": "test-provider", "key": ["test-key"], "model": "default-model"},
+        {},
+    )
+    completion = ChatCompletion.model_validate(
+        {
+            "id": "completion",
+            "object": "chat.completion",
+            "created": 0,
+            "model": "other-model",
+            "choices": [
+                {
+                    "index": 0,
+                    "message": {"role": "assistant", "content": "ok"},
+                    "finish_reason": "stop",
+                },
+            ],
+            "usage": {
+                "prompt_tokens": 11,
+                "completion_tokens": 7,
+                "total_tokens": 18,
+                "prompt_tokens_details": {"cached_tokens": 3},
+            },
+        }
+    )
+    monkeypatch.setattr(
+        provider.client.chat.completions,
+        "create",
+        AsyncMock(side_effect=[httpx.ConnectError("retry"), completion]),
+    )
 
-    event = SimpleNamespace(unified_msg_origin="webchat:FriendMessage:session-42")
-    req = ProviderRequest(
-        conversation=SimpleNamespace(cid="conv-123"),
-    )
-    stats = AgentStats(
-        token_usage=TokenUsage(input_other=11, input_cached=3, output=7),
-        start_time=100.0,
-        end_time=108.5,
-        time_to_first_token=0.6,
-    )
-    provider = SimpleNamespace(
-        provider_config={"id": "provider-1"},
-        meta=lambda: SimpleNamespace(id="provider-1", type="openai"),
-        get_model=lambda: "gpt-4.1",
-    )
-    agent_runner = SimpleNamespace(
-        provider=provider,
-        stats=stats,
-        was_aborted=lambda: False,
-    )
-    final_resp = SimpleNamespace(role="assistant")
+    async def handle(event):
+        response = await provider.text_chat(
+            prompt="hello", model="other-model", request_max_retries=2
+        )
+        assert response.completion_text == "ok"
 
-    await native_history.record_agent_stats(
-        event,
-        req,
-        agent_runner,
-        final_resp,
+    plugin = StarMetadata(name="test_plugin", author="author")
+    monkeypatch.setitem(star_request.star_map, "test_plugin", plugin)
+    handler = SimpleNamespace(
+        handler=handle,
+        handler_name="handle",
+        handler_full_name="test_plugin.handle",
+        handler_module_path="test_plugin",
+        event_type=EventType.AdapterMessageEvent,
+        event_filters=[],
+        extras_configs={},
     )
+    event = MagicMock()
+    event.get_extra.side_effect = {"activated_handlers": [handler]}.get
+    event.is_stopped.return_value = False
+    try:
+        async for _ in star_request.StarRequestSubStage().process(event):
+            pass
+    finally:
+        await provider.terminate()
 
     async with temp_db.get_db() as session:
-        result = await session.execute(select(ProviderStat))
-        records = result.scalars().all()
+        rows = (
+            (
+                await session.execute(
+                    select(ChatRequestStat).order_by(ChatRequestStat.id)
+                )
+            )
+            .scalars()
+            .all()
+        )
+    assert [(row.status, row.token_output) for row in rows] == [
+        ("error", None),
+        ("completed", 7),
+    ]
+    assert {row.plugin_id for row in rows} == {plugin.plugin_id}
+    assert {row.provider_model for row in rows} == {"other-model"}
+    assert rows[1].token_input_other == 8
+    assert rows[1].token_input_cached == 3
 
-    assert len(records) == 1
-    record = records[0]
-    assert record.agent_type == "internal"
-    assert record.status == "completed"
-    assert record.umo == "webchat:FriendMessage:session-42"
-    assert record.conversation_id == "conv-123"
-    assert record.provider_id == "provider-1"
-    assert record.provider_model == "gpt-4.1"
-    assert record.token_input_other == 11
-    assert record.token_input_cached == 3
-    assert record.token_output == 7
-    assert record.start_time == 100.0
-    assert record.end_time == 108.5
-    assert record.time_to_first_token == 0.6
+    service = StatService(temp_db, MagicMock(), {})
+    stats = await service.get_provider_token_stats(1)
+    assert stats["range_total_tokens"] == 27
+    assert stats["range_total_calls"] == 2
+    assert stats["range_unknown_usage_calls"] == 1
+    assert stats["range_by_plugin"] == [
+        {"plugin_id": plugin.plugin_id, "tokens": 18, "calls": 2},
+    ]

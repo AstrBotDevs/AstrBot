@@ -45,6 +45,7 @@ from astrbot.core.star.tool_execution import call_local_llm_tool
 from astrbot.core.utils.active_event_registry import active_event_registry
 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
 from astrbot.core.utils.image_ref_utils import is_supported_image_ref
+from astrbot.core.utils.plugin_scope import plugin_id_for_callback, plugin_scope
 from astrbot.core.utils.string_utils import normalize_and_dedupe_strings
 
 BACKGROUND_TASK_RESULT_WOKE_USER_PROMPT = (
@@ -624,13 +625,15 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
             method_name=method_name,
             **tool_args,
         )
+        plugin_id = plugin_id_for_callback(awaitable, tool.handler_module_path)
         async with aclosing(wrapper):
             while True:
                 try:
-                    resp = await asyncio.wait_for(
-                        anext(wrapper),
-                        timeout=effective_timeout,
-                    )
+                    with plugin_scope(plugin_id):
+                        resp = await asyncio.wait_for(
+                            anext(wrapper),
+                            timeout=effective_timeout,
+                        )
                     if resp is not None:
                         if isinstance(resp, ViewResult):
                             if resp.name is None:

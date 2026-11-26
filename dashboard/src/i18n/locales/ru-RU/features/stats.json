@@ -60,6 +60,7 @@
   "modelTotal": {
     "title": "{range} всего вызовов моделей",
     "callCount": "{count} вызовов",
+    "unknownUsage": "Запросы без данных о токенах: {count}",
     "avgTtft": "Средний TTFT",
     "avgDuration": "Среднее время ответа",
     "avgTpm": "Средний Output TPM",
@@ -68,6 +69,9 @@
   "modelRanking": {
     "title": "Рейтинг использования моделей"
   },
+  "pluginRanking": {
+    "title": "Расход токенов по плагинам"
+  },
   "sessionRanking": {
     "title": "{range} топ-10 сессий по использованию моделей",
     "openConversation": "Открыть диалог"
@@ -75,6 +79,7 @@
   "empty": {
     "platformStats": "Статистика сообщений по платформам отсутствует.",
     "modelCalls": "Нет данных по вызовам моделей за период {range}.",
+    "pluginCalls": "За период «{range}» запросов от плагинов пока нет.",
     "sessionCalls": "Нет данных по сессиям за период {range}."
   },
   "chart": {

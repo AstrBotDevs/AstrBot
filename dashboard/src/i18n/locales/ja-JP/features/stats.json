@@ -60,6 +60,7 @@
   "modelTotal": {
     "title": "{range}のモデル呼び出し合計",
     "callCount": "合計 {count} 回",
+    "unknownUsage": "{count} 件のリクエストでトークン使用量が報告されませんでした",
     "avgTtft": "最初のトークンまでの平均時間（TTFT）",
     "avgDuration": "平均応答時間",
     "avgTpm": "平均出力速度（TPM）",
@@ -68,6 +69,9 @@
   "modelRanking": {
     "title": "モデル使用量ランキング"
   },
+  "pluginRanking": {
+    "title": "プラグインのトークン使用量"
+  },
   "sessionRanking": {
     "title": "{range}のセッション別モデル使用量上位 10 件",
     "openConversation": "会話を見る"
@@ -75,6 +79,7 @@
   "empty": {
     "platformStats": "プラットフォーム別メッセージ統計データはありません。",
     "modelCalls": "{range}のモデル呼び出しデータはありません。",
+    "pluginCalls": "{range}のプラグインリクエストはまだありません。",
     "sessionCalls": "{range}のセッション呼び出しデータはありません。"
   },
   "chart": {

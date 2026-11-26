@@ -32,6 +32,7 @@ from astrbot.core.platform.agent_wakeup_event import AgentWakeupEvent
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from astrbot.core.speech_output import stream_speech
 from astrbot.core.utils.active_event_registry import active_event_registry
+from astrbot.core.utils.plugin_scope import plugin_scope
 
 from ....context import PipelineContext
 from ...follow_up import (
@@ -156,12 +157,14 @@ class InternalAgentSubStage(Stage):
                 else None,
             )
             session.runtime_name = runtime_name
-            turn = await session.run_turn(
-                input,
-                admit=partial(
-                    admit_agent_input, self.ctx.plugin_manager.context, input
-                ),
-            )
+            request = event.get_extra("provider_request")
+            with plugin_scope(getattr(request, "_plugin_id", None)):
+                turn = await session.run_turn(
+                    input,
+                    admit=partial(
+                        admit_agent_input, self.ctx.plugin_manager.context, input
+                    ),
+                )
             active_event_registry.register_agent_stop_callback(event, turn.request_stop)
             stream_to_general = (
                 self.unsupported_streaming_strategy == "turn_off"
