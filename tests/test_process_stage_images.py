@@ -874,6 +874,246 @@ async def test_reply_fallback_limit_and_deduplication(harness, tmp_path, monkeyp
 
 
 @pytest.mark.asyncio
+async def test_unresolved_quoted_image_falls_back_via_onebot_get_image(
+    harness, tmp_path
+):
+    bare_name = "d41d8cd98f00b204e9800998ecf8427e.png"
+    recovered = source_image(tmp_path, "PNG")
+    actions: list[tuple[str, dict]] = []
+
+    async def call_action(action: str, **params):
+        actions.append((action, params))
+        if action == "get_msg":
+            return {
+                "data": {
+                    "message": [
+                        {
+                            "type": "image",
+                            "data": {"url": "", "file": bare_name},
+                        }
+                    ]
+                }
+            }
+        if action == "get_image" and params == {"file": bare_name}:
+            return {"data": {"file": str(recovered)}}
+        return {"data": {}}
+
+    event = make_event(
+        [
+            Reply(
+                id="300",
+                chain=[Image(url="", file=bare_name)],
+                message_str="",
+            ),
+            Plain(text="what is in this image?"),
+        ],
+        text="what is in this image?",
+    )
+    event.bot = SimpleNamespace(api=SimpleNamespace(call_action=call_action))
+
+    await process_event(harness, event, preprocess_first=True)
+
+    assert ("get_image", {"file": bare_name}) in actions
+    req = harness.captured[0].req
+    assert len(req.image_urls) == 1
+    assert not any(
+        isinstance(part, TextPart) and part.text == "[Image unavailable]"
+        for part in req.extra_user_content_parts
+    )
+    payload = harness.provider.text_chat.await_args.kwargs["contexts"][-1]["content"]
+    assert any(part["type"] == "image_url" for part in payload)
+    text_parts = [part["text"] for part in payload if part["type"] == "text"]
+    assert not any("[Image unavailable]" in text for text in text_parts)
+    assert any("in quoted message" in text for text in text_parts)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("outcome", ["empty", "error", "limit"])
+async def test_unresolved_quoted_image_keeps_placeholder_when_fallback_fails(
+    harness, tmp_path, monkeypatch, outcome
+):
+    bare_name = "d41d8cd98f00b204e9800998ecf8427e.png"
+    if outcome == "empty":
+        extract = AsyncMock(return_value=[])
+    elif outcome == "error":
+        extract = AsyncMock(side_effect=RuntimeError("protocol failed"))
+    else:
+        harness.config["provider_settings"]["max_quoted_fallback_images"] = 0
+        extract = AsyncMock(return_value=[str(source_image(tmp_path, "PNG"))])
+    monkeypatch.setattr(request_build, "extract_quoted_message_images", extract)
+
+    event = make_event(
+        [
+            Reply(id="301", chain=[Image(url="", file=bare_name)], message_str=""),
+            Plain(text="describe"),
+        ],
+        text="describe",
+    )
+    await process_event(harness, event, preprocess_first=True)
+
+    assert extract.await_count == 1
+    req = harness.captured[0].req
+    assert req.image_urls == []
+    unavailable = [
+        part
+        for part in req.extra_user_content_parts
+        if isinstance(part, TextPart) and part.text == "[Image unavailable]"
+    ]
+    assert len(unavailable) == 1
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("partial_failure", [False, True])
+async def test_embedded_quoted_image_skips_fallback_for_valid_and_partial_failure(
+    harness, tmp_path, monkeypatch, partial_failure
+):
+    valid = source_image(tmp_path, "PNG")
+    extract = AsyncMock(return_value=[str(source_image(tmp_path, "JPEG"))])
+    monkeypatch.setattr(request_build, "extract_quoted_message_images", extract)
+
+    chain = [Image(file=str(valid))]
+    if partial_failure:
+        chain.append(Image(url="", file="d41d8cd98f00b204e9800998ecf8427e.png"))
+    event = make_event(
+        [Reply(id="302", chain=chain, message_str=""), Plain(text="describe")],
+        text="describe",
+    )
+    await process_event(harness, event, preprocess_first=True)
+
+    assert extract.await_count == 0
+    req = harness.captured[0].req
+    assert len(req.image_urls) == 1
+    unavailable = [
+        part
+        for part in req.extra_user_content_parts
+        if isinstance(part, TextPart) and part.text == "[Image unavailable]"
+    ]
+    assert len(unavailable) == int(partial_failure)
+
+
+@pytest.mark.asyncio
+async def test_quoted_fallback_duplicate_with_current_image_preserves_other_unavailable_notice(
+    harness, tmp_path, monkeypatch
+):
+    shared = source_image(tmp_path, "PNG")
+    extract = AsyncMock(return_value=[str(shared)])
+    monkeypatch.setattr(request_build, "extract_quoted_message_images", extract)
+
+    event = make_event(
+        [
+            Image(file=str(shared)),
+            Image(file="missing_ordinary.png"),
+            Reply(
+                id="303",
+                chain=[Image(url="", file="d41d8cd98f00b204e9800998ecf8427e.png")],
+                message_str="",
+            ),
+            Plain(text="compare"),
+        ],
+        text="compare",
+    )
+    await process_event(harness, event, preprocess_first=True)
+
+    assert extract.await_count == 1
+    req = harness.captured[0].req
+    assert len(req.image_urls) == 1
+    unavailable = [
+        part
+        for part in req.extra_user_content_parts
+        if isinstance(part, TextPart) and part.text == "[Image unavailable]"
+    ]
+    assert len(unavailable) == 1
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("mode", ["partial", "truncated"])
+async def test_unresolved_quoted_images_report_unrecovered_count_on_partial_or_truncated_fallback(
+    harness, tmp_path, monkeypatch, mode
+):
+    first = source_image(tmp_path, "PNG")
+    second = source_image(tmp_path, "JPEG")
+    if mode == "partial":
+        extract = AsyncMock(return_value=[str(first)])
+    else:
+        harness.config["provider_settings"]["max_quoted_fallback_images"] = 1
+        extract = AsyncMock(return_value=[str(first), str(second)])
+    monkeypatch.setattr(request_build, "extract_quoted_message_images", extract)
+
+    event = make_event(
+        [
+            Reply(
+                id="304",
+                chain=[
+                    Image(url="", file="aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.png"),
+                    Image(url="", file="bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb.png"),
+                ],
+                message_str="",
+            ),
+            Plain(text="describe both"),
+        ],
+        text="describe both",
+    )
+    await process_event(harness, event, preprocess_first=True)
+
+    assert extract.await_count == 1
+    req = harness.captured[0].req
+    assert len(req.image_urls) == 1
+    unavailable = [
+        part
+        for part in req.extra_user_content_parts
+        if isinstance(part, TextPart) and part.text == "[Image unavailable]"
+    ]
+    assert len(unavailable) == 1
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "limit_case", ["exhausted_existing_only", "one_slot_existing_plus_new"]
+)
+async def test_quoted_fallback_deduplicates_existing_refs_before_applying_limit(
+    harness, tmp_path, monkeypatch, limit_case
+):
+    img_a = source_image(tmp_path, "PNG")
+    img_b = source_image(tmp_path, "JPEG")
+    if limit_case == "exhausted_existing_only":
+        harness.config["provider_settings"]["max_quoted_fallback_images"] = 1
+        extract = AsyncMock(side_effect=[[str(img_a)], [str(img_a)]])
+        second_chain = [
+            Image(url="", file="aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.png"),
+        ]
+        expected_images = 1
+    else:
+        harness.config["provider_settings"]["max_quoted_fallback_images"] = 2
+        extract = AsyncMock(side_effect=[[str(img_a)], [str(img_a), str(img_b)]])
+        second_chain = [
+            Image(url="", file="aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.png"),
+            Image(url="", file="bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb.png"),
+        ]
+        expected_images = 2
+    monkeypatch.setattr(request_build, "extract_quoted_message_images", extract)
+
+    event = make_event(
+        [
+            Reply(id="305-first"),
+            Reply(id="305-second", chain=second_chain, message_str=""),
+            Plain(text="check"),
+        ],
+        text="check",
+    )
+    await process_event(harness, event, preprocess_first=True)
+
+    assert extract.await_count == 2
+    req = harness.captured[0].req
+    assert len(req.image_urls) == expected_images
+    unavailable = [
+        part
+        for part in req.extra_user_content_parts
+        if isinstance(part, TextPart) and part.text == "[Image unavailable]"
+    ]
+    assert unavailable == []
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize(
     "text,good", [("", False), ("keep text", False), ("keep text", True)]
 )
