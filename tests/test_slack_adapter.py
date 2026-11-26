@@ -2,6 +2,7 @@ import asyncio
 import hashlib
 import hmac
 import json
+import time
 from unittest.mock import AsyncMock
 from urllib.parse import urlencode
 
@@ -204,7 +205,7 @@ async def test_slack_webhook_acknowledges_block_action_before_processing():
         ],
     }
     body = urlencode({"payload": json.dumps(payload)}).encode()
-    timestamp = "1700000000"
+    timestamp = str(int(time.time()))
     signature = (
         "v0="
         + hmac.new(

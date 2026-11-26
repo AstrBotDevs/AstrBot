@@ -2,6 +2,7 @@ import asyncio
 import hashlib
 import hmac
 import json
+import time
 from collections.abc import Callable
 from typing import cast
 from urllib.parse import parse_qs
@@ -82,6 +83,14 @@ class SlackWebhookClient:
             signature = req.headers.get("X-Slack-Signature")
             if not timestamp or not signature:
                 return Response("Missing headers", status_code=400)
+            try:
+                request_time = int(timestamp)
+            except ValueError:
+                return Response("Invalid timestamp", status_code=400)
+            # A valid signature alone does not prevent replay of old requests.
+            now = time.time()
+            if not now - 300 <= request_time <= now + 300:
+                return Response("Expired timestamp", status_code=400)
             # Calculate the HMAC signature
             sig_basestring = f"v0:{timestamp}:{body_text}"
             my_signature = (
