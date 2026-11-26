@@ -1,0 +1,29 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "api_token": {
+      "default": "",
+      "description": "Write-only secret token",
+      "title": "Api Token",
+      "type": "string",
+      "writeOnly": true
+    },
+    "greeting_prefix": {
+      "default": "SDK",
+      "description": "Prefix returned by handlers",
+      "title": "Greeting Prefix",
+      "type": "string"
+    },
+    "max_items": {
+      "default": 5,
+      "description": "Upper limit validated by schema and hook",
+      "maximum": 50,
+      "minimum": 1,
+      "title": "Max Items",
+      "type": "integer"
+    }
+  },
+  "title": "ShowcaseConfig",
+  "type": "object"
+}

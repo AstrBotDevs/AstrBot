@@ -1,0 +1,12 @@
+{
+  "banner": {
+    "description": "Display banner",
+    "type": "string",
+    "default": "MAIN"
+  },
+  "counter": {
+    "description": "Counter value",
+    "type": "int",
+    "default": 0
+  }
+}

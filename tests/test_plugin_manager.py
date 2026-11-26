@@ -3011,3 +3011,177 @@ def test_metadata_rejects_invalid_views(tmp_path, views):
     path.write_text(yaml.safe_dump(raw))
     with pytest.raises(ValueError):
         PluginManager._load_plugin_metadata(str(tmp_path))
+
+
+def _write_runtime_test_metadata(
+    plugin_path: Path,
+    *,
+    schema_version: int | None = None,
+    isolated: bool = False,
+) -> None:
+    lines = [
+        "name: demo",
+        "desc: demo plugin",
+        "version: 1.0.0",
+        "author: tester",
+    ]
+    if schema_version == 2:
+        lines += ["schema_version: 2", "runtime:", "  api: sdk"]
+    elif isolated:
+        lines += ["runtime:", "  isolated: true"]
+    plugin_path.joinpath("metadata.yaml").write_text(
+        "\n".join(lines) + "\n",
+        encoding="utf-8",
+    )
+
+
+def test_failed_plugin_record_exposes_runtime(plugin_manager_pm):
+    pm = plugin_manager_pm
+    store = Path(pm.plugin_store_path)
+
+    legacy_isolated = store / "legacy_iso"
+    legacy_isolated.mkdir()
+    _write_runtime_test_metadata(legacy_isolated, isolated=True)
+    legacy_inprocess = store / "legacy_proc"
+    legacy_inprocess.mkdir()
+    _write_runtime_test_metadata(legacy_inprocess)
+    sdk_plugin = store / "sdk_plugin"
+    sdk_plugin.mkdir()
+    _write_runtime_test_metadata(sdk_plugin, schema_version=2)
+
+    pm._runtime_overrides = {}
+
+    record = pm._build_failed_plugin_record(
+        root_dir_name="legacy_iso",
+        plugin_dir_path=str(legacy_isolated),
+        reserved=False,
+        error="boom",
+        error_trace="trace",
+    )
+    assert record["runtime"] == "isolated"
+    assert record["can_change_runtime"] is True
+
+    record = pm._build_failed_plugin_record(
+        root_dir_name="legacy_proc",
+        plugin_dir_path=str(legacy_inprocess),
+        reserved=False,
+        error="boom",
+        error_trace="trace",
+    )
+    assert record["runtime"] == "in-process"
+    assert record["can_change_runtime"] is True
+
+    # The user's runtime override wins over the metadata declaration.
+    pm._runtime_overrides = {"legacy_proc": "isolated"}
+    record = pm._build_failed_plugin_record(
+        root_dir_name="legacy_proc",
+        plugin_dir_path=str(legacy_inprocess),
+        reserved=False,
+        error="boom",
+        error_trace="trace",
+    )
+    assert record["runtime"] == "isolated"
+
+    record = pm._build_failed_plugin_record(
+        root_dir_name="sdk_plugin",
+        plugin_dir_path=str(sdk_plugin),
+        reserved=False,
+        error="boom",
+        error_trace="trace",
+    )
+    assert record["runtime"] == "isolated"
+    assert record["can_change_runtime"] is False
+
+
+@pytest.mark.asyncio
+async def test_set_plugin_runtime_to_in_process_removes_venv_and_failed_record(
+    plugin_manager_pm,
+    tmp_path,
+    monkeypatch,
+):
+    pm = plugin_manager_pm
+    store = Path(pm.plugin_store_path)
+    plugin_dir = store / "legacy_iso"
+    plugin_dir.mkdir()
+    _write_runtime_test_metadata(plugin_dir, isolated=True)
+
+    data_root = tmp_path / "data"
+    venv_dir = data_root / "plugin_venvs" / "legacy_iso"
+    venv_dir.mkdir(parents=True)
+    (venv_dir / "pyvenv.cfg").write_text("", encoding="utf-8")
+    monkeypatch.setattr(
+        star_manager_module,
+        "get_astrbot_data_path",
+        lambda: str(data_root),
+    )
+
+    preferences = {"plugin_runtime_overrides": {}}
+
+    async def mock_global_get(key, default=None):
+        return preferences.get(key, default)
+
+    async def mock_global_put(key, value):
+        preferences[key] = value
+
+    async def mock_load(specified_dir_name=None, ignore_version_check=False):
+        return True, None
+
+    monkeypatch.setattr(star_manager_module.sp, "global_get", mock_global_get)
+    monkeypatch.setattr(star_manager_module.sp, "global_put", mock_global_put)
+    monkeypatch.setattr(pm, "load", mock_load)
+    pm._sdk_plugin_manager = None
+    pm.failed_plugin_dict["legacy_iso"] = {"error": "boom"}
+
+    success, error = await pm.set_plugin_runtime("legacy_iso", "in-process")
+
+    assert success
+    assert error is None
+    assert not venv_dir.exists()
+    assert preferences["plugin_runtime_overrides"] == {"legacy_iso": "in-process"}
+    assert "legacy_iso" not in pm.failed_plugin_dict
+
+
+@pytest.mark.asyncio
+async def test_set_plugin_runtime_rejects_path_traversal_and_preserves_outside_dirs(
+    plugin_manager_pm,
+    tmp_path,
+    monkeypatch,
+):
+    """Reject traversal/absolute names in PluginManager and PluginService runtime switches."""
+    from astrbot.dashboard.services.plugin_service import PluginService, PluginServiceError
+
+    pm = plugin_manager_pm
+    outside_plugin = tmp_path / "outside_plugin"
+    outside_plugin.mkdir()
+    marker_plugin = outside_plugin / "keep.txt"
+    marker_plugin.write_text("keep", encoding="utf-8")
+
+    data_root = tmp_path / "data"
+    (data_root / "plugin_venvs").mkdir(parents=True)
+    outside_venv_target = data_root / "keep_dir"
+    outside_venv_target.mkdir()
+    marker_venv = outside_venv_target / "important.txt"
+    marker_venv.write_text("safe", encoding="utf-8")
+    monkeypatch.setattr(
+        star_manager_module,
+        "get_astrbot_data_path",
+        lambda: str(data_root),
+    )
+
+    for bad_name in ("../outside_plugin", "../keep_dir", str(outside_plugin), "a/b", "..", "."):
+        success, error = await pm.set_plugin_runtime(bad_name, "in-process")
+        assert not success
+        assert error is not None
+
+    assert marker_plugin.read_text(encoding="utf-8") == "keep"
+    assert marker_venv.read_text(encoding="utf-8") == "safe"
+
+    pm.context.get_all_stars = lambda: []
+    service = PluginService(AsyncMock(), pm)
+    service._ensure_not_demo = lambda: None
+    for bad_name in ("../outside_plugin", str(outside_plugin), ".."):
+        with pytest.raises(PluginServiceError):
+            await service.set_plugin_runtime({"name": bad_name, "runtime": "in-process"})
+
+    assert marker_plugin.read_text(encoding="utf-8") == "keep"
+    assert marker_venv.read_text(encoding="utf-8") == "safe"

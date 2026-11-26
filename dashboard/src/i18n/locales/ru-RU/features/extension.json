@@ -17,7 +17,8 @@
         "columns": {
             "plugin": "Плагин",
             "error": "Ошибка"
-        }
+        },
+        "switchToInProcess": "Переключить на внутрипроцессный"
     },
     "search": {
         "placeholder": "Поиск плагинов...",
@@ -318,7 +319,10 @@
         "sourceBindSuccess": "Источник плагина обновлен",
         "validatingPlugin": "Проверка плагина...",
         "pluginValidateSuccess": "Плагин успешно проверен",
-        "pluginValidateFailed": "Не удалось проверить плагин"
+        "pluginValidateFailed": "Не удалось проверить плагин",
+        "runtimeSwitchSuccess": "Среда выполнения переключена",
+        "runtimeSwitchFailed": "Не удалось переключить среду выполнения",
+        "runtimeSwitchDisabled": "Среду выполнения этого плагина нельзя переключить"
     },
     "upload": {
         "fromFile": "Загрузить файл",
@@ -459,7 +463,8 @@
             "viewHandlers": "Действия",
             "updateTo": "Обновить до",
             "reinstall": "Переустановить",
-            "changeSource": "Сменить источник"
+            "changeSource": "Сменить источник",
+            "runtimeEnvironment": "Среда выполнения"
         },
         "status": {
             "hasUpdate": "Доступно обновление",
@@ -475,6 +480,14 @@
         },
         "errors": {
             "confirmNotRegistered": "$confirm не зарегистрирован"
+        },
+        "runtime": {
+            "title": "Среда выполнения",
+            "inProcess": "В процессе",
+            "inProcessDesc": "По умолчанию. Плагин работает в том же процессе, что и AstrBot.",
+            "isolated": "Изолированный",
+            "isolatedDesc": "Экспериментально. Плагин работает в отдельном процессе; сбои не повлияют на основную программу.",
+            "switchWarning": "После переключения плагин будет автоматически перезагружен."
         }
     },
     "conflicts": {

@@ -30,6 +30,7 @@ cmd_config.json
 addons/plugins
 astrbot/builtin_stars/python_interpreter/workplace
 tests/astrbot_plugin_openai
+packages/
 
 # Dashboard
 dashboard/node_modules/

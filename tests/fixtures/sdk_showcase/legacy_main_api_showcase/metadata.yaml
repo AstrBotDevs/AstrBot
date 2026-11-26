@@ -1,0 +1,12 @@
+name: legacy_main_api_showcase
+desc: Isolated legacy Star plugin exercising AstrBot main core astrbot.api and Context APIs.
+author: astrbot
+version: 1.0.0
+views:
+  - name: legacy_card
+    target: chat_message
+    title: Legacy Card
+    actions:
+      - bump
+runtime:
+  isolated: true

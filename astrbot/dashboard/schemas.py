@@ -620,6 +620,10 @@ class PluginEnabledRequest(PluginByIdRequest):
     enabled: bool
 
 
+class PluginRuntimeRequest(PluginByIdRequest):
+    runtime: Literal["isolated", "in-process"]
+
+
 class PluginConfigUpdateRequest(PluginByIdRequest):
     config: dict[str, Any] | None = None
 

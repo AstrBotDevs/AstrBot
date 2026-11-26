@@ -10,6 +10,8 @@ from pathlib import Path
 from typing import Any, get_args
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
+from astrbot_sdk.errors import InvalidConfig
+
 from astrbot.core import file_token_service, logger
 from astrbot.core.astr_agent_runtime.computer import computer_client
 from astrbot.core.astr_agent_runtime.computer.booters.local import LocalShellComponent
@@ -28,8 +30,17 @@ from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
 from astrbot.core.db import BaseDatabase
 from astrbot.core.platform.register import platform_cls_map, platform_registry
 from astrbot.core.provider.register import provider_registry
+from astrbot.core.star.sdk_bridge.bridge import SDKPluginBridge
+from astrbot.core.star.sdk_bridge.config_schema import (
+    load_plugin_json_schema,
+    redact_write_only_fields,
+    validate_against_json_schema,
+)
 from astrbot.core.star.star import star_registry
-from astrbot.core.utils.astrbot_path import get_astrbot_plugin_data_path
+from astrbot.core.utils.astrbot_path import (
+    get_astrbot_plugin_data_path,
+    get_astrbot_plugin_path,
+)
 from astrbot.core.utils.totp import (
     is_totp_enabled,
     revoke_user_trusted_devices,
@@ -990,13 +1001,39 @@ class ConfigDisplayService:
 
     def get_plugin_config(self, plugin_name: str) -> dict:
         result: dict = {"metadata": None, "config": None, "i18n": {}}
+        pm = getattr(self.core_lifecycle, "plugin_manager", None)
+        sdk_mgr = getattr(pm, "_sdk_plugin_manager", None)
+        find_bridge = getattr(sdk_mgr, "find_bridge", None)
+        bridge = find_bridge(plugin_name) if callable(find_bridge) else None
 
         for plugin_md in star_registry:
             if plugin_md.name != plugin_name:
                 continue
             if not plugin_md.config:
                 break
-            result["config"] = plugin_md.config
+            config_value: Any = plugin_md.config
+            plugin_root: Path | None = None
+            if isinstance(bridge, SDKPluginBridge):
+                plugin_root = bridge.plugin_root
+            elif getattr(plugin_md, "root_dir_name", None):
+                store_path = getattr(pm, "plugin_store_path", None)
+                base_dir = (
+                    Path(store_path)
+                    if isinstance(store_path, (str, Path))
+                    else Path(get_astrbot_plugin_path())
+                )
+                plugin_root = base_dir / plugin_md.root_dir_name
+            if plugin_root is not None and plugin_root.is_dir():
+                try:
+                    json_schema = load_plugin_json_schema(plugin_root)
+                except InvalidConfig:
+                    json_schema = None
+                if json_schema is not None:
+                    config_value = redact_write_only_fields(
+                        json_schema,
+                        dict(plugin_md.config),
+                    )
+            result["config"] = config_value
             result["metadata"] = {
                 plugin_name: {
                     "description": f"{plugin_name} 配置",
@@ -1162,7 +1199,52 @@ class ConfigFileService:
         )
         if errors:
             raise ValueError(f"格式校验未通过: {errors}")
+
+        pm = getattr(self.core_lifecycle, "plugin_manager", None)
+        sdk_mgr = getattr(pm, "_sdk_plugin_manager", None)
+        find_bridge = getattr(sdk_mgr, "find_bridge", None)
+        raw_bridge = find_bridge(plugin_name) if callable(find_bridge) else None
+        bridge = raw_bridge if isinstance(raw_bridge, SDKPluginBridge) else None
+
+        plugin_root: Path | None = None
+        if bridge is not None:
+            plugin_root = bridge.plugin_root
+        elif getattr(metadata, "root_dir_name", None):
+            store_path = getattr(pm, "plugin_store_path", None)
+            base_dir = (
+                Path(store_path)
+                if isinstance(store_path, (str, Path))
+                else Path(get_astrbot_plugin_path())
+            )
+            plugin_root = base_dir / metadata.root_dir_name
+
+        if plugin_root is not None and plugin_root.is_dir():
+            try:
+                json_schema = load_plugin_json_schema(plugin_root)
+                if json_schema is not None:
+                    validate_against_json_schema(json_schema, post_configs)
+            except InvalidConfig as exc:
+                raise ValueError(f"格式校验未通过: {exc}") from exc
+
+        if bridge is not None and not bridge.legacy:
+            try:
+                await bridge.validate_config(post_configs)
+            except Exception as exc:
+                raise ValueError(f"格式校验未通过: {exc}") from exc
+
+        prev_configs = copy.deepcopy(dict(metadata.config))
         metadata.config.save_config(post_configs)
+
+        if bridge is not None and bridge.supports_live_configure():
+            try:
+                await bridge.configure(post_configs)
+            except Exception as exc:
+                metadata.config.save_config(prev_configs)
+                raise ValueError(
+                    f"插件 {plugin_name} 配置热更新失败，已回滚: {exc}"
+                ) from exc
+            return
+
         try:
             success, error_message = await self.core_lifecycle.plugin_manager.reload(
                 plugin_name

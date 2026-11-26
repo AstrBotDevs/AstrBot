@@ -1,0 +1,12 @@
+schema_version: 2
+name: full_api_peer
+desc: Peer plugin exporting host-scoped and direct services for full_api_showcase.
+author: astrbot
+version: 1.0.0
+runtime:
+  api: sdk
+  entrypoint: main:FullApiPeerPlugin
+  sdk_version: ">=0.1,<0.2"
+capabilities:
+  required:
+    - id: storage.kv

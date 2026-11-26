@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import re
 from collections.abc import Callable
+from pathlib import Path
 from typing import Any
 from urllib.parse import quote
 
@@ -12,6 +13,9 @@ from fastapi.responses import PlainTextResponse, Response
 from astrbot.api.web import PluginRequest, bind_request_context
 from astrbot.core import logger
 from astrbot.core.log import LogManager
+from astrbot.core.star.sdk_bridge.bridge import SDKPluginBridge
+from astrbot.core.star.sdk_bridge.config_schema import plugin_has_sensitive_schema
+from astrbot.core.utils.astrbot_path import get_astrbot_plugin_path
 from astrbot.dashboard.asgi_runtime import (
     DashboardRequestState,
     call_request_view,
@@ -27,6 +31,7 @@ from astrbot.dashboard.schemas import (
     PluginEnabledRequest,
     PluginInstallRequest,
     PluginLogLevelPayload,
+    PluginRuntimeRequest,
     PluginSourceBindRequest,
     PluginSourceRequest,
     PluginUninstallRequest,
@@ -784,6 +789,36 @@ async def get_plugin_config_schema_by_id(
     return ok({"plugin_name": plugin_id, **await service.get_configs(plugin_id)})
 
 
+def _ensure_raw_config_files_allowed(
+    service: ConfigFileService,
+    plugin_id: str,
+) -> None:
+    """Block raw config-file routes with HTTP 404 when a plugin defines sensitive schema fields."""
+    metadata = service.get_plugin_metadata_by_name(plugin_id)
+    pm = getattr(service.core_lifecycle, "plugin_manager", None)
+    sdk_mgr = getattr(pm, "_sdk_plugin_manager", None)
+    find_bridge = getattr(sdk_mgr, "find_bridge", None)
+    bridge = find_bridge(plugin_id) if callable(find_bridge) else None
+
+    plugin_root: Path | None = None
+    if isinstance(bridge, SDKPluginBridge):
+        plugin_root = bridge.plugin_root
+    elif metadata and getattr(metadata, "root_dir_name", None):
+        store_path = getattr(pm, "plugin_store_path", None)
+        base_dir = (
+            Path(store_path)
+            if isinstance(store_path, (str, Path))
+            else Path(get_astrbot_plugin_path())
+        )
+        plugin_root = base_dir / metadata.root_dir_name
+
+    if plugin_root is not None and plugin_has_sensitive_schema(plugin_root):
+        raise ApiError(
+            "Raw config file access is disabled for plugins with sensitive configuration fields",
+            status_code=404,
+        )
+
+
 @router.get("/plugins/config-files")
 async def list_plugin_config_files_by_id(
     plugin_id: str = Query(...),
@@ -791,6 +826,7 @@ async def list_plugin_config_files_by_id(
     _auth: AuthContext = Depends(require_plugin_scope),
     service: ConfigFileService = Depends(get_config_file_service),
 ):
+    _ensure_raw_config_files_allowed(service, plugin_id)
     return ok(
         service.list_config_files(
             scope="plugin",
@@ -808,6 +844,7 @@ async def upload_plugin_config_files_by_id(
     _auth: AuthContext = Depends(require_plugin_scope),
     service: ConfigFileService = Depends(get_config_file_service),
 ):
+    _ensure_raw_config_files_allowed(service, plugin_id)
     _, files = await multipart_parts(request)
     return ok(
         await service.upload_config_file(
@@ -826,6 +863,7 @@ async def delete_plugin_config_file_by_id(
     _auth: AuthContext = Depends(require_plugin_scope),
     service: ConfigFileService = Depends(get_config_file_service),
 ):
+    _ensure_raw_config_files_allowed(service, plugin_id)
     return ok(
         message=service.delete_config_file_from_dashboard_payload(
             scope="plugin",
@@ -869,6 +907,22 @@ async def reload_plugin_by_id(
     return await _run_service(
         service.reload_plugin({"name": plugin_id}),
         log_label="/api/plugin/reload",
+    )
+
+
+@router.post("/plugins/runtime")
+async def set_plugin_runtime_by_id(
+    payload: PluginRuntimeRequest,
+    _auth: AuthContext = Depends(require_plugin_scope),
+    service: PluginService = Depends(get_service),
+):
+    body = _model_dict(payload)
+    plugin_id = _plugin_id_from_body(body)
+    return await _run_service(
+        service.set_plugin_runtime(
+            {"name": plugin_id, "runtime": body.get("runtime")},
+        ),
+        log_label="/api/plugin/runtime",
     )
 
 
@@ -1041,6 +1095,7 @@ async def list_plugin_config_files(
     _auth: AuthContext = Depends(require_plugin_scope),
     service: ConfigFileService = Depends(get_config_file_service),
 ):
+    _ensure_raw_config_files_allowed(service, plugin_id)
     return ok(
         service.list_config_files(
             scope="plugin",
@@ -1058,6 +1113,7 @@ async def upload_plugin_config_files(
     _auth: AuthContext = Depends(require_plugin_scope),
     service: ConfigFileService = Depends(get_config_file_service),
 ):
+    _ensure_raw_config_files_allowed(service, plugin_id)
     _, files = await multipart_parts(request)
     return ok(
         await service.upload_config_file(
@@ -1076,6 +1132,7 @@ async def delete_plugin_config_file(
     _auth: AuthContext = Depends(require_plugin_scope),
     service: ConfigFileService = Depends(get_config_file_service),
 ):
+    _ensure_raw_config_files_allowed(service, plugin_id)
     return ok(
         message=service.delete_config_file_from_dashboard_payload(
             scope="plugin",

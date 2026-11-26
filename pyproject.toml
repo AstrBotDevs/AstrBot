@@ -67,11 +67,14 @@ dependencies = [
   "python-socks>=2.8.0",
   "pysocks>=1.7.1",
   "packaging>=24.2",
+  "jsonschema>=4.23",
+  "pyyaml>=6.0",
   "python-ripgrep==0.0.8 ; python_version < '3.14'",
   "python-docx>=1.2.0",
   "pywin32>=306 ; sys_platform == 'win32'",
   "pyotp>=2.9.0",
   "reportlab>=5.0.0",
+  "uv>=0.9",
   "xlrd>=2.0.2",
   "opentelemetry-api>=1.45.1,<2",
   "opentelemetry-sdk>=1.45.1,<2",
@@ -93,7 +96,7 @@ astrbot = "astrbot.cli.__main__:cli"
 Repository = "https://github.com/AstrBotDevs/AstrBot"
 
 [tool.ruff]
-exclude = ["astrbot/core/utils/t2i/local_strategy.py", "astrbot/api/all.py", "tests"]
+exclude = ["astrbot/core/utils/t2i/local_strategy.py", "astrbot/api/all.py", "tests", "vendor"]
 line-length = 88
 target-version = "py310"
 
@@ -131,6 +134,12 @@ allow-direct-references = true
 # Include bundled dashboard dist even though it is not tracked by VCS.
 [tool.hatch.build]
 artifacts = ["astrbot/dashboard/dist/**"]
+
+[tool.hatch.build.targets.wheel]
+packages = ["astrbot", "vendor/astrbot-sdk/src/astrbot_sdk"]
+
+[tool.hatch.build.targets.wheel.sources]
+"vendor/astrbot-sdk/src" = ""
 
 # Custom build hook: builds the Vue dashboard and copies dist into the package.
 [tool.hatch.build.hooks.custom]

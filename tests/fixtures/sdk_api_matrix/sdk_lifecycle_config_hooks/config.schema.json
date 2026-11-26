@@ -1,0 +1,29 @@
+{
+  "additionalProperties": false,
+  "description": "Typed configuration schema for sdk_lifecycle_config_hooks.",
+  "properties": {
+    "limit": {
+      "default": 5,
+      "description": "Numeric limit validated live.",
+      "maximum": 50,
+      "minimum": 1,
+      "title": "Limit",
+      "type": "integer"
+    },
+    "secret_key": {
+      "default": "",
+      "description": "Write-only secret token masked by Host display APIs.",
+      "title": "Secret Key",
+      "type": "string",
+      "writeOnly": true
+    },
+    "tag": {
+      "default": "init",
+      "description": "Live tag echoed in commands.",
+      "title": "Tag",
+      "type": "string"
+    }
+  },
+  "title": "LchConfig",
+  "type": "object"
+}

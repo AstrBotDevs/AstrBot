@@ -1,0 +1,22 @@
+schema_version: 2
+name: sdk_web_views
+desc: Dedicated new-SDK plugin exercising WebService, WebRequest, WebResponse, views, and @on.ui_action.
+author: astrbot
+version: 1.0.0
+views:
+  - name: panel
+    target: plugin_page
+    title: Web Views Panel
+  - name: mini_card
+    target: chat_message
+    title: Mini View Card
+    actions:
+      - wv_inc
+runtime:
+  api: sdk
+  entrypoint: main:SdkWebViewsPlugin
+  sdk_version: ">=0.1,<0.2"
+capabilities:
+  required:
+    - id: message.receive
+    - id: web.route

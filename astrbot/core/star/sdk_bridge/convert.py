@@ -1,0 +1,723 @@
+from __future__ import annotations
+
+import base64
+import mimetypes
+from collections.abc import Mapping
+from datetime import UTC, datetime
+from pathlib import Path
+from typing import Any
+from uuid import uuid4
+
+from astrbot_sdk.assets import AssetRef
+from astrbot_sdk.events import (
+    UMO,
+    CommandInvocation,
+    MessageEvent,
+    MessageRef,
+    MessageType,
+    Sender,
+    SenderRole,
+)
+from astrbot_sdk.message_components import (
+    ActionRow,
+    At,
+    AtAll,
+    Button,
+    ButtonInteraction,
+    Face,
+    File,
+    Forward,
+    Image,
+    Json,
+    Location,
+    Music,
+    Node,
+    Nodes,
+    Plain,
+    Poke,
+    Record,
+    Reply,
+    Share,
+    UIInteraction,
+    UnknownSegment,
+    Video,
+    ViewContext,
+)
+from astrbot_sdk.messages import MessageChain
+from astrbot_sdk.results import EventResult, MessageResult, Propagation
+
+from astrbot.core.message import components as core_comp
+from astrbot.core.message.message_event_result import MessageEventResult
+from astrbot.core.platform.astr_message_event import AstrMessageEvent
+from astrbot.core.platform.message_type import MessageType as CoreMessageType
+
+_SDK_TO_CORE_MESSAGE_TYPE = {
+    MessageType.PRIVATE: CoreMessageType.FRIEND_MESSAGE,
+    MessageType.GROUP: CoreMessageType.GROUP_MESSAGE,
+    MessageType.OTHER: CoreMessageType.OTHER_MESSAGE,
+}
+_CORE_TO_SDK_MESSAGE_TYPE = {
+    value: key for key, value in _SDK_TO_CORE_MESSAGE_TYPE.items()
+}
+
+
+def to_core_message_type(message_type: MessageType) -> CoreMessageType:
+    """Map an SDK message type onto the core enum."""
+    return _SDK_TO_CORE_MESSAGE_TYPE[message_type]
+
+
+def to_umo_string(umo: UMO) -> str:
+    """Serialize an SDK UMO into the core unified_msg_origin string."""
+    return f"{umo.platform_id}:{to_core_message_type(umo.message_type).value}:{umo.session_id}"
+
+
+def _json_safe(value: Any) -> Any:
+    """Keep only values that can cross the protocol boundary."""
+    if value is None or isinstance(value, bool | int | float | str):
+        return value
+    if isinstance(value, (list | tuple)):
+        return [_json_safe(item) for item in value]
+    if isinstance(value, dict):
+        return {str(key): _json_safe(item) for key, item in value.items()}
+    return str(value)
+
+
+def _raw_message_safe(raw: Any) -> Any:
+    """Serialize message_obj.raw_message for the wire.
+
+    Legacy plugins introspect the platform-native payload (e.g. a telegram
+    Update or an aiocqhttp event dict). Prefer the object's own to_dict()
+    when present, then strip non-JSON values.
+    """
+    to_dict = getattr(raw, "to_dict", None)
+    if callable(to_dict):
+        try:
+            raw = to_dict()
+        except Exception:
+            pass
+    return _json_safe(raw)
+
+
+def _http_source(*candidates: Any) -> str | None:
+    """Return the first public URL among candidate media references."""
+    for candidate in candidates:
+        if isinstance(candidate, str) and candidate.startswith(("http://", "https://")):
+            return candidate
+    return None
+
+
+def _local_media_payload(component: Any) -> tuple[bytes, str | None] | None:
+    """Read a local media component's bytes for asset registration.
+
+    Args:
+        component: Core media component (Image/Record/Video/File).
+
+    Returns:
+        ``(data, filename)`` when the component points at a readable local
+        file or carries ``base64://`` content, else None.
+    """
+    candidates = (
+        getattr(component, "file", None),
+        getattr(component, "url", None),
+        getattr(component, "path", None),
+    )
+    for candidate in candidates:
+        if isinstance(candidate, str) and candidate.startswith("base64://"):
+            try:
+                return base64.b64decode(candidate[len("base64://") :]), None
+            except Exception:
+                continue
+        if isinstance(candidate, str | Path) and candidate:
+            path = Path(candidate)
+            if path.is_file():
+                try:
+                    return path.read_bytes(), path.name
+                except OSError:
+                    continue
+    return None
+
+
+def to_sdk_chain(components: list, *, asset_store: Any = None) -> MessageChain:
+    """Convert core inbound components into an SDK message chain.
+
+    Args:
+        components: Core message components.
+        asset_store: Optional AssetStore; local media is registered into it
+            and surfaces as an AssetRef the plugin can echo back or download.
+    """
+    segments = []
+    for component in components:
+        if isinstance(component, core_comp.AtAll):
+            segments.append(AtAll())
+        elif isinstance(component, core_comp.At):
+            segments.append(
+                At(user_id=str(component.qq), name=component.name or None),
+            )
+        elif isinstance(component, core_comp.Plain):
+            segments.append(Plain(component.text))
+        elif isinstance(component, core_comp.Face):
+            segments.append(Face(id=int(component.id)))
+        elif isinstance(component, core_comp.Forward):
+            segments.append(Forward(id=str(component.id)))
+        elif isinstance(component, core_comp.Poke):
+            segments.append(
+                Poke(
+                    poke_type=str(getattr(component, "_type", "126") or "126"),
+                    user_id=component.target_id(),
+                ),
+            )
+        elif isinstance(component, core_comp.Json):
+            segments.append(Json(data=component.data))
+        elif isinstance(component, core_comp.Share):
+            segments.append(
+                Share(
+                    url=component.url,
+                    title=component.title,
+                    content=component.content or "",
+                    image=component.image or "",
+                ),
+            )
+        elif isinstance(component, core_comp.Location):
+            segments.append(
+                Location(
+                    lat=float(component.lat),
+                    lon=float(component.lon),
+                    title=component.title or "",
+                    content=component.content or "",
+                ),
+            )
+        elif isinstance(component, core_comp.Music):
+            segments.append(
+                Music(
+                    music_type=str(getattr(component, "_type", "custom") or "custom"),
+                    id=int(getattr(component, "id", 0) or 0),
+                    url=component.url or "",
+                    audio=component.audio or "",
+                    title=component.title or "",
+                    content=component.content or "",
+                    image=component.image or "",
+                ),
+            )
+        elif isinstance(component, core_comp.Button):
+            raw_style = (
+                component.style.value
+                if isinstance(component.style, core_comp.Button.Style)
+                else str(component.style or "default")
+            )
+            sdk_style: Any = (
+                raw_style if raw_style in ("primary", "danger") else "secondary"
+            )
+            if isinstance(component.action, core_comp.Button.UrlAction):
+                segments.append(
+                    Button(
+                        label=component.label,
+                        url=component.action.url,
+                        style=sdk_style,
+                    ),
+                )
+            else:
+                segments.append(
+                    Button(
+                        label=component.label,
+                        action_id=component.id,
+                        data=component.action.data,
+                        style=sdk_style,
+                    ),
+                )
+        elif isinstance(component, core_comp.ActionRow):
+            row_buttons = to_sdk_chain(
+                list(component.buttons),
+                asset_store=asset_store,
+            ).segments
+            segments.append(ActionRow(row_buttons))  # type: ignore[arg-type]
+        elif isinstance(component, core_comp.ButtonInteraction):
+            segments.append(
+                ButtonInteraction(
+                    action_id=component.action_id,
+                    interaction_id=component.interaction_id,
+                    data=component.data,
+                    source_message_id=component.source_message_id,
+                    callback_data=component.callback_data,
+                ),
+            )
+        elif isinstance(component, core_comp.UIInteraction):
+            view_ctx = component.view
+            segments.append(
+                UIInteraction(
+                    action_id=component.action_id,
+                    interaction_id=component.interaction_id,
+                    data=component.data,
+                    source=component.source,
+                    source_message_id=component.source_message_id,
+                    view=ViewContext(
+                        id=view_ctx.id,
+                        name=view_ctx.name,
+                        version=view_ctx.version,
+                        revision=view_ctx.revision,
+                        data=dict(view_ctx.data),
+                    ),
+                ),
+            )
+        elif isinstance(component, core_comp.Reply):
+            segments.append(
+                Reply(
+                    id=str(component.id),
+                    sender_id=str(component.sender_id),
+                    sender_name=component.sender_nickname or None,
+                    text=component.message_str or None,
+                ),
+            )
+        elif isinstance(component, core_comp.Nodes):
+            nodes = [
+                Node(
+                    sender_id=str(getattr(node, "uin", "") or ""),
+                    sender_name=getattr(node, "name", "") or None,
+                    content=to_sdk_chain(
+                        getattr(node, "content", []) or [],
+                        asset_store=asset_store,
+                    ),
+                )
+                for node in component.nodes
+            ]
+            segments.append(Nodes(nodes=nodes))
+        elif isinstance(component, core_comp.Node):
+            segments.append(
+                Node(
+                    sender_id=str(component.uin or ""),
+                    sender_name=component.name or None,
+                    content=to_sdk_chain(
+                        component.content or [],
+                        asset_store=asset_store,
+                    ),
+                ),
+            )
+        elif isinstance(
+            component,
+            core_comp.Image | core_comp.Record | core_comp.Video | core_comp.File,
+        ):
+            source: Any = _http_source(
+                getattr(component, "url", None),
+                getattr(component, "file", None),
+            )
+            if source is None and asset_store is not None:
+                payload = _local_media_payload(component)
+                if payload is not None:
+                    data, filename = payload
+                    if isinstance(component, core_comp.File) and component.name:
+                        filename = component.name
+                    media_type = mimetypes.guess_type(filename)[0] if filename else None
+                    try:
+                        source = asset_store.put(
+                            data,
+                            filename=filename,
+                            media_type=media_type,
+                        )
+                    except Exception:
+                        source = None
+            if source is None:
+                # Unreadable local media: keep the segment visible but inert.
+                segments.append(
+                    UnknownSegment(
+                        segment_type=component.type.name,
+                        data={"reason": "local media is not supported yet"},
+                    ),
+                )
+                continue
+            if isinstance(component, core_comp.Image):
+                segments.append(Image(source=source))
+            elif isinstance(component, core_comp.Record):
+                segments.append(Record(source=source))
+            elif isinstance(component, core_comp.Video):
+                segments.append(Video(source=source))
+            else:
+                segments.append(
+                    File(
+                        source=source,
+                        filename=component.name or None,
+                    ),
+                )
+        else:
+            data = {
+                key: _json_safe(value)
+                for key, value in vars(component).items()
+                if not key.startswith("_")
+            }
+            segments.append(
+                UnknownSegment(
+                    segment_type=getattr(
+                        component.type,
+                        "name",
+                        str(type(component).__name__),
+                    ),
+                    data=data,
+                ),
+            )
+    return MessageChain(*segments)
+
+
+def to_sdk_event(
+    event: AstrMessageEvent,
+    *,
+    command_path: str | None = None,
+    arguments: dict[str, Any] | None = None,
+    asset_store: Any = None,
+) -> MessageEvent:
+    """Convert a core message event into the immutable SDK event DTO."""
+    platform_id, message_type_value, session_id = event.unified_msg_origin.split(
+        ":",
+        2,
+    )
+    try:
+        sdk_message_type = _CORE_TO_SDK_MESSAGE_TYPE[
+            CoreMessageType(message_type_value)
+        ]
+    except ValueError:
+        sdk_message_type = MessageType.OTHER
+
+    command = None
+    if command_path is not None:
+        command = CommandInvocation(
+            path=command_path,
+            arguments=arguments or {},
+        )
+
+    # AstrMessageEvent has no message_id attribute of its own; the platform
+    # message id lives on the wrapped AstrBotMessage.
+    message_id = str(getattr(event.message_obj, "message_id", "") or uuid4().hex)
+    created_at = getattr(event, "created_at", None)
+    timestamp = (
+        datetime.fromtimestamp(created_at, UTC)
+        if isinstance(created_at, int | float)
+        else datetime.now(UTC)
+    )
+
+    return MessageEvent(
+        id=message_id,
+        umo=UMO(platform_id, sdk_message_type, session_id),
+        platform_type=event.get_platform_name(),
+        message_ref=MessageRef(message_id),
+        message=to_sdk_chain(event.get_messages(), asset_store=asset_store),
+        sender=Sender(
+            id=event.get_sender_id(),
+            name=event.get_sender_name(),
+            role=(SenderRole.ADMIN if event.role == "admin" else SenderRole.MEMBER),
+        ),
+        timestamp=timestamp,
+        command=command,
+        is_wake=event.is_wake,
+        # waking_check fills plugins_name before handlers run; legacy plugins
+        # read it off the event, so carry it through the wire extras. Same
+        # for message_obj.self_id (bot account id on the platform).
+        extras={
+            "plugins_name": getattr(event, "plugins_name", None),
+            "self_id": getattr(event.message_obj, "self_id", "") or "",
+            # waking_check strips the wake prefix from event.message_str
+            # before handlers run; legacy plugins read the stripped text
+            # (e.g. for slicing off the command name), so carry it through.
+            "message_str": event.message_str,
+            "raw_message": _raw_message_safe(
+                getattr(event.message_obj, "raw_message", None)
+            ),
+        },
+    )
+
+
+def to_core_chain(
+    chain: MessageChain,
+    *,
+    resolve_asset: Any = None,
+) -> list:
+    """Convert an SDK outbound chain into core components.
+
+    Args:
+        chain: SDK chain to convert.
+        resolve_asset: Optional resolver mapping AssetRef to a local file.
+
+    Raises:
+        ValueError: The chain contains segments the Host cannot send yet.
+    """
+    components = []
+    for segment in chain:
+        if isinstance(segment, Plain):
+            components.append(core_comp.Plain(segment.text))
+        elif isinstance(segment, AtAll):
+            components.append(core_comp.AtAll())
+        elif isinstance(segment, At):
+            components.append(core_comp.At(qq=segment.user_id, name=segment.name or ""))
+        elif isinstance(segment, Face):
+            components.append(core_comp.Face(id=segment.id))
+        elif isinstance(segment, Forward):
+            components.append(core_comp.Forward(id=segment.id))
+        elif isinstance(segment, Poke):
+            components.append(
+                core_comp.Poke(
+                    poke_type=segment.poke_type,
+                    id=segment.user_id or 0,
+                ),
+            )
+        elif isinstance(segment, Json):
+            json_data = (
+                dict(segment.data)
+                if isinstance(segment.data, Mapping)
+                else segment.data
+            )
+            components.append(core_comp.Json(data=json_data))
+        elif isinstance(segment, Share):
+            components.append(
+                core_comp.Share(
+                    url=segment.url,
+                    title=segment.title,
+                    content=segment.content,
+                    image=segment.image,
+                ),
+            )
+        elif isinstance(segment, Location):
+            components.append(
+                core_comp.Location(
+                    lat=segment.lat,
+                    lon=segment.lon,
+                    title=segment.title,
+                    content=segment.content,
+                ),
+            )
+        elif isinstance(segment, Music):
+            components.append(
+                core_comp.Music(
+                    _type=segment.music_type,
+                    id=segment.id,
+                    url=segment.url,
+                    audio=segment.audio,
+                    title=segment.title,
+                    content=segment.content,
+                    image=segment.image,
+                ),
+            )
+        elif isinstance(segment, Button):
+            core_style = (
+                segment.style
+                if segment.style in ("primary", "danger", "success")
+                else "default"
+            )
+            if segment.url is not None:
+                action: Any = core_comp.Button.UrlAction(url=segment.url)
+                btn_id = segment.action_id or "url"
+            else:
+                action = core_comp.Button.CallbackAction(data=segment.data)
+                btn_id = segment.action_id or "btn"
+            components.append(
+                core_comp.Button(
+                    id=btn_id,
+                    label=segment.label,
+                    action=action,
+                    style=core_comp.Button.Style(core_style),
+                ),
+            )
+        elif isinstance(segment, ActionRow):
+            components.append(
+                core_comp.ActionRow(
+                    buttons=to_core_chain(
+                        MessageChain(*segment.buttons),
+                        resolve_asset=resolve_asset,
+                    ),
+                ),
+            )
+        elif isinstance(segment, ButtonInteraction):
+            components.append(
+                core_comp.ButtonInteraction(
+                    action_id=segment.action_id,
+                    interaction_id=segment.interaction_id,
+                    data=segment.data,
+                    source_message_id=segment.source_message_id,
+                    callback_data=segment.callback_data,
+                ),
+            )
+        elif isinstance(segment, UIInteraction):
+            components.append(
+                core_comp.UIInteraction(
+                    action_id=segment.action_id,
+                    interaction_id=segment.interaction_id,
+                    data=segment.data,
+                    source=segment.source,
+                    source_message_id=segment.source_message_id,
+                    view=core_comp.ViewContext(
+                        id=segment.view.id,
+                        name=segment.view.name,
+                        version=segment.view.version,
+                        revision=segment.view.revision,
+                        data=dict(segment.view.data),
+                    ),
+                ),
+            )
+        elif isinstance(segment, Reply):
+            components.append(
+                core_comp.Reply(
+                    id=segment.id,
+                    sender_id=segment.sender_id or 0,
+                    sender_nickname=segment.sender_name or "",
+                    message_str=segment.text or "",
+                ),
+            )
+        elif isinstance(segment, Image | Record | Video | File):
+            source = segment.source
+            if isinstance(source, AssetRef):
+                if resolve_asset is None:
+                    raise ValueError(
+                        f"{segment.type} references an asset without a resolver",
+                    )
+                path = str(resolve_asset(source))
+                if isinstance(segment, Image):
+                    components.append(core_comp.Image.fromFileSystem(path))
+                elif isinstance(segment, Record):
+                    components.append(core_comp.Record.fromFileSystem(path))
+                elif isinstance(segment, Video):
+                    components.append(core_comp.Video.fromFileSystem(path))
+                else:
+                    components.append(
+                        core_comp.File(name=segment.filename or "file", file=path),
+                    )
+            elif isinstance(source, str):
+                if isinstance(segment, Image):
+                    components.append(core_comp.Image.fromURL(source))
+                elif isinstance(segment, Record):
+                    components.append(core_comp.Record.fromURL(source))
+                elif isinstance(segment, Video):
+                    components.append(core_comp.Video.fromURL(source))
+                else:
+                    components.append(
+                        core_comp.File(name=segment.filename or "file", url=source),
+                    )
+            else:
+                raise ValueError(f"unsupported {segment.type} source: {source!r}")
+        elif isinstance(segment, Nodes):
+            components.append(
+                core_comp.Nodes(
+                    nodes=[
+                        core_comp.Node(
+                            content=to_core_chain(
+                                MessageChain(*node.content),
+                                resolve_asset=resolve_asset,
+                            ),
+                            name=node.sender_name or "",
+                            uin=node.sender_id,
+                        )
+                        for node in segment.nodes
+                    ],
+                ),
+            )
+        elif isinstance(segment, Node):
+            components.append(
+                core_comp.Node(
+                    content=to_core_chain(
+                        MessageChain(*segment.content),
+                        resolve_asset=resolve_asset,
+                    ),
+                    name=segment.sender_name or "",
+                    uin=segment.sender_id,
+                ),
+            )
+        elif isinstance(segment, UnknownSegment):
+            # The legacy compat layer carries components without a new SDK
+            # counterpart as typed unknown segments; rebuild the core form.
+            if segment.segment_type == "Poke":
+                components.append(
+                    core_comp.Poke(
+                        poke_type=segment.data.get("poke_type", "126"),
+                        id=segment.data.get("user_id") or 0,
+                    ),
+                )
+            elif segment.segment_type == "Json":
+                components.append(core_comp.Json(data=segment.data.get("data")))
+            elif segment.segment_type == "Share":
+                components.append(
+                    core_comp.Share(
+                        url=str(segment.data.get("url", "")),
+                        title=str(segment.data.get("title", "")),
+                        content=str(segment.data.get("content", "")),
+                        image=str(segment.data.get("image", "")),
+                    ),
+                )
+            else:
+                raise ValueError(
+                    f"unsupported outbound segment type: {segment.segment_type!r}",
+                )
+        else:
+            raise ValueError(f"unsupported outbound segment: {type(segment)!r}")
+    return components
+
+
+def _resolve_part_source(source: Any, resolve_asset: Any) -> str:
+    """Resolve one content part source into a usable URL or file path."""
+    if isinstance(source, AssetRef):
+        if resolve_asset is None:
+            raise ValueError("content part references an asset without a resolver")
+        return str(resolve_asset(source))
+    return str(source)
+
+
+def to_core_content(content: Any, *, resolve_asset: Any = None) -> Any:
+    """Convert SDK message content into the core format (str or part dicts)."""
+    if content is None or isinstance(content, str):
+        return content
+    from astrbot_sdk.conversations import AudioPart, ImagePart, TextPart
+
+    parts = []
+    for part in content:
+        if isinstance(part, TextPart):
+            parts.append({"type": "text", "text": part.text})
+        elif isinstance(part, ImagePart):
+            parts.append(
+                {
+                    "type": "image_url",
+                    "image_url": {
+                        "url": _resolve_part_source(part.source, resolve_asset),
+                    },
+                },
+            )
+        elif isinstance(part, AudioPart):
+            parts.append(
+                {
+                    "type": "audio_url",
+                    "audio_url": {
+                        "url": _resolve_part_source(part.source, resolve_asset),
+                    },
+                },
+            )
+        else:
+            raise ValueError(f"unsupported content part: {type(part)!r}")
+    return parts
+
+
+def to_core_context_message(message: Any, *, resolve_asset: Any = None) -> dict:
+    """Convert an SDK conversation Message into a core context dict."""
+    item: dict[str, Any] = {
+        "role": message.role,
+        "content": to_core_content(message.content, resolve_asset=resolve_asset),
+    }
+    if message.tool_calls is not None:
+        item["tool_calls"] = [dict(call) for call in message.tool_calls]
+    if message.tool_call_id is not None:
+        item["tool_call_id"] = message.tool_call_id
+    return item
+
+
+def apply_sdk_result(
+    event: AstrMessageEvent,
+    result: EventResult,
+    *,
+    resolve_asset: Any = None,
+) -> None:
+    """Apply one SDK handler result onto the core event.
+
+    Args:
+        event: Core event being processed.
+        result: SDK result produced by the remote handler.
+        resolve_asset: Optional resolver mapping AssetRef to a local file.
+    """
+    if isinstance(result, MessageResult):
+        event.set_result(
+            MessageEventResult(
+                chain=to_core_chain(result.message, resolve_asset=resolve_asset),
+            ),
+        )
+    if result.propagation is Propagation.STOP:
+        event.stop_event()

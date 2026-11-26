@@ -1,0 +1,513 @@
+from __future__ import annotations
+
+import inspect
+import json
+from datetime import UTC, datetime
+from typing import TYPE_CHECKING, Any
+
+from astrbot_sdk.conversations import (
+    Conversation,
+    ConversationPage,
+    ConversationPatch,
+    Message,
+)
+from astrbot_sdk.errors import Conflict, InvalidRequest, NotFound
+
+from ..convert import to_core_chain, to_core_context_message, to_umo_string
+
+if TYPE_CHECKING:
+    from astrbot.core.conversation_mgr import ConversationManager
+    from astrbot.core.db.po import Conversation as ConversationPO
+    from astrbot.core.star.context import Context
+
+    from .assets import AssetStore
+
+
+def _content_to_text(content: Any) -> str:
+    """Flatten one OpenAI-style message content into plain text."""
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        return "".join(
+            str(part.get("text", ""))
+            for part in content
+            if isinstance(part, dict) and part.get("type") == "text"
+        )
+    return str(content)
+
+
+def to_sdk_conversation(conv: ConversationPO) -> Conversation:
+    """Convert a core conversation PO into the SDK DTO.
+
+    Args:
+        conv: Core conversation with the JSON-string history field.
+
+    Returns:
+        Immutable SDK conversation with structured messages.
+    """
+    try:
+        history = json.loads(conv.history) if conv.history else []
+    except json.JSONDecodeError:
+        history = []
+    messages = tuple(
+        Message(
+            role=str(item.get("role", "")),
+            content=(
+                _content_to_text(item["content"])
+                if item.get("content") is not None
+                else None
+            ),
+            tool_calls=(
+                tuple(item["tool_calls"])
+                if item.get("tool_calls") is not None
+                else None
+            ),
+            tool_call_id=(
+                str(item["tool_call_id"])
+                if item.get("tool_call_id") is not None
+                else None
+            ),
+        )
+        for item in history
+        if isinstance(item, dict)
+    )
+    return Conversation(
+        id=str(conv.cid),
+        title=conv.title or None,
+        persona_id=conv.persona_id or None,
+        messages=messages,
+        created_at=(
+            datetime.fromtimestamp(conv.created_at, UTC) if conv.created_at else None
+        ),
+        updated_at=(
+            datetime.fromtimestamp(conv.updated_at, UTC) if conv.updated_at else None
+        ),
+    )
+
+
+def _to_history(messages: Any, *, resolve_asset: Any = None) -> list[dict[str, Any]]:
+    """Convert SDK messages into the core history format.
+
+    Args:
+        messages: Sequence of SDK Message DTOs.
+        resolve_asset: Optional AssetRef resolver for multimodal parts.
+
+    Returns:
+        Serialized OpenAI-compatible history message dicts.
+    """
+    return [
+        to_core_context_message(message, resolve_asset=resolve_asset)
+        for message in messages
+    ]
+
+
+class ConversationServiceBase:
+    """Shared helpers for the conversation capability services."""
+
+    def __init__(
+        self,
+        context: Context,
+        store: AssetStore | None = None,
+    ) -> None:
+        """Initialize the service.
+
+        Args:
+            context: AstrBot star context with the conversation manager.
+            store: Optional AssetStore used to resolve multimodal content assets.
+        """
+        self._context = context
+        self._store = store
+
+    @property
+    def _resolve_asset(self) -> Any:
+        return self._store.resolve if self._store is not None else None
+
+    @property
+    def _manager(self) -> ConversationManager:
+        return self._context.conversation_manager
+
+    @staticmethod
+    def _umo(payload: dict[str, Any]) -> str:
+        umo = payload.get("umo")
+        if umo is None:
+            raise InvalidRequest("conversation operation requires umo")
+        return to_umo_string(umo)
+
+    @staticmethod
+    def _cid(payload: dict[str, Any]) -> str:
+        cid = payload.get("conversation_id")
+        if not isinstance(cid, str) or not cid:
+            raise InvalidRequest("conversation_id must be a non-empty string")
+        return cid
+
+
+class ConversationReadService(ConversationServiceBase):
+    """Read operations for the conversation.read capability."""
+
+    capability_id = "conversation.read"
+
+    async def handle(self, operation: str, payload: dict[str, Any]) -> Any:
+        """Serve current/get/list operations."""
+        if operation == "current":
+            umo = self._umo(payload)
+            cid = await self._manager.get_curr_conversation_id(umo)
+            if cid is None:
+                return {"conversation": None}
+            conv = await self._manager.get_conversation(umo, cid)
+            return {
+                "conversation": (
+                    to_sdk_conversation(conv) if conv is not None else None
+                ),
+            }
+        if operation == "get":
+            conv = await self._manager.get_conversation(
+                self._umo(payload),
+                self._cid(payload),
+            )
+            return {
+                "conversation": (
+                    to_sdk_conversation(conv) if conv is not None else None
+                ),
+            }
+        if operation == "list":
+            umo = self._umo(payload)
+            cursor = payload.get("cursor")
+            limit = payload.get("limit", 50)
+            offset = int(cursor) if isinstance(cursor, str) and cursor else 0
+            limit = max(1, min(int(limit), 200))
+            convs = await self._manager.get_conversations(umo)
+            page_items = convs[offset : offset + limit]
+            next_offset = offset + limit
+            return {
+                "page": ConversationPage(
+                    items=tuple(to_sdk_conversation(conv) for conv in page_items),
+                    next_cursor=(
+                        str(next_offset) if next_offset < len(convs) else None
+                    ),
+                ),
+            }
+        if operation == "list_filtered":
+            convs, total = await self._manager.get_filtered_conversations(
+                page=int(payload.get("page") or 1),
+                page_size=int(payload.get("page_size") or 20),
+                platform_ids=payload.get("platform_ids"),
+                search_query=str(payload.get("search_query") or ""),
+                include_history=bool(payload.get("include_history", True)),
+            )
+            return {
+                "page": ConversationPage(
+                    items=tuple(to_sdk_conversation(conv) for conv in convs),
+                    next_cursor=None,
+                ),
+                "total": total,
+            }
+        if operation == "get_by_id_global":
+            # Legacy conversation_manager.db read: cross-session lookup by
+            # conversation id, granted under conversation.read like the
+            # in-process db handle plugins already reach.
+            record = await self._manager.db.get_conversation_by_id(
+                self._cid(payload),
+            )
+            return {
+                "record": (
+                    _serialize_conversation_v2(record) if record is not None else None
+                ),
+            }
+        if operation == "list_all":
+            records = await self._manager.db.get_all_conversations(
+                page=int(payload.get("page") or 1),
+                page_size=int(payload.get("page_size") or 20),
+            )
+            return {
+                "records": [_serialize_conversation_v2(record) for record in records],
+            }
+        if operation == "human_readable_context":
+            contexts, total_pages = await self._manager.get_human_readable_context(
+                self._umo(payload),
+                self._cid(payload),
+                page=int(payload.get("page") or 1),
+                page_size=int(payload.get("page_size") or 10),
+            )
+            return {"contexts": contexts, "total_pages": total_pages}
+        raise NotFound(f"unknown conversation operation: {operation}")
+
+
+class ConversationWriteService(ConversationServiceBase):
+    """Write operations for the conversation.write capability."""
+
+    capability_id = "conversation.write"
+
+    async def handle(self, operation: str, payload: dict[str, Any]) -> Any:
+        """Serve create/set_current/update/append/delete operations."""
+        if operation == "create":
+            umo = self._umo(payload)
+            cid = await self._manager.new_conversation(
+                umo,
+                content=_to_history(
+                    payload.get("messages", []),
+                    resolve_asset=self._resolve_asset,
+                ),
+                title=payload.get("title"),
+                persona_id=payload.get("persona_id"),
+            )
+            conv = await self._manager.get_conversation(umo, cid)
+            return {"conversation": to_sdk_conversation(conv)}
+        if operation == "set_current":
+            await self._manager.switch_conversation(
+                self._umo(payload),
+                self._cid(payload),
+            )
+            return {}
+        if operation == "update":
+            umo = self._umo(payload)
+            cid = self._cid(payload)
+            patch = payload.get("patch")
+            if not isinstance(patch, ConversationPatch):
+                raise InvalidRequest("update requires a ConversationPatch")
+            await self._manager.update_conversation(
+                umo,
+                cid,
+                title=patch.title,
+                persona_id=patch.persona_id,
+                history=(
+                    _to_history(
+                        list(patch.messages),
+                        resolve_asset=self._resolve_asset,
+                    )
+                    if patch.messages is not None
+                    else None
+                ),
+            )
+            conv = await self._manager.get_conversation(umo, cid)
+            if conv is None:
+                raise NotFound(f"conversation not found: {cid}")
+            return {"conversation": to_sdk_conversation(conv)}
+        if operation == "append":
+            umo = self._umo(payload)
+            cid = self._cid(payload)
+            conv = await self._manager.get_conversation(umo, cid)
+            if conv is None:
+                raise NotFound(f"conversation not found: {cid}")
+            try:
+                history = json.loads(conv.history) if conv.history else []
+            except json.JSONDecodeError:
+                history = []
+            history.extend(
+                _to_history(
+                    payload.get("messages", []),
+                    resolve_asset=self._resolve_asset,
+                )
+            )
+            await self._manager.update_conversation(umo, cid, history=history)
+            return {}
+        if operation == "append_message":
+            cid = self._cid(payload)
+            content = payload.get("content")
+            if content is None:
+                raise InvalidRequest("append_message requires content")
+            from astrbot.core.db.conversation import ConversationConflictError
+
+            try:
+                msg_id = await self._manager.append_message(
+                    content,
+                    cid=cid,
+                    message_id=payload.get("message_id"),
+                )
+            except ConversationConflictError as exc:
+                raise Conflict(str(exc)) from exc
+            except ValueError as exc:
+                raise InvalidRequest(str(exc)) from exc
+            return {"message_id": msg_id}
+        if operation == "append_plugin_event":
+            cid = self._cid(payload)
+            event_type = str(payload.get("event_type") or "")
+            data = payload.get("data")
+            if not isinstance(data, dict):
+                raise InvalidRequest("append_plugin_event requires a dict payload")
+            from astrbot.core.db.conversation import ConversationConflictError
+
+            try:
+                event_id = await self._manager.append_plugin_event(
+                    event_type,
+                    data,
+                    cid=cid,
+                    event_id=payload.get("event_id"),
+                )
+            except ConversationConflictError as exc:
+                raise Conflict(str(exc)) from exc
+            except ValueError as exc:
+                raise InvalidRequest(str(exc)) from exc
+            return {"event_id": event_id}
+        if operation == "fork":
+            umo = self._umo(payload)
+            source_event_id = str(payload.get("source_event_id") or "")
+            if not source_event_id:
+                raise InvalidRequest("fork requires source_event_id")
+            try:
+                new_cid = await self._manager.fork_conversation(umo, source_event_id)
+            except ValueError as exc:
+                raise InvalidRequest(str(exc)) from exc
+            return {"conversation_id": new_cid}
+        if operation == "delete":
+            await self._manager.delete_conversation(
+                self._umo(payload),
+                self._cid(payload),
+            )
+            return {}
+        if operation == "evict_session":
+            # Mirror the in-process dict pop: drop the cached session ->
+            # conversation binding so the next message re-resolves it.
+            self._manager.session_conversations.pop(self._umo(payload), None)
+            return {}
+        raise NotFound(f"unknown conversation operation: {operation}")
+
+
+def _serialize_conversation_v2(record: Any) -> dict[str, Any]:
+    """Serialize one ConversationV2 row to a JSON-safe dict."""
+    created_at = getattr(record, "created_at", None)
+    updated_at = getattr(record, "updated_at", None)
+    return {
+        "conversation_id": record.conversation_id,
+        "platform_id": record.platform_id,
+        "user_id": record.user_id,
+        "content": record.content,
+        "title": record.title,
+        "persona_id": record.persona_id,
+        "token_usage": record.token_usage,
+        "created_at": (
+            created_at.isoformat() if hasattr(created_at, "isoformat") else created_at
+        ),
+        "updated_at": (
+            updated_at.isoformat() if hasattr(updated_at, "isoformat") else updated_at
+        ),
+    }
+
+
+def _serialize_history(record: Any) -> dict[str, Any]:
+    """Serialize one PlatformMessageHistory row to a JSON-safe dict."""
+    created_at = getattr(record, "created_at", None)
+    updated_at = getattr(record, "updated_at", None)
+    checkpoint = getattr(record, "turn_id", None)
+    if checkpoint is None:
+        checkpoint = getattr(record, "llm_checkpoint_id", None)
+    return {
+        "id": record.id,
+        "platform_id": record.platform_id,
+        "user_id": record.user_id,
+        "sender_id": record.sender_id,
+        "sender_name": record.sender_name,
+        "content": record.content,
+        "llm_checkpoint_id": checkpoint,
+        "turn_id": checkpoint,
+        "created_at": created_at.isoformat() if created_at else None,
+        "updated_at": updated_at.isoformat() if updated_at else None,
+    }
+
+
+class MessageHistoryService:
+    """Platform message history access for isolated legacy plugins.
+
+    Mirrors ``context.message_history_manager``; only granted to legacy
+    plugins so their transcript bookkeeping keeps working.
+    """
+
+    capability_id = "message.history"
+
+    def __init__(self, context: Context) -> None:
+        """Initialize the service.
+
+        Args:
+            context: AstrBot star context with the history manager.
+        """
+        self._context = context
+
+    @property
+    def _manager(self) -> Any:
+        return self._context.message_history_manager
+
+    async def handle(self, operation: str, payload: dict[str, Any]) -> Any:
+        """Serve one message.history operation."""
+        if operation == "insert":
+            checkpoint = payload.get("turn_id") or payload.get("llm_checkpoint_id")
+            insert_params = inspect.signature(self._manager.insert).parameters
+            extra_kw = (
+                {"turn_id": checkpoint}
+                if "turn_id" in insert_params
+                else {"llm_checkpoint_id": checkpoint}
+            )
+            record = await self._manager.insert(
+                platform_id=self._required(payload, "platform_id"),
+                user_id=self._required(payload, "user_id"),
+                content=payload.get("content") or {},
+                sender_id=payload.get("sender_id"),
+                sender_name=payload.get("sender_name"),
+                max_messages=payload.get("max_messages"),
+                **extra_kw,
+            )
+            return {"record": _serialize_history(record)}
+        if operation == "insert_message_chain":
+            chain = payload.get("message_chain")
+            if chain is None:
+                raise InvalidRequest("insert_message_chain requires message_chain")
+            from astrbot.core.message.message_event_result import (
+                MessageChain as CoreChain,
+            )
+
+            core_chain = CoreChain(chain=to_core_chain(chain))
+            record = await self._manager.insert_message_chain(
+                platform_id=self._required(payload, "platform_id"),
+                user_id=self._required(payload, "user_id"),
+                message_chain=core_chain,
+                role=str(payload.get("role") or "user"),
+                sender_id=payload.get("sender_id"),
+                sender_name=payload.get("sender_name"),
+                max_messages=payload.get("max_messages"),
+            )
+            return {"record": _serialize_history(record) if record else None}
+        if operation == "get":
+            records = await self._manager.get(
+                platform_id=self._required(payload, "platform_id"),
+                user_id=self._required(payload, "user_id"),
+                page=int(payload.get("page") or 1),
+                page_size=int(payload.get("page_size") or 200),
+            )
+            return {"records": [_serialize_history(record) for record in records]}
+        if operation == "count":
+            return {
+                "count": await self._manager.count(
+                    platform_id=self._required(payload, "platform_id"),
+                    user_id=self._required(payload, "user_id"),
+                ),
+            }
+        if operation == "delete":
+            await self._manager.delete(
+                platform_id=self._required(payload, "platform_id"),
+                user_id=self._required(payload, "user_id"),
+                offset_sec=int(payload.get("offset_sec") or 86400),
+            )
+            return {}
+        if operation == "update":
+            checkpoint = payload.get("turn_id") or payload.get("llm_checkpoint_id")
+            update_params = inspect.signature(self._manager.update).parameters
+            extra_kw = (
+                {"turn_id": checkpoint}
+                if "turn_id" in update_params
+                else {"llm_checkpoint_id": checkpoint}
+            )
+            await self._manager.update(
+                int(self._required(payload, "message_id")),
+                content=payload.get("content"),
+                **extra_kw,
+            )
+            return {}
+        if operation == "delete_by_id":
+            await self._manager.delete_by_id(int(self._required(payload, "message_id")))
+            return {}
+        raise NotFound(f"unknown message.history operation: {operation}")
+
+    @staticmethod
+    def _required(payload: dict[str, Any], key: str) -> Any:
+        value = payload.get(key)
+        if value is None or value == "":
+            raise InvalidRequest(f"message.history operation requires {key}")
+        return value
