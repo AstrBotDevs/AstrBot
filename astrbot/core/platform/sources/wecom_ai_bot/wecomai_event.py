@@ -93,7 +93,11 @@ class WecomAIBotMessageEvent(AstrMessageEvent):
             for component in message_chain.chain
             if isinstance(component, ActionRow)
         ]
-        template_card = build_wecom_button_card(action_rows)
+        template_card = (
+            await asyncio.to_thread(build_wecom_button_card, action_rows)
+            if action_rows
+            else None
+        )
         if template_card:
             await back_queue.put(
                 {
@@ -198,7 +202,13 @@ class WecomAIBotMessageEvent(AstrMessageEvent):
                 if isinstance(component, ActionRow)
             ]
             task_id = callback_params.get("task_id")
-            template_card = build_wecom_button_card(action_rows, task_id=task_id)
+            template_card = (
+                await asyncio.to_thread(
+                    build_wecom_button_card, action_rows, task_id=task_id
+                )
+                if action_rows
+                else None
+            )
             if template_card is None:
                 content = self._extract_plain_text_from_chain(message) or "Done"
                 template_card = {
@@ -258,7 +268,11 @@ class WecomAIBotMessageEvent(AstrMessageEvent):
                 for component in message.chain
                 if isinstance(component, ActionRow)
             ]
-            template_card = build_wecom_button_card(action_rows)
+            template_card = (
+                await asyncio.to_thread(build_wecom_button_card, action_rows)
+                if action_rows
+                else None
+            )
             if template_card:
                 body = {
                     "msgtype": "stream_with_template_card",
@@ -393,7 +407,11 @@ class WecomAIBotMessageEvent(AstrMessageEvent):
                     )
                     last_stream_update_time = now
 
-            template_card = build_wecom_button_card(action_rows)
+            template_card = (
+                await asyncio.to_thread(build_wecom_button_card, action_rows)
+                if action_rows
+                else None
+            )
             if template_card:
                 body = {
                     "msgtype": "stream_with_template_card",

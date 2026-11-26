@@ -114,9 +114,13 @@ class InternalAgentSubStage(Stage):
             if capture is not None:
                 consumed, activated = await prepare_follow_up_capture(capture)
                 if consumed:
-                    event.set_extra(
-                        "_follow_up_captured", {"target_run_id": capture.target_run_id}
-                    )
+                    follow_up = {"target_run_id": capture.target_run_id}
+                    if active is not None and event.get_platform_name() == "webchat":
+                        target = active.input.event
+                        # The WebChat request and agent runtime use different IDs.
+                        follow_up["target_run_id"] = str(target.message_obj.message_id)
+                        follow_up["_target_turn_id"] = target.get_extra("turn_id")
+                    event.set_extra("_follow_up_captured", follow_up)
                     return
             if not is_wakeup:
                 try:

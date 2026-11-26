@@ -21,8 +21,8 @@ from astrbot.core.message.components import (
 )
 from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.platform.button_interaction import (
-    decode_button_callback,
-    encode_button_callback,
+    decode_button_callback_async,
+    encode_button_callback_async,
 )
 from astrbot.core.utils.datetime_utils import generate_timestamp_id
 from astrbot.core.utils.media_utils import MediaResolver
@@ -163,7 +163,7 @@ async def parse_webchat_message_parts(
                     raise ValueError("button_interaction part missing callback_data")
                 continue
             try:
-                action_id, data = decode_button_callback(
+                action_id, data = await decode_button_callback_async(
                     callback_payload, allow_expired=True
                 )
             except ValueError:
@@ -278,7 +278,7 @@ async def build_webchat_message_parts(
                     raise ValueError("button_interaction part missing callback_data")
                 continue
             try:
-                decode_button_callback(callback_payload, allow_expired=True)
+                await decode_button_callback_async(callback_payload, allow_expired=True)
             except ValueError:
                 if strict:
                     raise
@@ -487,12 +487,12 @@ async def message_chain_to_storage_message_parts(
                 strict=True,
             ):
                 if isinstance(button.action, Button.CallbackAction):
-                    serialized_button["action"]["callback_data"] = (
-                        encode_button_callback(
-                            button.id,
-                            button.action.data,
-                            expires_at=comp.action_expires_at,
-                        )
+                    serialized_button["action"][
+                        "callback_data"
+                    ] = await encode_button_callback_async(
+                        button.id,
+                        button.action.data,
+                        expires_at=comp.action_expires_at,
                     )
                     serialized_button["action"].pop("data", None)
             parts.append({"type": "actionrow", **row_data})

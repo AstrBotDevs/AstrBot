@@ -18,7 +18,7 @@ from astrbot.api.message_components import (
     Video,
 )
 from astrbot.api.platform import AstrBotMessage, Group, MessageMember, PlatformMetadata
-from astrbot.core.platform.button_interaction import encode_button_callback
+from astrbot.core.platform.button_interaction import encode_button_callback_async
 from astrbot.core.utils.media_utils import resolve_media_ref_to_base64_data
 
 if TYPE_CHECKING:
@@ -434,7 +434,7 @@ class SatoriPlatformEvent(AstrMessageEvent):
                     theme = theme_map[button.style]
                     if isinstance(button.action, Button.CallbackAction):
                         callback_id = html.escape(
-                            encode_button_callback(
+                            await encode_button_callback_async(
                                 button.id,
                                 button.action.data,
                                 expires_at=component.action_expires_at
@@ -574,7 +574,7 @@ class SatoriPlatformEvent(AstrMessageEvent):
                     theme = theme_map[button.style]
                     if isinstance(button.action, Button.CallbackAction):
                         callback_id = html.escape(
-                            encode_button_callback(
+                            await encode_button_callback_async(
                                 button.id,
                                 button.action.data,
                                 expires_at=component.action_expires_at

@@ -28,7 +28,7 @@ from astrbot.api.platform import (
 )
 from astrbot.core import logger
 from astrbot.core.platform.astr_message_event import MessageSesion
-from astrbot.core.platform.button_interaction import decode_button_callback
+from astrbot.core.platform.button_interaction import decode_button_callback_async
 from astrbot.core.platform.webhook_server import FastAPIWebhookServer
 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
 from astrbot.core.utils.media_utils import (
@@ -377,7 +377,7 @@ class WecomPlatformAdapter(Platform):
                 logger.debug("Ignored a WeCom template card callback without EventKey.")
                 return None
             try:
-                action_id, data = decode_button_callback(
+                action_id, data = await decode_button_callback_async(
                     callback_payload, allow_expired=True
                 )
             except ValueError:
@@ -483,7 +483,7 @@ class WecomPlatformAdapter(Platform):
             menu_id = text_data.get("menu_id")
             if isinstance(menu_id, str) and menu_id:
                 try:
-                    action_id, data = decode_button_callback(
+                    action_id, data = await decode_button_callback_async(
                         menu_id, allow_expired=True
                     )
                 except ValueError:

@@ -162,7 +162,9 @@ class AstrBotCoreLifecycle:
         await self.db.initialize()
         button_callback_db_path = getattr(self.db, "db_path", None)
         if isinstance(button_callback_db_path, (str, Path)):
-            configure_button_callback_registry(button_callback_db_path)
+            await asyncio.to_thread(
+                configure_button_callback_registry, button_callback_db_path
+            )
         if sp.db_helper is self.db:
             await sp.initialize()
 

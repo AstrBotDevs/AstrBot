@@ -16,7 +16,7 @@ from astrbot.api.message_components import (
     Plain,
     Record,
 )
-from astrbot.core.platform.button_interaction import encode_button_callback
+from astrbot.core.platform.button_interaction import encode_button_callback_async
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 from astrbot.core.utils.datetime_utils import generate_timestamp_id
 from astrbot.core.utils.media_utils import (
@@ -99,12 +99,12 @@ class WebChatMessageEvent(AstrMessageEvent):
                     strict=True,
                 ):
                     if isinstance(button.action, Button.CallbackAction):
-                        serialized_button["action"]["callback_data"] = (
-                            encode_button_callback(
-                                button.id,
-                                button.action.data,
-                                expires_at=comp.action_expires_at,
-                            )
+                        serialized_button["action"][
+                            "callback_data"
+                        ] = await encode_button_callback_async(
+                            button.id,
+                            button.action.data,
+                            expires_at=comp.action_expires_at,
                         )
                         serialized_button["action"].pop("data", None)
                 accepted = await webchat_queue_mgr.put_back_queue(

@@ -50,6 +50,8 @@ export interface ToolCall {
   result?: unknown;
   ts?: number;
   finished_ts?: number;
+  // "unknown": the turn ended before this call returned.
+  phase?: "unknown";
   [key: string]: unknown;
 }
 
@@ -1180,14 +1182,14 @@ export function useMessages(options: UseMessagesOptions) {
       const payload = JSON.parse(event.data);
       const payloadMessageId =
         payload?.message_id == null ? "" : String(payload.message_id);
-      let connection = payloadMessageId
+      const connection = payloadMessageId
         ? activeConnections[payloadMessageId]
-        : undefined;
-      if (!connection) {
-        const candidates = getWebSocketConnections(sessionId);
-        connection = candidates[0];
-      }
-      if (connection?.transport !== "websocket" || !connection.botRecord) {
+        : getWebSocketConnections(sessionId)[0];
+      if (
+        connection?.transport !== "websocket" ||
+        connection.sessionId !== sessionId ||
+        !connection.botRecord
+      ) {
         return;
       }
       processStreamPayload(
@@ -1368,6 +1370,13 @@ export function useMessages(options: UseMessagesOptions) {
     if (msgType === "error") {
       markMessageStarted(botRecord);
       appendError(botRecord, data);
+      // A failed run may send no "end", so mark unreturned calls here too; a
+      // late result clears the mark.
+      for (const part of botRecord.content.message) {
+        for (const tool of part.tool_calls || []) {
+          if (!tool.finished_ts) tool.phase = "unknown";
+        }
+      }
       return;
     }
     if (msgType === "complete" || msgType === "break") {
@@ -1392,6 +1401,13 @@ export function useMessages(options: UseMessagesOptions) {
     if (msgType === "end") {
       if (connection) connection.completed = true;
       markMessageStarted(botRecord);
+      // Calls still without a result when the turn ends never returned; the
+      // backend stores them the same way.
+      for (const part of botRecord.content.message) {
+        for (const tool of part.tool_calls || []) {
+          if (!tool.finished_ts) tool.phase = "unknown";
+        }
+      }
       return;
     }
 
@@ -1756,15 +1772,18 @@ export function appendError(record: ChatRecord, error: unknown, code = "agent_er
   });
 }
 
-export function appendPlain(record: ChatRecord, text: string, append = true) {
+export function appendPlain(record: ChatRecord, text: string, streaming = true) {
   markMessageStarted(record);
+  if (!text) return;
   const content = record.content;
-  let last = content.message[content.message.length - 1];
-  if (!last || last.type !== "plain") {
-    last = { type: "plain", text: "" };
-    content.message.push(last);
+  const last = content.message[content.message.length - 1];
+  if (last?.type !== "plain") {
+    content.message.push({ type: "plain", text });
+    return;
   }
-  last.text = append ? `${last.text || ""}${text}` : text;
+  const previousText = last.text || "";
+  const separator = !streaming && previousText ? "\n\n" : "";
+  last.text = `${previousText}${separator}${text}`;
 }
 
 export function appendReasoningPart(record: ChatRecord, text: string) {
@@ -1809,6 +1828,8 @@ export function finishToolCall(record: ChatRecord, result: any) {
     if (part.type !== "tool_call" || !Array.isArray(part.tool_calls)) continue;
     const tool = part.tool_calls.find((item) => item.id === targetId);
     if (tool) {
+      // A late result supersedes an earlier "unknown" mark.
+      delete tool.phase;
       tool.result = result.result;
       tool.finished_ts = result.ts || Date.now() / 1000;
       return;
