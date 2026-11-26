@@ -1,10 +1,8 @@
 from pathlib import Path
 
-import httpx
-
-from astrbot import logger
 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
 from astrbot.core.utils.datetime_utils import generate_timestamp_id
+from astrbot.core.utils.network_utils import create_proxy_client
 
 from ..entities import ProviderType
 from ..provider import TTSProvider
@@ -116,12 +114,11 @@ class ProviderElevenLabsTTSAPI(TTSProvider):
         timeout = _normalize_timeout(provider_config.get("timeout", 20))
 
         proxy = provider_config.get("proxy", "")
-        if proxy:
-            logger.info(f"[ElevenLabs TTS] 使用代理: {proxy}")
-        self.client = httpx.AsyncClient(
+        self.client = create_proxy_client(
+            "ElevenLabs TTS",
+            proxy or None,
             headers=self.request_headers,
             timeout=timeout,
-            proxy=proxy or None,
             trust_env=False,
         )
 

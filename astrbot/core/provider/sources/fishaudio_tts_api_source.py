@@ -3,12 +3,11 @@ import re
 from typing import Annotated, Literal
 
 import ormsgpack
-from httpx import AsyncClient
 from pydantic import BaseModel, conint
 
-from astrbot import logger
 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
 from astrbot.core.utils.datetime_utils import generate_timestamp_id
+from astrbot.core.utils.network_utils import create_proxy_client
 
 from ..entities import ProviderType
 from ..provider import TTSProvider
@@ -62,8 +61,6 @@ class ProviderFishAudioTTSAPI(TTSProvider):
         except ValueError:
             self.timeout = 20
         self.proxy: str = provider_config.get("proxy", "")
-        if self.proxy:
-            logger.info(f"[FishAudio TTS] 使用代理: {self.proxy}")
         self.headers = {
             **self.request_headers,
             "Authorization": f"Bearer {self.chosen_api_key}",
@@ -87,9 +84,10 @@ class ProviderFishAudioTTSAPI(TTSProvider):
 
         """
         sort_options = ["score", "task_count", "created_at"]
-        async with AsyncClient(
+        async with create_proxy_client(
+            "FishAudio TTS",
+            self.proxy or None,
             base_url=self.api_base.replace("/v1", ""),
-            proxy=self.proxy if self.proxy else None,
         ) as client:
             for sort_by in sort_options:
                 params = {"title": character, "sort_by": sort_by}
@@ -153,10 +151,11 @@ class ProviderFishAudioTTSAPI(TTSProvider):
         self.headers["content-type"] = "application/msgpack"
         request = await self._generate_request(text)
         async with (
-            AsyncClient(
+            create_proxy_client(
+                "FishAudio TTS",
+                self.proxy or None,
                 base_url=self.api_base,
                 timeout=self.timeout,
-                proxy=self.proxy if self.proxy else None,
             ) as client,
             client.stream(
                 "POST",

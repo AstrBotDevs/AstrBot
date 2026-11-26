@@ -9,10 +9,10 @@ from xml.sax.saxutils import escape
 
 from httpx import AsyncClient, Timeout
 
-from astrbot import logger
 from astrbot.core.provider.headers import build_provider_headers
 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
 from astrbot.core.utils.datetime_utils import generate_timestamp_id
+from astrbot.core.utils.network_utils import create_proxy_client
 
 from ..entities import ProviderType
 from ..provider import TTSProvider
@@ -34,8 +34,6 @@ class OTTSProvider:
         self.timeout = Timeout(10.0)
         self.retry_count = 3
         self.proxy = config.get("proxy", "")
-        if self.proxy:
-            logger.info(f"[Azure TTS] 使用代理: {self.proxy}")
         self._client: AsyncClient | None = None
 
     @property
@@ -47,10 +45,11 @@ class OTTSProvider:
         return self._client
 
     async def __aenter__(self):
-        self._client = AsyncClient(
+        self._client = create_proxy_client(
+            "Azure TTS",
+            self.proxy or None,
             headers=self.request_headers,
             timeout=self.timeout,
-            proxy=self.proxy if self.proxy else None,
         )
         return self
 
@@ -137,8 +136,6 @@ class AzureNativeProvider(TTSProvider):
             "volume": provider_config.get("azure_tts_volume", "100"),
         }
         self.proxy = provider_config.get("proxy", "")
-        if self.proxy:
-            logger.info(f"[Azure TTS Native] 使用代理: {self.proxy}")
 
     @property
     def client(self) -> AsyncClient:
@@ -149,13 +146,14 @@ class AzureNativeProvider(TTSProvider):
         return self._client
 
     async def __aenter__(self):
-        self._client = AsyncClient(
+        self._client = create_proxy_client(
+            "Azure TTS Native",
+            self.proxy or None,
             headers={
                 **self.request_headers,
                 "Content-Type": "application/ssml+xml",
                 "X-Microsoft-OutputFormat": "riff-48khz-16bit-mono-pcm",
             },
-            proxy=self.proxy if self.proxy else None,
         )
         return self
 

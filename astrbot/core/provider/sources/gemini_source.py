@@ -8,7 +8,6 @@ from contextlib import asynccontextmanager
 from typing import Literal, cast
 
 import httpx
-from google import genai
 from google.genai import types
 from google.genai.errors import APIError
 
@@ -28,7 +27,7 @@ from astrbot.core.utils.network_utils import is_connection_error, log_connection
 
 from ..headers import build_conversation_headers
 from ..register import register_provider_adapter
-from .gemini_api_common import gemini_api_version
+from .gemini_api_common import close_httpx_client, create_genai_async_client
 from .request_retry import retry_provider_request
 
 GEMINI_4_FALLBACK_THINKING_LEVELS = ("LOW", "MEDIUM", "HIGH", "XHIGH")
@@ -104,24 +103,6 @@ class ProviderGoogleGenAI(Provider):
     def _init_client(self) -> None:
         """初始化Gemini客户端"""
         proxy = self.provider_config.get("proxy", "")
-        http_options = types.HttpOptions(
-            api_version=gemini_api_version(),
-            headers=self.request_headers,
-            base_url=self.api_base,
-            timeout=self.timeout * 1000,  # 毫秒
-        )
-
-        # 强制使用 httpx 作为异步 HTTP 后端，避免 aiohttp 响应类型兼容问题 (#7564)
-        # httpx.AsyncClient 的 timeout 单位为秒（与 HttpOptions 的毫秒不同）
-        async_client_kwargs: dict = {
-            "base_url": self.api_base,
-            "timeout": self.timeout,
-        }
-        if proxy:
-            async_client_kwargs["proxy"] = proxy
-            async_client_kwargs["trust_env"] = False
-        else:
-            async_client_kwargs["trust_env"] = True
 
         # Track the previous client so it can be closed in terminate() instead
         # of leaking when _init_client is called again (e.g. via set_key).
@@ -129,17 +110,14 @@ class ProviderGoogleGenAI(Provider):
         if self._http_client is not None:
             self._stale_http_clients = [self._http_client]
 
-        self._http_client = httpx.AsyncClient(**async_client_kwargs)
-        http_options.httpx_async_client = self._http_client
-
-        self.client = genai.Client(
+        self.client, self._http_client = create_genai_async_client(
+            provider_label="Gemini",
             api_key=self.chosen_api_key,
-            http_options=http_options,
-        ).aio
-        # Keep only AstrBot's UA across SDK versions that merge header case variants.
-        headers = self.client._api_client._http_options.headers
-        headers["user-agent"] = self.request_headers["User-Agent"]
-        headers.pop("User-Agent", None)
+            request_headers=self.request_headers,
+            api_base=self.api_base,
+            timeout=self.timeout,
+            proxy=proxy,
+        )
 
     @asynccontextmanager
     async def _conversation_header(self, conversation_id: str | None):
@@ -1345,14 +1323,7 @@ class ProviderGoogleGenAI(Provider):
 
     async def _close_httpx_client(self, client: httpx.AsyncClient | None) -> None:
         """Safely close an httpx.AsyncClient, swallowing errors for idempotency."""
-        if client is None:
-            return
-        try:
-            await client.aclose()
-        except Exception as e:
-            # Idempotent: ignore errors from already-closed or broken clients,
-            # but log at debug to aid diagnosing unexpected shutdown issues.
-            logger.debug(f"[Gemini] Ignored error while closing httpx client: {e}")
+        await close_httpx_client(client, label="Gemini")
 
     async def terminate(self) -> None:
         # Close the active Gemini client (external httpx client is managed
