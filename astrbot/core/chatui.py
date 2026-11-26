@@ -285,7 +285,7 @@ class ViewStore:
         with self.connect() as db:
             stored = {**record, "data": json.dumps(record["data"], ensure_ascii=False)}
             db.execute(
-                "INSERT INTO chatui_views VALUES (:id,:owner,:session_id,:platform,"
+                "INSERT INTO interactive_views VALUES (:id,:owner,:session_id,:platform,"
                 ":module,:name,:version,:revision,:data,:text,:message_id,:run_id)",
                 stored,
             )
@@ -305,7 +305,7 @@ class ViewStore:
         """
         with self.connect() as db:
             row = db.execute(
-                "SELECT * FROM chatui_views WHERE id=?", (view_id,)
+                "SELECT * FROM interactive_views WHERE id=?", (view_id,)
             ).fetchone()
         if not row:
             raise ViewError("VIEW_UNAVAILABLE", "This view is unavailable.")
@@ -322,7 +322,8 @@ class ViewStore:
         """
         with self.connect() as db:
             db.execute(
-                "UPDATE chatui_views SET message_id=? WHERE id=?", (message_id, view_id)
+                "UPDATE interactive_views SET message_id=? WHERE id=?",
+                (message_id, view_id),
             )
 
     def begin(self, view_id: str, request: ViewActionRequest) -> dict | None:
@@ -342,7 +343,7 @@ class ViewStore:
         with self.connect() as db:
             db.execute("BEGIN IMMEDIATE")
             previous = db.execute(
-                "SELECT * FROM chatui_actions WHERE view_id=? AND id=?",
+                "SELECT * FROM interactive_view_actions WHERE view_id=? AND id=?",
                 (view_id, request.interaction_id),
             ).fetchone()
             if previous:
@@ -360,7 +361,7 @@ class ViewStore:
                 )
                 raise ViewError(code, "This action has already been accepted.")
             active = db.execute(
-                "SELECT id,started FROM chatui_actions WHERE view_id=? AND status='running'",
+                "SELECT id,started FROM interactive_view_actions WHERE view_id=? AND status='running'",
                 (view_id,),
             ).fetchone()
             if active:
@@ -371,7 +372,7 @@ class ViewStore:
                     "Another action is still pending.",
                 )
             row = db.execute(
-                "SELECT revision FROM chatui_views WHERE id=?", (view_id,)
+                "SELECT revision FROM interactive_views WHERE id=?", (view_id,)
             ).fetchone()
             if not row:
                 raise ViewError("VIEW_UNAVAILABLE", "This view is unavailable.")
@@ -381,7 +382,7 @@ class ViewStore:
                     "The view has changed. Review it and try again.",
                 )
             db.execute(
-                "INSERT INTO chatui_actions VALUES (?,?,?,?,?,NULL)",
+                "INSERT INTO interactive_view_actions VALUES (?,?,?,?,?,NULL)",
                 (view_id, request.interaction_id, encoded, time.time(), "running"),
             )
         return None
@@ -407,18 +408,18 @@ class ViewStore:
         with self.connect() as db:
             db.execute("BEGIN IMMEDIATE")
             previous = db.execute(
-                "SELECT result FROM chatui_actions WHERE view_id=? AND id=?",
+                "SELECT result FROM interactive_view_actions WHERE view_id=? AND id=?",
                 (view_id, interaction_id),
             ).fetchone()
             if previous and previous["result"]:
                 return json.loads(previous["result"])
             if data is not None and error is None:
                 db.execute(
-                    "UPDATE chatui_views SET data=?,revision=revision+1 WHERE id=?",
+                    "UPDATE interactive_views SET data=?,revision=revision+1 WHERE id=?",
                     (json.dumps(data, ensure_ascii=False), view_id),
                 )
             row = db.execute(
-                "SELECT data,revision FROM chatui_views WHERE id=?", (view_id,)
+                "SELECT data,revision FROM interactive_views WHERE id=?", (view_id,)
             ).fetchone()
             result = {
                 "view_id": view_id,
@@ -431,7 +432,7 @@ class ViewStore:
                     "revision": row["revision"],
                 }
             db.execute(
-                "UPDATE chatui_actions SET status=?,result=? WHERE view_id=? AND id=?",
+                "UPDATE interactive_view_actions SET status=?,result=? WHERE view_id=? AND id=?",
                 (
                     "failed" if error else "completed",
                     json.dumps(result),
@@ -449,11 +450,13 @@ class ViewStore:
         """
         with self.connect() as db:
             db.execute(
-                "DELETE FROM chatui_actions WHERE view_id IN "
-                "(SELECT id FROM chatui_views WHERE session_id=?)",
+                "DELETE FROM interactive_view_actions WHERE view_id IN "
+                "(SELECT id FROM interactive_views WHERE session_id=?)",
                 (session_id,),
             )
-            db.execute("DELETE FROM chatui_views WHERE session_id=?", (session_id,))
+            db.execute(
+                "DELETE FROM interactive_views WHERE session_id=?", (session_id,)
+            )
 
 
 view_store = ViewStore()

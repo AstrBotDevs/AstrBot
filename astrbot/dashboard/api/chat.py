@@ -284,7 +284,7 @@ async def get_chat_view_action(
         await service.get_chat_view(auth.username, view_id)
         with view_store.connect() as db:
             row = db.execute(
-                "SELECT result,started FROM chatui_actions WHERE view_id=? AND id=?",
+                "SELECT result,started FROM interactive_view_actions WHERE view_id=? AND id=?",
                 (view_id, interaction_id),
             ).fetchone()
         if not row:

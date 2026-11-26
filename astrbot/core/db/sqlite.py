@@ -172,7 +172,7 @@ class SQLiteDatabase(BaseDatabase):
             await conn.execute(text("PRAGMA optimize"))
             await conn.execute(
                 text(
-                    "CREATE TABLE IF NOT EXISTS chatui_views ("
+                    "CREATE TABLE IF NOT EXISTS interactive_views ("
                     "id TEXT PRIMARY KEY, owner TEXT, session_id TEXT, platform TEXT, "
                     "module TEXT, name TEXT, version INTEGER, revision INTEGER, "
                     "data TEXT, text TEXT, message_id TEXT, run_id TEXT)"
@@ -180,7 +180,7 @@ class SQLiteDatabase(BaseDatabase):
             )
             await conn.execute(
                 text(
-                    "CREATE TABLE IF NOT EXISTS chatui_actions ("
+                    "CREATE TABLE IF NOT EXISTS interactive_view_actions ("
                     "view_id TEXT, id TEXT, request TEXT, started REAL, status TEXT, "
                     "result TEXT, PRIMARY KEY(view_id, id))"
                 )
