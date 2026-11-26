@@ -88,7 +88,8 @@ class SlackWebhookClient:
             except ValueError:
                 return Response("Invalid timestamp", status_code=400)
             # A valid signature alone does not prevent replay of old requests.
-            if abs(time.time() - request_time) > 300:
+            now = time.time()
+            if not now - 300 <= request_time <= now + 300:
                 return Response("Expired timestamp", status_code=400)
             # Calculate the HMAC signature
             sig_basestring = f"v0:{timestamp}:{body_text}"
