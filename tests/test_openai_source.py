@@ -2680,6 +2680,11 @@ async def test_query_filters_empty_list_content_assistant_message(monkeypatch):
         "Function calling is not enabled for this model",
         "tool calling is not supported by the selected model",
         "当前模型不支持工具调用",
+        "Error code: 400 - {'error': {'message': \"'tools' is not supported\"}}",
+        "This model does not support the 'tools' parameter",
+        "Function call is not supported for this model",
+        "No endpoints found that support tool use. To learn more about provider "
+        "routing, visit: https://openrouter.ai/docs/provider-routing",
     ],
 )
 async def test_handle_api_error_tools_unsupported_drops_tools_and_tool_choice(

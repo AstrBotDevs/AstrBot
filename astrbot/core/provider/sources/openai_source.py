@@ -1363,9 +1363,12 @@ class ProviderOpenAIOfficial(Provider):
             # not supported", invalid tool schemas) are surfaced instead of
             # silently dropping every tool.
             r"function calling is not enabled"
-            r"|(?:does not|doesn't|do not|don't|not) support"
-            r" (?:function calling|functions|tools|tool use|tool calling|tool calls)"
-            r"|(?:tools|tool use|tool calling|function calling) (?:is|are) not supported"
+            r"|(?:does not|doesn't|do not|don't|not) support (?:the )?['\"]?"
+            r"(?:function calling|function calls?|functions|tools|tool use"
+            r"|tool calling|tool calls)\b"
+            r"|['\"]?(?:tools|tool use|tool calling|function calling|function calls?)"
+            r"['\"]? (?:is|are) not supported"
+            r"|no endpoints found that support tool use"
             r"|不支持.{0,6}(?:工具|函数|function|tool)",
             str(e),
             re.IGNORECASE,
