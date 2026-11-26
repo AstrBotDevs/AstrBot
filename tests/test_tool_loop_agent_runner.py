@@ -591,7 +591,7 @@ async def test_max_step_final_request_includes_limit_prompt(
         streaming=False,
     )
 
-    async def snapshot_context_manager(messages, trusted_token_usage=0):
+    async def snapshot_context_manager(messages, trusted_token_usage=0, **_kwargs):
         return list(messages)
 
     runner.request_context_manager.process = snapshot_context_manager
@@ -621,7 +621,7 @@ async def test_tool_loop_next_request_includes_tool_result(
         streaming=False,
     )
 
-    async def snapshot_context_manager(messages, trusted_token_usage=0):
+    async def snapshot_context_manager(messages, trusted_token_usage=0, **_kwargs):
         return list(messages)
 
     runner.request_context_manager.process = snapshot_context_manager
@@ -1365,7 +1365,6 @@ async def test_empty_output_retries_exhausted_then_uses_fallback_provider(
     assert fallback_provider.call_count == 1
 
 
-
 @pytest.mark.asyncio
 async def test_stop_signal_returns_aborted_and_discards_partial_message(
     runner, provider_request, mock_tool_executor, mock_hooks
@@ -1418,7 +1417,11 @@ async def test_stop_signal_returns_aborted_and_discards_partial_message(
         for message in runner.run_context.messages
     )
 
-    cancelled = [call.args[0] for call in sink.await_args_list if call.args[0].type == "message.appended"]
+    cancelled = [
+        call.args[0]
+        for call in sink.await_args_list
+        if call.args[0].type == "message.appended"
+    ]
     assert len(cancelled) == 1
     assert cancelled[0].data["status"] == "cancelled"
     assert cancelled[0].data["usage"]["output_tokens"] == 1
@@ -1479,7 +1482,11 @@ async def test_stop_cancels_provider_before_first_response(
     with pytest.raises(StopAsyncIteration):
         await step_iter.__anext__()
 
-    cancelled = [call.args[0] for call in sink.await_args_list if call.args[0].type == "message.appended"]
+    cancelled = [
+        call.args[0]
+        for call in sink.await_args_list
+        if call.args[0].type == "message.appended"
+    ]
     assert len(cancelled) == 1
     assert cancelled[0].data["status"] == "cancelled"
     assert cancelled[0].data["message"]["_no_save"] is True
@@ -1625,12 +1632,14 @@ async def test_steering_appends_user_messages_after_all_tool_results(
         streaming=False,
     )
 
-    mock_provider.text_chat = AsyncMock(return_value=LLMResponse(
-        role="assistant",
-        tools_call_name=["test_tool"] * tool_count,
-        tools_call_args=[{"query": "test"}] * tool_count,
-        tools_call_ids=[f"call_{index}" for index in range(tool_count)],
-    ))
+    mock_provider.text_chat = AsyncMock(
+        return_value=LLMResponse(
+            role="assistant",
+            tools_call_name=["test_tool"] * tool_count,
+            tools_call_args=[{"query": "test"}] * tool_count,
+            tools_call_ids=[f"call_{index}" for index in range(tool_count)],
+        )
+    )
     tickets = []
     async for event in runner.step():
         if event.type == "tool.started" and not tickets:
@@ -1647,12 +1656,17 @@ async def test_steering_appends_user_messages_after_all_tool_results(
     assert provider_request.tool_calls_result
     results = provider_request.tool_calls_result[0].tool_calls_result
     assert [result.content for result in results] == ["工具执行结果"] * tool_count
-    tail = runner.run_context.messages[-(tool_count + 2):]
+    tail = runner.run_context.messages[-(tool_count + 2) :]
     assert [message.role for message in tail] == [
-        "assistant", *(["tool"] * tool_count), "user",
+        "assistant",
+        *(["tool"] * tool_count),
+        "user",
     ]
     first, second, reminder = tail[-1].content
-    assert [first, second] == [TextPart(text="follow up 1"), TextPart(text="\nfollow up 2")]
+    assert [first, second] == [
+        TextPart(text="follow up 1"),
+        TextPart(text="\nfollow up 2"),
+    ]
     assert reminder._no_save
     assert "<system_reminder>" in reminder.text
     assert "user-visible text" in reminder.text
@@ -2230,7 +2244,8 @@ async def test_follow_up_after_stop_not_added_to_context(
     )
     assert ticket_before.resolved.is_set()
     assert ticket_before.consumed == any(
-        message.role == "user" and message.content == [TextPart(text="valid before stop")]
+        message.role == "user"
+        and message.content == [TextPart(text="valid before stop")]
         for message in runner.run_context.messages
     )
 
@@ -2415,13 +2430,18 @@ async def test_event_journal_records_requests_tools_and_final_context(
     await db.initialize()
     try:
         conv = await db.create_conversation("umo", "p")
-        writer = ConversationEventWriter(db.conversation_store, await db.conversation_store.read(conv.conversation_id))
+        writer = ConversationEventWriter(
+            db.conversation_store,
+            await db.conversation_store.read(conv.conversation_id),
+        )
         provider = VaryingUsageProvider()
         sink = AsyncMock(wraps=writer.consume)
         await runner.reset(
-            provider=provider, request=provider_request,
+            provider=provider,
+            request=provider_request,
             run_context=ContextWrapper(context=None),
-            tool_executor=mock_tool_executor, agent_hooks=mock_hooks,
+            tool_executor=mock_tool_executor,
+            agent_hooks=mock_hooks,
             streaming=streaming,
             conversation_event_sink=sink,
         )
@@ -2442,9 +2462,15 @@ async def test_event_journal_records_requests_tools_and_final_context(
         assert "request.started" not in types and "request.finished" not in types
         assert "tool.started" not in types and "tool.finished" not in types
         runtime_types = [event.type for event in runtime_events]
-        assert runtime_types.count("tool.started") == runtime_types.count("tool.finished") == 1
+        assert (
+            runtime_types.count("tool.started")
+            == runtime_types.count("tool.finished")
+            == 1
+        )
         assert types[-1] == "turn.finished"
-        assistant_events = [e for e in events if e.type == "message.appended" and "status" in e.payload]
+        assistant_events = [
+            e for e in events if e.type == "message.appended" and "status" in e.payload
+        ]
         assert [e.event_id for e in assistant_events] == [
             e.request_id for e in runtime_events if e.type == "request.started"
         ]
@@ -2454,11 +2480,21 @@ async def test_event_journal_records_requests_tools_and_final_context(
         assert sum(item["cached_input_tokens"] for item in usage) == 30
         finished_tool = next(e for e in runtime_events if e.type == "tool.finished")
         assert finished_tool.status == "completed"
-        tool_message = next(e.payload["message"] for e in events if e.type == "message.appended" and e.payload["message"]["role"] == "tool")
+        tool_message = next(
+            e.payload["message"]
+            for e in events
+            if e.type == "message.appended" and e.payload["message"]["role"] == "tool"
+        )
         assert tool_message["tool_call_id"] == "call_varying_usage"
         assert "工具执行结果" in str(tool_message["content"])
         history = (await db.conversation_store.read(conv.conversation_id)).messages
-        assert [m["role"] for m in history] == ["user", "assistant", "tool", "user", "assistant"]
+        assert [m["role"] for m in history] == [
+            "user",
+            "assistant",
+            "tool",
+            "user",
+            "assistant",
+        ]
         assert ticket is not None and ticket.consumed
         assert history[-2]["content"] == [{"type": "text", "text": "steering input"}]
         assert history[-1]["content"] == [{"type": "text", "text": "final"}]
@@ -2479,9 +2515,14 @@ async def test_journal_failure_does_not_retry_a_model_or_fallback(
 
     primary, fallback = MockProvider(), MockProvider()
     await runner.reset(
-        provider=primary, fallback_providers=[fallback], request=provider_request,
-        run_context=ContextWrapper(context=None), tool_executor=mock_tool_executor,
-        agent_hooks=mock_hooks, streaming=False, conversation_event_sink=persist,
+        provider=primary,
+        fallback_providers=[fallback],
+        request=provider_request,
+        run_context=ContextWrapper(context=None),
+        tool_executor=mock_tool_executor,
+        agent_hooks=mock_hooks,
+        streaming=False,
+        conversation_event_sink=persist,
     )
     with pytest.raises(ConversationPersistenceError):
         await collect_events(runner.step())
@@ -2511,9 +2552,13 @@ async def test_tool_call_message_is_acknowledged_before_creating_executor(
         return True
 
     await runner.reset(
-        provider=provider, request=provider_request,
-        run_context=ContextWrapper(context=None), tool_executor=executor,
-        agent_hooks=mock_hooks, streaming=False, conversation_event_sink=persist,
+        provider=provider,
+        request=provider_request,
+        run_context=ContextWrapper(context=None),
+        tool_executor=executor,
+        agent_hooks=mock_hooks,
+        streaming=False,
+        conversation_event_sink=persist,
     )
     with pytest.raises(ConversationPersistenceError):
         await collect_events(runner.step_until_done(3))
@@ -2771,7 +2816,11 @@ async def test_lifecycle_cancellation_during_async_work(
     assert runner.run_context.run_end_reason == "cancelled"
     assert runner.done()
 
-    recorded = [call.args[0] for call in sink.await_args_list if call.args[0].type == "message.appended"]
+    recorded = [
+        call.args[0]
+        for call in sink.await_args_list
+        if call.args[0].type == "message.appended"
+    ]
     assert len(recorded) == 1 and recorded[0].data["status"] == "cancelled"
 
 
@@ -2795,7 +2844,9 @@ async def test_lifecycle_budget_exit_and_final_request_failure(
     event.get_platform_name.return_value = "test"
     if provider_error:
         mock_provider.text_chat = AsyncMock(
-            return_value=LLMResponse(role="err", completion_text="summary failed", usage=TokenUsage(output=3))
+            return_value=LLMResponse(
+                role="err", completion_text="summary failed", usage=TokenUsage(output=3)
+            )
         )
     await runner.reset(
         provider=mock_provider,
@@ -2819,7 +2870,11 @@ async def test_lifecycle_budget_exit_and_final_request_failure(
     )
 
     if provider_error:
-        failed = [call.args[0] for call in sink.await_args_list if call.args[0].type == "message.appended"]
+        failed = [
+            call.args[0]
+            for call in sink.await_args_list
+            if call.args[0].type == "message.appended"
+        ]
         assert len(failed) == 1
         assert failed[0].data["status"] == "failed"
         assert failed[0].data["usage"]["output_tokens"] == 3
@@ -2920,6 +2975,125 @@ async def test_unknown_tool_is_rejected_without_claiming_execution(
 
 
 @pytest.mark.asyncio
+async def test_runner_passes_stable_request_id_and_umo_across_tool_rounds(
+    runner, mock_tool_executor, mock_hooks, tool_set
+):
+    from astrbot.core.db.po import Conversation
+
+    captured: list[dict] = []
+
+    class RecordingProvider(MockProvider):
+        async def text_chat(self, **kwargs) -> LLMResponse:
+            self.call_count += 1
+            captured.append(kwargs)
+            if self.call_count == 1:
+                return LLMResponse(
+                    role="assistant",
+                    completion_text="调用工具",
+                    tools_call_name=["test_tool"],
+                    tools_call_args=[{"query": "test"}],
+                    tools_call_ids=["call_1"],
+                    usage=TokenUsage(input_other=1, output=1),
+                )
+            return LLMResponse(
+                role="assistant",
+                completion_text="完成",
+                usage=TokenUsage(input_other=1, output=1),
+            )
+
+    provider = RecordingProvider()
+    request = ProviderRequest(
+        prompt="请帮我查询信息",
+        func_tool=tool_set,
+        contexts=[],
+        session_id="legacy-session",
+        conversation=Conversation(
+            platform_id="aiocqhttp",
+            user_id="aiocqhttp:GroupMessage:100",
+            cid="cid-1",
+        ),
+    )
+
+    await runner.reset(
+        provider=provider,
+        request=request,
+        run_context=ContextWrapper(
+            context=MockAgentContext(
+                MockEvent(umo="aiocqhttp:GroupMessage:100", sender_id="sender-1")
+            )
+        ),
+        tool_executor=cast(Any, mock_tool_executor),
+        agent_hooks=mock_hooks,
+    )
+    process = AsyncMock(wraps=runner.request_context_manager.process)
+    runner.request_context_manager.process = process
+    async for _ in runner.step_until_done(max_step=3):
+        pass
+
+    assert process.call_count >= 1
+    for call in process.call_args_list:
+        assert call.kwargs["request_id"] == runner._request_id
+        assert call.kwargs["umo"] == "aiocqhttp:GroupMessage:100"
+        assert call.kwargs["conversation_id"] == "cid-1"
+
+    assert len(captured) >= 2
+    request_ids = {item["request_id"] for item in captured}
+    assert request_ids == {runner._request_id}
+    for item in captured:
+        assert item["umo"] == "aiocqhttp:GroupMessage:100"
+        assert item["session_id"] == "legacy-session"
+        assert item["conversation_id"] == "cid-1"
+
+
+@pytest.mark.asyncio
+async def test_runner_reuses_request_id_for_fallback_provider(
+    mock_tool_executor, mock_hooks
+):
+    captured: dict[str, list[dict]] = {"primary": [], "fallback": []}
+
+    class RecordingProvider(MockProvider):
+        def __init__(self, label: str, error: bool = False) -> None:
+            super().__init__()
+            self.label = label
+            self.error = error
+
+        async def text_chat(self, **kwargs) -> LLMResponse:
+            self.call_count += 1
+            captured[self.label].append(kwargs)
+            if self.error:
+                return LLMResponse(role="err", completion_text="boom")
+            return LLMResponse(
+                role="assistant",
+                completion_text="完成",
+                usage=TokenUsage(input_other=1, output=1),
+            )
+
+    primary = RecordingProvider("primary", error=True)
+    fallback = RecordingProvider("fallback")
+    runner = ToolLoopAgentRunner()
+
+    await runner.reset(
+        provider=primary,
+        request=ProviderRequest(prompt="hi", contexts=[], session_id="umo-1"),
+        run_context=ContextWrapper(
+            context=MockAgentContext(
+                MockEvent(umo="aiocqhttp:GroupMessage:100", sender_id="sender-1")
+            )
+        ),
+        tool_executor=cast(Any, mock_tool_executor),
+        agent_hooks=mock_hooks,
+        fallback_providers=[fallback],
+    )
+    async for _ in runner.step():
+        pass
+
+    primary_id = captured["primary"][0]["request_id"]
+    assert primary_id == runner._request_id
+    assert captured["fallback"][0]["request_id"] == primary_id
+    assert captured["fallback"][0]["umo"] == "aiocqhttp:GroupMessage:100"
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize("phase", ["non_streaming", "streaming", "tool_requery"])
 async def test_steering_restarts_model_generation_in_the_same_step(
     runner, provider_request, mock_tool_executor, phase
@@ -2991,12 +3165,19 @@ async def test_steering_restarts_model_generation_in_the_same_step(
     assert original == TextPart(text="change direction")
     assert "user-visible text" in reminder.text
     assert [message.role for message in runner.run_context.messages] == [
-        "user", "user", "assistant",
+        "user",
+        "user",
+        "assistant",
     ]
     finished = [event for event in events if event.type == "request.finished"]
-    expected = ["completed", "cancelled", "completed"] if requery else [
-        "cancelled", "completed",
-    ]
+    expected = (
+        ["completed", "cancelled", "completed"]
+        if requery
+        else [
+            "cancelled",
+            "completed",
+        ]
+    )
     assert [event.status for event in finished] == expected
     assert all(event.error is None for event in finished)
     abandoned = [
@@ -3048,7 +3229,9 @@ async def test_running_tool_returns_its_real_result_before_steering(
             calls.append(tool.name)
             started.set()
             await release.wait()
-            yield CallToolResult(content=[TextContent(type="text", text="finished once")])
+            yield CallToolResult(
+                content=[TextContent(type="text", text="finished once")]
+            )
 
     provider = VaryingUsageProvider()
     original_chat = provider.text_chat
@@ -3059,9 +3242,13 @@ async def test_running_tool_returns_its_real_result_before_steering(
 
     provider.text_chat = capture_request
     await runner.reset(
-        provider=provider, request=provider_request,
-        run_context=ContextWrapper(context=context), tool_executor=SlowExecutor,
-        agent_hooks=mock_hooks, streaming=False, enforce_max_turns=1,
+        provider=provider,
+        request=provider_request,
+        run_context=ContextWrapper(context=context),
+        tool_executor=SlowExecutor,
+        agent_hooks=mock_hooks,
+        streaming=False,
+        enforce_max_turns=1,
     )
     turn = asyncio.create_task(collect_events(runner.step_until_done(3)))
     try:
@@ -3082,7 +3269,10 @@ async def test_running_tool_returns_its_real_result_before_steering(
     assert ticket.consumed and ticket.resolved.is_set()
     assert len(requests) == 2
     assert [message.role for message in requests[1]] == [
-        "user", "assistant", "tool", "user",
+        "user",
+        "assistant",
+        "tool",
+        "user",
     ]
     assert requests[1][-2].content == "finished once"
     original, reminder = requests[1][-1].content

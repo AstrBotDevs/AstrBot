@@ -541,3 +541,37 @@ async def test_query_concatenates_multiple_text_blocks():
     response = await provider._query({"model": "claude-test", "messages": []}, None)
 
     assert response.completion_text == "Let me search. The answer is 42."
+
+
+@pytest.mark.parametrize(
+    ("module_name", "class_name", "provider_type"),
+    [
+        (
+            "astrbot.core.provider.sources.xiaomi_token_plan_source",
+            "ProviderXiaomiTokenPlan",
+            "xiaomi_token_plan",
+        ),
+        (
+            "astrbot.core.provider.sources.minimax_token_plan_source",
+            "ProviderMiniMaxTokenPlan",
+            "minimax_token_plan",
+        ),
+    ],
+)
+def test_token_plan_api_key_is_not_parsed_as_header_template(
+    module_name, class_name, provider_type
+):
+    import importlib
+
+    provider_cls = getattr(importlib.import_module(module_name), class_name)
+    provider_config = {
+        "id": "token-plan-test",
+        "type": provider_type,
+        "model": "test-model",
+        "key": ["sk-{not_a_var}}"],
+    }
+
+    provider = provider_cls(provider_config=provider_config, provider_settings={})
+
+    assert provider.client.default_headers["Authorization"] == "Bearer sk-{not_a_var}}"
+    assert "custom_headers" not in provider_config
