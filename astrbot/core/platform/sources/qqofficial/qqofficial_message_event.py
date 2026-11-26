@@ -1199,7 +1199,9 @@ class QQOfficialMessageEvent(AstrMessageEvent):
                 plain_text += i.text
             elif isinstance(i, At):
                 mention_id = str(i.qq) if i.qq else ""
-                if mention_id and mention_id != "all":
+                if mention_id == "all":
+                    plain_text += "<qqbot-at-everyone />"
+                elif mention_id:
                     plain_text += f'<qqbot-at-user id="{mention_id}" />'
             elif isinstance(i, Image) and not image_base64:
                 if not i.file:

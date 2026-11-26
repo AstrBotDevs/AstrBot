@@ -241,7 +241,10 @@ async def test_parse_to_qqofficial_preserves_at_component_order():
         MessageChain(chain=[At(qq="member-1"), Plain(" hello"), At(qq="all")])
     )
 
-    assert parsed[0] == '<qqbot-at-user id="member-1" /> hello'
+    assert (
+        parsed[0]
+        == '<qqbot-at-user id="member-1" /> hello<qqbot-at-everyone />'
+    )
 
 
 @pytest.mark.parametrize("qq", [None, ""])
@@ -657,7 +660,9 @@ async def test_ws_group_send_by_session_with_at_uses_text_chain_markup():
         post_message=AsyncMock(),
     )
     adapter._session_scene["group-1"] = "group"
-    chain = MessageChain(chain=[At(qq="member-1"), Plain(" hello")])
+    chain = MessageChain(
+        chain=[At(qq="member-1"), Plain(" hello"), At(qq="all")]
+    )
     chain.use_markdown(False)
 
     await adapter.send_by_session(
@@ -666,7 +671,10 @@ async def test_ws_group_send_by_session_with_at_uses_text_chain_markup():
     )
 
     kwargs = adapter.client.api.post_group_message.await_args.kwargs
-    assert kwargs["content"] == '<qqbot-at-user id="member-1" /> hello'
+    assert (
+        kwargs["content"]
+        == '<qqbot-at-user id="member-1" /> hello<qqbot-at-everyone />'
+    )
     assert "markdown" not in kwargs
 
 
