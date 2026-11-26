@@ -13,7 +13,10 @@ from astrbot.core.agent.runners.deerflow.deerflow_agent_runner import (
     DeerFlowAgentRunner,
 )
 from astrbot.core.agent.runners.dify.dify_agent_runner import DifyAgentRunner
-from astrbot.core.agent_input import matches_provider_wake_prefix
+from astrbot.core.agent_input import (
+    apply_user_identifier,
+    matches_provider_wake_prefix,
+)
 from astrbot.core.astr_agent_runtime.history import ConversationHistoryObserver
 from astrbot.core.astr_agent_runtime.hooks import MainAgentHooks
 from astrbot.core.conversation_mgr import ConversationManager
@@ -327,6 +330,13 @@ class ThirdPartyAgentSubStage(Stage):
         )
         if empty_prompt and not req.image_urls and not req.audio_urls:
             return
+
+        apply_user_identifier(
+            event,
+            req,
+            self.ctx.astrbot_config.get("provider_settings", {}),
+            prompt_was_empty=empty_prompt,
+        )
 
         custom_error_message = await self._resolve_persona_custom_error_message(event)
         set_persona_custom_error_message_on_event(event, custom_error_message)

@@ -267,14 +267,40 @@ def test_apply_user_identifier_media_only_prompts(mock_event):
     request_build.apply_user_identifier(mock_event, audio_req, {"identifier": True})
     assert audio_req.prompt == "[TestUser (ID: user123)]: [音频]"
 
+    extra_img_req = ProviderRequest(
+        prompt="",
+        extra_user_content_parts=[{"type": "image_url", "image_url": {"url": "a.png"}}],
+    )
+    request_build.apply_user_identifier(mock_event, extra_img_req, {"identifier": True})
+    assert extra_img_req.prompt == "[TestUser (ID: user123)]: [图片]"
+
+    extra_audio_req = ProviderRequest(
+        prompt="",
+        extra_user_content_parts=[{"type": "input_audio", "input_audio": {"data": ""}}],
+    )
+    request_build.apply_user_identifier(
+        mock_event, extra_audio_req, {"identifier": True}
+    )
+    assert extra_audio_req.prompt == "[TestUser (ID: user123)]: [音频]"
+
 
 def test_apply_prompt_prefix_and_user_identifier_order(mock_event):
     """User identifier is placed at the outermost prefix after prompt_prefix."""
     req = ProviderRequest(prompt="Hello")
     cfg = {"prompt_prefix": "Prefix: {{prompt}}", "identifier": True}
     request_build.apply_prompt_prefix(req, cfg)
-    request_build.apply_user_identifier(mock_event, req, cfg)
+    request_build.apply_user_identifier(
+        mock_event, req, cfg, prompt_was_empty=False
+    )
     assert req.prompt == "[TestUser (ID: user123)]: Prefix: Hello"
+
+    media_req = ProviderRequest(prompt="", image_urls=["/tmp/a.png"])
+    literal_cfg = {"prompt_prefix": "Prefix: ", "identifier": True}
+    request_build.apply_prompt_prefix(media_req, literal_cfg)
+    request_build.apply_user_identifier(
+        mock_event, media_req, literal_cfg, prompt_was_empty=True
+    )
+    assert media_req.prompt == "[TestUser (ID: user123)]: Prefix: [图片]"
 
 
 def test_local_mode_prompt_uses_windows_powershell_51():
@@ -3690,6 +3716,7 @@ async def test_feature_composition_preserves_tool_scope_and_instruction_order(
     assert req.prompt == "[TestUser (ID: user123)]: Question"
     assert all("User ID:" not in part.text for part in req.extra_user_content_parts)
     if not agentic_kb:
+        assert retrieve.await_args.kwargs["query"] == "Question"
         assert "Knowledge marker" in req.extra_user_content_parts[0].text
     assert req.contexts[0] == {"role": "assistant", "content": "Opening"}
     markers = [

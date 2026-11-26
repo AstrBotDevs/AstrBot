@@ -72,21 +72,23 @@ def apply_prompt_prefix(req: ProviderRequest, cfg: dict) -> None:
         req.prompt = f"{prefix}{req.prompt}"
 
 
-def _sanitize_identifier_value(value: object) -> str:
-    """Normalize an identifier field into a single-line, bracket-safe string."""
-    if value is None:
-        return ""
-    text = " ".join(str(value).split())
-    return text.replace("[", "(").replace("]", ")")
-
-
 def format_user_identifier(event: AstrMessageEvent) -> str:
     """Format the sender's nickname and ID as a structured inline prefix."""
     sender = getattr(event.message_obj, "sender", None)
     if sender is None:
         return ""
-    user_id = _sanitize_identifier_value(getattr(sender, "user_id", None))
-    nickname = _sanitize_identifier_value(getattr(sender, "nickname", None))
+    raw_user_id = getattr(sender, "user_id", None)
+    user_id = (
+        " ".join(str(raw_user_id).split()).replace("[", "(").replace("]", ")")
+        if raw_user_id is not None
+        else ""
+    )
+    raw_nickname = getattr(sender, "nickname", None)
+    nickname = (
+        " ".join(str(raw_nickname).split()).replace("[", "(").replace("]", ")")
+        if raw_nickname is not None
+        else ""
+    )
     if nickname and user_id:
         return f"[{nickname} (ID: {user_id})]"
     if nickname:
@@ -100,6 +102,8 @@ def apply_user_identifier(
     event: AstrMessageEvent,
     req: ProviderRequest,
     cfg: dict,
+    *,
+    prompt_was_empty: bool | None = None,
 ) -> None:
     """Prepend the formatted sender identifier inline to the current prompt.
 
@@ -107,18 +111,33 @@ def apply_user_identifier(
         event: Event providing sender details.
         req: Request whose current prompt is updated in place.
         cfg: Provider settings controlling whether user identification is enabled.
+        prompt_was_empty: Whether the prompt was empty before prompt_prefix was applied.
     """
     if not cfg.get("identifier"):
         return
     identifier = format_user_identifier(event)
     if not identifier:
         return
-    if req.prompt and req.prompt.strip():
-        req.prompt = f"{identifier}: {req.prompt}"
-    elif req.image_urls:
-        req.prompt = f"{identifier}: [图片]"
-    elif req.audio_urls:
-        req.prompt = f"{identifier}: [音频]"
+    has_image = bool(req.image_urls) or any(
+        (p.get("type") if isinstance(p, dict) else getattr(p, "type", None))
+        == "image_url"
+        for p in req.extra_user_content_parts
+    )
+    has_audio = bool(req.audio_urls) or any(
+        (p.get("type") if isinstance(p, dict) else getattr(p, "type", None))
+        in ("input_audio", "audio_url")
+        for p in req.extra_user_content_parts
+    )
+    media_placeholder = "[图片]" if has_image else ("[音频]" if has_audio else "")
+    prompt_text = req.prompt or ""
+    if (prompt_was_empty is True or not prompt_text.strip()) and media_placeholder:
+        prompt_text = (
+            f"{prompt_text}{media_placeholder}"
+            if prompt_text.strip()
+            else media_placeholder
+        )
+    if prompt_text.strip():
+        req.prompt = f"{identifier}: {prompt_text}"
     else:
         req.prompt = f"{identifier}:"
 
@@ -384,8 +403,9 @@ async def prepare_input_content(
     if event.get_extra("_default_event_prompt"):
         event.set_extra("_default_event_prompt", False)
         supplement_mention_display(event, req, prompt_has_text=prompt_has_text)
+    prompt_was_empty = not (req.prompt and req.prompt.strip())
     apply_prompt_prefix(req, cfg)
-    apply_user_identifier(event, req, cfg)
+    apply_user_identifier(event, req, cfg, prompt_was_empty=prompt_was_empty)
     if (
         req.conversation
         and caption_provider_id
