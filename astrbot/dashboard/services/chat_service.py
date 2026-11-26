@@ -21,6 +21,7 @@ from astrbot.core.platform.message_type import MessageType
 from astrbot.core.platform.sources.webchat.message_parts_helper import (
     build_webchat_message_parts,
     create_attachment_part_from_existing_file,
+    resolve_view,
     strip_message_parts_path_fields,
     webchat_message_parts_have_content,
 )
@@ -504,12 +505,12 @@ class ChatService:
         Raises:
             ViewError: If the source or plugin is no longer accessible.
         """
-        from astrbot.core.chatui import ViewError, resolve_view, view_store
+        from astrbot.core.message.interactive_ui import ViewError, view_store
 
         record = await asyncio.to_thread(view_store.get, view_id)
-        if record["owner"] != username:
+        if record["platform_id"] != "webchat" or record["owner"] != username:
             raise ViewError("FORBIDDEN", "This view is not accessible.")
-        if record["platform"] == "webchat_thread":
+        if record["history_platform_id"] == "webchat_thread":
             session = await self.db.get_webchat_thread_by_id(record["session_id"])
             umo = build_thread_unified_msg_origin(username, record["session_id"])
         else:
@@ -527,6 +528,7 @@ class ChatService:
                 not message
                 or not message.is_active
                 or message.user_id != record["session_id"]
+                or message.platform_id != record["history_platform_id"]
             ):
                 raise ViewError(
                     "VIEW_UNAVAILABLE", "The source message is unavailable."
@@ -889,10 +891,10 @@ class ChatService:
             raise ChatServiceError(str(exc)) from exc
 
     async def delete_threads_by_ids(self, thread_ids: list[str], creator: str) -> None:
-        from astrbot.core.chatui import view_store
+        from astrbot.core.message.interactive_ui import view_store
 
         for thread_id in thread_ids:
-            await asyncio.to_thread(view_store.delete_session, thread_id)
+            await asyncio.to_thread(view_store.delete_session, "webchat", thread_id)
             unified_msg_origin = build_thread_unified_msg_origin(creator, thread_id)
             active_event_registry.request_agent_stop_all(unified_msg_origin)
             tasks = []
@@ -1159,7 +1161,7 @@ class ChatService:
             if record is None:
                 return
 
-            from astrbot.core.chatui import view_store
+            from astrbot.core.message.interactive_ui import view_store
 
             for part in parts:
                 if part.get("type") != "view":
@@ -1169,7 +1171,12 @@ class ChatService:
                     continue
                 try:
                     await asyncio.to_thread(
-                        view_store.bind_message, view_id, str(record.id)
+                        view_store.bind_message,
+                        view_id,
+                        str(record.id),
+                        platform_id="webchat",
+                        session_id=run.session_id,
+                        history_platform_id=run.platform_history_id,
                     )
                 except (sqlite3.Error, OSError) as exc:
                     logger.warning(
@@ -1516,7 +1523,7 @@ class ChatService:
         return await self.stop_session(username, session_id)
 
     async def delete_session_internal(self, session, username: str) -> None:
-        from astrbot.core.chatui import view_store
+        from astrbot.core.message.interactive_ui import view_store
 
         session_id = session.session_id
         message_type = "GroupMessage" if session.is_group else "FriendMessage"
@@ -1566,7 +1573,9 @@ class ChatService:
             webchat_queue_mgr.remove_queues(session_id)
 
         await self.db.delete_platform_session(session_id)
-        await asyncio.to_thread(view_store.delete_session, session_id)
+        await asyncio.to_thread(
+            view_store.delete_session, session.platform_id, session_id
+        )
 
     async def delete_webchat_session(self, username: str, session_id: str) -> None:
         session = await self.db.get_platform_session_by_id(session_id)

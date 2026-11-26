@@ -13,12 +13,14 @@ from astrbot.core.message.components import (
     ButtonInteraction,
     File,
     Image,
+    InteractiveView,
     Json,
     Plain,
     Record,
     Reply,
     Video,
 )
+from astrbot.core.message.interactive_ui import ViewError, resolve_view_spec
 from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.platform.button_interaction import (
     decode_button_callback_async,
@@ -33,6 +35,67 @@ ReplyHistoryGetter = Callable[
     [Any],
     Awaitable[tuple[list[dict], str | None, str | None] | None],
 ]
+
+
+def resolve_view(
+    module: str, name: str, version: int | None = None, *, target: str | None = None
+):
+    """Resolve the HTML entry for a view rendered by the dashboard.
+
+    Args:
+        module: Module that owns the view.
+        name: View name declared by the plugin.
+        version: Required version of a persisted view.
+        target: Dashboard host to validate, or None for interactive messages.
+
+    Returns:
+        The plugin, its declaration, and the resolved HTML path.
+
+    Raises:
+        ViewError: If the view or its HTML entry is unavailable.
+    """
+    plugin, spec = resolve_view_spec(module, name, version, target=target)
+    root = Path(plugin.module.__file__).resolve().parent
+    entry = (root / spec.entry).resolve()
+    if spec.target == "plugin_page" and not entry.is_file():
+        entry = (root / "pages" / spec.name / "index.html").resolve()
+    if not entry.is_relative_to(root) or not entry.is_file():
+        raise ViewError("VIEW_UNAVAILABLE", "The view or its version is unavailable.")
+    return plugin, spec, entry
+
+
+def serialize_webchat_view(view: InteractiveView) -> dict:
+    """Translate an interactive component into the WebChat view payload.
+
+    Args:
+        view: View reference sent by the message pipeline.
+
+    Returns:
+        The payload shared by live messages and WebChat history.
+    """
+    plugin, spec = resolve_view_spec(view.module, view.name, view.version)
+    return {
+        "id": view.view_id,
+        "name": view.name,
+        "text": view.fallback_text,
+        "title": view.title,
+        "target": spec.target,
+        "view_metadata": {
+            "name": spec.name,
+            "title": spec.title,
+            "description": spec.description,
+            "i18n": {
+                locale: {
+                    prefix: {spec.name: translations[prefix][spec.name]}
+                    for prefix in ("views", "pages")
+                    if isinstance(translations.get(prefix), dict)
+                    and isinstance(translations[prefix].get(spec.name), dict)
+                }
+                for locale, translations in plugin.i18n.items()
+            },
+        },
+    }
+
 
 MEDIA_PART_TYPES = {"image", "record", "file", "video"}
 
@@ -471,6 +534,10 @@ async def message_chain_to_storage_message_parts(
         if isinstance(comp, Plain):
             if comp.text:
                 parts.append({"type": "plain", "text": comp.text})
+            continue
+
+        if isinstance(comp, InteractiveView):
+            parts.append({"type": "view", **serialize_webchat_view(comp)})
             continue
 
         if isinstance(comp, Json):

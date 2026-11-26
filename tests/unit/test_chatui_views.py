@@ -10,22 +10,30 @@ import httpx
 import pytest
 from fastapi import FastAPI
 
-from astrbot.api import chatui
-from astrbot.core import chatui as core_views
-from astrbot.core.chatui import ViewActionRequest, ViewError, ViewStore, resolve_view
+from astrbot.api import interactive_ui
+from astrbot.api.message_components import InteractiveView
+from astrbot.core.message import interactive_ui as core_views
 from astrbot.core.message.components import (
     ButtonInteraction,
     Plain,
     UIInteraction,
     ViewContext,
 )
+from astrbot.core.message.interactive_ui import ViewActionRequest, ViewError, ViewStore
 from astrbot.core.pipeline.context_utils import call_handler
 from astrbot.core.pipeline.process_stage.stage import ProcessStage
 from astrbot.core.pipeline.waking_check.stage import WakingCheckStage
 from astrbot.core.platform.astrbot_message import AstrBotMessage, MessageMember
+from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from astrbot.core.platform.message_type import MessageType
 from astrbot.core.platform.platform_metadata import PlatformMetadata
+from astrbot.core.platform.sources.webchat import webchat_adapter
+from astrbot.core.platform.sources.webchat.message_parts_helper import (
+    resolve_view,
+    serialize_webchat_view,
+)
 from astrbot.core.platform.sources.webchat.webchat_event import WebChatMessageEvent
+from astrbot.core.platform.sources.webchat.webchat_queue_mgr import webchat_queue_mgr
 from astrbot.core.provider.entities import ProviderRequest
 from astrbot.core.star.filter.button_action import ButtonActionFilter
 from astrbot.core.star.filter.ui_action import UIActionFilter
@@ -54,7 +62,7 @@ async def test_sidebar_plugin_list_excludes_chat_views(
             entry.parent.mkdir(parents=True)
             entry.write_text("<html></html>", encoding="utf-8")
         plugin.views.append(
-            chatui.ViewSpec(
+            interactive_ui.ViewSpec(
                 name="settings",
                 target="plugin_page",
             )
@@ -80,12 +88,12 @@ async def test_sidebar_plugin_list_excludes_chat_views(
 
 
 def test_view_targets_default_to_legacy_page_and_validate_page_actions():
-    spec = chatui.ViewSpec(name="counter",)
+    spec = interactive_ui.ViewSpec(name="counter",)
     assert spec.target == "plugin_page"
     with pytest.raises(ValueError):
-        chatui.ViewSpec(name="counter", target="sidebar")
+        interactive_ui.ViewSpec(name="counter", target="sidebar")
     with pytest.raises(ValueError, match="plugin Web APIs"):
-        chatui.ViewSpec(
+        interactive_ui.ViewSpec(
             name="counter",
             target="plugin_page",
             actions=["demo:increment"],
@@ -93,9 +101,19 @@ def test_view_targets_default_to_legacy_page_and_validate_page_actions():
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("target", ["chat_workbench", "chat_workbench_with_launcher"])
-async def test_workbench_tool_result_emits_persistent_target_and_title(views, target):
+@pytest.mark.parametrize(
+    ("target", "history_platform_id"),
+    [("chat_workbench", "webchat"), ("chat_workbench_with_launcher", "webchat_thread")],
+)
+async def test_workbench_tool_result_emits_persistent_target_and_title(
+    views, target, history_platform_id, monkeypatch, database
+):
     store, event, plugin, _ = views
+    message = event.message_obj
+    message.raw_message[2]["_platform_history_id"] = history_platform_id
+    adapter = webchat_adapter.WebChatAdapter({"id": "webchat"}, {}, asyncio.Queue())
+    event = adapter.create_event(message)
+    event.send = AsyncMock()
     plugin.views[0].target = target
     result = event.view_result(
         name="results",
@@ -104,12 +122,37 @@ async def test_workbench_tool_result_emits_persistent_target_and_title(views, ta
         text="Opened Notes.md",
     )
     await core_views.emit_view(event, __name__, result)
-    part = event.send.await_args.args[0].chain[0].data
+    send_frame = AsyncMock(return_value=True)
+    monkeypatch.setattr(webchat_queue_mgr, "put_back_queue", send_frame)
+    await WebChatMessageEvent._send(
+        "run-1", event.send.await_args.args[0], event.session_id
+    )
+    frame = send_frame.await_args.args[1]
+    assert frame["type"] == "view"
+    part = frame["data"]
     assert part["target"] == target
     assert part["title"] == "Notes.md"
-    assert store.get(part["id"])["data"] == {"url": "files/notes.md"}
+    record = store.get(part["id"])
+    assert record["data"] == {"url": "files/notes.md"}
+    assert record["platform_id"] == "webchat"
+    assert record["history_platform_id"] == history_platform_id
+    assert record["session_id"] == "session-1"
+
+    monkeypatch.setattr(webchat_adapter, "db_helper", database)
+    monkeypatch.setattr(webchat_adapter, "view_store", store)
+    monkeypatch.setattr(
+        database,
+        "get_webchat_thread_by_id",
+        AsyncMock(return_value=history_platform_id == "webchat_thread"),
+    )
+    await adapter._save_proactive_message("session-1", event.send.await_args.args[0])
+    message_id = store.get(part["id"])["message_id"]
+    history = await database.get_platform_message_history_by_id(int(message_id))
+    assert history.platform_id == history_platform_id
+    assert history.content["message"] == [{"type": "view", **part}]
+
     with pytest.raises(ValueError, match="title"):
-        chatui.ViewResult(data={}, title="Cannot rename through an update")
+        interactive_ui.ViewResult(data={}, title="Cannot rename through an update")
 
 
 @pytest.mark.asyncio
@@ -120,7 +163,7 @@ async def test_view_targets_select_chat_or_independent_page_host(views, tmp_path
         entry.parent.mkdir(parents=True)
         entry.write_text(f"<html><body>{name}</body></html>", encoding="utf-8")
     plugin.views.append(
-        chatui.ViewSpec(
+        interactive_ui.ViewSpec(
             name="settings",
             target="plugin_page",
         )
@@ -146,7 +189,7 @@ async def test_view_targets_select_chat_or_independent_page_host(views, tmp_path
         resolve_view(__name__, "settings", target="plugin_page")[1].name == "settings"
     )
     with pytest.raises(ViewError, match="not registered for chat_message"):
-        store.create(
+        await core_views.emit_view(
             event,
             __name__,
             event.view_result(name="settings", data={}, text="Settings"),
@@ -159,7 +202,7 @@ async def test_view_targets_select_chat_or_independent_page_host(views, tmp_path
 def test_changing_a_view_to_plugin_page_invalidates_existing_chat_instances(views):
     _, _, plugin, record = views
     plugin.views = [
-        chatui.ViewSpec(
+        interactive_ui.ViewSpec(
             name="results",
             target="plugin_page",
         )
@@ -183,7 +226,7 @@ def views(tmp_path, monkeypatch, database):
     entry = tmp_path / "views" / "results" / "index.html"
     entry.parent.mkdir(parents=True)
     entry.write_text("<html><body>Test view</body></html>", encoding="utf-8")
-    spec = chatui.ViewSpec(
+    spec = interactive_ui.ViewSpec(
         name="results", target="chat_message", actions=["demo:select"]
     )
     plugin = StarMetadata(
@@ -204,20 +247,21 @@ def views(tmp_path, monkeypatch, database):
     message.sender = MessageMember("alice", "Alice")
     message.message_id = "run-1"
     message.message = [Plain("show")]
+    message.message_str = "show"
     message.raw_message = ("alice", "session-1", {})
-    event = WebChatMessageEvent(
-        "show",
-        message,
-        PlatformMetadata(
-            name="webchat", id="webchat", description="test", support_ui_interaction=True
-        ),
-        "webchat!alice!session-1",
-    )
+    message.session_id = "webchat!alice!session-1"
+    adapter = webchat_adapter.WebChatAdapter({"id": "webchat"}, {}, asyncio.Queue())
+    event = adapter.create_event(message)
     event.send = AsyncMock()
     record = store.create(
-        event,
         __name__,
+        spec,
         event.view_result(name="results", data={"items": [1, 2]}, text="Two items"),
+        owner="alice",
+        session_id="session-1",
+        platform_id="webchat",
+        history_platform_id="webchat",
+        run_id="run-1",
     )
     return store, event, plugin, record
 
@@ -258,12 +302,12 @@ def test_create_and_update_contract_and_button_isolation(views):
 )
 def test_view_data_rejects_invalid_values(data):
     with pytest.raises((ValueError, TypeError)):
-        chatui.ViewResult(name="results", data=data, text="Result")
+        interactive_ui.ViewResult(name="results", data=data, text="Result")
 
 
 def test_view_data_is_copied():
     data = {"items": [1]}
-    result = chatui.ViewResult(name="results", data=data, text="Result")
+    result = interactive_ui.ViewResult(name="results", data=data, text="Result")
     data["items"].append(2)
     assert result.data == {"items": [1]}
 
@@ -363,12 +407,8 @@ async def test_command_card_falls_back_without_view_capability(
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("coroutine", [False, True])
-@pytest.mark.parametrize("platform_name", ["webchat", "custom_chatui"])
-async def test_message_handlers_can_create_cards_without_tools(
-    views, coroutine, platform_name
-):
+async def test_message_handlers_can_create_cards_without_tools(views, coroutine):
     store, event, _, _ = views
-    event.platform_meta.name = platform_name
 
     async def handler(event):
         """Create a card from an ordinary event.
@@ -398,9 +438,12 @@ async def test_message_handlers_can_create_cards_without_tools(
 
     async for _ in call_handler(event, returning_handler if coroutine else handler):
         pass
-    chain = event.send.await_args.args[0]
-    assert chain.type == "chatui_view"
-    assert store.get(chain.chain[0].data["id"])["data"] == {"from": "command"}
+    (component,) = event.send.await_args.args[0].chain
+    assert isinstance(component, InteractiveView)
+    record = store.get(component.view_id)
+    assert record["platform_id"] == "webchat"
+    assert record["session_id"] == "session-1"
+    assert record["data"] == {"from": "command"}
 
 
 @pytest.mark.asyncio
@@ -465,7 +508,7 @@ def test_persisted_actions_revision_and_replay(views):
     with pytest.raises(ViewError) as reused:
         restored.begin(record["id"], request.model_copy(update={"data": {"id": 2}}))
     assert reused.value.code == "INVALID_INPUT"
-    store.delete_session("session-1")
+    store.delete_session("webchat", "session-1")
     with pytest.raises(ViewError):
         store.get(record["id"])
 
@@ -492,8 +535,36 @@ async def test_concurrent_actions_only_reserve_once(views):
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("fail", [False, True])
-async def test_callback_commit_and_ack_precede_model_generation(views, fail):
-    store, event, _, record = views
+@pytest.mark.parametrize("platform_id", ["webchat", "custom_im"])
+async def test_callback_commit_and_ack_precede_model_generation(views, fail, platform_id):
+    store, event, plugin, record = views
+    if platform_id == "custom_im":
+        message = event.message_obj
+        message.raw_message = {"native": {"session": "session-1"}}
+        Path(plugin.module.__file__).with_name("views").joinpath(
+            "results", "index.html"
+        ).unlink()
+        event = AstrMessageEvent(
+            "show",
+            message,
+            PlatformMetadata(
+                name=platform_id,
+                id=platform_id,
+                description="test",
+                support_ui_interaction=True,
+            ),
+            "session-1",
+        )
+        event.send = AsyncMock()
+        await core_views.emit_view(
+            event, __name__, event.view_result(name="results", data={}, text="Card")
+        )
+        component = event.send.await_args.args[0].chain[0]
+        assert isinstance(component, InteractiveView)
+        record = store.get(component.view_id)
+        assert record["platform_id"] == "custom_im"
+        assert record["session_id"] == "session-1"
+        store.delete_session("webchat", "session-1")
     action = ViewActionRequest(
         action_id="demo:select", interaction_id="click-1", expected_revision=1
     )
@@ -575,9 +646,16 @@ def test_disabled_version_and_escaping_resources_rejected(views, tmp_path):
 @pytest.mark.asyncio
 async def test_routes_check_owner_source_and_declared_actions(views):
     store, _, plugin, record = views
-    store.bind_message(record["id"], "42")
+    store.bind_message(
+        record["id"],
+        "42",
+        platform_id="webchat",
+        session_id="session-1",
+        history_platform_id="webchat",
+    )
     history = SimpleNamespace(
         is_active=True,
+        platform_id="webchat",
         user_id="session-1",
         content={"message": [{"type": "view", "id": record["id"]}]},
     )
@@ -819,13 +897,13 @@ async def test_workbench_catalog_only_exposes_enabled_launcher_views(views, tmp_
 
 
 def test_workbench_launcher_also_allows_message_actions():
-    spec = chatui.ViewSpec(
+    spec = interactive_ui.ViewSpec(
         name="context", target="chat_workbench_with_launcher", actions=["demo:select"]
     )
     assert spec.actions == ["demo:select"]
     assert spec.entry == Path("views/context/index.html")
     with pytest.raises(ValueError):
-        chatui.ViewSpec(name="context", target="chat_workbench", launcher=True)
+        interactive_ui.ViewSpec(name="context", target="chat_workbench", launcher=True)
 
 
 @pytest.mark.asyncio
@@ -860,7 +938,7 @@ async def test_default_message_titles_keep_metadata_for_live_localization(views)
     spec.title = "Default title"
     plugin.i18n = {"en-US": {"views": {"results": {"title": "Translated"}}, "metadata": {"secret": "Unrelated"}}}
     await core_views.emit_view(event, __name__, event.view_result(name="results", data={}, text="Opened"))
-    part = event.send.await_args.args[0].chain[0].data
+    part = serialize_webchat_view(event.send.await_args.args[0].chain[0])
     assert part["title"] == ""
     assert part["view_metadata"]["title"] == "Default title"
     assert part["view_metadata"]["i18n"]["en-US"] == {"views": {"results": {"title": "Translated"}}}

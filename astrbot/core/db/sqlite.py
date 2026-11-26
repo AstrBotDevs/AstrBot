@@ -173,7 +173,8 @@ class SQLiteDatabase(BaseDatabase):
             await conn.execute(
                 text(
                     "CREATE TABLE IF NOT EXISTS interactive_views ("
-                    "id TEXT PRIMARY KEY, owner TEXT, session_id TEXT, platform TEXT, "
+                    "id TEXT PRIMARY KEY, owner TEXT, session_id TEXT, "
+                    "platform_id TEXT, history_platform_id TEXT, "
                     "module TEXT, name TEXT, version INTEGER, revision INTEGER, "
                     "data TEXT, text TEXT, message_id TEXT, run_id TEXT)"
                 )

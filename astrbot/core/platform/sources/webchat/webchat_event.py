@@ -12,6 +12,7 @@ from astrbot.api.message_components import (
     Button,
     File,
     Image,
+    InteractiveView,
     Json,
     Plain,
     Record,
@@ -24,6 +25,7 @@ from astrbot.core.utils.media_utils import (
     detect_image_mime_type_async,
 )
 
+from .message_parts_helper import serialize_webchat_view
 from .webchat_queue_mgr import webchat_queue_mgr
 
 attachments_dir = os.path.join(get_astrbot_data_path(), "attachments")
@@ -71,18 +73,28 @@ class WebChatMessageEvent(AstrMessageEvent):
                 )
                 if not accepted:
                     return None
+            elif isinstance(comp, InteractiveView):
+                accepted = await webchat_queue_mgr.put_back_queue(
+                    request_id,
+                    {
+                        "type": "view",
+                        "data": serialize_webchat_view(comp),
+                        "streaming": streaming,
+                        "message_id": message_id,
+                    },
+                )
+                if not accepted:
+                    return None
             elif isinstance(comp, Json):
                 accepted = await webchat_queue_mgr.put_back_queue(
                     request_id,
                     {
                         "type": {
-                            "chatui_view": "view",
                             "chatui_error": "error",
                             "ui_action_result": "ui_action_result",
                         }.get(message.type, "plain"),
                         "data": comp.data
-                        if message.type
-                        in {"chatui_view", "ui_action_result", "chatui_error"}
+                        if message.type in {"ui_action_result", "chatui_error"}
                         else json.dumps(comp.data, ensure_ascii=False),
                         "streaming": streaming,
                         "chain_type": message.type,

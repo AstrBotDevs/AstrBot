@@ -8,8 +8,8 @@ from typing import Any
 from fastapi import APIRouter, Depends, File, Form, Query, Request, UploadFile
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 
-from astrbot.core.chatui import ViewActionRequest, ViewError, view_store
 from astrbot.core.message.components import UIInteraction, ViewContext
+from astrbot.core.message.interactive_ui import ViewActionRequest, ViewError, view_store
 from astrbot.dashboard.async_utils import run_maybe_async
 from astrbot.dashboard.responses import error, ok
 from astrbot.dashboard.schemas import (
@@ -220,11 +220,11 @@ async def run_chat_view_action(
             "session_id": record["session_id"],
             "message": [{"type": "plain", "text": payload.action_id}],
             "_skip_user_history": True,
-            "_platform_history_id": record["platform"],
+            "_platform_history_id": record["history_platform_id"],
             "_api_key_allow_admin_role": auth.via != "api_key"
             or "chat:admin" in auth.scopes,
         }
-        if record["platform"] == "webchat_thread":
+        if record["history_platform_id"] == "webchat_thread":
             thread = await service.db.get_webchat_thread_by_id(record["session_id"])
             post_data["_thread_selected_text"] = thread.selected_text
         try:

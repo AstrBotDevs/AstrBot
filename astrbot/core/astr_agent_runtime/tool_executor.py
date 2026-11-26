@@ -35,8 +35,8 @@ from astrbot.core.astr_agent_runtime.tools.computer_tools import (
     PythonTool,
     ShellSessionTool,
 )
-from astrbot.core.chatui import ViewResult, emit_view
 from astrbot.core.message.components import Image
+from astrbot.core.message.interactive_ui import ViewResult, emit_view
 from astrbot.core.message.message_event_result import (
     MessageChain,
 )

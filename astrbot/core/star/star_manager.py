@@ -527,7 +527,7 @@ class PluginManager:
                 _PluginUpdater.validate_plugin_metadata(metadata, metadata_label)
             except ValueError as exc:
                 raise Exception(f"插件元数据校验失败：{exc!s}") from exc
-            from astrbot.core.chatui import ViewSpec
+            from astrbot.core.message.interactive_ui import ViewSpec
 
             raw_views = metadata.get("views", metadata.get("pages", []))
             if not isinstance(raw_views, list):
@@ -1300,7 +1300,9 @@ class PluginManager:
                     metadata.activated = not plugin_disabled
 
                     if not plugin_disabled and metadata.star_cls is not None:
-                        from astrbot.core.chatui import resolve_view
+                        from astrbot.core.platform.sources.webchat.message_parts_helper import (
+                            resolve_view,
+                        )
                         from astrbot.core.star.filter.ui_action import UIActionFilter
 
                         action_filters = [
@@ -1310,9 +1312,10 @@ class PluginManager:
                             if isinstance(item, UIActionFilter)
                         ]
                         for spec in metadata.views:
-                            resolve_view(
-                                metadata.module_path, spec.name, target=spec.target
-                            )
+                            if spec.target == "plugin_page":
+                                resolve_view(
+                                    metadata.module_path, spec.name, target=spec.target
+                                )
                             for action in spec.actions:
                                 if not any(
                                     item.action_id in (None, action)

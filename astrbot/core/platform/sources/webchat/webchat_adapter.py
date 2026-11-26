@@ -8,6 +8,7 @@ from typing import Any
 from astrbot import logger
 from astrbot.core import db_helper
 from astrbot.core.db.po import PlatformMessageHistory
+from astrbot.core.message.interactive_ui import view_store
 from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.platform import (
     AstrBotMessage,
@@ -147,13 +148,26 @@ class WebChatAdapter(Platform):
         if not message_parts:
             return
 
-        await db_helper.insert_platform_message_history(
-            platform_id="webchat",
+        view_parts = [part for part in message_parts if part["type"] == "view"]
+        history_platform_id = "webchat"
+        if view_parts and await db_helper.get_webchat_thread_by_id(conversation_id):
+            history_platform_id = "webchat_thread"
+        record = await db_helper.insert_platform_message_history(
+            platform_id=history_platform_id,
             user_id=conversation_id,
             content={"type": "bot", "message": message_parts},
             sender_id="bot",
             sender_name="bot",
         )
+        for part in view_parts:
+            await asyncio.to_thread(
+                view_store.bind_message,
+                part["id"],
+                str(record.id),
+                platform_id=self.meta().id,
+                session_id=conversation_id,
+                history_platform_id=history_platform_id,
+            )
 
     async def _get_message_history(
         self, message_id: int
@@ -257,6 +271,13 @@ class WebChatAdapter(Platform):
         if isinstance(raw_message, tuple) and len(raw_message) >= 3:
             payload = raw_message[2]
             if isinstance(payload, dict):
+                message_event.set_extra(
+                    "view_session_id", _extract_conversation_id(message.session_id)
+                )
+                message_event.set_extra(
+                    "view_history_platform_id",
+                    payload.get("_platform_history_id", self.meta().id),
+                )
                 # This object is supplied only by the authenticated view action route.
                 from astrbot.core.message.components import UIInteraction
 

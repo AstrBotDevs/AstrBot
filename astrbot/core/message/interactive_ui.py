@@ -1,22 +1,28 @@
-"""Plugin view declarations and durable ChatUI interaction state."""
+"""Plugin view declarations and durable interactive message state."""
 
 from __future__ import annotations
 
+import asyncio
 import json
 import sqlite3
 import time
 import uuid
 from contextlib import closing, contextmanager
 from pathlib import Path
-from typing import Any, Literal
+from typing import TYPE_CHECKING, Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from astrbot.core.config.default import DB_PATH
+from astrbot.core.message.components import InteractiveView
+from astrbot.core.message.message_event_result import MessageChain
+
+if TYPE_CHECKING:
+    from astrbot.core.platform.astr_message_event import AstrMessageEvent
 
 
 class ViewSpec(BaseModel):
-    """Declare an HTML view's host and permitted chat actions."""
+    """Declare a plugin view and its permitted actions."""
 
     model_config = ConfigDict(extra="forbid")
     name: str = Field(pattern=r"^[a-zA-Z0-9_-]+$")
@@ -134,26 +140,26 @@ class ViewError(ValueError):
         self.code = code
 
 
-def resolve_view(
+def resolve_view_spec(
     module: str,
     name: str,
     version: int | None = None,
     *,
     target: str | None = None,
 ):
-    """Resolve a currently enabled plugin's declared view and safe entry path.
+    """Resolve a view declaration from a currently enabled plugin.
 
     Args:
         module: Owning plugin module recorded by the host.
         name: Plugin-local view name.
         version: Required contract version, if restoring an existing instance.
-        target: Exact host to validate, or None to accept any ChatUI host.
+        target: Exact host to validate, or None to select an interactive view.
 
     Returns:
-        The plugin metadata, validated declaration, and resolved entry path.
+        The plugin metadata and validated declaration.
 
     Raises:
-        ViewError: If the plugin, contract, or entry is unavailable.
+        ViewError: If the plugin or view contract is unavailable.
     """
     from astrbot.core.star.star import star_map
 
@@ -163,10 +169,8 @@ def resolve_view(
     for spec in plugin.views:
         if spec.name != name:
             continue
-        if spec.target not in (
-            (target,)
-            if target
-            else ("chat_message", "chat_workbench", "chat_workbench_with_launcher")
+        if (target is not None and spec.target != target) or (
+            target is None and spec.target == "plugin_page"
         ):
             raise ViewError(
                 "VIEW_UNAVAILABLE",
@@ -174,19 +178,11 @@ def resolve_view(
             )
         if version is not None and version != spec.version:
             break
-        root = Path(plugin.module.__file__).resolve().parent
-        entry = (root / spec.entry).resolve()
-        if spec.target == "plugin_page" and not entry.is_file():
-            entry = (root / "pages" / spec.name / "index.html").resolve()
-        if spec.entry.is_absolute() or not entry.is_relative_to(root):
-            break
-        if not entry.is_file():
-            break
-        return plugin, spec, entry
+        return plugin, spec
     raise ViewError("VIEW_UNAVAILABLE", "The view or its version is unavailable.")
 
 
-async def emit_view(event, module: str, result: ViewResult) -> None:
+async def emit_view(event: AstrMessageEvent, module: str, result: ViewResult) -> None:
     """Send a new card from either a tool or a message handler.
 
     Args:
@@ -194,45 +190,33 @@ async def emit_view(event, module: str, result: ViewResult) -> None:
         module: Plugin module owning the handler.
         result: Named card creation result.
     """
-    import asyncio
-
-    from astrbot.core.message.components import Json
-    from astrbot.core.message.message_event_result import MessageChain
-
-    plugin, spec, _ = resolve_view(module, result.name)
+    _, spec = resolve_view_spec(module, result.name)
     if not event.platform_meta.support_ui_interaction:
         return
-    record = await asyncio.to_thread(view_store.create, event, module, result)
+    platform_id = event.get_platform_id()
+    record = await asyncio.to_thread(
+        view_store.create,
+        module,
+        spec,
+        result,
+        owner=event.get_sender_id(),
+        session_id=event.get_extra("view_session_id", event.get_session_id()),
+        platform_id=platform_id,
+        history_platform_id=event.get_extra("view_history_platform_id", platform_id),
+        run_id=str(event.message_obj.message_id),
+    )
     await event.send(
         MessageChain(
             chain=[
-                Json(
-                    {
-                        "id": record["id"],
-                        "name": record["name"],
-                        "text": result.text,
-                        "title": result.title,
-                        "view_metadata": {
-                            "name": spec.name,
-                            "title": spec.title,
-                            "description": spec.description,
-                            "i18n": {
-                                locale: {
-                                    prefix: {spec.name: translations[prefix][spec.name]}
-                                    for prefix in ("views", "pages")
-                                    if isinstance(translations.get(prefix), dict)
-                                    and isinstance(
-                                        translations[prefix].get(spec.name), dict
-                                    )
-                                }
-                                for locale, translations in plugin.i18n.items()
-                            },
-                        },
-                        "target": spec.target,
-                    }
+                InteractiveView(
+                    view_id=record["id"],
+                    module=module,
+                    name=spec.name,
+                    version=spec.version,
+                    title=result.title,
+                    fallback_text=result.text,
                 )
-            ],
-            type="chatui_view",
+            ]
         )
     )
 
@@ -254,25 +238,39 @@ class ViewStore:
             db.row_factory = sqlite3.Row
             yield db
 
-    def create(self, event, module: str, result: ViewResult) -> dict:
+    def create(
+        self,
+        module: str,
+        spec: ViewSpec,
+        result: ViewResult,
+        *,
+        owner: str,
+        session_id: str,
+        platform_id: str,
+        history_platform_id: str,
+        run_id: str,
+    ) -> dict:
         """Persist a card created by a plugin message or tool handler.
 
         Args:
-            event: Authenticated WebChat event.
             module: Owning plugin module.
+            spec: Resolved view declaration.
             result: Validated card creation result.
+            owner: Authenticated actor identifier.
+            session_id: Session identifier for the card's history.
+            platform_id: Unique platform adapter instance identifier.
+            history_platform_id: Adapter's history namespace for the session.
+            run_id: Originating request identifier before message binding.
 
         Returns:
             A serialized view snapshot.
         """
-        plugin, spec, _ = resolve_view(module, result.name)
-        raw = event.message_obj.raw_message
-        owner, session_id, payload = raw
         record = {
             "id": uuid.uuid4().hex,
             "owner": owner,
             "session_id": session_id,
-            "platform": payload.get("_platform_history_id", "webchat"),
+            "platform_id": platform_id,
+            "history_platform_id": history_platform_id,
             "module": module,
             "name": spec.name,
             "version": spec.version,
@@ -280,12 +278,13 @@ class ViewStore:
             "data": result.data,
             "text": result.text,
             "message_id": None,
-            "run_id": str(event.message_obj.message_id),
+            "run_id": run_id,
         }
         with self.connect() as db:
             stored = {**record, "data": json.dumps(record["data"], ensure_ascii=False)}
             db.execute(
-                "INSERT INTO interactive_views VALUES (:id,:owner,:session_id,:platform,"
+                "INSERT INTO interactive_views VALUES "
+                "(:id,:owner,:session_id,:platform_id,:history_platform_id,"
                 ":module,:name,:version,:revision,:data,:text,:message_id,:run_id)",
                 stored,
             )
@@ -313,17 +312,29 @@ class ViewStore:
         record["data"] = json.loads(record["data"])
         return record
 
-    def bind_message(self, view_id: str, message_id: str) -> None:
+    def bind_message(
+        self,
+        view_id: str,
+        message_id: str,
+        *,
+        platform_id: str,
+        session_id: str,
+        history_platform_id: str,
+    ) -> None:
         """Associate a card with its persisted source message.
 
         Args:
             view_id: Instance identifier.
             message_id: Saved message identifier.
+            platform_id: Adapter instance that saved the message.
+            session_id: Session that owns the message.
+            history_platform_id: History namespace that contains the message.
         """
         with self.connect() as db:
             db.execute(
-                "UPDATE interactive_views SET message_id=? WHERE id=?",
-                (message_id, view_id),
+                "UPDATE interactive_views SET message_id=? "
+                "WHERE id=? AND platform_id=? AND session_id=? AND history_platform_id=?",
+                (message_id, view_id, platform_id, session_id, history_platform_id),
             )
 
     def begin(self, view_id: str, request: ViewActionRequest) -> dict | None:
@@ -442,20 +453,22 @@ class ViewStore:
             )
         return result
 
-    def delete_session(self, session_id: str) -> None:
+    def delete_session(self, platform_id: str, session_id: str) -> None:
         """Remove cards and action records belonging to a deleted session.
 
         Args:
+            platform_id: Adapter instance that owns the session.
             session_id: Deleted chat or thread identifier.
         """
         with self.connect() as db:
             db.execute(
                 "DELETE FROM interactive_view_actions WHERE view_id IN "
-                "(SELECT id FROM interactive_views WHERE session_id=?)",
-                (session_id,),
+                "(SELECT id FROM interactive_views WHERE platform_id=? AND session_id=?)",
+                (platform_id, session_id),
             )
             db.execute(
-                "DELETE FROM interactive_views WHERE session_id=?", (session_id,)
+                "DELETE FROM interactive_views WHERE platform_id=? AND session_id=?",
+                (platform_id, session_id),
             )
 
 
