@@ -6,6 +6,7 @@ import asyncio
 from abc import ABC, abstractmethod
 from collections.abc import AsyncIterator, Awaitable, Callable, Generator
 from contextlib import AbstractAsyncContextManager, nullcontext
+from contextvars import ContextVar
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from enum import Enum
@@ -36,6 +37,11 @@ if TYPE_CHECKING:
     from astrbot.core.astr_agent_context import AstrAgentContext
     from astrbot.core.platform.astr_message_event import AstrMessageEvent
     from astrbot.core.skills.skill_manager import SkillInfo
+
+
+_current_agent_turn: ContextVar[AgentTurn | None] = ContextVar(
+    "current_agent_turn", default=None
+)
 
 
 class AgentRole(str, Enum):
@@ -387,11 +393,15 @@ class AgentSession(ABC):
                     self.active_turn = turn
                     turn.emit(TurnStarted())
                     async with self._execution_scope():
-                        if admit is not None and not await admit():
-                            result = TurnResult(reason="skipped")
-                        else:
-                            turn._execution_started = True
-                            result = await self.execute_turn(turn)
+                        token = _current_agent_turn.set(turn)
+                        try:
+                            if admit is not None and not await admit():
+                                result = TurnResult(reason="skipped")
+                            else:
+                                turn._execution_started = True
+                                result = await self.execute_turn(turn)
+                        finally:
+                            _current_agent_turn.reset(token)
             except asyncio.CancelledError as exc:
                 result = TurnResult(
                     status=TurnStatus.CANCELLED,

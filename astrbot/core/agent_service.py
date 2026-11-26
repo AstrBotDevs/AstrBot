@@ -29,9 +29,11 @@ from astrbot.core.agent.runtime import (
     RuntimeEvent,
     SessionState,
     TurnResult,
+    _current_agent_turn,
 )
 from astrbot.core.agent_input import prepare_agent_input
 from astrbot.core.agent_output import deliver_agent_turn
+from astrbot.core.astr_agent_runtime.subagents.caller import DelegatedAgentInput
 from astrbot.core.log import log_context
 from astrbot.core.message import components as Comp
 from astrbot.core.platform.agent_wakeup_event import AgentWakeupEvent
@@ -267,6 +269,44 @@ class AgentService:
         if not isinstance(runtime, AgentRuntime):
             raise TypeError("runtime must implement AgentRuntime")
         self._runtimes[name] = runtime
+
+    async def _continuation_target(self, event: AstrMessageEvent) -> AgentSessionRef:
+        """Bind a continuation to the originating or currently selected session.
+
+        Args:
+            event: Host event on whose behalf a plugin submitted a continuation.
+
+        Returns:
+            Runtime and conversation identity captured before queuing.
+
+        Raises:
+            RuntimeError: If the configured runtime is unavailable.
+        """
+        turn = _current_agent_turn.get()
+        if turn is not None and turn.input.event is not event:
+            turn = None
+        delegated = turn is not None and isinstance(turn.input, DelegatedAgentInput)
+        if not delegated:
+            if turn is not None:
+                return AgentSessionRef(turn.session.runtime_name, turn.session.id)
+            if isinstance(event, AgentWakeupEvent) and event.agent_session is not None:
+                return event.agent_session
+        umo = event.unified_msg_origin
+        config = self.context.get_config(umo=umo).get("agent", {})
+        runtime_name = config.get("runtime", "astrbot")
+        runtime = self._runtimes.get(runtime_name)
+        if runtime is None:
+            raise RuntimeError(f"Agent runtime unavailable: {runtime_name}")
+        session = await runtime.open_session(
+            umo,
+            # Delegated inputs reuse the parent event, which can pin an older
+            # conversation. Resolve the current main session for a child wakeup.
+            input=None
+            if delegated
+            else AgentInput(event, AgentPermissions.from_event(event)),
+            options={"config": deepcopy(config.get("config", {}))},
+        )
+        return AgentSessionRef(runtime_name, session.id)
 
     def _make_event(
         self,

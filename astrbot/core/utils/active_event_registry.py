@@ -4,6 +4,7 @@ import asyncio
 from collections import defaultdict
 from collections.abc import Callable
 from typing import TYPE_CHECKING
+from weakref import WeakSet
 
 if TYPE_CHECKING:
     from astrbot.core.platform import AstrMessageEvent
@@ -17,6 +18,7 @@ class ActiveEventRegistry:
 
     def __init__(self) -> None:
         self._events: dict[str, set[AstrMessageEvent]] = defaultdict(set)
+        self._pending_continuations: WeakSet[AstrMessageEvent] = WeakSet()
         self._agent_stop_callbacks: dict[AstrMessageEvent, set[Callable[[], None]]] = (
             defaultdict(set)
         )
@@ -34,6 +36,22 @@ class ActiveEventRegistry:
         self._events[umo].discard(event)
         if not self._events[umo]:
             del self._events[umo]
+
+    def register_pending_continuation(self, event: AstrMessageEvent) -> None:
+        """Track a continuation before it can wait in the queue.
+
+        Args:
+            event: The managed event about to be enqueued.
+        """
+        self._pending_continuations.add(event)
+
+    def discard_pending_continuation(self, event: AstrMessageEvent) -> None:
+        """Remove a managed event that can no longer start.
+
+        Args:
+            event: The managed event discarded or completed by the dispatcher.
+        """
+        self._pending_continuations.discard(event)
 
     def register_agent_stop_callback(
         self,
@@ -191,6 +209,12 @@ class ActiveEventRegistry:
         """
         tasks = self._background_tasks.get(umo, {})
         events = set(self._events.get(umo, []))
+        events.update(
+            event
+            for event in self._pending_continuations
+            if event.unified_msg_origin == umo
+            and not self.get_background_stop_signal(event).is_set()
+        )
         events.update(event for task, event in tasks.items() if not task.done())
         events.update(
             event

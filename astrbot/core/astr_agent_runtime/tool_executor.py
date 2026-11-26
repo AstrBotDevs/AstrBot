@@ -17,7 +17,7 @@ from astrbot.core.agent.run_context import ContextWrapper
 from astrbot.core.agent.runtime import get_agent_permissions
 from astrbot.core.agent.tool import FunctionTool, ToolSet
 from astrbot.core.agent.tool_executor import BaseFunctionToolExecutor
-from astrbot.core.agent_wakeup import wake_main_agent
+from astrbot.core.agent_wakeup import _queue_agent_wakeup as wake_main_agent
 from astrbot.core.astr_agent_runtime.context import AstrAgentContext
 from astrbot.core.astr_agent_runtime.tools.computer_tools import (
     CuaKeyboardTypeTool,

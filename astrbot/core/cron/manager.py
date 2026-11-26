@@ -466,7 +466,7 @@ class CronJobManager:
             "cron_payload": payload,
         }
 
-        from astrbot.core.agent_wakeup import wake_main_agent
+        from astrbot.core.agent_wakeup import _queue_agent_wakeup
 
         cfg = self.ctx.get_config(umo=umo)
         role = (
@@ -480,7 +480,7 @@ class CronJobManager:
             )
             else "member"
         )
-        await wake_main_agent(
+        await _queue_agent_wakeup(
             self.ctx,
             umo=umo,
             source="cron",
