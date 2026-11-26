@@ -2635,7 +2635,7 @@ async def test_plugin_service_market_install_uses_registry_entry(
     assert result == {"name": "astrbot_plugin_demo"}
     assert message == "安装成功。"
     assert captured["registry_url"] == "https://example.com/plugins.json"
-    assert captured["force_refresh"] is False
+    assert captured["force_refresh"] is True
     assert captured["repo_url"] == "https://github.com/AstrBotDevs/astrbot-plugin-demo"
     assert captured["download_url"] == "https://cdn.example/market-plugin.zip"
     assert captured["proxy"] == "https://proxy.example"
@@ -2886,7 +2886,7 @@ async def test_plugin_service_bind_market_source_validates_and_persists(
 
     assert message == "插件源已更新。"
     assert captured["registry_url"] == "https://example.com/plugins.json"
-    assert captured["force_refresh"] is False
+    assert captured["force_refresh"] is True
     assert record["install_method"] == "market"
     assert record["registry_url"] == "https://example.com/plugins.json"
     assert record["market_plugin_id"] == "AstrBotDevs/astrbot-plugin-demo"
@@ -5183,3 +5183,36 @@ async def test_chat_transcription_requires_auth_and_passes_selected_provider(
     assert response.status_code == 200
     assert response.json()["data"] == {"text": "dictated words", "provider_id": "stt-2"}
     assert received == [(b"recording", "stt-2")]
+
+
+@pytest.mark.asyncio
+async def test_v1_plugin_market_forwards_force_refresh(
+    asgi_app: FastAPI,
+    asgi_client: httpx.AsyncClient,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    plugin_service = asgi_app.state.services.plugins
+    captured: dict[str, object] = {}
+
+    async def fake_get_online_plugins(*, custom_registry, force_refresh):
+        captured["custom_registry"] = custom_registry
+        captured["force_refresh"] = force_refresh
+        return {"a/b": {"name": "b"}}, None
+
+    monkeypatch.setattr(plugin_service, "get_online_plugins", fake_get_online_plugins)
+
+    response = await asgi_client.get(
+        "/api/v1/plugins/market",
+        params={
+            "custom_registry": "https://example.com/registry.json",
+            "force_refresh": "true",
+        },
+        headers=_jwt_headers(),
+    )
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "ok"
+    assert captured == {
+        "custom_registry": "https://example.com/registry.json",
+        "force_refresh": True,
+    }

@@ -40,6 +40,11 @@ from astrbot.core.star.star_manager import (
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path, get_astrbot_temp_path
 
 PLUGIN_UPDATE_CONCURRENCY = 3
+
+
+# Seconds a cache that cannot be verified against the registry may be served
+# before it is refreshed, so sources without an MD5 endpoint do not stay stale.
+UNVERIFIED_CACHE_MAX_AGE_S = 300
 PLUGIN_OPERATION_FAILED_MESSAGE = "插件操作失败，请查看服务端日志。"
 PLUGIN_UPDATE_FAILED_MESSAGE = "更新失败，请查看服务端日志。"
 PLUGIN_INSTALL_SOURCES_KEY = "plugin_install_sources"
@@ -65,6 +70,17 @@ class RegistrySource:
     urls: list[str]
     cache_file: str
     md5_url: str | None
+
+
+@dataclass(frozen=True)
+class PluginMarketCacheSnapshot:
+    """Parsed plugin market cache entry."""
+
+    data: Any
+    md5: str
+    registry_id: str | None
+    source_index: int | None
+    timestamp: str
 
 
 class PluginServiceError(Exception):
@@ -1002,21 +1018,24 @@ class PluginService:
         force_refresh: bool,
     ) -> tuple[Any, str | None]:
         source = self.build_registry_source(custom_registry)
+        registry_id = self.registry_id(source)
+        request_started = datetime.now().isoformat()
 
-        cached_data = None
-        if not force_refresh and await self.is_cache_valid(source):
-            cached_data = self.load_plugin_cache(source.cache_file)
-            if cached_data:
-                logger.debug(
-                    "The cached MD5 matches; using cached plugin marketplace data."
-                )
-                return cached_data, None
+        entry = self.load_plugin_cache_entry(source.cache_file)
+        if entry is not None and await self.is_cache_valid(
+            source,
+            entry=entry,
+            require_verification=force_refresh,
+        ):
+            logger.debug(
+                "Using cached plugin marketplace data for %s.", source.cache_file
+            )
+            return entry.data, None
 
-        remote_data = None
         ssl_context = ssl.create_default_context(cafile=certifi.where())
         connector = aiohttp.TCPConnector(ssl=ssl_context)
 
-        for url in source.urls:
+        for index, url in enumerate(source.urls):
             try:
                 async with (
                     aiohttp.ClientSession(
@@ -1026,11 +1045,14 @@ class PluginService:
                     session.get(url) as response,
                 ):
                     if response.status == 200:
+                        raw = await response.read()
                         try:
-                            remote_data = await response.json()
-                        except aiohttp.ContentTypeError:
-                            remote_text = await response.text()
-                            remote_data = json.loads(remote_text)
+                            remote_data = json.loads(raw)
+                        except json.JSONDecodeError as exc:
+                            logger.error(
+                                f"Invalid plugin marketplace JSON from {url}: {exc}"
+                            )
+                            continue
 
                         if not remote_data or (
                             isinstance(remote_data, dict) and len(remote_data) == 0
@@ -1044,11 +1066,32 @@ class PluginService:
                             "Fetched remote plugin marketplace data successfully; "
                             f"received {len(remote_data)} plugins."
                         )
-                        current_md5 = await self.fetch_remote_md5(source.md5_url)
+
+                        # A redirect from a configured URL keeps the requested
+                        # URL's provenance; only configured fallbacks count as
+                        # mirror data.
+                        final_url = str(response.url)
+                        source_index = (
+                            source.urls.index(final_url)
+                            if final_url in source.urls
+                            else index
+                        )
+
+                        current_md5 = None
+                        if source_index == 0:
+                            current_md5 = await self.fetch_remote_md5(source.md5_url)
+                            if current_md5 != hashlib.md5(raw).hexdigest():
+                                # The registry changed between the payload and the
+                                # MD5 response; do not claim a verified hash.
+                                current_md5 = None
+
                         self.save_plugin_cache(
                             source.cache_file,
                             remote_data,
                             current_md5,
+                            registry_id=registry_id,
+                            source_index=source_index,
+                            timestamp=request_started,
                         )
                         return remote_data, None
                     logger.error(
@@ -1057,14 +1100,11 @@ class PluginService:
             except Exception as exc:
                 logger.error(f"Request to {url} failed: {exc}")
 
-        if not cached_data:
-            cached_data = self.load_plugin_cache(source.cache_file)
-
-        if cached_data:
+        if entry is not None and entry.registry_id == registry_id:
             logger.warning(
                 "Failed to fetch remote plugin marketplace data; using cached data."
             )
-            return cached_data, "使用缓存数据，可能不是最新版本"
+            return entry.data, "使用缓存数据，可能不是最新版本"
 
         raise PluginServiceError("获取插件列表失败，且没有可用的缓存数据")
 
@@ -1101,19 +1141,6 @@ class PluginService:
         return RegistrySource(urls=urls, cache_file=cache_file, md5_url=md5_url)
 
     @staticmethod
-    def load_cached_md5(cache_file: str) -> str | None:
-        if not os.path.exists(cache_file):
-            return None
-
-        try:
-            with open(cache_file, encoding="utf-8") as file:
-                cache_data = json.load(file)
-            return cache_data.get("md5")
-        except Exception as exc:
-            logger.warning(f"Failed to load cached MD5: {exc}")
-            return None
-
-    @staticmethod
     async def fetch_remote_md5(md5_url: str | None) -> str | None:
         if not md5_url:
             return None
@@ -1131,59 +1158,157 @@ class PluginService:
             ):
                 if response.status == 200:
                     data = await response.json()
-                    return data.get("md5", "")
+                    return data.get("md5") or None
         except Exception as exc:
             logger.debug(f"Failed to fetch remote MD5: {exc}")
         return None
 
-    async def is_cache_valid(self, source: RegistrySource) -> bool:
+    @staticmethod
+    def registry_id(source: RegistrySource) -> str:
+        """Return a short identifier for the registry a source points at."""
+        return hashlib.sha256(source.urls[0].encode()).hexdigest()[:16]
+
+    @staticmethod
+    def cache_is_fresh(entry: PluginMarketCacheSnapshot) -> bool:
+        """Return whether an unverifiable cache is still within its max age."""
         try:
-            cached_md5 = self.load_cached_md5(source.cache_file)
-            if not cached_md5:
-                logger.debug("MD5 not found in cache, treating cache as invalid")
-                return False
+            written_at = datetime.fromisoformat(entry.timestamp)
+        except (TypeError, ValueError):
+            return False
+        now = datetime.now(written_at.tzinfo) if written_at.tzinfo else datetime.now()
+        age = (now - written_at).total_seconds()
+        return age <= UNVERIFIED_CACHE_MAX_AGE_S
+
+    async def is_cache_valid(
+        self,
+        source: RegistrySource,
+        *,
+        entry: PluginMarketCacheSnapshot,
+        require_verification: bool,
+    ) -> bool:
+        """Return whether the cached marketplace payload can be served.
+
+        Args:
+            source: Registry URLs and cache location for this request.
+            entry: Parsed cache file.
+            require_verification: Reject a cache that cannot be verified against
+                the primary MD5; set on an explicit refresh.
+
+        Returns:
+            True when the cached payload may be served without downloading.
+        """
+        if entry.registry_id != self.registry_id(source):
+            # Cache written for another registry, or by a version without
+            # provenance tracking.
+            return False
+
+        if entry.source_index == 0:
+            if not entry.md5:
+                if require_verification:
+                    return False
+                if await self.fetch_remote_md5(source.md5_url):
+                    # The MD5 endpoint is reachable now, so download once to
+                    # record a hash instead of leaving the cache unverifiable.
+                    return False
+                return self.cache_is_fresh(entry)
 
             remote_md5 = await self.fetch_remote_md5(source.md5_url)
-            if remote_md5 is None:
+            if not remote_md5:
+                if require_verification:
+                    logger.info(
+                        "Cannot fetch remote MD5; downloading the registry again"
+                    )
+                    return False
                 logger.warning(
                     "Cannot fetch remote MD5, using cache without validation"
                 )
                 return True
 
-            is_valid = cached_md5 == remote_md5
+            is_valid = entry.md5 == remote_md5
             logger.debug(
-                f"Plugin cache: local={cached_md5}, remote={remote_md5}, effective={is_valid}",
+                f"Plugin cache: local={entry.md5}, remote={remote_md5}, effective={is_valid}",
             )
             return is_valid
 
-        except Exception as exc:
-            logger.warning(f"Failed to validate the plugin marketplace cache: {exc}")
+        # Mirror or redirected payload: never treated as verified primary data.
+        if require_verification:
             return False
+        # Ordinary request: refresh from the primary registry once it is back.
+        if await self.fetch_remote_md5(source.md5_url):
+            return False
+        return self.cache_is_fresh(entry)
 
     @staticmethod
-    def load_plugin_cache(cache_file: str):
+    def load_plugin_cache_entry(cache_file: str) -> PluginMarketCacheSnapshot | None:
+        """Read the marketplace cache file.
+
+        Args:
+            cache_file: Cache file written by :meth:`save_plugin_cache`.
+
+        Returns:
+            The cached payload with its provenance, or None when the file is
+            missing or does not contain cached marketplace data.
+        """
+        if not os.path.exists(cache_file):
+            return None
+
         try:
-            if os.path.exists(cache_file):
-                with open(cache_file, encoding="utf-8") as file:
-                    cache_data = json.load(file)
-                    if "data" in cache_data and "timestamp" in cache_data:
-                        logger.debug(
-                            f"Loading cached file: {cache_file}, Cache time: {cache_data['timestamp']}",
-                        )
-                        return cache_data["data"]
+            with open(cache_file, encoding="utf-8") as file:
+                cache_data = json.load(file)
         except Exception as exc:
             logger.warning(f"Failed to load plugin market cache: {exc}")
-        return None
+            return None
+
+        if not isinstance(cache_data, dict):
+            logger.warning(f"Unexpected plugin market cache content: {cache_file}")
+            return None
+
+        data = cache_data.get("data")
+        timestamp = cache_data.get("timestamp")
+        if not data or not timestamp:
+            return None
+
+        logger.debug(f"Loading cached file: {cache_file}, Cache time: {timestamp}")
+        source_index = cache_data.get("source_index")
+        return PluginMarketCacheSnapshot(
+            data=data,
+            md5=cache_data.get("md5") or "",
+            registry_id=cache_data.get("registry_id"),
+            source_index=source_index if isinstance(source_index, int) else None,
+            timestamp=timestamp,
+        )
 
     @staticmethod
-    def save_plugin_cache(cache_file: str, data, md5: str | None = None) -> None:
+    def save_plugin_cache(
+        cache_file: str,
+        data,
+        md5: str | None = None,
+        *,
+        registry_id: str,
+        source_index: int | None,
+        timestamp: str,
+    ) -> None:
+        """Write the marketplace cache file.
+
+        Args:
+            cache_file: Destination path.
+            data: Marketplace payload returned by the registry.
+            md5: MD5 of the registry the payload came from, when known.
+            registry_id: Identifier of the registry the payload came from.
+            source_index: Position of the URL that produced the payload, or
+                None when the payload cannot be tied to a configured URL.
+            timestamp: Time the payload request started, used for freshness
+                checks on caches that cannot be verified.
+        """
         try:
             os.makedirs(os.path.dirname(cache_file), exist_ok=True)
 
             cache_data = {
-                "timestamp": datetime.now().isoformat(),
+                "timestamp": timestamp,
                 "data": data,
                 "md5": md5 or "",
+                "registry_id": registry_id,
+                "source_index": source_index,
             }
 
             with open(cache_file, "w", encoding="utf-8") as file:
@@ -1360,7 +1485,7 @@ class PluginService:
         registry_url = self.normalize_registry_url(payload.get("registry_url"))
         market_data, _ = await self.get_online_plugins(
             custom_registry=registry_url,
-            force_refresh=False,
+            force_refresh=True,
         )
         market_plugin = self.resolve_market_plugin_entry_by_id(
             market_data,
@@ -1436,7 +1561,7 @@ class PluginService:
         registry_url = self.normalize_registry_url(record.get("registry_url"))
         market_data, _ = await self.get_online_plugins(
             custom_registry=registry_url,
-            force_refresh=False,
+            force_refresh=True,
         )
         market_plugin = self.resolve_market_plugin_entry(market_data, record)
         if not market_plugin:
@@ -1532,7 +1657,7 @@ class PluginService:
         registry_url = self.normalize_registry_url(payload.get("registry_url"))
         market_data, _ = await self.get_online_plugins(
             custom_registry=registry_url,
-            force_refresh=False,
+            force_refresh=True,
         )
         market_plugin = self.resolve_market_plugin_entry_by_id(
             market_data,
