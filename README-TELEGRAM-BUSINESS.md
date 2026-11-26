@@ -30,8 +30,10 @@
 
 ### 1. 拉取代码
 
+仓库是公开的，拉取用 HTTPS，**不需要登录**：
+
 ```bash
-git clone --branch feat/telegram-business git@github.com:gonglchuangl/AstrBot.git
+git clone --branch feat/telegram-business https://github.com/gonglchuangl/AstrBot.git
 cd AstrBot
 ```
 
@@ -39,10 +41,12 @@ cd AstrBot
 
 ```bash
 cd /path/to/AstrBot
-git remote add fork git@github.com:gonglchuangl/AstrBot.git
+git remote add fork https://github.com/gonglchuangl/AstrBot.git
 git fetch fork feat/telegram-business
 git checkout -b feat/telegram-business fork/feat/telegram-business
 ```
+
+> 只有“推送（git push）”才需要认证：SSH key 或 GitHub token。只拉代码用 HTTPS 即可。
 
 ### 2. 安装环境（uv，最快）
 
