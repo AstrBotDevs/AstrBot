@@ -104,7 +104,7 @@ if receipt is not None:
 
 `follow_up()` queues a turn in the original runtime and conversation. `steer()` adds input to an active turn: it returns `None` if rejected, or an `InputReceipt` whose awaited boolean indicates whether the input was consumed and saved. Rejected input is not queued automatically. Steering images and files are currently passed as text references.
 
-When steering arrives while a tool result is pending, the built-in executor moves the running tool to the background without executing it again. The foreground receives a handoff result containing the task ID and proceeds with steering. Completion or failure triggers a wakeup in the original runtime conversation. Stopping the session cancels these background tools too; executors without handoff support keep waiting for the tool result.
+In the native runtime, steering interrupts in-progress model generation and starts a new model request in the same turn with the additional input. If a tool batch is already executing, the runner waits for its results and adds the steering input before the next model request. A temporary reminder asks the model to briefly explain how it will adjust when the steer changes its approach and work remains.
 
 For event-backed main sessions, user and assistant messages are committed incrementally. Assistant tool calls are committed before tool execution, and tool results are stored as `message.appended`. `tool.started` and `tool.finished` remain runtime notifications and are not stored in the conversation journal. Missing tool results after an interrupted execution are represented as unknown results when preparing the next turn.
 

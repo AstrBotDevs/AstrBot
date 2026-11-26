@@ -10,7 +10,7 @@ from astrbot.core.agent.agent import Agent
 from astrbot.core.agent.handoff import HandoffTool
 from astrbot.core.agent.run_context import ContextWrapper
 from astrbot.core.agent.runners.tool_loop_agent_runner import ToolLoopAgentRunner
-from astrbot.core.agent.runtime import AgentPermissions, AgentRole, AgentSessionRef
+from astrbot.core.agent.runtime import AgentPermissions, AgentRole
 from astrbot.core.agent.tool import FunctionTool
 from astrbot.core.astr_agent_runtime.tool_executor import FunctionToolExecutor
 from astrbot.core.astr_agent_runtime.tools.computer_tools.shell import ShellSessionTool
@@ -58,7 +58,7 @@ def _build_run_context(message_components: list[object] | None = None):
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("kind", ["detach", "tool", "handoff"])
+@pytest.mark.parametrize("kind", ["tool", "handoff"])
 @pytest.mark.parametrize("authorization", ["restricted_key", "runtime_member", "admin"])
 async def test_background_wakeup_preserves_effective_permissions(
     monkeypatch, kind, authorization
@@ -78,7 +78,6 @@ async def test_background_wakeup_preserves_effective_permissions(
         event.set_extra("_api_key_allow_admin_role", False)
     elif authorization == "runtime_member":
         context.permissions = AgentPermissions()
-    context.agent_session = AgentSessionRef("astrbot", "original")
     queue = asyncio.Queue()
     context.context = SimpleNamespace(
         get_platform_inst=lambda _: SimpleNamespace(
@@ -106,29 +105,17 @@ async def test_background_wakeup_preserves_effective_permissions(
             structuredContent={"status": "done"},
         )
 
-    if kind == "detach":
-        executor = execute()
-        pending = asyncio.create_task(anext(executor))
-        FunctionToolExecutor.detach(
-            tool=_DummyTool(),
-            run_context=run_context,
-            executor=executor,
-            pending_result=pending,
-            task_id="permission-test",
-            arguments={},
-        )
-    else:
-        monkeypatch.setattr(
-            FunctionToolExecutor,
-            "_execute_local" if kind == "tool" else "_execute_handoff",
-            execute,
-        )
-        method = (
-            FunctionToolExecutor._execute_background
-            if kind == "tool"
-            else FunctionToolExecutor._do_handoff_background
-        )
-        await method(_DummyTool(), run_context, "permission-test")
+    monkeypatch.setattr(
+        FunctionToolExecutor,
+        "_execute_local" if kind == "tool" else "_execute_handoff",
+        execute,
+    )
+    method = (
+        FunctionToolExecutor._execute_background
+        if kind == "tool"
+        else FunctionToolExecutor._do_handoff_background
+    )
+    await method(_DummyTool(), run_context, "permission-test")
 
     wakeup = await asyncio.wait_for(queue.get(), timeout=1)
     expected = AgentRole.ADMIN if authorization == "admin" else AgentRole.MEMBER

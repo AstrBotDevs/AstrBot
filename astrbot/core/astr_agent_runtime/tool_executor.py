@@ -35,8 +35,8 @@ from astrbot.core.astr_agent_runtime.tools.computer_tools import (
     PythonTool,
     ShellSessionTool,
 )
-from astrbot.core.chatui import ViewResult, emit_view
 from astrbot.core.message.components import Image
+from astrbot.core.message.interactive_ui import ViewResult, emit_view
 from astrbot.core.message.message_event_result import (
     MessageChain,
 )
@@ -64,104 +64,6 @@ BACKGROUND_TASK_RESULT_WOKE_USER_PROMPT = (
 
 
 class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
-    @classmethod
-    def detach(cls, *, tool, run_context, executor, pending_result, task_id, arguments):
-        """Continue an in-flight tool in the background and wake its original session.
-
-        Args:
-            tool: Tool already executing.
-            run_context: Context of the initiating turn.
-            executor: Owned iterator, resumed after the pending read completes.
-            pending_result: Existing in-flight read; never execute the tool again.
-            task_id: Execution identity linking submission and completion.
-            arguments: Actual tool arguments included in the completion notice.
-
-        Returns:
-            A submission result, or None when no native session can receive completion.
-        """
-        context = run_context.context
-        session = getattr(context, "agent_session", None)
-        if session is None:
-            return None
-        event = context.event
-        permissions = get_agent_permissions(run_context)
-        stop_signal = active_event_registry.get_background_stop_signal(event)
-        if stop_signal.is_set():
-            return None
-
-        async def complete() -> None:
-            result = mcp.types.CallToolResult(content=[])
-            error = None
-            try:
-                # Register after starting so cancellation always runs iterator cleanup.
-                active_event_registry.register_background_task(
-                    event, asyncio.current_task()
-                )
-                try:
-                    item = await pending_result
-                    while True:
-                        if isinstance(item, mcp.types.CallToolResult):
-                            result.content.extend(item.content)
-                            result.isError = result.isError or item.isError
-                            if item.structuredContent is not None:
-                                result.structuredContent = item.structuredContent
-                        item = await anext(executor)
-                except StopAsyncIteration:
-                    pass
-                except Exception as exc:
-                    error = {"code": type(exc).__name__, "message": str(exc)}
-            finally:
-                if not pending_result.done():
-                    pending_result.cancel()
-                await asyncio.gather(pending_result, return_exceptions=True)
-                try:
-                    await executor.aclose()
-                except Exception as exc:
-                    error = {"code": type(exc).__name__, "message": str(exc)}
-            if error is not None:
-                result.isError = True
-                result.content.append(
-                    mcp.types.TextContent(
-                        type="text", text=f"{error['code']}: {error['message']}"
-                    )
-                )
-            try:
-                await wake_main_agent(
-                    ctx=context.context,
-                    umo=event.unified_msg_origin,
-                    source="background_task",
-                    source_id=task_id,
-                    user_prompt=BACKGROUND_TASK_RESULT_WOKE_USER_PROMPT.format(
-                        background_task_result=json.dumps(
-                            {
-                                "task_id": task_id,
-                                "tool_name": tool.name,
-                                "tool_args": arguments,
-                            },
-                            ensure_ascii=False,
-                        )
-                    ),
-                    role=permissions.role.value,
-                    stop_signal=stop_signal,
-                    agent_session=session,
-                    tool_result=(tool.name, result),
-                    source_event=event,
-                )
-            except Exception:
-                logger.exception("Unable to deliver background tool result %s", task_id)
-
-        asyncio.create_task(complete(), name=f"background-tool:{task_id}")
-        return mcp.types.CallToolResult(
-            content=[
-                mcp.types.TextContent(
-                    type="text",
-                    text=f"Tool continues in background. task_id={task_id}. "
-                    "Its result will arrive in a separate wakeup; do not repeat the tool call.",
-                )
-            ],
-            structuredContent={"background_task_id": task_id, "status": "running"},
-        )
-
     @classmethod
     def _collect_image_urls_from_args(cls, image_urls_raw: T.Any) -> list[str]:
         if image_urls_raw is None:

@@ -99,7 +99,7 @@ async def test_platform_callback_honors_row_deadline(
             .callback_data
         )
     elif platform == "discord":
-        token = action_rows_to_discord_view([row]).children[0].custom_id
+        token = (await action_rows_to_discord_view([row])).children[0].custom_id
     elif platform == "qq":
         token = QQOfficialMessageEvent._parse_keyboard(chain)["content"]["rows"][0][
             "buttons"
@@ -180,7 +180,10 @@ async def test_platform_callback_honors_row_deadline(
         ]
     else:
         parts = await message_chain_to_storage_message_parts(
-            chain, insert_attachment=AsyncMock(), attachments_dir=tmp_path
+            chain,
+            session_id="session-1",
+            insert_attachment=AsyncMock(),
+            attachments_dir=tmp_path,
         )
         token = parts[0]["buttons"][0]["action"]["callback_data"]
 

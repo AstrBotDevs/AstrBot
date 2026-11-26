@@ -245,9 +245,7 @@ async def test_mattermost_webhook_acknowledges_then_dispatches_button():
     response = await adapter.webhook_callback(FakeRequest())
 
     assert response == {}
-    await asyncio.sleep(0)
-    await asyncio.sleep(0)
-    event = adapter._event_queue.get_nowait()
+    event = await asyncio.wait_for(adapter._event_queue.get(), timeout=2)
     assert event.get_sender_id() == "user-1"
     assert event.get_session_id() == "channel-1"
     interaction = event.get_button_interaction()

@@ -1,7 +1,7 @@
 # Interactive message component
 
 > [!NOTE]
-> Currently supported only in AstrBot ChatUI.
+> AstrBot includes a card renderer in ChatUI.
 
 Plugins can create HTML cards from commands, message handlers, UI callbacks, or local LLM tools. Creation is not limited to tool calls. Declare each card in `metadata.yaml`, then yield or return `event.view_result()`.
 
@@ -82,7 +82,11 @@ class ViewDemo(Star):
 
 Keep the usual plugin `metadata.yaml`. The entry must be `views/<name>/index.html`, with relative scripts, styles, and assets inside that directory.
 
-Providing `name` creates a new card, including from a UI callback. Omitting `name` replaces the current interaction's card data and requires a UI event. Creation requires nonempty `text` as a fallback. A local tool can directly `return event.view_result(name=..., data=..., text=...)`: the model receives `text`, while display `data` is not automatically added to its context. View support is controlled by `event.platform_meta.support_ui_interaction`, not the platform name. It defaults to `False`; WebChat explicitly enables it. Platforms without this capability use the text fallback. Custom adapters must implement the ChatUI view event and delivery protocol before enabling this flag in both their registration and event metadata.
+Providing `name` creates a new card, including from a UI callback. Omitting `name` replaces the current interaction's card data and requires a UI event. Creation requires nonempty `text` as a fallback. A local tool can directly `return event.view_result(name=..., data=..., text=...)`. The model receives `text`, and display `data` goes to the card. Import `ViewSpec` and `ViewResult` from `astrbot.api.interactive_ui` when you need the Python types.
+
+AstrBot sends new cards as `InteractiveView` components. Adapters translate authenticated user actions into `UIInteraction` components. Both types are available from `astrbot.api.message_components`. Custom adapters can enable `support_ui_interaction` in their registration and event metadata after implementing card rendering and action handling for their platform. Platforms without this capability use the text fallback.
+
+To handle a click, look up the card by ID, verify its adapter instance, session, user, and allowed action, then reserve the action in the shared store. Use the saved snapshot for `UIInteraction.view` and set the event's `ui_plugin_module` to the card's owning plugin module before dispatch.
 
 ## Display data and submit an action {#frontend}
 
@@ -162,6 +166,7 @@ Handlers can also yield ordinary message results or explicitly request a model r
 ## Persistence and boundaries
 
 - Main chat, standalone chat, and threads share the card renderer. Reloading restores data without executing the original command, tool, or callback.
+- A card instance stays bound to the first message that stores it. Sending it to another conversation uses the text fallback. AstrBot backups include card state and action receipts.
 - Increment `version` for incompatible contracts. Older incompatible cards fall back to text; there is no automatic migration. Successful data replacement increments `revision`.
 - The backend checks session ownership, source message, plugin availability, session plugin configuration, and declared actions. Plugins must still enforce business permissions.
 - Concurrent actions reserve the instance exclusively. Stale input gets `REVISION_CONFLICT` and the latest snapshot. Completed duplicate requests replay their outcome; reusing an ID with different input fails.

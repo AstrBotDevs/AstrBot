@@ -39,6 +39,12 @@ from astrbot.core.db.po import (
     UmoSender,
 )
 from astrbot.core.db.sqlite import SQLiteDatabase
+from astrbot.core.message.interactive_ui import (
+    ViewActionRequest,
+    ViewResult,
+    ViewSpec,
+    ViewStore,
+)
 from astrbot.core.utils.upload import UploadTooLargeError
 from astrbot.core.utils.version_comparator import VersionComparator
 from astrbot.dashboard.services.backup_service import (
@@ -1202,6 +1208,56 @@ class TestBackupIntegration:
             if model is ApiKey:
                 active = await target.get_active_api_key_by_hash(data["key_hash"])
                 assert (active is None) == (data.get("revoked_at") is not None)
+        finally:
+            await source.engine.dispose()
+            await target.engine.dispose()
+
+    @pytest.mark.asyncio
+    async def test_interactive_view_and_action_roundtrip(self, tmp_path, monkeypatch):
+        monkeypatch.setenv("ASTRBOT_ROOT", str(tmp_path))
+        source = SQLiteDatabase(str(tmp_path / "source.db"))
+        target = SQLiteDatabase(str(tmp_path / "target.db"))
+        try:
+            await source.initialize()
+            store = ViewStore(Path(source.db_path))
+            view = store.create(
+                "demo",
+                ViewSpec(name="counter", target="chat_message", actions=["demo:add"]),
+                ViewResult(name="counter", data={"count": 0}, text="Counter"),
+                owner="alice",
+                session_id="session-1",
+                platform_id="webchat",
+                history_platform_id="webchat",
+                run_id="run-1",
+            )
+            history = await source.insert_platform_message_history(
+                "webchat",
+                "session-1",
+                {"type": "bot", "message": [{"type": "view", "id": view["id"]}]},
+            )
+            store.bind_message(
+                view["id"],
+                str(history.id),
+                platform_id="webchat",
+                session_id="session-1",
+                history_platform_id="webchat",
+            )
+            action = ViewActionRequest(
+                action_id="demo:add", interaction_id="click-1", expected_revision=1
+            )
+            store.begin(view["id"], action)
+            receipt = store.finish(view["id"], "click-1", {"count": 1})
+            archive = await AstrBotExporter(
+                source, config_path=str(tmp_path / "missing-config.json")
+            ).export_all(str(tmp_path / "backups"))
+
+            result = await AstrBotImporter(target).import_all(archive)
+            assert result.success, result.errors
+            restored = ViewStore(Path(target.db_path))
+            assert restored.get(view["id"]) == store.get(view["id"])
+            assert restored.begin(view["id"], action) == receipt
+            restored_history = await target.get_platform_message_history_by_id(history.id)
+            assert restored_history.content == history.content
         finally:
             await source.engine.dispose()
             await target.engine.dispose()

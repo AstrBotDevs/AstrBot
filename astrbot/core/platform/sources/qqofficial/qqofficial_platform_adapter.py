@@ -192,7 +192,9 @@ async def _handle_interaction_create(client: Any, interaction: Interaction) -> N
     if interaction.type != 11:
         return
     try:
-        abm = QQOfficialPlatformAdapter._parse_interaction_from_qqofficial(interaction)
+        abm = await asyncio.to_thread(
+            QQOfficialPlatformAdapter._parse_interaction_from_qqofficial, interaction
+        )
     except ValueError as exc:
         logger.warning("[QQOfficial] Ignore invalid button interaction: %s", exc)
         await client.api.on_interaction_result(interaction.id, 1)
@@ -337,9 +339,6 @@ class QQOfficialPlatformAdapter(Platform):
         self.secret = platform_config["secret"]
         qq_group = platform_config["enable_group_c2c"]
         guild_dm = platform_config["enable_guild_direct_message"]
-        # 旧存档配置没有该键，缺省视为启用 Markdown，与历史行为一致
-        self.use_markdown_default = platform_config.get("use_markdown", True)
-
         if qq_group:
             self.intents = botpy.Intents(
                 public_messages=True,
@@ -417,7 +416,11 @@ class QQOfficialPlatformAdapter(Platform):
             message_chain,
             allow_at_everyone=session.message_type == MessageType.GROUP_MESSAGE,
         )
-        keyboard = QQOfficialMessageEvent._parse_keyboard(message_chain)
+        keyboard = None
+        if any(isinstance(part, ActionRow) for part in message_chain.chain):
+            keyboard = await asyncio.to_thread(
+                QQOfficialMessageEvent._parse_keyboard, message_chain
+            )
         if keyboard and not plain_text:
             plain_text = next(
                 (
@@ -463,7 +466,7 @@ class QQOfficialPlatformAdapter(Platform):
             return
 
         use_md = getattr(message_chain, "use_markdown_", None)
-        if use_md is False or (use_md is None and not self.use_markdown_default):
+        if use_md is False:
             payload: dict[str, Any] = {"content": plain_text}
         else:
             payload = {

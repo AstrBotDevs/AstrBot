@@ -20,6 +20,7 @@ from astrbot.core import DEMO_MODE, file_token_service, logger
 from astrbot.core.astr_agent_runtime.computer.computer_client import (
     sync_skills_to_active_sandboxes,
 )
+from astrbot.core.config.default import PLUGIN_DEFAULT_REGISTRY_URL
 from astrbot.core.repository import (
     GitUnavailableError,
     normalize_repository_url,
@@ -110,6 +111,7 @@ class PluginService:
             EventType.OnPluginErrorEvent: "插件报错时",
         }
         self._logo_cache: dict[str, str] = {}
+        self._create_source_lock = asyncio.Lock()
 
     @staticmethod
     def _payload(data: object) -> dict[str, Any]:
@@ -1091,9 +1093,9 @@ class PluginService:
             urls = [custom_url]
         else:
             cache_file = os.path.join(data_dir, "plugins.json")
-            md5_url = "https://api.soulter.top/astrbot/plugins-md5"
+            md5_url = PLUGIN_DEFAULT_REGISTRY_URL.removesuffix(".json") + "-md5.json"
             urls = [
-                "https://api.soulter.top/astrbot/plugins",
+                PLUGIN_DEFAULT_REGISTRY_URL,
                 "https://github.com/AstrBotDevs/AstrBot_Plugins_Collection/raw/refs/heads/main/plugin_cache_original.json",
             ]
         return RegistrySource(urls=urls, cache_file=cache_file, md5_url=md5_url)
@@ -2095,13 +2097,30 @@ class PluginService:
             raise PluginServiceError("sources fields must be a list")
         return sources
 
-    @staticmethod
-    async def create_custom_source(data: object) -> list:
+    async def create_custom_source(self, data: object) -> list:
+        """Append a plugin source once, including when the request is retried.
+
+        Args:
+            data: Source fields from the add-source request.
+
+        Returns:
+            The saved list of custom sources.
+        """
         source = data if isinstance(data, dict) else {}
-        sources = await PluginService.get_custom_sources()
-        sources.append(source)
-        await sp.global_put("custom_plugin_sources", sources)
-        return sources
+        url = self.normalize_registry_url(source.get("url"))
+        async with self._create_source_lock:
+            sources = await self.get_custom_sources()
+            if url and any(
+                self.normalize_registry_url(
+                    item.get("url") if isinstance(item, dict) else item
+                )
+                == url
+                for item in sources
+            ):
+                return sources
+            sources.append(source)
+            await sp.global_put("custom_plugin_sources", sources)
+            return sources
 
     @staticmethod
     async def replace_custom_sources(data: object) -> list:
