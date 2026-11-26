@@ -76,3 +76,9 @@ def test_a_non_numeric_field_does_not_kill_the_platform_adapter():
     assert adapter.api_timeout_ms == DEFAULTS["weixin_oc_api_timeout_ms"]
     assert adapter.long_poll_timeout_ms == DEFAULTS["weixin_oc_long_poll_timeout_ms"]
     assert adapter.qr_poll_interval == DEFAULTS["weixin_oc_qr_poll_interval"]
+
+
+def test_get_client_returns_the_adapter_client():
+    adapter = _adapter()
+
+    assert adapter.get_client() is adapter.client

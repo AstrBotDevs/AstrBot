@@ -1824,6 +1824,9 @@ class WeixinOCAdapter(Platform):
             await self._cleanup_typing_tasks()
             await self.client.close()
 
+    def get_client(self) -> WeixinOCClient:
+        return self.client
+
     async def terminate(self) -> None:
         self._shutdown_event.set()
         await self._cleanup_typing_tasks()
