@@ -51,6 +51,11 @@ class _ButtonCallbackRegistry:
                 "CREATE TABLE IF NOT EXISTS button_callbacks ("
                 "token TEXT PRIMARY KEY, payload TEXT NOT NULL)"
             )
+            connection.execute(
+                "CREATE INDEX IF NOT EXISTS ix_button_callbacks_expiry "
+                "ON button_callbacks (json_extract(payload, '$.e')) "
+                "WHERE json_valid(payload) AND json_extract(payload, '$.e') IS NOT NULL"
+            )
             connection.commit()
             self._db_path = resolved_path
 
