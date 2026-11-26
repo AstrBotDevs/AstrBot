@@ -1772,15 +1772,18 @@ export function appendError(record: ChatRecord, error: unknown, code = "agent_er
   });
 }
 
-export function appendPlain(record: ChatRecord, text: string, append = true) {
+export function appendPlain(record: ChatRecord, text: string, streaming = true) {
   markMessageStarted(record);
+  if (!text) return;
   const content = record.content;
-  let last = content.message[content.message.length - 1];
-  if (!last || last.type !== "plain") {
-    last = { type: "plain", text: "" };
-    content.message.push(last);
+  const last = content.message[content.message.length - 1];
+  if (last?.type !== "plain") {
+    content.message.push({ type: "plain", text });
+    return;
   }
-  last.text = append ? `${last.text || ""}${text}` : text;
+  const previousText = last.text || "";
+  const separator = !streaming && previousText ? "\n\n" : "";
+  last.text = `${previousText}${separator}${text}`;
 }
 
 export function appendReasoningPart(record: ChatRecord, text: string) {

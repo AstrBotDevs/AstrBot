@@ -8,12 +8,20 @@ from astrbot.dashboard.services.chat_service import ChatRunState, ChatService
 
 
 @pytest.mark.asyncio
-async def test_stream_saves_one_record_with_ordered_tool_calls(database):
+async def test_stream_saves_one_reply_after_its_follow_up(database):
     service = object.__new__(ChatService)
+    service.db = database
     service.platform_history_mgr = PlatformMessageHistoryManager(database)
     service.running_convs = {}
     service.chat_runs = {}
     service.chat_runs_by_session = {}
+    reply_saved = asyncio.Event()
+
+    def publish(run, payload):
+        if payload["type"] == "message_saved":
+            reply_saved.set()
+
+    service._publish_chat_run = publish
     run = ChatRunState(
         run_id="run-1",
         username="alice",
@@ -22,9 +30,25 @@ async def test_stream_saves_one_record_with_ordered_tool_calls(database):
         platform_history_id="webchat",
         back_queue=asyncio.Queue(),
     )
+    run.back_queue.put_nowait(
+        {"type": "plain", "data": "Let me check.", "streaming": True}
+    )
+    run.back_queue.put_nowait({"type": "complete", "streaming": True})
+    run.task = asyncio.create_task(service._consume_chat_run(run))
+    await asyncio.wait_for(reply_saved.wait(), timeout=5)
+    (first_save,) = await service.platform_history_mgr.get("webchat", run.session_id)
+    follow_up = await service.platform_history_mgr.insert(
+        platform_id="webchat",
+        user_id=run.session_id,
+        content={
+            "type": "user",
+            "message": [{"type": "plain", "text": "Check Shanghai."}],
+        },
+    )
+
     for event in (
-        {"type": "plain", "data": "Let me check.", "streaming": True},
-        {"type": "complete", "streaming": True},
+        {"type": "plain", "data": "Looking up Shanghai."},
+        {"type": "plain", "data": "Checking the latest forecast."},
         {
             "type": "plain",
             "chain_type": "tool_call",
@@ -47,9 +71,32 @@ async def test_stream_saves_one_record_with_ordered_tool_calls(database):
         {"type": "end"},
     ):
         run.back_queue.put_nowait(event)
-    await asyncio.wait_for(service._consume_chat_run(run), timeout=5)
+    await asyncio.wait_for(run.task, timeout=5)
 
-    (record,) = await service.platform_history_mgr.get("webchat", run.session_id)
+    # A captured input can be acknowledged after its target has already finished.
+    capture_run = ChatRunState(
+        run_id="follow-up",
+        username=run.username,
+        session_id=run.session_id,
+        turn_id="follow-up-turn",
+        platform_history_id=run.platform_history_id,
+        back_queue=asyncio.Queue(),
+        user_message_created_at=follow_up.created_at,
+    )
+    capture_run.back_queue.put_nowait(
+        {
+            "type": "follow_up_captured",
+            "data": {"target_run_id": run.run_id, "_target_turn_id": run.turn_id},
+        }
+    )
+    capture_run.back_queue.put_nowait({"type": "end"})
+    await asyncio.wait_for(service._consume_chat_run(capture_run), timeout=5)
+
+    (user_record, record) = await service.platform_history_mgr.get(
+        "webchat", run.session_id
+    )
+    assert user_record.id == follow_up.id
+    assert record.id == first_save.id
     parts = record.content["message"]
     assert [part["type"] for part in parts] == [
         "plain",
@@ -57,6 +104,9 @@ async def test_stream_saves_one_record_with_ordered_tool_calls(database):
         "actionrow",
         "tool_call",
     ]
+    assert parts[0]["text"] == (
+        "Let me check.\n\nLooking up Shanghai.\n\nChecking the latest forecast."
+    )
     (finished,) = parts[1]["tool_calls"]
     (interrupted,) = parts[3]["tool_calls"]
     assert finished["id"] == "c1"

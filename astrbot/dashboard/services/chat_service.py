@@ -8,6 +8,7 @@ import uuid
 from collections.abc import AsyncIterator
 from copy import deepcopy
 from dataclasses import dataclass, field
+from datetime import datetime, timedelta
 from pathlib import Path, PurePosixPath
 from typing import Any
 
@@ -202,10 +203,13 @@ class BotMessageAccumulator:
             self._append_think_part(result_text)
             return
 
-        if streaming:
-            self.pending_text += result_text
-        else:
-            self.pending_text = result_text
+        if not result_text:
+            return
+        if not streaming:
+            self._flush_pending_text()
+            if self.parts and self.parts[-1].get("type") == "plain":
+                self.pending_text = "\n\n"
+        self.pending_text += result_text
 
     def add_part(self, part: dict | None) -> None:
         """Append a structured non-text message part.
@@ -460,6 +464,7 @@ class ChatRunState:
     turn_id: str
     platform_history_id: str
     back_queue: asyncio.Queue
+    user_message_created_at: datetime | None = None
     subscribers: set[asyncio.Queue] = field(default_factory=set)
     message_parts: list[dict] = field(default_factory=list)
     agent_stats: dict = field(default_factory=dict)
@@ -1230,6 +1235,33 @@ class ChatService:
                     part = {**result_text, "type": msg_type}
                     for accumulator in (pending_accumulator, display_accumulator):
                         accumulator.add_part(part)
+                elif msg_type == "follow_up_captured" and isinstance(result_text, dict):
+                    target_turn_id = result_text.pop("_target_turn_id", None)
+                    if target_turn_id and run.user_message_created_at is not None:
+                        from sqlalchemy import update
+
+                        from astrbot.core.db.po import PlatformMessageHistory
+
+                        # Move an already-saved reply below this follow-up.
+                        # A first insert after this transaction is already in order.
+                        display_at = run.user_message_created_at + timedelta(
+                            microseconds=1
+                        )
+                        async with self.db.get_db() as session, session.begin():
+                            await session.execute(
+                                update(PlatformMessageHistory)
+                                .where(
+                                    PlatformMessageHistory.platform_id
+                                    == run.platform_history_id,
+                                    PlatformMessageHistory.user_id == run.session_id,
+                                    PlatformMessageHistory.turn_id == target_turn_id,
+                                    PlatformMessageHistory.content["type"].as_string()
+                                    == "bot",
+                                    PlatformMessageHistory.is_active.is_(True),
+                                    PlatformMessageHistory.created_at < display_at,
+                                )
+                                .values(created_at=display_at)
+                            )
 
                 snapshot_accumulator = deepcopy(display_accumulator)
                 run.message_parts = snapshot_accumulator.build_message_parts()
@@ -1417,6 +1449,11 @@ class ChatService:
             turn_id=turn_id,
             platform_history_id=platform_history_id,
             back_queue=back_queue,
+            user_message_created_at=(
+                saved_user_record.created_at
+                if saved_user_record is not None and not skip_user_history
+                else None
+            ),
         )
         self.chat_runs[message_id] = run
         self.chat_runs_by_session.setdefault(webchat_conv_id, set()).add(message_id)
