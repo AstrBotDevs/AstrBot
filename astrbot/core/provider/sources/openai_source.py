@@ -977,7 +977,7 @@ class ProviderOpenAIOfficial(Provider):
                     func_name_ls.append(tool_call.function.name)
                     tool_call_ids.append(tool_call.id)
 
-                    # gemini-2.5 / gemini-3 series extra_content handling
+                    # Preserve provider metadata such as Gemini thought signatures.
                     extra_content = getattr(tool_call, "extra_content", None)
                     if extra_content is not None:
                         tool_call_extra_content_dict[tool_call.id] = extra_content

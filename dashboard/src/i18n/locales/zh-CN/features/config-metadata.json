@@ -1842,10 +1842,6 @@
       },
       "gm_thinking_config": {
         "description": "思考配置",
-        "budget": {
-          "description": "思考预算",
-          "hint": "设置Gemini 2.5的推理词元预算。留空时使用模型默认值。参见 https://ai.google.dev/gemini-api/docs/thinking#set-budget"
-        },
         "level": {
           "description": "思考级别",
           "hint": "参见 https://ai.google.dev/gemini-api/docs/thinking#thinking-levels"

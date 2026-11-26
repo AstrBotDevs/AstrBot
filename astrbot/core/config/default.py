@@ -1358,7 +1358,7 @@ CONFIG_METADATA_2 = {
                             "sexually_explicit": "BLOCK_MEDIUM_AND_ABOVE",
                             "dangerous_content": "BLOCK_MEDIUM_AND_ABOVE",
                         },
-                        "gm_thinking_config": {"budget": None, "level": "AUTO"},
+                        "gm_thinking_config": {"level": "AUTO"},
                         "proxy": "",
                     },
                     "Anthropic": {
@@ -2760,12 +2760,6 @@ CONFIG_METADATA_2 = {
                         "description": "Thinking Config",
                         "type": "object",
                         "items": {
-                            "budget": {
-                                "description": "Thinking Budget",
-                                "type": "int",
-                                "nullable": True,
-                                "hint": "Thinking token budget for Gemini 2.5. Leave blank to use the model default. See https://ai.google.dev/gemini-api/docs/thinking#set-budget",
-                            },
                             "level": {
                                 "description": "Thinking Level",
                                 "type": "string",

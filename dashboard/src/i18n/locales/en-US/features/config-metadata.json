@@ -1821,10 +1821,6 @@
       },
       "gm_thinking_config": {
         "description": "Thinking Config",
-        "budget": {
-          "description": "Thinking Budget",
-          "hint": "Thinking token budget for Gemini 2.5. Leave blank to use the model default. See https://ai.google.dev/gemini-api/docs/thinking#set-budget"
-        },
         "level": {
           "description": "Thinking Level",
           "hint": "See https://ai.google.dev/gemini-api/docs/thinking#thinking-levels"

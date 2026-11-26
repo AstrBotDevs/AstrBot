@@ -1925,10 +1925,6 @@
             },
             "gm_thinking_config": {
                 "description": "Настройки рассуждения (Thinking)",
-                "budget": {
-                    "description": "Бюджет рассуждения",
-                    "hint": "Бюджет токенов рассуждения Gemini 2.5. Пустое поле использует значение модели по умолчанию."
-                },
                 "level": {
                     "description": "Уровень рассуждения",
                     "hint": "См. https://ai.google.dev/gemini-api/docs/thinking#thinking-levels"

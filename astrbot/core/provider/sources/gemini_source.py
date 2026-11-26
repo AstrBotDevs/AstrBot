@@ -263,18 +263,12 @@ class ProviderGoogleGenAI(Provider):
         native_search = self.provider_config.get("gm_native_search", False)
         url_context = self.provider_config.get("gm_url_context", False)
 
-        if "gemini-2.0-lite" in model_name:
-            if native_coderunner or native_search or url_context:
-                logger.warning(
-                    "gemini-2.0-lite does not support native code execution, search, or URL context tools. These settings will be ignored.",
-                )
-        else:
-            if native_coderunner:
-                tool_list.append(types.Tool(code_execution=types.ToolCodeExecution()))
-            if native_search:
-                tool_list.append(types.Tool(google_search=types.GoogleSearch()))
-            if url_context:
-                tool_list.append(types.Tool(url_context=types.UrlContext()))
+        if native_coderunner:
+            tool_list.append(types.Tool(code_execution=types.ToolCodeExecution()))
+        if native_search:
+            tool_list.append(types.Tool(google_search=types.GoogleSearch()))
+        if url_context:
+            tool_list.append(types.Tool(url_context=types.UrlContext()))
 
         has_builtin_tool = bool(tool_list)
         if tools:
@@ -326,25 +320,7 @@ class ProviderGoogleGenAI(Provider):
 
         thinking_config = None
         thinking_settings = self.provider_config.get("gm_thinking_config") or {}
-        if model_name in [
-            "gemini-2.5-pro",
-            "gemini-2.5-pro-preview",
-            "gemini-2.5-flash",
-            "gemini-2.5-flash-preview",
-            "gemini-2.5-flash-lite",
-            "gemini-2.5-flash-lite-preview",
-            "gemini-robotics-er-1.5-preview",
-            "gemini-live-2.5-flash-preview-native-audio-09-2025",
-        ]:
-            # The thinkingBudget parameter, introduced with the Gemini 2.5 series
-            thinking_budget = thinking_settings.get("budget")
-            if thinking_budget is not None:
-                thinking_config = types.ThinkingConfig(
-                    thinking_budget=thinking_budget,
-                )
-        # TODO: Drop legacy models support.
-        # We have too much fragile legacy workaround here.
-        elif is_gemini_4 or model_name.startswith(("gemini-3-", "gemini-3.")):
+        if is_gemini_4 or model_name.startswith(("gemini-3-", "gemini-3.")):
             thinking_level = (
                 extra_body.get("reasoning_effort")
                 if is_gemini_4
