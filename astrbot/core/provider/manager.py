@@ -764,8 +764,6 @@ class ProviderManager:
                 logger.error(f"Could not find a class for {provider_metadata.type}")
                 return
 
-            provider_metadata.id = provider_config["id"]
-
             match provider_metadata.provider_type:
                 case ProviderType.SPEECH_TO_TEXT:
                     # STT 任务
@@ -803,7 +801,7 @@ class ProviderManager:
 
                     self.tts_provider_insts.append(inst)
                     if (
-                        self.provider_settings.get("provider_id")
+                        self.provider_tts_settings.get("provider_id")
                         == provider_config["id"]
                     ):
                         self.curr_tts_provider_inst = inst
@@ -890,8 +888,9 @@ class ProviderManager:
                 await self.load_provider(provider_config)
 
             # 和配置文件保持同步
-            self.providers_config = astrbot_config["provider"]
-            self.provider_sources_config = astrbot_config.get("provider_sources", [])
+            default_conf = getattr(self.acm, "default_conf", astrbot_config)
+            self.providers_config = default_conf["provider"]
+            self.provider_sources_config = default_conf.get("provider_sources", [])
             config_ids = [provider["id"] for provider in self.providers_config]
             logger.info(f"providers in user's config: {config_ids}")
             for key in list(self.inst_map.keys()):
@@ -964,6 +963,12 @@ class ProviderManager:
         if prov_inst in self.tts_provider_insts:
             if isinstance(prov_inst, TTSProvider):
                 self.tts_provider_insts.remove(prov_inst)
+        if prov_inst in self.embedding_provider_insts:
+            if isinstance(prov_inst, EmbeddingProvider):
+                self.embedding_provider_insts.remove(prov_inst)
+        if prov_inst in self.rerank_provider_insts:
+            if isinstance(prov_inst, RerankProvider):
+                self.rerank_provider_insts.remove(prov_inst)
         if prov_inst in self.decision_provider_insts:
             if isinstance(prov_inst, DecisionProvider):
                 self.decision_provider_insts.remove(prov_inst)
@@ -1055,9 +1060,10 @@ class ProviderManager:
                 raise
             config.save_config()
             # sync in-memory config for API queries (e.g., embedding provider list)
-            self.providers_config = astrbot_config["provider"]
+            self.providers_config = config["provider"]
 
     async def terminate(self) -> None:
+        """Terminate all loaded providers and disable MCP servers."""
         if self._mcp_init_task and not self._mcp_init_task.done():
             self._mcp_init_task.cancel()
             try:
@@ -1065,9 +1071,31 @@ class ProviderManager:
             except asyncio.CancelledError:
                 pass
 
-        for provider_inst in [*self.provider_insts, *self.decision_provider_insts]:
-            if hasattr(provider_inst, "terminate"):
-                await provider_inst.terminate()  # type: ignore
+        seen_inst_ids: set[int] = set()
+        for provider_inst in (
+            *self.provider_insts,
+            *self.stt_provider_insts,
+            *self.tts_provider_insts,
+            *self.embedding_provider_insts,
+            *self.rerank_provider_insts,
+            *self.decision_provider_insts,
+            *self.inst_map.values(),
+        ):
+            if id(provider_inst) in seen_inst_ids:
+                continue
+            seen_inst_ids.add(id(provider_inst))
+            terminate_fn = getattr(provider_inst, "terminate", None)
+            if callable(terminate_fn):
+                try:
+                    await terminate_fn()  # type: ignore
+                except Exception:
+                    logger.error(
+                        "Error while terminating provider %s",
+                        getattr(provider_inst, "provider_config", {}).get(
+                            "id", type(provider_inst).__name__
+                        ),
+                        exc_info=True,
+                    )
         try:
             await self.llm_tools.disable_mcp_server()
         except Exception:
