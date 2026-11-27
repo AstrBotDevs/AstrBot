@@ -7030,6 +7030,11 @@ components:
           type: string
         session:
           type: string
+        sessions:
+          description: Ordered delivery sessions. Takes precedence over session when supplied.
+          type: array
+          items:
+            type: string
         note:
           type: string
         description:

@@ -3,7 +3,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from astrbot.dashboard.services.cron_service import CronService
+from astrbot.dashboard.services.cron_service import CronService, CronServiceError
 
 
 @pytest.mark.parametrize(
@@ -98,3 +98,52 @@ async def test_create_job_resolves_default_timezone(
         config_manager.get_conf.assert_called_once_with(session or None)
     else:
         config_manager.get_conf.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_dashboard_cron_delivery_sessions_round_trip() -> None:
+    """Preserve ordered targets on create, then honor single-target API edits."""
+    first = "lark:GroupMessage:first"
+    second = "lark:GroupMessage:second"
+    job = SimpleNamespace(
+        job_id="job",
+        job_type="active_agent",
+        run_once=False,
+        cron_expression="0 9 * * *",
+        description="Report",
+    )
+
+    async def apply_payload(*args, payload, **kwargs):
+        job.payload = payload
+        return job
+
+    manager = SimpleNamespace(
+        add_active_job=AsyncMock(side_effect=apply_payload),
+        update_job=AsyncMock(side_effect=apply_payload),
+        db=SimpleNamespace(get_cron_job=AsyncMock(return_value=job)),
+    )
+    get_conf = MagicMock(return_value={"timezone": "Asia/Shanghai"})
+    service = CronService(
+        SimpleNamespace(
+            cron_manager=manager, astrbot_config_mgr=SimpleNamespace(get_conf=get_conf)
+        )
+    )
+    data = await service.create_job(
+        {"cron_expression": "0 9 * * *", "sessions": [first, second, first]}
+    )
+    assert data["sessions"] == [first, second]
+    assert job.payload["session"] == first
+    get_conf.assert_called_once_with(first)
+
+    data = await service.update_job("job", {"note": "Updated report"})
+    assert data["sessions"] == [first, second]
+    data = await service.update_job("job", {"session": second})
+    assert data["sessions"] == [second]
+    assert job.payload["session"] == second
+    assert "sessions" not in job.payload
+    data = await service.update_job("job", {"sessions": []})
+    assert data["sessions"] == []
+
+    with pytest.raises(CronServiceError, match="Invalid delivery session"):
+        await service.update_job("job", {"sessions": [first, "invalid"]})
+    assert manager.update_job.await_count == 3

@@ -146,6 +146,7 @@
     "cronPlaceholder": "0 9 * * *",
     "runAt": "Run at *",
     "session": "Deliver to",
+    "multipleSessionsHint": "The task runs once and sends the result to every selected conversation. The first conversation supplies the settings and context.",
     "noUmos": "No sessions available",
     "timezone": "Timezone (optional, e.g. Asia/Shanghai)",
     "enabled": "Enabled"

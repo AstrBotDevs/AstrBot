@@ -177,7 +177,7 @@ class ChatThreadMessageRequest(OpenModel):
 
 
 class CronJobRequest(OpenModel):
-    pass
+    sessions: list[str] | None = None
 
 
 class CommandUpdateRequest(BaseModel):

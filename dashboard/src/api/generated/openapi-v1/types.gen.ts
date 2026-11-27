@@ -288,6 +288,10 @@ export type CronJobRequest = {
     cron_expression?: string;
     timezone?: string;
     session?: string;
+    /**
+     * Ordered delivery sessions. Takes precedence over session when supplied.
+     */
+    sessions?: Array<(string)>;
     note?: string;
     description?: string;
     persona_id?: string;

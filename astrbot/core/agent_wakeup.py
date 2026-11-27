@@ -26,6 +26,7 @@ async def wake_main_agent(
     agent_session: "AgentSessionRef | None" = None,
     tool_result: "tuple[str, CallToolResult] | None" = None,
     source_event: "AstrMessageEvent | None" = None,
+    additional_delivery_sessions: tuple[str, ...] = (),
 ) -> None:
     """Queue a triggered user turn without waiting for agent execution.
 
@@ -40,6 +41,7 @@ async def wake_main_agent(
         agent_session: Original runtime conversation when selection must not drift.
         tool_result: Tool name and typed output, kept separate from trigger instructions.
         source_event: Original caller identity and restrictions for background work.
+        additional_delivery_sessions: Other recipients configured for the cron job.
 
     Raises:
         ValueError: If the source or target session is invalid,
@@ -64,6 +66,7 @@ async def wake_main_agent(
         agent_session=agent_session,
         tool_result=tool_result,
         source_event=source_event,
+        additional_delivery_sessions=additional_delivery_sessions,
     )
     if stop_signal is not None:
         event.set_extra("_background_stop_signal", stop_signal)

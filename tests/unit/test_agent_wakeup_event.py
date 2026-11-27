@@ -7,6 +7,8 @@ from unittest.mock import AsyncMock
 import pytest
 
 from astrbot import logger
+from astrbot.core.agent.run_context import ContextWrapper
+from astrbot.core.astr_agent_runtime.tools.message_tools import SendMessageToUserTool
 from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.platform.agent_wakeup_event import AgentWakeupEvent
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
@@ -100,6 +102,44 @@ def test_wakeup_preserves_the_resolved_permission_role(wakeup_event):
     assert event.role == "admin"
     assert event.get_sender_id() == original.get_sender_id()
     assert event.source_id is None
+
+
+@pytest.mark.asyncio
+async def test_cron_send_tool_fans_out_without_reusing_mutated_components(wakeup_event):
+    """A transport failure or in-place edit does not change later deliveries."""
+    event, send, _ = wakeup_event
+    first = event.unified_msg_origin
+    second = "lark:GroupMessage:unavailable"
+    third = "lark:GroupMessage:available"
+    event.additional_delivery_sessions = (first, second, third)
+    received = []
+
+    async def transport(umo, chain):
+        received.append((umo, chain.get_plain_text()))
+        chain.chain.clear()
+        if umo == second:
+            raise RuntimeError("offline")
+        return True
+
+    send.side_effect = transport
+    context = ContextWrapper(
+        context=SimpleNamespace(
+            event=event,
+            context=event.context_obj,
+            send_to_user=True,
+            _output_turn=None,
+        )
+    )
+
+    result = await SendMessageToUserTool().call(
+        context,
+        messages=[{"type": "plain", "text": "The same report"}],
+    )
+
+    assert received == [(umo, "The same report") for umo in (first, second, third)]
+    assert second in result
+    assert "Sent to 2 configured sessions" in result
+    assert event._has_send_oper
 
 
 @pytest.mark.parametrize(

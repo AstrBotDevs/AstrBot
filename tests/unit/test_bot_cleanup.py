@@ -26,6 +26,38 @@ from astrbot.dashboard.services.bot_cleanup_service import delete_bot_data
 
 
 @pytest.mark.asyncio
+async def test_cleanup_removes_secondary_cron_destination(temp_db, monkeypatch):
+    """Removing a recipient bot preserves the scheduled task and its context."""
+    primary = "keep:GroupMessage:room"
+    secondary = "remove:GroupMessage:room"
+    job = CronJob(
+        job_id="broadcast",
+        name="Report",
+        job_type="active_agent",
+        payload={
+            "session": primary,
+            "sessions": [primary, secondary],
+            "note": "Summary",
+        },
+    )
+    manager = SimpleNamespace(update_job=AsyncMock(), delete_job=AsyncMock())
+    core = SimpleNamespace(
+        cron_manager=manager,
+        db=SimpleNamespace(
+            list_cron_jobs=AsyncMock(return_value=[job]), get_db=temp_db.get_db
+        ),
+    )
+    monkeypatch.setattr(bot_cleanup_service, "sp", SimpleNamespace(flush=AsyncMock()))
+
+    await delete_bot_data(core, "remove", {"cron_jobs"})
+
+    manager.update_job.assert_awaited_once_with(
+        "broadcast", payload={"session": primary, "note": "Summary"}
+    )
+    manager.delete_job.assert_not_awaited()
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize(
     "target",
     [
@@ -98,7 +130,9 @@ async def test_cleanup_is_selective_and_matches_exact_platform(
                 ]
             )
             await preferences.session_put(
-                umo, "config_binding", {"profile_id": None, "overrides": {"provider_settings.enable": False}}
+                umo,
+                "config_binding",
+                {"profile_id": None, "overrides": {"provider_settings.enable": False}},
             )
             await preferences.session_put(umo, "session_variables", {"name": platform})
             await preferences.session_put(umo, "sel_conv_id", platform)
@@ -147,7 +181,12 @@ async def test_cleanup_is_selective_and_matches_exact_platform(
             rules_removed = selected and "custom_rules" in targets
             prefs_removed = selected and "preferences" in targets
             assert await preferences.session_get(umo, "config_binding") == (
-                None if rules_removed else {"profile_id": None, "overrides": {"provider_settings.enable": False}}
+                None
+                if rules_removed
+                else {
+                    "profile_id": None,
+                    "overrides": {"provider_settings.enable": False},
+                }
             )
             assert await preferences.session_get(umo, "session_variables") == (
                 None if prefs_removed else {"name": platform}

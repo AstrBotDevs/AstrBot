@@ -54,9 +54,11 @@ Open **Extensions → Future Tasks** and click **New Task**. You do not need to 
 | Task name | A recognizable name, such as “Daily technology briefing.” |
 | Task requirements | Instructions the Agent executes when woken. Specify sources, steps, result format, and whether to send the result. |
 | Schedule | Choose one-off, interval, daily, weekly, monthly, or custom. |
-| Deliver to (optional) | Select an existing conversation. Leaving it empty allows execution but does not automatically deliver results to a user or group. |
+| Deliver to | Select one or more existing group or private conversations. |
 
 If no conversations appear, talk to AstrBot on the target platform first, then return to select it. The target is identified by a UMO (unified message origin), which includes the platform, message type, and conversation identifier.
+
+With multiple recipients selected, the task runs once and its send tool delivers the same message to each selected conversation. The first conversation supplies the task's settings and context. Manage these tasks in the WebUI and make sure the task's output is suitable for every recipient.
 
 The list shows each schedule, delivery target, and next run. Search by name or content, or filter by target. Click a task to edit it, use its switch to disable scheduled execution, and use **More actions** for **Run now** or **Delete**. Hover over its timing information to see the last execution time and any recorded error.
 
@@ -87,7 +89,7 @@ AstrBot must be online to execute tasks. Saved schedules are reloaded after a re
 
 ## What a scheduled task can use
 
-Tasks use the target conversation's configuration and conversation context. Later changes to models, Personas, and tools can affect subsequent runs. Put required details in the task instructions instead of writing only “do what we discussed.” Tasks without a delivery target use a separate scheduling conversation and the default configuration.
+Tasks use the first delivery conversation's settings and context. Later changes to models, Personas, and tools can affect subsequent runs. Include the details the agent needs in the task instructions.
 
 Scheduling does not grant extra capabilities:
 

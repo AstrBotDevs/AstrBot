@@ -7,6 +7,7 @@ import uuid
 from collections.abc import AsyncGenerator
 from typing import TYPE_CHECKING, Literal
 
+from astrbot import logger
 from astrbot.core.message.components import Plain
 from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.platform.astr_message_event import (
@@ -45,6 +46,7 @@ class AgentWakeupEvent(AstrMessageEvent):
         agent_session: AgentSessionRef | None = None,
         tool_result: tuple[str, CallToolResult] | None = None,
         source_event: AstrMessageEvent | None = None,
+        additional_delivery_sessions: tuple[str, ...] = (),
     ) -> None:
         """Create a wakeup without changing the target session's identity.
 
@@ -59,6 +61,7 @@ class AgentWakeupEvent(AstrMessageEvent):
             agent_session: Explicit runtime conversation, independent of UMO selection.
             tool_result: Tool name and typed output to prepare in the receiving runner.
             source_event: Original caller identity and restrictions for background work.
+            additional_delivery_sessions: Other recipients configured for the cron job.
 
         Raises:
             ValueError: If the source or target platform identity is invalid.
@@ -71,6 +74,9 @@ class AgentWakeupEvent(AstrMessageEvent):
         self.source_id = source_id
         self.agent_session = agent_session
         self.tool_result = tool_result
+        self.additional_delivery_sessions = (
+            additional_delivery_sessions if source == "cron" else ()
+        )
 
         message = AstrBotMessage()
         message.type = session.message_type
@@ -120,6 +126,11 @@ class AgentWakeupEvent(AstrMessageEvent):
         """
         if message is None:
             return
+        if self.additional_delivery_sessions:
+            sent, _ = await self.send_to_delivery_sessions(message)
+            if sent:
+                self._has_send_oper = True
+            return
         # The outer event.send records delivery; suppress its nested public send.
         token = streaming_response_event.set(self)
         try:
@@ -128,6 +139,31 @@ class AgentWakeupEvent(AstrMessageEvent):
             streaming_response_event.reset(token)
         if sent:
             await super().send(message)
+
+    async def send_to_delivery_sessions(
+        self, message: MessageChain
+    ) -> tuple[list[str], list[str]]:
+        """Send the same output to all configured recipients independently.
+
+        Args:
+            message: Prepared message chain, which adapters may modify when sending.
+
+        Returns:
+            The successfully sent and failed session IDs, respectively.
+        """
+        sent: list[str] = []
+        failed: list[str] = []
+        for session in dict.fromkeys(
+            (self.unified_msg_origin, *self.additional_delivery_sessions)
+        ):
+            try:
+                if await self.context_obj.send_message(session, copy.deepcopy(message)):
+                    sent.append(session)
+                    continue
+            except Exception:
+                logger.exception("Cron delivery failed for %s", session)
+            failed.append(session)
+        return sent, failed
 
     async def send_streaming(
         self, generator: AsyncGenerator[MessageChain, None], use_fallback: bool = False
