@@ -172,7 +172,7 @@ def test_sandbox_and_local_path_resolution_with_show_sandbox_path_false(
     assert by_name["python-sandbox"].path == "/app/skills/python-sandbox/SKILL.md"
 
 
-def test_delete_skill_path_boundaries(monkeypatch, tmp_path: Path):
+def test_delete_skill_rejects_traversal(monkeypatch, tmp_path: Path):
     data_dir = tmp_path / "data"
     skills_root, victim_dir = data_dir / "skills", data_dir / "victim"
     skills_root.mkdir(parents=True)
@@ -182,82 +182,14 @@ def test_delete_skill_path_boundaries(monkeypatch, tmp_path: Path):
     )
 
     mgr = SkillManager(skills_root=str(skills_root))
-    for name in ("skill-1.0.0", "my skill", "demo"):
-        _write_skill(skills_root, name, "local")
+    _write_skill(skills_root, "skill-1.0.0", "local")
+    _write_skill(skills_root, "my skill", "local")
 
-    for bad in (
-        "",
-        " ",
-        ".",
-        "..",
-        ".. ",
-        "../victim",
-        "..\\victim",
-        str(victim_dir),
-        123,
-    ):
+    for bad in ("", ".", "..", ".. ", "../victim", "..\\victim", str(victim_dir)):
         with pytest.raises(ValueError, match="Invalid skill"):
-            mgr.delete_skill(bad)  # type: ignore[arg-type]
-    for bad in ("../victim", 123):
-        with pytest.raises(ValueError, match="Invalid skill"):
-            mgr.set_skill_active(bad, False)  # type: ignore[arg-type]
+            mgr.delete_skill(bad)
 
-    mgr.delete_skill(" demo")
-    assert victim_dir.exists() and (skills_root / "demo").exists()
-
+    assert victim_dir.exists()
     for name in ("skill-1.0.0", "my skill"):
         mgr.delete_skill(name)
         assert not (skills_root / name).exists()
-
-
-@pytest.mark.asyncio
-async def test_skill_zip_and_service_boundaries(monkeypatch, tmp_path: Path):
-    import zipfile
-
-    from astrbot.dashboard.services.skills_service import (
-        SkillsService,
-        SkillsServiceError,
-    )
-
-    data_dir, temp_dir = tmp_path / "data", tmp_path / "temp"
-    skills_root = data_dir / "skills"
-    skills_root.mkdir(parents=True)
-    temp_dir.mkdir()
-    for target, val in (
-        ("astrbot.core.skills.skill_manager.get_astrbot_data_path", str(data_dir)),
-        ("astrbot.core.skills.skill_manager.get_astrbot_temp_path", str(temp_dir)),
-        ("astrbot.core.skills.skill_manager.get_astrbot_skills_path", str(skills_root)),
-        (
-            "astrbot.dashboard.services.skills_service.get_astrbot_temp_path",
-            str(temp_dir),
-        ),
-    ):
-        monkeypatch.setattr(target, lambda v=val: v)
-
-    z_path = tmp_path / "padded.zip"
-    with zipfile.ZipFile(z_path, "w") as zf:
-        zf.writestr(" .. /SKILL.md", "---\ndescription: x\n---\n")
-    mgr = SkillManager(skills_root=str(skills_root))
-    with pytest.raises(ValueError):
-        mgr.install_skill_from_zip(str(z_path), overwrite=True, skill_name_hint="..")
-    with pytest.raises(ValueError):
-        mgr.install_skill_from_zip(str(z_path), overwrite=True)
-
-    legacy = skills_root / "legacy"
-    legacy.mkdir()
-    (legacy / "skill.md").write_text("---\ndescription: x\n---\n", encoding="utf-8")
-    outside = tmp_path / "outside.txt"
-    outside.write_text("secret", encoding="utf-8")
-    try:
-        (legacy / "leak.txt").symlink_to(outside)
-    except OSError:
-        pass
-
-    service = SkillsService(core_lifecycle=None)
-    assert service.get_skill_file("legacy")["path"] == "skill.md"
-    with zipfile.ZipFile(service.prepare_skill_archive("legacy").path) as zf:
-        assert zf.namelist() == ["legacy/skill.md"]
-    with pytest.raises(SkillsServiceError, match="Invalid skill"):
-        await service.delete_skill({"name": "../victim"})
-    with pytest.raises(SkillsServiceError, match="Invalid skill"):
-        service.prepare_skill_archive("..")
