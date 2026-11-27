@@ -2,8 +2,10 @@ from __future__ import annotations
 
 import asyncio
 import os
+import shlex
 import shutil
 import subprocess
+import time
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
@@ -54,6 +56,7 @@ def posix_shell(tmp_path):
                 capture_output=True,
                 timeout=timeout,
                 env=env,
+                cwd=tmp_path,
             )
             result = {
                 "stdout": completed.stdout.decode("utf-8", errors="replace"),
@@ -83,7 +86,7 @@ async def test_remote_search_stops_globally_and_cleans_temp_directory(
         max_output_bytes=4096,
     )
 
-    assert result["success"]
+    assert result["success"], result
     assert result["truncated"]
     assert result["truncation_reason"] == "max_results"
     assert len(result["content"].splitlines()) == 3
@@ -92,7 +95,13 @@ async def test_remote_search_stops_globally_and_cleans_temp_directory(
 
 
 @pytest.mark.asyncio
-async def test_remote_context_finishes_last_selected_group(posix_shell, tmp_path):
+@pytest.mark.parametrize("backend", ["rg", "grep"])
+async def test_remote_context_finishes_last_selected_group(
+    posix_shell, tmp_path, backend
+):
+    if backend == "rg" and shutil.which("rg") is None:
+        pytest.skip("ripgrep is not installed")
+    posix_shell.force_grep = backend == "grep"
     file = tmp_path / "context.txt"
     file.write_text(
         "before\nneedle\nafter\nskip\nskip\nbefore2\nneedle\nafter2\n",
@@ -101,27 +110,36 @@ async def test_remote_context_finishes_last_selected_group(posix_shell, tmp_path
     result = await search_files_via_shell(
         posix_shell,
         pattern="needle",
-        path=file.as_posix(),
+        path=file.name,
         before_context=1,
         after_context=1,
         max_results=1,
     )
     assert result["success"]
     assert result["truncation_reason"] == "max_results"
-    assert result["content"].splitlines() == ["1-before", "2:needle", "3-after"]
+    assert result["content"].splitlines() == (
+        ["1-before", "2:needle", "3-after"]
+        if backend == "rg"
+        else ["context.txt-1-before", "context.txt:2:needle", "context.txt-3-after"]
+    )
 
 
 @pytest.mark.asyncio
-async def test_remote_byte_cap_bounds_large_lines(posix_shell, tmp_path):
+@pytest.mark.parametrize("backend", ["rg", "grep"])
+async def test_remote_byte_cap_bounds_large_lines(posix_shell, tmp_path, backend):
+    if backend == "rg" and shutil.which("rg") is None:
+        pytest.skip("ripgrep is not installed")
+    posix_shell.force_grep = backend == "grep"
     file = tmp_path / "long.txt"
     file.write_text("x" * (2 * 1024 * 1024) + "\n", encoding="utf-8")
     result = await search_files_via_shell(
-        posix_shell, pattern=".", path=file.as_posix(), max_output_bytes=80
+        posix_shell, pattern=".", path=file.name, max_output_bytes=80
     )
     assert result["success"]
     assert result["truncation_reason"] == "max_output_bytes"
     assert len(result["content"].encode()) <= 80
-    assert result["content"].startswith("1:xxxx")
+    prefix = "1:" if backend == "rg" else "long.txt:1:"
+    assert result["content"] == prefix.ljust(80, "x")
     assert len(posix_shell.results[-1]["stdout"].encode()) <= 82
 
 
@@ -135,6 +153,47 @@ async def test_remote_rg_preview_keeps_the_line_prefix(posix_shell, tmp_path):
         posix_shell, pattern=".", path=file.as_posix()
     )
     assert result == {"success": True, "content": "1:" + "x" * 998 + "\n"}
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("character", ["\u4f60", "\U0001f600"])
+async def test_remote_rg_preview_counts_unicode_characters(
+    posix_shell, tmp_path, character
+):
+    if shutil.which("rg") is None:
+        pytest.skip("ripgrep is not installed")
+    file = tmp_path / "unicode.txt"
+    file.write_bytes((character * 2000 + "\n").encode("utf-8"))
+    result = await search_files_via_shell(posix_shell, pattern=".", path=file.name)
+    assert result == {"success": True, "content": "1:" + character * 998 + "\n"}
+
+
+@pytest.mark.asyncio
+async def test_remote_result_limit_stops_the_producer(posix_shell, tmp_path):
+    marker = tmp_path / "producer_completed"
+
+    class InfiniteShell:
+        async def exec(self, command, timeout=30):
+            command = command.replace("if command -v rg >/dev/null 2>&1", "if true")
+            producer = (
+                'i=0; while [ "$i" -lt 1000000 ]; do '
+                "printf '1:%080d\\n' 0 || exit $?; i=$((i + 1)); done; "
+                "touch producer_completed"
+            )
+            return await posix_shell.exec(
+                f"rg() {{ sh -c {shlex.quote(producer)}; }}; " + command,
+                timeout=timeout,
+            )
+
+    started = time.monotonic()
+    result = await search_files_via_shell(
+        InfiniteShell(), pattern=".", max_results=1, max_output_bytes=4096, timeout=10
+    )
+    assert result["success"], result
+    assert result["truncation_reason"] == "max_results"
+    assert len(result["content"].splitlines()) == 1
+    assert not marker.exists()
+    assert time.monotonic() - started < 10
 
 
 @pytest.mark.asyncio
@@ -248,6 +307,26 @@ def test_remote_commands_quote_arguments_and_skip_binary_grep():
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("backend", ["rg", "grep"])
+async def test_remote_pattern_is_not_executed_by_the_shell(
+    posix_shell, tmp_path, backend
+):
+    if backend == "rg" and shutil.which("rg") is None:
+        pytest.skip("ripgrep is not installed")
+    posix_shell.force_grep = backend == "grep"
+    marker = tmp_path / "injected"
+    file = tmp_path / "input.txt"
+    file.write_text("harmless\n", encoding="utf-8")
+    result = await search_files_via_shell(
+        posix_shell,
+        pattern="$(touch injected);'",
+        path=file.name,
+    )
+    assert result == {"success": True, "content": ""}
+    assert not marker.exists()
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize("booter", ["shipyard", "neo", "cua", "posix"])
 async def test_remote_booters_accept_and_forward_search_limits(booter):
     shell = SimpleNamespace(
@@ -295,4 +374,25 @@ async def test_remote_truncation_marker_can_make_sdk_success_flag_false():
         "content": "1:needle\n",
         "truncated": True,
         "truncation_reason": "max_results",
+    }
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("exit_code", [141, -13])
+async def test_remote_truncation_does_not_hide_real_errors(exit_code):
+    shell = SimpleNamespace(
+        exec=AsyncMock(
+            return_value={
+                "stdout": "1:needle\n",
+                "stderr": "real error\n__ASTRBOT_SEARCH_TRUNCATED__:max_results\n",
+                "exit_code": exit_code,
+            }
+        )
+    )
+    result = await search_files_via_shell(shell, pattern="needle", max_results=1)
+    assert result == {
+        "success": False,
+        "content": "",
+        "error": "real error",
+        "exit_code": exit_code,
     }

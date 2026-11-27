@@ -307,3 +307,53 @@ def test_local_search_broad_pattern_has_bounded_python_memory(
     assert result["truncation_reason"] == "max_results"
     assert len(result["content"].splitlines()) == 10
     assert peak < 10 * 1024 * 1024
+
+
+@pytest.mark.parametrize("budget", [128, 4096])
+def test_restricted_search_executes_embedded_runner_with_limits(
+    monkeypatch, tmp_path, local_search_backend, budget
+):
+    class TestSandbox:
+        def run(self, argv, spec, *, timeout, output_limit):
+            assert spec.workspace_writable is False
+            completed = subprocess.run(
+                argv, cwd=spec.workspace, capture_output=True, timeout=timeout
+            )
+            # Deliberately don't enforce the parent capture limit: this test
+            # verifies the standalone runner's own bounds, not a canned reply.
+            assert len(completed.stdout) <= output_limit
+            return process_sandbox.SandboxRunResult(
+                returncode=completed.returncode,
+                stdout=completed.stdout,
+                stderr=completed.stderr,
+            )
+
+    target = tmp_path / "matches.txt"
+    target.write_text("needle\n" * 1000, encoding="utf-8")
+    monkeypatch.setattr(local_booter, "create_process_sandbox", lambda: TestSandbox())
+    result = asyncio.run(
+        LocalFileSystemComponent().search_files(
+            ".",
+            str(target),
+            sandboxed=True,
+            sandbox_root=str(tmp_path),
+            max_results=10,
+            max_output_bytes=budget,
+        )
+    )
+    assert result["success"]
+    assert result["truncated"]
+    assert len(result["content"].splitlines()) <= 10
+    assert len(result["content"].encode()) <= budget
+    if budget == 4096:
+        assert len(result["content"].splitlines()) == 10
+
+
+@pytest.mark.parametrize("character", ["中", "😀"])
+def test_local_rg_preserves_multibyte_character_prefix(tmp_path, character):
+    if local_booter.shutil.which("rg") is None:
+        pytest.skip("ripgrep executable unavailable")
+    target = tmp_path / "unicode.txt"
+    target.write_text(character * 2000 + "needle\n", encoding="utf-8")
+    result = asyncio.run(LocalFileSystemComponent().search_files("needle", str(target)))
+    assert result == {"success": True, "content": "1:" + character * 998 + "\n"}

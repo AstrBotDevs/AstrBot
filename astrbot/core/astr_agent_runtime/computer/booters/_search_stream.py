@@ -93,6 +93,7 @@ def run_search(
     output = bytearray()
     output_bytes = 0
     groups = 0
+    group_start = 0
     new_group = True
     separator = ""
     prefix = bytearray()
@@ -102,7 +103,7 @@ def run_search(
     timed_out = False
 
     def consume_line(ending: str) -> None:
-        nonlocal groups, new_group, separator, output_bytes, reason
+        nonlocal groups, new_group, separator, output_bytes, group_start, reason
         raw = bytes(prefix)
         if ending and last_byte == b"\r":
             ending = "\r\n"
@@ -128,15 +129,17 @@ def run_search(
             if max_results is not None and groups >= max_results:
                 reason = "max_results"
                 return
+            # Commit context groups only once their closing separator or EOF
+            # has been observed. Rollback excludes the separator before them.
+            group_start = len(output)
             groups += 1
             new_group = False
         for text in (separator, line + ending):
             encoded = text.encode("utf-8")
             remaining = max_output_bytes - output_bytes
             if len(encoded) > remaining:
-                retained = encoded[:remaining].decode("utf-8", errors="ignore").encode()
-                output.extend(retained)
-                output_bytes += len(retained)
+                del output[group_start:]
+                output_bytes = len(output)
                 reason = "max_output_bytes"
                 break
             output.extend(encoded)

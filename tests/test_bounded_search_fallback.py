@@ -3,6 +3,7 @@ from __future__ import annotations
 import importlib.util
 import io
 import json
+import shutil
 import subprocess
 import sys
 import tracemalloc
@@ -111,6 +112,16 @@ def test_fallback_large_unicode_literal_matches_suffix(tmp_path):
     assert output.getvalue().decode() == "1:" + "字" * 998 + "\n"
 
 
+def test_fallback_long_line_regex_guard_counts_backslash_parity(tmp_path):
+    target = tmp_path / "large.txt"
+    target.write_bytes(b"a" * 100_000 + b"(a)\n")
+    with pytest.raises(ValueError, match="Grouped or alternating"):
+        fallback.run_search({"path": str(target), "pattern": r"\\(a+)+$"}, io.BytesIO())
+    output = io.BytesIO()
+    assert fallback.run_search({"path": str(target), "pattern": r"\(a\)$"}, output) == 0
+    assert output.getvalue() == b"1:" + b"a" * 998 + b"\n"
+
+
 def test_fallback_unicode_classes_and_casefold_for_ordinary_lines(tmp_path):
     target = tmp_path / "unicode.txt"
     target.write_text("中文\nÜBER\n", encoding="utf-8")
@@ -141,6 +152,59 @@ def test_fallback_byte_budget_and_huge_context_stay_bounded(tmp_path, capsys):
 
     assert status == 3
     assert len(output.getvalue()) <= 32
+    assert (
+        json.loads(capsys.readouterr().err)["truncation_reason"] == "max_output_bytes"
+    )
+
+
+@pytest.mark.parametrize("context", [{"before_context": 1}, {"after_context": 2}])
+def test_fallback_byte_cap_drops_context_without_a_complete_match_group(
+    tmp_path, capsys, context
+):
+    target = tmp_path / "context.txt"
+    target.write_text("before\nneedle\nafter\nafter\n", encoding="utf-8")
+    output = io.BytesIO()
+    assert (
+        fallback.run_search(
+            {
+                "path": str(target),
+                "pattern": "needle",
+                "max_output_bytes": 12,
+                **context,
+            },
+            output,
+        )
+        == 3
+    )
+    assert output.getvalue() == b""
+    assert (
+        json.loads(capsys.readouterr().err)["truncation_reason"] == "max_output_bytes"
+    )
+
+
+def test_fallback_byte_cap_keeps_only_previous_complete_context_groups(
+    tmp_path, capsys
+):
+    target = tmp_path / "context.txt"
+    target.write_text(
+        "before\nneedle\nafter\ngap\ngap\nbefore\nneedle\n" + "x" * 100 + "\n",
+        encoding="utf-8",
+    )
+    output = io.BytesIO()
+    assert (
+        fallback.run_search(
+            {
+                "path": str(target),
+                "pattern": "needle",
+                "max_output_bytes": 80,
+                "before_context": 1,
+                "after_context": 1,
+            },
+            output,
+        )
+        == 3
+    )
+    assert output.getvalue() == b"1-before\n2:needle\n3-after\n"
     assert (
         json.loads(capsys.readouterr().err)["truncation_reason"] == "max_output_bytes"
     )
@@ -191,6 +255,79 @@ def test_fallback_brace_glob_and_ordinary_ignore_rules(tmp_path):
     lines = output.getvalue().decode().splitlines()
     assert len(lines) == 3
     assert not any("other.txt" in line for line in lines)
+
+
+@pytest.mark.parametrize(
+    "glob", ["src/*.py", "src/**/*.py", "**/src/*.py", "src/*.{py,txt}"]
+)
+def test_fallback_path_globs_match_actual_ripgrep(tmp_path, monkeypatch, glob):
+    rg = shutil.which("rg")
+    if rg is None:
+        pytest.skip("ripgrep comparison requires rg")
+    for name in ("src/a.py", "src/nested/b.py", "src/nested/b.txt", "other/src/c.py"):
+        path = tmp_path / name
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("needle\n", encoding="utf-8")
+    monkeypatch.chdir(tmp_path)
+    output = io.BytesIO()
+    status = fallback.run_search(
+        {"path": str(tmp_path), "pattern": "needle", "glob": glob}, output
+    )
+    actual = subprocess.run(
+        [rg, "--color=never", "-n", "-g", glob, "-e", "needle", "--", str(tmp_path)],
+        capture_output=True,
+        timeout=10,
+    )
+    assert status == actual.returncode == 0
+    assert sorted(output.getvalue().splitlines()) == sorted(actual.stdout.splitlines())
+
+
+@pytest.mark.parametrize("glob", ["*.py", "!*.txt"])
+def test_fallback_explicit_file_ignores_glob_as_ripgrep_does(tmp_path, glob):
+    rg = shutil.which("rg")
+    if rg is None:
+        pytest.skip("ripgrep comparison requires rg")
+    target = tmp_path / "file.txt"
+    target.write_text("needle\n", encoding="utf-8")
+    output = io.BytesIO()
+    assert (
+        fallback.run_search(
+            {"path": str(target), "pattern": "needle", "glob": glob}, output
+        )
+        == 0
+    )
+    actual = subprocess.run(
+        [rg, "--color=never", "-n", "-g", glob, "-e", "needle", "--", str(target)],
+        capture_output=True,
+        timeout=10,
+    )
+    assert actual.returncode == 0
+    assert output.getvalue().splitlines() == actual.stdout.splitlines() == [b"1:needle"]
+
+
+def test_fallback_slash_glob_is_relative_to_cwd_as_ripgrep_is(tmp_path, monkeypatch):
+    rg = shutil.which("rg")
+    if rg is None:
+        pytest.skip("ripgrep comparison requires rg")
+    target = tmp_path / "root" / "src" / "file.py"
+    target.parent.mkdir(parents=True)
+    target.write_text("needle\n", encoding="utf-8")
+    monkeypatch.chdir(tmp_path)
+    output = io.BytesIO()
+    assert (
+        fallback.run_search(
+            {"path": str(tmp_path / "root"), "pattern": "needle", "glob": "src/*.py"},
+            output,
+        )
+        == 1
+    )
+    actual = subprocess.run(
+        [rg, "-n", "-g", "src/*.py", "-e", "needle", "--", str(tmp_path / "root")],
+        capture_output=True,
+        timeout=10,
+    )
+    assert actual.returncode == 1
+    assert output.getvalue() == actual.stdout == b""
 
 
 def test_fallback_nested_ignore_rules_have_a_cumulative_memory_budget(tmp_path):

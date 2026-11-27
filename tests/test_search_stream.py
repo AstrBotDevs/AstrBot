@@ -107,9 +107,54 @@ def test_search_stream_utf8_byte_bound_does_not_split_character():
         max_output_bytes=19,
     )
 
-    assert result["content"] == "1:" + "🙂" * 4
+    assert result["content"] == ""
     assert len(result["content"].encode()) <= 19
     assert result["truncation_reason"] == "max_output_bytes"
+
+
+def test_search_stream_byte_cap_preserves_only_complete_lines():
+    result = search(
+        "sys.stdout.buffer.write(('1:one\\n2:'+chr(0x1f642)*20+'\\n').encode())",
+        max_output_bytes=19,
+    )
+
+    assert result == {
+        "success": True,
+        "content": "1:one\n",
+        "truncated": True,
+        "truncation_reason": "max_output_bytes",
+    }
+
+
+def test_search_stream_byte_cap_discards_oversized_first_context_group():
+    result = search(
+        "print('1:needle\\n2-context\\n3-context')",
+        has_context=True,
+        max_output_bytes=24,
+    )
+
+    assert result == {
+        "success": True,
+        "content": "",
+        "truncated": True,
+        "truncation_reason": "max_output_bytes",
+    }
+
+
+@pytest.mark.parametrize("byte_limit", [20, 40])
+def test_search_stream_byte_cap_keeps_previous_complete_context_group(byte_limit):
+    result = search(
+        "print('1:needle\\n2-after\\n--\\n8:needle\\n9-context\\n10-context')",
+        has_context=True,
+        max_output_bytes=byte_limit,
+    )
+
+    assert result == {
+        "success": True,
+        "content": "1:needle\n2-after\n",
+        "truncated": True,
+        "truncation_reason": "max_output_bytes",
+    }
 
 
 def test_search_stream_exact_byte_count_is_not_marked_truncated():

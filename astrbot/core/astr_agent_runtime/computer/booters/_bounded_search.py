@@ -56,9 +56,26 @@ def _candidate_files(root: Path, glob: str | None):
             return any(
                 fnmatch.fnmatchcase(part, pattern) for part in relative.split("/")
             )
-        return fnmatch.fnmatchcase(relative, pattern) or (
-            pattern.startswith("**/") and fnmatch.fnmatchcase(relative, pattern[3:])
-        )
+        # Match path segments separately: fnmatch's '*' also accepts '/',
+        # whereas ripgrep reserves cross-directory matching for '**'.
+        segments = relative.split("/")
+        parts = pattern.split("/")
+        positions = {0}
+        for part in parts:
+            if part == "**":
+                positions = set(
+                    range(min(positions, default=len(segments) + 1), len(segments) + 1)
+                )
+            else:
+                positions = {
+                    index + 1
+                    for index in positions
+                    if index < len(segments)
+                    and fnmatch.fnmatchcase(segments[index], part)
+                }
+            if not positions:
+                return False
+        return len(segments) in positions
 
     if root.is_file():
         yield root
@@ -107,6 +124,12 @@ def _candidate_files(root: Path, glob: str | None):
                     ):
                         continue
                     entry_path = Path(entry.path)
+                    try:
+                        glob_path = (
+                            entry_path.resolve().relative_to(Path.cwd()).as_posix()
+                        )
+                    except ValueError:
+                        glob_path = entry_path.as_posix()
                     is_dir = entry.is_dir(follow_symlinks=False)
                     ignored = False
                     for base, rule in rules:
@@ -121,7 +144,7 @@ def _candidate_files(root: Path, glob: str | None):
                             ignored = not negative
                     if not is_dir and glob and not glob.startswith("!"):
                         # Command-line includes override ignore files, as with rg.
-                        if matches(entry_path.relative_to(root).as_posix(), glob):
+                        if matches(glob_path, glob):
                             ignored = False
                     if ignored:
                         continue
@@ -133,11 +156,10 @@ def _candidate_files(root: Path, glob: str | None):
                     if is_dir:
                         yield from walk(entry_path)
                     elif entry.is_file(follow_symlinks=False):
-                        relative = entry_path.relative_to(root).as_posix()
                         if glob:
                             negative = glob.startswith("!")
                             if (
-                                matches(relative, glob[1:] if negative else glob)
+                                matches(glob_path, glob[1:] if negative else glob)
                                 == negative
                             ):
                                 continue
@@ -219,14 +241,21 @@ def run_search(options: dict[str, Any], output: BinaryIO) -> int:
     # Repetition of groups can make Python's backtracking stack proportional
     # to a giant source line. Basic atoms/repeats use its constant-space fast
     # path; richer expressions still work on the bounded ordinary-line path.
-    complex_long_pattern = re.search(r"(?<!\\)[()|{]", pattern) is not None
+    complex_long_pattern = re.search(r"(?<!\\)(?:\\\\)*[()|{]", pattern) is not None
+    pending_group = bytearray()
 
     def emit(data: bytes) -> bool:
         nonlocal written
-        if written + len(data) > max_bytes:
+        if written + len(pending_group) + len(data) > max_bytes:
             return False
-        output.write(data)
-        written += len(data)
+        if has_context:
+            # Keep one group until its closing boundary is known. If its
+            # context exceeds the byte budget, none of that partial group
+            # reaches the caller, even if its before-lines fit by themselves.
+            pending_group.extend(data)
+        else:
+            output.write(data)
+            written += len(data)
         return True
 
     def truncated(reason: str) -> int:
@@ -354,6 +383,10 @@ def run_search(options: dict[str, Any], output: BinaryIO) -> int:
                             or line_number - before > last_emitted + 1
                         )
                         if new_group:
+                            if pending_group:
+                                output.write(pending_group)
+                                written += len(pending_group)
+                                pending_group.clear()
                             if max_results is not None and groups >= max_results:
                                 return truncated("max_results")
                             if has_context and groups and not emit(b"--\n"):
@@ -385,10 +418,16 @@ def run_search(options: dict[str, Any], output: BinaryIO) -> int:
                         # Account for deque/tuple/int overhead as well as text,
                         # so a huge -B over tiny lines cannot inflate memory.
                         previous_bytes += len(line) + 128
-                        while len(previous) > before or previous_bytes > max_bytes:
+                        while len(previous) > before or previous_bytes > max(
+                            max_bytes, _TEXT_LINE_BYTES
+                        ):
                             _, old_line = previous.popleft()
                             previous_bytes -= len(old_line) + 128
                     start = end + 1
+        if pending_group:
+            output.write(pending_group)
+            written += len(pending_group)
+            pending_group.clear()
     return 0 if groups else 1
 
 

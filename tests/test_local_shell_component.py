@@ -1011,10 +1011,10 @@ async def test_local_python_uses_platform_sandbox(
 ):
     calls = []
 
-    def fake_run(*args, **kwargs):
+    def fake_popen(*args, **kwargs):
         calls.append((args, kwargs))
         kwargs["stdout"].write(b"done\n")
-        return subprocess.CompletedProcess(args[0], 0)
+        return _FakePopen(stdout=b"")
 
     monkeypatch.setattr(local_booter.sys, "platform", platform_name)
     monkeypatch.setattr(
@@ -1022,7 +1022,7 @@ async def test_local_python_uses_platform_sandbox(
         "which",
         lambda _name, **_kwargs: sandbox_executable,
     )
-    monkeypatch.setattr(local_booter.subprocess, "run", fake_run)
+    monkeypatch.setattr(local_booter.subprocess, "Popen", fake_popen)
 
     result = await LocalPythonComponent().exec(
         "print('done')",
@@ -1038,20 +1038,21 @@ async def test_local_python_uses_platform_sandbox(
         "print('done')",
     ]
     assert calls[0][1]["env"] == {"PATH": os.defpath}
+    assert calls[0][1]["start_new_session"] is True
     assert "capture_output" not in calls[0][1]
 
 
 @pytest.mark.asyncio
 @pytest.mark.skipif(os.name == "nt", reason="Unix sandbox requires POSIX.")
 async def test_sandboxed_local_python_caps_returned_output(monkeypatch, tmp_path):
-    def fake_run(*args, **kwargs):
+    def fake_popen(*args, **kwargs):
         kwargs["stdout"].write(b"123456")
-        return subprocess.CompletedProcess(args[0], 0)
+        return _FakePopen(stdout=b"")
 
     monkeypatch.setattr(local_booter.sys, "platform", "linux")
     monkeypatch.setattr(local_booter.shutil, "which", lambda _name: "/usr/bin/bwrap")
     monkeypatch.setattr(local_booter, "_LOCAL_SANDBOX_MAX_OUTPUT_BYTES", 5)
-    monkeypatch.setattr(local_booter.subprocess, "run", fake_run)
+    monkeypatch.setattr(local_booter.subprocess, "Popen", fake_popen)
 
     result = await LocalPythonComponent().exec(
         "print('large output')",

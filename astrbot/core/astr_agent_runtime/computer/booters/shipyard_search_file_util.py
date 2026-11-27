@@ -231,8 +231,9 @@ async def search_files_via_shell(
     )
     if not truncation_reason and len(raw_stdout.encode("utf-8")) > byte_limit:
         truncation_reason = "max_output_bytes"
+    error_detail = "\n".join(error_lines).strip()
     if (exit_code in (0, None) and result.get("success") is not False) or (
-        truncation_reason and exit_code in (0, 1, 141, -13)
+        truncation_reason and exit_code in (0, 1, 141, -13) and not error_detail
     ):
         response: dict[str, Any] = {"success": True, "content": stdout}
         if truncation_reason:
@@ -257,8 +258,6 @@ async def search_files_via_shell(
     return {
         "success": False,
         "content": "",
-        "error": "\n".join(error_lines).strip()
-        or stdout
-        or f"command exited with code {exit_code}",
+        "error": error_detail or stdout or f"command exited with code {exit_code}",
         "exit_code": exit_code,
     }
