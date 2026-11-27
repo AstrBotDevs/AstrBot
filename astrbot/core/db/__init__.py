@@ -128,6 +128,10 @@ class BaseDatabase(abc.ABC):
         """Get platform statistics within the specified offset in seconds and group by platform_id."""
         ...
 
+    @deprecated(
+        version="4.30.0",
+        reason="Managed Chat Providers record request usage automatically.",
+    )
     @abc.abstractmethod
     async def insert_provider_stat(
         self,
@@ -140,7 +144,7 @@ class BaseDatabase(abc.ABC):
         stats: dict | None = None,
         agent_type: str = "internal",
     ) -> ProviderStat:
-        """Insert a per-response provider stat record."""
+        """Insert a legacy provider statistic for an Agent turn."""
         ...
 
     @abc.abstractmethod

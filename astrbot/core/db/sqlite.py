@@ -377,6 +377,10 @@ class SQLiteDatabase(BaseDatabase):
             )
             return list(result.scalars().all())
 
+    @deprecated(
+        version="4.30.0",
+        reason="Managed Chat Providers record request usage automatically.",
+    )
     async def insert_provider_stat(
         self,
         *,
@@ -388,7 +392,7 @@ class SQLiteDatabase(BaseDatabase):
         stats: dict | None = None,
         agent_type: str = "internal",
     ) -> ProviderStat:
-        """Insert a provider stat record for a single agent response."""
+        """Insert a legacy provider statistic for an Agent turn."""
         stats = stats or {}
         token_usage = stats.get("token_usage", {})
 

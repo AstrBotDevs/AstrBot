@@ -26,11 +26,12 @@ async def test_direct_plugin_chat_counts_each_attempt_and_keeps_historical_token
     monkeypatch.setattr(chat_request, "db_helper", temp_db)
     monkeypatch.setattr(request_retry, "REQUEST_RETRY_WAIT_MIN_S", 0)
     monkeypatch.setattr(request_retry, "REQUEST_RETRY_WAIT_MAX_S", 0)
-    await temp_db.insert_provider_stat(
-        umo="test:FriendMessage:old",
-        provider_id="old-provider",
-        stats={"token_usage": {"input_other": 9}},
-    )
+    with pytest.warns(DeprecationWarning, match="insert_provider_stat"):
+        await temp_db.insert_provider_stat(
+            umo="test:FriendMessage:old",
+            provider_id="old-provider",
+            stats={"token_usage": {"input_other": 9}},
+        )
     provider = ProviderOpenAIOfficial(
         {"id": "test-provider", "key": ["test-key"], "model": "default-model"},
         {},

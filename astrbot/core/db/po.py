@@ -61,7 +61,7 @@ class PlatformStat(SQLModel, table=True):
 
 
 class ProviderStat(TimestampMixin, SQLModel, table=True):
-    """Historical per-turn statistics from before request accounting."""
+    """Deprecated per-turn statistics retained for historical totals and backups."""
 
     __tablename__: str = "provider_stats"
 
