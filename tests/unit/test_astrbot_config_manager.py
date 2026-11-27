@@ -218,6 +218,9 @@ async def test_async_config_resolution_avoids_sync_sqlite_on_cold_cache(
         conf = await manager.get_conf_async(umo)
         assert conf["wake_prefix"] == ["?"]
 
+        session_conf = await manager.get_conf_async(MessageSession.from_str(umo))
+        assert session_conf["wake_prefix"] == ["?"]
+
         pm = ProviderManager(
             manager,
             db,
@@ -232,6 +235,20 @@ async def test_async_config_resolution_avoids_sync_sqlite_on_cold_cache(
         pm.inst_map["custom_chat"] = fake_chat
         resolved = await pm.get_using_provider_async(ProviderType.CHAT_COMPLETION, umo)
         assert resolved is fake_chat
+
+        async def fail_get_async(*_args, **_kwargs):
+            raise RuntimeError("db unavailable")
+
+        monkeypatch.setattr(sp_instance, "get_async", fail_get_async)
+        assert (await manager.get_conf_info_async("not-a-valid-umo"))["id"] == "default"
+        assert (await manager.get_conf_async("not-a-valid-umo")) is default_conf
+        bad_snapshot, bad_overrides = await manager._create_message_config_async(
+            "not-a-valid-umo"
+        )
+        assert bad_snapshot["wake_prefix"] == default_conf["wake_prefix"]
+        assert bad_overrides == frozenset()
+        bad_info, _, _ = await manager.resolve_message_config_async("not-a-valid-umo")
+        assert bad_info["id"] == "default"
     finally:
         await sp_instance.close()
         await db.engine.dispose()

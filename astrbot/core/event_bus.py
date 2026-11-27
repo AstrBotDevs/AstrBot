@@ -55,43 +55,43 @@ class EventBus:
         self.astrbot_config_mgr = astrbot_config_mgr
         # 持有正在执行的 pipeline 任务的强引用, 防止 task 在 pending 状态被 GC 回收
         self._pending_tasks: dict[asyncio.Task, AstrMessageEvent] = {}
+        self._inflight_dispatches: dict[str, set[asyncio.Event]] = {}
         self.stopped_platforms: set[str] = set()
         self._closed = False
+
+    async def _resolve_dispatch_config(self, umo: str):
+        """Resolve profile metadata and an optional preloaded message snapshot."""
+        resolve_async = getattr(
+            self.astrbot_config_mgr, "resolve_message_config_async", None
+        )
+        if inspect.iscoroutinefunction(resolve_async):
+            conf_info, snapshot, override_paths = await resolve_async(umo)
+            return conf_info, (snapshot, override_paths)
+        get_conf_info_async = getattr(
+            self.astrbot_config_mgr, "get_conf_info_async", None
+        )
+        if inspect.iscoroutinefunction(get_conf_info_async):
+            return await get_conf_info_async(umo), None
+        return self.astrbot_config_mgr.get_conf_info(umo), None
 
     async def dispatch(self) -> None:
         while not self._closed:
             event: AstrMessageEvent = await self.event_queue.get()
-            if self._closed or event.get_platform_id() in self.stopped_platforms:
+            platform_id = event.get_platform_id()
+            if self._closed or platform_id in self.stopped_platforms:
                 event.trace.record("pipeline_end", status="cancelled")
                 continue
-            original_umo = event.unified_msg_origin
-            get_conf_info_async = getattr(
-                self.astrbot_config_mgr, "get_conf_info_async", None
-            )
-            if inspect.iscoroutinefunction(get_conf_info_async):
-                conf_info = await get_conf_info_async(original_umo)
-            else:
-                conf_info = self.astrbot_config_mgr.get_conf_info(original_umo)
-            conf_id = conf_info["id"]
-            scheduler = self.pipeline_scheduler_mapping.get(conf_id)
-            if not scheduler:
-                logger.error(
-                    f"PipelineScheduler not found for id: {conf_id}, event ignored."
+
+            done_event = asyncio.Event()
+            self._inflight_dispatches.setdefault(platform_id, set()).add(done_event)
+            try:
+                original_umo = event.unified_msg_origin
+                conf_info, resolved_config = await self._resolve_dispatch_config(
+                    original_umo
                 )
-                event.trace.record(
-                    "pipeline_end", status="error", error=_MISSING_SCHEDULER_TRACE_ERROR
-                )
-                continue
-            self._apply_session_isolation(event, scheduler.ctx.astrbot_config)
-            if event.unified_msg_origin != original_umo:
-                # Isolation changes the routing key. Match the scheduler to the
-                # same final UMO used by providers and other configuration readers.
-                if inspect.iscoroutinefunction(get_conf_info_async):
-                    conf_info = await get_conf_info_async(event.unified_msg_origin)
-                else:
-                    conf_info = self.astrbot_config_mgr.get_conf_info(
-                        event.unified_msg_origin
-                    )
+                if self._closed or platform_id in self.stopped_platforms:
+                    event.trace.record("pipeline_end", status="cancelled")
+                    continue
                 conf_id = conf_info["id"]
                 scheduler = self.pipeline_scheduler_mapping.get(conf_id)
                 if not scheduler:
@@ -104,16 +104,61 @@ class EventBus:
                         error=_MISSING_SCHEDULER_TRACE_ERROR,
                     )
                     continue
-            conf_name = conf_info.get("name") or conf_id
-            with event.trace.context():
-                self._print_event(event, conf_name)
-            task = asyncio.create_task(scheduler.execute(event))
-            self._pending_tasks[task] = event
-            task.add_done_callback(self._on_task_done)
+                self._apply_session_isolation(event, scheduler.ctx.astrbot_config)
+                if event.unified_msg_origin != original_umo:
+                    # Isolation changes the routing key. Match the scheduler to the
+                    # same final UMO used by providers and other configuration readers.
+                    conf_info, resolved_config = await self._resolve_dispatch_config(
+                        event.unified_msg_origin
+                    )
+                    if self._closed or platform_id in self.stopped_platforms:
+                        event.trace.record("pipeline_end", status="cancelled")
+                        continue
+                    conf_id = conf_info["id"]
+                    scheduler = self.pipeline_scheduler_mapping.get(conf_id)
+                    if not scheduler:
+                        logger.error(
+                            f"PipelineScheduler not found for id: {conf_id}, event ignored."
+                        )
+                        event.trace.record(
+                            "pipeline_end",
+                            status="error",
+                            error=_MISSING_SCHEDULER_TRACE_ERROR,
+                        )
+                        continue
+                if resolved_config is not None:
+                    event.set_extra(
+                        "_resolved_message_config",
+                        (
+                            event.unified_msg_origin,
+                            resolved_config[0],
+                            resolved_config[1],
+                        ),
+                    )
+                conf_name = conf_info.get("name") or conf_id
+                with event.trace.context():
+                    self._print_event(event, conf_name)
+                task = asyncio.create_task(scheduler.execute(event))
+                self._pending_tasks[task] = event
+                task.add_done_callback(self._on_task_done)
+            finally:
+                done_event.set()
+                inflight = self._inflight_dispatches.get(platform_id)
+                if inflight is not None:
+                    inflight.discard(done_event)
+                    if not inflight:
+                        self._inflight_dispatches.pop(platform_id, None)
 
     async def close(self) -> None:
         """Stop dispatching and let active message pipelines finish cancellation."""
         self._closed = True
+        inflight = [
+            done_event
+            for waiters in self._inflight_dispatches.values()
+            for done_event in waiters
+        ]
+        if inflight:
+            await asyncio.gather(*(done_event.wait() for done_event in inflight))
         tasks = list(self._pending_tasks)
         for task in tasks:
             task.cancel()
@@ -135,6 +180,9 @@ class EventBus:
                 retained.append(event)
         for event in retained:
             self.event_queue.put_nowait(event)
+        inflight = list(self._inflight_dispatches.get(platform_id, ()))
+        if inflight:
+            await asyncio.gather(*(done_event.wait() for done_event in inflight))
         tasks = [
             task
             for task, event in self._pending_tasks.items()

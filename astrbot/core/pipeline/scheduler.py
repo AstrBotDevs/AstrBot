@@ -5,6 +5,7 @@ from typing import cast
 
 from astrbot.core import logger
 from astrbot.core.config.runtime import MessageConfig, current_message_config
+from astrbot.core.config.snapshot import AstrBotConfigSnapshot
 from astrbot.core.log import log_context
 from astrbot.core.message.components import UIInteraction
 from astrbot.core.platform import AstrMessageEvent
@@ -95,18 +96,31 @@ class PipelineScheduler:
             event (AstrMessageEvent): 事件对象
 
         """
-        config_mgr = self.ctx.plugin_manager.context.astrbot_config_mgr
-        create_message_config_async = getattr(
-            config_mgr, "_create_message_config_async", None
-        )
-        if inspect.iscoroutinefunction(create_message_config_async):
-            snapshot, override_paths = await create_message_config_async(
-                event.unified_msg_origin
-            )
+        preloaded = event.get_extra("_resolved_message_config")
+        if (
+            isinstance(preloaded, tuple)
+            and len(preloaded) == 3
+            and preloaded[0] == event.unified_msg_origin
+            and isinstance(preloaded[1], AstrBotConfigSnapshot)
+            and isinstance(preloaded[2], frozenset)
+        ):
+            extras = event.get_extra()
+            if isinstance(extras, dict):
+                extras.pop("_resolved_message_config", None)
+            snapshot, override_paths = preloaded[1], preloaded[2]
         else:
-            snapshot, override_paths = config_mgr._create_message_config(
-                event.unified_msg_origin
+            config_mgr = self.ctx.plugin_manager.context.astrbot_config_mgr
+            create_message_config_async = getattr(
+                config_mgr, "_create_message_config_async", None
             )
+            if inspect.iscoroutinefunction(create_message_config_async):
+                snapshot, override_paths = await create_message_config_async(
+                    event.unified_msg_origin
+                )
+            else:
+                snapshot, override_paths = config_mgr._create_message_config(
+                    event.unified_msg_origin
+                )
         scope = MessageConfig(
             event.unified_msg_origin, snapshot, self.ctx, override_paths
         )

@@ -202,6 +202,18 @@ class AstrBotConfigManager:
             return AstrBotConfigSnapshot(conf, overrides)
         return conf
 
+    @staticmethod
+    def _normalize_umo(umo: str | MessageSession) -> str | None:
+        """Validate and normalize a session origin to its canonical string form."""
+        try:
+            if isinstance(umo, MessageSession):
+                return str(MessageSession.from_str(str(umo)))
+            if isinstance(umo, str):
+                return str(MessageSession.from_str(umo))
+        except Exception:
+            return None
+        return None
+
     async def get_conf_async(self, umo: str | MessageSession | None) -> AstrBotConfig:
         """Asynchronously read a session's effective configuration or snapshot.
 
@@ -214,21 +226,25 @@ class AstrBotConfigManager:
         """
         if not umo:
             return self.confs["default"]
-        if isinstance(umo, MessageSession):
-            umo = f"{umo.platform_id}:{umo.message_type}:{umo.session_id}"
+        normalized_umo = self._normalize_umo(umo)
+        scope_umo = normalized_umo or (umo if isinstance(umo, str) else None)
 
         scope = current_message_config.get()
         if (
             scope is not None
             and scope.active
-            and scope.umo == umo
+            and scope_umo is not None
+            and scope.umo == scope_umo
             and scope.context.plugin_manager.context.astrbot_config_mgr is self
         ):
             return scope.config
 
+        if normalized_umo is None:
+            return self.confs["default"]
+
         self._get_abconf_data()
-        binding = await self.sp.get_async("umo", umo, BINDING_KEY, {}) or {}
-        conf_id = self._load_conf_mapping(umo, binding=binding)["id"]
+        binding = await self.sp.get_async("umo", normalized_umo, BINDING_KEY, {}) or {}
+        conf_id = self._load_conf_mapping(normalized_umo, binding=binding)["id"]
         conf = self.confs.get(conf_id) or self.confs["default"]
         overrides = binding.get("overrides", {})
         if overrides:
@@ -253,6 +269,33 @@ class AstrBotConfigManager:
         overrides = binding.get("overrides", {})
         return AstrBotConfigSnapshot(conf, overrides), frozenset(overrides)
 
+    async def resolve_message_config_async(
+        self, umo: str | MessageSession
+    ) -> tuple[ConfInfo, AstrBotConfigSnapshot, frozenset[str]]:
+        """Asynchronously resolve profile metadata and a message configuration snapshot.
+
+        Args:
+            umo: Session origin used for binding and route lookup.
+
+        Returns:
+            Selected profile metadata, a fresh runtime configuration snapshot,
+            and its explicit override paths.
+        """
+        self._get_abconf_data()
+        normalized_umo = self._normalize_umo(umo)
+        if normalized_umo is None:
+            return (
+                DEFAULT_CONFIG_CONF_INFO,
+                AstrBotConfigSnapshot(self.confs["default"], {}),
+                frozenset(),
+            )
+
+        binding = await self.sp.get_async("umo", normalized_umo, BINDING_KEY, {}) or {}
+        conf_info = self._load_conf_mapping(normalized_umo, binding=binding)
+        conf = self.confs.get(conf_info["id"]) or self.confs["default"]
+        overrides = binding.get("overrides", {})
+        return conf_info, AstrBotConfigSnapshot(conf, overrides), frozenset(overrides)
+
     async def _create_message_config_async(
         self, umo: str
     ) -> tuple[AstrBotConfigSnapshot, frozenset[str]]:
@@ -264,12 +307,8 @@ class AstrBotConfigManager:
         Returns:
             A fresh runtime configuration and its explicit override paths.
         """
-        self._get_abconf_data()
-        binding = await self.sp.get_async("umo", umo, BINDING_KEY, {}) or {}
-        conf_id = self._load_conf_mapping(umo, binding=binding)["id"]
-        conf = self.confs.get(conf_id) or self.confs["default"]
-        overrides = binding.get("overrides", {})
-        return AstrBotConfigSnapshot(conf, overrides), frozenset(overrides)
+        _, snapshot, override_paths = await self.resolve_message_config_async(umo)
+        return snapshot, override_paths
 
     @property
     def default_conf(self) -> AstrBotConfig:
@@ -306,13 +345,9 @@ class AstrBotConfigManager:
             Metadata of the selected base profile.
         """
         self._get_abconf_data()
-        if isinstance(umo, MessageSession):
-            normalized_umo = str(umo)
-        else:
-            try:
-                normalized_umo = str(MessageSession.from_str(umo))
-            except Exception:
-                return DEFAULT_CONFIG_CONF_INFO
+        normalized_umo = self._normalize_umo(umo)
+        if normalized_umo is None:
+            return DEFAULT_CONFIG_CONF_INFO
 
         if follow_route:
             binding = None

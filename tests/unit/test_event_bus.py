@@ -998,3 +998,194 @@ async def test_dispatch_and_execute_resolve_config_async_without_sync_sqlite(
     finally:
         await sp_instance.close()
         await db.engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_stop_platform_cancels_inflight_dispatch_during_async_config_lookup() -> (
+    None
+):
+    """stop_platform waits for and cancels a dispatch suspended in config resolution."""
+    queue: asyncio.Queue = asyncio.Queue()
+    scheduler = MagicMock(spec=PipelineScheduler)
+    scheduler.ctx = SimpleNamespace(astrbot_config={})
+    scheduler.execute = AsyncMock()
+
+    lookup_started = asyncio.Event()
+    allow_lookup = asyncio.Event()
+
+    async def slow_resolve(_umo: str):
+        lookup_started.set()
+        await allow_lookup.wait()
+        return {"id": "default", "name": "default"}, MagicMock(), frozenset()
+
+    config_mgr = MagicMock()
+    config_mgr.resolve_message_config_async = slow_resolve
+
+    bus = EventBus(queue, {"default": scheduler}, config_mgr)
+
+    msg = AstrBotMessage()
+    msg.type = MessageType.GROUP_MESSAGE
+    msg.group_id = "g1"
+    msg.self_id = "bot"
+    msg.sender = MessageMember(user_id="u1")
+    msg.message = [Plain("hi")]
+    msg.raw_message = SimpleNamespace(message_type="text")
+    event = AstrMessageEvent(
+        "hi", msg, PlatformMetadata("aiocqhttp", "test", "bot1"), "g1"
+    )
+
+    recorded_statuses: list[tuple[str, dict]] = []
+    event.trace.record = lambda name, **kwargs: recorded_statuses.append((name, kwargs))
+
+    await queue.put(event)
+    dispatch_task = asyncio.create_task(bus.dispatch())
+    try:
+        await asyncio.wait_for(lookup_started.wait(), timeout=1.0)
+        stop_task = asyncio.create_task(bus.stop_platform("bot1"))
+        await asyncio.sleep(0)
+        assert not stop_task.done()
+
+        allow_lookup.set()
+        await asyncio.wait_for(stop_task, timeout=1.0)
+    finally:
+        await bus.close()
+        dispatch_task.cancel()
+        with suppress(asyncio.CancelledError):
+            await dispatch_task
+
+    scheduler.execute.assert_not_awaited()
+    assert ("pipeline_end", {"status": "cancelled"}) in recorded_statuses
+
+
+@pytest.mark.asyncio
+async def test_dispatch_reuses_resolved_snapshot_when_binding_changes(
+    tmp_path,
+) -> None:
+    """Pipeline execution uses the snapshot resolved when dispatch chose the scheduler."""
+    from astrbot.core.astrbot_config_mgr import AstrBotConfigManager
+    from astrbot.core.config.astrbot_config import AstrBotConfig
+    from astrbot.core.config.default import DEFAULT_CONFIG
+    from astrbot.core.config_bindings import BINDING_KEY
+    from astrbot.core.db.sqlite import SQLiteDatabase
+    from astrbot.core.pipeline.context import PipelineContext
+    from astrbot.core.utils.shared_preferences import SharedPreferences
+
+    db = SQLiteDatabase(str(tmp_path / "consistency.db"))
+    await db.initialize()
+    sp_instance = SharedPreferences(
+        db_helper=db, json_storage_path=str(tmp_path / "sp.json")
+    )
+    await sp_instance.initialize()
+    try:
+        default_conf = AstrBotConfig(
+            config_path=str(tmp_path / "cmd_config.json"),
+            default_config=DEFAULT_CONFIG,
+        )
+        profile_1_conf = AstrBotConfig(
+            config_path=str(tmp_path / "abconf_p1.json"),
+            default_config={**DEFAULT_CONFIG, "wake_prefix": ["!"]},
+        )
+        profile_1_conf.save_config()
+        profile_2_conf = AstrBotConfig(
+            config_path=str(tmp_path / "abconf_p2.json"),
+            default_config={**DEFAULT_CONFIG, "wake_prefix": ["#"]},
+        )
+        profile_2_conf.save_config()
+
+        umo = "bot1:GroupMessage:g1"
+        await sp_instance.global_put(
+            "abconf_mapping",
+            {
+                "profile_1": {"path": "abconf_p1.json", "name": "P1"},
+                "profile_2": {"path": "abconf_p2.json", "name": "P2"},
+            },
+        )
+        await sp_instance.session_put(
+            umo,
+            BINDING_KEY,
+            {"profile_id": "profile_1", "overrides": {"wake_prefix": ["!"]}},
+        )
+
+        ucr = MagicMock()
+        ucr.get_conf_id_for_umop.return_value = None
+        config_mgr = AstrBotConfigManager(default_conf, ucr, sp_instance)
+        await config_mgr.initialize()
+        config_mgr.confs["profile_1"] = profile_1_conf
+        config_mgr.confs["profile_2"] = profile_2_conf
+
+        observed: list[tuple[str, list[str]]] = []
+        processed = asyncio.Event()
+
+        def make_stage(profile_id: str, sched_ref: list[PipelineScheduler]):
+            async def inspect_stage(ev: AstrMessageEvent) -> None:
+                observed.append(
+                    (profile_id, sched_ref[0].ctx.astrbot_config["wake_prefix"])
+                )
+                ev.stop_event()
+                processed.set()
+
+            return inspect_stage
+
+        plugin_mgr = SimpleNamespace(
+            context=SimpleNamespace(astrbot_config_mgr=config_mgr)
+        )
+        p1_ref: list[PipelineScheduler] = []
+        sched_1 = PipelineScheduler(
+            PipelineContext(profile_1_conf, plugin_mgr, "profile_1", db)
+        )
+        p1_ref.append(sched_1)
+        sched_1.stages = [SimpleNamespace(process=make_stage("profile_1", p1_ref))]
+
+        p2_ref: list[PipelineScheduler] = []
+        sched_2 = PipelineScheduler(
+            PipelineContext(profile_2_conf, plugin_mgr, "profile_2", db)
+        )
+        p2_ref.append(sched_2)
+        sched_2.stages = [SimpleNamespace(process=make_stage("profile_2", p2_ref))]
+
+        # Mutate binding after dispatch resolves profile_1, before execute runs.
+        orig_resolve = config_mgr.resolve_message_config_async
+
+        async def mutating_resolve(target_umo):
+            result = await orig_resolve(target_umo)
+            await sp_instance.session_put(
+                umo,
+                BINDING_KEY,
+                {"profile_id": "profile_2", "overrides": {"wake_prefix": ["#"]}},
+            )
+            return result
+
+        config_mgr.resolve_message_config_async = mutating_resolve  # type: ignore[method-assign]
+
+        queue: asyncio.Queue = asyncio.Queue()
+        bus = EventBus(
+            queue,
+            {"default": sched_1, "profile_1": sched_1, "profile_2": sched_2},
+            config_mgr,
+        )
+
+        msg = AstrBotMessage()
+        msg.type = MessageType.GROUP_MESSAGE
+        msg.group_id = "g1"
+        msg.self_id = "bot"
+        msg.sender = MessageMember(user_id="alice")
+        msg.message = [Plain("hello")]
+        msg.raw_message = SimpleNamespace(message_type="text")
+        event = AstrMessageEvent(
+            "hello", msg, PlatformMetadata("aiocqhttp", "test", "bot1"), "g1"
+        )
+
+        await queue.put(event)
+        dispatch_task = asyncio.create_task(bus.dispatch())
+        try:
+            await asyncio.wait_for(processed.wait(), timeout=2.0)
+        finally:
+            await bus.close()
+            dispatch_task.cancel()
+            with suppress(asyncio.CancelledError):
+                await dispatch_task
+
+        assert observed == [("profile_1", ["!"])]
+    finally:
+        await sp_instance.close()
+        await db.engine.dispose()
