@@ -3,6 +3,7 @@ import base64
 import json
 import logging
 import random
+import re
 from collections.abc import AsyncGenerator
 from contextlib import AsyncExitStack, aclosing, asynccontextmanager
 from typing import Literal, cast
@@ -47,6 +48,32 @@ _SERVER_SIDE_PART_ATTRS = (
     "executable_code",
     "code_execution_result",
 )
+
+_GEMINI_MODEL_ID_RE = re.compile(r"(?<![a-z0-9])gemini-\d.*")
+# Default-deny allow-list of thinking-capable Gemini 2.5 families (pro, flash,
+# flash-lite) with optional preview/exp and dated/revision suffixes. Non-thinking
+# 2.5 variants (image, tts, native-audio, computer-use) reject thinkingConfig
+# with 400 INVALID_ARGUMENT and must not match.
+_GEMINI_25_THINKING_MODEL_RE = re.compile(
+    r"gemini-2\.5-(?:flash-lite|flash|pro)"
+    r"(?:-preview|-exp)?(?:-\d{2,3}|-\d{2}-\d{2,4})?$"
+)
+
+
+def _normalize_gemini_model_name(model: str) -> str:
+    """Extract the canonical lowercase Gemini model id from a path or relay alias.
+
+    Args:
+        model: Raw model identifier from the request payload or provider config,
+            which may include resource path prefixes or relay decorations.
+
+    Returns:
+        Lowercase canonical Gemini model id when a ``gemini-<digit>`` token is
+        present, otherwise the stripped lowercase trailing path segment.
+    """
+    name = model.rsplit("/", 1)[-1].strip().lower()
+    match = _GEMINI_MODEL_ID_RE.search(name)
+    return match.group(0) if match else name
 
 
 class SuppressNonTextPartsWarning(logging.Filter):
@@ -244,7 +271,7 @@ class ProviderGoogleGenAI(Provider):
                 fields, or the SDK rejects their values.
         """
         model = cast(str, payloads.get("model", self.get_model()))
-        model_name = model.rsplit("/", 1)[-1].lower()
+        model_name = _normalize_gemini_model_name(model)
         is_gemini_4 = model_name.startswith("gemini-4")
         if not modalities or is_gemini_4:
             modalities = ["TEXT"]
@@ -336,7 +363,7 @@ class ProviderGoogleGenAI(Provider):
             "gemini-2.5-flash-lite-preview",
             "gemini-robotics-er-1.5-preview",
             "gemini-live-2.5-flash-preview-native-audio-09-2025",
-        ]:
+        ] or bool(_GEMINI_25_THINKING_MODEL_RE.fullmatch(model_name)):
             # The thinkingBudget parameter, introduced with the Gemini 2.5 series
             thinking_budget = thinking_settings.get("budget")
             if thinking_budget is not None:
