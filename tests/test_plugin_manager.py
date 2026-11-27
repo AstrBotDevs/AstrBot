@@ -1,10 +1,13 @@
 import asyncio
 import errno
 import functools
+import gc
 import json
 import os
 import sys
 import tempfile
+import threading
+import time
 import zipfile
 from pathlib import Path
 from types import ModuleType
@@ -3076,7 +3079,7 @@ async def test_terminate_plugin_awaits_del_fallback_and_handles_errors(
     plugin_manager_pm: PluginManager,
     monkeypatch,
 ):
-    """Legacy __del__ hooks complete before return and errors do not block unload hooks."""
+    """Legacy __del__ runs once before unload hooks and GC does not re-run it."""
     from astrbot.core.star.base import Star
 
     _clear_star_runtime_state()
@@ -3084,15 +3087,13 @@ async def test_terminate_plugin_awaits_del_fallback_and_handles_errors(
 
     class LegacyMixin(Star):
         def __del__(self) -> None:
-            if not getattr(self, "_del_called", False):
-                self._del_called = True
-                events.append("del_error")
-                raise RuntimeError("cleanup boom")
+            time.sleep(0.05)
+            events.append("del_error")
+            raise RuntimeError("cleanup boom")
 
     class LegacyChildPlugin(LegacyMixin):
         pass
 
-    unloaded_called: list[str] = []
     hook_module_path = "data.plugins.observer.main"
     observer_md = star_manager_module.StarMetadata(
         name="observer",
@@ -3105,7 +3106,7 @@ async def test_terminate_plugin_awaits_del_fallback_and_handles_errors(
     star_manager_module.star_map[hook_module_path] = observer_md
 
     async def on_unloaded(smd) -> None:
-        unloaded_called.append(smd.name)
+        events.append(f"unloaded:{smd.name}")
 
     star_manager_module.star_handlers_registry.append(
         StarHandlerMetadata(
@@ -3139,8 +3140,10 @@ async def test_terminate_plugin_awaits_del_fallback_and_handles_errors(
 
     try:
         await PluginManager._terminate_plugin(metadata)
-        assert events == ["del_error"]
-        assert unloaded_called == ["legacy_child"]
+        del instance
+        metadata.star_cls = None
+        gc.collect()
+        assert events == ["del_error", "unloaded:legacy_child"]
         assert any(
             "raised an exception in __del__" in str(args[0]) for args in logged_errors
         )
@@ -3158,6 +3161,30 @@ async def test_terminate_plugin_skips_inactive_or_uninstantiated_plugins(
 
     _clear_star_runtime_state()
     calls: list[str] = []
+
+    hook_module_path = "data.plugins.observer_skip.main"
+    star_manager_module.star_map[hook_module_path] = star_manager_module.StarMetadata(
+        name="observer_skip",
+        author="tester",
+        desc="observer",
+        version="1.0.0",
+        module_path=hook_module_path,
+        activated=True,
+    )
+
+    async def on_unloaded(smd) -> None:
+        calls.append(f"unloaded:{smd.name}")
+
+    star_manager_module.star_handlers_registry.append(
+        StarHandlerMetadata(
+            event_type=EventType.OnPluginUnloadedEvent,
+            handler_full_name=f"{hook_module_path}_on_unloaded",
+            handler_name="on_unloaded",
+            handler_module_path=hook_module_path,
+            handler=on_unloaded,
+            event_filters=[],
+        )
+    )
 
     class TrackingPlugin(Star):
         async def terminate(self) -> None:
@@ -3189,4 +3216,169 @@ async def test_terminate_plugin_skips_inactive_or_uninstantiated_plugins(
         await PluginManager._terminate_plugin(uninstantiated)
         assert calls == []
     finally:
+        _clear_star_runtime_state()
+
+
+@pytest.mark.asyncio
+async def test_terminate_plugin_dispatches_unload_when_terminate_raises(
+    plugin_manager_pm: PluginManager,
+    monkeypatch,
+):
+    """Exceptions in terminate() are logged and do not skip OnPluginUnloadedEvent."""
+    from astrbot.core.star.base import Star
+
+    _clear_star_runtime_state()
+    unloaded: list[str] = []
+
+    hook_module_path = "data.plugins.observer_err.main"
+    star_manager_module.star_map[hook_module_path] = star_manager_module.StarMetadata(
+        name="observer_err",
+        author="tester",
+        desc="observer",
+        version="1.0.0",
+        module_path=hook_module_path,
+        activated=True,
+    )
+
+    async def on_unloaded(smd) -> None:
+        unloaded.append(smd.name)
+
+    star_manager_module.star_handlers_registry.append(
+        StarHandlerMetadata(
+            event_type=EventType.OnPluginUnloadedEvent,
+            handler_full_name=f"{hook_module_path}_on_unloaded",
+            handler_name="on_unloaded",
+            handler_module_path=hook_module_path,
+            handler=on_unloaded,
+            event_filters=[],
+        )
+    )
+
+    class FailingTerminatePlugin(Star):
+        async def terminate(self) -> None:
+            raise RuntimeError("terminate boom")
+
+    metadata = star_manager_module.StarMetadata(
+        name="failing_terminate",
+        author="tester",
+        desc="test",
+        version="1.0.0",
+        module_path="data.plugins.failing_terminate.main",
+        star_cls_type=FailingTerminatePlugin,
+        star_cls=FailingTerminatePlugin(plugin_manager_pm.context),
+        activated=True,
+    )
+
+    logged_errors: list[tuple] = []
+    monkeypatch.setattr(
+        star_manager_module.logger,
+        "error",
+        lambda *args, **kwargs: logged_errors.append(args),
+    )
+
+    try:
+        await PluginManager._terminate_plugin(metadata)
+        assert unloaded == ["failing_terminate"]
+        assert any(
+            "raised an exception in terminate" in str(args[0]) for args in logged_errors
+        )
+    finally:
+        _clear_star_runtime_state()
+
+
+@pytest.mark.asyncio
+async def test_terminate_plugin_bounds_hung_del_and_handles_cancellation(
+    plugin_manager_pm: PluginManager,
+    monkeypatch,
+):
+    """Hung or cancelled legacy __del__ still dispatches OnPluginUnloadedEvent."""
+    from astrbot.core.star.base import Star
+
+    _clear_star_runtime_state()
+    unloaded: list[str] = []
+
+    hook_module_path = "data.plugins.observer_hung.main"
+    star_manager_module.star_map[hook_module_path] = star_manager_module.StarMetadata(
+        name="observer_hung",
+        author="tester",
+        desc="observer",
+        version="1.0.0",
+        module_path=hook_module_path,
+        activated=True,
+    )
+
+    async def on_unloaded(smd) -> None:
+        unloaded.append(smd.name)
+
+    star_manager_module.star_handlers_registry.append(
+        StarHandlerMetadata(
+            event_type=EventType.OnPluginUnloadedEvent,
+            handler_full_name=f"{hook_module_path}_on_unloaded",
+            handler_name="on_unloaded",
+            handler_module_path=hook_module_path,
+            handler=on_unloaded,
+            event_filters=[],
+        )
+    )
+
+    entered = threading.Event()
+    release = threading.Event()
+
+    class HungDelPlugin(Star):
+        def __del__(self) -> None:
+            entered.set()
+            release.wait(timeout=2.0)
+
+    monkeypatch.setattr(PluginManager, "_LEGACY_DEL_TIMEOUT_S", 0.05)
+    logged_errors: list[tuple] = []
+    monkeypatch.setattr(
+        star_manager_module.logger,
+        "error",
+        lambda *args, **kwargs: logged_errors.append(args),
+    )
+
+    timeout_md = star_manager_module.StarMetadata(
+        name="hung_timeout",
+        author="tester",
+        desc="test",
+        version="1.0.0",
+        module_path="data.plugins.hung_timeout.main",
+        star_cls_type=HungDelPlugin,
+        star_cls=HungDelPlugin(plugin_manager_pm.context),
+        activated=True,
+    )
+
+    try:
+        await asyncio.wait_for(PluginManager._terminate_plugin(timeout_md), timeout=1.0)
+        assert unloaded == ["hung_timeout"]
+        assert any("timed out in __del__" in str(args[0]) for args in logged_errors)
+    finally:
+        release.set()
+
+    entered.clear()
+    release.clear()
+    unloaded.clear()
+    monkeypatch.setattr(PluginManager, "_LEGACY_DEL_TIMEOUT_S", 5.0)
+
+    cancel_md = star_manager_module.StarMetadata(
+        name="hung_cancel",
+        author="tester",
+        desc="test",
+        version="1.0.0",
+        module_path="data.plugins.hung_cancel.main",
+        star_cls_type=HungDelPlugin,
+        star_cls=HungDelPlugin(plugin_manager_pm.context),
+        activated=True,
+    )
+
+    task = asyncio.create_task(PluginManager._terminate_plugin(cancel_md))
+    try:
+        while not entered.is_set():
+            await asyncio.sleep(0.01)
+        task.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await asyncio.wait_for(task, timeout=1.0)
+        assert unloaded == ["hung_cancel"]
+    finally:
+        release.set()
         _clear_star_runtime_state()

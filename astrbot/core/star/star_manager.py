@@ -193,6 +193,8 @@ async def _install_requirements_with_precheck(
 
 
 class PluginManager:
+    _LEGACY_DEL_TIMEOUT_S: float = 10.0
+
     def __init__(self, context: Context, config: AstrBotConfig) -> None:
         from .star_tools import StarTools
 
@@ -2028,35 +2030,83 @@ class PluginManager:
         del_attr = getattr(cls_type, "__del__", None)
         has_custom_del = del_attr is not None and del_attr is not Star.__del__
 
-        if has_custom_terminate:
-            with plugin_scope(star_metadata.plugin_id):
-                res = star_metadata.star_cls.terminate()
-                if inspect.isawaitable(res):
-                    await res
-        elif has_custom_del:
-            loop = asyncio.get_running_loop()
-            try:
-                await loop.run_in_executor(None, star_metadata.star_cls.__del__)
-            except Exception as exc:
-                logger.error(
-                    "Plugin %s raised an exception in __del__: %r",
-                    star_metadata.name,
-                    exc,
-                )
+        try:
+            if has_custom_terminate:
+                try:
+                    with plugin_scope(star_metadata.plugin_id):
+                        res = star_metadata.star_cls.terminate()
+                        if inspect.isawaitable(res):
+                            await res
+                except Exception as exc:
+                    logger.error(
+                        "Plugin %s raised an exception in terminate: %r",
+                        star_metadata.name,
+                        exc,
+                        exc_info=True,
+                    )
+            elif has_custom_del:
+                if not getattr(del_attr, "_astrbot_one_shot_del", False):
+                    original_del = del_attr
 
-        # 触发插件卸载事件
-        handlers = star_handlers_registry.get_handlers_by_event_type(
-            EventType.OnPluginUnloadedEvent,
-        )
-        for handler in handlers:
-            try:
-                logger.info(
-                    f"hook(on_plugin_unloaded) -> {star_map[handler.handler_module_path].name} - {handler.handler_name}",
-                )
-                with plugin_scope(star_map[handler.handler_module_path].plugin_id):
-                    await handler.handler(star_metadata)
-            except Exception:
-                logger.error(traceback.format_exc())
+                    def _one_shot_del(self_obj, _orig=original_del):
+                        if getattr(self_obj, "_astrbot_del_invoked", False):
+                            return None
+                        self_obj._astrbot_del_invoked = True
+                        return _orig(self_obj)
+
+                    _one_shot_del._astrbot_one_shot_del = True  # type: ignore[attr-defined]
+                    cls_type.__del__ = _one_shot_del
+
+                loop = asyncio.get_running_loop()
+                del_future = loop.run_in_executor(None, star_metadata.star_cls.__del__)
+                handled_inline = False
+                try:
+                    await asyncio.wait_for(
+                        asyncio.shield(del_future),
+                        timeout=PluginManager._LEGACY_DEL_TIMEOUT_S,
+                    )
+                    handled_inline = True
+                except asyncio.TimeoutError:
+                    logger.error(
+                        "Plugin %s timed out in __del__ after %.1fs",
+                        star_metadata.name,
+                        PluginManager._LEGACY_DEL_TIMEOUT_S,
+                    )
+                except Exception as exc:
+                    handled_inline = True
+                    logger.error(
+                        "Plugin %s raised an exception in __del__: %r",
+                        star_metadata.name,
+                        exc,
+                    )
+                finally:
+                    if not handled_inline:
+
+                        def _log_late_del_exception(fut: asyncio.Future) -> None:
+                            if fut.cancelled():
+                                return
+                            if (late_exc := fut.exception()) is not None:
+                                logger.error(
+                                    "Plugin %s raised an exception in __del__: %r",
+                                    star_metadata.name,
+                                    late_exc,
+                                )
+
+                        del_future.add_done_callback(_log_late_del_exception)
+        finally:
+            # 触发插件卸载事件
+            handlers = star_handlers_registry.get_handlers_by_event_type(
+                EventType.OnPluginUnloadedEvent,
+            )
+            for handler in handlers:
+                try:
+                    logger.info(
+                        f"hook(on_plugin_unloaded) -> {star_map[handler.handler_module_path].name} - {handler.handler_name}",
+                    )
+                    with plugin_scope(star_map[handler.handler_module_path].plugin_id):
+                        await handler.handler(star_metadata)
+                except Exception:
+                    logger.error(traceback.format_exc())
 
     async def turn_on_plugin(self, plugin_name: str) -> None:
         plugin = self.context.get_registered_star(plugin_name)
