@@ -5,6 +5,7 @@ from typing import Any, ClassVar, Literal, TypeVar, cast
 
 from pydantic import (
     BaseModel,
+    Field,
     GetCoreSchemaHandler,
     PrivateAttr,
     model_serializer,
@@ -123,6 +124,11 @@ class ImageURLPart(ContentPart):
         """The URL of the image, can be data URI scheme like `data:image/png;base64,...`."""
         id: str | None = None
         """The ID of the image, to allow LLMs to distinguish different images."""
+
+        tool_result_index: int | None = Field(
+            default=None, exclude_if=lambda v: v is None
+        )
+        """Index of the owning tool response in the preceding batch, if any."""
 
     type: str = "image_url"
     image_url: ImageURL

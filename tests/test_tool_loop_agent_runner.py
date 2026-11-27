@@ -907,6 +907,65 @@ async def test_hooks_called_with_max_step(
 
 
 @pytest.mark.asyncio
+async def test_gemini_parallel_tool_responses_own_their_images(
+    runner, provider_request, mock_provider, mock_hooks, tmp_path, monkeypatch
+):
+    from base64 import b64encode
+    from io import BytesIO
+
+    from google.genai import types
+    from mcp.types import CallToolResult, ImageContent
+    from PIL import Image
+
+    from astrbot.core.agent.tool_image_cache import tool_image_cache
+    from astrbot.core.provider.sources.gemini_source import ProviderGoogleGenAI
+
+    monkeypatch.setattr(tool_image_cache, "_cache_dir", str(tmp_path))
+    colors = ("red", "blue")
+    images = {}
+
+    async def execute(tool, run_context, query):
+        output = BytesIO()
+        Image.new("RGB", (1, 1), query).save(output, format="PNG")
+        images[query] = output.getvalue()
+        image = ImageContent(
+            type="image", mimeType="image/png", data=b64encode(images[query]).decode()
+        )
+        yield CallToolResult(content=[image])
+
+    gemini = ProviderGoogleGenAI.__new__(ProviderGoogleGenAI)
+    calls = [
+        types.Part.from_function_call(name="test_tool", args={"query": color})
+        for color in colors
+    ]
+    reply = LLMResponse(role="assistant")
+    gemini._process_content_parts(
+        types.Candidate(content=types.ModelContent(parts=calls)), reply
+    )
+    mock_provider.text_chat = AsyncMock(return_value=reply)
+    await runner.reset(
+        provider=mock_provider,
+        request=provider_request,
+        run_context=ContextWrapper(context=None),
+        tool_executor=SimpleNamespace(execute=execute),
+        agent_hooks=mock_hooks,
+    )
+    await collect_events(runner.step())
+
+    history = gemini._ensure_message_to_dicts(runner.run_context.messages)
+    contents = await gemini._prepare_conversation(
+        {"model": "gemini-3-flash-preview", "messages": history}
+    )
+    parts = contents[-1].parts
+    responses = [p.function_response for p in parts if p.function_response]
+    for color, response in zip(colors, responses, strict=True):
+        (attachment,) = response.parts
+        assert attachment.inline_data.mime_type == "image/png"
+        assert attachment.inline_data.data == images[color]
+    assert all(p.inline_data is None for p in parts)
+
+
+@pytest.mark.asyncio
 async def test_tool_result_includes_all_calltoolresult_content(
     runner, mock_provider, provider_request, mock_hooks, monkeypatch
 ):
