@@ -2988,12 +2988,22 @@ async def test_repeated_deactivated_loads_bind_handlers_once_when_activated(
         _clear_star_runtime_state()
 
 
-@pytest.mark.parametrize("target", ["chat_message", "chat_workbench", "chat_workbench_with_launcher"])
+@pytest.mark.parametrize(
+    "target", ["chat_message", "chat_workbench", "chat_workbench_with_launcher"]
+)
 def test_metadata_registers_chat_views(tmp_path, target):
     _write_local_test_plugin(tmp_path, TEST_PLUGIN_REPO)
     path = tmp_path / "metadata.yaml"
     raw = yaml.safe_load(path.read_text())
-    raw["views"] = [{"name": "counter", "target": target, "title": "Counter", "description": "Count items", "actions": ["demo:increment"]}]
+    raw["views"] = [
+        {
+            "name": "counter",
+            "target": target,
+            "title": "Counter",
+            "description": "Count items",
+            "actions": ["demo:increment"],
+        }
+    ]
     path.write_text(yaml.safe_dump(raw))
     spec = PluginManager._load_plugin_metadata(str(tmp_path)).views[0]
     assert spec.target == target
@@ -3002,7 +3012,17 @@ def test_metadata_registers_chat_views(tmp_path, target):
     assert spec.actions == ["demo:increment"]
 
 
-@pytest.mark.parametrize("views", [None, {}, [{"name": "../escape"}], [{"name": "a", "target": "invalid"}], [{"name": "a"}, {"name": "a"}], [{"name": "a", "target": "plugin_page", "actions": ["run"]}]])
+@pytest.mark.parametrize(
+    "views",
+    [
+        None,
+        {},
+        [{"name": "../escape"}],
+        [{"name": "a", "target": "invalid"}],
+        [{"name": "a"}, {"name": "a"}],
+        [{"name": "a", "target": "plugin_page", "actions": ["run"]}],
+    ],
+)
 def test_metadata_rejects_invalid_views(tmp_path, views):
     _write_local_test_plugin(tmp_path, TEST_PLUGIN_REPO)
     path = tmp_path / "metadata.yaml"
@@ -3011,3 +3031,162 @@ def test_metadata_rejects_invalid_views(tmp_path, views):
     path.write_text(yaml.safe_dump(raw))
     with pytest.raises(ValueError):
         PluginManager._load_plugin_metadata(str(tmp_path))
+
+
+@pytest.mark.asyncio
+async def test_terminate_plugin_invokes_inherited_terminate_and_skips_del(
+    plugin_manager_pm: PluginManager,
+):
+    """Inherited terminate() hooks run even when __del__ is also defined."""
+    from astrbot.core.star.base import Star
+
+    _clear_star_runtime_state()
+    calls: list[str] = []
+
+    class BaseMixin(Star):
+        async def terminate(self) -> None:
+            calls.append("terminate")
+
+    class ChildPlugin(BaseMixin):
+        def __del__(self) -> None:
+            calls.append("del")
+
+    instance = ChildPlugin(plugin_manager_pm.context)
+    metadata = star_manager_module.StarMetadata(
+        name="child_plugin",
+        author="tester",
+        desc="test",
+        version="1.0.0",
+        module_path="data.plugins.child_plugin.main",
+        star_cls_type=ChildPlugin,
+        star_cls=instance,
+        activated=True,
+    )
+
+    try:
+        await PluginManager._terminate_plugin(metadata)
+        assert calls == ["terminate"]
+    finally:
+        calls.clear()
+        _clear_star_runtime_state()
+
+
+@pytest.mark.asyncio
+async def test_terminate_plugin_awaits_del_fallback_and_handles_errors(
+    plugin_manager_pm: PluginManager,
+    monkeypatch,
+):
+    """Legacy __del__ hooks complete before return and errors do not block unload hooks."""
+    from astrbot.core.star.base import Star
+
+    _clear_star_runtime_state()
+    events: list[str] = []
+
+    class LegacyMixin(Star):
+        def __del__(self) -> None:
+            if not getattr(self, "_del_called", False):
+                self._del_called = True
+                events.append("del_error")
+                raise RuntimeError("cleanup boom")
+
+    class LegacyChildPlugin(LegacyMixin):
+        pass
+
+    unloaded_called: list[str] = []
+    hook_module_path = "data.plugins.observer.main"
+    observer_md = star_manager_module.StarMetadata(
+        name="observer",
+        author="tester",
+        desc="observer",
+        version="1.0.0",
+        module_path=hook_module_path,
+        activated=True,
+    )
+    star_manager_module.star_map[hook_module_path] = observer_md
+
+    async def on_unloaded(smd) -> None:
+        unloaded_called.append(smd.name)
+
+    star_manager_module.star_handlers_registry.append(
+        StarHandlerMetadata(
+            event_type=EventType.OnPluginUnloadedEvent,
+            handler_full_name=f"{hook_module_path}_on_unloaded",
+            handler_name="on_unloaded",
+            handler_module_path=hook_module_path,
+            handler=on_unloaded,
+            event_filters=[],
+        )
+    )
+
+    instance = LegacyChildPlugin(plugin_manager_pm.context)
+    metadata = star_manager_module.StarMetadata(
+        name="legacy_child",
+        author="tester",
+        desc="test",
+        version="1.0.0",
+        module_path="data.plugins.legacy_child.main",
+        star_cls_type=LegacyChildPlugin,
+        star_cls=instance,
+        activated=True,
+    )
+
+    logged_errors: list[tuple] = []
+    monkeypatch.setattr(
+        star_manager_module.logger,
+        "error",
+        lambda *args, **kwargs: logged_errors.append(args),
+    )
+
+    try:
+        await PluginManager._terminate_plugin(metadata)
+        assert events == ["del_error"]
+        assert unloaded_called == ["legacy_child"]
+        assert any(
+            "raised an exception in __del__" in str(args[0]) for args in logged_errors
+        )
+    finally:
+        events.clear()
+        _clear_star_runtime_state()
+
+
+@pytest.mark.asyncio
+async def test_terminate_plugin_skips_inactive_or_uninstantiated_plugins(
+    plugin_manager_pm: PluginManager,
+):
+    """Inactive plugins and metadata without star_cls return without invoking hooks."""
+    from astrbot.core.star.base import Star
+
+    _clear_star_runtime_state()
+    calls: list[str] = []
+
+    class TrackingPlugin(Star):
+        async def terminate(self) -> None:
+            calls.append("terminate")
+
+    inactive = star_manager_module.StarMetadata(
+        name="inactive_plugin",
+        author="tester",
+        desc="test",
+        version="1.0.0",
+        module_path="data.plugins.inactive_plugin.main",
+        star_cls_type=TrackingPlugin,
+        star_cls=TrackingPlugin(plugin_manager_pm.context),
+        activated=False,
+    )
+    uninstantiated = star_manager_module.StarMetadata(
+        name="uninstantiated_plugin",
+        author="tester",
+        desc="test",
+        version="1.0.0",
+        module_path="data.plugins.uninstantiated_plugin.main",
+        star_cls_type=TrackingPlugin,
+        star_cls=None,
+        activated=True,
+    )
+
+    try:
+        await PluginManager._terminate_plugin(inactive)
+        await PluginManager._terminate_plugin(uninstantiated)
+        assert calls == []
+    finally:
+        _clear_star_runtime_state()

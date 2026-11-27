@@ -49,6 +49,7 @@ from astrbot.core.utils.requirements_utils import (
 )
 
 from . import StarMetadata
+from .base import Star
 from .command_management import sync_command_configs
 from .context import Context
 from .error_messages import format_plugin_error
@@ -1997,7 +1998,15 @@ class PluginManager:
 
     @staticmethod
     async def _terminate_plugin(star_metadata: StarMetadata) -> None:
-        """终止插件，调用插件的 terminate() 和 __del__() 方法"""
+        """Terminate a plugin and dispatch unload hooks.
+
+        Prefers an overridden ``terminate()`` method anywhere in the plugin's
+        class hierarchy. Falls back to awaiting the deprecated ``__del__()``
+        hook in an executor only when ``terminate()`` is not overridden.
+
+        Args:
+            star_metadata: Metadata of the plugin instance being terminated.
+        """
         logger.info(f"Terminating plugin {star_metadata.name} ...")
 
         if not star_metadata.activated:
@@ -2011,27 +2020,29 @@ class PluginManager:
         if star_metadata.star_cls is None:
             return
 
-        if "__del__" in star_metadata.star_cls_type.__dict__:
-            loop = asyncio.get_running_loop()
-            future = loop.run_in_executor(
-                None,
-                star_metadata.star_cls.__del__,
-            )
+        cls_type = star_metadata.star_cls_type or type(star_metadata.star_cls)
+        terminate_attr = getattr(cls_type, "terminate", None)
+        has_custom_terminate = (
+            terminate_attr is not None and terminate_attr is not Star.terminate
+        )
+        del_attr = getattr(cls_type, "__del__", None)
+        has_custom_del = del_attr is not None and del_attr is not Star.__del__
 
-            def _log_del_exception(fut: asyncio.Future) -> None:
-                if fut.cancelled():
-                    return
-                if (exc := fut.exception()) is not None:
-                    logger.error(
-                        "Plugin %s raised an exception in __del__: %r",
-                        star_metadata.name,
-                        exc,
-                    )
-
-            future.add_done_callback(_log_del_exception)
-        elif "terminate" in star_metadata.star_cls_type.__dict__:
+        if has_custom_terminate:
             with plugin_scope(star_metadata.plugin_id):
-                await star_metadata.star_cls.terminate()
+                res = star_metadata.star_cls.terminate()
+                if inspect.isawaitable(res):
+                    await res
+        elif has_custom_del:
+            loop = asyncio.get_running_loop()
+            try:
+                await loop.run_in_executor(None, star_metadata.star_cls.__del__)
+            except Exception as exc:
+                logger.error(
+                    "Plugin %s raised an exception in __del__: %r",
+                    star_metadata.name,
+                    exc,
+                )
 
         # 触发插件卸载事件
         handlers = star_handlers_registry.get_handlers_by_event_type(
