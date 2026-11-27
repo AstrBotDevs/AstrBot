@@ -241,9 +241,10 @@ async def test_failed_reconnect_clears_partial_session_so_next_caller_retries():
 
 
 def test_server_errlogs_is_bounded():
-    """Server error log buffer stays a plain list capped at the newest entries."""
+    """Server error log buffer stays capped in count and per-entry character length."""
     client = mcp_client.MCPClient()
     limit = mcp_client.MCPClient._MAX_SERVER_ERRLOGS
+    max_chars = mcp_client.MCPClient._MAX_SERVER_ERRLOG_CHARS
     for idx in range(limit + 35):
         client._append_server_errlog(f"line-{idx}")
 
@@ -251,3 +252,106 @@ def test_server_errlogs_is_bounded():
     assert len(client.server_errlogs) == limit
     assert client.server_errlogs[0] == "line-35"
     assert client.server_errlogs[-1] == f"line-{limit + 34}"
+
+    client._append_server_errlog("x" * (max_chars + 500))
+    assert len(client.server_errlogs[-1]) == max_chars
+    assert client.server_errlogs[-1].endswith("... [truncated]")
+
+
+@pytest.mark.asyncio
+async def test_cancelled_reconnect_clears_partial_session_and_task():
+    """Cancelling _reconnect while listing tools tears down partial connection state."""
+    import asyncio
+
+    client = mcp_client.MCPClient()
+    client._mcp_server_config = {"command": "python"}
+    client._server_name = "demo"
+    client._connection_generation = 1
+
+    conn_task = asyncio.create_task(asyncio.sleep(10))
+    list_started = asyncio.Event()
+
+    async def fake_connect(_cfg, _name):
+        client._connection_task = conn_task
+        client.session = SimpleNamespace()  # type: ignore[assignment]
+        client._connection_generation = 2
+
+    async def slow_list_tools():
+        list_started.set()
+        await asyncio.sleep(10)
+
+    client.connect_to_server = fake_connect  # type: ignore[method-assign]
+    client.list_tools_and_save = slow_list_tools  # type: ignore[method-assign]
+
+    reconnect_task = asyncio.create_task(client._reconnect(failed_generation=1))
+    await asyncio.wait_for(list_started.wait(), timeout=1.0)
+    reconnect_task.cancel()
+
+    with pytest.raises(asyncio.CancelledError):
+        await reconnect_task
+
+    assert client.session is None
+    assert client._connection_task is None
+    assert client._connection_generation == 1
+    await asyncio.gather(conn_task, return_exceptions=True)
+
+
+@pytest.mark.asyncio
+async def test_reconnect_does_not_skip_when_newer_generation_already_failed():
+    """Queued caller from gen 1 still reconnects if gen 2 was already observed failing."""
+    from datetime import timedelta
+
+    import anyio
+
+    client = mcp_client.MCPClient()
+    client._mcp_server_config = {"command": "python"}
+    client._server_name = "demo"
+
+    gen2_session = SimpleNamespace()
+    gen3_session = SimpleNamespace()
+
+    async def broken_call_tool(**_kwargs):
+        raise anyio.ClosedResourceError()
+
+    async def healthy_call_tool(name, arguments, read_timeout_seconds):  # noqa: ARG001
+        return "recovered-gen3"
+
+    gen2_session.call_tool = broken_call_tool
+    gen3_session.call_tool = healthy_call_tool
+
+    client.session = gen2_session  # type: ignore[assignment]
+    client._connection_generation = 2
+
+    # Caller on gen 2 observes failure while reconnect cannot yet reach server.
+    async def fail_connect(_cfg, _name):
+        raise RuntimeError("server still restarting")
+
+    client.connect_to_server = fail_connect  # type: ignore[method-assign]
+    with pytest.raises(anyio.ClosedResourceError):
+        await client.call_tool_with_reconnect("ping", {}, timedelta(seconds=1))
+    assert client._failed_generation == 2
+
+    client.session = gen2_session  # type: ignore[assignment]
+    connect_count = 0
+
+    async def fake_connect(_cfg, _name):
+        nonlocal connect_count
+        connect_count += 1
+        client.session = gen3_session  # type: ignore[assignment]
+        client._connection_generation = 3
+
+    async def fake_list_tools():
+        return SimpleNamespace(tools=[])
+
+    client.connect_to_server = fake_connect  # type: ignore[method-assign]
+    client.list_tools_and_save = fake_list_tools  # type: ignore[method-assign]
+
+    await client._reconnect(failed_generation=1)
+    assert connect_count == 1
+    assert client.session is gen3_session
+    assert (
+        await gen3_session.call_tool(
+            name="ping", arguments={}, read_timeout_seconds=timedelta(seconds=1)
+        )
+        == "recovered-gen3"
+    )

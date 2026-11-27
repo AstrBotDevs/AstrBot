@@ -431,6 +431,7 @@ def _normalize_mcp_input_schema(schema: dict[str, Any]) -> dict[str, Any]:
 
 class MCPClient:
     _MAX_SERVER_ERRLOGS: int = 200
+    _MAX_SERVER_ERRLOG_CHARS: int = 4096
 
     def __init__(self) -> None:
         self.session: mcp.ClientSession | None = None
@@ -455,9 +456,17 @@ class MCPClient:
         self._reconnect_lock = asyncio.Lock()  # Lock for thread-safe reconnection
         self._reconnecting: bool = False
         self._connection_generation: int = 0
+        self._failed_generation: int = -1
 
     def _append_server_errlog(self, log_msg: str) -> None:
-        """Append a server log line while keeping bounded recent history."""
+        """Append a bounded server log line while retaining recent history.
+
+        Args:
+            log_msg: Formatted warning or error line from the MCP server.
+        """
+        if len(log_msg) > self._MAX_SERVER_ERRLOG_CHARS:
+            suffix = "... [truncated]"
+            log_msg = log_msg[: self._MAX_SERVER_ERRLOG_CHARS - len(suffix)] + suffix
         self.server_errlogs.append(log_msg)
         if len(self.server_errlogs) > self._MAX_SERVER_ERRLOGS:
             del self.server_errlogs[: -self._MAX_SERVER_ERRLOGS]
@@ -789,6 +798,7 @@ class MCPClient:
                 failed_generation is not None
                 and self.session is not None
                 and self._connection_generation != failed_generation
+                and self._connection_generation > self._failed_generation
             ):
                 logger.debug(
                     f"MCP Client {self._server_name} already reconnected on another "
@@ -824,14 +834,16 @@ class MCPClient:
                 logger.info(
                     f"Successfully reconnected to MCP server {self._server_name}"
                 )
-            except Exception as e:
+            except BaseException as e:
                 if self._connection_task and not self._connection_task.done():
                     self._cancel_connection_task(self._connection_task)
                 self._connection_task = None
                 self.session = None
-                logger.error(
-                    f"Failed to reconnect to MCP server {self._server_name}: {e}"
-                )
+                self._connection_generation = before_generation
+                if isinstance(e, Exception):
+                    logger.error(
+                        f"Failed to reconnect to MCP server {self._server_name}: {e}"
+                    )
                 raise
             finally:
                 self._reconnecting = False
@@ -896,6 +908,8 @@ class MCPClient:
             except Exception as exc:
                 if _is_mcp_reconnect_error(exc):
                     last_reconnectable = exc
+                    if attempt_generation > self._failed_generation:
+                        self._failed_generation = attempt_generation
                 raise
 
         if not self.session:
