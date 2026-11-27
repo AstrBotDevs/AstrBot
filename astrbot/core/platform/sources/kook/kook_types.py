@@ -277,16 +277,19 @@ class DividerModule(KookCardModelBase):
 class FileModule(KookCardModelBase):
     src: str
     title: str = ""
-    type: Literal[KookModuleType.FILE, KookModuleType.AUDIO, KookModuleType.VIDEO] = (
-        KookModuleType.FILE
-    )
+    type: Literal[
+        KookModuleType.FILE,
+        KookModuleType.AUDIO,
+        KookModuleType.VIDEO,
+    ] = KookModuleType.FILE
     cover: str | None = None
     """cover 仅音频有效, 是音频的封面图"""
 
 
 class VoiceModule(KookCardModelBase):
     type: Literal[KookModuleType.VOICE] = KookModuleType.VOICE
-    media_id: int
+    media_id: int | None = None
+    src: str | None = None
 
 
 class CountdownModule(KookCardModelBase):
@@ -480,6 +483,19 @@ class KookAuthor(KookBaseReceiveDataClass):
     roles: list[int] = Field(default_factory=list)
 
 
+class KookQuoteAuthor(KookBaseReceiveDataClass):
+    id: str
+    nickname: str
+
+
+class KookQuote(KookBaseReceiveDataClass):
+    id: str
+    type: int
+    content: str
+    create_at: int
+    author: KookQuoteAuthor
+
+
 class KookMarkdownMentionPart(KookBaseReceiveDataClass):
     """
     文档参考: https://developer.kookapp.cn/doc/event/message
@@ -555,6 +571,7 @@ class KookExtra(KookBaseReceiveDataClass):
     code: str | None = None
     body: KookRole | dict[str, Any] | None = None
     author: KookAuthor | None = None
+    quote: KookQuote | None = None
     kmarkdown: KookKMarkdown | None = None
     last_msg_content: str | None = None
     mention: list[str] = Field(default_factory=list)

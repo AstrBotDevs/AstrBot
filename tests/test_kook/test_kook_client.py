@@ -17,6 +17,7 @@ from astrbot.core.message.components import (
     Image,
     Plain,
     Record,
+    Reply,
     Video,
 )
 from astrbot.core.platform.button_interaction import encode_button_callback
@@ -148,8 +149,18 @@ class JsonFieldPaths:
         ),
         (
             KookEventDataPath.GROUP_MESSAGE,
-            ["d", "extra", "kmarkdown", "raw_content"],
-            [Plain(text="done!")],
+            "done!",
+            [
+                Reply(
+                    id="69a788adb0cfb9ece50eae1c",
+                    chain=[Plain(text="/am 1")],
+                    sender_id="2701973210937821093781",
+                    sender_nickname="some_username",
+                    time=1772587180,
+                    message_str="/am 1",
+                ),
+                Plain(text="done!"),
+            ],
         ),
         (
             KookEventDataPath.MESSAGE_WITH_CARD_1,
@@ -207,11 +218,11 @@ async def test_kook_event_warp_message(
 
     adapter = KookPlatformAdapter({}, {}, asyncio.Queue())
 
-    raw_event_str = expected_json_data_path.read_text(encoding="utf-8")
-    raw_event = json.loads(raw_event_str)
-    event = KookWebsocketEvent.from_json(
-        raw_event_str,
-    )
+    raw_event = json.loads(expected_json_data_path.read_text(encoding="utf-8"))
+    if expected_json_data_path == KookEventDataPath.GROUP_MESSAGE:
+        quote = raw_event["d"]["extra"]["quote"]
+        quote["author"] = {key: quote["author"][key] for key in ("id", "nickname")}
+    event = KookWebsocketEvent.from_json(json.dumps(raw_event))
     assert isinstance(event.data, KookMessageEventData)
 
     astrbotMessage = await adapter.convert_message(event.data)
@@ -332,6 +343,7 @@ async def test_kook_standalone_media_enters_event_pipeline(
     raw_event = json.loads(KookEventDataPath.GROUP_MESSAGE.read_text(encoding="utf-8"))
     raw_event["d"]["type"] = message_type.value
     raw_event["d"]["content"] = TEST_MEDIA_URL
+    del raw_event["d"]["extra"]["quote"]
     raw_event["d"]["extra"]["type"] = message_type.value
     raw_event["d"]["extra"]["attachments"] = {
         "type": message_type.name.lower(),
@@ -349,6 +361,7 @@ async def test_kook_standalone_media_enters_event_pipeline(
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("quoted", [False, True])
 @pytest.mark.parametrize(
     ("event_path", "scene"),
     [
@@ -357,7 +370,7 @@ async def test_kook_standalone_media_enters_event_pipeline(
     ],
 )
 async def test_kook_voice_card_enters_pipeline_as_record(
-    monkeypatch, event_path, scene
+    monkeypatch, event_path, scene, quoted
 ):
     from astrbot.core.platform.sources.kook.kook_adapter import KookPlatformAdapter
 
@@ -380,8 +393,7 @@ async def test_kook_voice_card_enters_pipeline_as_record(
     adapter = KookPlatformAdapter({}, {}, queue)
     raw = json.loads(event_path.read_text(encoding="utf-8"))
     data = raw["d"]
-    data["type"] = data["extra"]["type"] = KookMessageType.CARD.value
-    data["content"] = json.dumps(
+    card = json.dumps(
         [
             {
                 "type": "card",
@@ -395,6 +407,19 @@ async def test_kook_voice_card_enters_pipeline_as_record(
             }
         ]
     )
+    message_id = data["msg_id"]
+    if quoted:
+        message_id = "quoted-voice-id"
+        data["extra"]["quote"] = {
+            "id": message_id,
+            "type": KookMessageType.CARD.value,
+            "content": card,
+            "create_at": 1000,
+            "author": {"id": "speaker", "nickname": "Speaker"},
+        }
+    else:
+        data["type"] = data["extra"]["type"] = KookMessageType.CARD.value
+        data["content"] = card
     conversation = (
         {"chat_code": data["extra"]["code"]}
         if scene == "private"
@@ -406,15 +431,76 @@ async def test_kook_voice_card_enters_pipeline_as_record(
     http.post.assert_not_called()
     resolver.assert_not_called()
     messages = queue.get_nowait().get_messages()
+    if quoted:
+        messages = next(message for message in messages if isinstance(message, Reply)).chain
     record = next(message for message in messages if isinstance(message, Record))
     assert await record.convert_to_file_path() == TEST_AUDIO_WAV_PATH
     assert await record.convert_to_file_path() == TEST_AUDIO_WAV_PATH
 
     http.post.assert_called_once_with(
         "https://www.kookapp.cn/api/v3/asset/voice-token",
-        json={"scene": scene, "msg_id": data["msg_id"], "media_id": 42, **conversation},
+        json={"scene": scene, "msg_id": message_id, "media_id": 42, **conversation},
     )
     assert [call.args[0] for call in resolver.call_args_list].count(TEST_MEDIA_URL) == 1
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "modules,summary,expected_component",
+    [
+        (
+            [
+                {
+                    "type": "container",
+                    "elements": [{"type": "image", "src": TEST_MEDIA_URL}],
+                }
+            ],
+            "[image]",
+            Image(file=TEST_MEDIA_URL),
+        ),
+        (
+            [
+                {"type": "voice", "src": TEST_MEDIA_URL},
+                {
+                    "type": "context",
+                    "elements": [{"type": "plain-text", "content": "Upgrade to play."}],
+                },
+            ],
+            "[voice]",
+            Record(file=TEST_MEDIA_URL, url=TEST_MEDIA_URL),
+        ),
+        (
+            [{"type": "video", "src": TEST_MEDIA_URL, "title": "sample.mp4"}],
+            "[video]",
+            Video(file=TEST_MEDIA_URL),
+        ),
+        (
+            [{"type": "file", "src": TEST_MEDIA_URL, "title": "sample.txt"}],
+            "[file]",
+            File(name="sample.txt", url=TEST_MEDIA_URL),
+        ),
+    ],
+)
+async def test_kook_quoted_media_card(modules, summary, expected_component):
+    from astrbot.core.platform.sources.kook.kook_adapter import KookPlatformAdapter
+
+    raw_event = json.loads(KookEventDataPath.GROUP_MESSAGE.read_text(encoding="utf-8"))
+    raw_event["d"]["extra"]["quote"].update(
+        type=KookMessageType.CARD,
+        content=json.dumps([{"type": "card", "modules": modules}]),
+    )
+    event = KookWebsocketEvent.from_dict(raw_event)
+    adapter = KookPlatformAdapter({}, {}, asyncio.Queue())
+    try:
+        message = await adapter.convert_message(event.data)
+    finally:
+        await adapter.client.close()
+
+    reply, body = message.message
+    assert isinstance(reply, Reply)
+    assert reply.message_str == summary
+    assert reply.chain == [Plain(text=summary), expected_component]
+    assert body == Plain(text="done!")
 
 
 @pytest.mark.asyncio
