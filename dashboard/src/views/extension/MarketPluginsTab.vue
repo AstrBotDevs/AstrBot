@@ -80,6 +80,8 @@ const {
   randomPluginNames,
   marketCategoryFilter,
   marketCategoryItems,
+  marketPlatformFilter,
+  marketPlatformItems,
   getMarketPluginKey,
   normalizeStr,
   toPinyinText,
@@ -407,7 +409,31 @@ const openMarketPluginDetail = (plugin) => {
           </v-btn>
         </div>
 
-        <div class="market-category-row-sort">
+        <div class="market-category-row-controls">
+          <v-select
+            v-model="marketPlatformFilter"
+            :items="marketPlatformItems"
+            :label="tm('market.platform')"
+            :aria-label="tm('market.platform')"
+            :placeholder="tm('market.allPlatforms')"
+            persistent-placeholder
+            multiple
+            clearable
+            density="compact"
+            variant="outlined"
+            hide-details
+            class="market-filter-control"
+          >
+            <template #selection="{ item, index }">
+              <span v-if="index === 0" class="text-truncate">
+                {{ item.value === "__undeclared__" ? item.title : item.value }}
+                <span v-if="marketPlatformFilter.length > 1">
+                  (+{{ marketPlatformFilter.length - 1 }})
+                </span>
+              </span>
+            </template>
+          </v-select>
+
           <PluginSortControl
             class="market-sort-control"
             v-model="sortBy"
@@ -423,6 +449,11 @@ const openMarketPluginDetail = (plugin) => {
       </div>
 
       <v-row style="min-height: 26rem" dense>
+        <v-col v-if="!loading_ && sortedPlugins.length === 0" cols="12">
+          <div class="text-center text-medium-emphasis py-8" role="status">
+            {{ tm("market.noMatchingPlugins") }}
+          </div>
+        </v-col>
         <v-col
           v-for="plugin in paginatedPlugins"
           :key="getMarketPluginKey(plugin)"
@@ -547,9 +578,25 @@ const openMarketPluginDetail = (plugin) => {
   margin-bottom: 10px;
 }
 
-.market-category-row-sort {
+.market-category-row-controls {
   flex: 0 0 auto;
   margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.market-filter-control {
+  min-width: 180px;
+  width: 190px;
+  max-width: 220px;
+}
+
+.market-filter-control :deep(.v-field__input),
+.market-filter-control :deep(.v-field-label),
+.market-filter-control :deep(.v-select__selection-text),
+.market-filter-control :deep(.v-field__prepend-inner) {
+  font-size: 0.875rem;
 }
 
 .market-category-chips {
@@ -642,8 +689,8 @@ const openMarketPluginDetail = (plugin) => {
     width: 100%;
   }
 
-  /* Small screens: categories keep the first line to themselves and the sort
-     control drops to a second line, keeping its natural width. */
+  /* Small screens: categories keep the first line to themselves and the
+     platform and sort controls wrap cleanly below. */
   .market-category-row {
     align-items: center;
     flex-wrap: wrap;
@@ -655,13 +702,31 @@ const openMarketPluginDetail = (plugin) => {
     flex: 1 1 100%;
   }
 
-  .market-category-row-sort {
-    flex: 0 0 auto;
+  .market-category-row-controls {
+    flex: 1 1 100%;
+    flex-wrap: wrap;
     margin-left: 0;
+    width: 100%;
   }
 
-  .market-category-row-sort :deep(.plugin-sort-control) {
+  .market-filter-control {
+    flex: 1 1 180px;
+    max-width: none;
+    min-width: 0;
+    width: auto;
+  }
+
+  .market-category-row-controls :deep(.plugin-sort-control) {
+    flex: 1 1 180px;
     flex-wrap: nowrap;
+    min-width: 0;
+  }
+
+  .market-category-row-controls :deep(.plugin-sort-control__select) {
+    flex: 1;
+    max-width: none;
+    min-width: 0;
+    width: auto;
   }
 
   .plugin-view-tab {

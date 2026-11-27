@@ -222,6 +222,7 @@ export const useExtensionPage = (initialTab = "installed") => {
   const sortOrder = ref("desc"); // desc (降序) or asc (升序)
   const randomPluginNames = ref([]);
   const marketCategoryFilter = ref("");
+  const marketPlatformFilter = ref([]);
 
   const marketCategoryItems = computed(() => {
     const categories = new Map();
@@ -249,6 +250,23 @@ export const useExtensionPage = (initialTab = "installed") => {
         count: pluginMarketData.value.length,
       },
       ...[...categories.values()].sort((left, right) => left.order - right.order),
+    ];
+  });
+
+  const marketPlatformItems = computed(() => {
+    const platforms = new Set(
+      pluginMarketData.value.flatMap((plugin) =>
+        normalizePlatformList(plugin.support_platforms),
+      ),
+    );
+    return [
+      { value: "__undeclared__", title: tm("market.undeclaredPlatform") },
+      ...Array.from(platforms)
+        .sort()
+        .map((platform) => ({
+          value: platform,
+          title: getPlatformDisplayName(platform),
+        })),
     ];
   });
 
@@ -304,13 +322,23 @@ export const useExtensionPage = (initialTab = "installed") => {
   const filteredMarketPlugins = computed(() => {
     const query = buildSearchQuery(debouncedMarketSearch.value);
     const targetCategory = marketCategoryFilter.value;
-    if (!query && !targetCategory) return pluginMarketData.value;
+    const selectedPlatforms = new Set(marketPlatformFilter.value);
+    if (!query && !targetCategory && selectedPlatforms.size === 0) {
+      return pluginMarketData.value;
+    }
 
-    return pluginMarketData.value.filter(
-      (plugin) =>
-        (!targetCategory || plugin.market_category?.id === targetCategory) &&
-        (!query || matchesPluginSearch(plugin, query)),
-    );
+    return pluginMarketData.value.filter((plugin) => {
+      const matchesCategory =
+        !targetCategory || plugin.market_category?.id === targetCategory;
+      const matchesSearch = !query || matchesPluginSearch(plugin, query);
+      const platforms = normalizePlatformList(plugin.support_platforms);
+      const matchesPlatform =
+        selectedPlatforms.size === 0 ||
+        (platforms.length === 0
+          ? selectedPlatforms.has("__undeclared__")
+          : platforms.some((platform) => selectedPlatforms.has(platform)));
+      return matchesCategory && matchesSearch && matchesPlatform;
+    });
   });
 
   // 所有插件列表，推荐插件排在前面
@@ -362,7 +390,7 @@ export const useExtensionPage = (initialTab = "installed") => {
   const RANDOM_PLUGINS_COUNT = 3;
 
   const randomPlugins = computed(() => {
-    const allPlugins = pluginMarketData.value;
+    const allPlugins = filteredMarketPlugins.value;
     if (allPlugins.length === 0) return [];
 
     // Key by the unique market plugin key: metadata `name` is not unique and
@@ -2281,7 +2309,21 @@ export const useExtensionPage = (initialTab = "installed") => {
 
   const normalizePlatformList = (platforms) => {
     if (!Array.isArray(platforms)) return [];
-    return platforms.filter((item) => typeof item === "string");
+    const aliases = {
+      onebot: "aiocqhttp",
+      "aiocqhttp(onebot v11)": "aiocqhttp",
+      feishu: "lark",
+      weixin_official_accounts: "weixin_official_account",
+    };
+    return [
+      ...new Set(
+        platforms
+          .filter((item) => typeof item === "string")
+          .map((item) => item.trim().toLowerCase())
+          .filter(Boolean)
+          .map((item) => (Object.hasOwn(aliases, item) ? aliases[item] : item)),
+      ),
+    ];
   };
 
   const getPlatformDisplayList = (platforms) => {
@@ -2523,14 +2565,19 @@ export const useExtensionPage = (initialTab = "installed") => {
 
   watch(selectedSource, () => {
     marketCategoryFilter.value = "";
+    marketPlatformFilter.value = [];
     pluginMarketData.value = [];
   });
 
-  watch(marketCategoryFilter, () => {
-    if (activeTab.value === "market") {
-      currentPage.value = 1;
-    }
-  });
+  watch(
+    [marketCategoryFilter, marketPlatformFilter],
+    () => {
+      if (activeTab.value === "market") {
+        currentPage.value = 1;
+      }
+    },
+    { deep: true },
+  );
 
   watch(marketCategoryItems, (newItems) => {
     if (!newItems.some((item) => item.value === marketCategoryFilter.value)) {
@@ -2574,6 +2621,8 @@ export const useExtensionPage = (initialTab = "installed") => {
     loading_,
     currentPage,
     marketCategoryFilter,
+    marketPlatformFilter,
+    marketPlatformItems,
     marketCategoryItems,
     dangerConfirmDialog,
     selectedDangerPlugin,
