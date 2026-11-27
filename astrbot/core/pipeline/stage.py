@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 import abc
-from collections.abc import AsyncGenerator
+from collections.abc import AsyncGenerator, Coroutine
+from typing import Any
 
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
 
@@ -30,16 +31,16 @@ class Stage(abc.ABC):
         raise NotImplementedError
 
     @abc.abstractmethod
-    async def process(
+    def process(
         self,
         event: AstrMessageEvent,
-    ) -> None | AsyncGenerator[None]:
+    ) -> AsyncGenerator[None] | Coroutine[Any, Any, None | AsyncGenerator[None]]:
         """处理事件
 
         Args:
             event (AstrMessageEvent): 事件对象，包含事件的相关信息
         Returns:
-            None | AsyncGenerator[None]: 处理结果，可能是 None 或者异步生成器, 如果为 None 则表示不需要继续处理, 如果为异步生成器则表示需要继续处理(进入下一个阶段)
+            协程，或在产出时让调度器进入下一阶段的异步生成器。
 
         """
         raise NotImplementedError

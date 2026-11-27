@@ -6,6 +6,7 @@ import logging
 import os
 import tempfile
 import threading
+from _thread import LockType
 from pathlib import Path
 
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
@@ -41,6 +42,10 @@ class AstrBotConfig(dict):
     config_path: str
     default_config: dict
     schema: dict | None
+    _save_state_lock: LockType
+    _save_commit_lock: LockType
+    _save_revision: int
+    _save_committed_revision: int
 
     def __init__(
         self,
