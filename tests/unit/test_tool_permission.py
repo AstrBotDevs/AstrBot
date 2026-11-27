@@ -1,7 +1,7 @@
 """Tests for per-tool permission management."""
 
 from types import SimpleNamespace
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock
 
 import pytest
 
@@ -190,6 +190,7 @@ async def test_guarded_tool_delegates_handler_with_event_when_permission_passes(
         parameters={},
         handler=handler,
     )
+    mgr.func_list.append(wrapped)
     guarded = _PermissionGuardedTool(wrapped, mgr)
     context = _make_context(role="member")
 
@@ -220,6 +221,7 @@ async def test_guarded_tool_blocks_when_permission_denied():
             parameters={},
             handler=handler,
         )
+        mgr.func_list.append(wrapped)
         guarded = _PermissionGuardedTool(wrapped, mgr)
         context = _make_context(role="member")
 
@@ -245,6 +247,7 @@ async def test_guarded_tool_delegates_to_wrapped_call():
         description="desc",
         parameters={},
     )
+    mgr.func_list.append(wrapped)
     guarded = _PermissionGuardedTool(wrapped, mgr)
     context = _make_context()
 
@@ -266,6 +269,7 @@ async def test_guarded_tool_delegates_to_wrapped_run():
         description="desc",
         parameters={},
     )
+    mgr.func_list.append(wrapped)
     guarded = _PermissionGuardedTool(wrapped, mgr)
     context = _make_context(sender_id="runner")
 
@@ -290,6 +294,7 @@ async def test_guarded_tool_handles_async_generator_handler():
         parameters={},
         handler=gen_handler,
     )
+    mgr.func_list.append(wrapped)
     guarded = _PermissionGuardedTool(wrapped, mgr)
     context = _make_context()
 

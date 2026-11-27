@@ -10,6 +10,8 @@ from contextlib import aclosing, suppress
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 
+from jsonschema import Draft202012Validator
+from jsonschema.validators import validator_for
 from mcp.types import (
     BlobResourceContents,
     CallToolResult,
@@ -18,6 +20,8 @@ from mcp.types import (
     TextContent,
     TextResourceContents,
 )
+from referencing import Registry
+from referencing.exceptions import Unresolvable
 from tenacity import (
     AsyncRetrying,
     retry_if_exception_type,
@@ -34,6 +38,7 @@ from astrbot.core.agent.message import (
     dump_messages,
 )
 from astrbot.core.agent.tool import FunctionTool, ToolSet
+from astrbot.core.agent.tool_discovery import ToolDiscovery
 from astrbot.core.agent.tool_image_cache import CachedImage, tool_image_cache
 from astrbot.core.agent_output_content import content_from_chain
 from astrbot.core.exceptions import ConversationPersistenceError, EmptyModelOutputError
@@ -368,6 +373,10 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         self.tool_schema_mode = tool_schema_mode
         self._light_tool_set: ToolSet | None = None
         self._tool_schema_param_set: ToolSet | None = None
+        self._offered_tools: ToolSet | None = None
+        self._tool_discovery: ToolDiscovery[TContext] | None = None
+        if tool_schema_mode == "dynamic" and request.func_tool:
+            self._tool_discovery = ToolDiscovery(request.func_tool)
 
         # append existing messages in the run context
         messages = load_messages(request.contexts or [])
@@ -379,10 +388,19 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         ):
             m = await self._assemble_request_context_for_provider(request)
             messages.append(Message.model_validate(m))
-        if request.system_prompt:
+        system_prompt = request.system_prompt
+        if self._tool_discovery is not None and self._tool_discovery.catalog:
+            system_prompt = (
+                f"{system_prompt or ''}\nWhen the task needs a capability you do not "
+                f"have, call {self._tool_discovery.name} with a focused search query. "
+                "Use the full definitions in the next round to call discovered tools. "
+                "Search again with different keywords or for another capability when needed. "
+                "Use tools only when they help answer the request."
+            ).strip()
+        if system_prompt:
             messages.insert(
                 0,
-                Message(role="system", content=request.system_prompt),
+                Message(role="system", content=system_prompt),
             )
         self.run_context.messages = messages
 
@@ -756,8 +774,10 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         self, *, include_model: bool = True
     ) -> T.AsyncGenerator[LLMResponse, None]:
         """Yields chunks *and* a final LLMResponse."""
+        # Search results only affect the next request, not this response's other calls.
+        self._offered_tools = self._func_tool_for_provider()
         payload = {
-            "func_tool": self._func_tool_for_provider(),
+            "func_tool": self._offered_tools,
             "session_id": self.req.session_id,
             "conversation_id": (
                 self.req.conversation.cid if self.req.conversation else None
@@ -937,6 +957,20 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             if self._light_tool_set is None:
                 self._light_tool_set = tool_set.get_light_tool_set()
             return self._light_tool_set or None
+        if self._tool_discovery is not None:
+            discovery = self._tool_discovery
+            if not discovery.catalog:
+                return None
+            return ToolSet(
+                [
+                    discovery,
+                    *(
+                        tool
+                        for tool in discovery.loaded.values()
+                        if tool.is_available()
+                    ),
+                ]
+            )
         return tool_set
 
     def _simple_print_message_role(self, tag: str, messages: list):
@@ -1686,6 +1720,26 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                 ),
             )
 
+        def _validate_tool_arguments(tool: FunctionTool, arguments: T.Any) -> None:
+            if not isinstance(arguments, dict):
+                raise ValueError("Tool arguments must be an object.")
+            schema = tool.parameters
+            # Resolve local references without fetching external schemas.
+            validator = validator_for(schema, default=Draft202012Validator)(
+                schema, registry=Registry()
+            )
+            try:
+                error = next(validator.iter_errors(arguments), None)
+            except Unresolvable as exc:
+                raise ValueError(
+                    "Tool input schema has an unresolved reference."
+                ) from exc
+            if error is not None:
+                raise ValueError(
+                    "Tool arguments do not match the provided input schema "
+                    f"({error.json_path}: {error.validator})."
+                )
+
         # 执行函数调用
         for func_tool_name, func_tool_args, func_tool_id in zip(
             llm_response.tools_call_name,
@@ -1699,7 +1753,8 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                 func_tool_args,
             )
             try:
-                if not req.func_tool:
+                dynamic = self.tool_schema_mode == "dynamic"
+                if not dynamic and not req.func_tool:
                     if self._events.active:
                         await self._events.emit(
                             ToolRejected(
@@ -1715,7 +1770,8 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                         )
                     return
 
-                func_tool = req.func_tool.get_tool(func_tool_name)
+                tool_set = self._offered_tools if dynamic else req.func_tool
+                func_tool = tool_set.get_tool(func_tool_name) if tool_set else None
 
                 #  Some API may return None for tools with no parameters
                 if func_tool_args is None:
@@ -1724,7 +1780,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
 
                 if not func_tool or not func_tool.active:
                     available_tools = [
-                        tool.name for tool in req.func_tool if tool.active
+                        tool.name for tool in (tool_set or ()) if tool.active
                     ]
                     logger.warning(f"未找到指定的工具: {func_tool_name}，将跳过。")
                     if self._events.active:
@@ -1749,6 +1805,13 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                         f"error: Tool {func_tool_name} not found. Available tools are: {', '.join(available_tools)}",
                     )
                     continue
+
+                if dynamic:
+                    if not func_tool.is_available():
+                        raise ValueError(
+                            f"Tool {func_tool_name} is no longer available."
+                        )
+                    _validate_tool_arguments(func_tool, func_tool_args)
 
                 valid_params = {}  # 参数过滤：只传递函数实际需要的参数
 
@@ -1786,6 +1849,13 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                     )
                 except Exception as e:
                     logger.error(f"Error in on_tool_start hook: {e}", exc_info=True)
+
+                if dynamic:
+                    if not func_tool.is_available():
+                        raise ValueError(
+                            f"Tool {func_tool_name} is no longer available."
+                        )
+                    _validate_tool_arguments(func_tool, valid_params)
 
                 executor = self._recorded_tool_results(
                     func_tool, str(func_tool_id), valid_params

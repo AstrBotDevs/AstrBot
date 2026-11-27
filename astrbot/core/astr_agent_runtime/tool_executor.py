@@ -40,6 +40,7 @@ from astrbot.core.message.interactive_ui import ViewResult, emit_view
 from astrbot.core.message.message_event_result import (
     MessageChain,
 )
+from astrbot.core.provider.func_tool_manager import _PermissionGuardedTool
 from astrbot.core.provider.register import llm_tools
 from astrbot.core.star.tool_execution import call_local_llm_tool
 from astrbot.core.utils.active_event_registry import active_event_registry
@@ -149,6 +150,19 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
             AsyncGenerator[None | mcp.types.CallToolResult, None]
 
         """
+        # Keep the regular MCP/local timeout path; only handoffs need typed dispatch.
+        if isinstance(tool, _PermissionGuardedTool) and isinstance(
+            tool._wrapped, HandoffTool
+        ):
+            error = await tool.authorization_error(run_context)
+            if error is not None:
+                yield mcp.types.CallToolResult(
+                    content=[mcp.types.TextContent(type="text", text=error)],
+                    isError=True,
+                )
+                return
+            tool = tool._wrapped
+
         if isinstance(tool, HandoffTool):
             is_bg = tool_args.pop("background_task", False)
             # Caller-owned outputs must settle before the turn's stream closes.
@@ -373,12 +387,8 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
 
         config = ctx.get_config(umo=umo)
         prov_settings: dict = config.get("provider_settings", {})
-        agent_max_step = int(
-            config.get("agent", {})
-            .get("config", {})
-            .get("misc", {})
-            .get("max_steps", 128)
-        )
+        misc_config = config.get("agent", {}).get("config", {}).get("misc", {})
+        agent_max_step = int(misc_config.get("max_steps", 128))
         stream = prov_settings.get("streaming_response", False)
         llm_resp = await ctx.tool_loop_agent(
             event=event,
@@ -390,6 +400,11 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
             contexts=contexts,
             max_steps=agent_max_step,
             tool_call_timeout=run_context.tool_call_timeout,
+            tool_schema_mode=(
+                "dynamic"
+                if misc_config.get("tool_schema_mode") == "dynamic"
+                else "full"
+            ),
             stream=stream,
             agent_context=AstrAgentContext(
                 context=ctx,

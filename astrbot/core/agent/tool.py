@@ -74,6 +74,10 @@ class FunctionTool(ToolSchema, Generic[TContext]):
     def __repr__(self) -> str:
         return f"FuncTool(name={self.name}, parameters={self.parameters}, description={self.description})"
 
+    def is_available(self) -> bool:
+        """Return whether this tool instance is still available."""
+        return self.active
+
     async def call(
         self, context: "ContextWrapper[TContext]", **kwargs
     ) -> ToolExecResult:

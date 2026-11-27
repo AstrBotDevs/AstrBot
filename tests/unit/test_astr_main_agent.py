@@ -297,6 +297,13 @@ def test_local_mode_prompt_keeps_posix_shell_guidance():
 class TestMainAgentBuildConfig:
     """Tests for MainAgentBuildConfig dataclass."""
 
+    def test_from_config_accepts_dynamic_tool_discovery(self):
+        config = ama.MainAgentBuildConfig.from_config(
+            {"agent": {"config": {"misc": {"tool_schema_mode": "dynamic"}}}}
+        )
+
+        assert config.tool_schema_mode == "dynamic"
+
     def test_from_config_isolates_nested_settings(self):
         """Keep build settings stable when the source session config changes."""
         source = {
@@ -3770,3 +3777,104 @@ async def test_wakeup_collects_current_conversation_without_an_explicit_request(
     assert request.session_id == event.unified_msg_origin
     manager.get_curr_conversation_id.assert_awaited_once_with(event.unified_msg_origin)
     manager.db.get_conversation_by_id.assert_awaited_once_with("conversation")
+
+
+@pytest.mark.asyncio
+async def test_dynamic_main_agent_respects_persona_plugin_filter_and_permissions(
+    mock_event, mock_context, mock_conversation, mock_provider, monkeypatch
+):
+    from astrbot.core import sp
+    from astrbot.core.provider.entities import LLMResponse
+    from astrbot.core.provider.func_tool_manager import FunctionToolManager
+
+    allowed = AsyncMock(return_value="private ticket")
+    manager = FunctionToolManager()
+    manager.func_list = [
+        FunctionTool(
+            name=name,
+            description="Look up a support ticket",
+            parameters={"type": "object"},
+            handler=allowed,
+            handler_module_path=module,
+        )
+        for name, module in (
+            ("lookup_ticket", "permitted_module"),
+            ("filtered_ticket", "filtered_module"),
+            ("unselected_ticket", "permitted_module"),
+        )
+    ]
+    monkeypatch.setattr(
+        plugins_build,
+        "star_map",
+        {
+            "permitted_module": SimpleNamespace(
+                name="permitted_plugin", reserved=False
+            ),
+            "filtered_module": SimpleNamespace(name="filtered_plugin", reserved=False),
+        },
+    )
+    monkeypatch.setattr(
+        sp,
+        "global_get",
+        AsyncMock(return_value={"_default": {"lookup_ticket": "admin"}}),
+    )
+    mock_context.mock_add_spec(Context)
+    mock_event.plugins_name = ["permitted_plugin"]
+    mock_event.platform_meta.support_proactive_message = False
+    mock_event.role = "member"
+    mock_context.get_llm_tool_manager.return_value = manager
+    mock_context.persona_manager.resolve_selected_persona.return_value = (
+        "support",
+        {
+            "name": "Support",
+            "prompt": "Help with tickets.",
+            "tools": ["lookup_ticket", "filtered_ticket"],
+        },
+        False,
+    )
+    mock_provider.text_chat.side_effect = [
+        LLMResponse(
+            role="assistant",
+            tools_call_name=["astrbot_search_tools"],
+            tools_call_args=[{"query": "lookup support ticket"}],
+            tools_call_ids=["search"],
+        ),
+        LLMResponse(
+            role="assistant",
+            tools_call_name=["lookup_ticket"],
+            tools_call_args=[{}],
+            tools_call_ids=["lookup"],
+        ),
+        LLMResponse(role="assistant", completion_text="I could not access the ticket."),
+    ]
+
+    result = await ama.build_main_agent(
+        event=mock_event,
+        plugin_context=mock_context,
+        config=ama.MainAgentBuildConfig(
+            tool_call_timeout=60,
+            tool_schema_mode="dynamic",
+            add_cron_tools=False,
+            streaming_response=False,
+        ),
+        provider=mock_provider,
+        req=ProviderRequest(
+            prompt="Look up a support ticket", conversation=mock_conversation
+        ),
+    )
+
+    assert result is not None
+    async for _ in result.agent_runner.step_until_done(5):
+        pass
+
+    initial, loaded, final = mock_provider.text_chat.await_args_list
+    assert initial.kwargs["func_tool"].names() == ["astrbot_search_tools"]
+    assert loaded.kwargs["func_tool"].names() == [
+        "astrbot_search_tools",
+        "lookup_ticket",
+    ]
+    denied = next(
+        msg for msg in final.kwargs["contexts"] if msg.get("tool_call_id") == "lookup"
+    )
+    assert "Permission denied" in denied["content"]
+    allowed.assert_not_awaited()

@@ -737,3 +737,45 @@ async def test_tool_specific_timeout_survives_permission_wrapper(monkeypatch):
     ]
     assert results[0].content[0].text == "done"
     assert waiting.await_args_list[0].kwargs["timeout"] == 65
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("permission_error", [None, "Permission denied"])
+async def test_registered_handoff_preserves_dispatch_and_dynamic_mode(
+    permission_error, monkeypatch
+):
+    from astrbot.core.astr_agent_runtime import tool_executor
+
+    monkeypatch.setattr(tool_executor, "AstrAgentContext", SimpleNamespace)
+    manager = FunctionToolManager()
+    handoff = HandoffTool(Agent(name="child", tools=[]))
+    manager.func_list.append(handoff)
+    monkeypatch.setattr(
+        manager, "_check_tool_permission", AsyncMock(return_value=permission_error)
+    )
+    child_loop = AsyncMock(return_value=SimpleNamespace(completion_text="done"))
+    context = SimpleNamespace(
+        get_config=lambda **_: {
+            "agent": {"config": {"misc": {"tool_schema_mode": "dynamic"}}}
+        },
+        get_llm_tool_manager=lambda: manager,
+        get_current_chat_provider_id=AsyncMock(return_value="provider-id"),
+        tool_loop_agent=child_loop,
+    )
+    event = _DummyEvent([])
+    run_context = ContextWrapper(context=SimpleNamespace(event=event, context=context))
+
+    results = [
+        result
+        async for result in FunctionToolExecutor.execute(
+            manager.get_func(handoff.name, guarded=True), run_context, input="hello"
+        )
+    ]
+
+    assert results[0].content[0].text == (permission_error or "done")
+    if permission_error:
+        assert results[0].isError
+        child_loop.assert_not_awaited()
+    else:
+        child_loop.assert_awaited_once()
+        assert child_loop.await_args.kwargs["tool_schema_mode"] == "dynamic"

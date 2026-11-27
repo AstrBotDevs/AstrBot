@@ -236,10 +236,30 @@ class _PermissionGuardedTool(FunctionTool):
         self.active = getattr(tool, "active", True)
         self.handler_module_path = getattr(tool, "handler_module_path", None)
 
+    def is_available(self) -> bool:
+        if not self.active or not self._wrapped.active:
+            return False
+        if isinstance(self._wrapped, MCPTool):
+            runtime = self._mgr.mcp_server_runtime_view.get(
+                self._wrapped.mcp_server_name
+            )
+            if runtime is not None and runtime.shutdown_event.is_set():
+                return False
+        return self._mgr.get_func(self.name) is self._wrapped
+
+    async def authorization_error(self, context: Any) -> str | None:
+        """Check execution permission and the current registration."""
+        error = await self._mgr._check_tool_permission(self.name, context)
+        if error is not None:
+            return error
+        if not self.is_available():
+            return f"error: Tool {self.name} is no longer available."
+        return None
+
     async def call(self, context: Any, **kwargs: Any) -> Any:
         import inspect as _inspect
 
-        error = await self._mgr._check_tool_permission(self.name, context)
+        error = await self.authorization_error(context)
         if error is not None:
             return error
 
@@ -387,16 +407,16 @@ class FunctionToolManager:
                 self.func_list.pop(i)
                 break
 
-    def get_func(self, name) -> FuncTool | None:
+    def get_func(self, name, *, guarded: bool = False) -> FuncTool | None:
         # 优先返回已激活的工具（后加载的覆盖前面的，与 ToolSet.add_tool 保持一致）
         # 使用 getattr(..., True) 与 ToolSet.add_tool 保持一致：没有 active 属性的工具视为已激活
         for f in reversed(self.func_list):
             if f.name == name and getattr(f, "active", True):
-                return f
+                return _PermissionGuardedTool(f, self) if guarded else f
         # 退化则拿最后一个同名工具
         for f in reversed(self.func_list):
             if f.name == name:
-                return f
+                return _PermissionGuardedTool(f, self) if guarded else f
         return None
 
     def _default_permission(self, tool_name: str) -> str:

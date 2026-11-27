@@ -267,6 +267,7 @@ class Context:
             max_steps: Maximum number of tool calls before stopping the loop
             **kwargs: Additional keyword arguments. The kwargs will not be passed to the LLM directly for now, but can include:
                 stream: bool - whether to stream the LLM response
+                tool_schema_mode: str - use "dynamic" to discover tools from the supplied ToolSet
                 agent_hooks: BaseAgentRunHooks[AstrAgentContext] - hooks to run during agent execution
                 agent_context: AstrAgentContext - context to use for the agent
                 run_context: ContextWrapper - reuse caller-owned state for this Context and event
