@@ -3,12 +3,14 @@ from __future__ import annotations
 import asyncio
 import json
 import math
+import uuid
 from collections.abc import Mapping
 from typing import Any
 
 import httpx
 
 from astrbot import logger
+from astrbot.core.utils.media_utils import ResolvedMediaData
 from astrbot.core.utils.network_utils import log_connection_failure
 
 from ..entities import (
@@ -23,7 +25,7 @@ from ..entities import (
     DecisionState,
     ProviderType,
 )
-from ..provider import DecisionProvider
+from ..provider import DEFAULT_SYSTEM_ONE_MODEL, DecisionProvider
 from ..register import register_provider_adapter
 from .request_retry import retry_provider_request
 
@@ -64,7 +66,7 @@ class SystemOneDecisionProvider(DecisionProvider):
             if exact_endpoint or base_url.endswith("/systemone")
             else f"{base_url}/systemone"
         )
-        self.model = str(provider_config.get("model") or "jev-latest")
+        self.model = str(provider_config.get("model") or DEFAULT_SYSTEM_ONE_MODEL)
         self.api_key = provider_config.get("key", "")
         if not isinstance(self.api_key, str):
             raise ValueError("System One API key must be a string")
@@ -164,14 +166,34 @@ class SystemOneDecisionProvider(DecisionProvider):
                         )
                     payload_questions[head]["criteria"] = dict(question.criteria)
 
+        payload = {
+            "model": self.model,
+            "state": {} if state is None else state,
+            "questions": payload_questions,
+        }
+        headers = {}
+        if isinstance(state, ResolvedMediaData):
+            image_format = {"image/jpeg": "jpg", "image/png": "png"}.get(
+                state.mime_type
+            )
+            if not image_format:
+                raise ValueError("System One image decisions require a JPEG or PNG")
+            asset_id = uuid.uuid4().hex
+            payload["state"] = {"image": asset_id}
+            payload["assets"] = {
+                asset_id: {
+                    "type": "image",
+                    "format": image_format,
+                    "data_base64": state.base64_data,
+                }
+            }
+            headers["TypeSafe-Danger-Zone-Images"] = "true"
+
         async def _post() -> Any:
             response = await self.client.post(
                 self.base_url,
-                json={
-                    "model": self.model,
-                    "state": {} if state is None else state,
-                    "questions": payload_questions,
-                },
+                json=payload,
+                headers=headers,
             )
             response.raise_for_status()
             return response.json()

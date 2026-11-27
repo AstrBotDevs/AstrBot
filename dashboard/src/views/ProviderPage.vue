@@ -428,6 +428,9 @@ const legacyConfigSchema = computed(() => {
   const items = schema.provider?.items
   if (!items) return schema
   if (hintKey) {
+    if (items.modalities) {
+      items.modalities.options = ['text', 'image']
+    }
     if (items.key) {
       items.key.type = 'string'
       delete items.key.items

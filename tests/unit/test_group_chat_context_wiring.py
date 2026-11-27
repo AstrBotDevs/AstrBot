@@ -1,15 +1,25 @@
 import json
+from copy import deepcopy
+from io import BytesIO
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
+from PIL import Image as PILImage
 
-from astrbot.api.message_components import Json, Plain
-from astrbot.api.provider import LLMResponse
+from astrbot.api.message_components import Image, Json, Plain
+from astrbot.api.provider import (
+    DecisionChoiceAnswer,
+    DecisionProvider,
+    LLMResponse,
+    Provider,
+)
 from astrbot.builtin_stars.astrbot.group_chat_context import GroupChatContext
 from astrbot.builtin_stars.astrbot.main import Main
+from astrbot.core.config.default import DEFAULT_CONFIG
 from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.platform.message_type import MessageType
+from astrbot.core.provider.decision import DecisionService
 
 
 def make_main_with_conversation_manager(conv_mgr):
@@ -300,3 +310,73 @@ async def test_format_message_truncates_long_json_card_fields():
     formatted = await context._format_message(event, {})
 
     assert f"Description: {'a' * 200}...]" in formatted
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("invert", [True, False])
+async def test_group_caption_decides_each_image_before_captioning(tmp_path, invert):
+    mock_context = MagicMock()
+    context = GroupChatContext(MagicMock(), mock_context)
+    config = deepcopy(DEFAULT_CONFIG)
+    settings = config["provider_ltm_settings"]
+    settings.update(
+        group_icl_enable=True, image_caption=True, image_caption_provider_id="caption"
+    )
+    assert settings["image_caption_decision"]["invert"] is False
+    settings["image_caption_decision"].update(
+        provider_id="judge",
+        threshold=0.75,
+        invert=invert,
+        prompt="Is it red?",
+        placeholder="Skipped",
+    )
+    mock_context.get_config.return_value = config
+    manager = MagicMock()
+    judge = MagicMock(spec=DecisionProvider)
+    judge.provider_config = {"modalities": ["image"]}
+    manager.get_provider_by_id = AsyncMock(return_value=judge)
+    context.context.decision = DecisionService(manager)
+    judge.ask.side_effect = [
+        {"answer": DecisionChoiceAnswer("o1", 0.9, {"o1": 0.9, "o2": 0.1}, 0.75)},
+        {"answer": DecisionChoiceAnswer("o2", 0.9, {"o1": 0.1, "o2": 0.9}, 0.75)},
+        {"answer": DecisionChoiceAnswer("o2", 0.9, {"o1": 0.1, "o2": 0.9}, 0.74)},
+    ]
+    caption = MagicMock(spec=Provider)
+    caption.text_chat.return_value = LLMResponse(
+        role="assistant", completion_text="Described"
+    )
+    mock_context.get_provider_by_id.return_value = caption
+    event = make_event()
+    event.message_obj.sender = SimpleNamespace(nickname="Alice")
+    images = []
+    for color in ("red", "blue", "white"):
+        path = tmp_path / f"{color}.gif"
+        PILImage.new("RGB", (32, 32), color).save(path)
+        images.append(Image.fromFileSystem(path))
+    event.get_messages.return_value = [images[0], Plain("between"), images[1], images[2]]
+
+    rendered = await context._format_message(event, context.cfg(event))
+
+    assert rendered.endswith(
+        "[Image: Described] between [Image: Skipped] [Image: Skipped]"
+        if invert
+        else "[Image: Skipped] between [Image: Described] [Image: Skipped]"
+    )
+    assert judge.ask.await_count == 3
+    for call, color in zip(
+        judge.ask.await_args_list, [(255, 0, 0), (0, 0, 255), (255, 255, 255)], strict=True
+    ):
+        questions, image = call.args
+        assert questions["answer"].instructions == "Is it red?"
+        with PILImage.open(BytesIO(image.to_bytes())) as preview:
+            assert preview.size == (280, 280)
+            assert preview.convert("RGB").getpixel((140, 140)) == pytest.approx(
+                color, abs=2
+            )
+    caption.text_chat.assert_awaited_once()
+    allowed = judge.ask.await_args_list[0 if invert else 1].args[1]
+    assert caption.text_chat.await_args.kwargs["image_urls"] == [allowed.to_data_url()]
+    mock_context.get_provider_by_id.assert_called_once_with("caption")
+    assert all(
+        call.args == ("judge",) for call in manager.get_provider_by_id.await_args_list
+    )

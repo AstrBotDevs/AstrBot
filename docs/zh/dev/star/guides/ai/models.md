@@ -32,6 +32,13 @@ should_reply = await self.context.decision.yes_no(
     threshold=0.7,
 )
 
+should_route = await self.context.decision.matches(
+    question="Does this message request a refund?",
+    expected_answer=True,
+    confidence_threshold=0.85,
+    state=event.message_str,
+)
+
 strategy = await self.context.decision.choose(
     question="Which reply strategy should be used?",
     criteria={"short": "A brief reply", "detailed": "A detailed reply"},
@@ -42,7 +49,9 @@ print(strategy.choice)
 
 `yes_no()` 返回 `bool`，当肯定概率达到 `threshold` 时为 `True`；`choose()` 返回 `DecisionChoiceAnswer`，通过 `.choice` 读取选项值。
 
-`state` 提供判断所需的上下文，支持文本、列表或字典。默认使用当前判断提供商，也可传入 `provider_id` 指定。
+`matches()`检查模型选择的布尔答案及其置信度。答案等于`expected_answer`且置信度达到或高于`confidence_threshold`时返回`True`
+
+`state`支持文本、列表、字典，也可以向支持图像输入的模型传入已处理的图片（`ResolvedMediaData`）。默认使用当前判断提供商，也可传入 `provider_id` 指定。
 
 需要一次回答多个问题时，调用 `ask({问题名: 问题对象}, state=...)`，结果按问题名返回。以下类型从 `astrbot.api.provider` 导入：
 

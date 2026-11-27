@@ -20,6 +20,8 @@ from astrbot.core.provider.headers import build_provider_headers
 from astrbot.core.provider.register import provider_cls_map
 from astrbot.core.utils.astrbot_path import get_astrbot_path
 
+DEFAULT_SYSTEM_ONE_MODEL = "jev-latest"
+
 Providers: TypeAlias = Union[
     "Provider",
     "STTProvider",
@@ -452,6 +454,31 @@ class DecisionProvider(AbstractProvider):
         super().__init__(provider_config)
         self.provider_config = provider_config
         self.provider_settings = provider_settings
+
+    @staticmethod
+    def supports_image_input(config: dict) -> bool:
+        """Check explicit image support or recognize a legacy vision model.
+
+        Args:
+            config: Decision provider configuration, optionally declaring modalities.
+
+        Returns:
+            Whether image decisions are enabled for this model.
+        """
+        if "modalities" in config:
+            modalities = config["modalities"]
+            return isinstance(modalities, list) and "image" in modalities
+        model = config.get("model")
+        if config.get("type") == "openai_decision":
+            return str(model).rsplit("/", 1)[-1] == "gpt-6-luna"
+        if config.get("type") != "system_one_decision":
+            return False
+        return str(model or DEFAULT_SYSTEM_ONE_MODEL).rsplit("/", 1)[-1] in {
+            "jev-latest",
+            "jev-preview",
+            "jev-1.13.0",
+            "jev-1.14.0",
+        }
 
     @abc.abstractmethod
     async def ask(

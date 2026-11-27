@@ -2,6 +2,7 @@
   <ProviderSelectMenu
     :model-value="modelValue"
     :provider-type="providerType"
+    :required-modality="requiredModality"
     variant="config"
     :allow-empty="!multiple"
     :multiple="multiple"
@@ -25,6 +26,7 @@ defineProps({
     type: String,
     default: "",
   },
+  requiredModality: String,
   multiple: {
     type: Boolean,
     default: false,

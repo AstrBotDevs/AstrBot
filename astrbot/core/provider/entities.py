@@ -25,6 +25,7 @@ from astrbot.core.db.po import Conversation
 from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.utils.media_utils import (
     MediaResolver,
+    ResolvedMediaData,
     is_recoverable_image_error,
     resolve_image_ref_to_base64_data,
 )
@@ -81,7 +82,7 @@ class DecisionScoreQuestion:
 DecisionQuestion: TypeAlias = (
     DecisionChoiceQuestion | DecisionBooleanQuestion | DecisionScoreQuestion
 )
-DecisionState: TypeAlias = str | list[Any] | dict[str, Any]
+DecisionState: TypeAlias = str | list[Any] | dict[str, Any] | ResolvedMediaData
 
 
 @dataclass(frozen=True, slots=True)

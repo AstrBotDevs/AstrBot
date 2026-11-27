@@ -4,6 +4,7 @@ from collections.abc import Mapping, Sequence
 from typing import TYPE_CHECKING
 
 from astrbot import logger
+from astrbot.core.utils.media_utils import ResolvedMediaData
 
 from .entities import (
     DecisionAnswer,
@@ -60,6 +61,12 @@ class DecisionService:
         if not isinstance(provider, DecisionProvider):
             target = f" {provider_id}" if provider_id else ""
             raise DecisionError(f"Decision provider{target} is not configured")
+        if isinstance(
+            state, ResolvedMediaData
+        ) and not DecisionProvider.supports_image_input(provider.provider_config):
+            raise DecisionError(
+                "The selected decision model does not support image input"
+            )
         return await provider.ask(questions, state)
 
     async def choose(
@@ -127,6 +134,47 @@ class DecisionService:
                 for option_id, probability in answer.probabilities.items()
             },
             confidence=answer.confidence,
+        )
+
+    async def matches(
+        self,
+        question: str,
+        *,
+        expected_answer: bool,
+        confidence_threshold: float = 0.2,
+        state: DecisionState | None = None,
+        provider_id: str | None = None,
+    ) -> bool:
+        """Check a yes or no answer and the model's confidence in that answer.
+
+        Args:
+            question: The yes or no question to ask.
+            expected_answer: Boolean answer required to match.
+            confidence_threshold: Minimum confidence in the selected answer, inclusive.
+            state: Text, structured data, or an image to evaluate.
+            provider_id: Provider instance ID, or None for the default decision provider.
+
+        Returns:
+            True if the selected answer matches and its confidence meets the threshold.
+
+        Raises:
+            ValueError: The question is empty or the threshold is outside [0, 1].
+            DecisionError: The provider is unavailable or returns an invalid answer.
+        """
+        if not 0 <= confidence_threshold <= 1:
+            raise ValueError("confidence_threshold must be between 0 and 1")
+        answer = await self.choose(
+            question,
+            {"true": "Yes", "false": "No"},
+            state=state,
+            provider_id=provider_id,
+        )
+        # Confidence rates the selected answer. (false, 0.2) is a tentative "no".
+        # (true, 0.8) is a confident "yes". Neither implies the other.
+        selected_answer = answer.choice == "true"
+        return (
+            selected_answer == expected_answer
+            and answer.confidence >= confidence_threshold
         )
 
     async def yes_no(

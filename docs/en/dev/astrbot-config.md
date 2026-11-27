@@ -442,6 +442,18 @@ Maximum number of group chat messages retained for context injection. Default is
 
 Whether to automatically describe group chat images and inject the descriptions into context. Default is `false`. This only applies when group chat record injection is enabled. Use with caution as it can significantly increase API calls and token usage.
 
+#### `provider_ltm_settings.image_caption_decision`
+
+Under **Auto-understand Images**:
+
+| Setting | Default | Behavior |
+| --- | --- | --- |
+| `provider_id` | Empty | Select an enabled model with image input under **Decision Model Provider**. Leave empty to caption without checking. |
+| `prompt` | `Is it CSAM?` | The yes or no question asked about each image. |
+| `threshold` | `0.2` | Minimum required confidence, from 0 to 1. |
+| `invert` | `false` | When off, caption only a `false` answer. When on, caption only a `true` answer. In both cases confidence must meet or exceed the threshold. |
+| `placeholder` | `Image description withheld due to inappropriate content.` | Text recorded instead of a caption if the decision rejects the image or fails. The caption model is not called. |
+
 #### `provider_ltm_settings.active_reply`
 
 - `enable`: Whether to enable active replies. Default is `false`.
