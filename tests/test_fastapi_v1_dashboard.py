@@ -1976,7 +1976,6 @@ async def test_v1_provider_schema_keeps_reasoning_in_model_metadata(
         {"gpt-4o-mini": model_metadata},
     )
     monkeypatch.setattr(llm_metadata, "LLM_PROVIDER_REASONING_EFFORTS", {})
-    monkeypatch.setattr(llm_metadata, "LLM_CONSENSUS_REASONING_EFFORTS", {})
 
     response = await asgi_client.get(
         "/api/v1/providers/schema",

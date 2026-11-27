@@ -422,30 +422,26 @@ class ProviderOpenAIOfficial(Provider):
         """
         provider = self.provider_config.get("provider")
 
-        if request_extra_body:
-            overrides = dict(request_extra_body)
-            if "reasoning_effort" in overrides:
-                if payloads.get("model") == "qwen4-max" and (
-                    provider in {"bailian", "dashscope"}
-                    or self.client.base_url.host.endswith(".aliyuncs.com")
-                ):
-                    extra_body.pop("thinking_budget", None)
-                if "thinking" not in overrides:
-                    extra_body.pop("thinking", None)
-                if provider == "deepseek" and overrides["reasoning_effort"] == "none":
-                    del overrides["reasoning_effort"]
-                    extra_body.pop("reasoning_effort", None)
-                    overrides["thinking"] = {"type": "disabled"}
-                elif "reasoning" not in overrides and isinstance(
-                    extra_body.get("reasoning"), dict
-                ):
-                    # OpenRouter effort replaces its mutually exclusive budget and toggle.
-                    reasoning = dict(extra_body["reasoning"])
-                    reasoning.pop("max_tokens", None)
-                    reasoning.pop("enabled", None)
-                    reasoning["effort"] = overrides.pop("reasoning_effort")
-                    extra_body["reasoning"] = reasoning
-            extra_body.update(overrides)
+        effort = (request_extra_body or {}).get("reasoning_effort")
+        if effort:
+            if payloads.get("model") == "qwen4-max" and (
+                provider in {"bailian", "dashscope"}
+                or self.client.base_url.host.endswith(".aliyuncs.com")
+            ):
+                extra_body.pop("thinking_budget", None)
+            extra_body.pop("thinking", None)
+            if provider == "deepseek" and effort == "none":
+                extra_body.pop("reasoning_effort", None)
+                extra_body["thinking"] = {"type": "disabled"}
+            elif isinstance(extra_body.get("reasoning"), dict):
+                # OpenRouter accepts either an effort or a token budget.
+                reasoning = dict(extra_body["reasoning"])
+                reasoning.pop("max_tokens", None)
+                reasoning.pop("enabled", None)
+                reasoning["effort"] = effort
+                extra_body["reasoning"] = reasoning
+            else:
+                extra_body["reasoning_effort"] = effort
 
         self._apply_provider_specific_request_overrides(payloads, extra_body)
 

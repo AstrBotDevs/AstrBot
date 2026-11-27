@@ -324,12 +324,7 @@ class ProviderGoogleGenAI(Provider):
             custom_extra_body = {}
         if not isinstance(custom_extra_body, dict):
             raise ValueError("Gemini custom_extra_body must be a JSON object.")
-        extra_body = dict(custom_extra_body)
-        request_extra_body = payloads.get("extra_body")
-        if isinstance(request_extra_body, dict):
-            for key, value in request_extra_body.items():
-                if key != "reasoning_effort" or is_gemini_4:
-                    extra_body[key] = value
+        extra_body = custom_extra_body
 
         thinking_config = None
         thinking_settings = self.provider_config.get("gm_thinking_config") or {}
@@ -368,6 +363,15 @@ class ProviderGoogleGenAI(Provider):
                     ),
                     GEMINI_4_FALLBACK_THINKING_LEVELS,
                 )
+
+                request_level = (payloads.get("extra_body") or {}).get(
+                    "reasoning_effort"
+                )
+                if (
+                    isinstance(request_level, str)
+                    and request_level.upper() in allowed_levels
+                ):
+                    thinking_level = request_level
 
             # Workaround. Recommended to drop support after Gemini 4 Neon release.
             elif model_name.startswith(("gemini-3.7", "gemini-3.8")):

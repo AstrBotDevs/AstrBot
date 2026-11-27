@@ -1,6 +1,5 @@
 import asyncio
 import os
-from collections import Counter
 from typing import Any, Literal, TypedDict
 from urllib.parse import urlsplit
 
@@ -106,7 +105,6 @@ ADAPTER_TO_MODELS_DEV = {
 LLM_METADATAS: dict[str, LLMMetadata] = {}
 LLM_METADATAS_BY_LOWER: dict[str, LLMMetadata] = {}
 LLM_PROVIDER_REASONING_EFFORTS: dict[str, dict[str, tuple[str, ...]]] = {}
-LLM_CONSENSUS_REASONING_EFFORTS: dict[str, tuple[str, ...]] = {}
 LLM_METADATA_URLS = (
     "https://models.dev/api.json",
     "https://models.opencode.ai/api.json",
@@ -124,7 +122,6 @@ def populate_llm_metadata(data: dict[str, Any]) -> int:
     """
     models: dict[str, LLMMetadata] = {}
     by_provider: dict[str, dict[str, tuple[str, ...]]] = {}
-    effort_votes: dict[str, Counter[tuple[str, ...]]] = {}
 
     for provider_id, info in data.items():
         if not isinstance(provider_id, str) or not isinstance(info, dict):
@@ -133,7 +130,7 @@ def populate_llm_metadata(data: dict[str, Any]) -> int:
         if not isinstance(raw_models, dict):
             continue
 
-        direct_entries: list[tuple[dict[str, Any], tuple[str, ...]]] = []
+        provider_efforts: dict[str, tuple[str, ...]] = {}
         for model in raw_models.values():
             if not isinstance(model, dict):
                 continue
@@ -167,48 +164,14 @@ def populate_llm_metadata(data: dict[str, Any]) -> int:
                 values = ["none", *values]
             value_set = set(values)
             efforts = tuple(v for v in REASONING_EFFORT_ORDER if v in value_set)
-            direct_entries.append((model, efforts))
-
-        # Inherit effort levels from the newest sibling in the same family when a
-        # newly listed reasoning model omits reasoning_options.
-        provider_efforts: dict[str, tuple[str, ...]] = {}
-        for model, efforts in direct_entries:
-            model_id = model["id"]
-            if (
-                "reasoning_options" not in model
-                and model.get("reasoning")
-                and model.get("family")
-            ):
-                family = model["family"]
-                release_date = str(model.get("release_date") or "")
-                best_key: tuple[str, str] | None = None
-                for kin, kin_efforts in direct_entries:
-                    if (
-                        not kin_efforts
-                        or kin.get("family") != family
-                        or kin["id"] == model_id
-                    ):
-                        continue
-                    kin_date = str(kin.get("release_date") or "")
-                    if release_date and kin_date > release_date:
-                        continue
-                    candidate_key = (kin_date, kin["id"])
-                    if best_key is None or candidate_key > best_key:
-                        best_key = candidate_key
-                        efforts = kin_efforts
-
             lower_id = model_id.lower()
             bare_id = lower_id.rsplit("/", 1)[-1]
             provider_efforts[lower_id] = efforts
             provider_efforts.setdefault(bare_id, efforts)
 
-            if "reasoning_options" in model or not model.get("reasoning"):
-                effort_votes.setdefault(bare_id, Counter())[efforts] += 1
-
             models[model_id] = LLMMetadata(
                 id=model_id,
                 reasoning=bool(model.get("reasoning", False)),
-                reasoning_efforts=list(efforts),
                 tool_call=bool(model.get("tool_call", False)),
                 knowledge=model.get("knowledge", "none"),
                 release_date=model.get("release_date", ""),
@@ -219,17 +182,10 @@ def populate_llm_metadata(data: dict[str, Any]) -> int:
 
         by_provider[provider_id.lower()] = provider_efforts
 
-    consensus = {
-        bare_id: counts.most_common(1)[0][0]
-        for bare_id, counts in effort_votes.items()
-        if counts
-    }
     models_by_lower: dict[str, LLMMetadata] = {}
     for model_id, meta in models.items():
         lower_id = model_id.lower()
         bare_id = lower_id.rsplit("/", 1)[-1]
-        if bare_id in consensus:
-            meta["reasoning_efforts"] = list(consensus[bare_id])
         models_by_lower[lower_id] = meta
         models_by_lower.setdefault(bare_id, meta)
 
@@ -240,8 +196,6 @@ def populate_llm_metadata(data: dict[str, Any]) -> int:
     LLM_METADATAS_BY_LOWER.update(models_by_lower)
     LLM_PROVIDER_REASONING_EFFORTS.clear()
     LLM_PROVIDER_REASONING_EFFORTS.update(by_provider)
-    LLM_CONSENSUS_REASONING_EFFORTS.clear()
-    LLM_CONSENSUS_REASONING_EFFORTS.update(consensus)
     return len(models)
 
 
@@ -254,8 +208,7 @@ def resolve_model_metadata(
 ) -> LLMMetadata | None:
     """Resolve model metadata with provider-specific reasoning effort levels.
 
-    Checks the provider's own catalog entry first, then falls back to the
-    cross-provider majority vote for the bare model ID.
+    Checks the configured provider catalog, then the adapter's mapped catalog.
 
     Args:
         model_id: Model identifier configured on the provider.
@@ -312,8 +265,6 @@ def resolve_model_metadata(
             ):
                 efforts = ("none", *efforts)
             break
-    if efforts is None:
-        efforts = LLM_CONSENSUS_REASONING_EFFORTS.get(bare_id)
 
     if base_meta is None and efforts is None:
         return None

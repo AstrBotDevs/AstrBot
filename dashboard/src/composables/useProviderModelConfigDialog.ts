@@ -1,9 +1,5 @@
 import { computed, ref, type Ref } from 'vue'
 import { providerApi } from '@/api/v1'
-import {
-  GEMINI_4_FALLBACK_REASONING_LEVELS,
-  GEMINI_4_REASONING_LEVELS
-} from '@/utils/reasoningEffort'
 
 interface UseProviderModelConfigDialogOptions {
   selectedProviderSource: Ref<any | null>
@@ -44,6 +40,16 @@ const GEMINI_EXTRA_BODY_TEMPLATE = {
   }
 }
 
+// Fallback only. Avoid actually depending on this.
+const GEMINI_4_DEFAULT_REASONING_LEVELS = ['auto', 'low', 'medium', 'high', 'xhigh']
+
+const GEMINI_4_REASONING_LEVELS = {
+  'gemini-4-carbon': ['auto', 'low', 'medium', 'high'],
+  'gemini-4-argon': ['auto', 'low', 'medium', 'high'],
+  'gemini-4-neon': ['auto', 'low', 'medium', 'high', 'xhigh'],
+  'gemini-4-hydrogen': ['auto', 'low', 'medium', 'high', 'xhigh']
+}
+
 export function useProviderModelConfigDialog(options: UseProviderModelConfigDialogOptions) {
   const {
     selectedProviderSource,
@@ -80,7 +86,7 @@ export function useProviderModelConfigDialog(options: UseProviderModelConfigDial
         extraBodySchema.template_schema.reasoning_effort = {
           name: 'Reasoning Effort',
           type: 'string',
-          options: ['auto', ...(modelLevels ?? GEMINI_4_FALLBACK_REASONING_LEVELS)]
+          options: modelLevels ?? GEMINI_4_DEFAULT_REASONING_LEVELS
         }
       }
     } else if (modelName.startsWith('gemini-')) {

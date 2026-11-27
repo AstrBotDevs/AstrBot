@@ -769,14 +769,8 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         if include_model:
             # For primary provider we keep explicit model selection if provided.
             payload["model"] = self.req.model
-        if self.req.extra_body:
-            extra_body = dict(self.req.extra_body)
-            if not include_model:
-                # Request-level reasoning_effort targets the primary model and
-                # may be rejected by an unrelated fallback provider.
-                extra_body.pop("reasoning_effort", None)
-            if extra_body:
-                payload["extra_body"] = extra_body
+        if self.req.reasoning_effort:
+            payload["extra_body"] = {"reasoning_effort": self.req.reasoning_effort}
         async with aclosing(
             self._recorded_responses(
                 payload, contexts=self.run_context.messages, streaming=self.streaming
@@ -822,12 +816,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                 # Clear primary-model overrides permanently so subsequent tool
                 # turns and skills_like re-queries do not leak them to the fallback.
                 self.req.model = None
-                if self.req.extra_body:
-                    self.req.extra_body = {
-                        k: v
-                        for k, v in self.req.extra_body.items()
-                        if k != "reasoning_effort"
-                    }
+                self.req.reasoning_effort = None
             self.provider = candidate
             try:
                 retrying = AsyncRetrying(
@@ -1970,8 +1959,10 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                     "abort_signal": self._abort_signal,
                     "request_max_retries": self.request_max_retries,
                 }
-                if self.req.extra_body:
-                    requery_payload["extra_body"] = dict(self.req.extra_body)
+                if self.req.reasoning_effort:
+                    requery_payload["extra_body"] = {
+                        "reasoning_effort": self.req.reasoning_effort
+                    }
                 requery_resp = None
                 async for recorded in self._recorded_responses(
                     requery_payload,
@@ -2006,8 +1997,10 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                         "abort_signal": self._abort_signal,
                         "request_max_retries": self.request_max_retries,
                     }
-                    if self.req.extra_body:
-                        repair_payload["extra_body"] = dict(self.req.extra_body)
+                    if self.req.reasoning_effort:
+                        repair_payload["extra_body"] = {
+                            "reasoning_effort": self.req.reasoning_effort
+                        }
                     repair_resp = None
                     async for recorded in self._recorded_responses(
                         repair_payload,

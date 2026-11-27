@@ -578,13 +578,10 @@ class ProviderAnthropic(Provider):
 
         custom_extra = self.provider_config.get("custom_extra_body") or {}
         extra_body = dict(custom_extra) if isinstance(custom_extra, dict) else {}
-        if isinstance(request_extra_body, dict):
-            for key, value in request_extra_body.items():
-                if key == "reasoning_effort":
-                    if isinstance(value, str) and value.strip():
-                        request_effort = value.strip().lower()
-                else:
-                    extra_body[key] = value
+        if request_extra_body:
+            value = request_extra_body.get("reasoning_effort")
+            if isinstance(value, str) and value.strip():
+                request_effort = value.strip().lower()
         # Server-side tools declared in the custom body (e.g. web search on
         # Anthropic-compatible endpoints) must coexist with the registered
         # function tools: extra_body replaces same-named top-level keys,
@@ -724,13 +721,10 @@ class ProviderAnthropic(Provider):
         usage = TokenUsage()
         custom_extra = self.provider_config.get("custom_extra_body") or {}
         extra_body = dict(custom_extra) if isinstance(custom_extra, dict) else {}
-        if isinstance(request_extra_body, dict):
-            for key, value in request_extra_body.items():
-                if key == "reasoning_effort":
-                    if isinstance(value, str) and value.strip():
-                        request_effort = value.strip().lower()
-                else:
-                    extra_body[key] = value
+        if request_extra_body:
+            value = request_extra_body.get("reasoning_effort")
+            if isinstance(value, str) and value.strip():
+                request_effort = value.strip().lower()
         # See _query: custom server-side tools must not replace the
         # registered function tools, and a name collision overrides
         # instead of duplicating.

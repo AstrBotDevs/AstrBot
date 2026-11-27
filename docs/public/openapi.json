@@ -1901,7 +1901,7 @@
         ],
         "responses": {
           "200": {
-            "$ref": "#/components/responses/Ok"
+            "$ref": "#/components/responses/ChatDetail"
           }
         }
       },
@@ -2141,7 +2141,7 @@
         ],
         "responses": {
           "200": {
-            "$ref": "#/components/responses/Ok"
+            "$ref": "#/components/responses/ChatDetail"
           }
         },
         "description": "**Required scope:** `chat`"
@@ -7179,6 +7179,42 @@
           "application/json": {
             "schema": {
               "$ref": "#/components/schemas/SuccessEnvelope"
+            }
+          }
+        }
+      },
+      "ChatDetail": {
+        "description": "Session or thread detail with its effective runtime and default chat provider.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "allOf": [
+                {
+                  "$ref": "#/components/schemas/SuccessEnvelope"
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "object",
+                      "required": [
+                        "agent_runner_type",
+                        "default_provider_id"
+                      ],
+                      "properties": {
+                        "agent_runner_type": {
+                          "type": "string"
+                        },
+                        "default_provider_id": {
+                          "type": "string",
+                          "description": "Effective chat provider ID, or an empty string when unavailable."
+                        }
+                      },
+                      "additionalProperties": true
+                    }
+                  }
+                }
+              ]
             }
           }
         }

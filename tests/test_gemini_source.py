@@ -476,7 +476,7 @@ async def test_gemini_request_extra_body_overrides_custom_extra_body():
 
 
 @pytest.mark.asyncio
-async def test_gemini_request_extra_body_invalid_level_falls_back_to_model_default():
+async def test_gemini_unsupported_request_level_preserves_provider_level():
     provider = ProviderGoogleGenAI.__new__(ProviderGoogleGenAI)
     provider.provider_config = {"custom_extra_body": {"reasoning_effort": "low"}}
     provider.provider_settings = {}
@@ -490,7 +490,7 @@ async def test_gemini_request_extra_body_invalid_level_falls_back_to_model_defau
         }
     )
 
-    assert "thinking_config" not in config.model_dump(exclude_none=True)
+    assert config.thinking_config.thinking_level == types.ThinkingLevel.LOW
 
 
 def test_gemini_4_thinking_levels_match_frontend_registry():
@@ -507,7 +507,8 @@ def test_gemini_4_thinking_levels_match_frontend_registry():
     frontend_registry = json.loads(json_path.read_text(encoding="utf-8"))
 
     assert [level.upper() for level in frontend_registry["fallback"]] == [
-        level for level in gemini_source.GEMINI_4_FALLBACK_THINKING_LEVELS
+        level
+        for level in gemini_source.GEMINI_4_FALLBACK_THINKING_LEVELS
         if level != "XHIGH"
     ]
     assert {

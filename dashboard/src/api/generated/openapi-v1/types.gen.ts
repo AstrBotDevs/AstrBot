@@ -1563,7 +1563,16 @@ export type GetChatSessionData = {
     };
 };
 
-export type GetChatSessionResponse = (SuccessEnvelope);
+export type GetChatSessionResponse = ((SuccessEnvelope & {
+    data?: {
+        agent_runner_type: string;
+        /**
+         * Effective chat provider ID, or an empty string when unavailable.
+         */
+        default_provider_id: string;
+        [key: string]: unknown | string;
+    };
+}));
 
 export type GetChatSessionError = unknown;
 
@@ -1650,7 +1659,16 @@ export type GetChatThreadData = {
     };
 };
 
-export type GetChatThreadResponse = (SuccessEnvelope);
+export type GetChatThreadResponse = ((SuccessEnvelope & {
+    data?: {
+        agent_runner_type: string;
+        /**
+         * Effective chat provider ID, or an empty string when unavailable.
+         */
+        default_provider_id: string;
+        [key: string]: unknown | string;
+    };
+}));
 
 export type GetChatThreadError = unknown;
 

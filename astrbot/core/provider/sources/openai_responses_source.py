@@ -292,11 +292,9 @@ class ProviderOpenAIResponses(ProviderOpenAIOfficial):
         }
         if system_prompt:
             payloads["instructions"] = system_prompt
-        if isinstance(extra_body := kwargs.get("extra_body"), dict) and extra_body:
-            for key, value in extra_body.items():
-                if key not in {"input", "model", "instructions", "store", "extra_body"}:
-                    payloads[key] = value
 
+        if effort := (kwargs.get("extra_body") or {}).get("reasoning_effort"):
+            payloads["reasoning_effort"] = effort
         return payloads, context_query
 
     async def _query(
@@ -320,97 +318,50 @@ class ProviderOpenAIResponses(ProviderOpenAIOfficial):
         Raises:
             TypeError: If the SDK returns an unexpected response type.
         """
-        request_payloads = dict(payloads)
-        request_extra_body = request_payloads.pop("extra_body", None)
+        payloads = dict(payloads)
+        request_effort = payloads.pop("reasoning_effort", None)
         if tools:
             response_tools = []
             for tool in tools.openai_schema():
                 function = tool.get("function", {})
                 response_tools.append({"type": "function", **function})
             if response_tools:
-                request_payloads["tools"] = response_tools
-                request_payloads["tool_choice"] = request_payloads.get(
-                    "tool_choice", "auto"
-                )
+                payloads["tools"] = response_tools
+                payloads["tool_choice"] = payloads.get("tool_choice", "auto")
 
         extra_body: dict[str, Any] = {}
         custom_extra_body = self.provider_config.get("custom_extra_body", {})
         if isinstance(custom_extra_body, dict):
             extra_body.update(custom_extra_body)
 
-        request_reasoning_effort: Any = None
-        request_max_tokens: Any = None
-        has_request_max_output_tokens = "max_output_tokens" in request_payloads
-        for key in list(request_payloads):
+        for key in list(payloads):
             if key not in self.default_params:
-                value = request_payloads.pop(key)
-                extra_body[key] = value
-                if key == "reasoning_effort":
-                    request_reasoning_effort = value
-                elif key == "max_tokens":
-                    request_max_tokens = value
-            elif (
-                key
-                not in {
-                    "input",
-                    "model",
-                    "instructions",
-                    "store",
-                    "tools",
-                    "tool_choice",
-                }
-                and key in extra_body
-            ):
-                # OpenAI SDK overlays extra_body onto top-level kwargs, so drop
-                # shadowed config keys for request-level overrides.
-                extra_body.pop(key, None)
-        if isinstance(request_extra_body, dict):
-            extra_body.update(request_extra_body)
-            if "reasoning_effort" in request_extra_body:
-                request_reasoning_effort = request_extra_body["reasoning_effort"]
-            if "max_tokens" in request_extra_body:
-                request_max_tokens = request_extra_body["max_tokens"]
-            if "max_output_tokens" in request_extra_body:
-                has_request_max_output_tokens = True
+                extra_body[key] = payloads.pop(key)
 
         max_tokens = extra_body.pop("max_tokens", None)
-        if request_max_tokens is not None and not has_request_max_output_tokens:
-            extra_body["max_output_tokens"] = request_max_tokens
-        elif (
-            max_tokens is not None
-            and "max_output_tokens" not in extra_body
-            and "max_output_tokens" not in request_payloads
-        ):
+        if max_tokens is not None and "max_output_tokens" not in extra_body:
             extra_body["max_output_tokens"] = max_tokens
         reasoning_effort = extra_body.pop("reasoning_effort", None)
-        if request_reasoning_effort is not None:
-            existing_reasoning = request_payloads.pop(
-                "reasoning", extra_body.get("reasoning")
-            )
-            reasoning = (
-                dict(existing_reasoning) if isinstance(existing_reasoning, dict) else {}
-            )
-            reasoning["effort"] = request_reasoning_effort
-            extra_body["reasoning"] = reasoning
-        elif (
-            reasoning_effort is not None
-            and "reasoning" not in extra_body
-            and "reasoning" not in request_payloads
-        ):
+        if request_effort is not None:
+            extra_body["reasoning"] = {
+                **(extra_body.get("reasoning") or {}),
+                "effort": request_effort,
+            }
+        elif reasoning_effort is not None and "reasoning" not in extra_body:
             extra_body["reasoning"] = {"effort": reasoning_effort}
         extra_body.pop("previous_response_id", None)
         extra_body.pop("conversation", None)
         extra_body.pop("store", None)
-        request_payloads.pop("previous_response_id", None)
-        request_payloads.pop("conversation", None)
-        request_payloads["store"] = False
+        payloads.pop("previous_response_id", None)
+        payloads.pop("conversation", None)
+        payloads["store"] = False
 
         async with chat_request(
             self,
             "OpenAI Responses",
             extra_body.get("model") or payloads.get("model") or self.get_model(),
             lambda: self.client.responses.create(
-                **request_payloads,
+                **payloads,
                 stream=False,
                 extra_body=extra_body,
                 extra_headers=build_conversation_headers(conversation_id),
@@ -452,97 +403,50 @@ class ProviderOpenAIResponses(ProviderOpenAIOfficial):
         Raises:
             EmptyModelOutputError: If the stream ends without a terminal event.
         """
-        request_payloads = dict(payloads)
-        request_extra_body = request_payloads.pop("extra_body", None)
+        payloads = dict(payloads)
+        request_effort = payloads.pop("reasoning_effort", None)
         if tools:
             response_tools = []
             for tool in tools.openai_schema():
                 function = tool.get("function", {})
                 response_tools.append({"type": "function", **function})
             if response_tools:
-                request_payloads["tools"] = response_tools
-                request_payloads["tool_choice"] = request_payloads.get(
-                    "tool_choice", "auto"
-                )
+                payloads["tools"] = response_tools
+                payloads["tool_choice"] = payloads.get("tool_choice", "auto")
 
         extra_body: dict[str, Any] = {}
         custom_extra_body = self.provider_config.get("custom_extra_body", {})
         if isinstance(custom_extra_body, dict):
             extra_body.update(custom_extra_body)
 
-        request_reasoning_effort: Any = None
-        request_max_tokens: Any = None
-        has_request_max_output_tokens = "max_output_tokens" in request_payloads
-        for key in list(request_payloads):
+        for key in list(payloads):
             if key not in self.default_params:
-                value = request_payloads.pop(key)
-                extra_body[key] = value
-                if key == "reasoning_effort":
-                    request_reasoning_effort = value
-                elif key == "max_tokens":
-                    request_max_tokens = value
-            elif (
-                key
-                not in {
-                    "input",
-                    "model",
-                    "instructions",
-                    "store",
-                    "tools",
-                    "tool_choice",
-                }
-                and key in extra_body
-            ):
-                # OpenAI SDK overlays extra_body onto top-level kwargs, so drop
-                # shadowed config keys for request-level overrides.
-                extra_body.pop(key, None)
-        if isinstance(request_extra_body, dict):
-            extra_body.update(request_extra_body)
-            if "reasoning_effort" in request_extra_body:
-                request_reasoning_effort = request_extra_body["reasoning_effort"]
-            if "max_tokens" in request_extra_body:
-                request_max_tokens = request_extra_body["max_tokens"]
-            if "max_output_tokens" in request_extra_body:
-                has_request_max_output_tokens = True
+                extra_body[key] = payloads.pop(key)
 
         max_tokens = extra_body.pop("max_tokens", None)
-        if request_max_tokens is not None and not has_request_max_output_tokens:
-            extra_body["max_output_tokens"] = request_max_tokens
-        elif (
-            max_tokens is not None
-            and "max_output_tokens" not in extra_body
-            and "max_output_tokens" not in request_payloads
-        ):
+        if max_tokens is not None and "max_output_tokens" not in extra_body:
             extra_body["max_output_tokens"] = max_tokens
         reasoning_effort = extra_body.pop("reasoning_effort", None)
-        if request_reasoning_effort is not None:
-            existing_reasoning = request_payloads.pop(
-                "reasoning", extra_body.get("reasoning")
-            )
-            reasoning = (
-                dict(existing_reasoning) if isinstance(existing_reasoning, dict) else {}
-            )
-            reasoning["effort"] = request_reasoning_effort
-            extra_body["reasoning"] = reasoning
-        elif (
-            reasoning_effort is not None
-            and "reasoning" not in extra_body
-            and "reasoning" not in request_payloads
-        ):
+        if request_effort is not None:
+            extra_body["reasoning"] = {
+                **(extra_body.get("reasoning") or {}),
+                "effort": request_effort,
+            }
+        elif reasoning_effort is not None and "reasoning" not in extra_body:
             extra_body["reasoning"] = {"effort": reasoning_effort}
         extra_body.pop("previous_response_id", None)
         extra_body.pop("conversation", None)
         extra_body.pop("store", None)
-        request_payloads.pop("previous_response_id", None)
-        request_payloads.pop("conversation", None)
-        request_payloads["store"] = False
+        payloads.pop("previous_response_id", None)
+        payloads.pop("conversation", None)
+        payloads["store"] = False
 
         async with chat_request(
             self,
             "OpenAI Responses",
             extra_body.get("model") or payloads.get("model") or self.get_model(),
             lambda: self.client.responses.create(
-                **request_payloads,
+                **payloads,
                 stream=True,
                 extra_body=extra_body,
                 extra_headers=build_conversation_headers(conversation_id),
