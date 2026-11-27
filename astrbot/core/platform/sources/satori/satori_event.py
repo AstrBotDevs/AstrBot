@@ -382,9 +382,9 @@ class SatoriPlatformEvent(AstrMessageEvent):
                     logger.error(f"图片转换为base64失败: {e}")
 
             elif isinstance(component, File):
-                return (
-                    f'<file src="{component.file}" name="{component.name or "文件"}"/>'
-                )
+                src = html.escape(component.file, quote=True)
+                name = html.escape(component.name or "文件", quote=True)
+                return f'<file src="{src}" name="{name}"/>'
 
             elif isinstance(component, Record):
                 try:
@@ -522,9 +522,9 @@ class SatoriPlatformEvent(AstrMessageEvent):
                     logger.error(f"图片转换为base64失败: {e}")
 
             elif isinstance(component, File):
-                return (
-                    f'<file src="{component.file}" name="{component.name or "文件"}"/>'
-                )
+                src = html.escape(component.file, quote=True)
+                name = html.escape(component.name or "文件", quote=True)
+                return f'<file src="{src}" name="{name}"/>'
 
             elif isinstance(component, Record):
                 try:
