@@ -5,6 +5,7 @@
 
 import re
 import time
+import weakref
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
@@ -35,12 +36,25 @@ _SECRET_KV_RE = re.compile(
 _URL_QUERY_RE = re.compile(r"(https?://[^\s?'\"<>]+)\?[^\s'\"<>]+")
 
 
+def _make_provider_ref(provider: object) -> weakref.ReferenceType[object] | None:
+    try:
+        return weakref.ref(provider)
+    except TypeError:
+        return None
+
+
 @dataclass
 class _RerankCooldownState:
     open_until: float
     cooldown_seconds: float
     status_code: int
+    provider_ref: weakref.ReferenceType[object] | None
     provider_ref_id: int
+
+    def matches_provider(self, provider: object) -> bool:
+        if self.provider_ref is not None:
+            return self.provider_ref() is provider
+        return self.provider_ref_id == id(provider)
 
 
 def _extract_http_status(exc: BaseException) -> int | None:
@@ -162,7 +176,7 @@ class RetrievalManager:
             return 0.0
         # If the provider instance was reloaded (e.g., API key updated in WebUI),
         # reset the circuit immediately so fixed credentials take effect right away.
-        if state.provider_ref_id != id(rerank_provider):
+        if not state.matches_provider(rerank_provider):
             self._rerank_cooldowns.pop(provider_id, None)
             return 0.0
         remaining = state.open_until - now
@@ -179,7 +193,7 @@ class RetrievalManager:
     ) -> float:
         """Open or extend the recoverable cooldown circuit for auth/billing HTTP errors."""
         prev = self._rerank_cooldowns.get(provider_id)
-        if prev is not None and prev.provider_ref_id == id(rerank_provider):
+        if prev is not None and prev.matches_provider(rerank_provider):
             cooldown = min(
                 self._rerank_auth_max_cooldown_seconds,
                 prev.cooldown_seconds * 2.0,
@@ -190,6 +204,7 @@ class RetrievalManager:
             open_until=now + cooldown,
             cooldown_seconds=cooldown,
             status_code=status_code,
+            provider_ref=_make_provider_ref(rerank_provider),
             provider_ref_id=id(rerank_provider),
         )
         return cooldown
