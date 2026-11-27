@@ -430,6 +430,9 @@ def _normalize_mcp_input_schema(schema: dict[str, Any]) -> dict[str, Any]:
 
 
 class MCPClient:
+    _MAX_SERVER_ERRLOGS: int = 200
+    _MAX_SERVER_ERRLOG_CHARS: int = 4096
+
     def __init__(self) -> None:
         self.session: mcp.ClientSession | None = None
 
@@ -452,6 +455,21 @@ class MCPClient:
         self._server_name: str | None = None
         self._reconnect_lock = asyncio.Lock()  # Lock for thread-safe reconnection
         self._reconnecting: bool = False
+        self._connection_generation: int = 0
+        self._failed_generation: int = -1
+
+    def _append_server_errlog(self, log_msg: str) -> None:
+        """Append a bounded server log line while retaining recent history.
+
+        Args:
+            log_msg: Formatted warning or error line from the MCP server.
+        """
+        if len(log_msg) > self._MAX_SERVER_ERRLOG_CHARS:
+            suffix = "... [truncated]"
+            log_msg = log_msg[: self._MAX_SERVER_ERRLOG_CHARS - len(suffix)] + suffix
+        self.server_errlogs.append(log_msg)
+        if len(self.server_errlogs) > self._MAX_SERVER_ERRLOGS:
+            del self.server_errlogs[: -self._MAX_SERVER_ERRLOGS]
 
     async def _run_connection(
         self,
@@ -568,6 +586,7 @@ class MCPClient:
 
             try:
                 await ready
+                self._connection_generation += 1
                 return
             except asyncio.CancelledError:
                 # Caller was cancelled while waiting — tear down the connection task.
@@ -609,7 +628,7 @@ class MCPClient:
             if isinstance(msg, mcp.types.LoggingMessageNotificationParams):
                 if msg.level in ("warning", "error", "critical", "alert", "emergency"):
                     log_msg = f"[{msg.level.upper()}] {str(msg.data)}"
-                    self.server_errlogs.append(log_msg)
+                    self._append_server_errlog(log_msg)
 
         if "url" in cfg:
             success, error_msg = await _quick_test_mcp_connection(cfg)
@@ -710,7 +729,7 @@ class MCPClient:
                         "emergency",
                     ):
                         log_msg = f"[{msg.level.upper()}] {str(msg.data)}"
-                        self.server_errlogs.append(log_msg)
+                        self._append_server_errlog(log_msg)
 
             stdio_transport = await self.exit_stack.enter_async_context(
                 mcp.stdio_client(
@@ -750,7 +769,7 @@ class MCPClient:
         task.cancel()
         self._old_connection_tasks.append(task)
 
-    async def _reconnect(self) -> None:
+    async def _reconnect(self, failed_generation: int | None = None) -> None:
         """Reconnect to the MCP server using the stored configuration.
 
         Cancels the current _connection_task (which owns the exit_stack and all
@@ -759,6 +778,11 @@ class MCPClient:
         cross-task cancel-scope violation and no GC finalizer surprise.
 
         Uses asyncio.Lock to ensure thread-safe reconnection in concurrent environments.
+
+        Args:
+            failed_generation: Connection generation observed when the caller's
+                session failed. When another concurrent caller has already
+                established a newer active session, this reconnect is skipped.
 
         Raises:
             Exception: raised when reconnection fails
@@ -770,10 +794,23 @@ class MCPClient:
                 )
                 return
 
+            if (
+                failed_generation is not None
+                and self.session is not None
+                and self._connection_generation != failed_generation
+                and self._connection_generation > self._failed_generation
+            ):
+                logger.debug(
+                    f"MCP Client {self._server_name} already reconnected on another "
+                    "concurrent call; reusing active session"
+                )
+                return
+
             if not self._mcp_server_config or not self._server_name:
                 raise Exception("Cannot reconnect: missing connection configuration")
 
             self._reconnecting = True
+            before_generation = self._connection_generation
             try:
                 logger.info(
                     f"Attempting to reconnect to MCP server {self._server_name}..."
@@ -791,14 +828,22 @@ class MCPClient:
                 # Reconnect — this creates a new _connection_task.
                 await self.connect_to_server(self._mcp_server_config, self._server_name)
                 await self.list_tools_and_save()
+                if self._connection_generation == before_generation:
+                    self._connection_generation += 1
 
                 logger.info(
                     f"Successfully reconnected to MCP server {self._server_name}"
                 )
-            except Exception as e:
-                logger.error(
-                    f"Failed to reconnect to MCP server {self._server_name}: {e}"
-                )
+            except BaseException as e:
+                if self._connection_task and not self._connection_task.done():
+                    self._cancel_connection_task(self._connection_task)
+                self._connection_task = None
+                self.session = None
+                self._connection_generation = before_generation
+                if isinstance(e, Exception):
+                    logger.error(
+                        f"Failed to reconnect to MCP server {self._server_name}: {e}"
+                    )
                 raise
             finally:
                 self._reconnecting = False
@@ -824,13 +869,14 @@ class MCPClient:
             anyio.ClosedResourceError: raised after reconnection failure
         """
         last_reconnectable: BaseException | None = None
+        attempt_generation = self._connection_generation
 
         async def _reconnect_before_retry(retry_state: RetryCallState) -> None:
             # Log, then reconnect outside the retry predicate so that a failing
             # reconnect never masquerades as a retryable tool error.
             before_sleep_log(logger, logging.WARNING)(retry_state)
             try:
-                await self._reconnect()
+                await self._reconnect(failed_generation=attempt_generation)
             except Exception:
                 logger.exception(
                     "MCP reconnect before retry failed for tool %s.", tool_name
@@ -844,7 +890,7 @@ class MCPClient:
             reraise=True,
         )
         async def _call_with_retry():
-            nonlocal last_reconnectable
+            nonlocal attempt_generation, last_reconnectable
             if not self.session:
                 # The session disappeared (e.g. a failed reconnect cleared it).
                 # Surface the original tool error instead of a bare ValueError.
@@ -852,6 +898,7 @@ class MCPClient:
                     raise last_reconnectable
                 raise ValueError("MCP session is not available for MCP function tools.")
 
+            attempt_generation = self._connection_generation
             try:
                 return await self.session.call_tool(
                     name=tool_name,
@@ -861,13 +908,16 @@ class MCPClient:
             except Exception as exc:
                 if _is_mcp_reconnect_error(exc):
                     last_reconnectable = exc
+                    if attempt_generation > self._failed_generation:
+                        self._failed_generation = attempt_generation
                 raise
 
         if not self.session:
             # A previous call may have exhausted its retry after clearing the
             # session. Try one reconnect before rejecting the next tool call.
+            missing_generation = self._connection_generation
             try:
-                await self._reconnect()
+                await self._reconnect(failed_generation=missing_generation)
             except Exception:
                 if last_reconnectable is not None:
                     raise last_reconnectable
