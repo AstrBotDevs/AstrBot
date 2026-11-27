@@ -11,7 +11,7 @@ from botpy import ConnectionSession
 
 from astrbot.api.event import MessageChain
 from astrbot.api.message_components import At, Image, Plain, Reply
-from astrbot.api.platform import Group
+from astrbot.api.platform import AstrBotMessage, Group, PlatformMetadata
 from astrbot.core.message.mention_render import follow_up_text
 from astrbot.core.message.message_event_result import (
     MessageEventResult,
@@ -238,10 +238,23 @@ def test_strip_bot_mention_markup_preserves_word_boundaries(
 @pytest.mark.asyncio
 async def test_parse_to_qqofficial_preserves_at_component_order():
     parsed = await QQOfficialMessageEvent._parse_to_qqofficial(
-        MessageChain(chain=[At(qq="member-1"), Plain(" hello"), At(qq="all")])
+        MessageChain(chain=[At(qq="member-1"), Plain(" hello"), At(qq="all")]),
+        allow_at_everyone=True,
     )
 
-    assert parsed[0] == '<qqbot-at-user id="member-1" /> hello'
+    assert (
+        parsed[0]
+        == '<qqbot-at-user id="member-1" /> hello<qqbot-at-everyone />'
+    )
+
+
+@pytest.mark.asyncio
+async def test_parse_to_qqofficial_ignores_at_everyone_by_default():
+    parsed = await QQOfficialMessageEvent._parse_to_qqofficial(
+        MessageChain(chain=[Plain("hello"), At(qq="all")])
+    )
+
+    assert parsed[0] == "hello"
 
 
 @pytest.mark.parametrize("qq", [None, ""])
@@ -254,6 +267,80 @@ async def test_parse_to_qqofficial_ignores_empty_at_component(qq: str | None):
     parsed = await QQOfficialMessageEvent._parse_to_qqofficial(chain)
 
     assert parsed[0] == "hello"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("scene", ["c2c", "direct", "guild"])
+async def test_reply_at_everyone_respects_destination(scene: str):
+    if scene == "c2c":
+        raw = botpy.message.C2CMessage(
+            None,
+            "event-c2c",
+            {
+                "id": "msg-c2c",
+                "author": {"user_openid": "user-1"},
+                "content": "ping",
+                "timestamp": "0",
+            },
+        )
+    elif scene == "direct":
+        raw = botpy.message.DirectMessage(
+            None,
+            "event-direct",
+            {
+                "id": "msg-direct",
+                "guild_id": "guild-1",
+                "channel_id": "dm-channel-1",
+                "author": {"id": "user-1", "username": "User"},
+                "content": "ping",
+            },
+        )
+    else:
+        raw = botpy.message.Message(
+            None,
+            "event-guild",
+            {
+                "id": "msg-guild",
+                "channel_id": "channel-1",
+                "author": {"id": "user-1", "username": "User"},
+                "content": "ping",
+            },
+        )
+    abm = AstrBotMessage()
+    abm.type = (
+        MessageType.GROUP_MESSAGE if scene == "guild" else MessageType.FRIEND_MESSAGE
+    )
+    abm.raw_message = raw
+    abm.message_id = raw.id
+    abm.session_id = "user-1" if scene == "c2c" else "channel-1"
+    api = SimpleNamespace(
+        post_message=AsyncMock(),
+        post_dms=AsyncMock(),
+    )
+    event = QQOfficialMessageEvent(
+        "",
+        abm,
+        PlatformMetadata(name="qq_official", description="test", id="test"),
+        abm.session_id,
+        cast(Any, SimpleNamespace(api=api)),
+    )
+    event.post_c2c_message = AsyncMock()
+    chain = MessageChain(
+        chain=[Plain("hello"), At(qq="all")],
+        use_markdown_=False,
+    )
+    event.send_buffer = chain
+
+    await event._post_send_one(chain)
+
+    if scene == "c2c":
+        kwargs = event.post_c2c_message.await_args.kwargs
+    elif scene == "direct":
+        kwargs = api.post_dms.await_args.kwargs
+    else:
+        kwargs = api.post_message.await_args.kwargs
+    expected = "hello<qqbot-at-everyone />" if scene == "guild" else "hello"
+    assert kwargs["content"] == expected
 
 
 @pytest.mark.asyncio
@@ -657,7 +744,9 @@ async def test_ws_group_send_by_session_with_at_uses_text_chain_markup():
         post_message=AsyncMock(),
     )
     adapter._session_scene["group-1"] = "group"
-    chain = MessageChain(chain=[At(qq="member-1"), Plain(" hello")])
+    chain = MessageChain(
+        chain=[At(qq="member-1"), Plain(" hello"), At(qq="all")]
+    )
     chain.use_markdown(False)
 
     await adapter.send_by_session(
@@ -666,7 +755,10 @@ async def test_ws_group_send_by_session_with_at_uses_text_chain_markup():
     )
 
     kwargs = adapter.client.api.post_group_message.await_args.kwargs
-    assert kwargs["content"] == '<qqbot-at-user id="member-1" /> hello'
+    assert (
+        kwargs["content"]
+        == '<qqbot-at-user id="member-1" /> hello<qqbot-at-everyone />'
+    )
     assert "markdown" not in kwargs
 
 
@@ -871,7 +963,7 @@ async def test_ws_group_send_by_session_with_media_uses_msg_type_7(monkeypatch):
     )
     adapter._session_scene["group-1"] = "group"
 
-    async def fake_parse(message_chain):
+    async def fake_parse(message_chain, **_kwargs):
         return ("caption", "fake-base64", None, None, None, None, None)
 
     async def fake_upload_image(self_, image_base64, file_type, **kwargs):
@@ -912,7 +1004,7 @@ async def test_friend_send_by_session_renders_markdown():
 
     await adapter.send_by_session(
         MessageSession("qq_official", MessageType.FRIEND_MESSAGE, "user-1"),
-        MessageChain(chain=[Plain("hello friend")]),
+        MessageChain(chain=[At(qq="all"), Plain("hello friend")]),
     )
 
     request.assert_awaited_once()
@@ -943,13 +1035,13 @@ async def test_guild_channel_send_by_session_drops_msg_type():
 
     await adapter.send_by_session(
         MessageSession("qq_official", MessageType.GROUP_MESSAGE, "guild-channel-1"),
-        MessageChain(chain=[Plain("guild text")]),
+        MessageChain(chain=[Plain("guild text"), At(qq="all")]),
     )
 
     adapter.client.api.post_message.assert_awaited_once()
     kwargs = adapter.client.api.post_message.await_args.kwargs
     assert kwargs["channel_id"] == "guild-channel-1"
-    assert kwargs["markdown"]["content"] == "guild text"
+    assert kwargs["markdown"]["content"] == "guild text<qqbot-at-everyone />"
     assert "msg_type" not in kwargs
 
 

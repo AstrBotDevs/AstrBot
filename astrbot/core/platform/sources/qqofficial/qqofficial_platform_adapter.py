@@ -412,7 +412,10 @@ class QQOfficialPlatformAdapter(Platform):
             video_file_source,
             file_source,
             file_name,
-        ) = await QQOfficialMessageEvent._parse_to_qqofficial(message_chain)
+        ) = await QQOfficialMessageEvent._parse_to_qqofficial(
+            message_chain,
+            allow_at_everyone=session.message_type == MessageType.GROUP_MESSAGE,
+        )
         keyboard = None
         if any(isinstance(part, ActionRow) for part in message_chain.chain):
             keyboard = await asyncio.to_thread(

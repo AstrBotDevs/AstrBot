@@ -523,7 +523,13 @@ class QQOfficialMessageEvent(AstrMessageEvent):
             video_file_source,
             file_source,
             file_name,
-        ) = await QQOfficialMessageEvent._parse_to_qqofficial(message_to_send)
+        ) = await QQOfficialMessageEvent._parse_to_qqofficial(
+            message_to_send,
+            allow_at_everyone=isinstance(
+                source, botpy.message.GroupMessage | botpy.message.Message
+            )
+            or (isinstance(source, Interaction) and source.scene in ("group", "guild")),
+        )
         keyboard = None
         if any(isinstance(part, ActionRow) for part in message_to_send.chain):
             keyboard = await asyncio.to_thread(
@@ -1190,7 +1196,10 @@ class QQOfficialMessageEvent(AstrMessageEvent):
         return {"content": {"rows": rows}}
 
     @staticmethod
-    async def _parse_to_qqofficial(message: MessageChain):
+    async def _parse_to_qqofficial(
+        message: MessageChain,
+        allow_at_everyone: bool = False,
+    ):
         plain_text = ""
         image_base64 = None  # only one img supported
         image_file_path = None
@@ -1203,7 +1212,10 @@ class QQOfficialMessageEvent(AstrMessageEvent):
                 plain_text += i.text
             elif isinstance(i, At):
                 mention_id = str(i.qq) if i.qq else ""
-                if mention_id and mention_id != "all":
+                if mention_id == "all":
+                    if allow_at_everyone:
+                        plain_text += "<qqbot-at-everyone />"
+                elif mention_id:
                     plain_text += f'<qqbot-at-user id="{mention_id}" />'
             elif isinstance(i, Image) and not image_base64:
                 if not i.file:
