@@ -217,6 +217,11 @@ class EmbeddingStorage:
             if existing_mode is not None:
                 os.chmod(sibling_tmp, existing_mode)
 
+            if hasattr(os, "getxattr") and hasattr(os, "setxattr"):
+                with suppress(OSError):
+                    acl = os.getxattr(target_path, "system.posix_acl_access")
+                    os.setxattr(sibling_tmp, "system.posix_acl_access", acl)
+
             with sibling_tmp.open("r+b") as f:
                 f.flush()
                 os.fsync(f.fileno())

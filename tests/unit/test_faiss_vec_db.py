@@ -1,4 +1,6 @@
 import asyncio
+import os
+from pathlib import Path
 from unittest.mock import AsyncMock
 
 import pytest
@@ -331,3 +333,52 @@ async def test_single_insert_rolls_back_doc_and_vector_on_save_failure(
         assert vec_db.embedding_storage.index.ntotal == 0
     finally:
         await vec_db.close()
+
+
+def test_embedding_storage_write_index_preserves_posix_acl_xattr(
+    tmp_path: Path, monkeypatch
+) -> None:
+    faiss = pytest.importorskip("faiss")
+
+    index_path = tmp_path / "acl.faiss"
+    index = faiss.IndexFlatL2(1)
+    EmbeddingStorage._write_index(index, index_path)
+
+    acl_payload = b"posix-acl-payload"
+    get_calls: list[tuple[Path, str | bytes]] = []
+    set_calls: list[tuple[Path, str | bytes, bytes]] = []
+    chmod_calls: list[Path] = []
+    events: list[str] = []
+
+    orig_chmod = os.chmod
+
+    def fake_chmod(path, mode, *args, **kwargs):
+        chmod_calls.append(Path(path))
+        events.append("chmod")
+        return orig_chmod(path, mode, *args, **kwargs)
+
+    def fake_getxattr(path, attr):
+        get_calls.append((Path(path), attr))
+        events.append("getxattr")
+        return acl_payload
+
+    def fake_setxattr(path, attr, value):
+        set_calls.append((Path(path), attr, value))
+        events.append("setxattr")
+
+    monkeypatch.setattr(os, "chmod", fake_chmod)
+    monkeypatch.setattr(os, "getxattr", fake_getxattr, raising=False)
+    monkeypatch.setattr(os, "setxattr", fake_setxattr, raising=False)
+
+    EmbeddingStorage._write_index(index, index_path)
+
+    resolved_target = index_path.absolute()
+    assert get_calls == [(resolved_target, "system.posix_acl_access")]
+    assert len(set_calls) == 1
+    tmp_target, set_attr, set_value = set_calls[0]
+    assert tmp_target.parent == resolved_target.parent
+    assert tmp_target != resolved_target
+    assert set_attr == "system.posix_acl_access"
+    assert set_value == acl_payload
+    assert chmod_calls == [tmp_target]
+    assert events == ["chmod", "getxattr", "setxattr"]
