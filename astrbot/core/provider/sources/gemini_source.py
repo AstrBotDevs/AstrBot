@@ -5,7 +5,7 @@ import logging
 import random
 import re
 from collections.abc import AsyncGenerator
-from contextlib import asynccontextmanager
+from contextlib import AsyncExitStack, aclosing, asynccontextmanager
 from typing import Literal, cast
 
 import httpx
@@ -29,6 +29,7 @@ from astrbot.core.utils.network_utils import is_connection_error, log_connection
 
 from ..headers import build_conversation_headers
 from ..register import register_provider_adapter
+from .chat_request import chat_request
 from .gemini_api_common import gemini_api_version
 from .request_retry import retry_provider_request
 
@@ -47,6 +48,32 @@ _SERVER_SIDE_PART_ATTRS = (
     "executable_code",
     "code_execution_result",
 )
+
+_GEMINI_MODEL_ID_RE = re.compile(r"(?<![a-z0-9])gemini-\d.*")
+# Default-deny allow-list of thinking-capable Gemini 2.5 families (pro, flash,
+# flash-lite) with optional preview/exp and dated/revision suffixes. Non-thinking
+# 2.5 variants (image, tts, native-audio, computer-use) reject thinkingConfig
+# with 400 INVALID_ARGUMENT and must not match.
+_GEMINI_25_THINKING_MODEL_RE = re.compile(
+    r"gemini-2\.5-(?:flash-lite|flash|pro)"
+    r"(?:-preview|-exp)?(?:-\d{2,3}|-\d{2}-\d{2,4})?$"
+)
+
+
+def _normalize_gemini_model_name(model: str) -> str:
+    """Extract the canonical lowercase Gemini model id from a path or relay alias.
+
+    Args:
+        model: Raw model identifier from the request payload or provider config,
+            which may include resource path prefixes or relay decorations.
+
+    Returns:
+        Lowercase canonical Gemini model id when a ``gemini-<digit>`` token is
+        present, otherwise the stripped lowercase trailing path segment.
+    """
+    name = model.rsplit("/", 1)[-1].strip().lower()
+    match = _GEMINI_MODEL_ID_RE.search(name)
+    return match.group(0) if match else name
 
 
 class SuppressNonTextPartsWarning(logging.Filter):
@@ -244,7 +271,7 @@ class ProviderGoogleGenAI(Provider):
                 fields, or the SDK rejects their values.
         """
         model = cast(str, payloads.get("model", self.get_model()))
-        model_name = model.rsplit("/", 1)[-1].lower()
+        model_name = _normalize_gemini_model_name(model)
         is_gemini_4 = model_name.startswith("gemini-4")
         if not modalities or is_gemini_4:
             modalities = ["TEXT"]
@@ -336,7 +363,7 @@ class ProviderGoogleGenAI(Provider):
             "gemini-2.5-flash-lite-preview",
             "gemini-robotics-er-1.5-preview",
             "gemini-live-2.5-flash-preview-native-audio-09-2025",
-        ]:
+        ] or bool(_GEMINI_25_THINKING_MODEL_RE.fullmatch(model_name)):
             # The thinkingBudget parameter, introduced with the Gemini 2.5 series
             thinking_budget = thinking_settings.get("budget")
             if thinking_budget is not None:
@@ -485,16 +512,16 @@ class ProviderGoogleGenAI(Provider):
             else:
                 contents.append(content_cls(parts=part))
 
-        model = payloads.get("model", "").rsplit("/", 1)[-1].lower()
+        model = _normalize_gemini_model_name(payloads.get("model", ""))
         version = re.match(r"gemini-(\d+)(?:[.-]|$)", model)
         native_tool_images = version is not None and int(version[1]) >= 3
         # Parallel calls to the same tool may lack distinct call IDs. The runner
         # records the producing response's position when it reads each image.
         tool_responses: dict[int, types.FunctionResponse] = {}
         gemini_contents: list[types.Content] = []
-        # Map tool call IDs to function names for later tool result matching.
-        tool_id_to_name: dict[str, str] = {}
-        for message in payloads["messages"]:
+        tool_call_names: dict[str, str] = {}
+        messages = payloads["messages"]
+        for message_index, message in enumerate(messages):
             role, content = message["role"], message.get("content")
 
             if role == "user":
@@ -541,8 +568,9 @@ class ProviderGoogleGenAI(Provider):
                         extra_content = tool.get("extra_content") or {}
                         google_extra = extra_content.get("google") or {}
                         function_name = tool["function"]["name"]
-                        if tool.get("id"):
-                            tool_id_to_name[tool["id"]] = function_name
+                        tool_id = tool.get("id")
+                        if tool_id:
+                            tool_call_names[tool_id] = function_name
                         # Replay server-side tool parts unchanged (with their thought signatures).
                         for server_side_part in google_extra.get("server_parts") or []:
                             try:
@@ -559,6 +587,14 @@ class ProviderGoogleGenAI(Provider):
                             name=function_name,
                             args=json.loads(tool["function"]["arguments"]),
                         )
+                        # Official Gemini often omits id (and we fall back to name).
+                        # Only emit a distinct id so strict proxies can pair history.
+                        if (
+                            tool_id
+                            and tool_id != function_name
+                            and part.function_call is not None
+                        ):
+                            part.function_call.id = tool_id
                         # we should set thought_signature back to part if exists
                         # for more info about thought_signature, see:
                         # https://ai.google.dev/gemini-api/docs/thought-signatures
@@ -568,7 +604,8 @@ class ProviderGoogleGenAI(Provider):
                         tool_parts.append(part)
 
                 if isinstance(content, str):
-                    parts.append(types.Part.from_text(text=content))
+                    if content:
+                        parts.append(types.Part.from_text(text=content))
                 elif isinstance(content, list):
                     thinking_signature = None
                     text = ""
@@ -600,7 +637,7 @@ class ProviderGoogleGenAI(Provider):
                         # Omit duplicate thought_signature already carried by a tool/server part.
                         if text:
                             parts.append(types.Part(text=text))
-                    else:
+                    elif text or thinking_signature:
                         parts.append(
                             types.Part(
                                 text=text,
@@ -616,11 +653,21 @@ class ProviderGoogleGenAI(Provider):
                 append_or_extend(gemini_contents, parts, types.ModelContent)
 
             elif role == "tool":
-                tool_call_id = message["tool_call_id"]
-                # Resolve function name from preceding assistant tool calls via call ID.
-                func_name = message.get("name") or tool_id_to_name.get(
-                    tool_call_id, tool_call_id
-                )
+                tool_call_id = message.get("tool_call_id")
+                preceding_name = tool_call_names.pop(tool_call_id, None)
+                func_name = message.get("name") or preceding_name
+                if not func_name:
+                    # Imported histories can place the result before its call.
+                    func_name = next(
+                        (
+                            tool["function"]["name"]
+                            for later in messages[message_index + 1 :]
+                            if later["role"] == "assistant"
+                            for tool in later.get("tool_calls") or []
+                            if tool.get("id") == tool_call_id
+                        ),
+                        tool_call_id,
+                    )
                 response = types.FunctionResponse(
                     name=func_name,
                     response={
@@ -628,6 +675,8 @@ class ProviderGoogleGenAI(Provider):
                         "content": message["content"],
                     },
                 )
+                if tool_call_id and tool_call_id != func_name:
+                    response.id = tool_call_id
 
                 if native_tool_images:
                     tool_responses[len(tool_responses)] = response
@@ -667,9 +716,12 @@ class ProviderGoogleGenAI(Provider):
         prompt_tokens = usage_metadata.prompt_token_count or 0
         cached = usage_metadata.cached_content_token_count or 0
         return TokenUsage(
-            input_other=prompt_tokens - cached,
+            input_other=prompt_tokens
+            - cached
+            + (getattr(usage_metadata, "tool_use_prompt_token_count", None) or 0),
             input_cached=cached,
-            output=usage_metadata.candidates_token_count or 0,
+            output=(usage_metadata.candidates_token_count or 0)
+            + (getattr(usage_metadata, "thoughts_token_count", None) or 0),
         )
 
     @staticmethod
@@ -847,15 +899,20 @@ class ProviderGoogleGenAI(Provider):
                     modalities,
                 )
                 async with self._conversation_header(conversation_id):
-                    result = await retry_provider_request(
+                    async with chat_request(
+                        self,
                         "Gemini",
+                        model,
                         lambda: self.client.models.generate_content(
                             model=model,
                             contents=cast(types.ContentListUnion, conversation),
                             config=config,
                         ),
+                        conversation_id=conversation_id,
                         max_attempts=request_max_retries,
-                    )
+                    ) as (result, request):
+                        if result.usage_metadata is not None:
+                            request.usage = self._extract_usage(result.usage_metadata)
                 logger.debug(f"genai result: {result}")
 
                 if not result.candidates:
@@ -932,52 +989,66 @@ class ProviderGoogleGenAI(Provider):
         model = payloads.get("model", self.get_model())
         conversation = await self._prepare_conversation(payloads)
 
-        result = None
-        while True:
-            try:
-                config = await self._prepare_query_config(
-                    payloads,
-                    tools,
-                    payloads.get("tool_choice", "auto"),
-                    system_instruction,
-                )
-                async with self._conversation_header(conversation_id):
-                    result = await retry_provider_request(
-                        "Gemini",
-                        lambda: self.client.models.generate_content_stream(
-                            model=model,
-                            contents=cast(types.ContentListUnion, conversation),
-                            config=config,
-                        ),
-                        max_attempts=request_max_retries,
-                    )
-                break
-            except APIError as e:
-                if e.message is None:
-                    e.message = ""
-                if "Developer instruction is not enabled" in e.message:
-                    logger.warning(
-                        f"{model} does not support system prompts; removing it automatically. This may affect persona settings.",
-                    )
-                    system_instruction = None
-                elif "Function calling is not enabled" in e.message:
-                    logger.warning(
-                        f"{model} does not support function calling; removing tools automatically."
-                    )
-                    tools = None
-                else:
-                    raise
-                continue
-
         # Accumulate the complete response text for the final response
         accumulated_text = ""
         accumulated_reasoning = ""
         final_response = None
+        tool_response = None
+        finished = False
         # Buffer server-side tool parts until a custom tool call is emitted.
         pending_server_side_parts: list[dict] = []
 
-        async with self._conversation_header(conversation_id):
+        async with (
+            self._conversation_header(conversation_id),
+            AsyncExitStack() as request_stack,
+        ):
+            while True:
+                try:
+                    config = await self._prepare_query_config(
+                        payloads,
+                        tools,
+                        payloads.get("tool_choice", "auto"),
+                        system_instruction,
+                    )
+                    result, request = await request_stack.enter_async_context(
+                        chat_request(
+                            self,
+                            "Gemini",
+                            model,
+                            lambda: self.client.models.generate_content_stream(
+                                model=model,
+                                contents=cast(types.ContentListUnion, conversation),
+                                config=config,
+                            ),
+                            conversation_id=conversation_id,
+                            max_attempts=request_max_retries,
+                            streaming=True,
+                        )
+                    )
+                    break
+                except APIError as e:
+                    if e.message is None:
+                        e.message = ""
+                    if "Developer instruction is not enabled" in e.message:
+                        logger.warning(
+                            f"{model} does not support system prompts; removing it automatically. This may affect persona settings.",
+                        )
+                        system_instruction = None
+                    elif "Function calling is not enabled" in e.message:
+                        logger.warning(
+                            f"{model} does not support function calling; removing tools automatically."
+                        )
+                        tools = None
+                    else:
+                        raise
+                    continue
+
             async for chunk in result:
+                if chunk.usage_metadata is not None:
+                    request.usage = self._extract_usage(chunk.usage_metadata)
+                # Some endpoints send their final usage in a metadata-only frame.
+                if finished:
+                    continue
                 llm_response = LLMResponse("assistant", is_chunk=True)
 
                 if not chunk.candidates:
@@ -1023,10 +1094,10 @@ class ProviderGoogleGenAI(Provider):
                                 llm_response.reasoning_content or ""
                             )
                     llm_response.id = chunk.response_id
-                    if chunk.usage_metadata:
-                        llm_response.usage = self._extract_usage(chunk.usage_metadata)
-                    yield llm_response
-                    return
+                    request.mark_first_token()
+                    tool_response = llm_response
+                    finished = True
+                    continue
 
                 pending_server_side_parts.extend(
                     part.model_dump(exclude_none=True, mode="json")
@@ -1050,6 +1121,7 @@ class ProviderGoogleGenAI(Provider):
                         chain=[Comp.Plain(chunk.text)]
                     )
                 if _f:
+                    request.mark_first_token()
                     yield llm_response
 
                 if chunk.candidates[0].finish_reason:
@@ -1063,15 +1135,18 @@ class ProviderGoogleGenAI(Provider):
                             validate_output=False,
                         )
                         final_response.id = chunk.response_id
-                        if chunk.usage_metadata:
-                            final_response.usage = self._extract_usage(
-                                chunk.usage_metadata
-                            )
-                    break
+                    finished = True
+
+        if tool_response is not None:
+            tool_response.usage = request.usage
+            yield tool_response
+            return
 
         # Yield final complete response with accumulated text
         if not final_response:
             final_response = LLMResponse("assistant", is_chunk=False)
+
+        final_response.usage = request.usage
 
         # Set the complete accumulated reasoning in the final response
         if accumulated_reasoning:
@@ -1222,13 +1297,16 @@ class ProviderGoogleGenAI(Provider):
                 query_kwargs = {}
                 if conversation_id:
                     query_kwargs["conversation_id"] = conversation_id
-                async for response in self._query_stream(
-                    payloads,
-                    func_tool,
-                    request_max_retries=request_max_retries,
-                    **query_kwargs,
-                ):
-                    yield response
+                async with aclosing(
+                    self._query_stream(
+                        payloads,
+                        func_tool,
+                        request_max_retries=request_max_retries,
+                        **query_kwargs,
+                    )
+                ) as responses:
+                    async for response in responses:
+                        yield response
                 break
             except APIError as e:
                 if await self._handle_api_error(e, keys):

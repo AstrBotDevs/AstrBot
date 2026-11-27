@@ -1722,7 +1722,7 @@ CONFIG_METADATA_2 = {
                         "enable": False,
                         "api_key": "",
                         "api_base": "",
-                        "model": "whisper-1",
+                        "model": "gpt-transcribe",
                         "proxy": "",
                     },
                     "MiMo STT(API)": {
@@ -1778,6 +1778,19 @@ CONFIG_METADATA_2 = {
                         "model": "tts-1",
                         "openai-tts-voice": "alloy",
                         "timeout": "20",
+                        "proxy": "",
+                    },
+                    "StepFun TTS(API)": {
+                        "id": "stepfun_tts",
+                        "type": "stepfun_tts_api",
+                        "provider": "stepfun",
+                        "provider_type": "text_to_speech",
+                        "enable": False,
+                        "api_key": "",
+                        "api_base": "https://api.stepfun.com/v1",
+                        "model": "stepaudio-3-tts",
+                        "stepfun-tts-voice": "wenrounvsheng",
+                        "timeout": "60",
                         "proxy": "",
                     },
                     "DeepSeek TTS(API)": {
@@ -2964,6 +2977,10 @@ CONFIG_METADATA_2 = {
                         "description": "voice",
                         "type": "string",
                         "hint": "OpenAI TTS 的声音。OpenAI 默认支持：'alloy', 'echo', 'fable', 'onyx', 'nova', 'shimmer'",
+                    },
+                    "stepfun-tts-voice": {
+                        "description": "音色 ID",
+                        "type": "string",
                     },
                     "deepseek-tts-voice": {
                         "description": "音色",

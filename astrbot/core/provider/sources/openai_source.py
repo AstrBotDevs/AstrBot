@@ -4,7 +4,9 @@ import inspect
 import json
 import random
 import re
+from collections import Counter
 from collections.abc import AsyncGenerator
+from contextlib import aclosing
 from typing import Any, Literal
 
 import httpx
@@ -42,6 +44,7 @@ from astrbot.core.utils.string_utils import normalize_and_dedupe_strings
 
 from ..headers import build_conversation_headers
 from ..register import register_provider_adapter
+from .chat_request import chat_request
 from .request_retry import retry_provider_request
 
 
@@ -451,12 +454,10 @@ class ProviderOpenAIOfficial(Provider):
 
     @staticmethod
     def _sanitize_assistant_messages(payloads: dict) -> None:
-        """在请求发送前过滤/规范化空的 assistant 消息。
+        """Normalize assistant messages and pair tool calls with their results.
 
-        严格 API（Moonshot、DeepSeek Reasoner 等）会在 assistant 消息同时缺少
-        ``content`` 和 ``tool_calls`` 时返回 400。把 ``""`` / ``None`` / ``[]``
-        都视作空内容：无 tool_calls 时整条过滤掉；有 tool_calls 时将 content
-        设为 ``None`` 以符合 OpenAI 规范。就地修改 ``payloads["messages"]``。
+        Args:
+            payloads: Request payload to update in place before sending.
         """
         messages = payloads.get("messages")
         if not isinstance(messages, list):
@@ -465,6 +466,31 @@ class ProviderOpenAIOfficial(Provider):
         def _is_empty(content: Any) -> bool:
             return content is None or content == "" or content == []
 
+        # Reserve every existing tool-call ID and tool-message ID upfront so
+        # generated replacement IDs can never collide with an orphan or later
+        # tool message.
+        reserved_tool_call_ids: set[str] = set()
+        for msg in messages:
+            if not isinstance(msg, dict):
+                continue
+            role = msg.get("role")
+            if role == "assistant":
+                raw_tool_calls = msg.get("tool_calls")
+                if isinstance(raw_tool_calls, list):
+                    for tc in raw_tool_calls:
+                        if (
+                            isinstance(tc, dict)
+                            and isinstance(tc.get("id"), str)
+                            and tc["id"]
+                        ):
+                            reserved_tool_call_ids.add(tc["id"])
+            elif role == "tool":
+                tool_call_id = msg.get("tool_call_id")
+                if isinstance(tool_call_id, str) and tool_call_id:
+                    reserved_tool_call_ids.add(tool_call_id)
+
+        removed_assistant = object()
+        ambiguous_ids_by_cleaned_index: dict[int, set[str]] = {}
         cleaned: list[Any] = []
         for idx, msg in enumerate(messages):
             if not isinstance(msg, dict) or msg.get("role") != "assistant":
@@ -475,52 +501,139 @@ class ProviderOpenAIOfficial(Provider):
             tool_calls = msg.get("tool_calls")
             reasoning_content = msg.get("reasoning_content")
 
+            if tool_calls:
+                if not isinstance(tool_calls, list):
+                    tool_calls = None
+                    msg.pop("tool_calls", None)
+                else:
+                    # Drop malformed tool-call entries (non-dict or missing/empty
+                    # string ID) so invalid items never reach strict providers.
+                    valid_tool_calls = [
+                        tc
+                        for tc in tool_calls
+                        if isinstance(tc, dict)
+                        and isinstance(tc.get("id"), str)
+                        and tc["id"]
+                    ]
+                    counts = Counter(tc["id"] for tc in valid_tool_calls)
+                    ambiguous_ids = {
+                        call_id for call_id, count in counts.items() if count > 1
+                    }
+                    if ambiguous_ids:
+                        # A repeated ID in the same batch cannot be reliably matched
+                        # to its result. Omit those calls and their results from this
+                        # request without changing the saved conversation.
+                        ambiguous_ids_by_cleaned_index[len(cleaned)] = ambiguous_ids
+                        valid_tool_calls = [
+                            tc
+                            for tc in valid_tool_calls
+                            if tc["id"] not in ambiguous_ids
+                        ]
+                    if valid_tool_calls:
+                        tool_calls = valid_tool_calls
+                        msg["tool_calls"] = tool_calls
+                    else:
+                        tool_calls = None
+                        msg.pop("tool_calls", None)
+
             if _is_empty(content) and not tool_calls:
                 if not reasoning_content:
-                    # 三者全空，真正的垃圾消息，丢弃
+                    # Drop assistant messages without content, tool_calls, or reasoning.
                     logger.debug(
-                        f"过滤第 {idx} 条空 assistant 消息 (无 content | tool_calls | reasoning_content)"
+                        f"Filtered empty assistant message at index {idx} (no content, tool_calls, or reasoning_content)"
                     )
+                    # Keep a boundary so a later tool result cannot be matched
+                    # to a call preceding this removed assistant message.
+                    cleaned.append(removed_assistant)
                     continue
                 else:
-                    # ⭐ 有 reasoning_content 但没有 content 和 tool_calls
-                    # 不能丢（推理模型需要 reasoning 历史）
-                    # 但 API 要求 content 或 tool_calls 至少有一个
-                    # → 设空字符串占位，满足校验
+                    # Preserve reasoning-only assistant messages with an empty string
+                    # placeholder to satisfy API schema validation.
                     msg["content"] = ""
 
             elif _is_empty(content) and tool_calls:
-                msg["content"] = None  # 有 tool_calls，按 OpenAI 规范
+                msg["content"] = None
 
             cleaned.append(msg)
 
         # Drop orphaned or duplicate tool messages whose assistant(tool_calls)
-        # was removed by context truncation / compression.
-        pending_tool_call_ids: set[str] = set()
+        # was removed by context truncation / compression, and drop unanswered
+        # tool calls along with delayed results from earlier unanswered rounds.
+        used_tool_call_ids: set[str] = set()
+        unresolved_original_ids: set[str] = set()
+        pending_tool_call_ids: dict[str, str] = {}
+        pending_assistant = None
         final: list = []
         removed_tool_messages = 0
-        for msg in cleaned:
+        for msg_index, msg in enumerate([*cleaned, removed_assistant]):
+            role = msg.get("role") if isinstance(msg, dict) else None
+            if role != "tool" and pending_tool_call_ids:
+                # An assistant tool call requires a corresponding tool result.
+                # Remove unanswered calls before the next message or end of input,
+                # and mark their original IDs unresolved so a delayed result cannot
+                # attach to a later call reusing the same original ID.
+                unresolved_original_ids.update(pending_tool_call_ids.keys())
+                unanswered_ids = set(pending_tool_call_ids.values())
+                pending_assistant["tool_calls"] = [
+                    tc
+                    for tc in pending_assistant["tool_calls"]
+                    if tc["id"] not in unanswered_ids
+                ]
+                if not pending_assistant["tool_calls"]:
+                    pending_assistant.pop("tool_calls")
+                    if _is_empty(pending_assistant.get("content")):
+                        if pending_assistant.get("reasoning_content"):
+                            pending_assistant["content"] = ""
+                        elif final and final[-1] is pending_assistant:
+                            final.pop()
+                pending_tool_call_ids = {}
+            if msg_index in ambiguous_ids_by_cleaned_index:
+                unresolved_original_ids.update(
+                    ambiguous_ids_by_cleaned_index[msg_index]
+                )
+            if msg is removed_assistant:
+                continue
             if not isinstance(msg, dict):
                 final.append(msg)
-                pending_tool_call_ids = set()
+                pending_tool_call_ids = {}
                 continue
-            role = msg.get("role")
             if role == "assistant" and msg.get("tool_calls"):
-                pending_tool_call_ids = {
-                    tc["id"]
-                    for tc in msg["tool_calls"]
-                    if isinstance(tc, dict) and "id" in tc
-                }
+                pending_assistant = msg
+                pending_tool_call_ids = {}
+                for tc in msg["tool_calls"]:
+                    original_id = tc["id"]
+                    call_id = original_id
+                    if (
+                        call_id in used_tool_call_ids
+                        or call_id in unresolved_original_ids
+                    ):
+                        suffix = 0
+                        call_id = f"call_astrbot_{msg_index}_{suffix}"
+                        while (
+                            call_id in reserved_tool_call_ids
+                            or call_id in used_tool_call_ids
+                        ):
+                            suffix += 1
+                            call_id = f"call_astrbot_{msg_index}_{suffix}"
+                        tc["id"] = call_id
+                    used_tool_call_ids.add(call_id)
+                    if original_id in unresolved_original_ids:
+                        # An earlier call with this original ID went unanswered or
+                        # was omitted as ambiguous, so a raw tool message carrying
+                        # original_id may be a delayed result from that earlier round.
+                        pending_tool_call_ids[call_id] = call_id
+                    else:
+                        pending_tool_call_ids[original_id] = call_id
                 final.append(msg)
             elif role == "tool":
                 tool_call_id = msg.get("tool_call_id")
                 if tool_call_id in pending_tool_call_ids:
+                    msg["tool_call_id"] = pending_tool_call_ids.pop(tool_call_id)
                     final.append(msg)
-                    pending_tool_call_ids.remove(tool_call_id)
                 else:
                     removed_tool_messages += 1
             else:
-                pending_tool_call_ids = set()
+                pending_tool_call_ids = {}
                 final.append(msg)
         if removed_tool_messages:
             logger.debug(
@@ -563,20 +676,27 @@ class ProviderOpenAIOfficial(Provider):
             extra_body.update(custom_extra_body)
         self._apply_provider_specific_request_overrides(payloads, extra_body)
 
-        model = payloads.get("model", "").lower()
-
         self._sanitize_assistant_messages(payloads)
 
-        completion = await retry_provider_request(
+        async with chat_request(
+            self,
             "OpenAI",
+            extra_body.get("model") or payloads.get("model") or self.get_model(),
             lambda: self.client.chat.completions.create(
                 **payloads,
                 stream=False,
                 extra_body=extra_body,
                 extra_headers=build_conversation_headers(conversation_id),
             ),
+            conversation_id=conversation_id,
             max_attempts=request_max_retries,
-        )
+        ) as (completion, request):
+            if isinstance(completion, ChatCompletion):
+                usage = completion.usage
+                if usage is None and completion.choices:
+                    usage = getattr(completion.choices[0], "usage", None)
+                if usage is not None:
+                    request.usage = self._extract_usage(usage)
 
         if not isinstance(completion, ChatCompletion):
             raise Exception(
@@ -627,18 +747,6 @@ class ProviderOpenAIOfficial(Provider):
 
         self._sanitize_assistant_messages(payloads)
 
-        stream = await retry_provider_request(
-            "OpenAI",
-            lambda: self.client.chat.completions.create(
-                **payloads,
-                stream=True,
-                extra_body=extra_body,
-                extra_headers=build_conversation_headers(conversation_id),
-                stream_options={"include_usage": True},
-            ),
-            max_attempts=request_max_retries,
-        )
-
         llm_response = LLMResponse("assistant", is_chunk=True)
 
         state = ChatCompletionStreamState()
@@ -656,103 +764,127 @@ class ProviderOpenAIOfficial(Provider):
         slot_of_index: dict[int, dict] = {}
         slot_of_id: dict[str, dict] = {}
 
-        async for chunk in stream:
-            choice = chunk.choices[0] if chunk.choices else None
-            delta = choice.delta if choice else None
+        async with chat_request(
+            self,
+            "OpenAI",
+            extra_body.get("model") or payloads.get("model") or self.get_model(),
+            lambda: self.client.chat.completions.create(
+                **payloads,
+                stream=True,
+                extra_body=extra_body,
+                extra_headers=build_conversation_headers(conversation_id),
+                stream_options={"include_usage": True},
+            ),
+            streaming=True,
+            conversation_id=conversation_id,
+            max_attempts=request_max_retries,
+        ) as (stream, request):
+            async for chunk in stream:
+                choice = chunk.choices[0] if chunk.choices else None
+                delta = choice.delta if choice else None
+                choice_usage = getattr(choice, "usage", None)
+                if reported_usage := chunk.usage or choice_usage:
+                    request.usage = self._extract_usage(reported_usage)
 
-            if delta and (dtcs := delta.tool_calls):
-                for idx, tc in enumerate(dtcs):
-                    # siliconflow workaround
-                    if tc.function and tc.function.arguments:
-                        tc.type = "function"
-                    # Fix for #6661: Add missing 'index' field to tool_call deltas
-                    # Gemini and some OpenAI-compatible proxies omit this field
-                    if not hasattr(tc, "index") or tc.index is None:
-                        tc.index = idx
-                # Normalize the replayed identity and the sparse upstream indices,
-                # see the comment above `tool_call_slots`.
-                for tc in dtcs:
-                    incoming_id = tc.id or ""
-                    incoming_name = (
-                        tc.function.name if tc.function and tc.function.name else ""
+                if delta and (dtcs := delta.tool_calls):
+                    for idx, tc in enumerate(dtcs):
+                        # siliconflow workaround
+                        if tc.function and tc.function.arguments:
+                            tc.type = "function"
+                        # Fix for #6661: Add missing 'index' field to tool_call deltas
+                        # Gemini and some OpenAI-compatible proxies omit this field
+                        if not hasattr(tc, "index") or tc.index is None:
+                            tc.index = idx
+                    # Normalize the replayed identity and the sparse upstream indices,
+                    # see the comment above `tool_call_slots`.
+                    for tc in dtcs:
+                        incoming_id = tc.id or ""
+                        incoming_name = (
+                            tc.function.name if tc.function and tc.function.name else ""
+                        )
+                        slot = slot_of_id.get(incoming_id) if incoming_id else None
+                        if slot is None and tc.index is not None:
+                            slot = slot_of_index.get(tc.index)
+                        if slot is None and not incoming_id and not incoming_name:
+                            # A continuation frame without identity belongs to the call
+                            # that is still streaming.
+                            slot = tool_call_slots[-1] if tool_call_slots else None
+                        if (
+                            slot is not None
+                            and incoming_id
+                            and slot["id"]
+                            and not incoming_id.startswith(slot["id"])
+                            and not slot["id"].startswith(incoming_id)
+                        ):
+                            # The same incoming index now carries a different call.
+                            slot = None
+                        if slot is None:
+                            slot = {
+                                "id": "",
+                                "name": "",
+                                "position": len(tool_call_slots),
+                            }
+                            tool_call_slots.append(slot)
+                        # Forward only the part the SDK has not accumulated yet: a replayed
+                        # value contributes nothing, a fragment is appended as it arrives.
+                        id_delta = (
+                            incoming_id[len(slot["id"]) :]
+                            if incoming_id.startswith(slot["id"])
+                            else incoming_id
+                        )
+                        name_delta = (
+                            incoming_name[len(slot["name"]) :]
+                            if incoming_name.startswith(slot["name"])
+                            else incoming_name
+                        )
+                        slot["id"] += id_delta
+                        slot["name"] += name_delta
+                        if tc.index is not None:
+                            slot_of_index[tc.index] = slot
+                        if slot["id"]:
+                            slot_of_id[slot["id"]] = slot
+                        tc.index = slot["position"]
+                        tc.id = id_delta
+                        if tc.function:
+                            tc.function.name = name_delta
+                # 跳过 delta=None 的 chunk，避免 SDK 内部 _convert_initial_chunk_into_snapshot
+                # 第 747 行 choice.delta.to_dict() 抛出 NoneType 错误。
+                # refs: AstrBot#6689 / openai-python#5069 / #5047
+                # 例外：流末尾的 usage chunk（choices=[]，delta=None 但有 usage 数据）
+                # 需要传给 state，否则最终 completion 会丢失 usage 信息
+                if delta is not None or chunk.usage:
+                    try:
+                        state.handle_chunk(chunk)
+                    except Exception as e:
+                        logger.error("Saving chunk state error: " + str(e))
+                # logger.debug(f"chunk delta: {delta}")
+                # handle the content delta
+                reasoning = self._extract_reasoning_content(chunk)
+                _y = False
+                llm_response.id = chunk.id
+                llm_response.reasoning_content = None
+                llm_response.completion_text = ""
+                if reasoning is not None:
+                    llm_response.reasoning_content = reasoning
+                    _y = True
+                if delta and delta.content:
+                    # Don't strip streaming chunks to preserve spaces between words
+                    completion_text = self._normalize_content(
+                        delta.content, strip=False
                     )
-                    slot = slot_of_id.get(incoming_id) if incoming_id else None
-                    if slot is None and tc.index is not None:
-                        slot = slot_of_index.get(tc.index)
-                    if slot is None and not incoming_id and not incoming_name:
-                        # A continuation frame without identity belongs to the call
-                        # that is still streaming.
-                        slot = tool_call_slots[-1] if tool_call_slots else None
-                    if (
-                        slot is not None
-                        and incoming_id
-                        and slot["id"]
-                        and not incoming_id.startswith(slot["id"])
-                        and not slot["id"].startswith(incoming_id)
-                    ):
-                        # The same incoming index now carries a different call.
-                        slot = None
-                    if slot is None:
-                        slot = {"id": "", "name": "", "position": len(tool_call_slots)}
-                        tool_call_slots.append(slot)
-                    # Forward only the part the SDK has not accumulated yet: a replayed
-                    # value contributes nothing, a fragment is appended as it arrives.
-                    id_delta = (
-                        incoming_id[len(slot["id"]) :]
-                        if incoming_id.startswith(slot["id"])
-                        else incoming_id
+                    llm_response.result_chain = MessageChain(
+                        chain=[Comp.Plain(completion_text)],
                     )
-                    name_delta = (
-                        incoming_name[len(slot["name"]) :]
-                        if incoming_name.startswith(slot["name"])
-                        else incoming_name
-                    )
-                    slot["id"] += id_delta
-                    slot["name"] += name_delta
-                    if tc.index is not None:
-                        slot_of_index[tc.index] = slot
-                    if slot["id"]:
-                        slot_of_id[slot["id"]] = slot
-                    tc.index = slot["position"]
-                    tc.id = id_delta
-                    if tc.function:
-                        tc.function.name = name_delta
-            # 跳过 delta=None 的 chunk，避免 SDK 内部 _convert_initial_chunk_into_snapshot
-            # 第 747 行 choice.delta.to_dict() 抛出 NoneType 错误。
-            # refs: AstrBot#6689 / openai-python#5069 / #5047
-            # 例外：流末尾的 usage chunk（choices=[]，delta=None 但有 usage 数据）
-            # 需要传给 state，否则最终 completion 会丢失 usage 信息
-            if delta is not None or chunk.usage:
-                try:
-                    state.handle_chunk(chunk)
-                except Exception as e:
-                    logger.error("Saving chunk state error: " + str(e))
-            # logger.debug(f"chunk delta: {delta}")
-            # handle the content delta
-            reasoning = self._extract_reasoning_content(chunk)
-            _y = False
-            llm_response.id = chunk.id
-            llm_response.reasoning_content = None
-            llm_response.completion_text = ""
-            if reasoning is not None:
-                llm_response.reasoning_content = reasoning
-                _y = True
-            if delta and delta.content:
-                # Don't strip streaming chunks to preserve spaces between words
-                completion_text = self._normalize_content(delta.content, strip=False)
-                llm_response.result_chain = MessageChain(
-                    chain=[Comp.Plain(completion_text)],
-                )
-                _y = True
-            if chunk.usage:
-                llm_response.usage = self._extract_usage(chunk.usage)
-            elif choice and (choice_usage := getattr(choice, "usage", None)):
-                # Workaround for some providers that only return usage in choices[].usage, e.g. MoonshotAI
-                # See https://github.com/AstrBotDevs/AstrBot/issues/6614
-                llm_response.usage = self._extract_usage(choice_usage)
-                state.current_completion_snapshot.usage = choice_usage
-            if _y:
-                yield llm_response
+                    _y = True
+                if reported_usage is not None:
+                    llm_response.usage = request.usage
+                if not chunk.usage and choice_usage:
+                    # Some gateways only return usage on the choice (AstrBot #6614).
+                    state.current_completion_snapshot.usage = choice_usage
+                if _y or (delta and delta.tool_calls):
+                    request.mark_first_token()
+                if _y:
+                    yield llm_response
 
         try:
             final_completion = state.get_final_completion()
@@ -790,16 +922,16 @@ class ProviderOpenAIOfficial(Provider):
         return reasoning_attr
 
     def _extract_usage(self, usage: CompletionUsage | dict) -> TokenUsage:
-        ptd = getattr(usage, "prompt_tokens_details", None)
-        cached = getattr(ptd, "cached_tokens", 0) if ptd else 0
-        cached = (
-            cached if isinstance(cached, int) else 0
-        )  # ptd.cached_tokens 可能为None
-        prompt_tokens = getattr(usage, "prompt_tokens", 0) or 0  # 安全
+        if isinstance(usage, dict):
+            usage = CompletionUsage.model_construct(**usage)
+        details = usage.prompt_tokens_details
+        if isinstance(details, dict):
+            cached = details.get("cached_tokens") or 0
+        else:
+            cached = getattr(details, "cached_tokens", 0) or 0
+        cached = cached if isinstance(cached, int) else 0
+        prompt_tokens = getattr(usage, "prompt_tokens", 0) or 0
         completion_tokens = getattr(usage, "completion_tokens", 0) or 0
-        cached = cached or 0
-        prompt_tokens = prompt_tokens or 0
-        completion_tokens = completion_tokens or 0
         return TokenUsage(
             input_other=prompt_tokens - cached,
             input_cached=cached,
@@ -1376,13 +1508,16 @@ class ProviderOpenAIOfficial(Provider):
                 query_kwargs = {}
                 if conversation_id:
                     query_kwargs["conversation_id"] = conversation_id
-                async for response in self._query_stream(
-                    payloads,
-                    func_tool,
-                    request_max_retries=request_max_retries,
-                    **query_kwargs,
-                ):
-                    yield response
+                async with aclosing(
+                    self._query_stream(
+                        payloads,
+                        func_tool,
+                        request_max_retries=request_max_retries,
+                        **query_kwargs,
+                    )
+                ) as responses:
+                    async for response in responses:
+                        yield response
                 break
             except Exception as e:
                 last_exception = e

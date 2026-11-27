@@ -12,6 +12,7 @@ from astrbot.core.astr_agent_runtime.history import ConversationHistoryObserver
 from astrbot.core.conversation_mgr import ConversationManager
 from astrbot.core.db.conversation import ConversationConflictError
 from astrbot.core.pipeline import context_utils
+from astrbot.core.star.star import StarMetadata
 from astrbot.core.star.star_handler import EventType
 
 
@@ -34,7 +35,7 @@ def install_hook(monkeypatch):
         monkeypatch.setitem(
             context_utils.star_map,
             "test.memory",
-            SimpleNamespace(name="memory", display_name=None),
+            StarMetadata(name="memory", author="test"),
         )
 
     return install

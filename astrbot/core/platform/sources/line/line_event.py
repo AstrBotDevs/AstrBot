@@ -19,7 +19,7 @@ from astrbot.api.message_components import (
     Video,
 )
 from astrbot.api.platform import Group, MessageMember
-from astrbot.core.platform.button_interaction import encode_button_callback
+from astrbot.core.platform.button_interaction import encode_button_callback_async
 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
 from astrbot.core.utils.media_utils import get_media_duration
 
@@ -115,7 +115,7 @@ class LineMessageEvent(AstrMessageEvent):
                     continue
 
                 if isinstance(button.action, Button.CallbackAction):
-                    callback_data = encode_button_callback(
+                    callback_data = await encode_button_callback_async(
                         button.id,
                         button.action.data,
                         expires_at=segment.action_expires_at,

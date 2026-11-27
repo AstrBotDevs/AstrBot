@@ -61,7 +61,10 @@ class PlatformStat(SQLModel, table=True):
 
 
 class ProviderStat(TimestampMixin, SQLModel, table=True):
-    """Per-response provider stats for internal agent runs."""
+    """Deprecated per-turn statistics retained for historical totals and backups.
+
+    See https://github.com/AstrBotDevs/AstrBot/issues/11400 for the migration plan.
+    """
 
     __tablename__: str = "provider_stats"
 
@@ -82,6 +85,26 @@ class ProviderStat(TimestampMixin, SQLModel, table=True):
     start_time: float = Field(default=0.0, nullable=False)
     end_time: float = Field(default=0.0, nullable=False)
     time_to_first_token: float = Field(default=0.0, nullable=False)
+
+
+class ChatRequestStat(SQLModel, table=True):
+    """Usage reported for one upstream chat request attempt."""
+
+    __tablename__: str = "chat_request_stats"
+
+    id: int | None = Field(default=None, primary_key=True)
+    created_at: datetime = Field(sa_type=DateTime(timezone=False), index=True)
+    provider_id: str
+    provider_model: str
+    umo: str | None = Field(default=None, index=True)
+    conversation_id: str | None = Field(default=None, index=True)
+    plugin_id: str | None = None
+    status: str
+    token_input_other: int | None = None
+    token_input_cached: int | None = None
+    token_output: int | None = None
+    duration: float
+    time_to_first_token: float | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -362,6 +385,39 @@ class PlatformMessageHistory(TimestampMixin, SQLModel, table=True):
             "id",
         ),
     )
+
+
+class InteractiveViewRecord(SQLModel, table=True):
+    """Persist the source and snapshot of an interactive message."""
+
+    __tablename__: str = "interactive_views"
+
+    id: str = Field(primary_key=True)
+    owner: str
+    session_id: str
+    platform_id: str
+    history_platform_id: str
+    module: str
+    name: str
+    version: int
+    revision: int
+    data: str = Field(sa_type=Text)
+    text: str = Field(sa_type=Text)
+    message_id: str | None = None
+    run_id: str
+
+
+class InteractiveViewActionRecord(SQLModel, table=True):
+    """Persist an action reservation and its replayable receipt."""
+
+    __tablename__: str = "interactive_view_actions"
+
+    view_id: str = Field(primary_key=True)
+    id: str = Field(primary_key=True)
+    request: str = Field(sa_type=Text)
+    started: float
+    status: str
+    result: str | None = Field(default=None, sa_type=Text)
 
 
 class WebChatThread(TimestampMixin, SQLModel, table=True):

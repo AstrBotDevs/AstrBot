@@ -1,4 +1,3 @@
-import asyncio
 import datetime
 import json
 import random
@@ -44,16 +43,8 @@ class GroupChatContext:
     def __init__(self, acm: AstrBotConfigManager, context: star.Context) -> None:
         self.acm = acm
         self.context = context
-        self._locks: dict[str, asyncio.Lock] = {}
         self.raw_records: dict[str, deque[str]] = defaultdict(deque)
         self._record_ids: dict[str, deque[str]] = defaultdict(deque)
-
-    def _get_lock(self, umo: str) -> asyncio.Lock:
-        lock = self._locks.get(umo)
-        if lock is None:
-            lock = asyncio.Lock()
-            self._locks[umo] = lock
-        return lock
 
     def cfg(self, event: AstrMessageEvent):
         cfg = self.context.get_config(umo=event.unified_msg_origin)
@@ -130,14 +121,30 @@ class GroupChatContext:
         return False
 
     async def remove_session(self, event: AstrMessageEvent) -> int:
-        umo = event.unified_msg_origin
-        lock = self._get_lock(umo)
-        async with lock:
-            cnt = len(self.raw_records.get(umo, deque()))
-            self.raw_records.pop(umo, None)
-            self._record_ids.pop(umo, None)
-        self._locks.pop(umo, None)
-        return cnt
+        return self.clear_session(event.unified_msg_origin)
+
+    def clear_session(self, umo: str) -> int:
+        """Discard pending observations for one message origin.
+
+        Args:
+            umo: Unified message origin whose conversation was cleared.
+
+        Returns:
+            Number of discarded observations.
+        """
+        records = self.raw_records.pop(umo, None)
+        self._record_ids.pop(umo, None)
+        return len(records) if records else 0
+
+    def clear_platform(self, platform_id: str) -> None:
+        """Discard all buffered observations owned by one adapter instance.
+
+        Args:
+            platform_id: Exact platform instance ID being cleaned up.
+        """
+        for umo in list(self.raw_records):
+            if umo.partition(":")[0] == platform_id:
+                self.clear_session(umo)
 
     async def handle_message(self, event: AstrMessageEvent) -> None:
         if event.get_message_type() != MessageType.GROUP_MESSAGE:
@@ -145,51 +152,38 @@ class GroupChatContext:
 
         umo = event.unified_msg_origin
         cfg = self.cfg(event)
+        records = self.raw_records[umo]
         final_message = await self._format_message(event, cfg)
+        # A deletion during image captioning retires this particular buffer.
+        if self.raw_records.get(umo) is not records:
+            return
 
-        async with self._get_lock(umo):
-            records = self.raw_records[umo]
-            record_ids = self._record_ids[umo]
-            record_id = uuid.uuid4().hex
-            records.append(final_message)
-            record_ids.append(record_id)
-            _trim_left(records, cfg["group_message_max_cnt"], record_ids)
-            event.set_extra("_group_context_record_id", record_id)
-            event.set_extra("_group_context_raw_idx", len(records) - 1)
+        record_ids = self._record_ids[umo]
+        record_id = uuid.uuid4().hex
+        records.append(final_message)
+        record_ids.append(record_id)
+        _trim_left(records, cfg["group_message_max_cnt"], record_ids)
+        event.set_extra("_group_context_record_id", record_id)
 
         logger.debug(f"group_chat_context | {umo} | {final_message}")
 
     async def on_req_llm(self, event: AstrMessageEvent, req: ProviderRequest) -> None:
         umo = event.unified_msg_origin
         record_id = event.get_extra("_group_context_record_id", None)
-        prompt_idx = event.get_extra("_group_context_raw_idx", -1)
-        if not isinstance(record_id, str) and (
-            not isinstance(prompt_idx, int) or prompt_idx < 0
+        record_ids = self._record_ids.get(umo)
+        if (
+            not isinstance(record_id, str)
+            or not record_ids
+            or record_id not in record_ids
         ):
             return
 
-        async with self._get_lock(umo):
-            records = self.raw_records.get(umo)
-            if not records:
-                return
-
-            raw_list = list(records)
-            id_list = list(self._record_ids.get(umo, deque()))
-            if isinstance(record_id, str) and record_id in id_list:
-                prompt_idx = id_list.index(record_id)
-
-            if prompt_idx >= len(raw_list):
-                return
-
-            records_to_inject = raw_list[:prompt_idx]
-            remaining = raw_list[prompt_idx + 1 :]
-            remaining_ids = id_list[prompt_idx + 1 :] if id_list else []
-            records.clear()
-            records.extend(remaining)
-            if id_list:
-                record_ids = self._record_ids[umo]
-                record_ids.clear()
-                record_ids.extend(remaining_ids)
+        # Consume through this event without yielding to other buffer mutations.
+        records = self.raw_records[umo]
+        records_to_inject = []
+        while record_ids.popleft() != record_id:
+            records_to_inject.append(records.popleft())
+        records.popleft()
 
         if records_to_inject:
             req.extra_user_content_parts.append(

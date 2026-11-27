@@ -1,5 +1,4 @@
-from sqlalchemy import case, func, select
-from sqlmodel import col
+from sqlalchemy import func, select
 
 from astrbot.api import sp, star
 from astrbot.api.event import AstrMessageEvent, MessageEventResult
@@ -9,7 +8,7 @@ from astrbot.core.agent.runners.deerflow.constants import (
     DEERFLOW_THREAD_ID_KEY,
 )
 from astrbot.core.agent.runners.deerflow.deerflow_api_client import DeerFlowAPIClient
-from astrbot.core.db.po import ProviderStat
+from astrbot.core.db.chat_usage import chat_usage
 from astrbot.core.utils.active_event_registry import active_event_registry
 
 from ..i18n import translate
@@ -214,22 +213,17 @@ class ConversationCommands:
         async with db.get_db() as session:
             result = await session.execute(
                 select(
-                    func.count(case((col(ProviderStat.id).is_not(None), 1))).label(
-                        "record_count",
-                    ),
-                    func.coalesce(func.sum(ProviderStat.token_input_other), 0).label(
+                    func.count().label("record_count"),
+                    func.coalesce(func.sum(chat_usage.c.token_input_other), 0).label(
                         "total_input_other",
                     ),
-                    func.coalesce(func.sum(ProviderStat.token_input_cached), 0).label(
+                    func.coalesce(func.sum(chat_usage.c.token_input_cached), 0).label(
                         "total_input_cached",
                     ),
-                    func.coalesce(func.sum(ProviderStat.token_output), 0).label(
+                    func.coalesce(func.sum(chat_usage.c.token_output), 0).label(
                         "total_output",
                     ),
-                ).where(
-                    col(ProviderStat.agent_type) == "internal",
-                    col(ProviderStat.conversation_id) == cid,
-                )
+                ).where(chat_usage.c.conversation_id == cid)
             )
             stats = result.one()
 

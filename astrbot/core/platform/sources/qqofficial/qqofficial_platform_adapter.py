@@ -192,7 +192,9 @@ async def _handle_interaction_create(client: Any, interaction: Interaction) -> N
     if interaction.type != 11:
         return
     try:
-        abm = QQOfficialPlatformAdapter._parse_interaction_from_qqofficial(interaction)
+        abm = await asyncio.to_thread(
+            QQOfficialPlatformAdapter._parse_interaction_from_qqofficial, interaction
+        )
     except ValueError as exc:
         logger.warning("[QQOfficial] Ignore invalid button interaction: %s", exc)
         await client.api.on_interaction_result(interaction.id, 1)
@@ -411,7 +413,11 @@ class QQOfficialPlatformAdapter(Platform):
             file_source,
             file_name,
         ) = await QQOfficialMessageEvent._parse_to_qqofficial(message_chain)
-        keyboard = QQOfficialMessageEvent._parse_keyboard(message_chain)
+        keyboard = None
+        if any(isinstance(part, ActionRow) for part in message_chain.chain):
+            keyboard = await asyncio.to_thread(
+                QQOfficialMessageEvent._parse_keyboard, message_chain
+            )
         if keyboard and not plain_text:
             plain_text = next(
                 (

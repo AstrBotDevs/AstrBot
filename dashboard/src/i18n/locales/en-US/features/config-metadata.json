@@ -1933,6 +1933,9 @@
         "description": "voice",
         "hint": "OpenAI TTS voice. OpenAI defaults: 'alloy', 'echo', 'fable', 'onyx', 'nova', 'shimmer'."
       },
+      "stepfun-tts-voice": {
+        "description": "Voice ID"
+      },
       "deepseek-tts-voice": {
         "description": "Voice",
         "hint": "DeepSeek TTS voice. The corresponding voice_id is sent to the API.",

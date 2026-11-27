@@ -8,6 +8,7 @@ from deprecated import deprecated
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
+from astrbot.core.db.chat_usage_writer import ChatUsageWriter
 from astrbot.core.db.po import (
     ApiKey,
     Attachment,
@@ -55,6 +56,7 @@ class BaseDatabase(abc.ABC):
         from astrbot.core.db.conversation import ConversationStore
 
         self.conversation_store = ConversationStore(self)
+        self.chat_usage_writer = ChatUsageWriter(self)
         self.AsyncSessionLocal = async_sessionmaker(
             self.engine,
             class_=AsyncSession,
@@ -126,6 +128,10 @@ class BaseDatabase(abc.ABC):
         """Get platform statistics within the specified offset in seconds and group by platform_id."""
         ...
 
+    @deprecated(
+        version="4.30.0",
+        reason="Managed Chat Providers record request usage automatically.",
+    )
     @abc.abstractmethod
     async def insert_provider_stat(
         self,
@@ -138,7 +144,7 @@ class BaseDatabase(abc.ABC):
         stats: dict | None = None,
         agent_type: str = "internal",
     ) -> ProviderStat:
-        """Insert a per-response provider stat record."""
+        """Insert a legacy provider statistic for an Agent turn."""
         ...
 
     @abc.abstractmethod
