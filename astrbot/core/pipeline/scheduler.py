@@ -1,3 +1,4 @@
+import inspect
 from collections.abc import AsyncGenerator
 from contextlib import aclosing
 from typing import cast
@@ -94,11 +95,18 @@ class PipelineScheduler:
             event (AstrMessageEvent): 事件对象
 
         """
-        snapshot, override_paths = (
-            self.ctx.plugin_manager.context.astrbot_config_mgr._create_message_config(
+        config_mgr = self.ctx.plugin_manager.context.astrbot_config_mgr
+        create_message_config_async = getattr(
+            config_mgr, "_create_message_config_async", None
+        )
+        if inspect.iscoroutinefunction(create_message_config_async):
+            snapshot, override_paths = await create_message_config_async(
                 event.unified_msg_origin
             )
-        )
+        else:
+            snapshot, override_paths = config_mgr._create_message_config(
+                event.unified_msg_origin
+            )
         scope = MessageConfig(
             event.unified_msg_origin, snapshot, self.ctx, override_paths
         )

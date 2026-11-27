@@ -342,7 +342,9 @@ async def test_session_isolation_precedes_registration(
         plugin_manager=SimpleNamespace(
             context=SimpleNamespace(
                 get_config=lambda **_: config,
-                astrbot_config_mgr=SimpleNamespace(_create_message_config=lambda _: (config, frozenset())),
+                astrbot_config_mgr=SimpleNamespace(
+                    _create_message_config=lambda _: (config, frozenset())
+                ),
             )
         ),
         db_helper=None,
@@ -898,3 +900,101 @@ class TestEventFiltering:
 
             # Verify error was logged for missing scheduler
             mock_logger.error.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_dispatch_and_execute_resolve_config_async_without_sync_sqlite(
+    tmp_path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Dispatch and pipeline execution avoid synchronous sqlite3.connect on cold cache."""
+    import sqlite3
+
+    from astrbot.core.astrbot_config_mgr import AstrBotConfigManager
+    from astrbot.core.config.astrbot_config import AstrBotConfig
+    from astrbot.core.config.default import DEFAULT_CONFIG
+    from astrbot.core.config_bindings import BINDING_KEY
+    from astrbot.core.db.sqlite import SQLiteDatabase
+    from astrbot.core.utils.shared_preferences import SharedPreferences
+
+    db = SQLiteDatabase(str(tmp_path / "dispatch.db"))
+    await db.initialize()
+    sp_instance = SharedPreferences(
+        db_helper=db, json_storage_path=str(tmp_path / "sp.json")
+    )
+    await sp_instance.initialize()
+    try:
+        default_conf = AstrBotConfig(
+            config_path=str(tmp_path / "cmd_config.json"),
+            default_config=DEFAULT_CONFIG,
+        )
+        default_conf["platform_settings"]["unique_session"] = True
+        ucr = MagicMock()
+        ucr.get_conf_id_for_umop.return_value = None
+        config_mgr = AstrBotConfigManager(default_conf, ucr, sp_instance)
+        await config_mgr.initialize()
+
+        isolated_umo = "aiocqhttp:GroupMessage:alice_group"
+        await sp_instance.session_put(
+            isolated_umo,
+            BINDING_KEY,
+            {"profile_id": None, "overrides": {"wake_prefix": ["!"]}},
+        )
+        with sp_instance._cache_lock:
+            sp_instance._cache.clear()
+
+        observed_wake_prefix = []
+        processed = asyncio.Event()
+
+        async def inspect_stage(event):
+            observed_wake_prefix.append(scheduler.ctx.astrbot_config["wake_prefix"])
+            event.stop_event()
+            processed.set()
+
+        ctx = SimpleNamespace(
+            astrbot_config=default_conf,
+            astrbot_config_id="default",
+            plugin_manager=SimpleNamespace(
+                context=SimpleNamespace(astrbot_config_mgr=config_mgr)
+            ),
+            db_helper=db,
+        )
+        from astrbot.core.pipeline.context import PipelineContext
+
+        real_ctx = PipelineContext(default_conf, ctx.plugin_manager, "default", db)
+        scheduler = PipelineScheduler(real_ctx)
+        scheduler.stages = [SimpleNamespace(process=inspect_stage)]
+
+        def fail_sync_connect(*_args, **_kwargs):
+            raise AssertionError("synchronous sqlite3.connect should not be called")
+
+        monkeypatch.setattr(sqlite3, "connect", fail_sync_connect)
+
+        queue: asyncio.Queue = asyncio.Queue()
+        bus = EventBus(queue, {"default": scheduler}, config_mgr)
+
+        msg = AstrBotMessage()
+        msg.type = MessageType.GROUP_MESSAGE
+        msg.group_id = "group"
+        msg.self_id = "bot"
+        msg.sender = MessageMember(user_id="alice")
+        msg.message = [Plain("hello")]
+        msg.raw_message = SimpleNamespace(message_type="text")
+        event = AstrMessageEvent(
+            "hello", msg, PlatformMetadata("aiocqhttp", "test", "aiocqhttp"), "group"
+        )
+
+        await queue.put(event)
+        dispatch_task = asyncio.create_task(bus.dispatch())
+        try:
+            await asyncio.wait_for(processed.wait(), timeout=2.0)
+        finally:
+            await bus.close()
+            dispatch_task.cancel()
+            with suppress(asyncio.CancelledError):
+                await dispatch_task
+
+        assert event.unified_msg_origin == isolated_umo
+        assert observed_wake_prefix == [["!"]]
+    finally:
+        await sp_instance.close()
+        await db.engine.dispose()

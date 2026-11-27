@@ -202,6 +202,39 @@ class AstrBotConfigManager:
             return AstrBotConfigSnapshot(conf, overrides)
         return conf
 
+    async def get_conf_async(self, umo: str | MessageSession | None) -> AstrBotConfig:
+        """Asynchronously read a session's effective configuration or snapshot.
+
+        Args:
+            umo: Session origin, or None to read the shared default profile.
+
+        Returns:
+            The current message snapshot for a matching session and manager.
+            Outside that scope, the routed profile with explicit overrides applied.
+        """
+        if not umo:
+            return self.confs["default"]
+        if isinstance(umo, MessageSession):
+            umo = f"{umo.platform_id}:{umo.message_type}:{umo.session_id}"
+
+        scope = current_message_config.get()
+        if (
+            scope is not None
+            and scope.active
+            and scope.umo == umo
+            and scope.context.plugin_manager.context.astrbot_config_mgr is self
+        ):
+            return scope.config
+
+        self._get_abconf_data()
+        binding = await self.sp.get_async("umo", umo, BINDING_KEY, {}) or {}
+        conf_id = self._load_conf_mapping(umo, binding=binding)["id"]
+        conf = self.confs.get(conf_id) or self.confs["default"]
+        overrides = binding.get("overrides", {})
+        if overrides:
+            return AstrBotConfigSnapshot(conf, overrides)
+        return conf
+
     def _create_message_config(
         self, umo: str
     ) -> tuple[AstrBotConfigSnapshot, frozenset[str]]:
@@ -215,6 +248,24 @@ class AstrBotConfigManager:
         """
         self._get_abconf_data()
         binding = self.sp.get(BINDING_KEY, {}, scope="umo", scope_id=umo) or {}
+        conf_id = self._load_conf_mapping(umo, binding=binding)["id"]
+        conf = self.confs.get(conf_id) or self.confs["default"]
+        overrides = binding.get("overrides", {})
+        return AstrBotConfigSnapshot(conf, overrides), frozenset(overrides)
+
+    async def _create_message_config_async(
+        self, umo: str
+    ) -> tuple[AstrBotConfigSnapshot, frozenset[str]]:
+        """Asynchronously create an independent configuration for a new pipeline run.
+
+        Args:
+            umo: Final session origin of the incoming message.
+
+        Returns:
+            A fresh runtime configuration and its explicit override paths.
+        """
+        self._get_abconf_data()
+        binding = await self.sp.get_async("umo", umo, BINDING_KEY, {}) or {}
         conf_id = self._load_conf_mapping(umo, binding=binding)["id"]
         conf = self.confs.get(conf_id) or self.confs["default"]
         overrides = binding.get("overrides", {})
@@ -241,6 +292,37 @@ class AstrBotConfigManager:
             umo = f"{umo.platform_id}:{umo.message_type}:{umo.session_id}"
 
         return self._load_conf_mapping(umo, follow_route=follow_route)
+
+    async def get_conf_info_async(
+        self, umo: str | MessageSession, *, follow_route: bool = False
+    ) -> ConfInfo:
+        """Asynchronously return the metadata of the session's selected base profile.
+
+        Args:
+            umo: Exact session origin.
+            follow_route: Preview the routing result without the explicit selection.
+
+        Returns:
+            Metadata of the selected base profile.
+        """
+        self._get_abconf_data()
+        if isinstance(umo, MessageSession):
+            normalized_umo = str(umo)
+        else:
+            try:
+                normalized_umo = str(MessageSession.from_str(umo))
+            except Exception:
+                return DEFAULT_CONFIG_CONF_INFO
+
+        if follow_route:
+            binding = None
+        else:
+            binding = (
+                await self.sp.get_async("umo", normalized_umo, BINDING_KEY, {}) or {}
+            )
+        return self._load_conf_mapping(
+            normalized_umo, follow_route=follow_route, binding=binding
+        )
 
     def get_conf_list(self) -> list[ConfInfo]:
         """获取所有配置文件的元数据列表"""
