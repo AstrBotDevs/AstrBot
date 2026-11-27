@@ -177,6 +177,8 @@ Select `Data & Logs` in the left sidebar to switch between `Statistics`, `Conver
 
 The `Statistics` tab summarizes platform instances, messages, model calls, tokens, and uptime. It also shows message trends, platform message rankings, model-call trends, and token usage by provider, plugin, and conversation. The request count includes retries and provider fallbacks. Historical totals still contribute to token usage. Use the range selector at the top to view 1 day, 3 days, or 1 week.
 
+Average cache hit rate is the share of input tokens served from cache in the selected range.
+
 ### Conversations
 
 Use the `Conversations` tab to find and manage saved conversation records:

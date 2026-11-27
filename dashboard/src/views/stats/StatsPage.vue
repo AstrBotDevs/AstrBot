@@ -143,6 +143,10 @@
                   <span>{{ t('modelTotal.successRate') }}</span>
                   <strong>{{ rangeSuccessRateLabel }}</strong>
                 </div>
+                <div class="token-meta-item">
+                  <span>{{ t('modelTotal.avgCacheHitRate') }}</span>
+                  <strong>{{ rangeCacheHitRateLabel }}</strong>
+                </div>
               </div>
             </section>
 
@@ -323,6 +327,7 @@ interface ProviderTokenStatsResponse {
   range_avg_duration_ms: number
   range_avg_tpm: number
   range_success_rate: number
+  range_cache_hit_rate: number | null
   range_by_provider: ProviderRankingItem[]
   range_by_umo: UmoRankingItem[]
   range_by_plugin: Array<{ plugin_id: string; tokens: number; calls: number }>
@@ -594,6 +599,11 @@ const rangeSuccessRateLabel = computed(() => {
   }
   const rate = providerStats.value?.range_success_rate ?? 0
   return `${(rate * 100).toFixed(1)}%`
+})
+
+const rangeCacheHitRateLabel = computed(() => {
+  const rate = providerStats.value?.range_cache_hit_rate
+  return rate == null ? '—' : `${(rate * 100).toFixed(1)}%`
 })
 
 const platformRanking = computed(() =>

@@ -502,6 +502,8 @@ class StatService:
             calls_by_plugin: dict[str, int] = defaultdict(int)
             total_by_bucket: dict[int, int] = defaultdict(int)
             range_total_tokens = 0
+            range_input_tokens = 0
+            range_cached_input_tokens = 0
             range_total_output_tokens = 0
             range_total_calls = 0
             range_unknown_usage_calls = 0
@@ -518,11 +520,9 @@ class StatService:
             for record in records:
                 created_at_utc = self._ensure_aware_utc(record.created_at)
                 created_at_local = created_at_utc.astimezone(local_tz)
-                token_total = (
-                    (record.token_input_other or 0)
-                    + (record.token_input_cached or 0)
-                    + (record.token_output or 0)
-                )
+                cached_input = record.token_input_cached or 0
+                input_tokens = (record.token_input_other or 0) + cached_input
+                token_total = input_tokens + (record.token_output or 0)
                 provider_id = record.provider_id or "unknown"
                 provider_model = record.provider_model or "Unknown"
 
@@ -537,6 +537,8 @@ class StatService:
                         total_by_umo[record.umo] += token_total
                     total_by_bucket[bucket_ts] += token_total
                     range_total_tokens += token_total
+                    range_input_tokens += input_tokens
+                    range_cached_input_tokens += cached_input
                     if record.is_request:
                         range_total_calls += 1
                         if record.plugin_id:
@@ -662,6 +664,11 @@ class StatService:
                 ),
                 "range_success_rate": (
                     range_success_calls / range_total_calls if range_total_calls else 0
+                ),
+                "range_cache_hit_rate": (
+                    range_cached_input_tokens / range_input_tokens
+                    if range_input_tokens
+                    else None
                 ),
                 "range_by_provider": range_by_provider_data,
                 "range_by_umo": range_by_umo_data,

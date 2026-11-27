@@ -26,6 +26,8 @@ async def test_direct_plugin_chat_counts_each_attempt_and_keeps_historical_token
     monkeypatch.setattr(chat_request, "db_helper", temp_db)
     monkeypatch.setattr(request_retry, "REQUEST_RETRY_WAIT_MIN_S", 0)
     monkeypatch.setattr(request_retry, "REQUEST_RETRY_WAIT_MAX_S", 0)
+    service = StatService(temp_db, MagicMock(), {})
+    assert (await service.get_provider_token_stats(1))["range_cache_hit_rate"] is None
     with pytest.warns(DeprecationWarning, match="insert_provider_stat"):
         await temp_db.insert_provider_stat(
             umo="test:FriendMessage:old",
@@ -109,11 +111,11 @@ async def test_direct_plugin_chat_counts_each_attempt_and_keeps_historical_token
     assert rows[1].token_input_other == 8
     assert rows[1].token_input_cached == 3
 
-    service = StatService(temp_db, MagicMock(), {})
     stats = await service.get_provider_token_stats(1)
     assert stats["range_total_tokens"] == 27
     assert stats["range_total_calls"] == 2
     assert stats["range_unknown_usage_calls"] == 1
+    assert stats["range_cache_hit_rate"] == pytest.approx(3 / 20)
     assert stats["range_by_plugin"] == [
         {"plugin_id": plugin.plugin_id, "tokens": 18, "calls": 2},
     ]
