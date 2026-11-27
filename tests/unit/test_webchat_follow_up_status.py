@@ -1,5 +1,16 @@
+from copy import deepcopy
+from types import SimpleNamespace
+from unittest.mock import AsyncMock
+
 import pytest
 
+from astrbot.core.config.default import DEFAULT_CONFIG
+from astrbot.core.message.message_event_result import (
+    MessageEventResult,
+    ResultContentType,
+)
+from astrbot.core.pipeline.respond.stage import RespondStage
+from astrbot.core.pipeline.result_decorate.stage import ResultDecorateStage
 from astrbot.core.platform.astrbot_message import AstrBotMessage, MessageMember
 from astrbot.core.platform.message_type import MessageType
 from astrbot.core.platform.platform_metadata import PlatformMetadata
@@ -78,3 +89,46 @@ async def test_webchat_follow_up_captured_is_emitted_by_default():
         assert (await queue.get())["type"] == "end"
     finally:
         webchat_queue_mgr.remove_back_queue("follow-up-request")
+
+
+@pytest.mark.asyncio
+async def test_nonstream_reasoning_is_delivered_once_before_the_reply():
+    event = _event("reasoning-request")
+    config = deepcopy(DEFAULT_CONFIG)
+    config["platform_settings"]["segmented_reply"].update(enable=True, interval="0,0")
+    event.set_extra("enable_reasoning", True)
+    event.set_extra("_llm_reasoning_content", "Thinking")
+    event.set_result(
+        MessageEventResult()
+        .message("First。Second。")
+        .set_result_content_type(ResultContentType.LLM_RESULT)
+    )
+    context = SimpleNamespace(
+        astrbot_config=config,
+        plugin_manager=SimpleNamespace(
+            context=SimpleNamespace(
+                get_using_tts_provider_async=AsyncMock(return_value=None),
+                get_config=lambda **_: config,
+            )
+        ),
+    )
+    decorate = ResultDecorateStage()
+    respond = RespondStage()
+    await decorate.initialize(context)
+    await respond.initialize(context)
+    queue = webchat_queue_mgr.get_or_create_back_queue("reasoning-request")
+    try:
+        async for _ in decorate.process(event):
+            pass
+        await respond.process(event)
+        frames = []
+        while not queue.empty():
+            frame = queue.get_nowait()
+            frames.append((frame["chain_type"], frame["data"]))
+        assert frames == [
+            ("reasoning", "Thinking"),
+            (None, "First。"),
+            (None, "Second。"),
+        ]
+    finally:
+        webchat_queue_mgr.remove_back_queue("reasoning-request")
